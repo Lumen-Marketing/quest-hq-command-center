@@ -363,50 +363,86 @@ function fileLibrary() {
 
 function folderGrid() {
   const folders = [
-    ['Job photos', '19 items', 'Updated today', 'Field images, leak close-ups, before/after photos'],
-    ['Client documents', '8 items', 'Updated Jun 8', 'Client intake forms, approvals, signatures'],
-    ['Permits', '7 items', 'Updated Jun 7', 'City permit files and submission packets'],
-    ['Contracts', '5 items', 'Updated Jun 6', 'Signed agreements and change orders'],
-    ['Estimates', '6 items', 'Updated Jun 5', 'Drafts, sent estimates, and approved versions'],
-    ['Invoices', '4 items', 'Updated Jun 4', 'Open, overdue, and paid invoices'],
-    ['Drawings', '3 items', 'Updated Jun 2', 'Drafting sheets, markups, and revision sets'],
-    ['Marketing assets', '2 items', 'Updated May 31', 'Lumen campaign images and brand files']
+    ['Job photos', '19 files', 'Field Team', 'Updated today', 'photo'],
+    ['Client documents', '8 files', 'Admin', 'Updated Jun 8', 'doc'],
+    ['Permits', '7 files', 'Drafting', 'Updated Jun 7', 'permit'],
+    ['Contracts', '5 files', 'Admin', 'Updated Jun 6', 'doc'],
+    ['Estimates', '6 files', 'Finance', 'Updated Jun 5', 'sheet'],
+    ['Invoices', '4 files', 'Finance', 'Updated Jun 4', 'sheet'],
+    ['Drawings', '3 files', 'Drafting', 'Updated Jun 2', 'drawing'],
+    ['Marketing assets', '2 files', 'Lumen', 'Updated May 31', 'image']
   ];
-  return `<div class="file-explorer panel">
-    <div class="explorer-head">
+  const recents = [
+    ['Mesa roof before photo.jpg', 'Job photos', 'Image', 'Today'],
+    ['Queen Creek deposit invoice.pdf', 'Invoices', 'PDF', 'Today'],
+    ['Permit packet revision.dwg', 'Drawings', 'Drawing', 'Yesterday'],
+    ['Client approval signed.pdf', 'Client documents', 'PDF', 'Jun 8']
+  ];
+  return `<div class="drive-viewer panel">
+    <div class="drive-topbar">
       <div>
-        <h2>Folders</h2>
-        <p class="muted">File explorer-style folders for job documents, photos, permits, billing, and company assets.</p>
+        <h2>My Drive</h2>
+        <p class="muted">Drive-style file viewer for folders, job attachments, shared documents, and recent uploads.</p>
       </div>
-      <div class="explorer-path">Quest HQ / Files</div>
+      <label class="drive-search">
+        <span>Search</span>
+        <input value="" placeholder="Search in Quest HQ files" />
+      </label>
+      <button class="primary-button" type="button">New</button>
     </div>
-    <div class="explorer-shell">
-      <aside class="explorer-tree" aria-label="Folder tree">
-        ${['All files', 'Pinned', 'Recent', 'Shared with client', 'Needs review'].map((item, index) => `<button class="${index === 0 ? 'active' : ''}" type="button">${folderGlyph()}<span>${item}</span></button>`).join('')}
+
+    <div class="drive-shell">
+      <aside class="drive-rail" aria-label="Drive sections">
+        ${[
+          ['My Drive', 'drive'],
+          ['Shared with me', 'shared'],
+          ['Recent', 'clock'],
+          ['Starred', 'star'],
+          ['Needs review', 'alert']
+        ].map((item, index) => `<button class="${index === 0 ? 'active' : ''}" type="button">${driveRailIcon(item[1])}<span>${item[0]}</span></button>`).join('')}
       </aside>
-      <section class="folder-browser" aria-label="Folder browser">
-        <div class="folder-browser-head">
-          <span>Name</span>
-          <span>Items</span>
-          <span>Modified</span>
+
+      <section class="drive-main" aria-label="Drive files">
+        <div class="drive-section-title">
+          <h3>Folders</h3>
+          <div class="drive-view-toggle"><span></span><span></span><span></span></div>
         </div>
-        <div class="folder-list">
-          ${folders.map((folder, index) => `<button class="folder-row ${index === 0 ? 'selected' : ''}" type="button">
-            <span class="folder-name">${folderGlyph()}<strong>${folder[0]}</strong><small>${folder[3]}</small></span>
-            <span>${folder[1]}</span>
-            <span>${folder[2]}</span>
+        <div class="drive-folder-grid">
+          ${folders.map((folder, index) => `<button class="drive-folder-card ${index === 0 ? 'selected' : ''}" type="button">
+            <span class="drive-folder-icon">${folderGlyph()}</span>
+            <strong>${folder[0]}</strong>
+            <small>${folder[1]} - ${folder[2]}</small>
+            <em>${folder[3]}</em>
+          </button>`).join('')}
+        </div>
+
+        <div class="drive-section-title recent-title">
+          <h3>Recent files</h3>
+          <span>Owner / type / modified</span>
+        </div>
+        <div class="drive-file-list">
+          ${recents.map((file) => `<button class="drive-file-row" type="button">
+            <span class="file-type ${file[2].toLowerCase()}">${fileIcon(file[2])}</span>
+            <strong>${file[0]}</strong>
+            <span>${file[1]}</span>
+            <span>${file[2]}</span>
+            <span>${file[3]}</span>
           </button>`).join('')}
         </div>
       </section>
-      <aside class="folder-details">
-        <div class="folder-preview">${folderGlyph()}</div>
+
+      <aside class="drive-details">
+        <div class="drive-preview-card">
+          ${folderGlyph()}
+        </div>
         <h3>Job photos</h3>
-        <p class="muted">19 items synced locally for presentation mode. Attach these to jobs before backend storage is connected.</p>
-        <dl>
-          <div><dt>Type</dt><dd>Photo folder</dd></div>
-          <div><dt>Linked job</dt><dd>Mesa Storage Roof Repair</dd></div>
-          <div><dt>Owner</dt><dd>Field Team</dd></div>
-        </dl>
+        <p class="muted">19 image files attached to active roofing jobs. This preview panel is local-only until cloud storage is connected.</p>
+        <div class="drive-detail-list">
+          <span><strong>Owner</strong><small>Field Team</small></span>
+          <span><strong>Location</strong><small>Quest HQ / Files / Job photos</small></span>
+          <span><strong>Linked job</strong><small>Mesa Storage Roof Repair</small></span>
+          <span><strong>Sharing</strong><small>Internal team only</small></span>
+        </div>
       </aside>
     </div>
   </div>`;
@@ -414,6 +450,23 @@ function folderGrid() {
 
 function folderGlyph() {
   return '<svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg>';
+}
+
+function driveRailIcon(type) {
+  const icons = {
+    drive: '<path d="M4 7h7l2 2h7v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M4 7a2 2 0 0 1 2-2h4l2 2"/>',
+    shared: '<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 10h4"/><path d="M19 8v4"/>',
+    clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/>',
+    star: '<path d="m12 3 2.7 5.4 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6-4.3-4.2 6-.9Z"/>',
+    alert: '<path d="M12 3 2.5 20h19Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>'
+  };
+  return `<svg class="drive-rail-icon" viewBox="0 0 24 24" aria-hidden="true">${icons[type] || icons.drive}</svg>`;
+}
+
+function fileIcon(type) {
+  if (type === 'Image') return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="m4 16 4-4 4 4 3-3 5 5"/><circle cx="15" cy="9" r="1.5"/></svg>';
+  if (type === 'Drawing') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="m7 16 9-9 3 3-9 9H7Z"/><path d="m14 9 3 3"/></svg>';
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7Z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h5"/></svg>';
 }
 
 function ledger() {
@@ -471,7 +524,7 @@ const css = `:root{--ink:#121826;--muted:#617089;--line:#d9e0ea;--soft:#f5f7fb;-
 
 const sidebarPolishCss = `.sidebar{width:292px;padding:22px 16px 18px}.main{margin-left:292px}.brand{gap:12px;margin-bottom:6px}.brand-mark{width:46px;height:46px;border-radius:9px;font-size:23px}.brand strong{font-size:24px;line-height:1.05;color:#fff}.brand small{font-size:14px;margin-top:4px;color:#adc7e6}.build-badge{align-self:flex-start;border-color:#f45d22;background:#3a211f;color:#fff3ec;padding:8px 12px;font-size:13px}.nav-list{gap:7px;margin-top:6px}.nav-item{min-height:47px;gap:12px;border-radius:8px;padding:0 12px;font-size:18px;line-height:1;color:#cfe6ff}.nav-item .nav-icon{display:grid;place-items:center;flex:0 0 20px;width:20px;height:20px;border:0;border-radius:0;color:#b8c7dc}.nav-item .nav-icon svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.nav-item .nav-label{display:block;width:auto;height:auto;border:0;border-radius:0;color:inherit;font-size:inherit}.nav-item.active{background:#3a211f;color:#fff;box-shadow:inset 4px 0 var(--orange)}.nav-item.active .nav-icon{color:#fff}.sidebar-card{font-size:14px;line-height:1.35}@media(max-width:820px){.sidebar{position:static;width:auto;height:auto;max-height:none;padding:18px}.main{margin-left:0;padding:16px}.brand strong{font-size:23px}.nav-item{font-size:18px}}`;
 
-const fileExplorerCss = `.file-explorer{padding:0;overflow:hidden}.explorer-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:18px 20px;border-bottom:1px solid var(--line);background:#fff}.explorer-head h2{margin-bottom:4px}.explorer-path{border:1px solid var(--line);border-radius:999px;background:#f8fafc;color:#52627a;padding:8px 12px;font-size:13px;font-weight:850;white-space:nowrap}.explorer-shell{display:grid;grid-template-columns:220px minmax(0,1fr) 260px;min-height:470px}.explorer-tree{border-right:1px solid var(--line);background:#f8fafc;padding:12px;display:grid;align-content:start;gap:6px}.explorer-tree button{display:flex;align-items:center;gap:9px;border:0;border-radius:7px;background:transparent;color:#52627a;padding:10px;text-align:left;font-weight:800;cursor:pointer}.explorer-tree button.active,.explorer-tree button:hover{background:#fff;color:var(--ink);box-shadow:0 0 0 1px var(--line)}.folder-browser{min-width:0;background:#fff}.folder-browser-head,.folder-row{display:grid;grid-template-columns:minmax(240px,1fr) 110px 140px;gap:12px;align-items:center}.folder-browser-head{position:sticky;top:0;z-index:1;border-bottom:1px solid var(--line);background:#f8fafc;color:#617089;padding:10px 14px;font-size:12px;font-weight:900;text-transform:uppercase}.folder-list{display:grid}.folder-row{min-height:72px;border:0;border-bottom:1px solid var(--line);background:#fff;padding:10px 14px;text-align:left;cursor:pointer;color:#1d2a3e}.folder-row:hover,.folder-row.selected{background:#fff8f5}.folder-row.selected{box-shadow:inset 4px 0 var(--orange)}.folder-name{display:grid;grid-template-columns:38px minmax(0,1fr);column-gap:12px;align-items:center}.folder-name strong,.folder-name small{display:block;min-width:0}.folder-name strong{font-size:16px}.folder-name small{grid-column:2;color:#617089;line-height:1.35;margin-top:3px}.folder-glyph{width:32px;height:32px;fill:#fbbf24;stroke:#b45309;stroke-width:1.6;stroke-linejoin:round}.folder-details{border-left:1px solid var(--line);background:#fbfcfe;padding:18px}.folder-preview{display:grid;place-items:center;width:92px;height:74px;border:1px solid #fde68a;border-radius:8px;background:#fffbeb;margin-bottom:14px}.folder-preview .folder-glyph{width:56px;height:56px}.folder-details dl{display:grid;gap:10px;margin:16px 0 0}.folder-details dt{color:#617089;font-size:12px;font-weight:900;text-transform:uppercase}.folder-details dd{margin:3px 0 0;font-weight:800}@media(max-width:1180px){.explorer-shell{grid-template-columns:180px minmax(0,1fr)}.folder-details{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}}@media(max-width:760px){.explorer-head{display:grid}.explorer-shell,.folder-browser-head,.folder-row{grid-template-columns:1fr}.explorer-tree{border-right:0;border-bottom:1px solid var(--line)}.folder-row{gap:5px}.folder-name{grid-template-columns:34px minmax(0,1fr)}}`;
+const fileViewerCss = `.drive-viewer{padding:0;overflow:hidden}.drive-topbar{display:grid;grid-template-columns:minmax(220px,1fr) minmax(260px,420px) auto;gap:14px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);background:#fff}.drive-topbar h2{margin-bottom:3px}.drive-search{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;border:1px solid var(--line);border-radius:999px;background:#f8fafc;padding:0 14px;min-height:42px;color:#617089;font-size:12px;font-weight:900;text-transform:uppercase}.drive-search input{border:0;background:transparent;outline:0;color:var(--ink);font-size:14px;text-transform:none;font-weight:650}.drive-shell{display:grid;grid-template-columns:190px minmax(0,1fr) 270px;min-height:560px}.drive-rail{border-right:1px solid var(--line);background:#f8fafc;padding:12px;display:grid;align-content:start;gap:6px}.drive-rail button{display:flex;align-items:center;gap:10px;border:0;border-radius:999px;background:transparent;color:#52627a;padding:10px 12px;text-align:left;font-weight:850;cursor:pointer}.drive-rail button.active,.drive-rail button:hover{background:#e8f0fe;color:#174ea6}.drive-rail-icon{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.drive-main{min-width:0;padding:18px;background:#fff}.drive-section-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.drive-section-title h3{margin:0;font-size:18px}.drive-section-title span{color:#617089;font-size:13px;font-weight:800}.drive-view-toggle{display:grid;grid-template-columns:repeat(3,5px);gap:4px;border:1px solid var(--line);border-radius:999px;padding:8px 10px}.drive-view-toggle span{width:5px;height:5px;border-radius:50%;background:#617089}.drive-folder-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px}.drive-folder-card{min-height:142px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px;text-align:left;color:#172033;cursor:pointer;box-shadow:0 8px 24px rgba(24,35,55,.05)}.drive-folder-card:hover,.drive-folder-card.selected{border-color:#f97316;background:#fff8f5}.drive-folder-card.selected{box-shadow:inset 0 0 0 2px #fed7aa}.drive-folder-icon{display:grid;place-items:center;width:48px;height:40px;border-radius:8px;background:#fffbeb;margin-bottom:12px}.folder-glyph{width:34px;height:34px;fill:#fbbf24;stroke:#b45309;stroke-width:1.6;stroke-linejoin:round}.drive-folder-card strong,.drive-folder-card small,.drive-folder-card em{display:block}.drive-folder-card strong{font-size:16px}.drive-folder-card small{color:#617089;margin-top:6px}.drive-folder-card em{color:#52627a;font-style:normal;font-size:12px;font-weight:800;margin-top:10px}.recent-title{margin-top:24px}.drive-file-list{border:1px solid var(--line);border-radius:12px;overflow:hidden}.drive-file-row{display:grid;grid-template-columns:38px minmax(220px,1fr) 140px 90px 90px;gap:12px;align-items:center;width:100%;border:0;border-bottom:1px solid var(--line);background:#fff;padding:11px 12px;text-align:left;cursor:pointer}.drive-file-row:last-child{border-bottom:0}.drive-file-row:hover{background:#f8fafc}.drive-file-row strong{font-size:14px}.drive-file-row span:not(.file-type){color:#617089;font-size:13px;font-weight:750}.file-type{display:grid;place-items:center;width:30px;height:30px;border-radius:7px;background:#e8f0fe;color:#174ea6}.file-type.pdf{background:#fee2e2;color:#b91c1c}.file-type.drawing{background:#ecfdf5;color:#047857}.file-type svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.drive-details{border-left:1px solid var(--line);background:#fbfcfe;padding:18px}.drive-preview-card{display:grid;place-items:center;height:150px;border:1px solid #fde68a;border-radius:14px;background:linear-gradient(180deg,#fffbeb,#fff7ed);margin-bottom:16px}.drive-preview-card .folder-glyph{width:76px;height:76px}.drive-detail-list{display:grid;gap:10px;margin-top:16px}.drive-detail-list span{display:block;border-top:1px solid var(--line);padding-top:10px}.drive-detail-list strong,.drive-detail-list small{display:block}.drive-detail-list strong{font-size:12px;text-transform:uppercase;color:#617089}.drive-detail-list small{font-size:14px;font-weight:850;margin-top:3px}@media(max-width:1240px){.drive-shell{grid-template-columns:170px minmax(0,1fr)}.drive-details{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}.drive-folder-grid{grid-template-columns:repeat(3,minmax(150px,1fr))}}@media(max-width:820px){.drive-topbar,.drive-shell,.drive-file-row{grid-template-columns:1fr}.drive-rail{border-right:0;border-bottom:1px solid var(--line)}.drive-folder-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.drive-file-row{gap:5px}}@media(max-width:560px){.drive-folder-grid{grid-template-columns:1fr}}`;
 
 const js = `(() => {
   const storageKey = (moduleId) => 'quest-hq-static-' + moduleId;
@@ -547,7 +600,7 @@ async function writeTarget(target) {
   const absolute = path.resolve(target);
   if (target !== '.') await rm(absolute, { recursive: true, force: true });
   await mkdir(path.join(absolute, 'assets'), { recursive: true });
-  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + fileExplorerCss);
+  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + fileViewerCss);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js);
   await writeFile(path.join(absolute, 'index.html'), commandPage());
   await writeFile(path.join(absolute, 'jobs.html'), jobsPage());

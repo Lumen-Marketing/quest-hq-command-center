@@ -31,69 +31,118 @@
     <div class="metric-grid"><div class="metric"><span>Files</span><strong>48</strong></div><div class="metric"><span>Photos</span><strong>19</strong></div><div class="metric"><span>Permits</span><strong>7</strong></div><div class="metric"><span>Unlinked</span><strong>4</strong></div></div>
     <div class="hero-card" style="background-image:url('https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=1400&q=80')"><strong>Visual File Cabinet</strong><span>Photos, permits, contracts, estimates, invoices, drawings, and job documents get thumbnails and metadata.</span></div>
     <div class="tabs" role="tablist"><button class="active" data-tab="library">Library</button><button class="" data-tab="folders">Folders</button><button class="" data-tab="file-details">File Details</button></div>
-    <section class="tab-panel active" data-panel="library"><div class="file-grid"><article class="file-tile"><img src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=900&q=80" alt=""><strong>Job photos</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=900&q=80" alt=""><strong>Permits</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=900&q=80" alt=""><strong>Contracts</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1554224155-1696413565d3?auto=format&fit=crop&w=900&q=80" alt=""><strong>Estimates</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=900&q=80" alt=""><strong>Invoices</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=80" alt=""><strong>Drawings</strong><span>Thumbnail folder</span></article></div></section><section class="tab-panel " data-panel="folders"><div class="file-explorer panel">
-    <div class="explorer-head">
+    <section class="tab-panel active" data-panel="library"><div class="file-grid"><article class="file-tile"><img src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=900&q=80" alt=""><strong>Job photos</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=900&q=80" alt=""><strong>Permits</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=900&q=80" alt=""><strong>Contracts</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1554224155-1696413565d3?auto=format&fit=crop&w=900&q=80" alt=""><strong>Estimates</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=900&q=80" alt=""><strong>Invoices</strong><span>Thumbnail folder</span></article><article class="file-tile"><img src="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=80" alt=""><strong>Drawings</strong><span>Thumbnail folder</span></article></div></section><section class="tab-panel " data-panel="folders"><div class="drive-viewer panel">
+    <div class="drive-topbar">
       <div>
-        <h2>Folders</h2>
-        <p class="muted">File explorer-style folders for job documents, photos, permits, billing, and company assets.</p>
+        <h2>My Drive</h2>
+        <p class="muted">Drive-style file viewer for folders, job attachments, shared documents, and recent uploads.</p>
       </div>
-      <div class="explorer-path">Quest HQ / Files</div>
+      <label class="drive-search">
+        <span>Search</span>
+        <input value="" placeholder="Search in Quest HQ files" />
+      </label>
+      <button class="primary-button" type="button">New</button>
     </div>
-    <div class="explorer-shell">
-      <aside class="explorer-tree" aria-label="Folder tree">
-        <button class="active" type="button"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><span>All files</span></button><button class="" type="button"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><span>Pinned</span></button><button class="" type="button"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><span>Recent</span></button><button class="" type="button"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><span>Shared with client</span></button><button class="" type="button"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><span>Needs review</span></button>
+
+    <div class="drive-shell">
+      <aside class="drive-rail" aria-label="Drive sections">
+        <button class="active" type="button"><svg class="drive-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h7l2 2h7v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M4 7a2 2 0 0 1 2-2h4l2 2"/></svg><span>My Drive</span></button><button class="" type="button"><svg class="drive-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 10h4"/><path d="M19 8v4"/></svg><span>Shared with me</span></button><button class="" type="button"><svg class="drive-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg><span>Recent</span></button><button class="" type="button"><svg class="drive-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.4 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6-4.3-4.2 6-.9Z"/></svg><span>Starred</span></button><button class="" type="button"><svg class="drive-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 20h19Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>Needs review</span></button>
       </aside>
-      <section class="folder-browser" aria-label="Folder browser">
-        <div class="folder-browser-head">
-          <span>Name</span>
-          <span>Items</span>
-          <span>Modified</span>
+
+      <section class="drive-main" aria-label="Drive files">
+        <div class="drive-section-title">
+          <h3>Folders</h3>
+          <div class="drive-view-toggle"><span></span><span></span><span></span></div>
         </div>
-        <div class="folder-list">
-          <button class="folder-row selected" type="button">
-            <span class="folder-name"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><strong>Job photos</strong><small>Field images, leak close-ups, before/after photos</small></span>
-            <span>19 items</span>
-            <span>Updated today</span>
-          </button><button class="folder-row " type="button">
-            <span class="folder-name"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><strong>Client documents</strong><small>Client intake forms, approvals, signatures</small></span>
-            <span>8 items</span>
-            <span>Updated Jun 8</span>
-          </button><button class="folder-row " type="button">
-            <span class="folder-name"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><strong>Permits</strong><small>City permit files and submission packets</small></span>
-            <span>7 items</span>
-            <span>Updated Jun 7</span>
-          </button><button class="folder-row " type="button">
-            <span class="folder-name"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><strong>Contracts</strong><small>Signed agreements and change orders</small></span>
-            <span>5 items</span>
-            <span>Updated Jun 6</span>
-          </button><button class="folder-row " type="button">
-            <span class="folder-name"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><strong>Estimates</strong><small>Drafts, sent estimates, and approved versions</small></span>
-            <span>6 items</span>
-            <span>Updated Jun 5</span>
-          </button><button class="folder-row " type="button">
-            <span class="folder-name"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><strong>Invoices</strong><small>Open, overdue, and paid invoices</small></span>
-            <span>4 items</span>
-            <span>Updated Jun 4</span>
-          </button><button class="folder-row " type="button">
-            <span class="folder-name"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><strong>Drawings</strong><small>Drafting sheets, markups, and revision sets</small></span>
-            <span>3 items</span>
-            <span>Updated Jun 2</span>
-          </button><button class="folder-row " type="button">
-            <span class="folder-name"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg><strong>Marketing assets</strong><small>Lumen campaign images and brand files</small></span>
-            <span>2 items</span>
-            <span>Updated May 31</span>
+        <div class="drive-folder-grid">
+          <button class="drive-folder-card selected" type="button">
+            <span class="drive-folder-icon"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg></span>
+            <strong>Job photos</strong>
+            <small>19 files - Field Team</small>
+            <em>Updated today</em>
+          </button><button class="drive-folder-card " type="button">
+            <span class="drive-folder-icon"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg></span>
+            <strong>Client documents</strong>
+            <small>8 files - Admin</small>
+            <em>Updated Jun 8</em>
+          </button><button class="drive-folder-card " type="button">
+            <span class="drive-folder-icon"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg></span>
+            <strong>Permits</strong>
+            <small>7 files - Drafting</small>
+            <em>Updated Jun 7</em>
+          </button><button class="drive-folder-card " type="button">
+            <span class="drive-folder-icon"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg></span>
+            <strong>Contracts</strong>
+            <small>5 files - Admin</small>
+            <em>Updated Jun 6</em>
+          </button><button class="drive-folder-card " type="button">
+            <span class="drive-folder-icon"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg></span>
+            <strong>Estimates</strong>
+            <small>6 files - Finance</small>
+            <em>Updated Jun 5</em>
+          </button><button class="drive-folder-card " type="button">
+            <span class="drive-folder-icon"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg></span>
+            <strong>Invoices</strong>
+            <small>4 files - Finance</small>
+            <em>Updated Jun 4</em>
+          </button><button class="drive-folder-card " type="button">
+            <span class="drive-folder-icon"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg></span>
+            <strong>Drawings</strong>
+            <small>3 files - Drafting</small>
+            <em>Updated Jun 2</em>
+          </button><button class="drive-folder-card " type="button">
+            <span class="drive-folder-icon"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg></span>
+            <strong>Marketing assets</strong>
+            <small>2 files - Lumen</small>
+            <em>Updated May 31</em>
+          </button>
+        </div>
+
+        <div class="drive-section-title recent-title">
+          <h3>Recent files</h3>
+          <span>Owner / type / modified</span>
+        </div>
+        <div class="drive-file-list">
+          <button class="drive-file-row" type="button">
+            <span class="file-type image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="m4 16 4-4 4 4 3-3 5 5"/><circle cx="15" cy="9" r="1.5"/></svg></span>
+            <strong>Mesa roof before photo.jpg</strong>
+            <span>Job photos</span>
+            <span>Image</span>
+            <span>Today</span>
+          </button><button class="drive-file-row" type="button">
+            <span class="file-type pdf"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7Z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h5"/></svg></span>
+            <strong>Queen Creek deposit invoice.pdf</strong>
+            <span>Invoices</span>
+            <span>PDF</span>
+            <span>Today</span>
+          </button><button class="drive-file-row" type="button">
+            <span class="file-type drawing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="m7 16 9-9 3 3-9 9H7Z"/><path d="m14 9 3 3"/></svg></span>
+            <strong>Permit packet revision.dwg</strong>
+            <span>Drawings</span>
+            <span>Drawing</span>
+            <span>Yesterday</span>
+          </button><button class="drive-file-row" type="button">
+            <span class="file-type pdf"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7Z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h5"/></svg></span>
+            <strong>Client approval signed.pdf</strong>
+            <span>Client documents</span>
+            <span>PDF</span>
+            <span>Jun 8</span>
           </button>
         </div>
       </section>
-      <aside class="folder-details">
-        <div class="folder-preview"><svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg></div>
+
+      <aside class="drive-details">
+        <div class="drive-preview-card">
+          <svg class="folder-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H19a2 2 0 0 1 2 2v1H3Z"/><path d="M3 10h18l-2 8.5A2 2 0 0 1 17 20H6.4a2 2 0 0 1-2-1.6Z"/></svg>
+        </div>
         <h3>Job photos</h3>
-        <p class="muted">19 items synced locally for presentation mode. Attach these to jobs before backend storage is connected.</p>
-        <dl>
-          <div><dt>Type</dt><dd>Photo folder</dd></div>
-          <div><dt>Linked job</dt><dd>Mesa Storage Roof Repair</dd></div>
-          <div><dt>Owner</dt><dd>Field Team</dd></div>
-        </dl>
+        <p class="muted">19 image files attached to active roofing jobs. This preview panel is local-only until cloud storage is connected.</p>
+        <div class="drive-detail-list">
+          <span><strong>Owner</strong><small>Field Team</small></span>
+          <span><strong>Location</strong><small>Quest HQ / Files / Job photos</small></span>
+          <span><strong>Linked job</strong><small>Mesa Storage Roof Repair</small></span>
+          <span><strong>Sharing</strong><small>Internal team only</small></span>
+        </div>
       </aside>
     </div>
   </div></section><section class="tab-panel " data-panel="file-details"><div class="record-system panel" data-record-system="files">
