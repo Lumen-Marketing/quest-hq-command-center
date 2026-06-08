@@ -103,6 +103,69 @@ const ticketTypes = [
   'Payroll question'
 ];
 
+const moduleStructuredDefaults = {
+  finance: {
+    estimateStatus: 'Draft',
+    estimateNumber: 'EST-local',
+    lineItems: 'Labor, Materials, Cleanup',
+    taxesFees: '8.6% tax',
+    discounts: '',
+    amount: 0,
+    paidAmount: 0,
+    invoiceStatus: 'Draft',
+    invoiceNumber: 'INV-local',
+    dueDate: today,
+    paymentStatus: 'Unpaid',
+    paymentRecords: '',
+    revenueCompany: 'Roofing',
+    revenueJob: '',
+    profitability: 'Pending cost input'
+  },
+  knowledge: {
+    category: 'Company SOPs',
+    articleBody: '',
+    searchTerms: '',
+    attachTarget: 'Job',
+    attachedObject: '',
+    trainingMaterial: '',
+    templateNotes: '',
+    reviewOwner: people[0]?.id || '',
+    reviewDate: today
+  },
+  automations: {
+    trigger: 'New job created',
+    condition: 'Company is Roofing',
+    action: 'Create task',
+    enabled: 'Enabled',
+    automationLog: ''
+  },
+  dashboards: {
+    dashboardType: 'Company overview',
+    widgets: 'Active jobs, Overdue tasks, Open tickets, Revenue',
+    filters: 'Company: all',
+    savedView: '',
+    dateRange: 'This week'
+  },
+  templates: {
+    templateType: 'Job template',
+    templateOutput: 'Job shell, checklist, TaskManagement task set, estimate starter',
+    exampleJob: 'Roofing repair job',
+    taskSet: 'Inspection, estimate, scheduling, final walkthrough',
+    formSet: 'Inspection checklist, client approval form',
+    financeSet: 'Estimate line items, deposit invoice',
+    automationSet: 'Create default tasks when job is created'
+  },
+  admin: {
+    userName: '',
+    role: 'Worker',
+    permissions: 'View jobs, update assigned records',
+    companyAccess: 'Roofing',
+    approvalStatus: 'Pending approval',
+    settings: 'Job stages, ticket statuses, lead statuses',
+    notificationSettings: 'Due dates, overdue invoices, ticket SLA alerts'
+  }
+};
+
 const localModulePanels = {
   finance: {
     title: 'Finance Workspace',
@@ -2157,6 +2220,11 @@ function safeNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function getModuleStructuredDefaults(moduleId) {
+  const defaults = moduleStructuredDefaults[moduleId] || {};
+  return JSON.parse(JSON.stringify(defaults));
+}
+
 function ModuleRecordDetail({
   moduleId,
   config,
@@ -2192,17 +2260,22 @@ function ModuleRecordDetail({
           <select value={record.status} onChange={(event) => onUpdate(record.id, { status: event.target.value })}>
             <option>New</option>
             <option>Draft</option>
+            <option>Saved</option>
+            <option>Tagged</option>
             <option>Published</option>
+            <option>Review</option>
             <option>Qualified</option>
             <option>Triaged</option>
             <option>Urgent</option>
             <option>In review</option>
             <option>Approved</option>
             <option>Sent</option>
+            <option>Paid</option>
             <option>Enabled</option>
             <option>Paused</option>
             <option>Pinned</option>
             <option>Pending approval</option>
+            <option>Applied</option>
             <option>Converted</option>
             <option>Archived</option>
           </select>
@@ -2300,13 +2373,12 @@ function ModuleRecordDetail({
 
       {moduleId === 'files' && <FileRecordPanel record={record} />}
 
-      {localModulePanels[moduleId] && (
-        <LocalModuleCompletionPanel
-          moduleId={moduleId}
-          record={record}
-          onUpdate={onUpdate}
-        />
-      )}
+      {moduleId === 'finance' && <FinanceRecordPanel record={record} jobs={jobs} onUpdate={onUpdate} />}
+      {moduleId === 'knowledge' && <KnowledgeRecordPanel record={record} onUpdate={onUpdate} />}
+      {moduleId === 'automations' && <AutomationRecordPanel record={record} onUpdate={onUpdate} />}
+      {moduleId === 'dashboards' && <DashboardRecordPanel record={record} jobs={jobs} onUpdate={onUpdate} />}
+      {moduleId === 'templates' && <TemplateRecordPanel record={record} onUpdate={onUpdate} />}
+      {moduleId === 'admin' && <AdminRecordPanel record={record} onUpdate={onUpdate} />}
 
       <div className="record-detail-meta">
         <InfoBlock label="Module" value={config.eyebrow} />
@@ -2686,6 +2758,524 @@ function LocalModuleCompletionPanel({ moduleId, record, onUpdate }) {
   );
 }
 
+function FinanceRecordPanel({ record, jobs, onUpdate }) {
+  const details = { ...moduleStructuredDefaults.finance, ...(record.structured || {}) };
+  const relatedJob = record.jobId ? jobs.find((job) => job.id === record.jobId) : null;
+  const estimateAmount = safeNumber(details.amount) || safeNumber(relatedJob?.estimateTotal);
+  const paidAmount = safeNumber(details.paidAmount) || safeNumber(relatedJob?.invoiceTotal);
+  const balance = Math.max(0, estimateAmount - paidAmount);
+  const updateDetails = (field, value) => {
+    onUpdate(record.id, { structured: { ...details, [field]: value } });
+  };
+  const applyFinanceAction = (label, patch) => {
+    onUpdate(record.id, {
+      ...patch,
+      conversionNote: `${label} recorded ${new Date().toLocaleDateString('en-US')}.`,
+      structured: { ...details, ...(patch.structured || {}) }
+    });
+  };
+
+  return (
+    <div className="module-system-panel">
+      <div className="panel-header">
+        <div>
+          <h3>Finance System</h3>
+          <p>Estimate builder, invoice tracking, payments, AR, and job profitability for the selected finance record.</p>
+        </div>
+      </div>
+
+      <div className="record-detail-grid">
+        <label>
+          Estimate number
+          <input value={details.estimateNumber || ''} onChange={(event) => updateDetails('estimateNumber', event.target.value)} />
+        </label>
+        <label>
+          Estimate status
+          <select value={details.estimateStatus || 'Draft'} onChange={(event) => updateDetails('estimateStatus', event.target.value)}>
+            <option>Draft</option>
+            <option>Sent</option>
+            <option>Approved</option>
+            <option>Declined</option>
+            <option>Converted</option>
+          </select>
+        </label>
+        <label className="span-2">
+          Line items
+          <textarea value={details.lineItems || ''} onChange={(event) => updateDetails('lineItems', event.target.value)} placeholder="Labor, materials, permits, cleanup" />
+        </label>
+        <label>
+          Taxes / fees
+          <input value={details.taxesFees || ''} onChange={(event) => updateDetails('taxesFees', event.target.value)} />
+        </label>
+        <label>
+          Discounts
+          <input value={details.discounts || ''} onChange={(event) => updateDetails('discounts', event.target.value)} />
+        </label>
+        <label>
+          Estimate amount
+          <input type="number" min="0" value={details.amount || ''} onChange={(event) => updateDetails('amount', event.target.value)} placeholder={String(relatedJob?.estimateTotal || 0)} />
+        </label>
+        <label>
+          Paid amount
+          <input type="number" min="0" value={details.paidAmount || ''} onChange={(event) => updateDetails('paidAmount', event.target.value)} />
+        </label>
+        <label>
+          Invoice number
+          <input value={details.invoiceNumber || ''} onChange={(event) => updateDetails('invoiceNumber', event.target.value)} />
+        </label>
+        <label>
+          Invoice status
+          <select value={details.invoiceStatus || 'Draft'} onChange={(event) => updateDetails('invoiceStatus', event.target.value)}>
+            <option>Draft</option>
+            <option>Sent</option>
+            <option>Partial</option>
+            <option>Paid</option>
+            <option>Overdue</option>
+          </select>
+        </label>
+        <label>
+          Due date
+          <input type="date" value={details.dueDate || today} onChange={(event) => updateDetails('dueDate', event.target.value)} />
+        </label>
+        <label>
+          Payment status
+          <select value={details.paymentStatus || 'Unpaid'} onChange={(event) => updateDetails('paymentStatus', event.target.value)}>
+            <option>Unpaid</option>
+            <option>Partial</option>
+            <option>Paid</option>
+            <option>Overdue</option>
+          </select>
+        </label>
+        <label className="span-2">
+          Payment records
+          <textarea value={details.paymentRecords || ''} onChange={(event) => updateDetails('paymentRecords', event.target.value)} placeholder="Deposit paid by ACH, final payment pending" />
+        </label>
+        <label>
+          Revenue by company
+          <input value={details.revenueCompany || ''} onChange={(event) => updateDetails('revenueCompany', event.target.value)} />
+        </label>
+        <label>
+          Job profitability
+          <input value={details.profitability || ''} onChange={(event) => updateDetails('profitability', event.target.value)} />
+        </label>
+      </div>
+
+      <div className="system-summary-grid">
+        <InfoBlock label="Estimate" value={money(estimateAmount)} sub={details.estimateStatus} />
+        <InfoBlock label="Paid" value={money(paidAmount)} sub={details.paymentStatus} />
+        <InfoBlock label="AR balance" value={money(balance)} sub={balance > 0 ? `Due ${details.dueDate}` : 'No balance'} />
+        <InfoBlock label="Invoice" value={details.invoiceNumber || 'Not created'} sub={details.invoiceStatus} />
+      </div>
+
+      <div className="record-actions">
+        <button type="button" className="secondary-button" onClick={() => applyFinanceAction('Send estimate', { status: 'Sent', structured: { estimateStatus: 'Sent' } })}>Send Estimate</button>
+        <button type="button" className="secondary-button" onClick={() => applyFinanceAction('Approve estimate', { status: 'Approved', structured: { estimateStatus: 'Approved' } })}>Approve Estimate</button>
+        <button type="button" className="primary-button" onClick={() => applyFinanceAction('Convert estimate to invoice', { status: 'Converted', convertedTo: 'Converted estimate to invoice', structured: { estimateStatus: 'Converted', invoiceStatus: 'Sent', paymentStatus: balance > 0 ? 'Unpaid' : 'Paid' } })}>Convert to Invoice</button>
+        <button type="button" className="secondary-button" onClick={() => applyFinanceAction('Mark paid', { status: 'Paid', structured: { paidAmount: estimateAmount, invoiceStatus: 'Paid', paymentStatus: 'Paid' } })}>Mark Paid</button>
+      </div>
+    </div>
+  );
+}
+
+function KnowledgeRecordPanel({ record, onUpdate }) {
+  const details = { ...moduleStructuredDefaults.knowledge, ...(record.structured || {}) };
+  const updateDetails = (field, value) => {
+    onUpdate(record.id, { structured: { ...details, [field]: value } });
+  };
+  const publish = () => {
+    onUpdate(record.id, {
+      status: 'Published',
+      conversionNote: `Article published ${new Date().toLocaleDateString('en-US')}.`,
+      structured: { ...details, searchTerms: details.searchTerms || `${record.title}, ${details.category}` }
+    });
+  };
+  const attach = () => {
+    onUpdate(record.id, {
+      convertedTo: `Attached SOP to ${details.attachTarget}`,
+      conversionNote: `${record.title} attached to ${details.attachTarget.toLowerCase()} context ${new Date().toLocaleDateString('en-US')}.`
+    });
+  };
+
+  return (
+    <div className="module-system-panel">
+      <div className="panel-header">
+        <div>
+          <h3>Knowledge System</h3>
+          <p>Article editor, SOP categorization, search terms, training material, templates, and attachment controls.</p>
+        </div>
+      </div>
+
+      <div className="record-detail-grid">
+        <label>
+          Category
+          <select value={details.category || 'Company SOPs'} onChange={(event) => updateDetails('category', event.target.value)}>
+            <option>Company SOPs</option>
+            <option>Roofing procedures</option>
+            <option>Drafting guidelines</option>
+            <option>Admin guides</option>
+            <option>Lumen Marketing processes</option>
+            <option>Training</option>
+            <option>FAQs</option>
+          </select>
+        </label>
+        <label>
+          Review owner
+          <select value={details.reviewOwner || ''} onChange={(event) => updateDetails('reviewOwner', event.target.value)}>
+            <option value="">No owner</option>
+            {people.map((person) => <option key={person.id} value={person.id}>{person.name} - {person.role}</option>)}
+          </select>
+        </label>
+        <label>
+          Review date
+          <input type="date" value={details.reviewDate || today} onChange={(event) => updateDetails('reviewDate', event.target.value)} />
+        </label>
+        <label>
+          Attach SOP to
+          <select value={details.attachTarget || 'Job'} onChange={(event) => updateDetails('attachTarget', event.target.value)}>
+            <option>Job</option>
+            <option>Task</option>
+            <option>Ticket</option>
+            <option>Form</option>
+          </select>
+        </label>
+        <label className="span-2">
+          Article body
+          <textarea value={details.articleBody || ''} onChange={(event) => updateDetails('articleBody', event.target.value)} placeholder="Steps, standards, examples, links, and ownership notes" />
+        </label>
+        <label className="span-2">
+          Search terms
+          <input value={details.searchTerms || ''} onChange={(event) => updateDetails('searchTerms', event.target.value)} placeholder="inspection, tile, QA, invoice, campaign" />
+        </label>
+        <label className="span-2">
+          Training materials
+          <textarea value={details.trainingMaterial || ''} onChange={(event) => updateDetails('trainingMaterial', event.target.value)} placeholder="Onboarding notes, role-specific training, video links" />
+        </label>
+        <label className="span-2">
+          Templates
+          <textarea value={details.templateNotes || ''} onChange={(event) => updateDetails('templateNotes', event.target.value)} placeholder="Reusable checklist, email, SOP, or task-set notes" />
+        </label>
+      </div>
+
+      <div className="system-summary-grid">
+        <InfoBlock label="Category" value={details.category} sub="Knowledge taxonomy" />
+        <InfoBlock label="Review" value={details.reviewDate || 'Not scheduled'} sub={details.reviewOwner ? getPerson(details.reviewOwner)?.name : 'No owner'} />
+        <InfoBlock label="Attach target" value={details.attachTarget || 'Job'} sub={record.convertedTo || 'Not attached'} />
+        <InfoBlock label="Search" value={(details.searchTerms || '').split(',').filter(Boolean).length || 0} sub="Indexed terms" />
+      </div>
+
+      <div className="record-actions">
+        <button type="button" className="primary-button" onClick={publish}>Publish Article</button>
+        <button type="button" className="secondary-button" onClick={attach}>Attach SOP</button>
+      </div>
+    </div>
+  );
+}
+
+function AutomationRecordPanel({ record, onUpdate }) {
+  const details = { ...moduleStructuredDefaults.automations, ...(record.structured || {}) };
+  const updateDetails = (field, value) => {
+    onUpdate(record.id, { structured: { ...details, [field]: value } });
+  };
+  const runAutomation = () => {
+    const line = `${new Date().toLocaleString('en-US')}: ${details.trigger} / ${details.condition} / ${details.action}`;
+    onUpdate(record.id, {
+      status: details.enabled === 'Paused' ? 'Paused' : 'Enabled',
+      convertedTo: 'Automation run logged',
+      conversionNote: line,
+      structured: { ...details, automationLog: [line, details.automationLog].filter(Boolean).join('\n') }
+    });
+  };
+
+  return (
+    <div className="module-system-panel">
+      <div className="panel-header">
+        <div>
+          <h3>Automation System</h3>
+          <p>Trigger, condition, action, enablement, test run, and run-log controls for workflow rules.</p>
+        </div>
+      </div>
+
+      <div className="rule-builder">
+        <label>
+          Trigger
+          <select value={details.trigger || 'New job created'} onChange={(event) => updateDetails('trigger', event.target.value)}>
+            {localModulePanels.automations.fields[0][3].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          Condition
+          <select value={details.condition || 'Company is Roofing'} onChange={(event) => updateDetails('condition', event.target.value)}>
+            {localModulePanels.automations.fields[1][3].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          Action
+          <select value={details.action || 'Create task'} onChange={(event) => updateDetails('action', event.target.value)}>
+            {localModulePanels.automations.fields[2][3].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          Rule state
+          <select value={details.enabled || 'Enabled'} onChange={(event) => {
+            updateDetails('enabled', event.target.value);
+            onUpdate(record.id, { status: event.target.value });
+          }}>
+            <option>Enabled</option>
+            <option>Paused</option>
+          </select>
+        </label>
+        <label className="span-2">
+          Automation log
+          <textarea value={details.automationLog || ''} onChange={(event) => updateDetails('automationLog', event.target.value)} placeholder="Runs will appear here" />
+        </label>
+      </div>
+
+      <div className="automation-flow">
+        {[details.trigger, details.condition, details.action].map((item, index) => (
+          <div className="flow-step" key={`${item}-${index}`}>
+            <span>{index === 0 ? 'When' : index === 1 ? 'If' : 'Then'}</span>
+            <strong>{item}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="record-actions">
+        <button type="button" className="primary-button" onClick={runAutomation}>Run Automation Locally</button>
+        <button type="button" className="secondary-button" onClick={() => {
+          const nextState = details.enabled === 'Enabled' ? 'Paused' : 'Enabled';
+          onUpdate(record.id, { status: nextState, structured: { ...details, enabled: nextState } });
+        }}>{details.enabled === 'Enabled' ? 'Pause Rule' : 'Enable Rule'}</button>
+      </div>
+    </div>
+  );
+}
+
+function DashboardRecordPanel({ record, jobs, onUpdate }) {
+  const details = { ...moduleStructuredDefaults.dashboards, ...(record.structured || {}) };
+  const updateDetails = (field, value) => {
+    onUpdate(record.id, { structured: { ...details, [field]: value } });
+  };
+  const widgetList = (details.widgets || '').split(',').map((item) => item.trim()).filter(Boolean);
+  const activeJobs = jobs.filter((job) => job.stage !== 'Completed').length;
+  const overdueTasks = jobs.reduce((sum, job) => sum + taskStats(job.id).overdue, 0);
+  const revenue = jobs.reduce((sum, job) => sum + safeNumber(job.estimateTotal), 0);
+
+  return (
+    <div className="module-system-panel">
+      <div className="panel-header">
+        <div>
+          <h3>Dashboard System</h3>
+          <p>Saved views, widget builder, company filters, and operational reporting controls.</p>
+        </div>
+      </div>
+
+      <div className="record-detail-grid">
+        <label>
+          Dashboard type
+          <select value={details.dashboardType || 'Company overview'} onChange={(event) => updateDetails('dashboardType', event.target.value)}>
+            {localModulePanels.dashboards.fields[0][3].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          Date range
+          <select value={details.dateRange || 'This week'} onChange={(event) => updateDetails('dateRange', event.target.value)}>
+            <option>Today</option>
+            <option>This week</option>
+            <option>This month</option>
+            <option>This quarter</option>
+          </select>
+        </label>
+        <label className="span-2">
+          Widgets
+          <textarea value={details.widgets || ''} onChange={(event) => updateDetails('widgets', event.target.value)} placeholder="Active jobs, overdue tasks, revenue, survey score" />
+        </label>
+        <label>
+          Filters
+          <input value={details.filters || ''} onChange={(event) => updateDetails('filters', event.target.value)} />
+        </label>
+        <label>
+          Saved view name
+          <input value={details.savedView || ''} onChange={(event) => updateDetails('savedView', event.target.value)} placeholder={record.title} />
+        </label>
+      </div>
+
+      <div className="system-summary-grid">
+        <InfoBlock label="Active jobs" value={activeJobs} sub="Current local job records" />
+        <InfoBlock label="Overdue tasks" value={overdueTasks} sub="TaskManagement rollup" />
+        <InfoBlock label="Revenue view" value={money(revenue)} sub={details.dateRange} />
+        <InfoBlock label="Widgets" value={widgetList.length} sub={details.dashboardType} />
+      </div>
+
+      <div className="capsule-grid">
+        {widgetList.map((widget) => <span key={widget}>{widget}</span>)}
+        {!widgetList.length && <span>No widgets configured</span>}
+      </div>
+
+      <div className="record-actions">
+        <button type="button" className="primary-button" onClick={() => onUpdate(record.id, { status: 'Pinned', convertedTo: 'Dashboard view pinned', conversionNote: `${record.title} pinned ${new Date().toLocaleDateString('en-US')}.` })}>Pin Dashboard</button>
+        <button type="button" className="secondary-button" onClick={() => onUpdate(record.id, { status: 'Saved', structured: { ...details, savedView: details.savedView || record.title } })}>Save View</button>
+      </div>
+    </div>
+  );
+}
+
+function TemplateRecordPanel({ record, onUpdate }) {
+  const details = { ...moduleStructuredDefaults.templates, ...(record.structured || {}) };
+  const updateDetails = (field, value) => {
+    onUpdate(record.id, { structured: { ...details, [field]: value } });
+  };
+  const applyTemplate = () => {
+    onUpdate(record.id, {
+      status: 'Applied',
+      convertedTo: 'Template applied to job setup',
+      conversionNote: `${record.title} template applied locally ${new Date().toLocaleDateString('en-US')}.`,
+      structured: {
+        ...details,
+        appliedObjects: ['Job shell', 'TaskManagement task set', 'Form/checklist', 'Finance starter']
+      }
+    });
+  };
+
+  return (
+    <div className="module-system-panel">
+      <div className="panel-header">
+        <div>
+          <h3>Template System</h3>
+          <p>Reusable job, task, form, survey, inspection, estimate, email, SOP, and automation templates.</p>
+        </div>
+      </div>
+
+      <div className="record-detail-grid">
+        <label>
+          Template type
+          <select value={details.templateType || 'Job template'} onChange={(event) => updateDetails('templateType', event.target.value)}>
+            {localModulePanels.templates.fields[0][3].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          Example job template
+          <select value={details.exampleJob || 'Roofing repair job'} onChange={(event) => updateDetails('exampleJob', event.target.value)}>
+            {localModulePanels.templates.fields[2][3].map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="span-2">
+          Creates
+          <textarea value={details.templateOutput || ''} onChange={(event) => updateDetails('templateOutput', event.target.value)} />
+        </label>
+        <label className="span-2">
+          TaskManagement task set
+          <textarea value={details.taskSet || ''} onChange={(event) => updateDetails('taskSet', event.target.value)} />
+        </label>
+        <label>
+          Form / survey set
+          <input value={details.formSet || ''} onChange={(event) => updateDetails('formSet', event.target.value)} />
+        </label>
+        <label>
+          Finance starter
+          <input value={details.financeSet || ''} onChange={(event) => updateDetails('financeSet', event.target.value)} />
+        </label>
+        <label className="span-2">
+          Automation starter
+          <input value={details.automationSet || ''} onChange={(event) => updateDetails('automationSet', event.target.value)} />
+        </label>
+      </div>
+
+      <div className="template-object-grid">
+        {['Job shell', 'TaskManagement task set', 'Form/checklist', 'Estimate/invoice starter', 'SOP/email copy', 'Automation rule'].map((item) => (
+          <div className="local-card" key={item}>
+            <strong>{item}</strong>
+            <small>{details.templateType} output</small>
+          </div>
+        ))}
+      </div>
+
+      <div className="record-actions">
+        <button type="button" className="primary-button" onClick={applyTemplate}>Apply Template Locally</button>
+      </div>
+    </div>
+  );
+}
+
+function AdminRecordPanel({ record, onUpdate }) {
+  const details = { ...moduleStructuredDefaults.admin, ...(record.structured || {}) };
+  const updateDetails = (field, value) => {
+    onUpdate(record.id, { structured: { ...details, [field]: value } });
+  };
+
+  return (
+    <div className="module-system-panel">
+      <div className="panel-header">
+        <div>
+          <h3>Admin System</h3>
+          <p>User approvals, roles, permissions, company access, system settings, and notification controls.</p>
+        </div>
+      </div>
+
+      <div className="record-detail-grid">
+        <label>
+          User profile
+          <input value={details.userName || ''} onChange={(event) => updateDetails('userName', event.target.value)} placeholder="User name or setting owner" />
+        </label>
+        <label>
+          Role
+          <select value={details.role || 'Worker'} onChange={(event) => updateDetails('role', event.target.value)}>
+            <option>Owner</option>
+            <option>Admin</option>
+            <option>Supervisor</option>
+            <option>Worker</option>
+            <option>Viewer</option>
+          </select>
+        </label>
+        <label>
+          Company access
+          <select value={details.companyAccess || 'Roofing'} onChange={(event) => updateDetails('companyAccess', event.target.value)}>
+            <option>Roofing</option>
+            <option>Drafting</option>
+            <option>Lumen</option>
+            <option>All companies</option>
+          </select>
+        </label>
+        <label>
+          Approval status
+          <select value={details.approvalStatus || 'Pending approval'} onChange={(event) => {
+            updateDetails('approvalStatus', event.target.value);
+            onUpdate(record.id, { status: event.target.value });
+          }}>
+            <option>Pending approval</option>
+            <option>Approved</option>
+            <option>Suspended</option>
+          </select>
+        </label>
+        <label className="span-2">
+          Permissions
+          <textarea value={details.permissions || ''} onChange={(event) => updateDetails('permissions', event.target.value)} placeholder="View jobs, approve estimates, manage tickets" />
+        </label>
+        <label className="span-2">
+          Settings
+          <textarea value={details.settings || ''} onChange={(event) => updateDetails('settings', event.target.value)} placeholder="Job types, stages, lead statuses, ticket statuses, templates" />
+        </label>
+        <label className="span-2">
+          Notification settings
+          <textarea value={details.notificationSettings || ''} onChange={(event) => updateDetails('notificationSettings', event.target.value)} placeholder="Due dates, invoices, SLA, approvals" />
+        </label>
+      </div>
+
+      <div className="system-summary-grid">
+        <InfoBlock label="Role" value={details.role} sub={details.companyAccess} />
+        <InfoBlock label="Approval" value={details.approvalStatus} sub={record.status} />
+        <InfoBlock label="Users" value={people.length} sub="Seeded local users" />
+        <InfoBlock label="Companies" value={companies.length} sub="Roofing, Drafting, Lumen" />
+      </div>
+
+      <div className="record-actions">
+        <button type="button" className="primary-button" onClick={() => onUpdate(record.id, { status: 'Approved', convertedTo: 'User approved', conversionNote: `${record.title} approved ${new Date().toLocaleDateString('en-US')}.`, structured: { ...details, approvalStatus: 'Approved' } })}>Approve User</button>
+        <button type="button" className="secondary-button" onClick={() => onUpdate(record.id, { status: 'Suspended', structured: { ...details, approvalStatus: 'Suspended' } })}>Suspend</button>
+        <button type="button" className="secondary-button" onClick={() => onUpdate(record.id, { convertedTo: 'Admin setting applied', conversionNote: `Settings applied ${new Date().toLocaleDateString('en-US')}.` })}>Apply Setting</button>
+      </div>
+    </div>
+  );
+}
+
 function CrmRecordPanel({ record, jobs, onUpdate, onConvertLeadToClient, onConvertLeadToJob }) {
   const details = record.structured || {};
   const updateDetails = (field, value) => {
@@ -2909,7 +3499,7 @@ function ModuleRecordModal({ moduleId, jobs, onClose, onSubmit }) {
             dueDate: today,
             attachedFiles: []
           }
-      : {}
+      : getModuleStructuredDefaults(moduleId)
   });
 
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));

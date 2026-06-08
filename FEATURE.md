@@ -46,6 +46,7 @@ The existing TaskManagement app remains the work execution layer.
 - [x] Automations
 - [x] Dashboards
 - [x] Admin
+- [x] Each non-task module has its own local-first record system, editor, actions, and saved state instead of a shared placeholder page
 
 ---
 
