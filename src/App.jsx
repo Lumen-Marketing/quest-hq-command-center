@@ -45,7 +45,7 @@ import {
 import { copyText, taskManagementUrl } from './lib/taskManagement';
 
 const today = '2026-06-09';
-const presentationBuild = 'Module Workspaces v4';
+const presentationBuild = 'Stock Visuals v5';
 
 const navigation = [
   { id: 'command', label: 'Command Center', icon: Home },
@@ -165,6 +165,32 @@ const moduleStructuredDefaults = {
     settings: 'Job stages, ticket statuses, lead statuses',
     notificationSettings: 'Due dates, overdue invoices, ticket SLA alerts'
   }
+};
+
+const stockImages = {
+  crm: 'https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1400&q=80',
+  forms: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1400&q=80',
+  tickets: 'https://images.unsplash.com/photo-1553484771-371a605b060b?auto=format&fit=crop&w=1400&q=80',
+  files: 'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=1400&q=80',
+  finance: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1400&q=80',
+  knowledge: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1400&q=80',
+  automations: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1400&q=80',
+  dashboards: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1400&q=80',
+  templates: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80',
+  admin: 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1400&q=80'
+};
+
+const fileStockImages = {
+  'Job photos': 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=900&q=80',
+  'Client documents': 'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=900&q=80',
+  Permits: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=900&q=80',
+  Contracts: 'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=900&q=80',
+  Estimates: 'https://images.unsplash.com/photo-1554224155-1696413565d3?auto=format&fit=crop&w=900&q=80',
+  Invoices: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=900&q=80',
+  Drawings: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=900&q=80',
+  'Drafting files': 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=900&q=80',
+  'Marketing assets': 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=900&q=80',
+  'Internal documents': 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=80'
 };
 
 const localModulePanels = {
@@ -2054,6 +2080,7 @@ function CrmPipelineWorkspace({ records, jobs, selectedRecordId, onSelectRecord,
         </div>
         <Users size={18} />
       </div>
+      <WorkspaceImageHeader moduleId="crm" title="Relationship command view" text="Lead intake, follow-ups, client accounts, and opportunity value in one pipeline." />
       <div className="pipeline-board">
         {lanes.map((lane) => (
           <div className="pipeline-lane" key={lane}>
@@ -2090,6 +2117,7 @@ function FormsBuilderWorkspace({ records, selectedRecordId, onSelectRecord, onUp
         </div>
         <ClipboardList size={18} />
       </div>
+      <WorkspaceImageHeader moduleId="forms" title="Digital intake and approvals" text="Public forms, field checklists, client approvals, and response conversion." />
       <div className="forms-studio-grid">
         <div className="form-list-rail">
           {records.map((record) => (
@@ -2138,6 +2166,7 @@ function TicketsDeskWorkspace({ records, jobs, selectedRecordId, onSelectRecord,
         </div>
         <Ticket size={18} />
       </div>
+      <WorkspaceImageHeader moduleId="tickets" title="Request desk" text="SLA triage for client issues, internal requests, repairs, changes, and admin support." />
       <div className="ticket-desk-grid">
         <div className="sla-column urgent">
           <h3>Urgent / Due</h3>
@@ -2183,6 +2212,7 @@ function FilesLibraryWorkspace({ records, jobs, selectedRecordId, onSelectRecord
           Upload File
         </button>
       </div>
+      <WorkspaceImageHeader moduleId="files" title="Visual file cabinet" text="Photos, permits, contracts, estimates, invoices, drawings, and job documents with thumbnail previews." />
       <div className="file-library-layout">
         <div className="folder-rail">
           {categories.map((item) => (
@@ -2222,6 +2252,7 @@ function FinanceLedgerWorkspace({ records, jobs, selectedRecordId, onSelectRecor
         </div>
         <Receipt size={18} />
       </div>
+      <WorkspaceImageHeader moduleId="finance" title="AR and invoice control" text="Estimate approval, invoice status, payment progress, and job profitability." />
       <div className="ledger-table">
         <div className="ledger-row ledger-head"><span>Client / Job</span><span>Estimate</span><span>Paid</span><span>Balance</span><span>State</span></div>
         {rows.map(({ record, amount }) => (
@@ -2253,6 +2284,7 @@ function KnowledgeBrowserWorkspace({ records, selectedRecordId, onSelectRecord, 
         </div>
         <Library size={18} />
       </div>
+      <WorkspaceImageHeader moduleId="knowledge" title="SOP library" text="Searchable procedures, onboarding materials, training guides, and templates." />
       <div className="knowledge-layout">
         <div className="category-stack">{categories.map((item) => <span key={item}>{item}</span>)}</div>
         <div className="article-shelf">
@@ -2283,6 +2315,7 @@ function AutomationCanvasWorkspace({ records, selectedRecordId, onSelectRecord, 
         </div>
         <Workflow size={18} />
       </div>
+      <WorkspaceImageHeader moduleId="automations" title="Workflow automation lab" text="Rule cards that connect triggers, conditions, actions, and run logs." />
       <div className="automation-canvas-grid">
         {records.map((record) => (
           <button type="button" className={`automation-rule-card ${selectedRecordId === record.id ? 'selected' : ''}`} key={record.id} onClick={() => onSelectRecord(record.id)}>
@@ -2315,6 +2348,7 @@ function DashboardStudioWorkspace({ records, jobs, selectedRecordId, onSelectRec
         </div>
         <BarChart3 size={18} />
       </div>
+      <WorkspaceImageHeader moduleId="dashboards" title="Executive reporting wall" text="Operational widgets for work, revenue, quality, tickets, and team load." />
       <div className="dashboard-canvas">
         <div className="chart-widget tall"><span>Active Jobs</span><strong>{active}</strong><div style={{ height: `${Math.min(100, active * 18)}%` }} /></div>
         <div className="chart-widget"><span>Overdue Tasks</span><strong>{overdue}</strong></div>
@@ -2342,6 +2376,7 @@ function TemplateCatalogWorkspace({ records, selectedRecordId, onSelectRecord, o
         </div>
         <Layers3 size={18} />
       </div>
+      <WorkspaceImageHeader moduleId="templates" title="Reusable launch kits" text="Prebuilt job, form, task, finance, SOP, and automation patterns." />
       <div className="template-gallery">
         {records.map((record) => (
           <button type="button" className={`template-tile ${selectedRecordId === record.id ? 'selected' : ''}`} key={record.id} onClick={() => onSelectRecord(record.id)}>
@@ -2369,6 +2404,7 @@ function AdminConsoleWorkspace({ records, selectedRecordId, onSelectRecord, onUp
         </div>
         <Settings size={18} />
       </div>
+      <WorkspaceImageHeader moduleId="admin" title="Access and settings control" text="User approvals, role scope, company access, permissions, and notification settings." />
       <div className="admin-matrix">
         {records.map((record) => (
           <button type="button" className={`admin-user-row ${selectedRecordId === record.id ? 'selected' : ''}`} key={record.id} onClick={() => onSelectRecord(record.id)}>
@@ -2391,6 +2427,10 @@ function FileThumbnail({ record }) {
   if (details.previewDataUrl && isImage) {
     return <img className="file-thumb-image" src={details.previewDataUrl} alt="" />;
   }
+  const stockImage = fileImageForRecord(record);
+  if (stockImage) {
+    return <img className="file-thumb-image" src={stockImage} alt="" loading="lazy" />;
+  }
   const extension = (details.fileName || record.title || 'file').split('.').pop()?.slice(0, 4).toUpperCase() || 'FILE';
   return (
     <div className={`file-thumb-fallback ${isImage ? 'imageish' : ''}`}>
@@ -2398,6 +2438,25 @@ function FileThumbnail({ record }) {
       <span>{extension}</span>
     </div>
   );
+}
+
+function WorkspaceImageHeader({ moduleId, title, text }) {
+  return (
+    <div className="workspace-image-header">
+      <img src={stockImages[moduleId]} alt="" loading="lazy" />
+      <div>
+        <strong>{title}</strong>
+        <span>{text}</span>
+      </div>
+    </div>
+  );
+}
+
+function fileImageForRecord(record) {
+  const details = record.structured || {};
+  if (details.previewDataUrl) return details.previewDataUrl;
+  if (details.previewUrl) return details.previewUrl;
+  return fileStockImages[details.category] || fileStockImages['Internal documents'];
 }
 
 function normalizeCrmLane(record) {

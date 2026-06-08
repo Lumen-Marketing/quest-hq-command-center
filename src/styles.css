@@ -966,6 +966,58 @@ h3 {
   overflow: hidden;
 }
 
+.workspace-image-header {
+  position: relative;
+  min-height: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: flex-end;
+  background: #101722;
+}
+
+.workspace-image-header img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.74;
+}
+
+.workspace-image-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(16, 23, 34, 0.88), rgba(16, 23, 34, 0.28));
+}
+
+.workspace-image-header > div {
+  position: relative;
+  z-index: 1;
+  max-width: 620px;
+  padding: 18px;
+  color: #ffffff;
+}
+
+.workspace-image-header strong,
+.workspace-image-header span {
+  display: block;
+}
+
+.workspace-image-header strong {
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.workspace-image-header span {
+  color: #d9e0e8;
+  line-height: 1.45;
+  margin-top: 6px;
+}
+
 .pipeline-board,
 .forms-studio-grid,
 .ticket-desk-grid,
@@ -1239,6 +1291,11 @@ h3 {
   border: 1px solid var(--line);
   object-fit: cover;
   margin-bottom: 10px;
+}
+
+.file-thumb-image {
+  display: block;
+  background: var(--surface-soft);
 }
 
 .file-thumb-fallback {
