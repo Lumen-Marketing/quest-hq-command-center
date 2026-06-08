@@ -1,0 +1,12 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  base: process.env.GITHUB_PAGES === 'true' ? '/quest-hq-command-center/' : '/',
+  plugins: [react()],
+  server: {
+    fs: {
+      allow: ['..']
+    }
+  }
+});
