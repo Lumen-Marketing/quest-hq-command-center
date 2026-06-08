@@ -12,6 +12,14 @@ This repo should be reused as the Work Execution module.
 
 Do not duplicate existing TaskManagement features. Build Quest HQ as the all-in-one operations layer around it.
 
+Quest HQ repository:
+
+https://github.com/AsianDoesCodin/quest-hq-command-center
+
+First presentation deployment:
+
+https://asiandoescodin.github.io/quest-hq-command-center/
+
 ---
 
 # Product Goal
@@ -631,8 +639,8 @@ Vercel is the target production deployment platform.
 - [x] Commit Quest HQ source code
 - [x] Keep build artifacts out of source control unless intentionally needed
 - [x] Add GitHub Pages static `/docs` build target for first presentation
-- [ ] Enable GitHub Pages from `main` / `/docs`
-- [ ] Verify live GitHub Pages URL
+- [x] Enable GitHub Pages from `main` / `/docs`
+- [x] Verify live GitHub Pages URL
 - [x] Add README with local setup, scripts, and deployment notes
 - [x] Document TaskManagement integration expectations
 - [x] Document required environment variables
