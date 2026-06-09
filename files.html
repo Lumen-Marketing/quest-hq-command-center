@@ -27,18 +27,6 @@
       </aside>
       <main class="main">
         <section class="workspace file-center" data-file-center data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07" data-storage-bucket="quest-job-files" data-storage-limit="1073741824">
-    <div class="page-heading">
-      <div>
-        <div class="eyebrow">Files</div>
-        <h1>Job File Center</h1>
-        <p>Supabase-backed file storage for job photos, documents, permits, estimates, drawings, and field uploads.</p>
-      </div>
-      <div class="job-actions">
-        <span class="sync-pill" data-file-sync>Connecting to Supabase...</span>
-        <button class="primary-button" type="button" data-file-open-upload>Upload Files</button>
-      </div>
-    </div>
-
     <div class="file-metrics">
       <div class="metric"><span>Stored Files</span><strong data-file-metric="count">0</strong></div>
       <div class="metric"><span>Storage Used</span><strong data-file-metric="used">0 MB</strong></div>
@@ -65,7 +53,9 @@
       <label>Search
         <input data-file-search placeholder="Search file names, notes, types" />
       </label>
+      <span class="sync-pill" data-file-sync>Connecting to Supabase...</span>
       <button class="secondary-button" type="button" data-file-refresh>Refresh</button>
+      <button class="primary-button" type="button" data-file-open-upload>Upload Files</button>
     </div>
 
     <div class="tabs" role="tablist">
