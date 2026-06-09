@@ -373,7 +373,7 @@ function jobsPage() {
     <section class="tab-panel" data-panel="editor">
       <form class="panel job-editor" data-job-form>
         <input type="hidden" name="id" />
-        <div class="job-section-heading span-2"><h2>Job Editor</h2><span>Saved to Supabase when available, local fallback otherwise.</span></div>
+        <div class="job-section-heading span-2"><h2 data-job-editor-title>Job Editor</h2><span>Saved to Supabase when available, local fallback otherwise.</span></div>
         <label class="span-2">Job Name<input name="name" required /></label>
         <label>Company
           <select name="company_id" data-job-company-select></select>
@@ -411,11 +411,24 @@ function jobsPage() {
         <label class="span-2">Notes<textarea name="notes" rows="4"></textarea></label>
         <div class="form-actions span-2">
           <button class="primary-button" type="submit">Save Job</button>
+          <button class="secondary-button" type="button" data-job-modal-close>Close</button>
           <button class="secondary-button" type="button" data-job-duplicate>Duplicate</button>
           <button class="danger-button" type="button" data-job-delete>Delete</button>
         </div>
       </form>
     </section>
+    <div class="modal-overlay" data-job-modal hidden>
+      <div class="modal-panel job-modal-panel" role="dialog" aria-modal="true" aria-labelledby="job-modal-title">
+        <div class="modal-header">
+          <div>
+            <div class="eyebrow">Job Center</div>
+            <h2 id="job-modal-title" data-job-modal-title>Add Job</h2>
+          </div>
+          <button class="secondary-button" type="button" data-job-modal-close>Close</button>
+        </div>
+        <div data-job-modal-body></div>
+      </div>
+    </div>
   </section>`;
   return shell({
     file: 'jobs.html',
@@ -898,6 +911,8 @@ const css = `:root{--ink:#121826;--muted:#617089;--line:#d9e0ea;--soft:#f5f7fb;-
 
 const sidebarPolishCss = `.sidebar{width:292px;padding:22px 16px 18px}.main{margin-left:292px}.brand{gap:12px;margin-bottom:6px}.brand-mark{width:46px;height:46px;border-radius:9px;font-size:23px}.brand strong{font-size:24px;line-height:1.05;color:#fff}.brand small{font-size:14px;margin-top:4px;color:#adc7e6}.build-badge{align-self:flex-start;border-color:#f45d22;background:#3a211f;color:#fff3ec;padding:8px 12px;font-size:13px}.nav-list{gap:7px;margin-top:6px}.nav-item{min-height:47px;gap:12px;border-radius:8px;padding:0 12px;font-size:18px;line-height:1;color:#cfe6ff}.nav-item .nav-icon{display:grid;place-items:center;flex:0 0 20px;width:20px;height:20px;border:0;border-radius:0;color:#b8c7dc}.nav-item .nav-icon svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.nav-item .nav-label{display:block;width:auto;height:auto;border:0;border-radius:0;color:inherit;font-size:inherit}.nav-item.active{background:#3a211f;color:#fff;box-shadow:inset 4px 0 var(--orange)}.nav-item.active .nav-icon{color:#fff}.sidebar-card{font-size:14px;line-height:1.35}@media(max-width:820px){.sidebar{position:static;width:auto;height:auto;max-height:none;padding:18px}.main{margin-left:0;padding:16px}.brand strong{font-size:23px}.nav-item{font-size:18px}}`;
 
+const modalCss = `.modal-overlay[hidden]{display:none}.modal-overlay{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:rgba(15,23,42,.58);padding:22px}.modal-panel{width:min(980px,calc(100vw - 44px));max-height:calc(100vh - 44px);overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 28px 90px rgba(15,23,42,.34)}.modal-header{position:sticky;top:0;z-index:2;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;border-bottom:1px solid var(--line);background:#fff;padding:16px 18px}.modal-header h2{margin:3px 0 0}.job-modal-panel .job-editor{border:0;border-radius:0;box-shadow:none}.job-modal-panel .job-editor>.job-section-heading{display:none}.job-modal-panel .job-editor .form-actions{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding-top:12px}.job-modal-panel [data-job-modal-close]{display:inline-flex}body.modal-open{overflow:hidden}@media(max-width:760px){.modal-overlay{padding:10px}.modal-panel{width:calc(100vw - 20px);max-height:calc(100vh - 20px)}.modal-header{display:grid}.job-modal-panel .job-editor{grid-template-columns:1fr}}`;
+
 const plannedNavCss = `.nav-item.nav-planned,.nav-item.nav-planned:hover,.nav-item.nav-planned.active{background:rgba(148,163,184,.08);color:#7f8fa5;box-shadow:none;cursor:not-allowed;filter:grayscale(1)}.nav-item.nav-planned.active{box-shadow:inset 4px 0 #64748b}.nav-item.nav-planned .nav-icon{color:#6f8198}.nav-item.nav-planned .nav-icon svg{stroke-dasharray:3 3}.nav-item.nav-planned .nav-label{color:#7f8fa5}.nav-status{margin-left:auto;border:1px solid #53657c;border-radius:999px;background:#172234;color:#9fb0c6;padding:3px 7px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0}.nav-item:not(.nav-planned) .nav-status{display:none}@media(max-width:1180px){.nav-status{display:none}}`;
 
 const fileViewerCss = `.drive-viewer{padding:0;overflow:hidden}.drive-topbar{display:grid;grid-template-columns:minmax(220px,1fr) minmax(260px,420px) auto;gap:14px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);background:#fff}.drive-topbar h2{margin-bottom:3px}.drive-search{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;border:1px solid var(--line);border-radius:999px;background:#f8fafc;padding:0 14px;min-height:42px;color:#617089;font-size:12px;font-weight:900;text-transform:uppercase}.drive-search input{border:0;background:transparent;outline:0;color:var(--ink);font-size:14px;text-transform:none;font-weight:650}.drive-shell{display:grid;grid-template-columns:190px minmax(0,1fr) 270px;min-height:560px}.drive-rail{border-right:1px solid var(--line);background:#f8fafc;padding:12px;display:grid;align-content:start;gap:6px}.drive-rail button{display:flex;align-items:center;gap:10px;border:0;border-radius:999px;background:transparent;color:#52627a;padding:10px 12px;text-align:left;font-weight:850;cursor:pointer}.drive-rail button.active,.drive-rail button:hover{background:#e8f0fe;color:#174ea6}.drive-rail-icon{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.drive-main{min-width:0;padding:18px;background:#fff}.drive-section-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.drive-section-title h3{margin:0;font-size:18px}.drive-section-title span{color:#617089;font-size:13px;font-weight:800}.drive-view-toggle{display:grid;grid-template-columns:repeat(3,5px);gap:4px;border:1px solid var(--line);border-radius:999px;padding:8px 10px}.drive-view-toggle span{width:5px;height:5px;border-radius:50%;background:#617089}.drive-folder-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px}.drive-folder-card{min-height:142px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px;text-align:left;color:#172033;cursor:pointer;box-shadow:0 8px 24px rgba(24,35,55,.05)}.drive-folder-card:hover,.drive-folder-card.selected{border-color:#f97316;background:#fff8f5}.drive-folder-card.selected{box-shadow:inset 0 0 0 2px #fed7aa}.drive-folder-icon{display:grid;place-items:center;width:48px;height:40px;border-radius:8px;background:#fffbeb;margin-bottom:12px}.folder-glyph{width:34px;height:34px;fill:#fbbf24;stroke:#b45309;stroke-width:1.6;stroke-linejoin:round}.drive-folder-card strong,.drive-folder-card small,.drive-folder-card em{display:block}.drive-folder-card strong{font-size:16px}.drive-folder-card small{color:#617089;margin-top:6px}.drive-folder-card em{color:#52627a;font-style:normal;font-size:12px;font-weight:800;margin-top:10px}.recent-title{margin-top:24px}.drive-file-list{border:1px solid var(--line);border-radius:12px;overflow:hidden}.drive-file-row{display:grid;grid-template-columns:38px minmax(220px,1fr) 140px 90px 90px;gap:12px;align-items:center;width:100%;border:0;border-bottom:1px solid var(--line);background:#fff;padding:11px 12px;text-align:left;cursor:pointer}.drive-file-row:last-child{border-bottom:0}.drive-file-row:hover{background:#f8fafc}.drive-file-row strong{font-size:14px}.drive-file-row span:not(.file-type){color:#617089;font-size:13px;font-weight:750}.file-type{display:grid;place-items:center;width:30px;height:30px;border-radius:7px;background:#e8f0fe;color:#174ea6}.file-type.pdf{background:#fee2e2;color:#b91c1c}.file-type.drawing{background:#ecfdf5;color:#047857}.file-type svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.drive-details{border-left:1px solid var(--line);background:#fbfcfe;padding:18px}.drive-preview-card{display:grid;place-items:center;height:150px;border:1px solid #fde68a;border-radius:14px;background:linear-gradient(180deg,#fffbeb,#fff7ed);margin-bottom:16px}.drive-preview-card .folder-glyph{width:76px;height:76px}.drive-detail-list{display:grid;gap:10px;margin-top:16px}.drive-detail-list span{display:block;border-top:1px solid var(--line);padding-top:10px}.drive-detail-list strong,.drive-detail-list small{display:block}.drive-detail-list strong{font-size:12px;text-transform:uppercase;color:#617089}.drive-detail-list small{font-size:14px;font-weight:850;margin-top:3px}@media(max-width:1240px){.drive-shell{grid-template-columns:170px minmax(0,1fr)}.drive-details{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}.drive-folder-grid{grid-template-columns:repeat(3,minmax(150px,1fr))}}@media(max-width:820px){.drive-topbar,.drive-shell,.drive-file-row{grid-template-columns:1fr}.drive-rail{border-right:0;border-bottom:1px solid var(--line)}.drive-folder-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.drive-file-row{gap:5px}}@media(max-width:560px){.drive-folder-grid{grid-template-columns:1fr}}`;
@@ -1010,6 +1025,11 @@ const jobCenterJs = `(() => {
     profile: center.querySelector('[data-job-profile]'),
     sidecar: center.querySelector('[data-job-sidecar]'),
     form: center.querySelector('[data-job-form]'),
+    editorPanel: center.querySelector('[data-panel="editor"]'),
+    modal: center.querySelector('[data-job-modal]'),
+    modalBody: center.querySelector('[data-job-modal-body]'),
+    modalTitle: center.querySelector('[data-job-modal-title]'),
+    editorTitle: center.querySelector('[data-job-editor-title]'),
     companySelect: center.querySelector('[data-job-company-select]'),
     search: center.querySelector('[data-job-search]'),
     stage: center.querySelector('[data-job-stage-filter]')
@@ -1020,6 +1040,8 @@ const jobCenterJs = `(() => {
   let jobs = seed.map(normalizeJob);
   let selectedId = new URLSearchParams(window.location.search).get('job_id') || jobs[0]?.id || null;
   let source = 'local';
+  let formHome = null;
+  let lastFocus = null;
 
   init();
 
@@ -1089,7 +1111,7 @@ const jobCenterJs = `(() => {
       selectedId = job.id;
       saveLocal();
       render();
-      clickTab('editor');
+      openJobModal('Add Job');
     });
     center.querySelector('[data-job-refresh]')?.addEventListener('click', async () => {
       await refreshCompanies();
@@ -1102,12 +1124,22 @@ const jobCenterJs = `(() => {
     nodes.form?.addEventListener('submit', saveJob);
     center.querySelector('[data-job-duplicate]')?.addEventListener('click', duplicateJob);
     center.querySelector('[data-job-delete]')?.addEventListener('click', deleteJob);
+    center.addEventListener('click', (event) => {
+      if (event.target.closest('[data-job-modal-close]')) closeJobModal();
+    });
+    nodes.modal?.addEventListener('click', (event) => {
+      if (event.target === nodes.modal) closeJobModal();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && nodes.modal && !nodes.modal.hidden) closeJobModal();
+    });
   }
 
   function applyInitialRoute() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('action') === 'new') {
       center.querySelector('[data-job-new]')?.click();
+      window.history.replaceState({}, '', 'jobs.html');
       return;
     }
     if (params.get('tab')) clickTab(params.get('tab'));
@@ -1145,6 +1177,7 @@ const jobCenterJs = `(() => {
         setSync('Supabase live', 'live');
         clearLocal();
         render();
+        closeJobModal();
         return;
       }
     }
@@ -1153,6 +1186,7 @@ const jobCenterJs = `(() => {
     selectedId = payload.id;
     saveLocal();
     render();
+    closeJobModal();
   }
 
   async function deleteJob() {
@@ -1172,6 +1206,7 @@ const jobCenterJs = `(() => {
     selectedId = jobs[0]?.id || null;
     saveLocal();
     render();
+    closeJobModal();
   }
 
   function duplicateJob() {
@@ -1182,6 +1217,7 @@ const jobCenterJs = `(() => {
     selectedId = copy.id;
     saveLocal();
     render();
+    openJobModal('Duplicate Job');
   }
 
   function render() {
@@ -1252,7 +1288,7 @@ const jobCenterJs = `(() => {
       '<a class=\"secondary-button\" href=\"' + escapeHtml(bridgeUrl(job)) + '\">Open TaskManagement</a>' +
       '<a class=\"secondary-button\" href=\"' + escapeHtml(fileUrl(job)) + '\">Open Files</a>' +
       '<button class=\"primary-button\" type=\"button\" data-edit-selected>Edit Job</button>';
-    nodes.sidecar.querySelector('[data-edit-selected]')?.addEventListener('click', () => clickTab('editor'));
+    nodes.sidecar.querySelector('[data-edit-selected]')?.addEventListener('click', () => openJobModal('Edit Job'));
   }
 
   function linkedPanels(job) {
@@ -1277,6 +1313,37 @@ const jobCenterJs = `(() => {
       if (!nodes.form.elements[field]) return;
       nodes.form.elements[field].value = job[field] ?? '';
     });
+  }
+
+  function openJobModal(title) {
+    if (!nodes.modal || !nodes.modalBody || !nodes.form) {
+      clickTab('editor');
+      return;
+    }
+    if (!formHome) {
+      formHome = document.createElement('div');
+      formHome.hidden = true;
+      nodes.form.parentNode.insertBefore(formHome, nodes.form);
+    }
+    lastFocus = document.activeElement;
+    nodes.modalTitle.textContent = title || 'Job Editor';
+    if (nodes.editorTitle) nodes.editorTitle.textContent = title || 'Job Editor';
+    nodes.modalBody.appendChild(nodes.form);
+    nodes.modal.hidden = false;
+    document.body.classList.add('modal-open');
+    fillForm();
+    requestAnimationFrame(() => nodes.form.elements.name?.focus());
+  }
+
+  function closeJobModal() {
+    if (!nodes.modal || nodes.modal.hidden) return;
+    if (formHome && nodes.form) {
+      formHome.parentNode.insertBefore(nodes.form, formHome);
+    }
+    nodes.modal.hidden = true;
+    document.body.classList.remove('modal-open');
+    if (nodes.editorTitle) nodes.editorTitle.textContent = 'Job Editor';
+    if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
   }
 
   function collectForm() {
@@ -2343,7 +2410,7 @@ async function writeTarget(target) {
   const absolute = path.resolve(target);
   if (target !== '.') await rm(absolute, { recursive: true, force: true });
   await mkdir(path.join(absolute, 'assets'), { recursive: true });
-  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + plannedNavCss + fileViewerCss + fileCenterCss + jobCenterCss + coreDemoCss + companyAdminCss + analyticsCss + plannedTabsCss);
+  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + modalCss + plannedNavCss + fileViewerCss + fileCenterCss + jobCenterCss + coreDemoCss + companyAdminCss + analyticsCss + plannedTabsCss);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js + jobCenterJs + fileCenterJs + companyAdminJs + analyticsJs + commandCenterJs + taskBridgeJs);
   await writeFile(path.join(absolute, 'index.html'), commandPage());
   await writeFile(path.join(absolute, 'jobs.html'), jobsPage());

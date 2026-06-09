@@ -92,6 +92,11 @@
     profile: center.querySelector('[data-job-profile]'),
     sidecar: center.querySelector('[data-job-sidecar]'),
     form: center.querySelector('[data-job-form]'),
+    editorPanel: center.querySelector('[data-panel="editor"]'),
+    modal: center.querySelector('[data-job-modal]'),
+    modalBody: center.querySelector('[data-job-modal-body]'),
+    modalTitle: center.querySelector('[data-job-modal-title]'),
+    editorTitle: center.querySelector('[data-job-editor-title]'),
     companySelect: center.querySelector('[data-job-company-select]'),
     search: center.querySelector('[data-job-search]'),
     stage: center.querySelector('[data-job-stage-filter]')
@@ -102,6 +107,8 @@
   let jobs = seed.map(normalizeJob);
   let selectedId = new URLSearchParams(window.location.search).get('job_id') || jobs[0]?.id || null;
   let source = 'local';
+  let formHome = null;
+  let lastFocus = null;
 
   init();
 
@@ -171,7 +178,7 @@
       selectedId = job.id;
       saveLocal();
       render();
-      clickTab('editor');
+      openJobModal('Add Job');
     });
     center.querySelector('[data-job-refresh]')?.addEventListener('click', async () => {
       await refreshCompanies();
@@ -184,12 +191,22 @@
     nodes.form?.addEventListener('submit', saveJob);
     center.querySelector('[data-job-duplicate]')?.addEventListener('click', duplicateJob);
     center.querySelector('[data-job-delete]')?.addEventListener('click', deleteJob);
+    center.addEventListener('click', (event) => {
+      if (event.target.closest('[data-job-modal-close]')) closeJobModal();
+    });
+    nodes.modal?.addEventListener('click', (event) => {
+      if (event.target === nodes.modal) closeJobModal();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && nodes.modal && !nodes.modal.hidden) closeJobModal();
+    });
   }
 
   function applyInitialRoute() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('action') === 'new') {
       center.querySelector('[data-job-new]')?.click();
+      window.history.replaceState({}, '', 'jobs.html');
       return;
     }
     if (params.get('tab')) clickTab(params.get('tab'));
@@ -227,6 +244,7 @@
         setSync('Supabase live', 'live');
         clearLocal();
         render();
+        closeJobModal();
         return;
       }
     }
@@ -235,6 +253,7 @@
     selectedId = payload.id;
     saveLocal();
     render();
+    closeJobModal();
   }
 
   async function deleteJob() {
@@ -254,6 +273,7 @@
     selectedId = jobs[0]?.id || null;
     saveLocal();
     render();
+    closeJobModal();
   }
 
   function duplicateJob() {
@@ -264,6 +284,7 @@
     selectedId = copy.id;
     saveLocal();
     render();
+    openJobModal('Duplicate Job');
   }
 
   function render() {
@@ -334,7 +355,7 @@
       '<a class="secondary-button" href="' + escapeHtml(bridgeUrl(job)) + '">Open TaskManagement</a>' +
       '<a class="secondary-button" href="' + escapeHtml(fileUrl(job)) + '">Open Files</a>' +
       '<button class="primary-button" type="button" data-edit-selected>Edit Job</button>';
-    nodes.sidecar.querySelector('[data-edit-selected]')?.addEventListener('click', () => clickTab('editor'));
+    nodes.sidecar.querySelector('[data-edit-selected]')?.addEventListener('click', () => openJobModal('Edit Job'));
   }
 
   function linkedPanels(job) {
@@ -359,6 +380,37 @@
       if (!nodes.form.elements[field]) return;
       nodes.form.elements[field].value = job[field] ?? '';
     });
+  }
+
+  function openJobModal(title) {
+    if (!nodes.modal || !nodes.modalBody || !nodes.form) {
+      clickTab('editor');
+      return;
+    }
+    if (!formHome) {
+      formHome = document.createElement('div');
+      formHome.hidden = true;
+      nodes.form.parentNode.insertBefore(formHome, nodes.form);
+    }
+    lastFocus = document.activeElement;
+    nodes.modalTitle.textContent = title || 'Job Editor';
+    if (nodes.editorTitle) nodes.editorTitle.textContent = title || 'Job Editor';
+    nodes.modalBody.appendChild(nodes.form);
+    nodes.modal.hidden = false;
+    document.body.classList.add('modal-open');
+    fillForm();
+    requestAnimationFrame(() => nodes.form.elements.name?.focus());
+  }
+
+  function closeJobModal() {
+    if (!nodes.modal || nodes.modal.hidden) return;
+    if (formHome && nodes.form) {
+      formHome.parentNode.insertBefore(nodes.form, formHome);
+    }
+    nodes.modal.hidden = true;
+    document.body.classList.remove('modal-open');
+    if (nodes.editorTitle) nodes.editorTitle.textContent = 'Job Editor';
+    if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
   }
 
   function collectForm() {
