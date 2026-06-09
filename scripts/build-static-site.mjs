@@ -839,9 +839,9 @@ const jobCenterJs = `(() => {
     stage: center.querySelector('[data-job-stage-filter]')
   };
 
-  let supabaseClient = null;
-  let jobs = loadLocal();
   let companies = defaultCompanies.slice();
+  let supabaseClient = null;
+  let jobs = seed.map(normalizeJob);
   let selectedId = new URLSearchParams(window.location.search).get('job_id') || jobs[0]?.id || null;
   let source = 'local';
 
@@ -900,9 +900,8 @@ const jobCenterJs = `(() => {
     }
     source = 'supabase';
     jobs = (data || []).map(normalizeJob);
-    if (!jobs.length) jobs = loadLocal();
     selectedId = selectedId && jobs.some((job) => job.id === selectedId) ? selectedId : jobs[0]?.id || null;
-    saveLocal();
+    clearLocal();
     setSync('Supabase live', 'live');
     render();
   }
@@ -968,7 +967,7 @@ const jobCenterJs = `(() => {
         selectedId = saved.id;
         source = 'supabase';
         setSync('Supabase live', 'live');
-        saveLocal();
+        clearLocal();
         render();
         return;
       }
@@ -1198,17 +1197,12 @@ const jobCenterJs = `(() => {
     });
   }
 
-  function loadLocal() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(localKey) || 'null');
-      return Array.isArray(saved) && saved.length ? saved.map(normalizeJob) : seed.map(normalizeJob);
-    } catch {
-      return seed.map(normalizeJob);
-    }
-  }
-
   function saveLocal() {
     localStorage.setItem(localKey, JSON.stringify(jobs));
+  }
+
+  function clearLocal() {
+    localStorage.removeItem(localKey);
   }
 
   function setSync(message, state) {
