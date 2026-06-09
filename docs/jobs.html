@@ -26,30 +26,116 @@
         </div>
       </aside>
       <main class="main">
-        <section class="workspace">
-    <div class="page-heading"><div><div class="eyebrow">Jobs</div><h1>Job Center</h1><p>Jobs are parent containers for client, site, scope, files, forms, estimates, invoices, and linked tasks.</p></div><button class="primary-button" data-add-record>Add Job</button></div>
-    <div class="metric-grid"><div class="metric"><span>Active</span><strong>18</strong></div><div class="metric"><span>Urgent</span><strong>3</strong></div><div class="metric"><span>Linked tasks</span><strong>64</strong></div><div class="metric"><span>Revenue</span><strong>$126K</strong></div></div>
-    <div class="tabs" role="tablist"><button class="active" data-tab="list">Job List</button><button data-tab="profile">Profile</button><button data-tab="editor">Job Editor</button></div>
-    <section class="tab-panel active" data-panel="list"><div class="panel"><h2>Job Pipeline</h2><div class="table"><div><strong>Mesa Storage Roof Repair</strong><span>Roofing</span><span>Production</span><span>High</span><span>$46K</span></div><div><strong>Queen Creek Leak Follow-up</strong><span>Roofing</span><span>Inspection</span><span>Urgent</span><span>$8K</span></div><div><strong>Drafting Permit Package</strong><span>Drafting</span><span>QA Review</span><span>Medium</span><span>$14K</span></div><div><strong>Lumen Campaign Setup</strong><span>Lumen</span><span>Estimate Approved</span><span>Medium</span><span>$22K</span></div></div></div></section>
-    <section class="tab-panel" data-panel="profile"><div class="hero-card" style="background-image:url('https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1400&q=80')"><strong>Mesa Storage Roof Repair</strong><span>Client, scope, site, files, forms, finance, and TaskManagement link.</span></div></section>
-    <section class="tab-panel" data-panel="editor"><div class="record-system panel" data-record-system="jobs">
-    <div class="record-toolbar"><h2>Local Jobs Records</h2><button class="secondary-button" data-add-record>Add</button></div>
-    <div class="record-layout">
-      <div class="record-list" data-record-list></div>
-      <form class="record-editor" data-record-editor>
-        <label>Title<input name="title" /></label>
-        <label>Status<input name="status" /></label>
-        <label>Owner<input name="owner" /></label>
-        <label>Job / Context<input name="job" /></label>
-        <label class="span-2">Notes<textarea name="notes" rows="6"></textarea></label>
-        <div class="form-actions"><button class="primary-button" type="submit">Save Locally</button><button class="secondary-button" type="button" data-duplicate-record>Duplicate</button><button class="danger-button" type="button" data-delete-record>Delete</button></div>
-      </form>
+        <section class="workspace job-center" data-job-center data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
+    <div class="page-heading">
+      <div>
+        <div class="eyebrow">Jobs</div>
+        <h1>Job Center</h1>
+        <p>Jobs are the parent container for client, site, scope, files, forms, finance, and TaskManagement handoff.</p>
+      </div>
+      <div class="job-actions">
+        <span class="sync-pill" data-job-sync>Connecting to Supabase...</span>
+        <button class="primary-button" type="button" data-job-new>Add Job</button>
+      </div>
     </div>
-  </div></section>
+    <div class="metric-grid job-metrics">
+      <div class="metric"><span>Active Jobs</span><strong data-job-metric="active">0</strong></div>
+      <div class="metric"><span>Urgent</span><strong data-job-metric="urgent">0</strong></div>
+      <div class="metric"><span>Linked Tasks</span><strong data-job-metric="tasks">0</strong></div>
+      <div class="metric"><span>Pipeline</span><strong data-job-metric="revenue">$0</strong></div>
+    </div>
+    <div class="job-command panel">
+      <div class="job-search">
+        <span>Search</span>
+        <input data-job-search placeholder="Search jobs, clients, owners, addresses" />
+      </div>
+      <select data-job-stage-filter aria-label="Filter jobs by stage">
+        <option value="all">All stages</option>
+        <option>Lead</option>
+        <option>Inspection</option>
+        <option>Estimate Approved</option>
+        <option>Production</option>
+        <option>QA Review</option>
+        <option>Complete</option>
+      </select>
+      <button class="secondary-button" type="button" data-job-refresh>Refresh</button>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="active" data-tab="pipeline">Pipeline</button>
+      <button data-tab="list">Job List</button>
+      <button data-tab="profile">Profile</button>
+      <button data-tab="editor">Job Editor</button>
+    </div>
+    <section class="tab-panel active" data-panel="pipeline">
+      <div class="job-board" data-job-board></div>
+    </section>
+    <section class="tab-panel" data-panel="list">
+      <div class="panel job-list-panel">
+        <div class="job-section-heading"><h2>Job List</h2><span data-job-count>0 jobs</span></div>
+        <div class="job-table" data-job-table></div>
+      </div>
+    </section>
+    <section class="tab-panel" data-panel="profile">
+      <div class="job-profile-grid">
+        <article class="panel job-profile" data-job-profile></article>
+        <aside class="panel job-sidecar" data-job-sidecar></aside>
+      </div>
+    </section>
+    <section class="tab-panel" data-panel="editor">
+      <form class="panel job-editor" data-job-form>
+        <input type="hidden" name="id" />
+        <div class="job-section-heading span-2"><h2>Job Editor</h2><span>Saved to Supabase when available, local fallback otherwise.</span></div>
+        <label class="span-2">Job Name<input name="name" required /></label>
+        <label>Company
+          <select name="company_id">
+            <option value="quest-roofing">Quest Roofing</option>
+            <option value="quest-drafting">Quest Drafting</option>
+            <option value="lumen">Lumen</option>
+          </select>
+        </label>
+        <label>Client<input name="client_name" placeholder="Client or account name" /></label>
+        <label>Contact<input name="contact_name" /></label>
+        <label>Owner<input name="owner_name" /></label>
+        <label>Job Type<input name="job_type" /></label>
+        <label>Stage
+          <select name="stage">
+            <option>Lead</option>
+            <option>Inspection</option>
+            <option>Estimate Approved</option>
+            <option>Production</option>
+            <option>QA Review</option>
+            <option>Complete</option>
+          </select>
+        </label>
+        <label>Priority
+          <select name="priority">
+            <option>Low</option>
+            <option>Medium</option>
+            <option>High</option>
+            <option>Urgent</option>
+          </select>
+        </label>
+        <label>Start Date<input type="date" name="start_date" /></label>
+        <label>Due Date<input type="date" name="due_date" /></label>
+        <label>Estimate Total<input type="number" min="0" step="100" name="estimate_total" /></label>
+        <label>Invoice Total<input type="number" min="0" step="100" name="invoice_total" /></label>
+        <label>Task Count<input type="number" min="0" step="1" name="task_count" /></label>
+        <label>File Count<input type="number" min="0" step="1" name="file_count" /></label>
+        <label class="span-2">Site Address<input name="site_address" /></label>
+        <label class="span-2">Scope<textarea name="scope" rows="4"></textarea></label>
+        <label class="span-2">Notes<textarea name="notes" rows="4"></textarea></label>
+        <div class="form-actions span-2">
+          <button class="primary-button" type="submit">Save Job</button>
+          <button class="secondary-button" type="button" data-job-duplicate>Duplicate</button>
+          <button class="danger-button" type="button" data-job-delete>Delete</button>
+        </div>
+      </form>
+    </section>
   </section>
       </main>
     </div>
-    <script type="application/json" id="record-seed">[{"title":"Mesa Storage Roof Repair","status":"Production","owner":"Roofing","job":"$46K","notes":"High priority job."},{"title":"Queen Creek Leak Follow-up","status":"Inspection","owner":"Roofing","job":"$8K","notes":"Urgent priority job."},{"title":"Drafting Permit Package","status":"QA Review","owner":"Drafting","job":"$14K","notes":"Medium priority job."},{"title":"Lumen Campaign Setup","status":"Estimate Approved","owner":"Lumen","job":"$22K","notes":"Medium priority job."}]</script>
+    <script type="application/json" id="record-seed">[{"id":"local-mesa-storage","company_id":"quest-roofing","client_name":"Mesa Storage Partners","name":"Mesa Storage Roof Repair","contact_name":"Dana Ortiz","site_address":"1840 S Mesa Industrial Rd, Mesa, AZ","job_type":"Roofing","stage":"Production","priority":"High","owner_name":"Maya Rosales","scope":"Repair membrane damage, replace flashing, document photos, and close final inspection.","start_date":"2026-06-03","due_date":"2026-06-14","estimate_total":46000,"invoice_total":12000,"task_count":12,"file_count":9,"notes":"Priority commercial roof repair. Keep client updated daily."},{"id":"local-queen-creek","company_id":"quest-roofing","client_name":"Maya Rosales","name":"Queen Creek Leak Follow-up","contact_name":"Maya Rosales","site_address":"2138 E Orchard Lane, Queen Creek, AZ","job_type":"Roofing","stage":"Inspection","priority":"Urgent","owner_name":"Andre Lee","scope":"Emergency leak follow-up, roof photos, estimate, and deposit invoice.","start_date":"2026-06-08","due_date":"2026-06-09","estimate_total":8200,"invoice_total":0,"task_count":7,"file_count":5,"notes":"Client reported active leak after storm."},{"id":"local-drafting-permit","company_id":"quest-drafting","client_name":"Arroyo Vista HOA","name":"Drafting Permit Package","contact_name":"Board Office","site_address":"Arroyo Vista HOA, Gilbert, AZ","job_type":"Drafting","stage":"QA Review","priority":"Medium","owner_name":"Noah Park","scope":"Permit-ready drawings and review packet for city submission.","start_date":"2026-06-01","due_date":"2026-06-18","estimate_total":14000,"invoice_total":5000,"task_count":9,"file_count":6,"notes":"Needs QA pass before client approval."},{"id":"local-lumen-campaign","company_id":"lumen","client_name":"Lumen Internal","name":"Lumen Campaign Setup","contact_name":"Andre Lee","site_address":"Remote","job_type":"Lumen","stage":"Estimate Approved","priority":"Medium","owner_name":"Andre Lee","scope":"Campaign buildout, assets, automations, and launch dashboard.","start_date":"2026-06-05","due_date":"2026-06-21","estimate_total":22000,"invoice_total":0,"task_count":14,"file_count":12,"notes":"Ready for production planning."}]</script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="assets/quest-hq.js" defer></script>
   </body>
 </html>
