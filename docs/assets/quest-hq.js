@@ -5,6 +5,7 @@
     tabs.addEventListener('click', (event) => {
       const button = event.target.closest('[data-tab]');
       if (!button) return;
+      if (button.dataset.tabState === 'planned') return;
       const name = button.dataset.tab;
       tabs.querySelectorAll('[data-tab]').forEach((item) => item.classList.toggle('active', item === button));
       tabs.parentElement.querySelectorAll('[data-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === name));

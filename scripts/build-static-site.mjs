@@ -450,14 +450,24 @@ function modulePage(module) {
   const action = module.file === 'dashboards.html'
     ? '<a class="primary-button" href="jobs.html">Open Job Center</a>'
     : '<button class="primary-button" data-add-record>Create Record</button>';
+  const tabButtons = module.tabs.map(([label, body], index) => {
+    const planned = isPlannedTab(body);
+    const classes = [index === 0 ? 'active' : '', planned ? 'tab-planned' : ''].filter(Boolean).join(' ');
+    const state = planned ? ' data-tab-state="planned" aria-disabled="true" title="Planned for a later build"' : '';
+    return `<button class="${classes}" data-tab="${slug(label)}"${state}>${label}${planned ? '<small>Planned</small>' : ''}</button>`;
+  }).join('');
   const content = `<section class="workspace module-page">
     <div class="page-heading"><div><div class="eyebrow">${module.eyebrow}</div><h1>${module.title}</h1><p>${module.summary}</p></div>${action}</div>
     ${metrics}
     <div class="hero-card" style="background-image:url('${module.image}')"><strong>${module.title}</strong><span>${module.summary}</span></div>
-    <div class="tabs" role="tablist">${module.tabs.map(([label], index) => `<button class="${index === 0 ? 'active' : ''}" data-tab="${slug(label)}">${label}</button>`).join('')}</div>
+    <div class="tabs" role="tablist">${tabButtons}</div>
     ${module.tabs.map(([label, body], index) => `<section class="tab-panel ${index === 0 ? 'active' : ''}" data-panel="${slug(label)}">${body}</section>`).join('')}
   </section>`;
   return shell({ file: module.file, title: module.title, moduleId: module.file.replace('.html', ''), content, seed: module.seed });
+}
+
+function isPlannedTab(body) {
+  return String(body).includes('data-empty-module=');
 }
 
 function recordSystem(moduleId) {
@@ -777,6 +787,8 @@ const companyAdminCss = `.company-admin{padding:0;overflow:hidden}.company-admin
 
 const analyticsCss = `.analytics-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px}.analytics-stage-grid,.analytics-scope-list{display:grid;gap:10px}.analytics-stage-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.analytics-stage-grid span,.analytics-scope-list span{display:block;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px}.analytics-stage-grid strong,.analytics-stage-grid small,.analytics-scope-list strong,.analytics-scope-list small{display:block}.analytics-stage-grid small,.analytics-scope-list small{color:#617089;margin-top:5px}.analytics-health-table div{grid-template-columns:minmax(120px,.45fr) minmax(0,1fr) 120px}@media(max-width:1100px){.analytics-layout{grid-template-columns:1fr}.analytics-stage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.analytics-stage-grid{grid-template-columns:1fr}}`;
 
+const plannedTabsCss = `.tabs button.tab-planned{color:#94a3b8;background:#eef2f7;border-color:#d8e0eb;box-shadow:none;cursor:not-allowed;opacity:.78}.tabs button.tab-planned:hover{color:#94a3b8;background:#eef2f7;border-color:#d8e0eb;box-shadow:none}.tabs button.tab-planned.active{background:#f8fafc;border-color:#d8e0eb;color:#7b8798;box-shadow:inset 0 -2px #cbd5e1}.tabs button.tab-planned small{display:inline-flex;margin-left:8px;border:1px solid #cbd5e1;border-radius:999px;padding:2px 7px;color:#64748b;font-size:10px;font-weight:900;text-transform:uppercase;vertical-align:middle}.tabs button:not(.tab-planned) small{display:none}@media(max-width:620px){.tabs button.tab-planned small{display:none}}`;
+
 const js = `(() => {
   const storageKey = (moduleId) => 'quest-hq-static-' + moduleId;
   const seed = JSON.parse(document.getElementById('record-seed')?.textContent || '[]');
@@ -784,6 +796,7 @@ const js = `(() => {
     tabs.addEventListener('click', (event) => {
       const button = event.target.closest('[data-tab]');
       if (!button) return;
+      if (button.dataset.tabState === 'planned') return;
       const name = button.dataset.tab;
       tabs.querySelectorAll('[data-tab]').forEach((item) => item.classList.toggle('active', item === button));
       tabs.parentElement.querySelectorAll('[data-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === name));
@@ -1789,7 +1802,7 @@ async function writeTarget(target) {
   const absolute = path.resolve(target);
   if (target !== '.') await rm(absolute, { recursive: true, force: true });
   await mkdir(path.join(absolute, 'assets'), { recursive: true });
-  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + fileViewerCss + jobCenterCss + coreDemoCss + companyAdminCss + analyticsCss);
+  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + fileViewerCss + jobCenterCss + coreDemoCss + companyAdminCss + analyticsCss + plannedTabsCss);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js + jobCenterJs + companyAdminJs + analyticsJs + commandCenterJs + taskBridgeJs);
   await writeFile(path.join(absolute, 'index.html'), commandPage());
   await writeFile(path.join(absolute, 'jobs.html'), jobsPage());
