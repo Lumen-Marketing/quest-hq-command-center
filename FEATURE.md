@@ -301,17 +301,19 @@ Central file system connected to jobs, clients, tasks, tickets, and forms.
 
 ## Features
 
-- [x] Upload files
-- [x] Upload photos
-- [x] File list
-- [x] File preview
-- [x] File tags
+- [x] Upload files to Supabase Storage
+- [x] Upload photos to Supabase Storage
+- [x] File list by selected job
+- [x] Image thumbnail preview with signed URLs
 - [x] File categories
 - [x] Attach file to job
-- [x] Attach file to client
-- [x] Attach file to task
-- [x] Attach file to ticket
-- [x] Attach file to form response
+- [x] Download via signed URL
+- [x] Delete file and metadata
+- [x] 1GB presentation storage cap
+- [ ] Attach file to client
+- [ ] Attach file to task
+- [ ] Attach file to ticket
+- [ ] Attach file to form response
 
 ## File Categories
 
@@ -615,9 +617,9 @@ Do not rebuild these inside the new modules.
 
 - [x] File uploads
 - [x] Attach files to jobs
-- [x] Customer surveys
-- [x] Inspection checklists
-- [x] Ticket system
+- [ ] Customer surveys
+- [ ] Inspection checklists
+- [ ] Ticket system
 
 ## Phase 4: Finance + Templates
 
@@ -667,7 +669,7 @@ Vercel is the target production deployment platform.
 - [x] Set output directory to `dist`
 - [ ] Add production environment variables
 - [ ] Add preview environment variables
-- [ ] Configure `VITE_TASK_MANAGEMENT_URL` for deployed environment
+- [x] Configure `VITE_TASK_MANAGEMENT_URL` for deployed environment
 - [ ] Verify production build on Vercel
 - [ ] Verify preview deployments on PRs
 - [ ] Verify client-side routing and deep links
@@ -676,7 +678,7 @@ Vercel is the target production deployment platform.
 
 ## Deployment Architecture
 
-- [ ] Decide whether TaskManagement deploys as a separate Vercel project or as a routed sibling app
+- [x] Decide whether TaskManagement deploys as a separate Vercel project or as a routed sibling app
 - [x] Preserve `job.id -> task.project_id` relationship across deployments
 - [x] Avoid duplicating TaskManagement execution screens inside Quest HQ
 - [x] Plan shared auth / session behavior between Quest HQ and TaskManagement

@@ -331,7 +331,8 @@
     nodes.sidecar.innerHTML = detail('TaskManagement Link', number(job.task_count) + ' linked tasks') +
       detail('Files', number(job.file_count) + ' files attached') +
       detail('Company', companyLabel(job.company_id)) +
-      '<a class="secondary-button" href="' + escapeHtml(bridgeUrl(job)) + '">Open TaskManagement Bridge</a>' +
+      '<a class="secondary-button" href="' + escapeHtml(bridgeUrl(job)) + '">Open TaskManagement</a>' +
+      '<a class="secondary-button" href="' + escapeHtml(fileUrl(job)) + '">Open Files</a>' +
       '<button class="primary-button" type="button" data-edit-selected>Edit Job</button>';
     nodes.sidecar.querySelector('[data-edit-selected]')?.addEventListener('click', () => clickTab('editor'));
   }
@@ -340,7 +341,7 @@
     const taskOpen = Math.max(number(job.task_count) - completedTasks(job), 0);
     const items = [
       ['TaskManagement', number(job.task_count) + ' tasks', taskOpen + ' open / ' + completedTasks(job) + ' done', bridgeUrl(job)],
-      ['Files & Photos', number(job.file_count) + ' files', 'Photos, permits, estimates, invoices', 'files.html'],
+      ['Files & Photos', number(job.file_count) + ' files', 'Photos, permits, estimates, invoices', fileUrl(job)],
       ['Forms & Inspections', inspectionCount(job) + ' records', 'Inspection, approval, walkthrough', 'forms.html'],
       ['Finance', money.format(number(job.invoice_total)) + ' invoiced', money.format(number(job.estimate_total)) + ' estimate', 'finance.html']
     ];
@@ -506,7 +507,11 @@
       project_id: job.id,
       return_url: new URL('jobs.html?job_id=' + encodeURIComponent(job.id) + '&tab=profile', window.location.href).toString()
     });
-    return 'task-management.html?' + params.toString();
+    return 'https://task-management-quest.vercel.app?' + params.toString();
+  }
+
+  function fileUrl(job) {
+    return 'files.html?job_id=' + encodeURIComponent(job.id);
   }
 
   function completedTasks(job) {
@@ -523,6 +528,412 @@
 
   function priorityClass(priority) {
     return 'priority-' + String(priority || 'medium').toLowerCase();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[char]));
+  }
+})();(() => {
+  const center = document.querySelector('[data-file-center]');
+  if (!center) return;
+
+  const bucket = center.dataset.storageBucket || 'quest-job-files';
+  const storageLimit = number(center.dataset.storageLimit || 1073741824);
+  const requestedJobId = new URLSearchParams(window.location.search).get('job_id');
+  const money = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+  const nodes = {
+    sync: center.querySelector('[data-file-sync]'),
+    job: center.querySelector('[data-file-job]'),
+    category: center.querySelector('[data-file-category-filter]'),
+    search: center.querySelector('[data-file-search]'),
+    refresh: center.querySelector('[data-file-refresh]'),
+    grid: center.querySelector('[data-file-grid]'),
+    table: center.querySelector('[data-file-table]'),
+    detail: center.querySelector('[data-file-detail]'),
+    detailFull: center.querySelector('[data-file-detail-full]'),
+    context: center.querySelector('[data-file-context]'),
+    capacityLabel: center.querySelector('[data-file-capacity-label]'),
+    capacityBar: center.querySelector('[data-file-capacity-bar]'),
+    uploadForm: center.querySelector('[data-file-upload-form]'),
+    fileInput: center.querySelector('[data-file-input]'),
+    uploadLog: center.querySelector('[data-file-upload-log]')
+  };
+
+  let client = null;
+  let jobs = [];
+  let files = [];
+  let usageBytes = 0;
+  let selectedJobId = requestedJobId || '';
+  let selectedFileId = '';
+
+  init();
+
+  async function init() {
+    bindEvents();
+    if (!window.supabase || !center.dataset.supabaseUrl || !center.dataset.supabaseKey) {
+      setSync('Supabase unavailable', 'error');
+      renderEmpty('Supabase client is not available on this page.');
+      return;
+    }
+    client = window.supabase.createClient(center.dataset.supabaseUrl, center.dataset.supabaseKey);
+    await refreshAll();
+  }
+
+  function bindEvents() {
+    nodes.refresh?.addEventListener('click', refreshAll);
+    nodes.job?.addEventListener('change', async () => {
+      selectedJobId = nodes.job.value;
+      selectedFileId = '';
+      await refreshFiles();
+    });
+    nodes.category?.addEventListener('change', render);
+    nodes.search?.addEventListener('input', render);
+    nodes.grid?.addEventListener('click', selectFromClick);
+    nodes.table?.addEventListener('click', selectFromClick);
+    center.querySelector('[data-file-open-upload]')?.addEventListener('click', () => center.querySelector('[data-tab="upload-queue"]')?.click());
+    center.querySelector('[data-file-clear-input]')?.addEventListener('click', () => {
+      nodes.fileInput.value = '';
+      nodes.uploadLog.innerHTML = '';
+    });
+    nodes.uploadForm?.addEventListener('submit', uploadSelected);
+  }
+
+  async function refreshAll() {
+    setSync('Syncing...', '');
+    await loadJobs();
+    await refreshFiles();
+  }
+
+  async function loadJobs() {
+    const { data, error } = await client
+      .from('jobs')
+      .select('id,name,client_name,company_id,stage,priority,file_count')
+      .order('updated_at', { ascending: false });
+    if (error) {
+      console.error(error);
+      setSync('Jobs unavailable', 'error');
+      jobs = [];
+      renderJobOptions();
+      return;
+    }
+    jobs = data || [];
+    if (!jobs.some((job) => job.id === selectedJobId)) selectedJobId = jobs[0]?.id || '';
+    renderJobOptions();
+  }
+
+  async function refreshFiles() {
+    if (!client) return;
+    await refreshUsage();
+    if (!selectedJobId) {
+      files = [];
+      setSync('No jobs yet', 'local');
+      render();
+      return;
+    }
+    const { data, error } = await client
+      .from('job_files')
+      .select('*')
+      .eq('job_id', selectedJobId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error(error);
+      setSync('Files unavailable', 'error');
+      files = [];
+      render();
+      return;
+    }
+    files = await withPreviewUrls(data || []);
+    selectedFileId = selectedFileId && files.some((file) => file.id === selectedFileId) ? selectedFileId : files[0]?.id || '';
+    setSync('Supabase Storage live', 'live');
+    render();
+  }
+
+  async function refreshUsage() {
+    const { data, error } = await client
+      .from('job_files')
+      .select('size_bytes')
+      .is('deleted_at', null);
+    if (error) {
+      console.error(error);
+      usageBytes = 0;
+      return;
+    }
+    usageBytes = (data || []).reduce((total, file) => total + number(file.size_bytes), 0);
+  }
+
+  async function withPreviewUrls(items) {
+    return Promise.all(items.map(async (file) => {
+      if (!isImage(file.mime_type)) return file;
+      const { data, error } = await client.storage.from(bucket).createSignedUrl(file.object_path, 3600);
+      if (error) {
+        console.error(error);
+        return file;
+      }
+      return { ...file, preview_url: data.signedUrl };
+    }));
+  }
+
+  async function uploadSelected(event) {
+    event.preventDefault();
+    const selectedJob = currentJob();
+    const selectedFiles = Array.from(nodes.fileInput.files || []);
+    if (!selectedJob) return logUpload('Create or select a job before uploading.', 'error');
+    if (!selectedFiles.length) return logUpload('Choose at least one file.', 'error');
+
+    const form = new FormData(nodes.uploadForm);
+    const category = String(form.get('category') || 'Other');
+    const uploadedBy = String(form.get('uploaded_by_label') || 'Quest HQ Demo');
+    const notes = String(form.get('notes') || '');
+    let workingUsage = usageBytes;
+    nodes.uploadLog.innerHTML = '';
+    setSync('Uploading...', '');
+
+    for (const file of selectedFiles) {
+      if (workingUsage + file.size > storageLimit) {
+        logUpload(file.name + ' would exceed the 1GB demo limit.', 'error');
+        continue;
+      }
+      const id = crypto.randomUUID ? crypto.randomUUID() : 'file-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+      const objectPath = 'companies/' + safeSegment(selectedJob.company_id || 'company') + '/jobs/' + safeSegment(selectedJob.id) + '/' + id + '-' + safeFileName(file.name);
+      const { error: uploadError } = await client.storage
+        .from(bucket)
+        .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || 'application/octet-stream' });
+      if (uploadError) {
+        console.error(uploadError);
+        logUpload(file.name + ': upload failed - ' + uploadError.message, 'error');
+        continue;
+      }
+
+      const payload = {
+        id,
+        company_id: selectedJob.company_id || 'quest-roofing',
+        job_id: selectedJob.id,
+        bucket_id: bucket,
+        object_path: objectPath,
+        file_name: file.name,
+        mime_type: file.type || 'application/octet-stream',
+        size_bytes: file.size,
+        category,
+        uploaded_by_label: uploadedBy,
+        notes
+      };
+      const { error: insertError } = await client.from('job_files').insert(payload);
+      if (insertError) {
+        console.error(insertError);
+        await client.storage.from(bucket).remove([objectPath]);
+        logUpload(file.name + ': metadata save failed - ' + insertError.message, 'error');
+        continue;
+      }
+      workingUsage += file.size;
+      logUpload(file.name + ' uploaded.', 'ok');
+    }
+
+    nodes.fileInput.value = '';
+    await refreshFiles();
+    center.querySelector('[data-tab="job-files"]')?.click();
+  }
+
+  async function deleteFile(id) {
+    const file = files.find((item) => item.id === id);
+    if (!file) return;
+    if (!confirm('Delete ' + file.file_name + '?')) return;
+    setSync('Deleting...', '');
+    const { error: storageError } = await client.storage.from(bucket).remove([file.object_path]);
+    if (storageError) console.error(storageError);
+    const { error } = await client.from('job_files').update({ deleted_at: new Date().toISOString() }).eq('id', file.id);
+    if (error) {
+      console.error(error);
+      setSync('Delete failed', 'error');
+      return;
+    }
+    selectedFileId = '';
+    await refreshFiles();
+  }
+
+  async function downloadFile(id) {
+    const file = files.find((item) => item.id === id);
+    if (!file) return;
+    const { data, error } = await client.storage.from(bucket).createSignedUrl(file.object_path, 3600, { download: file.file_name });
+    if (error) {
+      console.error(error);
+      setSync('Download failed', 'error');
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener');
+  }
+
+  function renderJobOptions() {
+    if (!nodes.job) return;
+    nodes.job.innerHTML = jobs.length
+      ? jobs.map((job) => '<option value="' + escapeHtml(job.id) + '">' + escapeHtml(job.name) + ' - ' + escapeHtml(job.client_name || 'No client') + '</option>').join('')
+      : '<option value="">No jobs available</option>';
+    nodes.job.value = selectedJobId;
+  }
+
+  function render() {
+    const visible = filteredFiles();
+    const job = currentJob();
+    const selected = files.find((file) => file.id === selectedFileId) || visible[0] || null;
+    if (selected) selectedFileId = selected.id;
+    center.querySelector('[data-file-metric="count"]').textContent = String(files.length);
+    center.querySelector('[data-file-metric="used"]').textContent = formatBytes(usageBytes);
+    center.querySelector('[data-file-metric="limit"]').textContent = formatBytes(storageLimit);
+    center.querySelector('[data-file-metric="job"]').textContent = job ? shortText(job.name, 18) : 'None';
+    nodes.context.textContent = job ? (job.name + ' - ' + (job.client_name || 'No client')) : 'Create a job before uploading files.';
+    nodes.capacityLabel.textContent = formatBytes(usageBytes) + ' of ' + formatBytes(storageLimit);
+    nodes.capacityBar.style.width = Math.min(100, Math.round((usageBytes / storageLimit) * 100)) + '%';
+
+    nodes.grid.innerHTML = visible.length ? visible.map(fileCard).join('') : '<div class="empty-state">No files match this job view.</div>';
+    nodes.table.innerHTML = visible.length ? visible.map(fileRow).join('') : '<div class="empty-state">Upload job files to populate this table.</div>';
+    renderDetails(selected);
+  }
+
+  function renderDetails(file) {
+    if (!file) {
+      const empty = '<div class="empty-state">Select a file to inspect details.</div>';
+      nodes.detail.innerHTML = empty;
+      nodes.detailFull.innerHTML = empty;
+      return;
+    }
+    const html = fileDetailHtml(file);
+    nodes.detail.innerHTML = html;
+    nodes.detailFull.innerHTML = html;
+    center.querySelectorAll('[data-file-download]').forEach((button) => button.addEventListener('click', () => downloadFile(button.dataset.fileDownload)));
+    center.querySelectorAll('[data-file-delete]').forEach((button) => button.addEventListener('click', () => deleteFile(button.dataset.fileDelete)));
+  }
+
+  function fileCard(file) {
+    return '<button type="button" class="file-card-live ' + activeClass(file) + '" data-file-id="' + escapeHtml(file.id) + '">' +
+      '<span class="file-thumb">' + thumb(file) + '</span>' +
+      '<strong>' + escapeHtml(file.file_name) + '</strong>' +
+      '<span>' + escapeHtml(file.category || fileTypeLabel(file)) + ' / ' + formatBytes(file.size_bytes) + '</span>' +
+    '</button>';
+  }
+
+  function fileRow(file) {
+    return '<button type="button" class="file-row-live ' + activeClass(file) + '" data-file-id="' + escapeHtml(file.id) + '">' +
+      '<strong>' + escapeHtml(file.file_name) + '<span>' + escapeHtml(file.notes || file.object_path) + '</span></strong>' +
+      '<span>' + escapeHtml(file.category || 'Other') + '</span>' +
+      '<span>' + formatBytes(file.size_bytes) + '</span>' +
+      '<span>' + formatDate(file.created_at) + '</span>' +
+      '<span>' + escapeHtml(fileTypeLabel(file)) + '</span>' +
+    '</button>';
+  }
+
+  function fileDetailHtml(file) {
+    return '<div class="file-detail-preview">' + thumb(file, true) + '</div>' +
+      '<h2>' + escapeHtml(file.file_name) + '</h2>' +
+      '<p class="muted">' + escapeHtml(file.notes || 'No notes saved for this file.') + '</p>' +
+      '<div class="file-detail-list">' +
+        detail('Category', file.category || 'Other') +
+        detail('Size', formatBytes(file.size_bytes)) +
+        detail('MIME type', file.mime_type || 'application/octet-stream') +
+        detail('Uploaded by', file.uploaded_by_label || 'Unknown') +
+        detail('Uploaded', formatDate(file.created_at)) +
+        detail('Storage path', file.object_path) +
+      '</div>' +
+      '<div class="file-detail-actions">' +
+        '<button class="primary-button" type="button" data-file-download="' + escapeHtml(file.id) + '">Download</button>' +
+        '<button class="danger-button" type="button" data-file-delete="' + escapeHtml(file.id) + '">Delete</button>' +
+      '</div>';
+  }
+
+  function selectFromClick(event) {
+    const button = event.target.closest('[data-file-id]');
+    if (!button) return;
+    selectedFileId = button.dataset.fileId;
+    render();
+  }
+
+  function filteredFiles() {
+    const query = (nodes.search?.value || '').trim().toLowerCase();
+    const category = nodes.category?.value || 'all';
+    return files.filter((file) => {
+      const categoryMatch = category === 'all' || file.category === category;
+      const haystack = [file.file_name, file.mime_type, file.category, file.notes, file.uploaded_by_label].join(' ').toLowerCase();
+      return categoryMatch && (!query || haystack.includes(query));
+    });
+  }
+
+  function currentJob() {
+    return jobs.find((job) => job.id === selectedJobId) || null;
+  }
+
+  function renderEmpty(message) {
+    nodes.grid.innerHTML = '<div class="empty-state">' + escapeHtml(message) + '</div>';
+    nodes.table.innerHTML = '';
+  }
+
+  function thumb(file, large = false) {
+    if (isImage(file.mime_type) && file.preview_url) return '<img src="' + escapeHtml(file.preview_url) + '" alt="">';
+    const label = fileTypeLabel(file);
+    const cls = label === 'PDF' ? 'pdf' : label === 'Drawing' ? 'drawing' : '';
+    return '<span class="file-doc-icon ' + cls + '">' + escapeHtml(large ? label : label.slice(0, 3).toUpperCase()) + '</span>';
+  }
+
+  function detail(label, value) {
+    return '<div><strong>' + escapeHtml(label) + '</strong><span>' + escapeHtml(value || 'Not set') + '</span></div>';
+  }
+
+  function fileTypeLabel(file) {
+    const mime = String(file.mime_type || '');
+    const name = String(file.file_name || '').toLowerCase();
+    if (mime.includes('pdf') || name.endsWith('.pdf')) return 'PDF';
+    if (mime.startsWith('image/')) return 'Image';
+    if (name.endsWith('.dwg') || name.endsWith('.dxf')) return 'Drawing';
+    if (mime.includes('spreadsheet') || name.endsWith('.xlsx') || name.endsWith('.csv')) return 'Sheet';
+    if (mime.includes('word') || name.endsWith('.doc') || name.endsWith('.docx')) return 'Doc';
+    return 'File';
+  }
+
+  function isImage(mime) {
+    return String(mime || '').startsWith('image/');
+  }
+
+  function setSync(message, state) {
+    nodes.sync.textContent = message;
+    nodes.sync.className = 'sync-pill' + (state ? ' ' + state : '');
+  }
+
+  function logUpload(message, state) {
+    nodes.uploadLog.insertAdjacentHTML('beforeend', '<div class="' + escapeHtml(state || '') + '">' + escapeHtml(message) + '</div>');
+  }
+
+  function activeClass(file) {
+    return file.id === selectedFileId ? 'active' : '';
+  }
+
+  function safeSegment(value) {
+    return String(value || 'item').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'item';
+  }
+
+  function safeFileName(value) {
+    return String(value || 'file').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'file';
+  }
+
+  function shortText(value, max) {
+    const text = String(value || '');
+    return text.length > max ? text.slice(0, max - 1) + '...' : text;
+  }
+
+  function formatDate(value) {
+    if (!value) return 'Not set';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString();
+  }
+
+  function formatBytes(value) {
+    const bytes = number(value);
+    if (bytes >= 1024 * 1024 * 1024) return (bytes / 1024 / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 * 1024 ? 0 : 1) + ' GB';
+    if (bytes >= 1024 * 1024) return money.format(bytes / 1024 / 1024) + ' MB';
+    if (bytes >= 1024) return money.format(bytes / 1024) + ' KB';
+    return money.format(bytes) + ' B';
+  }
+
+  function number(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   function escapeHtml(value) {
