@@ -614,7 +614,9 @@
     grid: center.querySelector('[data-file-grid]'),
     table: center.querySelector('[data-file-table]'),
     detail: center.querySelector('[data-file-detail]'),
-    detailFull: center.querySelector('[data-file-detail-full]'),
+    folders: center.querySelector('[data-drive-folders]'),
+    folderSection: center.querySelector('[data-folder-section]'),
+    crumb: center.querySelector('[data-file-crumb]'),
     context: center.querySelector('[data-file-context]'),
     capacityLabel: center.querySelector('[data-file-capacity-label]'),
     capacityBar: center.querySelector('[data-file-capacity-bar]'),
@@ -627,10 +629,13 @@
 
   let client = null;
   let jobs = [];
+  let allFiles = [];
   let files = [];
   let usageBytes = 0;
   let selectedJobId = requestedJobId || '';
   let selectedFileId = '';
+  let driveFilter = 'job-files';
+  let viewMode = 'grid';
   let uploadFormHome = null;
   let lastFocus = null;
 
@@ -652,12 +657,44 @@
     nodes.job?.addEventListener('change', async () => {
       selectedJobId = nodes.job.value;
       selectedFileId = '';
+      driveFilter = 'job-files';
+      setActiveDriveNav();
       await refreshFiles();
     });
     nodes.category?.addEventListener('change', render);
     nodes.search?.addEventListener('input', render);
     nodes.grid?.addEventListener('click', selectFromClick);
     nodes.table?.addEventListener('click', selectFromClick);
+    nodes.folders?.addEventListener('click', async (event) => {
+      const folder = event.target.closest('[data-drive-job-id]');
+      if (!folder) return;
+      driveFilter = 'job-files';
+      selectedJobId = folder.dataset.driveJobId;
+      selectedFileId = '';
+      if (nodes.job) nodes.job.value = selectedJobId;
+      setActiveDriveNav();
+      await refreshFiles();
+    });
+    center.querySelector('[data-drive-root]')?.addEventListener('click', () => {
+      driveFilter = 'job-files';
+      setActiveDriveNav();
+      render();
+    });
+    center.querySelectorAll('[data-drive-filter]').forEach((button) => {
+      button.addEventListener('click', () => {
+        driveFilter = button.dataset.driveFilter || 'job-files';
+        selectedFileId = '';
+        setActiveDriveNav();
+        render();
+      });
+    });
+    center.querySelectorAll('[data-file-view]').forEach((button) => {
+      button.addEventListener('click', () => {
+        viewMode = button.dataset.fileView || 'grid';
+        center.querySelectorAll('[data-file-view]').forEach((item) => item.classList.toggle('active', item === button));
+        render();
+      });
+    });
     center.querySelector('[data-file-open-upload]')?.addEventListener('click', openUploadModal);
     center.addEventListener('click', (event) => {
       if (event.target.closest('[data-file-modal-close]')) closeUploadModal();
@@ -701,28 +738,24 @@
   async function refreshFiles() {
     if (!client) return;
     await refreshUsage();
-    if (!selectedJobId) {
-      files = [];
-      setSync('No jobs yet', 'local');
-      render();
-      return;
-    }
     const { data, error } = await client
       .from('job_files')
       .select('*')
-      .eq('job_id', selectedJobId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
     if (error) {
       console.error(error);
       setSync('Files unavailable', 'error');
+      allFiles = [];
       files = [];
       render();
       return;
     }
-    files = await withPreviewUrls(data || []);
-    selectedFileId = selectedFileId && files.some((file) => file.id === selectedFileId) ? selectedFileId : files[0]?.id || '';
-    setSync('Supabase Storage live', 'live');
+    allFiles = await withPreviewUrls(data || []);
+    files = selectedJobId ? allFiles.filter((file) => file.job_id === selectedJobId) : [];
+    const visible = filteredFiles();
+    selectedFileId = selectedFileId && visible.some((file) => file.id === selectedFileId) ? selectedFileId : visible[0]?.id || '';
+    setSync(jobs.length ? 'Supabase Storage live' : 'No jobs yet', jobs.length ? 'live' : 'local');
     render();
   }
 
@@ -842,7 +875,7 @@
   }
 
   async function deleteFile(id) {
-    const file = files.find((item) => item.id === id);
+    const file = allFiles.find((item) => item.id === id);
     if (!file) return;
     if (!confirm('Delete ' + file.file_name + '?')) return;
     setSync('Deleting...', '');
@@ -859,7 +892,7 @@
   }
 
   async function downloadFile(id) {
-    const file = files.find((item) => item.id === id);
+    const file = allFiles.find((item) => item.id === id);
     if (!file) return;
     const { data, error } = await client.storage.from(bucket).createSignedUrl(file.object_path, 3600, { download: file.file_name });
     if (error) {
@@ -881,31 +914,44 @@
   function render() {
     const visible = filteredFiles();
     const job = currentJob();
-    const selected = files.find((file) => file.id === selectedFileId) || visible[0] || null;
+    const selected = visible.find((file) => file.id === selectedFileId) || visible[0] || null;
     if (selected) selectedFileId = selected.id;
-    center.querySelector('[data-file-metric="count"]').textContent = String(files.length);
+    center.querySelector('[data-file-metric="count"]').textContent = String(allFiles.length);
     center.querySelector('[data-file-metric="used"]').textContent = formatBytes(usageBytes);
-    center.querySelector('[data-file-metric="limit"]').textContent = formatBytes(storageLimit);
-    center.querySelector('[data-file-metric="job"]').textContent = job ? shortText(job.name, 18) : 'None';
-    nodes.context.textContent = job ? (job.name + ' - ' + (job.client_name || 'No client')) : 'Create a job before uploading files.';
+    center.querySelector('[data-file-metric="job"]').textContent = job ? shortText(job.name, 22) : viewLabel();
+    nodes.crumb.textContent = driveFilter === 'job-files' ? (job?.name || 'Job files') : viewLabel();
+    nodes.context.textContent = driveContext(job, visible.length);
     nodes.capacityLabel.textContent = formatBytes(usageBytes) + ' of ' + formatBytes(storageLimit);
     nodes.capacityBar.style.width = Math.min(100, Math.round((usageBytes / storageLimit) * 100)) + '%';
+    nodes.folderSection.hidden = driveFilter !== 'job-files';
+    renderFolders();
 
-    nodes.grid.innerHTML = visible.length ? visible.map(fileCard).join('') : '<div class="empty-state">No files match this job view.</div>';
-    nodes.table.innerHTML = visible.length ? visible.map(fileRow).join('') : '<div class="empty-state">Upload job files to populate this table.</div>';
+    nodes.grid.hidden = viewMode !== 'grid';
+    nodes.table.hidden = viewMode !== 'list';
+    nodes.grid.innerHTML = visible.length ? visible.map(fileCard).join('') : '<div class="empty-state">No files match this Drive view.</div>';
+    nodes.table.innerHTML = visible.length ? visible.map(fileRow).join('') : '<div class="empty-state">No files match this Drive view.</div>';
     renderDetails(selected);
+  }
+
+  function renderFolders() {
+    if (!nodes.folders) return;
+    nodes.folders.innerHTML = jobs.length ? jobs.map((job) => {
+      const count = allFiles.filter((file) => file.job_id === job.id).length;
+      return '<button class="drive-folder-card-live ' + (job.id === selectedJobId ? 'active' : '') + '" type="button" data-drive-job-id="' + escapeHtml(job.id) + '">' +
+        '<span class="drive-folder-mark">FL</span>' +
+        '<span><strong>' + escapeHtml(job.name) + '</strong><span>' + escapeHtml(job.client_name || 'No client') + ' / ' + count + (count === 1 ? ' file' : ' files') + '</span></span>' +
+      '</button>';
+    }).join('') : '<div class="empty-state">Create a job workspace to get its file folder.</div>';
   }
 
   function renderDetails(file) {
     if (!file) {
       const empty = '<div class="empty-state">Select a file to inspect details.</div>';
       nodes.detail.innerHTML = empty;
-      nodes.detailFull.innerHTML = empty;
       return;
     }
     const html = fileDetailHtml(file);
     nodes.detail.innerHTML = html;
-    nodes.detailFull.innerHTML = html;
     center.querySelectorAll('[data-file-download]').forEach((button) => button.addEventListener('click', () => downloadFile(button.dataset.fileDownload)));
     center.querySelectorAll('[data-file-delete]').forEach((button) => button.addEventListener('click', () => deleteFile(button.dataset.fileDelete)));
   }
@@ -920,6 +966,7 @@
 
   function fileRow(file) {
     return '<button type="button" class="file-row-live ' + activeClass(file) + '" data-file-id="' + escapeHtml(file.id) + '">' +
+      '<span class="file-type ' + fileTypeClass(file) + '">' + escapeHtml(fileTypeLabel(file).slice(0, 3).toUpperCase()) + '</span>' +
       '<strong>' + escapeHtml(file.file_name) + '<span>' + escapeHtml(file.notes || file.object_path) + '</span></strong>' +
       '<span>' + escapeHtml(file.category || 'Other') + '</span>' +
       '<span>' + formatBytes(file.size_bytes) + '</span>' +
@@ -956,11 +1003,43 @@
   function filteredFiles() {
     const query = (nodes.search?.value || '').trim().toLowerCase();
     const category = nodes.category?.value || 'all';
-    return files.filter((file) => {
+    const source = driveFilter === 'job-files'
+      ? files
+      : driveFilter === 'recent'
+        ? allFiles.slice(0, 40)
+        : driveFilter === 'images'
+          ? allFiles.filter((file) => isImage(file.mime_type))
+          : driveFilter === 'documents'
+            ? allFiles.filter((file) => !isImage(file.mime_type))
+            : files;
+    return source.filter((file) => {
       const categoryMatch = category === 'all' || file.category === category;
       const haystack = [file.file_name, file.mime_type, file.category, file.notes, file.uploaded_by_label].join(' ').toLowerCase();
       return categoryMatch && (!query || haystack.includes(query));
     });
+  }
+
+  function setActiveDriveNav() {
+    center.querySelectorAll('[data-drive-filter]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.driveFilter === driveFilter);
+    });
+  }
+
+  function viewLabel() {
+    const labels = {
+      'job-files': 'Job files',
+      recent: 'Recent',
+      images: 'Images',
+      documents: 'Documents'
+    };
+    return labels[driveFilter] || 'Files';
+  }
+
+  function driveContext(job, count) {
+    if (driveFilter === 'job-files') {
+      return job ? (job.name + ' - ' + (job.client_name || 'No client') + ' - ' + count + (count === 1 ? ' file' : ' files')) : 'Create a job workspace before uploading files.';
+    }
+    return viewLabel() + ' - ' + count + (count === 1 ? ' file' : ' files');
   }
 
   function currentJob() {
@@ -992,6 +1071,11 @@
     if (mime.includes('spreadsheet') || name.endsWith('.xlsx') || name.endsWith('.csv')) return 'Sheet';
     if (mime.includes('word') || name.endsWith('.doc') || name.endsWith('.docx')) return 'Doc';
     return 'File';
+  }
+
+  function fileTypeClass(file) {
+    const label = fileTypeLabel(file);
+    return label === 'PDF' ? 'pdf' : label === 'Drawing' ? 'drawing' : '';
   }
 
   function isImage(mime) {

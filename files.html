@@ -27,19 +27,14 @@
       </aside>
       <main class="main">
         <section class="workspace file-center" data-file-center data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07" data-storage-bucket="quest-job-files" data-storage-limit="1073741824">
-    <div class="file-metrics">
-      <div class="metric"><span>Stored Files</span><strong data-file-metric="count">0</strong></div>
-      <div class="metric"><span>Storage Used</span><strong data-file-metric="used">0 MB</strong></div>
-      <div class="metric"><span>Demo Limit</span><strong data-file-metric="limit">1 GB</strong></div>
-      <div class="metric"><span>Selected Job</span><strong data-file-metric="job">None</strong></div>
-    </div>
-
-    <div class="file-toolbar panel">
-      <label>Job
-        <select data-file-job></select>
-      </label>
-      <label>Category
-        <select data-file-category-filter>
+    <div class="drive-app panel">
+      <div class="drive-header">
+        <button class="primary-button" type="button" data-file-open-upload>New</button>
+        <label class="drive-search-bar">
+          <span>Search</span>
+          <input data-file-search placeholder="Search in files" />
+        </label>
+        <select data-file-category-filter aria-label="Filter files by category">
           <option value="all">All categories</option>
           <option>Photo</option>
           <option>Permit</option>
@@ -49,35 +44,55 @@
           <option>Drawing</option>
           <option>Other</option>
         </select>
-      </label>
-      <label>Search
-        <input data-file-search placeholder="Search file names, notes, types" />
-      </label>
-      <span class="sync-pill" data-file-sync>Connecting to Supabase...</span>
-      <button class="secondary-button" type="button" data-file-refresh>Refresh</button>
-      <button class="primary-button" type="button" data-file-open-upload>Upload Files</button>
-    </div>
+        <span class="sync-pill" data-file-sync>Connecting...</span>
+        <button class="secondary-button" type="button" data-file-refresh>Refresh</button>
+      </div>
 
-    <div class="tabs" role="tablist">
-      <button class="active" data-tab="job-files">Job Files</button>
-      <button data-tab="file-details">File Details</button>
-    </div>
-
-    <section class="tab-panel active" data-panel="job-files">
-      <div class="file-layout">
-        <section class="panel file-browser">
-          <div class="file-section-title">
-            <div><h2>Files</h2><p class="muted" data-file-context>No job selected.</p></div>
-            <div class="file-capacity"><span data-file-capacity-label>0 MB of 1 GB</span><b><i data-file-capacity-bar></i></b></div>
+      <div class="drive-body">
+        <aside class="drive-sidebar">
+          <button class="drive-nav active" type="button" data-drive-filter="job-files">My Drive</button>
+          <button class="drive-nav" type="button" data-drive-filter="recent">Recent</button>
+          <button class="drive-nav" type="button" data-drive-filter="images">Images</button>
+          <button class="drive-nav" type="button" data-drive-filter="documents">Documents</button>
+          <div class="drive-storage">
+            <strong>Storage</strong>
+            <span data-file-capacity-label>0 MB of 1 GB</span>
+            <b><i data-file-capacity-bar></i></b>
           </div>
-          <div class="file-grid-live" data-file-grid></div>
-          <div class="file-table-live" data-file-table></div>
-        </section>
-        <aside class="panel file-detail-pane" data-file-detail>
+          <div class="drive-job-select">
+            <label>Current job space<select data-file-job></select></label>
+          </div>
+        </aside>
+
+        <main class="drive-content">
+          <div class="drive-content-bar">
+            <div>
+              <div class="drive-crumbs"><button type="button" data-drive-root>My Drive</button><span>/</span><strong data-file-crumb>Job files</strong></div>
+              <p class="muted" data-file-context>No job selected.</p>
+            </div>
+            <div class="drive-view-actions" role="group" aria-label="File view mode">
+              <button class="active" type="button" data-file-view="grid">Grid</button>
+              <button type="button" data-file-view="list">List</button>
+            </div>
+          </div>
+
+          <section class="drive-folder-section" data-folder-section>
+            <div class="drive-section-heading"><h2>Job folders</h2><span data-file-metric="job">None</span></div>
+            <div class="drive-folder-live-grid" data-drive-folders></div>
+          </section>
+
+          <section class="drive-files-section">
+            <div class="drive-section-heading"><h2>Files</h2><span><strong data-file-metric="count">0</strong> stored / <strong data-file-metric="used">0 MB</strong></span></div>
+            <div class="file-grid-live" data-file-grid></div>
+            <div class="file-table-live" data-file-table hidden></div>
+          </section>
+        </main>
+
+        <aside class="drive-details-pane" data-file-detail>
           <div class="empty-state">Select a file to inspect details.</div>
         </aside>
       </div>
-    </section>
+    </div>
 
     <section class="tab-panel" data-panel="upload-queue">
       <form class="panel file-upload-panel" data-file-upload-form>
@@ -116,12 +131,6 @@
         </div>
         <div class="file-upload-log span-2" data-file-upload-log></div>
       </form>
-    </section>
-
-    <section class="tab-panel" data-panel="file-details">
-      <div class="panel file-detail-full" data-file-detail-full>
-        <div class="empty-state">Select a file from Job Files to view its deployment metadata.</div>
-      </div>
     </section>
     <div class="modal-overlay" data-file-modal hidden>
       <div class="modal-panel file-modal-panel" role="dialog" aria-modal="true" aria-labelledby="file-modal-title">
