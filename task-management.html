@@ -9,7 +9,7 @@
     <title>TaskManagement | Quest HQ</title>
     <link rel="stylesheet" href="assets/quest-hq.css" />
   </head>
-  <body data-page="task-management.html" data-module="">
+  <body data-page="task-management.html" data-module="task-bridge">
     <div class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="index.html">
@@ -26,14 +26,38 @@
         </div>
       </aside>
       <main class="main">
-        <section class="workspace">
-    <div class="page-heading"><div><div class="eyebrow">TaskManagement</div><h1>Work Execution Bridge</h1><p>Quest HQ does not duplicate tasks. Jobs link to TaskManagement through the shared project relationship.</p></div><a class="primary-button" href="https://github.com/ShanIngrid1207/TaskManagementQuest/tree/main">Open Repo</a></div>
-    <div class="bridge-card"><code>job.id</code><span>maps to</span><code>task.project_id</code></div>
-    <div class="command-grid"><section class="panel wide-panel"><h2>Related Task Rollup</h2><div class="table"><div><strong>Mesa Storage Roof Repair</strong><span>8 tasks</span><span>1 overdue</span><span>12h tracked</span></div><div><strong>Queen Creek Leak Follow-up</strong><span>9 tasks</span><span>2 overdue</span><span>15h tracked</span></div><div><strong>Drafting Permit Package</strong><span>10 tasks</span><span>3 overdue</span><span>18h tracked</span></div><div><strong>Lumen Campaign Setup</strong><span>11 tasks</span><span>4 overdue</span><span>21h tracked</span></div></div></section><section class="panel"><h2>Next Integration</h2><p class="muted">When backend work starts, Vercel routes can read the TaskManagement app by job/project ID.</p></section></div>
+        <section class="workspace task-bridge-page" data-task-bridge data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
+    <div class="page-heading">
+      <div><div class="eyebrow">TaskManagement Bridge</div><h1>Work execution handoff</h1><p>Demo bridge for the future TaskManagement integration. Quest HQ keeps job context; TaskManagement owns execution.</p></div>
+      <div class="job-actions"><span class="sync-pill" data-bridge-sync>Loading job...</span><a class="primary-button" data-bridge-return href="jobs.html">Return to Job</a></div>
+    </div>
+    <div class="bridge-hero panel">
+      <div><span>Quest HQ job id</span><code data-bridge-job-id>pending</code></div>
+      <strong>maps to</strong>
+      <div><span>TaskManagement project_id</span><code data-bridge-project-id>pending</code></div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric"><span>Linked Tasks</span><strong data-bridge-metric="tasks">0</strong></div>
+      <div class="metric"><span>Open</span><strong data-bridge-metric="open">0</strong></div>
+      <div class="metric"><span>Completed</span><strong data-bridge-metric="completed">0</strong></div>
+      <div class="metric"><span>Overdue</span><strong data-bridge-metric="overdue">0</strong></div>
+    </div>
+    <div class="task-bridge-grid">
+      <section class="panel wide-panel">
+        <div class="job-section-heading"><h2 data-bridge-title>Selected Job</h2><span data-bridge-stage>Stage</span></div>
+        <div class="bridge-task-list" data-bridge-tasks></div>
+      </section>
+      <aside class="panel bridge-contract">
+        <h2>Handoff Contract</h2>
+        <div data-bridge-contract></div>
+        <a class="secondary-button" href="https://github.com/ShanIngrid1207/TaskManagementQuest/tree/main">View TaskManagement Repo</a>
+      </aside>
+    </div>
   </section>
       </main>
     </div>
-    <script type="application/json" id="record-seed">[]</script>
+    <script type="application/json" id="record-seed">[{"id":"local-mesa-storage","company_id":"quest-roofing","client_name":"Mesa Storage Partners","name":"Mesa Storage Roof Repair","contact_name":"Dana Ortiz","site_address":"1840 S Mesa Industrial Rd, Mesa, AZ","job_type":"Roofing","stage":"Production","priority":"High","owner_name":"Maya Rosales","scope":"Repair membrane damage, replace flashing, document photos, and close final inspection.","start_date":"2026-06-03","due_date":"2026-06-14","estimate_total":46000,"invoice_total":12000,"task_count":12,"file_count":9,"notes":"Priority commercial roof repair. Keep client updated daily."},{"id":"local-queen-creek","company_id":"quest-roofing","client_name":"Maya Rosales","name":"Queen Creek Leak Follow-up","contact_name":"Maya Rosales","site_address":"2138 E Orchard Lane, Queen Creek, AZ","job_type":"Roofing","stage":"Inspection","priority":"Urgent","owner_name":"Andre Lee","scope":"Emergency leak follow-up, roof photos, estimate, and deposit invoice.","start_date":"2026-06-08","due_date":"2026-06-09","estimate_total":8200,"invoice_total":0,"task_count":7,"file_count":5,"notes":"Client reported active leak after storm."},{"id":"local-drafting-permit","company_id":"quest-drafting","client_name":"Arroyo Vista HOA","name":"Drafting Permit Package","contact_name":"Board Office","site_address":"Arroyo Vista HOA, Gilbert, AZ","job_type":"Drafting","stage":"QA Review","priority":"Medium","owner_name":"Noah Park","scope":"Permit-ready drawings and review packet for city submission.","start_date":"2026-06-01","due_date":"2026-06-18","estimate_total":14000,"invoice_total":5000,"task_count":9,"file_count":6,"notes":"Needs QA pass before client approval."},{"id":"local-lumen-campaign","company_id":"lumen","client_name":"Lumen Internal","name":"Lumen Campaign Setup","contact_name":"Andre Lee","site_address":"Remote","job_type":"Lumen","stage":"Estimate Approved","priority":"Medium","owner_name":"Andre Lee","scope":"Campaign buildout, assets, automations, and launch dashboard.","start_date":"2026-06-05","due_date":"2026-06-21","estimate_total":22000,"invoice_total":0,"task_count":14,"file_count":12,"notes":"Ready for production planning."}]</script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="assets/quest-hq.js" defer></script>
   </body>
 </html>

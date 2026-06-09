@@ -9,7 +9,7 @@
     <title>Command Center | Quest HQ</title>
     <link rel="stylesheet" href="assets/quest-hq.css" />
   </head>
-  <body data-page="index.html" data-module="">
+  <body data-page="index.html" data-module="command">
     <div class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="index.html">
@@ -26,22 +26,45 @@
         </div>
       </aside>
       <main class="main">
-        <section class="workspace">
+        <section class="workspace command-center" data-command-center data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
     <div class="page-heading">
-      <div><div class="eyebrow">Command Center</div><h1>Company-wide operating picture</h1><p>Local-first presentation build with real static HTML pages.</p></div>
-      <a class="primary-button" href="jobs.html">Open Jobs</a>
+      <div><div class="eyebrow">Command Center</div><h1>Operations dashboard</h1><p>Today view for active jobs, urgent work, revenue, task handoff, and recent operating activity.</p></div>
+      <div class="job-actions"><span class="sync-pill" data-command-sync>Loading jobs...</span><a class="primary-button" href="jobs.html?action=new">Add Job</a></div>
     </div>
-    <div class="metric-grid">
-      <div class="metric"><span>Active jobs</span><strong>18</strong></div><div class="metric"><span>Open tickets</span><strong>9</strong></div><div class="metric"><span>Outstanding AR</span><strong>$38K</strong></div><div class="metric"><span>Tracked hours</span><strong>126h</strong></div>
+    <div class="metric-grid command-metrics">
+      <div class="metric"><span>Active Jobs</span><strong data-command-metric="active">0</strong></div>
+      <div class="metric"><span>Urgent Work</span><strong data-command-metric="urgent">0</strong></div>
+      <div class="metric"><span>Pipeline Value</span><strong data-command-metric="revenue">$0</strong></div>
+      <div class="metric"><span>Task Rollup</span><strong data-command-metric="tasks">0</strong></div>
     </div>
-    <div class="command-grid">
-      <section class="panel wide-panel"><h2>Presentation Flow</h2><div class="timeline"><a href="index.html">Command Center<span>Open</span></a><a href="jobs.html">Jobs<span>Open</span></a><a href="task-management.html">TaskManagement bridge<span>Open</span></a><a href="crm.html">CRM<span>Open</span></a><a href="tickets.html">Tickets<span>Open</span></a><a href="files.html">Files<span>Open</span></a><a href="finance.html">Finance<span>Open</span></a></div></section>
-      <section class="panel"><h2>Local Saving</h2><p class="muted">Each module editor saves records to browser localStorage. Backend work stays deferred for the first presentation.</p></section>
+    <div class="ops-dashboard-grid">
+      <section class="panel wide-panel">
+        <div class="job-section-heading"><h2>Priority Job Queue</h2><span data-command-count>0 jobs</span></div>
+        <div class="ops-job-list" data-command-jobs></div>
+      </section>
+      <section class="panel">
+        <h2>Quick Actions</h2>
+        <div class="quick-action-grid">
+          <a href="jobs.html?action=new">Create job<span>Supabase job record</span></a>
+          <a href="jobs.html">Open Job Center<span>Pipeline, list, profile, editor</span></a>
+          <a href="task-management.html">Task bridge<span>project_id handoff preview</span></a>
+          <a href="files.html">Files viewer<span>Demo file cabinet</span></a>
+        </div>
+      </section>
+      <section class="panel wide-panel">
+        <div class="job-section-heading"><h2>Recent Operating Activity</h2><span>Demo timeline</span></div>
+        <div class="activity-feed" data-command-activity></div>
+      </section>
+      <section class="panel">
+        <h2>Today Demo Boundary</h2>
+        <p class="muted">Jobs are live in Supabase. Files, CRM, forms, finance, tickets, and dashboards stay as linked demo workspaces for today.</p>
+      </section>
     </div>
   </section>
       </main>
     </div>
-    <script type="application/json" id="record-seed">[]</script>
+    <script type="application/json" id="record-seed">[{"id":"local-mesa-storage","company_id":"quest-roofing","client_name":"Mesa Storage Partners","name":"Mesa Storage Roof Repair","contact_name":"Dana Ortiz","site_address":"1840 S Mesa Industrial Rd, Mesa, AZ","job_type":"Roofing","stage":"Production","priority":"High","owner_name":"Maya Rosales","scope":"Repair membrane damage, replace flashing, document photos, and close final inspection.","start_date":"2026-06-03","due_date":"2026-06-14","estimate_total":46000,"invoice_total":12000,"task_count":12,"file_count":9,"notes":"Priority commercial roof repair. Keep client updated daily."},{"id":"local-queen-creek","company_id":"quest-roofing","client_name":"Maya Rosales","name":"Queen Creek Leak Follow-up","contact_name":"Maya Rosales","site_address":"2138 E Orchard Lane, Queen Creek, AZ","job_type":"Roofing","stage":"Inspection","priority":"Urgent","owner_name":"Andre Lee","scope":"Emergency leak follow-up, roof photos, estimate, and deposit invoice.","start_date":"2026-06-08","due_date":"2026-06-09","estimate_total":8200,"invoice_total":0,"task_count":7,"file_count":5,"notes":"Client reported active leak after storm."},{"id":"local-drafting-permit","company_id":"quest-drafting","client_name":"Arroyo Vista HOA","name":"Drafting Permit Package","contact_name":"Board Office","site_address":"Arroyo Vista HOA, Gilbert, AZ","job_type":"Drafting","stage":"QA Review","priority":"Medium","owner_name":"Noah Park","scope":"Permit-ready drawings and review packet for city submission.","start_date":"2026-06-01","due_date":"2026-06-18","estimate_total":14000,"invoice_total":5000,"task_count":9,"file_count":6,"notes":"Needs QA pass before client approval."},{"id":"local-lumen-campaign","company_id":"lumen","client_name":"Lumen Internal","name":"Lumen Campaign Setup","contact_name":"Andre Lee","site_address":"Remote","job_type":"Lumen","stage":"Estimate Approved","priority":"Medium","owner_name":"Andre Lee","scope":"Campaign buildout, assets, automations, and launch dashboard.","start_date":"2026-06-05","due_date":"2026-06-21","estimate_total":22000,"invoice_total":0,"task_count":14,"file_count":12,"notes":"Ready for production planning."}]</script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="assets/quest-hq.js" defer></script>
   </body>
 </html>

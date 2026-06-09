@@ -316,7 +316,7 @@ function shell({ file, title, content, seed = [], moduleId = '' }) {
       </main>
     </div>
     <script type="application/json" id="record-seed">${JSON.stringify(seed)}</script>
-${moduleId === 'jobs' ? '    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\n    ' : '    '}<script src="assets/quest-hq.js" defer></script>
+${['command', 'jobs', 'task-bridge'].includes(moduleId) ? '    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\n    ' : '    '}<script src="assets/quest-hq.js" defer></script>
   </body>
 </html>`;
 }
@@ -341,20 +341,42 @@ function iconSvg(name) {
 }
 
 function commandPage() {
-  const content = `<section class="workspace">
+  const content = `<section class="workspace command-center" data-command-center data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
     <div class="page-heading">
-      <div><div class="eyebrow">Command Center</div><h1>Company-wide operating picture</h1><p>Local-first presentation build with real static HTML pages.</p></div>
-      <a class="primary-button" href="jobs.html">Open Jobs</a>
+      <div><div class="eyebrow">Command Center</div><h1>Operations dashboard</h1><p>Today view for active jobs, urgent work, revenue, task handoff, and recent operating activity.</p></div>
+      <div class="job-actions"><span class="sync-pill" data-command-sync>Loading jobs...</span><a class="primary-button" href="jobs.html?action=new">Add Job</a></div>
     </div>
-    <div class="metric-grid">
-      ${metric('Active jobs', '18')}${metric('Open tickets', '9')}${metric('Outstanding AR', '$38K')}${metric('Tracked hours', '126h')}
+    <div class="metric-grid command-metrics">
+      <div class="metric"><span>Active Jobs</span><strong data-command-metric="active">0</strong></div>
+      <div class="metric"><span>Urgent Work</span><strong data-command-metric="urgent">0</strong></div>
+      <div class="metric"><span>Pipeline Value</span><strong data-command-metric="revenue">$0</strong></div>
+      <div class="metric"><span>Task Rollup</span><strong data-command-metric="tasks">0</strong></div>
     </div>
-    <div class="command-grid">
-      <section class="panel wide-panel"><h2>Presentation Flow</h2><div class="timeline">${['Command Center', 'Jobs', 'TaskManagement bridge', 'CRM', 'Tickets', 'Files', 'Finance'].map((item) => `<a href="${slugPage(item)}">${item}<span>Open</span></a>`).join('')}</div></section>
-      <section class="panel"><h2>Local Saving</h2><p class="muted">Each module editor saves records to browser localStorage. Backend work stays deferred for the first presentation.</p></section>
+    <div class="ops-dashboard-grid">
+      <section class="panel wide-panel">
+        <div class="job-section-heading"><h2>Priority Job Queue</h2><span data-command-count>0 jobs</span></div>
+        <div class="ops-job-list" data-command-jobs></div>
+      </section>
+      <section class="panel">
+        <h2>Quick Actions</h2>
+        <div class="quick-action-grid">
+          <a href="jobs.html?action=new">Create job<span>Supabase job record</span></a>
+          <a href="jobs.html">Open Job Center<span>Pipeline, list, profile, editor</span></a>
+          <a href="task-management.html">Task bridge<span>project_id handoff preview</span></a>
+          <a href="files.html">Files viewer<span>Demo file cabinet</span></a>
+        </div>
+      </section>
+      <section class="panel wide-panel">
+        <div class="job-section-heading"><h2>Recent Operating Activity</h2><span>Demo timeline</span></div>
+        <div class="activity-feed" data-command-activity></div>
+      </section>
+      <section class="panel">
+        <h2>Today Demo Boundary</h2>
+        <p class="muted">Jobs are live in Supabase. Files, CRM, forms, finance, tickets, and dashboards stay as linked demo workspaces for today.</p>
+      </section>
     </div>
   </section>`;
-  return shell({ file: 'index.html', title: 'Command Center', content });
+  return shell({ file: 'index.html', title: 'Command Center', moduleId: 'command', content, seed: jobSeed });
 }
 
 function jobsPage() {
@@ -474,12 +496,35 @@ function jobsPage() {
 }
 
 function taskManagementPage() {
-  const content = `<section class="workspace">
-    <div class="page-heading"><div><div class="eyebrow">TaskManagement</div><h1>Work Execution Bridge</h1><p>Quest HQ does not duplicate tasks. Jobs link to TaskManagement through the shared project relationship.</p></div><a class="primary-button" href="https://github.com/ShanIngrid1207/TaskManagementQuest/tree/main">Open Repo</a></div>
-    <div class="bridge-card"><code>job.id</code><span>maps to</span><code>task.project_id</code></div>
-    <div class="command-grid"><section class="panel wide-panel"><h2>Related Task Rollup</h2><div class="table">${jobs.map((job, index) => `<div><strong>${job[0]}</strong><span>${8 + index} tasks</span><span>${index + 1} overdue</span><span>${12 + index * 3}h tracked</span></div>`).join('')}</div></section><section class="panel"><h2>Next Integration</h2><p class="muted">When backend work starts, Vercel routes can read the TaskManagement app by job/project ID.</p></section></div>
+  const content = `<section class="workspace task-bridge-page" data-task-bridge data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
+    <div class="page-heading">
+      <div><div class="eyebrow">TaskManagement Bridge</div><h1>Work execution handoff</h1><p>Demo bridge for the future TaskManagement integration. Quest HQ keeps job context; TaskManagement owns execution.</p></div>
+      <div class="job-actions"><span class="sync-pill" data-bridge-sync>Loading job...</span><a class="primary-button" data-bridge-return href="jobs.html">Return to Job</a></div>
+    </div>
+    <div class="bridge-hero panel">
+      <div><span>Quest HQ job id</span><code data-bridge-job-id>pending</code></div>
+      <strong>maps to</strong>
+      <div><span>TaskManagement project_id</span><code data-bridge-project-id>pending</code></div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric"><span>Linked Tasks</span><strong data-bridge-metric="tasks">0</strong></div>
+      <div class="metric"><span>Open</span><strong data-bridge-metric="open">0</strong></div>
+      <div class="metric"><span>Completed</span><strong data-bridge-metric="completed">0</strong></div>
+      <div class="metric"><span>Overdue</span><strong data-bridge-metric="overdue">0</strong></div>
+    </div>
+    <div class="task-bridge-grid">
+      <section class="panel wide-panel">
+        <div class="job-section-heading"><h2 data-bridge-title>Selected Job</h2><span data-bridge-stage>Stage</span></div>
+        <div class="bridge-task-list" data-bridge-tasks></div>
+      </section>
+      <aside class="panel bridge-contract">
+        <h2>Handoff Contract</h2>
+        <div data-bridge-contract></div>
+        <a class="secondary-button" href="https://github.com/ShanIngrid1207/TaskManagementQuest/tree/main">View TaskManagement Repo</a>
+      </aside>
+    </div>
   </section>`;
-  return shell({ file: 'task-management.html', title: 'TaskManagement', content });
+  return shell({ file: 'task-management.html', title: 'TaskManagement', moduleId: 'task-bridge', content, seed: jobSeed });
 }
 
 function modulePage(module) {
@@ -709,6 +754,8 @@ const fileViewerCss = `.drive-viewer{padding:0;overflow:hidden}.drive-topbar{dis
 
 const jobCenterCss = `.job-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}.sync-pill{display:inline-flex;align-items:center;min-height:34px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#52627a;padding:0 12px;font-size:12px;font-weight:900;text-transform:uppercase}.sync-pill.live{border-color:#bbf7d0;background:#f0fdf4;color:#166534}.sync-pill.local{border-color:#fed7aa;background:#fff7ed;color:#9a3412}.sync-pill.error{border-color:#fecaca;background:#fef2f2;color:#991b1b}.job-command{display:grid;grid-template-columns:minmax(280px,1fr) 210px auto;gap:12px;align-items:center;margin-bottom:18px}.job-search{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;border:1px solid var(--line);border-radius:999px;background:#f8fafc;padding:0 14px;min-height:42px;color:#617089;font-size:12px;font-weight:900;text-transform:uppercase}.job-search input,.job-command select,.job-editor input,.job-editor textarea,.job-editor select{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);padding:11px}.job-search input{border:0;background:transparent;outline:0;text-transform:none;font-size:14px;font-weight:650}.job-board{display:grid;grid-template-columns:repeat(5,minmax(190px,1fr));gap:12px;align-items:start}.job-lane{min-height:340px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px}.job-lane h2{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;margin-bottom:12px}.job-lane h2 span{display:grid;place-items:center;min-width:25px;height:25px;border-radius:999px;background:#fff;border:1px solid var(--line);font-size:12px;color:#52627a}.job-card{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;padding:12px;text-align:left;cursor:pointer;box-shadow:0 10px 26px rgba(24,35,55,.06);margin-bottom:10px}.job-card:hover,.job-card.active{border-color:#f97316;background:#fff8f5}.job-card strong,.job-card span,.job-card small{display:block}.job-card strong{font-size:15px}.job-card span{color:#52627a;margin-top:6px}.job-card small{margin-top:10px;color:#617089;font-weight:800}.priority-urgent{box-shadow:inset 4px 0 #dc2626}.priority-high{box-shadow:inset 4px 0 #f97316}.priority-medium{box-shadow:inset 4px 0 #2563eb}.priority-low{box-shadow:inset 4px 0 #16a34a}.job-section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}.job-section-heading h2{margin-bottom:0}.job-section-heading span{color:#617089;font-size:13px;font-weight:850}.job-table{display:grid;gap:8px}.job-row{display:grid;grid-template-columns:minmax(220px,1.2fr) 130px 150px 110px 110px 90px;gap:12px;align-items:center;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px;text-align:left;cursor:pointer}.job-row:hover,.job-row.active{border-color:#f97316;background:#fff8f5}.job-row strong,.job-row span{display:block}.job-row span{color:#617089;font-size:13px;font-weight:750}.job-profile-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px}.job-profile-hero{min-height:220px;border-radius:8px;background:linear-gradient(90deg,rgba(17,24,39,.9),rgba(17,24,39,.35)),url('https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1400&q=80');background-size:cover;background-position:center;color:#fff;padding:24px;display:flex;flex-direction:column;justify-content:flex-end;margin-bottom:16px}.job-profile-hero h2{font-size:30px;margin-bottom:8px}.job-profile-hero p{max-width:820px;color:#e5edf8;margin-bottom:0}.job-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.job-detail-grid div,.job-sidecar div{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px}.job-detail-grid strong,.job-detail-grid span,.job-sidecar strong,.job-sidecar span{display:block}.job-detail-grid strong,.job-sidecar strong{font-size:12px;text-transform:uppercase;color:#617089}.job-detail-grid span,.job-sidecar span{margin-top:5px;font-weight:850}.job-sidecar{display:grid;gap:10px;align-content:start}.job-editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.job-editor label{display:grid;gap:6px;font-size:12px;font-weight:850;text-transform:uppercase;color:#617089}.job-editor .span-2{grid-column:1/-1}.empty-state{border:1px dashed var(--line);border-radius:8px;padding:24px;background:#fbfcfe;color:#617089;font-weight:800;text-align:center}@media(max-width:1280px){.job-board{grid-template-columns:repeat(3,minmax(190px,1fr))}.job-profile-grid{grid-template-columns:1fr}.job-row{grid-template-columns:minmax(220px,1fr) repeat(3,auto)}}@media(max-width:860px){.job-command,.job-editor,.job-detail-grid,.job-row{grid-template-columns:1fr}.job-board{grid-template-columns:1fr}.job-actions{justify-content:flex-start}}`;
 
+const coreDemoCss = `.ops-dashboard-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:18px}.ops-job-list,.activity-feed,.quick-action-grid,.bridge-task-list,.bridge-contract>div{display:grid;gap:10px}.ops-job-list a,.quick-action-grid a,.activity-feed div,.bridge-task-list div,.bridge-contract span{display:block;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px}.ops-job-list a:hover,.quick-action-grid a:hover{border-color:#f97316;background:#fff8f5}.ops-job-list strong,.ops-job-list span,.quick-action-grid strong,.quick-action-grid span,.activity-feed strong,.activity-feed span,.bridge-task-list strong,.bridge-task-list span,.bridge-contract strong,.bridge-contract small{display:block}.ops-job-list span,.quick-action-grid span,.activity-feed span,.bridge-task-list span,.bridge-contract small{color:#617089;font-size:13px;margin-top:5px}.quick-action-grid a{font-weight:900}.linked-panel-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:16px}.linked-panel-grid a{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px}.linked-panel-grid a:hover{border-color:#f97316;background:#fff8f5}.linked-panel-grid strong,.linked-panel-grid span,.linked-panel-grid small{display:block}.linked-panel-grid span{font-weight:900;margin-top:8px}.linked-panel-grid small{color:#617089;margin-top:4px}.job-activity-panel{margin-top:16px}.job-activity-panel div:not(.job-section-heading){display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px;border-top:1px solid var(--line);padding:11px 0}.job-activity-panel strong,.job-activity-panel span{display:block}.job-activity-panel span{color:#617089}.bridge-hero{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:18px;align-items:center;background:#111a27;color:#fff;margin-bottom:18px}.bridge-hero div{display:grid;gap:8px}.bridge-hero span{color:#aebbd0;font-size:12px;font-weight:900;text-transform:uppercase}.bridge-hero code{display:block;overflow:hidden;text-overflow:ellipsis;background:#fff;color:#111a27;border-radius:8px;padding:12px;font-weight:850}.bridge-hero strong{color:#ffd8c7}.task-bridge-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px}.bridge-task-list div{display:grid;grid-template-columns:minmax(0,1fr) 110px 90px;gap:12px;align-items:center}.bridge-task-list b{display:inline-flex;justify-content:center;border-radius:999px;padding:5px 8px;background:#e8f0fe;color:#174ea6}.bridge-task-list b.overdue{background:#fee2e2;color:#b91c1c}.bridge-contract span{display:grid;gap:4px}.bridge-contract code{display:block;overflow:hidden;text-overflow:ellipsis;border-radius:6px;background:#eef2f7;padding:8px;color:#172033}@media(max-width:1180px){.ops-dashboard-grid,.task-bridge-grid{grid-template-columns:1fr}.linked-panel-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.bridge-hero{grid-template-columns:1fr}.bridge-task-list div{grid-template-columns:1fr}}@media(max-width:680px){.linked-panel-grid,.job-activity-panel div:not(.job-section-heading){grid-template-columns:1fr}}`;
+
 const js = `(() => {
   const storageKey = (moduleId) => 'quest-hq-static-' + moduleId;
   const seed = JSON.parse(document.getElementById('record-seed')?.textContent || '[]');
@@ -802,7 +849,7 @@ const jobCenterJs = `(() => {
 
   let supabaseClient = null;
   let jobs = loadLocal();
-  let selectedId = jobs[0]?.id || null;
+  let selectedId = new URLSearchParams(window.location.search).get('job_id') || jobs[0]?.id || null;
   let source = 'local';
 
   init();
@@ -811,6 +858,7 @@ const jobCenterJs = `(() => {
     bindEvents();
     render();
     await connect();
+    applyInitialRoute();
   }
 
   async function connect() {
@@ -863,6 +911,15 @@ const jobCenterJs = `(() => {
     nodes.form?.addEventListener('submit', saveJob);
     center.querySelector('[data-job-duplicate]')?.addEventListener('click', duplicateJob);
     center.querySelector('[data-job-delete]')?.addEventListener('click', deleteJob);
+  }
+
+  function applyInitialRoute() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'new') {
+      center.querySelector('[data-job-new]')?.click();
+      return;
+    }
+    if (params.get('tab')) clickTab(params.get('tab'));
   }
 
   function selectFromClick(event) {
@@ -995,13 +1052,36 @@ const jobCenterJs = `(() => {
       detail('Estimate', money.format(number(job.estimate_total))) +
       detail('Invoice', money.format(number(job.invoice_total))) +
       detail('Due Date', job.due_date || 'Not set') +
-      '</div>';
+      '</div>' +
+      linkedPanels(job) +
+      activityTimeline(job);
     nodes.sidecar.innerHTML = detail('TaskManagement Link', number(job.task_count) + ' linked tasks') +
       detail('Files', number(job.file_count) + ' files attached') +
       detail('Company', companyLabel(job.company_id)) +
-      '<a class=\"secondary-button\" href=\"task-management.html\">Open TaskManagement Bridge</a>' +
+      '<a class=\"secondary-button\" href=\"' + escapeHtml(bridgeUrl(job)) + '\">Open TaskManagement Bridge</a>' +
       '<button class=\"primary-button\" type=\"button\" data-edit-selected>Edit Job</button>';
     nodes.sidecar.querySelector('[data-edit-selected]')?.addEventListener('click', () => clickTab('editor'));
+  }
+
+  function linkedPanels(job) {
+    const taskOpen = Math.max(number(job.task_count) - completedTasks(job), 0);
+    const items = [
+      ['TaskManagement', number(job.task_count) + ' tasks', taskOpen + ' open / ' + completedTasks(job) + ' done', bridgeUrl(job)],
+      ['Files & Photos', number(job.file_count) + ' files', 'Photos, permits, estimates, invoices', 'files.html'],
+      ['Forms & Inspections', inspectionCount(job) + ' records', 'Inspection, approval, walkthrough', 'forms.html'],
+      ['Finance', money.format(number(job.invoice_total)) + ' invoiced', money.format(number(job.estimate_total)) + ' estimate', 'finance.html']
+    ];
+    return '<div class=\"linked-panel-grid\">' + items.map((item) => '<a href=\"' + escapeHtml(item[3]) + '\"><strong>' + escapeHtml(item[0]) + '</strong><span>' + escapeHtml(item[1]) + '</span><small>' + escapeHtml(item[2]) + '</small></a>').join('') + '</div>';
+  }
+
+  function activityTimeline(job) {
+    const items = [
+      ['Job updated', job.stage + ' stage is current'],
+      ['Task rollup synced', number(job.task_count) + ' linked tasks mapped through project_id'],
+      ['Files reviewed', number(job.file_count) + ' attached job files available in the file cabinet'],
+      ['Finance checked', money.format(number(job.estimate_total)) + ' estimate visible to operations']
+    ];
+    return '<section class=\"job-activity-panel\"><div class=\"job-section-heading\"><h2>Activity Timeline</h2><span>Demo feed</span></div>' + items.map((item) => '<div><strong>' + escapeHtml(item[0]) + '</strong><span>' + escapeHtml(item[1]) + '</span></div>').join('') + '</section>';
   }
 
   function fillForm() {
@@ -1142,6 +1222,22 @@ const jobCenterJs = `(() => {
     return ({ 'quest-roofing': 'Quest Roofing', 'quest-drafting': 'Quest Drafting', lumen: 'Lumen' })[id] || id || 'Quest Roofing';
   }
 
+  function bridgeUrl(job) {
+    const params = new URLSearchParams({
+      project_id: job.id,
+      return_url: new URL('jobs.html?job_id=' + encodeURIComponent(job.id) + '&tab=profile', window.location.href).toString()
+    });
+    return 'task-management.html?' + params.toString();
+  }
+
+  function completedTasks(job) {
+    return Math.min(Math.floor(number(job.task_count) * 0.58), number(job.task_count));
+  }
+
+  function inspectionCount(job) {
+    return Math.max(1, Math.ceil(number(job.file_count) / 3));
+  }
+
   function activeClass(job) {
     return job.id === selectedId ? 'active' : '';
   }
@@ -1155,12 +1251,220 @@ const jobCenterJs = `(() => {
   }
 })();`;
 
+const commandCenterJs = `(() => {
+  const center = document.querySelector('[data-command-center]');
+  if (!center) return;
+
+  const seed = JSON.parse(document.getElementById('record-seed')?.textContent || '[]').map(normalizeJob);
+  const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const nodes = {
+    sync: center.querySelector('[data-command-sync]'),
+    jobs: center.querySelector('[data-command-jobs]'),
+    activity: center.querySelector('[data-command-activity]'),
+    count: center.querySelector('[data-command-count]')
+  };
+
+  init();
+
+  async function init() {
+    render(seed, 'local');
+    if (!window.supabase) return setSync('Local fallback', 'local');
+    const client = window.supabase.createClient(center.dataset.supabaseUrl, center.dataset.supabaseKey);
+    const { data, error } = await client.from('jobs').select('*').order('updated_at', { ascending: false });
+    if (error) {
+      console.error(error);
+      setSync('Local fallback', 'error');
+      return;
+    }
+    render((data || []).map(normalizeJob), 'live');
+    setSync('Supabase live', 'live');
+  }
+
+  function render(jobs, mode) {
+    const active = jobs.filter((job) => job.stage !== 'Complete');
+    const urgent = jobs.filter((job) => job.priority === 'Urgent');
+    setMetric('active', active.length);
+    setMetric('urgent', urgent.length);
+    setMetric('revenue', money.format(sum(jobs, 'estimate_total')));
+    setMetric('tasks', sum(jobs, 'task_count'));
+    nodes.count.textContent = active.length + (active.length === 1 ? ' active job' : ' active jobs');
+    nodes.jobs.innerHTML = active.slice(0, 5).map((job) => {
+      return '<a href=\"jobs.html?job_id=' + encodeURIComponent(job.id) + '&tab=profile\">' +
+        '<strong>' + escapeHtml(job.name) + '</strong>' +
+        '<span>' + escapeHtml(job.client_name || 'No client') + ' / ' + escapeHtml(job.stage || 'Lead') + ' / ' + money.format(number(job.estimate_total)) + '</span>' +
+      '</a>';
+    }).join('') || '<div class=\"empty-state\">No active jobs found.</div>';
+    nodes.activity.innerHTML = buildActivity(jobs, mode).map((item) => '<div><strong>' + escapeHtml(item[0]) + '</strong><span>' + escapeHtml(item[1]) + '</span></div>').join('');
+  }
+
+  function buildActivity(jobs, mode) {
+    const first = jobs[0];
+    return [
+      ['Supabase status', mode === 'live' ? 'Live jobs loaded from Quest HQ project.' : 'Using local demo jobs.'],
+      ['Priority review', (jobs.find((job) => job.priority === 'Urgent')?.name || first?.name || 'No urgent job') + ' is first in the operations queue.'],
+      ['Task bridge ready', sum(jobs, 'task_count') + ' linked tasks represented through project_id.'],
+      ['Demo boundary', 'Jobs are live; adjacent modules remain linked demo workspaces today.']
+    ];
+  }
+
+  function setMetric(name, value) {
+    center.querySelector('[data-command-metric=\"' + name + '\"]').textContent = String(value);
+  }
+
+  function setSync(message, state) {
+    nodes.sync.textContent = message;
+    nodes.sync.className = 'sync-pill' + (state ? ' ' + state : '');
+  }
+
+  function normalizeJob(job) {
+    return {
+      id: String(job.id || 'local-' + Date.now()),
+      name: job.name || job.title || 'Untitled Job',
+      client_name: job.client_name || job.clients?.name || '',
+      stage: job.stage || job.status || 'Lead',
+      priority: job.priority || 'Medium',
+      estimate_total: number(job.estimate_total),
+      task_count: number(job.task_count)
+    };
+  }
+
+  function sum(jobs, field) {
+    return jobs.reduce((total, job) => total + number(job[field]), 0);
+  }
+
+  function number(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>\"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '\"':'&quot;', \"'\":'&#039;' }[char]));
+  }
+})();`;
+
+const taskBridgeJs = `(() => {
+  const bridge = document.querySelector('[data-task-bridge]');
+  if (!bridge) return;
+
+  const params = new URLSearchParams(window.location.search);
+  const requestedId = params.get('project_id');
+  const returnUrl = params.get('return_url');
+  const seed = JSON.parse(document.getElementById('record-seed')?.textContent || '[]').map(normalizeJob);
+  const nodes = {
+    sync: bridge.querySelector('[data-bridge-sync]'),
+    returnLink: bridge.querySelector('[data-bridge-return]'),
+    jobId: bridge.querySelector('[data-bridge-job-id]'),
+    projectId: bridge.querySelector('[data-bridge-project-id]'),
+    title: bridge.querySelector('[data-bridge-title]'),
+    stage: bridge.querySelector('[data-bridge-stage]'),
+    tasks: bridge.querySelector('[data-bridge-tasks]'),
+    contract: bridge.querySelector('[data-bridge-contract]')
+  };
+
+  init();
+
+  async function init() {
+    render(pickJob(seed), 'local');
+    if (!window.supabase) return setSync('Local fallback', 'local');
+    const client = window.supabase.createClient(bridge.dataset.supabaseUrl, bridge.dataset.supabaseKey);
+    const query = client.from('jobs').select('*');
+    const request = requestedId ? query.eq('id', requestedId).limit(1) : query.order('updated_at', { ascending: false }).limit(1);
+    const { data, error } = await request;
+    if (error) {
+      console.error(error);
+      setSync('Local fallback', 'error');
+      return;
+    }
+    render(pickJob((data || []).map(normalizeJob)), 'live');
+    setSync('Supabase live', 'live');
+  }
+
+  function render(job, mode) {
+    if (!job) return;
+    const completed = completedTasks(job);
+    const open = Math.max(number(job.task_count) - completed, 0);
+    const overdue = overdueTasks(job);
+    nodes.jobId.textContent = job.id;
+    nodes.projectId.textContent = job.id;
+    nodes.title.textContent = job.name;
+    nodes.stage.textContent = job.stage + ' / ' + job.priority;
+    nodes.returnLink.href = returnUrl || 'jobs.html?job_id=' + encodeURIComponent(job.id) + '&tab=profile';
+    setMetric('tasks', number(job.task_count));
+    setMetric('open', open);
+    setMetric('completed', completed);
+    setMetric('overdue', overdue);
+    nodes.tasks.innerHTML = demoTasks(job, completed, open, overdue).map((task) => '<div><strong>' + escapeHtml(task.title) + '<span>' + escapeHtml(task.owner) + '</span></strong><span>' + escapeHtml(task.status) + '</span><b class=\"' + (task.status === 'Overdue' ? 'overdue' : '') + '\">' + escapeHtml(task.due) + '</b></div>').join('');
+    nodes.contract.innerHTML =
+      contractRow('project_id', job.id) +
+      contractRow('return_url', nodes.returnLink.href) +
+      contractRow('source', mode === 'live' ? 'Quest HQ Supabase project' : 'Local demo fallback') +
+      contractRow('future behavior', 'TaskManagement filters tasks where task.project_id matches this job id.');
+  }
+
+  function demoTasks(job, completed, open, overdue) {
+    return [
+      { title: 'Review job scope', owner: job.owner_name || 'Operations', status: completed > 0 ? 'Completed' : 'Open', due: 'Done' },
+      { title: 'Attach field files', owner: 'Field Team', status: open > 1 ? 'Open' : 'Completed', due: job.due_date || 'This week' },
+      { title: 'Finance handoff', owner: 'Finance', status: job.invoice_total > 0 ? 'Completed' : 'Open', due: 'Next' },
+      { title: 'Resolve priority item', owner: job.owner_name || 'Operations', status: overdue ? 'Overdue' : 'Open', due: overdue ? 'Late' : 'Soon' }
+    ].slice(0, Math.max(3, Math.min(4, number(job.task_count))));
+  }
+
+  function pickJob(jobs) {
+    return jobs.find((job) => job.id === requestedId) || jobs[0] || null;
+  }
+
+  function normalizeJob(job) {
+    return {
+      id: String(job.id || 'local-' + Date.now()),
+      name: job.name || job.title || 'Untitled Job',
+      client_name: job.client_name || job.clients?.name || '',
+      stage: job.stage || job.status || 'Lead',
+      priority: job.priority || 'Medium',
+      owner_name: job.owner_name || job.owner || '',
+      due_date: job.due_date || '',
+      invoice_total: number(job.invoice_total),
+      task_count: number(job.task_count)
+    };
+  }
+
+  function contractRow(label, value) {
+    return '<span><strong>' + escapeHtml(label) + '</strong><code>' + escapeHtml(value) + '</code></span>';
+  }
+
+  function setMetric(name, value) {
+    bridge.querySelector('[data-bridge-metric=\"' + name + '\"]').textContent = String(value);
+  }
+
+  function setSync(message, state) {
+    nodes.sync.textContent = message;
+    nodes.sync.className = 'sync-pill' + (state ? ' ' + state : '');
+  }
+
+  function completedTasks(job) {
+    return Math.min(Math.floor(number(job.task_count) * 0.58), number(job.task_count));
+  }
+
+  function overdueTasks(job) {
+    return job.priority === 'Urgent' ? 2 : job.priority === 'High' ? 1 : 0;
+  }
+
+  function number(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>\"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '\"':'&quot;', \"'\":'&#039;' }[char]));
+  }
+})();`;
+
 async function writeTarget(target) {
   const absolute = path.resolve(target);
   if (target !== '.') await rm(absolute, { recursive: true, force: true });
   await mkdir(path.join(absolute, 'assets'), { recursive: true });
-  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + fileViewerCss + jobCenterCss);
-  await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js + jobCenterJs);
+  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + fileViewerCss + jobCenterCss + coreDemoCss);
+  await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js + jobCenterJs + commandCenterJs + taskBridgeJs);
   await writeFile(path.join(absolute, 'index.html'), commandPage());
   await writeFile(path.join(absolute, 'jobs.html'), jobsPage());
   await writeFile(path.join(absolute, 'task-management.html'), taskManagementPage());

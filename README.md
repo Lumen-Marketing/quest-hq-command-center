@@ -1,6 +1,6 @@
 # Quest HQ Command Center
 
-Quest HQ is the operations shell for Quest Roofing, Quest Drafting, and Lumen Marketing. It is built as a Vite + React command center around jobs, clients, module records, and the existing TaskManagement app.
+Quest HQ is the operations shell for Quest Roofing, Quest Drafting, and Lumen Marketing. It is currently built as a Vite-served static HTML/CSS/vanilla JS command center around jobs, clients, module records, and the existing TaskManagement app.
 
 The key product boundary is intentional:
 
@@ -92,7 +92,16 @@ Required data contract:
 
 ## Supabase Notes
 
-The app currently uses local fixture data in `src/data.js`. The planned Supabase model is documented in [supabase/schema-plan.md](supabase/schema-plan.md).
+The current demo uses Supabase for the Jobs module only. Other modules remain local/mock presentation workspaces until the next backend phase. The broader planned model is documented in [supabase/schema-plan.md](supabase/schema-plan.md).
+
+Current demo project:
+
+- Project ref: `lpzotcznihwyyudxycmd`
+- Public URL: `https://lpzotcznihwyyudxycmd.supabase.co`
+- Live table used by the browser today: `public.jobs`
+- Reproducible migration: `supabase/migrations/202606082049_job_center_demo.sql`
+
+The public Vercel demo intentionally allows browser writes to `public.jobs` so the presentation can demonstrate create, edit, duplicate, and delete behavior. Treat this as temporary demo RLS only; production must add Supabase Auth, company memberships, and scoped write policies before real customer data is entered.
 
 Recommended production approach:
 
