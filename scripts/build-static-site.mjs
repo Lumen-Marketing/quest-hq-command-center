@@ -1,7 +1,7 @@
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const buildId = 'Quest Auth Runtime Integration v3';
+const buildId = 'Quest Auth Runtime Integration v4';
 const assetVersion = buildId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const targets = ['.', 'dist', 'docs'];
 
