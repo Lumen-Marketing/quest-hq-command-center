@@ -1739,6 +1739,14 @@ function escapeHtml(value) {
         switchTab(jump.dataset.tabJump);
         return;
       }
+      if (event.target.closest('[data-form-delete]')) {
+        deleteForm();
+        return;
+      }
+      if (event.target.closest('[data-form-duplicate]')) {
+        duplicateForm();
+        return;
+      }
       if (!event.target.closest('[data-form-edit]')) return;
       openFormModal();
     });
@@ -2144,7 +2152,7 @@ function escapeHtml(value) {
     nodes.summary.innerHTML = '<div class="forms-summary-head"><div><h2>' + escapeHtml(draft.title || 'Unsaved form') + '</h2><p class="muted">' + escapeHtml(draft.description || 'No description yet.') + '</p></div><span>' + escapeHtml(draft.status || 'Draft') + '</span></div>' +
       '<div class="forms-simple-meta"><span>' + escapeHtml(draft.type || 'Inspection') + '</span><button type="button" data-tab-jump="responses">' + count + ' responses</button><span>' + draft.questions.length + ' questions</span></div>' +
       '<div class="share-card forms-summary-share"><strong>Respondent link</strong><input readonly value="' + escapeHtml(publicUrl) + '"><div class="form-actions"><button class="primary-button" type="button" data-form-open-public>Open</button><button class="secondary-button" type="button" data-form-copy-link>Copy</button></div></div>' +
-      '<div class="form-actions forms-summary-actions"><button class="primary-button" type="button" data-form-edit>Edit Form</button><button class="secondary-button" type="button" data-tab-jump="preview">Preview</button><button class="secondary-button" type="button" data-tab-jump="responses">Responses</button></div>';
+      '<div class="form-actions forms-summary-actions"><button class="primary-button" type="button" data-form-edit>Edit Form</button><button class="secondary-button" type="button" data-tab-jump="preview">Preview</button><button class="secondary-button" type="button" data-tab-jump="responses">Responses</button><button class="secondary-button" type="button" data-form-duplicate>Duplicate</button><button class="danger-button" type="button" data-form-delete>Delete Form</button></div>';
   }
 
   function renderQuestions() {
