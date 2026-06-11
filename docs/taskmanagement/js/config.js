@@ -1,4 +1,5 @@
 window.App = window.App || {};
+App.authEnabled = false;
 
 // Routes are derived from the URL and need no secrets, so they can be set
 // synchronously. Other modules read App.routes during script-load.

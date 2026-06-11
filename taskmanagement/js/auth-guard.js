@@ -7,6 +7,45 @@ window.App = window.App || {};
 App.authReady = (async function () {
   const loginUrl = App.routes ? App.routes.login : window.location.origin + '/';
 
+  if (App.configReady) await App.configReady;
+
+  if (App.authEnabled === false) {
+    App.previewMode = true;
+    App.authDisabled = true;
+    App.currentSession = { user: { id: 'basic-quest-user', email: 'basic@quest-hq.local' } };
+    App.currentAuthUser = App.currentSession.user;
+    App.currentProfile = {
+      id: 'basic-quest-user',
+      email: 'basic@quest-hq.local',
+      full_name: 'Quest Basic Mode',
+      approved: true,
+      role: 'developer',
+      email_verified: true,
+      member_id: 'abraham',
+      supervisor_id: null,
+      company_ids: ['roofing', 'drafting', 'lumen'],
+      created_at: new Date().toISOString(),
+      avatar_url: '',
+    };
+    App.signOut = function () {
+      window.location.replace(App.commandCenterIntegration && App.commandCenterIntegration.hosted
+        ? `${window.location.origin}${App.commandCenterIntegration.basePath || '../'}index.html`
+        : window.location.pathname);
+    };
+    const wireBasicMode = () => {
+      const btn = document.getElementById('signOutBtn');
+      const avatar = document.getElementById('userAvatar');
+      if (btn) btn.addEventListener('click', App.signOut);
+      if (avatar) {
+        avatar.title = 'Quest Basic Mode';
+        avatar.textContent = 'QB';
+      }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireBasicMode);
+    else wireBasicMode();
+    return;
+  }
+
   // Dev-only UI preview mode: ?preview=1 skips Supabase entirely and boots
   // with seeded data. Gated to localhost / loopback only — on any deployed
   // origin this becomes a no-op so it can't be used as an auth-bypass.
@@ -39,9 +78,6 @@ App.authReady = (async function () {
     App.signOut = function () { window.location.href = window.location.pathname; };
     return;
   }
-
-  // Wait for runtime config (env.json -> Supabase client) before any auth call.
-  if (App.configReady) await App.configReady;
 
   if (!App.supabase || !App.supabase.auth) {
     const detail = App.supabaseLoadError || 'Check Supabase configuration.';

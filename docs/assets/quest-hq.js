@@ -1,4 +1,5 @@
 (() => {
+  const QUEST_AUTH_ENABLED = false;
   const QUEST_SUPABASE_URL = 'https://lpzotcznihwyyudxycmd.supabase.co';
   const QUEST_SUPABASE_KEY = 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07';
   const QUEST_LOGIN_STORAGE_KEY = 'quest-hq-last-login';
@@ -23,6 +24,10 @@
   initQuestAuth();
 
   async function initQuestAuth() {
+    if (!QUEST_AUTH_ENABLED) {
+      enterBasicQuestMode();
+      return;
+    }
     if (!questClient) {
       if (isLoginPage) showAuthMessage('Auth service is unavailable.');
       else window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
@@ -33,6 +38,35 @@
       return;
     }
     await guardQuestPage();
+  }
+
+  function enterBasicQuestMode() {
+    const user = {
+      id: 'basic-quest-user',
+      email: 'basic@quest-hq.local',
+      user_metadata: { full_name: 'Quest Basic Mode' }
+    };
+    const profile = {
+      id: user.id,
+      email: user.email,
+      full_name: 'Quest Basic Mode',
+      approved: true,
+      role: 'developer',
+      member_id: 'abraham',
+      company_ids: ['roofing', 'drafting', 'lumen'],
+      avatar_url: ''
+    };
+    window.QuestAuth.session = null;
+    window.QuestAuth.user = user;
+    window.QuestAuth.profile = profile;
+    if (isLoginPage) {
+      window.location.replace(sameOriginReturn);
+      return;
+    }
+    paintQuestAccount(user, profile);
+    bindQuestAccountControls();
+    document.body.classList.remove('auth-loading');
+    if (new URLSearchParams(window.location.search).get('account') === 'profile') openQuestProfile();
   }
 
   async function initLoginPage() {
@@ -252,6 +286,10 @@
     document.querySelectorAll('[data-quest-profile-open]').forEach((button) => button.addEventListener('click', openQuestProfile));
     document.querySelectorAll('[data-quest-profile-close]').forEach((button) => button.addEventListener('click', closeQuestProfile));
     document.querySelector('[data-quest-sign-out]')?.addEventListener('click', async () => {
+      if (!QUEST_AUTH_ENABLED) {
+        window.location.replace('index.html');
+        return;
+      }
       await questClient.auth.signOut();
       window.location.replace('login.html');
     });
@@ -276,6 +314,14 @@
     const user = window.QuestAuth.user;
     if (!profile || !user) return;
     if (msg) { msg.textContent = 'Saving profile...'; msg.classList.add('ok'); }
+    if (!QUEST_AUTH_ENABLED) {
+      const fullName = String(form.elements.full_name.value || '').trim() || 'Quest Basic Mode';
+      window.QuestAuth.profile = { ...profile, full_name: fullName };
+      window.QuestAuth.user = { ...user, email: profile.email };
+      paintQuestAccount(window.QuestAuth.user, window.QuestAuth.profile);
+      if (msg) { msg.textContent = 'Profile saved for this basic-mode session.'; msg.classList.add('ok'); }
+      return;
+    }
     let avatarUrl = profile.avatar_url || null;
     const file = form.elements.avatar.files && form.elements.avatar.files[0];
     if (file) {

@@ -1,7 +1,7 @@
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const buildId = 'Quest Auth Runtime Integration v5';
+const buildId = 'Quest Auth Runtime Integration v6';
 const assetVersion = buildId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const targets = ['.', 'dist', 'docs'];
 
@@ -1340,6 +1340,7 @@ const tutorialCss = `.tour-replay{display:inline-flex;align-items:center;justify
 const questAuthCss = `body.auth-loading .main,body.auth-loading .nav-list,body.auth-loading .sidebar-card,body.auth-loading .tour-replay{visibility:hidden}body.auth-loading:after{content:"Checking Quest access...";position:fixed;inset:0;display:grid;place-items:center;background:#eef2f7;color:#121826;font-weight:900}.quest-account{display:grid;gap:8px;border:1px solid #324055;border-radius:8px;background:#121d2c;padding:10px}.quest-account-main{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:center;width:100%;border:0;background:transparent;color:#fff;text-align:left;cursor:pointer;padding:0}.quest-account-main strong,.quest-account-main small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.quest-account-main small{color:#aebbd0;margin-top:2px}.quest-avatar{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#f45d22;color:#fff;font-weight:900;overflow:hidden}.quest-avatar img{width:100%;height:100%;object-fit:cover}.quest-avatar.large{width:72px;height:72px;font-size:24px}.quest-account-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.quest-account-actions button{min-height:34px;border:1px solid #425169;border-radius:8px;background:#172234;color:#dbeafe;font-weight:850;cursor:pointer}.quest-account-actions button:hover{border-color:#f45d22;background:#2a1816;color:#fff}.quest-login-shell{min-height:100vh;display:grid;place-items:center;background:#eef2f7;color:#121826;padding:24px}.quest-login-panel{display:grid;gap:18px;width:min(430px,100%);padding:34px;border:1px solid #d9e0ea;border-top:5px solid #f45d22;border-radius:8px;background:#fff;color:#121826;box-shadow:0 18px 55px rgba(24,35,55,.14)}.quest-login-panel .brand{gap:10px}.quest-login-panel .brand-mark{width:42px;height:42px;border-radius:8px}.quest-login-panel .brand strong{color:#121826;font-size:18px}.quest-login-panel .brand small{color:#617089}.quest-login-panel h1{font-size:30px;line-height:1.12;margin:4px 0 8px}.quest-login-panel .muted{font-size:14px}.quest-auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;border:1px solid #d9e0ea;border-radius:8px;background:#f5f7fb;padding:4px}.quest-auth-tabs button{min-height:38px;border:0;border-radius:6px;background:transparent;color:#52627a;font-weight:900;cursor:pointer}.quest-auth-tabs button:hover{color:#121826}.quest-auth-tabs button.active{background:#f45d22;color:#fff;box-shadow:0 7px 16px rgba(244,93,34,.22)}.quest-auth-form,.quest-pending-card,.quest-profile-form{display:grid;gap:14px}.quest-auth-form[hidden],.quest-pending-card[hidden]{display:none!important}.quest-auth-form label,.quest-profile-form label{display:grid;gap:7px;color:#52627a;font-size:12px;font-weight:900;text-transform:uppercase}.quest-auth-form input,.quest-profile-form input{width:100%;min-height:44px;border:1px solid #cfd8e6;border-radius:8px;background:#fff;color:#121826;padding:11px 12px}.quest-auth-form input:focus,.quest-profile-form input:focus{outline:3px solid #ffdacb;border-color:#f45d22}.quest-auth-form .primary-button{width:100%;min-height:46px;margin-top:2px}.quest-pending-card{border:1px solid #fed7aa;border-radius:8px;background:#fff7ed;padding:14px}.quest-pending-card h2{font-size:20px;margin-bottom:2px}.quest-auth-message{min-height:20px;color:#991b1b;font-size:13px;font-weight:850}.quest-auth-message.ok{color:#166534}.quest-profile-panel{width:min(620px,calc(100vw - 44px))}.quest-profile-form{padding:18px}.quest-profile-preview{display:grid;grid-template-columns:72px minmax(0,1fr);gap:14px;align-items:center}.quest-profile-preview strong,.quest-profile-preview span{display:block}.quest-profile-preview span{color:#617089;margin-top:4px}@media(max-width:860px){.quest-account-actions{grid-template-columns:1fr}.quest-profile-preview{grid-template-columns:1fr}}@media(max-width:520px){.quest-login-shell{padding:14px}.quest-login-panel{padding:22px}.quest-login-panel h1{font-size:26px}.quest-auth-tabs{grid-template-columns:1fr}.quest-login-panel .brand strong{font-size:17px}}`;
 
 const js = `(() => {
+  const QUEST_AUTH_ENABLED = false;
   const QUEST_SUPABASE_URL = 'https://lpzotcznihwyyudxycmd.supabase.co';
   const QUEST_SUPABASE_KEY = 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07';
   const QUEST_LOGIN_STORAGE_KEY = 'quest-hq-last-login';
@@ -1364,6 +1365,10 @@ const js = `(() => {
   initQuestAuth();
 
   async function initQuestAuth() {
+    if (!QUEST_AUTH_ENABLED) {
+      enterBasicQuestMode();
+      return;
+    }
     if (!questClient) {
       if (isLoginPage) showAuthMessage('Auth service is unavailable.');
       else window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
@@ -1374,6 +1379,35 @@ const js = `(() => {
       return;
     }
     await guardQuestPage();
+  }
+
+  function enterBasicQuestMode() {
+    const user = {
+      id: 'basic-quest-user',
+      email: 'basic@quest-hq.local',
+      user_metadata: { full_name: 'Quest Basic Mode' }
+    };
+    const profile = {
+      id: user.id,
+      email: user.email,
+      full_name: 'Quest Basic Mode',
+      approved: true,
+      role: 'developer',
+      member_id: 'abraham',
+      company_ids: ['roofing', 'drafting', 'lumen'],
+      avatar_url: ''
+    };
+    window.QuestAuth.session = null;
+    window.QuestAuth.user = user;
+    window.QuestAuth.profile = profile;
+    if (isLoginPage) {
+      window.location.replace(sameOriginReturn);
+      return;
+    }
+    paintQuestAccount(user, profile);
+    bindQuestAccountControls();
+    document.body.classList.remove('auth-loading');
+    if (new URLSearchParams(window.location.search).get('account') === 'profile') openQuestProfile();
   }
 
   async function initLoginPage() {
@@ -1593,6 +1627,10 @@ const js = `(() => {
     document.querySelectorAll('[data-quest-profile-open]').forEach((button) => button.addEventListener('click', openQuestProfile));
     document.querySelectorAll('[data-quest-profile-close]').forEach((button) => button.addEventListener('click', closeQuestProfile));
     document.querySelector('[data-quest-sign-out]')?.addEventListener('click', async () => {
+      if (!QUEST_AUTH_ENABLED) {
+        window.location.replace('index.html');
+        return;
+      }
       await questClient.auth.signOut();
       window.location.replace('login.html');
     });
@@ -1617,6 +1655,14 @@ const js = `(() => {
     const user = window.QuestAuth.user;
     if (!profile || !user) return;
     if (msg) { msg.textContent = 'Saving profile...'; msg.classList.add('ok'); }
+    if (!QUEST_AUTH_ENABLED) {
+      const fullName = String(form.elements.full_name.value || '').trim() || 'Quest Basic Mode';
+      window.QuestAuth.profile = { ...profile, full_name: fullName };
+      window.QuestAuth.user = { ...user, email: profile.email };
+      paintQuestAccount(window.QuestAuth.user, window.QuestAuth.profile);
+      if (msg) { msg.textContent = 'Profile saved for this basic-mode session.'; msg.classList.add('ok'); }
+      return;
+    }
     let avatarUrl = profile.avatar_url || null;
     const file = form.elements.avatar.files && form.elements.avatar.files[0];
     if (file) {
