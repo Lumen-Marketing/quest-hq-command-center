@@ -1,7 +1,7 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const buildId = 'TaskManagement Integration v1';
+const buildId = 'TaskManagement Runtime Integration v2';
 const assetVersion = buildId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const targets = ['.', 'dist', 'docs'];
 
@@ -444,55 +444,40 @@ function jobsPage() {
 }
 
 function taskManagementPage() {
-  const content = `<section class="workspace task-hub" data-task-bridge data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
-    <div class="job-command panel">
-      <span class="sync-pill" data-bridge-sync>Loading job...</span>
-      <a class="secondary-button" data-bridge-return href="jobs.html">Return to Job</a>
-      <a class="secondary-button" href="admin.html">People & Access</a>
-      <a class="primary-button" href="jobs.html?action=new">New Job Workspace</a>
-    </div>
-    <div class="task-hub-grid">
-      <section class="panel task-context-panel">
-        <div class="job-section-heading"><h2 data-bridge-title>Selected Job</h2><span data-bridge-stage>Stage</span></div>
-        <div class="bridge-identity-grid">
-          <span><strong>Quest HQ job id</strong><code data-bridge-job-id>pending</code></span>
-          <span><strong>Task project_id</strong><code data-bridge-project-id>pending</code></span>
-        </div>
-        <div class="task-metric-row">
-          <span><strong data-bridge-metric="tasks">0</strong><small>Total tasks</small></span>
-          <span><strong data-bridge-metric="open">0</strong><small>Open</small></span>
-          <span><strong data-bridge-metric="completed">0</strong><small>Completed</small></span>
-          <span><strong data-bridge-metric="overdue">0</strong><small>Overdue</small></span>
-        </div>
-      </section>
-      <section class="panel task-work-panel">
-        <div class="job-section-heading"><h2>Execution Queue</h2><span>Job-scoped</span></div>
-        <div class="bridge-task-list" data-bridge-tasks></div>
-      </section>
-      <aside class="panel task-admin-snapshot">
-        <h2>Access Model</h2>
-        <div class="access-flow">
-          <span><strong>Auth user</strong><small>Supabase login identity</small></span>
-          <span><strong>Profile</strong><small>Approval, role, company access</small></span>
-          <span><strong>Team member</strong><small>Roster, supervisor, task assignee</small></span>
-        </div>
-        <a class="secondary-button" href="admin.html">Manage access</a>
-      </aside>
-      <aside class="panel task-approval-snapshot">
-        <div class="job-section-heading"><h2>Approval Queue</h2><span>Admin-owned</span></div>
-        <div class="approval-mini-list">
-          <span><strong>Adrian Alegria</strong><small>Pending Lumen access</small></span>
-          <span><strong>Estimate approval</strong><small>Client signoff routes through Forms</small></span>
-          <span><strong>Task completion</strong><small>Supervisor review before closeout</small></span>
-        </div>
-      </aside>
-      <section class="panel bridge-contract">
-        <div class="job-section-heading"><h2>Integration Contract</h2><span>Copied from TaskManagement model</span></div>
-        <div data-bridge-contract></div>
-      </section>
-    </div>
-  </section>`;
-  return shell({ file: 'task-management.html', title: 'TaskManagement', moduleId: 'task-bridge', content, seed: jobSeed });
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TaskManagement - Quest HQ</title>
+  <meta http-equiv="refresh" content="0; url=taskmanagement/app.html" />
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f8fb;color:#172033;font-family:Inter,Arial,sans-serif}
+    main{max-width:520px;padding:28px}
+    a{color:#f45d22;font-weight:800}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Opening TaskManagement</h1>
+    <p>Quest HQ is loading the integrated TaskManagement runtime.</p>
+    <p><a id="taskRuntimeLink" href="taskmanagement/app.html">Open TaskManagement</a></p>
+  </main>
+  <script>
+    (function () {
+      var target = new URL('taskmanagement/app.html', window.location.href);
+      var params = new URLSearchParams(window.location.search);
+      if (!params.has('return_url')) {
+        params.set('return_url', new URL('jobs.html', window.location.href).toString());
+      }
+      target.search = params.toString();
+      var link = document.getElementById('taskRuntimeLink');
+      if (link) link.href = target.toString();
+      window.location.replace(target.toString());
+    })();
+  </script>
+</body>
+</html>`;
 }
 
 function filesPage() {
@@ -4065,6 +4050,7 @@ async function writeTarget(target) {
   const absolute = path.resolve(target);
   if (target !== '.') await rm(absolute, { recursive: true, force: true });
   await mkdir(path.join(absolute, 'assets'), { recursive: true });
+  await copyTaskManagementRuntime(target, absolute);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + modalCss + plannedNavCss + fileViewerCss + fileCenterCss + driveFileCss + jobCenterCss + coreDemoCss + identityIntegrationCss + companyAdminCss + analyticsCss + formsCenterCss + googleFormsCss + formShareCss + formsLayoutRedoCss + formsLibraryModalCss + plannedTabsCss + tutorialCss);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js + jobCenterJs + fileCenterJs + companyAdminJs + analyticsJs + commandCenterJs + taskBridgeJs + formsCenterJs + tutorialJs);
   await writeFile(path.join(absolute, 'index.html'), commandPage());
@@ -4077,6 +4063,36 @@ async function writeTarget(target) {
     await writeFile(path.join(absolute, module.file), modulePage(module));
   }
   if (target === 'docs') await writeFile(path.join(absolute, '.nojekyll'), '');
+}
+
+async function copyTaskManagementRuntime(target, absolute) {
+  const source = path.resolve('taskmanagement');
+  if (target === '.') return;
+
+  const destination = path.join(absolute, 'taskmanagement');
+  await rm(destination, { recursive: true, force: true });
+  await cp(source, destination, {
+    recursive: true,
+    filter: (sourcePath) => !/[/\\]env\.json$/i.test(sourcePath)
+  });
+
+  const env = taskManagementRuntimeEnv();
+  if (env) {
+    await writeFile(path.join(destination, 'env.json'), JSON.stringify(env, null, 2) + '\n');
+  }
+}
+
+function taskManagementRuntimeEnv() {
+  const supabaseUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
+  const supabaseAnonKey = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+  return {
+    supabaseUrl,
+    supabaseAnonKey,
+    sentryDsn: (process.env.VITE_SENTRY_DSN || '').trim(),
+    release: (process.env.VERCEL_GIT_COMMIT_SHA || buildId).trim(),
+    turnstileSiteKey: (process.env.VITE_TURNSTILE_SITE_KEY || '').trim()
+  };
 }
 
 for (const target of targets) {

@@ -10,6 +10,8 @@ build/
 .env
 .env.*
 !.env.example
+taskmanagement/env.json
+docs/taskmanagement/env.json
 
 # Logs
 logs/

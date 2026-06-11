@@ -16,14 +16,13 @@ TaskManagement is becoming the Job Center execution layer, not a separate destin
 - Job workspaces.
 - Files, forms, finance, analytics, and business context.
 - User approval, role assignment, and team chart surfaces.
+- The login, verification, approval, company, admin, and developer control surfaces.
 
 TaskManagement contributes:
 
-- Login/profile approval model.
-- Role permissions.
-- Team member roster and supervisor hierarchy.
 - Task execution rows.
-- Time tracking, notifications, and approval queue concepts.
+- Job-scoped task filtering through `tasks.project_id`.
+- Time tracking and task notifications.
 
 ## Data Mapping
 
@@ -41,9 +40,12 @@ TaskManagement contributes:
 
 Do not replay the TaskManagement SQL migrations directly into Quest HQ. The upstream migrations contain production RLS and historical fixes for a different app lifecycle. Quest HQ should receive a clean additive migration that preserves the useful model while respecting the existing `companies`, `jobs`, `job_files`, and demo policies.
 
-## Current Mockup Status
+## Current Runtime Status
 
-- TaskManagement now opens inside Quest HQ at `task-management.html`.
+- The actual TaskManagement static runtime is vendored at `taskmanagement/`.
+- `task-management.html` is now only a compatibility redirect to `taskmanagement/app.html`.
+- The generator copies `taskmanagement/` into `dist/taskmanagement/` and `docs/taskmanagement/`.
 - Job Center still provides the integration key: `jobs.id -> tasks.project_id`.
-- Admin now shows Companies, Users & Roles, Approvals, and Team Chart.
+- The vendored TaskManagement runtime reads `project_id` from the URL, filters task queries by `tasks.project_id`, and stamps new tasks with that job id.
+- The TaskManagement company/settings/admin model is preserved as the team-refined source for the task runtime.
 - Live database work remains limited to the existing Quest HQ Supabase project until a dedicated migration is reviewed.

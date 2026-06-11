@@ -202,7 +202,7 @@ create table public.company_memberships (
 
 Vercel client variables:
 
-- `VITE_TASK_MANAGEMENT_URL`: deployed TaskManagement URL used for `project_id` handoff.
+- `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`: public Command Center Supabase config used by the vendored TaskManagement runtime.
 - `VITE_SUPABASE_URL`: public Supabase project URL.
 - `VITE_SUPABASE_ANON_KEY`: public anon key protected by RLS.
 
