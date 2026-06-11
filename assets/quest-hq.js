@@ -1,4 +1,231 @@
 (() => {
+  const QUEST_SUPABASE_URL = 'https://lpzotcznihwyyudxycmd.supabase.co';
+  const QUEST_SUPABASE_KEY = 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07';
+  const pageName = (document.body.dataset.page || '').split('/').pop();
+  const isLoginPage = pageName === 'login.html';
+  const returnParam = new URLSearchParams(window.location.search).get('return_url');
+  const sameOriginReturn = (() => {
+    try {
+      const url = returnParam ? new URL(returnParam, window.location.href) : new URL('index.html', window.location.href);
+      return url.origin === window.location.origin ? url.toString() : new URL('index.html', window.location.href).toString();
+    } catch (error) {
+      return new URL('index.html', window.location.href).toString();
+    }
+  })();
+  const questClient = window.supabase && window.supabase.createClient ? window.supabase.createClient(QUEST_SUPABASE_URL, QUEST_SUPABASE_KEY) : null;
+  window.QuestAuth = { client: questClient, session: null, user: null, profile: null };
+
+  initQuestAuth();
+
+  async function initQuestAuth() {
+    if (!questClient) {
+      if (isLoginPage) showAuthMessage('Auth service is unavailable.');
+      else window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
+      return;
+    }
+    if (isLoginPage) {
+      await initLoginPage();
+      return;
+    }
+    await guardQuestPage();
+  }
+
+  async function initLoginPage() {
+    document.body.classList.remove('auth-loading');
+    bindLoginForms();
+    const { data } = await questClient.auth.getSession();
+    if (!data.session) return;
+    const profile = await loadQuestProfile(data.session.user.id);
+    if (profile && profile.approved) {
+      window.location.replace(sameOriginReturn);
+      return;
+    }
+    showPendingState();
+  }
+
+  async function guardQuestPage() {
+    const { data } = await questClient.auth.getSession();
+    if (!data.session) {
+      window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
+      return;
+    }
+    const profile = await loadQuestProfile(data.session.user.id);
+    if (!profile || !profile.approved) {
+      window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
+      return;
+    }
+    window.QuestAuth.session = data.session;
+    window.QuestAuth.user = data.session.user;
+    window.QuestAuth.profile = profile;
+    paintQuestAccount(data.session.user, profile);
+    bindQuestAccountControls();
+    document.body.classList.remove('auth-loading');
+    if (new URLSearchParams(window.location.search).get('account') === 'profile') openQuestProfile();
+    questClient.auth.onAuthStateChange((_event, session) => {
+      if (!session) window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
+    });
+  }
+
+  async function loadQuestProfile(userId) {
+    const { data, error } = await questClient
+      .from('profiles')
+      .select('id,email,full_name,approved,role,member_id,company_ids,avatar_url')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) return null;
+    return data;
+  }
+
+  function bindLoginForms() {
+    document.querySelectorAll('[data-auth-mode]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const mode = button.dataset.authMode;
+        document.querySelectorAll('[data-auth-mode]').forEach((item) => item.classList.toggle('active', item === button));
+        document.querySelectorAll('[data-auth-form]').forEach((form) => { form.hidden = form.dataset.authForm !== mode; });
+        document.querySelector('[data-auth-pending]').hidden = true;
+        showAuthMessage('');
+      });
+    });
+    document.querySelector('[data-auth-form="signin"]')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      showAuthMessage('Signing in...', true);
+      const payload = Object.fromEntries(new FormData(form).entries());
+      const { data, error } = await questClient.auth.signInWithPassword({
+        email: String(payload.email || '').trim(),
+        password: String(payload.password || '')
+      });
+      if (error) return showAuthMessage(error.message || 'Could not sign in.');
+      const profile = await loadQuestProfile(data.user.id);
+      if (profile && profile.approved) window.location.replace(sameOriginReturn);
+      else showPendingState();
+    });
+    document.querySelector('[data-auth-form="signup"]')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      showAuthMessage('Creating account...', true);
+      const payload = Object.fromEntries(new FormData(form).entries());
+      const { error } = await questClient.auth.signUp({
+        email: String(payload.email || '').trim(),
+        password: String(payload.password || ''),
+        options: { data: { full_name: String(payload.full_name || '').trim() } }
+      });
+      if (error) return showAuthMessage(error.message || 'Could not create account.');
+      showPendingState();
+    });
+    document.querySelector('[data-auth-refresh]')?.addEventListener('click', async () => {
+      const { data } = await questClient.auth.getSession();
+      if (!data.session) return showAuthMessage('Sign in again to check approval.');
+      const profile = await loadQuestProfile(data.session.user.id);
+      if (profile && profile.approved) window.location.replace(sameOriginReturn);
+      else showPendingState();
+    });
+    document.querySelector('[data-auth-sign-out]')?.addEventListener('click', async () => {
+      await questClient.auth.signOut();
+      window.location.replace('login.html?return_url=' + encodeURIComponent(sameOriginReturn));
+    });
+  }
+
+  function showPendingState() {
+    document.querySelectorAll('[data-auth-form]').forEach((form) => { form.hidden = true; });
+    document.querySelector('[data-auth-pending]').hidden = false;
+    showAuthMessage('Account pending admin approval.', true);
+  }
+
+  function showAuthMessage(message, ok = false) {
+    const node = document.querySelector('[data-auth-message]');
+    if (!node) return;
+    node.textContent = message || '';
+    node.classList.toggle('ok', !!ok);
+  }
+
+  function paintQuestAccount(user, profile) {
+    const account = document.querySelector('[data-quest-account]');
+    if (account) account.hidden = false;
+    const name = profile.full_name || user.email || 'Quest user';
+    const role = profile.role || 'member';
+    setText('[data-quest-account-name]', name);
+    setText('[data-quest-account-role]', role + ' - Quest HQ');
+    setAvatar(document.querySelector('[data-quest-avatar]'), name, profile.avatar_url);
+    setText('[data-quest-profile-email]', profile.email || user.email || '');
+    setText('[data-quest-profile-access]', role + ' - ' + ((profile.company_ids || []).join(', ') || 'No company access assigned'));
+    setAvatar(document.querySelector('[data-quest-profile-avatar]'), name, profile.avatar_url);
+    const form = document.querySelector('[data-quest-profile-form]');
+    if (form) form.elements.full_name.value = profile.full_name || '';
+  }
+
+  function bindQuestAccountControls() {
+    document.querySelectorAll('[data-quest-profile-open]').forEach((button) => button.addEventListener('click', openQuestProfile));
+    document.querySelectorAll('[data-quest-profile-close]').forEach((button) => button.addEventListener('click', closeQuestProfile));
+    document.querySelector('[data-quest-sign-out]')?.addEventListener('click', async () => {
+      await questClient.auth.signOut();
+      window.location.replace('login.html');
+    });
+    document.querySelector('[data-quest-profile-form]')?.addEventListener('submit', saveQuestProfile);
+  }
+
+  function openQuestProfile() {
+    const modal = document.querySelector('[data-quest-profile-modal]');
+    if (modal) modal.hidden = false;
+  }
+
+  function closeQuestProfile() {
+    const modal = document.querySelector('[data-quest-profile-modal]');
+    if (modal) modal.hidden = true;
+  }
+
+  async function saveQuestProfile(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const msg = document.querySelector('[data-quest-profile-message]');
+    const profile = window.QuestAuth.profile;
+    const user = window.QuestAuth.user;
+    if (!profile || !user) return;
+    if (msg) { msg.textContent = 'Saving profile...'; msg.classList.add('ok'); }
+    let avatarUrl = profile.avatar_url || null;
+    const file = form.elements.avatar.files && form.elements.avatar.files[0];
+    if (file) {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const path = user.id + '/avatar.' + ext;
+      const uploaded = await questClient.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+      if (uploaded.error) {
+        if (msg) { msg.textContent = uploaded.error.message || 'Avatar upload failed.'; msg.classList.remove('ok'); }
+        return;
+      }
+      avatarUrl = questClient.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+    }
+    const fullName = String(form.elements.full_name.value || '').trim();
+    const { error } = await questClient
+      .from('profiles')
+      .update({ full_name: fullName, avatar_url: avatarUrl })
+      .eq('id', profile.id);
+    if (error) {
+      if (msg) { msg.textContent = error.message || 'Profile save failed.'; msg.classList.remove('ok'); }
+      return;
+    }
+    window.QuestAuth.profile = { ...profile, full_name: fullName, avatar_url: avatarUrl };
+    paintQuestAccount(user, window.QuestAuth.profile);
+    if (msg) { msg.textContent = 'Profile saved.'; msg.classList.add('ok'); }
+  }
+
+  function setAvatar(node, name, url) {
+    if (!node) return;
+    node.replaceChildren();
+    if (url) {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      node.appendChild(img);
+      return;
+    }
+    node.textContent = String(name || 'Q').trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'Q';
+  }
+
+  function setText(selector, value) {
+    const node = document.querySelector(selector);
+    if (node) node.textContent = value;
+  }
+
   const storageKey = (moduleId) => 'quest-hq-static-' + moduleId;
   const seed = JSON.parse(document.getElementById('record-seed')?.textContent || '[]');
   document.querySelectorAll('[data-nav-state="planned"]').forEach((link) => {

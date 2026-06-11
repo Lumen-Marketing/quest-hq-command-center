@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login | Quest HQ</title>
+    <link rel="stylesheet" href="assets/quest-hq.css?v=quest-auth-runtime-integration-v3" />
+  </head>
+  <body class="login-page" data-page="login.html">
+    <main class="quest-login-shell" data-quest-login>
+      <section class="quest-login-panel">
+        <div class="brand">
+          <span class="brand-mark">Q</span>
+          <span><strong>Quest HQ</strong><small>Operations Command</small></span>
+        </div>
+        <div>
+          <span class="eyebrow">Secure access</span>
+          <h1>Sign in to Quest HQ</h1>
+          <p class="muted">Use one Quest account for the operations command center and TaskManagement.</p>
+        </div>
+        <div class="quest-auth-tabs">
+          <button class="active" type="button" data-auth-mode="signin">Sign in</button>
+          <button type="button" data-auth-mode="signup">Create account</button>
+        </div>
+        <form class="quest-auth-form" data-auth-form="signin">
+          <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+          <button class="primary-button" type="submit">Sign in</button>
+        </form>
+        <form class="quest-auth-form" data-auth-form="signup" hidden>
+          <label>Display name<input name="full_name" autocomplete="name" required /></label>
+          <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+          <label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8" /></label>
+          <button class="primary-button" type="submit">Create account</button>
+          <p class="muted">An admin must approve the account before it can enter Quest HQ or TaskManagement.</p>
+        </form>
+        <section class="quest-pending-card" data-auth-pending hidden>
+          <h2>Awaiting approval</h2>
+          <p class="muted">Your login exists, but a Quest admin still needs to approve your profile and assign access.</p>
+          <div class="form-actions">
+            <button class="secondary-button" type="button" data-auth-refresh>Check again</button>
+            <button class="secondary-button" type="button" data-auth-sign-out>Sign out</button>
+          </div>
+        </section>
+        <div class="quest-auth-message" data-auth-message></div>
+      </section>
+      <aside class="quest-login-aside">
+        <strong>Flow</strong>
+        <span>Login</span>
+        <span>Quest HQ Operations Command</span>
+        <span>TaskManagement execution</span>
+      </aside>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/quest-hq.js?v=quest-auth-runtime-integration-v3" defer></script>
+  </body>
+</html>

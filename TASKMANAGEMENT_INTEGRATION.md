@@ -10,16 +10,24 @@
 
 ## Quest HQ Direction
 
-TaskManagement is becoming the Job Center execution layer, not a separate destination. Quest HQ owns:
+TaskManagement is becoming the Job Center execution layer, not a separate destination. The live flow is:
 
-- Companies and company access.
+```text
+login.html -> Quest HQ Operations Command -> taskmanagement/app.html
+```
+
+Quest HQ owns:
+
+- Login and shared Supabase session gating.
+- Profile display name and avatar.
+- Approval state.
+- Role assignment and access gating before a user enters Quest HQ or TaskManagement.
 - Job workspaces.
 - Files, forms, finance, analytics, and business context.
-- User approval, role assignment, and team chart surfaces.
-- The login, verification, approval, company, admin, and developer control surfaces.
 
 TaskManagement contributes:
 
+- Its refined company/settings model for the task runtime.
 - Task execution rows.
 - Job-scoped task filtering through `tasks.project_id`.
 - Time tracking and task notifications.
@@ -28,10 +36,10 @@ TaskManagement contributes:
 
 | TaskManagement | Quest HQ Target | Purpose |
 | --- | --- | --- |
-| `auth.users` | Supabase Auth | Login identity |
-| `profiles` | Quest HQ profiles | Approval, role, company access, member link |
+| `auth.users` | Supabase Auth | Shared login identity |
+| `profiles` | Quest HQ profiles | Profile/avatar, approval, role, access gating, member link |
 | `team_members` | Quest HQ team roster | Assignee picker, team chart, supervisor hierarchy |
-| `companies` | Quest HQ companies | Operating company scope |
+| `companies` | TaskManagement runtime and Quest HQ data | Preserve the team-refined company/settings model while Quest HQ gates access |
 | `tasks.project_id` | `jobs.id` | Job-scoped task execution |
 | `notifications` | Quest HQ notifications | Assignment and approval alerts |
 | `time_entries` / `active_timers` | Time tracking module | Labor/time rollups by user and job |
@@ -47,5 +55,7 @@ Do not replay the TaskManagement SQL migrations directly into Quest HQ. The upst
 - The generator copies `taskmanagement/` into `dist/taskmanagement/` and `docs/taskmanagement/`.
 - Job Center still provides the integration key: `jobs.id -> tasks.project_id`.
 - The vendored TaskManagement runtime reads `project_id` from the URL, filters task queries by `tasks.project_id`, and stamps new tasks with that job id.
+- Quest HQ now owns `login.html`, account approval, profile display name, avatar upload, role display, and sign out.
+- The hosted TaskManagement user menu routes profile edits back to Quest HQ.
 - The TaskManagement company/settings/admin model is preserved as the team-refined source for the task runtime.
-- Live database work remains limited to the existing Quest HQ Supabase project until a dedicated migration is reviewed.
+- Live database work remains limited to the Quest HQ Supabase project `lpzotcznihwyyudxycmd`; the upstream Supabase project stays untouched.

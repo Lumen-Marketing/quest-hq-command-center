@@ -26,10 +26,14 @@ App.commandCenterIntegration = {
 App.routes = {
   // In Command Center mode, login/approval/profile ownership lives in the host app.
   login: App.commandCenterIntegration.hosted
-    ? `${window.location.origin}${commandCenterBasePath}index.html`
+    ? `${window.location.origin}${commandCenterBasePath}login.html?return_url=${encodeURIComponent(window.location.href)}`
     : `${window.location.origin}${App.basePath}`,
   app: `${window.location.origin}${App.basePath}app.html`,
 };
+
+App.commandCenterProfileUrl = App.commandCenterIntegration.hosted
+  ? `${window.location.origin}${commandCenterBasePath}index.html?account=profile`
+  : '';
 
 App.defaultSupabaseConfig = {
   supabaseUrl: 'https://lpzotcznihwyyudxycmd.supabase.co',

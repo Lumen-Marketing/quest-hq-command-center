@@ -6,6 +6,7 @@ This is a planning artifact for moving Quest HQ from local fixtures to Supabase 
 
 - Make `jobs` the parent business container for Quest HQ.
 - Keep TaskManagement as the source of truth for task execution.
+- Keep Quest HQ as the source of truth for login, profile/avatar, approval, roles, and session gating.
 - Preserve the integration key `jobs.id -> tasks.project_id`.
 - Support multiple Quest business lines: Roofing, Drafting, and Lumen.
 - Keep browser-safe configuration separate from server-only secrets.
@@ -28,12 +29,14 @@ create table public.companies (
 
 ### profiles
 
-App profile for authenticated users. Link to `auth.users` when Supabase Auth is enabled.
+App profile for authenticated users. Quest HQ owns profile/avatar, approval state, role, and access gating.
 
 ```sql
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null,
+  avatar_url text,
+  approved boolean not null default false,
   role text,
   default_company_id text references public.companies(id),
   created_at timestamptz not null default now(),
@@ -170,10 +173,14 @@ Quest HQ should absorb the useful identity and operating model into its own Supa
 
 - `auth.users -> profiles`
 - `profiles.member_id -> team_members.id`
-- `profiles.company_ids -> company access`
+- `profiles.avatar_url -> Quest HQ profile avatar`
+- `profiles.approved` and `profiles.role -> Quest HQ access gate`
+- `profiles.company_ids -> access gating for the shared session`
 - `team_members.supervisor_id -> team chart`
 - `jobs.id -> tasks.project_id`
 - approvals, notifications, time entries, and active timers as Quest HQ-owned tables or views
+
+Do not strip or replace TaskManagement's team-refined company/settings behavior in the task runtime. Quest HQ gates who can enter; TaskManagement remains responsible for how task execution is organized once launched.
 
 Do not replay TaskManagement's historical migrations directly into Quest HQ. They include old policy transitions and table assumptions that should be consolidated before production.
 

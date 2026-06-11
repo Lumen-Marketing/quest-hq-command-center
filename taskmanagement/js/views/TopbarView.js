@@ -177,6 +177,7 @@ App.TopbarView = class TopbarView {
     const profile = App.currentProfile || {};
     const currentName = person.full || profile.full_name || person.name || '';
     const roleLabel = (App.ROLES[profile.role] || { label: profile.role || 'Member' }).label;
+    const hostedByCommandCenter = !!(App.commandCenterIntegration && App.commandCenterIntegration.hosted);
 
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
 
@@ -194,7 +195,7 @@ App.TopbarView = class TopbarView {
           <button class="theme-opt ${currentTheme === 'light' ? 'active' : ''}" data-theme-set="light"><i class="ti ti-sun"></i>Light</button>
         </div>
       </div>
-      <div class="user-menu-item" data-action="edit-profile"><i class="ti ti-user-edit"></i>Edit profile</div>
+      <div class="user-menu-item" data-action="${hostedByCommandCenter ? 'quest-profile' : 'edit-profile'}"><i class="ti ti-user-edit"></i>${hostedByCommandCenter ? 'Quest profile' : 'Edit profile'}</div>
       <div class="user-menu-item" data-action="show-tour"><i class="ti ti-help"></i>Show tour again</div>
       <div class="user-menu-item" data-action="sign-out"><i class="ti ti-logout"></i>Sign out</div>
     `;
@@ -212,6 +213,13 @@ App.TopbarView = class TopbarView {
       editProfile.addEventListener('click', () => {
         this.closeUserMenu();
         if (this.controller && this.controller.openProfile) this.controller.openProfile();
+      });
+    }
+    const questProfile = menu.querySelector('[data-action="quest-profile"]');
+    if (questProfile) {
+      questProfile.addEventListener('click', () => {
+        this.closeUserMenu();
+        window.location.href = App.commandCenterProfileUrl || '../index.html?account=profile';
       });
     }
     menu.querySelector('[data-action="show-tour"]').addEventListener('click', () => {

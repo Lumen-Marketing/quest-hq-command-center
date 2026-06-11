@@ -5,6 +5,7 @@ Quest HQ is the operations shell for Quest Roofing, Quest Drafting, and Lumen Ma
 The key product boundary is intentional:
 
 - Quest HQ owns business containers: jobs, clients, CRM records, forms, tickets, files, finance, knowledge base records, automations, dashboards, templates, and admin setup.
+- Quest HQ owns the account shell: login, profile/avatar, approval state, role, company access gating, and the session handed into TaskManagement.
 - TaskManagement remains the work execution module for tasks, assignments, statuses, time tracking, and task notifications.
 - The shared integration contract is `job.id -> task.project_id`.
 
@@ -74,11 +75,15 @@ TaskManagement is vendored into this workspace under `taskmanagement/` and copie
 Expected handoff behavior:
 
 ```text
-Quest HQ Job Profile
+login.html
+  authenticates the Quest HQ user and checks approval
+
+Quest HQ Operations Command
   opens task-management.html?project_id=<job.id>&return_url=<quest-hq-url-with-job_id>
 
-TaskManagement
+TaskManagement runtime
   runs from taskmanagement/app.html inside this deployment
+  uses the same Supabase session from Quest HQ
   filters tasks where task.project_id = project_id
   can use return_url to navigate back to the originating Quest HQ job context
 ```
@@ -87,6 +92,8 @@ Required data contract:
 
 - `jobs.id` is the stable Quest HQ job identifier.
 - `tasks.project_id` in TaskManagement stores the Quest HQ job id.
+- Quest HQ `profiles` stores login approval, display name, avatar, role, and company access for the shared session.
+- TaskManagement keeps its own refined company/settings/task execution behavior inside the vendored runtime.
 - Task rollups shown in Quest HQ should be read from TaskManagement or a shared view, not reimplemented as a separate task system.
 - Automations that create tasks should write to TaskManagement and preserve `project_id`.
 
@@ -98,11 +105,14 @@ Current demo project:
 
 - Project ref: `lpzotcznihwyyudxycmd`
 - Public URL: `https://lpzotcznihwyyudxycmd.supabase.co`
-- Live tables used by the browser today: `public.jobs`, `public.companies`, `public.job_files`
-- Live storage bucket used by the browser today: `quest-job-files`
+- Live tables used by the browser today: `public.jobs`, `public.companies`, `public.job_files`, `public.profiles`, `public.tasks`, `public.team_members`
+- Live storage buckets used by the browser today: `quest-job-files`, `avatars`
 - Reproducible migrations:
   - `supabase/migrations/202606082049_job_center_demo.sql`
   - `supabase/migrations/202606101100_job_files_storage.sql`
+  - `supabase/migrations/202606121100_taskmanagement_runtime.sql`
+  - `supabase/migrations/202606121230_quest_profile_avatars.sql`
+  - `supabase/migrations/202606121240_quest_auth_bootstrap.sql`
 
 The public Vercel demo intentionally allows browser writes to `public.jobs`, `public.companies`, `public.job_files`, and Storage objects in `quest-job-files` so the presentation can demonstrate create, edit, upload, download, and delete behavior. Treat this as temporary demo RLS only; production must add Supabase Auth, company memberships, and scoped write policies before real customer data is entered.
 
@@ -117,7 +127,8 @@ File Center notes:
 Recommended production approach:
 
 - Keep Quest HQ and TaskManagement in the same Supabase project when possible so jobs, task rollups, files, and activity can share auth and Row Level Security.
-- Use `auth.users` for identity and app-level `profiles`, `companies`, and memberships for authorization.
+- Use `auth.users` and Quest HQ `profiles` for identity, profile/avatar, approval, roles, and access gating.
+- Preserve TaskManagement's refined companies/settings behavior in the task runtime.
 - Store public browser configuration in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - Keep privileged data migration, admin, webhook, and automation secrets out of the Vite client. Use Supabase Edge Functions or server-side deployment environment variables for those.
 

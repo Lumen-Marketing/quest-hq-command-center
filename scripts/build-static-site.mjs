@@ -1,7 +1,7 @@
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const buildId = 'TaskManagement Runtime Integration v2';
+const buildId = 'Quest Auth Runtime Integration v3';
 const assetVersion = buildId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const targets = ['.', 'dist', 'docs'];
 
@@ -230,7 +230,7 @@ function shell({ file, title, content, seed = [], moduleId = '' }) {
     <title>${title} | Quest HQ</title>
     <link rel="stylesheet" href="assets/quest-hq.css?v=${assetVersion}" />
   </head>
-  <body data-page="${file}" data-module="${moduleId}">
+  <body class="auth-loading" data-page="${file}" data-module="${moduleId}">
     <div class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="index.html">
@@ -238,6 +238,16 @@ function shell({ file, title, content, seed = [], moduleId = '' }) {
           <span><strong>Quest HQ</strong><small>Operations Command</small></span>
         </a>
         <div class="build-badge">${buildId}</div>
+        <section class="quest-account" data-quest-account hidden>
+          <button class="quest-account-main" type="button" data-quest-profile-open>
+            <span class="quest-avatar" data-quest-avatar>Q</span>
+            <span><strong data-quest-account-name>Loading account</strong><small data-quest-account-role>Checking access</small></span>
+          </button>
+          <div class="quest-account-actions">
+            <button type="button" data-quest-profile-open>Profile</button>
+            <button type="button" data-quest-sign-out>Sign out</button>
+          </div>
+        </section>
         <button class="tour-replay" type="button" data-tour-start>Walkthrough</button>
         <nav class="nav-list" aria-label="Main navigation">
           ${nav.map(([href, label, icon, state]) => navItem({ href, label, icon, state, file })).join('')}
@@ -250,6 +260,34 @@ function shell({ file, title, content, seed = [], moduleId = '' }) {
       <main class="main">
         ${content}
       </main>
+    </div>
+    <div class="modal-overlay" data-quest-profile-modal hidden>
+      <section class="modal-panel quest-profile-panel" role="dialog" aria-modal="true" aria-labelledby="quest-profile-title">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">Quest Account</span>
+            <h2 id="quest-profile-title">Profile</h2>
+          </div>
+          <button class="secondary-button" type="button" data-quest-profile-close>Close</button>
+        </div>
+        <form class="quest-profile-form" data-quest-profile-form>
+          <div class="quest-profile-preview">
+            <span class="quest-avatar large" data-quest-profile-avatar>Q</span>
+            <div>
+              <strong data-quest-profile-email></strong>
+              <span data-quest-profile-access></span>
+            </div>
+          </div>
+          <label>Display name<input name="full_name" autocomplete="name" /></label>
+          <label>Avatar image<input name="avatar" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+          <p class="muted">Quest HQ owns profile, avatar, login, approval, role, and company access. TaskManagement reads that session after launch.</p>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">Save profile</button>
+            <button class="secondary-button" type="button" data-quest-profile-close>Cancel</button>
+          </div>
+          <div class="quest-auth-message" data-quest-profile-message></div>
+        </form>
+      </section>
     </div>
     <div class="tour-overlay" data-tour-overlay hidden>
       <div class="tour-spotlight" data-tour-spotlight></div>
@@ -268,7 +306,8 @@ function shell({ file, title, content, seed = [], moduleId = '' }) {
       </section>
     </div>
     <script type="application/json" id="record-seed">${JSON.stringify(seed)}</script>
-${['command', 'jobs', 'task-bridge', 'admin', 'dashboards', 'files'].includes(moduleId) ? '    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\n    ' : '    '}<script src="assets/quest-hq.js?v=${assetVersion}" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/quest-hq.js?v=${assetVersion}" defer></script>
   </body>
 </html>`;
 }
@@ -278,6 +317,66 @@ function navItem({ href, label, icon, state, file }) {
   const classes = ['nav-item', href === file ? 'active' : '', planned ? 'nav-planned' : ''].filter(Boolean).join(' ');
   const attrs = planned ? ' data-nav-state="planned" aria-disabled="true" title="Planned for a later build"' : '';
   return `<a class="${classes}" href="${href}"${attrs}><span class="nav-icon">${iconSvg(icon)}</span><span class="nav-label">${label}</span>${planned ? '<small class="nav-status">Planned</small>' : ''}</a>`;
+}
+
+function loginPage() {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login | Quest HQ</title>
+    <link rel="stylesheet" href="assets/quest-hq.css?v=${assetVersion}" />
+  </head>
+  <body class="login-page" data-page="login.html">
+    <main class="quest-login-shell" data-quest-login>
+      <section class="quest-login-panel">
+        <div class="brand">
+          <span class="brand-mark">Q</span>
+          <span><strong>Quest HQ</strong><small>Operations Command</small></span>
+        </div>
+        <div>
+          <span class="eyebrow">Secure access</span>
+          <h1>Sign in to Quest HQ</h1>
+          <p class="muted">Use one Quest account for the operations command center and TaskManagement.</p>
+        </div>
+        <div class="quest-auth-tabs">
+          <button class="active" type="button" data-auth-mode="signin">Sign in</button>
+          <button type="button" data-auth-mode="signup">Create account</button>
+        </div>
+        <form class="quest-auth-form" data-auth-form="signin">
+          <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+          <button class="primary-button" type="submit">Sign in</button>
+        </form>
+        <form class="quest-auth-form" data-auth-form="signup" hidden>
+          <label>Display name<input name="full_name" autocomplete="name" required /></label>
+          <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+          <label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8" /></label>
+          <button class="primary-button" type="submit">Create account</button>
+          <p class="muted">An admin must approve the account before it can enter Quest HQ or TaskManagement.</p>
+        </form>
+        <section class="quest-pending-card" data-auth-pending hidden>
+          <h2>Awaiting approval</h2>
+          <p class="muted">Your login exists, but a Quest admin still needs to approve your profile and assign access.</p>
+          <div class="form-actions">
+            <button class="secondary-button" type="button" data-auth-refresh>Check again</button>
+            <button class="secondary-button" type="button" data-auth-sign-out>Sign out</button>
+          </div>
+        </section>
+        <div class="quest-auth-message" data-auth-message></div>
+      </section>
+      <aside class="quest-login-aside">
+        <strong>Flow</strong>
+        <span>Login</span>
+        <span>Quest HQ Operations Command</span>
+        <span>TaskManagement execution</span>
+      </aside>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/quest-hq.js?v=${assetVersion}" defer></script>
+  </body>
+</html>`;
 }
 
 function iconSvg(name) {
@@ -1244,7 +1343,236 @@ const plannedTabsCss = `.tabs button.tab-planned,.tabs button.tab-planned:hover,
 
 const tutorialCss = `.tour-replay{display:inline-flex;align-items:center;justify-content:center;min-height:36px;border:1px solid #324055;border-radius:999px;background:#172234;color:#dbeafe;font-weight:850;cursor:pointer}.tour-replay:hover{border-color:#f45d22;color:#fff;background:#2a1816}.tour-overlay[hidden]{display:none}.tour-overlay{position:fixed;inset:0;z-index:130;background:rgba(15,23,42,.68);pointer-events:auto}.tour-spotlight{position:absolute;border:2px solid #f45d22;border-radius:12px;box-shadow:0 0 0 9999px rgba(15,23,42,.68),0 18px 60px rgba(0,0,0,.32);transition:all .18s ease;background:rgba(255,255,255,.04);pointer-events:none}.tour-card{position:absolute;width:min(440px,calc(100vw - 28px));border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);box-shadow:0 28px 90px rgba(0,0,0,.34);padding:18px}.tour-card-head{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-bottom:8px}.tour-card-head span{display:none}.tour-card-head button{border:0;background:transparent;color:#52627a;font-weight:850;cursor:pointer}.tour-progress{display:flex;align-items:center;gap:8px;margin:0 0 16px}.tour-progress span{display:block;width:11px;height:11px;border-radius:50%;background:#dbe3ed;border:2px solid #dbe3ed}.tour-progress span.done{background:#111827;border-color:#111827}.tour-progress span.active{background:#f45d22;border-color:#f45d22;box-shadow:0 0 0 4px #ffedd5}.tour-card h2{font-size:23px;margin:0 0 8px}.tour-card p{color:#52627a;line-height:1.5;margin-bottom:16px}.tour-actions{display:flex;justify-content:space-between;gap:10px}.tour-actions button[disabled]{opacity:.45;cursor:not-allowed}body.tour-open{overflow:hidden}@media(max-width:820px){.tour-overlay{display:grid;place-items:end center;padding:12px}.tour-spotlight{display:none}.tour-card{position:static;width:100%}.tour-replay{width:100%}}`;
 
+const questAuthCss = `body.auth-loading .main,body.auth-loading .nav-list,body.auth-loading .sidebar-card,body.auth-loading .tour-replay{visibility:hidden}body.auth-loading:after{content:"Checking Quest access...";position:fixed;inset:0;display:grid;place-items:center;background:#eef2f7;color:#121826;font-weight:900}.quest-account{display:grid;gap:8px;border:1px solid #324055;border-radius:8px;background:#121d2c;padding:10px}.quest-account-main{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:center;width:100%;border:0;background:transparent;color:#fff;text-align:left;cursor:pointer;padding:0}.quest-account-main strong,.quest-account-main small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.quest-account-main small{color:#aebbd0;margin-top:2px}.quest-avatar{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#f45d22;color:#fff;font-weight:900;overflow:hidden}.quest-avatar img{width:100%;height:100%;object-fit:cover}.quest-avatar.large{width:72px;height:72px;font-size:24px}.quest-account-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.quest-account-actions button,.quest-auth-tabs button{min-height:34px;border:1px solid #425169;border-radius:8px;background:#172234;color:#dbeafe;font-weight:850;cursor:pointer}.quest-account-actions button:hover,.quest-auth-tabs button.active{border-color:#f45d22;background:#2a1816;color:#fff}.quest-login-shell{min-height:100vh;display:grid;grid-template-columns:minmax(360px,520px) minmax(320px,1fr);background:#111a27;color:#eaf1fb}.quest-login-panel{display:grid;align-content:center;gap:18px;padding:clamp(24px,5vw,64px);background:#fff;color:#121826}.quest-login-panel .brand strong{color:#121826}.quest-login-panel .brand small{color:#617089}.quest-login-panel h1{font-size:38px;margin:4px 0 8px}.quest-login-aside{display:grid;align-content:center;gap:14px;padding:clamp(24px,6vw,74px);background:linear-gradient(140deg,#111a27,#2a1816)}.quest-login-aside strong{font-size:13px;text-transform:uppercase;color:#ffd8c7}.quest-login-aside span{display:block;border:1px solid #334155;border-radius:8px;background:rgba(255,255,255,.05);padding:14px;font-size:22px;font-weight:900}.quest-auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.quest-auth-form,.quest-pending-card,.quest-profile-form{display:grid;gap:12px}.quest-auth-form label,.quest-profile-form label{display:grid;gap:6px;color:#617089;font-size:12px;font-weight:850;text-transform:uppercase}.quest-auth-form input,.quest-profile-form input{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);padding:12px}.quest-auth-message{min-height:20px;color:#991b1b;font-weight:800}.quest-auth-message.ok{color:#166534}.quest-profile-panel{width:min(620px,calc(100vw - 44px))}.quest-profile-form{padding:18px}.quest-profile-preview{display:grid;grid-template-columns:72px minmax(0,1fr);gap:14px;align-items:center}.quest-profile-preview strong,.quest-profile-preview span{display:block}.quest-profile-preview span{color:#617089;margin-top:4px}@media(max-width:860px){.quest-login-shell{grid-template-columns:1fr}.quest-login-aside{display:none}.quest-account-actions{grid-template-columns:1fr}.quest-profile-preview{grid-template-columns:1fr}}`;
+
 const js = `(() => {
+  const QUEST_SUPABASE_URL = 'https://lpzotcznihwyyudxycmd.supabase.co';
+  const QUEST_SUPABASE_KEY = 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07';
+  const pageName = (document.body.dataset.page || '').split('/').pop();
+  const isLoginPage = pageName === 'login.html';
+  const returnParam = new URLSearchParams(window.location.search).get('return_url');
+  const sameOriginReturn = (() => {
+    try {
+      const url = returnParam ? new URL(returnParam, window.location.href) : new URL('index.html', window.location.href);
+      return url.origin === window.location.origin ? url.toString() : new URL('index.html', window.location.href).toString();
+    } catch (error) {
+      return new URL('index.html', window.location.href).toString();
+    }
+  })();
+  const questClient = window.supabase && window.supabase.createClient ? window.supabase.createClient(QUEST_SUPABASE_URL, QUEST_SUPABASE_KEY) : null;
+  window.QuestAuth = { client: questClient, session: null, user: null, profile: null };
+
+  initQuestAuth();
+
+  async function initQuestAuth() {
+    if (!questClient) {
+      if (isLoginPage) showAuthMessage('Auth service is unavailable.');
+      else window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
+      return;
+    }
+    if (isLoginPage) {
+      await initLoginPage();
+      return;
+    }
+    await guardQuestPage();
+  }
+
+  async function initLoginPage() {
+    document.body.classList.remove('auth-loading');
+    bindLoginForms();
+    const { data } = await questClient.auth.getSession();
+    if (!data.session) return;
+    const profile = await loadQuestProfile(data.session.user.id);
+    if (profile && profile.approved) {
+      window.location.replace(sameOriginReturn);
+      return;
+    }
+    showPendingState();
+  }
+
+  async function guardQuestPage() {
+    const { data } = await questClient.auth.getSession();
+    if (!data.session) {
+      window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
+      return;
+    }
+    const profile = await loadQuestProfile(data.session.user.id);
+    if (!profile || !profile.approved) {
+      window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
+      return;
+    }
+    window.QuestAuth.session = data.session;
+    window.QuestAuth.user = data.session.user;
+    window.QuestAuth.profile = profile;
+    paintQuestAccount(data.session.user, profile);
+    bindQuestAccountControls();
+    document.body.classList.remove('auth-loading');
+    if (new URLSearchParams(window.location.search).get('account') === 'profile') openQuestProfile();
+    questClient.auth.onAuthStateChange((_event, session) => {
+      if (!session) window.location.replace('login.html?return_url=' + encodeURIComponent(window.location.href));
+    });
+  }
+
+  async function loadQuestProfile(userId) {
+    const { data, error } = await questClient
+      .from('profiles')
+      .select('id,email,full_name,approved,role,member_id,company_ids,avatar_url')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) return null;
+    return data;
+  }
+
+  function bindLoginForms() {
+    document.querySelectorAll('[data-auth-mode]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const mode = button.dataset.authMode;
+        document.querySelectorAll('[data-auth-mode]').forEach((item) => item.classList.toggle('active', item === button));
+        document.querySelectorAll('[data-auth-form]').forEach((form) => { form.hidden = form.dataset.authForm !== mode; });
+        document.querySelector('[data-auth-pending]').hidden = true;
+        showAuthMessage('');
+      });
+    });
+    document.querySelector('[data-auth-form="signin"]')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      showAuthMessage('Signing in...', true);
+      const payload = Object.fromEntries(new FormData(form).entries());
+      const { data, error } = await questClient.auth.signInWithPassword({
+        email: String(payload.email || '').trim(),
+        password: String(payload.password || '')
+      });
+      if (error) return showAuthMessage(error.message || 'Could not sign in.');
+      const profile = await loadQuestProfile(data.user.id);
+      if (profile && profile.approved) window.location.replace(sameOriginReturn);
+      else showPendingState();
+    });
+    document.querySelector('[data-auth-form="signup"]')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      showAuthMessage('Creating account...', true);
+      const payload = Object.fromEntries(new FormData(form).entries());
+      const { error } = await questClient.auth.signUp({
+        email: String(payload.email || '').trim(),
+        password: String(payload.password || ''),
+        options: { data: { full_name: String(payload.full_name || '').trim() } }
+      });
+      if (error) return showAuthMessage(error.message || 'Could not create account.');
+      showPendingState();
+    });
+    document.querySelector('[data-auth-refresh]')?.addEventListener('click', async () => {
+      const { data } = await questClient.auth.getSession();
+      if (!data.session) return showAuthMessage('Sign in again to check approval.');
+      const profile = await loadQuestProfile(data.session.user.id);
+      if (profile && profile.approved) window.location.replace(sameOriginReturn);
+      else showPendingState();
+    });
+    document.querySelector('[data-auth-sign-out]')?.addEventListener('click', async () => {
+      await questClient.auth.signOut();
+      window.location.replace('login.html?return_url=' + encodeURIComponent(sameOriginReturn));
+    });
+  }
+
+  function showPendingState() {
+    document.querySelectorAll('[data-auth-form]').forEach((form) => { form.hidden = true; });
+    document.querySelector('[data-auth-pending]').hidden = false;
+    showAuthMessage('Account pending admin approval.', true);
+  }
+
+  function showAuthMessage(message, ok = false) {
+    const node = document.querySelector('[data-auth-message]');
+    if (!node) return;
+    node.textContent = message || '';
+    node.classList.toggle('ok', !!ok);
+  }
+
+  function paintQuestAccount(user, profile) {
+    const account = document.querySelector('[data-quest-account]');
+    if (account) account.hidden = false;
+    const name = profile.full_name || user.email || 'Quest user';
+    const role = profile.role || 'member';
+    setText('[data-quest-account-name]', name);
+    setText('[data-quest-account-role]', role + ' - Quest HQ');
+    setAvatar(document.querySelector('[data-quest-avatar]'), name, profile.avatar_url);
+    setText('[data-quest-profile-email]', profile.email || user.email || '');
+    setText('[data-quest-profile-access]', role + ' - ' + ((profile.company_ids || []).join(', ') || 'No company access assigned'));
+    setAvatar(document.querySelector('[data-quest-profile-avatar]'), name, profile.avatar_url);
+    const form = document.querySelector('[data-quest-profile-form]');
+    if (form) form.elements.full_name.value = profile.full_name || '';
+  }
+
+  function bindQuestAccountControls() {
+    document.querySelectorAll('[data-quest-profile-open]').forEach((button) => button.addEventListener('click', openQuestProfile));
+    document.querySelectorAll('[data-quest-profile-close]').forEach((button) => button.addEventListener('click', closeQuestProfile));
+    document.querySelector('[data-quest-sign-out]')?.addEventListener('click', async () => {
+      await questClient.auth.signOut();
+      window.location.replace('login.html');
+    });
+    document.querySelector('[data-quest-profile-form]')?.addEventListener('submit', saveQuestProfile);
+  }
+
+  function openQuestProfile() {
+    const modal = document.querySelector('[data-quest-profile-modal]');
+    if (modal) modal.hidden = false;
+  }
+
+  function closeQuestProfile() {
+    const modal = document.querySelector('[data-quest-profile-modal]');
+    if (modal) modal.hidden = true;
+  }
+
+  async function saveQuestProfile(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const msg = document.querySelector('[data-quest-profile-message]');
+    const profile = window.QuestAuth.profile;
+    const user = window.QuestAuth.user;
+    if (!profile || !user) return;
+    if (msg) { msg.textContent = 'Saving profile...'; msg.classList.add('ok'); }
+    let avatarUrl = profile.avatar_url || null;
+    const file = form.elements.avatar.files && form.elements.avatar.files[0];
+    if (file) {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const path = user.id + '/avatar.' + ext;
+      const uploaded = await questClient.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+      if (uploaded.error) {
+        if (msg) { msg.textContent = uploaded.error.message || 'Avatar upload failed.'; msg.classList.remove('ok'); }
+        return;
+      }
+      avatarUrl = questClient.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+    }
+    const fullName = String(form.elements.full_name.value || '').trim();
+    const { error } = await questClient
+      .from('profiles')
+      .update({ full_name: fullName, avatar_url: avatarUrl })
+      .eq('id', profile.id);
+    if (error) {
+      if (msg) { msg.textContent = error.message || 'Profile save failed.'; msg.classList.remove('ok'); }
+      return;
+    }
+    window.QuestAuth.profile = { ...profile, full_name: fullName, avatar_url: avatarUrl };
+    paintQuestAccount(user, window.QuestAuth.profile);
+    if (msg) { msg.textContent = 'Profile saved.'; msg.classList.add('ok'); }
+  }
+
+  function setAvatar(node, name, url) {
+    if (!node) return;
+    node.replaceChildren();
+    if (url) {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      node.appendChild(img);
+      return;
+    }
+    node.textContent = String(name || 'Q').trim().split(/\\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'Q';
+  }
+
+  function setText(selector, value) {
+    const node = document.querySelector(selector);
+    if (node) node.textContent = value;
+  }
+
   const storageKey = (moduleId) => 'quest-hq-static-' + moduleId;
   const seed = JSON.parse(document.getElementById('record-seed')?.textContent || '[]');
   document.querySelectorAll('[data-nav-state=\"planned\"]').forEach((link) => {
@@ -4051,8 +4379,9 @@ async function writeTarget(target) {
   if (target !== '.') await rm(absolute, { recursive: true, force: true });
   await mkdir(path.join(absolute, 'assets'), { recursive: true });
   await copyTaskManagementRuntime(target, absolute);
-  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + modalCss + plannedNavCss + fileViewerCss + fileCenterCss + driveFileCss + jobCenterCss + coreDemoCss + identityIntegrationCss + companyAdminCss + analyticsCss + formsCenterCss + googleFormsCss + formShareCss + formsLayoutRedoCss + formsLibraryModalCss + plannedTabsCss + tutorialCss);
+  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + modalCss + plannedNavCss + fileViewerCss + fileCenterCss + driveFileCss + jobCenterCss + coreDemoCss + identityIntegrationCss + companyAdminCss + analyticsCss + formsCenterCss + googleFormsCss + formShareCss + formsLayoutRedoCss + formsLibraryModalCss + plannedTabsCss + tutorialCss + questAuthCss);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js + jobCenterJs + fileCenterJs + companyAdminJs + analyticsJs + commandCenterJs + taskBridgeJs + formsCenterJs + tutorialJs);
+  await writeFile(path.join(absolute, 'login.html'), loginPage());
   await writeFile(path.join(absolute, 'index.html'), commandPage());
   await writeFile(path.join(absolute, 'jobs.html'), jobsPage());
   await writeFile(path.join(absolute, 'task-management.html'), taskManagementPage());
