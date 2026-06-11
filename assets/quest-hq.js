@@ -1657,7 +1657,23 @@ function escapeHtml(value) {
   let selectedResponseId = '';
   let menuQuestionId = '';
   let dirty = false;
-  if (selectedId) draft = clone(forms.find((form) => form.id === selectedId));
+  const params = new URLSearchParams(window.location.search);
+  const isPublicMode = params.get('public') === '1';
+  if (isPublicMode) {
+    document.body.classList.add('form-public-mode');
+    const shared = readSharedForm(params.get('payload'));
+    const byId = params.get('form') ? forms.find((form) => form.id === params.get('form')) : null;
+    if (shared) {
+      draft = shared;
+      selectedId = shared.id || 'shared-form';
+    } else if (byId) {
+      draft = clone(byId);
+      selectedId = byId.id;
+    }
+    selectedQuestionId = draft.questions?.[0]?.id || '';
+  }
+  if (!isPublicMode && selectedId) draft = clone(forms.find((form) => form.id === selectedId));
+  if (isPublicMode && !draft.questions) draft = blankForm();
 
   bind();
   render();
@@ -1699,6 +1715,16 @@ function escapeHtml(value) {
     center.addEventListener('click', (event) => {
       if (event.target.closest('[data-form-modal-close]')) closeFormModal();
       if (event.target === nodes.modal) closeFormModal();
+      const copyLink = event.target.closest('[data-form-copy-link]');
+      if (copyLink) {
+        copyPublicLink();
+        return;
+      }
+      const openPublic = event.target.closest('[data-form-open-public]');
+      if (openPublic) {
+        window.open(publicFormUrl(), '_blank', 'noopener,noreferrer');
+        return;
+      }
     });
     nodes.search?.addEventListener('input', renderLibrary);
     nodes.typeFilter?.addEventListener('change', renderLibrary);
@@ -1889,6 +1915,10 @@ function escapeHtml(value) {
     draft.status = String(data.get('status') || 'Draft');
     draft.audience = String(data.get('audience') || '');
     draft.jobContext = String(data.get('jobContext') || '');
+    draft.themeColor = String(data.get('themeColor') || '#f45d22');
+    draft.backgroundStyle = String(data.get('backgroundStyle') || 'clean');
+    draft.headerImage = String(data.get('headerImage') || '');
+    draft.buttonLabel = String(data.get('buttonLabel') || 'Submit');
     draft.collectEmail = data.has('collectEmail');
     draft.requireApproval = data.has('requireApproval');
   }
@@ -2040,11 +2070,16 @@ function escapeHtml(value) {
     write(responsesKey, responses);
     setState('Response saved', 'live');
     nodes.responseForm.reset();
+    if (isPublicMode) {
+      nodes.responseForm.innerHTML = '<div class="public-thank-you"><h2>Response submitted</h2><p class="muted">Thank you. Your response was saved on this device for the presentation mockup.</p></div>';
+      return;
+    }
     render();
     switchTab('responses');
   }
 
   function render() {
+    if (isPublicMode) setPublicLayout();
     renderMetrics();
     renderSettings();
     renderLibrary();
@@ -2074,6 +2109,10 @@ function escapeHtml(value) {
     nodes.settings.elements.status.value = draft.status || 'Draft';
     nodes.settings.elements.audience.value = draft.audience || '';
     nodes.settings.elements.jobContext.value = draft.jobContext || '';
+    nodes.settings.elements.themeColor.value = draft.themeColor || '#f45d22';
+    nodes.settings.elements.backgroundStyle.value = draft.backgroundStyle || 'clean';
+    nodes.settings.elements.headerImage.value = draft.headerImage || '';
+    nodes.settings.elements.buttonLabel.value = draft.buttonLabel || 'Submit';
     nodes.settings.elements.collectEmail.checked = !!draft.collectEmail;
     nodes.settings.elements.requireApproval.checked = !!draft.requireApproval;
   }
@@ -2097,12 +2136,14 @@ function escapeHtml(value) {
       return;
     }
     const count = responses.filter((response) => response.formId === draft.id).length;
+    const publicUrl = publicFormUrl();
     nodes.summary.innerHTML = '<h2>' + escapeHtml(draft.title || 'Unsaved form') + '</h2><p class="muted">' + escapeHtml(draft.description || 'No description yet.') + '</p>' +
       '<div class="form-status-row">' +
       pill('Type', draft.type) + pill('Status', draft.status) + pill('Responses', count) +
       '</div><div class="summary-pill-grid">' +
       pill('Audience', draft.audience || 'Not set') + pill('Job context', draft.jobContext || 'Optional') + pill('Review', draft.requireApproval ? 'Required' : 'Not required') +
-      '</div><div class="form-actions"><button class="primary-button" type="button" data-form-edit>Edit Form</button><button class="secondary-button" type="button" data-tab-jump="preview">Preview</button></div>';
+      '</div><div class="share-card"><strong>Respondent link</strong><input readonly value="' + escapeHtml(publicUrl) + '"><div class="form-actions"><button class="primary-button" type="button" data-form-open-public>Open Public Form</button><button class="secondary-button" type="button" data-form-copy-link>Copy Link</button></div></div>' +
+      '<div class="form-actions"><button class="primary-button" type="button" data-form-edit>Edit Form</button><button class="secondary-button" type="button" data-tab-jump="preview">Preview</button></div>';
   }
 
   function renderQuestions() {
@@ -2177,17 +2218,23 @@ function escapeHtml(value) {
 
   function renderPreview() {
     if (!draft.title && !draft.questions.length) {
-      nodes.responseForm.innerHTML = '<div class="empty-state">Build or select a form to preview it.</div>';
-      nodes.responseSidecar.innerHTML = '<h2>Collector Settings</h2><p class="muted">No form selected.</p>';
+      nodes.responseForm.innerHTML = isPublicMode ? '<div class="empty-state">This form link is empty or expired.</div>' : '<div class="empty-state">Build or select a form to preview it.</div>';
+      if (nodes.responseSidecar) nodes.responseSidecar.innerHTML = '<h2>Collector Settings</h2><p class="muted">No form selected.</p>';
       return;
     }
-    nodes.responseForm.innerHTML = '<div><h2>' + escapeHtml(draft.title || 'Untitled form') + '</h2><p class="muted">' + escapeHtml(draft.description || 'No description yet.') + '</p></div>' +
+    nodes.responseForm.classList.add('designed-form');
+    nodes.responseForm.style.setProperty('--form-theme', themeColor());
+    document.body.dataset.formBackground = draft.backgroundStyle || 'clean';
+    nodes.responseForm.innerHTML = respondentHeader() +
       (draft.collectEmail ? '<label>Email<input type="email" name="respondent_email" placeholder="name@example.com"></label>' : '') +
       (draft.questions.length ? draft.questions.map(responseField).join('') : '<div class="empty-state">No questions yet.</div>') +
-      '<div class="form-actions"><button class="primary-button" type="submit">Submit Test Response</button><button class="secondary-button" type="reset">Clear</button></div>';
+      '<div class="form-actions"><button class="primary-button" type="submit">' + escapeHtml(draft.buttonLabel || 'Submit') + '</button>' + (isPublicMode ? '' : '<button class="secondary-button" type="reset">Clear</button>') + '</div>';
     const saved = draft.id ? responses.filter((response) => response.formId === draft.id).length : 0;
-    nodes.responseSidecar.innerHTML = '<h2>Collector Settings</h2><p class="muted">Responses save locally for the mockup. Published forms can later receive public URLs and Supabase tables.</p>' +
-      '<div class="summary-pill-grid">' + pill('Status', draft.status) + pill('Responses', saved) + pill('Email', draft.collectEmail ? 'Collected' : 'Off') + '</div>';
+    if (nodes.responseSidecar) {
+      nodes.responseSidecar.innerHTML = '<h2>Share & Collect</h2><p class="muted">This generated link opens a dedicated respondent form without the Quest HQ sidebar.</p>' +
+        '<div class="share-card"><strong>Public form link</strong><input readonly value="' + escapeHtml(publicFormUrl()) + '"><div class="form-actions"><button class="primary-button" type="button" data-form-open-public>Open</button><button class="secondary-button" type="button" data-form-copy-link>Copy</button></div></div>' +
+        '<div class="summary-pill-grid">' + pill('Status', draft.status) + pill('Responses', saved) + pill('Email', draft.collectEmail ? 'Collected' : 'Off') + '</div>';
+    }
   }
 
   function renderResponses() {
@@ -2250,8 +2297,67 @@ function escapeHtml(value) {
     return '<label class="response-question">' + label + '<input name="' + question.id + '"' + required + '></label>';
   }
 
+  function setPublicLayout() {
+    center.querySelectorAll('[data-tab]').forEach((button) => button.classList.toggle('active', button.dataset.tab === 'preview'));
+    center.querySelectorAll('[data-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === 'preview'));
+  }
+
+  function respondentHeader() {
+    const image = String(draft.headerImage || '').trim();
+    return '<div class="designed-form-header">' +
+      (image ? '<div class="designed-form-image" style="background-image:url(' + cssUrl(image) + ')"></div>' : '') +
+      '<div class="designed-form-title"><h2>' + escapeHtml(draft.title || 'Untitled form') + '</h2><p class="muted">' + escapeHtml(draft.description || 'No description yet.') + '</p></div>' +
+    '</div>';
+  }
+
+  function publicFormUrl() {
+    const form = clone(draft);
+    if (!form.id) form.id = 'shared-form';
+    const payload = encodePayload(form);
+    const url = new URL(window.location.href);
+    url.pathname = url.pathname.replace(/[^/]*$/, 'forms.html');
+    url.search = '?public=1&payload=' + encodeURIComponent(payload);
+    url.hash = '';
+    return url.toString();
+  }
+
+  function copyPublicLink() {
+    if (!draft.title.trim()) {
+      setState('Title required before sharing', 'error');
+      return;
+    }
+    saveDraft();
+    const url = publicFormUrl();
+    navigator.clipboard?.writeText(url).then(() => setState('Public link copied', 'live')).catch(() => {
+      setState('Copy failed. Link is visible.', 'error');
+    });
+  }
+
+  function encodePayload(value) {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(value))));
+  }
+
+  function readSharedForm(payload) {
+    if (!payload) return null;
+    try {
+      const form = JSON.parse(decodeURIComponent(escape(atob(payload))));
+      return form && Array.isArray(form.questions) ? form : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function themeColor() {
+    const color = String(draft.themeColor || '#f45d22');
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : '#f45d22';
+  }
+
+  function cssUrl(value) {
+    return '\'' + String(value).replace(/[\\']/g, '') + '\'';
+  }
+
   function blankForm() {
-    return { id: '', title: '', description: '', type: 'Inspection', status: 'Draft', audience: '', jobContext: '', collectEmail: false, requireApproval: false, createdAt: '', updatedAt: '', questions: [] };
+    return { id: '', title: '', description: '', type: 'Inspection', status: 'Draft', audience: '', jobContext: '', themeColor: '#f45d22', backgroundStyle: 'clean', headerImage: '', buttonLabel: 'Submit', collectEmail: false, requireApproval: false, createdAt: '', updatedAt: '', questions: [] };
   }
 
   function blankQuestion(type) {

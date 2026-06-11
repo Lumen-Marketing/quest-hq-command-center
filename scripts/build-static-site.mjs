@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const buildId = 'Forms Builder v18';
+const buildId = 'Forms Builder v19';
 const assetVersion = buildId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const targets = ['.', 'dist', 'docs'];
 
@@ -669,6 +669,17 @@ function formsPage() {
             </label>
             <label>Audience<input name="audience" placeholder="Client, field team, admin, vendor" /></label>
             <label>Linked Job Context<input name="jobContext" placeholder="Optional job/client context" /></label>
+            <label>Theme Color<input type="color" name="themeColor" value="#f45d22" /></label>
+            <label>Background
+              <select name="backgroundStyle">
+                <option value="clean">Clean light</option>
+                <option value="warm">Warm paper</option>
+                <option value="blueprint">Blueprint</option>
+                <option value="dark">Dark slate</option>
+              </select>
+            </label>
+            <label class="span-2">Header Image URL<input name="headerImage" placeholder="Optional image URL for the respondent form header" /></label>
+            <label>Submit Button Label<input name="buttonLabel" placeholder="Submit" /></label>
             <label class="forms-check"><input type="checkbox" name="collectEmail" /> Collect respondent email</label>
             <label class="forms-check"><input type="checkbox" name="requireApproval" /> Require internal review</label>
           </div>
@@ -1103,6 +1114,8 @@ const analyticsCss = `.analytics-layout{display:grid;grid-template-columns:minma
 const formsCenterCss = `.forms-command{display:flex;justify-content:flex-end;gap:12px;align-items:center;margin-bottom:18px;flex-wrap:wrap}.forms-dashboard{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.forms-library-grid,.forms-preview-grid,.forms-response-grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:18px}.forms-builder-grid{display:grid;grid-template-columns:minmax(320px,.75fr) minmax(320px,.75fr) minmax(360px,1fr);gap:18px;align-items:start}.forms-toolbar{display:grid;grid-template-columns:1fr 150px;gap:10px;margin-bottom:12px}.forms-toolbar label,.forms-settings label,.question-editor label{display:grid;gap:6px;font-size:12px;font-weight:850;text-transform:uppercase;color:#617089}.forms-toolbar input,.forms-toolbar select,.forms-settings input,.forms-settings textarea,.forms-settings select,.question-editor input,.question-editor textarea,.question-editor select,.question-add-row select,.response-form input,.response-form textarea,.response-form select{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);padding:11px}.forms-list,.question-list,.response-list{display:grid;gap:8px}.form-card,.question-card,.response-card{width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px;text-align:left;cursor:pointer}.form-card:hover,.form-card.active,.question-card:hover,.question-card.active,.response-card:hover,.response-card.active{border-color:#f97316;background:#fff8f5}.form-card strong,.form-card span,.form-card small,.question-card strong,.question-card span,.response-card strong,.response-card span{display:block}.form-card span,.question-card span,.response-card span{color:#617089;font-size:13px;margin-top:5px}.form-card small{margin-top:8px;color:#52627a;font-weight:850}.forms-summary h2,.response-form h2{margin-bottom:6px}.form-status-row,.summary-pill-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.form-status-row span,.summary-pill-grid span{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px}.form-status-row strong,.form-status-row small,.summary-pill-grid strong,.summary-pill-grid small{display:block}.form-status-row small,.summary-pill-grid small{color:#617089;margin-top:4px}.forms-settings,.question-editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.forms-settings .span-2,.question-editor .span-2{grid-column:1/-1}.forms-check{display:flex!important;grid-template-columns:none!important;align-items:center;gap:8px;min-height:42px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:0 10px;text-transform:none!important;color:#27364d!important}.forms-check input{width:auto!important}.question-add-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;margin-bottom:12px}.question-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}.question-card b{border:1px solid var(--line);border-radius:999px;background:#fff;padding:4px 8px;color:#52627a;font-size:11px;text-transform:uppercase}.question-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.response-form{display:grid;gap:14px}.response-question{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:14px}.response-question strong,.response-question small{display:block}.response-question small{color:#617089;margin-top:4px}.response-options{display:grid;gap:8px;margin-top:10px}.response-options label{display:flex;align-items:center;gap:8px;color:#27364d}.rating-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.rating-row label{display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer}.rating-row input{position:absolute;opacity:0;pointer-events:none}.rating-row label:has(input:checked){background:#111827;color:#fff;border-color:#111827}.response-sidecar{align-self:start}.response-detail-list{display:grid;gap:10px}.response-detail-list div{border-top:1px solid var(--line);padding-top:10px}.response-detail-list strong,.response-detail-list span{display:block}.response-detail-list span{color:#52627a;margin-top:4px;white-space:pre-wrap}.forms-template-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.forms-template-grid button{min-height:170px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:16px;text-align:left;cursor:pointer;box-shadow:var(--shadow)}.forms-template-grid button:hover{border-color:#f97316;background:#fff8f5}.forms-template-grid strong,.forms-template-grid span{display:block}.forms-template-grid strong{font-size:18px}.forms-template-grid span{color:#617089;margin-top:8px;line-height:1.45}.forms-center .empty-state{min-height:140px;display:grid;place-items:center}.form-modal-panel{width:min(1280px,calc(100vw - 44px))}.form-modal-body{padding:18px}.form-modal-body .forms-builder-grid{grid-template-columns:minmax(300px,.7fr) minmax(300px,.7fr) minmax(340px,1fr)}.form-modal-body .forms-settings,.form-modal-body .question-panel,.form-modal-body .question-editor{box-shadow:none}@media(max-width:1280px){.forms-dashboard,.forms-template-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.forms-builder-grid,.forms-library-grid,.forms-preview-grid,.forms-response-grid,.form-modal-body .forms-builder-grid{grid-template-columns:1fr}}@media(max-width:760px){.forms-command,.forms-dashboard,.forms-toolbar,.forms-settings,.question-editor,.question-add-row,.forms-template-grid,.form-status-row,.summary-pill-grid{display:grid;grid-template-columns:1fr}.forms-command{align-items:stretch}.forms-command .sync-pill{justify-content:center}}`;
 
 const googleFormsCss = `.gform-editor{grid-template-columns:minmax(0,1fr)!important;gap:14px}.gform-editor-tabs{grid-column:1/-1;display:flex;justify-content:center;gap:6px;border-bottom:1px solid var(--line);padding-bottom:10px}.gform-editor-tabs button{border:0;border-bottom:3px solid transparent;background:transparent;color:#617089;min-height:38px;padding:0 18px;font-weight:900;cursor:pointer}.gform-editor-tabs button.active{border-color:#f45d22;color:#121826}.gform-editor .forms-settings{grid-column:1/-1;border-top:8px solid #f45d22}.gform-editor .forms-settings h2{font-size:20px}.gform-settings-fields{display:none;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.gform-editor[data-form-editor-mode="settings"] .gform-settings-fields{display:grid}.gform-editor[data-form-editor-mode="settings"] .question-workbench,.gform-editor[data-form-editor-mode="settings"] .gform-modal-responses{display:none}.gform-editor[data-form-editor-mode="questions"] .question-workbench{display:block;grid-column:1/-1}.gform-editor[data-form-editor-mode="questions"] .gform-modal-responses{display:none}.gform-editor[data-form-editor-mode="responses"] .question-workbench{display:none}.gform-editor[data-form-editor-mode="responses"] .gform-modal-responses{display:block;grid-column:1/-1}.gform-modal-responses{display:none}.gform-modal-responses [data-form-editor-response-list]{display:grid;gap:8px}.gform-modal-response-row{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px}.gform-modal-response-row strong,.gform-modal-response-row span{display:block}.gform-modal-response-row span{color:#617089;margin-top:4px}.question-workbench{position:relative}.question-canvas{width:min(820px,100%);margin:0 auto;position:relative;display:grid;gap:12px}.gform-floating-toolbar{position:absolute;right:-58px;top:0;display:grid;gap:8px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px;box-shadow:var(--shadow)}.gform-floating-toolbar button,.gform-card-icon,.gform-option-remove{width:34px;height:34px;border:1px solid var(--line);border-radius:8px;background:#fff;color:#27364d;font-weight:950;cursor:pointer}.gform-floating-toolbar button:hover,.gform-card-icon:hover,.gform-option-remove:hover{border-color:#f45d22;color:#f45d22}.gform-add-question{border:1px dashed #b9c5d6;border-radius:8px;background:#fff;color:#52627a;min-height:52px;font-weight:900;cursor:pointer}.gform-add-question:hover{border-color:#f45d22;color:#f45d22;background:#fff8f5}.question-list{display:grid;gap:12px}.question-card{display:block;border:1px solid var(--line);border-left:6px solid transparent;border-radius:8px;background:#fff;padding:0;text-align:left;box-shadow:var(--shadow);cursor:default;overflow:hidden}.question-card.active{border-left-color:#f45d22}.question-card.gform-static-block{border-left-color:#111827}.gform-card-body{display:grid;gap:12px;padding:18px}.gform-question-top{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;align-items:start}.gform-question-input,.gform-help-input,.gform-type-select,.gform-option-input,.gform-scale-input{width:100%;border:0;border-bottom:2px solid #d8e0eb;background:#f8fafc;color:#121826;padding:11px;border-radius:0;font:inherit}.gform-question-input{font-size:18px;font-weight:900}.gform-help-input{resize:vertical;min-height:44px}.gform-type-select{border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:850}.gform-question-input:focus,.gform-help-input:focus,.gform-option-input:focus,.gform-scale-input:focus{outline:none;border-color:#f45d22;background:#fff}.gform-option-list,.gform-grid-editor{display:grid;gap:9px}.gform-option-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center}.gform-option-marker{width:18px;height:18px;border:2px solid #aab7c8;border-radius:999px}.gform-option-marker.square{border-radius:4px}.gform-option-marker.dropdown{display:grid;place-items:center;border:0;color:#617089;font-size:13px}.gform-option-add{width:max-content;border:0;background:transparent;color:#f45d22;font-weight:900;cursor:pointer;padding:6px 0}.gform-card-footer{border-top:1px solid var(--line);padding:10px 18px;display:flex;justify-content:flex-end;gap:10px;align-items:center;flex-wrap:wrap}.gform-required{display:flex;align-items:center;gap:8px;font-weight:850;color:#27364d}.gform-card-menu{display:flex;gap:6px}.gform-context-hint{margin-right:auto;color:#617089;font-size:12px}.question-context-menu{position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:6px;width:210px}.question-context-menu button{display:block;width:100%;border:0;background:transparent;text-align:left;padding:10px;border-radius:6px;font-weight:850;color:#27364d;cursor:pointer}.question-context-menu button:hover{background:#fff3ed;color:#f45d22}.gform-scale-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.gform-preview-line{border-bottom:1px dotted #aab7c8;color:#617089;padding:10px 0}.gform-file-preview{border:1px dashed #b9c5d6;border-radius:8px;padding:14px;color:#617089;background:#fbfcfe}.form-modal-panel{background:#f8fafc}.form-modal-body{background:#f8fafc}@media(max-width:980px){.gform-editor{grid-template-columns:1fr!important}.gform-settings-fields,.gform-question-top,.gform-scale-row{grid-template-columns:1fr}.gform-floating-toolbar{position:static;display:flex;width:max-content;margin-left:auto}}`;
+
+const formShareCss = `.share-card{margin-top:14px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px;display:grid;gap:10px}.share-card strong,.share-card input{display:block}.share-card input{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;color:#27364d;padding:10px;font-size:12px}.designed-form{--form-theme:#f45d22;border-top:8px solid var(--form-theme)!important;box-shadow:0 18px 55px rgba(24,35,55,.12)}.designed-form .primary-button{background:var(--form-theme)}.designed-form-header{display:grid;gap:0;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}.designed-form-image{min-height:180px;background-size:cover;background-position:center}.designed-form-title{padding:20px}.designed-form-title h2{font-size:30px;margin-bottom:8px}.public-thank-you{border:1px solid var(--line);border-radius:8px;background:#fff;padding:28px;text-align:center}.form-public-mode{background:#eef2f7}.form-public-mode[data-form-background="warm"]{background:#f8efe3}.form-public-mode[data-form-background="blueprint"]{background:#e8f0fe;background-image:linear-gradient(rgba(66,103,178,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(66,103,178,.08) 1px,transparent 1px);background-size:28px 28px}.form-public-mode[data-form-background="dark"]{background:#111827}.form-public-mode .sidebar,.form-public-mode .tour-overlay,.form-public-mode .forms-command,.form-public-mode .forms-dashboard,.form-public-mode .tabs,.form-public-mode [data-panel="library"],.form-public-mode [data-panel="responses"],.form-public-mode [data-panel="templates"],.form-public-mode [data-form-builder-host],.form-public-mode .response-sidecar{display:none!important}.form-public-mode .main{margin-left:0;padding:34px 16px}.form-public-mode .workspace{max-width:760px}.form-public-mode [data-panel="preview"]{display:block!important}.form-public-mode .forms-preview-grid{display:block}.form-public-mode .response-form{border-radius:10px;padding:0;background:transparent;border:0;box-shadow:none}.form-public-mode .designed-form-header,.form-public-mode .response-question,.form-public-mode .response-form>.form-actions{background:#fff;box-shadow:0 10px 35px rgba(24,35,55,.08)}.form-public-mode .response-question,.form-public-mode .response-form>.form-actions{border-radius:8px;border:1px solid var(--line);padding:18px}.form-public-mode .response-form>.form-actions{justify-content:flex-start}.form-public-mode[data-form-background="dark"] .designed-form-header,.form-public-mode[data-form-background="dark"] .response-question,.form-public-mode[data-form-background="dark"] .response-form>.form-actions,.form-public-mode[data-form-background="dark"] .public-thank-you{background:#172234;color:#eaf1fb;border-color:#334155}.form-public-mode[data-form-background="dark"] .muted,.form-public-mode[data-form-background="dark"] .response-question small{color:#adc7e6}@media(max-width:760px){.designed-form-title h2{font-size:24px}.form-public-mode .main{padding:16px 10px}}`;
 
 const plannedTabsCss = `.tabs button.tab-planned,.tabs button.tab-planned:hover,.tabs button.tab-planned.active{color:#64748b;background:repeating-linear-gradient(135deg,#eef2f7 0,#eef2f7 8px,#e2e8f0 8px,#e2e8f0 16px);border-color:#94a3b8;box-shadow:none;cursor:not-allowed;opacity:1;filter:grayscale(1)}.tabs button.tab-planned.active{box-shadow:inset 0 -3px #94a3b8}.tabs button.tab-planned small{display:inline-flex;margin-left:8px;border:1px solid #94a3b8;border-radius:999px;background:#f8fafc;padding:2px 7px;color:#475569;font-size:10px;font-weight:900;text-transform:uppercase;vertical-align:middle}.tabs button:not(.tab-planned) small{display:none}@media(max-width:620px){.tabs button.tab-planned small{display:none}}`;
 
@@ -2781,7 +2794,23 @@ const formsCenterJs = `(() => {
   let selectedResponseId = '';
   let menuQuestionId = '';
   let dirty = false;
-  if (selectedId) draft = clone(forms.find((form) => form.id === selectedId));
+  const params = new URLSearchParams(window.location.search);
+  const isPublicMode = params.get('public') === '1';
+  if (isPublicMode) {
+    document.body.classList.add('form-public-mode');
+    const shared = readSharedForm(params.get('payload'));
+    const byId = params.get('form') ? forms.find((form) => form.id === params.get('form')) : null;
+    if (shared) {
+      draft = shared;
+      selectedId = shared.id || 'shared-form';
+    } else if (byId) {
+      draft = clone(byId);
+      selectedId = byId.id;
+    }
+    selectedQuestionId = draft.questions?.[0]?.id || '';
+  }
+  if (!isPublicMode && selectedId) draft = clone(forms.find((form) => form.id === selectedId));
+  if (isPublicMode && !draft.questions) draft = blankForm();
 
   bind();
   render();
@@ -2823,6 +2852,16 @@ const formsCenterJs = `(() => {
     center.addEventListener('click', (event) => {
       if (event.target.closest('[data-form-modal-close]')) closeFormModal();
       if (event.target === nodes.modal) closeFormModal();
+      const copyLink = event.target.closest('[data-form-copy-link]');
+      if (copyLink) {
+        copyPublicLink();
+        return;
+      }
+      const openPublic = event.target.closest('[data-form-open-public]');
+      if (openPublic) {
+        window.open(publicFormUrl(), '_blank', 'noopener,noreferrer');
+        return;
+      }
     });
     nodes.search?.addEventListener('input', renderLibrary);
     nodes.typeFilter?.addEventListener('change', renderLibrary);
@@ -3013,6 +3052,10 @@ const formsCenterJs = `(() => {
     draft.status = String(data.get('status') || 'Draft');
     draft.audience = String(data.get('audience') || '');
     draft.jobContext = String(data.get('jobContext') || '');
+    draft.themeColor = String(data.get('themeColor') || '#f45d22');
+    draft.backgroundStyle = String(data.get('backgroundStyle') || 'clean');
+    draft.headerImage = String(data.get('headerImage') || '');
+    draft.buttonLabel = String(data.get('buttonLabel') || 'Submit');
     draft.collectEmail = data.has('collectEmail');
     draft.requireApproval = data.has('requireApproval');
   }
@@ -3164,11 +3207,16 @@ const formsCenterJs = `(() => {
     write(responsesKey, responses);
     setState('Response saved', 'live');
     nodes.responseForm.reset();
+    if (isPublicMode) {
+      nodes.responseForm.innerHTML = '<div class=\"public-thank-you\"><h2>Response submitted</h2><p class=\"muted\">Thank you. Your response was saved on this device for the presentation mockup.</p></div>';
+      return;
+    }
     render();
     switchTab('responses');
   }
 
   function render() {
+    if (isPublicMode) setPublicLayout();
     renderMetrics();
     renderSettings();
     renderLibrary();
@@ -3198,6 +3246,10 @@ const formsCenterJs = `(() => {
     nodes.settings.elements.status.value = draft.status || 'Draft';
     nodes.settings.elements.audience.value = draft.audience || '';
     nodes.settings.elements.jobContext.value = draft.jobContext || '';
+    nodes.settings.elements.themeColor.value = draft.themeColor || '#f45d22';
+    nodes.settings.elements.backgroundStyle.value = draft.backgroundStyle || 'clean';
+    nodes.settings.elements.headerImage.value = draft.headerImage || '';
+    nodes.settings.elements.buttonLabel.value = draft.buttonLabel || 'Submit';
     nodes.settings.elements.collectEmail.checked = !!draft.collectEmail;
     nodes.settings.elements.requireApproval.checked = !!draft.requireApproval;
   }
@@ -3221,12 +3273,14 @@ const formsCenterJs = `(() => {
       return;
     }
     const count = responses.filter((response) => response.formId === draft.id).length;
+    const publicUrl = publicFormUrl();
     nodes.summary.innerHTML = '<h2>' + escapeHtml(draft.title || 'Unsaved form') + '</h2><p class=\"muted\">' + escapeHtml(draft.description || 'No description yet.') + '</p>' +
       '<div class=\"form-status-row\">' +
       pill('Type', draft.type) + pill('Status', draft.status) + pill('Responses', count) +
       '</div><div class=\"summary-pill-grid\">' +
       pill('Audience', draft.audience || 'Not set') + pill('Job context', draft.jobContext || 'Optional') + pill('Review', draft.requireApproval ? 'Required' : 'Not required') +
-      '</div><div class=\"form-actions\"><button class=\"primary-button\" type=\"button\" data-form-edit>Edit Form</button><button class=\"secondary-button\" type=\"button\" data-tab-jump=\"preview\">Preview</button></div>';
+      '</div><div class=\"share-card\"><strong>Respondent link</strong><input readonly value=\"' + escapeHtml(publicUrl) + '\"><div class=\"form-actions\"><button class=\"primary-button\" type=\"button\" data-form-open-public>Open Public Form</button><button class=\"secondary-button\" type=\"button\" data-form-copy-link>Copy Link</button></div></div>' +
+      '<div class=\"form-actions\"><button class=\"primary-button\" type=\"button\" data-form-edit>Edit Form</button><button class=\"secondary-button\" type=\"button\" data-tab-jump=\"preview\">Preview</button></div>';
   }
 
   function renderQuestions() {
@@ -3301,17 +3355,23 @@ const formsCenterJs = `(() => {
 
   function renderPreview() {
     if (!draft.title && !draft.questions.length) {
-      nodes.responseForm.innerHTML = '<div class=\"empty-state\">Build or select a form to preview it.</div>';
-      nodes.responseSidecar.innerHTML = '<h2>Collector Settings</h2><p class=\"muted\">No form selected.</p>';
+      nodes.responseForm.innerHTML = isPublicMode ? '<div class=\"empty-state\">This form link is empty or expired.</div>' : '<div class=\"empty-state\">Build or select a form to preview it.</div>';
+      if (nodes.responseSidecar) nodes.responseSidecar.innerHTML = '<h2>Collector Settings</h2><p class=\"muted\">No form selected.</p>';
       return;
     }
-    nodes.responseForm.innerHTML = '<div><h2>' + escapeHtml(draft.title || 'Untitled form') + '</h2><p class=\"muted\">' + escapeHtml(draft.description || 'No description yet.') + '</p></div>' +
+    nodes.responseForm.classList.add('designed-form');
+    nodes.responseForm.style.setProperty('--form-theme', themeColor());
+    document.body.dataset.formBackground = draft.backgroundStyle || 'clean';
+    nodes.responseForm.innerHTML = respondentHeader() +
       (draft.collectEmail ? '<label>Email<input type=\"email\" name=\"respondent_email\" placeholder=\"name@example.com\"></label>' : '') +
       (draft.questions.length ? draft.questions.map(responseField).join('') : '<div class=\"empty-state\">No questions yet.</div>') +
-      '<div class=\"form-actions\"><button class=\"primary-button\" type=\"submit\">Submit Test Response</button><button class=\"secondary-button\" type=\"reset\">Clear</button></div>';
+      '<div class=\"form-actions\"><button class=\"primary-button\" type=\"submit\">' + escapeHtml(draft.buttonLabel || 'Submit') + '</button>' + (isPublicMode ? '' : '<button class=\"secondary-button\" type=\"reset\">Clear</button>') + '</div>';
     const saved = draft.id ? responses.filter((response) => response.formId === draft.id).length : 0;
-    nodes.responseSidecar.innerHTML = '<h2>Collector Settings</h2><p class=\"muted\">Responses save locally for the mockup. Published forms can later receive public URLs and Supabase tables.</p>' +
-      '<div class=\"summary-pill-grid\">' + pill('Status', draft.status) + pill('Responses', saved) + pill('Email', draft.collectEmail ? 'Collected' : 'Off') + '</div>';
+    if (nodes.responseSidecar) {
+      nodes.responseSidecar.innerHTML = '<h2>Share & Collect</h2><p class=\"muted\">This generated link opens a dedicated respondent form without the Quest HQ sidebar.</p>' +
+        '<div class=\"share-card\"><strong>Public form link</strong><input readonly value=\"' + escapeHtml(publicFormUrl()) + '\"><div class=\"form-actions\"><button class=\"primary-button\" type=\"button\" data-form-open-public>Open</button><button class=\"secondary-button\" type=\"button\" data-form-copy-link>Copy</button></div></div>' +
+        '<div class=\"summary-pill-grid\">' + pill('Status', draft.status) + pill('Responses', saved) + pill('Email', draft.collectEmail ? 'Collected' : 'Off') + '</div>';
+    }
   }
 
   function renderResponses() {
@@ -3374,8 +3434,67 @@ const formsCenterJs = `(() => {
     return '<label class=\"response-question\">' + label + '<input name=\"' + question.id + '\"' + required + '></label>';
   }
 
+  function setPublicLayout() {
+    center.querySelectorAll('[data-tab]').forEach((button) => button.classList.toggle('active', button.dataset.tab === 'preview'));
+    center.querySelectorAll('[data-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === 'preview'));
+  }
+
+  function respondentHeader() {
+    const image = String(draft.headerImage || '').trim();
+    return '<div class=\"designed-form-header\">' +
+      (image ? '<div class=\"designed-form-image\" style=\"background-image:url(' + cssUrl(image) + ')\"></div>' : '') +
+      '<div class=\"designed-form-title\"><h2>' + escapeHtml(draft.title || 'Untitled form') + '</h2><p class=\"muted\">' + escapeHtml(draft.description || 'No description yet.') + '</p></div>' +
+    '</div>';
+  }
+
+  function publicFormUrl() {
+    const form = clone(draft);
+    if (!form.id) form.id = 'shared-form';
+    const payload = encodePayload(form);
+    const url = new URL(window.location.href);
+    url.pathname = url.pathname.replace(/[^/]*$/, 'forms.html');
+    url.search = '?public=1&payload=' + encodeURIComponent(payload);
+    url.hash = '';
+    return url.toString();
+  }
+
+  function copyPublicLink() {
+    if (!draft.title.trim()) {
+      setState('Title required before sharing', 'error');
+      return;
+    }
+    saveDraft();
+    const url = publicFormUrl();
+    navigator.clipboard?.writeText(url).then(() => setState('Public link copied', 'live')).catch(() => {
+      setState('Copy failed. Link is visible.', 'error');
+    });
+  }
+
+  function encodePayload(value) {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(value))));
+  }
+
+  function readSharedForm(payload) {
+    if (!payload) return null;
+    try {
+      const form = JSON.parse(decodeURIComponent(escape(atob(payload))));
+      return form && Array.isArray(form.questions) ? form : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function themeColor() {
+    const color = String(draft.themeColor || '#f45d22');
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : '#f45d22';
+  }
+
+  function cssUrl(value) {
+    return '\\'' + String(value).replace(/[\\\\']/g, '') + '\\'';
+  }
+
   function blankForm() {
-    return { id: '', title: '', description: '', type: 'Inspection', status: 'Draft', audience: '', jobContext: '', collectEmail: false, requireApproval: false, createdAt: '', updatedAt: '', questions: [] };
+    return { id: '', title: '', description: '', type: 'Inspection', status: 'Draft', audience: '', jobContext: '', themeColor: '#f45d22', backgroundStyle: 'clean', headerImage: '', buttonLabel: 'Submit', collectEmail: false, requireApproval: false, createdAt: '', updatedAt: '', questions: [] };
   }
 
   function blankQuestion(type) {
@@ -3728,7 +3847,7 @@ async function writeTarget(target) {
   const absolute = path.resolve(target);
   if (target !== '.') await rm(absolute, { recursive: true, force: true });
   await mkdir(path.join(absolute, 'assets'), { recursive: true });
-  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + modalCss + plannedNavCss + fileViewerCss + fileCenterCss + driveFileCss + jobCenterCss + coreDemoCss + companyAdminCss + analyticsCss + formsCenterCss + googleFormsCss + plannedTabsCss + tutorialCss);
+  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + modalCss + plannedNavCss + fileViewerCss + fileCenterCss + driveFileCss + jobCenterCss + coreDemoCss + companyAdminCss + analyticsCss + formsCenterCss + googleFormsCss + formShareCss + plannedTabsCss + tutorialCss);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js + jobCenterJs + fileCenterJs + companyAdminJs + analyticsJs + commandCenterJs + taskBridgeJs + formsCenterJs + tutorialJs);
   await writeFile(path.join(absolute, 'index.html'), commandPage());
   await writeFile(path.join(absolute, 'jobs.html'), jobsPage());
