@@ -59,3 +59,33 @@ Do not replay the TaskManagement SQL migrations directly into Quest HQ. The upst
 - The hosted TaskManagement user menu routes profile edits back to Quest HQ.
 - The TaskManagement company/settings/admin model is preserved as the team-refined source for the task runtime.
 - Live database work remains limited to the Quest HQ Supabase project `lpzotcznihwyyudxycmd`; the upstream Supabase project stays untouched.
+
+## Source Data Import Requirements
+
+The connected Supabase account cannot inspect the original project `qqvmcsvdxhgjooirznrj`. To copy real contents without editing that project, use one of these source inputs:
+
+- Preferred: a Supabase backup or `pg_dump` export from the source project covering `public`, `auth`, and `storage` metadata, plus a Storage export for bucket objects such as `avatars`.
+- Acceptable: the source database connection string and source service-role key, used only for read-only export commands. The service-role key is needed for Auth and Storage export; the publishable/anon key is not enough.
+- If passwords must keep working, the export must include `auth.users` and `auth.identities` so user IDs and password hashes can be preserved. If those are not provided, users can be recreated with temporary passwords or password-reset emails, but existing passwords cannot be recovered from Supabase Auth APIs.
+
+Data to copy from TaskManagement:
+
+- `auth.users` and `auth.identities`
+- `public.companies`
+- `public.team_members`
+- `public.profiles`
+- `public.projects`
+- `public.schedules`
+- `public.tasks`
+- `public.time_entries`
+- `public.active_timers` only if in-progress clocks must survive migration
+- `public.notifications`
+- Storage bucket contents and `storage.objects` metadata for `avatars`
+
+Import order into Quest HQ:
+
+1. Bring Quest HQ schema up to the source TaskManagement runtime shape, including `projects` and `schedules`.
+2. Import Auth users and identities, preserving user UUIDs.
+3. Import companies, team members, profiles, projects, tasks, schedules, time entries, timers, notifications.
+4. Import avatar objects and storage metadata.
+5. Rebuild indexes/RLS policies, then verify login, approval, task queries, timers, notifications, and avatar rendering.

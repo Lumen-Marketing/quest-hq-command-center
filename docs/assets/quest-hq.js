@@ -105,13 +105,22 @@
       const form = event.currentTarget;
       showAuthMessage('Creating account...', true);
       const payload = Object.fromEntries(new FormData(form).entries());
-      const { error } = await questClient.auth.signUp({
+      const { data, error } = await questClient.auth.signUp({
         email: String(payload.email || '').trim(),
         password: String(payload.password || ''),
         options: { data: { full_name: String(payload.full_name || '').trim() } }
       });
       if (error) return showAuthMessage(error.message || 'Could not create account.');
-      showPendingState();
+      if (data.session && data.user) {
+        const profile = await loadQuestProfile(data.user.id);
+        if (profile && profile.approved) {
+          window.location.replace(sameOriginReturn);
+          return;
+        }
+        showPendingState();
+        return;
+      }
+      showAuthMessage('Account created. Check email confirmation before signing in.', true);
     });
     document.querySelector('[data-auth-refresh]')?.addEventListener('click', async () => {
       const { data } = await questClient.auth.getSession();
