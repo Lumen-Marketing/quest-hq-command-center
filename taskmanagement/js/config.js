@@ -57,6 +57,12 @@ App.defaultSupabaseConfig = {
 // throw an unhandled exception. We never reject the promise — defensive
 // programming: callers always get a definite signal via App.supabase presence.
 App.configReady = (async function loadRuntimeConfig() {
+  if (App.authEnabled === false) {
+    App.supabase = null;
+    App.supabaseLoadError = '';
+    return;
+  }
+
   const envUrl = `${App.basePath}env.json`;
   try {
     const res = await fetch(envUrl, { cache: 'no-store', credentials: 'same-origin' });
