@@ -1635,8 +1635,14 @@ function escapeHtml(value) {
     responseSidecar: center.querySelector('[data-response-sidecar]'),
     responseList: center.querySelector('[data-response-list]'),
     responseCount: center.querySelector('[data-response-count]'),
-    responseDetail: center.querySelector('[data-response-detail]')
+    responseDetail: center.querySelector('[data-response-detail]'),
+    builderPanel: center.querySelector('[data-panel="builder"]'),
+    builderGrid: center.querySelector('.forms-builder-grid'),
+    modal: center.querySelector('[data-form-modal]'),
+    modalBody: center.querySelector('[data-form-modal-body]')
   };
+  let builderHome = null;
+  let lastFocus = null;
   let forms = read(formsKey, []);
   let responses = read(responsesKey, []);
   let draft = blankForm();
@@ -1656,8 +1662,8 @@ function escapeHtml(value) {
       selectedResponseId = '';
       draft = blankForm();
       dirty = true;
-      switchTab('builder');
       render();
+      openFormModal();
     });
     nodes.settings.addEventListener('input', () => {
       applySettings();
@@ -1667,6 +1673,7 @@ function escapeHtml(value) {
     nodes.settings.addEventListener('submit', (event) => {
       event.preventDefault();
       saveDraft();
+      if (!nodes.modal.hidden) closeFormModal();
     });
     center.querySelector('[data-form-publish]')?.addEventListener('click', () => {
       draft.status = 'Published';
@@ -1679,6 +1686,10 @@ function escapeHtml(value) {
     center.querySelector('[data-form-duplicate]')?.addEventListener('click', duplicateForm);
     center.querySelector('[data-form-delete]')?.addEventListener('click', deleteForm);
     center.querySelector('[data-form-export]')?.addEventListener('click', exportForm);
+    center.addEventListener('click', (event) => {
+      if (event.target.closest('[data-form-modal-close]')) closeFormModal();
+      if (event.target === nodes.modal) closeFormModal();
+    });
     nodes.search?.addEventListener('input', renderLibrary);
     nodes.typeFilter?.addEventListener('change', renderLibrary);
     nodes.list.addEventListener('click', (event) => {
@@ -1728,6 +1739,30 @@ function escapeHtml(value) {
         render();
       });
     });
+  }
+
+  function openFormModal() {
+    if (!nodes.modal || !nodes.modalBody || !nodes.builderGrid) return;
+    lastFocus = document.activeElement;
+    builderHome = document.createComment('form-builder-home');
+    nodes.builderGrid.parentNode.insertBefore(builderHome, nodes.builderGrid);
+    nodes.modalBody.appendChild(nodes.builderGrid);
+    nodes.modal.hidden = false;
+    document.body.classList.add('modal-open');
+    nodes.modal.querySelector('[data-form-modal-close]')?.focus();
+  }
+
+  function closeFormModal() {
+    if (!nodes.modal || nodes.modal.hidden) return;
+    if (builderHome && nodes.builderGrid) {
+      builderHome.parentNode.insertBefore(nodes.builderGrid, builderHome);
+      builderHome.remove();
+      builderHome = null;
+    }
+    nodes.modal.hidden = true;
+    document.body.classList.remove('modal-open');
+    lastFocus?.focus?.();
+    render();
   }
 
   function saveDraft() {
@@ -2196,8 +2231,8 @@ function escapeHtml(value) {
     ],
     forms: [
       { selector: '.forms-command', title: 'Forms Command Bar', body: 'This is a local-first Google Forms style builder for inspections, approvals, surveys, intakes, and checklists.' },
-      { selector: '[data-form-new]', title: 'Create Without Saving Junk', body: 'New Form starts an unsaved draft. It does not create a saved record until Save Form is pressed.' },
-      { selector: '[data-panel="builder"]', title: 'Builder Workspace', body: 'The builder separates form settings, question list, and question editing so the presenter can move quickly.', action: 'openFormsBuilder' },
+      { selector: '[data-form-new]', title: 'Create Without Saving Junk', body: 'New Form opens a modal draft. It does not create a saved record until Save Form is pressed.' },
+      { selector: '[data-form-modal]', title: 'Builder Modal', body: 'The builder opens in place with settings, question list, and question editing so the presenter does not lose the Forms page context.', action: 'openFormModal' },
       { selector: '[data-form-settings]', title: 'Form Settings', body: 'Set title, description, type, status, audience, job context, email capture, and internal review requirements.' },
       { selector: '.question-panel', title: 'Question Builder', body: 'Add short answers, paragraphs, multiple choice, checkboxes, dropdowns, ratings, dates, signatures, and file requests.' },
       { selector: '[data-panel="preview"]', title: 'Preview and Collect', body: 'Preview renders the form as a respondent will see it and can save local test responses for the demo.', action: 'openFormsPreview' },
@@ -2296,9 +2331,13 @@ function escapeHtml(value) {
       document.querySelector('[data-file-modal-close]')?.click();
     }
     if (step.action === 'openFormsBuilder') document.querySelector('[data-tab="builder"]')?.click();
+    if (step.action === 'openFormModal' && document.querySelector('[data-form-modal]')?.hidden) document.querySelector('[data-form-new]')?.click();
     if (step.action === 'openFormsPreview') document.querySelector('[data-tab="preview"]')?.click();
     if (step.action === 'openFormsResponses') document.querySelector('[data-tab="responses"]')?.click();
-    if (step.action === 'openFormsTemplates') document.querySelector('[data-tab="templates"]')?.click();
+    if (step.action === 'openFormsTemplates') {
+      if (!document.querySelector('[data-form-modal]')?.hidden) document.querySelector('[data-form-modal-close]')?.click();
+      document.querySelector('[data-tab="templates"]')?.click();
+    }
   }
 
   function placeSpotlight(element) {

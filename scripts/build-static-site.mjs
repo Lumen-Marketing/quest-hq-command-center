@@ -594,10 +594,6 @@ function filesPage() {
 function formsPage() {
   const content = `<section class="workspace forms-center" data-form-center>
     <div class="forms-command panel">
-      <div>
-        <h1>Forms & Surveys</h1>
-        <p class="muted">Build intake forms, inspections, approvals, surveys, and response packets locally for presentation mode.</p>
-      </div>
       <span class="sync-pill live" data-form-state>Local autosafe</span>
       <button class="secondary-button" type="button" data-form-export>Export JSON</button>
       <button class="secondary-button" type="button" data-form-duplicate>Duplicate</button>
@@ -758,6 +754,18 @@ function formsPage() {
         <button type="button" data-form-template="intake"><strong>Service Intake</strong><span>Client details, issue category, urgency, requested files.</span></button>
       </div>
     </section>
+    <div class="modal-overlay" data-form-modal hidden>
+      <div class="modal-panel form-modal-panel" role="dialog" aria-modal="true" aria-labelledby="form-modal-title">
+        <div class="modal-header">
+          <div>
+            <div class="eyebrow">Forms & Surveys</div>
+            <h2 id="form-modal-title">Create Form</h2>
+          </div>
+          <button class="secondary-button" type="button" data-form-modal-close>Close</button>
+        </div>
+        <div class="form-modal-body" data-form-modal-body></div>
+      </div>
+    </div>
   </section>`;
   return shell({ file: 'forms.html', title: 'Forms & Surveys', moduleId: 'forms', content, seed: [] });
 }
@@ -1114,7 +1122,7 @@ const companyAdminCss = `.company-admin{padding:0;overflow:hidden}.company-admin
 
 const analyticsCss = `.analytics-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px}.analytics-stage-grid,.analytics-scope-list{display:grid;gap:10px}.analytics-stage-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.analytics-stage-grid span,.analytics-scope-list span{display:block;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px}.analytics-stage-grid strong,.analytics-stage-grid small,.analytics-scope-list strong,.analytics-scope-list small{display:block}.analytics-stage-grid small,.analytics-scope-list small{color:#617089;margin-top:5px}.analytics-health-table div{grid-template-columns:minmax(120px,.45fr) minmax(0,1fr) 120px}@media(max-width:1100px){.analytics-layout{grid-template-columns:1fr}.analytics-stage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.analytics-stage-grid{grid-template-columns:1fr}}`;
 
-const formsCenterCss = `.forms-command{display:grid;grid-template-columns:minmax(260px,1fr) auto auto auto auto auto;gap:12px;align-items:center;margin-bottom:18px}.forms-command h1{margin:0 0 4px}.forms-dashboard{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.forms-library-grid,.forms-preview-grid,.forms-response-grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:18px}.forms-builder-grid{display:grid;grid-template-columns:minmax(320px,.75fr) minmax(320px,.75fr) minmax(360px,1fr);gap:18px;align-items:start}.forms-toolbar{display:grid;grid-template-columns:1fr 150px;gap:10px;margin-bottom:12px}.forms-toolbar label,.forms-settings label,.question-editor label{display:grid;gap:6px;font-size:12px;font-weight:850;text-transform:uppercase;color:#617089}.forms-toolbar input,.forms-toolbar select,.forms-settings input,.forms-settings textarea,.forms-settings select,.question-editor input,.question-editor textarea,.question-editor select,.question-add-row select,.response-form input,.response-form textarea,.response-form select{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);padding:11px}.forms-list,.question-list,.response-list{display:grid;gap:8px}.form-card,.question-card,.response-card{width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px;text-align:left;cursor:pointer}.form-card:hover,.form-card.active,.question-card:hover,.question-card.active,.response-card:hover,.response-card.active{border-color:#f97316;background:#fff8f5}.form-card strong,.form-card span,.form-card small,.question-card strong,.question-card span,.response-card strong,.response-card span{display:block}.form-card span,.question-card span,.response-card span{color:#617089;font-size:13px;margin-top:5px}.form-card small{margin-top:8px;color:#52627a;font-weight:850}.forms-summary h2,.response-form h2{margin-bottom:6px}.form-status-row,.summary-pill-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.form-status-row span,.summary-pill-grid span{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px}.form-status-row strong,.form-status-row small,.summary-pill-grid strong,.summary-pill-grid small{display:block}.form-status-row small,.summary-pill-grid small{color:#617089;margin-top:4px}.forms-settings,.question-editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.forms-settings .span-2,.question-editor .span-2{grid-column:1/-1}.forms-check{display:flex!important;grid-template-columns:none!important;align-items:center;gap:8px;min-height:42px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:0 10px;text-transform:none!important;color:#27364d!important}.forms-check input{width:auto!important}.question-add-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;margin-bottom:12px}.question-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}.question-card b{border:1px solid var(--line);border-radius:999px;background:#fff;padding:4px 8px;color:#52627a;font-size:11px;text-transform:uppercase}.question-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.response-form{display:grid;gap:14px}.response-question{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:14px}.response-question strong,.response-question small{display:block}.response-question small{color:#617089;margin-top:4px}.response-options{display:grid;gap:8px;margin-top:10px}.response-options label{display:flex;align-items:center;gap:8px;color:#27364d}.rating-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.rating-row label{display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer}.rating-row input{position:absolute;opacity:0;pointer-events:none}.rating-row label:has(input:checked){background:#111827;color:#fff;border-color:#111827}.response-sidecar{align-self:start}.response-detail-list{display:grid;gap:10px}.response-detail-list div{border-top:1px solid var(--line);padding-top:10px}.response-detail-list strong,.response-detail-list span{display:block}.response-detail-list span{color:#52627a;margin-top:4px;white-space:pre-wrap}.forms-template-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.forms-template-grid button{min-height:170px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:16px;text-align:left;cursor:pointer;box-shadow:var(--shadow)}.forms-template-grid button:hover{border-color:#f97316;background:#fff8f5}.forms-template-grid strong,.forms-template-grid span{display:block}.forms-template-grid strong{font-size:18px}.forms-template-grid span{color:#617089;margin-top:8px;line-height:1.45}.forms-center .empty-state{min-height:140px;display:grid;place-items:center}@media(max-width:1280px){.forms-command{grid-template-columns:1fr repeat(2,auto)}.forms-dashboard,.forms-template-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.forms-builder-grid,.forms-library-grid,.forms-preview-grid,.forms-response-grid{grid-template-columns:1fr}}@media(max-width:760px){.forms-command,.forms-dashboard,.forms-toolbar,.forms-settings,.question-editor,.question-add-row,.forms-template-grid,.form-status-row,.summary-pill-grid{grid-template-columns:1fr}.forms-command{align-items:stretch}.forms-command .sync-pill{justify-content:center}}`;
+const formsCenterCss = `.forms-command{display:flex;justify-content:flex-end;gap:12px;align-items:center;margin-bottom:18px;flex-wrap:wrap}.forms-dashboard{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.forms-library-grid,.forms-preview-grid,.forms-response-grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:18px}.forms-builder-grid{display:grid;grid-template-columns:minmax(320px,.75fr) minmax(320px,.75fr) minmax(360px,1fr);gap:18px;align-items:start}.forms-toolbar{display:grid;grid-template-columns:1fr 150px;gap:10px;margin-bottom:12px}.forms-toolbar label,.forms-settings label,.question-editor label{display:grid;gap:6px;font-size:12px;font-weight:850;text-transform:uppercase;color:#617089}.forms-toolbar input,.forms-toolbar select,.forms-settings input,.forms-settings textarea,.forms-settings select,.question-editor input,.question-editor textarea,.question-editor select,.question-add-row select,.response-form input,.response-form textarea,.response-form select{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);padding:11px}.forms-list,.question-list,.response-list{display:grid;gap:8px}.form-card,.question-card,.response-card{width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px;text-align:left;cursor:pointer}.form-card:hover,.form-card.active,.question-card:hover,.question-card.active,.response-card:hover,.response-card.active{border-color:#f97316;background:#fff8f5}.form-card strong,.form-card span,.form-card small,.question-card strong,.question-card span,.response-card strong,.response-card span{display:block}.form-card span,.question-card span,.response-card span{color:#617089;font-size:13px;margin-top:5px}.form-card small{margin-top:8px;color:#52627a;font-weight:850}.forms-summary h2,.response-form h2{margin-bottom:6px}.form-status-row,.summary-pill-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.form-status-row span,.summary-pill-grid span{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px}.form-status-row strong,.form-status-row small,.summary-pill-grid strong,.summary-pill-grid small{display:block}.form-status-row small,.summary-pill-grid small{color:#617089;margin-top:4px}.forms-settings,.question-editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.forms-settings .span-2,.question-editor .span-2{grid-column:1/-1}.forms-check{display:flex!important;grid-template-columns:none!important;align-items:center;gap:8px;min-height:42px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:0 10px;text-transform:none!important;color:#27364d!important}.forms-check input{width:auto!important}.question-add-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;margin-bottom:12px}.question-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}.question-card b{border:1px solid var(--line);border-radius:999px;background:#fff;padding:4px 8px;color:#52627a;font-size:11px;text-transform:uppercase}.question-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.response-form{display:grid;gap:14px}.response-question{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:14px}.response-question strong,.response-question small{display:block}.response-question small{color:#617089;margin-top:4px}.response-options{display:grid;gap:8px;margin-top:10px}.response-options label{display:flex;align-items:center;gap:8px;color:#27364d}.rating-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.rating-row label{display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer}.rating-row input{position:absolute;opacity:0;pointer-events:none}.rating-row label:has(input:checked){background:#111827;color:#fff;border-color:#111827}.response-sidecar{align-self:start}.response-detail-list{display:grid;gap:10px}.response-detail-list div{border-top:1px solid var(--line);padding-top:10px}.response-detail-list strong,.response-detail-list span{display:block}.response-detail-list span{color:#52627a;margin-top:4px;white-space:pre-wrap}.forms-template-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.forms-template-grid button{min-height:170px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:16px;text-align:left;cursor:pointer;box-shadow:var(--shadow)}.forms-template-grid button:hover{border-color:#f97316;background:#fff8f5}.forms-template-grid strong,.forms-template-grid span{display:block}.forms-template-grid strong{font-size:18px}.forms-template-grid span{color:#617089;margin-top:8px;line-height:1.45}.forms-center .empty-state{min-height:140px;display:grid;place-items:center}.form-modal-panel{width:min(1280px,calc(100vw - 44px))}.form-modal-body{padding:18px}.form-modal-body .forms-builder-grid{grid-template-columns:minmax(300px,.7fr) minmax(300px,.7fr) minmax(340px,1fr)}.form-modal-body .forms-settings,.form-modal-body .question-panel,.form-modal-body .question-editor{box-shadow:none}@media(max-width:1280px){.forms-dashboard,.forms-template-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.forms-builder-grid,.forms-library-grid,.forms-preview-grid,.forms-response-grid,.form-modal-body .forms-builder-grid{grid-template-columns:1fr}}@media(max-width:760px){.forms-command,.forms-dashboard,.forms-toolbar,.forms-settings,.question-editor,.question-add-row,.forms-template-grid,.form-status-row,.summary-pill-grid{display:grid;grid-template-columns:1fr}.forms-command{align-items:stretch}.forms-command .sync-pill{justify-content:center}}`;
 
 const plannedTabsCss = `.tabs button.tab-planned,.tabs button.tab-planned:hover,.tabs button.tab-planned.active{color:#64748b;background:repeating-linear-gradient(135deg,#eef2f7 0,#eef2f7 8px,#e2e8f0 8px,#e2e8f0 16px);border-color:#94a3b8;box-shadow:none;cursor:not-allowed;opacity:1;filter:grayscale(1)}.tabs button.tab-planned.active{box-shadow:inset 0 -3px #94a3b8}.tabs button.tab-planned small{display:inline-flex;margin-left:8px;border:1px solid #94a3b8;border-radius:999px;background:#f8fafc;padding:2px 7px;color:#475569;font-size:10px;font-weight:900;text-transform:uppercase;vertical-align:middle}.tabs button:not(.tab-planned) small{display:none}@media(max-width:620px){.tabs button.tab-planned small{display:none}}`;
 
@@ -2771,8 +2779,14 @@ const formsCenterJs = `(() => {
     responseSidecar: center.querySelector('[data-response-sidecar]'),
     responseList: center.querySelector('[data-response-list]'),
     responseCount: center.querySelector('[data-response-count]'),
-    responseDetail: center.querySelector('[data-response-detail]')
+    responseDetail: center.querySelector('[data-response-detail]'),
+    builderPanel: center.querySelector('[data-panel=\"builder\"]'),
+    builderGrid: center.querySelector('.forms-builder-grid'),
+    modal: center.querySelector('[data-form-modal]'),
+    modalBody: center.querySelector('[data-form-modal-body]')
   };
+  let builderHome = null;
+  let lastFocus = null;
   let forms = read(formsKey, []);
   let responses = read(responsesKey, []);
   let draft = blankForm();
@@ -2792,8 +2806,8 @@ const formsCenterJs = `(() => {
       selectedResponseId = '';
       draft = blankForm();
       dirty = true;
-      switchTab('builder');
       render();
+      openFormModal();
     });
     nodes.settings.addEventListener('input', () => {
       applySettings();
@@ -2803,6 +2817,7 @@ const formsCenterJs = `(() => {
     nodes.settings.addEventListener('submit', (event) => {
       event.preventDefault();
       saveDraft();
+      if (!nodes.modal.hidden) closeFormModal();
     });
     center.querySelector('[data-form-publish]')?.addEventListener('click', () => {
       draft.status = 'Published';
@@ -2815,6 +2830,10 @@ const formsCenterJs = `(() => {
     center.querySelector('[data-form-duplicate]')?.addEventListener('click', duplicateForm);
     center.querySelector('[data-form-delete]')?.addEventListener('click', deleteForm);
     center.querySelector('[data-form-export]')?.addEventListener('click', exportForm);
+    center.addEventListener('click', (event) => {
+      if (event.target.closest('[data-form-modal-close]')) closeFormModal();
+      if (event.target === nodes.modal) closeFormModal();
+    });
     nodes.search?.addEventListener('input', renderLibrary);
     nodes.typeFilter?.addEventListener('change', renderLibrary);
     nodes.list.addEventListener('click', (event) => {
@@ -2864,6 +2883,30 @@ const formsCenterJs = `(() => {
         render();
       });
     });
+  }
+
+  function openFormModal() {
+    if (!nodes.modal || !nodes.modalBody || !nodes.builderGrid) return;
+    lastFocus = document.activeElement;
+    builderHome = document.createComment('form-builder-home');
+    nodes.builderGrid.parentNode.insertBefore(builderHome, nodes.builderGrid);
+    nodes.modalBody.appendChild(nodes.builderGrid);
+    nodes.modal.hidden = false;
+    document.body.classList.add('modal-open');
+    nodes.modal.querySelector('[data-form-modal-close]')?.focus();
+  }
+
+  function closeFormModal() {
+    if (!nodes.modal || nodes.modal.hidden) return;
+    if (builderHome && nodes.builderGrid) {
+      builderHome.parentNode.insertBefore(nodes.builderGrid, builderHome);
+      builderHome.remove();
+      builderHome = null;
+    }
+    nodes.modal.hidden = true;
+    document.body.classList.remove('modal-open');
+    lastFocus?.focus?.();
+    render();
   }
 
   function saveDraft() {
@@ -3334,8 +3377,8 @@ const tutorialJs = `(() => {
     ],
     forms: [
       { selector: '.forms-command', title: 'Forms Command Bar', body: 'This is a local-first Google Forms style builder for inspections, approvals, surveys, intakes, and checklists.' },
-      { selector: '[data-form-new]', title: 'Create Without Saving Junk', body: 'New Form starts an unsaved draft. It does not create a saved record until Save Form is pressed.' },
-      { selector: '[data-panel=\"builder\"]', title: 'Builder Workspace', body: 'The builder separates form settings, question list, and question editing so the presenter can move quickly.', action: 'openFormsBuilder' },
+      { selector: '[data-form-new]', title: 'Create Without Saving Junk', body: 'New Form opens a modal draft. It does not create a saved record until Save Form is pressed.' },
+      { selector: '[data-form-modal]', title: 'Builder Modal', body: 'The builder opens in place with settings, question list, and question editing so the presenter does not lose the Forms page context.', action: 'openFormModal' },
       { selector: '[data-form-settings]', title: 'Form Settings', body: 'Set title, description, type, status, audience, job context, email capture, and internal review requirements.' },
       { selector: '.question-panel', title: 'Question Builder', body: 'Add short answers, paragraphs, multiple choice, checkboxes, dropdowns, ratings, dates, signatures, and file requests.' },
       { selector: '[data-panel=\"preview\"]', title: 'Preview and Collect', body: 'Preview renders the form as a respondent will see it and can save local test responses for the demo.', action: 'openFormsPreview' },
@@ -3434,9 +3477,13 @@ const tutorialJs = `(() => {
       document.querySelector('[data-file-modal-close]')?.click();
     }
     if (step.action === 'openFormsBuilder') document.querySelector('[data-tab=\"builder\"]')?.click();
+    if (step.action === 'openFormModal' && document.querySelector('[data-form-modal]')?.hidden) document.querySelector('[data-form-new]')?.click();
     if (step.action === 'openFormsPreview') document.querySelector('[data-tab=\"preview\"]')?.click();
     if (step.action === 'openFormsResponses') document.querySelector('[data-tab=\"responses\"]')?.click();
-    if (step.action === 'openFormsTemplates') document.querySelector('[data-tab=\"templates\"]')?.click();
+    if (step.action === 'openFormsTemplates') {
+      if (!document.querySelector('[data-form-modal]')?.hidden) document.querySelector('[data-form-modal-close]')?.click();
+      document.querySelector('[data-tab=\"templates\"]')?.click();
+    }
   }
 
   function placeSpotlight(element) {
