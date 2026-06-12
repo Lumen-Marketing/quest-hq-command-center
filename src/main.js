@@ -18,15 +18,25 @@ const TASK_CACHE_KEY = 'quest-hq-task-cache-v1';
 const FILE_CACHE_KEY = 'quest-hq-file-cache-v1';
 const TEAM_CACHE_KEY = 'quest-hq-team-cache-v1';
 const MEMBERSHIP_CACHE_KEY = 'quest-hq-company-membership-cache-v1';
+const FORM_CACHE_KEY = 'quest-hq-company-form-cache-v1';
+const FORM_RESPONSE_CACHE_KEY = 'quest-hq-company-form-response-cache-v1';
 const COMPANY_KEY = 'quest-hq-active-company';
 const TASK_VIEW_KEY = 'quest-hq-task-view';
 const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
+const DRIVE_FILTER_KEY = 'quest-hq-drive-filter';
 
 const STAGES = ['Lead', 'Site Review', 'Estimate', 'Approved', 'Active', 'Closed'];
 const JOB_TABS = ['pipeline', 'list', 'profile', 'editor'];
 const TASK_STATUSES = ['todo', 'pending', 'hold', 'review', 'done'];
 const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
 const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
+const FILE_CATEGORIES = ['All categories', 'Shared', 'Jobs', 'Forms', 'Photos', 'Permits', 'Contracts', 'Archive'];
+const DRIVE_FILTERS = [
+  ['my-drive', 'My Drive', 'ti-folder'],
+  ['recent', 'Recent', 'ti-clock'],
+  ['images', 'Images', 'ti-photo'],
+  ['documents', 'Documents', 'ti-file-description'],
+];
 const DRIVE_FOLDERS = [
   ['jobs', 'Jobs', 'Job-linked folders and deliverables', 'ti-folders'],
   ['shared', 'Shared', 'Company-wide files', 'ti-folder-share'],
@@ -35,6 +45,19 @@ const DRIVE_FOLDERS = [
   ['permits', 'Permits', 'Permit packets and approvals', 'ti-file-certificate'],
   ['contracts', 'Contracts', 'Signed agreements and estimates', 'ti-file-dollar'],
   ['archive', 'Archive', 'Closed or historical files', 'ti-archive'],
+];
+const FORM_TYPES = ['Inspection', 'Client approval', 'Intake', 'Survey', 'Safety', 'Internal'];
+const FORM_STATUSES = ['Draft', 'Published', 'Archived'];
+const QUESTION_TYPES = [
+  ['short', 'Short answer'],
+  ['paragraph', 'Paragraph'],
+  ['multiple', 'Multiple choice'],
+  ['checkbox', 'Checkboxes'],
+  ['dropdown', 'Dropdown'],
+  ['date', 'Date'],
+  ['rating', 'Rating'],
+  ['yesno', 'Yes / No'],
+  ['file', 'File upload'],
 ];
 
 const companiesFallback = [
@@ -241,26 +264,145 @@ const filesFallback = [
   },
 ];
 
+const formsFallback = [
+  {
+    id: 'form-roofing-inspection',
+    company_id: 'roofing',
+    title: 'Roof Inspection Checklist',
+    description: 'Field checklist for leak calls, roof condition notes, photos, and repair recommendations.',
+    type: 'Inspection',
+    status: 'Published',
+    audience: 'Field team',
+    linked_job_id: '11111111-1111-4111-8111-111111111111',
+    theme_color: '#f0b23b',
+    background: 'paper',
+    submit_label: 'Submit inspection',
+    collect_email: true,
+    require_approval: false,
+    created_at: new Date(Date.now() - 604800000).toISOString(),
+    updated_at: new Date(Date.now() - 86400000).toISOString(),
+    questions: [
+      { id: 'q-roof-1', type: 'short', label: 'Inspection address', help: 'Confirm the address before submitting.', required: true },
+      { id: 'q-roof-2', type: 'multiple', label: 'Primary roof condition', help: '', required: true, options: ['Active leak', 'Storm damage', 'Aged underlayment', 'Maintenance issue'] },
+      { id: 'q-roof-3', type: 'paragraph', label: 'Recommended scope', help: 'Write the repair or estimate recommendation.', required: true },
+      { id: 'q-roof-4', type: 'file', label: 'Attach inspection photos', help: 'Upload photos into the company drive after submit.', required: false },
+    ],
+  },
+  {
+    id: 'form-roofing-estimate-approval',
+    company_id: 'roofing',
+    title: 'Estimate Approval',
+    description: 'Client-facing approval form for estimate review and signature follow-up.',
+    type: 'Client approval',
+    status: 'Draft',
+    audience: 'Client',
+    linked_job_id: '22222222-2222-4222-8222-222222222222',
+    theme_color: '#f45d22',
+    background: 'clean',
+    submit_label: 'Approve estimate',
+    collect_email: true,
+    require_approval: true,
+    created_at: new Date(Date.now() - 432000000).toISOString(),
+    updated_at: new Date(Date.now() - 7200000).toISOString(),
+    questions: [
+      { id: 'q-est-1', type: 'short', label: 'Client name', required: true },
+      { id: 'q-est-2', type: 'yesno', label: 'Do you approve the attached estimate?', required: true },
+      { id: 'q-est-3', type: 'paragraph', label: 'Questions or requested changes', required: false },
+    ],
+  },
+  {
+    id: 'form-drafting-intake',
+    company_id: 'drafting',
+    title: 'Drafting Permit Intake',
+    description: 'Collect measurements, equipment details, and permit packet requirements.',
+    type: 'Intake',
+    status: 'Published',
+    audience: 'Client',
+    linked_job_id: '33333333-3333-4333-8333-333333333333',
+    theme_color: '#60a5fa',
+    background: 'grid',
+    submit_label: 'Send intake',
+    collect_email: true,
+    require_approval: false,
+    created_at: new Date(Date.now() - 518400000).toISOString(),
+    updated_at: new Date(Date.now() - 172800000).toISOString(),
+    questions: [
+      { id: 'q-draft-1', type: 'short', label: 'Project address', required: true },
+      { id: 'q-draft-2', type: 'paragraph', label: 'Permit notes', required: false },
+      { id: 'q-draft-3', type: 'date', label: 'Needed by', required: true },
+    ],
+  },
+  {
+    id: 'form-lumen-onboarding',
+    company_id: 'lumen',
+    title: 'Client Onboarding Intake',
+    description: 'Initial Lumen setup form for client goals, assets, users, and launch timing.',
+    type: 'Intake',
+    status: 'Draft',
+    audience: 'Client',
+    linked_job_id: '',
+    theme_color: '#a78bfa',
+    background: 'clean',
+    submit_label: 'Submit onboarding',
+    collect_email: true,
+    require_approval: false,
+    created_at: new Date(Date.now() - 345600000).toISOString(),
+    updated_at: new Date(Date.now() - 259200000).toISOString(),
+    questions: [
+      { id: 'q-lumen-1', type: 'short', label: 'Company name', required: true },
+      { id: 'q-lumen-2', type: 'checkbox', label: 'Needed services', required: true, options: ['Website', 'SEO', 'Paid ads', 'CRM setup'] },
+      { id: 'q-lumen-3', type: 'paragraph', label: 'Launch goals', required: false },
+    ],
+  },
+];
+
+const formResponsesFallback = [
+  {
+    id: 'response-roofing-1',
+    company_id: 'roofing',
+    form_id: 'form-roofing-inspection',
+    submitted_by: 'Maya Rosales',
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+    answers: {
+      'q-roof-1': 'Queen Creek, AZ',
+      'q-roof-2': 'Active leak',
+      'q-roof-3': 'Dry-in held. Prepare repair estimate and photo packet.',
+    },
+  },
+];
+
 const state = {
   route: null,
   session: readJson(SESSION_KEY, null),
   profileDraft: readJson(PROFILE_KEY, null),
-  jobs: readJson(JOB_CACHE_KEY, jobsFallback).map(normalizeJob),
-  tasks: readJson(TASK_CACHE_KEY, tasksFallback).map(normalizeTask),
-  files: readJson(FILE_CACHE_KEY, filesFallback).map(normalizeFile),
-  teamMembers: readJson(TEAM_CACHE_KEY, teamMembersFallback).map(normalizeTeamMember),
-  memberships: readJson(MEMBERSHIP_CACHE_KEY, membershipsFallback),
+  jobs: readSeededList(JOB_CACHE_KEY, jobsFallback).map(normalizeJob),
+  tasks: readSeededList(TASK_CACHE_KEY, tasksFallback).map(normalizeTask),
+  files: readSeededList(FILE_CACHE_KEY, filesFallback).map(normalizeFile),
+  forms: readSeededList(FORM_CACHE_KEY, formsFallback).map(normalizeForm),
+  formResponses: readSeededList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback).map(normalizeFormResponse),
+  teamMembers: readSeededList(TEAM_CACHE_KEY, teamMembersFallback).map(normalizeTeamMember),
+  memberships: readSeededList(MEMBERSHIP_CACHE_KEY, membershipsFallback),
   companies: companiesFallback,
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
   selectedJobId: '',
   selectedTaskId: '',
+  selectedFileId: '',
+  selectedFormId: '',
+  selectedQuestionId: '',
   query: '',
+  fileQuery: '',
+  formQuery: '',
   stageFilter: 'all',
   taskStatusFilter: 'all',
   taskPriorityFilter: 'all',
+  fileCategoryFilter: 'All categories',
+  formTypeFilter: 'all',
+  formsTab: 'library',
+  formEditorTab: 'questions',
   taskView: localStorage.getItem(TASK_VIEW_KEY) || 'table',
   driveFolder: 'home',
   driveView: localStorage.getItem(DRIVE_VIEW_KEY) || 'grid',
+  driveFilter: localStorage.getItem(DRIVE_FILTER_KEY) || 'my-drive',
   sync: { label: 'Loading workspace...', mode: 'loading' },
   dataLoaded: false,
   dataLoading: false,
@@ -351,23 +493,23 @@ async function loadSupabaseData() {
     liveTables += 1;
   }
   if (!jobsResult.error) {
-    state.jobs = (jobsResult.data || []).map(normalizeJob);
+    if (jobsResult.data?.length) state.jobs = jobsResult.data.map(normalizeJob);
     liveTables += 1;
   }
   if (!tasksResult.error) {
-    state.tasks = (tasksResult.data || []).map(normalizeTask);
+    if (tasksResult.data?.length) state.tasks = tasksResult.data.map(normalizeTask);
     liveTables += 1;
   }
   if (!filesResult.error) {
-    state.files = (filesResult.data || []).map(normalizeFile);
+    if (filesResult.data?.length) state.files = filesResult.data.map(normalizeFile);
     liveTables += 1;
   }
   if (!teamResult.error) {
-    state.teamMembers = (teamResult.data || []).map(normalizeTeamMember);
+    if (teamResult.data?.length) state.teamMembers = teamResult.data.map(normalizeTeamMember);
     liveTables += 1;
   }
   if (!membershipsResult.error) {
-    state.memberships = (membershipsResult.data || []).map(normalizeMembership);
+    if (membershipsResult.data?.length) state.memberships = membershipsResult.data.map(normalizeMembership);
     liveTables += 1;
   }
 
@@ -440,6 +582,7 @@ function renderDeck(route) {
   const jobs = companyJobs(companyId);
   const tasks = companyTasks(companyId);
   const files = companyFiles(companyId);
+  const forms = companyForms(companyId);
   const users = companyMembers(companyId);
   return `
     <div class="company-card">
@@ -451,7 +594,7 @@ function renderDeck(route) {
       navItem(route, companyPath('jobs', {}, companyId), 'ti-briefcase', 'Jobs', jobs.length),
       navItem(route, companyPath('tasks', {}, companyId), 'ti-list-check', 'Tasks', tasks.length),
       navItem(route, companyPath('files', {}, companyId), 'ti-folder', 'Files', files.length),
-      navItem(route, companyPath('forms', {}, companyId), 'ti-clipboard-list', 'Forms'),
+      navItem(route, companyPath('forms', {}, companyId), 'ti-clipboard-list', 'Forms', forms.length),
       navItem(route, companyPath('analytics', {}, companyId), 'ti-chart-bar', 'Dashboard'),
     ])}
     ${navGroup('Company', [
@@ -837,109 +980,209 @@ function renderTaskForm(companyId, job, task) {
 function renderFilesPage(route, companyId) {
   const folder = route.params.get('folder') || state.driveFolder || 'home';
   const job = route.jobId ? jobById(route.jobId) : null;
-  const files = filteredFiles(companyId, folder, job?.id);
+  const files = filteredDriveFiles(companyId, folder, job?.id || '');
+  const selected = selectedDriveFile(files);
+  const metrics = driveMetrics(companyId);
   return `
-    ${workspaceHeader(job ? `${job.name} files` : 'Company Drive', 'Company-scoped file manager for shared and job-linked documents.', `
-      <button class="btn" type="button" data-action="open-file-upload"><i class="ti ti-upload"></i>Upload</button>
-      <a class="btn btn-primary" href="${appHref(companyPath('jobs', {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
-    `)}
-    <section class="drive-toolbar">
-      <nav class="breadcrumbs" aria-label="Drive location">
-        <a href="${appHref(companyPath('files', {}, companyId))}" data-router>${h(companyName(companyId))}</a>
-        ${folder !== 'home' ? `<span>/</span><a href="${appHref(companyPath('files', { folder }, companyId))}" data-router>${h(folderLabel(folder))}</a>` : ''}
-        ${job ? `<span>/</span><strong>${h(job.name)}</strong>` : ''}
-      </nav>
-      <div class="segmented" role="group" aria-label="Drive view">
-        <button class="${state.driveView === 'grid' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="grid"><i class="ti ti-layout-grid"></i>Grid</button>
-        <button class="${state.driveView === 'list' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="list"><i class="ti ti-list"></i>List</button>
+    <section class="tool-page drive-page">
+      <div class="tool-strip">
+        <div>
+          <div class="context-line"><span>${h(companyName(companyId))}</span><b>${h(job ? job.name : driveViewLabel())}</b></div>
+          <h1>Company Drive</h1>
+        </div>
+        <div class="head-actions">
+          <button class="btn" type="button" data-action="open-file-upload"><i class="ti ti-upload"></i>Upload</button>
+          <a class="btn btn-primary" href="${appHref(companyPath('jobs', {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
+        </div>
       </div>
+      <section class="file-metrics">
+        ${metricCard('Files', metrics.count, 'Company records')}
+        ${metricCard('Used', formatBytes(metrics.bytes), 'Tracked storage')}
+        ${metricCard('Job folders', companyJobs(companyId).length, 'Workspace folders')}
+        ${metricCard('Visible', files.length, job ? 'Job scoped' : driveViewLabel())}
+      </section>
+      <section class="drive-app panel">
+        <header class="drive-topbar">
+          <div>
+            <h2>${h(job ? job.name : 'Drive browser')}</h2>
+            <p>${h(job ? `${job.client_name || companyName(companyId)} file workspace` : 'Company folders, shared files, job packets, photos, and forms.')}</p>
+          </div>
+          <label class="drive-search">
+            <i class="ti ti-search"></i>
+            <input data-file-search value="${h(state.fileQuery)}" placeholder="Search drive" />
+          </label>
+          <button class="btn" type="button" data-action="refresh-data"><i class="ti ti-refresh"></i>Refresh</button>
+        </header>
+        <div class="drive-shell">
+          <aside class="drive-rail">
+            ${DRIVE_FILTERS.map(([id, label, icon]) => driveFilterButton(id, label, icon)).join('')}
+            <div class="drive-rail-block">
+              <span>Job folder</span>
+              <select data-file-job-filter>
+                <option value="">All jobs</option>
+                ${companyJobs(companyId).map((item) => `<option value="${h(item.id)}" ${job?.id === item.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="drive-capacity">
+              <span>${formatBytes(metrics.bytes)} of 1 GB</span>
+              <b><i style="width:${h(String(Math.min(100, Math.round((metrics.bytes / 1073741824) * 100))))}%"></i></b>
+            </div>
+          </aside>
+          <div class="drive-main">
+            <section class="file-toolbar">
+              <label>
+                <span>Folder</span>
+                <select data-file-folder-filter>
+                  <option value="home" ${folder === 'home' ? 'selected' : ''}>Home</option>
+                  ${DRIVE_FOLDERS.map(([id, label]) => `<option value="${h(id)}" ${folder === id ? 'selected' : ''}>${h(label)}</option>`).join('')}
+                </select>
+              </label>
+              <label>
+                <span>Category</span>
+                <select data-file-category-filter>
+                  ${FILE_CATEGORIES.map((category) => `<option value="${h(category)}" ${state.fileCategoryFilter === category ? 'selected' : ''}>${h(category)}</option>`).join('')}
+                </select>
+              </label>
+              <nav class="breadcrumbs" aria-label="Drive location">
+                <a href="${appHref(companyPath('files', {}, companyId))}" data-router>${h(companyName(companyId))}</a>
+                ${folder !== 'home' ? `<span>/</span><a href="${appHref(companyPath('files', { folder }, companyId))}" data-router>${h(folderLabel(folder))}</a>` : ''}
+                ${job ? `<span>/</span><strong>${h(job.name)}</strong>` : ''}
+              </nav>
+              <div class="segmented" role="group" aria-label="Drive view">
+                <button class="${state.driveView === 'grid' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="grid"><i class="ti ti-layout-grid"></i>Grid</button>
+                <button class="${state.driveView === 'list' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="list"><i class="ti ti-list"></i>List</button>
+              </div>
+            </section>
+            ${folder === 'home' && state.driveFilter === 'my-drive' && !job ? renderDriveHome(companyId) : ''}
+            ${renderDriveFiles(companyId, files)}
+          </div>
+          <aside class="drive-details">
+            ${renderFileDetails(selected, companyId)}
+          </aside>
+        </div>
+      </section>
     </section>
-    ${folder === 'home' && !job ? renderDriveHome(companyId) : renderDriveFiles(companyId, files)}
   `;
 }
 
 function renderDriveHome(companyId) {
   const jobs = companyJobs(companyId);
   return `
-    <section class="drive-grid">
+    <section class="drive-section-title">
+      <div><h3>Company folders</h3><span>Folders are scoped to ${h(companyName(companyId))}</span></div>
+    </section>
+    <section class="drive-folder-grid">
       ${DRIVE_FOLDERS.map(([id, label, text, icon]) => `
-        <a class="folder-tile" href="${appHref(companyPath('files', { folder: id }, companyId))}" data-router>
-          <i class="ti ${h(icon)}"></i>
+        <a class="drive-folder-card" href="${appHref(companyPath('files', { folder: id }, companyId))}" data-router>
+          <span class="drive-folder-icon"><i class="ti ${h(icon)}"></i></span>
           <strong>${h(label)}</strong>
-          <span>${h(text)}</span>
-          <small>${h(filteredFiles(companyId, id).length)} files</small>
+          <small>${h(text)}</small>
+          <em>${h(filteredDriveFiles(companyId, id).length)} files</em>
         </a>
       `).join('')}
     </section>
-    <section class="panel top-gap">
-      <div class="section-head"><div><h2>Job folders</h2><p>Each job keeps its files under the same company drive.</p></div></div>
-      <div class="folder-grid">
-        ${jobs.map((job) => `
-          <a class="folder-card" href="${appHref(companyPath('files', { folder: 'jobs', job_id: job.id }, companyId))}" data-router>
-            <i class="ti ti-folder"></i>
-            <strong>${h(job.name)}</strong>
-            <span>${h(job.client_name || companyName(companyId))}</span>
-            <small>${fileCountForJob(job.id)} files</small>
-          </a>
-        `).join('') || emptyState('No job folders yet.')}
-      </div>
+    <section class="drive-section-title recent-title">
+      <div><h3>Job folders</h3><span>Each job has a linked drive folder.</span></div>
+    </section>
+    <section class="drive-folder-grid">
+      ${jobs.map((job) => `
+        <a class="drive-folder-card" href="${appHref(companyPath('files', { folder: 'jobs', job_id: job.id }, companyId))}" data-router>
+          <span class="drive-folder-icon"><i class="ti ti-folder"></i></span>
+          <strong>${h(job.name)}</strong>
+          <small>${h(job.client_name || companyName(companyId))}</small>
+          <em>${fileCountForJob(job.id)} files</em>
+        </a>
+      `).join('') || emptyState('Create a job workspace to get its file folder.')}
     </section>
   `;
 }
 
 function renderDriveFiles(companyId, files) {
-  if (state.driveView === 'list') {
+  const title = state.driveFilter === 'my-drive' ? 'Files' : driveViewLabel();
+  return `
+    <section class="drive-section-title recent-title">
+      <div><h3>${h(title)}</h3><span>${files.length} visible file${files.length === 1 ? '' : 's'}</span></div>
+    </section>
+    ${state.driveView === 'list' ? `
+      <div class="file-table-live">
+        ${files.map((file) => `
+          <button type="button" class="file-row-live ${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}">
+            <span class="file-type ${h(fileTypeClass(file))}">${h(fileTypeLabel(file).slice(0, 3).toUpperCase())}</span>
+            <strong>${h(file.file_name)}<span>${h(file.notes || file.object_path || folderLabel(file.folder))}</span></strong>
+            <span>${h(file.category || folderLabel(file.folder))}</span>
+            <span>${h(jobById(file.job_id)?.name || 'Company shared')}</span>
+            <span>${formatBytes(file.size_bytes)}</span>
+          </button>
+        `).join('') || emptyState('No files match this Drive view.')}
+      </div>
+    ` : `
+      <div class="file-grid-live">
+        ${files.map((file) => `
+          <button type="button" class="file-card-live ${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}">
+            <span class="file-thumb">${fileThumb(file)}</span>
+            <strong>${h(file.file_name)}</strong>
+            <span>${h(file.category || folderLabel(file.folder))} / ${formatBytes(file.size_bytes)}</span>
+          </button>
+        `).join('') || emptyState('No files match this Drive view.')}
+      </div>
+    `}
+  `;
+}
+
+function renderFileDetails(file, companyId) {
+  if (!file) {
     return `
-      <section class="panel">
-        <div class="data-table drive-list">
-          <div class="table-head"><span>Name</span><span>Folder</span><span>Job</span><span>Owner</span><span>Size</span><span>Updated</span></div>
-          ${files.map((file) => `
-            <div class="table-row">
-              <span><strong>${h(file.file_name)}</strong><small>${h(file.mime_type)}</small></span>
-              <span>${h(folderLabel(file.folder))}</span>
-              <span>${h(jobById(file.job_id)?.name || 'Company shared')}</span>
-              <span>${h(file.uploaded_by_label || 'Quest HQ')}</span>
-              <span>${formatBytes(file.size_bytes)}</span>
-              <span>${formatDate(file.created_at)}</span>
-            </div>
-          `).join('') || emptyState('No files in this location yet.')}
-        </div>
-      </section>
+      <div class="file-detail-preview"><span class="file-doc-icon"><i class="ti ti-folder-open"></i></span></div>
+      <h3>${h(companyName(companyId))} Drive</h3>
+      <p>Pick a file to see metadata, job context, storage path, and actions.</p>
     `;
   }
   return `
-    <section class="drive-grid">
-      ${files.map((file) => `
-        <article class="file-card">
-          <i class="ti ${h(fileIcon(file))}"></i>
-          <strong>${h(file.file_name)}</strong>
-          <span>${h(jobById(file.job_id)?.name || folderLabel(file.folder))}</span>
-          <small>${formatBytes(file.size_bytes)} - ${formatDate(file.created_at)}</small>
-        </article>
-      `).join('') || emptyState('No files in this location yet.')}
-    </section>
+    <div class="file-detail-preview">${fileThumb(file, true)}</div>
+    <h3>${h(file.file_name)}</h3>
+    <p>${h(file.notes || jobById(file.job_id)?.name || folderLabel(file.folder))}</p>
+    <div class="file-detail-list">
+      ${detailRow('Category', file.category || folderLabel(file.folder))}
+      ${detailRow('Job', jobById(file.job_id)?.name || 'Company shared')}
+      ${detailRow('Uploaded by', file.uploaded_by_label || 'Quest HQ')}
+      ${detailRow('Uploaded', formatDate(file.created_at))}
+      ${detailRow('Size', formatBytes(file.size_bytes))}
+      ${detailRow('Storage path', file.object_path || 'Metadata only')}
+    </div>
+    <div class="file-detail-actions">
+      <button class="btn" type="button" data-action="download-file" data-file-id="${h(file.id)}"><i class="ti ti-download"></i>Download</button>
+      <button class="btn danger" type="button" data-action="delete-file" data-file-id="${h(file.id)}"><i class="ti ti-trash"></i>Delete</button>
+    </div>
   `;
 }
 
 function renderFileUploadModal() {
   const companyId = activeCompanyId();
+  const folder = state.driveFolder === 'home' ? 'shared' : state.driveFolder;
   return `
     <div class="modal-overlay">
-      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="upload-title">
+      <div class="modal-panel file-modal-panel" role="dialog" aria-modal="true" aria-labelledby="upload-title">
         <div class="modal-head">
-          <div><div class="eyebrow">Company Drive</div><h2 id="upload-title">Upload entry</h2></div>
+          <div><div class="eyebrow">Company Drive</div><h2 id="upload-title">Upload files</h2></div>
           <button class="btn" type="button" data-action="close-modal">Close</button>
         </div>
-        <form class="profile-form" data-file-form>
-          <div class="notice">This pass creates the company-scoped file record. Binary storage upload is the next wire-up step once auth/RLS is enabled.</div>
-          ${field('File name', 'file_name', '', true)}
-          ${selectField('Folder', 'folder', state.driveFolder === 'home' ? 'shared' : state.driveFolder, DRIVE_FOLDERS.map(([id, label]) => [id, label]))}
+        <form class="file-upload-panel" data-file-form>
+          <div class="file-policy-note span-2">
+            <strong>Company-scoped storage</strong>
+            <span>Files are written under the active company. If Supabase Storage is blocked by policy, Quest keeps the file record locally instead of losing the entry.</span>
+          </div>
+          <label class="span-2">
+            <span>Files</span>
+            <input name="files" type="file" multiple />
+          </label>
+          ${field('Metadata-only file name', 'file_name', '')}
+          ${selectField('Folder', 'folder', folder, DRIVE_FOLDERS.map(([id, label]) => [id, label]))}
           ${selectField('Job', 'job_id', state.route?.jobId || '', [['', 'Company shared file']].concat(companyJobs(companyId).map((job) => [job.id, job.name])))}
-          ${selectField('Category', 'category', 'Shared', DRIVE_FOLDERS.map(([id, label]) => [label, label]))}
-          ${field('Size bytes', 'size_bytes', 0, false, 'number')}
-          ${textareaField('Notes', 'notes', '')}
-          <div class="form-actions">
-            <button class="btn btn-primary" type="submit">Save file record</button>
+          ${selectField('Category', 'category', folderLabel(folder), FILE_CATEGORIES.filter((item) => item !== 'All categories').map((item) => [item, item]))}
+          ${field('Uploaded by', 'uploaded_by_label', activeSession().profile.full_name || 'Quest HQ')}
+          ${textareaField('Notes', 'notes', '', 'span-2')}
+          <div class="form-actions span-2">
+            <button class="btn btn-primary" type="submit">Upload to drive</button>
             <button class="btn" type="button" data-action="close-modal">Cancel</button>
           </div>
         </form>
@@ -1015,22 +1258,272 @@ function renderSettingsPage(companyId) {
 }
 
 function renderFormsPage(companyId) {
-  const templates = ['Inspection checklist', 'Client approval', 'Final walkthrough', 'Internal request intake', 'Safety form', 'Warranty handoff'];
+  const forms = filteredForms(companyId);
+  const current = selectedForm(companyId);
+  const responses = companyFormResponses(companyId);
+  const job = state.route?.jobId ? jobById(state.route.jobId) : null;
   return `
-    ${workspaceHeader('Forms', 'Company forms and survey response surfaces.', '')}
-    <section class="forms-layout">
-      <article class="panel">
-        <div class="section-head"><div><h2>Template library</h2><p>Company-scoped templates ready for form table wiring.</p></div></div>
-        <div class="card-grid">
-          ${templates.map((title, index) => `<article class="mini-card"><strong>${h(title)}</strong><span>${index % 2 ? 'Draft' : 'Published'}</span><small>${h(companyName(companyId))}</small></article>`).join('')}
+    <section class="tool-page forms-center">
+      <div class="forms-command panel">
+        <span class="sync-pill live"><i class="ti ti-device-floppy"></i>Local autosafe</span>
+        <button class="btn" type="button" data-action="export-forms"><i class="ti ti-download"></i>Export JSON</button>
+        <button class="btn btn-primary" type="button" data-action="new-form"><i class="ti ti-plus"></i>New form</button>
+      </div>
+      <div class="tool-strip">
+        <div>
+          <div class="context-line"><span>${h(companyName(companyId))}</span><b>${h(job ? job.name : `${forms.length} visible forms`)}</b></div>
+          <h1>Forms</h1>
+        </div>
+        <div class="forms-mini-search">
+          <label>
+            <span>Search</span>
+            <input data-form-search value="${h(state.formQuery)}" placeholder="Find form, audience, or job" />
+          </label>
+          <label>
+            <span>Type</span>
+            <select data-form-type-filter>
+              <option value="all" ${state.formTypeFilter === 'all' ? 'selected' : ''}>All types</option>
+              ${FORM_TYPES.map((type) => `<option value="${h(type)}" ${state.formTypeFilter === type ? 'selected' : ''}>${h(type)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+      </div>
+      <section class="forms-dashboard">
+        ${metricCard('Forms', companyForms(companyId).length, 'Company library')}
+        ${metricCard('Published', companyForms(companyId).filter((form) => form.status === 'Published').length, 'Live forms')}
+        ${metricCard('Responses', responses.length, 'Local response queue')}
+        ${metricCard('Templates', formTemplates().length, 'Reusable starts')}
+      </section>
+      <nav class="tabbar forms-tabs" aria-label="Forms workspace">
+        ${['library', 'builder', 'responses', 'templates'].map((tab) => `
+          <button class="${state.formsTab === tab ? 'active' : ''}" type="button" data-action="set-forms-tab" data-tab="${h(tab)}">${h(titleCase(tab))}</button>
+        `).join('')}
+      </nav>
+      ${state.formsTab === 'library' ? renderFormsLibrary(companyId, forms, current) : ''}
+      ${state.formsTab === 'builder' ? renderFormsBuilder(companyId, current) : ''}
+      ${state.formsTab === 'responses' ? renderFormsResponses(companyId, current) : ''}
+      ${state.formsTab === 'templates' ? renderFormsTemplates(companyId) : ''}
+    </section>
+  `;
+}
+
+function renderFormsLibrary(companyId, forms, current) {
+  return `
+    <section class="forms-library-grid">
+      <article class="forms-library-panel panel">
+        <div class="forms-list">
+          ${forms.map((form) => `
+            <button class="form-card ${current?.id === form.id ? 'active' : ''}" type="button" data-action="select-form" data-form-id="${h(form.id)}">
+              <strong>${h(form.title)}</strong>
+              <span>${h(form.description || 'No description yet.')}</span>
+              <small>${h(form.type)} / ${h(form.status)} / ${formQuestionCount(form)} questions</small>
+            </button>
+          `).join('') || emptyState('No forms match this company view.')}
         </div>
       </article>
-      <aside class="panel">
-        <div class="section-head"><div><h2>Response queue</h2><p>Recent job-linked responses.</p></div></div>
-        <div class="activity-list">
-          ${companyJobs(companyId).slice(0, 4).map((job) => `<div><strong>${h(job.name)}</strong><span>Response workspace ready.</span></div>`).join('') || emptyState('No jobs available.')}
+      <aside class="forms-summary panel">
+        ${current ? renderFormSummary(companyId, current) : emptyState('Create a form or choose a template.')}
+      </aside>
+    </section>
+  `;
+}
+
+function renderFormSummary(companyId, form) {
+  const responses = responsesForForm(form.id);
+  const job = jobById(form.linked_job_id);
+  return `
+    <div class="forms-summary-head">
+      <div>
+        <h2>${h(form.title)}</h2>
+        <p>${h(form.description || 'No description yet.')}</p>
+      </div>
+      <span>${h(form.status)}</span>
+    </div>
+    <div class="forms-simple-meta">
+      <span>${h(form.type)}</span>
+      <span>${h(form.audience || 'Internal')}</span>
+      <span>${h(job?.name || 'Company level')}</span>
+      <span>${formQuestionCount(form)} questions</span>
+      <span>${responses.length} responses</span>
+    </div>
+    <div class="summary-pill-grid">
+      ${metricCard('Updated', formatDate(form.updated_at), 'Last edit')}
+      ${metricCard('Approval', form.require_approval ? 'Required' : 'Not required', 'Review flow')}
+      ${metricCard('Email', form.collect_email ? 'Collected' : 'Optional', 'Submitter identity')}
+    </div>
+    <div class="forms-summary-share">
+      <strong>Shareable preview URL</strong>
+      <input readonly value="${h(`${window.location.origin}${appHref(companyPath('forms', { form_id: form.id }, companyId))}`)}" />
+      <div class="form-actions">
+        <button class="btn" type="button" data-action="copy-form-link" data-form-id="${h(form.id)}">Copy</button>
+        <button class="btn btn-primary" type="button" data-action="edit-form" data-form-id="${h(form.id)}">Edit</button>
+      </div>
+    </div>
+    <div class="forms-summary-actions">
+      <button class="btn" type="button" data-action="duplicate-form" data-form-id="${h(form.id)}"><i class="ti ti-copy"></i>Duplicate</button>
+      <button class="btn" type="button" data-action="publish-form" data-form-id="${h(form.id)}"><i class="ti ti-world-upload"></i>Publish</button>
+      <button class="btn" type="button" data-action="archive-form" data-form-id="${h(form.id)}"><i class="ti ti-archive"></i>Archive</button>
+      <button class="btn danger" type="button" data-action="delete-form" data-form-id="${h(form.id)}"><i class="ti ti-trash"></i>Delete</button>
+    </div>
+  `;
+}
+
+function renderFormsBuilder(companyId, form) {
+  if (!form) {
+    return `
+      <section class="panel">
+        <div class="section-head"><div><h2>Builder</h2><p>No form selected yet.</p></div></div>
+        ${emptyState('Create a form or choose a template to open the builder.')}
+      </section>
+    `;
+  }
+  return `
+    <section class="forms-builder-grid">
+      <aside class="panel form-settings-panel">
+        <div class="section-head"><div><h2>Settings</h2><p>${h(form.status)} / ${h(form.type)}</p></div></div>
+        ${formInput('Title', 'title', form.title, true)}
+        ${formTextarea('Description', 'description', form.description)}
+        ${formSelect('Type', 'type', form.type, FORM_TYPES.map((type) => [type, type]))}
+        ${formSelect('Status', 'status', form.status, FORM_STATUSES.map((status) => [status, status]))}
+        ${formInput('Audience', 'audience', form.audience)}
+        ${formSelect('Linked job', 'linked_job_id', form.linked_job_id || '', [['', 'Company level']].concat(companyJobs(companyId).map((job) => [job.id, job.name])))}
+        ${formInput('Theme color', 'theme_color', form.theme_color || companyColor(companyId), false, 'color')}
+        ${formSelect('Background', 'background', form.background || 'clean', [['clean', 'Clean'], ['paper', 'Paper'], ['grid', 'Grid'], ['dark', 'Dark']])}
+        ${formInput('Submit button', 'submit_label', form.submit_label || 'Submit')}
+        <label class="check-row"><input type="checkbox" data-form-field="collect_email" ${form.collect_email ? 'checked' : ''} /> Collect email</label>
+        <label class="check-row"><input type="checkbox" data-form-field="require_approval" ${form.require_approval ? 'checked' : ''} /> Require approval</label>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="button" data-action="save-form" data-form-id="${h(form.id)}">Save</button>
+          <button class="btn" type="button" data-action="publish-form" data-form-id="${h(form.id)}">Publish</button>
         </div>
       </aside>
+      <article class="panel question-workbench">
+        <div class="section-head">
+          <div><h2>Questions</h2><p>${formQuestionCount(form)} question${formQuestionCount(form) === 1 ? '' : 's'}</p></div>
+          <div class="question-add-menu">
+            ${QUESTION_TYPES.slice(0, 5).map(([type, label]) => `<button class="btn" type="button" data-action="add-question" data-question-type="${h(type)}">${h(label)}</button>`).join('')}
+          </div>
+        </div>
+        <div class="question-list">
+          ${form.questions.map((question, index) => renderQuestionCard(question, index)).join('') || emptyState('Add the first question.')}
+        </div>
+      </article>
+      <aside class="panel forms-preview-panel">
+        <div class="section-head"><div><h2>Preview</h2><p>Submits into the local company response queue.</p></div></div>
+        ${renderFormPreview(companyId, form)}
+      </aside>
+    </section>
+  `;
+}
+
+function renderQuestionCard(question, index) {
+  const typeOptions = QUESTION_TYPES.map(([id, label]) => `<option value="${h(id)}" ${question.type === id ? 'selected' : ''}>${h(label)}</option>`).join('');
+  return `
+    <article class="question-card ${state.selectedQuestionId === question.id ? 'active' : ''}" data-question-id="${h(question.id)}">
+      <div class="question-card-head">
+        <span>${index + 1}</span>
+        <select data-question-field="type">${typeOptions}</select>
+        <div class="question-actions">
+          <button type="button" data-action="move-question" data-direction="-1" data-question-id="${h(question.id)}"><i class="ti ti-arrow-up"></i></button>
+          <button type="button" data-action="move-question" data-direction="1" data-question-id="${h(question.id)}"><i class="ti ti-arrow-down"></i></button>
+          <button type="button" data-action="duplicate-question" data-question-id="${h(question.id)}"><i class="ti ti-copy"></i></button>
+          <button type="button" data-action="delete-question" data-question-id="${h(question.id)}"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>
+      <label><span>Question</span><input data-question-field="label" value="${h(question.label)}" /></label>
+      <label><span>Help text</span><input data-question-field="help" value="${h(question.help || '')}" /></label>
+      <label class="check-row"><input type="checkbox" data-question-field="required" ${question.required ? 'checked' : ''} /> Required</label>
+      ${questionHasOptions(question) ? `
+        <div class="question-options">
+          ${(question.options || []).map((option, optionIndex) => `
+            <label>
+              <span>Option ${optionIndex + 1}</span>
+              <input data-question-option="${optionIndex}" value="${h(option)}" />
+              <button type="button" data-action="remove-question-option" data-question-id="${h(question.id)}" data-option-index="${optionIndex}"><i class="ti ti-x"></i></button>
+            </label>
+          `).join('')}
+          <button class="btn" type="button" data-action="add-question-option" data-question-id="${h(question.id)}"><i class="ti ti-plus"></i>Add option</button>
+        </div>
+      ` : ''}
+    </article>
+  `;
+}
+
+function renderFormPreview(companyId, form) {
+  return `
+    <form class="response-form" data-form-preview-response data-form-id="${h(form.id)}" style="--form-accent:${h(form.theme_color || companyColor(companyId))}">
+      <div class="designed-form-header">
+        <span>${h(companyName(companyId))}</span>
+        <h2>${h(form.title)}</h2>
+        <p>${h(form.description || 'Preview this form before sending it out.')}</p>
+      </div>
+      ${form.collect_email ? `<label><span>Email</span><input name="submitter_email" type="email" placeholder="name@example.com" /></label>` : ''}
+      ${form.questions.map((question) => renderPreviewQuestion(question)).join('') || emptyState('No questions yet.')}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">${h(form.submit_label || 'Submit')}</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderPreviewQuestion(question) {
+  const name = `answer:${question.id}`;
+  const required = question.required ? 'required' : '';
+  if (question.type === 'paragraph') return previewWrap(question, `<textarea name="${h(name)}" rows="3" ${required}></textarea>`);
+  if (question.type === 'date') return previewWrap(question, `<input name="${h(name)}" type="date" ${required} />`);
+  if (question.type === 'file') return previewWrap(question, `<input name="${h(name)}" type="file" ${required} />`);
+  if (question.type === 'yesno') return previewWrap(question, `<select name="${h(name)}" ${required}><option value="">Choose</option><option>Yes</option><option>No</option></select>`);
+  if (question.type === 'rating') return previewWrap(question, `<input name="${h(name)}" type="range" min="1" max="5" value="3" ${required} />`);
+  if (question.type === 'dropdown') {
+    return previewWrap(question, `<select name="${h(name)}" ${required}><option value="">Choose</option>${(question.options || []).map((option) => `<option>${h(option)}</option>`).join('')}</select>`);
+  }
+  if (question.type === 'checkbox') {
+    return previewWrap(question, `<div class="choice-stack">${(question.options || []).map((option) => `<label><input name="${h(name)}" type="checkbox" value="${h(option)}" /> ${h(option)}</label>`).join('')}</div>`);
+  }
+  if (question.type === 'multiple') {
+    return previewWrap(question, `<div class="choice-stack">${(question.options || []).map((option) => `<label><input name="${h(name)}" type="radio" value="${h(option)}" ${required} /> ${h(option)}</label>`).join('')}</div>`);
+  }
+  return previewWrap(question, `<input name="${h(name)}" ${required} />`);
+}
+
+function renderFormsResponses(companyId, form) {
+  const responses = form ? responsesForForm(form.id) : companyFormResponses(companyId);
+  const selected = responses[0] || null;
+  return `
+    <section class="forms-response-grid">
+      <article class="panel response-list-panel">
+        <div class="section-head"><div><h2>Responses</h2><p>${responses.length} response${responses.length === 1 ? '' : 's'}</p></div></div>
+        <div class="response-list">
+          ${responses.map((response) => `
+            <button type="button" class="response-card">
+              <strong>${h(formById(response.form_id)?.title || 'Unknown form')}</strong>
+              <span>${h(response.submitted_by || response.submitter_email || 'Anonymous')}</span>
+              <small>${formatDate(response.created_at)}</small>
+            </button>
+          `).join('') || emptyState('No responses yet. Submit a preview response from the builder.')}
+        </div>
+      </article>
+      <aside class="panel response-detail">
+        ${selected ? renderResponseDetail(selected) : emptyState('No response selected.')}
+      </aside>
+    </section>
+  `;
+}
+
+function renderFormsTemplates(companyId) {
+  return `
+    <section class="forms-template-grid">
+      ${formTemplates().map((template) => `
+        <article class="template-card panel">
+          <strong>${h(template.title)}</strong>
+          <p>${h(template.description)}</p>
+          <div class="forms-simple-meta">
+            <span>${h(template.type)}</span>
+            <span>${template.questions.length} questions</span>
+          </div>
+          <button class="btn btn-primary" type="button" data-action="use-form-template" data-template-id="${h(template.id)}">Use template</button>
+        </article>
+      `).join('')}
     </section>
   `;
 }
@@ -1198,6 +1691,124 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'set-drive-filter') {
+    event.preventDefault();
+    state.driveFilter = node.dataset.filter || 'my-drive';
+    localStorage.setItem(DRIVE_FILTER_KEY, state.driveFilter);
+    state.selectedFileId = '';
+    render();
+    return;
+  }
+  if (action === 'select-file') {
+    event.preventDefault();
+    state.selectedFileId = node.dataset.fileId || '';
+    render();
+    return;
+  }
+  if (action === 'download-file') {
+    event.preventDefault();
+    downloadFile(node.dataset.fileId);
+    return;
+  }
+  if (action === 'delete-file') {
+    event.preventDefault();
+    deleteFile(node.dataset.fileId);
+    return;
+  }
+  if (action === 'set-forms-tab') {
+    event.preventDefault();
+    state.formsTab = node.dataset.tab || 'library';
+    render();
+    return;
+  }
+  if (action === 'new-form') {
+    event.preventDefault();
+    createForm(activeCompanyId());
+    return;
+  }
+  if (action === 'select-form') {
+    event.preventDefault();
+    selectForm(node.dataset.formId);
+    return;
+  }
+  if (action === 'edit-form') {
+    event.preventDefault();
+    selectForm(node.dataset.formId);
+    state.formsTab = 'builder';
+    render();
+    return;
+  }
+  if (action === 'save-form') {
+    event.preventDefault();
+    saveFormsState('Form saved locally');
+    render();
+    return;
+  }
+  if (action === 'publish-form') {
+    event.preventDefault();
+    setFormStatus(node.dataset.formId, 'Published');
+    return;
+  }
+  if (action === 'archive-form') {
+    event.preventDefault();
+    setFormStatus(node.dataset.formId, 'Archived');
+    return;
+  }
+  if (action === 'duplicate-form') {
+    event.preventDefault();
+    duplicateForm(node.dataset.formId);
+    return;
+  }
+  if (action === 'delete-form') {
+    event.preventDefault();
+    deleteForm(node.dataset.formId);
+    return;
+  }
+  if (action === 'copy-form-link') {
+    event.preventDefault();
+    copyFormLink(node.dataset.formId);
+    return;
+  }
+  if (action === 'export-forms') {
+    event.preventDefault();
+    exportForms(activeCompanyId());
+    return;
+  }
+  if (action === 'use-form-template') {
+    event.preventDefault();
+    useFormTemplate(activeCompanyId(), node.dataset.templateId);
+    return;
+  }
+  if (action === 'add-question') {
+    event.preventDefault();
+    addQuestion(node.dataset.questionType || 'multiple');
+    return;
+  }
+  if (action === 'duplicate-question') {
+    event.preventDefault();
+    duplicateQuestion(node.dataset.questionId);
+    return;
+  }
+  if (action === 'delete-question') {
+    event.preventDefault();
+    deleteQuestion(node.dataset.questionId);
+    return;
+  }
+  if (action === 'move-question') {
+    event.preventDefault();
+    moveQuestion(node.dataset.questionId, Number(node.dataset.direction || 0));
+    return;
+  }
+  if (action === 'add-question-option') {
+    event.preventDefault();
+    addQuestionOption(node.dataset.questionId);
+    return;
+  }
+  if (action === 'remove-question-option') {
+    event.preventDefault();
+    removeQuestionOption(node.dataset.questionId, Number(node.dataset.optionIndex || -1));
+    return;
+  }
   if (action === 'delete-job') {
     event.preventDefault();
     deleteJob(node.dataset.jobId);
@@ -1258,6 +1869,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-file-form]')) {
     event.preventDefault();
     saveFileRecord(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-form-preview-response]')) {
+    event.preventDefault();
+    saveFormResponse(event.target);
   }
 }
 
@@ -1265,6 +1882,24 @@ function onDocumentInput(event) {
   if (event.target.matches('[data-global-search]')) {
     state.query = event.target.value;
     updateWorkspaceOnly();
+    return;
+  }
+  if (event.target.matches('[data-file-search]')) {
+    state.fileQuery = event.target.value;
+    updateWorkspaceOnly();
+    return;
+  }
+  if (event.target.matches('[data-form-search]')) {
+    state.formQuery = event.target.value;
+    updateWorkspaceOnly();
+    return;
+  }
+  if (event.target.matches('[data-form-field]')) {
+    updateFormField(event.target);
+    return;
+  }
+  if (event.target.matches('[data-question-field]') || event.target.matches('[data-question-option]')) {
+    updateQuestionField(event.target);
   }
 }
 
@@ -1292,6 +1927,35 @@ function onDocumentChange(event) {
   if (event.target.matches('[data-task-job-filter]')) {
     const jobId = event.target.value;
     navigate(companyPath('tasks', jobId ? { job_id: jobId } : {}, activeCompanyId()));
+    return;
+  }
+  if (event.target.matches('[data-file-category-filter]')) {
+    state.fileCategoryFilter = event.target.value || 'All categories';
+    render();
+    return;
+  }
+  if (event.target.matches('[data-file-folder-filter]')) {
+    const folder = event.target.value === 'home' ? '' : event.target.value;
+    const jobId = state.route?.jobId || '';
+    navigate(companyPath('files', { ...(folder ? { folder } : {}), ...(jobId ? { job_id: jobId } : {}) }, activeCompanyId()));
+    return;
+  }
+  if (event.target.matches('[data-file-job-filter]')) {
+    const jobId = event.target.value;
+    navigate(companyPath('files', { ...(jobId ? { folder: 'jobs', job_id: jobId } : {}) }, activeCompanyId()));
+    return;
+  }
+  if (event.target.matches('[data-form-type-filter]')) {
+    state.formTypeFilter = event.target.value || 'all';
+    render();
+    return;
+  }
+  if (event.target.matches('[data-form-field]')) {
+    updateFormField(event.target);
+    return;
+  }
+  if (event.target.matches('[data-question-field]') || event.target.matches('[data-question-option]')) {
+    updateQuestionField(event.target);
   }
 }
 
@@ -1381,39 +2045,96 @@ async function deleteTask(id) {
 
 async function saveFileRecord(form) {
   const companyId = activeCompanyId();
-  const formData = Object.fromEntries(new FormData(form).entries());
-  const payload = normalizeFile({
-    id: crypto.randomUUID(),
-    company_id: companyId,
-    job_id: formData.job_id || '',
-    folder: formData.folder || 'shared',
-    file_name: formData.file_name,
-    mime_type: 'application/octet-stream',
-    size_bytes: Number(formData.size_bytes || 0),
-    category: formData.category || folderLabel(formData.folder || 'shared'),
-    notes: formData.notes || '',
-    uploaded_by_label: activeSession().profile.full_name,
-    bucket_id: 'quest-job-files',
-    object_path: `${companyId}/${formData.folder || 'shared'}/${Date.now()}-${slugify(formData.file_name || 'file')}`,
-    created_at: new Date().toISOString(),
-  });
-
+  const formData = new FormData(form);
+  const fields = Object.fromEntries(formData.entries());
+  const selectedFiles = Array.from(form.elements.files?.files || []);
+  const metadataName = String(fields.file_name || '').trim();
+  const uploadList = selectedFiles.length ? selectedFiles : (metadataName ? [null] : []);
+  if (!uploadList.length) {
+    state.sync = { label: 'Choose a file or enter a file name', mode: 'local' };
+    render();
+    return;
+  }
   const client = createSupabaseClient();
-  if (client) {
-    const result = await client.from('job_files').insert(filePayload(payload)).select().single();
-    if (!result.error && result.data) {
-      upsertFile(normalizeFile(result.data));
-      state.sync = { label: 'Quest Supabase live', mode: 'live' };
-      state.modal = '';
-      navigate(companyPath('files', { folder: payload.folder, ...(payload.job_id ? { job_id: payload.job_id } : {}) }, companyId), { replace: true });
-      return;
+  let liveSaved = 0;
+  for (const item of uploadList) {
+    const fileId = crypto.randomUUID();
+    const fileName = item?.name || metadataName;
+    const folder = String(fields.folder || 'shared');
+    const objectPath = `${companyId}/${fields.job_id ? `jobs/${fields.job_id}` : folder}/${fileId}-${slugify(fileName)}`;
+    let uploaded = false;
+    if (client && item) {
+      const storageResult = await client.storage
+        .from('quest-job-files')
+        .upload(objectPath, item, { cacheControl: '3600', upsert: false, contentType: item.type || 'application/octet-stream' });
+      uploaded = !storageResult.error;
     }
-    state.sync = { label: 'File record saved locally', mode: 'local' };
+    const payload = normalizeFile({
+      id: fileId,
+      company_id: companyId,
+      job_id: fields.job_id || '',
+      folder,
+      file_name: fileName,
+      mime_type: item?.type || 'application/octet-stream',
+      size_bytes: item?.size || Number(fields.size_bytes || 0),
+      category: fields.category || folderLabel(folder),
+      notes: fields.notes || '',
+      uploaded_by_label: fields.uploaded_by_label || activeSession().profile.full_name,
+      bucket_id: 'quest-job-files',
+      object_path: uploaded || !item ? objectPath : '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    if (client) {
+      const result = await client.from('job_files').insert(filePayload(payload)).select().single();
+      if (!result.error && result.data) {
+        upsertFile(normalizeFile(result.data));
+        liveSaved += 1;
+        continue;
+      }
+      if (uploaded) await client.storage.from('quest-job-files').remove([objectPath]);
+    }
+    upsertFile(payload);
   }
 
-  upsertFile(payload);
+  state.sync = liveSaved === uploadList.length
+    ? { label: 'Quest Supabase live', mode: 'live' }
+    : { label: liveSaved ? 'Some files saved locally' : 'File record saved locally', mode: liveSaved ? 'loading' : 'local' };
   state.modal = '';
-  navigate(companyPath('files', { folder: payload.folder, ...(payload.job_id ? { job_id: payload.job_id } : {}) }, companyId), { replace: true });
+  navigate(companyPath('files', { folder: fields.folder || 'shared', ...(fields.job_id ? { job_id: fields.job_id } : {}) }, companyId), { replace: true });
+}
+
+async function downloadFile(id) {
+  const file = state.files.find((item) => item.id === id);
+  if (!file?.object_path) {
+    state.sync = { label: 'No stored object for this file', mode: 'local' };
+    render();
+    return;
+  }
+  const client = createSupabaseClient();
+  if (!client) return;
+  const result = await client.storage.from(file.bucket_id || 'quest-job-files').createSignedUrl(file.object_path, 3600, { download: file.file_name });
+  if (result.error || !result.data?.signedUrl) {
+    state.sync = { label: 'Download failed', mode: 'local' };
+    render();
+    return;
+  }
+  window.open(result.data.signedUrl, '_blank', 'noopener,noreferrer');
+}
+
+async function deleteFile(id) {
+  const file = state.files.find((item) => item.id === id);
+  if (!file) return;
+  const client = createSupabaseClient();
+  if (client) {
+    if (file.object_path) await client.storage.from(file.bucket_id || 'quest-job-files').remove([file.object_path]);
+    await client.from('job_files').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  }
+  state.files = state.files.filter((item) => item.id !== id);
+  state.selectedFileId = '';
+  persistAll();
+  render();
 }
 
 function upsertJob(job) {
@@ -1696,18 +2417,6 @@ function filteredTasks(companyId = activeCompanyId(), jobId = '') {
   });
 }
 
-function filteredFiles(companyId = activeCompanyId(), folder = 'home', jobId = '') {
-  const q = state.query.trim().toLowerCase();
-  return companyFiles(companyId).filter((file) => {
-    if (jobId && file.job_id !== jobId) return false;
-    if (!jobId && folder && folder !== 'home' && folder !== 'jobs' && file.folder !== folder) return false;
-    if (!jobId && folder === 'jobs' && !file.job_id) return false;
-    if (!q) return true;
-    return [file.file_name, file.category, file.uploaded_by_label, jobById(file.job_id)?.name]
-      .some((value) => String(value || '').toLowerCase().includes(q));
-  });
-}
-
 function allowedCompanies() {
   const ids = allowedCompanyIds();
   return state.companies.filter((company) => ids.includes(company.id));
@@ -1858,6 +2567,56 @@ function normalizeFile(input) {
     notes: String(input.notes || ''),
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+
+function normalizeForm(input) {
+  const questions = Array.isArray(input.questions) ? input.questions.map(normalizeQuestion) : [];
+  const type = FORM_TYPES.includes(input.type) ? input.type : 'Internal';
+  const status = FORM_STATUSES.includes(input.status) ? input.status : 'Draft';
+  return {
+    id: String(input.id || `form-${crypto.randomUUID()}`),
+    company_id: String(input.company_id || defaultCompanyId()),
+    title: String(input.title || 'Untitled form').trim() || 'Untitled form',
+    description: String(input.description || '').trim(),
+    type,
+    status,
+    audience: String(input.audience || 'Internal').trim(),
+    linked_job_id: String(input.linked_job_id || input.job_id || ''),
+    theme_color: String(input.theme_color || '#f0b23b'),
+    background: String(input.background || 'clean'),
+    submit_label: String(input.submit_label || 'Submit').trim() || 'Submit',
+    collect_email: input.collect_email !== false,
+    require_approval: input.require_approval === true,
+    questions,
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+
+function normalizeQuestion(input) {
+  const type = QUESTION_TYPES.some(([id]) => id === input.type) ? input.type : 'short';
+  const question = {
+    id: String(input.id || `q-${crypto.randomUUID()}`),
+    type,
+    label: String(input.label || 'Untitled question').trim() || 'Untitled question',
+    help: String(input.help || '').trim(),
+    required: input.required === true,
+    options: Array.isArray(input.options) ? input.options.map((item) => String(item || '').trim()).filter(Boolean) : [],
+  };
+  if (questionHasOptions(question) && !question.options.length) question.options = ['Option 1', 'Option 2'];
+  return question;
+}
+
+function normalizeFormResponse(input) {
+  return {
+    id: String(input.id || `response-${crypto.randomUUID()}`),
+    company_id: String(input.company_id || defaultCompanyId()),
+    form_id: String(input.form_id || input.formId || ''),
+    submitted_by: String(input.submitted_by || input.submitter_email || 'Anonymous'),
+    submitter_email: String(input.submitter_email || ''),
+    answers: input.answers && typeof input.answers === 'object' ? input.answers : {},
+    created_at: input.created_at || new Date().toISOString(),
   };
 }
 
@@ -2096,8 +2855,516 @@ function persistAll() {
   writeJson(JOB_CACHE_KEY, state.jobs);
   writeJson(TASK_CACHE_KEY, state.tasks);
   writeJson(FILE_CACHE_KEY, state.files);
+  writeJson(FORM_CACHE_KEY, state.forms);
+  writeJson(FORM_RESPONSE_CACHE_KEY, state.formResponses);
   writeJson(TEAM_CACHE_KEY, state.teamMembers);
   writeJson(MEMBERSHIP_CACHE_KEY, state.memberships);
+}
+
+function metricCard(label, value, text = '') {
+  return `<article class="metric"><span>${h(label)}</span><strong>${h(value)}</strong>${text ? `<small>${h(text)}</small>` : ''}</article>`;
+}
+
+function detailRow(label, value) {
+  return `<div><strong>${h(label)}</strong><span>${h(value)}</span></div>`;
+}
+
+function driveFilterButton(id, label, icon) {
+  return `
+    <button class="${state.driveFilter === id ? 'active' : ''}" type="button" data-action="set-drive-filter" data-filter="${h(id)}">
+      <i class="ti ${h(icon)}"></i>
+      <span>${h(label)}</span>
+    </button>
+  `;
+}
+
+function driveViewLabel() {
+  return DRIVE_FILTERS.find(([id]) => id === state.driveFilter)?.[1] || 'My Drive';
+}
+
+function driveMetrics(companyId = activeCompanyId()) {
+  const files = companyFiles(companyId);
+  return { count: files.length, bytes: sum(files, 'size_bytes') };
+}
+
+function selectedDriveFile(files) {
+  const visible = files || [];
+  const selected = visible.find((file) => file.id === state.selectedFileId) || visible[0] || null;
+  state.selectedFileId = selected?.id || '';
+  return selected;
+}
+
+function filteredDriveFiles(companyId = activeCompanyId(), folder = 'home', jobId = '') {
+  const query = (state.fileQuery || state.query || '').trim().toLowerCase();
+  const category = state.fileCategoryFilter;
+  let files = companyFiles(companyId);
+  if (jobId) {
+    files = files.filter((file) => file.job_id === jobId);
+  } else if (state.driveFilter === 'images') {
+    files = files.filter((file) => file.mime_type.includes('image') || file.folder === 'photos');
+  } else if (state.driveFilter === 'documents') {
+    files = files.filter((file) => !file.mime_type.includes('image') && file.folder !== 'photos');
+  } else if (folder && folder !== 'home') {
+    if (folder === 'jobs') files = files.filter((file) => file.job_id);
+    else files = files.filter((file) => file.folder === folder);
+  }
+  if (category && category !== 'All categories') {
+    files = files.filter((file) => String(file.category || folderLabel(file.folder)).toLowerCase() === category.toLowerCase());
+  }
+  if (query) {
+    files = files.filter((file) => [file.file_name, file.category, file.uploaded_by_label, file.notes, file.object_path, jobById(file.job_id)?.name]
+      .some((value) => String(value || '').toLowerCase().includes(query)));
+  }
+  return files.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+}
+
+function fileTypeLabel(file) {
+  const type = String(file.mime_type || '').toLowerCase();
+  if (type.includes('pdf')) return 'PDF';
+  if (type.includes('image')) return 'Image';
+  if (type.includes('zip')) return 'Zip';
+  if (type.includes('spreadsheet') || type.includes('excel')) return 'Sheet';
+  if (type.includes('word') || type.includes('document')) return 'Doc';
+  return folderLabel(file.folder);
+}
+
+function fileTypeClass(file) {
+  const label = fileTypeLabel(file).toLowerCase();
+  if (label === 'pdf') return 'pdf';
+  if (label === 'image') return 'image';
+  if (label === 'sheet') return 'sheet';
+  return 'doc';
+}
+
+function fileThumb(file, large = false) {
+  const icon = fileIcon(file);
+  if (file.signed_url) return `<img src="${h(file.signed_url)}" alt="" />`;
+  return `<span class="file-doc-icon ${h(fileTypeClass(file))} ${large ? 'large' : ''}"><i class="ti ${h(icon)}"></i></span>`;
+}
+
+function companyForms(companyId = activeCompanyId()) {
+  return state.forms.filter((form) => form.company_id === companyId);
+}
+
+function filteredForms(companyId = activeCompanyId()) {
+  const query = state.formQuery.trim().toLowerCase();
+  const jobId = state.route?.jobId || '';
+  return companyForms(companyId).filter((form) => {
+    if (jobId && form.linked_job_id !== jobId) return false;
+    if (state.formTypeFilter !== 'all' && form.type !== state.formTypeFilter) return false;
+    if (!query) return true;
+    return [form.title, form.description, form.type, form.status, form.audience, jobById(form.linked_job_id)?.name]
+      .some((value) => String(value || '').toLowerCase().includes(query));
+  });
+}
+
+function selectedForm(companyId = activeCompanyId()) {
+  const jobId = state.route?.jobId || '';
+  const forms = companyForms(companyId).filter((form) => !jobId || form.linked_job_id === jobId);
+  const routeFormId = state.route?.params?.get('form_id') || '';
+  if (routeFormId && forms.some((form) => form.id === routeFormId)) state.selectedFormId = routeFormId;
+  if (!forms.length) {
+    state.selectedFormId = '';
+    state.selectedQuestionId = '';
+    return null;
+  }
+  let form = forms.find((item) => item.id === state.selectedFormId) || forms[0];
+  state.selectedFormId = form.id;
+  if (!state.selectedQuestionId || !form.questions.some((question) => question.id === state.selectedQuestionId)) {
+    state.selectedQuestionId = form.questions[0]?.id || '';
+  }
+  return form;
+}
+
+function formById(id) {
+  return state.forms.find((form) => form.id === id) || null;
+}
+
+function selectedFormMutable() {
+  return formById(state.selectedFormId) || selectedForm(activeCompanyId());
+}
+
+function companyFormResponses(companyId = activeCompanyId()) {
+  return state.formResponses.filter((response) => response.company_id === companyId);
+}
+
+function responsesForForm(formId) {
+  return state.formResponses.filter((response) => response.form_id === formId);
+}
+
+function formQuestionCount(form) {
+  return Array.isArray(form?.questions) ? form.questions.length : 0;
+}
+
+function formInput(label, key, value = '', required = false, type = 'text') {
+  return `<label><span>${h(label)}</span><input data-form-field="${h(key)}" type="${h(type)}" value="${h(value)}" ${required ? 'required' : ''} /></label>`;
+}
+
+function formTextarea(label, key, value = '') {
+  return `<label><span>${h(label)}</span><textarea data-form-field="${h(key)}" rows="3">${h(value)}</textarea></label>`;
+}
+
+function formSelect(label, key, value, options) {
+  return `
+    <label><span>${h(label)}</span><select data-form-field="${h(key)}">
+      ${options.map(([id, text]) => `<option value="${h(id)}" ${String(id) === String(value) ? 'selected' : ''}>${h(text)}</option>`).join('')}
+    </select></label>
+  `;
+}
+
+function questionHasOptions(question) {
+  return ['multiple', 'checkbox', 'dropdown'].includes(question.type);
+}
+
+function previewWrap(question, control) {
+  return `
+    <div class="response-question">
+      <label>
+        <span>${h(question.label)}${question.required ? ' *' : ''}</span>
+        ${question.help ? `<small>${h(question.help)}</small>` : ''}
+        ${control}
+      </label>
+    </div>
+  `;
+}
+
+function renderResponseDetail(response) {
+  const form = formById(response.form_id);
+  const answerRows = Object.entries(response.answers || {}).map(([questionId, value]) => {
+    const question = form?.questions.find((item) => item.id === questionId);
+    const printable = Array.isArray(value) ? value.join(', ') : value;
+    return detailRow(question?.label || questionId, printable || 'No answer');
+  }).join('');
+  return `
+    <div class="response-detail-head">
+      <div><h2>${h(form?.title || 'Response')}</h2><p>${h(response.submitted_by || response.submitter_email || 'Anonymous')} / ${formatDate(response.created_at)}</p></div>
+    </div>
+    <div class="file-detail-list">${answerRows || detailRow('Response', 'No answers captured.')}</div>
+  `;
+}
+
+function formTemplates() {
+  return [
+    {
+      id: 'roof-inspection',
+      title: 'Roof Inspection',
+      description: 'Leak source, condition, photo handoff, and recommended repair scope.',
+      type: 'Inspection',
+      questions: [
+        blankQuestion('short', 'Inspection address'),
+        blankQuestion('multiple', 'Primary finding', ['Active leak', 'Damaged flashing', 'Storm damage', 'Maintenance']),
+        blankQuestion('paragraph', 'Recommended scope'),
+        blankQuestion('file', 'Photos'),
+      ],
+    },
+    {
+      id: 'client-approval',
+      title: 'Client Approval',
+      description: 'Approval, client notes, signature follow-up, and change request capture.',
+      type: 'Client approval',
+      questions: [
+        blankQuestion('short', 'Client name'),
+        blankQuestion('yesno', 'Approved to proceed?'),
+        blankQuestion('paragraph', 'Requested changes'),
+      ],
+    },
+    {
+      id: 'service-intake',
+      title: 'Service Intake',
+      description: 'New request triage for company-level or job-linked work.',
+      type: 'Intake',
+      questions: [
+        blankQuestion('short', 'Request title'),
+        blankQuestion('dropdown', 'Priority', ['Low', 'Medium', 'High', 'Urgent']),
+        blankQuestion('paragraph', 'Details'),
+      ],
+    },
+    {
+      id: 'safety-check',
+      title: 'Safety Checklist',
+      description: 'Crew safety confirmation before field work starts.',
+      type: 'Safety',
+      questions: [
+        blankQuestion('checkbox', 'PPE confirmed', ['Harness', 'Ladder', 'Gloves', 'Eye protection']),
+        blankQuestion('yesno', 'Weather safe?'),
+        blankQuestion('paragraph', 'Safety notes'),
+      ],
+    },
+  ];
+}
+
+function blankForm(companyId = activeCompanyId()) {
+  return normalizeForm({
+    id: `form-${crypto.randomUUID()}`,
+    company_id: companyId,
+    title: 'Untitled form',
+    description: '',
+    type: 'Internal',
+    status: 'Draft',
+    audience: 'Internal',
+    linked_job_id: state.route?.jobId || '',
+    theme_color: companyColor(companyId),
+    background: 'clean',
+    submit_label: 'Submit',
+    collect_email: true,
+    require_approval: false,
+    questions: [blankQuestion('short', 'First question')],
+  });
+}
+
+function blankQuestion(type = 'short', label = 'Untitled question', options = []) {
+  return normalizeQuestion({
+    id: `q-${crypto.randomUUID()}`,
+    type,
+    label,
+    required: false,
+    options,
+  });
+}
+
+function createForm(companyId) {
+  const form = blankForm(companyId);
+  state.forms.unshift(form);
+  state.selectedFormId = form.id;
+  state.selectedQuestionId = form.questions[0]?.id || '';
+  state.formsTab = 'builder';
+  saveFormsState('New form created');
+  render();
+}
+
+function selectForm(id) {
+  const form = formById(id);
+  if (!form) return;
+  state.selectedFormId = form.id;
+  state.selectedQuestionId = form.questions[0]?.id || '';
+  render();
+}
+
+function saveFormsState(label = 'Forms saved locally') {
+  const form = selectedFormMutable();
+  if (form) form.updated_at = new Date().toISOString();
+  writeJson(FORM_CACHE_KEY, state.forms);
+  writeJson(FORM_RESPONSE_CACHE_KEY, state.formResponses);
+  state.sync = { label, mode: 'live' };
+}
+
+function setFormStatus(id, status) {
+  const form = formById(id || state.selectedFormId);
+  if (!form) return;
+  form.status = FORM_STATUSES.includes(status) ? status : 'Draft';
+  state.selectedFormId = form.id;
+  saveFormsState(`${form.status} locally`);
+  render();
+}
+
+function duplicateForm(id) {
+  const form = formById(id || state.selectedFormId);
+  if (!form) return;
+  const copy = normalizeForm({
+    ...clone(form),
+    id: `form-${crypto.randomUUID()}`,
+    title: `${form.title} Copy`,
+    status: 'Draft',
+    questions: form.questions.map((question) => ({ ...clone(question), id: `q-${crypto.randomUUID()}` })),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  state.forms.unshift(copy);
+  state.selectedFormId = copy.id;
+  state.selectedQuestionId = copy.questions[0]?.id || '';
+  saveFormsState('Form duplicated');
+  render();
+}
+
+function deleteForm(id) {
+  const formId = id || state.selectedFormId;
+  if (!formId) return;
+  state.forms = state.forms.filter((form) => form.id !== formId);
+  state.formResponses = state.formResponses.filter((response) => response.form_id !== formId);
+  state.selectedFormId = companyForms(activeCompanyId())[0]?.id || '';
+  state.selectedQuestionId = selectedForm(activeCompanyId())?.questions[0]?.id || '';
+  saveFormsState('Form deleted locally');
+  render();
+}
+
+async function copyFormLink(id) {
+  const formId = id || state.selectedFormId;
+  const url = `${window.location.origin}${appHref(companyPath('forms', { form_id: formId }, activeCompanyId()))}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    state.sync = { label: 'Form link copied', mode: 'live' };
+  } catch {
+    state.sync = { label: 'Copy failed', mode: 'local' };
+  }
+  render();
+}
+
+function exportForms(companyId) {
+  const payload = JSON.stringify({ company_id: companyId, forms: companyForms(companyId), responses: companyFormResponses(companyId) }, null, 2);
+  downloadText(`${companyId}-forms-export.json`, payload, 'application/json');
+}
+
+function useFormTemplate(companyId, templateId) {
+  const template = formTemplates().find((item) => item.id === templateId);
+  if (!template) return;
+  const form = normalizeForm({
+    ...template,
+    id: `form-${crypto.randomUUID()}`,
+    company_id: companyId,
+    status: 'Draft',
+    audience: 'Internal',
+    linked_job_id: state.route?.jobId || '',
+    theme_color: companyColor(companyId),
+    background: 'clean',
+    submit_label: 'Submit',
+    questions: template.questions.map((question) => ({ ...clone(question), id: `q-${crypto.randomUUID()}` })),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  state.forms.unshift(form);
+  state.selectedFormId = form.id;
+  state.selectedQuestionId = form.questions[0]?.id || '';
+  state.formsTab = 'builder';
+  saveFormsState('Template added');
+  render();
+}
+
+function updateFormField(target) {
+  const form = selectedFormMutable();
+  if (!form) return;
+  const key = target.dataset.formField;
+  if (!key) return;
+  form[key] = target.type === 'checkbox' ? target.checked : target.value;
+  form.updated_at = new Date().toISOString();
+  writeJson(FORM_CACHE_KEY, state.forms);
+}
+
+function updateQuestionField(target) {
+  const form = selectedFormMutable();
+  const card = target.closest('[data-question-id]');
+  const question = form?.questions.find((item) => item.id === card?.dataset.questionId);
+  if (!form || !question) return;
+  state.selectedQuestionId = question.id;
+  if (target.matches('[data-question-option]')) {
+    const index = Number(target.dataset.questionOption);
+    question.options[index] = target.value;
+  } else {
+    const key = target.dataset.questionField;
+    if (key === 'required') question.required = target.checked;
+    else if (key === 'type') {
+      question.type = target.value;
+      if (questionHasOptions(question) && !question.options.length) question.options = ['Option 1', 'Option 2'];
+      if (!questionHasOptions(question)) question.options = [];
+      saveFormsState('Question updated');
+      render();
+      return;
+    } else if (key) {
+      question[key] = target.value;
+    }
+  }
+  form.updated_at = new Date().toISOString();
+  writeJson(FORM_CACHE_KEY, state.forms);
+}
+
+function addQuestion(type = 'multiple') {
+  const form = selectedFormMutable();
+  if (!form) return;
+  const question = blankQuestion(type, QUESTION_TYPES.find(([id]) => id === type)?.[1] || 'New question');
+  form.questions.push(question);
+  state.selectedQuestionId = question.id;
+  saveFormsState('Question added');
+  render();
+}
+
+function duplicateQuestion(id) {
+  const form = selectedFormMutable();
+  const question = form?.questions.find((item) => item.id === id);
+  if (!form || !question) return;
+  const index = form.questions.findIndex((item) => item.id === id);
+  const copy = normalizeQuestion({ ...clone(question), id: `q-${crypto.randomUUID()}`, label: `${question.label} Copy` });
+  form.questions.splice(index + 1, 0, copy);
+  state.selectedQuestionId = copy.id;
+  saveFormsState('Question duplicated');
+  render();
+}
+
+function deleteQuestion(id) {
+  const form = selectedFormMutable();
+  if (!form) return;
+  form.questions = form.questions.filter((question) => question.id !== id);
+  state.selectedQuestionId = form.questions[0]?.id || '';
+  saveFormsState('Question deleted');
+  render();
+}
+
+function moveQuestion(id, direction) {
+  const form = selectedFormMutable();
+  if (!form || !direction) return;
+  const index = form.questions.findIndex((question) => question.id === id);
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= form.questions.length) return;
+  const [question] = form.questions.splice(index, 1);
+  form.questions.splice(next, 0, question);
+  state.selectedQuestionId = id;
+  saveFormsState('Question moved');
+  render();
+}
+
+function addQuestionOption(id) {
+  const form = selectedFormMutable();
+  const question = form?.questions.find((item) => item.id === id);
+  if (!question) return;
+  question.options = question.options || [];
+  question.options.push(`Option ${question.options.length + 1}`);
+  saveFormsState('Option added');
+  render();
+}
+
+function removeQuestionOption(id, index) {
+  const form = selectedFormMutable();
+  const question = form?.questions.find((item) => item.id === id);
+  if (!question || index < 0) return;
+  question.options.splice(index, 1);
+  if (!question.options.length) question.options.push('Option 1');
+  saveFormsState('Option removed');
+  render();
+}
+
+function saveFormResponse(formEl) {
+  const form = formById(formEl.dataset.formId);
+  if (!form) return;
+  const data = new FormData(formEl);
+  const answers = {};
+  form.questions.forEach((question) => {
+    const key = `answer:${question.id}`;
+    const values = data.getAll(key).filter((value) => value instanceof File ? value.name : String(value || '').trim());
+    answers[question.id] = values.length > 1 ? values.map((value) => value instanceof File ? value.name : value) : (values[0] instanceof File ? values[0].name : values[0] || '');
+  });
+  state.formResponses.unshift(normalizeFormResponse({
+    company_id: form.company_id,
+    form_id: form.id,
+    submitter_email: String(data.get('submitter_email') || ''),
+    submitted_by: String(data.get('submitter_email') || activeSession().profile.full_name || 'Preview submitter'),
+    answers,
+    created_at: new Date().toISOString(),
+  }));
+  state.formsTab = 'responses';
+  saveFormsState('Preview response saved');
+  render();
+}
+
+function downloadText(filename, text, type = 'text/plain') {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 function statusLabel(status) {
@@ -2193,6 +3460,11 @@ function readJson(key, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function readSeededList(key, fallback) {
+  const value = readJson(key, fallback);
+  return Array.isArray(value) && value.length ? value : fallback;
 }
 
 function writeJson(key, value) {
