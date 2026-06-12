@@ -1467,6 +1467,12 @@ textarea:focus {
   gap: 8px;
 }
 
+.btn.icon-only {
+  width: 38px;
+  padding-inline: 0;
+  justify-content: center;
+}
+
 .drive-shell {
   min-height: 0;
 }
@@ -1477,41 +1483,34 @@ textarea:focus {
   padding: 18px;
 }
 
-.file-toolbar {
+.drive-crumb-row {
   display: grid;
-  grid-template-columns: 170px 180px minmax(0, 1fr) auto;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  margin: -4px 0 14px;
+  padding-bottom: 12px;
 }
 
-.drive-context-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 9px;
-  margin-bottom: 18px;
+.drive-compact-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.drive-context-strip span {
-  display: grid;
-  gap: 3px;
+.drive-compact-controls select {
+  min-height: 36px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fbf7ee;
-  padding: 10px 12px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.drive-context-strip b {
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--ink);
-  font-size: 11px;
-  font-weight: 950;
-  text-transform: uppercase;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 900;
 }
 
-.file-toolbar label,
 .forms-command label,
 .forms-mini-search label,
 .analytics-toolbar label,
@@ -1526,8 +1525,6 @@ textarea:focus {
   text-transform: uppercase;
 }
 
-.file-toolbar input,
-.file-toolbar select,
 .forms-command input,
 .forms-command select,
 .forms-mini-search input,
@@ -1556,7 +1553,7 @@ textarea:focus {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .drive-section-title h3 {
@@ -1571,33 +1568,28 @@ textarea:focus {
 }
 
 .recent-title {
-  margin-top: 18px;
-}
-
-.drive-inline-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  margin-top: 14px;
 }
 
 .drive-folder-grid,
 .file-grid-live {
   display: grid;
-  grid-template-columns: repeat(4, minmax(170px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
 }
 
 .drive-folder-card,
 .file-card-live {
   display: grid;
-  gap: 8px;
-  min-height: 146px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: start;
+  min-height: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
-  padding: 14px;
+  padding: 12px;
   text-align: left;
-  box-shadow: 0 10px 26px rgba(33, 31, 27, .05);
 }
 
 .drive-folder-card:hover,
@@ -1611,7 +1603,7 @@ textarea:focus {
 .file-thumb {
   display: grid;
   place-items: center;
-  min-height: 82px;
+  min-height: 42px;
   border-radius: 8px;
   background: #f3e6c9;
   color: #8a5a0a;
@@ -1619,13 +1611,18 @@ textarea:focus {
 }
 
 .drive-folder-icon {
-  width: 48px;
+  width: 42px;
   min-height: 42px;
+  grid-row: span 3;
+}
+
+.file-thumb {
+  grid-row: span 2;
 }
 
 .drive-folder-icon i,
 .file-doc-icon i {
-  font-size: 28px;
+  font-size: 22px;
 }
 
 .drive-folder-card strong,
@@ -2691,7 +2688,7 @@ textarea:focus {
 @media (max-width: 980px) {
   .tool-strip,
   .drive-topbar,
-  .file-toolbar,
+  .drive-crumb-row,
   .analytics-toolbar,
   .forms-builder-grid,
   .gform-editor-tabs.panel,
@@ -2706,7 +2703,6 @@ textarea:focus {
   .file-metrics,
   .forms-dashboard,
   .analytics-grid,
-  .drive-context-strip,
   .drive-folder-grid,
   .file-grid-live,
   .forms-settings-grid {
@@ -2784,7 +2780,6 @@ textarea:focus {
   .file-metrics,
   .forms-dashboard,
   .analytics-grid,
-  .drive-context-strip,
   .drive-folder-grid,
   .file-grid-live,
   .forms-settings-grid {
@@ -3406,6 +3401,17 @@ button.side-item {
 }
 
 @media (max-width: 720px) {
+  .drive-compact-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+  }
+
+  .drive-compact-controls select,
+  .drive-compact-controls .segmented {
+    width: 100%;
+  }
+
   .drive-storage-strip {
     grid-template-columns: 1fr;
   }

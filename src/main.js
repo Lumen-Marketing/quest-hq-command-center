@@ -1094,7 +1094,6 @@ function renderFilesPage(route, companyId) {
   state.driveFolder = folder;
   const job = route.jobId ? jobById(route.jobId) : null;
   const files = filteredDriveFiles(companyId, folder, job?.id || '');
-  const metrics = driveMetrics(companyId);
   return `
     <section class="tool-page drive-page">
       <section class="drive-app panel">
@@ -1112,42 +1111,27 @@ function renderFilesPage(route, companyId) {
           </label>
           <div class="drive-actions">
             <button class="btn" type="button" data-action="open-file-upload"><i class="ti ti-upload"></i>Upload</button>
-            <a class="btn btn-primary" href="${appHref(companyPath('jobs', {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
-            <button class="btn" type="button" data-action="refresh-data"><i class="ti ti-refresh"></i>Refresh</button>
+            <button class="btn icon-only" type="button" data-action="refresh-data" title="Refresh" aria-label="Refresh"><i class="ti ti-refresh"></i></button>
           </div>
         </header>
         <div class="drive-shell drive-shell-compact">
           <div class="drive-main">
             ${renderDriveTabs(companyId, folder, job)}
-            <section class="file-toolbar">
-              <label>
-                <span>Folder</span>
-                <select data-file-folder-filter>
-                  <option value="home" ${folder === 'home' ? 'selected' : ''}>Home</option>
-                  ${DRIVE_FOLDERS.map(([id, label]) => `<option value="${h(id)}" ${folder === id ? 'selected' : ''}>${h(label)}</option>`).join('')}
-                </select>
-              </label>
-              <label>
-                <span>Category</span>
-                <select data-file-category-filter>
-                  ${FILE_CATEGORIES.map((category) => `<option value="${h(category)}" ${state.fileCategoryFilter === category ? 'selected' : ''}>${h(category)}</option>`).join('')}
-                </select>
-              </label>
+            <section class="drive-crumb-row">
               <nav class="breadcrumbs" aria-label="Drive location">
                 <a href="${appHref(companyPath('files', {}, companyId))}" data-router>${h(companyName(companyId))}</a>
                 ${folder !== 'home' ? `<span>/</span><a href="${appHref(companyPath('files', { folder }, companyId))}" data-router>${h(folderLabel(folder))}</a>` : ''}
                 ${job ? `<span>/</span><strong>${h(job.name)}</strong>` : ''}
               </nav>
-              <div class="segmented" role="group" aria-label="Drive view">
-                <button class="${state.driveView === 'grid' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="grid"><i class="ti ti-layout-grid"></i>Grid</button>
-                <button class="${state.driveView === 'list' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="list"><i class="ti ti-list"></i>List</button>
+              <div class="drive-compact-controls">
+                <select data-file-category-filter aria-label="File category">
+                  ${FILE_CATEGORIES.map((category) => `<option value="${h(category)}" ${state.fileCategoryFilter === category ? 'selected' : ''}>${h(category)}</option>`).join('')}
+                </select>
+                <div class="segmented" role="group" aria-label="Drive view">
+                  <button class="${state.driveView === 'grid' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="grid"><i class="ti ti-layout-grid"></i>Grid</button>
+                  <button class="${state.driveView === 'list' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="list"><i class="ti ti-list"></i>List</button>
+                </div>
               </div>
-            </section>
-            <section class="drive-context-strip">
-              ${driveContextPill('Scope', job ? job.name : folder === 'home' ? 'All company files' : folderLabel(folder))}
-              ${driveContextPill('Visible', `${files.length} file${files.length === 1 ? '' : 's'}`)}
-              ${driveContextPill('Category', state.fileCategoryFilter)}
-              ${driveContextPill('Storage', formatBytes(metrics.bytes))}
             </section>
             ${folder === 'home' && state.driveFilter === 'my-drive' && !job ? renderDriveHome(companyId) : ''}
             ${renderDriveFiles(companyId, files)}
@@ -1194,7 +1178,6 @@ function renderDriveHome(companyId) {
   return `
     <section class="drive-section-title">
       <div><h3>Company folders</h3><span>Folders are scoped to ${h(companyName(companyId))}</span></div>
-      <button class="btn" type="button" data-action="open-file-upload"><i class="ti ti-upload"></i>Upload</button>
     </section>
     <section class="drive-folder-grid">
       ${DRIVE_FOLDERS.map(([id, label, text, icon]) => `
@@ -1228,9 +1211,6 @@ function renderDriveFiles(companyId, files) {
   return `
     <section class="drive-section-title recent-title">
       <div><h3>${h(title)}</h3><span>${files.length} visible file${files.length === 1 ? '' : 's'}</span></div>
-      <div class="drive-inline-actions">
-        <button class="btn" type="button" data-action="open-file-upload"><i class="ti ti-plus"></i>New</button>
-      </div>
     </section>
     ${state.driveView === 'list' ? `
       <div class="file-table-live">
@@ -3383,10 +3363,6 @@ function driveFolderCount(companyId, folder) {
   const files = companyFiles(companyId);
   if (folder === 'jobs') return files.filter((file) => file.job_id).length;
   return files.filter((file) => file.folder === folder).length;
-}
-
-function driveContextPill(label, value) {
-  return `<span><b>${h(label)}</b>${h(value)}</span>`;
 }
 
 function driveMetrics(companyId = activeCompanyId()) {
