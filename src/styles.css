@@ -1574,21 +1574,21 @@ textarea:focus {
 .drive-folder-grid,
 .file-grid-live {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
 }
 
 .drive-folder-card,
 .file-card-live {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 6px 10px;
-  align-items: start;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 3px 9px;
+  align-items: center;
   min-height: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
-  padding: 12px;
+  padding: 9px 10px;
   text-align: left;
   color: var(--ink);
   text-decoration: none;
@@ -1605,17 +1605,17 @@ textarea:focus {
 .file-thumb {
   display: grid;
   place-items: center;
-  min-height: 42px;
-  border-radius: 8px;
-  background: #f3e6c9;
+  min-height: 28px;
+  border-radius: 6px;
+  background: transparent;
   color: #8a5a0a;
   overflow: hidden;
 }
 
 .drive-folder-icon {
-  width: 42px;
-  min-height: 42px;
-  grid-row: span 3;
+  width: 28px;
+  min-height: 28px;
+  grid-row: span 2;
 }
 
 .file-thumb {
@@ -1624,7 +1624,7 @@ textarea:focus {
 
 .drive-folder-icon i,
 .file-doc-icon i {
-  font-size: 22px;
+  font-size: 21px;
 }
 
 .drive-folder-card strong,
@@ -1640,9 +1640,18 @@ textarea:focus {
 .drive-folder-card em,
 .file-card-live span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
   font-weight: 800;
+}
+
+.drive-folder-card strong,
+.file-card-live strong {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-card-live strong {

@@ -420,7 +420,6 @@
     <a class="drive-folder-card explorer-folder" href="${n(e.href)}" data-router>
       <span class="drive-folder-icon"><i class="ti ${n(e.icon||"ti-folder")}"></i></span>
       <strong>${n(e.name)}</strong>
-      <small>${n(e.caption||"Folder")}</small>
       <em>${n(e.countLabel||"0 items")}</em>
     </a>
   `}function ka(e){return`

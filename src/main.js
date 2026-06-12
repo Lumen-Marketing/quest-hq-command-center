@@ -1151,7 +1151,6 @@ function renderFolderTile(folder) {
     <a class="drive-folder-card explorer-folder" href="${h(folder.href)}" data-router>
       <span class="drive-folder-icon"><i class="ti ${h(folder.icon || 'ti-folder')}"></i></span>
       <strong>${h(folder.name)}</strong>
-      <small>${h(folder.caption || 'Folder')}</small>
       <em>${h(folder.countLabel || '0 items')}</em>
     </a>
   `;
