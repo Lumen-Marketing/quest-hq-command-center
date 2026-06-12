@@ -4,6 +4,11 @@ import path from 'node:path';
 const buildId = 'Quest Job Center Task Merge v1';
 const assetVersion = buildId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const targets = ['.', 'dist', 'docs'];
+const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#f45d22"/>
+  <path d="M33 44c-8 0-14-5.8-14-13.2S25 17.6 33 17.6s14 5.8 14 13.2c0 3.8-1.6 7.2-4.2 9.6l4.6 5.2h-8.8l-1.6-1.9c-1.3.2-2.6.3-4 .3Zm0-8.1c2.8 0 4.8-2.1 4.8-5.1s-2-5.1-4.8-5.1-4.8 2.1-4.8 5.1 2 5.1 4.8 5.1Z" fill="#111827"/>
+</svg>
+`;
 
 const nav = [
   ['index.html', 'Command Center', 'home', 'live'],
@@ -227,6 +232,7 @@ function shell({ file, title, content, seed = [], moduleId = '' }) {
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>${title} | Quest HQ</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="assets/quest-hq.css?v=${assetVersion}" />
   </head>
   <body class="auth-loading" data-page="${file}" data-module="${moduleId}">
@@ -4613,6 +4619,7 @@ async function writeTarget(target) {
   if (target !== '.') await rm(absolute, { recursive: true, force: true });
   await mkdir(path.join(absolute, 'assets'), { recursive: true });
   await copyTaskManagementRuntime(target, absolute);
+  await writeFile(path.join(absolute, 'favicon.svg'), faviconSvg);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + modalCss + plannedNavCss + fileViewerCss + fileCenterCss + driveFileCss + jobCenterCss + jobCenterTaskMergeCss + coreDemoCss + identityIntegrationCss + companyAdminCss + analyticsCss + formsCenterCss + googleFormsCss + formShareCss + formsLayoutRedoCss + formsLibraryModalCss + plannedTabsCss + tutorialCss + questAuthCss);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js + jobCenterJs + fileCenterJs + companyAdminJs + analyticsJs + commandCenterJs + taskBridgeJs + formsCenterJs + tutorialJs);
   await writeFile(path.join(absolute, 'login.html'), loginPage());
