@@ -354,9 +354,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   App.startTour = () => App.tour.start({ onFinish: markOnboarded });
 
   const forceTour = new URLSearchParams(window.location.search).get('tour') === '1';
-  window.setTimeout(async () => {
-    if (forceTour || await shouldAutoStartTour()) App.startTour();
-  }, 600);
+  const embeddedInJobCenter = !!(App.commandCenterIntegration && App.commandCenterIntegration.embedded);
+  if (!embeddedInJobCenter) {
+    window.setTimeout(async () => {
+      if (forceTour || await shouldAutoStartTour()) App.startTour();
+    }, 600);
+  }
 
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
