@@ -1940,6 +1940,9 @@ textarea:focus {
 .form-card {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon main status"
+    "icon meta meta";
   gap: 12px;
   align-items: start;
   min-height: 0;
@@ -1955,6 +1958,7 @@ textarea:focus {
 }
 
 .form-card-top i {
+  grid-area: icon;
   display: grid;
   place-items: center;
   width: 34px;
@@ -1966,7 +1970,7 @@ textarea:focus {
 }
 
 .form-card-top b {
-  grid-column: 3;
+  grid-area: status;
   align-self: start;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -1991,6 +1995,7 @@ textarea:focus {
 }
 
 .form-card-main {
+  grid-area: main;
   display: grid !important;
   gap: 5px;
 }
@@ -2005,10 +2010,11 @@ textarea:focus {
 .form-card-main strong {
   color: var(--ink);
   font-size: 15px;
+  line-height: 1.25;
 }
 
 .form-card-meta {
-  grid-column: 2 / -1;
+  grid-area: meta;
   display: flex !important;
   flex-wrap: wrap;
   gap: 6px;
@@ -2724,15 +2730,14 @@ textarea:focus {
 
   .form-card {
     grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-areas:
+      "icon main"
+      "icon status"
+      "meta meta";
   }
 
   .form-card-top b {
-    grid-column: 2;
     justify-self: start;
-  }
-
-  .form-card-meta {
-    grid-column: 1 / -1;
   }
 
   .file-metrics,
