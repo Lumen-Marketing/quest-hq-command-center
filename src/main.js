@@ -16,6 +16,7 @@ const PROFILE_KEY = 'quest-hq-local-profile';
 const JOB_CACHE_KEY = 'quest-hq-job-cache-v2';
 const TASK_CACHE_KEY = 'quest-hq-task-cache-v1';
 const FILE_CACHE_KEY = 'quest-hq-file-cache-v1';
+const DRIVE_FOLDER_CACHE_KEY = 'quest-hq-drive-folder-cache-v1';
 const TEAM_CACHE_KEY = 'quest-hq-team-cache-v1';
 const MEMBERSHIP_CACHE_KEY = 'quest-hq-company-membership-cache-v1';
 const FORM_CACHE_KEY = 'quest-hq-company-form-cache-v1';
@@ -23,7 +24,6 @@ const FORM_RESPONSE_CACHE_KEY = 'quest-hq-company-form-response-cache-v1';
 const COMPANY_KEY = 'quest-hq-active-company';
 const TASK_VIEW_KEY = 'quest-hq-task-view';
 const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
-const DRIVE_FILTER_KEY = 'quest-hq-drive-filter';
 
 const STAGES = ['Lead', 'Site Review', 'Estimate', 'Approved', 'Active', 'Closed'];
 const JOB_TABS = ['pipeline', 'list', 'profile'];
@@ -31,12 +31,6 @@ const TASK_STATUSES = ['todo', 'pending', 'hold', 'review', 'done'];
 const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
 const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
 const FILE_CATEGORIES = ['All categories', 'Shared', 'Jobs', 'Forms', 'Photos', 'Permits', 'Contracts', 'Archive'];
-const DRIVE_FILTERS = [
-  ['my-drive', 'My Drive', 'ti-folder'],
-  ['recent', 'Recent', 'ti-clock'],
-  ['images', 'Images', 'ti-photo'],
-  ['documents', 'Documents', 'ti-file-description'],
-];
 const DRIVE_FOLDERS = [
   ['jobs', 'Jobs', 'Job-linked folders and deliverables', 'ti-folders'],
   ['shared', 'Shared', 'Company-wide files', 'ti-folder-share'],
@@ -382,6 +376,7 @@ const state = {
   jobs: readSeededList(JOB_CACHE_KEY, jobsFallback).map(normalizeJob),
   tasks: readSeededList(TASK_CACHE_KEY, tasksFallback).map(normalizeTask),
   files: readSeededList(FILE_CACHE_KEY, filesFallback).map(normalizeFile),
+  driveFolders: readSeededList(DRIVE_FOLDER_CACHE_KEY, []).map(normalizeDriveFolder),
   forms: readSeededList(FORM_CACHE_KEY, formsFallback).map(normalizeForm),
   formResponses: readSeededList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback).map(normalizeFormResponse),
   teamMembers: readSeededList(TEAM_CACHE_KEY, teamMembersFallback).map(normalizeTeamMember),
@@ -409,7 +404,6 @@ const state = {
   taskView: localStorage.getItem(TASK_VIEW_KEY) || 'table',
   driveFolder: 'home',
   driveView: localStorage.getItem(DRIVE_VIEW_KEY) || 'grid',
-  driveFilter: localStorage.getItem(DRIVE_FILTER_KEY) || 'my-drive',
   sync: { label: 'Loading workspace...', mode: 'loading' },
   dataLoaded: false,
   dataLoading: false,
@@ -1110,31 +1104,27 @@ function renderFilesPage(route, companyId) {
             <input data-file-search value="${h(state.fileQuery)}" placeholder="Search drive" />
           </label>
           <div class="drive-actions">
+            <button class="btn" type="button" data-action="open-folder-form"><i class="ti ti-folder-plus"></i>New folder</button>
             <button class="btn" type="button" data-action="open-file-upload"><i class="ti ti-upload"></i>Upload</button>
             <button class="btn icon-only" type="button" data-action="refresh-data" title="Refresh" aria-label="Refresh"><i class="ti ti-refresh"></i></button>
           </div>
         </header>
         <div class="drive-shell drive-shell-compact">
           <div class="drive-main">
-            ${renderDriveTabs(companyId, folder, job)}
             <section class="drive-crumb-row">
               <nav class="breadcrumbs" aria-label="Drive location">
                 <a href="${appHref(companyPath('files', {}, companyId))}" data-router>${h(companyName(companyId))}</a>
-                ${folder !== 'home' ? `<span>/</span><a href="${appHref(companyPath('files', { folder }, companyId))}" data-router>${h(folderLabel(folder))}</a>` : ''}
+                ${folder !== 'home' ? driveBreadcrumbTrail(companyId, folder, job) : ''}
                 ${job ? `<span>/</span><strong>${h(job.name)}</strong>` : ''}
               </nav>
               <div class="drive-compact-controls">
-                <select data-file-category-filter aria-label="File category">
-                  ${FILE_CATEGORIES.map((category) => `<option value="${h(category)}" ${state.fileCategoryFilter === category ? 'selected' : ''}>${h(category)}</option>`).join('')}
-                </select>
                 <div class="segmented" role="group" aria-label="Drive view">
                   <button class="${state.driveView === 'grid' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="grid"><i class="ti ti-layout-grid"></i>Grid</button>
                   <button class="${state.driveView === 'list' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="list"><i class="ti ti-list"></i>List</button>
                 </div>
               </div>
             </section>
-            ${folder === 'home' && state.driveFilter === 'my-drive' && !job ? renderDriveHome(companyId) : ''}
-            ${renderDriveFiles(companyId, files)}
+            ${renderDriveExplorer(companyId, folder, job, files)}
           </div>
         </div>
       </section>
@@ -1142,72 +1132,49 @@ function renderFilesPage(route, companyId) {
   `;
 }
 
-function renderDriveTabs(companyId, folder, job) {
-  const metrics = driveMetrics(companyId);
+function renderDriveExplorer(companyId, folder, job, files) {
+  const folders = driveExplorerFolders(companyId, folder, job);
+  const title = job ? job.name : folder === 'home' ? 'This folder' : folderLabel(folder);
   return `
-    <section class="drive-tabs" aria-label="Drive sections">
-      <div class="drive-tab-row">
-        ${DRIVE_FILTERS.map(([id, label, icon]) => `
-          <button class="drive-tab ${state.driveFilter === id ? 'active' : ''}" type="button" data-action="set-drive-filter" data-filter="${h(id)}">
-            <i class="ti ${h(icon)}"></i>
-            <span>${h(label)}</span>
-            <b>${h(String(driveFilterCount(companyId, id)))}</b>
-          </button>
-        `).join('')}
-      </div>
-      <div class="drive-tab-row">
-        ${DRIVE_FOLDERS.map(([id, label,, icon]) => `
-          <a class="drive-tab ${folder === id && !job ? 'active' : ''}" href="${appHref(companyPath('files', { folder: id }, companyId))}" data-router>
-            <i class="ti ${h(icon)}"></i>
-            <span>${h(label)}</span>
-            <b>${h(String(driveFolderCount(companyId, id)))}</b>
-          </a>
-        `).join('')}
-      </div>
-      <div class="drive-storage-strip">
-        <span>${formatBytes(metrics.bytes)} of 1 GB</span>
-        <b><i style="width:${h(String(Math.min(100, Math.round((metrics.bytes / 1073741824) * 100))))}%"></i></b>
-        <small>${metrics.count} file${metrics.count === 1 ? '' : 's'} in this company</small>
-      </div>
+    <section class="drive-section-title">
+      <div><h3>${h(title)}</h3><span>${folders.length} folder${folders.length === 1 ? '' : 's'} / ${files.length} file${files.length === 1 ? '' : 's'}</span></div>
     </section>
+    ${folders.length ? `
+      ${state.driveView === 'list' ? renderFolderList(folders) : `<section class="drive-folder-grid explorer-grid">${folders.map(renderFolderTile).join('')}</section>`}
+    ` : ''}
+    ${renderDriveFiles(companyId, files)}
   `;
 }
 
-function renderDriveHome(companyId) {
-  const jobs = companyJobs(companyId);
+function renderFolderTile(folder) {
   return `
-    <section class="drive-section-title">
-      <div><h3>Company folders</h3><span>Folders are scoped to ${h(companyName(companyId))}</span></div>
-    </section>
-    <section class="drive-folder-grid">
-      ${DRIVE_FOLDERS.map(([id, label, text, icon]) => `
-        <a class="drive-folder-card" href="${appHref(companyPath('files', { folder: id }, companyId))}" data-router>
-          <span class="drive-folder-icon"><i class="ti ${h(icon)}"></i></span>
-          <strong>${h(label)}</strong>
-          <small>${h(text)}</small>
-          <em>${h(filteredDriveFiles(companyId, id).length)} files</em>
+    <a class="drive-folder-card explorer-folder" href="${h(folder.href)}" data-router>
+      <span class="drive-folder-icon"><i class="ti ${h(folder.icon || 'ti-folder')}"></i></span>
+      <strong>${h(folder.name)}</strong>
+      <small>${h(folder.caption || 'Folder')}</small>
+      <em>${h(folder.countLabel || '0 items')}</em>
+    </a>
+  `;
+}
+
+function renderFolderList(folders) {
+  return `
+    <div class="file-table-live explorer-table">
+      ${folders.map((folder) => `
+        <a class="file-row-live folder-row-live" href="${h(folder.href)}" data-router>
+          <span class="file-type folder"><i class="ti ${h(folder.icon || 'ti-folder')}"></i></span>
+          <strong>${h(folder.name)}<span>${h(folder.caption || 'Folder')}</span></strong>
+          <span>Folder</span>
+          <span>${h(folder.countLabel || '0 items')}</span>
+          <span>${h(folder.updatedLabel || '')}</span>
         </a>
       `).join('')}
-    </section>
-    <section class="drive-section-title recent-title">
-      <div><h3>Job folders</h3><span>Each job has a linked drive folder.</span></div>
-      <a class="btn" href="${appHref(companyPath('jobs', {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Open jobs</a>
-    </section>
-    <section class="drive-folder-grid">
-      ${jobs.map((job) => `
-        <a class="drive-folder-card" href="${appHref(companyPath('files', { folder: 'jobs', job_id: job.id }, companyId))}" data-router>
-          <span class="drive-folder-icon"><i class="ti ti-folder"></i></span>
-          <strong>${h(job.name)}</strong>
-          <small>${h(job.client_name || companyName(companyId))}</small>
-          <em>${fileCountForJob(job.id)} files</em>
-        </a>
-      `).join('') || emptyState('Create a job workspace to get its file folder.')}
-    </section>
+    </div>
   `;
 }
 
 function renderDriveFiles(companyId, files) {
-  const title = state.driveFilter === 'my-drive' ? 'Files' : driveViewLabel();
+  const title = 'Files';
   return `
     <section class="drive-section-title recent-title">
       <div><h3>${h(title)}</h3><span>${files.length} visible file${files.length === 1 ? '' : 's'}</span></div>
@@ -1270,6 +1237,28 @@ function renderFileDetails(file, companyId) {
   `;
 }
 
+function renderNewFolderModal() {
+  const companyId = activeCompanyId();
+  const route = state.route || getRoute();
+  const folder = route.params.get('folder') || state.driveFolder || 'home';
+  const job = route.jobId ? jobById(route.jobId) : null;
+  return renderModalShell('Drive', 'New folder', `
+    <form class="compact-tool-form" data-folder-form>
+      <label><span>Folder name</span><input name="name" placeholder="Folder name" required autofocus /></label>
+      <input type="hidden" name="company_id" value="${h(companyId)}" />
+      <input type="hidden" name="parent_key" value="${h(driveParentKey(folder, job))}" />
+      <div class="file-upload-log">
+        <strong>Location</strong>
+        <span>${h(folder === 'home' ? companyName(companyId) : job?.name || folderLabel(folder))}</span>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Create folder</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+
 function renderFileUploadModal() {
   const companyId = activeCompanyId();
   const folder = state.route?.params?.get('folder') || (state.driveFolder === 'home' ? 'shared' : state.driveFolder);
@@ -1291,7 +1280,7 @@ function renderFileUploadModal() {
             <input name="files" type="file" multiple />
           </label>
           ${field('Metadata-only file name', 'file_name', '')}
-          ${selectField('Folder', 'folder', folder, DRIVE_FOLDERS.map(([id, label]) => [id, label]))}
+          ${selectField('Folder', 'folder', folder, driveFolderOptions(companyId))}
           ${selectField('Job', 'job_id', jobId, [['', 'Company shared file']].concat(companyJobs(companyId).map((job) => [job.id, job.name])))}
           ${selectField('Category', 'category', folderLabel(folder), FILE_CATEGORIES.filter((item) => item !== 'All categories').map((item) => [item, item]))}
           ${field('Uploaded by', 'uploaded_by_label', activeSession().profile.full_name || 'Quest HQ')}
@@ -1797,6 +1786,7 @@ function renderProfileModal(profile) {
 function renderActiveModal(route, session) {
   if (state.modal === 'profile') return renderProfileModal(session.profile);
   if (state.modal === 'file-upload') return renderFileUploadModal();
+  if (state.modal === 'folder-new') return renderNewFolderModal();
   if (state.modal === 'file-detail') return renderFileDetailModal(activeCompanyId());
   if (state.modal === 'forms-tools') return renderFormsToolsModal(activeCompanyId());
   if (state.modal === 'form-actions') return renderFormActionsModal(activeCompanyId(), selectedForm(activeCompanyId()));
@@ -2057,6 +2047,12 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'open-folder-form') {
+    event.preventDefault();
+    state.modal = 'folder-new';
+    render();
+    return;
+  }
   if (action === 'open-job-form') {
     event.preventDefault();
     const jobId = node.dataset.jobId || '';
@@ -2116,14 +2112,6 @@ function handleAction(event, node) {
     event.preventDefault();
     state.driveView = node.dataset.view === 'list' ? 'list' : 'grid';
     localStorage.setItem(DRIVE_VIEW_KEY, state.driveView);
-    render();
-    return;
-  }
-  if (action === 'set-drive-filter') {
-    event.preventDefault();
-    state.driveFilter = node.dataset.filter || 'my-drive';
-    localStorage.setItem(DRIVE_FILTER_KEY, state.driveFilter);
-    state.selectedFileId = '';
     render();
     return;
   }
@@ -2336,6 +2324,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-file-form]')) {
     event.preventDefault();
     saveFileRecord(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-folder-form]')) {
+    event.preventDefault();
+    createDriveFolder(event.target);
     return;
   }
 
@@ -2581,6 +2575,30 @@ async function saveFileRecord(form) {
     : { label: liveSaved ? 'Some files saved locally' : 'File record saved locally', mode: liveSaved ? 'loading' : 'local' };
   state.modal = '';
   navigate(companyPath('files', { folder: fields.folder || 'shared', ...(fields.job_id ? { job_id: fields.job_id } : {}) }, companyId), { replace: true });
+}
+
+function createDriveFolder(form) {
+  const fields = Object.fromEntries(new FormData(form).entries());
+  const name = String(fields.name || '').trim();
+  if (!name) {
+    state.sync = { label: 'Folder name is required', mode: 'local' };
+    render();
+    return;
+  }
+  const folder = normalizeDriveFolder({
+    id: `folder-${crypto.randomUUID()}`,
+    company_id: activeCompanyId(),
+    name,
+    parent_key: fields.parent_key || 'home',
+    created_by_label: activeSession().profile.full_name || 'Quest HQ',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  state.driveFolders.unshift(folder);
+  state.modal = '';
+  state.sync = { label: 'Folder created locally', mode: 'local' };
+  persistAll();
+  render();
 }
 
 async function downloadFile(id) {
@@ -2869,6 +2887,10 @@ function companyFiles(companyId = activeCompanyId()) {
   return state.files.filter((file) => file.company_id === companyId);
 }
 
+function companyDriveFolders(companyId = activeCompanyId()) {
+  return state.driveFolders.filter((folder) => folder.company_id === companyId);
+}
+
 function companyMembers(companyId = activeCompanyId()) {
   return state.teamMembers.filter((member) => Array.isArray(member.company_ids) && member.company_ids.includes(companyId));
 }
@@ -3043,6 +3065,18 @@ function normalizeFile(input) {
     object_path: input.object_path || '',
     uploaded_by_label: String(input.uploaded_by_label || 'Quest HQ'),
     notes: String(input.notes || ''),
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+
+function normalizeDriveFolder(input) {
+  return {
+    id: String(input.id || `folder-${crypto.randomUUID()}`),
+    company_id: String(input.company_id || defaultCompanyId()),
+    name: String(input.name || 'New folder').trim() || 'New folder',
+    parent_key: String(input.parent_key || 'home'),
+    created_by_label: String(input.created_by_label || 'Quest HQ'),
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || input.created_at || new Date().toISOString(),
   };
@@ -3334,6 +3368,7 @@ function persistAll() {
   writeJson(JOB_CACHE_KEY, state.jobs);
   writeJson(TASK_CACHE_KEY, state.tasks);
   writeJson(FILE_CACHE_KEY, state.files);
+  writeJson(DRIVE_FOLDER_CACHE_KEY, state.driveFolders);
   writeJson(FORM_CACHE_KEY, state.forms);
   writeJson(FORM_RESPONSE_CACHE_KEY, state.formResponses);
   writeJson(TEAM_CACHE_KEY, state.teamMembers);
@@ -3348,21 +3383,84 @@ function detailRow(label, value) {
   return `<div><strong>${h(label)}</strong><span>${h(value)}</span></div>`;
 }
 
-function driveViewLabel() {
-  return DRIVE_FILTERS.find(([id]) => id === state.driveFilter)?.[1] || 'My Drive';
-}
-
-function driveFilterCount(companyId, filter) {
-  const files = companyFiles(companyId);
-  if (filter === 'images') return files.filter((file) => file.mime_type.includes('image') || file.folder === 'photos').length;
-  if (filter === 'documents') return files.filter((file) => !file.mime_type.includes('image') && file.folder !== 'photos').length;
-  return files.length;
-}
-
 function driveFolderCount(companyId, folder) {
   const files = companyFiles(companyId);
   if (folder === 'jobs') return files.filter((file) => file.job_id).length;
   return files.filter((file) => file.folder === folder).length;
+}
+
+function driveParentKey(folder = 'home', job = null) {
+  if (job?.id) return `job:${job.id}`;
+  return folder || 'home';
+}
+
+function driveExplorerFolders(companyId, folder = 'home', job = null) {
+  const parentKey = driveParentKey(folder, job);
+  const custom = companyDriveFolders(companyId)
+    .filter((item) => item.parent_key === parentKey)
+    .map((item) => customFolderModel(companyId, item));
+  if (job) return custom;
+  if (folder === 'home') {
+    const fixed = DRIVE_FOLDERS.map(([id, label, text, icon]) => ({
+      id,
+      name: label,
+      caption: text,
+      icon,
+      href: appHref(companyPath('files', { folder: id }, companyId)),
+      countLabel: `${driveFolderCount(companyId, id)} file${driveFolderCount(companyId, id) === 1 ? '' : 's'}`,
+      updatedLabel: '',
+    }));
+    return fixed.concat(custom);
+  }
+  if (folder === 'jobs') {
+    const jobs = companyJobs(companyId).map((jobItem) => ({
+      id: `job:${jobItem.id}`,
+      name: jobItem.name,
+      caption: jobItem.client_name || companyName(companyId),
+      icon: 'ti-folder',
+      href: appHref(companyPath('files', { folder: 'jobs', job_id: jobItem.id }, companyId)),
+      countLabel: `${fileCountForJob(jobItem.id)} file${fileCountForJob(jobItem.id) === 1 ? '' : 's'}`,
+      updatedLabel: formatDate(jobItem.updated_at),
+    }));
+    return jobs.concat(custom);
+  }
+  return custom;
+}
+
+function customFolderModel(companyId, folder) {
+  const childCount = companyDriveFolders(companyId).filter((item) => item.parent_key === folder.id).length;
+  const fileCount = companyFiles(companyId).filter((file) => file.folder === folder.id).length;
+  const itemCount = childCount + fileCount;
+  return {
+    id: folder.id,
+    name: folder.name,
+    caption: 'Custom folder',
+    icon: 'ti-folder',
+    href: appHref(companyPath('files', { folder: folder.id }, companyId)),
+    countLabel: `${itemCount} item${itemCount === 1 ? '' : 's'}`,
+    updatedLabel: formatDate(folder.updated_at),
+  };
+}
+
+function driveBreadcrumbTrail(companyId, folder, job = null) {
+  if (job) return `<span>/</span><a href="${appHref(companyPath('files', { folder: 'jobs' }, companyId))}" data-router>Jobs</a>`;
+  const custom = companyDriveFolders(companyId).find((item) => item.id === folder);
+  if (!custom) return `<span>/</span><strong>${h(folderLabel(folder))}</strong>`;
+  const crumbs = [];
+  let cursor = custom;
+  const guard = new Set();
+  while (cursor && !guard.has(cursor.id)) {
+    guard.add(cursor.id);
+    crumbs.unshift(cursor);
+    cursor = companyDriveFolders(companyId).find((item) => item.id === cursor.parent_key);
+  }
+  const root = custom.parent_key && !custom.parent_key.startsWith('folder-') && custom.parent_key !== 'home'
+    ? `<span>/</span><a href="${appHref(companyPath('files', { folder: custom.parent_key }, companyId))}" data-router>${h(folderLabel(custom.parent_key))}</a>`
+    : '';
+  return `${root}${crumbs.map((item, index) => {
+    const isLast = index === crumbs.length - 1;
+    return `<span>/</span>${isLast ? `<strong>${h(item.name)}</strong>` : `<a href="${appHref(companyPath('files', { folder: item.id }, companyId))}" data-router>${h(item.name)}</a>`}`;
+  }).join('')}`;
 }
 
 function driveMetrics(companyId = activeCompanyId()) {
@@ -3376,10 +3474,6 @@ function filteredDriveFiles(companyId = activeCompanyId(), folder = 'home', jobI
   let files = companyFiles(companyId);
   if (jobId) {
     files = files.filter((file) => file.job_id === jobId);
-  } else if (state.driveFilter === 'images') {
-    files = files.filter((file) => file.mime_type.includes('image') || file.folder === 'photos');
-  } else if (state.driveFilter === 'documents') {
-    files = files.filter((file) => !file.mime_type.includes('image') && file.folder !== 'photos');
   } else if (folder && folder !== 'home') {
     if (folder === 'jobs') files = files.filter((file) => file.job_id);
     else files = files.filter((file) => file.folder === folder);
@@ -3907,7 +4001,14 @@ function taskTypeLabel(type) {
 }
 
 function folderLabel(id) {
-  return DRIVE_FOLDERS.find(([folderId]) => folderId === id)?.[1] || titleCase(id || 'Shared');
+  return DRIVE_FOLDERS.find(([folderId]) => folderId === id)?.[1]
+    || state.driveFolders.find((folder) => folder.id === id)?.name
+    || titleCase(id || 'Shared');
+}
+
+function driveFolderOptions(companyId = activeCompanyId()) {
+  return DRIVE_FOLDERS.map(([id, label]) => [id, label])
+    .concat(companyDriveFolders(companyId).map((folder) => [folder.id, folder.name]));
 }
 
 function folderIdFromCategory(category) {

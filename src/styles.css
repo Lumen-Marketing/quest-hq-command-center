@@ -1590,6 +1590,8 @@ textarea:focus {
   background: var(--surface);
   padding: 12px;
   text-align: left;
+  color: var(--ink);
+  text-decoration: none;
 }
 
 .drive-folder-card:hover,
@@ -1664,6 +1666,8 @@ textarea:focus {
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   padding: 12px;
+  color: var(--ink);
+  text-decoration: none;
   text-align: left;
 }
 
@@ -1703,6 +1707,16 @@ textarea:focus {
   color: #1d4ed8;
   font-size: 11px;
   font-weight: 950;
+}
+
+.file-type.folder {
+  background: #f3e6c9;
+  color: #8a5a0a;
+  font-size: 16px;
+}
+
+.explorer-grid + .recent-title {
+  margin-top: 18px;
 }
 
 .file-doc-icon {
@@ -3302,77 +3316,6 @@ button.side-item {
   padding: 16px 18px 18px;
 }
 
-.drive-tabs {
-  display: grid;
-  gap: 8px;
-  border-bottom: 1px solid var(--border);
-  margin: -2px 0 16px;
-  padding-bottom: 14px;
-}
-
-.drive-tab-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.drive-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted);
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.drive-tab.active,
-.drive-tab:hover {
-  border-color: var(--amber);
-  background: #fff8e7;
-  color: var(--ink);
-}
-
-.drive-tab b {
-  display: grid;
-  place-items: center;
-  min-width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: rgba(36, 32, 25, .08);
-  color: var(--ink);
-  font-size: 11px;
-}
-
-.drive-storage-strip {
-  display: grid;
-  grid-template-columns: auto minmax(90px, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.drive-storage-strip b {
-  display: block;
-  height: 8px;
-  border-radius: 999px;
-  background: #e7decf;
-  overflow: hidden;
-}
-
-.drive-storage-strip i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--green), var(--amber), var(--orange));
-}
-
 .compact-settings-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -3410,15 +3353,6 @@ button.side-item {
   .drive-compact-controls select,
   .drive-compact-controls .segmented {
     width: 100%;
-  }
-
-  .drive-storage-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .drive-tab {
-    flex: 1 1 140px;
-    justify-content: flex-start;
   }
 
   .task-table .table-head {
