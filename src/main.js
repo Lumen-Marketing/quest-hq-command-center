@@ -403,7 +403,7 @@ const state = {
   formEditorTab: 'questions',
   taskView: localStorage.getItem(TASK_VIEW_KEY) || 'table',
   driveFolder: 'home',
-  driveView: localStorage.getItem(DRIVE_VIEW_KEY) || 'grid',
+  driveView: localStorage.getItem(DRIVE_VIEW_KEY) || 'list',
   sync: { label: 'Loading workspace...', mode: 'loading' },
   dataLoaded: false,
   dataLoading: false,
@@ -1119,8 +1119,8 @@ function renderFilesPage(route, companyId) {
               </nav>
               <div class="drive-compact-controls">
                 <div class="segmented" role="group" aria-label="Drive view">
-                  <button class="${state.driveView === 'grid' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="grid"><i class="ti ti-layout-grid"></i>Grid</button>
-                  <button class="${state.driveView === 'list' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="list"><i class="ti ti-list"></i>List</button>
+                  <button class="${state.driveView === 'grid' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="grid"><i class="ti ti-layout-grid"></i>Icons</button>
+                  <button class="${state.driveView === 'list' ? 'active' : ''}" type="button" data-action="set-drive-view" data-view="list"><i class="ti ti-list-details"></i>Details</button>
                 </div>
               </div>
             </section>
@@ -1134,15 +1134,35 @@ function renderFilesPage(route, companyId) {
 
 function renderDriveExplorer(companyId, folder, job, files) {
   const folders = driveExplorerFolders(companyId, folder, job);
+  const items = folders.map((item) => ({ kind: 'folder', ...item })).concat(files.map((file) => ({ kind: 'file', file })));
   const title = job ? job.name : folder === 'home' ? 'This folder' : folderLabel(folder);
   return `
     <section class="drive-section-title">
       <div><h3>${h(title)}</h3><span>${folders.length} folder${folders.length === 1 ? '' : 's'} / ${files.length} file${files.length === 1 ? '' : 's'}</span></div>
     </section>
-    ${folders.length ? `
-      ${state.driveView === 'list' ? renderFolderList(folders) : `<section class="drive-folder-grid explorer-grid">${folders.map(renderFolderTile).join('')}</section>`}
-    ` : ''}
-    ${renderDriveFiles(companyId, files)}
+    ${state.driveView === 'list' ? renderExplorerDetails(items) : renderExplorerIcons(items)}
+  `;
+}
+
+function renderExplorerDetails(items) {
+  return `
+    <div class="explorer-table" role="table" aria-label="File explorer">
+      <div class="explorer-head" role="row">
+        <span>Name</span>
+        <span>Date modified</span>
+        <span>Type</span>
+        <span>Size</span>
+      </div>
+      ${items.map((item) => item.kind === 'folder' ? renderFolderRow(item) : renderFileRow(item.file)).join('') || emptyState('This folder is empty.')}
+    </div>
+  `;
+}
+
+function renderExplorerIcons(items) {
+  return `
+    <section class="drive-folder-grid explorer-grid">
+      ${items.map((item) => item.kind === 'folder' ? renderFolderTile(item) : renderFileTile(item.file)).join('') || emptyState('This folder is empty.')}
+    </section>
   `;
 }
 
@@ -1156,51 +1176,35 @@ function renderFolderTile(folder) {
   `;
 }
 
-function renderFolderList(folders) {
+function renderFolderRow(folder) {
   return `
-    <div class="file-table-live explorer-table">
-      ${folders.map((folder) => `
-        <a class="file-row-live folder-row-live" href="${h(folder.href)}" data-router>
-          <span class="file-type folder"><i class="ti ${h(folder.icon || 'ti-folder')}"></i></span>
-          <strong>${h(folder.name)}<span>${h(folder.caption || 'Folder')}</span></strong>
-          <span>Folder</span>
-          <span>${h(folder.countLabel || '0 items')}</span>
-          <span>${h(folder.updatedLabel || '')}</span>
-        </a>
-      `).join('')}
-    </div>
+    <a class="explorer-row folder-row-live" href="${h(folder.href)}" data-router role="row">
+      <span class="explorer-name"><span class="file-type folder"><i class="ti ${h(folder.icon || 'ti-folder')}"></i></span><strong>${h(folder.name)}</strong></span>
+      <span>${h(folder.updatedLabel || '')}</span>
+      <span>Folder</span>
+      <span>${h(folder.countLabel || '')}</span>
+    </a>
   `;
 }
 
-function renderDriveFiles(companyId, files) {
-  const title = 'Files';
+function renderFileRow(file) {
   return `
-    <section class="drive-section-title recent-title">
-      <div><h3>${h(title)}</h3><span>${files.length} visible file${files.length === 1 ? '' : 's'}</span></div>
-    </section>
-    ${state.driveView === 'list' ? `
-      <div class="file-table-live">
-        ${files.map((file) => `
-          <button type="button" class="file-row-live ${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}">
-            <span class="file-type ${h(fileTypeClass(file))}">${h(fileTypeLabel(file).slice(0, 3).toUpperCase())}</span>
-            <strong>${h(file.file_name)}<span>${h(file.notes || file.object_path || folderLabel(file.folder))}</span></strong>
-            <span>${h(file.category || folderLabel(file.folder))}</span>
-            <span>${h(jobById(file.job_id)?.name || 'Company shared')}</span>
-            <span>${formatBytes(file.size_bytes)}</span>
-          </button>
-        `).join('') || emptyState('No files match this Drive view.')}
-      </div>
-    ` : `
-      <div class="file-grid-live">
-        ${files.map((file) => `
-          <button type="button" class="file-card-live ${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}">
-            <span class="file-thumb">${fileThumb(file)}</span>
-            <strong>${h(file.file_name)}</strong>
-            <span>${h(file.category || folderLabel(file.folder))} / ${formatBytes(file.size_bytes)}</span>
-          </button>
-        `).join('') || emptyState('No files match this Drive view.')}
-      </div>
-    `}
+    <button type="button" class="explorer-row ${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}" role="row">
+      <span class="explorer-name"><span class="file-type ${h(fileTypeClass(file))}">${h(fileTypeLabel(file).slice(0, 3).toUpperCase())}</span><strong>${h(file.file_name)}</strong></span>
+      <span>${formatDate(file.updated_at || file.created_at)}</span>
+      <span>${h(fileTypeLabel(file))}</span>
+      <span>${formatBytes(file.size_bytes)}</span>
+    </button>
+  `;
+}
+
+function renderFileTile(file) {
+  return `
+    <button type="button" class="file-card-live ${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}">
+      <span class="file-thumb">${fileThumb(file)}</span>
+      <strong>${h(file.file_name)}</strong>
+      <span>${h(fileTypeLabel(file))} / ${formatBytes(file.size_bytes)}</span>
+    </button>
   `;
 }
 
@@ -1232,6 +1236,54 @@ function renderFileDetails(file, companyId) {
     <div class="file-detail-actions">
       <button class="btn" type="button" data-action="download-file" data-file-id="${h(file.id)}"><i class="ti ti-download"></i>Download</button>
       <button class="btn danger" type="button" data-action="delete-file" data-file-id="${h(file.id)}"><i class="ti ti-trash"></i>Delete</button>
+    </div>
+  `;
+}
+
+function renderFileViewer(file, companyId) {
+  return `
+    <section class="file-viewer-layout">
+      <div class="file-viewer-stage">
+        ${renderFilePreview(file)}
+      </div>
+      <aside class="file-viewer-meta">
+        <div class="file-open-head">
+          ${fileThumb(file)}
+          <div>
+            <strong>${h(file.file_name)}</strong>
+            <span>${h(fileTypeLabel(file))} / ${formatBytes(file.size_bytes)}</span>
+          </div>
+        </div>
+        <div class="file-detail-list">
+          ${detailRow('Location', folderLabel(file.folder))}
+          ${detailRow('Job', jobById(file.job_id)?.name || 'Company shared')}
+          ${detailRow('Uploaded by', file.uploaded_by_label || 'Quest HQ')}
+          ${detailRow('Modified', formatDate(file.updated_at || file.created_at))}
+          ${detailRow('Storage', file.object_path || 'Metadata only')}
+        </div>
+        <div class="file-detail-actions">
+          <button class="btn" type="button" data-action="download-file" data-file-id="${h(file.id)}"><i class="ti ti-download"></i>Download</button>
+          <button class="btn danger" type="button" data-action="delete-file" data-file-id="${h(file.id)}"><i class="ti ti-trash"></i>Delete</button>
+        </div>
+      </aside>
+    </section>
+  `;
+}
+
+function renderFilePreview(file) {
+  const type = fileTypeClass(file);
+  if (file.signed_url && type === 'image') return `<img class="file-preview-media" src="${h(file.signed_url)}" alt="" />`;
+  if (file.signed_url && type === 'pdf') return `<iframe class="file-preview-frame" src="${h(file.signed_url)}" title="${h(file.file_name)}"></iframe>`;
+  if (file.signed_url && type === 'text') return `<iframe class="file-preview-frame text" src="${h(file.signed_url)}" title="${h(file.file_name)}"></iframe>`;
+  if (['doc', 'sheet'].includes(type) && file.signed_url) {
+    return `<iframe class="file-preview-frame" src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(file.signed_url)}" title="${h(file.file_name)}"></iframe>`;
+  }
+  return `
+    <div class="file-preview-empty">
+      ${fileThumb(file, true)}
+      <strong>${h(fileTypeLabel(file))} preview</strong>
+      <p>${h(file.object_path ? 'Preview will load when a signed file URL is available.' : 'This is a metadata-only file record. Upload the actual file object to preview it here.')}</p>
+      ${file.notes ? `<pre>${h(file.notes)}</pre>` : ''}
     </div>
   `;
 }
@@ -1854,7 +1906,7 @@ function renderTaskRouteModal(route, companyId) {
 function renderFileDetailModal(companyId) {
   const file = state.selectedFileId ? state.files.find((item) => item.id === state.selectedFileId) : null;
   if (!file) return '';
-  return renderDrawerShell('Company Drive', file.file_name, renderFileDetails(file, companyId));
+  return renderModalShell('Open file', file.file_name, renderFileViewer(file, companyId), 'file-viewer-modal');
 }
 
 function renderFormsToolsModal(companyId) {
@@ -3489,20 +3541,31 @@ function filteredDriveFiles(companyId = activeCompanyId(), folder = 'home', jobI
 
 function fileTypeLabel(file) {
   const type = String(file.mime_type || '').toLowerCase();
+  const ext = fileExtension(file);
   if (type.includes('pdf')) return 'PDF';
-  if (type.includes('image')) return 'Image';
-  if (type.includes('zip')) return 'Zip';
-  if (type.includes('spreadsheet') || type.includes('excel')) return 'Sheet';
-  if (type.includes('word') || type.includes('document')) return 'Doc';
-  return folderLabel(file.folder);
+  if (ext === 'pdf') return 'PDF';
+  if (type.includes('image') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'Image';
+  if (type.includes('zip') || ['zip', 'rar', '7z'].includes(ext)) return 'Archive';
+  if (type.includes('spreadsheet') || type.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext)) return 'Excel';
+  if (type.includes('word') || ['doc', 'docx'].includes(ext)) return 'Word';
+  if (type.includes('text') || ['txt', 'md', 'json', 'csv', 'log'].includes(ext)) return 'Text';
+  if (type.includes('presentation') || ['ppt', 'pptx'].includes(ext)) return 'PowerPoint';
+  return ext ? ext.toUpperCase() : folderLabel(file.folder);
 }
 
 function fileTypeClass(file) {
   const label = fileTypeLabel(file).toLowerCase();
   if (label === 'pdf') return 'pdf';
   if (label === 'image') return 'image';
-  if (label === 'sheet') return 'sheet';
+  if (label === 'excel') return 'sheet';
+  if (label === 'text') return 'text';
+  if (['word', 'powerpoint'].includes(label)) return 'doc';
+  if (label === 'archive') return 'zip';
   return 'doc';
+}
+
+function fileExtension(file) {
+  return String(file.file_name || '').split('.').pop()?.toLowerCase() || '';
 }
 
 function fileThumb(file, large = false) {
@@ -4021,9 +4084,12 @@ function folderIdFromCategory(category) {
 }
 
 function fileIcon(file) {
-  if (file.mime_type.includes('image')) return 'ti-photo';
-  if (file.mime_type.includes('pdf')) return 'ti-file-type-pdf';
-  if (file.mime_type.includes('zip')) return 'ti-file-zip';
+  const kind = fileTypeClass(file);
+  if (kind === 'image') return 'ti-photo';
+  if (kind === 'pdf') return 'ti-file-type-pdf';
+  if (kind === 'zip') return 'ti-file-zip';
+  if (kind === 'sheet') return 'ti-file-spreadsheet';
+  if (kind === 'text') return 'ti-file-text';
   return 'ti-file-description';
 }
 
