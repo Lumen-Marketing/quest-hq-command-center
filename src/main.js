@@ -26,7 +26,7 @@ const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
 const DRIVE_FILTER_KEY = 'quest-hq-drive-filter';
 
 const STAGES = ['Lead', 'Site Review', 'Estimate', 'Approved', 'Active', 'Closed'];
-const JOB_TABS = ['pipeline', 'list', 'profile', 'editor'];
+const JOB_TABS = ['pipeline', 'list', 'profile'];
 const TASK_STATUSES = ['todo', 'pending', 'hold', 'review', 'done'];
 const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
 const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
@@ -549,7 +549,6 @@ function shellTemplate(route, workspace) {
           </label>
           <span class="sync-pill ${h(state.sync.mode)}" data-sync-state>${h(state.sync.label)}</span>
           <button class="btn" type="button" data-action="refresh-data" title="Refresh workspace data"><i class="ti ti-refresh"></i></button>
-          <a class="btn btn-primary" href="${appHref(companyPath('tasks', { new: '1' }, companyId))}" data-router><i class="ti ti-plus"></i>New task</a>
           <div class="account-menu">
             <button class="avatar-button" type="button" data-action="open-profile" aria-label="Open Quest profile">
               ${renderAvatar(session.profile, 'avatar')}
@@ -572,8 +571,7 @@ function shellTemplate(route, workspace) {
         </main>
       </div>
     </div>
-    ${state.modal === 'profile' ? renderProfileModal(session.profile) : ''}
-    ${state.modal === 'file-upload' ? renderFileUploadModal() : ''}
+    ${renderActiveModal(route, session)}
   `;
 }
 
@@ -596,14 +594,23 @@ function renderDeck(route) {
       navItem(route, companyPath('files', {}, companyId), 'ti-folder', 'Files', files.length),
       navItem(route, companyPath('forms', {}, companyId), 'ti-clipboard-list', 'Forms', forms.length),
       navItem(route, companyPath('analytics', {}, companyId), 'ti-chart-bar', 'Analytics'),
+      plannedNavItem('ti-users-group', 'CRM'),
+      plannedNavItem('ti-ticket', 'Tickets'),
+      plannedNavItem('ti-receipt-dollar', 'Finance'),
+      plannedNavItem('ti-books', 'Knowledge Base'),
+      plannedNavItem('ti-automation', 'Automations'),
+      plannedNavItem('ti-template', 'Templates'),
     ])}
     ${navGroup('Company', [
       navItem(route, companyPath('users', {}, companyId), 'ti-users', 'Users', users.length),
       navItem(route, companyPath('settings', {}, companyId), 'ti-settings', 'Settings'),
+      plannedNavItem('ti-hierarchy-3', 'Team chart'),
     ])}
     ${navGroup('Operations', [
       navItem(route, companyPath('time', {}, companyId), 'ti-clock', 'My time', '3.3h'),
       navItem(route, companyPath('approvals', {}, companyId), 'ti-user-check', 'Approvals', 0),
+      plannedNavItem('ti-users', 'Team workload'),
+      plannedNavItem('ti-clock-hour-4', 'Clock dashboard'),
     ])}
   `;
 }
@@ -628,6 +635,24 @@ function navItem(route, path, icon, label, count = '') {
   `;
 }
 
+function plannedNavItem(icon, label) {
+  return `
+    <button class="side-item planned" type="button" disabled aria-disabled="true">
+      <i class="ti ${h(icon)}"></i>
+      <span>${h(label)}</span>
+      <b>Planned</b>
+    </button>
+  `;
+}
+
+function compactTabs(label, items) {
+  return `
+    <nav class="tabbar compact-tabbar" aria-label="${h(label)}">
+      ${items.map(([path, text, active]) => `<a class="${active ? 'active' : ''}" href="${appHref(path)}" data-router>${h(text)}</a>`).join('')}
+    </nav>
+  `;
+}
+
 function renderWorkspace(route) {
   if (route.name === 'command') return renderCompanyDashboard(activeCompanyId());
   if (route.name !== 'company') return renderPlannedPage(route.name);
@@ -635,11 +660,11 @@ function renderWorkspace(route) {
   if (route.section === 'jobs') return renderJobsPage(route, companyId);
   if (route.section === 'tasks') return renderTasksPage(route, companyId);
   if (route.section === 'files') return renderFilesPage(route, companyId);
-  if (route.section === 'users') return renderUsersPage(companyId);
-  if (route.section === 'settings') return renderSettingsPage(companyId);
+  if (route.section === 'users') return renderUsersPage(route, companyId);
+  if (route.section === 'settings') return renderSettingsPage(route, companyId);
   if (route.section === 'forms') return renderFormsPage(companyId);
   if (route.section === 'analytics') return renderAnalyticsPage(route, companyId);
-  if (route.section === 'time' || route.section === 'approvals') return renderOperationsPage(route.section, companyId);
+  if (route.section === 'time' || route.section === 'approvals') return renderOperationsPage(route, companyId);
   return renderPlannedPage(route.section);
 }
 
@@ -651,7 +676,7 @@ function renderCompanyDashboard(companyId) {
   return `
     ${workspaceHeader('Company dashboard', 'Live context for this company workspace.', `
       <a class="btn" href="${appHref(companyPath('files', {}, companyId))}" data-router><i class="ti ti-folder"></i>Open drive</a>
-      <a class="btn btn-primary" href="${appHref(companyPath('tasks', { new: '1' }, companyId))}" data-router><i class="ti ti-plus"></i>New task</a>
+      <a class="btn btn-primary" href="${appHref(companyPath('jobs', {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Open jobs</a>
     `)}
     ${metricGrid([
       ['Jobs', jobs.length],
@@ -780,7 +805,7 @@ function renderJobsPage(route, companyId) {
   return `
     ${workspaceHeader('Jobs', 'Company job records, clients, scope, and linked work.', `
       <a class="btn" href="${appHref(companyPath('files', job ? { job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-folder"></i>Drive</a>
-      <a class="btn btn-primary" href="${appHref(companyPath('jobs', { tab: 'editor', ...(job ? { job_id: job.id } : {}) }, companyId))}" data-router><i class="ti ti-plus"></i>Add job</a>
+      <button class="btn btn-primary" type="button" data-action="open-job-form" data-mode="new"><i class="ti ti-plus"></i>Add job</button>
     `)}
     <section class="job-toolbar">
       <label>
@@ -805,7 +830,6 @@ function renderJobPanel(tab, companyId, job) {
   if (tab === 'pipeline') return renderPipeline(companyId);
   if (tab === 'list') return renderJobList(companyId);
   if (tab === 'profile') return renderJobProfile(companyId, job);
-  if (tab === 'editor') return renderJobEditor(companyId, job);
   return renderPipeline(companyId);
 }
 
@@ -872,7 +896,7 @@ function renderJobProfile(companyId, job) {
         ])}
         <div class="button-grid">
           <a class="btn btn-primary" href="${appHref(companyPath('tasks', { job_id: job.id }, companyId))}" data-router>Open tasks</a>
-          <a class="btn" href="${appHref(companyPath('jobs', { tab: 'editor', job_id: job.id }, companyId))}" data-router>Edit job</a>
+          <button class="btn" type="button" data-action="open-job-form" data-mode="edit" data-job-id="${h(job.id)}">Edit job</button>
         </div>
       </aside>
       <article class="panel span-2">
@@ -891,7 +915,7 @@ function renderJobProfile(companyId, job) {
 function renderJobEditor(companyId, job) {
   const edit = job || blankJob(companyId);
   return `
-    <form class="panel job-editor" data-job-form>
+    <form class="job-editor" data-job-form>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
       <div class="section-head span-2">
         <div><h2>${job ? 'Edit job' : 'Create job'}</h2><p>Creates the company job container for tasks, files, forms, and reporting.</p></div>
@@ -911,6 +935,7 @@ function renderJobEditor(companyId, job) {
       <div class="form-actions span-2">
         <button class="btn btn-primary" type="submit">Save job</button>
         ${job ? `<button class="btn danger" type="button" data-action="delete-job" data-job-id="${h(job.id)}">Delete</button>` : ''}
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
       </div>
     </form>
   `;
@@ -918,9 +943,6 @@ function renderJobEditor(companyId, job) {
 
 function renderTasksPage(route, companyId) {
   const job = route.jobId ? jobById(route.jobId) : null;
-  const taskId = route.params.get('task_id') || state.selectedTaskId;
-  const task = taskId ? taskById(taskId) : filteredTasks(companyId, job?.id)[0] || null;
-  const editing = route.params.get('new') === '1' || route.params.get('edit') === '1';
   const tasks = filteredTasks(companyId, job?.id);
   return `
     ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Native Quest task execution backed by the company task table.', `
@@ -928,13 +950,10 @@ function renderTasksPage(route, companyId) {
       <a class="btn btn-primary" href="${appHref(companyPath('tasks', { ...(job ? { job_id: job.id } : {}), new: '1' }, companyId))}" data-router><i class="ti ti-plus"></i>New task</a>
     `)}
     ${renderTaskToolbar(companyId, job)}
-    <section class="task-layout ${editing ? 'editing' : ''}">
+    <section class="task-layout task-layout-flat">
       <article class="panel task-main">
         ${state.taskView === 'board' ? renderTaskBoard(companyId, tasks) : renderTaskTable(companyId, tasks)}
       </article>
-      <aside class="panel detail-panel">
-        ${editing ? renderTaskForm(companyId, job, route.params.get('edit') === '1' ? task : null) : renderTaskDetail(companyId, task)}
-      </aside>
     </section>
   `;
 }
@@ -1057,7 +1076,7 @@ function renderTaskForm(companyId, job, task) {
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">Save task</button>
         ${task ? `<button class="btn danger" type="button" data-action="delete-task" data-task-id="${h(task.id)}">Delete</button>` : ''}
-        <a class="btn" href="${appHref(companyPath('tasks', { ...(edit.project_id ? { job_id: edit.project_id } : {}) }, companyId))}" data-router>Cancel</a>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
       </div>
     </form>
   `;
@@ -1068,7 +1087,6 @@ function renderFilesPage(route, companyId) {
   state.driveFolder = folder;
   const job = route.jobId ? jobById(route.jobId) : null;
   const files = filteredDriveFiles(companyId, folder, job?.id || '');
-  const selected = selectedDriveFile(files);
   const metrics = driveMetrics(companyId);
   return `
     <section class="tool-page drive-page">
@@ -1091,36 +1109,9 @@ function renderFilesPage(route, companyId) {
             <button class="btn" type="button" data-action="refresh-data"><i class="ti ti-refresh"></i>Refresh</button>
           </div>
         </header>
-        <div class="drive-shell">
-          <aside class="drive-rail">
-            <div class="drive-rail-section">
-              <span>Drive</span>
-              ${DRIVE_FILTERS.map(([id, label, icon]) => driveFilterButton(id, label, icon, driveFilterCount(companyId, id))).join('')}
-            </div>
-            <div class="drive-rail-section">
-              <span>Folders</span>
-              ${DRIVE_FOLDERS.map(([id, label,, icon]) => `
-                <a class="${folder === id && !job ? 'active' : ''}" href="${appHref(companyPath('files', { folder: id }, companyId))}" data-router>
-                  <i class="ti ${h(icon)}"></i>
-                  <span>${h(label)}</span>
-                  <b>${h(String(driveFolderCount(companyId, id)))}</b>
-                </a>
-              `).join('')}
-            </div>
-            <div class="drive-rail-block">
-              <span>Job folder</span>
-              <select data-file-job-filter>
-                <option value="">All jobs</option>
-                ${companyJobs(companyId).map((item) => `<option value="${h(item.id)}" ${job?.id === item.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="drive-capacity">
-              <span>${formatBytes(metrics.bytes)} of 1 GB</span>
-              <b><i style="width:${h(String(Math.min(100, Math.round((metrics.bytes / 1073741824) * 100))))}%"></i></b>
-              <small>${metrics.count} file${metrics.count === 1 ? '' : 's'} in this company</small>
-            </div>
-          </aside>
+        <div class="drive-shell drive-shell-compact">
           <div class="drive-main">
+            ${renderDriveTabs(companyId, folder, job)}
             <section class="file-toolbar">
               <label>
                 <span>Folder</span>
@@ -1154,11 +1145,39 @@ function renderFilesPage(route, companyId) {
             ${folder === 'home' && state.driveFilter === 'my-drive' && !job ? renderDriveHome(companyId) : ''}
             ${renderDriveFiles(companyId, files)}
           </div>
-          <aside class="drive-details">
-            ${renderFileDetails(selected, companyId)}
-          </aside>
         </div>
       </section>
+    </section>
+  `;
+}
+
+function renderDriveTabs(companyId, folder, job) {
+  const metrics = driveMetrics(companyId);
+  return `
+    <section class="drive-tabs" aria-label="Drive sections">
+      <div class="drive-tab-row">
+        ${DRIVE_FILTERS.map(([id, label, icon]) => `
+          <button class="drive-tab ${state.driveFilter === id ? 'active' : ''}" type="button" data-action="set-drive-filter" data-filter="${h(id)}">
+            <i class="ti ${h(icon)}"></i>
+            <span>${h(label)}</span>
+            <b>${h(String(driveFilterCount(companyId, id)))}</b>
+          </button>
+        `).join('')}
+      </div>
+      <div class="drive-tab-row">
+        ${DRIVE_FOLDERS.map(([id, label,, icon]) => `
+          <a class="drive-tab ${folder === id && !job ? 'active' : ''}" href="${appHref(companyPath('files', { folder: id }, companyId))}" data-router>
+            <i class="ti ${h(icon)}"></i>
+            <span>${h(label)}</span>
+            <b>${h(String(driveFolderCount(companyId, id)))}</b>
+          </a>
+        `).join('')}
+      </div>
+      <div class="drive-storage-strip">
+        <span>${formatBytes(metrics.bytes)} of 1 GB</span>
+        <b><i style="width:${h(String(Math.min(100, Math.round((metrics.bytes / 1073741824) * 100))))}%"></i></b>
+        <small>${metrics.count} file${metrics.count === 1 ? '' : 's'} in this company</small>
+      </div>
     </section>
   `;
 }
@@ -1305,25 +1324,32 @@ function renderFileUploadModal() {
   `;
 }
 
-function renderUsersPage(companyId) {
+function renderUsersPage(route, companyId) {
   const members = companyMembers(companyId);
+  const tab = ['members', 'access'].includes(route.params.get('tab')) ? route.params.get('tab') : 'members';
   return `
     ${workspaceHeader('Users', 'Company members, roles, workers, and access context.', `
       <a class="btn btn-primary" href="${appHref(companyPath('settings', {}, companyId))}" data-router><i class="ti ti-settings"></i>Settings</a>
     `)}
-    <section class="users-grid">
-      ${members.map((member) => `
-        <article class="user-card">
-          ${renderAvatar({ full_name: member.full_name, avatar_url: member.avatar_url }, 'avatar')}
-          <div>
-            <strong>${h(member.full_name)}</strong>
-            <span>${h(member.email)}</span>
-            <small>${h(roleForMember(companyId, member.id))}</small>
-          </div>
-        </article>
-      `).join('') || emptyState('No users assigned to this company yet.')}
-    </section>
-    <section class="panel top-gap">
+    ${compactTabs('Users sections', [
+      [companyPath('users', { tab: 'members' }, companyId), 'Members', tab === 'members'],
+      [companyPath('users', { tab: 'access' }, companyId), 'Access model', tab === 'access'],
+    ])}
+    ${tab === 'members' ? `
+      <section class="users-grid">
+        ${members.map((member) => `
+          <article class="user-card">
+            ${renderAvatar({ full_name: member.full_name, avatar_url: member.avatar_url }, 'avatar')}
+            <div>
+              <strong>${h(member.full_name)}</strong>
+              <span>${h(member.email)}</span>
+              <small>${h(roleForMember(companyId, member.id))}</small>
+            </div>
+          </article>
+        `).join('') || emptyState('No users assigned to this company yet.')}
+      </section>
+    ` : `
+    <section class="panel">
       <div class="section-head"><div><h2>Membership model</h2><p>company_memberships is the canonical table; legacy company_ids remain as backfill fields.</p></div></div>
       ${contractRows([
         ['Tenant key', 'company_id on jobs, tasks, files, forms, users, settings'],
@@ -1331,14 +1357,22 @@ function renderUsersPage(companyId) {
         ['Active role', roleForCompany(companyId)],
       ])}
     </section>
+    `}
   `;
 }
 
-function renderSettingsPage(companyId) {
+function renderSettingsPage(route, companyId) {
   const company = companyById(companyId);
+  const tab = ['company', 'access', 'team'].includes(route.params.get('tab')) ? route.params.get('tab') : 'company';
   return `
     ${workspaceHeader('Settings', 'Company settings, roles, approvals, and admin controls.', '')}
-    <section class="dashboard-grid">
+    ${compactTabs('Settings sections', [
+      [companyPath('settings', { tab: 'company' }, companyId), 'Company', tab === 'company'],
+      [companyPath('settings', { tab: 'access' }, companyId), 'Access', tab === 'access'],
+      [companyPath('settings', { tab: 'team' }, companyId), 'Workers', tab === 'team'],
+    ])}
+    <section class="dashboard-grid compact-settings-grid">
+      ${tab === 'company' ? `
       <article class="panel">
         <div class="section-head"><div><h2>Company</h2><p>Workspace identity.</p></div></div>
         ${contractRows([
@@ -1348,6 +1382,8 @@ function renderSettingsPage(companyId) {
           ['Visible jobs', companyJobs(companyId).length],
         ])}
       </article>
+      ` : ''}
+      ${tab === 'access' ? `
       <article class="panel">
         <div class="section-head"><div><h2>Access</h2><p>Prepared for Supabase Auth and RLS.</p></div></div>
         ${contractRows([
@@ -1361,12 +1397,15 @@ function renderSettingsPage(companyId) {
         <div class="section-head"><div><h2>Approvals</h2><p>Quest-owned access approval queue.</p></div></div>
         ${emptyState('No pending company approvals.')}
       </article>
+      ` : ''}
+      ${tab === 'team' ? `
       <article class="panel span-3">
         <div class="section-head"><div><h2>Workers and roles</h2><p>Company users stay here, not inside TaskManagement.</p></div></div>
         <div class="team-chart">
           ${companyMembers(companyId).map((member) => `<div><strong>${h(member.full_name)}</strong><span>${h(roleForMember(companyId, member.id))}</span></div>`).join('') || emptyState('No workers assigned.')}
         </div>
       </article>
+      ` : ''}
     </section>
   `;
 }
@@ -1382,14 +1421,7 @@ function renderFormsPage(companyId) {
           <span>Search</span>
           <input data-form-search value="${h(state.formQuery)}" placeholder="Find form, audience, or job" />
         </label>
-        <label>
-          <span>Type</span>
-          <select data-form-type-filter>
-            <option value="all" ${state.formTypeFilter === 'all' ? 'selected' : ''}>All types</option>
-            ${FORM_TYPES.map((type) => `<option value="${h(type)}" ${state.formTypeFilter === type ? 'selected' : ''}>${h(type)}</option>`).join('')}
-          </select>
-        </label>
-        <button class="btn" type="button" data-action="export-forms"><i class="ti ti-download"></i>Export JSON</button>
+        <button class="btn" type="button" data-action="open-forms-tools"><i class="ti ti-adjustments"></i>Tools</button>
         <button class="btn btn-primary" type="button" data-action="new-form"><i class="ti ti-plus"></i>New form</button>
       </div>
       <nav class="tabbar forms-tabs" aria-label="Forms workspace">
@@ -1460,19 +1492,9 @@ function renderFormSummary(companyId, form) {
       ${metricCard('Approval', form.require_approval ? 'Required' : 'Not required', 'Review flow')}
       ${metricCard('Email', form.collect_email ? 'Collected' : 'Optional', 'Submitter identity')}
     </div>
-    <div class="forms-summary-share">
-      <strong>Shareable preview URL</strong>
-      <input readonly value="${h(`${window.location.origin}${appHref(companyPath('forms', { form_id: form.id }, companyId))}`)}" />
-      <div class="form-actions">
-        <button class="btn" type="button" data-action="copy-form-link" data-form-id="${h(form.id)}">Copy</button>
-        <button class="btn btn-primary" type="button" data-action="edit-form" data-form-id="${h(form.id)}">Edit</button>
-      </div>
-    </div>
     <div class="forms-summary-actions">
-      <button class="btn" type="button" data-action="duplicate-form" data-form-id="${h(form.id)}"><i class="ti ti-copy"></i>Duplicate</button>
-      <button class="btn" type="button" data-action="publish-form" data-form-id="${h(form.id)}"><i class="ti ti-world-upload"></i>Publish</button>
-      <button class="btn" type="button" data-action="archive-form" data-form-id="${h(form.id)}"><i class="ti ti-archive"></i>Archive</button>
-      <button class="btn danger" type="button" data-action="delete-form" data-form-id="${h(form.id)}"><i class="ti ti-trash"></i>Delete</button>
+      <button class="btn btn-primary" type="button" data-action="edit-form" data-form-id="${h(form.id)}"><i class="ti ti-edit"></i>Edit</button>
+      <button class="btn" type="button" data-action="open-form-actions" data-form-id="${h(form.id)}"><i class="ti ti-dots"></i>Manage</button>
     </div>
   `;
 }
@@ -1737,7 +1759,8 @@ function renderFormsTemplates(companyId) {
   `;
 }
 
-function renderOperationsPage(name, companyId) {
+function renderOperationsPage(route, companyId) {
+  const name = route.section;
   const labels = {
     time: ['My time', 'Personal time and shift context inside the company workspace.'],
     approvals: ['Approvals', 'Company access approvals and role requests.'],
@@ -1745,6 +1768,10 @@ function renderOperationsPage(name, companyId) {
   const [title, summary] = labels[name] || labels.time;
   return `
     ${workspaceHeader(title, summary, '')}
+    ${compactTabs('Operations sections', [
+      [companyPath('time', {}, companyId), 'My time', name === 'time'],
+      [companyPath('approvals', {}, companyId), 'Approvals', name === 'approvals'],
+    ])}
     <section class="dashboard-grid">
       <article class="panel">
         <div class="section-head"><div><h2>Summary</h2><p>Quest-owned operational surface.</p></div></div>
@@ -1824,6 +1851,113 @@ function renderProfileModal(profile) {
   `;
 }
 
+function renderActiveModal(route, session) {
+  if (state.modal === 'profile') return renderProfileModal(session.profile);
+  if (state.modal === 'file-upload') return renderFileUploadModal();
+  if (state.modal === 'file-detail') return renderFileDetailModal(activeCompanyId());
+  if (state.modal === 'forms-tools') return renderFormsToolsModal(activeCompanyId());
+  if (state.modal === 'form-actions') return renderFormActionsModal(activeCompanyId(), selectedForm(activeCompanyId()));
+  if (state.modal === 'job-new') return renderJobFormModal(activeCompanyId(), null);
+  if (state.modal === 'job-edit') return renderJobFormModal(activeCompanyId(), selectedJob());
+
+  if (route.name === 'company' && route.section === 'jobs' && route.params.get('tab') === 'editor') {
+    return renderJobFormModal(route.companyId, route.jobId ? jobById(route.jobId) : selectedJob());
+  }
+  if (route.name === 'company' && route.section === 'tasks') {
+    return renderTaskRouteModal(route, route.companyId);
+  }
+  return '';
+}
+
+function renderModalShell(eyebrow, title, content, className = '') {
+  return `
+    <div class="modal-overlay">
+      <div class="modal-panel ${h(className)}" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <div><div class="eyebrow">${h(eyebrow)}</div><h2>${h(title)}</h2></div>
+          <button class="btn" type="button" data-action="close-modal">Close</button>
+        </div>
+        <div class="modal-body">${content}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDrawerShell(eyebrow, title, content) {
+  return `
+    <div class="modal-overlay drawer-overlay">
+      <aside class="modal-panel drawer-panel" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <div><div class="eyebrow">${h(eyebrow)}</div><h2>${h(title)}</h2></div>
+          <button class="btn" type="button" data-action="close-modal">Close</button>
+        </div>
+        <div class="modal-body">${content}</div>
+      </aside>
+    </div>
+  `;
+}
+
+function renderJobFormModal(companyId, job) {
+  return renderModalShell('Jobs', job ? 'Edit job' : 'Create job', renderJobEditor(companyId, job), 'wide-modal');
+}
+
+function renderTaskRouteModal(route, companyId) {
+  const job = route.jobId ? jobById(route.jobId) : null;
+  const taskId = route.params.get('task_id') || '';
+  const task = taskId ? taskById(taskId) : null;
+  if (route.params.get('new') === '1') {
+    return renderModalShell('Tasks', 'New task', renderTaskForm(companyId, job, null), 'task-modal');
+  }
+  if (route.params.get('edit') === '1' && task) {
+    return renderModalShell('Tasks', 'Edit task', renderTaskForm(companyId, job, task), 'task-modal');
+  }
+  if (task) {
+    return renderDrawerShell('Task detail', task.title, renderTaskDetail(companyId, task));
+  }
+  return '';
+}
+
+function renderFileDetailModal(companyId) {
+  const file = state.selectedFileId ? state.files.find((item) => item.id === state.selectedFileId) : null;
+  if (!file) return '';
+  return renderDrawerShell('Company Drive', file.file_name, renderFileDetails(file, companyId));
+}
+
+function renderFormsToolsModal(companyId) {
+  return renderModalShell('Forms', 'Tools', `
+    <div class="compact-tool-form">
+      <label>
+        <span>Type filter</span>
+        <select data-form-type-filter>
+          <option value="all" ${state.formTypeFilter === 'all' ? 'selected' : ''}>All types</option>
+          ${FORM_TYPES.map((type) => `<option value="${h(type)}" ${state.formTypeFilter === type ? 'selected' : ''}>${h(type)}</option>`).join('')}
+        </select>
+      </label>
+      <button class="btn" type="button" data-action="export-forms"><i class="ti ti-download"></i>Export JSON</button>
+      <button class="btn btn-primary" type="button" data-action="new-form"><i class="ti ti-plus"></i>New form</button>
+    </div>
+  `);
+}
+
+function renderFormActionsModal(companyId, form) {
+  if (!form) return renderModalShell('Forms', 'Manage form', emptyState('Choose a form first.'));
+  return renderModalShell('Forms', 'Manage form', `
+    <div class="forms-summary-share compact">
+      <strong>Shareable preview URL</strong>
+      <input readonly value="${h(`${window.location.origin}${appHref(companyPath('forms', { form_id: form.id }, companyId))}`)}" />
+      <button class="btn" type="button" data-action="copy-form-link" data-form-id="${h(form.id)}">Copy link</button>
+    </div>
+    <div class="modal-action-grid">
+      <button class="btn btn-primary" type="button" data-action="edit-form" data-form-id="${h(form.id)}"><i class="ti ti-edit"></i>Edit builder</button>
+      <button class="btn" type="button" data-action="duplicate-form" data-form-id="${h(form.id)}"><i class="ti ti-copy"></i>Duplicate</button>
+      <button class="btn" type="button" data-action="publish-form" data-form-id="${h(form.id)}"><i class="ti ti-world-upload"></i>Publish</button>
+      <button class="btn" type="button" data-action="archive-form" data-form-id="${h(form.id)}"><i class="ti ti-archive"></i>Archive</button>
+      <button class="btn" type="button" data-action="export-forms"><i class="ti ti-download"></i>Export library</button>
+      <button class="btn danger" type="button" data-action="delete-form" data-form-id="${h(form.id)}"><i class="ti ti-trash"></i>Delete</button>
+    </div>
+  `);
+}
+
 function onDocumentClick(event) {
   const action = event.target.closest('[data-action]');
   if (action) {
@@ -1880,10 +2014,30 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'open-job-form') {
+    event.preventDefault();
+    const jobId = node.dataset.jobId || '';
+    if (jobId) state.selectedJobId = jobId;
+    state.modal = node.dataset.mode === 'edit' ? 'job-edit' : 'job-new';
+    render();
+    return;
+  }
+  if (action === 'open-forms-tools') {
+    event.preventDefault();
+    state.modal = 'forms-tools';
+    render();
+    return;
+  }
+  if (action === 'open-form-actions') {
+    event.preventDefault();
+    selectForm(node.dataset.formId, false);
+    state.modal = 'form-actions';
+    render();
+    return;
+  }
   if (action === 'close-modal') {
     event.preventDefault();
-    state.modal = '';
-    render();
+    closeActiveModal();
     return;
   }
   if (action === 'set-task-view') {
@@ -1911,6 +2065,7 @@ function handleAction(event, node) {
   if (action === 'select-file') {
     event.preventDefault();
     state.selectedFileId = node.dataset.fileId || '';
+    state.modal = 'file-detail';
     render();
     return;
   }
@@ -1948,9 +2103,10 @@ function handleAction(event, node) {
   }
   if (action === 'edit-form') {
     event.preventDefault();
-    selectForm(node.dataset.formId);
+    selectForm(node.dataset.formId, false);
     state.formsTab = 'builder';
     state.formEditorTab = 'questions';
+    state.modal = '';
     render();
     return;
   }
@@ -2034,6 +2190,21 @@ function handleAction(event, node) {
     event.preventDefault();
     deleteTask(node.dataset.taskId);
   }
+}
+
+function closeActiveModal() {
+  const route = state.route || getRoute();
+  state.modal = '';
+  if (route.name === 'company' && route.section === 'tasks' && (route.params.get('new') || route.params.get('edit') || route.params.get('task_id'))) {
+    navigate(companyPath('tasks', route.jobId ? { job_id: route.jobId } : {}, route.companyId), { replace: true });
+    return;
+  }
+  if (route.name === 'company' && route.section === 'jobs' && route.params.get('tab') === 'editor') {
+    const job = route.jobId ? jobById(route.jobId) : selectedJob();
+    navigate(companyPath('jobs', { tab: job ? 'profile' : 'pipeline', ...(job ? { job_id: job.id } : {}) }, route.companyId), { replace: true });
+    return;
+  }
+  render();
 }
 
 function onDocumentSubmit(event) {
@@ -2197,6 +2368,7 @@ async function saveJob(form) {
     if (!result.error && result.data) {
       upsertJob(normalizeJob(result.data));
       state.sync = { label: 'Quest Supabase live', mode: 'live' };
+      state.modal = '';
       navigate(companyPath('jobs', { tab: 'profile', job_id: result.data.id }, payload.company_id), { replace: true });
       return;
     }
@@ -2204,6 +2376,7 @@ async function saveJob(form) {
   }
 
   upsertJob(payload);
+  state.modal = '';
   navigate(companyPath('jobs', { tab: 'profile', job_id: payload.id }, payload.company_id), { replace: true });
 }
 
@@ -2214,6 +2387,7 @@ async function deleteJob(id) {
   if (client) await client.from('jobs').delete().eq('id', id);
   state.jobs = state.jobs.filter((job) => job.id !== id);
   state.selectedJobId = companyJobs(companyId)[0]?.id || '';
+  state.modal = '';
   persistAll();
   navigate(companyPath('jobs', { tab: 'list' }, companyId), { replace: true });
 }
@@ -2243,6 +2417,7 @@ async function saveTask(form) {
     if (!result.error && result.data) {
       upsertTask(normalizeTask(result.data));
       state.sync = { label: 'Quest Supabase live', mode: 'live' };
+      state.modal = '';
       navigate(companyPath('tasks', { ...(payload.project_id ? { job_id: payload.project_id } : {}), task_id: payload.id }, companyId), { replace: true });
       return;
     }
@@ -2250,6 +2425,7 @@ async function saveTask(form) {
   }
 
   upsertTask(payload);
+  state.modal = '';
   navigate(companyPath('tasks', { ...(payload.project_id ? { job_id: payload.project_id } : {}), task_id: payload.id }, companyId), { replace: true });
 }
 
@@ -2260,6 +2436,7 @@ async function deleteTask(id) {
   if (client) await client.from('tasks').delete().eq('id', id);
   state.tasks = state.tasks.filter((task) => task.id !== id);
   state.selectedTaskId = '';
+  state.modal = '';
   persistAll();
   navigate(companyPath('tasks', {}, companyId), { replace: true });
 }
@@ -2354,6 +2531,7 @@ async function deleteFile(id) {
   }
   state.files = state.files.filter((item) => item.id !== id);
   state.selectedFileId = '';
+  state.modal = '';
   persistAll();
   render();
 }
@@ -2541,7 +2719,6 @@ function labelForTab(tab) {
     pipeline: 'Pipeline',
     list: 'List',
     profile: 'Profile',
-    editor: 'Editor',
   }[tab] || tab;
 }
 
@@ -3090,16 +3267,6 @@ function detailRow(label, value) {
   return `<div><strong>${h(label)}</strong><span>${h(value)}</span></div>`;
 }
 
-function driveFilterButton(id, label, icon, count = '') {
-  return `
-    <button class="${state.driveFilter === id ? 'active' : ''}" type="button" data-action="set-drive-filter" data-filter="${h(id)}">
-      <i class="ti ${h(icon)}"></i>
-      <span>${h(label)}</span>
-      ${count !== '' ? `<b>${h(String(count))}</b>` : ''}
-    </button>
-  `;
-}
-
 function driveViewLabel() {
   return DRIVE_FILTERS.find(([id]) => id === state.driveFilter)?.[1] || 'My Drive';
 }
@@ -3124,13 +3291,6 @@ function driveContextPill(label, value) {
 function driveMetrics(companyId = activeCompanyId()) {
   const files = companyFiles(companyId);
   return { count: files.length, bytes: sum(files, 'size_bytes') };
-}
-
-function selectedDriveFile(files) {
-  const visible = files || [];
-  const selected = visible.find((file) => file.id === state.selectedFileId) || visible[0] || null;
-  state.selectedFileId = selected?.id || '';
-  return selected;
 }
 
 function filteredDriveFiles(companyId = activeCompanyId(), folder = 'home', jobId = '') {
@@ -3382,16 +3542,17 @@ function createForm(companyId) {
   state.selectedQuestionId = form.questions[0]?.id || '';
   state.formsTab = 'builder';
   state.formEditorTab = 'questions';
+  state.modal = '';
   saveFormsState('New form created');
   render();
 }
 
-function selectForm(id) {
+function selectForm(id, shouldRender = true) {
   const form = formById(id);
   if (!form) return;
   state.selectedFormId = form.id;
   state.selectedQuestionId = form.questions[0]?.id || '';
-  render();
+  if (shouldRender) render();
 }
 
 function saveFormsState(label = 'Forms saved locally') {
@@ -3437,6 +3598,7 @@ function deleteForm(id) {
   state.formResponses = state.formResponses.filter((response) => response.form_id !== formId);
   state.selectedFormId = companyForms(activeCompanyId())[0]?.id || '';
   state.selectedQuestionId = selectedForm(activeCompanyId())?.questions[0]?.id || '';
+  state.modal = '';
   saveFormsState('Form deleted locally');
   render();
 }
@@ -3480,6 +3642,7 @@ function useFormTemplate(companyId, templateId) {
   state.selectedQuestionId = form.questions[0]?.id || '';
   state.formsTab = 'builder';
   state.formEditorTab = 'questions';
+  state.modal = '';
   saveFormsState('Template added');
   render();
 }
