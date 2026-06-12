@@ -1449,26 +1449,6 @@ function renderFormsPage(companyId) {
 function renderFormsLibrary(companyId, forms, current) {
   return `
     <section class="forms-home">
-      <article class="forms-start-panel panel">
-        <div class="forms-panel-head">
-          <div>
-            <strong>Create a form</strong>
-            <span>Start blank or pick a company-ready template.</span>
-          </div>
-        </div>
-        <div class="forms-start-actions">
-          <button type="button" class="form-start-choice" data-action="new-form" data-start-tab="blank">
-            <span><i class="ti ti-clipboard-plus"></i></span>
-            <strong>Blank form</strong>
-            <small>Build from a title card and one starter question.</small>
-          </button>
-          <button type="button" class="form-start-choice" data-action="new-form" data-start-tab="templates">
-            <span><i class="ti ti-template"></i></span>
-            <strong>Template</strong>
-            <small>Choose inspection, approval, intake, or safety starters.</small>
-          </button>
-        </div>
-      </article>
       <article class="forms-recent-panel panel">
         <div class="forms-panel-head">
           <div>
@@ -1481,7 +1461,6 @@ function renderFormsLibrary(companyId, forms, current) {
             <article class="form-card ${state.expandedFormIds.has(form.id) ? 'expanded' : ''} ${current?.id === form.id ? 'active' : ''}">
               <span class="form-card-top">
                 <i class="ti ti-clipboard-list"></i>
-                <b>${h(form.status)}</b>
               </span>
               <span class="form-card-main">
                 <strong>${h(form.title)}</strong>
@@ -1496,6 +1475,7 @@ function renderFormsLibrary(companyId, forms, current) {
                 <small>${formQuestionCount(form)} questions</small>
                 <em>${responsesForForm(form.id).length} responses</em>
                 <em>Updated ${formatDate(form.updated_at)}</em>
+                <em>${h(form.status)}</em>
               </span>
               ${state.expandedFormIds.has(form.id) ? `
                 <div class="form-card-detail">
