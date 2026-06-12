@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0" />
     <title>Jobs | Quest HQ</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="assets/quest-hq.css?v=quest-job-center-task-merge-v1" />
+    <link rel="stylesheet" href="assets/quest-hq.css?v=quest-job-center-task-ui-merge-v2" />
   </head>
   <body class="auth-loading" data-page="jobs.html" data-module="jobs">
     <div class="app-shell">
@@ -17,7 +17,7 @@
           <span class="brand-mark">Q</span>
           <span><strong>Quest HQ</strong><small>Operations Command</small></span>
         </a>
-        <div class="build-badge">Quest Job Center Task Merge v1</div>
+        <div class="build-badge">Quest Job Center Task UI Merge v2</div>
         <section class="quest-account" data-quest-account hidden>
           <button class="quest-account-main" type="button" data-quest-profile-open>
             <span class="quest-avatar" data-quest-avatar>Q</span>
@@ -38,32 +38,62 @@
         </div>
       </aside>
       <main class="main">
-        <section class="workspace job-center" data-job-center data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
-    <div class="job-command panel">
-      <div class="job-search">
-        <span>Search</span>
-        <input data-job-search placeholder="Search jobs, clients, owners, addresses" />
-      </div>
-      <select data-job-stage-filter aria-label="Filter jobs by stage">
-        <option value="all">All business statuses</option>
-        <option>Lead</option>
-        <option>Site Review</option>
-        <option>Estimate</option>
-        <option>Approved</option>
-        <option>Active</option>
-        <option>Closed</option>
-      </select>
-      <span class="sync-pill" data-job-sync>Connecting to Supabase...</span>
-      <button class="secondary-button" type="button" data-job-refresh>Refresh</button>
-      <button class="primary-button" type="button" data-job-new>Add Job Workspace</button>
-    </div>
-    <div class="tabs" role="tablist">
-      <button class="active" data-tab="pipeline">Pipeline</button>
-      <button data-tab="list">Job List</button>
-      <button data-tab="profile">Profile</button>
-      <button data-tab="tasks">Tasks</button>
-      <button data-tab="editor">Job Editor</button>
-    </div>
+        <section class="workspace job-center job-center-task-ui" data-job-center data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
+    <div class="job-center-app">
+      <header class="job-center-topbar">
+        <div class="job-center-topbar-left">
+          <a class="job-center-logo" href="index.html" aria-label="Quest HQ Command Center">Q</a>
+          <div>
+            <div class="job-center-brand">Quest HQ</div>
+            <div class="job-center-sub">Job Center</div>
+          </div>
+        </div>
+        <div class="job-center-topbar-right">
+          <label class="job-center-global-search">
+            <span>Search</span>
+            <input data-job-search placeholder="Search jobs, clients, owners, addresses" />
+          </label>
+          <span class="sync-pill" data-job-sync>Connecting to Supabase...</span>
+          <button class="secondary-button" type="button" data-job-refresh>Refresh</button>
+          <button class="primary-button" type="button" data-job-new>Add Job</button>
+          <section class="quest-account job-center-account" data-quest-account hidden>
+            <button class="quest-account-main" type="button" data-quest-profile-open aria-label="Open Quest profile">
+              <span class="quest-avatar" data-quest-avatar>Q</span>
+              <span class="job-center-account-text"><strong data-quest-account-name>Loading account</strong><small data-quest-account-role>Checking access</small></span>
+            </button>
+            <div class="quest-account-actions">
+              <button type="button" data-quest-profile-open>Profile</button>
+              <button type="button" data-quest-sign-out>Sign out</button>
+            </div>
+          </section>
+        </div>
+      </header>
+      <div class="job-center-body">
+        <aside class="job-center-deck" aria-label="Job Center navigation">
+          <div class="side-group">
+            <div class="side-label">Workspace</div>
+            <div class="tabs job-center-deck-tabs" role="tablist">
+              <button class="active" data-tab="pipeline">Pipeline</button>
+              <button data-tab="list">Job List</button>
+              <button data-tab="profile">Profile</button>
+              <button data-tab="tasks">Tasks</button>
+              <button data-tab="editor">Job Editor</button>
+            </div>
+          </div>
+          <div class="side-group">
+            <div class="side-label">Stage</div>
+            <select data-job-stage-filter aria-label="Filter jobs by stage">
+              <option value="all">All business statuses</option>
+              <option>Lead</option>
+              <option>Site Review</option>
+              <option>Estimate</option>
+              <option>Approved</option>
+              <option>Active</option>
+              <option>Closed</option>
+            </select>
+          </div>
+        </aside>
+        <main class="job-center-work" aria-label="Job Center work surface">
     <section class="tab-panel active" data-panel="pipeline">
       <div class="job-board" data-job-board></div>
     </section>
@@ -154,6 +184,9 @@
         <div data-job-modal-body></div>
       </div>
     </div>
+        </main>
+      </div>
+    </div>
   </section>
       </main>
     </div>
@@ -203,6 +236,6 @@
     </div>
     <script type="application/json" id="record-seed">[]</script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="assets/quest-hq.js?v=quest-job-center-task-merge-v1" defer></script>
+    <script src="assets/quest-hq.js?v=quest-job-center-task-ui-merge-v2" defer></script>
   </body>
 </html>

@@ -1,7 +1,7 @@
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const buildId = 'Quest Job Center Task Merge v1';
+const buildId = 'Quest Job Center Task UI Merge v2';
 const assetVersion = buildId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const targets = ['.', 'dist', 'docs'];
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
@@ -437,32 +437,62 @@ function commandPage() {
 }
 
 function jobsPage() {
-  const content = `<section class="workspace job-center" data-job-center data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
-    <div class="job-command panel">
-      <div class="job-search">
-        <span>Search</span>
-        <input data-job-search placeholder="Search jobs, clients, owners, addresses" />
-      </div>
-      <select data-job-stage-filter aria-label="Filter jobs by stage">
-        <option value="all">All business statuses</option>
-        <option>Lead</option>
-        <option>Site Review</option>
-        <option>Estimate</option>
-        <option>Approved</option>
-        <option>Active</option>
-        <option>Closed</option>
-      </select>
-      <span class="sync-pill" data-job-sync>Connecting to Supabase...</span>
-      <button class="secondary-button" type="button" data-job-refresh>Refresh</button>
-      <button class="primary-button" type="button" data-job-new>Add Job Workspace</button>
-    </div>
-    <div class="tabs" role="tablist">
-      <button class="active" data-tab="pipeline">Pipeline</button>
-      <button data-tab="list">Job List</button>
-      <button data-tab="profile">Profile</button>
-      <button data-tab="tasks">Tasks</button>
-      <button data-tab="editor">Job Editor</button>
-    </div>
+  const content = `<section class="workspace job-center job-center-task-ui" data-job-center data-supabase-url="https://lpzotcznihwyyudxycmd.supabase.co" data-supabase-key="sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07">
+    <div class="job-center-app">
+      <header class="job-center-topbar">
+        <div class="job-center-topbar-left">
+          <a class="job-center-logo" href="index.html" aria-label="Quest HQ Command Center">Q</a>
+          <div>
+            <div class="job-center-brand">Quest HQ</div>
+            <div class="job-center-sub">Job Center</div>
+          </div>
+        </div>
+        <div class="job-center-topbar-right">
+          <label class="job-center-global-search">
+            <span>Search</span>
+            <input data-job-search placeholder="Search jobs, clients, owners, addresses" />
+          </label>
+          <span class="sync-pill" data-job-sync>Connecting to Supabase...</span>
+          <button class="secondary-button" type="button" data-job-refresh>Refresh</button>
+          <button class="primary-button" type="button" data-job-new>Add Job</button>
+          <section class="quest-account job-center-account" data-quest-account hidden>
+            <button class="quest-account-main" type="button" data-quest-profile-open aria-label="Open Quest profile">
+              <span class="quest-avatar" data-quest-avatar>Q</span>
+              <span class="job-center-account-text"><strong data-quest-account-name>Loading account</strong><small data-quest-account-role>Checking access</small></span>
+            </button>
+            <div class="quest-account-actions">
+              <button type="button" data-quest-profile-open>Profile</button>
+              <button type="button" data-quest-sign-out>Sign out</button>
+            </div>
+          </section>
+        </div>
+      </header>
+      <div class="job-center-body">
+        <aside class="job-center-deck" aria-label="Job Center navigation">
+          <div class="side-group">
+            <div class="side-label">Workspace</div>
+            <div class="tabs job-center-deck-tabs" role="tablist">
+              <button class="active" data-tab="pipeline">Pipeline</button>
+              <button data-tab="list">Job List</button>
+              <button data-tab="profile">Profile</button>
+              <button data-tab="tasks">Tasks</button>
+              <button data-tab="editor">Job Editor</button>
+            </div>
+          </div>
+          <div class="side-group">
+            <div class="side-label">Stage</div>
+            <select data-job-stage-filter aria-label="Filter jobs by stage">
+              <option value="all">All business statuses</option>
+              <option>Lead</option>
+              <option>Site Review</option>
+              <option>Estimate</option>
+              <option>Approved</option>
+              <option>Active</option>
+              <option>Closed</option>
+            </select>
+          </div>
+        </aside>
+        <main class="job-center-work" aria-label="Job Center work surface">
     <section class="tab-panel active" data-panel="pipeline">
       <div class="job-board" data-job-board></div>
     </section>
@@ -551,6 +581,9 @@ function jobsPage() {
           <button class="secondary-button" type="button" data-job-modal-close>Close</button>
         </div>
         <div data-job-modal-body></div>
+      </div>
+    </div>
+        </main>
       </div>
     </div>
   </section>`;
@@ -1364,6 +1397,8 @@ const plannedTabsCss = `.tabs button.tab-planned,.tabs button.tab-planned:hover,
 
 const jobCenterTaskMergeCss = `.job-task-runtime{padding:0;overflow:hidden}.job-task-runtime-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);background:#fff;padding:16px 18px}.job-task-runtime-head h2{margin:3px 0 4px;font-size:24px}.job-task-runtime-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.job-task-runtime iframe{display:block;width:100%;height:min(1120px,calc(100vh - 238px));min-height:720px;border:0;background:#f7f8fb}.job-center [data-panel="tasks"].active{display:block}.job-center [data-panel="tasks"]{margin-top:-4px}@media(max-width:980px){.job-task-runtime-head{display:grid}.job-task-runtime-actions{justify-content:flex-start}.job-task-runtime iframe{height:880px;min-height:680px}}@media(max-width:640px){.job-task-runtime-head{padding:14px}.job-task-runtime-actions{display:grid;grid-template-columns:1fr}.job-task-runtime-actions .secondary-button{width:100%}.job-task-runtime iframe{height:820px;min-height:620px}}`;
 
+const jobCenterTaskUiCss = `body[data-module="jobs"]{background:#f5f1e8}body[data-module="jobs"] .sidebar{display:none}body[data-module="jobs"] .main{margin-left:0;padding:0;min-height:100vh}.job-center-task-ui{max-width:none;margin:0}.job-center-app{display:grid;grid-template-rows:64px 1fr;min-height:100vh;background:#f5f1e8;color:#211f1b}.job-center-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0;padding:0 22px;background:#f5f1e8;border-bottom:1px solid #ded7ca}.job-center-topbar-left,.job-center-topbar-right{display:flex;align-items:center;gap:10px;min-width:0}.job-center-logo{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;background:#242019;color:#f0b23b;font-weight:950}.job-center-brand{font-size:17px;font-weight:850;letter-spacing:0}.job-center-sub{font-size:11px;color:#756d60;margin-top:1px}.job-center-global-search{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:9px;width:min(390px,30vw);min-height:36px;border:1px solid #d6cfc3;border-radius:999px;background:#fffaf1;padding:0 13px;color:#756d60;font-size:11px;font-weight:900;text-transform:uppercase}.job-center-global-search input{min-width:0;border:0;background:transparent;padding:0;color:#211f1b;font-size:13px;font-weight:650;text-transform:none;outline:0;box-shadow:none}.job-center-account{position:relative;display:block!important;border:0;background:transparent;padding:0}.job-center-account .quest-account-main{display:flex;align-items:center;gap:8px;width:auto;color:#211f1b;cursor:pointer}.job-center-account .quest-avatar{width:42px;height:42px;background:#f0b23b;color:#111827;font-size:13px;font-weight:950}.job-center-account-text{display:none}.job-center-account .quest-account-actions{position:absolute;top:48px;right:0;z-index:35;display:none;width:150px;border:1px solid #d6cfc3;border-radius:8px;background:#fffaf1;padding:7px;box-shadow:0 18px 45px rgba(33,31,27,.16)}.job-center-account:hover .quest-account-actions,.job-center-account:focus-within .quest-account-actions{display:grid}.job-center-account .quest-account-actions button{min-height:34px;border:0;border-radius:6px;background:transparent;color:#211f1b;text-align:left;padding:0 10px;font-weight:850}.job-center-account .quest-account-actions button:hover{background:#f3e6c9}.job-center-body{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:0}.job-center-deck{min-width:0;border-right:1px solid #ded7ca;background:#eee8dc;padding:16px 10px;overflow:auto}.job-center-deck .side-group{margin-bottom:18px}.job-center-deck .side-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#756d60;padding:4px 10px;margin-bottom:5px;font-weight:800}.job-center-deck select{width:100%;border:1px solid #d6cfc3;border-radius:8px;background:#fffaf1;color:#211f1b;padding:9px 10px;font-weight:750}.job-center-deck-tabs{display:grid;gap:5px;border:0;margin:0;overflow:visible}.job-center-deck-tabs button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:36px;border:0;border-radius:7px;background:transparent;color:#4f473b;padding:0 10px;text-align:left;font-size:13px;font-weight:800;box-shadow:none}.job-center-deck-tabs button:hover,.job-center-deck-tabs button.active{background:#fffaf1;color:#211f1b;box-shadow:inset 3px 0 #f0b23b}.job-center-work{min-width:0;overflow:auto;padding:18px 22px 24px}.job-center-work>.tab-panel{min-width:0}.job-center-work .panel{box-shadow:none;border-color:#ded7ca;background:#fffaf1}.job-center-work .job-board{gap:10px}.job-center-work .job-lane{box-shadow:none;border-color:#ded7ca;background:#fbf7ee}.job-center-work .job-card,.job-center-work .job-row,.job-center-work .linked-panel-grid a{border-color:#ded7ca;background:#fffaf1}.job-center-work .job-card:hover,.job-center-work .job-row:hover,.job-center-work .linked-panel-grid a:hover{border-color:#f0b23b;background:#fff8e7}.job-center-work .job-task-runtime{border:1px solid #ded7ca;border-radius:8px;background:#fffaf1}.job-center-work .job-task-runtime-head{background:#fffaf1;border-color:#ded7ca}.job-center-work .job-task-runtime iframe{height:calc(100vh - 178px);min-height:680px;background:#f5f1e8}.job-center-work .tabs:not(.job-center-deck-tabs){display:none}@media(max-width:1100px){.job-center-global-search{width:min(280px,34vw)}.job-center-body{grid-template-columns:210px minmax(0,1fr)}}@media(max-width:860px){body[data-module="jobs"] .main{min-height:auto}.job-center-app{grid-template-rows:auto auto}.job-center-topbar{display:grid;grid-template-columns:1fr auto;padding:12px}.job-center-topbar-right{grid-column:1/-1;display:grid;grid-template-columns:1fr auto auto;align-items:center}.job-center-global-search{width:100%}.job-center-body{grid-template-columns:1fr}.job-center-deck{border-right:0;border-bottom:1px solid #ded7ca}.job-center-deck-tabs{grid-template-columns:repeat(5,minmax(110px,1fr));overflow-x:auto}.job-center-work{padding:14px}.job-center-work .job-task-runtime iframe{height:760px;min-height:620px}}@media(max-width:620px){.job-center-topbar-right{grid-template-columns:1fr auto}.job-center-topbar-right .sync-pill,.job-center-topbar-right [data-job-refresh]{display:none}.job-center-deck-tabs{grid-template-columns:repeat(5,112px)}.job-center-work .job-task-runtime-head{display:grid}.job-center-work .job-task-runtime iframe{height:700px}}`;
+
 const tutorialCss = `.tour-replay{display:inline-flex;align-items:center;justify-content:center;min-height:36px;border:1px solid #324055;border-radius:999px;background:#172234;color:#dbeafe;font-weight:850;cursor:pointer}.tour-replay:hover{border-color:#f45d22;color:#fff;background:#2a1816}.tour-overlay[hidden]{display:none}.tour-overlay{position:fixed;inset:0;z-index:130;background:rgba(15,23,42,.68);pointer-events:auto}.tour-spotlight{position:absolute;border:2px solid #f45d22;border-radius:12px;box-shadow:0 0 0 9999px rgba(15,23,42,.68),0 18px 60px rgba(0,0,0,.32);transition:all .18s ease;background:rgba(255,255,255,.04);pointer-events:none}.tour-card{position:absolute;width:min(440px,calc(100vw - 28px));border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);box-shadow:0 28px 90px rgba(0,0,0,.34);padding:18px}.tour-card-head{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-bottom:8px}.tour-card-head span{display:none}.tour-card-head button{border:0;background:transparent;color:#52627a;font-weight:850;cursor:pointer}.tour-progress{display:flex;align-items:center;gap:8px;margin:0 0 16px}.tour-progress span{display:block;width:11px;height:11px;border-radius:50%;background:#dbe3ed;border:2px solid #dbe3ed}.tour-progress span.done{background:#111827;border-color:#111827}.tour-progress span.active{background:#f45d22;border-color:#f45d22;box-shadow:0 0 0 4px #ffedd5}.tour-card h2{font-size:23px;margin:0 0 8px}.tour-card p{color:#52627a;line-height:1.5;margin-bottom:16px}.tour-actions{display:flex;justify-content:space-between;gap:10px}.tour-actions button[disabled]{opacity:.45;cursor:not-allowed}body.tour-open{overflow:hidden}@media(max-width:820px){.tour-overlay{display:grid;place-items:end center;padding:12px}.tour-spotlight{display:none}.tour-card{position:static;width:100%}.tour-replay{width:100%}}`;
 
 const questAuthCss = `body.auth-loading .main,body.auth-loading .nav-list,body.auth-loading .sidebar-card,body.auth-loading .tour-replay{visibility:hidden}body.auth-loading:after{content:"Checking Quest access...";position:fixed;inset:0;display:grid;place-items:center;background:#eef2f7;color:#121826;font-weight:900}.quest-account{display:grid;gap:8px;border:1px solid #324055;border-radius:8px;background:#121d2c;padding:10px}.quest-account-main{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:center;width:100%;border:0;background:transparent;color:#fff;text-align:left;cursor:pointer;padding:0}.quest-account-main strong,.quest-account-main small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.quest-account-main small{color:#aebbd0;margin-top:2px}.quest-avatar{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#f45d22;color:#fff;font-weight:900;overflow:hidden}.quest-avatar img{width:100%;height:100%;object-fit:cover}.quest-avatar.large{width:72px;height:72px;font-size:24px}.quest-account-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.quest-account-actions button{min-height:34px;border:1px solid #425169;border-radius:8px;background:#172234;color:#dbeafe;font-weight:850;cursor:pointer}.quest-account-actions button:hover{border-color:#f45d22;background:#2a1816;color:#fff}.quest-login-shell{min-height:100vh;display:grid;place-items:center;background:#eef2f7;color:#121826;padding:24px}.quest-login-panel{display:grid;gap:18px;width:min(430px,100%);padding:34px;border:1px solid #d9e0ea;border-top:5px solid #f45d22;border-radius:8px;background:#fff;color:#121826;box-shadow:0 18px 55px rgba(24,35,55,.14)}.quest-login-panel .brand{gap:10px}.quest-login-panel .brand-mark{width:42px;height:42px;border-radius:8px}.quest-login-panel .brand strong{color:#121826;font-size:18px}.quest-login-panel .brand small{color:#617089}.quest-login-panel h1{font-size:30px;line-height:1.12;margin:4px 0 8px}.quest-login-panel .muted{font-size:14px}.quest-auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;border:1px solid #d9e0ea;border-radius:8px;background:#f5f7fb;padding:4px}.quest-auth-tabs button{min-height:38px;border:0;border-radius:6px;background:transparent;color:#52627a;font-weight:900;cursor:pointer}.quest-auth-tabs button:hover{color:#121826}.quest-auth-tabs button.active{background:#f45d22;color:#fff;box-shadow:0 7px 16px rgba(244,93,34,.22)}.quest-auth-form,.quest-pending-card,.quest-profile-form{display:grid;gap:14px}.quest-auth-form[hidden],.quest-pending-card[hidden]{display:none!important}.quest-auth-form label,.quest-profile-form label{display:grid;gap:7px;color:#52627a;font-size:12px;font-weight:900;text-transform:uppercase}.quest-auth-form input,.quest-profile-form input{width:100%;min-height:44px;border:1px solid #cfd8e6;border-radius:8px;background:#fff;color:#121826;padding:11px 12px}.quest-auth-form input:focus,.quest-profile-form input:focus{outline:3px solid #ffdacb;border-color:#f45d22}.quest-auth-form .primary-button{width:100%;min-height:46px;margin-top:2px}.quest-pending-card{border:1px solid #fed7aa;border-radius:8px;background:#fff7ed;padding:14px}.quest-pending-card h2{font-size:20px;margin-bottom:2px}.quest-auth-message{min-height:20px;color:#991b1b;font-size:13px;font-weight:850}.quest-auth-message.ok{color:#166534}.quest-profile-panel{width:min(620px,calc(100vw - 44px))}.quest-profile-form{padding:18px}.quest-profile-preview{display:grid;grid-template-columns:72px minmax(0,1fr);gap:14px;align-items:center}.quest-profile-preview strong,.quest-profile-preview span{display:block}.quest-profile-preview span{color:#617089;margin-top:4px}@media(max-width:860px){.quest-account-actions{grid-template-columns:1fr}.quest-profile-preview{grid-template-columns:1fr}}@media(max-width:520px){.quest-login-shell{padding:14px}.quest-login-panel{padding:22px}.quest-login-panel h1{font-size:26px}.quest-auth-tabs{grid-template-columns:1fr}.quest-login-panel .brand strong{font-size:17px}}`;
@@ -1638,13 +1673,12 @@ const js = `(() => {
   }
 
   function paintQuestAccount(user, profile) {
-    const account = document.querySelector('[data-quest-account]');
-    if (account) account.hidden = false;
+    document.querySelectorAll('[data-quest-account]').forEach((account) => { account.hidden = false; });
     const name = profile.full_name || user.email || 'Quest user';
     const role = profile.role || 'member';
     setText('[data-quest-account-name]', name);
     setText('[data-quest-account-role]', role + ' - Quest HQ');
-    setAvatar(document.querySelector('[data-quest-avatar]'), name, profile.avatar_url);
+    document.querySelectorAll('[data-quest-avatar]').forEach((avatar) => setAvatar(avatar, name, profile.avatar_url));
     setText('[data-quest-profile-email]', profile.email || user.email || '');
     setText('[data-quest-profile-access]', role + ' - ' + ((profile.company_ids || []).join(', ') || 'No company access assigned'));
     setAvatar(document.querySelector('[data-quest-profile-avatar]'), name, profile.avatar_url);
@@ -1655,14 +1689,14 @@ const js = `(() => {
   function bindQuestAccountControls() {
     document.querySelectorAll('[data-quest-profile-open]').forEach((button) => button.addEventListener('click', openQuestProfile));
     document.querySelectorAll('[data-quest-profile-close]').forEach((button) => button.addEventListener('click', closeQuestProfile));
-    document.querySelector('[data-quest-sign-out]')?.addEventListener('click', async () => {
+    document.querySelectorAll('[data-quest-sign-out]').forEach((button) => button.addEventListener('click', async () => {
       if (!QUEST_AUTH_ENABLED) {
         window.location.replace('index.html');
         return;
       }
       await questClient.auth.signOut();
       window.location.replace('login.html');
-    });
+    }));
     document.querySelector('[data-quest-profile-form]')?.addEventListener('submit', saveQuestProfile);
   }
 
@@ -1732,8 +1766,7 @@ const js = `(() => {
   }
 
   function setText(selector, value) {
-    const node = document.querySelector(selector);
-    if (node) node.textContent = value;
+    document.querySelectorAll(selector).forEach((node) => { node.textContent = value; });
   }
 
   const storageKey = (moduleId) => 'quest-hq-static-' + moduleId;
@@ -1748,7 +1781,8 @@ const js = `(() => {
       if (button.dataset.tabState === 'planned') return;
       const name = button.dataset.tab;
       tabs.querySelectorAll('[data-tab]').forEach((item) => item.classList.toggle('active', item === button));
-      tabs.parentElement.querySelectorAll('[data-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === name));
+      const scope = tabs.closest('[data-job-center]') || tabs.parentElement;
+      scope.querySelectorAll('[data-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === name));
     });
   });
   document.querySelectorAll('[data-record-system]').forEach((system) => {
@@ -4620,7 +4654,7 @@ async function writeTarget(target) {
   await mkdir(path.join(absolute, 'assets'), { recursive: true });
   await copyTaskManagementRuntime(target, absolute);
   await writeFile(path.join(absolute, 'favicon.svg'), faviconSvg);
-  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + modalCss + plannedNavCss + fileViewerCss + fileCenterCss + driveFileCss + jobCenterCss + jobCenterTaskMergeCss + coreDemoCss + identityIntegrationCss + companyAdminCss + analyticsCss + formsCenterCss + googleFormsCss + formShareCss + formsLayoutRedoCss + formsLibraryModalCss + plannedTabsCss + tutorialCss + questAuthCss);
+  await writeFile(path.join(absolute, 'assets', 'quest-hq.css'), css + sidebarPolishCss + modalCss + plannedNavCss + fileViewerCss + fileCenterCss + driveFileCss + jobCenterCss + jobCenterTaskMergeCss + coreDemoCss + identityIntegrationCss + companyAdminCss + analyticsCss + formsCenterCss + googleFormsCss + formShareCss + formsLayoutRedoCss + formsLibraryModalCss + plannedTabsCss + tutorialCss + questAuthCss + jobCenterTaskUiCss);
   await writeFile(path.join(absolute, 'assets', 'quest-hq.js'), js + jobCenterJs + fileCenterJs + companyAdminJs + analyticsJs + commandCenterJs + taskBridgeJs + formsCenterJs + tutorialJs);
   await writeFile(path.join(absolute, 'login.html'), loginPage());
   await writeFile(path.join(absolute, 'index.html'), commandPage());

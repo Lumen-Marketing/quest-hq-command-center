@@ -268,13 +268,12 @@
   }
 
   function paintQuestAccount(user, profile) {
-    const account = document.querySelector('[data-quest-account]');
-    if (account) account.hidden = false;
+    document.querySelectorAll('[data-quest-account]').forEach((account) => { account.hidden = false; });
     const name = profile.full_name || user.email || 'Quest user';
     const role = profile.role || 'member';
     setText('[data-quest-account-name]', name);
     setText('[data-quest-account-role]', role + ' - Quest HQ');
-    setAvatar(document.querySelector('[data-quest-avatar]'), name, profile.avatar_url);
+    document.querySelectorAll('[data-quest-avatar]').forEach((avatar) => setAvatar(avatar, name, profile.avatar_url));
     setText('[data-quest-profile-email]', profile.email || user.email || '');
     setText('[data-quest-profile-access]', role + ' - ' + ((profile.company_ids || []).join(', ') || 'No company access assigned'));
     setAvatar(document.querySelector('[data-quest-profile-avatar]'), name, profile.avatar_url);
@@ -285,14 +284,14 @@
   function bindQuestAccountControls() {
     document.querySelectorAll('[data-quest-profile-open]').forEach((button) => button.addEventListener('click', openQuestProfile));
     document.querySelectorAll('[data-quest-profile-close]').forEach((button) => button.addEventListener('click', closeQuestProfile));
-    document.querySelector('[data-quest-sign-out]')?.addEventListener('click', async () => {
+    document.querySelectorAll('[data-quest-sign-out]').forEach((button) => button.addEventListener('click', async () => {
       if (!QUEST_AUTH_ENABLED) {
         window.location.replace('index.html');
         return;
       }
       await questClient.auth.signOut();
       window.location.replace('login.html');
-    });
+    }));
     document.querySelector('[data-quest-profile-form]')?.addEventListener('submit', saveQuestProfile);
   }
 
@@ -362,8 +361,7 @@
   }
 
   function setText(selector, value) {
-    const node = document.querySelector(selector);
-    if (node) node.textContent = value;
+    document.querySelectorAll(selector).forEach((node) => { node.textContent = value; });
   }
 
   const storageKey = (moduleId) => 'quest-hq-static-' + moduleId;
@@ -378,7 +376,8 @@
       if (button.dataset.tabState === 'planned') return;
       const name = button.dataset.tab;
       tabs.querySelectorAll('[data-tab]').forEach((item) => item.classList.toggle('active', item === button));
-      tabs.parentElement.querySelectorAll('[data-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === name));
+      const scope = tabs.closest('[data-job-center]') || tabs.parentElement;
+      scope.querySelectorAll('[data-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === name));
     });
   });
   document.querySelectorAll('[data-record-system]').forEach((system) => {

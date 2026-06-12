@@ -71,6 +71,19 @@ body {
   display: none;
 }
 
+.embedded-in-job-center .topbar {
+  display: none;
+}
+
+.embedded-in-job-center .app {
+  grid-template-rows: 1fr;
+}
+
+.embedded-in-job-center .app > .deck,
+.embedded-in-job-center .app > .main {
+  grid-row: 1;
+}
+
 @media (max-width: 720px) {
   .command-center-host-bar {
     max-width: none;
