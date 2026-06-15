@@ -786,6 +786,85 @@ textarea:focus {
   text-transform: uppercase;
 }
 
+.crm-page {
+  max-width: 1280px;
+}
+
+.crm-metrics {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.crm-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 190px 190px;
+  align-items: end;
+  gap: 12px;
+}
+
+.crm-toolbar label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.crm-list-panel {
+  padding: 16px;
+}
+
+.crm-table .table-head,
+.crm-table .table-row {
+  grid-template-columns: minmax(240px, 1.35fr) minmax(130px, .75fr) 120px minmax(130px, .75fr) 70px 110px 100px;
+  gap: 12px;
+}
+
+.crm-account-row {
+  text-decoration: none;
+}
+
+.crm-account-row span {
+  min-width: 0;
+}
+
+.crm-account-modal {
+  display: grid;
+  gap: 14px;
+}
+
+.crm-modal-summary,
+.crm-modal-section {
+  display: grid;
+  gap: 10px;
+}
+
+.crm-rollup-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.crm-rollup-grid .metric {
+  margin: 0;
+}
+
+.crm-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.crm-linked-jobs .table-head,
+.crm-linked-jobs .table-row {
+  grid-template-columns: minmax(220px, 1fr) 110px 140px 110px;
+  gap: 12px;
+}
+
+.crm-modal {
+  width: min(860px, calc(100vw - 40px));
+}
+
 .profile-layout,
 .file-layout,
 .forms-layout {
@@ -2839,6 +2918,7 @@ textarea:focus {
   .file-layout,
   .forms-layout,
   .task-layout,
+  .crm-toolbar,
   .workspace-toolbar { grid-template-columns: 1fr; }
   .span-2,
   .span-3 { grid-column: 1; }
@@ -2849,12 +2929,20 @@ textarea:focus {
   .detail-panel { position: static; }
   .task-table .table-head,
   .task-table .table-row,
+  .crm-table .table-head,
+  .crm-table .table-row,
   .drive-list .table-head,
   .drive-list .table-row { grid-template-columns: minmax(220px, 1fr) repeat(3, auto); }
   .task-table .table-head span:nth-child(n+5),
   .task-table .table-row span:nth-child(n+5),
+  .crm-table .table-head span:nth-child(n+5),
+  .crm-table .table-row span:nth-child(n+5),
   .drive-list .table-head span:nth-child(n+5),
   .drive-list .table-row span:nth-child(n+5) { display: none; }
+
+  .crm-rollup-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -2919,7 +3007,17 @@ textarea:focus {
   .table-head { display: none; }
   .jobs-table .table-row,
   .task-table .table-row,
+  .crm-table .table-row,
+  .crm-linked-jobs .table-row,
   .drive-list .table-row { grid-template-columns: 1fr; }
+
+  .crm-table .table-row span:nth-child(n+5) {
+    display: block;
+  }
+
+  .crm-rollup-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 520px) {

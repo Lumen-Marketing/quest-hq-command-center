@@ -394,7 +394,10 @@ const state = {
   query: '',
   fileQuery: '',
   formQuery: '',
+  crmQuery: '',
   stageFilter: 'all',
+  crmStageFilter: 'all',
+  crmOwnerFilter: 'all',
   taskStatusFilter: 'all',
   taskPriorityFilter: 'all',
   fileCategoryFilter: 'All categories',
@@ -582,6 +585,7 @@ function renderDeck(route) {
   const tasks = companyTasks(companyId);
   const files = companyFiles(companyId);
   const forms = companyForms(companyId);
+  const accounts = crmAccounts(companyId);
   const users = companyMembers(companyId);
   return `
     <div class="company-card">
@@ -595,7 +599,7 @@ function renderDeck(route) {
       navItem(route, companyPath('files', {}, companyId), 'ti-folder', 'Files', files.length),
       navItem(route, companyPath('forms', {}, companyId), 'ti-clipboard-list', 'Forms', forms.length),
       navItem(route, companyPath('analytics', {}, companyId), 'ti-chart-bar', 'Analytics'),
-      plannedNavItem('ti-users-group', 'CRM'),
+      navItem(route, companyPath('crm', {}, companyId), 'ti-users-group', 'CRM', accounts.length),
       plannedNavItem('ti-ticket', 'Tickets'),
       plannedNavItem('ti-receipt-dollar', 'Finance'),
       plannedNavItem('ti-books', 'Knowledge Base'),
@@ -665,6 +669,7 @@ function renderWorkspace(route) {
   if (route.section === 'settings') return renderSettingsPage(route, companyId);
   if (route.section === 'forms') return renderFormsPage(companyId);
   if (route.section === 'analytics') return renderAnalyticsPage(route, companyId);
+  if (route.section === 'crm') return renderCrmPage(route, companyId);
   if (route.section === 'time' || route.section === 'approvals') return renderOperationsPage(route, companyId);
   return renderPlannedPage(route.section);
 }
@@ -1751,6 +1756,128 @@ function renderFormsResponses(companyId, form) {
   `;
 }
 
+function renderCrmPage(route, companyId) {
+  const accounts = filteredCrmAccounts(companyId);
+  const allAccounts = crmAccounts(companyId);
+  const openTasks = companyTasks(companyId).filter((task) => task.status !== 'done').length;
+  const activeValue = sum(companyJobs(companyId), 'estimate_total');
+  const owners = crmOwnerOptions(companyId);
+  return `
+    <section class="tool-page crm-page">
+      ${workspaceHeader('CRM', 'Customers, contacts, and follow-ups built from company jobs.', `
+        <button class="btn btn-primary" type="button" data-action="open-job-form" data-mode="new"><i class="ti ti-plus"></i>Add customer job</button>
+      `)}
+      <section class="metric-grid crm-metrics">
+        ${metricCard('Accounts', allAccounts.length)}
+        ${metricCard('Open jobs', companyJobs(companyId).filter((job) => job.stage !== 'Closed').length)}
+        ${metricCard('Open tasks', openTasks)}
+        ${metricCard('Pipeline value', money(activeValue))}
+      </section>
+      <section class="crm-toolbar panel">
+        <label>
+          <span>Search</span>
+          <input data-crm-search value="${h(state.crmQuery)}" placeholder="Find customer, contact, job, or address" />
+        </label>
+        <label>
+          <span>Stage</span>
+          <select data-crm-stage-filter>
+            ${['all'].concat(STAGES).map((stage) => `<option value="${h(stage)}" ${state.crmStageFilter === stage ? 'selected' : ''}>${h(stage === 'all' ? 'All stages' : stage)}</option>`).join('')}
+          </select>
+        </label>
+        <label>
+          <span>Owner</span>
+          <select data-crm-owner-filter>
+            <option value="all" ${state.crmOwnerFilter === 'all' ? 'selected' : ''}>All owners</option>
+            ${owners.map((owner) => `<option value="${h(owner)}" ${state.crmOwnerFilter === owner ? 'selected' : ''}>${h(owner)}</option>`).join('')}
+          </select>
+        </label>
+      </section>
+      <section class="panel crm-list-panel">
+        <div class="section-head">
+          <div><h2>Customers</h2><p>${accounts.length} visible account${accounts.length === 1 ? '' : 's'} in ${h(companyName(companyId))}</p></div>
+        </div>
+        <div class="data-table crm-table">
+          <div class="table-head"><span>Account</span><span>Contact</span><span>Stage</span><span>Owner</span><span>Jobs</span><span>Value</span><span>Updated</span></div>
+          ${accounts.map((account) => `
+            <a class="table-row crm-account-row" href="${appHref(companyPath('crm', { account: account.key }, companyId))}" data-router>
+              <span><strong>${h(account.name)}</strong><small>${h(account.subtitle)}</small></span>
+              <span>${h(account.primaryContact)}</span>
+              <span>${h(account.stage)}</span>
+              <span>${h(account.owner)}</span>
+              <span>${h(account.jobs.length)}</span>
+              <span>${money(account.estimateTotal)}</span>
+              <span>${formatDate(account.updatedAt)}</span>
+            </a>
+          `).join('') || emptyState('No CRM accounts match this view. Add a customer job to start the list.')}
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function renderCrmAccountModal(companyId, accountKey) {
+  const account = crmAccountByKey(companyId, accountKey);
+  if (!account) {
+    return renderModalShell('CRM', 'Customer account', emptyState('This customer is not visible in the current company view.'));
+  }
+  const latestJob = account.latestJob;
+  const openTasks = account.tasks.filter((task) => task.status !== 'done');
+  return renderModalShell('CRM', account.name, `
+    <div class="crm-account-modal">
+      <section class="crm-modal-summary">
+        <div class="section-head">
+          <div>
+            <h2>${h(account.name)}</h2>
+            <p>${h(account.subtitle)}</p>
+          </div>
+          ${priorityPill(account.priority)}
+        </div>
+        ${contractRows([
+          ['Primary contact', account.primaryContact],
+          ['Owner', account.owner],
+          ['Current stage', account.stage],
+          ['Pipeline value', money(account.estimateTotal)],
+          ['Open tasks', String(openTasks.length)],
+          ['Last updated', formatDate(account.updatedAt)],
+        ])}
+      </section>
+      <section class="crm-rollup-grid">
+        ${metricCard('Jobs', account.jobs.length)}
+        ${metricCard('Files', account.fileCount)}
+        ${metricCard('Forms', account.formCount)}
+        ${metricCard('Tasks', account.tasks.length)}
+      </section>
+      <section class="crm-modal-actions">
+        ${latestJob ? `<a class="btn btn-primary" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: latestJob.id }, companyId))}" data-router><i class="ti ti-briefcase"></i>Open job</a>` : ''}
+        ${latestJob ? `<a class="btn" href="${appHref(companyPath('tasks', { job_id: latestJob.id }, companyId))}" data-router><i class="ti ti-list-check"></i>Tasks</a>` : ''}
+        ${latestJob ? `<a class="btn" href="${appHref(companyPath('files', { job_id: latestJob.id }, companyId))}" data-router><i class="ti ti-folder"></i>Files</a>` : ''}
+        ${latestJob ? `<button class="btn" type="button" data-action="open-job-form" data-mode="edit" data-job-id="${h(latestJob.id)}"><i class="ti ti-pencil"></i>Edit latest job</button>` : ''}
+        <button class="btn" type="button" data-action="open-job-form" data-mode="new"><i class="ti ti-plus"></i>Add job</button>
+      </section>
+      <section class="crm-modal-section">
+        <div class="section-head"><div><h2>Linked jobs</h2><p>Customer workspaces connected to this account.</p></div></div>
+        <div class="data-table crm-linked-jobs">
+          <div class="table-head"><span>Job</span><span>Stage</span><span>Owner</span><span>Value</span></div>
+          ${account.jobs.map((job) => `
+            <a class="table-row" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router>
+              <span><strong>${h(job.name)}</strong><small>${h(job.site_address || 'No address')}</small></span>
+              <span>${h(job.stage)}</span>
+              <span>${h(job.owner_name || 'Unassigned')}</span>
+              <span>${money(job.estimate_total)}</span>
+            </a>
+          `).join('') || emptyState('No linked jobs yet.')}
+        </div>
+      </section>
+      <section class="crm-modal-section">
+        <div class="section-head"><div><h2>Follow-ups</h2><p>Open tasks across linked jobs.</p></div></div>
+        <div class="queue-list">
+          ${openTasks.slice(0, 6).map((task) => taskQueueRow(task)).join('') || emptyState('No open follow-ups for this customer.')}
+        </div>
+      </section>
+    </div>
+  `, 'crm-modal');
+}
+
 function renderOperationsPage(route, companyId) {
   const name = route.section;
   const labels = {
@@ -1854,6 +1981,9 @@ function renderActiveModal(route, session) {
   if (state.modal === 'form-preview') return renderFormPreviewModal(activeCompanyId(), selectedForm(activeCompanyId()));
   if (state.modal === 'job-new') return renderJobFormModal(activeCompanyId(), null);
   if (state.modal === 'job-edit') return renderJobFormModal(activeCompanyId(), selectedJob());
+  if (route.name === 'company' && route.section === 'crm' && route.params.get('account')) {
+    return renderCrmAccountModal(route.companyId, route.params.get('account'));
+  }
 
   if (route.name === 'company' && route.section === 'jobs' && route.params.get('tab') === 'editor') {
     return renderJobFormModal(route.companyId, route.jobId ? jobById(route.jobId) : selectedJob());
@@ -2314,6 +2444,7 @@ function handleAction(event, node) {
 
 function closeActiveModal() {
   const route = state.route || getRoute();
+  const closingStateModal = state.modal;
   state.modal = '';
   state.formStartTemplateId = '';
   state.formStartTab = 'blank';
@@ -2324,6 +2455,10 @@ function closeActiveModal() {
   if (route.name === 'company' && route.section === 'jobs' && route.params.get('tab') === 'editor') {
     const job = route.jobId ? jobById(route.jobId) : selectedJob();
     navigate(companyPath('jobs', { tab: job ? 'profile' : 'pipeline', ...(job ? { job_id: job.id } : {}) }, route.companyId), { replace: true });
+    return;
+  }
+  if (route.name === 'company' && route.section === 'crm' && route.params.get('account') && !closingStateModal) {
+    navigate(companyPath('crm', {}, route.companyId), { replace: true });
     return;
   }
   render();
@@ -2415,6 +2550,11 @@ function onDocumentInput(event) {
     updateWorkspaceOnly();
     return;
   }
+  if (event.target.matches('[data-crm-search]')) {
+    state.crmQuery = event.target.value;
+    updateWorkspaceOnly();
+    return;
+  }
   if (event.target.matches('[data-form-field]')) {
     updateFormField(event.target);
     return;
@@ -2432,6 +2572,16 @@ function onDocumentChange(event) {
   }
   if (event.target.matches('[data-stage-filter]')) {
     state.stageFilter = event.target.value || 'all';
+    render();
+    return;
+  }
+  if (event.target.matches('[data-crm-stage-filter]')) {
+    state.crmStageFilter = event.target.value || 'all';
+    render();
+    return;
+  }
+  if (event.target.matches('[data-crm-owner-filter]')) {
+    state.crmOwnerFilter = event.target.value || 'all';
     render();
     return;
   }
@@ -2753,7 +2903,7 @@ function normalizeLegacyLocation() {
     '/command.html': companyPath('jobs', {}, companyId),
     '/admin.html': companyPath('settings', {}, companyId),
     '/automations.html': companyPath('settings', {}, companyId),
-    '/crm.html': companyPath('users', {}, companyId),
+    '/crm.html': companyPath('crm', {}, companyId),
     '/dashboards.html': companyPath('analytics', {}, companyId),
     '/files.html': companyPath('files', {}, companyId),
     '/finance.html': companyPath('analytics', {}, companyId),
@@ -2777,6 +2927,7 @@ function normalizeLegacyLocation() {
   if (path === '/files') target = companyPath('files', copyParams(params, ['job_id', 'folder']), companyId);
   if (path === '/forms') target = companyPath('forms', copyParams(params, ['job_id']), companyId);
   if (path === '/analytics') target = companyPath('analytics', copyParams(params, ['job_id']), companyId);
+  if (path === '/crm') target = companyPath('crm', copyParams(params, ['account']), companyId);
   if (path === '/admin') target = companyPath('settings', {}, companyId);
   if (path === '/time') target = companyPath('time', {}, companyId);
   if (path === '/team') target = companyPath('users', {}, companyId);
@@ -2802,7 +2953,7 @@ function routeRedirect(route) {
   if (!allowed.includes(route.companyId)) {
     return companyPath(route.section || 'jobs', Object.fromEntries(route.params.entries()), allowed[0] || defaultCompanyId());
   }
-  const validSections = ['jobs', 'tasks', 'files', 'forms', 'analytics', 'users', 'settings', 'time', 'approvals'];
+  const validSections = ['jobs', 'tasks', 'files', 'forms', 'analytics', 'crm', 'users', 'settings', 'time', 'approvals'];
   if (!validSections.includes(route.section)) return companyPath('jobs', {}, route.companyId);
   const jobCompanyId = route.jobId ? companyIdForJob(route.jobId) : '';
   if (jobCompanyId && jobCompanyId !== route.companyId && allowed.includes(jobCompanyId)) {
@@ -2963,6 +3114,86 @@ function filteredJobs(companyId = activeCompanyId()) {
     return [job.name, job.client_name, job.contact_name, job.owner_name, job.site_address, job.job_type, companyName(job.company_id)]
       .some((value) => String(value || '').toLowerCase().includes(q));
   });
+}
+
+function crmAccounts(companyId = activeCompanyId()) {
+  const groups = new Map();
+  companyJobs(companyId).forEach((job) => {
+    const accountName = String(job.client_name || '').trim() || 'Unassigned customer';
+    const key = `account-${slugify(accountName.toLowerCase()) || 'unassigned'}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        name: accountName,
+        jobs: [],
+      });
+    }
+    groups.get(key).jobs.push(job);
+  });
+
+  return Array.from(groups.values()).map((account) => {
+    const jobs = account.jobs
+      .slice()
+      .sort((a, b) => Date.parse(b.updated_at || b.created_at || 0) - Date.parse(a.updated_at || a.created_at || 0));
+    const latestJob = jobs[0] || null;
+    const jobIds = jobs.map((job) => job.id);
+    const tasks = companyTasks(companyId).filter((task) => jobIds.includes(task.project_id));
+    const forms = companyForms(companyId).filter((form) => jobIds.includes(form.linked_job_id));
+    const files = companyFiles(companyId).filter((file) => jobIds.includes(file.job_id));
+    const contacts = compactUnique(jobs.map((job) => job.contact_name));
+    const owners = compactUnique(jobs.map((job) => job.owner_name));
+    const addresses = compactUnique(jobs.map((job) => job.site_address));
+    const priority = jobs
+      .map((job) => job.priority || 'Medium')
+      .sort((a, b) => priorityRank(b) - priorityRank(a))[0] || 'Medium';
+
+    return {
+      ...account,
+      jobs,
+      tasks,
+      latestJob,
+      contacts,
+      owners,
+      addresses,
+      forms,
+      files,
+      primaryContact: contacts[0] || 'No contact',
+      owner: owners[0] || 'Unassigned',
+      stage: latestJob?.stage || 'Lead',
+      priority,
+      estimateTotal: sum(jobs, 'estimate_total'),
+      fileCount: files.length,
+      formCount: forms.length,
+      updatedAt: latestJob?.updated_at || latestJob?.created_at || new Date().toISOString(),
+      subtitle: addresses[0] || `${jobs.length} linked job${jobs.length === 1 ? '' : 's'}`,
+    };
+  }).sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
+}
+
+function filteredCrmAccounts(companyId = activeCompanyId()) {
+  const query = state.crmQuery.trim().toLowerCase();
+  return crmAccounts(companyId).filter((account) => {
+    if (state.crmStageFilter !== 'all' && !account.jobs.some((job) => job.stage === state.crmStageFilter)) return false;
+    if (state.crmOwnerFilter !== 'all' && !account.owners.includes(state.crmOwnerFilter)) return false;
+    if (!query) return true;
+    return [
+      account.name,
+      account.primaryContact,
+      account.owner,
+      account.stage,
+      ...account.addresses,
+      ...account.contacts,
+      ...account.jobs.map((job) => job.name),
+    ].some((value) => String(value || '').toLowerCase().includes(query));
+  });
+}
+
+function crmAccountByKey(companyId, key) {
+  return crmAccounts(companyId).find((account) => account.key === key) || null;
+}
+
+function crmOwnerOptions(companyId = activeCompanyId()) {
+  return compactUnique(companyJobs(companyId).map((job) => job.owner_name)).sort((a, b) => a.localeCompare(b));
 }
 
 function filteredTasks(companyId = activeCompanyId(), jobId = '') {
@@ -4059,6 +4290,10 @@ function downloadText(filename, text, type = 'text/plain') {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function compactUnique(values) {
+  return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)));
 }
 
 function statusLabel(status) {
