@@ -21,6 +21,10 @@ const TEAM_CACHE_KEY = 'quest-hq-team-cache-v1';
 const MEMBERSHIP_CACHE_KEY = 'quest-hq-company-membership-cache-v1';
 const FORM_CACHE_KEY = 'quest-hq-company-form-cache-v1';
 const FORM_RESPONSE_CACHE_KEY = 'quest-hq-company-form-response-cache-v1';
+const FINANCE_INVOICE_CACHE_KEY = 'quest-hq-finance-invoice-cache-v1';
+const FINANCE_PAYMENT_CACHE_KEY = 'quest-hq-finance-payment-cache-v1';
+const FINANCE_EXPENSE_CACHE_KEY = 'quest-hq-finance-expense-cache-v1';
+const FINANCE_VENDOR_CACHE_KEY = 'quest-hq-finance-vendor-cache-v1';
 const COMPANY_KEY = 'quest-hq-active-company';
 const TASK_VIEW_KEY = 'quest-hq-task-view';
 const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
@@ -42,6 +46,11 @@ const DRIVE_FOLDERS = [
 ];
 const FORM_TYPES = ['Inspection', 'Client approval', 'Intake', 'Survey', 'Safety', 'Internal'];
 const FORM_STATUSES = ['Draft', 'Published', 'Archived'];
+const INVOICE_STATUSES = ['Draft', 'Sent', 'Partially paid', 'Paid', 'Overdue', 'Void'];
+const EXPENSE_STATUSES = ['Pending', 'Approved', 'Paid', 'Rejected'];
+const VENDOR_STATUSES = ['Active', 'On hold', 'Inactive'];
+const PAYMENT_METHODS = ['ACH', 'Check', 'Card', 'Cash', 'Wire', 'Other'];
+const EXPENSE_CATEGORIES = ['Materials', 'Labor', 'Subcontractor', 'Permit', 'Equipment', 'Marketing', 'Software', 'Travel', 'Other'];
 const QUESTION_TYPES = [
   ['short', 'Short answer'],
   ['paragraph', 'Paragraph'],
@@ -369,6 +378,208 @@ const formResponsesFallback = [
   },
 ];
 
+const financeVendorsFallback = [
+  {
+    id: 'vendor-roofing-materials',
+    company_id: 'roofing',
+    name: 'Valley Roofing Supply',
+    contact_name: 'Elena Ortiz',
+    email: 'orders@valleyroofingsupply.local',
+    phone: '(480) 555-0190',
+    category: 'Materials',
+    status: 'Active',
+    notes: 'Primary tile, flashing, and underlayment vendor.',
+    created_at: new Date(Date.now() - 1209600000).toISOString(),
+    updated_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    id: 'vendor-roofing-dryin',
+    company_id: 'roofing',
+    name: 'Monsoon Dry-In Crew',
+    contact_name: 'R. Alvarez',
+    email: 'dispatch@monsoondryin.local',
+    phone: '(602) 555-0144',
+    category: 'Subcontractor',
+    status: 'Active',
+    notes: 'Emergency dry-in support during storm calls.',
+    created_at: new Date(Date.now() - 1036800000).toISOString(),
+    updated_at: new Date(Date.now() - 172800000).toISOString(),
+  },
+  {
+    id: 'vendor-drafting-permits',
+    company_id: 'drafting',
+    name: 'Permit Runner AZ',
+    contact_name: 'Sofia Chen',
+    email: 'permits@runneraz.local',
+    phone: '(602) 555-0171',
+    category: 'Permit',
+    status: 'Active',
+    notes: 'Permit filing support for drafting packets.',
+    created_at: new Date(Date.now() - 864000000).toISOString(),
+    updated_at: new Date(Date.now() - 259200000).toISOString(),
+  },
+  {
+    id: 'vendor-lumen-software',
+    company_id: 'lumen',
+    name: 'Lumen SaaS Stack',
+    contact_name: 'Ops Billing',
+    email: 'billing@lumenstack.local',
+    phone: '',
+    category: 'Software',
+    status: 'Active',
+    notes: 'Internal software subscriptions for client onboarding.',
+    created_at: new Date(Date.now() - 777600000).toISOString(),
+    updated_at: new Date(Date.now() - 345600000).toISOString(),
+  },
+];
+
+const financeInvoicesFallback = [
+  {
+    id: 'invoice-roofing-queen-creek',
+    company_id: 'roofing',
+    job_id: '11111111-1111-4111-8111-111111111111',
+    client_name: 'Rosales Residence',
+    invoice_number: 'QR-1007',
+    status: 'Partially paid',
+    issue_date: isoDate(-10),
+    due_date: isoDate(5),
+    subtotal: 6800,
+    tax: 0,
+    total: 6800,
+    notes: 'Emergency leak repair billing with deposit received.',
+    created_at: new Date(Date.now() - 864000000).toISOString(),
+    updated_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    id: 'invoice-roofing-mesa-storage',
+    company_id: 'roofing',
+    job_id: '22222222-2222-4222-8222-222222222222',
+    client_name: 'Mesa Storage Partners',
+    invoice_number: 'QR-1008',
+    status: 'Sent',
+    issue_date: isoDate(-18),
+    due_date: isoDate(-2),
+    subtotal: 18400,
+    tax: 0,
+    total: 18400,
+    notes: 'Estimate packet sent to board for approval.',
+    created_at: new Date(Date.now() - 1555200000).toISOString(),
+    updated_at: new Date(Date.now() - 172800000).toISOString(),
+  },
+  {
+    id: 'invoice-drafting-horizon',
+    company_id: 'drafting',
+    job_id: '33333333-3333-4333-8333-333333333333',
+    client_name: 'Horizon HVAC',
+    invoice_number: 'QD-2031',
+    status: 'Sent',
+    issue_date: isoDate(-7),
+    due_date: isoDate(14),
+    subtotal: 4200,
+    tax: 0,
+    total: 4200,
+    notes: 'Drafting permit package milestone invoice.',
+    created_at: new Date(Date.now() - 604800000).toISOString(),
+    updated_at: new Date(Date.now() - 172800000).toISOString(),
+  },
+  {
+    id: 'invoice-lumen-onboarding',
+    company_id: 'lumen',
+    job_id: '',
+    client_name: 'Lumen Internal Launch',
+    invoice_number: 'LM-3004',
+    status: 'Draft',
+    issue_date: isoDate(-3),
+    due_date: isoDate(27),
+    subtotal: 3200,
+    tax: 0,
+    total: 3200,
+    notes: 'Demo onboarding package used for finance workspace.',
+    created_at: new Date(Date.now() - 259200000).toISOString(),
+    updated_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+];
+
+const financePaymentsFallback = [
+  {
+    id: 'payment-roofing-queen-creek-deposit',
+    company_id: 'roofing',
+    invoice_id: 'invoice-roofing-queen-creek',
+    amount: 2500,
+    method: 'ACH',
+    received_at: isoDate(-4),
+    reference: 'ACH-4421',
+    notes: 'Deposit received after dry-in visit.',
+    created_at: new Date(Date.now() - 345600000).toISOString(),
+  },
+  {
+    id: 'payment-drafting-horizon-retainer',
+    company_id: 'drafting',
+    invoice_id: 'invoice-drafting-horizon',
+    amount: 1000,
+    method: 'Check',
+    received_at: isoDate(-1),
+    reference: 'CHK-117',
+    notes: 'Retainer collected before permit packet completion.',
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+];
+
+const financeExpensesFallback = [
+  {
+    id: 'expense-roofing-queen-creek-materials',
+    company_id: 'roofing',
+    job_id: '11111111-1111-4111-8111-111111111111',
+    vendor_id: 'vendor-roofing-materials',
+    category: 'Materials',
+    amount: 1850,
+    status: 'Approved',
+    spent_at: isoDate(-6),
+    notes: 'Underlayment, flashing, and tile replacement materials.',
+    created_at: new Date(Date.now() - 518400000).toISOString(),
+    updated_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    id: 'expense-roofing-mesa-permit',
+    company_id: 'roofing',
+    job_id: '22222222-2222-4222-8222-222222222222',
+    vendor_id: 'vendor-roofing-materials',
+    category: 'Permit',
+    amount: 620,
+    status: 'Pending',
+    spent_at: isoDate(-2),
+    notes: 'Permit and document prep allowance.',
+    created_at: new Date(Date.now() - 172800000).toISOString(),
+    updated_at: new Date(Date.now() - 7200000).toISOString(),
+  },
+  {
+    id: 'expense-drafting-horizon-runner',
+    company_id: 'drafting',
+    job_id: '33333333-3333-4333-8333-333333333333',
+    vendor_id: 'vendor-drafting-permits',
+    category: 'Permit',
+    amount: 480,
+    status: 'Approved',
+    spent_at: isoDate(-3),
+    notes: 'Permit runner package review.',
+    created_at: new Date(Date.now() - 259200000).toISOString(),
+    updated_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    id: 'expense-lumen-software-stack',
+    company_id: 'lumen',
+    job_id: '',
+    vendor_id: 'vendor-lumen-software',
+    category: 'Software',
+    amount: 540,
+    status: 'Paid',
+    spent_at: isoDate(-5),
+    notes: 'Client onboarding software stack.',
+    created_at: new Date(Date.now() - 432000000).toISOString(),
+    updated_at: new Date(Date.now() - 172800000).toISOString(),
+  },
+];
+
 const state = {
   route: null,
   session: readJson(SESSION_KEY, null),
@@ -379,6 +590,10 @@ const state = {
   driveFolders: readSeededList(DRIVE_FOLDER_CACHE_KEY, []).map(normalizeDriveFolder),
   forms: readSeededList(FORM_CACHE_KEY, formsFallback).map(normalizeForm),
   formResponses: readSeededList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback).map(normalizeFormResponse),
+  financeInvoices: readSeededList(FINANCE_INVOICE_CACHE_KEY, financeInvoicesFallback).map(normalizeFinanceInvoice),
+  financePayments: readSeededList(FINANCE_PAYMENT_CACHE_KEY, financePaymentsFallback).map(normalizeFinancePayment),
+  financeExpenses: readSeededList(FINANCE_EXPENSE_CACHE_KEY, financeExpensesFallback).map(normalizeFinanceExpense),
+  financeVendors: readSeededList(FINANCE_VENDOR_CACHE_KEY, financeVendorsFallback).map(normalizeFinanceVendor),
   teamMembers: readSeededList(TEAM_CACHE_KEY, teamMembersFallback).map(normalizeTeamMember),
   memberships: readSeededList(MEMBERSHIP_CACHE_KEY, membershipsFallback),
   companies: companiesFallback,
@@ -388,6 +603,9 @@ const state = {
   selectedFileId: '',
   selectedFormId: '',
   selectedQuestionId: '',
+  selectedFinanceInvoiceId: '',
+  selectedFinanceExpenseId: '',
+  selectedFinanceVendorId: '',
   expandedFormIds: new Set(),
   formStartTemplateId: '',
   formStartTab: 'blank',
@@ -586,6 +804,7 @@ function renderDeck(route) {
   const files = companyFiles(companyId);
   const forms = companyForms(companyId);
   const accounts = crmAccounts(companyId);
+  const invoices = companyFinanceInvoices(companyId);
   const users = companyMembers(companyId);
   return `
     <div class="company-card">
@@ -601,7 +820,7 @@ function renderDeck(route) {
       navItem(route, companyPath('analytics', {}, companyId), 'ti-chart-bar', 'Analytics'),
       navItem(route, companyPath('crm', {}, companyId), 'ti-users-group', 'CRM', accounts.length),
       plannedNavItem('ti-ticket', 'Tickets'),
-      plannedNavItem('ti-receipt-dollar', 'Finance'),
+      navItem(route, companyPath('finance', {}, companyId), 'ti-receipt-dollar', 'Finance', invoices.length),
       plannedNavItem('ti-books', 'Knowledge Base'),
       plannedNavItem('ti-automation', 'Automations'),
       plannedNavItem('ti-template', 'Templates'),
@@ -670,6 +889,7 @@ function renderWorkspace(route) {
   if (route.section === 'forms') return renderFormsPage(companyId);
   if (route.section === 'analytics') return renderAnalyticsPage(route, companyId);
   if (route.section === 'crm') return renderCrmPage(route, companyId);
+  if (route.section === 'finance') return renderFinancePage(route, companyId);
   if (route.section === 'time' || route.section === 'approvals') return renderOperationsPage(route, companyId);
   return renderPlannedPage(route.section);
 }
@@ -935,6 +1155,7 @@ function renderJobEditor(companyId, job) {
       ${selectField('Business status', 'stage', edit.stage || 'Lead', STAGES.map((stage) => [stage, stage]))}
       ${selectField('Client urgency', 'priority', edit.priority || 'Medium', ['Low', 'Medium', 'High', 'Urgent'].map((item) => [item, item]))}
       ${field('Estimate total', 'estimate_total', edit.estimate_total || 0, false, 'number')}
+      ${field('Invoice total', 'invoice_total', edit.invoice_total || 0, false, 'number')}
       ${field('Site address', 'site_address', edit.site_address, false, 'text', 'span-2')}
       ${textareaField('Scope', 'scope', edit.scope, 'span-2')}
       ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
@@ -1878,6 +2099,271 @@ function renderCrmAccountModal(companyId, accountKey) {
   `, 'crm-modal');
 }
 
+function renderFinancePage(route, companyId) {
+  const summary = financeSummary(companyId);
+  const invoices = companyFinanceInvoices(companyId);
+  const payments = companyFinancePayments(companyId).slice().sort(dateDesc('received_at')).slice(0, 5);
+  const expenses = companyFinanceExpenses(companyId).slice().sort(dateDesc('spent_at')).slice(0, 5);
+  const vendors = companyFinanceVendors(companyId).slice().sort((a, b) => a.name.localeCompare(b.name)).slice(0, 5);
+  return `
+    <section class="tool-page finance-page">
+      ${workspaceHeader('Finance', 'Invoices, payments, expenses, vendors, and job-linked money in one company view.', `
+        <button class="btn btn-primary" type="button" data-action="new-finance-invoice"><i class="ti ti-file-dollar"></i>New invoice</button>
+        <button class="btn" type="button" data-action="new-finance-payment"><i class="ti ti-cash"></i>Record payment</button>
+        <button class="btn" type="button" data-action="new-finance-expense"><i class="ti ti-receipt"></i>Add expense</button>
+        <button class="btn" type="button" data-action="new-finance-vendor"><i class="ti ti-building-store"></i>Add vendor</button>
+        <a class="btn" href="${appHref(companyPath('finance', { report: 'summary' }, companyId))}" data-router><i class="ti ti-report-analytics"></i>Reports</a>
+      `)}
+      <section class="metric-grid finance-metrics">
+        ${metricCard('Estimated pipeline', money(summary.pipeline))}
+        ${metricCard('Invoiced', money(summary.invoiced))}
+        ${metricCard('Collected', money(summary.collected))}
+        ${metricCard('Outstanding', money(summary.outstanding))}
+        ${metricCard('Expenses', money(summary.expenses))}
+        ${metricCard('Net position', money(summary.net))}
+      </section>
+      <section class="panel finance-aging">
+        <div class="section-head"><div><h2>AR aging</h2><p>Outstanding invoice balance by due date.</p></div></div>
+        <div class="finance-aging-grid">
+          ${[
+            ['Current', summary.aging.current],
+            ['1-30', summary.aging.thirty],
+            ['31-60', summary.aging.sixty],
+            ['61+', summary.aging.overSixty],
+          ].map(([label, value]) => `<div><span>${h(label)}</span><strong>${money(value)}</strong></div>`).join('')}
+        </div>
+      </section>
+      <section class="panel finance-invoice-panel">
+        <div class="section-head"><div><h2>Invoices</h2><p>${invoices.length} billing record${invoices.length === 1 ? '' : 's'} for ${h(companyName(companyId))}</p></div></div>
+        <div class="data-table finance-invoice-table">
+          <div class="table-head"><span>Invoice</span><span>Status</span><span>Job</span><span>Due</span><span>Total</span><span>Paid</span><span>Balance</span></div>
+          ${invoices.map((invoice) => `
+            <a class="table-row" href="${appHref(companyPath('finance', { invoice: invoice.id }, companyId))}" data-router>
+              <span><strong>${h(invoice.invoice_number)}</strong><small>${h(invoice.client_name || jobById(invoice.job_id)?.client_name || 'No client')}</small></span>
+              <span>${financeStatusPill(invoiceStatus(invoice))}</span>
+              <span>${h(jobById(invoice.job_id)?.name || 'Company level')}</span>
+              <span>${formatDate(invoice.due_date)}</span>
+              <span>${money(invoice.total)}</span>
+              <span>${money(invoicePaid(invoice.id))}</span>
+              <span>${money(invoiceBalance(invoice.id))}</span>
+            </a>
+          `).join('') || emptyState('No invoices yet. Create one from a job or customer record.')}
+        </div>
+      </section>
+      <section class="finance-secondary-grid">
+        <article class="panel">
+          <div class="section-head"><div><h2>Recent payments</h2><p>Money received.</p></div></div>
+          <div class="finance-compact-list">
+            ${payments.map((payment) => compactFinanceRow(financeInvoiceById(payment.invoice_id)?.invoice_number || 'Payment', payment.method, money(payment.amount), payment.received_at)).join('') || emptyState('No payments recorded.')}
+          </div>
+        </article>
+        <article class="panel">
+          <div class="section-head"><div><h2>Expenses</h2><p>Job and company costs.</p></div></div>
+          <div class="finance-compact-list">
+            ${expenses.map((expense) => compactFinanceRow(financeVendorName(expense.vendor_id), expense.category, money(expense.amount), expense.spent_at, companyPath('finance', { expense: expense.id }, companyId))).join('') || emptyState('No expenses recorded.')}
+          </div>
+        </article>
+        <article class="panel">
+          <div class="section-head"><div><h2>Vendors</h2><p>Suppliers and subcontractors.</p></div></div>
+          <div class="finance-compact-list">
+            ${vendors.map((vendor) => compactFinanceRow(vendor.name, vendor.category, vendor.status, vendor.updated_at, companyPath('finance', { vendor: vendor.id }, companyId))).join('') || emptyState('No vendors recorded.')}
+          </div>
+        </article>
+      </section>
+    </section>
+  `;
+}
+
+function renderFinanceRouteModal(route, companyId) {
+  if (route.params.get('invoice')) return renderInvoiceDetailModal(companyId, route.params.get('invoice'));
+  if (route.params.get('expense')) return renderExpenseDetailModal(companyId, route.params.get('expense'));
+  if (route.params.get('vendor')) return renderVendorDetailModal(companyId, route.params.get('vendor'));
+  if (route.params.get('report') === 'summary') return renderFinanceReportModal(companyId);
+  return '';
+}
+
+function renderInvoiceDetailModal(companyId, id) {
+  const invoice = financeInvoiceById(id);
+  if (!invoice || invoice.company_id !== companyId) return renderModalShell('Finance', 'Invoice', emptyState('Invoice not found.'));
+  const payments = paymentsForInvoice(invoice.id);
+  const job = jobById(invoice.job_id);
+  return renderModalShell('Finance', invoice.invoice_number, `
+    <div class="finance-detail-modal">
+      ${contractRows([
+        ['Client', invoice.client_name || job?.client_name || 'No client'],
+        ['Status', invoiceStatus(invoice)],
+        ['Job', job?.name || 'Company level'],
+        ['Issued', formatDate(invoice.issue_date)],
+        ['Due', formatDate(invoice.due_date)],
+        ['Total', money(invoice.total)],
+        ['Collected', money(invoicePaid(invoice.id))],
+        ['Balance', money(invoiceBalance(invoice.id))],
+      ])}
+      <div class="finance-modal-actions">
+        <button class="btn btn-primary" type="button" data-action="new-finance-payment" data-invoice-id="${h(invoice.id)}"><i class="ti ti-cash"></i>Record payment</button>
+        <button class="btn" type="button" data-action="edit-finance-invoice" data-invoice-id="${h(invoice.id)}"><i class="ti ti-pencil"></i>Edit invoice</button>
+        ${job ? `<a class="btn" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router><i class="ti ti-briefcase"></i>Open job</a>` : ''}
+      </div>
+      <section class="finance-modal-section">
+        <div class="section-head"><div><h2>Payments</h2><p>${payments.length} payment${payments.length === 1 ? '' : 's'} applied.</p></div></div>
+        <div class="finance-compact-list">
+          ${payments.map((payment) => compactFinanceRow(payment.reference || payment.method, payment.method, money(payment.amount), payment.received_at)).join('') || emptyState('No payments yet.')}
+        </div>
+      </section>
+      ${invoice.notes ? `<p class="finance-note">${h(invoice.notes)}</p>` : ''}
+    </div>
+  `, 'finance-modal');
+}
+
+function renderExpenseDetailModal(companyId, id) {
+  const expense = financeExpenseById(id);
+  if (!expense || expense.company_id !== companyId) return renderModalShell('Finance', 'Expense', emptyState('Expense not found.'));
+  const job = jobById(expense.job_id);
+  return renderModalShell('Finance', `${financeVendorName(expense.vendor_id)} expense`, `
+    <div class="finance-detail-modal">
+      ${contractRows([
+        ['Vendor', financeVendorName(expense.vendor_id)],
+        ['Category', expense.category],
+        ['Status', expense.status],
+        ['Job', job?.name || 'Company level'],
+        ['Spent', formatDate(expense.spent_at)],
+        ['Amount', money(expense.amount)],
+      ])}
+      <div class="finance-modal-actions">
+        <button class="btn btn-primary" type="button" data-action="edit-finance-expense" data-expense-id="${h(expense.id)}"><i class="ti ti-pencil"></i>Edit expense</button>
+        ${job ? `<a class="btn" href="${appHref(companyPath('files', { job_id: job.id }, companyId))}" data-router><i class="ti ti-folder"></i>Job files</a>` : ''}
+      </div>
+      ${expense.notes ? `<p class="finance-note">${h(expense.notes)}</p>` : ''}
+    </div>
+  `, 'finance-modal');
+}
+
+function renderVendorDetailModal(companyId, id) {
+  const vendor = financeVendorById(id);
+  if (!vendor || vendor.company_id !== companyId) return renderModalShell('Finance', 'Vendor', emptyState('Vendor not found.'));
+  const expenses = companyFinanceExpenses(companyId).filter((expense) => expense.vendor_id === vendor.id);
+  return renderModalShell('Finance', vendor.name, `
+    <div class="finance-detail-modal">
+      ${contractRows([
+        ['Contact', vendor.contact_name || 'No contact'],
+        ['Email', vendor.email || 'No email'],
+        ['Phone', vendor.phone || 'No phone'],
+        ['Category', vendor.category],
+        ['Status', vendor.status],
+        ['Spend', money(sum(expenses, 'amount'))],
+      ])}
+      <div class="finance-modal-actions">
+        <button class="btn btn-primary" type="button" data-action="edit-finance-vendor" data-vendor-id="${h(vendor.id)}"><i class="ti ti-pencil"></i>Edit vendor</button>
+        <button class="btn" type="button" data-action="new-finance-expense" data-vendor-id="${h(vendor.id)}"><i class="ti ti-receipt"></i>Add expense</button>
+      </div>
+      ${vendor.notes ? `<p class="finance-note">${h(vendor.notes)}</p>` : ''}
+    </div>
+  `, 'finance-modal');
+}
+
+function renderFinanceReportModal(companyId) {
+  const summary = financeSummary(companyId);
+  return renderModalShell('Finance', 'Summary report', `
+    <div class="finance-report-modal">
+      ${contractRows([
+        ['Company', companyName(companyId)],
+        ['Estimated pipeline', money(summary.pipeline)],
+        ['Invoiced', money(summary.invoiced)],
+        ['Collected', money(summary.collected)],
+        ['Outstanding', money(summary.outstanding)],
+        ['Expenses', money(summary.expenses)],
+        ['Net position', money(summary.net)],
+      ])}
+      <div class="finance-aging-grid">
+        <div><span>Current</span><strong>${money(summary.aging.current)}</strong></div>
+        <div><span>1-30</span><strong>${money(summary.aging.thirty)}</strong></div>
+        <div><span>31-60</span><strong>${money(summary.aging.sixty)}</strong></div>
+        <div><span>61+</span><strong>${money(summary.aging.overSixty)}</strong></div>
+      </div>
+    </div>
+  `, 'finance-modal');
+}
+
+function renderFinanceInvoiceFormModal(companyId, invoice = null) {
+  const edit = invoice || blankFinanceInvoice(companyId);
+  return renderModalShell('Finance', invoice ? 'Edit invoice' : 'New invoice', `
+    <form class="finance-form" data-finance-invoice-form>
+      <input type="hidden" name="id" value="${h(edit.id)}" />
+      ${field('Invoice number', 'invoice_number', edit.invoice_number, true)}
+      ${selectField('Linked job', 'job_id', edit.job_id || '', [['', 'Company level']].concat(companyJobs(companyId).map((job) => [job.id, job.name])))}
+      ${field('Client', 'client_name', edit.client_name, true)}
+      ${selectField('Status', 'status', edit.status, INVOICE_STATUSES.map((status) => [status, status]))}
+      ${field('Issue date', 'issue_date', edit.issue_date, false, 'date')}
+      ${field('Due date', 'due_date', edit.due_date, false, 'date')}
+      ${field('Subtotal', 'subtotal', edit.subtotal, false, 'number')}
+      ${field('Tax', 'tax', edit.tax, false, 'number')}
+      ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
+      <div class="form-actions span-2">
+        <button class="btn btn-primary" type="submit">Save invoice</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'finance-form-modal');
+}
+
+function renderFinancePaymentFormModal(companyId, invoiceId = '') {
+  const edit = blankFinancePayment(companyId, invoiceId);
+  return renderModalShell('Finance', 'Record payment', `
+    <form class="finance-form" data-finance-payment-form>
+      ${selectField('Invoice', 'invoice_id', edit.invoice_id, companyFinanceInvoices(companyId).map((invoice) => [invoice.id, `${invoice.invoice_number} - ${invoice.client_name}`]))}
+      ${field('Amount', 'amount', edit.amount, true, 'number')}
+      ${selectField('Method', 'method', edit.method, PAYMENT_METHODS.map((method) => [method, method]))}
+      ${field('Received', 'received_at', edit.received_at, false, 'date')}
+      ${field('Reference', 'reference', edit.reference)}
+      ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
+      <div class="form-actions span-2">
+        <button class="btn btn-primary" type="submit">Save payment</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'finance-form-modal');
+}
+
+function renderFinanceExpenseFormModal(companyId, expense = null, vendorId = '') {
+  const edit = expense || blankFinanceExpense(companyId, vendorId);
+  return renderModalShell('Finance', expense ? 'Edit expense' : 'Add expense', `
+    <form class="finance-form" data-finance-expense-form>
+      <input type="hidden" name="id" value="${h(edit.id)}" />
+      ${selectField('Vendor', 'vendor_id', edit.vendor_id, companyFinanceVendors(companyId).map((vendor) => [vendor.id, vendor.name]))}
+      ${selectField('Linked job', 'job_id', edit.job_id || '', [['', 'Company level']].concat(companyJobs(companyId).map((job) => [job.id, job.name])))}
+      ${selectField('Category', 'category', edit.category, EXPENSE_CATEGORIES.map((category) => [category, category]))}
+      ${selectField('Status', 'status', edit.status, EXPENSE_STATUSES.map((status) => [status, status]))}
+      ${field('Amount', 'amount', edit.amount, true, 'number')}
+      ${field('Spent date', 'spent_at', edit.spent_at, false, 'date')}
+      ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
+      <div class="form-actions span-2">
+        <button class="btn btn-primary" type="submit">Save expense</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'finance-form-modal');
+}
+
+function renderFinanceVendorFormModal(companyId, vendor = null) {
+  const edit = vendor || blankFinanceVendor(companyId);
+  return renderModalShell('Finance', vendor ? 'Edit vendor' : 'Add vendor', `
+    <form class="finance-form" data-finance-vendor-form>
+      <input type="hidden" name="id" value="${h(edit.id)}" />
+      ${field('Vendor name', 'name', edit.name, true)}
+      ${field('Contact', 'contact_name', edit.contact_name)}
+      ${field('Email', 'email', edit.email, false, 'email')}
+      ${field('Phone', 'phone', edit.phone)}
+      ${selectField('Category', 'category', edit.category, EXPENSE_CATEGORIES.map((category) => [category, category]))}
+      ${selectField('Status', 'status', edit.status, VENDOR_STATUSES.map((status) => [status, status]))}
+      ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
+      <div class="form-actions span-2">
+        <button class="btn btn-primary" type="submit">Save vendor</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'finance-form-modal');
+}
+
 function renderOperationsPage(route, companyId) {
   const name = route.section;
   const labels = {
@@ -1981,8 +2467,19 @@ function renderActiveModal(route, session) {
   if (state.modal === 'form-preview') return renderFormPreviewModal(activeCompanyId(), selectedForm(activeCompanyId()));
   if (state.modal === 'job-new') return renderJobFormModal(activeCompanyId(), null);
   if (state.modal === 'job-edit') return renderJobFormModal(activeCompanyId(), selectedJob());
+  if (state.modal === 'finance-invoice-new') return renderFinanceInvoiceFormModal(activeCompanyId(), null);
+  if (state.modal === 'finance-invoice-edit') return renderFinanceInvoiceFormModal(activeCompanyId(), financeInvoiceById(state.selectedFinanceInvoiceId));
+  if (state.modal === 'finance-payment-new') return renderFinancePaymentFormModal(activeCompanyId(), state.selectedFinanceInvoiceId);
+  if (state.modal === 'finance-expense-new') return renderFinanceExpenseFormModal(activeCompanyId(), null, state.selectedFinanceVendorId);
+  if (state.modal === 'finance-expense-edit') return renderFinanceExpenseFormModal(activeCompanyId(), financeExpenseById(state.selectedFinanceExpenseId));
+  if (state.modal === 'finance-vendor-new') return renderFinanceVendorFormModal(activeCompanyId(), null);
+  if (state.modal === 'finance-vendor-edit') return renderFinanceVendorFormModal(activeCompanyId(), financeVendorById(state.selectedFinanceVendorId));
   if (route.name === 'company' && route.section === 'crm' && route.params.get('account')) {
     return renderCrmAccountModal(route.companyId, route.params.get('account'));
+  }
+  if (route.name === 'company' && route.section === 'finance') {
+    const financeModal = renderFinanceRouteModal(route, route.companyId);
+    if (financeModal) return financeModal;
   }
 
   if (route.name === 'company' && route.section === 'jobs' && route.params.get('tab') === 'editor') {
@@ -2401,6 +2898,56 @@ function handleAction(event, node) {
     exportForms(activeCompanyId());
     return;
   }
+  if (action === 'new-finance-invoice') {
+    event.preventDefault();
+    state.selectedFinanceInvoiceId = '';
+    state.modal = 'finance-invoice-new';
+    render();
+    return;
+  }
+  if (action === 'edit-finance-invoice') {
+    event.preventDefault();
+    state.selectedFinanceInvoiceId = node.dataset.invoiceId || '';
+    state.modal = 'finance-invoice-edit';
+    render();
+    return;
+  }
+  if (action === 'new-finance-payment') {
+    event.preventDefault();
+    state.selectedFinanceInvoiceId = node.dataset.invoiceId || state.route?.params?.get('invoice') || '';
+    state.modal = 'finance-payment-new';
+    render();
+    return;
+  }
+  if (action === 'new-finance-expense') {
+    event.preventDefault();
+    state.selectedFinanceExpenseId = '';
+    state.selectedFinanceVendorId = node.dataset.vendorId || '';
+    state.modal = 'finance-expense-new';
+    render();
+    return;
+  }
+  if (action === 'edit-finance-expense') {
+    event.preventDefault();
+    state.selectedFinanceExpenseId = node.dataset.expenseId || '';
+    state.modal = 'finance-expense-edit';
+    render();
+    return;
+  }
+  if (action === 'new-finance-vendor') {
+    event.preventDefault();
+    state.selectedFinanceVendorId = '';
+    state.modal = 'finance-vendor-new';
+    render();
+    return;
+  }
+  if (action === 'edit-finance-vendor') {
+    event.preventDefault();
+    state.selectedFinanceVendorId = node.dataset.vendorId || '';
+    state.modal = 'finance-vendor-edit';
+    render();
+    return;
+  }
   if (action === 'add-question') {
     event.preventDefault();
     addQuestion(node.dataset.questionType || 'multiple');
@@ -2448,6 +2995,9 @@ function closeActiveModal() {
   state.modal = '';
   state.formStartTemplateId = '';
   state.formStartTab = 'blank';
+  state.selectedFinanceInvoiceId = '';
+  state.selectedFinanceExpenseId = '';
+  state.selectedFinanceVendorId = '';
   if (route.name === 'company' && route.section === 'tasks' && (route.params.get('new') || route.params.get('edit') || route.params.get('task_id'))) {
     navigate(companyPath('tasks', route.jobId ? { job_id: route.jobId } : {}, route.companyId), { replace: true });
     return;
@@ -2459,6 +3009,10 @@ function closeActiveModal() {
   }
   if (route.name === 'company' && route.section === 'crm' && route.params.get('account') && !closingStateModal) {
     navigate(companyPath('crm', {}, route.companyId), { replace: true });
+    return;
+  }
+  if (route.name === 'company' && route.section === 'finance' && (route.params.get('invoice') || route.params.get('expense') || route.params.get('vendor') || route.params.get('report')) && !closingStateModal) {
+    navigate(companyPath('finance', {}, route.companyId), { replace: true });
     return;
   }
   render();
@@ -2525,6 +3079,30 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-folder-form]')) {
     event.preventDefault();
     createDriveFolder(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-finance-invoice-form]')) {
+    event.preventDefault();
+    saveFinanceInvoice(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-finance-payment-form]')) {
+    event.preventDefault();
+    saveFinancePayment(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-finance-expense-form]')) {
+    event.preventDefault();
+    saveFinanceExpense(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-finance-vendor-form]')) {
+    event.preventDefault();
+    saveFinanceVendor(event.target);
     return;
   }
 
@@ -2640,6 +3218,7 @@ async function saveJob(form) {
   payload.id = payload.id || crypto.randomUUID();
   payload.company_id = payload.company_id || activeCompanyId();
   payload.estimate_total = Number(payload.estimate_total || 0);
+  payload.invoice_total = Number(payload.invoice_total || 0);
   payload.updated_at = new Date().toISOString();
 
   const existing = state.jobs.some((job) => job.id === payload.id);
@@ -2811,6 +3390,79 @@ function createDriveFolder(form) {
   render();
 }
 
+function saveFinanceInvoice(form) {
+  const fields = Object.fromEntries(new FormData(form).entries());
+  const companyId = activeCompanyId();
+  const linkedJob = jobById(fields.job_id);
+  const previous = String(fields.id || '').trim() ? financeInvoiceById(String(fields.id).trim()) : null;
+  const invoice = normalizeFinanceInvoice({
+    ...fields,
+    id: String(fields.id || '').trim() || `invoice-${crypto.randomUUID()}`,
+    company_id: companyId,
+    client_name: String(fields.client_name || linkedJob?.client_name || '').trim(),
+    total: number(fields.subtotal) + number(fields.tax),
+    updated_at: new Date().toISOString(),
+  });
+  upsertFinanceInvoice(invoice);
+  if (previous?.job_id && previous.job_id !== invoice.job_id) syncJobInvoiceTotal(previous.job_id);
+  syncJobInvoiceTotal(invoice.job_id);
+  state.modal = '';
+  state.sync = { label: 'Finance saved locally', mode: 'local' };
+  navigate(companyPath('finance', { invoice: invoice.id }, companyId), { replace: true });
+}
+
+function saveFinancePayment(form) {
+  const fields = Object.fromEntries(new FormData(form).entries());
+  const companyId = activeCompanyId();
+  const payment = normalizeFinancePayment({
+    ...fields,
+    id: `payment-${crypto.randomUUID()}`,
+    company_id: companyId,
+    created_at: new Date().toISOString(),
+  });
+  state.financePayments.unshift(payment);
+  const invoice = financeInvoiceById(payment.invoice_id);
+  if (invoice) {
+    invoice.status = invoiceBalance(invoice.id) <= 0 ? 'Paid' : 'Partially paid';
+    invoice.updated_at = new Date().toISOString();
+    syncJobInvoiceTotal(invoice.job_id);
+  }
+  persistAll();
+  state.modal = '';
+  state.sync = { label: 'Payment recorded locally', mode: 'local' };
+  navigate(companyPath('finance', payment.invoice_id ? { invoice: payment.invoice_id } : {}, companyId), { replace: true });
+}
+
+function saveFinanceExpense(form) {
+  const fields = Object.fromEntries(new FormData(form).entries());
+  const companyId = activeCompanyId();
+  const expense = normalizeFinanceExpense({
+    ...fields,
+    id: String(fields.id || '').trim() || `expense-${crypto.randomUUID()}`,
+    company_id: companyId,
+    updated_at: new Date().toISOString(),
+  });
+  upsertFinanceExpense(expense);
+  state.modal = '';
+  state.sync = { label: 'Expense saved locally', mode: 'local' };
+  navigate(companyPath('finance', { expense: expense.id }, companyId), { replace: true });
+}
+
+function saveFinanceVendor(form) {
+  const fields = Object.fromEntries(new FormData(form).entries());
+  const companyId = activeCompanyId();
+  const vendor = normalizeFinanceVendor({
+    ...fields,
+    id: String(fields.id || '').trim() || `vendor-${crypto.randomUUID()}`,
+    company_id: companyId,
+    updated_at: new Date().toISOString(),
+  });
+  upsertFinanceVendor(vendor);
+  state.modal = '';
+  state.sync = { label: 'Vendor saved locally', mode: 'local' };
+  navigate(companyPath('finance', { vendor: vendor.id }, companyId), { replace: true });
+}
+
 async function downloadFile(id) {
   const file = state.files.find((item) => item.id === id);
   if (!file?.object_path) {
@@ -2867,6 +3519,36 @@ function upsertFile(file) {
   persistAll();
 }
 
+function upsertFinanceInvoice(invoice) {
+  const index = state.financeInvoices.findIndex((item) => item.id === invoice.id);
+  if (index >= 0) state.financeInvoices[index] = invoice;
+  else state.financeInvoices.unshift(invoice);
+  persistAll();
+}
+
+function upsertFinanceExpense(expense) {
+  const index = state.financeExpenses.findIndex((item) => item.id === expense.id);
+  if (index >= 0) state.financeExpenses[index] = expense;
+  else state.financeExpenses.unshift(expense);
+  persistAll();
+}
+
+function upsertFinanceVendor(vendor) {
+  const index = state.financeVendors.findIndex((item) => item.id === vendor.id);
+  if (index >= 0) state.financeVendors[index] = vendor;
+  else state.financeVendors.unshift(vendor);
+  persistAll();
+}
+
+function syncJobInvoiceTotal(jobId) {
+  if (!jobId) return;
+  const job = jobById(jobId);
+  if (!job) return;
+  job.invoice_total = sum(companyFinanceInvoices(job.company_id).filter((invoice) => invoice.job_id === jobId), 'total');
+  job.updated_at = new Date().toISOString();
+  upsertJob(job);
+}
+
 function updateWorkspaceOnly() {
   const workspace = document.getElementById('workspace');
   if (!workspace) return;
@@ -2906,7 +3588,7 @@ function normalizeLegacyLocation() {
     '/crm.html': companyPath('crm', {}, companyId),
     '/dashboards.html': companyPath('analytics', {}, companyId),
     '/files.html': companyPath('files', {}, companyId),
-    '/finance.html': companyPath('analytics', {}, companyId),
+    '/finance.html': companyPath('finance', {}, companyId),
     '/forms.html': companyPath('forms', {}, companyId),
     '/jobs.html': companyPath('jobs', {}, companyId),
     '/knowledge.html': companyPath('files', { folder: 'shared' }, companyId),
@@ -2928,6 +3610,7 @@ function normalizeLegacyLocation() {
   if (path === '/forms') target = companyPath('forms', copyParams(params, ['job_id']), companyId);
   if (path === '/analytics') target = companyPath('analytics', copyParams(params, ['job_id']), companyId);
   if (path === '/crm') target = companyPath('crm', copyParams(params, ['account']), companyId);
+  if (path === '/finance') target = companyPath('finance', copyParams(params, ['invoice', 'expense', 'vendor', 'report']), companyId);
   if (path === '/admin') target = companyPath('settings', {}, companyId);
   if (path === '/time') target = companyPath('time', {}, companyId);
   if (path === '/team') target = companyPath('users', {}, companyId);
@@ -2953,7 +3636,7 @@ function routeRedirect(route) {
   if (!allowed.includes(route.companyId)) {
     return companyPath(route.section || 'jobs', Object.fromEntries(route.params.entries()), allowed[0] || defaultCompanyId());
   }
-  const validSections = ['jobs', 'tasks', 'files', 'forms', 'analytics', 'crm', 'users', 'settings', 'time', 'approvals'];
+  const validSections = ['jobs', 'tasks', 'files', 'forms', 'analytics', 'crm', 'finance', 'users', 'settings', 'time', 'approvals'];
   if (!validSections.includes(route.section)) return companyPath('jobs', {}, route.companyId);
   const jobCompanyId = route.jobId ? companyIdForJob(route.jobId) : '';
   if (jobCompanyId && jobCompanyId !== route.companyId && allowed.includes(jobCompanyId)) {
@@ -3196,6 +3879,90 @@ function crmOwnerOptions(companyId = activeCompanyId()) {
   return compactUnique(companyJobs(companyId).map((job) => job.owner_name)).sort((a, b) => a.localeCompare(b));
 }
 
+function companyFinanceInvoices(companyId = activeCompanyId()) {
+  return state.financeInvoices
+    .filter((invoice) => invoice.company_id === companyId)
+    .sort(dateDesc('updated_at'));
+}
+
+function companyFinancePayments(companyId = activeCompanyId()) {
+  return state.financePayments.filter((payment) => payment.company_id === companyId);
+}
+
+function companyFinanceExpenses(companyId = activeCompanyId()) {
+  return state.financeExpenses
+    .filter((expense) => expense.company_id === companyId)
+    .sort(dateDesc('updated_at'));
+}
+
+function companyFinanceVendors(companyId = activeCompanyId()) {
+  return state.financeVendors.filter((vendor) => vendor.company_id === companyId);
+}
+
+function financeInvoiceById(id) {
+  return state.financeInvoices.find((invoice) => invoice.id === id) || null;
+}
+
+function financeExpenseById(id) {
+  return state.financeExpenses.find((expense) => expense.id === id) || null;
+}
+
+function financeVendorById(id) {
+  return state.financeVendors.find((vendor) => vendor.id === id) || null;
+}
+
+function financeVendorName(id) {
+  return financeVendorById(id)?.name || 'No vendor';
+}
+
+function paymentsForInvoice(invoiceId) {
+  return state.financePayments.filter((payment) => payment.invoice_id === invoiceId).sort(dateDesc('received_at'));
+}
+
+function invoicePaid(invoiceId) {
+  return sum(paymentsForInvoice(invoiceId), 'amount');
+}
+
+function invoiceBalance(invoiceId) {
+  const invoice = financeInvoiceById(invoiceId);
+  return Math.max(0, number(invoice?.total) - invoicePaid(invoiceId));
+}
+
+function invoiceStatus(invoice) {
+  const balance = invoiceBalance(invoice.id);
+  if (balance <= 0 && number(invoice.total) > 0) return 'Paid';
+  if (balance < number(invoice.total)) return 'Partially paid';
+  if (invoice.status === 'Sent' && daysPastDue(invoice.due_date) > 0) return 'Overdue';
+  return invoice.status;
+}
+
+function financeSummary(companyId = activeCompanyId()) {
+  const invoices = companyFinanceInvoices(companyId);
+  const payments = companyFinancePayments(companyId);
+  const expenses = companyFinanceExpenses(companyId).filter((expense) => ['Approved', 'Paid'].includes(expense.status));
+  const aging = { current: 0, thirty: 0, sixty: 0, overSixty: 0 };
+  invoices.forEach((invoice) => {
+    const balance = invoiceBalance(invoice.id);
+    if (!balance) return;
+    const days = daysPastDue(invoice.due_date);
+    if (days <= 0) aging.current += balance;
+    else if (days <= 30) aging.thirty += balance;
+    else if (days <= 60) aging.sixty += balance;
+    else aging.overSixty += balance;
+  });
+  const collected = sum(payments, 'amount');
+  const expenseTotal = sum(expenses, 'amount');
+  return {
+    pipeline: sum(companyJobs(companyId), 'estimate_total'),
+    invoiced: sum(invoices, 'total'),
+    collected,
+    outstanding: invoices.reduce((total, invoice) => total + invoiceBalance(invoice.id), 0),
+    expenses: expenseTotal,
+    net: collected - expenseTotal,
+    aging,
+  };
+}
+
 function filteredTasks(companyId = activeCompanyId(), jobId = '') {
   const q = state.query.trim().toLowerCase();
   return companyTasks(companyId).filter((task) => {
@@ -3424,6 +4191,74 @@ function normalizeFormResponse(input) {
   };
 }
 
+function normalizeFinanceInvoice(input) {
+  const subtotal = number(input.subtotal);
+  const tax = number(input.tax);
+  const total = number(input.total) || subtotal + tax;
+  return {
+    id: String(input.id || `invoice-${crypto.randomUUID()}`),
+    company_id: String(input.company_id || defaultCompanyId()),
+    job_id: String(input.job_id || ''),
+    client_name: String(input.client_name || '').trim(),
+    invoice_number: String(input.invoice_number || `INV-${Date.now()}`).trim(),
+    status: INVOICE_STATUSES.includes(input.status) ? input.status : 'Draft',
+    issue_date: String(input.issue_date || isoDate(0)).slice(0, 10),
+    due_date: String(input.due_date || isoDate(30)).slice(0, 10),
+    subtotal,
+    tax,
+    total,
+    notes: String(input.notes || '').trim(),
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+
+function normalizeFinancePayment(input) {
+  return {
+    id: String(input.id || `payment-${crypto.randomUUID()}`),
+    company_id: String(input.company_id || defaultCompanyId()),
+    invoice_id: String(input.invoice_id || ''),
+    amount: number(input.amount),
+    method: PAYMENT_METHODS.includes(input.method) ? input.method : 'ACH',
+    received_at: String(input.received_at || isoDate(0)).slice(0, 10),
+    reference: String(input.reference || '').trim(),
+    notes: String(input.notes || '').trim(),
+    created_at: input.created_at || new Date().toISOString(),
+  };
+}
+
+function normalizeFinanceExpense(input) {
+  return {
+    id: String(input.id || `expense-${crypto.randomUUID()}`),
+    company_id: String(input.company_id || defaultCompanyId()),
+    job_id: String(input.job_id || ''),
+    vendor_id: String(input.vendor_id || ''),
+    category: EXPENSE_CATEGORIES.includes(input.category) ? input.category : 'Other',
+    amount: number(input.amount),
+    status: EXPENSE_STATUSES.includes(input.status) ? input.status : 'Pending',
+    spent_at: String(input.spent_at || isoDate(0)).slice(0, 10),
+    notes: String(input.notes || '').trim(),
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+
+function normalizeFinanceVendor(input) {
+  return {
+    id: String(input.id || `vendor-${crypto.randomUUID()}`),
+    company_id: String(input.company_id || defaultCompanyId()),
+    name: String(input.name || 'New vendor').trim() || 'New vendor',
+    contact_name: String(input.contact_name || '').trim(),
+    email: String(input.email || '').trim(),
+    phone: String(input.phone || '').trim(),
+    category: EXPENSE_CATEGORIES.includes(input.category) ? input.category : 'Other',
+    status: VENDOR_STATUSES.includes(input.status) ? input.status : 'Active',
+    notes: String(input.notes || '').trim(),
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+
 function normalizeTeamMember(input) {
   return {
     id: String(input.id || ''),
@@ -3470,6 +4305,61 @@ function blankTask(companyId = activeCompanyId(), jobId = '') {
     priority: 'medium',
     status: 'todo',
     type: 'admin',
+  });
+}
+
+function blankFinanceInvoice(companyId = activeCompanyId()) {
+  const job = selectedJob();
+  return normalizeFinanceInvoice({
+    id: '',
+    company_id: companyId,
+    job_id: job?.company_id === companyId ? job.id : '',
+    client_name: job?.company_id === companyId ? job.client_name : '',
+    invoice_number: nextInvoiceNumber(companyId),
+    status: 'Draft',
+    issue_date: isoDate(0),
+    due_date: isoDate(30),
+    subtotal: job?.company_id === companyId ? job.estimate_total : 0,
+    tax: 0,
+    notes: '',
+  });
+}
+
+function blankFinancePayment(companyId = activeCompanyId(), invoiceId = '') {
+  const invoice = invoiceId ? financeInvoiceById(invoiceId) : companyFinanceInvoices(companyId).find((item) => invoiceBalance(item.id) > 0);
+  return normalizeFinancePayment({
+    id: '',
+    company_id: companyId,
+    invoice_id: invoice?.id || '',
+    amount: invoice ? invoiceBalance(invoice.id) : 0,
+    method: 'ACH',
+    received_at: isoDate(0),
+    reference: '',
+    notes: '',
+  });
+}
+
+function blankFinanceExpense(companyId = activeCompanyId(), vendorId = '') {
+  return normalizeFinanceExpense({
+    id: '',
+    company_id: companyId,
+    job_id: selectedJob()?.company_id === companyId ? selectedJob().id : '',
+    vendor_id: vendorId || companyFinanceVendors(companyId)[0]?.id || '',
+    category: 'Materials',
+    status: 'Pending',
+    amount: 0,
+    spent_at: isoDate(0),
+    notes: '',
+  });
+}
+
+function blankFinanceVendor(companyId = activeCompanyId()) {
+  return normalizeFinanceVendor({
+    id: '',
+    company_id: companyId,
+    name: '',
+    category: 'Materials',
+    status: 'Active',
   });
 }
 
@@ -3636,6 +4526,10 @@ function taskStatusPill(status) {
   return `<span class="status-pill ${h(status)}">${h(statusLabel(status))}</span>`;
 }
 
+function financeStatusPill(status) {
+  return `<span class="finance-status ${h(slugify(status))}">${h(status)}</span>`;
+}
+
 function renderAvatar(profile, className) {
   if (profile.avatar_url) return `<span class="${h(className)}"><img src="${h(profile.avatar_url)}" alt="" /></span>`;
   const initials = String(profile.full_name || profile.email || 'QB').trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'QB';
@@ -3662,6 +4556,10 @@ function persistAll() {
   writeJson(DRIVE_FOLDER_CACHE_KEY, state.driveFolders);
   writeJson(FORM_CACHE_KEY, state.forms);
   writeJson(FORM_RESPONSE_CACHE_KEY, state.formResponses);
+  writeJson(FINANCE_INVOICE_CACHE_KEY, state.financeInvoices);
+  writeJson(FINANCE_PAYMENT_CACHE_KEY, state.financePayments);
+  writeJson(FINANCE_EXPENSE_CACHE_KEY, state.financeExpenses);
+  writeJson(FINANCE_VENDOR_CACHE_KEY, state.financeVendors);
   writeJson(TEAM_CACHE_KEY, state.teamMembers);
   writeJson(MEMBERSHIP_CACHE_KEY, state.memberships);
 }
@@ -3672,6 +4570,16 @@ function metricCard(label, value, text = '') {
 
 function detailRow(label, value) {
   return `<div><strong>${h(label)}</strong><span>${h(value)}</span></div>`;
+}
+
+function compactFinanceRow(title, meta, amount, date, href = '') {
+  const inner = `
+    <span><strong>${h(title)}</strong><small>${h(meta || 'Finance record')}</small></span>
+    <b>${h(amount)}</b>
+    <em>${formatDate(date)}</em>
+  `;
+  if (href) return `<a class="finance-compact-row" href="${appHref(href)}" data-router>${inner}</a>`;
+  return `<div class="finance-compact-row">${inner}</div>`;
 }
 
 function driveFolderCount(companyId, folder) {
@@ -4375,6 +5283,26 @@ function formatBytes(value) {
   const units = ['B', 'KB', 'MB', 'GB'];
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
+function dateDesc(field) {
+  return (a, b) => Date.parse(b[field] || b.updated_at || b.created_at || 0) - Date.parse(a[field] || a.updated_at || a.created_at || 0);
+}
+
+function daysPastDue(value) {
+  if (!value) return 0;
+  const due = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(due.getTime())) return 0;
+  return Math.floor((startOfToday().getTime() - due.getTime()) / 86400000);
+}
+
+function nextInvoiceNumber(companyId = activeCompanyId()) {
+  const prefix = (companyLabel(companyById(companyId) || { short_name: companyId }) || companyId || 'QH')
+    .replace(/[^a-z]/gi, '')
+    .slice(0, 2)
+    .toUpperCase() || 'QH';
+  const count = companyFinanceInvoices(companyId).length + 1;
+  return `${prefix}-${String(1000 + count)}`;
 }
 
 function startOfToday() {

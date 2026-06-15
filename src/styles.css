@@ -865,6 +865,157 @@ textarea:focus {
   width: min(860px, calc(100vw - 40px));
 }
 
+.finance-page {
+  max-width: 1360px;
+}
+
+.finance-metrics {
+  grid-template-columns: repeat(6, minmax(140px, 1fr));
+}
+
+.finance-aging {
+  display: grid;
+  gap: 4px;
+}
+
+.finance-aging-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.finance-aging-grid div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbf7ee;
+  padding: 12px;
+}
+
+.finance-aging-grid span,
+.finance-compact-row small,
+.finance-compact-row em,
+.finance-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.finance-aging-grid span,
+.finance-aging-grid strong {
+  display: block;
+}
+
+.finance-aging-grid strong {
+  margin-top: 6px;
+  font-size: 20px;
+}
+
+.finance-invoice-panel {
+  padding: 16px;
+}
+
+.finance-invoice-table .table-head,
+.finance-invoice-table .table-row {
+  grid-template-columns: minmax(220px, 1.25fr) 130px minmax(170px, .9fr) 90px 110px 110px 110px;
+  gap: 12px;
+}
+
+.finance-secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.finance-compact-list,
+.finance-detail-modal,
+.finance-report-modal,
+.finance-modal-section {
+  display: grid;
+  gap: 10px;
+}
+
+.finance-compact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbf7ee;
+  color: var(--ink);
+  padding: 10px 11px;
+}
+
+.finance-compact-row:hover {
+  border-color: var(--amber);
+  background: #fff8e7;
+}
+
+.finance-compact-row strong,
+.finance-compact-row small {
+  display: block;
+}
+
+.finance-compact-row b {
+  white-space: nowrap;
+}
+
+.finance-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 0 9px;
+  background: #e5e7eb;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.finance-status.sent { background: #dbeafe; color: #1d4ed8; }
+.finance-status.partially-paid { background: #fef3c7; color: #92400e; }
+.finance-status.paid { background: #dcfce7; color: #166534; }
+.finance-status.overdue { background: #fee2e2; color: #991b1b; }
+.finance-status.void,
+.finance-status.rejected { background: #f3f4f6; color: #6b7280; }
+
+.finance-modal {
+  width: min(900px, calc(100vw - 40px));
+}
+
+.finance-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.finance-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.finance-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.finance-form .span-2 {
+  grid-column: 1 / -1;
+}
+
+.finance-note {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbf7ee;
+  padding: 12px;
+}
+
 .profile-layout,
 .file-layout,
 .forms-layout {
@@ -2875,6 +3026,7 @@ textarea:focus {
 @media (max-width: 1280px) {
   .job-board { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
   .task-board { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+  .finance-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .linked-grid,
   .card-grid,
   .file-grid,
@@ -2919,6 +3071,7 @@ textarea:focus {
   .forms-layout,
   .task-layout,
   .crm-toolbar,
+  .finance-secondary-grid,
   .workspace-toolbar { grid-template-columns: 1fr; }
   .span-2,
   .span-3 { grid-column: 1; }
@@ -2931,16 +3084,24 @@ textarea:focus {
   .task-table .table-row,
   .crm-table .table-head,
   .crm-table .table-row,
+  .finance-invoice-table .table-head,
+  .finance-invoice-table .table-row,
   .drive-list .table-head,
   .drive-list .table-row { grid-template-columns: minmax(220px, 1fr) repeat(3, auto); }
   .task-table .table-head span:nth-child(n+5),
   .task-table .table-row span:nth-child(n+5),
   .crm-table .table-head span:nth-child(n+5),
   .crm-table .table-row span:nth-child(n+5),
+  .finance-invoice-table .table-head span:nth-child(n+5),
+  .finance-invoice-table .table-row span:nth-child(n+5),
   .drive-list .table-head span:nth-child(n+5),
   .drive-list .table-row span:nth-child(n+5) { display: none; }
 
   .crm-rollup-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-aging-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2989,6 +3150,8 @@ textarea:focus {
   .metric-grid,
   .job-toolbar,
   .job-editor,
+  .finance-form,
+  .finance-metrics,
   .linked-grid,
   .card-grid,
   .file-grid,
@@ -3009,13 +3172,20 @@ textarea:focus {
   .task-table .table-row,
   .crm-table .table-row,
   .crm-linked-jobs .table-row,
+  .finance-invoice-table .table-row,
   .drive-list .table-row { grid-template-columns: 1fr; }
 
-  .crm-table .table-row span:nth-child(n+5) {
+  .crm-table .table-row span:nth-child(n+5),
+  .finance-invoice-table .table-row span:nth-child(n+5) {
     display: block;
   }
 
-  .crm-rollup-grid {
+  .crm-rollup-grid,
+  .finance-aging-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-compact-row {
     grid-template-columns: 1fr;
   }
 }
