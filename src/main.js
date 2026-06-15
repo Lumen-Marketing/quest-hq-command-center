@@ -720,6 +720,7 @@ const state = {
 };
 
 const app = document.getElementById('app');
+let supabaseClientCache = null;
 init();
 
 function init() {
@@ -984,7 +985,10 @@ async function loadSupabaseData() {
 
 function createSupabaseClient() {
   if (!window.supabase || typeof window.supabase.createClient !== 'function') return null;
-  return window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+  if (!supabaseClientCache) {
+    supabaseClientCache = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+  }
+  return supabaseClientCache;
 }
 
 function renderSvgSprite() {
