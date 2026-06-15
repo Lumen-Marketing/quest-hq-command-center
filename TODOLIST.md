@@ -40,5 +40,5 @@ This file is the durable implementation checklist for the auth, permissions, peo
 - [x] Run `npm run build`.
 - [x] Run `npm run build:pages`.
 - [x] Run `git diff --check`.
-- [ ] Commit, push, deploy to Vercel production.
-- [ ] Verify production routes after deployment.
+- [x] Commit, push, deploy to Vercel production.
+- [x] Verify production routes after deployment.
