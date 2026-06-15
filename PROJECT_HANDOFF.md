@@ -21,11 +21,12 @@ The active app is `Lumen Command Center`, deployed as **Quest HQ Operations Comm
 - Quest HQ target Supabase project: `lpzotcznihwyyudxycmd`.
 - Do not run a local dev server unless Joshua explicitly allows it.
 - Deployment flow is GitHub push plus Vercel deploy.
-- Keep auth disabled/basic mode for now while the UI and app structure are stabilized.
-- Current temporary login is:
+- Supabase Auth is now the default app path. Local demo login only works when `VITE_LOCAL_LOGIN_ENABLED=true`.
+- Previous temporary login remains a demo fallback only:
   - username: `lumen123`
   - password: `lumen123`
-- Do not claim true company data isolation until Supabase Auth and RLS are re-enabled.
+- Tenant isolation now has live Supabase migrations for memberships, subscriptions, roles, role permissions, ACLs, field permissions, invites, join requests, and hardened RLS leftovers.
+- Do not claim full paid-production readiness until Stripe env vars are configured, the avatar bucket warning is resolved, leaked-password protection is enabled, and end-to-end multi-tenant tests pass.
 
 ## Product Direction
 
@@ -186,7 +187,7 @@ Long-term tenant model:
   - job files can live inside job folders
   - shared company files should not need a job
 
-While auth is disabled, filtering is client-side only. Real company privacy requires Supabase Auth + RLS before real sensitive company data is entered.
+Supabase Auth and RLS are now the intended privacy boundary. The app also has UI guards, but the database policies are the real security layer. Finance still has local/demo records and should not be treated as the real accounting system until moved behind RLS-backed tables.
 
 ## Deployment / Verification Flow
 

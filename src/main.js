@@ -2,12 +2,13 @@ import './styles.css';
 
 const CONFIG = {
   buildId: 'Quest HQ Company Workspace v1',
-  questAuthEnabled: false,
-  localLoginEnabled: true,
-  localUsername: 'lumen123',
-  localPassword: 'lumen123',
-  supabaseUrl: 'https://lpzotcznihwyyudxycmd.supabase.co',
-  supabaseKey: 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07',
+  questAuthEnabled: import.meta.env.VITE_QUEST_AUTH_ENABLED !== 'false',
+  localLoginEnabled: import.meta.env.VITE_LOCAL_LOGIN_ENABLED === 'true',
+  localUsername: import.meta.env.VITE_LOCAL_LOGIN_USERNAME || 'lumen123',
+  localPassword: import.meta.env.VITE_LOCAL_LOGIN_PASSWORD || 'lumen123',
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL || 'https://lpzotcznihwyyudxycmd.supabase.co',
+  supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07',
+  stripePriceId: import.meta.env.VITE_STRIPE_PRICE_ID || '',
 };
 
 const BASE_PATH = new URL(import.meta.env.BASE_URL || '/', window.location.origin).pathname.replace(/\/$/, '');
@@ -34,17 +35,44 @@ const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
 const ROLE_PERMISSIONS = {
   developer: ['*'],
   admin: ['*'],
-  manager: ['jobs.manage', 'tasks.manage', 'files.manage', 'forms.manage', 'finance.view', 'team.view', 'clock.manage', 'approvals.manage', 'approvals.view', 'users.view', 'settings.view'],
-  member: ['jobs.view', 'tasks.manage', 'files.view', 'forms.view', 'time.track', 'approvals.view', 'users.view'],
+  owner: ['*'],
+  manager: ['jobs.view', 'jobs.manage', 'tasks.view', 'tasks.manage', 'files.view', 'files.manage', 'forms.view', 'forms.manage', 'finance.view', 'team.view', 'clock.manage', 'approvals.manage', 'approvals.view', 'users.view', 'settings.view', 'billing.view', 'roles.view'],
+  member: ['jobs.view', 'tasks.view', 'tasks.manage', 'files.view', 'forms.view', 'time.track', 'approvals.view', 'users.view'],
 };
+
+const PERMISSION_KEYS = [
+  ['jobs.view', 'View jobs'],
+  ['jobs.manage', 'Create/edit jobs'],
+  ['tasks.view', 'View tasks'],
+  ['tasks.manage', 'Create/edit tasks'],
+  ['files.view', 'View files'],
+  ['files.manage', 'Upload/delete files'],
+  ['forms.view', 'View forms'],
+  ['forms.manage', 'Create/edit forms'],
+  ['crm.view', 'View CRM'],
+  ['finance.view', 'View finance'],
+  ['finance.manage', 'Create/edit finance'],
+  ['users.view', 'View users'],
+  ['users.manage', 'Invite/manage users'],
+  ['roles.view', 'View roles'],
+  ['roles.manage', 'Create/edit roles'],
+  ['billing.view', 'View billing'],
+  ['billing.manage', 'Manage subscription'],
+  ['settings.view', 'View settings'],
+  ['settings.manage', 'Manage settings'],
+  ['time.track', 'Track own time'],
+  ['clock.manage', 'Manage clock dashboard'],
+  ['approvals.view', 'View approvals'],
+  ['approvals.manage', 'Manage approvals'],
+];
 
 const MODULE_REGISTRY = [
   { id: 'jobs', group: 'Workspace', label: 'Jobs', icon: 'ti-briefcase', symbol: 'q-symbol-jobs', status: 'live', permission: 'jobs.view' },
-  { id: 'tasks', group: 'Workspace', label: 'Tasks', icon: 'ti-list-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'tasks.manage' },
+  { id: 'tasks', group: 'Workspace', label: 'Tasks', icon: 'ti-list-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'tasks.view' },
   { id: 'files', group: 'Workspace', label: 'Files', icon: 'ti-folder', symbol: 'q-symbol-files', status: 'live', permission: 'files.view' },
   { id: 'forms', group: 'Workspace', label: 'Forms', icon: 'ti-clipboard-list', symbol: 'q-symbol-forms', status: 'live', permission: 'forms.view' },
   { id: 'analytics', group: 'Workspace', label: 'Analytics', icon: 'ti-chart-bar', symbol: 'q-symbol-analytics', status: 'live', permission: 'jobs.view' },
-  { id: 'crm', group: 'Workspace', label: 'CRM', icon: 'ti-users-group', symbol: 'q-symbol-crm', status: 'live', permission: 'jobs.view' },
+  { id: 'crm', group: 'Workspace', label: 'CRM', icon: 'ti-users-group', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
   { id: 'tickets', group: 'Workspace', label: 'Tickets', icon: 'ti-ticket', symbol: 'q-symbol-tickets', status: 'planned' },
   { id: 'finance', group: 'Workspace', label: 'Finance', icon: 'ti-receipt-dollar', symbol: 'q-symbol-finance', status: 'live', permission: 'finance.view' },
   { id: 'knowledge', group: 'Workspace', label: 'Knowledge Base', icon: 'ti-books', symbol: 'q-symbol-knowledge', status: 'planned' },
@@ -628,6 +656,8 @@ const state = {
   route: null,
   session: readJson(SESSION_KEY, null),
   profileDraft: readJson(PROFILE_KEY, null),
+  authReady: !CONFIG.questAuthEnabled,
+  authMode: 'signin',
   jobs: readSeededList(JOB_CACHE_KEY, jobsFallback).map(normalizeJob),
   tasks: readSeededList(TASK_CACHE_KEY, tasksFallback).map(normalizeTask),
   files: readSeededList(FILE_CACHE_KEY, filesFallback).map(normalizeFile),
@@ -642,6 +672,16 @@ const state = {
   activeTimer: readJson(ACTIVE_TIMER_KEY, null),
   teamMembers: readSeededList(TEAM_CACHE_KEY, teamMembersFallback).map(normalizeTeamMember),
   memberships: readSeededList(MEMBERSHIP_CACHE_KEY, membershipsFallback),
+  profiles: [],
+  subscriptions: [],
+  roles: [],
+  rolePermissions: [],
+  roleAssignments: [],
+  resourceAcl: [],
+  fieldPermissions: [],
+  companyInvites: [],
+  joinRequests: [],
+  auditEvents: [],
   companies: mergeCompanies(companiesFallback.map(normalizeCompany)),
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
   selectedJobId: '',
@@ -675,6 +715,7 @@ const state = {
   dataLoaded: false,
   dataLoading: false,
   loginError: '',
+  authMessage: '',
   modal: '',
 };
 
@@ -688,11 +729,76 @@ function init() {
   document.addEventListener('submit', onDocumentSubmit);
   document.addEventListener('input', onDocumentInput);
   document.addEventListener('change', onDocumentChange);
+  initializeAuth();
   render();
+}
+
+async function initializeAuth() {
+  if (!CONFIG.questAuthEnabled) {
+    state.authReady = true;
+    return;
+  }
+  const client = createSupabaseClient();
+  if (!client?.auth) {
+    state.authReady = true;
+    state.loginError = 'Supabase auth is unavailable in this browser session.';
+    return;
+  }
+  try {
+    const { data } = await client.auth.getSession();
+    await setSupabaseSession(data?.session || null);
+    client.auth.onAuthStateChange((_event, session) => {
+      setSupabaseSession(session || null).finally(() => {
+        state.dataLoaded = false;
+        render();
+      });
+    });
+  } catch (error) {
+    state.loginError = error.message || 'Unable to initialize Supabase auth.';
+  } finally {
+    state.authReady = true;
+    render();
+  }
+}
+
+async function setSupabaseSession(session) {
+  if (!CONFIG.questAuthEnabled) return;
+  if (!session?.user) {
+    state.session = null;
+    localStorage.removeItem(SESSION_KEY);
+    return;
+  }
+  const profile = await fetchSupabaseProfile(session.user);
+  state.session = buildSupabaseSession(session, profile);
+  writeJson(SESSION_KEY, state.session);
+}
+
+async function fetchSupabaseProfile(user) {
+  const fallback = {
+    id: user.id,
+    email: user.email || '',
+    full_name: user.user_metadata?.full_name || user.email || 'Quest user',
+    role: 'member',
+    role_label: 'Member',
+    member_id: '',
+    company_ids: [],
+    avatar_url: '',
+    approved: false,
+  };
+  const client = createSupabaseClient();
+  if (!client) return fallback;
+  const result = await client.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  if (result.error || !result.data) return fallback;
+  return normalizeProfile(result.data, fallback);
 }
 
 function render() {
   state.route = getRoute();
+
+  if (CONFIG.questAuthEnabled && !state.authReady) {
+    renderAuthLoading();
+    return;
+  }
 
   if (needsLocalLogin(state.route)) {
     navigate('/login?return_url=' + encodeURIComponent(currentAppUrl()), { replace: true });
@@ -705,6 +811,10 @@ function render() {
   }
 
   ensureDataLoad();
+  if (state.session?.auth === 'supabase' && state.dataLoaded && !allowedCompanyIds().length) {
+    renderNoCompanyAccess();
+    return;
+  }
   const redirect = routeRedirect(state.route);
   if (redirect) {
     navigate(redirect, { replace: true });
@@ -718,10 +828,50 @@ function render() {
   app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route));
 }
 
+function renderNoCompanyAccess() {
+  document.title = 'Company access pending | Quest HQ';
+  app.innerHTML = `
+    <main class="login-shell">
+      <section class="login-panel">
+        <div class="login-brand">
+          <span class="side-mark">Q</span>
+          <span><strong>Quest HQ</strong><small>Access pending</small></span>
+        </div>
+        <div>
+          <div class="eyebrow">Tenant security</div>
+          <h1>No active company access</h1>
+          <p>Your account exists, but you are not an active member of a company workspace yet. Create your own workspace or request access from an existing company.</p>
+        </div>
+        <form data-company-create-form>
+          <label>Company workspace<input name="company_name" placeholder="Example Roofing LLC" required /></label>
+          <button class="btn btn-primary full" type="submit">Create company workspace</button>
+          <div class="form-message">You will become the Owner for this workspace.</div>
+        </form>
+        <button class="btn full" type="button" data-action="sign-out">Sign out</button>
+      </section>
+    </main>
+  `;
+}
+
 function needsLocalLogin(route) {
-  if (!CONFIG.localLoginEnabled) return false;
+  if (!CONFIG.questAuthEnabled && !CONFIG.localLoginEnabled) return false;
   if (route.name === 'login') return false;
   return !state.session;
+}
+
+function renderAuthLoading() {
+  document.title = 'Loading | Quest HQ';
+  app.innerHTML = `
+    <main class="login-shell">
+      <section class="login-panel">
+        <div class="login-brand">
+          <span class="side-mark">Q</span>
+          <span><strong>Quest HQ</strong><small>Secure workspace</small></span>
+        </div>
+        ${emptyState('Checking secure session...')}
+      </section>
+    </main>
+  `;
 }
 
 function ensureDataLoad() {
@@ -746,13 +896,40 @@ async function loadSupabaseData() {
     return;
   }
 
-  const [companiesResult, jobsResult, tasksResult, filesResult, teamResult, membershipsResult] = await Promise.all([
+  const [
+    companiesResult,
+    jobsResult,
+    tasksResult,
+    filesResult,
+    teamResult,
+    membershipsResult,
+    profilesResult,
+    subscriptionsResult,
+    rolesResult,
+    rolePermissionsResult,
+    roleAssignmentsResult,
+    resourceAclResult,
+    fieldPermissionsResult,
+    invitesResult,
+    joinRequestsResult,
+    auditEventsResult,
+  ] = await Promise.all([
     client.from('companies').select('*').order('name', { ascending: true }),
     client.from('jobs').select('*').order('updated_at', { ascending: false }),
     client.from('tasks').select('*').order('updated_at', { ascending: false }),
     client.from('job_files').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
     client.from('team_members').select('*').order('name', { ascending: true }),
     client.from('company_memberships').select('*'),
+    client.from('profiles').select('*'),
+    client.from('company_subscriptions').select('*'),
+    client.from('roles').select('*').order('priority', { ascending: false }),
+    client.from('role_permissions').select('*'),
+    client.from('user_role_assignments').select('*'),
+    client.from('resource_acl').select('*'),
+    client.from('field_permissions').select('*'),
+    client.from('company_invites').select('*').order('created_at', { ascending: false }),
+    client.from('company_join_requests').select('*').order('created_at', { ascending: false }),
+    client.from('audit_events').select('*').order('created_at', { ascending: false }).limit(100),
   ]);
 
   let liveTables = 0;
@@ -782,6 +959,25 @@ async function loadSupabaseData() {
     if (membershipsResult.data?.length) state.memberships = membershipsResult.data.map(normalizeMembership);
     liveTables += 1;
   }
+  if (!profilesResult.error) {
+    state.profiles = (profilesResult.data || []).map((profile) => normalizeProfile(profile));
+    liveTables += 1;
+  }
+  if (!subscriptionsResult.error) {
+    state.subscriptions = (subscriptionsResult.data || []).map(normalizeSubscription);
+    liveTables += 1;
+  }
+  if (!rolesResult.error) {
+    state.roles = (rolesResult.data || []).map(normalizeRole);
+    liveTables += 1;
+  }
+  if (!rolePermissionsResult.error) state.rolePermissions = (rolePermissionsResult.data || []).map(normalizeRolePermission);
+  if (!roleAssignmentsResult.error) state.roleAssignments = (roleAssignmentsResult.data || []).map(normalizeRoleAssignment);
+  if (!resourceAclResult.error) state.resourceAcl = (resourceAclResult.data || []).map(normalizeResourceAcl);
+  if (!fieldPermissionsResult.error) state.fieldPermissions = (fieldPermissionsResult.data || []).map(normalizeFieldPermission);
+  if (!invitesResult.error) state.companyInvites = (invitesResult.data || []).map(normalizeCompanyInvite);
+  if (!joinRequestsResult.error) state.joinRequests = (joinRequestsResult.data || []).map(normalizeJoinRequest);
+  if (!auditEventsResult.error) state.auditEvents = auditEventsResult.data || [];
 
   state.sync = liveTables ? { label: 'Quest Supabase live', mode: 'live' } : { label: 'Local fallback', mode: 'local' };
 }
@@ -1024,7 +1220,9 @@ function plannedNavItem(symbol, label) {
 }
 
 function canViewModule(module, companyId = activeCompanyId()) {
-  return module.status === 'planned' || can(module.permission || `${module.id}.view`, companyId);
+  if (module.status === 'planned') return true;
+  if (!subscriptionAllowsCompany(companyId) && !['settings', 'users'].includes(module.id)) return false;
+  return can(module.permission || `${module.id}.view`, companyId);
 }
 
 function moduleBadgeCount(moduleId, companyId = activeCompanyId()) {
@@ -1053,6 +1251,11 @@ function renderWorkspace(route) {
   if (route.name === 'command') return renderCompanyDashboard(activeCompanyId());
   if (route.name !== 'company') return renderPlannedPage(route.name);
   const companyId = route.companyId;
+  const moduleMeta = MODULE_REGISTRY.find((module) => module.id === route.section);
+  if (moduleMeta?.status !== 'planned') {
+    if (!subscriptionAllowsCompany(companyId) && !['settings', 'users'].includes(route.section)) return renderSubscriptionBlockedPage(companyId);
+    if (moduleMeta?.permission && !can(moduleMeta.permission, companyId)) return renderPermissionBlockedPage(companyId, moduleMeta.permission);
+  }
   if (route.section === 'jobs') return renderJobsPage(route, companyId);
   if (route.section === 'tasks') return renderTasksPage(route, companyId);
   if (route.section === 'files') return renderFilesPage(route, companyId);
@@ -1065,6 +1268,36 @@ function renderWorkspace(route) {
   if (route.section === 'team-chart') return renderTeamChartPage(companyId);
   if (route.section === 'time' || route.section === 'approvals' || route.section === 'clock') return renderOperationsPage(route, companyId);
   return renderPlannedPage(route.section);
+}
+
+function renderSubscriptionBlockedPage(companyId) {
+  return `
+    ${workspaceHeader('Subscription required', 'This company workspace needs an active or trialing subscription before paid modules can open.', `
+      <a class="btn btn-primary" href="${appHref(companyPath('settings', { tab: 'billing' }, companyId))}" data-router><i class="ti ti-credit-card"></i>Billing</a>
+    `)}
+    <section class="panel">
+      ${contractRows([
+        ['Company', companyName(companyId)],
+        ['Subscription', subscriptionLabel(companyId)],
+        ['Allowed area', 'Billing and settings remain available to owners/admins'],
+      ])}
+    </section>
+  `;
+}
+
+function renderPermissionBlockedPage(companyId, permission) {
+  return `
+    ${workspaceHeader('Access denied', 'Your role does not include the permission required for this module.', `
+      <a class="btn" href="${appHref(companyPath('settings', { tab: 'roles' }, companyId))}" data-router><i class="ti ti-shield-lock"></i>Roles</a>
+    `)}
+    <section class="panel">
+      ${contractRows([
+        ['Company', companyName(companyId)],
+        ['Required permission', permission],
+        ['Your role', roleForCompany(companyId)],
+      ])}
+    </section>
+  `;
 }
 
 function renderCompanyDashboard(companyId) {
@@ -1762,6 +1995,7 @@ function renderFileUploadModal() {
 function renderUsersPage(route, companyId) {
   const members = companyMembers(companyId);
   const tab = ['members', 'access'].includes(route.params.get('tab')) ? route.params.get('tab') : 'members';
+  const pendingRequests = state.joinRequests.filter((item) => item.company_id === companyId && item.status === 'pending');
   return `
     ${workspaceHeader('Users', 'Company members, roles, workers, and access context.', `
       <a class="btn btn-primary" href="${appHref(companyPath('settings', {}, companyId))}" data-router><i class="ti ti-settings"></i>Settings</a>
@@ -1788,8 +2022,9 @@ function renderUsersPage(route, companyId) {
       <div class="section-head"><div><h2>Membership model</h2><p>company_memberships is the canonical table; legacy company_ids remain as backfill fields.</p></div></div>
       ${contractRows([
         ['Tenant key', 'company_id on jobs, tasks, files, forms, users, settings'],
-        ['Privacy status', CONFIG.questAuthEnabled ? 'RLS can enforce membership' : 'Client-filtered only while auth is disabled'],
+        ['Privacy status', CONFIG.questAuthEnabled ? 'Supabase Auth + RLS' : 'Client-filtered demo only'],
         ['Active role', roleForCompany(companyId)],
+        ['Pending requests', String(pendingRequests.length)],
       ])}
     </section>
     `}
@@ -1837,11 +2072,13 @@ function renderTeamNode(companyId, member, members, depth = 0) {
 
 function renderSettingsPage(route, companyId) {
   const company = companyById(companyId);
-  const tab = ['company', 'access', 'team'].includes(route.params.get('tab')) ? route.params.get('tab') : 'company';
+  const tab = ['company', 'billing', 'roles', 'access', 'team'].includes(route.params.get('tab')) ? route.params.get('tab') : 'company';
   return `
     ${workspaceHeader('Settings', 'Company settings, roles, approvals, and admin controls.', '')}
     ${compactTabs('Settings sections', [
       [companyPath('settings', { tab: 'company' }, companyId), 'Company', tab === 'company'],
+      [companyPath('settings', { tab: 'billing' }, companyId), 'Billing', tab === 'billing'],
+      [companyPath('settings', { tab: 'roles' }, companyId), 'Roles', tab === 'roles'],
       [companyPath('settings', { tab: 'access' }, companyId), 'Access', tab === 'access'],
       [companyPath('settings', { tab: 'team' }, companyId), 'Workers', tab === 'team'],
     ])}
@@ -1857,19 +2094,24 @@ function renderSettingsPage(route, companyId) {
         ])}
       </article>
       ` : ''}
+      ${tab === 'billing' ? renderBillingSettings(companyId) : ''}
+      ${tab === 'roles' ? renderRolesSettings(companyId) : ''}
       ${tab === 'access' ? `
       <article class="panel">
-        <div class="section-head"><div><h2>Access</h2><p>Prepared for Supabase Auth and RLS.</p></div></div>
+        <div class="section-head"><div><h2>Access</h2><p>Memberships, invites, and join requests.</p></div></div>
         ${contractRows([
           ['Auth switch', CONFIG.questAuthEnabled ? 'Enabled' : 'Disabled'],
           ['Local login', CONFIG.localLoginEnabled ? 'Enabled' : 'Disabled'],
-          ['Isolation', CONFIG.questAuthEnabled ? 'Server-enforced' : 'Client-filtered only'],
+          ['Isolation', CONFIG.questAuthEnabled ? 'Server-enforced when migration is applied' : 'Client-filtered only'],
           ['Memberships', String(state.memberships.filter((item) => item.company_id === companyId).length)],
+          ['Invites', String(state.companyInvites.filter((item) => item.company_id === companyId && item.status === 'pending').length)],
         ])}
       </article>
       <article class="panel">
-        <div class="section-head"><div><h2>Approvals</h2><p>Quest-owned access approval queue.</p></div></div>
-        ${emptyState('No pending company approvals.')}
+        <div class="section-head"><div><h2>Join requests</h2><p>Hybrid onboarding queue for this company.</p></div></div>
+        <div class="finance-compact-list">
+          ${state.joinRequests.filter((item) => item.company_id === companyId).map((request) => compactFinanceRow(request.requested_email || request.profile_id, request.message || 'Access request', titleCase(request.status), request.created_at)).join('') || emptyState('No pending company approvals.')}
+        </div>
       </article>
       ` : ''}
       ${tab === 'team' ? `
@@ -1882,6 +2124,82 @@ function renderSettingsPage(route, companyId) {
       ` : ''}
     </section>
   `;
+}
+
+function renderBillingSettings(companyId) {
+  const subscription = companySubscription(companyId);
+  return `
+    <article class="panel">
+      <div class="section-head">
+        <div><h2>Subscription</h2><p>$300/month company workspace billing gate.</p></div>
+        <button class="btn btn-primary" type="button" data-action="start-checkout"><i class="ti ti-credit-card"></i>Start subscription</button>
+      </div>
+      ${contractRows([
+        ['Plan', '$300/month company workspace'],
+        ['Status', subscriptionLabel(companyId)],
+        ['Stripe customer', subscription?.stripe_customer_id || 'Not connected'],
+        ['Renewal / trial', subscription?.current_period_end || subscription?.trial_ends_at ? formatDate(subscription.current_period_end || subscription.trial_ends_at) : 'Pending'],
+      ])}
+    </article>
+    <article class="panel">
+      <div class="section-head"><div><h2>Billing gate</h2><p>Paid modules remain available only for trialing, active, past_due, or grace status.</p></div></div>
+      ${contractRows([
+        ['Workspace access', subscriptionAllowsCompany(companyId) ? 'Allowed' : 'Suspended'],
+        ['Finance/files privacy', CONFIG.questAuthEnabled ? 'Requires Auth + RLS' : 'Demo only'],
+        ['Seat billing', 'Tracked later; not charged in v1'],
+      ])}
+    </article>
+  `;
+}
+
+function renderRolesSettings(companyId) {
+  const roles = companyRoles(companyId);
+  return `
+    <article class="panel span-2">
+      <div class="section-head">
+        <div><h2>Custom roles</h2><p>Discord-style roles for module, action, record, and field permissions.</p></div>
+        <button class="btn btn-primary" type="button" data-action="open-role-form"><i class="ti ti-plus"></i>New role</button>
+      </div>
+      <div class="roles-list">
+        ${roles.map((role) => {
+          const permissionCount = state.rolePermissions.filter((item) => item.role_id === role.id && item.effect === 'allow').length;
+          const userCount = state.roleAssignments.filter((item) => item.company_id === companyId && item.role_id === role.id).length;
+          return `
+            <article class="role-row" style="--role-color:${h(role.color)}">
+              <span></span>
+              <div><strong>${h(role.name)}</strong><small>${permissionCount || 'All'} permissions / ${userCount} users / priority ${role.priority}</small></div>
+              <b>${role.is_system ? 'System' : 'Custom'}</b>
+            </article>
+          `;
+        }).join('') || emptyState('No custom roles yet.')}
+      </div>
+    </article>
+    <article class="panel">
+      <div class="section-head"><div><h2>Field controls</h2><p>Finance and sensitive field masking rules.</p></div></div>
+      <div class="finance-compact-list">
+        ${state.fieldPermissions.filter((item) => item.company_id === companyId).map((rule) => compactFinanceRow(rule.field_key, rule.resource_type, rule.visibility, '')).join('') || emptyState('No field permission overrides yet.')}
+      </div>
+    </article>
+  `;
+}
+
+function renderRoleFormModal(companyId) {
+  return renderModalShell('Settings', 'New role', `
+    <form class="role-form" data-role-form>
+      ${field('Role name', 'name', '')}
+      ${field('Color', 'color', '#f0b23b', false, 'color')}
+      ${field('Priority', 'priority', '100', false, 'number')}
+      <div class="permission-grid span-2">
+        ${PERMISSION_KEYS.map(([key, label]) => `
+          <label><input type="checkbox" name="permissions" value="${h(key)}" /> <span>${h(label)}</span></label>
+        `).join('')}
+      </div>
+      <div class="form-actions span-2">
+        <button class="btn btn-primary" type="submit">Create role</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'finance-modal');
 }
 
 function renderFormsPage(companyId) {
@@ -2744,28 +3062,91 @@ function renderPlannedPage(name) {
 function renderLogin() {
   document.title = 'Sign in | Quest HQ';
   const returnUrl = safeReturnUrl(state.route.params.get('return_url') || appHref(companyPath('jobs', {}, defaultCompanyId())));
+  const authEnabled = CONFIG.questAuthEnabled;
   app.innerHTML = `
     <main class="login-shell">
       <section class="login-panel">
         <div class="login-brand">
           <span class="side-mark">Q</span>
-          <span><strong>Quest HQ</strong><small>Company Workspace</small></span>
+          <span><strong>Quest HQ</strong><small>${authEnabled ? 'Secure company workspace' : 'Company Workspace'}</small></span>
         </div>
         <div>
-          <div class="eyebrow">Local access</div>
+          <div class="eyebrow">${authEnabled ? 'Tenant access' : 'Local access'}</div>
           <h1>Sign in to Quest HQ</h1>
-          <p>Supabase auth is switched off while the company workspace foundation is stabilized.</p>
+          <p>${authEnabled ? 'Each company workspace is isolated by Supabase Auth, memberships, subscription state, and role permissions.' : 'Supabase auth is switched off while the company workspace foundation is stabilized.'}</p>
         </div>
-        <form data-login-form>
-          <label>Username<input name="username" value="${h(CONFIG.localUsername)}" autocomplete="username" /></label>
-          <label>Password<input name="password" type="password" autocomplete="current-password" /></label>
-          <input type="hidden" name="return_url" value="${h(returnUrl)}" />
-          <button class="btn btn-primary full" type="submit">Sign in</button>
-          ${state.loginError ? `<div class="form-message error">${h(state.loginError)}</div>` : `<div class="form-message">Temporary credentials: lumen123 / lumen123</div>`}
-        </form>
+        ${authEnabled ? `
+          <div class="auth-mode-tabs">
+            <button class="${state.authMode === 'signin' ? 'active' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="signin">Sign in</button>
+            <button class="${state.authMode === 'register' ? 'active' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="register">Create workspace</button>
+            <button class="${state.authMode === 'request' ? 'active' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="request">Request access</button>
+          </div>
+          ${renderSupabaseAuthForm(returnUrl)}
+        ` : renderLocalLoginForm(returnUrl)}
+        ${CONFIG.localLoginEnabled && authEnabled ? `
+          <details class="demo-login-details">
+            <summary>Demo access</summary>
+            ${renderLocalLoginForm(returnUrl)}
+          </details>
+        ` : ''}
       </section>
     </main>
   `;
+}
+
+function renderSupabaseAuthForm(returnUrl) {
+  if (state.authMode === 'register') {
+    return `
+      <form data-auth-register-form>
+        <label>Full name<input name="full_name" autocomplete="name" required /></label>
+        <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+        <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required /></label>
+        <label>Company workspace<input name="company_name" placeholder="Example Roofing LLC" required /></label>
+        <input type="hidden" name="return_url" value="${h(returnUrl)}" />
+        <button class="btn btn-primary full" type="submit">Create secure workspace</button>
+        ${authStatusMessage('Owner role, trial subscription, and workspace isolation are created automatically.')}
+      </form>
+    `;
+  }
+  if (state.authMode === 'request') {
+    return `
+      <form data-auth-request-form>
+        <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" minlength="8" required /></label>
+        <label>Company ID<input name="company_id" placeholder="company-workspace-id" required /></label>
+        <label>Message<input name="message" placeholder="Tell the admin why you need access" /></label>
+        <input type="hidden" name="return_url" value="${h(returnUrl)}" />
+        <button class="btn btn-primary full" type="submit">Request company access</button>
+        ${authStatusMessage('Requests stay pending until a company Owner/Admin approves them.')}
+      </form>
+    `;
+  }
+  return `
+    <form data-auth-sign-in-form>
+      <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+      <input type="hidden" name="return_url" value="${h(returnUrl)}" />
+      <button class="btn btn-primary full" type="submit">Sign in</button>
+      ${authStatusMessage('Use the company workspace account your Owner/Admin invited.')}
+    </form>
+  `;
+}
+
+function renderLocalLoginForm(returnUrl) {
+  return `
+    <form data-login-form>
+      <label>Username<input name="username" value="${h(CONFIG.localUsername)}" autocomplete="username" /></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" /></label>
+      <input type="hidden" name="return_url" value="${h(returnUrl)}" />
+      <button class="btn btn-primary full" type="submit">Sign in to demo</button>
+      ${state.loginError ? `<div class="form-message error">${h(state.loginError)}</div>` : `<div class="form-message">Temporary demo credentials: lumen123 / lumen123</div>`}
+    </form>
+  `;
+}
+
+function authStatusMessage(defaultText) {
+  if (state.loginError) return `<div class="form-message error">${h(state.loginError)}</div>`;
+  return `<div class="form-message">${h(state.authMessage || defaultText)}</div>`;
 }
 
 function renderProfileModal(profile) {
@@ -2811,6 +3192,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'finance-expense-edit') return renderFinanceExpenseFormModal(activeCompanyId(), financeExpenseById(state.selectedFinanceExpenseId));
   if (state.modal === 'finance-vendor-new') return renderFinanceVendorFormModal(activeCompanyId(), null);
   if (state.modal === 'finance-vendor-edit') return renderFinanceVendorFormModal(activeCompanyId(), financeVendorById(state.selectedFinanceVendorId));
+  if (state.modal === 'role-new') return renderRoleFormModal(activeCompanyId());
   if (route.name === 'company' && route.section === 'crm' && route.params.get('account')) {
     return renderCrmAccountModal(route.companyId, route.params.get('account'));
   }
@@ -3054,15 +3436,32 @@ function handleAction(event, node) {
   }
   if (action === 'sign-out') {
     event.preventDefault();
-    localStorage.removeItem(SESSION_KEY);
-    state.session = null;
-    navigate('/login', { replace: true });
+    signOut();
+    return;
+  }
+  if (action === 'set-auth-mode') {
+    event.preventDefault();
+    state.authMode = ['signin', 'register', 'request'].includes(node.dataset.authMode) ? node.dataset.authMode : 'signin';
+    state.loginError = '';
+    state.authMessage = '';
+    render();
     return;
   }
   if (action === 'open-profile') {
     event.preventDefault();
     state.modal = 'profile';
     render();
+    return;
+  }
+  if (action === 'open-role-form') {
+    event.preventDefault();
+    state.modal = 'role-new';
+    render();
+    return;
+  }
+  if (action === 'start-checkout') {
+    event.preventDefault();
+    startCheckout();
     return;
   }
   if (action === 'open-file-upload') {
@@ -3381,6 +3780,30 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-auth-sign-in-form]')) {
+    event.preventDefault();
+    signInWithSupabase(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-auth-register-form]')) {
+    event.preventDefault();
+    registerWorkspace(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-auth-request-form]')) {
+    event.preventDefault();
+    requestCompanyAccess(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-company-create-form]')) {
+    event.preventDefault();
+    createWorkspaceForCurrentUser(event.target);
+    return;
+  }
+
   if (event.target.matches('[data-profile-form]')) {
     event.preventDefault();
     const form = Object.fromEntries(new FormData(event.target).entries());
@@ -3452,10 +3875,230 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-role-form]')) {
+    event.preventDefault();
+    saveRole(event.target);
+    return;
+  }
+
   if (event.target.matches('[data-form-preview-response]')) {
     event.preventDefault();
     saveFormResponse(event.target);
   }
+}
+
+async function signOut() {
+  const client = createSupabaseClient();
+  if (CONFIG.questAuthEnabled && client?.auth) await client.auth.signOut();
+  localStorage.removeItem(SESSION_KEY);
+  state.session = null;
+  state.dataLoaded = false;
+  navigate('/login', { replace: true });
+}
+
+async function signInWithSupabase(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const client = createSupabaseClient();
+  if (!client?.auth) {
+    state.loginError = 'Supabase auth is unavailable.';
+    render();
+    return;
+  }
+  state.loginError = '';
+  state.authMessage = 'Signing in...';
+  render();
+  const result = await client.auth.signInWithPassword({
+    email: String(form.email || '').trim(),
+    password: String(form.password || ''),
+  });
+  if (result.error) {
+    state.loginError = result.error.message || 'Unable to sign in.';
+    state.authMessage = '';
+    render();
+    return;
+  }
+  await setSupabaseSession(result.data.session);
+  state.authMessage = '';
+  state.dataLoaded = false;
+  navigate(safeReturnUrl(form.return_url || appHref(companyPath('jobs', {}, defaultCompanyId()))), { replace: true });
+}
+
+async function registerWorkspace(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const client = createSupabaseClient();
+  if (!client?.auth) {
+    state.loginError = 'Supabase auth is unavailable.';
+    render();
+    return;
+  }
+  const email = String(form.email || '').trim();
+  const password = String(form.password || '');
+  const fullName = String(form.full_name || '').trim();
+  const companyName = String(form.company_name || '').trim();
+  if (!email || !password || !fullName || !companyName) {
+    state.loginError = 'Name, email, password, and company workspace are required.';
+    render();
+    return;
+  }
+  state.loginError = '';
+  state.authMessage = 'Creating secure workspace...';
+  render();
+  const signUp = await client.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: fullName } },
+  });
+  if (signUp.error) {
+    state.loginError = signUp.error.message || 'Unable to create account.';
+    state.authMessage = '';
+    render();
+    return;
+  }
+  let session = signUp.data.session;
+  if (!session) {
+    const signIn = await client.auth.signInWithPassword({ email, password });
+    if (signIn.error) {
+      state.loginError = 'Account created. Please sign in to finish workspace setup.';
+      state.authMode = 'signin';
+      state.authMessage = '';
+      render();
+      return;
+    }
+    session = signIn.data.session;
+  }
+  await setSupabaseSession(session);
+  const workspace = await client.rpc('create_company_workspace', { company_name: companyName });
+  if (workspace.error) {
+    state.loginError = workspace.error.message || 'Account created, but workspace setup failed.';
+    state.authMessage = '';
+    render();
+    return;
+  }
+  state.activeCompanyId = canonicalCompanyId(workspace.data || defaultCompanyId());
+  localStorage.setItem(COMPANY_KEY, state.activeCompanyId);
+  state.dataLoaded = false;
+  state.authMessage = '';
+  navigate(companyPath('settings', { tab: 'billing' }, state.activeCompanyId), { replace: true });
+}
+
+async function createWorkspaceForCurrentUser(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const client = createSupabaseClient();
+  const companyName = String(form.company_name || '').trim();
+  if (!client || !companyName) {
+    state.loginError = 'Company workspace name is required.';
+    render();
+    return;
+  }
+  const workspace = await client.rpc('create_company_workspace', { company_name: companyName });
+  if (workspace.error) {
+    state.loginError = workspace.error.message || 'Workspace setup failed.';
+    render();
+    return;
+  }
+  state.activeCompanyId = canonicalCompanyId(workspace.data || defaultCompanyId());
+  localStorage.setItem(COMPANY_KEY, state.activeCompanyId);
+  state.dataLoaded = false;
+  navigate(companyPath('settings', { tab: 'billing' }, state.activeCompanyId), { replace: true });
+}
+
+async function requestCompanyAccess(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const client = createSupabaseClient();
+  if (!client?.auth) {
+    state.loginError = 'Supabase auth is unavailable.';
+    render();
+    return;
+  }
+  const email = String(form.email || '').trim();
+  const password = String(form.password || '');
+  const companyId = canonicalCompanyId(form.company_id || '');
+  state.loginError = '';
+  state.authMessage = 'Submitting access request...';
+  render();
+  const signIn = await client.auth.signInWithPassword({ email, password });
+  if (signIn.error) {
+    state.loginError = signIn.error.message || 'Sign in first to request access.';
+    state.authMessage = '';
+    render();
+    return;
+  }
+  await setSupabaseSession(signIn.data.session);
+  const request = await client.rpc('request_company_access', {
+    target_company_id: companyId,
+    request_message: String(form.message || '').trim() || null,
+  });
+  if (request.error) {
+    state.loginError = request.error.message || 'Unable to request access.';
+    state.authMessage = '';
+    render();
+    return;
+  }
+  state.authMessage = 'Access request sent. An Owner/Admin must approve it.';
+  state.loginError = '';
+  state.authMode = 'signin';
+  render();
+}
+
+async function startCheckout() {
+  const companyId = activeCompanyId();
+  state.sync = { label: 'Opening billing...', mode: 'loading' };
+  render();
+  try {
+    const response = await fetch('/api/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(activeSession().access_token ? { Authorization: `Bearer ${activeSession().access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        company_id: companyId,
+        return_url: `${window.location.origin}${appHref(companyPath('settings', { tab: 'billing' }, companyId))}`,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.url) throw new Error(payload.error || 'Billing is not configured yet.');
+    window.location.href = payload.url;
+  } catch (error) {
+    state.sync = { label: error.message || 'Billing unavailable', mode: 'local' };
+    render();
+  }
+}
+
+async function saveRole(formNode) {
+  const companyId = activeCompanyId();
+  const data = new FormData(formNode);
+  const role = normalizeRole({
+    id: crypto.randomUUID(),
+    company_id: companyId,
+    name: data.get('name'),
+    color: data.get('color') || '#f0b23b',
+    priority: data.get('priority') || 100,
+    is_system: false,
+    created_by: activeSession().profile.id,
+  });
+  const permissions = data.getAll('permissions').map((permission) => String(permission || '')).filter(Boolean);
+  const client = createSupabaseClient();
+  if (state.session?.auth === 'supabase' && client) {
+    const roleResult = await client.from('roles').insert(role).select().single();
+    if (roleResult.error) {
+      state.sync = { label: roleResult.error.message || 'Role save failed', mode: 'local' };
+      render();
+      return;
+    }
+    const savedRole = normalizeRole(roleResult.data);
+    const rows = permissions.map((permission_key) => ({ role_id: savedRole.id, permission_key, effect: 'allow' }));
+    if (rows.length) await client.from('role_permissions').insert(rows);
+    state.roles.unshift(savedRole);
+    state.rolePermissions = rows.concat(state.rolePermissions).map(normalizeRolePermission);
+    state.sync = { label: 'Role saved', mode: 'live' };
+  } else {
+    state.roles.unshift(role);
+    state.rolePermissions = permissions.map((permission_key) => normalizeRolePermission({ role_id: role.id, permission_key, effect: 'allow' })).concat(state.rolePermissions);
+    state.sync = { label: 'Role saved locally', mode: 'local' };
+  }
+  state.modal = '';
+  render();
 }
 
 function onDocumentInput(event) {
@@ -3973,6 +4616,7 @@ function normalizeLegacyLocation() {
 function routeRedirect(route) {
   if (route.name !== 'company') return '';
   const allowed = allowedCompanyIds();
+  if (state.session?.auth === 'supabase' && !allowed.length) return null;
   if (!allowed.includes(route.companyId)) {
     return companyPath(route.section || 'jobs', Object.fromEntries(route.params.entries()), allowed[0] || defaultCompanyId());
   }
@@ -4154,6 +4798,16 @@ function companyDriveFolders(companyId = activeCompanyId()) {
 
 function companyMembers(companyId = activeCompanyId()) {
   return state.teamMembers.filter((member) => Array.isArray(member.company_ids) && member.company_ids.includes(companyId));
+}
+
+function companyRoles(companyId = activeCompanyId()) {
+  const custom = state.roles.filter((role) => role.company_id === companyId);
+  if (custom.length) return custom.sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
+  return [
+    normalizeRole({ id: `owner-${companyId}`, company_id: companyId, name: 'Owner', color: '#f0b23b', priority: 1000, is_system: true }),
+    normalizeRole({ id: `admin-${companyId}`, company_id: companyId, name: 'Admin', color: '#60a5fa', priority: 800, is_system: true }),
+    normalizeRole({ id: `staff-${companyId}`, company_id: companyId, name: 'Staff', color: '#15803d', priority: 100, is_system: true }),
+  ];
 }
 
 function filteredJobs(companyId = activeCompanyId()) {
@@ -4477,11 +5131,18 @@ function allowedCompanies() {
 function can(permission, companyId = activeCompanyId()) {
   if (!permission) return true;
   const profile = activeSession().profile;
-  const role = String(
-    state.memberships.find((item) => item.company_id === companyId && item.profile_id === profile.id && item.status === 'active')?.role
-      || profile.role
-      || 'member',
-  ).toLowerCase();
+  if (state.session?.auth === 'supabase') {
+    const membership = membershipForProfile(companyId, profile.id);
+    if (!membership || membership.status !== 'active') return false;
+    if (['owner', 'developer'].includes(String(membership.role).toLowerCase())) return true;
+    const assignedRoleIds = state.roleAssignments
+      .filter((item) => item.company_id === companyId && item.profile_id === profile.id)
+      .map((item) => item.role_id);
+    const permissions = state.rolePermissions.filter((item) => assignedRoleIds.includes(item.role_id));
+    if (permissions.some((item) => (item.permission_key === permission || item.permission_key === '*') && item.effect === 'deny')) return false;
+    if (permissions.some((item) => (item.permission_key === permission || item.permission_key === '*') && item.effect === 'allow')) return true;
+  }
+  const role = String(membershipForProfile(companyId, profile.id)?.role || profile.role || 'member').toLowerCase();
   const permissions = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.member;
   return permissions.includes('*') || permissions.includes(permission);
 }
@@ -4489,6 +5150,12 @@ function can(permission, companyId = activeCompanyId()) {
 function allowedCompanyIds() {
   const profile = activeSession().profile;
   const allIds = state.companies.map((company) => company.id);
+  if (state.session?.auth === 'supabase') {
+    const membershipIds = state.memberships
+      .filter((item) => item.profile_id === profile.id && item.status === 'active')
+      .map((item) => canonicalCompanyId(item.company_id));
+    return compactUnique(membershipIds).filter((id) => allIds.includes(id));
+  }
   if (['developer', 'admin'].includes(profile.role)) return compactUnique(allIds.length ? allIds : companiesFallback.map((company) => canonicalCompanyId(company.id)));
   const membershipIds = state.memberships
     .filter((item) => item.profile_id === profile.id && item.status !== 'disabled')
@@ -4500,7 +5167,7 @@ function allowedCompanyIds() {
 function activeCompanyId() {
   const allowed = allowedCompanyIds();
   if (allowed.includes(state.activeCompanyId)) return state.activeCompanyId;
-  return allowed[0] || defaultCompanyId();
+  return allowed[0] || state.activeCompanyId || defaultCompanyId();
 }
 
 function defaultCompanyId() {
@@ -4531,13 +5198,40 @@ function companyIdForJob(jobId) {
 
 function roleForCompany(companyId) {
   const profile = activeSession().profile;
-  if (['developer', 'admin'].includes(profile.role)) return titleCase(profile.role);
-  return titleCase(state.memberships.find((item) => item.company_id === companyId && item.profile_id === profile.id)?.role || profile.role || 'member');
+  if (state.session?.auth !== 'supabase' && ['developer', 'admin'].includes(profile.role)) return titleCase(profile.role);
+  return titleCase(membershipForProfile(companyId, profile.id)?.role || profile.role || 'member');
 }
 
 function roleForMember(companyId, memberId) {
   const membership = state.memberships.find((item) => item.company_id === companyId && (item.member_id === memberId || item.profile_id === memberId));
   return titleCase(membership?.role || 'member');
+}
+
+function membershipForProfile(companyId, profileId) {
+  return state.memberships.find((item) => item.company_id === companyId && item.profile_id === profileId) || null;
+}
+
+function companySubscription(companyId = activeCompanyId()) {
+  return state.subscriptions.find((item) => item.company_id === companyId) || null;
+}
+
+function subscriptionAllowsCompany(companyId = activeCompanyId()) {
+  if (state.session?.auth !== 'supabase') return true;
+  const subscription = companySubscription(companyId);
+  if (!subscription) return true;
+  if (['trialing', 'active', 'past_due', 'grace'].includes(subscription.status)) return true;
+  if (subscription.grace_ends_at && Date.parse(subscription.grace_ends_at) > Date.now()) return true;
+  return false;
+}
+
+function subscriptionLabel(companyId = activeCompanyId()) {
+  const subscription = companySubscription(companyId);
+  if (!subscription) return state.session?.auth === 'supabase' ? 'Trial pending' : 'Demo mode';
+  if (subscription.status === 'trialing') return `Trial - ${formatDate(subscription.trial_ends_at)}`;
+  if (subscription.status === 'active') return 'Active subscription';
+  if (subscription.status === 'past_due') return 'Past due grace';
+  if (subscription.status === 'grace') return `Grace - ${formatDate(subscription.grace_ends_at)}`;
+  return titleCase(subscription.status);
 }
 
 function memberName(id) {
@@ -4807,6 +5501,100 @@ function normalizeMembership(input) {
   };
 }
 
+function normalizeSubscription(input) {
+  return {
+    company_id: canonicalCompanyId(input.company_id || ''),
+    status: String(input.status || 'trialing'),
+    plan_code: String(input.plan_code || 'quest_company_300'),
+    amount_cents: number(input.amount_cents || 30000),
+    currency: String(input.currency || 'usd'),
+    stripe_customer_id: String(input.stripe_customer_id || ''),
+    stripe_subscription_id: String(input.stripe_subscription_id || ''),
+    current_period_end: input.current_period_end || '',
+    trial_ends_at: input.trial_ends_at || '',
+    grace_ends_at: input.grace_ends_at || '',
+  };
+}
+
+function normalizeRole(input) {
+  return {
+    id: String(input.id || ''),
+    company_id: canonicalCompanyId(input.company_id || ''),
+    name: String(input.name || 'Role').trim() || 'Role',
+    color: String(input.color || '#f0b23b'),
+    priority: number(input.priority),
+    is_system: input.is_system === true,
+    created_by: String(input.created_by || ''),
+  };
+}
+
+function normalizeRolePermission(input) {
+  return {
+    role_id: String(input.role_id || ''),
+    permission_key: String(input.permission_key || ''),
+    effect: String(input.effect || 'allow') === 'deny' ? 'deny' : 'allow',
+  };
+}
+
+function normalizeRoleAssignment(input) {
+  return {
+    company_id: canonicalCompanyId(input.company_id || ''),
+    profile_id: String(input.profile_id || ''),
+    role_id: String(input.role_id || ''),
+    assigned_by: String(input.assigned_by || ''),
+  };
+}
+
+function normalizeResourceAcl(input) {
+  return {
+    id: String(input.id || ''),
+    company_id: canonicalCompanyId(input.company_id || ''),
+    resource_type: String(input.resource_type || ''),
+    resource_id: String(input.resource_id || ''),
+    principal_type: String(input.principal_type || ''),
+    principal_id: String(input.principal_id || ''),
+    permission_key: String(input.permission_key || ''),
+    effect: String(input.effect || 'allow') === 'deny' ? 'deny' : 'allow',
+  };
+}
+
+function normalizeFieldPermission(input) {
+  return {
+    id: String(input.id || ''),
+    company_id: canonicalCompanyId(input.company_id || ''),
+    resource_type: String(input.resource_type || ''),
+    field_key: String(input.field_key || ''),
+    role_id: String(input.role_id || ''),
+    visibility: ['visible', 'masked', 'hidden'].includes(input.visibility) ? input.visibility : 'visible',
+    editable: input.editable !== false,
+  };
+}
+
+function normalizeCompanyInvite(input) {
+  return {
+    id: String(input.id || ''),
+    company_id: canonicalCompanyId(input.company_id || ''),
+    email: String(input.email || ''),
+    role_id: String(input.role_id || ''),
+    status: String(input.status || 'pending'),
+    expires_at: input.expires_at || '',
+    invited_by: String(input.invited_by || ''),
+  };
+}
+
+function normalizeJoinRequest(input) {
+  return {
+    id: String(input.id || ''),
+    company_id: canonicalCompanyId(input.company_id || ''),
+    profile_id: String(input.profile_id || ''),
+    requested_email: String(input.requested_email || ''),
+    status: String(input.status || 'pending'),
+    message: String(input.message || ''),
+    reviewed_by: String(input.reviewed_by || ''),
+    created_at: input.created_at || '',
+  };
+}
+
 function blankJob(companyId = activeCompanyId()) {
   return normalizeJob({
     id: '',
@@ -4932,6 +5720,7 @@ function filePayload(file) {
 
 function activeSession() {
   if (state.session) {
+    if (state.session.auth === 'supabase') return state.session;
     return {
       ...state.session,
       profile: {
@@ -4942,6 +5731,26 @@ function activeSession() {
     };
   }
   return buildLocalSession();
+}
+
+function buildSupabaseSession(session, profile) {
+  return {
+    auth: 'supabase',
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    user: { id: session.user.id, email: session.user.email || '' },
+    profile: normalizeProfile(profile || {}, {
+      id: session.user.id,
+      email: session.user.email || '',
+      full_name: session.user.user_metadata?.full_name || session.user.email || 'Quest user',
+      role: 'member',
+      role_label: 'Member',
+      member_id: '',
+      company_ids: [],
+      avatar_url: '',
+      approved: false,
+    }),
+  };
 }
 
 function buildLocalSession() {
@@ -4957,9 +5766,25 @@ function buildLocalSession() {
     ...(state.profileDraft || {}),
   };
   return {
-    auth: CONFIG.questAuthEnabled ? 'supabase' : 'local-basic',
+    auth: 'local-basic',
     user: { id: profile.id, username: CONFIG.localUsername, email: profile.email },
     profile,
+  };
+}
+
+function normalizeProfile(input, fallback = {}) {
+  const role = String(input.role || fallback.role || 'member').toLowerCase();
+  return {
+    id: String(input.id || fallback.id || ''),
+    email: String(input.email || fallback.email || ''),
+    full_name: String(input.full_name || fallback.full_name || input.email || fallback.email || 'Quest user'),
+    role,
+    role_label: titleCase(role),
+    member_id: String(input.member_id || fallback.member_id || ''),
+    company_ids: Array.isArray(input.company_ids) ? compactUnique(input.company_ids.map(canonicalCompanyId)) : (fallback.company_ids || []),
+    avatar_url: String(input.avatar_url || fallback.avatar_url || ''),
+    approved: input.approved !== false,
+    supervisor_id: String(input.supervisor_id || fallback.supervisor_id || ''),
   };
 }
 

@@ -1692,6 +1692,41 @@ textarea:focus {
 .login-panel h1 { margin-bottom: 6px; }
 .login-panel form { display: grid; gap: 14px; }
 
+.auth-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.auth-mode-tabs button {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fbf7ee;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.auth-mode-tabs button.active {
+  border-color: var(--amber);
+  background: #fff4d8;
+  color: var(--ink);
+}
+
+.demo-login-details {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.demo-login-details summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .form-message {
   min-height: 20px;
   color: var(--muted);
@@ -1701,6 +1736,73 @@ textarea:focus {
 
 .form-message.error {
   color: var(--red);
+}
+
+.roles-list,
+.role-form {
+  display: grid;
+  gap: 10px;
+}
+
+.role-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbf7ee;
+  padding: 10px 12px;
+}
+
+.role-row > span {
+  width: 10px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--role-color);
+}
+
+.role-row strong,
+.role-row small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.role-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.role-row b {
+  border-radius: 999px;
+  background: #eee0c4;
+  color: var(--ink-2);
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbf7ee;
+  padding: 10px;
+}
+
+.permission-grid label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .modal-overlay {
