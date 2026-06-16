@@ -2064,41 +2064,105 @@ function renderFileUploadModal() {
 }
 
 function renderUsersPage(route, companyId) {
-  const members = companyMembers(companyId);
+  const users = companyAccessUsers(companyId);
   const tab = ['members', 'access'].includes(route.params.get('tab')) ? route.params.get('tab') : 'members';
   const pendingRequests = state.joinRequests.filter((item) => item.company_id === companyId && item.status === 'pending');
+  const canManageUsers = can('users.manage', companyId);
   return `
     ${workspaceHeader('Users', 'Company members, roles, workers, and access context.', `
-      <a class="btn btn-primary" href="${appHref(companyPath('settings', {}, companyId))}" data-router><i class="ti ti-settings"></i>Settings</a>
+      <a class="btn" href="${appHref(companyPath('settings', { tab: 'roles' }, companyId))}" data-router><i class="ti ti-shield-lock"></i>Roles</a>
+      <a class="btn btn-primary" href="${appHref(companyPath('settings', { tab: 'access' }, companyId))}" data-router><i class="ti ti-settings"></i>Access settings</a>
     `)}
     ${compactTabs('Users sections', [
       [companyPath('users', { tab: 'members' }, companyId), 'Members', tab === 'members'],
-      [companyPath('users', { tab: 'access' }, companyId), 'Access model', tab === 'access'],
+      [companyPath('users', { tab: 'access' }, companyId), 'Access', tab === 'access'],
     ])}
     ${tab === 'members' ? `
+      <section class="metric-grid operations-metrics">
+        ${metricCard('Active users', users.filter((user) => user.status === 'active').length)}
+        ${metricCard('Pending', users.filter((user) => user.status !== 'active').length + pendingRequests.length)}
+        ${metricCard('Roles', companyRoles(companyId).length)}
+      </section>
       <section class="users-grid">
-        ${members.map((member) => `
-          <article class="user-card">
-            ${renderAvatar({ full_name: member.full_name, avatar_url: member.avatar_url }, 'avatar')}
+        ${users.map((user) => `
+          <article class="user-card ${user.status !== 'active' ? 'muted' : ''}">
+            ${renderAvatar({ full_name: user.name, email: user.email, avatar_url: user.avatar_url }, 'avatar')}
             <div>
-              <strong>${h(member.full_name)}</strong>
-              <span>${h(member.email)}</span>
-              <small>${h(roleForMember(companyId, member.id))}</small>
+              <strong>${h(user.name)}</strong>
+              <span>${h(user.email || user.profile_id || user.member_id)}</span>
+              <small>${h(user.role_label)} / ${h(titleCase(user.status))}</small>
             </div>
           </article>
         `).join('') || emptyState('No users assigned to this company yet.')}
       </section>
     ` : `
-    <section class="panel">
-      <div class="section-head"><div><h2>Membership model</h2><p>company_memberships is the canonical table; legacy company_ids remain as backfill fields.</p></div></div>
-      ${contractRows([
-        ['Tenant key', 'company_id on jobs, tasks, files, forms, users, settings'],
-        ['Privacy status', CONFIG.questAuthEnabled ? 'Supabase Auth + RLS' : 'Client-filtered demo only'],
-        ['Active role', roleForCompany(companyId)],
-        ['Pending requests', String(pendingRequests.length)],
-      ])}
+    <section class="dashboard-grid compact-settings-grid">
+      <article class="panel span-2">
+        <div class="section-head">
+          <div><h2>Member access</h2><p>Assign roles and confirm each user's company status.</p></div>
+        </div>
+        <div class="access-user-list">
+          ${users.map((user) => renderUserAccessRow(companyId, user, canManageUsers)).join('') || emptyState('No users assigned to this company yet.')}
+        </div>
+      </article>
+      <article class="panel">
+        <div class="section-head"><div><h2>Join requests</h2><p>Approve requests into this company workspace or reject them.</p></div></div>
+        <div class="access-request-list">
+          ${pendingRequests.map((request) => renderJoinRequestRow(request, canManageUsers)).join('') || emptyState('No pending join requests.')}
+        </div>
+      </article>
+      <article class="panel span-3">
+        <div class="section-head"><div><h2>Access model</h2><p>Membership is company-scoped; UI hiding is convenience, RLS is the real privacy layer.</p></div></div>
+        ${contractRows([
+          ['Tenant key', 'company_id on jobs, tasks, files, forms, users, settings'],
+          ['Privacy status', CONFIG.questAuthEnabled ? 'Supabase Auth + RLS' : 'Client-filtered demo only'],
+          ['Your role', roleForCompany(companyId)],
+          ['Can manage users', canManageUsers ? 'Yes' : 'No'],
+        ])}
+      </article>
     </section>
     `}
+  `;
+}
+
+function renderUserAccessRow(companyId, user, canManageUsers) {
+  const roles = companyRoles(companyId);
+  const selectedRoleId = user.role_id || roleIdForName(companyId, user.role) || roles[0]?.id || '';
+  return `
+    <article class="access-user-row">
+      ${renderAvatar({ full_name: user.name, email: user.email, avatar_url: user.avatar_url }, 'avatar')}
+      <div class="access-user-main">
+        <strong>${h(user.name)}</strong>
+        <span>${h(user.email || user.profile_id || user.member_id)} / ${h(titleCase(user.status))}</span>
+      </div>
+      <form class="access-role-form" data-user-role-form>
+        <input type="hidden" name="company_id" value="${h(companyId)}" />
+        <input type="hidden" name="profile_id" value="${h(user.profile_id)}" />
+        <select name="role_id" ${canManageUsers && user.profile_id ? '' : 'disabled'}>
+          ${roles.map((role) => `<option value="${h(role.id)}" ${role.id === selectedRoleId ? 'selected' : ''}>${h(role.name)}</option>`).join('')}
+        </select>
+        <select name="membership_status" ${canManageUsers && user.profile_id ? '' : 'disabled'}>
+          ${['active', 'pending', 'disabled'].map((status) => `<option value="${h(status)}" ${status === user.status ? 'selected' : ''}>${h(titleCase(status))}</option>`).join('')}
+        </select>
+        <button class="btn" type="submit" ${canManageUsers && user.profile_id ? '' : 'disabled'}>Save</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderJoinRequestRow(request, canManageUsers) {
+  const title = request.requested_email || profileById(request.profile_id)?.email || request.profile_id || 'Requester';
+  return `
+    <article class="access-request-row">
+      <div>
+        <strong>${h(title)}</strong>
+        <span>${h(request.message || 'Access request')} / ${formatDate(request.created_at)}</span>
+      </div>
+      <div>
+        <button class="btn btn-primary" type="button" data-action="approve-join-request" data-request-id="${h(request.id)}" ${canManageUsers ? '' : 'disabled'}>Approve</button>
+        <button class="btn danger" type="button" data-action="reject-join-request" data-request-id="${h(request.id)}" ${canManageUsers ? '' : 'disabled'}>Reject</button>
+      </div>
+    </article>
   `;
 }
 
@@ -3562,6 +3626,16 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'approve-join-request') {
+    event.preventDefault();
+    updateJoinRequest(node.dataset.requestId, 'approved');
+    return;
+  }
+  if (action === 'reject-join-request') {
+    event.preventDefault();
+    updateJoinRequest(node.dataset.requestId, 'rejected');
+    return;
+  }
   if (action === 'start-checkout') {
     event.preventDefault();
     startCheckout();
@@ -3982,6 +4056,12 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-user-role-form]')) {
+    event.preventDefault();
+    saveUserAccess(event.target);
+    return;
+  }
+
   if (event.target.matches('[data-form-preview-response]')) {
     event.preventDefault();
     saveFormResponse(event.target);
@@ -4214,6 +4294,101 @@ async function saveRole(formNode) {
     state.sync = { label: 'Role saved locally', mode: 'local' };
   }
   state.modal = '';
+  render();
+}
+
+async function saveUserAccess(formNode) {
+  const data = new FormData(formNode);
+  const companyId = canonicalCompanyId(data.get('company_id') || activeCompanyId());
+  const profileId = String(data.get('profile_id') || '').trim();
+  const roleId = String(data.get('role_id') || '').trim();
+  const status = ['active', 'pending', 'disabled'].includes(String(data.get('membership_status'))) ? String(data.get('membership_status')) : 'active';
+  const role = roleById(companyId, roleId);
+  if (!profileId || !role) {
+    state.sync = { label: 'Select a user and role', mode: 'local' };
+    render();
+    return;
+  }
+
+  const membership = normalizeMembership({
+    company_id: companyId,
+    profile_id: profileId,
+    role: membershipRoleForRole(role),
+    status,
+  });
+  const assignment = normalizeRoleAssignment({
+    company_id: companyId,
+    profile_id: profileId,
+    role_id: role.id,
+    assigned_by: activeSession().profile.id,
+  });
+  const client = createSupabaseClient();
+
+  if (state.session?.auth === 'supabase' && client) {
+    const canPersistRoleAssignment = isUuid(role.id);
+    const membershipResult = await client.from('company_memberships').upsert(membership, { onConflict: 'company_id,profile_id' }).select().single();
+    if (membershipResult.error) {
+      state.sync = { label: membershipResult.error.message || 'Access update failed', mode: 'local' };
+      render();
+      return;
+    }
+    if (canPersistRoleAssignment) {
+      await client.from('user_role_assignments').delete().eq('company_id', companyId).eq('profile_id', profileId);
+      const assignmentResult = await client.from('user_role_assignments').insert(assignment);
+      if (assignmentResult.error) {
+        state.sync = { label: assignmentResult.error.message || 'Role assignment failed', mode: 'local' };
+        render();
+        return;
+      }
+    }
+    upsertMembership(normalizeMembership(membershipResult.data || membership));
+    if (canPersistRoleAssignment) replaceRoleAssignment(assignment);
+    state.sync = { label: canPersistRoleAssignment ? 'User access saved' : 'Membership saved; create a role to assign permissions', mode: 'live' };
+  } else {
+    upsertMembership(membership);
+    replaceRoleAssignment(assignment);
+    state.sync = { label: 'User access saved locally', mode: 'local' };
+  }
+
+  render();
+}
+
+async function updateJoinRequest(requestId, status) {
+  const request = state.joinRequests.find((item) => item.id === requestId);
+  if (!request || !['approved', 'rejected'].includes(status)) return;
+  const client = createSupabaseClient();
+  const nextRequest = normalizeJoinRequest({ ...request, status });
+  const membership = normalizeMembership({
+    company_id: request.company_id,
+    profile_id: request.profile_id,
+    role: 'member',
+    status: status === 'approved' ? 'active' : 'disabled',
+  });
+
+  if (state.session?.auth === 'supabase' && client) {
+    if (status === 'approved') {
+      const membershipResult = await client.from('company_memberships').upsert(membership, { onConflict: 'company_id,profile_id' });
+      if (membershipResult.error) {
+        state.sync = { label: membershipResult.error.message || 'Approval failed', mode: 'local' };
+        render();
+        return;
+      }
+    }
+    const requestResult = await client.from('company_join_requests').update({ status, reviewed_by: activeSession().profile.id, updated_at: new Date().toISOString() }).eq('id', request.id);
+    if (requestResult.error) {
+      state.sync = { label: requestResult.error.message || 'Request update failed', mode: 'local' };
+      render();
+      return;
+    }
+    if (status === 'approved') upsertMembership(membership);
+    state.sync = { label: status === 'approved' ? 'Access approved' : 'Request rejected', mode: 'live' };
+  } else {
+    if (status === 'approved') upsertMembership(membership);
+    state.sync = { label: status === 'approved' ? 'Access approved locally' : 'Request rejected locally', mode: 'local' };
+  }
+
+  state.joinRequests = state.joinRequests.map((item) => (item.id === request.id ? nextRequest : item));
+  persistAll();
   render();
 }
 
@@ -4648,6 +4823,18 @@ function upsertFinanceVendor(vendor) {
   persistAll();
 }
 
+function upsertMembership(membership) {
+  const index = state.memberships.findIndex((item) => item.company_id === membership.company_id && item.profile_id === membership.profile_id);
+  if (index >= 0) state.memberships[index] = membership;
+  else state.memberships.unshift(membership);
+  persistAll();
+}
+
+function replaceRoleAssignment(assignment) {
+  state.roleAssignments = state.roleAssignments.filter((item) => item.company_id !== assignment.company_id || item.profile_id !== assignment.profile_id);
+  if (assignment.role_id) state.roleAssignments.unshift(assignment);
+}
+
 function syncJobInvoiceTotal(jobId) {
   if (!jobId) return;
   const job = jobById(jobId);
@@ -4916,6 +5103,61 @@ function companyMembers(companyId = activeCompanyId()) {
   return state.teamMembers.filter((member) => Array.isArray(member.company_ids) && member.company_ids.includes(companyId));
 }
 
+function companyAccessUsers(companyId = activeCompanyId()) {
+  const byId = new Map();
+  companyMembers(companyId).forEach((member) => {
+    byId.set(member.id, {
+      profile_id: '',
+      member_id: member.id,
+      name: member.full_name || member.name,
+      email: member.email,
+      avatar_url: member.avatar_url,
+      role: roleForMember(companyId, member.id).toLowerCase(),
+      role_label: roleForMember(companyId, member.id),
+      role_id: '',
+      status: member.active ? 'active' : 'disabled',
+    });
+  });
+  state.memberships
+    .filter((membership) => membership.company_id === companyId)
+    .forEach((membership) => {
+      const profile = profileById(membership.profile_id);
+      const member = membership.member_id ? state.teamMembers.find((item) => item.id === membership.member_id) : null;
+      const assignment = state.roleAssignments.find((item) => item.company_id === companyId && item.profile_id === membership.profile_id);
+      const role = assignment ? roleById(companyId, assignment.role_id) : null;
+      const id = membership.profile_id || membership.member_id;
+      byId.set(id, {
+        profile_id: membership.profile_id,
+        member_id: membership.member_id,
+        name: profile?.full_name || member?.full_name || profile?.email || member?.name || id || 'User',
+        email: profile?.email || member?.email || '',
+        avatar_url: profile?.avatar_url || member?.avatar_url || '',
+        role: membership.role,
+        role_label: role?.name || titleCase(membership.role),
+        role_id: assignment?.role_id || roleIdForName(companyId, membership.role),
+        status: membership.status || 'active',
+      });
+    });
+  const sessionProfile = activeSession().profile;
+  if (state.session?.auth === 'supabase' && sessionProfile?.id && !byId.has(sessionProfile.id)) {
+    const membership = membershipForProfile(companyId, sessionProfile.id);
+    if (membership) {
+      byId.set(sessionProfile.id, {
+        profile_id: sessionProfile.id,
+        member_id: sessionProfile.member_id || '',
+        name: sessionProfile.full_name || sessionProfile.email,
+        email: sessionProfile.email,
+        avatar_url: sessionProfile.avatar_url,
+        role: membership.role,
+        role_label: titleCase(membership.role),
+        role_id: roleIdForName(companyId, membership.role),
+        status: membership.status || 'active',
+      });
+    }
+  }
+  return [...byId.values()].sort((a, b) => (a.status === 'active' ? 0 : 1) - (b.status === 'active' ? 0 : 1) || a.name.localeCompare(b.name));
+}
+
 function companyRoles(companyId = activeCompanyId()) {
   const custom = state.roles.filter((role) => role.company_id === companyId);
   if (custom.length) return custom.sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
@@ -4924,6 +5166,27 @@ function companyRoles(companyId = activeCompanyId()) {
     normalizeRole({ id: `admin-${companyId}`, company_id: companyId, name: 'Admin', color: '#60a5fa', priority: 800, is_system: true }),
     normalizeRole({ id: `staff-${companyId}`, company_id: companyId, name: 'Staff', color: '#15803d', priority: 100, is_system: true }),
   ];
+}
+
+function roleById(companyId, roleId) {
+  return companyRoles(companyId).find((role) => role.id === roleId) || null;
+}
+
+function roleIdForName(companyId, roleName) {
+  const normalized = String(roleName || '').toLowerCase();
+  return companyRoles(companyId).find((role) => role.name.toLowerCase() === normalized || role.id.toLowerCase() === normalized)?.id || '';
+}
+
+function membershipRoleForRole(role) {
+  const normalized = String(role?.name || '').toLowerCase().replace(/\s+/g, '_');
+  const allowed = ['owner', 'member', 'worker', 'sales', 'supervisor', 'admin', 'developer', 'construction_supervisor'];
+  if (allowed.includes(normalized)) return normalized;
+  if (normalized === 'staff') return 'member';
+  return 'member';
+}
+
+function profileById(profileId) {
+  return state.profiles.find((profile) => profile.id === profileId) || (activeSession().profile.id === profileId ? activeSession().profile : null);
 }
 
 function filteredJobs(companyId = activeCompanyId()) {
@@ -6844,6 +7107,10 @@ function sum(items, field) {
 function number(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
 
 function money(value) {

@@ -12,6 +12,11 @@ This file is the durable implementation checklist for the auth, permissions, peo
 ## People And Access
 
 - [ ] Upgrade Users from a read-only list into a basic access surface with roles, approval state, and permission visibility.
+  - [x] Add Supabase-backed tenant tables for memberships, roles, role permissions, role assignments, invites, join requests, ACL, field permissions, audit events.
+  - [x] Add Settings tabs for billing, roles, access, and workers.
+  - [x] Add Users page actions for role assignment, approval/disable, and join request approval/rejection workflow.
+  - [ ] Add invite-user email/link workflow.
+  - [ ] Verify user role changes against Supabase RLS on production.
 - [x] Replace the Settings-only worker list with a real Team Chart route.
 - [x] Add supervisor/reporting logic to team members without requiring Supabase Auth yet.
 
@@ -24,7 +29,11 @@ This file is the durable implementation checklist for the auth, permissions, peo
 ## Persistence And Sync
 
 - [ ] Fix seeded local cache semantics so empty arrays stay empty after user deletion.
-- [ ] Separate local demo data, local user changes, and Supabase live records.
+- [x] Separate local demo data, local user changes, and Supabase live records.
+  - [x] Add visible Demo Mode button.
+  - [x] Demo Mode is local-only and uses seeded data.
+  - [x] Supabase workspaces no longer merge placeholder seed data.
+  - [x] Supabase sessions no longer persist live/empty data into demo localStorage caches.
 - [ ] Stop destructive local deletes when Supabase delete fails.
 - [ ] Keep derived finance/job totals consistent across reloads.
 
@@ -37,6 +46,8 @@ This file is the durable implementation checklist for the auth, permissions, peo
 ## Verification
 
 - [x] Run `node --check src/main.js`.
+- [x] Run `node --check api/create-checkout-session.js` when API files are touched.
+- [x] Run `node --check api/stripe-webhook.js` when API files are touched.
 - [x] Run `npm run build`.
 - [x] Run `npm run build:pages`.
 - [x] Run `git diff --check`.
