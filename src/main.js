@@ -2086,10 +2086,10 @@ function renderUsersPage(route, companyId) {
       <section class="users-grid">
         ${users.map((user) => `
           <article class="user-card ${user.status !== 'active' ? 'muted' : ''}">
-            ${renderAvatar({ full_name: user.name, email: user.email, avatar_url: user.avatar_url }, 'avatar')}
+            ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
             <div>
-              <strong>${h(user.name)}</strong>
-              <span>${h(user.email || user.profile_id || user.member_id)}</span>
+              <strong>${h(userDisplayName(user))}</strong>
+              <span>${h(userDisplayMeta(user))}</span>
               <small>${h(user.role_label)} / ${h(titleCase(user.status))}</small>
             </div>
           </article>
@@ -2130,10 +2130,10 @@ function renderUserAccessRow(companyId, user, canManageUsers) {
   const selectedRoleId = user.role_id || roleIdForName(companyId, user.role) || roles[0]?.id || '';
   return `
     <article class="access-user-row">
-      ${renderAvatar({ full_name: user.name, email: user.email, avatar_url: user.avatar_url }, 'avatar')}
+      ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
       <div class="access-user-main">
-        <strong>${h(user.name)}</strong>
-        <span>${h(user.email || user.profile_id || user.member_id)} / ${h(titleCase(user.status))}</span>
+        <strong>${h(userDisplayName(user))}</strong>
+        <span>${h(userDisplayMeta(user))} / ${h(titleCase(user.status))}</span>
       </div>
       <form class="access-role-form" data-user-role-form>
         <input type="hidden" name="company_id" value="${h(companyId)}" />
@@ -2164,6 +2164,25 @@ function renderJoinRequestRow(request, canManageUsers) {
       </div>
     </article>
   `;
+}
+
+function userDisplayName(user) {
+  const rawName = String(user.name || '').trim();
+  const rawEmail = String(user.email || '').trim();
+  if (rawName && !isOpaqueUserId(rawName)) return rawName;
+  if (rawEmail && !isOpaqueUserId(rawEmail)) return rawEmail.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const role = String(user.role || '').toLowerCase();
+  if (role === 'owner') return 'Workspace owner';
+  if (role === 'admin') return 'Workspace admin';
+  if (role === 'developer') return 'Developer';
+  return `${user.role_label || 'Workspace'} user`;
+}
+
+function userDisplayMeta(user) {
+  const email = String(user.email || '').trim();
+  if (email && !isOpaqueUserId(email)) return email;
+  const id = String(user.profile_id || user.member_id || '').trim();
+  return id ? `ID ${shortUserId(id)}` : 'No email on profile';
 }
 
 function renderTeamChartPage(companyId) {
@@ -7120,6 +7139,16 @@ function number(value) {
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+}
+
+function isOpaqueUserId(value) {
+  const text = String(value || '').trim();
+  return isUuid(text) || /^[0-9a-f]{8,}$/i.test(text) || /^user[_-]?[0-9a-f-]{8,}$/i.test(text);
+}
+
+function shortUserId(value) {
+  const text = String(value || '').trim();
+  return text ? text.slice(0, 8) : '';
 }
 
 function money(value) {
