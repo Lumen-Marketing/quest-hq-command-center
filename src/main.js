@@ -717,6 +717,7 @@ const state = {
   loginError: '',
   authMessage: '',
   modal: '',
+  accountMenuOpen: false,
 };
 
 const app = document.getElementById('app');
@@ -1146,8 +1147,8 @@ function shellTemplate(route, workspace) {
           </label>
           <span class="sync-pill ${h(state.sync.mode)}" data-sync-state>${h(state.sync.label)}</span>
           <button class="btn" type="button" data-action="refresh-data" title="Refresh workspace data"><i class="ti ti-refresh"></i></button>
-          <div class="account-menu">
-            <button class="avatar-button" type="button" data-action="open-profile" aria-label="Open Quest profile">
+          <div class="account-menu ${state.accountMenuOpen ? 'open' : ''}">
+            <button class="avatar-button" type="button" data-action="toggle-account-menu" aria-label="Open account menu" aria-expanded="${state.accountMenuOpen ? 'true' : 'false'}">
               ${renderAvatar(session.profile, 'avatar')}
             </button>
             <div class="account-popover">
@@ -3402,6 +3403,9 @@ function renderFormActionsModal(companyId, form) {
 }
 
 function onDocumentClick(event) {
+  const closeAccountMenu = state.accountMenuOpen && !event.target.closest('.account-menu');
+  if (closeAccountMenu) state.accountMenuOpen = false;
+
   const action = event.target.closest('[data-action]');
   if (action) {
     handleAction(event, action);
@@ -3423,7 +3427,10 @@ function onDocumentClick(event) {
   }
 
   const link = event.target.closest('a[href][data-router]');
-  if (!link) return;
+  if (!link) {
+    if (closeAccountMenu) render();
+    return;
+  }
   if (link.target || link.hasAttribute('download')) return;
   event.preventDefault();
   navigate(link.getAttribute('href'));
@@ -3440,7 +3447,14 @@ function handleAction(event, node) {
   }
   if (action === 'sign-out') {
     event.preventDefault();
+    state.accountMenuOpen = false;
     signOut();
+    return;
+  }
+  if (action === 'toggle-account-menu') {
+    event.preventDefault();
+    state.accountMenuOpen = !state.accountMenuOpen;
+    render();
     return;
   }
   if (action === 'set-auth-mode') {
@@ -3453,6 +3467,7 @@ function handleAction(event, node) {
   }
   if (action === 'open-profile') {
     event.preventDefault();
+    state.accountMenuOpen = false;
     state.modal = 'profile';
     render();
     return;

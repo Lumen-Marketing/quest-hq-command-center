@@ -228,7 +228,7 @@ button { cursor: pointer; }
   padding: 9px;
 }
 
-.account-menu:focus-within .account-popover {
+.account-menu.open .account-popover {
   display: grid;
   gap: 6px;
 }
