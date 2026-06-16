@@ -716,6 +716,8 @@ const state = {
   dataLoading: false,
   loginError: '',
   authMessage: '',
+  toast: null,
+  toastTimer: null,
   modal: '',
   accountMenuOpen: false,
 };
@@ -792,6 +794,7 @@ async function fetchSupabaseProfile(user) {
     company_ids: [],
     avatar_url: '',
     approved: false,
+    email_verified: !!user.email_confirmed_at,
   };
   const client = createSupabaseClient();
   if (!client) return fallback;
@@ -1187,6 +1190,7 @@ function metricSymbol(label) {
 function shellTemplate(route, workspace) {
   const session = activeSession();
   const companyId = activeCompanyId();
+  const emailVerified = isSessionEmailVerified(session);
   return `
     <div class="quest-app" data-route="${h(route.name)}">
       ${renderSvgSprite()}
@@ -1220,6 +1224,12 @@ function shellTemplate(route, workspace) {
             <div class="account-popover">
               <strong>${h(session.profile.full_name)}</strong>
               <span>${h(session.profile.role_label)} - ${h(companyName(companyId))}</span>
+              ${!emailVerified ? `
+                <div class="account-status warning">
+                  <b>Email unverified</b>
+                  <button type="button" data-action="verify-email">Click here to verify</button>
+                </div>
+              ` : ''}
               <button type="button" data-action="open-profile"><i class="ti ti-user-circle"></i>Profile</button>
               <button type="button" data-action="sign-out"><i class="ti ti-logout"></i>Sign out</button>
             </div>
@@ -1236,6 +1246,7 @@ function shellTemplate(route, workspace) {
       </div>
     </div>
     ${renderActiveModal(route, session)}
+    ${renderToast()}
   `;
 }
 
@@ -3427,6 +3438,27 @@ function renderActiveModal(route, session) {
   return '';
 }
 
+function renderToast() {
+  if (!state.toast) return '';
+  return `
+    <div class="app-toast ${h(state.toast.mode || 'local')}" role="status" aria-live="polite">
+      <strong>${h(state.toast.title || 'Quest HQ')}</strong>
+      <span>${h(state.toast.message || '')}</span>
+    </div>
+  `;
+}
+
+function showToast(message, mode = 'local', title = 'Not available yet') {
+  if (state.toastTimer) clearTimeout(state.toastTimer);
+  state.toast = { title, message, mode };
+  render();
+  state.toastTimer = setTimeout(() => {
+    state.toast = null;
+    state.toastTimer = null;
+    render();
+  }, 4200);
+}
+
 function renderModalShell(eyebrow, title, content, className = '') {
   return `
     <div class="modal-overlay">
@@ -3667,6 +3699,12 @@ function handleAction(event, node) {
     event.preventDefault();
     state.accountMenuOpen = !state.accountMenuOpen;
     render();
+    return;
+  }
+  if (action === 'verify-email') {
+    event.preventDefault();
+    state.accountMenuOpen = false;
+    showToast('Email verification is not implemented yet. Account access is not blocked right now.', 'local');
     return;
   }
   if (action === 'start-demo-mode') {
@@ -6353,11 +6391,17 @@ function activeSession() {
 }
 
 function buildSupabaseSession(session, profile) {
+  const emailVerified = !!(session.user.email_confirmed_at || session.user.confirmed_at);
   return {
     auth: 'supabase',
     access_token: session.access_token,
     refresh_token: session.refresh_token,
-    user: { id: session.user.id, email: session.user.email || '' },
+    user: {
+      id: session.user.id,
+      email: session.user.email || '',
+      email_confirmed_at: session.user.email_confirmed_at || session.user.confirmed_at || '',
+      email_verified: emailVerified,
+    },
     profile: normalizeProfile(profile || {}, {
       id: session.user.id,
       email: session.user.email || '',
@@ -6368,6 +6412,7 @@ function buildSupabaseSession(session, profile) {
       company_ids: [],
       avatar_url: '',
       approved: false,
+      email_verified: emailVerified,
     }),
   };
 }
@@ -6382,6 +6427,7 @@ function buildLocalSession() {
     member_id: 'abraham',
     company_ids: ['roofing', 'drafting', 'lumen'],
     avatar_url: '',
+    email_verified: true,
     ...(state.profileDraft || {}),
   };
   return {
@@ -6393,6 +6439,7 @@ function buildLocalSession() {
 
 function normalizeProfile(input, fallback = {}) {
   const role = String(input.role || fallback.role || 'member').toLowerCase();
+  const emailVerified = typeof input.email_verified === 'boolean' ? input.email_verified : fallback.email_verified === true;
   return {
     id: String(input.id || fallback.id || ''),
     email: String(input.email || fallback.email || ''),
@@ -6403,8 +6450,14 @@ function normalizeProfile(input, fallback = {}) {
     company_ids: Array.isArray(input.company_ids) ? compactUnique(input.company_ids.map(canonicalCompanyId)) : (fallback.company_ids || []),
     avatar_url: String(input.avatar_url || fallback.avatar_url || ''),
     approved: input.approved !== false,
+    email_verified: emailVerified,
     supervisor_id: String(input.supervisor_id || fallback.supervisor_id || ''),
   };
+}
+
+function isSessionEmailVerified(session = activeSession()) {
+  if (session.auth !== 'supabase') return true;
+  return session.user?.email_verified === true || !!session.user?.email_confirmed_at || session.profile?.email_verified === true;
 }
 
 function workspaceHeader(title, summary, actions = '') {
