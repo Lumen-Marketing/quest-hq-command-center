@@ -2126,7 +2126,7 @@ function renderUsersPage(route, companyId) {
       </article>
       <article class="panel">
         <div class="section-head">
-          <div><h2>Invites</h2><p>Copy a secure invite link for a specific email address.</p></div>
+          <div><h2>Invites</h2><p>Copy a secure invite code or link for a specific email address.</p></div>
           <button class="btn btn-primary" type="button" data-action="open-invite-form" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-user-plus"></i>Invite</button>
         </div>
         <div class="access-invite-list">
@@ -2202,8 +2202,10 @@ function renderInviteRow(invite, canManageUsers) {
       <div>
         <strong>${h(invite.email)}</strong>
         <span>${h(role?.name || 'Member')} / ${expired ? 'Expired' : `Expires ${formatDate(invite.expires_at)}`}</span>
+        ${invite.token ? `<code class="invite-code">${h(invite.token)}</code>` : ''}
       </div>
       <div>
+        <button class="btn" type="button" data-action="copy-invite-code" data-invite-id="${h(invite.id)}" ${canManageUsers && invite.token ? '' : 'disabled'}><i class="ti ti-key"></i>Copy code</button>
         <button class="btn" type="button" data-action="copy-invite-link" data-invite-id="${h(invite.id)}" ${canManageUsers && invite.token ? '' : 'disabled'}><i class="ti ti-link"></i>Copy link</button>
         <button class="btn danger" type="button" data-action="revoke-invite" data-invite-id="${h(invite.id)}" ${canManageUsers ? '' : 'disabled'}>Revoke</button>
       </div>
@@ -2409,9 +2411,9 @@ function renderInviteFormModal(companyId) {
       <input type="hidden" name="company_id" value="${h(companyId)}" />
       ${field('Email', 'email', '', true, 'email')}
       ${selectField('Role', 'role_id', defaultInviteRoleId(companyId), options)}
-      <div class="form-message span-2">Quest creates a link you can copy. Email delivery comes after the Resend/SMTP setup.</div>
+      <div class="form-message span-2">Quest creates an invite code you can copy. Email delivery comes after the Resend/SMTP setup.</div>
       <div class="form-actions span-2">
-        <button class="btn btn-primary" type="submit">Create invite</button>
+        <button class="btn btn-primary" type="submit">Create invite code</button>
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
       </div>
     </form>
@@ -3297,6 +3299,7 @@ function renderLogin() {
           <div class="auth-mode-tabs">
             <button class="${state.authMode === 'signin' ? 'active' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="signin">Sign in</button>
             <button class="${state.authMode === 'register' ? 'active' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="register">${inviteToken ? 'Create account' : 'Create workspace'}</button>
+            <button class="${state.authMode === 'invite' ? 'active' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="invite">Invite code</button>
             <button class="${state.authMode === 'request' ? 'active' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="request">Request access</button>
           </div>
           ${renderSupabaseAuthForm(returnUrl)}
@@ -3330,7 +3333,7 @@ function renderSupabaseAuthForm(returnUrl) {
   if (state.authMode === 'register') {
     return `
       <form data-auth-register-form>
-        <label>Full name<input name="full_name" autocomplete="name" required /></label>
+        <label>${inviteToken ? 'Name / username' : 'Full name'}<input name="full_name" autocomplete="name" required /></label>
         <label>Email<input name="email" type="email" autocomplete="email" required /></label>
         <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required /></label>
         ${inviteToken ? '' : '<label>Company workspace<input name="company_name" placeholder="Example Roofing LLC" required /></label>'}
@@ -3338,6 +3341,16 @@ function renderSupabaseAuthForm(returnUrl) {
         <input type="hidden" name="return_url" value="${h(returnUrl)}" />
         <button class="btn btn-primary full" type="submit">${inviteToken ? 'Create account and join' : 'Create secure workspace'}</button>
         ${authStatusMessage(inviteToken ? 'The invite email must match this account email.' : 'Owner role, trial subscription, and workspace isolation are created automatically.')}
+      </form>
+    `;
+  }
+  if (state.authMode === 'invite') {
+    return `
+      <form data-auth-invite-code-form>
+        <label>Invite code<input name="invite_code" autocomplete="one-time-code" required placeholder="Paste the code from your admin" /></label>
+        <input type="hidden" name="return_url" value="${h(returnUrl)}" />
+        <button class="btn btn-primary full" type="submit">Continue with invite code</button>
+        ${authStatusMessage('Invite codes are shared by your Owner/Admin. No email delivery required.')}
       </form>
     `;
   }
@@ -3721,7 +3734,7 @@ function handleAction(event, node) {
   }
   if (action === 'set-auth-mode') {
     event.preventDefault();
-    state.authMode = ['signin', 'register', 'request'].includes(node.dataset.authMode) ? node.dataset.authMode : 'signin';
+    state.authMode = ['signin', 'register', 'invite', 'request'].includes(node.dataset.authMode) ? node.dataset.authMode : 'signin';
     state.loginError = '';
     state.authMessage = '';
     render();
@@ -3749,6 +3762,11 @@ function handleAction(event, node) {
   if (action === 'copy-invite-link') {
     event.preventDefault();
     copyInviteLink(node.dataset.inviteId);
+    return;
+  }
+  if (action === 'copy-invite-code') {
+    event.preventDefault();
+    copyInviteCode(node.dataset.inviteId);
     return;
   }
   if (action === 'revoke-invite') {
@@ -4097,6 +4115,12 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-auth-invite-code-form]')) {
+    event.preventDefault();
+    submitInviteCode(event.target);
+    return;
+  }
+
   if (event.target.matches('[data-auth-request-form]')) {
     event.preventDefault();
     requestCompanyAccess(event.target);
@@ -4257,6 +4281,23 @@ async function signInWithSupabase(formNode) {
   state.authMessage = '';
   state.dataLoaded = false;
   navigate(safeReturnUrl(form.return_url || appHref(companyPath('jobs', {}, defaultCompanyId()))), { replace: true });
+}
+
+function submitInviteCode(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const inviteCode = String(form.invite_code || '').trim();
+  if (!inviteCode) {
+    state.loginError = 'Invite code is required.';
+    render();
+    return;
+  }
+  state.loginError = '';
+  state.authMessage = '';
+  state.authMode = 'register';
+  const params = new URLSearchParams({ invite: inviteCode });
+  const returnUrl = safeReturnUrl(form.return_url || '');
+  if (returnUrl) params.set('return_url', returnUrl);
+  navigate(`/login?${params.toString()}`, { replace: true });
 }
 
 async function registerWorkspace(formNode) {
@@ -4458,7 +4499,7 @@ async function saveInvite(formNode) {
     company_id: companyId,
     email,
     role_id: isUuid(roleId) ? roleId : '',
-    token: crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '').slice(0, 16),
+    token: generateInviteCode(),
     status: 'pending',
     invited_by: activeSession().profile.id,
     expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
@@ -4471,6 +4512,7 @@ async function saveInvite(formNode) {
       company_id: invite.company_id,
       email: invite.email,
       role_id: invite.role_id || null,
+      token: invite.token,
       status: 'pending',
       invited_by: activeSession().profile.id,
     };
@@ -4481,10 +4523,10 @@ async function saveInvite(formNode) {
       return;
     }
     state.companyInvites.unshift(normalizeCompanyInvite(result.data));
-    state.sync = { label: 'Invite created. Copy the link to send it.', mode: 'live' };
+    state.sync = { label: 'Invite code created. Copy it for the new user.', mode: 'live' };
   } else {
     state.companyInvites.unshift(invite);
-    state.sync = { label: 'Invite created locally', mode: 'local' };
+    state.sync = { label: 'Invite code created locally', mode: 'local' };
   }
 
   state.modal = '';
@@ -4527,6 +4569,22 @@ async function copyInviteLink(inviteId) {
   try {
     await navigator.clipboard.writeText(inviteLink(invite));
     state.sync = { label: 'Invite link copied', mode: 'live' };
+  } catch {
+    state.sync = { label: 'Copy failed', mode: 'local' };
+  }
+  render();
+}
+
+async function copyInviteCode(inviteId) {
+  const invite = state.companyInvites.find((item) => item.id === inviteId);
+  if (!invite?.token) {
+    state.sync = { label: 'Invite code is unavailable', mode: 'local' };
+    render();
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(invite.token);
+    state.sync = { label: 'Invite code copied', mode: 'live' };
   } catch {
     state.sync = { label: 'Copy failed', mode: 'local' };
   }
@@ -5451,6 +5509,12 @@ function roleIdForName(companyId, roleName) {
 function defaultInviteRoleId(companyId = activeCompanyId()) {
   const roles = companyRoles(companyId).filter((role) => role.name.toLowerCase() !== 'owner');
   return roles.find((role) => role.name.toLowerCase() === 'staff')?.id || roles.find((role) => role.name.toLowerCase() === 'member')?.id || roles[0]?.id || '';
+}
+
+function generateInviteCode() {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return `QH-${Array.from(bytes, (byte) => byte.toString(36).padStart(2, '0')).join('').toUpperCase()}`;
 }
 
 function inviteLink(invite) {

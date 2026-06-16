@@ -1837,7 +1837,7 @@ textarea:focus {
 
 .auth-mode-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 6px;
   margin: 8px 0 12px;
 }
@@ -1898,6 +1898,22 @@ textarea:focus {
   font-weight: 800;
   line-height: 1.35;
   margin-top: 2px;
+}
+
+.invite-code {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fbf7ee;
+  color: var(--ink);
+  padding: 4px 7px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  margin-top: 6px;
 }
 
 .demo-login-details {

@@ -15,7 +15,7 @@ This file is the durable implementation checklist for the auth, permissions, peo
   - [x] Add Supabase-backed tenant tables for memberships, roles, role permissions, role assignments, invites, join requests, ACL, field permissions, audit events.
   - [x] Add Settings tabs for billing, roles, access, and workers.
   - [x] Add Users page actions for role assignment, approval/disable, and join request approval/rejection workflow.
-  - [x] Add invite-user link workflow with invite modal, copy link, revoke, and accept path.
+  - [x] Add invite-user code/link workflow with invite modal, copy code/link, revoke, and accept path.
   - [ ] Add transactional invite email delivery after Resend/SMTP is configured.
   - [ ] Verify user role changes against Supabase RLS on production.
 - [x] Replace the Settings-only worker list with a real Team Chart route.
