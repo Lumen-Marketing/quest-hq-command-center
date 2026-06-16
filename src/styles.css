@@ -1582,13 +1582,15 @@ textarea:focus {
 }
 
 .access-user-list,
-.access-request-list {
+.access-request-list,
+.access-invite-list {
   display: grid;
   gap: 9px;
 }
 
 .access-user-row,
-.access-request-row {
+.access-request-row,
+.access-invite-row {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) minmax(280px, .95fr);
   align-items: center;
@@ -1603,10 +1605,16 @@ textarea:focus {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.access-invite-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .access-user-main strong,
 .access-user-main span,
 .access-request-row strong,
-.access-request-row span {
+.access-request-row span,
+.access-invite-row strong,
+.access-invite-row span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1614,7 +1622,8 @@ textarea:focus {
 }
 
 .access-user-main span,
-.access-request-row span {
+.access-request-row span,
+.access-invite-row span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
@@ -1631,7 +1640,8 @@ textarea:focus {
   min-width: 0;
 }
 
-.access-request-row > div:last-child {
+.access-request-row > div:last-child,
+.access-invite-row > div:last-child {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
@@ -1790,6 +1800,26 @@ textarea:focus {
 }
 
 .demo-mode-box span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.invite-banner {
+  border: 1px solid #d6e3f8;
+  border-radius: 8px;
+  background: #f5f8ff;
+  padding: 12px;
+}
+
+.invite-banner strong,
+.invite-banner span {
+  display: block;
+}
+
+.invite-banner span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
@@ -3588,15 +3618,18 @@ textarea:focus {
 
   .access-user-row,
   .access-request-row,
+  .access-invite-row,
   .access-role-form {
     grid-template-columns: 1fr;
   }
 
-  .access-request-row > div:last-child {
+  .access-request-row > div:last-child,
+  .access-invite-row > div:last-child {
     justify-content: stretch;
   }
 
-  .access-request-row .btn {
+  .access-request-row .btn,
+  .access-invite-row .btn {
     width: 100%;
   }
 }
