@@ -2789,7 +2789,6 @@ textarea:focus {
   min-height: 28px;
   border-radius: 6px;
   background: transparent;
-  color: #8a5a0a;
   overflow: hidden;
 }
 
@@ -2801,11 +2800,6 @@ textarea:focus {
 
 .file-thumb {
   grid-row: span 2;
-}
-
-.drive-folder-icon i,
-.file-doc-icon i {
-  font-size: 21px;
 }
 
 .drive-folder-card strong,
@@ -2925,131 +2919,57 @@ textarea:focus {
 }
 
 .file-type {
-  position: relative;
   display: grid;
-  grid-template-rows: 1fr auto;
   place-items: center;
   width: 30px;
   height: 34px;
-  border: 1px solid #c9d8ee;
-  border-radius: 5px;
-  background: linear-gradient(135deg, #ffffff 0 72%, #dbeafe 72% 100%);
-  color: #2454a6;
-  padding: 3px 2px 2px;
-  font-weight: 950;
-  line-height: 1;
-  box-shadow: 0 1px 0 rgba(21, 37, 64, .04);
+  border-radius: 6px;
+  background: transparent;
+  overflow: hidden;
 }
 
-.file-type::after {
-  content: "";
-  position: absolute;
-  right: -1px;
-  top: -1px;
-  width: 9px;
-  height: 9px;
-  border-left: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  border-radius: 0 5px 0 3px;
-  background: rgba(255, 255, 255, .72);
-  opacity: .28;
-}
-
-.file-type i {
-  font-size: 16px;
-  line-height: 1;
+.asset-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .file-type small {
-  position: relative;
-  z-index: 1;
-  display: block;
-  font-size: 7px;
+  display: none;
+}
+
+.file-type.folder {
+  width: 32px;
+  height: 28px;
+}
+
+.file-doc-icon {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.file-doc-icon .asset-icon {
+  width: 52px;
+  height: 52px;
+}
+
+.file-doc-icon small {
+  color: var(--muted);
+  font-size: 9px;
   font-weight: 950;
   letter-spacing: .04em;
   text-transform: uppercase;
 }
 
-.file-doc-icon {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid #c9d8ee;
-  border-radius: 8px;
-  background: #dbeafe;
-  color: #1d4ed8;
-  font-size: 11px;
-  font-weight: 950;
-}
-
-.file-type.folder {
-  display: block;
-  width: 32px;
-  height: 24px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: transparent;
-  box-shadow: none;
-}
-
-.file-type.folder::before,
-.file-type.folder::after {
-  content: "";
-  position: absolute;
-  display: block;
-}
-
-.file-type.folder::before {
-  left: 3px;
-  top: 2px;
-  width: 13px;
-  height: 7px;
-  border: 1px solid #b87509;
-  border-bottom: 0;
-  border-radius: 4px 4px 0 0;
-  background: #f7cf63;
-}
-
-.file-type.folder::after {
-  left: 1px;
-  right: 1px;
-  bottom: 2px;
-  height: 18px;
-  border: 1px solid #ad7207;
-  border-radius: 4px;
-  background: linear-gradient(#ffd875, #edaa27);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 1px 1px rgba(45, 31, 5, .14);
-}
-
-.file-type.folder i {
-  display: none;
-}
-
-.file-type.text,
-.file-doc-icon.text {
-  border-color: #cbd5e1;
-  background: linear-gradient(135deg, #ffffff 0 72%, #e2e8f0 72% 100%);
-  color: #475569;
-}
-
-.file-type.zip,
-.file-doc-icon.zip {
-  border-color: #f2d392;
-  background: linear-gradient(135deg, #fffdfa 0 72%, #fef3c7 72% 100%);
-  color: #92400e;
-}
-
 .explorer-grid + .recent-title {
   margin-top: 18px;
-}
-
-.file-doc-icon {
-  width: 64px;
-  height: 64px;
-  font-size: 18px;
 }
 
 .file-doc-icon.large {
@@ -3057,32 +2977,9 @@ textarea:focus {
   height: 90px;
 }
 
-.file-type.pdf,
-.file-doc-icon.pdf {
-  border-color: #fecaca;
-  background: linear-gradient(135deg, #fffafa 0 72%, #fee2e2 72% 100%);
-  color: #991b1b;
-}
-
-.file-type.image,
-.file-doc-icon.image {
-  border-color: #bbf7d0;
-  background: linear-gradient(135deg, #fbfffd 0 72%, #dcfce7 72% 100%);
-  color: #166534;
-}
-
-.file-type.sheet,
-.file-doc-icon.sheet {
-  border-color: #a7f3d0;
-  background: linear-gradient(135deg, #fbfffd 0 72%, #ecfdf5 72% 100%);
-  color: #047857;
-}
-
-.file-type.doc,
-.file-doc-icon.doc {
-  border-color: #bfdbfe;
-  background: linear-gradient(135deg, #ffffff 0 72%, #dbeafe 72% 100%);
-  color: #1d4ed8;
+.file-doc-icon.large .asset-icon {
+  width: 72px;
+  height: 72px;
 }
 
 .file-detail-preview {
@@ -3096,12 +2993,17 @@ textarea:focus {
   overflow: hidden;
 }
 
-.file-detail-preview img {
+.file-detail-preview > img,
+.file-detail-preview .file-preview-media {
   width: 100%;
   height: 100%;
   max-height: 280px;
   object-fit: contain;
   background: #111827;
+}
+
+.file-detail-preview .asset-icon {
+  background: transparent;
 }
 
 .file-detail-list {

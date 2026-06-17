@@ -135,6 +135,7 @@ const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
 const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
 const CALENDAR_EVENT_TYPES = ['Company event', 'Job visit / inspection', 'Estimate appointment', 'Install / field work', 'Internal meeting', 'Personal reminder'];
 const CALENDAR_FILTER_TYPES = ['Task due', 'Invoice due', 'Approval', 'Time'].concat(CALENDAR_EVENT_TYPES);
+const FILE_ICON_ASSET_BASE = 'https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons/';
 const FILE_CATEGORIES = ['All categories', 'Shared', 'Jobs', 'Forms', 'Photos', 'Permits', 'Contracts', 'Archive'];
 const DRIVE_FOLDERS = [
   ['jobs', 'Jobs', 'Job-linked folders and deliverables', 'ti-folders'],
@@ -2359,7 +2360,7 @@ function renderExplorerIcons(items) {
 function renderFolderTile(folder) {
   return `
     <a class="drive-folder-card explorer-folder" href="${h(folder.href)}" data-router>
-      <span class="drive-folder-icon"><i class="ti ${h(folder.icon || 'ti-folder')}"></i></span>
+      <span class="drive-folder-icon">${folderIconAsset(folder, folder.name)}</span>
       <strong>${h(folder.name)}</strong>
       <em>${h(folder.countLabel || '0 items')}</em>
     </a>
@@ -2369,7 +2370,7 @@ function renderFolderTile(folder) {
 function renderFolderRow(folder) {
   return `
     <a class="explorer-row folder-row-live" href="${h(folder.href)}" data-router role="row">
-      <span class="explorer-name"><span class="file-type folder"><i class="ti ${h(folder.icon || 'ti-folder')}"></i></span><strong>${h(folder.name)}</strong></span>
+      <span class="explorer-name"><span class="file-type folder">${folderIconAsset(folder, folder.name)}</span><strong>${h(folder.name)}</strong></span>
       <span>${h(folder.updatedLabel || '')}</span>
       <span>Folder</span>
       <span>${h(folder.countLabel || '')}</span>
@@ -2391,7 +2392,7 @@ function renderFileRow(file) {
 function fileTypeBadge(file) {
   return `
     <span class="file-type ${h(fileTypeClass(file))}">
-      <i class="ti ${h(fileIcon(file))}"></i>
+      ${fileIconAsset(file, fileTypeLabel(file))}
       <small>${h(fileTypeShortLabel(file))}</small>
     </span>
   `;
@@ -2410,7 +2411,7 @@ function renderFileTile(file) {
 function renderFileDetails(file, companyId) {
   if (!file) {
     return `
-      <div class="file-detail-preview"><span class="file-doc-icon"><i class="ti ti-folder-open"></i></span></div>
+      <div class="file-detail-preview"><span class="file-doc-icon large">${folderIconAsset({ id: 'home', name: companyName(companyId) }, 'Company drive')}</span></div>
       <h3>${h(companyName(companyId))} Drive</h3>
       <p>Pick a file to see metadata, job context, storage path, and actions.</p>
       <div class="file-detail-list">
@@ -9458,28 +9459,50 @@ function filteredDriveFiles(companyId = activeCompanyId(), folder = 'home', jobI
 }
 
 function fileTypeLabel(file) {
-  const type = String(file.mime_type || '').toLowerCase();
+  const labels = {
+    pdf: 'PDF',
+    image: 'Image',
+    archive: 'Archive',
+    sheet: 'Excel',
+    doc: 'Word',
+    presentation: 'PowerPoint',
+    text: 'Text',
+    video: 'Video',
+    audio: 'Audio',
+    code: 'Code',
+    data: 'Data',
+    design: 'Design',
+    cad: 'CAD',
+    email: 'Email',
+  };
+  const kind = fileTypeKind(file);
+  if (labels[kind]) return labels[kind];
   const ext = fileExtension(file);
-  if (type.includes('pdf')) return 'PDF';
-  if (ext === 'pdf') return 'PDF';
-  if (type.includes('image') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'Image';
-  if (type.includes('zip') || ['zip', 'rar', '7z'].includes(ext)) return 'Archive';
-  if (type.includes('spreadsheet') || type.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext)) return 'Excel';
-  if (type.includes('word') || ['doc', 'docx'].includes(ext)) return 'Word';
-  if (type.includes('text') || ['txt', 'md', 'json', 'csv', 'log'].includes(ext)) return 'Text';
-  if (type.includes('presentation') || ['ppt', 'pptx'].includes(ext)) return 'PowerPoint';
   return ext ? ext.toUpperCase() : folderLabel(file.folder);
 }
 
+function fileTypeKind(file) {
+  const type = String(file.mime_type || '').toLowerCase();
+  const ext = fileExtension(file);
+  if (type.includes('pdf') || ext === 'pdf') return 'pdf';
+  if (type.includes('image') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'tif', 'tiff', 'heic', 'ico'].includes(ext)) return 'image';
+  if (type.includes('zip') || type.includes('compressed') || ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2'].includes(ext)) return 'archive';
+  if (type.includes('spreadsheet') || type.includes('excel') || ['xls', 'xlsx', 'xlsm', 'ods', 'csv'].includes(ext)) return 'sheet';
+  if (type.includes('word') || ['doc', 'docx', 'odt', 'rtf'].includes(ext)) return 'doc';
+  if (type.includes('presentation') || ['ppt', 'pptx', 'pps', 'odp'].includes(ext)) return 'presentation';
+  if (type.includes('video') || ['mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv', 'm4v'].includes(ext)) return 'video';
+  if (type.includes('audio') || ['mp3', 'wav', 'aac', 'flac', 'm4a', 'ogg'].includes(ext)) return 'audio';
+  if (['js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'json', 'xml', 'yml', 'yaml', 'md', 'sql', 'py', 'rb', 'php', 'java', 'cs', 'cpp', 'c', 'go', 'rs', 'sh', 'ps1'].includes(ext)) return 'code';
+  if (['txt', 'log'].includes(ext) || type.includes('text')) return 'text';
+  if (['ai', 'psd', 'sketch', 'fig'].includes(ext)) return 'design';
+  if (['dwg', 'dxf', 'rvt', 'ifc', 'step', 'stp'].includes(ext)) return 'cad';
+  if (['eml', 'msg'].includes(ext)) return 'email';
+  if (['db', 'sqlite', 'bak'].includes(ext)) return 'data';
+  return 'file';
+}
+
 function fileTypeClass(file) {
-  const label = fileTypeLabel(file).toLowerCase();
-  if (label === 'pdf') return 'pdf';
-  if (label === 'image') return 'image';
-  if (label === 'excel') return 'sheet';
-  if (label === 'text') return 'text';
-  if (['word', 'powerpoint'].includes(label)) return 'doc';
-  if (label === 'archive') return 'zip';
-  return 'doc';
+  return fileTypeKind(file);
 }
 
 function fileExtension(file) {
@@ -9487,9 +9510,8 @@ function fileExtension(file) {
 }
 
 function fileThumb(file, large = false) {
-  const icon = fileIcon(file);
-  if (file.signed_url) return `<img src="${h(file.signed_url)}" alt="" />`;
-  return `<span class="file-doc-icon ${h(fileTypeClass(file))} ${large ? 'large' : ''}"><i class="ti ${h(icon)}"></i></span>`;
+  if (file.signed_url && fileTypeKind(file) === 'image') return `<img src="${h(file.signed_url)}" alt="" />`;
+  return `<span class="file-doc-icon ${h(fileTypeClass(file))} ${large ? 'large' : ''}">${fileIconAsset(file, fileTypeLabel(file))}<small>${h(fileTypeShortLabel(file))}</small></span>`;
 }
 
 function fileTypeShortLabel(file) {
@@ -9500,6 +9522,13 @@ function fileTypeShortLabel(file) {
   if (label === 'Excel') return ext === 'csv' ? 'CSV' : 'XLS';
   if (label === 'Word') return 'DOC';
   if (label === 'PowerPoint') return 'PPT';
+  if (label === 'Video') return 'VID';
+  if (label === 'Audio') return 'AUD';
+  if (label === 'Code') return ext && ext.length <= 4 ? ext.toUpperCase() : 'CODE';
+  if (label === 'Design') return ext && ext.length <= 4 ? ext.toUpperCase() : 'DES';
+  if (label === 'CAD') return ext && ext.length <= 4 ? ext.toUpperCase() : 'CAD';
+  if (label === 'Email') return ext && ext.length <= 4 ? ext.toUpperCase() : 'MAIL';
+  if (label === 'Data') return ext && ext.length <= 4 ? ext.toUpperCase() : 'DATA';
   if (label === 'Text') return ext && ext.length <= 4 ? ext.toUpperCase() : 'TXT';
   return label.length <= 4 ? label.toUpperCase() : (ext || 'FILE').slice(0, 4).toUpperCase();
 }
@@ -10026,16 +10055,76 @@ function folderIdFromCategory(category) {
   return 'shared';
 }
 
-function fileIcon(file) {
-  const label = fileTypeLabel(file);
-  if (label === 'Image') return 'ti-photo';
-  if (label === 'PDF') return 'ti-file-type-pdf';
-  if (label === 'Archive') return 'ti-file-zip';
-  if (label === 'Excel') return 'ti-file-spreadsheet';
-  if (label === 'Word') return 'ti-file-type-doc';
-  if (label === 'PowerPoint') return 'ti-file-type-ppt';
-  if (label === 'Text') return 'ti-file-text';
-  return 'ti-file-description';
+function folderIconAsset(folder, label = 'Folder') {
+  const id = String(folder?.id || folder?.name || '').toLowerCase();
+  const name = String(folder?.name || '').toLowerCase();
+  let asset = 'default_folder.svg';
+  if (id === 'photos' || name.includes('photo') || name.includes('image')) asset = 'folder_type_images.svg';
+  else if (id === 'shared' || name.includes('shared')) asset = 'folder_type_shared.svg';
+  else if (['forms', 'permits', 'contracts'].includes(id) || name.includes('form') || name.includes('permit') || name.includes('contract')) asset = 'folder_type_docs.svg';
+  else if (id === 'jobs' || id.startsWith('job:') || name.includes('job')) asset = 'folder_type_src.svg';
+  return iconAsset(asset, label || 'Folder');
+}
+
+function fileIconAsset(file, label = 'File') {
+  return iconAsset(fileIconAssetName(file), label || fileTypeLabel(file));
+}
+
+function iconAsset(asset, label) {
+  return `<img class="asset-icon" src="${h(FILE_ICON_ASSET_BASE + asset)}" alt="${h(label)}" loading="lazy" draggable="false" referrerpolicy="no-referrer" />`;
+}
+
+function fileIconAssetName(file) {
+  const ext = fileExtension(file);
+  const exact = {
+    pdf: 'file_type_pdf.svg',
+    doc: 'file_type_word.svg',
+    docx: 'file_type_word.svg',
+    odt: 'file_type_word.svg',
+    rtf: 'file_type_word.svg',
+    xls: 'file_type_excel.svg',
+    xlsx: 'file_type_excel.svg',
+    xlsm: 'file_type_excel.svg',
+    ods: 'file_type_excel.svg',
+    csv: 'file_type_excel.svg',
+    ppt: 'file_type_powerpoint.svg',
+    pptx: 'file_type_powerpoint.svg',
+    pps: 'file_type_powerpoint.svg',
+    odp: 'file_type_powerpoint.svg',
+    zip: 'file_type_zip.svg',
+    rar: 'file_type_zip.svg',
+    '7z': 'file_type_zip.svg',
+    tar: 'file_type_zip.svg',
+    gz: 'file_type_zip.svg',
+    tgz: 'file_type_zip.svg',
+    txt: 'file_type_text.svg',
+    log: 'file_type_text.svg',
+    md: 'file_type_markdown.svg',
+    json: 'file_type_json.svg',
+    html: 'file_type_html.svg',
+    htm: 'file_type_html.svg',
+    css: 'file_type_css.svg',
+    scss: 'file_type_css.svg',
+    js: 'file_type_js.svg',
+    jsx: 'file_type_js.svg',
+    ts: 'file_type_js.svg',
+    tsx: 'file_type_js.svg',
+    xml: 'file_type_xml.svg',
+    yml: 'file_type_yaml.svg',
+    yaml: 'file_type_yaml.svg',
+    svg: 'file_type_svg.svg',
+    ai: 'file_type_ai.svg',
+    psd: 'file_type_photoshop.svg',
+  };
+  if (exact[ext]) return exact[ext];
+  const kind = fileTypeKind(file);
+  if (kind === 'image') return 'file_type_image.svg';
+  if (kind === 'video') return 'file_type_video.svg';
+  if (kind === 'audio') return 'file_type_audio.svg';
+  if (kind === 'text') return 'file_type_text.svg';
+  if (kind === 'code') return 'file_type_js.svg';
+  if (kind === 'archive') return 'file_type_zip.svg';
+  return 'default_file.svg';
 }
 
 function titleCase(value) {
