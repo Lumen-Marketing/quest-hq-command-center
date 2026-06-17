@@ -80,6 +80,11 @@ const PERMISSION_KEYS = [
   ['messages.manage', 'Manage messages (compatibility)'],
 ];
 
+const PERMISSION_ALIASES = {
+  'messages.manage': ['messages.manage_groups'],
+  'messages.manage_groups': ['messages.manage'],
+};
+
 const MODULE_REGISTRY = [
   { id: 'jobs', group: 'Workspace', label: 'Jobs', icon: 'ti-briefcase', symbol: 'q-symbol-jobs', status: 'live', permission: 'jobs.view' },
   { id: 'tasks', group: 'Workspace', label: 'Tasks', icon: 'ti-list-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'tasks.view' },
@@ -1673,7 +1678,7 @@ function moduleBadgeCount(moduleId, companyId = activeCompanyId()) {
   if (moduleId === 'forms') return companyForms(companyId).length;
   if (moduleId === 'crm') return crmAccounts(companyId).length;
   if (moduleId === 'finance') return companyFinanceInvoices(companyId).length;
-  if (moduleId === 'users') return companyMembers(companyId).length;
+  if (moduleId === 'users') return companyAccessUsers(companyId).filter((user) => user.status === 'active').length;
   if (moduleId === 'messages') {
     const unread = companyMessageUnreadCount(companyId);
     return unread || companyMessageConversations(companyId).length;
@@ -1696,6 +1701,9 @@ function renderWorkspace(route) {
   if (route.name === 'command') return renderCompanyDashboard(activeCompanyId());
   if (route.name !== 'company') return renderPlannedPage(route.name);
   const companyId = route.companyId;
+  if (state.session?.auth === 'supabase' && !allowedCompanyIds().includes(companyId)) {
+    return renderCompanyAccessDeniedPage(companyId);
+  }
   const moduleMeta = MODULE_REGISTRY.find((module) => module.id === route.section);
   if (moduleMeta?.status !== 'planned') {
     if (!subscriptionAllowsCompany(companyId) && !['settings', 'users'].includes(route.section)) return renderSubscriptionBlockedPage(companyId);
@@ -1741,6 +1749,22 @@ function renderPermissionBlockedPage(companyId, permission) {
         ['Company', companyName(companyId)],
         ['Required permission', permission],
         ['Your role', roleForCompany(companyId)],
+      ])}
+    </section>
+  `;
+}
+
+function renderCompanyAccessDeniedPage(companyId) {
+  return `
+    ${workspaceHeader('Company access denied', 'This workspace is not in your active company memberships.', `
+      <a class="btn" href="${appHref(companyPath('jobs', {}, activeCompanyId()))}" data-router><i class="ti ti-building"></i>Your workspace</a>
+      <a class="btn btn-primary" href="${appHref('/login?mode=request')}" data-router><i class="ti ti-user-plus"></i>Request access</a>
+    `)}
+    <section class="panel">
+      ${contractRows([
+        ['Requested company', companyName(companyId)],
+        ['Access rule', 'Active company membership required'],
+        ['Your status', membershipForProfile(companyId, activeSession().profile.id)?.status ? titleCase(membershipForProfile(companyId, activeSession().profile.id).status) : 'No active membership'],
       ])}
     </section>
   `;
@@ -2443,6 +2467,8 @@ function renderUsersPage(route, companyId) {
   const tab = ['members', 'access'].includes(route.params.get('tab')) ? route.params.get('tab') : 'members';
   const pendingRequests = state.joinRequests.filter((item) => item.company_id === companyId && item.status === 'pending');
   const canManageUsers = can('users.manage', companyId);
+  const activeUsers = users.filter((user) => user.status === 'active');
+  const inactiveUsers = users.filter((user) => user.status !== 'active');
   return `
     ${workspaceHeader('Users', 'Company members, roles, workers, and access context.', `
       <button class="btn btn-primary" type="button" data-action="open-invite-form" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-user-plus"></i>Invite user</button>
@@ -2455,8 +2481,9 @@ function renderUsersPage(route, companyId) {
     ])}
     ${tab === 'members' ? `
       <section class="metric-grid operations-metrics">
-        ${metricCard('Active users', users.filter((user) => user.status === 'active').length)}
-        ${metricCard('Pending', users.filter((user) => user.status !== 'active').length + pendingRequests.length)}
+        ${metricCard('Active users', activeUsers.length)}
+        ${metricCard('Pending', users.filter((user) => user.status === 'pending').length + pendingRequests.length)}
+        ${metricCard('Disabled/left', inactiveUsers.filter((user) => user.status !== 'pending').length)}
         ${metricCard('Roles', companyRoles(companyId).length)}
       </section>
       <section class="users-grid">
@@ -2513,23 +2540,26 @@ function renderUsersPage(route, companyId) {
 function renderUserAccessRow(companyId, user, canManageUsers) {
   const roles = companyRoles(companyId);
   const selectedRoleId = user.role_id || roleIdForName(companyId, user.role) || roles[0]?.id || '';
+  const isProtectedOwner = user.profile_id && isLastActiveOwner(companyId, user.profile_id);
+  const canEditUser = canManageUsers && user.profile_id && !isProtectedOwner;
   return `
-    <article class="access-user-row">
+    <article class="access-user-row ${user.status !== 'active' ? 'muted' : ''}">
       ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
       <div class="access-user-main">
         <strong>${h(userDisplayName(user))}</strong>
         <span>${h(userDisplayMeta(user))} / ${h(titleCase(user.status))}</span>
+        ${isProtectedOwner ? '<small class="access-note">Last active Owner - promote another Owner before changing this access.</small>' : ''}
       </div>
       <form class="access-role-form" data-user-role-form>
         <input type="hidden" name="company_id" value="${h(companyId)}" />
         <input type="hidden" name="profile_id" value="${h(user.profile_id)}" />
-        <select name="role_id" ${canManageUsers && user.profile_id ? '' : 'disabled'}>
+        <select name="role_id" ${canEditUser ? '' : 'disabled'}>
           ${roles.map((role) => `<option value="${h(role.id)}" ${role.id === selectedRoleId ? 'selected' : ''}>${h(role.name)}</option>`).join('')}
         </select>
-        <select name="membership_status" ${canManageUsers && user.profile_id ? '' : 'disabled'}>
-          ${['active', 'pending', 'disabled'].map((status) => `<option value="${h(status)}" ${status === user.status ? 'selected' : ''}>${h(titleCase(status))}</option>`).join('')}
+        <select name="membership_status" ${canEditUser ? '' : 'disabled'}>
+          ${['active', 'pending', 'disabled', 'left'].map((status) => `<option value="${h(status)}" ${status === user.status ? 'selected' : ''}>${h(titleCase(status))}</option>`).join('')}
         </select>
-        <button class="btn" type="submit" ${canManageUsers && user.profile_id ? '' : 'disabled'}>Save</button>
+        <button class="btn" type="submit" ${canEditUser ? '' : 'disabled'}>Save</button>
       </form>
     </article>
   `;
@@ -2661,7 +2691,8 @@ function renderSettingsPage(route, companyId) {
           ['Auth switch', CONFIG.questAuthEnabled ? 'Enabled' : 'Disabled'],
           ['Local login', CONFIG.localLoginEnabled ? 'Enabled' : 'Disabled'],
           ['Isolation', CONFIG.questAuthEnabled ? 'Server-enforced when migration is applied' : 'Client-filtered only'],
-          ['Memberships', String(state.memberships.filter((item) => item.company_id === companyId).length)],
+          ['Active memberships', String(state.memberships.filter((item) => item.company_id === companyId && item.status === 'active').length)],
+          ['Disabled/left', String(state.memberships.filter((item) => item.company_id === companyId && ['disabled', 'left'].includes(item.status)).length)],
           ['Invites', String(state.companyInvites.filter((item) => item.company_id === companyId && item.status === 'pending').length)],
         ])}
       </article>
@@ -2669,6 +2700,12 @@ function renderSettingsPage(route, companyId) {
         <div class="section-head"><div><h2>Join requests</h2><p>Hybrid onboarding queue for this company.</p></div></div>
         <div class="finance-compact-list">
           ${state.joinRequests.filter((item) => item.company_id === companyId).map((request) => compactFinanceRow(request.requested_email || request.profile_id, request.message || 'Access request', titleCase(request.status), request.created_at)).join('') || emptyState('No pending company approvals.')}
+        </div>
+      </article>
+      <article class="panel span-3">
+        <div class="section-head"><div><h2>Access history</h2><p>Recent membership, invite, and role changes for this company.</p></div></div>
+        <div class="access-audit-list">
+          ${companyAuditEvents(companyId).slice(0, 8).map(renderAuditEventRow).join('') || emptyState('No access audit events yet.')}
         </div>
       </article>
       ` : ''}
@@ -2740,11 +2777,34 @@ function renderRolesSettings(companyId) {
       </div>
     </article>
     <article class="panel">
+      ${previewRole ? renderRoleAccessPreview(companyId, previewRole) : `
+        <div class="section-head"><div><h2>Access preview</h2><p>Pick View as role to check sidebar, route, and action access.</p></div></div>
+        ${emptyState('No role preview selected.')}
+      `}
+    </article>
+    <article class="panel span-3">
       <div class="section-head"><div><h2>Field controls</h2><p>Finance and sensitive field masking rules.</p></div></div>
       <div class="finance-compact-list">
         ${state.fieldPermissions.filter((item) => item.company_id === companyId).map((rule) => compactFinanceRow(rule.field_key, rule.resource_type, rule.visibility, '')).join('') || emptyState('No field permission overrides yet.')}
       </div>
     </article>
+  `;
+}
+
+function renderRoleAccessPreview(companyId, role) {
+  const liveModules = MODULE_REGISTRY.filter((module) => module.status === 'live');
+  const allowedModules = liveModules.filter((module) => roleAllowsPermission(role, module.permission || `${module.id}.view`));
+  const deniedModules = liveModules.filter((module) => !roleAllowsPermission(role, module.permission || `${module.id}.view`));
+  return `
+    <div class="section-head">
+      <div><h2>Access preview</h2><p>${h(role.name)} sees ${allowedModules.length} of ${liveModules.length} live modules.</p></div>
+      <button class="btn" type="button" data-action="exit-role-preview"><i class="ti ti-eye-off"></i>Exit preview</button>
+    </div>
+    ${contractRows([
+      ['Preview role', role.name],
+      ['Allowed modules', allowedModules.map((module) => module.label).join(', ') || 'None'],
+      ['Hidden modules', deniedModules.map((module) => module.label).join(', ') || 'None'],
+    ])}
   `;
 }
 
@@ -5301,9 +5361,11 @@ async function saveInvite(formNode) {
       return;
     }
     state.companyInvites.unshift(normalizeCompanyInvite(result.data));
+    await recordAuditEvent(invite.company_id, 'invite.created', 'company_invite', result.data.id, { email: invite.email }, true);
     state.sync = { label: 'Invite code created. Copy it for the new user.', mode: 'live' };
   } else {
     state.companyInvites.unshift(invite);
+    recordAuditEvent(invite.company_id, 'invite.created', 'company_invite', invite.id, { email: invite.email });
     state.sync = { label: 'Invite code created locally', mode: 'local' };
   }
 
@@ -5375,7 +5437,7 @@ async function revokeInvite(inviteId) {
   if (!invite) return;
   const client = createSupabaseClient();
   if (state.session?.auth === 'supabase' && client) {
-    const result = await client.from('company_invites').update({ status: 'revoked', updated_at: new Date().toISOString() }).eq('id', invite.id);
+    const result = await client.rpc('revoke_company_invite', { target_invite_id: invite.id });
     if (result.error) {
       state.sync = { label: result.error.message || 'Invite revoke failed', mode: 'local' };
       render();
@@ -5386,6 +5448,7 @@ async function revokeInvite(inviteId) {
     state.sync = { label: 'Invite revoked locally', mode: 'local' };
   }
   state.companyInvites = state.companyInvites.map((item) => (item.id === invite.id ? normalizeCompanyInvite({ ...item, status: 'revoked' }) : item));
+  recordAuditEvent(invite.company_id, 'invite.revoked', 'company_invite', invite.id, { email: invite.email });
   notifyLocalEvent('access.invite', 'Invite revoked', `${actorName()} revoked the invite for ${invite.email}.`, companyPath('settings', { tab: 'access' }, invite.company_id), 'invite', invite.id, invite.company_id);
   persistAll();
   render();
@@ -5396,10 +5459,16 @@ async function saveUserAccess(formNode) {
   const companyId = canonicalCompanyId(data.get('company_id') || activeCompanyId());
   const profileId = String(data.get('profile_id') || '').trim();
   const roleId = String(data.get('role_id') || '').trim();
-  const status = ['active', 'pending', 'disabled'].includes(String(data.get('membership_status'))) ? String(data.get('membership_status')) : 'active';
+  const status = ['active', 'pending', 'disabled', 'left'].includes(String(data.get('membership_status'))) ? String(data.get('membership_status')) : 'active';
   const role = roleById(companyId, roleId);
   if (!profileId || !role) {
     state.sync = { label: 'Select a user and role', mode: 'local' };
+    render();
+    return;
+  }
+  const validationMessage = validateMembershipChange(companyId, profileId, role, status);
+  if (validationMessage) {
+    state.sync = { label: validationMessage, mode: 'local' };
     render();
     return;
   }
@@ -5410,6 +5479,7 @@ async function saveUserAccess(formNode) {
     role: membershipRoleForRole(role),
     status,
   });
+  const previousMembership = membershipForProfile(companyId, profileId);
   const assignment = normalizeRoleAssignment({
     company_id: companyId,
     profile_id: profileId,
@@ -5420,20 +5490,17 @@ async function saveUserAccess(formNode) {
 
   if (state.session?.auth === 'supabase' && client) {
     const canPersistRoleAssignment = isUuid(role.id);
-    const membershipResult = await client.from('company_memberships').upsert(membershipPayload(membership), { onConflict: 'company_id,profile_id' }).select().single();
+    const membershipResult = await client.rpc('update_company_member_access', {
+      target_company_id: companyId,
+      target_profile_id: profileId,
+      target_role: membership.role,
+      target_role_id: canPersistRoleAssignment ? role.id : null,
+      target_status: status,
+    });
     if (membershipResult.error) {
       state.sync = { label: membershipResult.error.message || 'Access update failed', mode: 'local' };
       render();
       return;
-    }
-    if (canPersistRoleAssignment) {
-      await client.from('user_role_assignments').delete().eq('company_id', companyId).eq('profile_id', profileId);
-      const assignmentResult = await client.from('user_role_assignments').insert(assignment);
-      if (assignmentResult.error) {
-        state.sync = { label: assignmentResult.error.message || 'Role assignment failed', mode: 'local' };
-        render();
-        return;
-      }
     }
     upsertMembership(normalizeMembership(membershipResult.data || membership));
     if (canPersistRoleAssignment) replaceRoleAssignment(assignment);
@@ -5445,6 +5512,7 @@ async function saveUserAccess(formNode) {
   }
 
   notifyLocalEvent('access.role', 'User access updated', `${actorName()} set ${profileName(profileId)} to ${role.name} / ${titleCase(status)}.`, companyPath('settings', { tab: 'access' }, companyId), 'membership', profileId, companyId);
+  recordAuditEvent(companyId, membershipAuditEventType(previousMembership, membership), 'membership', profileId, { role: role.name, status });
   render();
 }
 
@@ -5461,15 +5529,11 @@ async function updateJoinRequest(requestId, status) {
   });
 
   if (state.session?.auth === 'supabase' && client) {
-    if (status === 'approved') {
-      const membershipResult = await client.from('company_memberships').upsert(membershipPayload(membership), { onConflict: 'company_id,profile_id' });
-      if (membershipResult.error) {
-        state.sync = { label: membershipResult.error.message || 'Approval failed', mode: 'local' };
-        render();
-        return;
-      }
-    }
-    const requestResult = await client.from('company_join_requests').update({ status, reviewed_by: activeSession().profile.id, updated_at: new Date().toISOString() }).eq('id', request.id);
+    const requestResult = await client.rpc('review_company_join_request', {
+      target_request_id: request.id,
+      decision: status,
+      target_role_id: null,
+    });
     if (requestResult.error) {
       state.sync = { label: requestResult.error.message || 'Request update failed', mode: 'local' };
       render();
@@ -5483,6 +5547,7 @@ async function updateJoinRequest(requestId, status) {
   }
 
   state.joinRequests = state.joinRequests.map((item) => (item.id === request.id ? nextRequest : item));
+  recordAuditEvent(request.company_id, status === 'approved' ? 'join.approved' : 'join.rejected', 'join_request', request.id, { email: request.requested_email });
   notifyLocalEvent('access.request', status === 'approved' ? 'Access approved' : 'Access rejected', `${actorName()} ${status === 'approved' ? 'approved' : 'rejected'} ${request.requested_email || 'a join request'}.`, companyPath('settings', { tab: 'access' }, request.company_id), 'join_request', request.id, request.company_id);
   persistAll();
   render();
@@ -6317,6 +6382,7 @@ function routeRedirect(route) {
   const allowed = allowedCompanyIds();
   if (state.session?.auth === 'supabase' && !allowed.length) return null;
   if (!allowed.includes(route.companyId)) {
+    if (state.session?.auth === 'supabase') return '';
     return companyPath(route.section || 'jobs', Object.fromEntries(route.params.entries()), allowed[0] || defaultCompanyId());
   }
   const validSections = MODULE_REGISTRY.map((module) => module.id);
@@ -6630,6 +6696,26 @@ function companyInvites(companyId = activeCompanyId()) {
     .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
 }
 
+function companyAuditEvents(companyId = activeCompanyId()) {
+  return state.auditEvents
+    .filter((event) => event.company_id === companyId)
+    .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
+}
+
+function renderAuditEventRow(event) {
+  const profile = profileById(event.actor_profile_id);
+  const actor = profile?.full_name || profile?.email || shortUserId(event.actor_profile_id || 'system');
+  return `
+    <article class="access-audit-row">
+      ${renderAvatar({ full_name: actor, email: profile?.email || '' }, 'avatar small')}
+      <span>
+        <strong>${h(titleCase(String(event.event_type || 'access.event').replace(/[._-]+/g, ' ')))}</strong>
+        <small>${h(actor)} / ${formatDate(event.created_at)}</small>
+      </span>
+    </article>
+  `;
+}
+
 function companyRoles(companyId = activeCompanyId()) {
   const custom = state.roles.filter((role) => role.company_id === companyId);
   if (custom.length) return custom.sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
@@ -6653,13 +6739,18 @@ function roleAllowsPermission(role, permission) {
   if (!permission) return true;
   const normalizedName = String(role?.name || '').toLowerCase();
   if (['owner', 'admin', 'developer'].includes(normalizedName)) return true;
+  const variants = permissionVariants(permission);
   const explicit = state.rolePermissions.filter((item) => item.role_id === role?.id);
-  if (explicit.some((item) => (item.permission_key === permission || item.permission_key === '*') && item.effect === 'deny')) return false;
-  if (explicit.some((item) => (item.permission_key === permission || item.permission_key === '*') && item.effect === 'allow')) return true;
+  if (explicit.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'deny')) return false;
+  if (explicit.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'allow')) return true;
   if (explicit.length) return false;
   const fallbackRole = membershipRoleForRole(role);
   const fallbackPermissions = ROLE_PERMISSIONS[fallbackRole] || ROLE_PERMISSIONS.member;
-  return fallbackPermissions.includes('*') || fallbackPermissions.includes(permission);
+  return fallbackPermissions.includes('*') || variants.some((variant) => fallbackPermissions.includes(variant));
+}
+
+function permissionVariants(permission) {
+  return compactUnique([permission, ...(PERMISSION_ALIASES[permission] || [])]);
 }
 
 function roleIdForName(companyId, roleName) {
@@ -7018,6 +7109,7 @@ function can(permission, companyId = activeCompanyId()) {
   if (!permission) return true;
   const previewRole = rolePreviewForCompany(companyId);
   if (previewRole) return roleAllowsPermission(previewRole, permission);
+  const variants = permissionVariants(permission);
   const profile = activeSession().profile;
   if (state.session?.auth === 'supabase') {
     const membership = membershipForProfile(companyId, profile.id);
@@ -7027,12 +7119,12 @@ function can(permission, companyId = activeCompanyId()) {
       .filter((item) => item.company_id === companyId && item.profile_id === profile.id)
       .map((item) => item.role_id);
     const permissions = state.rolePermissions.filter((item) => assignedRoleIds.includes(item.role_id));
-    if (permissions.some((item) => (item.permission_key === permission || item.permission_key === '*') && item.effect === 'deny')) return false;
-    if (permissions.some((item) => (item.permission_key === permission || item.permission_key === '*') && item.effect === 'allow')) return true;
+    if (permissions.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'deny')) return false;
+    if (permissions.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'allow')) return true;
   }
   const role = String(membershipForProfile(companyId, profile.id)?.role || profile.role || 'member').toLowerCase();
   const permissions = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.member;
-  return permissions.includes('*') || permissions.includes(permission);
+  return permissions.includes('*') || variants.some((variant) => permissions.includes(variant));
 }
 
 function allowedCompanyIds() {
@@ -7046,7 +7138,7 @@ function allowedCompanyIds() {
   }
   if (['developer', 'admin'].includes(profile.role)) return compactUnique(allIds.length ? allIds : companiesFallback.map((company) => canonicalCompanyId(company.id)));
   const membershipIds = state.memberships
-    .filter((item) => item.profile_id === profile.id && item.status !== 'disabled')
+    .filter((item) => item.profile_id === profile.id && item.status === 'active')
     .map((item) => canonicalCompanyId(item.company_id));
   const ids = membershipIds.length ? membershipIds : profile.company_ids || [];
   return compactUnique(ids.map(canonicalCompanyId)).filter((id) => allIds.includes(id));
@@ -7099,6 +7191,31 @@ function roleForMember(companyId, memberId) {
 
 function membershipForProfile(companyId, profileId) {
   return state.memberships.find((item) => item.company_id === companyId && item.profile_id === profileId) || null;
+}
+
+function activeOwnerMemberships(companyId = activeCompanyId()) {
+  return state.memberships.filter((item) => item.company_id === companyId && item.role === 'owner' && item.status === 'active');
+}
+
+function isLastActiveOwner(companyId, profileId) {
+  const owners = activeOwnerMemberships(companyId);
+  return owners.length === 1 && owners[0].profile_id === profileId;
+}
+
+function validateMembershipChange(companyId, profileId, role, status) {
+  const current = membershipForProfile(companyId, profileId);
+  const nextRole = membershipRoleForRole(role);
+  if (current?.role === 'owner' && current.status === 'active' && (nextRole !== 'owner' || status !== 'active') && isLastActiveOwner(companyId, profileId)) {
+    return 'Promote another active Owner before changing the last Owner.';
+  }
+  const actorMembership = membershipForProfile(companyId, activeSession().profile.id);
+  const actorGlobalRole = String(activeSession().profile.role || '').toLowerCase();
+  if (['owner', 'developer'].includes(current?.role) || ['owner', 'developer'].includes(nextRole)) {
+    if (!['owner', 'developer'].includes(String(actorMembership?.role || actorGlobalRole).toLowerCase())) {
+      return 'Only an Owner can change Owner or Developer access.';
+    }
+  }
+  return '';
 }
 
 function companySubscription(companyId = activeCompanyId()) {
@@ -7387,12 +7504,17 @@ function normalizeTeamMember(input) {
 }
 
 function normalizeMembership(input) {
+  const status = ['active', 'pending', 'disabled', 'left'].includes(String(input.status)) ? String(input.status) : 'active';
   return {
     company_id: canonicalCompanyId(input.company_id || ''),
     profile_id: String(input.profile_id || input.member_id || ''),
     member_id: input.member_id ? String(input.member_id) : '',
     role: String(input.role || 'member'),
-    status: String(input.status || 'active'),
+    status,
+    disabled_at: input.disabled_at || '',
+    disabled_by: String(input.disabled_by || ''),
+    left_at: input.left_at || '',
+    last_active_at: input.last_active_at || '',
   };
 }
 
@@ -8327,6 +8449,45 @@ function notifyLocalEvent(type, title, body, href, sourceType = '', sourceId = '
     source_type: sourceType,
     source_id: sourceId,
   });
+}
+
+async function recordAuditEvent(companyId, eventType, targetType, targetId, details = {}, persistLive = false) {
+  const event = {
+    id: `audit-${crypto.randomUUID()}`,
+    company_id: companyId,
+    actor_profile_id: activeSession().profile.id,
+    event_type: eventType,
+    target_type: targetType,
+    target_id: targetId,
+    details,
+    created_at: new Date().toISOString(),
+  };
+  state.auditEvents.unshift(event);
+  if (persistLive && state.session?.auth === 'supabase') {
+    const client = createSupabaseClient();
+    if (client) {
+      try {
+        await client.from('audit_events').insert({
+          company_id: companyId,
+          actor_profile_id: activeSession().profile.id,
+          event_type: eventType,
+          target_type: targetType,
+          target_id: targetId,
+          details,
+        });
+      } catch {
+        // Audit UI already has the local event; server audit persistence can retry on the next action.
+      }
+    }
+  }
+}
+
+function membershipAuditEventType(previous, next) {
+  if (next.status === 'disabled') return 'membership.disabled';
+  if (next.status === 'left') return 'membership.left';
+  if (previous && ['disabled', 'left', 'pending'].includes(previous.status) && next.status === 'active') return 'membership.reactivated';
+  if (previous && previous.role !== next.role) return 'role.changed';
+  return 'membership.updated';
 }
 
 function actorName() {

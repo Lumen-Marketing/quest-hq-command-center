@@ -16,8 +16,14 @@ This file is the durable implementation checklist for the auth, permissions, peo
   - [x] Add Settings tabs for billing, roles, access, and workers.
   - [x] Add Users page actions for role assignment, approval/disable, and join request approval/rejection workflow.
   - [x] Add invite-user code/link workflow with invite modal, copy code/link, revoke, and accept path.
+  - [x] Add company membership lifecycle states for active, pending, disabled, and left.
+  - [x] Add last-active-Owner protection in both UI validation and Supabase trigger safeguards.
+  - [x] Add guarded Supabase RPCs for member access updates, join request review, invite revoke, leaving a company, and promoting another Owner.
+  - [x] Add compact access audit history and role access preview in Settings.
+  - [x] Stop Supabase direct company URLs from silently switching to another company when access is denied.
   - [ ] Add transactional invite email delivery after Resend/SMTP is configured.
   - [ ] Verify user role changes against Supabase RLS on production.
+  - [ ] Add a full account deletion/privacy flow separate from company access removal.
 - [x] Replace the Settings-only worker list with a real Team Chart route.
 - [x] Add supervisor/reporting logic to team members without requiring Supabase Auth yet.
 

@@ -395,6 +395,7 @@ button { cursor: pointer; }
 }
 
 .avatar.large { width: 72px; height: 72px; font-size: 24px; }
+.avatar.small { width: 32px; height: 32px; font-size: 11px; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 
 .account-popover {
@@ -1857,6 +1858,11 @@ textarea:focus {
   padding: 10px;
 }
 
+.access-user-row.muted {
+  background: #f7f1e7;
+  opacity: .78;
+}
+
 .access-request-row {
   grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -1885,6 +1891,14 @@ textarea:focus {
   font-weight: 800;
 }
 
+.access-note {
+  display: block;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 900;
+  margin-top: 3px;
+}
+
 .access-role-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 110px auto;
@@ -1901,6 +1915,36 @@ textarea:focus {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.access-audit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.access-audit-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fffdf7;
+  padding: 9px 10px;
+}
+
+.access-audit-row strong,
+.access-audit-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-audit-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .notice {
