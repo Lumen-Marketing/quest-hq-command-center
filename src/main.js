@@ -1272,6 +1272,7 @@ async function loadSupabaseData() {
     messageAttachmentsResult,
     messageReadsResult,
     calendarEventsResult,
+    notificationsResult,
   ] = await Promise.all([
     client.from('companies').select('*').order('name', { ascending: true }),
     client.from('jobs').select('*').order('updated_at', { ascending: false }),
@@ -1295,6 +1296,7 @@ async function loadSupabaseData() {
     client.from('message_attachments').select('*').order('created_at', { ascending: true }).limit(500),
     client.from('message_reads').select('*'),
     client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
+    client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
   ]);
 
   let liveTables = 0;
@@ -1347,6 +1349,7 @@ async function loadSupabaseData() {
   if (!messageAttachmentsResult.error) state.messageAttachments = (messageAttachmentsResult.data || []).map(normalizeMessageAttachment);
   if (!messageReadsResult.error) state.messageReads = (messageReadsResult.data || []).map(normalizeMessageRead);
   if (!calendarEventsResult.error) state.calendarEvents = (calendarEventsResult.data || []).map(normalizeCalendarEvent);
+  if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
 
   state.sync = liveTables ? { label: 'Quest Supabase live', mode: 'live' } : { label: 'Local fallback', mode: 'local' };
 }
@@ -1668,7 +1671,7 @@ function renderNotificationCenter(companyId) {
           <button type="button" data-action="mark-all-notifications-read" ${unreadCount ? '' : 'disabled'}>Mark all read</button>
         </div>
         <div class="notification-list">
-          ${notifications.slice(0, 12).map((item) => renderNotificationItem(item)).join('') || emptyState(state.session?.auth === 'supabase' ? 'No live notifications yet. Supabase inbox persistence comes after RLS.' : 'No notifications yet.')}
+          ${notifications.slice(0, 12).map((item) => renderNotificationItem(item)).join('') || emptyState('No notifications yet.')}
         </div>
       </div>
     </div>
@@ -1680,7 +1683,7 @@ function renderNotificationItem(item) {
     <button class="notification-item ${item.read_at ? 'read' : 'unread'}" type="button" data-action="open-notification" data-notification-id="${h(item.id)}">
       <span></span>
       <div>
-        <small>${h(item.title)} - ${h(timeAgo(item.created_at))}</small>
+        <small>${h(notificationTypeLabel(item.type))} - ${h(item.title)} - ${h(timeAgo(item.created_at))}</small>
         <strong>${h(item.body)}</strong>
       </div>
     </button>
@@ -4730,14 +4733,12 @@ function handleAction(event, node) {
   }
   if (action === 'mark-all-notifications-read') {
     event.preventDefault();
-    markAllNotificationsRead(activeCompanyId());
-    render();
+    markAllNotificationsRead(activeCompanyId()).catch((error) => console.warn('Notification read sync failed', error));
     return;
   }
   if (action === 'open-notification') {
     event.preventDefault();
-    openNotification(node.dataset.notificationId);
-    render();
+    openNotification(node.dataset.notificationId).catch((error) => console.warn('Notification open sync failed', error));
     return;
   }
   if (action === 'verify-email') {
@@ -5941,7 +5942,7 @@ async function saveUserAccess(formNode) {
     state.sync = { label: 'User access saved locally', mode: 'local' };
   }
 
-  notifyLocalEvent('access.role', 'User access updated', `${actorName()} set ${profileName(profileId)} to ${role.name} / ${titleCase(status)}.`, companyPath('settings', { tab: 'access' }, companyId), 'membership', profileId, companyId);
+  notifyLocalEvent('access.role', 'User access updated', `${actorName()} set ${profileName(profileId)} to ${role.name} / ${titleCase(status)}.`, companyPath('settings', { tab: 'access' }, companyId), 'membership', profileId, companyId, [profileId].concat(usersWithAnyPermission(companyId, ['users.manage', 'settings.manage'])));
   recordAuditEvent(companyId, membershipAuditEventType(previousMembership, membership), 'membership', profileId, { role: role.name, status });
   render();
 }
@@ -5978,7 +5979,7 @@ async function updateJoinRequest(requestId, status) {
 
   state.joinRequests = state.joinRequests.map((item) => (item.id === request.id ? nextRequest : item));
   recordAuditEvent(request.company_id, status === 'approved' ? 'join.approved' : 'join.rejected', 'join_request', request.id, { email: request.requested_email });
-  notifyLocalEvent('access.request', status === 'approved' ? 'Access approved' : 'Access rejected', `${actorName()} ${status === 'approved' ? 'approved' : 'rejected'} ${request.requested_email || 'a join request'}.`, companyPath('settings', { tab: 'access' }, request.company_id), 'join_request', request.id, request.company_id);
+  notifyLocalEvent('access.request', status === 'approved' ? 'Access approved' : 'Access rejected', `${actorName()} ${status === 'approved' ? 'approved' : 'rejected'} ${request.requested_email || 'a join request'}.`, companyPath('settings', { tab: 'access' }, request.company_id), 'join_request', request.id, request.company_id, [request.profile_id].concat(usersWithAnyPermission(request.company_id, ['users.manage', 'settings.manage'])));
   persistAll();
   render();
 }
@@ -6009,7 +6010,7 @@ async function saveMessageGroup(form) {
   if (!saved) return;
   state.selectedConversationId = conversation.id;
   state.modal = '';
-  notifyLocalEvent('message.group', 'Group chat created', `${actorName()} created ${conversation.title}.`, companyPath('messages', { conversation: conversation.id }, companyId), 'message_conversation', conversation.id, companyId);
+  notifyLocalEvent('message.group', 'Group chat created', `${actorName()} created ${conversation.title}.`, companyPath('messages', { conversation: conversation.id }, companyId), 'message_conversation', conversation.id, companyId, conversationNotificationRecipients(conversation));
   navigate(companyPath('messages', { conversation: conversation.id }, companyId), { replace: true });
 }
 
@@ -6041,7 +6042,7 @@ async function saveDirectMessage(form) {
   state.modal = '';
   const body = String(data.get('body') || '').trim();
   if (body) await createMessageRecord(conversation, body, []);
-  notifyLocalEvent('message.direct', 'Direct message started', `${actorName()} started a direct message with ${conversation.title}.`, companyPath('messages', { conversation: conversation.id }, companyId), 'message_conversation', conversation.id, companyId);
+  notifyLocalEvent('message.direct', 'Direct message started', `${actorName()} started a direct message with ${conversation.title}.`, companyPath('messages', { conversation: conversation.id }, companyId), 'message_conversation', conversation.id, companyId, [targetId]);
   navigate(companyPath('messages', { conversation: conversation.id }, companyId), { replace: true });
 }
 
@@ -6064,8 +6065,13 @@ async function saveMessageAccess(form) {
   if (next.type !== 'company' && !accessRows.some((row) => row.target_type === 'profile' && row.target_id === activeSession().profile.id)) {
     accessRows.push(normalizeMessageAccess({ id: `msg-access-${crypto.randomUUID()}`, company_id: companyId, conversation_id: next.id, target_type: 'profile', target_id: activeSession().profile.id }));
   }
+  const previousRecipients = conversationNotificationRecipients(conversation);
   const saved = await persistConversation(next, accessRows, true);
   if (!saved) return;
+  const addedRecipients = conversationNotificationRecipients(next).filter((profileId) => !previousRecipients.includes(profileId));
+  if (addedRecipients.length) {
+    notifyLocalEvent('message.group', 'Added to chat', `${actorName()} added you to ${next.title}.`, companyPath('messages', { conversation: next.id }, companyId), 'message_conversation', next.id, companyId, addedRecipients);
+  }
   state.modal = '';
   showToast('Chat access saved.', state.session?.auth === 'supabase' ? 'live' : 'local', 'Messages');
   render();
@@ -8832,19 +8838,25 @@ function normalizeProfile(input, fallback = {}) {
 }
 
 function normalizeNotification(input) {
+  const legacyBody = stripHtmlText(input.html || input.meta || '');
+  const readAt = input.read_at || (input.read === true ? input.created_at || new Date().toISOString() : '');
   return {
     id: String(input.id || `notification-${crypto.randomUUID()}`),
     company_id: canonicalCompanyId(input.company_id || ''),
-    recipient_profile_id: String(input.recipient_profile_id || 'basic-quest-user'),
-    type: String(input.type || 'general'),
-    title: String(input.title || 'Notification'),
-    body: String(input.body || ''),
+    recipient_profile_id: String(input.recipient_profile_id || input.profile_id || input.member_id || 'basic-quest-user'),
+    type: String(input.type || (input.task_id ? 'task.notification' : 'general')),
+    title: String(input.title || input.meta || 'Notification'),
+    body: String(input.body || legacyBody || ''),
     href: String(input.href || ''),
-    source_type: String(input.source_type || ''),
-    source_id: String(input.source_id || ''),
-    read_at: String(input.read_at || ''),
+    source_type: String(input.source_type || (input.task_id ? 'task' : '')),
+    source_id: String(input.source_id || input.task_id || ''),
+    read_at: String(readAt || ''),
     created_at: String(input.created_at || new Date().toISOString()),
   };
+}
+
+function stripHtmlText(value) {
+  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function isSessionEmailVerified(session = activeSession()) {
@@ -9072,35 +9084,38 @@ function markConversationRead(conversationId, sync = true) {
 }
 
 function notifyMessageEvents(conversation, message, attachments = []) {
-  if (!canStoreLocalNotifications() || message.sender_profile_id !== activeSession().profile.id) return;
   const href = companyPath('messages', { conversation: conversation.id }, conversation.company_id);
-  const mentioned = mentionedProfileIds(message.body);
+  const senderName = profileName(message.sender_profile_id);
+  const participants = conversationNotificationRecipients(conversation)
+    .filter((profileId) => profileId !== notificationProfileId(conversation.company_id, message.sender_profile_id));
+  const mentioned = mentionedProfileIds(message.body, conversation.company_id)
+    .filter((profileId) => profileId !== notificationProfileId(conversation.company_id, message.sender_profile_id));
   if (conversation.type === 'direct') {
-    notifyLocalEvent('message.direct', 'New direct message', `${actorName()} sent a direct message in ${conversation.title}.`, href, 'message', message.id, conversation.company_id);
+    notifyLocalEvent('message.direct', 'New direct message', `${senderName} sent a direct message in ${conversation.title}.`, href, 'message', message.id, conversation.company_id, participants);
   }
   mentioned.forEach((profileId) => {
-    createNotification({
+    notifyEvent({
       company_id: conversation.company_id,
-      recipient_profile_id: profileId,
+      recipients: [profileId],
       type: 'message.mention',
       title: 'Mentioned in chat',
-      body: `${actorName()} mentioned you in ${conversation.title}.`,
+      body: `${senderName} mentioned you in ${conversation.title}.`,
       href,
-      source_type: 'message',
-      source_id: message.id,
-    });
+      sourceType: 'message',
+      sourceId: message.id,
+    }).catch((error) => console.warn('Message mention notification failed', error));
   });
   if (attachments.length) {
-    notifyLocalEvent('message.attachment', 'Attachment shared', `${actorName()} shared ${attachments.length} attachment${attachments.length === 1 ? '' : 's'} in ${conversation.title}.`, href, 'message', message.id, conversation.company_id);
+    notifyLocalEvent('message.attachment', 'Attachment shared', `${senderName} shared ${attachments.length} attachment${attachments.length === 1 ? '' : 's'} in ${conversation.title}.`, href, 'message', message.id, conversation.company_id, participants);
   }
 }
 
-function mentionedProfileIds(body = '') {
+function mentionedProfileIds(body = '', companyId = activeCompanyId()) {
   const lower = String(body || '').toLowerCase();
   if (!lower.includes('@')) return [];
-  return companyAccessUsers(activeCompanyId())
+  return companyAccessUsers(companyId)
     .filter((user) => lower.includes(`@${String(user.name || '').split(/\s+/)[0].toLowerCase()}`) || lower.includes(`@${String(user.name || '').toLowerCase()}`))
-    .map((user) => user.profile_id || user.member_id)
+    .map((user) => notificationProfileId(companyId, user.profile_id || user.member_id))
     .filter(Boolean);
 }
 
@@ -9270,109 +9285,326 @@ function resetMessageDemo() {
   render();
 }
 
-function canStoreLocalNotifications() {
-  return state.session?.auth !== 'supabase';
+function notificationPayload(notification) {
+  return {
+    id: notification.id,
+    company_id: notification.company_id,
+    recipient_profile_id: notification.recipient_profile_id,
+    type: notification.type,
+    title: notification.title,
+    body: notification.body,
+    href: notification.href,
+    source_type: notification.source_type,
+    source_id: notification.source_id,
+    read_at: notification.read_at || null,
+    created_at: notification.created_at,
+  };
 }
 
-function createNotification(input) {
-  if (!canStoreLocalNotifications()) return null;
-  const notification = normalizeNotification({
-    id: `notification-${crypto.randomUUID()}`,
-    company_id: activeCompanyId(),
-    recipient_profile_id: activeSession().profile.id,
-    created_at: new Date().toISOString(),
-    ...input,
+function notificationTypeLabel(type = '') {
+  const root = String(type || '').split('.')[0];
+  return {
+    access: 'Access',
+    approval: 'Approval',
+    calendar: 'Calendar',
+    file: 'Files',
+    finance: 'Finance',
+    form: 'Forms',
+    message: 'Messages',
+    task: 'Tasks',
+  }[root] || 'Inbox';
+}
+
+async function notifyEvent(input) {
+  const companyId = canonicalCompanyId(input.companyId || input.company_id || activeCompanyId());
+  const recipients = notificationRecipientIds(companyId, input.recipients, {
+    excludeActor: input.excludeActor === true,
+    type: input.type,
+    href: input.href,
   });
-  state.notifications = [notification]
-    .concat(state.notifications.filter((item) => item.id !== notification.id))
-    .slice(0, 100);
+  if (!recipients.length) return [];
+
+  const now = new Date().toISOString();
+  const rows = recipients.map((recipientId) => normalizeNotification({
+    id: `notification-${crypto.randomUUID()}`,
+    company_id: companyId,
+    recipient_profile_id: recipientId,
+    type: input.type || 'general',
+    title: input.title || 'Notification',
+    body: input.body || '',
+    href: input.href || '',
+    source_type: input.sourceType || input.source_type || '',
+    source_id: input.sourceId || input.source_id || '',
+    created_at: now,
+  }));
+
+  if (state.session?.auth === 'supabase') {
+    const client = createSupabaseClient();
+    if (!client) return [];
+    const result = await client.from('notifications').insert(rows.map(notificationPayload)).select();
+    if (result.error) {
+      console.warn('Notification insert failed', result.error);
+      return [];
+    }
+    const saved = (result.data || []).map(normalizeNotification);
+    mergeNotifications(saved);
+    render();
+    return saved;
+  }
+
+  mergeNotifications(rows);
   persistNotifications();
-  return notification;
+  render();
+  return rows;
 }
 
-function markAllNotificationsRead(companyId = activeCompanyId()) {
+function mergeNotifications(rows) {
+  if (!rows.length) return;
+  const next = new Map();
+  rows.concat(state.notifications).forEach((item) => next.set(item.id, item));
+  state.notifications = [...next.values()]
+    .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0))
+    .slice(0, 200);
+}
+
+function notificationRecipientIds(companyId, recipients = [], options = {}) {
+  const requested = Array.isArray(recipients) ? recipients : [recipients];
+  let ids = requested.map((item) => notificationProfileId(companyId, item)).filter(Boolean);
+  if (!ids.length) ids = notificationDefaultRecipients(companyId, options.type || '', '', '');
+  ids = compactUnique(ids);
+  if (state.session?.auth !== 'supabase' && !ids.includes(activeSession().profile.id)) ids.push(activeSession().profile.id);
+  if (options.excludeActor) ids = ids.filter((id) => id !== notificationActorProfileId());
+  return ids.filter((profileId) => activeNotificationProfile(companyId, profileId) && notificationRecipientCanOpen(companyId, profileId, options.type, options.href));
+}
+
+function notificationProfileId(companyId, value) {
+  if (!value) return '';
+  const raw = typeof value === 'object'
+    ? String(value.profile_id || value.id || value.member_id || value.target_id || '').trim()
+    : String(value).trim();
+  if (!raw) return '';
+  if (profileById(raw) || membershipForProfile(companyId, raw)) return raw;
+  const sessionProfile = activeSession().profile;
+  if (raw === sessionProfile.id || raw === sessionProfile.member_id || raw === sessionProfile.email) return sessionProfile.id;
+  const user = companyAccessUsers(companyId).find((item) => [item.profile_id, item.member_id, item.email, item.name].filter(Boolean).includes(raw));
+  if (user?.profile_id) return user.profile_id;
+  const profile = state.profiles.find((item) => item.member_id === raw || item.email === raw || item.full_name === raw);
+  if (profile?.id) return profile.id;
+  return state.session?.auth === 'supabase' ? '' : raw;
+}
+
+function activeNotificationProfile(companyId, profileId) {
+  if (!profileId) return false;
+  if (profileId === activeSession().profile.id && state.session?.auth !== 'supabase') return true;
+  const membership = membershipForProfile(companyId, profileId);
+  if (membership) return membership.status === 'active';
+  const user = companyAccessUsers(companyId).find((item) => item.profile_id === profileId || item.member_id === profileId);
+  return state.session?.auth !== 'supabase' ? true : user?.status === 'active';
+}
+
+function notificationActorProfileId() {
+  return activeSession().profile.id || activeSession().profile.member_id || '';
+}
+
+function notificationRecipientCanOpen(companyId, profileId, type = '', href = '') {
+  const permission = notificationPermissionForType(type, href);
+  if (!permission) return true;
+  return profileHasPermission(companyId, profileId, permission);
+}
+
+function notificationPermissionForType(type = '', href = '') {
+  const value = `${type} ${href}`;
+  if (value.includes('finance')) return 'finance.view';
+  if (value.includes('message')) return 'messages.view';
+  if (value.includes('calendar')) return 'calendar.view';
+  if (value.includes('file')) return 'files.view';
+  if (value.includes('approval')) return 'approvals.view';
+  if (value.includes('form')) return 'forms.view';
+  if (value.includes('task')) return 'tasks.view';
+  return '';
+}
+
+function profileHasPermission(companyId, profileId, permission) {
+  if (!permission) return true;
+  if (profileId === activeSession().profile.id) return can(permission, companyId);
+  const membership = membershipForProfile(companyId, profileId);
+  if (state.session?.auth === 'supabase' && (!membership || membership.status !== 'active')) return false;
+  const roleName = String(membership?.role || companyAccessUsers(companyId).find((item) => item.profile_id === profileId)?.role || 'member').toLowerCase();
+  if (['owner', 'admin', 'developer'].includes(roleName)) return true;
+  const variants = permissionVariants(permission);
+  const assignedRoleIds = state.roleAssignments
+    .filter((item) => item.company_id === companyId && item.profile_id === profileId)
+    .map((item) => item.role_id);
+  const explicit = state.rolePermissions.filter((item) => assignedRoleIds.includes(item.role_id));
+  if (explicit.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'deny')) return false;
+  if (explicit.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'allow')) return true;
+  const fallback = ROLE_PERMISSIONS[roleName] || ROLE_PERMISSIONS.member;
+  return fallback.includes('*') || variants.some((variant) => fallback.includes(variant));
+}
+
+function notificationDefaultRecipients(companyId, type = '', sourceType = '', sourceId = '') {
+  const root = String(type || '').split('.')[0];
+  if (root === 'finance') return usersWithAnyPermission(companyId, ['finance.view']);
+  if (root === 'message') return usersWithAnyPermission(companyId, ['messages.view']);
+  if (root === 'calendar') return calendarEventRecipients(sourceId).concat(usersWithAnyPermission(companyId, ['calendar.manage']));
+  if (root === 'file') return usersWithAnyPermission(companyId, ['files.view']).concat(jobNotificationRecipients(companyId, sourceId));
+  if (root === 'form') return usersWithAnyPermission(companyId, ['forms.view', 'forms.manage']);
+  if (root === 'approval') return usersWithAnyPermission(companyId, ['approvals.view', 'approvals.manage']);
+  if (root === 'access') return usersWithAnyPermission(companyId, ['users.manage', 'settings.manage']);
+  return [notificationActorProfileId()];
+}
+
+function usersWithAnyPermission(companyId, permissions) {
+  return compactUnique(companyAccessUsers(companyId)
+    .filter((user) => user.status === 'active')
+    .map((user) => notificationProfileId(companyId, user.profile_id || user.member_id))
+    .filter((profileId) => permissions.some((permission) => profileHasPermission(companyId, profileId, permission))));
+}
+
+function taskNotificationRecipients(task, includeCreator = true) {
+  if (!task) return [];
+  return compactUnique([
+    task.assignee_id,
+    includeCreator ? task.creator_id : '',
+    ...(Array.isArray(task.watchers) ? task.watchers : []),
+  ].map((id) => notificationProfileId(task.company_id, id)).filter(Boolean));
+}
+
+function jobNotificationRecipients(companyId, jobId) {
+  if (!jobId) return [];
+  return compactUnique(state.tasks
+    .filter((task) => task.company_id === companyId && task.project_id === jobId)
+    .flatMap((task) => taskNotificationRecipients(task)));
+}
+
+function calendarEventRecipients(eventId) {
+  const event = state.calendarEvents.find((item) => item.id === eventId);
+  if (!event) return [];
+  return compactUnique([event.assigned_profile_id, event.created_by]
+    .map((id) => notificationProfileId(event.company_id, id))
+    .filter(Boolean));
+}
+
+function conversationNotificationRecipients(conversation) {
+  if (!conversation) return [];
+  const rows = conversationAccessRows(conversation.id);
+  const ids = rows.flatMap((row) => {
+    if (row.target_type === 'all_company') return usersWithAnyPermission(conversation.company_id, ['messages.view']);
+    if (row.target_type === 'profile') return [notificationProfileId(conversation.company_id, row.target_id)];
+    if (row.target_type === 'role') {
+      return companyAccessUsers(conversation.company_id)
+        .filter((user) => user.status === 'active' && (user.role_id === row.target_id || roleIdForName(conversation.company_id, user.role) === row.target_id))
+        .map((user) => notificationProfileId(conversation.company_id, user.profile_id || user.member_id));
+    }
+    return [];
+  });
+  return compactUnique(ids.filter(Boolean));
+}
+
+async function markAllNotificationsRead(companyId = activeCompanyId()) {
   const now = new Date().toISOString();
   const profileId = activeSession().profile.id;
+  const ids = state.notifications
+    .filter((item) => item.company_id === companyId && item.recipient_profile_id === profileId && !item.read_at)
+    .map((item) => item.id);
+  if (!ids.length) return;
   state.notifications = state.notifications.map((item) => (
     item.company_id === companyId && item.recipient_profile_id === profileId && !item.read_at
       ? { ...item, read_at: now }
       : item
   ));
   persistNotifications();
+  render();
+  if (state.session?.auth === 'supabase') {
+    const client = createSupabaseClient();
+    if (client) await client.from('notifications').update({ read_at: now }).in('id', ids).eq('recipient_profile_id', profileId);
+  }
 }
 
-function openNotification(notificationId) {
+async function openNotification(notificationId) {
   const notification = state.notifications.find((item) => item.id === notificationId);
   if (!notification) return;
+  const now = new Date().toISOString();
   state.notifications = state.notifications.map((item) => (
-    item.id === notification.id ? { ...item, read_at: item.read_at || new Date().toISOString() } : item
+    item.id === notification.id ? { ...item, read_at: item.read_at || now } : item
   ));
   state.notificationMenuOpen = false;
   persistNotifications();
+  render();
+  if (state.session?.auth === 'supabase' && !notification.read_at) {
+    const client = createSupabaseClient();
+    if (client) await client.from('notifications').update({ read_at: now }).eq('id', notification.id).eq('recipient_profile_id', activeSession().profile.id);
+  }
   if (notification.href) navigate(notification.href);
 }
 
 function notifyTaskChange(task, previous = null) {
-  if (!canStoreLocalNotifications()) return;
   const href = companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id }, task.company_id);
   const assignee = memberName(task.assignee_id);
   if (!previous) {
-    createNotification({
-      company_id: task.company_id,
+    notifyEvent({
+      companyId: task.company_id,
+      recipients: [task.assignee_id],
       type: 'task.assigned',
       title: 'Task assigned',
       body: `${actorName()} assigned ${task.title} to ${assignee}.`,
       href,
-      source_type: 'task',
-      source_id: task.id,
-    });
+      sourceType: 'task',
+      sourceId: task.id,
+    }).catch((error) => console.warn('Task notification failed', error));
     return;
   }
   if (previous.assignee_id !== task.assignee_id) {
-    createNotification({
-      company_id: task.company_id,
+    notifyEvent({
+      companyId: task.company_id,
+      recipients: [task.assignee_id],
       type: 'task.assigned',
       title: 'Task reassigned',
       body: `${actorName()} reassigned ${task.title} to ${assignee}.`,
       href,
-      source_type: 'task',
-      source_id: task.id,
-    });
+      sourceType: 'task',
+      sourceId: task.id,
+    }).catch((error) => console.warn('Task notification failed', error));
   }
   if (previous.priority !== task.priority) {
-    createNotification({
-      company_id: task.company_id,
+    notifyEvent({
+      companyId: task.company_id,
+      recipients: taskNotificationRecipients(task),
+      excludeActor: true,
       type: 'task.priority',
       title: 'Task priority changed',
       body: `${actorName()} set priority to ${titleCase(task.priority)} on ${task.title}.`,
       href,
-      source_type: 'task',
-      source_id: task.id,
-    });
+      sourceType: 'task',
+      sourceId: task.id,
+    }).catch((error) => console.warn('Task notification failed', error));
   }
   if (previous.status !== task.status) {
-    createNotification({
-      company_id: task.company_id,
+    notifyEvent({
+      companyId: task.company_id,
+      recipients: taskNotificationRecipients(task),
+      excludeActor: true,
       type: 'task.status',
       title: 'Task status changed',
       body: `${actorName()} moved ${task.title} to ${statusLabel(task.status)}.`,
       href,
-      source_type: 'task',
-      source_id: task.id,
-    });
+      sourceType: 'task',
+      sourceId: task.id,
+    }).catch((error) => console.warn('Task notification failed', error));
   }
 }
 
-function notifyLocalEvent(type, title, body, href, sourceType = '', sourceId = '', companyId = activeCompanyId()) {
-  createNotification({
-    company_id: companyId,
+function notifyLocalEvent(type, title, body, href, sourceType = '', sourceId = '', companyId = activeCompanyId(), recipients = null) {
+  notifyEvent({
+    companyId,
+    recipients: recipients || notificationDefaultRecipients(companyId, type, sourceType, sourceId),
     type,
     title,
     body,
     href,
-    source_type: sourceType,
-    source_id: sourceId,
-  });
+    sourceType,
+    sourceId,
+  }).catch((error) => console.warn('Notification event failed', error));
 }
 
 async function recordAuditEvent(companyId, eventType, targetType, targetId, details = {}, persistLive = false) {
