@@ -4347,7 +4347,12 @@ function renderProfileModal(profile) {
             <div><strong>${h(profile.full_name)}</strong><span>${h(profile.email)}</span></div>
           </div>
           <label>Display name<input name="full_name" value="${h(profile.full_name)}" /></label>
-          <label>Avatar URL<input name="avatar_url" value="${h(profile.avatar_url || '')}" placeholder="https://..." /></label>
+          <input type="hidden" name="avatar_url" value="${h(profile.avatar_url || '')}" />
+          <label class="profile-upload-field">
+            <span>Profile picture</span>
+            <input name="avatar_file" type="file" accept="image/png,image/jpeg,image/webp" />
+            <small>PNG, JPG, or WebP. Live accounts support up to 2 MB.</small>
+          </label>
           <div class="form-actions">
             <button class="btn btn-primary" type="submit">Save profile</button>
             <button class="btn" type="button" data-action="close-modal">Cancel</button>
@@ -5290,18 +5295,9 @@ function onDocumentSubmit(event) {
 
   if (event.target.matches('[data-profile-form]')) {
     event.preventDefault();
-    const form = Object.fromEntries(new FormData(event.target).entries());
-    const next = {
-      ...activeSession().profile,
-      full_name: String(form.full_name || '').trim() || 'Quest Basic Mode',
-      avatar_url: String(form.avatar_url || '').trim(),
-    };
-    writeJson(PROFILE_KEY, next);
-    state.profileDraft = next;
-    state.session = { ...activeSession(), profile: next };
-    writeJson(SESSION_KEY, state.session);
-    state.modal = '';
-    render();
+    saveProfile(event.target).catch((error) => {
+      showToast(error.message || 'Profile save failed.', 'local', 'Profile');
+    });
     return;
   }
 
@@ -5435,6 +5431,93 @@ function startDemoMode(returnUrl = '') {
   state.dataLoaded = false;
   state.dataLoading = false;
   navigate(safeReturnUrl(returnUrl || appHref(companyPath('jobs', {}, activeCompanyId()))), { replace: true });
+}
+
+async function saveProfile(formNode) {
+  const data = new FormData(formNode);
+  const current = activeSession().profile;
+  const file = formNode.elements.avatar_file?.files?.[0] || null;
+  let avatarUrl = String(data.get('avatar_url') || current.avatar_url || '').trim();
+  if (file && file.size) {
+    const uploadResult = await saveProfileAvatar(file);
+    if (!uploadResult.ok) return;
+    avatarUrl = uploadResult.url;
+  }
+  let next = normalizeProfile({
+    ...current,
+    full_name: String(data.get('full_name') || '').trim() || current.full_name || 'Quest user',
+    avatar_url: avatarUrl,
+  }, current);
+  if (state.session?.auth === 'supabase') {
+    const client = createSupabaseClient();
+    if (!client) {
+      showToast('Profile upload needs Supabase to be available.', 'local', 'Profile');
+      return;
+    }
+    const result = await client
+      .from('profiles')
+      .update({ full_name: next.full_name, avatar_url: next.avatar_url })
+      .eq('id', current.id)
+      .select()
+      .single();
+    if (result.error) {
+      showToast(result.error.message || 'Profile save failed.', 'local', 'Profile');
+      return;
+    }
+    next = normalizeProfile(result.data, next);
+    if (client.auth?.updateUser) {
+      await client.auth.updateUser({ data: { full_name: next.full_name, avatar_url: next.avatar_url } });
+    }
+    state.profiles = [next].concat(state.profiles.filter((profile) => profile.id !== next.id));
+    if (next.member_id) {
+      state.teamMembers = state.teamMembers.map((member) => (member.id === next.member_id ? { ...member, full_name: next.full_name, name: next.full_name, avatar_url: next.avatar_url } : member));
+    }
+  } else {
+    writeJson(PROFILE_KEY, next);
+    state.profileDraft = next;
+  }
+  state.session = { ...activeSession(), profile: next };
+  writeJson(SESSION_KEY, state.session);
+  state.modal = '';
+  showToast('Profile saved.', state.session?.auth === 'supabase' ? 'live' : 'local', 'Profile');
+}
+
+async function saveProfileAvatar(file) {
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowed.includes(file.type)) {
+    showToast('Use a PNG, JPG, or WebP image for your profile picture.', 'local', 'Profile');
+    return { ok: false, url: '' };
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    showToast('Profile pictures must be 2 MB or smaller.', 'local', 'Profile');
+    return { ok: false, url: '' };
+  }
+  if (state.session?.auth !== 'supabase') {
+    const url = await fileToDataUrl(file);
+    if (!url) {
+      showToast('Could not read that image file.', 'local', 'Profile');
+      return { ok: false, url: '' };
+    }
+    return { ok: true, url };
+  }
+  const client = createSupabaseClient();
+  const profileId = activeSession().profile.id;
+  const ext = avatarFileExtension(file);
+  const objectPath = `${profileId}/avatar-${Date.now()}.${ext}`;
+  const upload = await client.storage
+    .from('avatars')
+    .upload(objectPath, file, { cacheControl: '3600', upsert: true, contentType: file.type });
+  if (upload.error) {
+    showToast(upload.error.message || 'Profile picture upload failed.', 'local', 'Profile');
+    return { ok: false, url: '' };
+  }
+  const publicResult = client.storage.from('avatars').getPublicUrl(objectPath);
+  const publicUrl = publicResult.data?.publicUrl ? `${publicResult.data.publicUrl}?v=${Date.now()}` : '';
+  if (!publicUrl) {
+    showToast('Profile picture uploaded, but no public URL was returned.', 'local', 'Profile');
+    return { ok: false, url: '' };
+  }
+  return { ok: true, url: publicUrl };
 }
 
 async function signInWithSupabase(formNode) {
@@ -9507,6 +9590,12 @@ function fileTypeClass(file) {
 
 function fileExtension(file) {
   return String(file.file_name || '').split('.').pop()?.toLowerCase() || '';
+}
+
+function avatarFileExtension(file) {
+  if (file.type === 'image/png') return 'png';
+  if (file.type === 'image/webp') return 'webp';
+  return 'jpg';
 }
 
 function fileThumb(file, large = false) {

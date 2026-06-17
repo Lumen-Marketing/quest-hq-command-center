@@ -2533,6 +2533,27 @@ textarea:focus {
   margin-top: 4px;
 }
 
+.profile-upload-field {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-upload-field input[type="file"] {
+  width: 100%;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: #fbf7ee;
+  padding: 12px;
+  color: var(--ink-2);
+  font-weight: 800;
+}
+
+.profile-upload-field small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .tool-page {
   display: grid;
   gap: 14px;
