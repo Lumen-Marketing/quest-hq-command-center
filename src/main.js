@@ -4356,7 +4356,7 @@ function renderLandingPage(forceAuthModal = false) {
       <nav class="landing-nav">
         <a class="login-brand landing-brand" href="${appHref('/')}" data-router>
           <span class="side-mark">Q</span>
-          <span><strong>Quest HQ</strong><small>Operations Command</small></span>
+          <span><strong>Quest HQ</strong><small>Workplace Center</small></span>
         </a>
         <div class="landing-nav-actions">
           ${session ? `<a class="btn" href="${appHref(companyPath('jobs', {}, activeCompanyId()))}" data-router>Open workspace</a>` : ''}
@@ -4366,30 +4366,34 @@ function renderLandingPage(forceAuthModal = false) {
       <section class="landing-hero">
         <div class="landing-hero-bg" aria-hidden="true"></div>
         <div class="landing-hero-copy">
-          <div class="eyebrow">Built for roofing & field service</div>
+          <div class="eyebrow">Company workspace platform</div>
           <h1>Quest HQ</h1>
-          <strong class="landing-kicker">Your company. Your work. One secure workspace.</strong>
-          <p>Bring jobs, tasks, files, finance, calendar, and messages into one calm command center. Owners create workspaces. Workers join only after an invite.</p>
+          <strong class="landing-kicker">One operating system for every team, file, customer, schedule, and dollar.</strong>
+          <p>Create a company workspace, invite the right people, assign roles, and run jobs, tasks, CRM, files, finance, messages, and calendars from one clean command center.</p>
           <div class="landing-hero-actions">
             <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="register"><i class="ti ti-building"></i>Create business workspace</button>
             <button class="btn landing-ghost-btn" type="button" data-action="open-auth-modal" data-auth-mode="invite"><i class="ti ti-users-plus"></i>Join with invite code</button>
           </div>
-          <div class="landing-security-line"><i class="ti ti-shield-lock"></i>Company isolated. Permission gated. Demo mode stays local.</div>
+          <div class="landing-security-line"><i class="ti ti-shield-lock"></i>Company isolated workspaces. Owner approval. Role-gated modules.</div>
         </div>
-        <div class="landing-status-card" aria-label="Quest HQ workspace snapshot">
+        <div class="landing-workspace-preview" aria-label="Quest HQ workspace preview">
           <div class="landing-status-head">
-            <span><i class="ti ti-calendar-week"></i></span>
+            <span><i class="ti ti-layout-dashboard"></i></span>
             <div>
-              <strong>Today at a glance</strong>
-              <small>Roofing Co.</small>
+              <strong>Workspace command</strong>
+              <small>Company HQ / Owner view</small>
             </div>
             <i class="ti ti-chevron-down"></i>
           </div>
+          <div class="landing-tenant-tabs" aria-hidden="true">
+            ${['Operations', 'Customers', 'Finance'].map((tenant, index) => `<span class="${index === 0 ? 'active' : ''}">${h(tenant)}</span>`).join('')}
+          </div>
           <div class="landing-status-list">
             ${[
-              ['ti-clipboard-check', 'Inspections', 'Scheduled today', '4'],
-              ['ti-folder', 'Permit files', 'Awaiting review', '3'],
-              ['ti-message-circle', 'Unread messages', 'Across your chats', '2'],
+              ['ti-layout-kanban', 'Work pipeline', 'Projects, requests, active work', '24'],
+              ['ti-list-check', 'Task management', 'Assigned work and approvals', '68'],
+              ['ti-folder', 'Files & forms', 'Documents, uploads, responses', '142'],
+              ['ti-messages', 'Messages', 'Team chats and direct messages', '9'],
             ].map(([icon, title, body, count]) => `
               <div class="landing-status-row">
                 <span><i class="ti ${h(icon)}"></i></span>
@@ -4399,24 +4403,28 @@ function renderLandingPage(forceAuthModal = false) {
             `).join('')}
             <div class="landing-status-row locked">
               <span><i class="ti ti-lock"></i></span>
-              <div><strong>Finance data</strong><small>Restricted by role permissions</small></div>
+              <div><strong>Finance workspace</strong><small>Visible only to permitted roles</small></div>
               <b>Locked</b>
             </div>
           </div>
-          <div class="landing-status-foot"><i class="ti ti-shield-check"></i>Role-based access · Encrypted links · Company isolated</div>
+          <div class="landing-preview-bottom">
+            <span><i class="ti ti-user-shield"></i>Owner controlled</span>
+            <span><i class="ti ti-key"></i>Invite-only workers</span>
+            <span><i class="ti ti-lock"></i>Role-gated data</span>
+          </div>
         </div>
       </section>
       <section class="landing-modules">
         <div>
-          <div class="eyebrow">Everything your team needs</div>
-          <h2>One place for the workday.</h2>
+          <div class="eyebrow">All-in-one workspace</div>
+          <h2>Built like a command center, not a single trade tool.</h2>
         </div>
         <div class="landing-module-panel">
           ${[
-            ['ti-briefcase', 'Jobs', 'Track projects, sites, and customer work.'],
-            ['ti-list-check', 'Tasks', 'Assign, prioritize, and get work done.'],
-            ['ti-folder', 'Files & Forms', 'Store documents and collect field data.'],
-            ['ti-calendar', 'Calendar', 'Schedules, inspections, and deadlines.'],
+            ['ti-layout-kanban', 'Operations', 'Jobs, tasks, approvals, time, and calendar.'],
+            ['ti-users', 'Customers', 'CRM accounts, linked work, and follow-ups.'],
+            ['ti-folders', 'Knowledge', 'Files, forms, photos, permits, and company records.'],
+            ['ti-report-money', 'Business', 'Finance, billing state, roles, and permissions.'],
           ].map(([icon, title, body]) => `
             <div class="landing-module-row">
               <i class="ti ${h(icon)}"></i>
@@ -4429,9 +4437,9 @@ function renderLandingPage(forceAuthModal = false) {
       </section>
       <section class="landing-proof">
         ${[
-          ['Business first', 'Owners create workspaces. Workers join only by invite.'],
-          ['Modal simple', 'Login, account creation, and invite joins stay focused.'],
-          ['Permission ready', 'Company access, roles, files, finance, and messages stay gated.'],
+          ['Workspace first', 'Each subscriber gets a company workspace, not a shared demo shell.'],
+          ['Invite-only teams', 'Workers join only after an Owner/Admin creates access.'],
+          ['Permission ready', 'Files, finance, messages, users, and settings are role-gated.'],
         ].map(([title, body]) => `
           <article>
             <strong>${h(title)}</strong>
