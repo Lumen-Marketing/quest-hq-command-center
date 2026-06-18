@@ -1150,13 +1150,18 @@ function render() {
     return;
   }
 
-  if (needsLocalLogin(state.route)) {
-    navigate('/login?return_url=' + encodeURIComponent(currentAppUrl()), { replace: true });
+  if (state.route.name === 'home') {
+    renderLandingPage(false);
     return;
   }
 
   if (state.route.name === 'login') {
-    renderLogin();
+    renderLandingPage(true);
+    return;
+  }
+
+  if (needsLocalLogin(state.route)) {
+    navigate('/login?return_url=' + encodeURIComponent(currentAppUrl()), { replace: true });
     return;
   }
 
@@ -1224,7 +1229,7 @@ function renderNoCompanyAccess() {
 
 function needsLocalLogin(route) {
   if (!CONFIG.questAuthEnabled && !CONFIG.localLoginEnabled) return false;
-  if (route.name === 'login') return false;
+  if (route.name === 'login' || route.name === 'home') return false;
   return !state.session;
 }
 
@@ -4242,40 +4247,110 @@ function renderPlannedPage(name) {
   `;
 }
 
-function renderLogin() {
-  document.title = 'Sign in | Quest HQ';
-  const returnUrl = safeReturnUrl(state.route.params.get('return_url') || appHref(companyPath('jobs', {}, defaultCompanyId())));
+function renderLandingPage(forceAuthModal = false) {
+  document.title = 'Quest HQ | Company operations workspace';
+  const route = state.route || getRoute();
+  const returnUrl = safeReturnUrl(route.params.get('return_url') || appHref(companyPath('jobs', {}, defaultCompanyId())));
   const authEnabled = CONFIG.questAuthEnabled;
-  const inviteToken = String(state.route.params.get('invite') || '').trim();
-  const requestedMode = normalizeAuthMode(state.route.params.get('mode'), inviteToken);
+  const inviteToken = String(route.params.get('invite') || '').trim();
+  const authParam = String(route.params.get('auth') || '').trim();
+  const requestedMode = normalizeAuthMode(route.params.get('mode') || authParam, inviteToken);
   if (requestedMode && state.authMode !== requestedMode) state.authMode = requestedMode;
   if (inviteToken && !['signin', 'register'].includes(state.authMode)) state.authMode = 'register';
+  const showAuthModal = forceAuthModal || Boolean(inviteToken || authParam);
+  const session = state.session;
   app.innerHTML = `
-    <main class="login-shell">
-      <section class="login-panel">
-        <div class="login-brand">
+    <main class="landing-shell">
+      <nav class="landing-nav">
+        <a class="login-brand landing-brand" href="${appHref('/')}" data-router>
           <span class="side-mark">Q</span>
-          <span><strong>Quest HQ</strong><small>${authEnabled ? 'Secure company workspace' : 'Company Workspace'}</small></span>
+          <span><strong>Quest HQ</strong><small>Operations Command</small></span>
+        </a>
+        <div class="landing-nav-actions">
+          ${session ? `<a class="btn" href="${appHref(companyPath('jobs', {}, activeCompanyId()))}" data-router>Open workspace</a>` : ''}
+          <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="signin">Login</button>
         </div>
-        <div>
-          <div class="eyebrow">${authEnabled ? 'Tenant access' : 'Local access'}</div>
-          <h1>${inviteToken ? 'Join your company workspace' : 'Choose your Quest HQ access'}</h1>
-          <p>${authEnabled ? 'Business owners create company workspaces. Workers join only after their company admin creates an invite.' : 'Supabase auth is switched off while the company workspace foundation is stabilized.'}</p>
+      </nav>
+      <section class="landing-hero">
+        <div class="landing-hero-media" aria-hidden="true">
+          <div class="landing-preview-shell">
+            <div class="landing-preview-top"><span></span><b>Quest Roofing</b><i>Live workspace</i></div>
+            <div class="landing-preview-body">
+              <aside>
+                ${['Jobs', 'Files', 'Messages', 'Calendar', 'Finance'].map((item, index) => `<span class="${index === 0 ? 'active' : ''}">${h(item)}</span>`).join('')}
+              </aside>
+              <section>
+                <div class="preview-strip"><b>Leak repair pipeline</b><small>Owner approved</small></div>
+                <div class="preview-grid">
+                  <div><strong>12</strong><span>Open jobs</span></div>
+                  <div><strong>38</strong><span>Files secured</span></div>
+                  <div><strong>7</strong><span>Follow-ups</span></div>
+                </div>
+                <div class="preview-table">
+                  <span>Queen Creek roof inspection</span><b>Today</b>
+                  <span>Mesa permit packet</span><b>Review</b>
+                  <span>HOA board approval</span><b>Urgent</b>
+                </div>
+              </section>
+            </div>
+          </div>
         </div>
-        ${inviteToken ? `<div class="invite-banner"><strong>Workspace invite</strong><span>Create an account with the invited email, or sign in if that email already has a Quest HQ account.</span></div>` : ''}
-        ${authEnabled ? `
-          ${renderAuthLanePicker(inviteToken)}
-          ${renderSupabaseAuthForm(returnUrl)}
-        ` : ''}
-        ${renderDemoModeLauncher(returnUrl)}
-${CONFIG.localLoginEnabled && authEnabled ? `
-          <details class="demo-login-details">
-            <summary>Legacy demo credentials</summary>
-            ${renderLocalLoginForm(returnUrl)}
-          </details>
-        ` : ''}
+        <div class="landing-hero-copy">
+          <div class="eyebrow">Company workspace</div>
+          <h1>Quest HQ</h1>
+          <p>One calm operations command center for jobs, tasks, files, forms, finance, messages, calendar, users, and permissions.</p>
+          <div class="landing-hero-actions">
+            <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="register">Create business workspace</button>
+            <button class="btn" type="button" data-action="open-auth-modal" data-auth-mode="invite">Join with invite code</button>
+          </div>
+        </div>
       </section>
+      <section class="landing-proof">
+        ${[
+          ['Business first', 'Owners create workspaces. Workers join only by invite.'],
+          ['Modal simple', 'Login, account creation, and invite joins stay focused.'],
+          ['Permission ready', 'Company access, roles, files, finance, and messages stay gated.'],
+        ].map(([title, body]) => `
+          <article>
+            <strong>${h(title)}</strong>
+            <span>${h(body)}</span>
+          </article>
+        `).join('')}
+      </section>
+      ${showAuthModal ? renderAuthModal(returnUrl, inviteToken, authEnabled) : ''}
+      ${renderToast()}
     </main>
+  `;
+}
+
+function renderAuthModal(returnUrl, inviteToken, authEnabled) {
+  return `
+    <div class="modal-overlay">
+      <div class="modal-panel landing-auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+        <div class="modal-head">
+          <div>
+            <div class="eyebrow">${authEnabled ? 'Tenant access' : 'Local access'}</div>
+            <h2 id="auth-modal-title">${inviteToken ? 'Join your company workspace' : 'Quest HQ login'}</h2>
+          </div>
+          <button class="btn" type="button" data-action="close-auth-modal">Close</button>
+        </div>
+        <div class="landing-auth-body">
+          <p>${authEnabled ? 'Business owners create company workspaces. Workers join only after their company admin creates an invite.' : 'Supabase auth is switched off while the company workspace foundation is stabilized.'}</p>
+          ${inviteToken ? `<div class="invite-banner"><strong>Workspace invite</strong><span>Create an account with the invited email, or sign in if that email already has a Quest HQ account.</span></div>` : ''}
+          ${authEnabled ? `
+            ${renderAuthLanePicker(inviteToken)}
+            ${renderSupabaseAuthForm(returnUrl)}
+          ` : ''}
+          ${renderDemoModeLauncher(returnUrl)}
+          ${CONFIG.localLoginEnabled && authEnabled ? `
+            <details class="demo-login-details">
+              <summary>Legacy demo credentials</summary>
+              ${renderLocalLoginForm(returnUrl)}
+            </details>
+          ` : ''}
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -4828,6 +4903,22 @@ function handleAction(event, node) {
   if (action === 'start-demo-mode') {
     event.preventDefault();
     startDemoMode(node.dataset.returnUrl || '');
+    return;
+  }
+  if (action === 'open-auth-modal') {
+    event.preventDefault();
+    const mode = normalizeAuthMode(node.dataset.authMode || 'signin') || 'signin';
+    state.authMode = mode;
+    state.loginError = '';
+    state.authMessage = '';
+    navigate(`/?auth=${encodeURIComponent(mode)}`);
+    return;
+  }
+  if (action === 'close-auth-modal') {
+    event.preventDefault();
+    state.loginError = '';
+    state.authMessage = '';
+    navigate('/');
     return;
   }
   if (action === 'set-auth-mode') {
@@ -6933,7 +7024,8 @@ function getRoute() {
   const path = appPathname();
   const params = new URLSearchParams(window.location.search);
   if (path === '/login') return { name: 'login', path, params, section: '', companyId: '', jobId: '' };
-  if (path === '/' || path === '/command') return { name: 'command', path, params, section: 'dashboard', companyId: activeCompanyId(), jobId: params.get('job_id') || '' };
+  if (path === '/') return { name: 'home', path, params, section: '', companyId: '', jobId: '' };
+  if (path === '/command') return { name: 'command', path, params, section: 'dashboard', companyId: activeCompanyId(), jobId: params.get('job_id') || '' };
   const companyMatch = path.match(/^\/company\/([^/]+)(?:\/([^/]+))?\/?$/);
   if (companyMatch) {
     const section = companyMatch[2] || 'jobs';
@@ -6955,7 +7047,7 @@ function normalizeLegacyLocation() {
   const companyId = params.get('company_id') || params.get('company') || companyIdForJob(params.get('job_id') || params.get('project_id')) || localStorage.getItem(COMPANY_KEY) || defaultCompanyId();
   const map = Object.fromEntries(Object.entries(LEGACY_ROUTE_SECTIONS).map(([legacyPath, section]) => [legacyPath, companyPath(section, {}, companyId)]));
   Object.assign(map, {
-    '/index.html': companyPath('jobs', {}, companyId),
+    '/index.html': '/',
     '/command.html': companyPath('jobs', {}, companyId),
     '/login.html': '/login',
   });
@@ -7057,6 +7149,7 @@ function companyPath(section = 'jobs', params = {}, companyId = activeCompanyId(
 }
 
 function routeTitle(route) {
+  if (route.name === 'home') return 'Quest HQ';
   if (route.name === 'company') return titleCase(route.section);
   if (route.name === 'command') return 'Company Dashboard';
   if (route.name === 'login') return 'Sign in';
