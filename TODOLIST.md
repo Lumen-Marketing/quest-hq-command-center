@@ -88,6 +88,19 @@ This file is the durable implementation checklist for the auth, permissions, peo
 - [ ] Stop destructive local deletes when Supabase delete fails.
 - [ ] Keep derived finance/job totals consistent across reloads.
 
+## Sensitive Data Hardening
+
+- [ ] Make Files and Finance safe enough for real company data.
+  - [x] Keep Demo Mode finance records local-only and separated from Supabase workspaces.
+  - [x] Add Supabase finance tables for invoices, payments, expenses, and vendors.
+  - [x] Add finance RLS policies using active membership plus `finance.view` / `finance.manage`.
+  - [x] Add a private finance attachment bucket contract for future receipts/invoice PDFs.
+  - [x] Wire Finance Live Mode to load/save Supabase-backed records when the migration is applied.
+  - [ ] Re-authenticate Supabase MCP and apply pending migrations to production.
+  - [ ] Add server-side signed URL RPC for file downloads instead of direct client storage calls.
+  - [ ] Add receipt/invoice attachment upload UI backed by private storage.
+  - [ ] Production-test Company A vs Company B finance/file denial with real users.
+
 ## Module Structure
 
 - [ ] Extract app shell/router/state helpers out of `src/main.js`.

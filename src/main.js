@@ -1300,6 +1300,10 @@ async function loadSupabaseData() {
     messageReadsResult,
     calendarEventsResult,
     notificationsResult,
+    financeInvoicesResult,
+    financePaymentsResult,
+    financeExpensesResult,
+    financeVendorsResult,
   ] = await Promise.all([
     client.from('companies').select('*').order('name', { ascending: true }),
     client.from('jobs').select('*').order('updated_at', { ascending: false }),
@@ -1324,6 +1328,10 @@ async function loadSupabaseData() {
     client.from('message_reads').select('*'),
     client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
     client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
+    client.from('finance_invoices').select('*').order('updated_at', { ascending: false }),
+    client.from('finance_payments').select('*').order('received_at', { ascending: false }),
+    client.from('finance_expenses').select('*').order('spent_at', { ascending: false }),
+    client.from('finance_vendors').select('*').order('name', { ascending: true }),
   ]);
 
   let liveTables = 0;
@@ -1377,6 +1385,13 @@ async function loadSupabaseData() {
   if (!messageReadsResult.error) state.messageReads = (messageReadsResult.data || []).map(normalizeMessageRead);
   if (!calendarEventsResult.error) state.calendarEvents = (calendarEventsResult.data || []).map(normalizeCalendarEvent);
   if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
+  if (!financeInvoicesResult.error) {
+    state.financeInvoices = (financeInvoicesResult.data || []).map(normalizeFinanceInvoice);
+    liveTables += 1;
+  }
+  if (!financePaymentsResult.error) state.financePayments = (financePaymentsResult.data || []).map(normalizeFinancePayment);
+  if (!financeExpensesResult.error) state.financeExpenses = (financeExpensesResult.data || []).map(normalizeFinanceExpense);
+  if (!financeVendorsResult.error) state.financeVendors = (financeVendorsResult.data || []).map(normalizeFinanceVendor);
 
   if (isQuestDeveloper()) {
     const reviewsResult = await client.rpc('list_workspace_reviews').catch((error) => ({ error }));
@@ -3750,13 +3765,16 @@ function renderFinancePage(route, companyId) {
   const payments = companyFinancePayments(companyId).slice().sort(dateDesc('received_at')).slice(0, 5);
   const expenses = companyFinanceExpenses(companyId).slice().sort(dateDesc('spent_at')).slice(0, 5);
   const vendors = companyFinanceVendors(companyId).slice().sort((a, b) => a.name.localeCompare(b.name)).slice(0, 5);
+  const canManageFinance = can('finance.manage', companyId);
   return `
     <section class="tool-page finance-page">
       ${workspaceHeader('Finance', 'Invoices, payments, expenses, vendors, and job-linked money in one company view.', `
-        <button class="btn btn-primary" type="button" data-action="new-finance-invoice"><i class="ti ti-file-dollar"></i>New invoice</button>
-        <button class="btn" type="button" data-action="new-finance-payment"><i class="ti ti-cash"></i>Record payment</button>
-        <button class="btn" type="button" data-action="new-finance-expense"><i class="ti ti-receipt"></i>Add expense</button>
-        <button class="btn" type="button" data-action="new-finance-vendor"><i class="ti ti-building-store"></i>Add vendor</button>
+        ${canManageFinance ? `
+          <button class="btn btn-primary" type="button" data-action="new-finance-invoice"><i class="ti ti-file-dollar"></i>New invoice</button>
+          <button class="btn" type="button" data-action="new-finance-payment"><i class="ti ti-cash"></i>Record payment</button>
+          <button class="btn" type="button" data-action="new-finance-expense"><i class="ti ti-receipt"></i>Add expense</button>
+          <button class="btn" type="button" data-action="new-finance-vendor"><i class="ti ti-building-store"></i>Add vendor</button>
+        ` : ''}
         <a class="btn" href="${appHref(companyPath('finance', { report: 'summary' }, companyId))}" data-router><i class="ti ti-report-analytics"></i>Reports</a>
       `)}
       <section class="metric-grid finance-metrics">
@@ -3815,6 +3833,7 @@ function renderFinancePage(route, companyId) {
           </div>
         </article>
       </section>
+      ${!canManageFinance ? `<p class="small-note">Your role can view finance records. Creating or editing invoices, payments, expenses, and vendors requires finance manage permission.</p>` : ''}
     </section>
   `;
 }
@@ -3845,8 +3864,10 @@ function renderInvoiceDetailModal(companyId, id) {
         ['Balance', money(invoiceBalance(invoice.id))],
       ])}
       <div class="finance-modal-actions">
-        <button class="btn btn-primary" type="button" data-action="new-finance-payment" data-invoice-id="${h(invoice.id)}"><i class="ti ti-cash"></i>Record payment</button>
-        <button class="btn" type="button" data-action="edit-finance-invoice" data-invoice-id="${h(invoice.id)}"><i class="ti ti-pencil"></i>Edit invoice</button>
+        ${can('finance.manage', companyId) ? `
+          <button class="btn btn-primary" type="button" data-action="new-finance-payment" data-invoice-id="${h(invoice.id)}"><i class="ti ti-cash"></i>Record payment</button>
+          <button class="btn" type="button" data-action="edit-finance-invoice" data-invoice-id="${h(invoice.id)}"><i class="ti ti-pencil"></i>Edit invoice</button>
+        ` : ''}
         ${job ? `<a class="btn" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router><i class="ti ti-briefcase"></i>Open job</a>` : ''}
       </div>
       <section class="finance-modal-section">
@@ -3875,7 +3896,7 @@ function renderExpenseDetailModal(companyId, id) {
         ['Amount', money(expense.amount)],
       ])}
       <div class="finance-modal-actions">
-        <button class="btn btn-primary" type="button" data-action="edit-finance-expense" data-expense-id="${h(expense.id)}"><i class="ti ti-pencil"></i>Edit expense</button>
+        ${can('finance.manage', companyId) ? `<button class="btn btn-primary" type="button" data-action="edit-finance-expense" data-expense-id="${h(expense.id)}"><i class="ti ti-pencil"></i>Edit expense</button>` : ''}
         ${job ? `<a class="btn" href="${appHref(companyPath('files', { job_id: job.id }, companyId))}" data-router><i class="ti ti-folder"></i>Job files</a>` : ''}
       </div>
       ${expense.notes ? `<p class="finance-note">${h(expense.notes)}</p>` : ''}
@@ -3898,8 +3919,10 @@ function renderVendorDetailModal(companyId, id) {
         ['Spend', money(sum(expenses, 'amount'))],
       ])}
       <div class="finance-modal-actions">
-        <button class="btn btn-primary" type="button" data-action="edit-finance-vendor" data-vendor-id="${h(vendor.id)}"><i class="ti ti-pencil"></i>Edit vendor</button>
-        <button class="btn" type="button" data-action="new-finance-expense" data-vendor-id="${h(vendor.id)}"><i class="ti ti-receipt"></i>Add expense</button>
+        ${can('finance.manage', companyId) ? `
+          <button class="btn btn-primary" type="button" data-action="edit-finance-vendor" data-vendor-id="${h(vendor.id)}"><i class="ti ti-pencil"></i>Edit vendor</button>
+          <button class="btn" type="button" data-action="new-finance-expense" data-vendor-id="${h(vendor.id)}"><i class="ti ti-receipt"></i>Add expense</button>
+        ` : ''}
       </div>
       ${vendor.notes ? `<p class="finance-note">${h(vendor.notes)}</p>` : ''}
     </div>
@@ -5386,6 +5409,7 @@ function handleAction(event, node) {
   }
   if (action === 'new-finance-invoice') {
     event.preventDefault();
+    if (!can('finance.manage', activeCompanyId())) return showToast('Your role cannot manage finance records.', 'local', 'Finance');
     state.selectedFinanceInvoiceId = '';
     state.modal = 'finance-invoice-new';
     render();
@@ -5393,6 +5417,7 @@ function handleAction(event, node) {
   }
   if (action === 'edit-finance-invoice') {
     event.preventDefault();
+    if (!can('finance.manage', activeCompanyId())) return showToast('Your role cannot manage finance records.', 'local', 'Finance');
     state.selectedFinanceInvoiceId = node.dataset.invoiceId || '';
     state.modal = 'finance-invoice-edit';
     render();
@@ -5400,6 +5425,7 @@ function handleAction(event, node) {
   }
   if (action === 'new-finance-payment') {
     event.preventDefault();
+    if (!can('finance.manage', activeCompanyId())) return showToast('Your role cannot manage finance records.', 'local', 'Finance');
     state.selectedFinanceInvoiceId = node.dataset.invoiceId || state.route?.params?.get('invoice') || '';
     state.modal = 'finance-payment-new';
     render();
@@ -5407,6 +5433,7 @@ function handleAction(event, node) {
   }
   if (action === 'new-finance-expense') {
     event.preventDefault();
+    if (!can('finance.manage', activeCompanyId())) return showToast('Your role cannot manage finance records.', 'local', 'Finance');
     state.selectedFinanceExpenseId = '';
     state.selectedFinanceVendorId = node.dataset.vendorId || '';
     state.modal = 'finance-expense-new';
@@ -5415,6 +5442,7 @@ function handleAction(event, node) {
   }
   if (action === 'edit-finance-expense') {
     event.preventDefault();
+    if (!can('finance.manage', activeCompanyId())) return showToast('Your role cannot manage finance records.', 'local', 'Finance');
     state.selectedFinanceExpenseId = node.dataset.expenseId || '';
     state.modal = 'finance-expense-edit';
     render();
@@ -5422,6 +5450,7 @@ function handleAction(event, node) {
   }
   if (action === 'new-finance-vendor') {
     event.preventDefault();
+    if (!can('finance.manage', activeCompanyId())) return showToast('Your role cannot manage finance records.', 'local', 'Finance');
     state.selectedFinanceVendorId = '';
     state.modal = 'finance-vendor-new';
     render();
@@ -5429,6 +5458,7 @@ function handleAction(event, node) {
   }
   if (action === 'edit-finance-vendor') {
     event.preventDefault();
+    if (!can('finance.manage', activeCompanyId())) return showToast('Your role cannot manage finance records.', 'local', 'Finance');
     state.selectedFinanceVendorId = node.dataset.vendorId || '';
     state.modal = 'finance-vendor-edit';
     render();
@@ -7012,7 +7042,7 @@ function createDriveFolder(form) {
   render();
 }
 
-function saveFinanceInvoice(form) {
+async function saveFinanceInvoice(form) {
   const fields = Object.fromEntries(new FormData(form).entries());
   const companyId = activeCompanyId();
   const linkedJob = jobById(fields.job_id);
@@ -7025,16 +7055,18 @@ function saveFinanceInvoice(form) {
     total: number(fields.subtotal) + number(fields.tax),
     updated_at: new Date().toISOString(),
   });
+  const persisted = await persistFinanceRow('finance_invoices', invoicePayload(invoice), 'Invoice save failed');
+  if (!persisted) return;
   upsertFinanceInvoice(invoice);
   if (previous?.job_id && previous.job_id !== invoice.job_id) syncJobInvoiceTotal(previous.job_id);
   syncJobInvoiceTotal(invoice.job_id);
   state.modal = '';
-  state.sync = { label: 'Finance saved locally', mode: 'local' };
+  state.sync = { label: state.session?.auth === 'supabase' ? 'Invoice saved securely' : 'Finance saved locally', mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
   notifyLocalEvent('finance.invoice', previous ? 'Invoice updated' : 'Invoice created', `${actorName()} ${previous ? 'updated' : 'created'} ${invoice.invoice_number}.`, companyPath('finance', { invoice: invoice.id }, companyId), 'invoice', invoice.id, companyId);
   navigate(companyPath('finance', { invoice: invoice.id }, companyId), { replace: true });
 }
 
-function saveFinancePayment(form) {
+async function saveFinancePayment(form) {
   const fields = Object.fromEntries(new FormData(form).entries());
   const companyId = activeCompanyId();
   const invoice = financeInvoiceById(fields.invoice_id);
@@ -7049,18 +7081,22 @@ function saveFinancePayment(form) {
     company_id: companyId,
     created_at: new Date().toISOString(),
   });
-  state.financePayments.unshift(payment);
-  invoice.status = invoiceBalance(invoice.id) <= 0 ? 'Paid' : 'Partially paid';
+  const persistedPayment = await persistFinanceRow('finance_payments', paymentPayload(payment), 'Payment save failed');
+  if (!persistedPayment) return;
+  invoice.status = invoiceBalance(invoice.id) - payment.amount <= 0 ? 'Paid' : 'Partially paid';
   invoice.updated_at = new Date().toISOString();
+  const persistedInvoice = await persistFinanceRow('finance_invoices', invoicePayload(invoice), 'Invoice status update failed');
+  if (!persistedInvoice) return;
+  state.financePayments.unshift(payment);
   syncJobInvoiceTotal(invoice.job_id);
   persistAll();
   state.modal = '';
-  state.sync = { label: 'Payment recorded locally', mode: 'local' };
+  state.sync = { label: state.session?.auth === 'supabase' ? 'Payment recorded securely' : 'Payment recorded locally', mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
   notifyLocalEvent('finance.payment', 'Payment recorded', `${actorName()} recorded ${money(payment.amount)} for ${invoice.invoice_number}.`, companyPath('finance', { invoice: payment.invoice_id }, companyId), 'payment', payment.id, companyId);
   navigate(companyPath('finance', payment.invoice_id ? { invoice: payment.invoice_id } : {}, companyId), { replace: true });
 }
 
-function saveFinanceExpense(form) {
+async function saveFinanceExpense(form) {
   const fields = Object.fromEntries(new FormData(form).entries());
   const companyId = activeCompanyId();
   const expense = normalizeFinanceExpense({
@@ -7069,14 +7105,16 @@ function saveFinanceExpense(form) {
     company_id: companyId,
     updated_at: new Date().toISOString(),
   });
+  const persisted = await persistFinanceRow('finance_expenses', expensePayload(expense), 'Expense save failed');
+  if (!persisted) return;
   upsertFinanceExpense(expense);
   state.modal = '';
-  state.sync = { label: 'Expense saved locally', mode: 'local' };
+  state.sync = { label: state.session?.auth === 'supabase' ? 'Expense saved securely' : 'Expense saved locally', mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
   notifyLocalEvent('finance.expense', 'Expense saved', `${actorName()} saved a ${money(expense.amount)} ${expense.category} expense.`, companyPath('finance', { expense: expense.id }, companyId), 'expense', expense.id, companyId);
   navigate(companyPath('finance', { expense: expense.id }, companyId), { replace: true });
 }
 
-function saveFinanceVendor(form) {
+async function saveFinanceVendor(form) {
   const fields = Object.fromEntries(new FormData(form).entries());
   const companyId = activeCompanyId();
   const vendor = normalizeFinanceVendor({
@@ -7085,11 +7123,102 @@ function saveFinanceVendor(form) {
     company_id: companyId,
     updated_at: new Date().toISOString(),
   });
+  const persisted = await persistFinanceRow('finance_vendors', vendorPayload(vendor), 'Vendor save failed');
+  if (!persisted) return;
   upsertFinanceVendor(vendor);
   state.modal = '';
-  state.sync = { label: 'Vendor saved locally', mode: 'local' };
+  state.sync = { label: state.session?.auth === 'supabase' ? 'Vendor saved securely' : 'Vendor saved locally', mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
   notifyLocalEvent('finance.vendor', 'Vendor saved', `${actorName()} saved vendor ${vendor.name}.`, companyPath('finance', { vendor: vendor.id }, companyId), 'vendor', vendor.id, companyId);
   navigate(companyPath('finance', { vendor: vendor.id }, companyId), { replace: true });
+}
+
+async function persistFinanceRow(table, payload, fallbackLabel) {
+  if (state.session?.auth !== 'supabase') return true;
+  const client = createSupabaseClient();
+  if (!client) {
+    state.sync = { label: 'Supabase is unavailable', mode: 'local' };
+    render();
+    return false;
+  }
+  if (!can('finance.manage', payload.company_id)) {
+    state.sync = { label: 'Your role cannot manage finance records', mode: 'local' };
+    render();
+    return false;
+  }
+  const result = await client.from(table).upsert(payload, { onConflict: 'id' }).select().single();
+  if (result.error) {
+    state.sync = { label: result.error.message || fallbackLabel, mode: 'local' };
+    showToast(result.error.message || fallbackLabel, 'local', 'Finance');
+    render();
+    return false;
+  }
+  return true;
+}
+
+function invoicePayload(invoice) {
+  return {
+    id: invoice.id,
+    company_id: invoice.company_id,
+    job_id: invoice.job_id || null,
+    client_name: invoice.client_name,
+    invoice_number: invoice.invoice_number,
+    status: invoice.status,
+    issue_date: invoice.issue_date || null,
+    due_date: invoice.due_date || null,
+    subtotal: number(invoice.subtotal),
+    tax: number(invoice.tax),
+    total: number(invoice.total),
+    notes: invoice.notes || '',
+    created_by: activeSession().profile.id || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function paymentPayload(payment) {
+  return {
+    id: payment.id,
+    company_id: payment.company_id,
+    invoice_id: payment.invoice_id,
+    amount: number(payment.amount),
+    method: payment.method,
+    received_at: payment.received_at || null,
+    reference: payment.reference || '',
+    notes: payment.notes || '',
+    created_by: activeSession().profile.id || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function expensePayload(expense) {
+  return {
+    id: expense.id,
+    company_id: expense.company_id,
+    job_id: expense.job_id || null,
+    vendor_id: expense.vendor_id || null,
+    category: expense.category,
+    amount: number(expense.amount),
+    status: expense.status,
+    spent_at: expense.spent_at || null,
+    notes: expense.notes || '',
+    created_by: activeSession().profile.id || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function vendorPayload(vendor) {
+  return {
+    id: vendor.id,
+    company_id: vendor.company_id,
+    name: vendor.name,
+    contact_name: vendor.contact_name || '',
+    email: vendor.email || '',
+    phone: vendor.phone || '',
+    category: vendor.category,
+    status: vendor.status,
+    notes: vendor.notes || '',
+    created_by: activeSession().profile.id || null,
+    updated_at: new Date().toISOString(),
+  };
 }
 
 async function downloadFile(id) {
