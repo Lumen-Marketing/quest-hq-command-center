@@ -4327,21 +4327,24 @@ function renderAuthModal(returnUrl, inviteToken, authEnabled) {
   return `
     <div class="modal-overlay">
       <div class="modal-panel landing-auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-        <div class="modal-head">
+        <div class="modal-head landing-auth-head">
           <div>
             <div class="eyebrow">${authEnabled ? 'Tenant access' : 'Local access'}</div>
-            <h2 id="auth-modal-title">${inviteToken ? 'Join your company workspace' : 'Quest HQ login'}</h2>
+            <h2 id="auth-modal-title">${inviteToken ? 'Join workspace' : 'Quest HQ'}</h2>
           </div>
           <button class="btn" type="button" data-action="close-auth-modal">Close</button>
         </div>
         <div class="landing-auth-body">
-          <p>${authEnabled ? 'Business owners create company workspaces. Workers join only after their company admin creates an invite.' : 'Supabase auth is switched off while the company workspace foundation is stabilized.'}</p>
+          <div class="auth-modal-note">${authEnabled ? 'Owners create workspaces. Workers join by invite.' : 'Supabase auth is switched off while the company workspace foundation is stabilized.'}</div>
           ${inviteToken ? `<div class="invite-banner"><strong>Workspace invite</strong><span>Create an account with the invited email, or sign in if that email already has a Quest HQ account.</span></div>` : ''}
           ${authEnabled ? `
             ${renderAuthLanePicker(inviteToken)}
             ${renderSupabaseAuthForm(returnUrl)}
           ` : ''}
-          ${renderDemoModeLauncher(returnUrl)}
+          <details class="demo-mode-details">
+            <summary>Demo mode</summary>
+            ${renderDemoModeLauncher(returnUrl)}
+          </details>
           ${CONFIG.localLoginEnabled && authEnabled ? `
             <details class="demo-login-details">
               <summary>Legacy demo credentials</summary>
@@ -4365,29 +4368,22 @@ function normalizeAuthMode(value, inviteToken = '') {
 
 function renderAuthLanePicker(inviteToken = '') {
   const active = state.authMode;
+  const options = inviteToken
+    ? [
+      ['signin', 'Sign in'],
+      ['register', 'Create invited account'],
+    ]
+    : [
+      ['signin', 'Sign in'],
+      ['register', 'Create workspace'],
+      ['invite', 'Join with invite'],
+    ];
   return `
-    <section class="login-lanes">
-      <article class="login-lane-card ${active === 'register' && !inviteToken ? 'active' : ''}">
-        <div>
-          <strong>Business account</strong>
-          <span>For Owners/Admins who manage a company workspace.</span>
-        </div>
-        <div class="lane-actions">
-          <button class="btn" type="button" data-action="set-auth-mode" data-auth-mode="signin">Business login</button>
-          <button class="btn ${active === 'register' && !inviteToken ? 'btn-primary' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="register">Create workspace</button>
-        </div>
-      </article>
-      <article class="login-lane-card ${inviteToken || active === 'invite' || active === 'request' ? 'active' : ''}">
-        <div>
-          <strong>Worker account</strong>
-          <span>Workers join only after their admin creates an invite.</span>
-        </div>
-        <div class="lane-actions">
-          <button class="btn" type="button" data-action="set-auth-mode" data-auth-mode="signin">Worker login</button>
-          <button class="btn ${active === 'invite' || (active === 'register' && inviteToken) ? 'btn-primary' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="${inviteToken ? 'register' : 'invite'}">${inviteToken ? 'Create invited account' : 'Join with invite code'}</button>
-        </div>
-      </article>
-    </section>
+    <nav class="auth-mode-bar" aria-label="Account access">
+      ${options.map(([mode, label]) => `
+        <button class="${active === mode ? 'active' : ''}" type="button" data-action="set-auth-mode" data-auth-mode="${h(mode)}">${h(label)}</button>
+      `).join('')}
+    </nav>
   `;
 }
 
@@ -4407,10 +4403,10 @@ function renderSupabaseAuthForm(returnUrl) {
   const inviteToken = String(state.route?.params?.get('invite') || '').trim();
   if (state.authMode === 'register') {
     return `
-      <form data-auth-register-form>
+      <form class="auth-form-compact" data-auth-register-form>
         <div class="auth-form-title">
           <strong>${inviteToken ? 'Create invited worker account' : 'Create business workspace'}</strong>
-          <span>${inviteToken ? 'The account email must match the invite.' : 'Quest will review this workspace before live company modules open.'}</span>
+          <span>${inviteToken ? 'Email must match the invite.' : 'Workspace opens after Quest approval.'}</span>
         </div>
         <label>${inviteToken ? 'Display name / username' : 'Full name'}<input name="full_name" autocomplete="name" required /></label>
         <label>Email<input name="email" type="email" autocomplete="email" required /></label>
@@ -4426,10 +4422,10 @@ function renderSupabaseAuthForm(returnUrl) {
   }
   if (state.authMode === 'invite') {
     return `
-      <form data-auth-invite-code-form>
+      <form class="auth-form-compact" data-auth-invite-code-form>
         <div class="auth-form-title">
-          <strong>Join a company workspace</strong>
-          <span>Ask your company admin for an invite code. Worker registration is blocked without one.</span>
+          <strong>Join with invite code</strong>
+          <span>Workers need a code from their company admin.</span>
         </div>
         <label>Invite code<input name="invite_code" autocomplete="one-time-code" required placeholder="Paste the code from your admin" /></label>
         <input type="hidden" name="return_url" value="${h(returnUrl)}" />
@@ -4440,7 +4436,7 @@ function renderSupabaseAuthForm(returnUrl) {
   }
   if (state.authMode === 'request') {
     return `
-      <form data-auth-request-form>
+      <form class="auth-form-compact" data-auth-request-form>
         <div class="auth-form-title">
           <strong>Request access</strong>
           <span>This is for existing accounts only. New workers should use an admin invite.</span>
@@ -4456,10 +4452,10 @@ function renderSupabaseAuthForm(returnUrl) {
     `;
   }
   return `
-    <form data-auth-sign-in-form>
+    <form class="auth-form-compact" data-auth-sign-in-form>
       <div class="auth-form-title">
         <strong>${inviteToken ? 'Sign in and accept invite' : 'Sign in'}</strong>
-        <span>${inviteToken ? 'Use the existing account for the invited email.' : 'Use the account connected to your company workspace.'}</span>
+        <span>${inviteToken ? 'Use the invited email account.' : 'Use your company account.'}</span>
       </div>
       <label>Email<input name="email" type="email" autocomplete="email" required /></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>

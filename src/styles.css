@@ -2511,13 +2511,74 @@ textarea:focus {
 }
 
 .landing-auth-modal {
-  width: min(760px, calc(100vw - 40px));
+  width: min(560px, calc(100vw - 40px));
+}
+
+.landing-auth-head {
+  align-items: center;
 }
 
 .landing-auth-body {
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.auth-modal-note {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.auth-mode-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f7efe3;
+  padding: 5px;
+}
+
+.auth-mode-bar button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #625746;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.auth-mode-bar button.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 0 rgba(66, 55, 37, .08), 0 8px 20px rgba(66, 55, 37, .08);
+}
+
+.auth-form-compact {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-form-compact label {
+  gap: 4px;
+}
+
+.auth-form-compact input,
+.auth-form-compact select {
+  min-height: 42px;
+}
+
+.auth-form-compact .btn-primary {
+  min-height: 44px;
+}
+
+.auth-form-compact .form-message {
+  font-size: 12px;
+  line-height: 1.3;
+  margin-top: -2px;
 }
 
 .login-panel h1 { margin-bottom: 6px; }
@@ -2567,7 +2628,8 @@ textarea:focus {
 
 .auth-form-title {
   border-top: 1px solid var(--border);
-  padding-top: 14px;
+  margin-top: 2px;
+  padding-top: 12px;
 }
 
 .no-access-lanes {
@@ -2604,6 +2666,23 @@ textarea:focus {
   border-radius: 8px;
   background: #fffaf0;
   padding: 12px;
+}
+
+.demo-mode-details {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.demo-mode-details summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.demo-mode-details .demo-mode-box {
+  margin-top: 10px;
 }
 
 .demo-mode-box strong,
@@ -4501,6 +4580,10 @@ textarea:focus {
   .landing-hero-actions .btn,
   .landing-nav-actions .btn {
     width: 100%;
+  }
+
+  .auth-mode-bar {
+    grid-template-columns: 1fr;
   }
 
   .preview-grid {

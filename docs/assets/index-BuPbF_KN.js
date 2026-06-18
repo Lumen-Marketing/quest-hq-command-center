@@ -1973,48 +1973,34 @@
   `}function Uo(e,t,a){return`
     <div class="modal-overlay">
       <div class="modal-panel landing-auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-        <div class="modal-head">
+        <div class="modal-head landing-auth-head">
           <div>
             <div class="eyebrow">Tenant access</div>
-            <h2 id="auth-modal-title">${t?"Join your company workspace":"Quest HQ login"}</h2>
+            <h2 id="auth-modal-title">${t?"Join workspace":"Quest HQ"}</h2>
           </div>
           <button class="btn" type="button" data-action="close-auth-modal">Close</button>
         </div>
         <div class="landing-auth-body">
-          <p>Business owners create company workspaces. Workers join only after their company admin creates an invite.</p>
+          <div class="auth-modal-note">Owners create workspaces. Workers join by invite.</div>
           ${t?'<div class="invite-banner"><strong>Workspace invite</strong><span>Create an account with the invited email, or sign in if that email already has a Quest HQ account.</span></div>':""}
           ${`
             ${Lo(t)}
             ${Vo(e)}
           `}
-          ${Qo(e)}
+          <details class="demo-mode-details">
+            <summary>Demo mode</summary>
+            ${Qo(e)}
+          </details>
           
         </div>
       </div>
     </div>
   `}function Ln(e,t=""){const a=String(e||"").toLowerCase().trim();return t&&!a?"register":["signin","register","invite","request"].includes(a)?a:a==="business"?"register":a==="worker"?t?"register":"invite":""}function Lo(e=""){const t=n.authMode;return`
-    <section class="login-lanes">
-      <article class="login-lane-card ${t==="register"&&!e?"active":""}">
-        <div>
-          <strong>Business account</strong>
-          <span>For Owners/Admins who manage a company workspace.</span>
-        </div>
-        <div class="lane-actions">
-          <button class="btn" type="button" data-action="set-auth-mode" data-auth-mode="signin">Business login</button>
-          <button class="btn ${t==="register"&&!e?"btn-primary":""}" type="button" data-action="set-auth-mode" data-auth-mode="register">Create workspace</button>
-        </div>
-      </article>
-      <article class="login-lane-card ${e||t==="invite"||t==="request"?"active":""}">
-        <div>
-          <strong>Worker account</strong>
-          <span>Workers join only after their admin creates an invite.</span>
-        </div>
-        <div class="lane-actions">
-          <button class="btn" type="button" data-action="set-auth-mode" data-auth-mode="signin">Worker login</button>
-          <button class="btn ${t==="invite"||t==="register"&&e?"btn-primary":""}" type="button" data-action="set-auth-mode" data-auth-mode="${e?"register":"invite"}">${e?"Create invited account":"Join with invite code"}</button>
-        </div>
-      </article>
-    </section>
+    <nav class="auth-mode-bar" aria-label="Account access">
+      ${(e?[["signin","Sign in"],["register","Create invited account"]]:[["signin","Sign in"],["register","Create workspace"],["invite","Join with invite"]]).map(([i,s])=>`
+        <button class="${t===i?"active":""}" type="button" data-action="set-auth-mode" data-auth-mode="${r(i)}">${r(s)}</button>
+      `).join("")}
+    </nav>
   `}function Qo(e){return`
     <section class="demo-mode-box">
       <div>
@@ -2024,10 +2010,10 @@
       <button class="btn full" type="button" data-action="start-demo-mode" data-return-url="${r(e)}">Open demo mode</button>
     </section>
   `}function Vo(e){const t=String(n.route?.params?.get("invite")||"").trim();return n.authMode==="register"?`
-      <form data-auth-register-form>
+      <form class="auth-form-compact" data-auth-register-form>
         <div class="auth-form-title">
           <strong>${t?"Create invited worker account":"Create business workspace"}</strong>
-          <span>${t?"The account email must match the invite.":"Quest will review this workspace before live company modules open."}</span>
+          <span>${t?"Email must match the invite.":"Workspace opens after Quest approval."}</span>
         </div>
         <label>${t?"Display name / username":"Full name"}<input name="full_name" autocomplete="name" required /></label>
         <label>Email<input name="email" type="email" autocomplete="email" required /></label>
@@ -2040,10 +2026,10 @@
         ${t?'<button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="signin">I already have an account</button>':""}
       </form>
     `:n.authMode==="invite"?`
-      <form data-auth-invite-code-form>
+      <form class="auth-form-compact" data-auth-invite-code-form>
         <div class="auth-form-title">
-          <strong>Join a company workspace</strong>
-          <span>Ask your company admin for an invite code. Worker registration is blocked without one.</span>
+          <strong>Join with invite code</strong>
+          <span>Workers need a code from their company admin.</span>
         </div>
         <label>Invite code<input name="invite_code" autocomplete="one-time-code" required placeholder="Paste the code from your admin" /></label>
         <input type="hidden" name="return_url" value="${r(e)}" />
@@ -2051,7 +2037,7 @@
         ${qt("Invite codes are shared by your Owner/Admin. No email delivery required.")}
       </form>
     `:n.authMode==="request"?`
-      <form data-auth-request-form>
+      <form class="auth-form-compact" data-auth-request-form>
         <div class="auth-form-title">
           <strong>Request access</strong>
           <span>This is for existing accounts only. New workers should use an admin invite.</span>
@@ -2065,10 +2051,10 @@
         ${qt("Requests stay pending until a company Owner/Admin approves them.")}
       </form>
     `:`
-    <form data-auth-sign-in-form>
+    <form class="auth-form-compact" data-auth-sign-in-form>
       <div class="auth-form-title">
         <strong>${t?"Sign in and accept invite":"Sign in"}</strong>
-        <span>${t?"Use the existing account for the invited email.":"Use the account connected to your company workspace."}</span>
+        <span>${t?"Use the invited email account.":"Use your company account."}</span>
       </div>
       <label>Email<input name="email" type="email" autocomplete="email" required /></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
