@@ -4358,107 +4358,169 @@ function renderLandingPage(forceAuthModal = false) {
           <span class="side-mark">Q</span>
           <span><strong>Quest HQ</strong><small>Workplace Center</small></span>
         </a>
+        <div class="landing-nav-links" aria-label="Landing navigation">
+          ${[
+            ['Why Quest HQ', 'why-quest-hq'],
+            ['Security', 'security'],
+            ['Platform', 'platform'],
+            ['Access', 'platform'],
+            ['Company', 'why-quest-hq'],
+          ].map(([item, target]) => `<a href="#${h(target)}">${h(item)}</a>`).join('')}
+        </div>
         <div class="landing-nav-actions">
           ${session ? `<a class="btn" href="${appHref(companyPath('jobs', {}, activeCompanyId()))}" data-router>Open workspace</a>` : ''}
-          <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="signin">Login</button>
+          <button class="btn landing-login-btn" type="button" data-action="open-auth-modal" data-auth-mode="signin"><i class="ti ti-lock"></i>Business login</button>
         </div>
       </nav>
       <section class="landing-hero">
         <div class="landing-hero-bg" aria-hidden="true"></div>
         <div class="landing-hero-copy">
-          <div class="eyebrow">Company workspace platform</div>
-          <h1>Quest HQ</h1>
-          <strong class="landing-kicker">One operating system for every team, file, customer, schedule, and dollar.</strong>
-          <p>Create a company workspace, invite the right people, assign roles, and run jobs, tasks, CRM, files, finance, messages, and calendars from one clean command center.</p>
+          <div class="landing-pill"><i class="ti ti-shield-lock"></i>Secure. Controlled. Built for business.</div>
+          <h1>Your company workspace, locked down and ready to run.</h1>
+          <p>Quest HQ brings every part of your business together in one secure, role-based workspace. Invite your team, control access, and move faster with confidence.</p>
           <div class="landing-hero-actions">
-            <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="register"><i class="ti ti-building"></i>Create business workspace</button>
-            <button class="btn landing-ghost-btn" type="button" data-action="open-auth-modal" data-auth-mode="invite"><i class="ti ti-users-plus"></i>Join with invite code</button>
+            <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="register">Start business workspace<i class="ti ti-arrow-right"></i></button>
+            <button class="btn landing-ghost-btn" type="button" data-action="open-auth-modal" data-auth-mode="invite"><i class="ti ti-users-plus"></i>Join by invite</button>
           </div>
-          <div class="landing-security-line"><i class="ti ti-shield-lock"></i>Company isolated workspaces. Owner approval. Role-gated modules.</div>
+          <div class="landing-security-line"><i class="ti ti-circle-check"></i>No credit card required. Approval required before live access is activated.</div>
         </div>
-        <div class="landing-workspace-preview" aria-label="Quest HQ workspace preview">
-          <div class="landing-status-head">
-            <span><i class="ti ti-layout-dashboard"></i></span>
-            <div>
-              <strong>Workspace command</strong>
-              <small>Company HQ / Owner view</small>
-            </div>
-            <i class="ti ti-chevron-down"></i>
-          </div>
-          <div class="landing-tenant-tabs" aria-hidden="true">
-            ${['Operations', 'Customers', 'Finance'].map((tenant, index) => `<span class="${index === 0 ? 'active' : ''}">${h(tenant)}</span>`).join('')}
-          </div>
-          <div class="landing-status-list">
+        <div class="landing-console" aria-label="Quest HQ workspace command center preview">
+          <aside class="landing-console-rail" aria-hidden="true">
+            <span class="console-mark">Q</span>
             ${[
-              ['ti-layout-kanban', 'Work pipeline', 'Projects, requests, active work', '24'],
-              ['ti-list-check', 'Task management', 'Assigned work and approvals', '68'],
-              ['ti-folder', 'Files & forms', 'Documents, uploads, responses', '142'],
-              ['ti-messages', 'Messages', 'Team chats and direct messages', '9'],
-            ].map(([icon, title, body, count]) => `
-              <div class="landing-status-row">
-                <span><i class="ti ${h(icon)}"></i></span>
-                <div><strong>${h(title)}</strong><small>${h(body)}</small></div>
-                <b>${h(count)}</b>
+              ['ti-home', 'Home', true],
+              ['ti-list-check', 'Tasks'],
+              ['ti-calendar', 'Calendar'],
+              ['ti-users', 'CRM'],
+              ['ti-lock-dollar', 'Finance'],
+              ['ti-folder', 'Files'],
+              ['ti-forms', 'Forms'],
+              ['ti-message-circle', 'Messages', false, '3'],
+              ['ti-user-cog', 'Users'],
+              ['ti-report-analytics', 'Reports'],
+              ['ti-settings', 'Settings'],
+              ['ti-clipboard-check', 'Audit'],
+            ].map(([icon, label, active, badge]) => `
+              <span class="${active ? 'active' : ''}"><i class="ti ${h(icon)}"></i>${h(label)}${badge ? `<b>${h(badge)}</b>` : ''}</span>
+            `).join('')}
+          </aside>
+          <div class="landing-console-main">
+            <div class="landing-console-top">
+              <div>
+                <strong>Good morning, Quest Admin</strong>
+                <span>Here is what is happening across your workspace.</span>
+              </div>
+              <button type="button"><i class="ti ti-building"></i>Acme Global<i class="ti ti-chevron-down"></i></button>
+              <span class="landing-avatar">QA</span>
+            </div>
+            <div class="landing-console-stats">
+              ${[
+                ['ti-shield-check', 'Company access', 'Pending approval', 'Approval required before modules open.', 'View status'],
+                ['ti-user-check', 'Active users', '24', '18 active · 6 pending', 'Manage users'],
+                ['ti-circle-check', 'Open tasks', '42', '12 overdue', 'View tasks'],
+                ['ti-message-circle', 'Unread messages', '8', 'Across team chats', 'Open inbox'],
+              ].map(([icon, label, value, body, action], index) => `
+                <article class="${index === 0 ? 'warning' : ''}">
+                  <i class="ti ${h(icon)}"></i>
+                  <span>${h(label)}</span>
+                  <strong>${h(value)}</strong>
+                  <small>${h(body)}</small>
+                  <button type="button">${h(action)}</button>
+                </article>
+              `).join('')}
+            </div>
+            <div class="landing-console-grid">
+              <article class="landing-activity">
+                <strong>Recent activity</strong>
+                ${[
+                  ['ti-file-dollar', 'Invoice #INV-1024 was created', 'Finance', '10m ago'],
+                  ['ti-forms', 'Shan submitted a form response', 'Forms', '25m ago'],
+                  ['ti-alert-circle', 'Leak inspection task was assigned', 'Tasks', '1h ago'],
+                  ['ti-file-upload', 'Permit packet.pdf was uploaded', 'Files', '2h ago'],
+                  ['ti-user-plus', 'Abraham joined the workspace', 'Users', '3h ago'],
+                ].map(([icon, title, label, time]) => `
+                  <div><i class="ti ${h(icon)}"></i><span><b>${h(title)}</b><small>${h(label)}</small></span><em>${h(time)}</em></div>
+                `).join('')}
+              </article>
+              <article class="landing-health">
+                <strong>Workspace health</strong>
+                ${[
+                  ['ti-circle-check', 'Company created', 'ok'],
+                  ['ti-clock', 'Pending approval', 'wait'],
+                  ['ti-link', 'Billing connected', 'muted'],
+                  ['ti-shield-lock', 'Payment active', 'muted'],
+                  ['ti-users', 'Full access enabled', 'muted'],
+                ].map(([icon, label, tone]) => `<div class="${h(tone)}"><i class="ti ${h(icon)}"></i>${h(label)}</div>`).join('')}
+                <span class="landing-watermark">Q</span>
+              </article>
+            </div>
+            <div class="landing-quick-access">
+              ${[
+                ['ti-folder', 'Files'],
+                ['ti-users', 'CRM'],
+                ['ti-currency-dollar', 'Finance'],
+                ['ti-calendar', 'Calendar'],
+                ['ti-user-cog', 'Users'],
+                ['ti-clipboard-check', 'Audit'],
+              ].map(([icon, label]) => `<span><i class="ti ${h(icon)}"></i>${h(label)}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="landing-command-panels" id="security">
+        <article class="landing-trust-card">
+          <div>
+            <div class="eyebrow">Trusted & secure</div>
+            <p>Built on company boundaries so your data, team, and business stay protected.</p>
+          </div>
+          <div class="landing-trust-grid">
+            ${[
+              ['ti-shield-check', 'SOC 2', 'Type II path'],
+              ['ti-lock', 'AES-256', 'Encryption'],
+              ['ti-database-lock', 'RLS', 'Row-level security'],
+              ['ti-clock-check', '99.9%', 'Uptime target'],
+              ['ti-clipboard-list', 'Audit', 'Every action'],
+              ['ti-key', 'Private', 'By default'],
+            ].map(([icon, title, body]) => `<span><i class="ti ${h(icon)}"></i><strong>${h(title)}</strong><small>${h(body)}</small></span>`).join('')}
+          </div>
+          <small class="landing-boundary"><i class="ti ti-lock"></i>Your data never leaves your company boundary.</small>
+        </article>
+        <article class="landing-access-card" id="platform">
+          <div class="landing-access-head">
+            <div class="eyebrow">Access model</div>
+            <p>The right access for the right people. No shortcuts. No guesswork.</p>
+          </div>
+          <div class="landing-role-flow">
+            ${[
+              ['ti-crown', 'Owner', 'Full access · Billing · Invites · Transfer ownership'],
+              ['ti-user-shield', 'Admin', 'Manage users · Roles · Module access'],
+              ['ti-user', 'Worker', 'Assigned access · Own tasks · Team collaboration'],
+              ['ti-shield-x', 'Finance denied', 'Finance hidden · No billing · No payments'],
+              ['ti-hourglass', 'Pending approval', 'Workspace created · Modules locked'],
+            ].map(([icon, title, body], index) => `
+              <div class="${index === 4 ? 'pending' : ''}">
+                <i class="ti ${h(icon)}"></i>
+                <strong>${h(title)}</strong>
+                <span>${h(body)}</span>
               </div>
             `).join('')}
-            <div class="landing-status-row locked">
-              <span><i class="ti ti-lock"></i></span>
-              <div><strong>Finance workspace</strong><small>Visible only to permitted roles</small></div>
-              <b>Locked</b>
-            </div>
           </div>
-          <div class="landing-preview-bottom">
-            <span><i class="ti ti-user-shield"></i>Owner controlled</span>
-            <span><i class="ti ti-key"></i>Invite-only workers</span>
-            <span><i class="ti ti-lock"></i>Role-gated data</span>
-          </div>
-        </div>
+        </article>
       </section>
-      <section class="landing-modules">
-        <div>
-          <div class="eyebrow">All-in-one workspace</div>
-          <h2>Built like a command center, not a single trade tool.</h2>
-        </div>
-        <div class="landing-module-panel">
-          ${[
-            ['ti-layout-kanban', 'Operations', 'Jobs, tasks, approvals, time, and calendar.'],
-            ['ti-users', 'Customers', 'CRM accounts, linked work, and follow-ups.'],
-            ['ti-folders', 'Knowledge', 'Files, forms, photos, permits, and company records.'],
-            ['ti-report-money', 'Business', 'Finance, billing state, roles, and permissions.'],
-          ].map(([icon, title, body]) => `
-            <div class="landing-module-row">
-              <i class="ti ${h(icon)}"></i>
-              <strong>${h(title)}</strong>
-              <span>${h(body)}</span>
-              <i class="ti ti-chevron-right"></i>
-            </div>
-          `).join('')}
-        </div>
-      </section>
-      <section class="landing-proof">
+      <section class="landing-proof" id="why-quest-hq">
         ${[
-          ['Workspace first', 'Each subscriber gets a company workspace, not a shared demo shell.'],
-          ['Invite-only teams', 'Workers join only after an Owner/Admin creates access.'],
-          ['Permission ready', 'Files, finance, messages, users, and settings are role-gated.'],
-        ].map(([title, body]) => `
+          ['ti-cube', 'One workspace', 'Everything connected'],
+          ['ti-user-shield', 'Role-based access', 'Built-in guardrails'],
+          ['ti-calendar-user', 'Company control', 'You decide who sees what'],
+          ['ti-shield-check', 'Audit & accountability', 'Every action tracked'],
+          ['ti-chart-arrows', 'Scale with confidence', 'Built for growth'],
+        ].map(([icon, title, body]) => `
           <article>
-            <strong>${h(title)}</strong>
-            <span>${h(body)}</span>
+            <i class="ti ${h(icon)}"></i>
+            <span><strong>${h(title)}</strong><small>${h(body)}</small></span>
           </article>
         `).join('')}
-      </section>
-      <section class="landing-access-flow">
-        ${[
-          ['Create company', 'Owner starts a workspace'],
-          ['Quest approval', 'Billing/access reviewed'],
-          ['Invite workers', 'Code now, email later'],
-          ['Assign roles', 'Files and finance stay gated'],
-        ].map(([title, body], index) => `
-          <article>
-            <b>${index + 1}</b>
-            <div><strong>${h(title)}</strong><span>${h(body)}</span></div>
-          </article>
-        `).join('')}
+        <blockquote>"Quest HQ gives us one secure workspace for everything. Our data, our team, our rules."</blockquote>
       </section>
       ${showAuthModal ? renderAuthModal(returnUrl, inviteToken, authEnabled) : ''}
       ${renderToast()}
