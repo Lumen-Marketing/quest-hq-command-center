@@ -4364,37 +4364,67 @@ function renderLandingPage(forceAuthModal = false) {
         </div>
       </nav>
       <section class="landing-hero">
-        <div class="landing-hero-media" aria-hidden="true">
-          <div class="landing-preview-shell">
-            <div class="landing-preview-top"><span></span><b>Quest Roofing</b><i>Live workspace</i></div>
-            <div class="landing-preview-body">
-              <aside>
-                ${['Jobs', 'Files', 'Messages', 'Calendar', 'Finance'].map((item, index) => `<span class="${index === 0 ? 'active' : ''}">${h(item)}</span>`).join('')}
-              </aside>
-              <section>
-                <div class="preview-strip"><b>Leak repair pipeline</b><small>Owner approved</small></div>
-                <div class="preview-grid">
-                  <div><strong>12</strong><span>Open jobs</span></div>
-                  <div><strong>38</strong><span>Files secured</span></div>
-                  <div><strong>7</strong><span>Follow-ups</span></div>
-                </div>
-                <div class="preview-table">
-                  <span>Queen Creek roof inspection</span><b>Today</b>
-                  <span>Mesa permit packet</span><b>Review</b>
-                  <span>HOA board approval</span><b>Urgent</b>
-                </div>
-              </section>
+        <div class="landing-hero-bg" aria-hidden="true"></div>
+        <div class="landing-hero-copy">
+          <div class="eyebrow">Built for roofing & field service</div>
+          <h1>Quest HQ</h1>
+          <strong class="landing-kicker">Your company. Your work. One secure workspace.</strong>
+          <p>Bring jobs, tasks, files, finance, calendar, and messages into one calm command center. Owners create workspaces. Workers join only after an invite.</p>
+          <div class="landing-hero-actions">
+            <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="register"><i class="ti ti-building"></i>Create business workspace</button>
+            <button class="btn landing-ghost-btn" type="button" data-action="open-auth-modal" data-auth-mode="invite"><i class="ti ti-users-plus"></i>Join with invite code</button>
+          </div>
+          <div class="landing-security-line"><i class="ti ti-shield-lock"></i>Company isolated. Permission gated. Demo mode stays local.</div>
+        </div>
+        <div class="landing-status-card" aria-label="Quest HQ workspace snapshot">
+          <div class="landing-status-head">
+            <span><i class="ti ti-calendar-week"></i></span>
+            <div>
+              <strong>Today at a glance</strong>
+              <small>Roofing Co.</small>
+            </div>
+            <i class="ti ti-chevron-down"></i>
+          </div>
+          <div class="landing-status-list">
+            ${[
+              ['ti-clipboard-check', 'Inspections', 'Scheduled today', '4'],
+              ['ti-folder', 'Permit files', 'Awaiting review', '3'],
+              ['ti-message-circle', 'Unread messages', 'Across your chats', '2'],
+            ].map(([icon, title, body, count]) => `
+              <div class="landing-status-row">
+                <span><i class="ti ${h(icon)}"></i></span>
+                <div><strong>${h(title)}</strong><small>${h(body)}</small></div>
+                <b>${h(count)}</b>
+              </div>
+            `).join('')}
+            <div class="landing-status-row locked">
+              <span><i class="ti ti-lock"></i></span>
+              <div><strong>Finance data</strong><small>Restricted by role permissions</small></div>
+              <b>Locked</b>
             </div>
           </div>
+          <div class="landing-status-foot"><i class="ti ti-shield-check"></i>Role-based access · Encrypted links · Company isolated</div>
         </div>
-        <div class="landing-hero-copy">
-          <div class="eyebrow">Company workspace</div>
-          <h1>Quest HQ</h1>
-          <p>One calm operations command center for jobs, tasks, files, forms, finance, messages, calendar, users, and permissions.</p>
-          <div class="landing-hero-actions">
-            <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="register">Create business workspace</button>
-            <button class="btn" type="button" data-action="open-auth-modal" data-auth-mode="invite">Join with invite code</button>
-          </div>
+      </section>
+      <section class="landing-modules">
+        <div>
+          <div class="eyebrow">Everything your team needs</div>
+          <h2>One place for the workday.</h2>
+        </div>
+        <div class="landing-module-panel">
+          ${[
+            ['ti-briefcase', 'Jobs', 'Track projects, sites, and customer work.'],
+            ['ti-list-check', 'Tasks', 'Assign, prioritize, and get work done.'],
+            ['ti-folder', 'Files & Forms', 'Store documents and collect field data.'],
+            ['ti-calendar', 'Calendar', 'Schedules, inspections, and deadlines.'],
+          ].map(([icon, title, body]) => `
+            <div class="landing-module-row">
+              <i class="ti ${h(icon)}"></i>
+              <strong>${h(title)}</strong>
+              <span>${h(body)}</span>
+              <i class="ti ti-chevron-right"></i>
+            </div>
+          `).join('')}
         </div>
       </section>
       <section class="landing-proof">
@@ -4406,6 +4436,19 @@ function renderLandingPage(forceAuthModal = false) {
           <article>
             <strong>${h(title)}</strong>
             <span>${h(body)}</span>
+          </article>
+        `).join('')}
+      </section>
+      <section class="landing-access-flow">
+        ${[
+          ['Create company', 'Owner starts a workspace'],
+          ['Quest approval', 'Billing/access reviewed'],
+          ['Invite workers', 'Code now, email later'],
+          ['Assign roles', 'Files and finance stay gated'],
+        ].map(([title, body], index) => `
+          <article>
+            <b>${index + 1}</b>
+            <div><strong>${h(title)}</strong><span>${h(body)}</span></div>
           </article>
         `).join('')}
       </section>
