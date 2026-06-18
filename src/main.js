@@ -1000,6 +1000,7 @@ const state = {
   memberships: readSeededList(MEMBERSHIP_CACHE_KEY, membershipsFallback),
   profiles: [],
   subscriptions: [],
+  workspaceReviews: [],
   roles: [],
   rolePermissions: [],
   roleAssignments: [],
@@ -1019,6 +1020,7 @@ const state = {
   selectedFinanceExpenseId: '',
   selectedFinanceVendorId: '',
   selectedCalendarEventId: '',
+  inviteLookup: null,
   expandedFormIds: new Set(),
   formStartTemplateId: '',
   formStartTab: 'blank',
@@ -1376,6 +1378,30 @@ async function loadSupabaseData() {
   if (!calendarEventsResult.error) state.calendarEvents = (calendarEventsResult.data || []).map(normalizeCalendarEvent);
   if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
 
+  if (isQuestDeveloper()) {
+    const reviewsResult = await client.rpc('list_workspace_reviews').catch((error) => ({ error }));
+    if (!reviewsResult.error) {
+      state.workspaceReviews = (reviewsResult.data || []).map(normalizeWorkspaceReview);
+      const reviewCompanies = state.workspaceReviews.map((review) => normalizeCompany({
+        id: review.company_id,
+        name: review.company_name,
+        short_name: review.company_name,
+      }));
+      const reviewSubscriptions = state.workspaceReviews.map((review) => normalizeSubscription({
+        company_id: review.company_id,
+        status: review.status,
+        plan_code: review.plan_code,
+        amount_cents: review.amount_cents,
+        currency: review.currency,
+        trial_ends_at: review.trial_ends_at,
+        current_period_end: review.current_period_end,
+        grace_ends_at: review.grace_ends_at,
+      }));
+      state.companies = mergeCompanies(state.companies.concat(reviewCompanies));
+      state.subscriptions = mergeSubscriptions(state.subscriptions.concat(reviewSubscriptions));
+    }
+  }
+
   state.sync = liveTables ? { label: 'Quest Supabase live', mode: 'live' } : { label: 'Local fallback', mode: 'local' };
 }
 
@@ -1411,6 +1437,7 @@ function resetLiveWorkspaceData() {
   state.memberships = [];
   state.profiles = [];
   state.subscriptions = [];
+  state.workspaceReviews = [];
   state.roles = [];
   state.rolePermissions = [];
   state.roleAssignments = [];
@@ -1447,6 +1474,7 @@ function resetDemoWorkspaceData() {
   state.memberships = readSeededList(MEMBERSHIP_CACHE_KEY, membershipsFallback);
   state.profiles = [];
   state.subscriptions = [];
+  state.workspaceReviews = [];
   state.roles = [];
   state.rolePermissions = [];
   state.roleAssignments = [];
@@ -2865,6 +2893,42 @@ function renderBillingSettings(companyId) {
         ['Finance/files privacy', CONFIG.questAuthEnabled ? 'Requires Auth + RLS' : 'Demo only'],
         ['Seat billing', 'Tracked later; not charged in v1'],
       ])}
+    </article>
+    ${isQuestDeveloper() ? renderWorkspaceApprovalConsole(companyId) : ''}
+  `;
+}
+
+function renderWorkspaceApprovalConsole(companyId) {
+  const reviews = workspaceReviewRows();
+  const pending = reviews.filter((review) => review.status === 'pending_review').length;
+  return `
+    <article class="panel span-3">
+      <div class="section-head">
+        <div><h2>Quest approval console</h2><p>${pending} workspace${pending === 1 ? '' : 's'} waiting for manual activation.</p></div>
+      </div>
+      <div class="approval-console-list">
+        ${reviews.map((review) => renderWorkspaceReviewRow(review, companyId)).join('') || emptyState('No workspace reviews found.')}
+      </div>
+    </article>
+  `;
+}
+
+function renderWorkspaceReviewRow(review, currentCompanyId) {
+  const active = ['active', 'trialing', 'past_due', 'grace'].includes(review.status);
+  const isCurrent = review.company_id === currentCompanyId;
+  return `
+    <article class="workspace-review-row ${review.status === 'pending_review' ? 'pending' : ''}">
+      <span>
+        <strong>${h(review.company_name || companyName(review.company_id))}${isCurrent ? ' / current' : ''}</strong>
+        <small>${h(review.company_id)} / ${h(review.owner_email || 'No owner email')} / ${formatDate(review.created_at)}</small>
+      </span>
+      <b class="status-pill ${active ? 'active' : review.status === 'pending_review' ? 'pending' : 'muted'}">${h(subscriptionLabelForStatus(review.status, review))}</b>
+      <div class="workspace-review-actions">
+        <button class="btn btn-primary" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="active" ${active ? 'disabled' : ''}>Approve</button>
+        <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="pending_review" ${review.status === 'pending_review' ? 'disabled' : ''}>Pending</button>
+        <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="suspended" ${review.status === 'suspended' ? 'disabled' : ''}>Suspend</button>
+        <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="canceled" ${review.status === 'canceled' ? 'disabled' : ''}>Reject</button>
+      </div>
     </article>
   `;
 }
@@ -4324,6 +4388,7 @@ function renderLandingPage(forceAuthModal = false) {
 }
 
 function renderAuthModal(returnUrl, inviteToken, authEnabled) {
+  const inviteLookup = inviteLookupForToken(inviteToken);
   return `
     <div class="modal-overlay">
       <div class="modal-panel landing-auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
@@ -4336,7 +4401,12 @@ function renderAuthModal(returnUrl, inviteToken, authEnabled) {
         </div>
         <div class="landing-auth-body">
           <div class="auth-modal-note">${authEnabled ? 'Owners create workspaces. Workers join by invite.' : 'Supabase auth is switched off while the company workspace foundation is stabilized.'}</div>
-          ${inviteToken ? `<div class="invite-banner"><strong>Workspace invite</strong><span>Create an account with the invited email, or sign in if that email already has a Quest HQ account.</span></div>` : ''}
+          ${inviteToken ? `
+            <div class="invite-banner">
+              <strong>${inviteLookup ? `Invite found for ${h(inviteLookup.company_name || 'workspace')}` : 'Workspace invite'}</strong>
+              <span>${inviteLookup ? `${h(inviteLookup.email)} can create an account or sign in to join.` : 'Create an account with the invited email, or sign in if that email already has a Quest HQ account.'}</span>
+            </div>
+          ` : ''}
           ${authEnabled ? `
             ${renderAuthLanePicker(inviteToken)}
             ${renderSupabaseAuthForm(returnUrl)}
@@ -5129,6 +5199,11 @@ function handleAction(event, node) {
     startCheckout();
     return;
   }
+  if (action === 'review-workspace') {
+    event.preventDefault();
+    reviewWorkspace(node.dataset.companyId, node.dataset.status);
+    return;
+  }
   if (action === 'open-file-upload') {
     event.preventDefault();
     state.modal = 'file-upload';
@@ -5744,7 +5819,7 @@ async function signInWithSupabase(formNode) {
   navigate(safeReturnUrl(form.return_url || appHref(companyPath('jobs', {}, defaultCompanyId()))), { replace: true });
 }
 
-function submitInviteCode(formNode) {
+async function submitInviteCode(formNode) {
   const form = Object.fromEntries(new FormData(formNode).entries());
   const inviteCode = String(form.invite_code || '').trim();
   if (!inviteCode) {
@@ -5753,12 +5828,60 @@ function submitInviteCode(formNode) {
     return;
   }
   state.loginError = '';
-  state.authMessage = '';
+  state.authMessage = 'Checking invite code...';
   state.authMode = 'register';
+  render();
+  const lookup = await lookupInviteCode(inviteCode);
+  if (lookup?.missing) {
+    state.loginError = 'Invite code was not found or is no longer pending.';
+    state.authMessage = '';
+    state.authMode = 'invite';
+    render();
+    return;
+  }
+  if (lookup?.status && lookup.status !== 'pending') {
+    state.loginError = `This invite is ${lookup.status}. Ask your company admin for a new code.`;
+    state.authMessage = '';
+    state.authMode = 'invite';
+    render();
+    return;
+  }
+  if (lookup?.expires_at && Date.parse(lookup.expires_at) <= Date.now()) {
+    state.loginError = 'This invite code expired. Ask your company admin for a new code.';
+    state.authMessage = '';
+    state.authMode = 'invite';
+    render();
+    return;
+  }
+  if (lookup) {
+    state.inviteLookup = lookup;
+    state.authMessage = `Invite found for ${lookup.email}.`;
+  } else {
+    state.authMessage = '';
+  }
   const params = new URLSearchParams({ invite: inviteCode });
   const returnUrl = safeReturnUrl(form.return_url || '');
   if (returnUrl) params.set('return_url', returnUrl);
+  params.set('mode', 'register');
   navigate(`/login?${params.toString()}`, { replace: true });
+}
+
+async function lookupInviteCode(inviteCode) {
+  const token = String(inviteCode || '').trim();
+  const client = createSupabaseClient();
+  if (!token || !client) return null;
+  const result = await client.rpc('lookup_company_invite', { invite_token: token }).catch((error) => ({ error }));
+  if (result.error) return null;
+  const row = Array.isArray(result.data) ? result.data[0] : result.data;
+  if (!row) return { missing: true };
+  return {
+    token,
+    company_id: canonicalCompanyId(row.company_id || ''),
+    company_name: String(row.company_name || row.company_id || '').trim(),
+    email: String(row.email || '').trim(),
+    status: String(row.status || '').trim(),
+    expires_at: row.expires_at || '',
+  };
 }
 
 async function registerWorkspace(formNode) {
@@ -5914,6 +6037,58 @@ async function startCheckout() {
   }
 }
 
+async function reviewWorkspace(companyId, status) {
+  const targetCompanyId = canonicalCompanyId(companyId);
+  const nextStatus = normalizeSubscriptionStatus(status);
+  if (!targetCompanyId || !nextStatus || !isQuestDeveloper()) {
+    showToast('Quest developer access is required to review workspaces.', 'local', 'Workspace review');
+    return;
+  }
+  const client = createSupabaseClient();
+  state.sync = { label: 'Updating workspace review...', mode: 'loading' };
+  render();
+  if (state.session?.auth === 'supabase' && client) {
+    const result = await client.rpc('review_company_workspace', {
+      target_company_id: targetCompanyId,
+      next_status: nextStatus,
+      review_note: `Marked ${nextStatus} from Quest HQ approval console`,
+    });
+    if (result.error) {
+      state.sync = { label: result.error.message || 'Workspace review failed', mode: 'local' };
+      showToast(result.error.message || 'Workspace review failed.', 'local', 'Workspace review');
+      render();
+      return;
+    }
+  }
+  applyWorkspaceReviewStatus(targetCompanyId, nextStatus);
+  await recordAuditEvent(targetCompanyId, 'workspace.reviewed', 'company_subscription', targetCompanyId, { status: nextStatus }, state.session?.auth === 'supabase');
+  state.sync = { label: `Workspace marked ${subscriptionLabelForStatus(nextStatus).toLowerCase()}`, mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
+  showToast(`Workspace marked ${subscriptionLabelForStatus(nextStatus).toLowerCase()}.`, state.session?.auth === 'supabase' ? 'live' : 'local', 'Workspace review');
+  render();
+}
+
+function applyWorkspaceReviewStatus(companyId, status) {
+  const subscription = normalizeSubscription({
+    ...(companySubscription(companyId) || {}),
+    company_id: companyId,
+    status,
+  });
+  state.subscriptions = mergeSubscriptions(state.subscriptions.filter((item) => item.company_id !== companyId).concat(subscription));
+  const review = normalizeWorkspaceReview({
+    ...(state.workspaceReviews.find((item) => item.company_id === companyId) || {}),
+    company_id: companyId,
+    company_name: companyName(companyId),
+    status,
+    plan_code: subscription.plan_code,
+    amount_cents: subscription.amount_cents,
+    currency: subscription.currency,
+    created_at: new Date().toISOString(),
+  });
+  state.workspaceReviews = state.workspaceReviews.filter((item) => item.company_id !== companyId).concat(review);
+  if (status === 'pending_review') markWorkspacePendingReview(companyId);
+  else clearWorkspacePendingReview(companyId);
+}
+
 async function saveRole(formNode) {
   const companyId = activeCompanyId();
   const data = new FormData(formNode);
@@ -6023,6 +6198,7 @@ async function acceptCompanyInvite(token, fallbackReturnUrl = '') {
   const companyId = canonicalCompanyId(result.data || defaultCompanyId());
   state.activeCompanyId = companyId;
   localStorage.setItem(COMPANY_KEY, companyId);
+  state.inviteLookup = null;
   state.authMessage = '';
   state.loginError = '';
   state.dataLoaded = false;
@@ -8258,6 +8434,38 @@ function companySubscription(companyId = activeCompanyId()) {
   return state.subscriptions.find((item) => item.company_id === companyId) || null;
 }
 
+function workspaceReviewRows() {
+  const fromRpc = state.workspaceReviews.map(normalizeWorkspaceReview);
+  const fromSubscriptions = state.subscriptions
+    .filter((subscription) => ['pending_review', 'active', 'trialing', 'suspended', 'canceled'].includes(subscription.status))
+    .map((subscription) => normalizeWorkspaceReview({
+      company_id: subscription.company_id,
+      company_name: companyName(subscription.company_id),
+      status: subscription.status,
+      plan_code: subscription.plan_code,
+      amount_cents: subscription.amount_cents,
+      currency: subscription.currency,
+      trial_ends_at: subscription.trial_ends_at,
+      current_period_end: subscription.current_period_end,
+      grace_ends_at: subscription.grace_ends_at,
+      created_at: subscription.created_at || '',
+    }));
+  const fromLocalPending = pendingReviewCompanyIds().map((companyId) => normalizeWorkspaceReview({
+    company_id: companyId,
+    company_name: companyName(companyId),
+    status: 'pending_review',
+  }));
+  const byCompany = new Map();
+  fromSubscriptions.concat(fromLocalPending, fromRpc).forEach((review) => {
+    if (review.company_id) byCompany.set(review.company_id, { ...(byCompany.get(review.company_id) || {}), ...review });
+  });
+  return Array.from(byCompany.values()).sort((a, b) => {
+    if (a.status === 'pending_review' && b.status !== 'pending_review') return -1;
+    if (a.status !== 'pending_review' && b.status === 'pending_review') return 1;
+    return String(a.company_name).localeCompare(String(b.company_name));
+  });
+}
+
 function subscriptionAllowsCompany(companyId = activeCompanyId()) {
   if (state.session?.auth !== 'supabase') return true;
   if (subscriptionNeedsReview(companyId)) return false;
@@ -8286,15 +8494,43 @@ function markWorkspacePendingReview(companyId) {
   writeJson(PENDING_WORKSPACE_REVIEW_KEY, next);
 }
 
+function clearWorkspacePendingReview(companyId) {
+  const id = canonicalCompanyId(companyId);
+  if (!id) return;
+  writeJson(PENDING_WORKSPACE_REVIEW_KEY, pendingReviewCompanyIds().filter((item) => item !== id));
+}
+
+function inviteLookupForToken(token) {
+  const clean = String(token || '').trim();
+  if (!clean || state.inviteLookup?.token !== clean) return null;
+  return state.inviteLookup;
+}
+
 function subscriptionLabel(companyId = activeCompanyId()) {
   const subscription = companySubscription(companyId);
   if (!subscription) return state.session?.auth === 'supabase' ? 'Approval pending' : 'Demo mode';
-  if (subscription.status === 'pending_review') return 'Awaiting Quest approval';
-  if (subscription.status === 'trialing') return `Trial - ${formatDate(subscription.trial_ends_at)}`;
-  if (subscription.status === 'active') return 'Active subscription';
-  if (subscription.status === 'past_due') return 'Past due grace';
-  if (subscription.status === 'grace') return `Grace - ${formatDate(subscription.grace_ends_at)}`;
-  return titleCase(subscription.status);
+  return subscriptionLabelForStatus(subscription.status, subscription);
+}
+
+function subscriptionLabelForStatus(status, subscription = {}) {
+  const clean = normalizeSubscriptionStatus(status) || String(status || '');
+  if (clean === 'pending_review') return 'Awaiting Quest approval';
+  if (clean === 'trialing') return `Trial - ${formatDate(subscription.trial_ends_at)}`;
+  if (clean === 'active') return 'Active subscription';
+  if (clean === 'past_due') return 'Past due grace';
+  if (clean === 'grace') return `Grace - ${formatDate(subscription.grace_ends_at)}`;
+  if (clean === 'suspended') return 'Suspended';
+  if (clean === 'canceled') return 'Rejected';
+  return titleCase(clean || 'Unknown');
+}
+
+function normalizeSubscriptionStatus(status) {
+  const clean = String(status || '').toLowerCase().trim();
+  return ['pending_review', 'trialing', 'active', 'past_due', 'grace', 'suspended', 'canceled', 'incomplete'].includes(clean) ? clean : '';
+}
+
+function isQuestDeveloper() {
+  return String(activeSession().profile?.role || '').toLowerCase() === 'developer';
 }
 
 function memberName(id) {
@@ -8327,6 +8563,15 @@ function mergeCompanies(companies) {
   companies.map(normalizeCompany).forEach((company) => {
     if (!company.id || seen.has(company.id)) return;
     seen.set(company.id, company);
+  });
+  return Array.from(seen.values());
+}
+
+function mergeSubscriptions(subscriptions) {
+  const seen = new Map();
+  subscriptions.map(normalizeSubscription).forEach((subscription) => {
+    if (!subscription.company_id) return;
+    seen.set(subscription.company_id, { ...(seen.get(subscription.company_id) || {}), ...subscription });
   });
   return Array.from(seen.values());
 }
@@ -8577,7 +8822,7 @@ function normalizeMembership(input) {
 function normalizeSubscription(input) {
   return {
     company_id: canonicalCompanyId(input.company_id || ''),
-    status: String(input.status || 'pending_review'),
+    status: normalizeSubscriptionStatus(input.status) || 'pending_review',
     plan_code: String(input.plan_code || 'quest_company_300'),
     amount_cents: number(input.amount_cents || 30000),
     currency: String(input.currency || 'usd'),
@@ -8586,6 +8831,26 @@ function normalizeSubscription(input) {
     current_period_end: input.current_period_end || '',
     trial_ends_at: input.trial_ends_at || '',
     grace_ends_at: input.grace_ends_at || '',
+    created_at: input.created_at || '',
+  };
+}
+
+function normalizeWorkspaceReview(input) {
+  return {
+    company_id: canonicalCompanyId(input.company_id || ''),
+    company_name: String(input.company_name || input.name || input.short_name || input.company_id || '').trim(),
+    status: normalizeSubscriptionStatus(input.status) || 'pending_review',
+    plan_code: String(input.plan_code || 'quest_company_300'),
+    amount_cents: number(input.amount_cents || 30000),
+    currency: String(input.currency || 'usd'),
+    owner_profile_id: String(input.owner_profile_id || ''),
+    owner_name: String(input.owner_name || ''),
+    owner_email: String(input.owner_email || ''),
+    current_period_end: input.current_period_end || '',
+    trial_ends_at: input.trial_ends_at || '',
+    grace_ends_at: input.grace_ends_at || '',
+    created_at: input.created_at || '',
+    updated_at: input.updated_at || '',
   };
 }
 

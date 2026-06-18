@@ -1845,6 +1845,51 @@ textarea:focus {
 .status-pill.hold { background: #fef3c7; color: #92400e; }
 .status-pill.review { background: #ede9fe; color: #6d28d9; }
 .status-pill.done { background: #dcfce7; color: #166534; }
+.status-pill.active { background: #dcfce7; color: #166534; }
+.status-pill.muted { background: #eee7da; color: #6f6557; }
+
+.approval-console-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-review-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fffdf7;
+  padding: 12px;
+}
+
+.workspace-review-row.pending {
+  border-color: #e7b647;
+  background: #fff6df;
+}
+
+.workspace-review-row span strong,
+.workspace-review-row span small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-review-row span small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 3px;
+}
+
+.workspace-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
 
 .priority.critical {
   background: #111827;
@@ -4548,17 +4593,20 @@ textarea:focus {
   .access-user-row,
   .access-request-row,
   .access-invite-row,
+  .workspace-review-row,
   .access-role-form {
     grid-template-columns: 1fr;
   }
 
   .access-request-row > div:last-child,
-  .access-invite-row > div:last-child {
+  .access-invite-row > div:last-child,
+  .workspace-review-actions {
     justify-content: stretch;
   }
 
   .access-request-row .btn,
-  .access-invite-row .btn {
+  .access-invite-row .btn,
+  .workspace-review-actions .btn {
     width: 100%;
   }
 }
