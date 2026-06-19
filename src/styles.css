@@ -6896,8 +6896,8 @@ button.side-item {
 
 .landing-trust-card {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 22px;
   align-items: start;
 }
 
@@ -6912,37 +6912,44 @@ button.side-item {
 
 .landing-trust-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .landing-trust-grid span {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
-  gap: 3px 9px;
-  min-height: 82px;
+  gap: 2px 10px;
+  min-height: 62px;
   border: 1px solid #e4d6c0;
   border-radius: 8px;
   background: rgba(255, 253, 247, .58);
-  padding: 12px;
+  padding: 10px 12px;
 }
 
 .landing-trust-grid i {
   grid-row: span 2;
   color: #15120f;
-  font-size: 23px;
+  font-size: 22px;
 }
 
 .landing-trust-grid strong,
 .landing-trust-grid small {
   display: block;
+  min-width: 0;
+}
+
+.landing-trust-grid strong {
+  font-size: 16px;
+  line-height: 1.05;
+  white-space: nowrap;
 }
 
 .landing-trust-grid small {
   color: #655d52;
   font-size: 11px;
   font-weight: 800;
-  line-height: 1.22;
+  line-height: 1.18;
 }
 
 .landing-boundary {
@@ -6953,7 +6960,7 @@ button.side-item {
   gap: 7px;
   color: #655d52;
   border-top: 1px solid #e4d6c0;
-  padding-top: 12px;
+  padding-top: 10px;
   font-weight: 850;
 }
 
