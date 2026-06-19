@@ -4,6 +4,8 @@ Source visual truth: `C:/Users/Joshua/.codex/generated_images/019ecc8d-97b4-7fe2
 
 Implementation screenshot: `C:/Users/Joshua/.codex/generated_images/019ecc8d-97b4-7fe2-8c48-cda43fc2adfd/quest-hq-option-5-implementation.png`
 
+Generated cockpit asset: `src/assets/quest-secure-workspace-cockpit.png`
+
 Viewport: `1440x1024`
 
 State: logged-out landing page, auth modal closed.
@@ -21,6 +23,7 @@ Focused region comparison evidence: focused review covered the hero headline, co
 - Rebuilt the hero around an editorial security message and command-center console preview.
 - Added security/trust proof, access-model cards, and a dark value strip.
 - Tuned desktop headline scale after capture so proof panels appear in the first viewport.
+- Replaced the hand-built cockpit text layer with a generated product visual asset so the landing hero reads as artwork instead of a brittle fake app screen.
 - Verified mobile collapse has no horizontal overflow.
 
 **Follow-up Polish**

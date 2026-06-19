@@ -1,4 +1,5 @@
 import './styles.css';
+import cockpitArtUrl from './assets/quest-secure-workspace-cockpit.png';
 
 const CONFIG = {
   buildId: 'Quest HQ Company Workspace v1',
@@ -4384,7 +4385,8 @@ function renderLandingPage(forceAuthModal = false) {
           </div>
           <div class="landing-security-line"><i class="ti ti-circle-check"></i>No credit card required. Approval required before live access is activated.</div>
         </div>
-        <div class="landing-console" aria-label="Quest HQ workspace command center preview">
+        <div class="landing-console image-mode" aria-label="Quest HQ workspace command center preview">
+          <img class="landing-console-art" src="${h(cockpitArtUrl)}" alt="Generated Quest HQ secure workspace cockpit preview showing company access, tasks, messages, finance, files, users, reports, and audit controls." />
           <aside class="landing-console-rail" aria-hidden="true">
             <span class="console-mark">Q</span>
             ${[

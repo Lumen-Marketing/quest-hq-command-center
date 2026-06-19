@@ -6577,6 +6577,23 @@ button.side-item {
   overflow: hidden;
 }
 
+.landing-console.image-mode {
+  display: block;
+  min-height: 0;
+  background: transparent;
+}
+
+.landing-console.image-mode > :not(.landing-console-art) {
+  display: none;
+}
+
+.landing-console-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 0;
+}
+
 .landing-console-rail {
   display: grid;
   align-content: start;
