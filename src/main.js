@@ -92,6 +92,7 @@ const PERMISSION_ALIASES = {
 };
 
 const MODULE_REGISTRY = [
+  { id: 'home', group: 'Workspace', label: 'Home', icon: 'ti-home', symbol: 'q-logo', status: 'live', permission: '' },
   { id: 'jobs', group: 'Workspace', label: 'Jobs', icon: 'ti-briefcase', symbol: 'q-symbol-jobs', status: 'live', permission: 'jobs.view' },
   { id: 'tasks', group: 'Workspace', label: 'Tasks', icon: 'ti-list-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'tasks.view' },
   { id: 'files', group: 'Workspace', label: 'Files', icon: 'ti-folder', symbol: 'q-symbol-files', status: 'live', permission: 'files.view' },
@@ -1776,7 +1777,14 @@ function renderRolePreviewBanner(companyId) {
 
 function renderDeck(route) {
   const companyId = activeCompanyId();
+  const session = activeSession();
   return `
+    <div class="deck-brand">
+      <a class="logo" href="${appHref(companyPath('home', {}, companyId))}" data-router aria-label="Quest HQ home">
+        ${svgIcon('q-logo', 'brand-symbol')}
+      </a>
+      <span><strong>Quest HQ</strong><small>Command Center</small></span>
+    </div>
     <div class="company-card">
       <span class="company-card-symbol" style="--company-accent:${h(companyColor(companyId))}">${svgIcon('q-company')}</span>
       <div>
@@ -1792,6 +1800,18 @@ function renderDeck(route) {
           ? plannedNavItem(module.symbol, module.label)
           : navItem(route, companyPath(module.id, {}, companyId), module.symbol, module.label, moduleBadgeCount(module.id, companyId))),
     )).join('')}
+    <div class="deck-footer">
+      <a class="deck-company-switch" href="${appHref(companyPath('settings', { tab: 'company' }, companyId))}" data-router>
+        ${svgIcon('q-company')}
+        <span><strong>${h(companyName(companyId))}</strong><small>Workspace</small></span>
+        <i class="ti ti-chevron-down"></i>
+      </a>
+      <button class="deck-user-card" type="button" data-action="open-profile">
+        ${renderAvatar(session.profile, 'avatar small')}
+        <span><strong>${h(session.profile.full_name)}</strong><small>${h(roleForCompany(companyId))}</small></span>
+        <i class="ti ti-dots-vertical"></i>
+      </button>
+    </div>
   `;
 }
 
@@ -1826,6 +1846,7 @@ function plannedNavItem(symbol, label) {
 }
 
 function canViewModule(module, companyId = activeCompanyId()) {
+  if (module.id === 'home') return true;
   if (module.status === 'planned') return true;
   if (!subscriptionAllowsCompany(companyId) && !['settings', 'users'].includes(module.id)) return false;
   return can(module.permission || `${module.id}.view`, companyId);
@@ -1866,6 +1887,7 @@ function renderWorkspace(route) {
     return renderCompanyAccessDeniedPage(companyId);
   }
   const moduleMeta = MODULE_REGISTRY.find((module) => module.id === route.section);
+  if (route.section === 'home') return renderCompanyHomePage(companyId);
   if (moduleMeta?.status !== 'planned') {
     if (!subscriptionAllowsCompany(companyId) && route.section !== 'settings') return renderSubscriptionBlockedPage(companyId);
     if (moduleMeta?.permission && !can(moduleMeta.permission, companyId)) return renderPermissionBlockedPage(companyId, moduleMeta.permission);
@@ -1935,48 +1957,182 @@ function renderCompanyAccessDeniedPage(companyId) {
 }
 
 function renderCompanyDashboard(companyId) {
+  return renderCompanyHomePage(companyId);
+}
+
+function renderCompanyHomePage(companyId) {
   const jobs = companyJobs(companyId);
   const tasks = companyTasks(companyId);
-  const urgent = tasks.filter((task) => ['critical', 'urgent'].includes(task.priority));
+  const openTasks = tasks.filter((task) => task.status !== 'done');
+  const overdueTasks = openTasks.filter((task) => task.due && new Date(task.due) < startOfToday());
+  const unreadMessages = can('messages.view', companyId) ? companyMessageUnreadCount(companyId) : 0;
   const files = companyFiles(companyId);
+  const forms = companyForms(companyId);
+  const users = companyAccessUsers(companyId);
+  const activeUsers = users.filter((user) => user.status === 'active');
+  const pendingUsers = users.filter((user) => user.status === 'pending');
+  const recentActivity = homeRecentActivity(companyId, companyNotifications(companyId).slice(0, 4));
+  const healthItems = homeHealthItems(companyId);
+  const customRoles = companyRoles(companyId).filter((role) => !role.is_system).length;
+  const activePermissions = new Set(companyRoles(companyId).flatMap((role) => role.permissions || [])).size;
+  const accessGoverned = can('users.view', companyId) || can('settings.view', companyId);
   return `
-    ${workspaceHeader('Company dashboard', 'Live context for this company workspace.', `
-      <a class="btn" href="${appHref(companyPath('files', {}, companyId))}" data-router><i class="ti ti-folder"></i>Open drive</a>
-      <a class="btn btn-primary" href="${appHref(companyPath('jobs', {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Open jobs</a>
-    `)}
-    ${metricGrid([
-      ['Jobs', jobs.length],
-      ['Open tasks', tasks.filter((task) => task.status !== 'done').length],
-      ['Urgent tasks', urgent.length],
-      ['Drive files', files.length],
-    ])}
-    <section class="dashboard-grid">
-      <article class="panel span-2">
-        <div class="section-head">
-          <div><h2>Priority work</h2><p>Tasks and jobs filtered by the active company.</p></div>
-          <a class="btn" href="${appHref(companyPath('tasks', {}, companyId))}" data-router>Open tasks</a>
+    <section class="home-cockpit">
+      <div class="home-hero">
+        <div>
+          <h1>Good ${h(dayPart())}, ${h(firstName(activeSession().profile.full_name) || 'Quest Admin')}</h1>
+          <p>Here is what is happening across your workspace.</p>
         </div>
-        <div class="queue-list">
-          ${tasks.slice(0, 6).map((task) => taskQueueRow(task)).join('') || emptyState('No tasks in this company yet.')}
+        <div class="home-hero-actions">
+          <label class="company-switch home-company-switch">
+            ${svgIcon('q-company')}
+            <select data-company-switch aria-label="Active company">
+              ${allowedCompanies().map((company) => `<option value="${h(company.id)}" ${company.id === companyId ? 'selected' : ''}>${h(companyLabel(company))}</option>`).join('')}
+            </select>
+          </label>
+          <button class="icon-button" type="button" data-action="toggle-notifications" aria-label="Open notifications">
+            <i class="ti ti-bell"></i>
+            ${unreadMessages ? `<b>${h(String(Math.min(unreadMessages, 99)))}</b>` : ''}
+          </button>
+          ${renderAvatar(activeSession().profile, 'avatar')}
         </div>
-      </article>
-      <article class="panel">
-        <div class="section-head"><div><h2>Company scope</h2><p>Client-side filtering while auth is disabled.</p></div></div>
-        ${contractRows([
-          ['Company', companyName(companyId)],
-          ['Visible users', companyMembers(companyId).length],
-          ['Auth mode', CONFIG.questAuthEnabled ? 'Supabase auth' : 'Local basic gate'],
-          ['RLS status', CONFIG.questAuthEnabled ? 'Ready for enforcement' : 'Prepared, not enforced'],
-        ])}
-      </article>
-      <article class="panel span-3">
-        <div class="section-head"><div><h2>Job queue</h2><p>Workspace records without leaving the Quest shell.</p></div></div>
-        <div class="queue-list">
-          ${jobs.slice(0, 8).map((job) => jobQueueRow(job)).join('') || emptyState('No jobs in this company yet.')}
-        </div>
-      </article>
+      </div>
+      <section class="home-metric-grid">
+        ${homeMetricCard('q-symbol-approvals', 'Company access', subscriptionLabel(companyId), subscriptionNeedsReview(companyId) ? 'Approval required before full access.' : 'Workspace modules are available.', companyPath('settings', { tab: 'billing' }, companyId), 'View status', subscriptionAllowsCompany(companyId) ? 'good' : 'warning')}
+        ${homeMetricCard('q-symbol-users', 'Active users', activeUsers.length, `${activeUsers.length} active / ${pendingUsers.length} pending`, companyPath('users', {}, companyId), 'Manage users')}
+        ${homeMetricCard('q-symbol-tasks', 'Open tasks', openTasks.length, `${overdueTasks.length} overdue`, companyPath('tasks', {}, companyId), 'View tasks', overdueTasks.length ? 'warning' : '')}
+        ${homeMetricCard('q-symbol-messages', 'Unread messages', unreadMessages, 'Across team chats', companyPath('messages', {}, companyId), 'Open inbox')}
+        ${homeMetricCard('q-symbol-settings', 'Workspace health', subscriptionAllowsCompany(companyId) ? 'Good' : 'Pending', subscriptionAllowsCompany(companyId) ? 'All core systems operational' : 'Approval or billing still needs attention.', companyPath('settings', {}, companyId), 'See details', subscriptionAllowsCompany(companyId) ? 'good' : 'warning')}
+      </section>
+      <section class="home-dashboard-grid">
+        <article class="panel home-activity-panel">
+          <div class="section-head">
+            <div><h2>Recent activity</h2><p>Latest company work and inbox events.</p></div>
+            <a class="btn" href="${appHref(companyPath('analytics', {}, companyId))}" data-router>All activity</a>
+          </div>
+          <div class="home-activity-list">
+            ${recentActivity.map(renderHomeActivity).join('') || emptyState('No recent activity yet.')}
+          </div>
+        </article>
+        <article class="panel home-health-panel">
+          <div class="section-head"><div><h2>Workspace health</h2><p>Access, billing, and operating signals.</p></div></div>
+          <div class="home-health-body">
+            <div class="home-orbit" aria-hidden="true"><span>${svgIcon('q-logo', 'brand-symbol')}</span></div>
+            <div class="home-health-list">
+              ${healthItems.map((item) => `<div class="${h(item.state)}"><i class="ti ${h(item.icon)}"></i><span>${h(item.label)}</span></div>`).join('')}
+            </div>
+          </div>
+        </article>
+        <article class="panel home-access-panel">
+          <div class="section-head">
+            <div><h2>Access control</h2><p>Roles, permissions, protected data, and audit trail.</p></div>
+            <a href="${appHref(companyPath('settings', { tab: 'roles' }, companyId))}" data-router>View all <i class="ti ti-arrow-right"></i></a>
+          </div>
+          <div class="home-access-grid">
+            <div><i class="ti ti-user-shield"></i><strong>${h(customRoles || companyRoles(companyId).length)}</strong><span>Custom roles</span></div>
+            <div><i class="ti ti-shield-lock"></i><strong>${h(activePermissions || PERMISSION_KEYS.length)}</strong><span>Active rules</span></div>
+            <div><i class="ti ti-lock"></i><strong>${h(accessGoverned ? '100%' : 'Basic')}</strong><span>Protected data</span></div>
+            <div><i class="ti ti-clipboard-check"></i><strong>${h(companyAuditEvents(companyId).length)}</strong><span>Audit events</span></div>
+          </div>
+        </article>
+      </section>
+      <section class="home-shortcuts panel">
+        ${homeShortcut('files', 'q-symbol-files', 'Files', files.length, companyId)}
+        ${homeShortcut('crm', 'q-symbol-crm', 'CRM', crmAccounts(companyId).length, companyId)}
+        ${homeShortcut('finance', 'q-symbol-finance', 'Finance', companyFinanceInvoices(companyId).length, companyId)}
+        ${homeShortcut('calendar', 'q-symbol-calendar', 'Calendar', calendarUpcomingItems(companyId).length, companyId)}
+        ${homeShortcut('users', 'q-symbol-users', 'Users', activeUsers.length, companyId)}
+        ${homeShortcut('forms', 'q-symbol-forms', 'Forms', forms.length, companyId)}
+        ${homeShortcut('analytics', 'q-symbol-analytics', 'Reports', jobs.length + tasks.length, companyId)}
+      </section>
     </section>
   `;
+}
+
+function homeMetricCard(symbol, label, value, detail, path, action, tone = '') {
+  return `
+    <article class="home-metric-card ${h(tone)}">
+      ${svgIcon(symbol)}
+      <span>${h(label)}</span>
+      <strong>${h(value)}</strong>
+      <small>${h(detail)}</small>
+      <a href="${appHref(path)}" data-router>${h(action)} <i class="ti ti-arrow-right"></i></a>
+    </article>
+  `;
+}
+
+function homeShortcut(section, symbol, label, count, companyId) {
+  const module = MODULE_REGISTRY.find((item) => item.id === section);
+  if (module && !canViewModule(module, companyId)) return '';
+  return `
+    <a class="home-shortcut" href="${appHref(companyPath(section, {}, companyId))}" data-router>
+      ${svgIcon(symbol)}
+      <span>${h(label)}</span>
+      ${count !== '' && count !== undefined ? `<b>${h(String(count))}</b>` : ''}
+    </a>
+  `;
+}
+
+function homeRecentActivity(companyId, notifications = []) {
+  const notificationItems = notifications.map((item) => ({
+    icon: 'ti-bell',
+    title: item.body || item.title,
+    meta: notificationTypeLabel(item.type),
+    time: item.created_at,
+    href: item.href || companyPath('home', {}, companyId),
+    avatar: activeSession().profile,
+  }));
+  const taskItems = companyTasks(companyId).slice(0, 3).map((task) => ({
+    icon: 'ti-circle-check',
+    title: `${task.title} was updated`,
+    meta: 'Tasks',
+    time: task.updated_at || task.due,
+    href: companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id }, companyId),
+    avatar: { full_name: memberName(task.assignee_id) },
+  }));
+  const fileItems = companyFiles(companyId).slice(0, 2).map((file) => ({
+    icon: 'ti-folder',
+    title: `${file.name} was uploaded`,
+    meta: 'Files',
+    time: file.updated_at || file.created_at,
+    href: companyPath('files', file.job_id ? { job_id: file.job_id } : {}, companyId),
+    avatar: { full_name: memberName(file.owner_id || file.created_by) },
+  }));
+  return notificationItems.concat(taskItems, fileItems)
+    .sort((a, b) => Date.parse(b.time || 0) - Date.parse(a.time || 0))
+    .slice(0, 5);
+}
+
+function renderHomeActivity(item) {
+  return `
+    <a class="home-activity-row" href="${appHref(item.href)}" data-router>
+      <span class="home-activity-icon"><i class="ti ${h(item.icon)}"></i></span>
+      <span><strong>${h(item.title)}</strong><small>${h(item.meta)}</small></span>
+      ${renderAvatar(item.avatar || {}, 'avatar small')}
+      <em>${h(timeAgo(item.time))}</em>
+    </a>
+  `;
+}
+
+function homeHealthItems(companyId) {
+  return [
+    { label: 'Company created', icon: 'ti-circle-check', state: 'good' },
+    { label: subscriptionAllowsCompany(companyId) ? 'Access approved' : 'Pending approval', icon: subscriptionAllowsCompany(companyId) ? 'ti-circle-check' : 'ti-clock', state: subscriptionAllowsCompany(companyId) ? 'good' : 'warning' },
+    { label: 'Billing connected', icon: 'ti-link', state: subscriptionAllowsCompany(companyId) ? 'good' : 'muted' },
+    { label: subscriptionAllowsCompany(companyId) ? 'Payment active' : 'Payment not active', icon: 'ti-credit-card', state: subscriptionAllowsCompany(companyId) ? 'good' : 'muted' },
+    { label: 'Full access enabled', icon: 'ti-shield-check', state: subscriptionAllowsCompany(companyId) ? 'good' : 'muted' },
+  ];
+}
+
+function dayPart() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+}
+
+function firstName(value) {
+  return String(value || '').trim().split(/\s+/)[0] || '';
 }
 
 function renderAnalyticsPage(route, companyId) {
@@ -7510,7 +7666,7 @@ function getRoute() {
   if (path === '/command') return { name: 'command', path, params, section: 'dashboard', companyId: activeCompanyId(), jobId: params.get('job_id') || '' };
   const companyMatch = path.match(/^\/company\/([^/]+)(?:\/([^/]+))?\/?$/);
   if (companyMatch) {
-    const section = companyMatch[2] || 'jobs';
+    const section = companyMatch[2] || 'home';
     return {
       name: 'company',
       path,
@@ -7530,7 +7686,7 @@ function normalizeLegacyLocation() {
   const map = Object.fromEntries(Object.entries(LEGACY_ROUTE_SECTIONS).map(([legacyPath, section]) => [legacyPath, companyPath(section, {}, companyId)]));
   Object.assign(map, {
     '/index.html': '/',
-    '/command.html': companyPath('jobs', {}, companyId),
+    '/command.html': companyPath('home', {}, companyId),
     '/login.html': '/login',
   });
 
@@ -7572,6 +7728,9 @@ function normalizeLegacyLocation() {
 
 function routeRedirect(route) {
   if (route.name !== 'company') return '';
+  if (route.section === 'home' && /^\/company\/[^/]+\/?$/.test(route.path)) {
+    return companyPath('home', {}, route.companyId);
+  }
   const allowed = allowedCompanyIds();
   if (state.session?.auth === 'supabase' && !allowed.length) return null;
   if (!allowed.includes(route.companyId)) {
@@ -7579,7 +7738,7 @@ function routeRedirect(route) {
     return companyPath(route.section || 'jobs', Object.fromEntries(route.params.entries()), allowed[0] || defaultCompanyId());
   }
   const validSections = MODULE_REGISTRY.map((module) => module.id);
-  if (!validSections.includes(route.section)) return companyPath('jobs', {}, route.companyId);
+  if (!validSections.includes(route.section)) return companyPath('home', {}, route.companyId);
   const jobCompanyId = route.jobId ? companyIdForJob(route.jobId) : '';
   if (jobCompanyId && jobCompanyId !== route.companyId && allowed.includes(jobCompanyId)) {
     return companyPath(route.section, Object.fromEntries(route.params.entries()), jobCompanyId);
