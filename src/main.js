@@ -33,6 +33,7 @@ const COMPANY_KEY = 'quest-hq-active-company';
 const PENDING_WORKSPACE_REVIEW_KEY = 'quest-hq-pending-workspace-review-v1';
 const TASK_VIEW_KEY = 'quest-hq-task-view';
 const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
+const SIDEBAR_COLLAPSED_KEY = 'quest-hq-sidebar-collapsed';
 const NOTIFICATION_CACHE_KEY = 'quest-hq-notification-cache-v1';
 const MESSAGE_CONVERSATION_CACHE_KEY = 'quest-hq-message-conversation-cache-v1';
 const MESSAGE_ACCESS_CACHE_KEY = 'quest-hq-message-access-cache-v1';
@@ -113,6 +114,15 @@ const MODULE_REGISTRY = [
   { id: 'approvals', group: 'Operations', label: 'Approvals', icon: 'ti-user-check', symbol: 'q-symbol-approvals', status: 'live', permission: 'approvals.view' },
   { id: 'team-workload', group: 'Operations', label: 'Team workload', icon: 'ti-users', symbol: 'q-symbol-team-workload', status: 'planned' },
   { id: 'clock', group: 'Operations', label: 'Clock dashboard', icon: 'ti-clock-hour-4', symbol: 'q-symbol-clock', status: 'live', permission: 'clock.manage' },
+];
+
+const NAV_GROUPS = [
+  { label: 'Command', ids: ['home', 'messages', 'calendar'] },
+  { label: 'Work', ids: ['jobs', 'tasks', 'files', 'forms', 'crm'] },
+  { label: 'Money', ids: ['finance', 'analytics'] },
+  { label: 'People', ids: ['users', 'team-chart', 'time', 'approvals', 'clock'] },
+  { label: 'Control', ids: ['settings'] },
+  { label: 'Future', ids: ['tickets', 'knowledge', 'automations', 'templates', 'team-workload'] },
 ];
 
 const LEGACY_ROUTE_SECTIONS = {
@@ -1013,6 +1023,7 @@ const state = {
   auditEvents: [],
   companies: mergeCompanies(companiesFallback.map(normalizeCompany)),
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
+  sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
   selectedJobId: '',
   selectedTaskId: '',
   selectedFileId: '',
@@ -1666,7 +1677,7 @@ function shellTemplate(route, workspace) {
   const companyId = activeCompanyId();
   const emailVerified = isSessionEmailVerified(session);
   return `
-    <div class="quest-app" data-route="${h(route.name)}">
+    <div class="quest-app ${state.sidebarCollapsed ? 'sidebar-collapsed' : ''}" data-route="${h(route.name)}">
       ${renderSvgSprite()}
       <header class="topbar">
         <div class="topbar-left">
@@ -1778,12 +1789,16 @@ function renderRolePreviewBanner(companyId) {
 function renderDeck(route) {
   const companyId = activeCompanyId();
   const session = activeSession();
+  const modulesById = new Map(MODULE_REGISTRY.map((module) => [module.id, module]));
   return `
     <div class="deck-brand">
       <a class="logo" href="${appHref(companyPath('home', {}, companyId))}" data-router aria-label="Quest HQ home">
         ${svgIcon('q-logo', 'brand-symbol')}
       </a>
       <span><strong>Quest HQ</strong><small>Command Center</small></span>
+      <button class="deck-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}" aria-expanded="${state.sidebarCollapsed ? 'false' : 'true'}">
+        <i class="ti ${state.sidebarCollapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-left-collapse'}"></i>
+      </button>
     </div>
     <div class="company-card">
       <span class="company-card-symbol" style="--company-accent:${h(companyColor(companyId))}">${svgIcon('q-company')}</span>
@@ -1792,14 +1807,17 @@ function renderDeck(route) {
         <small>${h(roleForCompany(companyId))} workspace</small>
       </div>
     </div>
-    ${['Workspace', 'Company', 'Operations'].map((group) => navGroup(
-      group,
-      MODULE_REGISTRY
-        .filter((module) => module.group === group && canViewModule(module, companyId))
-        .map((module) => module.status === 'planned'
-          ? plannedNavItem(module.symbol, module.label)
-          : navItem(route, companyPath(module.id, {}, companyId), module.symbol, module.label, moduleBadgeCount(module.id, companyId))),
-    )).join('')}
+    <div class="deck-scroll">
+      ${NAV_GROUPS.map((group) => {
+        const items = group.ids
+          .map((id) => modulesById.get(id))
+          .filter((module) => module && canViewModule(module, companyId))
+          .map((module) => module.status === 'planned'
+            ? plannedNavItem(module.symbol, module.label)
+            : navItem(route, companyPath(module.id, {}, companyId), module.symbol, module.label, moduleBadgeCount(module.id, companyId)));
+        return navGroup(group.label, items);
+      }).join('')}
+    </div>
     <div class="deck-footer">
       <a class="deck-company-switch" href="${appHref(companyPath('settings', { tab: 'company' }, companyId))}" data-router>
         ${svgIcon('q-company')}
@@ -1816,6 +1834,7 @@ function renderDeck(route) {
 }
 
 function navGroup(label, items) {
+  if (!items.length) return '';
   return `
     <section class="side-group">
       <div class="side-label">${h(label)}</div>
@@ -1827,7 +1846,7 @@ function navGroup(label, items) {
 function navItem(route, path, symbol, label, count = '') {
   const active = isActiveNav(route, path);
   return `
-    <a class="side-item ${active ? 'active' : ''}" href="${appHref(path)}" data-router>
+    <a class="side-item ${active ? 'active' : ''}" href="${appHref(path)}" data-router title="${h(label)}" aria-label="${h(label)}">
       ${svgIcon(symbol)}
       <span>${h(label)}</span>
       ${count !== '' ? `<b>${h(String(count))}</b>` : ''}
@@ -1837,7 +1856,7 @@ function navItem(route, path, symbol, label, count = '') {
 
 function plannedNavItem(symbol, label) {
   return `
-    <button class="side-item planned" type="button" disabled aria-disabled="true">
+    <button class="side-item planned" type="button" disabled aria-disabled="true" title="${h(label)}" aria-label="${h(label)}">
       ${svgIcon(symbol)}
       <span>${h(label)}</span>
       <b>Planned</b>
@@ -5329,6 +5348,13 @@ function handleAction(event, node) {
     event.preventDefault();
     state.notificationMenuOpen = !state.notificationMenuOpen;
     state.accountMenuOpen = false;
+    render();
+    return;
+  }
+  if (action === 'toggle-sidebar') {
+    event.preventDefault();
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(state.sidebarCollapsed));
     render();
     return;
   }
