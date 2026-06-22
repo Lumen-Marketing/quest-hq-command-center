@@ -184,7 +184,7 @@
       ${Er()}
       <header class="topbar">
         <div class="topbar-left">
-          <a class="logo" href="${_(m("jobs",{},i))}" data-router aria-label="Quest HQ workspace">
+          <a class="logo" href="${_(m("home",{},i))}" data-router aria-label="Quest HQ workspace">
             ${Y("q-logo","brand-symbol")}
           </a>
           <div>

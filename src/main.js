@@ -1681,7 +1681,7 @@ function shellTemplate(route, workspace) {
       ${renderSvgSprite()}
       <header class="topbar">
         <div class="topbar-left">
-          <a class="logo" href="${appHref(companyPath('jobs', {}, companyId))}" data-router aria-label="Quest HQ workspace">
+          <a class="logo" href="${appHref(companyPath('home', {}, companyId))}" data-router aria-label="Quest HQ workspace">
             ${svgIcon('q-logo', 'brand-symbol')}
           </a>
           <div>
