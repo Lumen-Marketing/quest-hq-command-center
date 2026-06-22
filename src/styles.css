@@ -10409,9 +10409,9 @@ body {
   position: relative;
   min-height: 38px;
   display: grid;
-  grid-template-columns: 25px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) max-content;
   align-items: center;
-  gap: 9px;
+  column-gap: 8px;
   border: 1px solid transparent;
   border-radius: 10px;
   color: var(--ink-2);
@@ -10439,7 +10439,15 @@ body {
   color: #647084;
 }
 
+.side-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .side-item b {
+  justify-self: end;
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
@@ -10449,6 +10457,8 @@ body {
   font-weight: 950;
   line-height: 20px;
   text-align: center;
+  white-space: nowrap;
+  z-index: 1;
 }
 
 .side-item:hover,
