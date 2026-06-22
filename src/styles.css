@@ -8875,7 +8875,7 @@ button.side-item.planned b {
 .landing-console {
   position: relative;
   display: grid;
-  grid-template-columns: 118px minmax(0, 1fr);
+  grid-template-columns: 152px minmax(0, 1fr);
   min-height: 560px;
   border: 1px solid #e5e8ed;
   border-radius: 12px;
@@ -11117,10 +11117,6 @@ textarea:focus {
   border-radius: 14px;
   background: #fff;
   box-shadow: var(--soft-shadow);
-}
-
-.landing-console {
-  grid-template-columns: 152px minmax(0, 1fr);
 }
 
 .landing-console-rail {
