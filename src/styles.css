@@ -12296,3 +12296,19 @@ button {
 .company-card-symbol { width: 34px; height: 34px; }
 .deck-company-switch,
 .deck-user-card { min-height: 42px; }
+
+/* Fix mobile topbar: it went light but kept dark-era white text/icons
+   (white-on-white = invisible controls on phones). Force ink + light chrome. */
+.topbar { color: var(--ink); }
+.topbar .company-switch,
+.topbar .company-switch select,
+.topbar .account-menu,
+.topbar .avatar-button { color: var(--ink); }
+.topbar .icon-button { color: var(--ink-2); }
+.topbar .company-switch .symbol-icon,
+.topbar .icon-button .symbol-icon { color: var(--ink-2); }
+.topbar .company-switch,
+.topbar .icon-button {
+  border-color: var(--border);
+  background: var(--surface);
+}
