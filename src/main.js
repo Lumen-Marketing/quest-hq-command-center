@@ -7,8 +7,8 @@ const CONFIG = {
   localLoginEnabled: import.meta.env.VITE_LOCAL_LOGIN_ENABLED === 'true',
   localUsername: import.meta.env.VITE_LOCAL_LOGIN_USERNAME || 'lumen123',
   localPassword: import.meta.env.VITE_LOCAL_LOGIN_PASSWORD || 'lumen123',
-  supabaseUrl: import.meta.env.VITE_SUPABASE_URL || 'https://lpzotcznihwyyudxycmd.supabase.co',
-  supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07',
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL || 'https://rqundirizvojpzhljtdn.supabase.co',
+  supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U',
   stripePriceId: import.meta.env.VITE_STRIPE_PRICE_ID || '',
 };
 
@@ -1087,6 +1087,7 @@ const state = {
   authMode: 'signin',
   jobs: readSeededList(JOB_CACHE_KEY, jobsFallback).map(normalizeJob),
   contacts: readSeededList(CONTACT_CACHE_KEY, contactsFallback).map(normalizeContact),
+  pipelineStages: [],
   tasks: readSeededList(TASK_CACHE_KEY, tasksFallback).map(normalizeTask),
   files: readSeededList(FILE_CACHE_KEY, filesFallback).map(normalizeFile),
   driveFolders: readSeededList(DRIVE_FOLDER_CACHE_KEY, []).map(normalizeDriveFolder),
@@ -1421,6 +1422,8 @@ async function loadSupabaseData() {
     financePaymentsResult,
     financeExpensesResult,
     financeVendorsResult,
+    contactsResult,
+    pipelineStagesResult,
   ] = await Promise.all([
     client.from('companies').select('*').order('name', { ascending: true }),
     client.from('jobs').select('*').order('updated_at', { ascending: false }),
@@ -1449,6 +1452,8 @@ async function loadSupabaseData() {
     client.from('finance_payments').select('*').order('received_at', { ascending: false }),
     client.from('finance_expenses').select('*').order('spent_at', { ascending: false }),
     client.from('finance_vendors').select('*').order('name', { ascending: true }),
+    client.from('contacts').select('*').order('updated_at', { ascending: false }),
+    client.from('pipeline_stages').select('*').order('position', { ascending: true }),
   ]);
 
   let liveTables = 0;
@@ -1509,6 +1514,14 @@ async function loadSupabaseData() {
   if (!financePaymentsResult.error) state.financePayments = (financePaymentsResult.data || []).map(normalizeFinancePayment);
   if (!financeExpensesResult.error) state.financeExpenses = (financeExpensesResult.data || []).map(normalizeFinanceExpense);
   if (!financeVendorsResult.error) state.financeVendors = (financeVendorsResult.data || []).map(normalizeFinanceVendor);
+  if (!contactsResult.error) {
+    state.contacts = (contactsResult.data || []).map(normalizeContact);
+    liveTables += 1;
+  }
+  if (!pipelineStagesResult.error) {
+    state.pipelineStages = pipelineStagesResult.data || [];
+    applyPipelineStagesForCompany(activeCompanyId());
+  }
 
   if (isQuestDeveloper()) {
     const reviewsResult = await client.rpc('list_workspace_reviews').catch((error) => ({ error }));
@@ -2669,11 +2682,40 @@ function blankContact(companyId = activeCompanyId()) {
   return normalizeContact({ id: '', company_id: companyId, name: '', stage: contactStageNames()[0], value: 0 });
 }
 
-function saveContact(form) {
+async function saveContact(form) {
   const formData = Object.fromEntries(new FormData(form).entries());
   const payload = normalizeContact(formData);
   payload.id = payload.id || `contact-${crypto.randomUUID()}`;
   payload.updated_at = new Date().toISOString();
+  const client = createSupabaseClient();
+  if (client) {
+    const record = {
+      id: payload.id,
+      company_id: payload.company_id,
+      name: payload.name,
+      phone: payload.phone,
+      email: payload.email,
+      location: payload.location,
+      stage: payload.stage,
+      value: payload.value,
+      owner_name: payload.owner_name,
+      notes: payload.notes,
+      updated_at: payload.updated_at,
+    };
+    try {
+      const result = await client.from('contacts').upsert(record).select().single();
+      if (!result.error && result.data) {
+        upsertContact(normalizeContact(result.data));
+        state.selectedContactId = payload.id;
+        state.modal = '';
+        showToast(`${payload.name} saved.`, 'live', 'Contacts');
+        render();
+        return;
+      }
+    } catch (error) {
+      console.warn('Contact save sync failed', error);
+    }
+  }
   upsertContact(payload);
   state.selectedContactId = payload.id;
   state.modal = '';
@@ -2681,8 +2723,16 @@ function saveContact(form) {
   render();
 }
 
-function deleteContact(id) {
+async function deleteContact(id) {
   if (!id) return;
+  const client = createSupabaseClient();
+  if (client) {
+    try {
+      await client.from('contacts').delete().eq('id', id);
+    } catch (error) {
+      console.warn('Contact delete sync failed', error);
+    }
+  }
   state.contacts = state.contacts.filter((contact) => contact.id !== id);
   persistContacts();
   if (state.selectedContactId === id) state.selectedContactId = '';
@@ -2752,6 +2802,7 @@ function addPipelineStage(kind) {
   list.push({ name: `New stage ${list.length + 1}`, color });
   if (kind === 'contacts') persistContactStages();
   else persistJobStages();
+  syncPipelineStagesToSupabase(kind);
   render();
 }
 
@@ -2765,7 +2816,43 @@ function deletePipelineStage(kind, index) {
   if (Number.isInteger(index) && index >= 0 && index < list.length) list.splice(index, 1);
   if (kind === 'contacts') persistContactStages();
   else persistJobStages();
+  syncPipelineStagesToSupabase(kind);
   render();
+}
+
+// Reflect the active company's Supabase pipeline stages into the in-memory
+// JOB_STAGES / CONTACT_STAGES the rest of the UI reads from.
+function applyPipelineStagesForCompany(companyId) {
+  if (!Array.isArray(state.pipelineStages) || !state.pipelineStages.length) return;
+  const forKind = (kind, fallback) => {
+    const rows = state.pipelineStages
+      .filter((row) => row.company_id === companyId && row.kind === kind)
+      .slice()
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+      .map((row) => ({ name: String(row.name || '').trim(), color: /^#[0-9a-fA-F]{3,8}$/.test(String(row.color || '')) ? row.color : '#9aa0a8' }))
+      .filter((row) => row.name);
+    return rows.length ? rows : fallback.map((stage) => ({ ...stage }));
+  };
+  JOB_STAGES = forKind('jobs', DEFAULT_JOB_STAGES);
+  CONTACT_STAGES = forKind('contacts', DEFAULT_CONTACT_STAGES);
+}
+
+// Replace the active company's stage set for a kind in Supabase (delete + insert).
+async function syncPipelineStagesToSupabase(kind) {
+  const client = createSupabaseClient();
+  if (!client) return;
+  const companyId = activeCompanyId();
+  const list = kind === 'contacts' ? CONTACT_STAGES : JOB_STAGES;
+  const rows = list.map((stage, index) => ({ company_id: companyId, kind, name: stage.name, color: stage.color, position: index }));
+  try {
+    await client.from('pipeline_stages').delete().eq('company_id', companyId).eq('kind', kind);
+    if (rows.length) await client.from('pipeline_stages').insert(rows);
+    state.pipelineStages = (Array.isArray(state.pipelineStages) ? state.pipelineStages : [])
+      .filter((row) => !(row.company_id === companyId && row.kind === kind))
+      .concat(rows);
+  } catch (error) {
+    console.warn('Pipeline stage sync failed', error);
+  }
 }
 
 function saveStageEdits(form) {
@@ -2796,9 +2883,27 @@ function saveStageEdits(form) {
     writeJson(JOB_CACHE_KEY, state.jobs);
     if (state.stageFilter !== 'all' && !validNames.has(state.stageFilter)) state.stageFilter = 'all';
   }
+  syncPipelineStagesToSupabase(kind);
+  syncStageRenamesToSupabase(kind, renameMap);
   state.modal = '';
   showToast('Pipeline stages updated.', 'local', 'Stages');
   render();
+}
+
+// Best-effort: carry stage renames onto the existing records in Supabase so
+// jobs/contacts keep their place after a stage is renamed.
+async function syncStageRenamesToSupabase(kind, renameMap) {
+  const client = createSupabaseClient();
+  if (!client || !renameMap || !Object.keys(renameMap).length) return;
+  const companyId = activeCompanyId();
+  const table = kind === 'contacts' ? 'contacts' : 'jobs';
+  for (const [oldName, newName] of Object.entries(renameMap)) {
+    try {
+      await client.from(table).update({ stage: newName }).eq('company_id', companyId).eq('stage', oldName);
+    } catch (error) {
+      console.warn('Stage rename sync failed', error);
+    }
+  }
 }
 
 function renderJobsPage(route, companyId) {
@@ -8641,6 +8746,7 @@ function reconcileCompany(route) {
   const allowed = allowedCompanyIds();
   state.activeCompanyId = allowed.includes(target) ? target : allowed[0] || defaultCompanyId();
   localStorage.setItem(COMPANY_KEY, state.activeCompanyId);
+  applyPipelineStagesForCompany(state.activeCompanyId);
 }
 
 function reconcileSelection(route) {
@@ -8661,6 +8767,7 @@ function setActiveCompany(companyId) {
   const next = allowed.includes(target) ? target : allowed[0] || defaultCompanyId();
   state.activeCompanyId = next;
   localStorage.setItem(COMPANY_KEY, next);
+  applyPipelineStagesForCompany(next);
   resetScopedUiState();
   const route = state.route || getRoute();
   const section = route.name === 'company' ? route.section : 'jobs';
