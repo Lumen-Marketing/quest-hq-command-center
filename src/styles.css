@@ -12148,3 +12148,120 @@ textarea:focus {
 .contract-rows div:last-child { border-bottom: 0; }
 .contract-rows span { color: var(--muted); font-size: 12.5px; }
 .contract-rows strong { font-size: 13.5px; font-weight: 750; }
+
+/* ===========================================================================
+   COMMAND CENTER FIDELITY — typography (Inter + JetBrains Mono) + single
+   orange accent, matching the Quest Command Center reference. Appended last so
+   it wins the cascade. Purely visual: no layout/behaviour changes.
+   =========================================================================== */
+:root {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --accent-soft: rgba(237, 78, 13, .09);
+  --accent-soft-border: rgba(237, 78, 13, .34);
+  /* deeper neutral canvas so white cards separate like the reference */
+  --bg: #e8ebef;
+}
+
+/* Base typeface → Inter everywhere (form controls don't inherit by default) */
+body,
+.quest-app,
+input,
+select,
+textarea,
+button {
+  font-family: var(--font-sans);
+}
+
+/* Greyer content field so white panels read as floating cards */
+.work-surface { background: #f1f3f7; }
+
+/* Monospace "data voice" for eyebrows, labels, counts and figures */
+.side-label,
+.deck-brand small,
+.context-line,
+.metric span,
+.metric strong,
+.data-table .table-head,
+.data-table .table-head span,
+.side-sub-ct,
+.side-item b,
+.kicker,
+.eyebrow {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1, "cv01" 1;
+}
+.side-label { letter-spacing: .1em; }
+.metric span { letter-spacing: .06em; }
+.deck-brand small { letter-spacing: .14em; text-transform: uppercase; font-weight: 500; }
+
+/* Brand mark → solid orange tile with a white symbol (reference) */
+.deck-brand .logo,
+.logo,
+.side-mark {
+  background: var(--orange);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(237, 78, 13, .32);
+}
+
+/* Sidebar count badge → orange, not amber */
+.side-item b {
+  background: var(--orange);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Active / selected states → cool orange-soft instead of warm cream */
+.side-item.active,
+.side-pipe.expanded > .side-pipe-head .side-item.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+  color: var(--orange);
+}
+.side-item.active .symbol-icon { color: var(--orange); }
+.side-sub-link.active { background: var(--accent-soft); color: var(--orange); }
+.data-table .table-row.active { background: var(--accent-soft); box-shadow: inset 3px 0 var(--orange); }
+.data-table .table-row:hover { background: var(--surface-2); }
+.tabbar a:hover,
+.tabbar button:hover { background: var(--surface-2); }
+
+/* Segmented view toggle (Board/List) active segment → orange-soft */
+.segmented button.active,
+.segmented .active {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+  color: var(--orange);
+}
+
+/* Inline emphasis chip in page-head eyebrow → orange-soft, not warm cream */
+.context-line b {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+  color: var(--orange);
+}
+
+/* Pipeline filter chips → orange-soft, drop the warm tan border */
+.pipe-chip.on {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+  color: var(--orange);
+}
+
+/* Page-head icon tile → orange-soft + orange mark, drop amber */
+.head-symbol {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+  color: var(--orange);
+}
+.head-symbol .symbol-icon { color: var(--orange); }
+
+/* Home dashboard count/role badges → cool neutral chips, drop warm cream */
+.home-shortcut b,
+.home-message-row b,
+.home-team-row b {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+/* "Warning" metric emphasis → orange accent (the "good" one stays green) */
+.home-metric-card.warning strong { color: var(--orange); }
