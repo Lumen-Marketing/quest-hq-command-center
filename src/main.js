@@ -190,6 +190,7 @@ const DEFAULT_DEAL_STAGES = [
   { name: 'Lost', color: '#E24B4A' },
 ];
 const STAGE_COLOR_PALETTE = ['#9AA0A8', '#378ADD', '#BA7517', '#7F77DD', '#639922', '#E24B4A', '#3C7BD0', '#C08A2B', '#5AB0A6', '#C4C7CC'];
+const TEMPERATURES = ['Hot', 'Warm', 'Cold'];
 // Maps the previous fixed job stage names onto the new default job stages so
 // existing job records still land in a real lane after the rework.
 const LEGACY_JOB_STAGE_MAP = {
@@ -2708,6 +2709,11 @@ function pipelineToolbar(kind, companyId) {
 
 // ---- Contacts (sales pipeline) --------------------------------------------
 function renderContactsPage(route, companyId) {
+  const contactId = route.params.get('contact_id');
+  if (contactId) {
+    const contact = contactById(contactId);
+    if (contact && contact.company_id === companyId) return renderContactRecord(companyId, contact);
+  }
   const stageParam = route.params.get('stage');
   if (stageParam) state.contactStageFilter = contactStageNames().includes(stageParam) ? stageParam : 'all';
   return `
@@ -2728,7 +2734,7 @@ function renderContactTable(companyId) {
       <div class="data-table contacts-table">
         <div class="table-head"><span>Client</span><span>Phone</span><span>Email</span><span>Location</span><span>Stage</span><span>Value</span></div>
         ${rows.map((contact) => `
-          <button class="table-row ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}">
+          <button class="table-row ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact" data-contact-id="${h(contact.id)}">
             <span class="cell-lead">${pipelineDot(contactStageColor(contact.stage))}<span><strong>${h(contact.name)}</strong><small>${h(contact.owner_name || 'Unassigned')}</small></span></span>
             <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">—</span>'}</span>
             <span>${contact.email ? h(contact.email) : '<span class="muted-dash">—</span>'}</span>
@@ -2765,12 +2771,198 @@ function renderContactBoard(companyId) {
 
 function contactCard(contact) {
   return `
-    <button class="pipe-card ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}">
+    <button class="pipe-card ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact" data-contact-id="${h(contact.id)}">
       <strong>${h(contact.name)}</strong>
       <span>${h(contact.location || contact.phone || contact.email || 'No details')}</span>
       <em>${contact.value ? money(contact.value) : '—'}</em>
     </button>
   `;
+}
+
+function renderContactRecord(companyId, contact) {
+  const account = contact.account_id ? accountById(contact.account_id) : null;
+  const initials = contact.name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
+  const tasks = tasksForContact(contact.id);
+  return `
+    ${workspaceHeader(contact.name, `Contacts · ${contact.stage}`, `
+      <a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-arrow-left"></i>Contacts</a>
+      ${contact.phone ? `<a class="btn" href="tel:${h(contact.phone)}"><i class="ti ti-phone"></i>Call</a>` : ''}
+      ${contact.email ? `<a class="btn" href="mailto:${h(contact.email)}"><i class="ti ti-mail"></i>Email</a>` : ''}
+      <button class="btn" type="button" data-action="open-activity-form" data-related-type="contact" data-related-id="${h(contact.id)}" data-account-id="${h(contact.account_id || '')}"><i class="ti ti-note"></i>Log activity</button>
+      <button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit</button>
+    `)}
+    <section class="contact-record">
+      <header class="contact-hero panel">
+        <span class="contact-avatar">${h(initials)}</span>
+        <div class="contact-hero-id">
+          <strong>${h(contact.name)}</strong>
+          <span>${h(contact.location || '—')}</span>
+        </div>
+        <div class="contact-hero-stats">
+          <div><label>Value</label><b class="money">${contact.value ? money(contact.value) : '—'}</b></div>
+          <div><label>Stage</label><b>${stageTagPipe('contacts', contact.stage)}</b></div>
+          <div><label>Owner</label><b>${h(contact.owner_name || 'Unassigned')}</b></div>
+        </div>
+      </header>
+
+      <article class="panel">
+        <div class="section-head"><div><h2>Pipeline</h2></div></div>
+        ${contactFunnel(contact)}
+      </article>
+
+      <div class="contact-info-grid">
+        <article class="panel">
+          <div class="section-head"><div><h2>Contact</h2></div></div>
+          ${contractRows([
+            ['Phone', contact.phone || '—'],
+            ['Email', contact.email || '—'],
+            ['Location', contact.location || '—'],
+            ['Account', account ? account.name : '—'],
+          ])}
+        </article>
+        <article class="panel">
+          <div class="section-head"><div><h2>Qualification</h2></div></div>
+          ${contractRows([
+            ['Owner', contact.owner_name || 'Unassigned'],
+            ['Source', contact.source || '—'],
+          ])}
+          <div class="contact-temp">
+            <span class="field-eyebrow">Set temperature</span>
+            <div class="temp-pills">
+              ${TEMPERATURES.map((t) => `<button class="temp-pill temp-${t.toLowerCase()} ${contact.temperature === t ? 'on' : ''}" type="button" data-action="set-contact-temp" data-contact-id="${h(contact.id)}" data-temp="${t}">${t}</button>`).join('')}
+            </div>
+          </div>
+        </article>
+        <article class="panel">
+          <div class="section-head"><div><h2>Project</h2></div></div>
+          ${contractRows([
+            ['Type', contact.title || '—'],
+            ['Est. value', contact.value ? money(contact.value) : '—'],
+          ])}
+          ${contact.notes ? `<p class="crm-notes">${h(contact.notes)}</p>` : ''}
+        </article>
+      </div>
+
+      <div class="contact-lower-grid">
+        <article class="panel">
+          <div class="section-head"><div><h2>Activity</h2></div><button class="btn" type="button" data-action="open-activity-form" data-related-type="contact" data-related-id="${h(contact.id)}" data-account-id="${h(contact.account_id || '')}"><i class="ti ti-plus"></i>Log</button></div>
+          ${renderActivityTimeline('contact', contact.id, contact.account_id)}
+        </article>
+        <article class="panel">
+          <div class="section-head"><div><h2>Open tasks</h2></div></div>
+          <ul class="contact-tasks">
+            ${tasks.map((task) => `
+              <li class="contact-task ${task.status === 'done' ? 'done' : ''}">
+                <button class="task-check ${task.status === 'done' ? 'on' : ''}" type="button" data-action="toggle-contact-task" data-task-id="${h(task.id)}" aria-label="Toggle task done">${task.status === 'done' ? '<i class="ti ti-check"></i>' : ''}</button>
+                <span class="task-title">${h(task.title)}</span>
+                ${task.due ? `<span class="task-due">${h(formatDate(task.due))}</span>` : ''}
+              </li>`).join('') || '<li class="contact-task-empty">No tasks yet.</li>'}
+          </ul>
+          <form class="contact-task-add" data-contact-task-form autocomplete="off">
+            <input type="hidden" name="contact_id" value="${h(contact.id)}" />
+            <i class="ti ti-plus"></i>
+            <input type="text" name="title" placeholder="Add a task…" aria-label="Add a task" />
+          </form>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function contactFunnel(contact) {
+  const stages = contactStages();
+  const ci = stages.findIndex((s) => s.name === contact.stage);
+  return `
+    <div class="contact-funnel">
+      ${stages.map((stage, i) => {
+        const done = i < ci;
+        const cur = i === ci;
+        return `
+          <button class="funnel-step ${done ? 'done' : ''} ${cur ? 'current' : ''}" type="button" data-action="set-contact-stage" data-contact-id="${h(contact.id)}" data-stage="${h(stage.name)}" title="${h(stage.name)}">
+            <span class="funnel-line" style="${i <= ci ? `background:${h(stage.color)}` : ''}"></span>
+            <span class="funnel-dot" style="${(done || cur) ? `background:${h(stage.color)};border-color:${h(stage.color)}` : ''}"></span>
+            <span class="funnel-name">${h(stage.name)}</span>
+          </button>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function tasksForContact(contactId) {
+  return companyTasks().filter((task) => task.contact_id === contactId)
+    .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || String(a.due).localeCompare(String(b.due)));
+}
+
+async function persistContact(contact) {
+  const payload = { ...contact, updated_at: new Date().toISOString() };
+  upsertContact(payload);
+  render();
+  const client = createSupabaseClient();
+  if (client) {
+    try {
+      const record = emptyToNull(supabaseRow(payload, CONTACT_COLS), ['account_id']);
+      const result = await client.from('contacts').upsert(record).select().single();
+      if (!result.error && result.data) {
+        upsertContact(normalizeContact(result.data));
+        render();
+      }
+    } catch (error) {
+      console.warn('Contact update sync failed', error);
+    }
+  }
+}
+
+async function setContactStage(contactId, stage) {
+  const contact = contactById(contactId);
+  if (!contact || !stage || contact.stage === stage) return;
+  await persistContact({ ...contact, stage });
+  await logActivity({ type: 'stage_change', subject: `Stage → ${stage}`, related_type: 'contact', related_id: contactId, account_id: contact.account_id });
+  render();
+}
+
+function setContactTemperature(contactId, temp) {
+  const contact = contactById(contactId);
+  if (!contact || contact.temperature === temp) return;
+  persistContact({ ...contact, temperature: resolveTemperature(temp) });
+}
+
+async function addContactTask(form) {
+  const companyId = activeCompanyId();
+  const data = Object.fromEntries(new FormData(form).entries());
+  const title = String(data.title || '').trim();
+  if (!title) return;
+  const payload = normalizeTask({
+    id: `task-${crypto.randomUUID()}`,
+    company_id: companyId,
+    title,
+    contact_id: String(data.contact_id || ''),
+    creator_id: activeSession().profile.member_id || companyMembers(companyId)[0]?.id || 'abraham',
+    status: 'todo',
+    due: isoDate(1),
+  });
+  upsertTask(payload);
+  render();
+  const client = createSupabaseClient();
+  if (client) {
+    try {
+      const result = await client.from('tasks').insert(taskPayload(payload)).select().single();
+      if (!result.error && result.data) { upsertTask(normalizeTask(result.data)); render(); }
+    } catch (error) {
+      console.warn('Contact task sync failed', error);
+    }
+  }
+}
+
+async function toggleContactTask(taskId) {
+  const task = taskById(taskId);
+  if (!task) return;
+  const status = task.status === 'done' ? 'todo' : 'done';
+  upsertTask({ ...task, status, updated_at: new Date().toISOString() });
+  render();
+  const client = createSupabaseClient();
+  if (client) {
+    try { await client.from('tasks').update({ status }).eq('id', taskId); } catch (error) { console.warn('Task toggle sync failed', error); }
+  }
 }
 
 function renderContactFormModal(companyId, contact) {
@@ -6972,6 +7164,27 @@ function handleAction(event, node) {
     navigate(companyPath('deals', { deal_id: node.dataset.dealId }, activeCompanyId()));
     return;
   }
+  if (action === 'open-contact') {
+    event.preventDefault();
+    state.selectedContactId = node.dataset.contactId || '';
+    navigate(companyPath('contacts', { contact_id: node.dataset.contactId }, activeCompanyId()));
+    return;
+  }
+  if (action === 'set-contact-stage') {
+    event.preventDefault();
+    setContactStage(node.dataset.contactId, node.dataset.stage);
+    return;
+  }
+  if (action === 'set-contact-temp') {
+    event.preventDefault();
+    setContactTemperature(node.dataset.contactId, node.dataset.temp);
+    return;
+  }
+  if (action === 'toggle-contact-task') {
+    event.preventDefault();
+    toggleContactTask(node.dataset.taskId);
+    return;
+  }
   if (action === 'convert-deal') {
     event.preventDefault();
     convertDealToJob(node.dataset.dealId);
@@ -7406,6 +7619,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-contact-form]')) {
     event.preventDefault();
     saveContact(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-contact-task-form]')) {
+    event.preventDefault();
+    addContactTask(event.target);
     return;
   }
 
@@ -10176,7 +10395,7 @@ async function supabaseDelete(table, id) {
 const ACCOUNT_COLS = ['id', 'company_id', 'name', 'type', 'industry', 'website', 'phone', 'email', 'address', 'owner_name', 'status', 'notes', 'updated_at'];
 const DEAL_COLS = ['id', 'company_id', 'account_id', 'primary_contact_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'notes', 'updated_at'];
 const ACTIVITY_COLS = ['id', 'company_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
-const CONTACT_COLS = ['id', 'company_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'last_activity_at', 'notes', 'updated_at'];
+const CONTACT_COLS = ['id', 'company_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'last_activity_at', 'notes', 'updated_at'];
 
 function emptyToNull(row, keys) {
   keys.forEach((key) => { if (row[key] === '') row[key] = null; });
@@ -10957,11 +11176,17 @@ function normalizeContact(input) {
     account_id: input.account_id ? String(input.account_id) : '',
     title: String(input.title || '').trim(),
     source: String(input.source || '').trim(),
+    temperature: resolveTemperature(input.temperature),
     last_activity_at: input.last_activity_at || null,
     notes: String(input.notes || '').trim(),
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || new Date().toISOString(),
   };
+}
+
+function resolveTemperature(value) {
+  const v = String(value || '').trim();
+  return TEMPERATURES.includes(v) ? v : 'Warm';
 }
 
 function normalizeAccount(input) {
@@ -11037,6 +11262,7 @@ function normalizeTask(input) {
     creator_id: String(input.creator_id || 'abraham'),
     assignee_id: String(input.assignee_id || input.creator_id || 'abraham'),
     project_id: String(input.project_id || ''),
+    contact_id: String(input.contact_id || ''),
     due: String(input.due || isoDate(1)).slice(0, 10),
     due_time: input.due_time || null,
     reminder_at: input.reminder_at || null,
@@ -11626,6 +11852,7 @@ function taskPayload(task) {
     creator_id: task.creator_id,
     assignee_id: task.assignee_id,
     project_id: task.project_id || null,
+    contact_id: task.contact_id || null,
     due: task.due,
     due_time: task.due_time,
     reminder_at: task.reminder_at,
