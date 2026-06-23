@@ -16,6 +16,9 @@ const BASE_PATH = new URL(import.meta.env.BASE_URL || '/', window.location.origi
 const SESSION_KEY = 'quest-hq-local-session';
 const PROFILE_KEY = 'quest-hq-local-profile';
 const JOB_CACHE_KEY = 'quest-hq-job-cache-v2';
+const CONTACT_CACHE_KEY = 'quest-hq-contact-cache-v1';
+const JOB_STAGES_KEY = 'quest-hq-job-stages-v1';
+const CONTACT_STAGES_KEY = 'quest-hq-contact-stages-v1';
 const TASK_CACHE_KEY = 'quest-hq-task-cache-v1';
 const FILE_CACHE_KEY = 'quest-hq-file-cache-v1';
 const DRIVE_FOLDER_CACHE_KEY = 'quest-hq-drive-folder-cache-v1';
@@ -35,6 +38,9 @@ const TASK_VIEW_KEY = 'quest-hq-task-view';
 const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
 const SIDEBAR_COLLAPSED_KEY = 'quest-hq-sidebar-collapsed';
 const NAV_GROUP_COLLAPSED_KEY = 'quest-hq-nav-groups-collapsed';
+const NAV_EXPANDED_KEY = 'quest-hq-nav-expanded-v1';
+const JOB_BOARD_VIEW_KEY = 'quest-hq-job-board-view';
+const CONTACT_BOARD_VIEW_KEY = 'quest-hq-contact-board-view';
 const NOTIFICATION_CACHE_KEY = 'quest-hq-notification-cache-v1';
 const MESSAGE_CONVERSATION_CACHE_KEY = 'quest-hq-message-conversation-cache-v1';
 const MESSAGE_ACCESS_CACHE_KEY = 'quest-hq-message-access-cache-v1';
@@ -101,6 +107,7 @@ const MODULE_REGISTRY = [
   { id: 'forms', group: 'Workspace', label: 'Forms', icon: 'ti-clipboard-list', symbol: 'q-symbol-forms', status: 'live', permission: 'forms.view' },
   { id: 'analytics', group: 'Workspace', label: 'Analytics', icon: 'ti-chart-bar', symbol: 'q-symbol-analytics', status: 'live', permission: 'jobs.view' },
   { id: 'crm', group: 'Workspace', label: 'CRM', icon: 'ti-users-group', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
+  { id: 'contacts', group: 'Workspace', label: 'Contacts', icon: 'ti-address-book', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
   { id: 'tickets', group: 'Workspace', label: 'Tickets', icon: 'ti-ticket', symbol: 'q-symbol-tickets', status: 'planned' },
   { id: 'finance', group: 'Workspace', label: 'Finance', icon: 'ti-receipt-dollar', symbol: 'q-symbol-finance', status: 'live', permission: 'finance.view' },
   { id: 'knowledge', group: 'Workspace', label: 'Knowledge Base', icon: 'ti-books', symbol: 'q-symbol-knowledge', status: 'planned' },
@@ -118,7 +125,7 @@ const MODULE_REGISTRY = [
 ];
 
 const NAV_GROUPS = [
-  { label: 'Command', ids: ['home', 'messages', 'calendar'] },
+  { label: 'Command', ids: ['home', 'contacts', 'messages', 'calendar'] },
   { label: 'Work', ids: ['jobs', 'tasks', 'files', 'forms', 'crm'] },
   { label: 'Money', ids: ['finance', 'analytics'] },
   { label: 'People', ids: ['users', 'team-chart', 'time', 'approvals', 'clock'] },
@@ -142,7 +149,82 @@ const LEGACY_ROUTE_SECTIONS = {
   '/tickets.html': 'tickets',
 };
 
-const STAGES = ['Lead', 'Site Review', 'Estimate', 'Approved', 'Active', 'Closed'];
+// Pipeline stages are customizable placeholder "groups" the client can edit.
+// Each stage is { name, color }. The job pipeline (production) and the contact
+// pipeline (sales) each have their own editable list, persisted to localStorage.
+const DEFAULT_JOB_STAGES = [
+  { name: 'Unscheduled', color: '#9AA0A8' },
+  { name: 'Scheduled', color: '#378ADD' },
+  { name: 'Material ordered', color: '#3C7BD0' },
+  { name: 'In production', color: '#BA7517' },
+  { name: 'QC / punch list', color: '#C08A2B' },
+  { name: 'Invoiced', color: '#7F77DD' },
+  { name: 'Paid / closed', color: '#639922' },
+  { name: 'On hold', color: '#C4C7CC' },
+];
+const DEFAULT_CONTACT_STAGES = [
+  { name: 'Prospects', color: '#9AA0A8' },
+  { name: 'Leads', color: '#378ADD' },
+  { name: 'Underwriting', color: '#BA7517' },
+  { name: 'Estimate sent', color: '#3C7BD0' },
+  { name: 'Negotiating', color: '#C08A2B' },
+  { name: 'Contract out', color: '#7F77DD' },
+  { name: 'Won', color: '#639922' },
+  { name: 'Follow-up', color: '#C4C7CC' },
+  { name: 'Lost', color: '#E24B4A' },
+];
+const STAGE_COLOR_PALETTE = ['#9AA0A8', '#378ADD', '#BA7517', '#7F77DD', '#639922', '#E24B4A', '#3C7BD0', '#C08A2B', '#5AB0A6', '#C4C7CC'];
+// Maps the previous fixed job stage names onto the new default job stages so
+// existing job records still land in a real lane after the rework.
+const LEGACY_JOB_STAGE_MAP = {
+  'Lead': 'Unscheduled',
+  'Site Review': 'Scheduled',
+  'Estimate': 'Material ordered',
+  'Approved': 'In production',
+  'Active': 'In production',
+  'Closed': 'Paid / closed',
+};
+
+function loadStageList(key, defaults) {
+  const raw = readJson(key, null);
+  if (!Array.isArray(raw) || !raw.length) return defaults.map((stage) => ({ ...stage }));
+  return raw
+    .map((stage) => ({
+      name: String(stage?.name || '').trim(),
+      color: /^#[0-9a-fA-F]{3,8}$/.test(String(stage?.color || '')) ? stage.color : '#9AA0A8',
+    }))
+    .filter((stage) => stage.name);
+}
+
+let JOB_STAGES = loadStageList(JOB_STAGES_KEY, DEFAULT_JOB_STAGES);
+let CONTACT_STAGES = loadStageList(CONTACT_STAGES_KEY, DEFAULT_CONTACT_STAGES);
+
+function jobStages() { return JOB_STAGES; }
+function contactStages() { return CONTACT_STAGES; }
+function jobStageNames() { return JOB_STAGES.map((stage) => stage.name); }
+function contactStageNames() { return CONTACT_STAGES.map((stage) => stage.name); }
+function jobStageColor(name) { return (JOB_STAGES.find((stage) => stage.name === name) || {}).color || '#9AA0A8'; }
+function contactStageColor(name) { return (CONTACT_STAGES.find((stage) => stage.name === name) || {}).color || '#9AA0A8'; }
+function pipelineStages(kind) { return kind === 'contacts' ? CONTACT_STAGES : JOB_STAGES; }
+function pipelineStageColor(kind, name) { return kind === 'contacts' ? contactStageColor(name) : jobStageColor(name); }
+
+function resolveJobStage(value) {
+  const names = jobStageNames();
+  const raw = String(value || '').trim();
+  if (names.includes(raw)) return raw;
+  if (LEGACY_JOB_STAGE_MAP[raw] && names.includes(LEGACY_JOB_STAGE_MAP[raw])) return LEGACY_JOB_STAGE_MAP[raw];
+  return names[0] || 'Unscheduled';
+}
+function resolveContactStage(value) {
+  const names = contactStageNames();
+  const raw = String(value || '').trim();
+  if (names.includes(raw)) return raw;
+  return names[0] || 'Prospects';
+}
+
+function persistJobStages() { JOB_STAGES = JOB_STAGES.filter((stage) => stage.name); writeJson(JOB_STAGES_KEY, JOB_STAGES); }
+function persistContactStages() { CONTACT_STAGES = CONTACT_STAGES.filter((stage) => stage.name); writeJson(CONTACT_STAGES_KEY, CONTACT_STAGES); }
+
 const JOB_TABS = ['pipeline', 'list', 'profile'];
 const TASK_STATUSES = ['todo', 'pending', 'hold', 'review', 'done'];
 const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
@@ -244,6 +326,19 @@ const jobsFallback = [
     file_count: 3,
     updated_at: new Date(Date.now() - 172800000).toISOString(),
   },
+];
+
+const contactsFallback = [
+  { id: 'contact-1', company_id: 'roofing', name: 'William Moran', phone: '928-231-0147', email: 'wrmoran@gmail.com', location: 'Future project', stage: 'Prospects', value: 0, owner_name: 'Abraham Flores' },
+  { id: 'contact-2', company_id: 'roofing', name: 'Valerie McKenzie', phone: '602-750-5678', email: '', location: '6054 E Blanche Dr, Scottsdale', stage: 'Prospects', value: 0, owner_name: 'Maya Rosales' },
+  { id: 'contact-3', company_id: 'roofing', name: 'April Reyes', phone: '480-277-1540', email: '', location: '451 E 10th Ave, Mesa', stage: 'Leads', value: 14500, owner_name: 'Andre Lee' },
+  { id: 'contact-4', company_id: 'roofing', name: 'Mario Esquivel', phone: '480-955-4036', email: 'esquivel@residence.com', location: 'Costa Bella Residence', stage: 'Leads', value: 22000, owner_name: 'Maya Rosales' },
+  { id: 'contact-5', company_id: 'roofing', name: 'Mike - Maricopa', phone: '503-317-4788', email: '', location: 'Maricopa', stage: 'Underwriting', value: 31000, owner_name: 'Andre Lee' },
+  { id: 'contact-6', company_id: 'roofing', name: 'Kumar Residence', phone: '', email: '', location: '16750 E Nicklaus Dr, Fountain Hills', stage: 'Estimate sent', value: 47800, owner_name: 'Maya Rosales' },
+  { id: 'contact-7', company_id: 'roofing', name: 'Keith Salas', phone: '717-991-7029', email: '', location: '15948 E Sycamore', stage: 'Negotiating', value: 28900, owner_name: 'Andre Lee' },
+  { id: 'contact-8', company_id: 'roofing', name: 'Brad Lundstrom', phone: '602-577-9523', email: 'lundstromdesign@gmail.com', location: '3200 W Wander Ln', stage: 'Contract out', value: 53200, owner_name: 'Abraham Flores' },
+  { id: 'contact-9', company_id: 'roofing', name: 'Rosa Cruz-Blanch', phone: '787-549-0942', email: 'rcruz@natlbtr.com', location: 'W Encanto Blvd', stage: 'Won', value: 61000, owner_name: 'Maya Rosales' },
+  { id: 'contact-10', company_id: 'drafting', name: 'Horizon HVAC', phone: '480-555-0199', email: 'plans@horizonhvac.com', location: 'Chandler, AZ', stage: 'Estimate sent', value: 4200, owner_name: 'Noah Park' },
 ];
 
 const teamMembersFallback = [
@@ -991,6 +1086,7 @@ const state = {
   authReady: !CONFIG.questAuthEnabled,
   authMode: 'signin',
   jobs: readSeededList(JOB_CACHE_KEY, jobsFallback).map(normalizeJob),
+  contacts: readSeededList(CONTACT_CACHE_KEY, contactsFallback).map(normalizeContact),
   tasks: readSeededList(TASK_CACHE_KEY, tasksFallback).map(normalizeTask),
   files: readSeededList(FILE_CACHE_KEY, filesFallback).map(normalizeFile),
   driveFolders: readSeededList(DRIVE_FOLDER_CACHE_KEY, []).map(normalizeDriveFolder),
@@ -1026,6 +1122,12 @@ const state = {
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
   sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
   collapsedNavGroups: new Set(readJson(NAV_GROUP_COLLAPSED_KEY, [])),
+  expandedNav: new Set(readJson(NAV_EXPANDED_KEY, ['contacts', 'jobs'])),
+  jobBoardView: localStorage.getItem(JOB_BOARD_VIEW_KEY) || 'board',
+  contactBoardView: localStorage.getItem(CONTACT_BOARD_VIEW_KEY) || 'table',
+  contactStageFilter: 'all',
+  contactQuery: '',
+  selectedContactId: '',
   selectedJobId: '',
   selectedTaskId: '',
   selectedFileId: '',
@@ -1864,9 +1966,11 @@ function renderDeck(route) {
         const items = group.ids
           .map((id) => modulesById.get(id))
           .filter((module) => module && canViewModule(module, companyId))
-          .map((module) => module.status === 'planned'
-            ? plannedNavItem(module.symbol, module.label)
-            : navItem(route, companyPath(module.id, {}, companyId), module.symbol, module.label, moduleBadgeCount(module.id, companyId)));
+          .map((module) => {
+            if (module.status === 'planned') return plannedNavItem(module.symbol, module.label);
+            if (module.id === 'jobs' || module.id === 'contacts') return navItemPipeline(route, module, companyId);
+            return navItem(route, companyPath(module.id, {}, companyId), module.symbol, module.label, moduleBadgeCount(module.id, companyId));
+          });
         return navGroup(group.label, items);
       }).join('')}
     </div>
@@ -1910,6 +2014,55 @@ function navItem(route, path, symbol, label, count = '') {
   `;
 }
 
+function pipelineStageCounts(kind, companyId = activeCompanyId()) {
+  const rows = kind === 'contacts' ? companyContacts(companyId) : companyJobs(companyId);
+  const counts = {};
+  rows.forEach((row) => { counts[row.stage] = (counts[row.stage] || 0) + 1; });
+  return counts;
+}
+
+function navItemPipeline(route, module, companyId) {
+  const kind = module.id;
+  const path = companyPath(kind, {}, companyId);
+  const active = isActiveNav(route, path);
+  const expanded = state.expandedNav.has(kind);
+  const count = moduleBadgeCount(kind, companyId);
+  const onSection = route.name === 'company' && route.section === kind;
+  const filter = kind === 'contacts' ? state.contactStageFilter : state.stageFilter;
+  const stages = pipelineStages(kind);
+  const counts = pipelineStageCounts(kind, companyId);
+  return `
+    <div class="side-pipe ${expanded ? 'expanded' : ''}">
+      <div class="side-pipe-head">
+        <a class="side-item ${active ? 'active' : ''}" href="${appHref(path)}" data-router data-action="pipeline-open" data-module="${kind}" title="${h(module.label)}" aria-label="${h(module.label)}">
+          ${svgIcon(module.symbol)}
+          <span>${h(module.label)}</span>
+          ${count !== '' ? `<b>${h(String(count))}</b>` : ''}
+        </a>
+        <button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(module.label)} stages">
+          <i class="ti ti-chevron-down" aria-hidden="true"></i>
+        </button>
+      </div>
+      ${expanded ? `
+        <div class="side-sub">
+          <button class="side-sub-link ${onSection && filter === 'all' ? 'active' : ''}" type="button" data-action="pipeline-stage" data-module="${kind}" data-stage="all">
+            <span class="side-sub-dot all"></span>
+            <span class="side-sub-name">All ${h(module.label.toLowerCase())}</span>
+            <span class="side-sub-ct">${h(String(count || 0))}</span>
+          </button>
+          ${stages.map((stage) => `
+            <button class="side-sub-link ${onSection && filter === stage.name ? 'active' : ''}" type="button" data-action="pipeline-stage" data-module="${kind}" data-stage="${h(stage.name)}">
+              <span class="side-sub-dot" style="background:${h(stage.color)}"></span>
+              <span class="side-sub-name">${h(stage.name)}</span>
+              <span class="side-sub-ct">${h(String(counts[stage.name] || 0))}</span>
+            </button>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
 function plannedNavItem(symbol, label) {
   return `
     <button class="side-item planned" type="button" disabled aria-disabled="true" title="${h(label)}" aria-label="${h(label)}">
@@ -1933,6 +2086,7 @@ function moduleBadgeCount(moduleId, companyId = activeCompanyId()) {
   if (moduleId === 'files') return companyFiles(companyId).length;
   if (moduleId === 'forms') return companyForms(companyId).length;
   if (moduleId === 'crm') return crmAccounts(companyId).length;
+  if (moduleId === 'contacts') return companyContacts(companyId).length;
   if (moduleId === 'finance') return companyFinanceInvoices(companyId).length;
   if (moduleId === 'users') return companyAccessUsers(companyId).filter((user) => user.status === 'active').length;
   if (moduleId === 'messages') {
@@ -1975,6 +2129,7 @@ function renderWorkspace(route) {
   if (route.section === 'forms') return renderFormsPage(companyId);
   if (route.section === 'analytics') return renderAnalyticsPage(route, companyId);
   if (route.section === 'crm') return renderCrmPage(route, companyId);
+  if (route.section === 'contacts') return renderContactsPage(route, companyId);
   if (route.section === 'finance') return renderFinancePage(route, companyId);
   if (route.section === 'messages') return renderMessagesPage(route, companyId);
   if (route.section === 'team-chart') return renderTeamChartPage(companyId);
@@ -2379,26 +2534,284 @@ function renderAnalyticsPage(route, companyId) {
   `;
 }
 
-function renderJobsPage(route, companyId) {
-  const tab = normalizeJobTab(route.params.get('tab'));
-  const job = selectedJob();
+// ---- Pipeline (stages) shared building blocks -----------------------------
+function pipelineDot(color) {
+  return `<span class="pipe-dot" style="background:${h(color || '#9AA0A8')}"></span>`;
+}
+
+function stageTagPipe(kind, name) {
+  if (!name) return '<span class="muted-dash">—</span>';
+  return `<span class="stage-tag">${pipelineDot(pipelineStageColor(kind, name))}${h(name)}</span>`;
+}
+
+function pipelineToolbar(kind, companyId) {
+  const stages = pipelineStages(kind);
+  const counts = pipelineStageCounts(kind, companyId);
+  const total = kind === 'contacts' ? companyContacts(companyId).length : companyJobs(companyId).length;
+  const filter = kind === 'contacts' ? state.contactStageFilter : state.stageFilter;
+  const view = kind === 'contacts' ? state.contactBoardView : state.jobBoardView;
   return `
-    ${workspaceHeader('Jobs', 'Company job records, clients, scope, and linked work.', `
-      <a class="btn" href="${appHref(companyPath('files', job ? { job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-folder"></i>Drive</a>
-      <button class="btn btn-primary" type="button" data-action="open-job-form" data-mode="new"><i class="ti ti-plus"></i>Add job</button>
-    `)}
-    <section class="job-toolbar">
-      <label>
-        <span>Stage</span>
-        <select data-stage-filter>
-          ${['all'].concat(STAGES).map((stage) => `<option value="${h(stage)}" ${state.stageFilter === stage ? 'selected' : ''}>${h(stage === 'all' ? 'All stages' : stage)}</option>`).join('')}
-        </select>
-      </label>
-      <div class="selected-job-chip">
-        <span>Selected job</span>
-        <strong>${job ? h(job.name) : 'No job selected'}</strong>
+    <section class="pipe-toolbar">
+      <div class="pipe-chips" role="group" aria-label="Filter by stage">
+        <button class="pipe-chip ${filter === 'all' ? 'on' : ''}" type="button" data-action="pipeline-stage" data-module="${kind}" data-stage="all">All<b>${h(String(total))}</b></button>
+        ${stages.map((stage) => `
+          <button class="pipe-chip ${filter === stage.name ? 'on' : ''}" type="button" data-action="pipeline-stage" data-module="${kind}" data-stage="${h(stage.name)}">
+            ${pipelineDot(stage.color)}${h(stage.name)}<b>${h(String(counts[stage.name] || 0))}</b>
+          </button>
+        `).join('')}
+      </div>
+      <div class="segmented" role="group" aria-label="View">
+        <button class="${view === 'table' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="${kind}" data-view="table"><i class="ti ti-table"></i>Table</button>
+        <button class="${view === 'board' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="${kind}" data-view="board"><i class="ti ti-layout-kanban"></i>Board</button>
       </div>
     </section>
+  `;
+}
+
+// ---- Contacts (sales pipeline) --------------------------------------------
+function renderContactsPage(route, companyId) {
+  const stageParam = route.params.get('stage');
+  if (stageParam) state.contactStageFilter = contactStageNames().includes(stageParam) ? stageParam : 'all';
+  return `
+    ${workspaceHeader('Contacts', 'Sales pipeline - prospects and leads moving toward won work.', `
+      <button class="btn" type="button" data-action="open-stage-manager" data-module="contacts"><i class="ti ti-adjustments-horizontal"></i>Manage stages</button>
+      <button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>
+    `)}
+    ${pipelineToolbar('contacts', companyId)}
+    ${state.contactBoardView === 'board' ? renderContactBoard(companyId) : renderContactTable(companyId)}
+  `;
+}
+
+function renderContactTable(companyId) {
+  const rows = filteredContacts(companyId);
+  return `
+    <section class="panel">
+      <div class="section-head"><div><h2>Contacts</h2><p>${rows.length} visible contact${rows.length === 1 ? '' : 's'}</p></div></div>
+      <div class="data-table contacts-table">
+        <div class="table-head"><span>Client</span><span>Phone</span><span>Email</span><span>Location</span><span>Stage</span><span>Value</span></div>
+        ${rows.map((contact) => `
+          <button class="table-row ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}">
+            <span class="cell-lead">${pipelineDot(contactStageColor(contact.stage))}<span><strong>${h(contact.name)}</strong><small>${h(contact.owner_name || 'Unassigned')}</small></span></span>
+            <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">—</span>'}</span>
+            <span>${contact.email ? h(contact.email) : '<span class="muted-dash">—</span>'}</span>
+            <span>${contact.location ? h(contact.location) : '<span class="muted-dash">—</span>'}</span>
+            <span>${stageTagPipe('contacts', contact.stage)}</span>
+            <span>${contact.value ? money(contact.value) : '<span class="muted-dash">—</span>'}</span>
+          </button>
+        `).join('') || emptyState('No contacts in this view yet.')}
+      </div>
+    </section>
+  `;
+}
+
+function renderContactBoard(companyId) {
+  const rows = filteredContacts(companyId, true);
+  const filter = state.contactStageFilter;
+  const lanes = filter === 'all' ? contactStages() : contactStages().filter((stage) => stage.name === filter);
+  return `
+    <section class="pipe-board">
+      ${lanes.map((stage) => {
+        const cards = rows.filter((contact) => contact.stage === stage.name);
+        return `
+          <article class="pipe-lane">
+            <header class="pipe-lane-head">${pipelineDot(stage.color)}<span>${h(stage.name)}</span><b>${cards.length}</b></header>
+            <div class="pipe-lane-body">
+              ${cards.map((contact) => contactCard(contact)).join('') || '<div class="lane-empty">No contacts</div>'}
+            </div>
+          </article>
+        `;
+      }).join('')}
+    </section>
+  `;
+}
+
+function contactCard(contact) {
+  return `
+    <button class="pipe-card ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}">
+      <strong>${h(contact.name)}</strong>
+      <span>${h(contact.location || contact.phone || contact.email || 'No details')}</span>
+      <em>${contact.value ? money(contact.value) : '—'}</em>
+    </button>
+  `;
+}
+
+function renderContactFormModal(companyId, contact) {
+  return renderModalShell('Contacts', contact ? 'Edit contact' : 'Add contact', renderContactEditor(companyId, contact), 'wide-modal');
+}
+
+function renderContactEditor(companyId, contact) {
+  const edit = contact || blankContact(companyId);
+  return `
+    <form class="job-editor" data-contact-form>
+      <input type="hidden" name="id" value="${h(edit.id || '')}" />
+      <div class="section-head span-2">
+        <div><h2>${contact ? 'Edit contact' : 'New contact'}</h2><p>Contacts move through your customizable sales pipeline stages.</p></div>
+      </div>
+      ${field('Name', 'name', edit.name, true)}
+      ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
+      ${field('Phone', 'phone', edit.phone)}
+      ${field('Email', 'email', edit.email, false, 'email')}
+      ${field('Location', 'location', edit.location, false, 'text', 'span-2')}
+      ${selectField('Stage', 'stage', edit.stage || contactStageNames()[0], contactStageNames().map((stage) => [stage, stage]))}
+      ${field('Owner', 'owner_name', edit.owner_name)}
+      ${field('Estimated value', 'value', edit.value || 0, false, 'number')}
+      ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
+      <div class="form-actions span-2">
+        <button class="btn btn-primary" type="submit">Save contact</button>
+        ${contact ? `<button class="btn danger" type="button" data-action="delete-contact" data-contact-id="${h(contact.id)}">Delete</button>` : ''}
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `;
+}
+
+function blankContact(companyId = activeCompanyId()) {
+  return normalizeContact({ id: '', company_id: companyId, name: '', stage: contactStageNames()[0], value: 0 });
+}
+
+function saveContact(form) {
+  const formData = Object.fromEntries(new FormData(form).entries());
+  const payload = normalizeContact(formData);
+  payload.id = payload.id || `contact-${crypto.randomUUID()}`;
+  payload.updated_at = new Date().toISOString();
+  upsertContact(payload);
+  state.selectedContactId = payload.id;
+  state.modal = '';
+  showToast(`${payload.name} saved.`, 'local', 'Contacts');
+  render();
+}
+
+function deleteContact(id) {
+  if (!id) return;
+  state.contacts = state.contacts.filter((contact) => contact.id !== id);
+  persistContacts();
+  if (state.selectedContactId === id) state.selectedContactId = '';
+  state.modal = '';
+  render();
+}
+
+// ---- Stage manager (create / rename / recolor / delete) -------------------
+function renderStageManagerModal(kind) {
+  const stages = pipelineStages(kind);
+  const title = kind === 'contacts' ? 'Contact pipeline stages' : 'Job pipeline stages';
+  const body = `
+    <form class="stage-manager" data-stage-form data-kind="${kind}">
+      <p class="stage-manager-hint">Stages are your pipeline columns - the placeholder groups your team can shape. Rename or recolor any stage and your records keep their place; add new stages for any workflow.</p>
+      <div class="stage-rows">
+        ${stages.map((stage, i) => `
+          <div class="stage-row">
+            <span class="stage-row-handle">${pipelineDot(stage.color)}</span>
+            <input type="text" name="name_${i}" value="${h(stage.name)}" placeholder="Stage name" />
+            <input type="hidden" name="orig_${i}" value="${h(stage.name)}" />
+            <input class="stage-color" type="color" name="color_${i}" value="${h(/^#[0-9a-fA-F]{6}$/.test(stage.color) ? stage.color : '#9aa0a8')}" aria-label="Stage color" />
+            <button class="btn danger stage-del" type="button" data-action="delete-stage" data-module="${kind}" data-index="${i}" aria-label="Delete stage"><i class="ti ti-trash"></i></button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn add-stage-btn" type="button" data-action="add-stage" data-module="${kind}"><i class="ti ti-plus"></i>Add stage</button>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save stages</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `;
+  return renderModalShell('Pipeline', title, body, 'wide-modal');
+}
+
+function parseStageForm(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  const stages = [];
+  const renameMap = {};
+  let i = 0;
+  while (data[`name_${i}`] !== undefined) {
+    const name = String(data[`name_${i}`] || '').trim();
+    const color = /^#[0-9a-fA-F]{3,8}$/.test(String(data[`color_${i}`] || '')) ? data[`color_${i}`] : '#9aa0a8';
+    const orig = data[`orig_${i}`] !== undefined ? String(data[`orig_${i}`]) : '';
+    if (name) {
+      stages.push({ name, color });
+      if (orig && orig !== name) renameMap[orig] = name;
+    }
+    i += 1;
+  }
+  return { stages, renameMap };
+}
+
+function captureStageFormInto(kind) {
+  const form = document.querySelector('[data-stage-form]');
+  if (!form) return;
+  const { stages } = parseStageForm(form);
+  if (!stages.length) return;
+  if (kind === 'contacts') CONTACT_STAGES = stages;
+  else JOB_STAGES = stages;
+}
+
+function addPipelineStage(kind) {
+  captureStageFormInto(kind);
+  const list = kind === 'contacts' ? CONTACT_STAGES : JOB_STAGES;
+  const color = STAGE_COLOR_PALETTE[list.length % STAGE_COLOR_PALETTE.length];
+  list.push({ name: `New stage ${list.length + 1}`, color });
+  if (kind === 'contacts') persistContactStages();
+  else persistJobStages();
+  render();
+}
+
+function deletePipelineStage(kind, index) {
+  captureStageFormInto(kind);
+  const list = kind === 'contacts' ? CONTACT_STAGES : JOB_STAGES;
+  if (list.length <= 1) {
+    showToast('Keep at least one stage in the pipeline.', 'local', 'Stages');
+    return;
+  }
+  if (Number.isInteger(index) && index >= 0 && index < list.length) list.splice(index, 1);
+  if (kind === 'contacts') persistContactStages();
+  else persistJobStages();
+  render();
+}
+
+function saveStageEdits(form) {
+  const kind = form.dataset.kind === 'contacts' ? 'contacts' : 'jobs';
+  const { stages, renameMap } = parseStageForm(form);
+  if (!stages.length) {
+    showToast('Add at least one stage before saving.', 'local', 'Stages');
+    return;
+  }
+  const validNames = new Set(stages.map((stage) => stage.name));
+  const fallback = stages[0].name;
+  if (kind === 'contacts') {
+    CONTACT_STAGES = stages;
+    persistContactStages();
+    state.contacts.forEach((contact) => {
+      if (renameMap[contact.stage]) contact.stage = renameMap[contact.stage];
+      if (!validNames.has(contact.stage)) contact.stage = fallback;
+    });
+    persistContacts();
+    if (state.contactStageFilter !== 'all' && !validNames.has(state.contactStageFilter)) state.contactStageFilter = 'all';
+  } else {
+    JOB_STAGES = stages;
+    persistJobStages();
+    state.jobs.forEach((job) => {
+      if (renameMap[job.stage]) job.stage = renameMap[job.stage];
+      if (!validNames.has(job.stage)) job.stage = fallback;
+    });
+    writeJson(JOB_CACHE_KEY, state.jobs);
+    if (state.stageFilter !== 'all' && !validNames.has(state.stageFilter)) state.stageFilter = 'all';
+  }
+  state.modal = '';
+  showToast('Pipeline stages updated.', 'local', 'Stages');
+  render();
+}
+
+function renderJobsPage(route, companyId) {
+  const tab = normalizeJobTab(route.params.get('tab'));
+  const stageParam = route.params.get('stage');
+  if (stageParam) state.stageFilter = jobStageNames().includes(stageParam) ? stageParam : 'all';
+  const job = selectedJob();
+  return `
+    ${workspaceHeader('Jobs', 'Production pipeline - every job type, from intake to paid.', `
+      <a class="btn" href="${appHref(companyPath('files', job ? { job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-folder"></i>Drive</a>
+      <button class="btn" type="button" data-action="open-stage-manager" data-module="jobs"><i class="ti ti-adjustments-horizontal"></i>Manage stages</button>
+      <button class="btn btn-primary" type="button" data-action="open-job-form" data-mode="new"><i class="ti ti-plus"></i>Add job</button>
+    `)}
     <nav class="tabbar" aria-label="Job sections">
       ${JOB_TABS.map((item) => `<a class="${item === tab ? 'active' : ''}" href="${appHref(companyPath('jobs', { tab: item, ...(job ? { job_id: job.id } : {}) }, companyId))}" data-router>${h(labelForTab(item))}</a>`).join('')}
     </nav>
@@ -2414,15 +2827,26 @@ function renderJobPanel(tab, companyId, job) {
 }
 
 function renderPipeline(companyId) {
-  const visible = filteredJobs(companyId);
   return `
-    <section class="job-board">
-      ${STAGES.map((stage) => {
-        const jobs = visible.filter((job) => job.stage === stage);
+    ${pipelineToolbar('jobs', companyId)}
+    ${state.jobBoardView === 'board' ? renderJobBoard(companyId) : renderJobList(companyId)}
+  `;
+}
+
+function renderJobBoard(companyId) {
+  const rows = filteredJobs(companyId, true);
+  const filter = state.stageFilter;
+  const lanes = filter === 'all' ? jobStages() : jobStages().filter((stage) => stage.name === filter);
+  return `
+    <section class="pipe-board">
+      ${lanes.map((stage) => {
+        const cards = rows.filter((job) => job.stage === stage.name);
         return `
-          <article class="job-lane">
-            <h2><span>${h(stage)}</span><b>${jobs.length}</b></h2>
-            ${jobs.map((job) => jobCard(job)).join('') || `<div class="lane-empty">No jobs</div>`}
+          <article class="pipe-lane">
+            <header class="pipe-lane-head">${pipelineDot(stage.color)}<span>${h(stage.name)}</span><b>${cards.length}</b></header>
+            <div class="pipe-lane-body">
+              ${cards.map((job) => jobCard(job)).join('') || '<div class="lane-empty">No jobs</div>'}
+            </div>
           </article>
         `;
       }).join('')}
@@ -2434,16 +2858,16 @@ function renderJobList(companyId) {
   const rows = filteredJobs(companyId);
   return `
     <section class="panel">
-      <div class="section-head"><div><h2>Job list</h2><p>${rows.length} visible job${rows.length === 1 ? '' : 's'}</p></div></div>
+      <div class="section-head"><div><h2>Jobs</h2><p>${rows.length} visible job${rows.length === 1 ? '' : 's'}</p></div></div>
       <div class="data-table jobs-table">
-        <div class="table-head"><span>Job</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Tasks</span><span>Value</span></div>
+        <div class="table-head"><span>Job</span><span>Type</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Value</span></div>
         ${rows.map((job) => `
           <button class="table-row ${job.id === state.selectedJobId ? 'active' : ''}" type="button" data-select-job="${h(job.id)}">
-            <span><strong>${h(job.name)}</strong><small>${h(job.client_name || 'No client')} - ${h(job.site_address || 'No address')}</small></span>
-            <span>${h(job.stage)}</span>
+            <span class="cell-lead">${pipelineDot(jobStageColor(job.stage))}<span><strong>${h(job.name)}</strong><small>${h(job.client_name || 'No client')} - ${h(job.site_address || 'No address')}</small></span></span>
+            <span>${h(job.job_type || '—')}</span>
+            <span>${stageTagPipe('jobs', job.stage)}</span>
             <span>${priorityPill(job.priority)}</span>
             <span>${h(job.owner_name || 'Unassigned')}</span>
-            <span>${h(taskCountForJob(job.id))}</span>
             <span>${money(job.estimate_total)}</span>
           </button>
         `).join('') || emptyState('No jobs match this view.')}
@@ -2506,7 +2930,7 @@ function renderJobEditor(companyId, job) {
       ${field('Contact', 'contact_name', edit.contact_name)}
       ${field('Account owner', 'owner_name', edit.owner_name)}
       ${field('Job type', 'job_type', edit.job_type || 'Roofing')}
-      ${selectField('Business status', 'stage', edit.stage || 'Lead', STAGES.map((stage) => [stage, stage]))}
+      ${selectField('Stage', 'stage', resolveJobStage(edit.stage), jobStageNames().map((stage) => [stage, stage]))}
       ${selectField('Client urgency', 'priority', edit.priority || 'Medium', ['Low', 'Medium', 'High', 'Urgent'].map((item) => [item, item]))}
       ${field('Estimate total', 'estimate_total', edit.estimate_total || 0, false, 'number')}
       ${field('Invoice total', 'invoice_total', edit.invoice_total || 0, false, 'number')}
@@ -3695,7 +4119,7 @@ function renderCrmPage(route, companyId) {
         <label>
           <span>Stage</span>
           <select data-crm-stage-filter>
-            ${['all'].concat(STAGES).map((stage) => `<option value="${h(stage)}" ${state.crmStageFilter === stage ? 'selected' : ''}>${h(stage === 'all' ? 'All stages' : stage)}</option>`).join('')}
+            ${['all'].concat(jobStageNames()).map((stage) => `<option value="${h(stage)}" ${state.crmStageFilter === stage ? 'selected' : ''}>${h(stage === 'all' ? 'All stages' : stage)}</option>`).join('')}
           </select>
         </label>
         <label>
@@ -5190,6 +5614,10 @@ function renderActiveModal(route, session) {
   if (state.modal === 'form-preview') return renderFormPreviewModal(activeCompanyId(), selectedForm(activeCompanyId()));
   if (state.modal === 'job-new') return renderJobFormModal(activeCompanyId(), null);
   if (state.modal === 'job-edit') return renderJobFormModal(activeCompanyId(), selectedJob());
+  if (state.modal === 'contact-new') return renderContactFormModal(activeCompanyId(), null);
+  if (state.modal === 'contact-edit') return renderContactFormModal(activeCompanyId(), selectedContact());
+  if (state.modal === 'stages-jobs') return renderStageManagerModal('jobs');
+  if (state.modal === 'stages-contacts') return renderStageManagerModal('contacts');
   if (state.modal === 'finance-invoice-new') return renderFinanceInvoiceFormModal(activeCompanyId(), null);
   if (state.modal === 'finance-invoice-edit') return renderFinanceInvoiceFormModal(activeCompanyId(), financeInvoiceById(state.selectedFinanceInvoiceId));
   if (state.modal === 'finance-payment-new') return renderFinancePaymentFormModal(activeCompanyId(), state.selectedFinanceInvoiceId);
@@ -5562,6 +5990,29 @@ function handleAction(event, node) {
     }
     return;
   }
+  if (action === 'toggle-nav-expand') {
+    event.preventDefault();
+    const module = node.dataset.module;
+    if (module) {
+      if (state.expandedNav.has(module)) state.expandedNav.delete(module);
+      else state.expandedNav.add(module);
+      writeJson(NAV_EXPANDED_KEY, [...state.expandedNav]);
+      render();
+    }
+    return;
+  }
+  if (action === 'pipeline-open') {
+    event.preventDefault();
+    const module = node.dataset.module;
+    setPipelineStage(module, 'all', true);
+    return;
+  }
+  if (action === 'pipeline-stage') {
+    event.preventDefault();
+    const module = node.dataset.module;
+    setPipelineStage(module, node.dataset.stage || 'all', false);
+    return;
+  }
   if (action === 'mark-all-notifications-read') {
     event.preventDefault();
     markAllNotificationsRead(activeCompanyId()).catch((error) => console.warn('Notification read sync failed', error));
@@ -5847,6 +6298,50 @@ function handleAction(event, node) {
     if (jobId) state.selectedJobId = jobId;
     state.modal = node.dataset.mode === 'edit' ? 'job-edit' : 'job-new';
     render();
+    return;
+  }
+  if (action === 'open-contact-form') {
+    event.preventDefault();
+    const contactId = node.dataset.contactId || '';
+    if (contactId) state.selectedContactId = contactId;
+    state.modal = node.dataset.mode === 'edit' ? 'contact-edit' : 'contact-new';
+    render();
+    return;
+  }
+  if (action === 'delete-contact') {
+    event.preventDefault();
+    deleteContact(node.dataset.contactId);
+    return;
+  }
+  if (action === 'set-pipeline-view') {
+    event.preventDefault();
+    const module = node.dataset.module;
+    const view = node.dataset.view === 'board' ? 'board' : 'table';
+    if (module === 'contacts') {
+      state.contactBoardView = view;
+      localStorage.setItem(CONTACT_BOARD_VIEW_KEY, view);
+    } else {
+      state.jobBoardView = view;
+      localStorage.setItem(JOB_BOARD_VIEW_KEY, view);
+    }
+    render();
+    return;
+  }
+  if (action === 'open-stage-manager') {
+    event.preventDefault();
+    const module = node.dataset.module === 'contacts' ? 'contacts' : 'jobs';
+    state.modal = `stages-${module}`;
+    render();
+    return;
+  }
+  if (action === 'add-stage') {
+    event.preventDefault();
+    addPipelineStage(node.dataset.module === 'contacts' ? 'contacts' : 'jobs');
+    return;
+  }
+  if (action === 'delete-stage') {
+    event.preventDefault();
+    deletePipelineStage(node.dataset.module === 'contacts' ? 'contacts' : 'jobs', Number(node.dataset.index));
     return;
   }
   if (action === 'open-forms-tools') {
@@ -6221,6 +6716,18 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-job-form]')) {
     event.preventDefault();
     saveJob(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-contact-form]')) {
+    event.preventDefault();
+    saveContact(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-stage-form]')) {
+    event.preventDefault();
+    saveStageEdits(event.target);
     return;
   }
 
@@ -8175,6 +8682,9 @@ function resetScopedUiState() {
   state.fileQuery = '';
   state.formQuery = '';
   state.crmQuery = '';
+  state.contactQuery = '';
+  state.selectedContactId = '';
+  state.contactStageFilter = 'all';
   state.stageFilter = 'all';
   state.crmStageFilter = 'all';
   state.crmOwnerFilter = 'all';
@@ -8767,14 +9277,57 @@ function profileById(profileId) {
   return state.profiles.find((profile) => profile.id === profileId) || (activeSession().profile.id === profileId ? activeSession().profile : null);
 }
 
-function filteredJobs(companyId = activeCompanyId()) {
+function filteredJobs(companyId = activeCompanyId(), ignoreStage = false) {
   const q = state.query.trim().toLowerCase();
   return companyJobs(companyId).filter((job) => {
-    if (state.stageFilter !== 'all' && job.stage !== state.stageFilter) return false;
+    if (!ignoreStage && state.stageFilter !== 'all' && job.stage !== state.stageFilter) return false;
     if (!q) return true;
     return [job.name, job.client_name, job.contact_name, job.owner_name, job.site_address, job.job_type, companyName(job.company_id)]
       .some((value) => String(value || '').toLowerCase().includes(q));
   });
+}
+
+function companyContacts(companyId = activeCompanyId()) {
+  return state.contacts.filter((contact) => contact.company_id === companyId);
+}
+
+function filteredContacts(companyId = activeCompanyId(), ignoreStage = false) {
+  const q = state.contactQuery.trim().toLowerCase();
+  return companyContacts(companyId).filter((contact) => {
+    if (!ignoreStage && state.contactStageFilter !== 'all' && contact.stage !== state.contactStageFilter) return false;
+    if (!q) return true;
+    return [contact.name, contact.phone, contact.email, contact.location, contact.owner_name, contact.stage]
+      .some((value) => String(value || '').toLowerCase().includes(q));
+  });
+}
+
+function contactById(id) {
+  return state.contacts.find((contact) => contact.id === id) || null;
+}
+
+function selectedContact() {
+  return contactById(state.selectedContactId);
+}
+
+function persistContacts() {
+  writeJson(CONTACT_CACHE_KEY, state.contacts);
+}
+
+function upsertContact(contact) {
+  const index = state.contacts.findIndex((item) => item.id === contact.id);
+  if (index >= 0) state.contacts[index] = contact;
+  else state.contacts.push(contact);
+  persistContacts();
+}
+
+function setPipelineStage(kind, stage, forceNav) {
+  if (kind !== 'contacts' && kind !== 'jobs') return;
+  if (kind === 'contacts') state.contactStageFilter = stage;
+  else state.stageFilter = stage;
+  const route = state.route;
+  const onSection = route?.name === 'company' && route.section === kind;
+  if (forceNav || !onSection) navigate(companyPath(kind, {}, activeCompanyId()));
+  else render();
 }
 
 function crmAccounts(companyId = activeCompanyId()) {
@@ -9371,7 +9924,7 @@ function normalizeJob(input) {
     contact_name: String(input.contact_name || '').trim(),
     site_address: String(input.site_address || '').trim(),
     job_type: String(input.job_type || 'Roofing').trim(),
-    stage: STAGES.includes(input.stage) ? input.stage : 'Lead',
+    stage: resolveJobStage(input.stage),
     priority: ['Low', 'Medium', 'High', 'Urgent'].includes(input.priority) ? input.priority : 'Medium',
     owner_name: String(input.owner_name || '').trim(),
     scope: String(input.scope || '').trim(),
@@ -9380,6 +9933,23 @@ function normalizeJob(input) {
     invoice_total: number(input.invoice_total),
     task_count: number(input.task_count),
     file_count: number(input.file_count),
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || new Date().toISOString(),
+  };
+}
+
+function normalizeContact(input) {
+  return {
+    id: String(input.id || ''),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    name: String(input.name || '').trim() || 'Untitled contact',
+    phone: String(input.phone || '').trim(),
+    email: String(input.email || '').trim(),
+    location: String(input.location || '').trim(),
+    stage: resolveContactStage(input.stage),
+    value: number(input.value),
+    owner_name: String(input.owner_name || '').trim(),
+    notes: String(input.notes || '').trim(),
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || new Date().toISOString(),
   };
@@ -10267,6 +10837,7 @@ function copyParams(params, keys) {
 function persistAll() {
   if (state.session?.auth === 'supabase') return;
   writeJson(JOB_CACHE_KEY, state.jobs);
+  writeJson(CONTACT_CACHE_KEY, state.contacts);
   writeJson(TASK_CACHE_KEY, state.tasks);
   writeJson(FILE_CACHE_KEY, state.files);
   writeJson(DRIVE_FOLDER_CACHE_KEY, state.driveFolders);
