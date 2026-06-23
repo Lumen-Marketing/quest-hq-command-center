@@ -11608,12 +11608,17 @@ textarea:focus {
   color: var(--ink);
 }
 
-.pipe-lane-head span {
+.pipe-lane-head span:not(.pipe-dot) {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.pipe-lane-head .pipe-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
 }
 
 .pipe-lane-head b {
