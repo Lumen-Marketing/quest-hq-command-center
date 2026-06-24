@@ -11015,19 +11015,21 @@ function companyMembers(companyId = activeCompanyId()) {
 
 function companyAccessUsers(companyId = activeCompanyId()) {
   const byId = new Map();
-  companyMembers(companyId).forEach((member) => {
-    byId.set(member.id, {
-      profile_id: '',
-      member_id: member.id,
-      name: member.full_name || member.name,
-      email: member.email,
-      avatar_url: member.avatar_url,
-      role: roleForMember(companyId, member.id).toLowerCase(),
-      role_label: roleForMember(companyId, member.id),
-      role_id: '',
-      status: member.active ? 'active' : 'disabled',
+  if (state.session?.auth !== 'supabase') {
+    companyMembers(companyId).forEach((member) => {
+      byId.set(member.id, {
+        profile_id: '',
+        member_id: member.id,
+        name: member.full_name || member.name,
+        email: member.email,
+        avatar_url: member.avatar_url,
+        role: roleForMember(companyId, member.id).toLowerCase(),
+        role_label: roleForMember(companyId, member.id),
+        role_id: '',
+        status: member.active ? 'active' : 'disabled',
+      });
     });
-  });
+  }
   state.memberships
     .filter((membership) => membership.company_id === companyId)
     .forEach((membership) => {
