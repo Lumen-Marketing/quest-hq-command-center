@@ -24,7 +24,7 @@ const ACCOUNT_CACHE_KEY = 'quest-hq-account-cache-v1';
 const DEAL_CACHE_KEY = 'quest-hq-deal-cache-v1';
 const ACTIVITY_CACHE_KEY = 'quest-hq-activity-cache-v1';
 const JOB_STAGES_KEY = 'quest-hq-job-stages-v1';
-const CONTACT_STAGES_KEY = 'quest-hq-lead-stages-v2';
+const CONTACT_STAGES_KEY = 'quest-hq-contact-stages-v3';
 const DEAL_STAGES_KEY = 'quest-hq-quote-stages-v2';
 const DEAL_BOARD_VIEW_KEY = 'quest-hq-deal-board-view';
 const TASK_CACHE_KEY = 'quest-hq-task-cache-v1';
@@ -113,7 +113,7 @@ const PERMISSION_ALIASES = {
 
 const CORE_MODULE_IDS = new Set(['home', 'jobs', 'tasks', 'users', 'settings']);
 const WORKSPACE_PLUGIN_REGISTRY = [
-  { id: 'crm', label: 'CRM', summary: 'Accounts, leads, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'] },
+  { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'] },
   { id: 'crm_2', label: 'CRM 2', summary: 'Underwriter workspace for qualification, scope, pricing, and handoff readiness.', icon: 'ti-clipboard-search', module_ids: ['underwriter'], permissions: ['underwriter.view', 'underwriter.manage'] },
   { id: 'files', label: 'Files', summary: 'Shared files, job folders, and document storage.', icon: 'ti-folder', module_ids: ['files'], permissions: ['files.view', 'files.manage'] },
   { id: 'forms', label: 'Forms', summary: 'Internal forms, templates, and response capture.', icon: 'ti-clipboard-list', module_ids: ['forms'], permissions: ['forms.view', 'forms.manage'] },
@@ -148,7 +148,7 @@ const MODULE_REGISTRY = [
   { id: 'forms', group: 'Workspace', label: 'Forms', icon: 'ti-clipboard-list', symbol: 'q-symbol-forms', status: 'live', permission: 'forms.view' },
   { id: 'analytics', group: 'Workspace', label: 'Analytics', icon: 'ti-chart-bar', symbol: 'q-symbol-analytics', status: 'live', permission: 'jobs.view' },
   { id: 'crm', group: 'Workspace', label: 'Accounts', icon: 'ti-building-community', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
-  { id: 'contacts', group: 'Leads · Top of Funnel', label: 'Leads', icon: 'ti-id-badge-2', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
+  { id: 'contacts', group: 'Contacts · Top of Funnel', label: 'Contacts', icon: 'ti-id-badge-2', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
   { id: 'deals', group: 'Quotes · Bottom of Funnel', label: 'Quotes', icon: 'ti-briefcase', symbol: 'q-symbol-jobs', status: 'live', permission: 'crm.view' },
   { id: 'underwriter', group: 'Workspace', label: 'Underwriter', icon: 'ti-clipboard-search', symbol: 'q-symbol-crm', status: 'live', permission: 'underwriter.view' },
   { id: 'tickets', group: 'Workspace', label: 'Tickets', icon: 'ti-ticket', symbol: 'q-symbol-tickets', status: 'planned' },
@@ -170,7 +170,7 @@ const MODULE_REGISTRY = [
 const NAV_GROUPS = [
   { label: 'Work', ids: ['home', 'tasks', 'underwriter'] },
   { label: 'Communication', ids: ['messages', 'calendar'] },
-  { label: 'Leads · Top of Funnel', ids: ['contacts'] },
+  { label: 'Contacts · Top of Funnel', ids: ['contacts'] },
   { label: 'Quotes · Bottom of Funnel', ids: ['deals'] },
   { label: 'Production', ids: ['jobs'] },
   { label: 'Estimating', ids: ['finance', 'files', 'forms'] },
@@ -197,7 +197,7 @@ const LEGACY_ROUTE_SECTIONS = {
 };
 
 // Pipeline stages are customizable placeholder "groups" the client can edit.
-// Each stage is { name, color }. Leads, quotes, and jobs each keep their own
+// Each stage is { name, color }. Contacts, quotes, and jobs each keep their own
 // editable list, persisted to localStorage.
 const DEFAULT_JOB_STAGES = [
   { name: 'Unscheduled', color: '#9AA0A8' },
@@ -210,8 +210,8 @@ const DEFAULT_JOB_STAGES = [
   { name: 'On hold', color: '#C4C7CC' },
 ];
 const DEFAULT_CONTACT_STAGES = [
-  { name: 'Prospect', color: '#9AA0A8' },
-  { name: 'Contacted', color: '#378ADD' },
+  { name: 'Prospects', color: '#9AA0A8' },
+  { name: 'Leads', color: '#378ADD' },
   { name: 'Nurturing', color: '#5AB0A6' },
 ];
 const DEFAULT_DEAL_STAGES = [
@@ -261,6 +261,46 @@ function loadStageList(key, defaults) {
     .filter((stage) => stage.name);
 }
 
+function canonicalContactStageName(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const aliases = {
+    prospect: 'Prospects',
+    prospects: 'Prospects',
+    contacted: 'Leads',
+    lead: 'Leads',
+    leads: 'Leads',
+    nurturing: 'Nurturing',
+    underwriting: 'Nurturing',
+    'estimate sent': 'Nurturing',
+    'proposal sent': 'Nurturing',
+    negotiating: 'Nurturing',
+    negotiation: 'Nurturing',
+    'contract out': 'Nurturing',
+    'contract sent': 'Nurturing',
+    'waiting to sign': 'Nurturing',
+    won: 'Nurturing',
+    'follow-up': 'Nurturing',
+    lost: 'Nurturing',
+  };
+  return aliases[raw.toLowerCase()] || raw;
+}
+
+function normalizeContactStageList(rows, fallback = DEFAULT_CONTACT_STAGES) {
+  const defaultsByName = new Map(fallback.map((stage) => [stage.name, stage]));
+  const output = [];
+  const seen = new Set();
+  rows.forEach((row) => {
+    const name = canonicalContactStageName(row?.name);
+    if (!name || seen.has(name)) return;
+    const fallbackStage = defaultsByName.get(name);
+    const color = fallbackStage?.color || (/^#[0-9a-fA-F]{3,8}$/.test(String(row?.color || '')) ? row.color : '#9AA0A8');
+    output.push({ name, color });
+    seen.add(name);
+  });
+  return output.length ? output : fallback.map((stage) => ({ ...stage }));
+}
+
 let JOB_STAGES = loadStageList(JOB_STAGES_KEY, DEFAULT_JOB_STAGES);
 let CONTACT_STAGES = loadStageList(CONTACT_STAGES_KEY, DEFAULT_CONTACT_STAGES);
 let DEAL_STAGES = loadStageList(DEAL_STAGES_KEY, DEFAULT_DEAL_STAGES);
@@ -288,19 +328,9 @@ function resolveContactStage(value) {
   const names = contactStageNames();
   const raw = String(value || '').trim();
   if (names.includes(raw)) return raw;
-  const legacy = {
-    Prospects: 'Prospect',
-    Leads: 'Contacted',
-    Underwriting: 'Nurturing',
-    'Estimate sent': 'Nurturing',
-    Negotiating: 'Nurturing',
-    'Contract out': 'Nurturing',
-    Won: 'Nurturing',
-    'Follow-up': 'Nurturing',
-    Lost: 'Nurturing',
-  }[raw];
-  if (legacy && names.includes(legacy)) return legacy;
-  return names[0] || 'Prospect';
+  const legacy = canonicalContactStageName(raw);
+  if (names.includes(legacy)) return legacy;
+  return names[0] || 'Prospects';
 }
 function resolveDealStage(value) {
   const names = dealStageNames();
@@ -429,15 +459,15 @@ const jobsFallback = [
 ];
 
 const contactsFallback = [
-  { id: 'contact-1', company_id: 'roofing', name: 'William Moran', phone: '928-231-0147', email: 'wrmoran@gmail.com', location: 'Future project', stage: 'Prospect', value: 0, owner_name: 'Abraham Flores' },
-  { id: 'contact-2', company_id: 'roofing', name: 'Valerie McKenzie', phone: '602-750-5678', email: '', location: '6054 E Blanche Dr, Scottsdale', stage: 'Prospect', value: 0, owner_name: 'Maya Rosales' },
-  { id: 'contact-3', company_id: 'roofing', name: 'April Reyes', phone: '480-277-1540', email: '', location: '451 E 10th Ave, Mesa', stage: 'Contacted', value: 14500, owner_name: 'Andre Lee' },
-  { id: 'contact-4', company_id: 'roofing', name: 'Mario Esquivel', phone: '480-955-4036', email: 'esquivel@residence.com', location: 'Costa Bella Residence', stage: 'Contacted', value: 22000, owner_name: 'Maya Rosales' },
+  { id: 'contact-1', company_id: 'roofing', name: 'William Moran', phone: '928-231-0147', email: 'wrmoran@gmail.com', location: 'Future project', stage: 'Prospects', value: 0, owner_name: 'Abraham Flores' },
+  { id: 'contact-2', company_id: 'roofing', name: 'Valerie McKenzie', phone: '602-750-5678', email: '', location: '6054 E Blanche Dr, Scottsdale', stage: 'Prospects', value: 0, owner_name: 'Maya Rosales' },
+  { id: 'contact-3', company_id: 'roofing', name: 'April Reyes', phone: '480-277-1540', email: '', location: '451 E 10th Ave, Mesa', stage: 'Leads', value: 14500, owner_name: 'Andre Lee' },
+  { id: 'contact-4', company_id: 'roofing', name: 'Mario Esquivel', phone: '480-955-4036', email: 'esquivel@residence.com', location: 'Costa Bella Residence', stage: 'Leads', value: 22000, owner_name: 'Maya Rosales' },
   { id: 'contact-5', company_id: 'roofing', name: 'Mike - Maricopa', phone: '503-317-4788', email: '', location: 'Maricopa', stage: 'Nurturing', value: 31000, owner_name: 'Andre Lee' },
   { id: 'contact-6', company_id: 'roofing', name: 'Kumar Residence', phone: '', email: '', location: '16750 E Nicklaus Dr, Fountain Hills', stage: 'Nurturing', value: 47800, owner_name: 'Maya Rosales' },
-  { id: 'contact-7', company_id: 'roofing', name: 'Keith Salas', phone: '717-991-7029', email: '', location: '15948 E Sycamore', stage: 'Contacted', value: 28900, owner_name: 'Andre Lee' },
+  { id: 'contact-7', company_id: 'roofing', name: 'Keith Salas', phone: '717-991-7029', email: '', location: '15948 E Sycamore', stage: 'Leads', value: 28900, owner_name: 'Andre Lee' },
   { id: 'contact-8', company_id: 'roofing', name: 'Brad Lundstrom', phone: '602-577-9523', email: 'lundstromdesign@gmail.com', location: '3200 W Wander Ln', stage: 'Nurturing', value: 53200, owner_name: 'Abraham Flores' },
-  { id: 'contact-9', company_id: 'roofing', name: 'Rosa Cruz-Blanch', phone: '787-549-0942', email: 'rcruz@natlbtr.com', location: 'W Encanto Blvd', stage: 'Contacted', value: 61000, owner_name: 'Maya Rosales' },
+  { id: 'contact-9', company_id: 'roofing', name: 'Rosa Cruz-Blanch', phone: '787-549-0942', email: 'rcruz@natlbtr.com', location: 'W Encanto Blvd', stage: 'Leads', value: 61000, owner_name: 'Maya Rosales' },
   { id: 'contact-10', company_id: 'drafting', name: 'Horizon HVAC', phone: '480-555-0199', email: 'plans@horizonhvac.com', location: 'Chandler, AZ', stage: 'Nurturing', value: 4200, owner_name: 'Noah Park', account_id: 'account-3', title: 'Facilities lead' },
 ];
 
@@ -3077,8 +3107,8 @@ function renderUnderwriterPage(route, companyId) {
   return `
     <section class="tool-page underwriter-page">
       ${workspaceHeader('Underwriter', 'CRM 2 workspace for qualification, scope, pricing, and quote handoff readiness.', `
-        ${can('crm.view', companyId) ? `<a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Open leads</a>` : ''}
-        ${canManageUnderwriter && can('crm.view', companyId) ? `<button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add lead</button>` : ''}
+        ${can('crm.view', companyId) ? `<a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Open contacts</a>` : ''}
+        ${canManageUnderwriter && can('crm.view', companyId) ? `<button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>` : ''}
       `)}
       <section class="metric-grid">
         ${metricCard('Underwriting', underwriting.length)}
@@ -3180,7 +3210,7 @@ function pipelineToolbar(kind, companyId) {
   `;
 }
 
-// ---- Leads (top-of-funnel pipeline) ---------------------------------------
+// ---- Contacts (top-of-funnel pipeline) ------------------------------------
 function renderContactsPage(route, companyId) {
   const contactId = route.params.get('contact_id');
   if (contactId) {
@@ -3190,9 +3220,9 @@ function renderContactsPage(route, companyId) {
   const stageParam = route.params.get('stage');
   if (stageParam) state.contactStageFilter = contactStageNames().includes(stageParam) ? stageParam : 'all';
   return `
-    ${workspaceHeader('Leads', 'Top-of-funnel prospects before quote handoff.', `
+    ${workspaceHeader('Contacts', 'Top-of-funnel contacts before quote handoff.', `
       <button class="btn" type="button" data-action="open-stage-manager" data-module="contacts"><i class="ti ti-adjustments-horizontal"></i>Manage stages</button>
-      <button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add lead</button>
+      <button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>
     `)}
     ${pipelineToolbar('contacts', companyId)}
     ${state.contactBoardView === 'board' ? renderContactBoard(companyId) : renderContactTable(companyId)}
@@ -3203,7 +3233,7 @@ function renderContactTable(companyId) {
   const rows = filteredContacts(companyId);
   return `
     <section class="panel">
-      <div class="section-head"><div><h2>Leads</h2><p>${rows.length} visible lead${rows.length === 1 ? '' : 's'}</p></div></div>
+      <div class="section-head"><div><h2>Contacts</h2><p>${rows.length} visible contact${rows.length === 1 ? '' : 's'}</p></div></div>
       <div class="data-table contacts-table">
         <div class="table-head"><span>Client</span><span>Phone</span><span>Email</span><span>Location</span><span>Stage</span><span>Value</span></div>
         ${rows.map((contact) => `
@@ -3215,7 +3245,7 @@ function renderContactTable(companyId) {
             <span>${stageTagPipe('contacts', contact.stage)}</span>
             <span>${contact.value ? money(contact.value) : '<span class="muted-dash">—</span>'}</span>
           </button>
-        `).join('') || emptyState('No leads in this view yet.')}
+        `).join('') || emptyState('No contacts in this view yet.')}
       </div>
     </section>
   `;
@@ -3233,7 +3263,7 @@ function renderContactBoard(companyId) {
           <article class="pipe-lane">
             <header class="pipe-lane-head">${pipelineDot(stage.color)}<span>${h(stage.name)}</span><b>${cards.length}</b></header>
             <div class="pipe-lane-body">
-              ${cards.map((contact) => contactCard(contact)).join('') || '<div class="lane-empty">No leads</div>'}
+              ${cards.map((contact) => contactCard(contact)).join('') || '<div class="lane-empty">No contacts</div>'}
             </div>
           </article>
         `;
@@ -3276,13 +3306,13 @@ function renderContactRecord(companyId, contact) {
     <div class="sf-record">
       <div class="sf-object-tabs">
         <a class="sf-object-tab" href="${appHref(companyPath('home', {}, companyId))}" data-router>Home</a>
-        <a class="sf-object-tab" href="${appHref(companyPath('contacts', {}, companyId))}" data-router>All Leads <span class="sf-tab-kind">| Leads</span></a>
-        <span class="sf-object-tab on">${h(contact.name)} <span class="sf-tab-kind">| Lead</span></span>
+        <a class="sf-object-tab" href="${appHref(companyPath('contacts', {}, companyId))}" data-router>All Contacts <span class="sf-tab-kind">| Contacts</span></a>
+        <span class="sf-object-tab on">${h(contact.name)} <span class="sf-tab-kind">| Contact</span></span>
       </div>
 
       <div class="sf-record-head">
         <span class="sf-record-icon"><i class="ti ti-user"></i></span>
-        <div><div class="sf-record-label">Lead</div><div class="sf-record-name">${h(contact.name)}</div></div>
+        <div><div class="sf-record-label">Contact</div><div class="sf-record-name">${h(contact.name)}</div></div>
         <div class="sf-actions">
           ${headerActions.map(([label, ico]) => label === 'Edit'
             ? `<button class="sf-btn" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ${ico}"></i>${label}</button>`
@@ -3441,8 +3471,8 @@ function contactQuickCreate(contactId, kind) {
   if (kind === 'Note') return logContactActivity(contactId, 'note', 'Note added');
   if (kind === 'Call Log' || kind === 'Log a Call') return logContactActivity(contactId, 'call', 'Logged a call');
   if (kind === 'Meeting' || kind === 'New Event') return logContactActivity(contactId, 'meeting', 'Meeting scheduled');
-  if (kind === 'Follow') return showToast('Following this lead.', 'local', 'Leads');
-  return showToast(`${kind} isn't set up yet.`, 'local', 'Leads');
+  if (kind === 'Follow') return showToast('Following this contact.', 'local', 'Contacts');
+  return showToast(`${kind} isn't set up yet.`, 'local', 'Contacts');
 }
 
 async function postContactNote(form) {
@@ -3483,9 +3513,9 @@ async function convertContactToJob(contactId) {
   upsertJob(ok && data ? normalizeJob(data) : job);
   const wonStage = contactStageNames().find((name) => /win|won/i.test(name)) || contact.stage;
   await persistContact({ ...contact, stage: wonStage });
-  await logActivity({ type: 'system', subject: 'Lead converted → Job created', body: contact.name, related_type: 'contact', related_id: contact.id, account_id: contact.account_id });
+  await logActivity({ type: 'system', subject: 'Contact converted -> Job created', body: contact.name, related_type: 'contact', related_id: contact.id, account_id: contact.account_id });
   state.selectedJobId = job.id;
-  showToast('Lead converted to job.', ok ? 'live' : 'local', 'Leads');
+  showToast('Contact converted to job.', ok ? 'live' : 'local', 'Contacts');
   navigate(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId));
 }
 
@@ -3680,7 +3710,7 @@ function beginJobInlineEdit(span) {
 }
 
 function renderContactFormModal(companyId, contact) {
-  return renderModalShell('Leads', contact ? 'Edit lead' : 'Add lead', renderContactEditor(companyId, contact), 'wide-modal');
+  return renderModalShell('Contacts', contact ? 'Edit contact' : 'Add contact', renderContactEditor(companyId, contact), 'wide-modal');
 }
 
 function renderContactEditor(companyId, contact) {
@@ -3689,7 +3719,7 @@ function renderContactEditor(companyId, contact) {
     <form class="job-editor" data-contact-form>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
       <div class="section-head span-2">
-        <div><h2>${contact ? 'Edit lead' : 'New lead'}</h2><p>Leads move through Prospect, Contacted, and Nurturing before quote handoff.</p></div>
+        <div><h2>${contact ? 'Edit contact' : 'New contact'}</h2><p>Contacts move through Prospects, Leads, and Nurturing before quote handoff.</p></div>
       </div>
       ${field('Name', 'name', edit.name, true)}
       ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
@@ -3706,7 +3736,7 @@ function renderContactEditor(companyId, contact) {
       ${field('Roof system', 'roof_system', edit.roof_system)}
       ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
       <div class="form-actions span-2">
-        <button class="btn btn-primary" type="submit">Save lead</button>
+        <button class="btn btn-primary" type="submit">Save contact</button>
         ${contact ? `<button class="btn danger" type="button" data-action="delete-contact" data-contact-id="${h(contact.id)}">Delete</button>` : ''}
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
       </div>
@@ -3733,7 +3763,7 @@ async function saveContact(form) {
         upsertContact(normalizeContact(result.data));
         state.selectedContactId = payload.id;
         state.modal = '';
-        showToast(`${payload.name} saved.`, 'live', 'Leads');
+        showToast(`${payload.name} saved.`, 'live', 'Contacts');
         render();
         return;
       }
@@ -3744,7 +3774,7 @@ async function saveContact(form) {
   upsertContact(payload);
   state.selectedContactId = payload.id;
   state.modal = '';
-  showToast(`${payload.name} saved.`, 'local', 'Leads');
+  showToast(`${payload.name} saved.`, 'local', 'Contacts');
   render();
 }
 
@@ -3768,7 +3798,7 @@ async function deleteContact(id) {
 // ---- Stage manager (create / rename / recolor / delete) -------------------
 function renderStageManagerModal(kind) {
   const stages = pipelineStages(kind);
-  const title = kind === 'contacts' ? 'Lead pipeline stages' : kind === 'deals' ? 'Quote pipeline stages' : 'Job pipeline stages';
+  const title = kind === 'contacts' ? 'Contact pipeline stages' : kind === 'deals' ? 'Quote pipeline stages' : 'Job pipeline stages';
   const body = `
     <form class="stage-manager" data-stage-form data-kind="${kind}">
       <p class="stage-manager-hint">Stages are your pipeline columns - the placeholder groups your team can shape. Rename or recolor any stage and your records keep their place; add new stages for any workflow.</p>
@@ -3867,7 +3897,7 @@ function applyPipelineStagesForCompany(companyId) {
     return rows.length ? rows : fallback.map((stage) => ({ ...stage }));
   };
   JOB_STAGES = forKind('jobs', DEFAULT_JOB_STAGES);
-  CONTACT_STAGES = forKind('contacts', DEFAULT_CONTACT_STAGES);
+  CONTACT_STAGES = normalizeContactStageList(forKind('contacts', DEFAULT_CONTACT_STAGES), DEFAULT_CONTACT_STAGES);
   DEAL_STAGES = forKind('deals', DEFAULT_DEAL_STAGES);
   // Clamp active stage filters to the current company's stage names.
   if (state.stageFilter !== 'all' && !jobStageNames().includes(state.stageFilter)) state.stageFilter = 'all';
@@ -5593,12 +5623,12 @@ function renderAccountList(companyId) {
   const all = companyAccounts(companyId);
   const openDeals = companyDeals(companyId).filter((deal) => deal.status === 'open');
   return `
-    ${workspaceHeader('Accounts', 'Organizations and customers - the hub for leads, quotes, and jobs.', `
+    ${workspaceHeader('Accounts', 'Organizations and customers - the hub for contacts, quotes, and jobs.', `
       <button class="btn btn-primary" type="button" data-action="open-account-form" data-mode="new"><i class="ti ti-plus"></i>Add account</button>
     `)}
     <section class="metric-grid crm-metrics">
       ${metricCard('Accounts', all.length)}
-      ${metricCard('Leads', companyContacts(companyId).length)}
+      ${metricCard('Contacts', companyContacts(companyId).length)}
       ${metricCard('Open quotes', openDeals.length)}
       ${metricCard('Quote pipeline', money(sum(openDeals, 'value')))}
     </section>
@@ -5612,7 +5642,7 @@ function renderAccountList(companyId) {
     <section class="panel">
       <div class="section-head"><div><h2>Accounts</h2><p>${rows.length} visible</p></div></div>
       <div class="data-table accounts-table">
-        <div class="table-head"><span>Account</span><span>Type</span><span>Owner</span><span>Leads</span><span>Open quotes</span><span>Pipeline</span></div>
+        <div class="table-head"><span>Account</span><span>Type</span><span>Owner</span><span>Contacts</span><span>Open quotes</span><span>Pipeline</span></div>
         ${rows.map((account) => {
           const deals = dealsForAccount(account.id).filter((deal) => deal.status === 'open');
           return `
@@ -5638,7 +5668,7 @@ function renderAccountDetail(companyId, account) {
   const openDeals = deals.filter((deal) => deal.status === 'open');
   const tabs = [
     ['overview', 'Overview', ''],
-    ['contacts', 'Leads', contacts.length],
+    ['contacts', 'Contacts', contacts.length],
     ['deals', 'Quotes', deals.length],
     ['jobs', 'Jobs', jobs.length],
     ['activity', 'Activity', activitiesForAccount(account.id).length],
@@ -5666,7 +5696,7 @@ function renderAccountDetail(companyId, account) {
 function renderAccountTab(companyId, account, tab, data) {
   if (tab === 'contacts') {
     return `<section class="panel">
-      <div class="section-head"><div><h2>Leads</h2><p>People at ${h(account.name)}</p></div><button class="btn" type="button" data-action="open-contact-form" data-mode="new" data-account-id="${h(account.id)}"><i class="ti ti-plus"></i>Add lead</button></div>
+      <div class="section-head"><div><h2>Contacts</h2><p>People at ${h(account.name)}</p></div><button class="btn" type="button" data-action="open-contact-form" data-mode="new" data-account-id="${h(account.id)}"><i class="ti ti-plus"></i>Add contact</button></div>
       <div class="data-table contacts-table">
         <div class="table-head"><span>Name</span><span>Title</span><span>Phone</span><span>Email</span><span>Owner</span><span></span></div>
         ${data.contacts.map((contact) => `
@@ -5677,7 +5707,7 @@ function renderAccountTab(companyId, account, tab, data) {
             <span>${contact.email ? h(contact.email) : '<span class="muted-dash">—</span>'}</span>
             <span>${h(contact.owner_name || 'Unassigned')}</span>
             <span></span>
-          </button>`).join('') || emptyState('No leads linked to this account yet.')}
+          </button>`).join('') || emptyState('No contacts linked to this account yet.')}
       </div>
     </section>`;
   }
@@ -5749,7 +5779,7 @@ function renderAccountEditor(companyId, account) {
   return `
     <form class="job-editor" data-account-form>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
-      <div class="section-head span-2"><div><h2>${account ? 'Edit account' : 'New account'}</h2><p>Accounts group the leads, quotes, and jobs for one organization.</p></div></div>
+      <div class="section-head span-2"><div><h2>${account ? 'Edit account' : 'New account'}</h2><p>Accounts group the contacts, quotes, and jobs for one organization.</p></div></div>
       ${field('Account name', 'name', edit.name, true)}
       ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
       ${selectField('Type', 'type', edit.type, ACCOUNT_TYPES.map((type) => [type, type]))}
@@ -7385,7 +7415,7 @@ function renderDemoModeLauncher(returnUrl) {
       <section class="demo-mode-box">
         <div>
           <strong>Read-only sample workspace</strong>
-          <span>Explore sample leads, quotes, jobs, files, forms, approvals, and billing without saving changes.</span>
+          <span>Explore sample contacts, quotes, jobs, files, forms, approvals, and billing without saving changes.</span>
         </div>
         <button class="btn full" type="button" data-action="start-demo-mode" data-return-url="${h(returnUrl)}">Open read-only demo</button>
       </section>
