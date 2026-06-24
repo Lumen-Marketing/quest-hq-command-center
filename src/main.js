@@ -12464,7 +12464,7 @@ function workspaceHeader(title, summary, actions = '') {
         <span class="head-symbol">${svgIcon(symbol)}</span>
         <div>
           <div class="context-line"><span>${h(companyName(activeCompanyId()))}</span><b>${h(roleForCompany(activeCompanyId()))}</b></div>
-          <h1>${h(title)}</h1>
+          <h1 class="sr-only">${h(title)}</h1>
           <p>${h(summary)}</p>
         </div>
       </div>
