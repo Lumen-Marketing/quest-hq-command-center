@@ -1318,7 +1318,6 @@ async function initializeAuth() {
     await setSupabaseSession(data?.session || null);
     client.auth.onAuthStateChange((_event, session) => {
       setSupabaseSession(session || null).finally(() => {
-        state.dataLoaded = false;
         render();
       });
     });
@@ -1334,13 +1333,30 @@ async function setSupabaseSession(session) {
   if (!CONFIG.questAuthEnabled) return;
   if (!session?.user) {
     state.session = null;
+    resetLiveWorkspaceData();
+    state.dataLoaded = false;
     localStorage.removeItem(SESSION_KEY);
     return;
   }
   const profile = await fetchSupabaseProfile(session.user);
-  state.session = buildSupabaseSession(session, profile);
-  resetLiveWorkspaceData();
+  const nextSession = buildSupabaseSession(session, profile);
+  const shouldReloadWorkspace = shouldReloadWorkspaceForSession(state.session, nextSession);
+  state.session = nextSession;
+  if (shouldReloadWorkspace) {
+    resetLiveWorkspaceData();
+    state.dataLoaded = false;
+  }
   writeJson(SESSION_KEY, state.session);
+}
+
+function shouldReloadWorkspaceForSession(previousSession, nextSession) {
+  if (!previousSession || previousSession.auth !== 'supabase') return true;
+  if (!nextSession || nextSession.auth !== 'supabase') return true;
+  if (previousSession?.user?.id !== nextSession?.user?.id) return true;
+  if (previousSession?.profile?.member_id !== nextSession?.profile?.member_id) return true;
+  if (previousSession?.profile?.role !== nextSession?.profile?.role) return true;
+  if (previousSession?.profile?.approved !== nextSession?.profile?.approved) return true;
+  return JSON.stringify(previousSession?.profile?.company_ids || []) !== JSON.stringify(nextSession?.profile?.company_ids || []);
 }
 
 async function fetchSupabaseProfile(user) {

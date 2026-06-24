@@ -33,6 +33,15 @@ test('supabase access survives noncritical full-data load fallback', () => {
   assert.match(source, /trustedProfileCompany && \['owner', 'admin', 'developer'\]\.includes/);
 });
 
+test('same-user supabase auth events do not force full workspace reloads', () => {
+  assert.match(source, /function shouldReloadWorkspaceForSession\(previousSession, nextSession\)/);
+  assert.match(source, /previousSession\?\.user\?\.id !== nextSession\?\.user\?\.id/);
+  assert.match(source, /JSON\.stringify\(previousSession\?\.profile\?\.company_ids \|\| \[\]\) !== JSON\.stringify\(nextSession\?\.profile\?\.company_ids \|\| \[\]\)/);
+  assert.match(source, /const shouldReloadWorkspace = shouldReloadWorkspaceForSession\(state\.session, nextSession\);/);
+  assert.match(source, /if \(shouldReloadWorkspace\) \{\s*resetLiveWorkspaceData\(\);\s*state\.dataLoaded = false;\s*\}/);
+  assert.doesNotMatch(source, /onAuthStateChange\(\(_event, session\) => \{\s*setSupabaseSession\(session \|\| null\)\.finally\(\(\) => \{\s*state\.dataLoaded = false;/);
+});
+
 test('supabase workspace creation is idempotent for active members', () => {
   assert.match(migration, /create or replace function public\.create_company_workspace\(company_name text\)/);
   assert.match(migration, /select cm\.company_id\s+into existing_company_id/);
