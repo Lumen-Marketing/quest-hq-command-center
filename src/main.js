@@ -12456,7 +12456,23 @@ function isSessionEmailVerified(session = activeSession()) {
   return session.user?.email_verified === true || !!session.user?.email_confirmed_at || session.profile?.email_verified === true;
 }
 
+function isNoticeWorkspaceHeader(title, summary) {
+  return [
+    'Access denied',
+    'Company access denied',
+    'Subscription required',
+    'Workspace awaiting approval',
+  ].includes(title) || String(summary || '').startsWith('This module will use');
+}
+
 function workspaceHeader(title, summary, actions = '') {
+  if (!isNoticeWorkspaceHeader(title, summary)) {
+    return actions ? `
+      <section class="workspace-head workspace-head-actions-only">
+        <div class="head-actions">${actions}</div>
+      </section>
+    ` : '';
+  }
   const symbol = moduleSymbol();
   return `
     <section class="workspace-head">
@@ -12464,7 +12480,7 @@ function workspaceHeader(title, summary, actions = '') {
         <span class="head-symbol">${svgIcon(symbol)}</span>
         <div>
           <div class="context-line"><span>${h(companyName(activeCompanyId()))}</span><b>${h(roleForCompany(activeCompanyId()))}</b></div>
-          <h1 class="sr-only">${h(title)}</h1>
+          <h1>${h(title)}</h1>
           <p>${h(summary)}</p>
         </div>
       </div>

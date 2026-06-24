@@ -12273,6 +12273,19 @@ button {
   font-size: 14px;
 }
 
+.workspace-head-actions-only {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 0;
+  margin: 0 0 12px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.workspace-head-actions-only .head-actions {
+  width: 100%;
+}
+
 /* Home dashboard count/role badges → cool neutral chips, drop warm cream */
 .home-shortcut b,
 .home-message-row b,
