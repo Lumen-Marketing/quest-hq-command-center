@@ -22,10 +22,13 @@ test('workspace creation applies optimistic active membership state', () => {
 });
 
 test('supabase access survives noncritical full-data load fallback', () => {
+  assert.match(source, /function safeSupabaseQuery\(query\)/);
+  assert.match(source, /return Promise\.resolve\(query\)\.catch\(\(error\) => \(\{ error \}\)\);/);
   assert.match(source, /async function loadSupabaseBootstrapData\(\)/);
-  assert.match(source, /client\.from\('company_memberships'\)\.select\('\*'\)\.eq\('profile_id', profile\.id\)/);
-  assert.match(source, /client\.rpc\('is_platform_admin'\)/);
-  assert.match(source, /client\.rpc\('list_platform_companies'\)/);
+  assert.match(source, /safeSupabaseQuery\(client\.from\('company_memberships'\)\.select\('\*'\)\.eq\('profile_id', profile\.id\)\)/);
+  assert.match(source, /safeSupabaseQuery\(client\.rpc\('is_platform_admin'\)\)/);
+  assert.match(source, /safeSupabaseQuery\(client\.rpc\('list_platform_companies'\)\)/);
+  assert.doesNotMatch(source, /client\.rpc\([^;\n]+\.catch\(\(error\) => \(\{ error \}\)\)/);
   assert.match(source, /const trustedProfileCompany = \(profile\.company_ids \|\| \[\]\)\.map\(canonicalCompanyId\)\.includes/);
   assert.match(source, /trustedProfileCompany && \['owner', 'admin', 'developer'\]\.includes/);
 });

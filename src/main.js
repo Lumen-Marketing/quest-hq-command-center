@@ -1567,7 +1567,7 @@ async function loadSupabaseData() {
     client.from('accounts').select('*').order('name', { ascending: true }),
     client.from('deals').select('*').order('updated_at', { ascending: false }),
     client.from('activities').select('*').order('created_at', { ascending: false }).limit(500),
-    client.rpc('is_platform_admin').catch((error) => ({ error })),
+    safeSupabaseQuery(client.rpc('is_platform_admin')),
   ]);
 
   let liveTables = 0;
@@ -1651,8 +1651,8 @@ async function loadSupabaseData() {
 
   if (state.platformAdmin) {
     const [platformCompaniesResult, platformMembersResult] = await Promise.all([
-      client.rpc('list_platform_companies').catch((error) => ({ error })),
-      client.rpc('list_platform_company_members', { target_company_id: null }).catch((error) => ({ error })),
+      safeSupabaseQuery(client.rpc('list_platform_companies')),
+      safeSupabaseQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
     ]);
     if (!platformCompaniesResult.error) {
       state.platformCompanies = (platformCompaniesResult.data || []).map(normalizePlatformCompany);
@@ -1673,7 +1673,7 @@ async function loadSupabaseData() {
   }
 
   if (isQuestDeveloper() && !state.platformCompanies.length) {
-    const reviewsResult = await client.rpc('list_workspace_reviews').catch((error) => ({ error }));
+    const reviewsResult = await safeSupabaseQuery(client.rpc('list_workspace_reviews'));
     if (!reviewsResult.error) {
       state.workspaceReviews = (reviewsResult.data || []).map(normalizeWorkspaceReview);
       const reviewCompanies = state.workspaceReviews.map((review) => normalizeCompany({
@@ -1705,9 +1705,9 @@ async function loadSupabaseBootstrapData() {
   if (!client) return;
   const profile = activeSession().profile;
   const [membershipsResult, profileResult, platformAdminResult] = await Promise.all([
-    client.from('company_memberships').select('*').eq('profile_id', profile.id).catch((error) => ({ error })),
-    client.from('profiles').select('*').eq('id', profile.id).maybeSingle().catch((error) => ({ error })),
-    client.rpc('is_platform_admin').catch((error) => ({ error })),
+    safeSupabaseQuery(client.from('company_memberships').select('*').eq('profile_id', profile.id)),
+    safeSupabaseQuery(client.from('profiles').select('*').eq('id', profile.id).maybeSingle()),
+    safeSupabaseQuery(client.rpc('is_platform_admin')),
   ]);
   if (!profileResult.error && profileResult.data) {
     const nextProfile = normalizeProfile(profileResult.data, profile);
@@ -1725,11 +1725,11 @@ async function loadSupabaseBootstrapData() {
     .concat(activeSession().profile.company_ids || []));
   if (companyIds.length) {
     const [companiesResult, subscriptionsResult, rolesResult, rolePermissionsResult, roleAssignmentsResult] = await Promise.all([
-      client.from('companies').select('*').in('id', companyIds).catch((error) => ({ error })),
-      client.from('company_subscriptions').select('*').in('company_id', companyIds).catch((error) => ({ error })),
-      client.from('roles').select('*').in('company_id', companyIds).catch((error) => ({ error })),
-      client.from('role_permissions').select('*').catch((error) => ({ error })),
-      client.from('user_role_assignments').select('*').in('company_id', companyIds).catch((error) => ({ error })),
+      safeSupabaseQuery(client.from('companies').select('*').in('id', companyIds)),
+      safeSupabaseQuery(client.from('company_subscriptions').select('*').in('company_id', companyIds)),
+      safeSupabaseQuery(client.from('roles').select('*').in('company_id', companyIds)),
+      safeSupabaseQuery(client.from('role_permissions').select('*')),
+      safeSupabaseQuery(client.from('user_role_assignments').select('*').in('company_id', companyIds)),
     ]);
     if (!companiesResult.error) state.companies = mergeCompanies(state.companies.concat((companiesResult.data || []).map(normalizeCompany)));
     if (!subscriptionsResult.error) state.subscriptions = mergeSubscriptions(state.subscriptions.concat((subscriptionsResult.data || []).map(normalizeSubscription)));
@@ -1739,8 +1739,8 @@ async function loadSupabaseBootstrapData() {
   }
   if (state.platformAdmin) {
     const [platformCompaniesResult, platformMembersResult] = await Promise.all([
-      client.rpc('list_platform_companies').catch((error) => ({ error })),
-      client.rpc('list_platform_company_members', { target_company_id: null }).catch((error) => ({ error })),
+      safeSupabaseQuery(client.rpc('list_platform_companies')),
+      safeSupabaseQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
     ]);
     if (!platformCompaniesResult.error) {
       state.platformCompanies = (platformCompaniesResult.data || []).map(normalizePlatformCompany);
@@ -1765,6 +1765,10 @@ function createSupabaseClient() {
     supabaseClientCache = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
   }
   return supabaseClientCache;
+}
+
+function safeSupabaseQuery(query) {
+  return Promise.resolve(query).catch((error) => ({ error }));
 }
 
 function resetLiveWorkspaceData() {
@@ -8793,7 +8797,7 @@ async function lookupInviteCode(inviteCode) {
   const token = String(inviteCode || '').trim();
   const client = createSupabaseClient();
   if (!token || !client) return null;
-  const result = await client.rpc('lookup_company_invite', { invite_token: token }).catch((error) => ({ error }));
+  const result = await safeSupabaseQuery(client.rpc('lookup_company_invite', { invite_token: token }));
   if (result.error) return null;
   const row = Array.isArray(result.data) ? result.data[0] : result.data;
   if (!row) return { missing: true };
@@ -8885,7 +8889,7 @@ async function createWorkspaceForCurrentUser(formNode) {
   state.loginError = '';
   state.authMessage = 'Creating workspace...';
   render();
-  const workspace = await client.rpc('create_company_workspace', { company_name: companyName }).catch((error) => ({ error }));
+  const workspace = await safeSupabaseQuery(client.rpc('create_company_workspace', { company_name: companyName }));
   if (workspace.error) {
     state.loginError = workspace.error.message || 'Workspace setup failed.';
     state.authMessage = '';
