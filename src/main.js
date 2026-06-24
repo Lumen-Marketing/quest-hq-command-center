@@ -5518,7 +5518,6 @@ function renderMessagesPage(route, companyId) {
   const selected = selectedConversation(companyId);
   if (selected && state.selectedConversationId !== selected.id) state.selectedConversationId = selected.id;
   const mobileThread = Boolean(selected && route.params.get('conversation'));
-  const stats = messageInboxStats(companyId, conversations);
   subscribeToMessageRealtime(companyId, selected?.id || '');
   if (selected) markConversationRead(selected.id, false);
   return `
@@ -5527,16 +5526,16 @@ function renderMessagesPage(route, companyId) {
         <button class="btn btn-primary" type="button" data-action="new-message-group"><i class="ti ti-message-plus"></i>New group</button>
         <button class="btn" type="button" data-action="new-direct-message"><i class="ti ti-user-plus"></i>Direct message</button>
       `)}
-      <section class="message-kpi-row" aria-label="Message inbox summary">
-        ${messageKpiCard('ti-message-circle', 'Unread', stats.unread, stats.unreadDelta)}
-        ${messageKpiCard('ti-at', 'Mentions', stats.mentions, stats.mentionsDelta)}
-        ${messageKpiCard('ti-paperclip', 'Files shared', stats.files, stats.filesDelta)}
-        ${messageKpiCard('ti-clock', 'Waiting on you', stats.waiting, stats.waitingDelta)}
-        ${messageKpiCard('ti-users-group', 'Group chats', stats.groups, 'Active conversations')}
-      </section>
       <section class="messages-shell">
         <aside class="messages-list-panel panel">
           <div class="messages-tools">
+            <div class="messenger-list-head">
+              <div><h2>Chats</h2><p>${h(String(conversations.length))} conversations</p></div>
+              <div>
+                <button class="icon-button" type="button" data-action="new-message-group" title="New group"><i class="ti ti-message-plus"></i></button>
+                <button class="icon-button" type="button" data-action="new-direct-message" title="Direct message"><i class="ti ti-user-plus"></i></button>
+              </div>
+            </div>
             <div class="message-list-top">
               <label class="message-search-field">
                 <i class="ti ti-search"></i>
@@ -5554,7 +5553,10 @@ function renderMessagesPage(route, companyId) {
             ${conversations.map((conversation) => renderConversationRow(conversation, companyId, selected?.id === conversation.id)).join('') || emptyState('No conversations match this view.')}
           </div>
         </aside>
-        ${selected ? renderMessageContextRail(companyId, selected) : ''}
+        <section class="messages-thread-panel panel">
+          ${selected ? renderMessageThread(companyId, selected) : renderNoConversationState(companyId)}
+        </section>
+        ${selected ? renderMessageDetailsRail(companyId, selected) : ''}
       </section>
       ${state.session?.auth === 'local-basic' ? renderMessageScenarioButton(companyId) : ''}
     </section>
@@ -5616,6 +5618,26 @@ function renderMessageContextRail(companyId, conversation) {
     <aside class="message-context-rail messages-thread-panel">
       <section class="message-preview-card panel">
         ${renderMessageThread(companyId, conversation)}
+      </section>
+      ${renderChatAccessCard(companyId, conversation)}
+      ${renderSharedFilesCard(conversation)}
+      ${renderMessageActionItemsCard(companyId, conversation)}
+    </aside>
+  `;
+}
+
+function renderMessageDetailsRail(companyId, conversation) {
+  return `
+    <aside class="message-details-rail">
+      <section class="messenger-profile-card panel">
+        ${renderAvatar({ full_name: conversation.title }, 'avatar messenger-profile-avatar')}
+        <h3>${h(conversation.title)}</h3>
+        <p>${h(accessSummary(conversation))}</p>
+        <div class="messenger-profile-actions">
+          <button class="icon-button" type="button" data-action="message-search-results" title="Search chat"><i class="ti ti-search"></i></button>
+          <button class="icon-button" type="button" data-action="message-details" data-conversation-id="${h(conversation.id)}" title="Chat details"><i class="ti ti-info-circle"></i></button>
+          <button class="icon-button" type="button" data-action="manage-message-chat" data-conversation-id="${h(conversation.id)}" title="Manage access" ${can('messages.manage_groups', companyId) || can('messages.manage', companyId) ? '' : 'disabled'}><i class="ti ti-users"></i></button>
+        </div>
       </section>
       ${renderChatAccessCard(companyId, conversation)}
       ${renderSharedFilesCard(conversation)}
@@ -5717,12 +5739,12 @@ function renderMessageAttachment(attachment) {
 function renderMessageComposer(conversation) {
   return `
     <form class="message-composer" data-message-form data-conversation-id="${h(conversation.id)}">
-      <input name="body" placeholder="Message ${h(conversation.title)}" autocomplete="off" />
       <label class="icon-button message-attach-button" title="Attach file">
         <i class="ti ti-paperclip"></i>
         <input name="attachments" type="file" multiple ${can('messages.attach_files', conversation.company_id) ? '' : 'disabled'} />
       </label>
-      <button class="btn btn-primary" type="submit"><i class="ti ti-send"></i>Send</button>
+      <input name="body" placeholder="Message ${h(conversation.title)}" autocomplete="off" />
+      <button class="icon-button btn-primary" type="submit" title="Send"><i class="ti ti-send"></i></button>
     </form>
   `;
 }
