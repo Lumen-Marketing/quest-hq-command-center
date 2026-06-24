@@ -29,3 +29,10 @@ test('image avatars do not use the fallback yellow initials background', () => {
   assert.match(styles, /background: #fff;/);
   assert.match(styles, /\.profile-cropper \{/);
 });
+
+test('profile modal close removes the account route query so it stays closed', () => {
+  assert.match(source, /function closeActiveModal\(\)/);
+  assert.match(source, /route\.params\?\.get\('account'\) === 'profile'/);
+  assert.match(source, /params\.delete\('account'\)/);
+  assert.match(source, /navigate\(`\$\{route\.path\}\$\{search \? `\?\$\{search\}` : ''\}`,\s*\{ replace: true \}\)/);
+});

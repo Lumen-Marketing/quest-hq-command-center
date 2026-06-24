@@ -8353,6 +8353,13 @@ function closeActiveModal() {
   state.selectedFinanceInvoiceId = '';
   state.selectedFinanceExpenseId = '';
   state.selectedFinanceVendorId = '';
+  if (route.params?.get('account') === 'profile') {
+    const params = new URLSearchParams(route.params);
+    params.delete('account');
+    const search = params.toString();
+    navigate(`${route.path}${search ? `?${search}` : ''}`, { replace: true });
+    return;
+  }
   if (route.name === 'company' && route.section === 'tasks' && (route.params.get('new') || route.params.get('edit') || route.params.get('task_id'))) {
     navigate(companyPath('tasks', route.jobId ? { job_id: route.jobId } : {}, route.companyId), { replace: true });
     return;
