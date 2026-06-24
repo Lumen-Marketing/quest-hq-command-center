@@ -10709,14 +10709,29 @@ function upsertContact(contact) {
   persistContacts();
 }
 
+function pipelineStageRouteParams(stage) {
+  return stage && stage !== 'all' ? { stage } : {};
+}
+
+function isPipelineDetailRoute(route, kind) {
+  if (!route || route.name !== 'company' || route.section !== kind) return false;
+  if (kind === 'contacts') return route.params.has('contact_id');
+  if (kind === 'deals') return route.params.has('deal_id');
+  if (kind === 'jobs') return route.params.has('job_id');
+  return false;
+}
+
 function setPipelineStage(kind, stage, forceNav) {
   if (!['contacts', 'jobs', 'deals'].includes(kind)) return;
-  if (kind === 'contacts') state.contactStageFilter = stage;
-  else if (kind === 'deals') state.stageFilterDeals = stage;
-  else state.stageFilter = stage;
+  const nextStage = stage || 'all';
+  if (kind === 'contacts') state.contactStageFilter = nextStage;
+  else if (kind === 'deals') state.stageFilterDeals = nextStage;
+  else state.stageFilter = nextStage;
   const route = state.route;
   const onSection = route?.name === 'company' && route.section === kind;
-  if (forceNav || !onSection) navigate(companyPath(kind, {}, activeCompanyId()));
+  if (forceNav || !onSection || isPipelineDetailRoute(route, kind)) {
+    navigate(companyPath(kind, pipelineStageRouteParams(nextStage), activeCompanyId()));
+  }
   else render();
 }
 
