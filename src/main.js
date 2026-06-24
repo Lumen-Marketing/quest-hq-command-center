@@ -3085,6 +3085,130 @@ async function toggleContactTask(taskId) {
   }
 }
 
+function jobSupabaseRow(job) {
+  return emptyToNull(supabaseRow(job, ['id', 'company_id', 'name', 'client_name', 'contact_name', 'site_address', 'job_type', 'stage', 'priority', 'owner_name', 'scope', 'notes', 'estimate_total', 'invoice_total', 'account_id', 'deal_id', 'updated_at']), ['account_id', 'deal_id']);
+}
+
+async function persistJob(job, label = 'Job saved locally') {
+  const payload = normalizeJob({ ...job, updated_at: new Date().toISOString() });
+  upsertJob(payload);
+  state.sync = { label, mode: 'local' };
+  render();
+  const { ok, data } = await supabaseWrite('jobs', jobSupabaseRow(payload));
+  if (ok && data) {
+    upsertJob(normalizeJob(data));
+    state.sync = { label: 'Quest Supabase live', mode: 'live' };
+    render();
+  }
+  return payload;
+}
+
+async function setJobStage(jobId, stage) {
+  const job = jobById(jobId);
+  if (!job || !jobStageNames().includes(stage)) return;
+  if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot update jobs.', 'Jobs')) return;
+  if (job.stage === stage) { render(); return; }
+  await persistJob({ ...job, stage }, 'Job stage saved locally');
+  await logJobActivity(job.id, 'stage_change', `Stage -> ${stage}`);
+}
+
+function markJobNextStage(jobId) {
+  const job = jobById(jobId);
+  const names = jobStageNames();
+  const idx = job ? names.indexOf(job.stage) : -1;
+  if (!job || idx < 0 || idx >= names.length - 1) return;
+  setJobStage(job.id, names[idx + 1]);
+}
+
+async function logJobActivity(jobId, type, subject, body = '') {
+  const job = jobById(jobId);
+  if (!job) return;
+  await logActivity({ type, subject, body, related_type: 'job', related_id: jobId, account_id: job.account_id });
+  render();
+}
+
+async function createJobTask(jobId, title) {
+  const job = jobById(jobId);
+  const clean = String(title || '').trim();
+  if (!job || !clean) return;
+  if (!requirePermission('tasks.manage', job.company_id, 'Your role cannot create tasks.', 'Tasks')) return;
+  const payload = normalizeTask({
+    id: `task-${crypto.randomUUID()}`,
+    company_id: job.company_id,
+    project_id: job.id,
+    title: clean,
+    type: 'lead',
+    status: 'todo',
+    priority: job.priority === 'Urgent' ? 'urgent' : 'medium',
+    due: isoDate(1),
+    creator_id: activeSession().profile.member_id || companyMembers(job.company_id)[0]?.id || 'abraham',
+  });
+  upsertTask(payload);
+  render();
+  const client = createSupabaseClient();
+  if (client) {
+    try {
+      const result = await client.from('tasks').insert(taskPayload(payload)).select().single();
+      if (!result.error && result.data) { upsertTask(normalizeTask(result.data)); render(); }
+    } catch (error) { console.warn('Job task sync failed', error); }
+  }
+}
+
+function jobQuickCreate(jobId, kind) {
+  const job = jobById(jobId);
+  if (!job) return;
+  if (kind === 'Task' || kind === 'New Task') return createJobTask(jobId, 'New job task');
+  if (kind === 'Note' || kind === 'Add Note') return logJobActivity(jobId, 'note', 'Note added');
+  if (kind === 'Log a Call') return logJobActivity(jobId, 'call', 'Logged a call');
+  if (kind === 'New Event') return logJobActivity(jobId, 'meeting', 'Meeting scheduled');
+  if (kind === 'Files' || kind === 'Open Files') return navigate(companyPath('files', { folder: 'jobs', job_id: job.id }, job.company_id));
+  if (kind === 'Form') return navigate(companyPath('forms', { job_id: job.id }, job.company_id));
+  if (kind === 'Invoice') return navigate(companyPath('finance', {}, job.company_id));
+  if (kind === 'Analytics') return navigate(companyPath('analytics', { job_id: job.id }, job.company_id));
+  return showToast(`${kind} isn't set up yet.`, 'local', 'Jobs');
+}
+
+async function postJobNote(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  const text = String(data.body || '').trim();
+  const jobId = String(data.job_id || '');
+  if (!text) return;
+  const tab = state.jobActivityTab || 'Note';
+  if (tab === 'New Task') return createJobTask(jobId, text);
+  const typeMap = { Note: 'note', 'Log a Call': 'call', 'New Event': 'meeting' };
+  await logJobActivity(jobId, typeMap[tab] || 'note', tab === 'Note' ? '' : tab, text);
+}
+
+function patchJobField(jobId, key, raw) {
+  const job = jobById(jobId);
+  if (!job) return;
+  let value;
+  if (key === 'estimate_total' || key === 'invoice_total') value = Number(String(raw).replace(/[^0-9.]/g, '')) || 0;
+  else value = String(raw).trim();
+  if (job[key] === value) { render(); return; }
+  persistJob({ ...job, [key]: value }, 'Job field saved locally');
+}
+
+function beginJobInlineEdit(span) {
+  const key = span.dataset.jobEdit;
+  const jobId = span.dataset.jobId;
+  const job = jobById(jobId);
+  if (!job) return;
+  const input = document.createElement('input');
+  input.className = 'sf-edit-input';
+  input.value = (key === 'estimate_total' || key === 'invoice_total') ? (job[key] || 0) : (job[key] || '');
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => { if (done) return; done = true; patchJobField(jobId, key, input.value); };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+    if (ev.key === 'Escape') { done = true; render(); }
+  });
+}
+
 function renderContactFormModal(companyId, contact) {
   return renderModalShell('Contacts', contact ? 'Edit contact' : 'Add contact', renderContactEditor(companyId, contact), 'wide-modal');
 }
@@ -3380,7 +3504,7 @@ function renderJobsPage(route, companyId) {
 function renderJobPanel(tab, companyId, job) {
   if (tab === 'pipeline') return renderPipeline(companyId);
   if (tab === 'list') return renderJobList(companyId);
-  if (tab === 'profile') return renderJobProfile(companyId, job);
+  if (tab === 'profile') return renderJobRecord(companyId, job);
   return renderPipeline(companyId);
 }
 
@@ -3471,6 +3595,135 @@ function renderJobProfile(companyId, job) {
         </div>
       </article>
     </section>
+  `;
+}
+
+function guidanceForJobStage(name) {
+  const stage = String(name || '').toLowerCase();
+  if (/unscheduled|lead|intake/.test(stage)) return { t: 'Get the job ready to schedule.', b: ['Confirm scope, address, and decision maker.', 'Assign an owner for the next move.', 'Add missing tasks before this sits idle.'] };
+  if (/scheduled|site|review/.test(stage)) return { t: 'Lock the field plan.', b: ['Confirm date, crew, and customer availability.', 'Make sure photos and measurements are attached.', 'Check permit or access constraints.'] };
+  if (/material|order/.test(stage)) return { t: 'Protect the production date.', b: ['Confirm material list and vendor status.', 'Attach purchase details or delivery notes.', 'Flag shortages before the crew is blocked.'] };
+  if (/production|active|install/.test(stage)) return { t: 'Run the work cleanly.', b: ['Keep crew tasks current.', 'Log field notes, photos, and blockers.', 'Watch cost, schedule, and customer updates.'] };
+  if (/qc|punch|quality/.test(stage)) return { t: 'Close the field loop.', b: ['Capture punch list items.', 'Confirm cleanup and customer walkthrough.', 'Prepare invoice and closeout docs.'] };
+  if (/invoice/.test(stage)) return { t: 'Move from work complete to paid.', b: ['Confirm invoice total and job scope.', 'Send the invoice and record due date.', 'Follow up on payment status.'] };
+  if (/paid|closed|complete/.test(stage)) return { t: 'Archive the win.', b: ['Confirm payment is recorded.', 'Make sure files and forms are complete.', 'Capture lessons learned for the next job.'] };
+  if (/hold/.test(stage)) return { t: 'Unblock or document the hold.', b: ['Write the blocker clearly.', 'Assign an owner for the next decision.', 'Set a follow-up date.'] };
+  return { t: 'Move the job forward.', b: ['Confirm the next operational step.', 'Assign the responsible person.', 'Log the latest customer or field update.'] };
+}
+
+function renderJobRecord(companyId, job) {
+  if (!job) return emptyState('Create a job to see the record workspace.');
+  const stages = jobStages();
+  const ci = stages.findIndex((stage) => stage.name === job.stage);
+  const currentIndex = ci >= 0 ? ci : 0;
+  const g = guidanceForJobStage(job.stage);
+  const activeTab = state.jobActivityTab || 'Note';
+  const feed = activitiesFor('job', job.id);
+  const tasks = state.tasks
+    .filter((task) => task.project_id === job.id)
+    .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || String(a.due).localeCompare(String(b.due)));
+  const account = accountById(job.account_id);
+  const deal = dealById(job.deal_id);
+  const fieldRow = (label, content) => `<div class="sf-field"><div class="sf-field-label">${h(label)}<i class="ti ti-pencil sf-pencil"></i></div><div class="sf-field-value">${content}</div></div>`;
+  const ed = (key, opts = {}) => {
+    const display = (job[key] === '' || job[key] == null) ? '-' : job[key];
+    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : ''].filter(Boolean).join(' ');
+    return `<span class="${cls}" data-job-edit="${h(key)}" data-job-id="${h(job.id)}" title="Click to edit">${h(String(display))}</span>`;
+  };
+  const headerActions = [['New Task', 'ti-checkbox'], ['Log a Call', 'ti-phone'], ['Add Note', 'ti-note'], ['Open Files', 'ti-folder'], ['Edit', 'ti-pencil']];
+  const activityTabs = [['Note', 'ti-note'], ['New Task', 'ti-checkbox'], ['New Event', 'ti-calendar'], ['Log a Call', 'ti-phone']];
+  const quickTiles = [['Task', 'ti-checkbox'], ['Files', 'ti-folder'], ['Form', 'ti-clipboard-list'], ['Invoice', 'ti-receipt-dollar'], ['Note', 'ti-note'], ['Analytics', 'ti-chart-bar']];
+
+  return `
+    <div class="sf-record job-record">
+      <div class="sf-object-tabs">
+        <a class="sf-object-tab" href="${appHref(companyPath('home', {}, companyId))}" data-router>Home</a>
+        <a class="sf-object-tab" href="${appHref(companyPath('jobs', {}, companyId))}" data-router>All Jobs <span class="sf-tab-kind">| Jobs</span></a>
+        <span class="sf-object-tab on">${h(job.name)} <span class="sf-tab-kind">| Job</span></span>
+      </div>
+
+      <div class="sf-record-head">
+        <span class="sf-record-icon"><i class="ti ti-briefcase"></i></span>
+        <div><div class="sf-record-label">Job</div><div class="sf-record-name">${h(job.name)}</div></div>
+        <div class="sf-actions">
+          ${headerActions.map(([label, ico]) => label === 'Edit'
+            ? `<button class="sf-btn" type="button" data-action="open-job-form" data-mode="edit" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`
+            : `<button class="sf-btn" type="button" data-action="job-quick" data-kind="${h(label)}" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
+        </div>
+      </div>
+
+      <div class="sf-path-wrap">
+        <div class="sf-path-row">
+          <div class="sf-stage-track">
+            ${stages.map((stage, i) => {
+              const cls = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'future';
+              return `<button class="sf-stage ${cls}" type="button" data-action="set-job-stage" data-job-id="${h(job.id)}" data-stage="${h(stage.name)}" title="Move to ${h(stage.name)}">${i < currentIndex ? '<i class="ti ti-check"></i>' : h(stage.name)}</button>`;
+            }).join('')}
+          </div>
+          <button class="sf-mark-btn" type="button" data-action="job-mark-next" data-job-id="${h(job.id)}">Mark as Current Stage</button>
+        </div>
+        <div class="sf-guidance">
+          <div class="sf-guidance-label">Guidance for Success</div>
+          <div class="sf-guidance-title">${h(g.t)}</div>
+          <div class="sf-guidance-lines">${g.b.map((line) => `<div>- ${h(line)}</div>`).join('')}</div>
+        </div>
+      </div>
+
+      <div class="sf-three-col">
+        <div class="sf-col">
+          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>Job Details</div><div class="sf-card-body">
+            ${fieldRow('Client', ed('client_name', { blue: true }))}
+            ${fieldRow('Contact', ed('contact_name', { blue: true }))}
+            ${fieldRow('Site Address', ed('site_address'))}
+            ${fieldRow('Job Type', `<span class="sf-pill">${h(job.job_type || '-')}</span>`)}
+            ${fieldRow('Owner', ed('owner_name', { blue: true }))}
+            ${fieldRow('Priority', `<span class="sf-pill">${h(job.priority || 'Medium')}</span>`)}
+          </div></div>
+          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
+            ${fieldRow('Stage', `<span>${h(job.stage)}</span>`)}
+            ${fieldRow('Estimate Total', `<span class="sf-money">$<span class="sf-edit mono" data-job-edit="estimate_total" data-job-id="${h(job.id)}" title="Click to edit">${money(job.estimate_total || 0)}</span></span>`)}
+            ${fieldRow('Invoice Total', `<span class="sf-money">$<span class="sf-edit mono" data-job-edit="invoice_total" data-job-id="${h(job.id)}" title="Click to edit">${money(job.invoice_total || 0)}</span></span>`)}
+            ${fieldRow('Account', account ? `<button class="link-button" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(account.name)}</button>` : '<span>-</span>')}
+            ${fieldRow('Deal', deal ? `<button class="link-button" type="button" data-action="open-deal" data-deal-id="${h(deal.id)}">${h(deal.name)}</button>` : '<span>-</span>')}
+          </div></div>
+        </div>
+
+        <div class="sf-col">
+          <div class="sf-card">
+            <div class="sf-activity-tabs">${activityTabs.map(([label, ico]) => `<button class="sf-activity-tab ${activeTab === label ? 'active' : ''}" type="button" data-action="job-activity-tab" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}</div>
+            <form class="sf-note-box" data-job-note-form autocomplete="off">
+              <input type="hidden" name="job_id" value="${h(job.id)}" />
+              <input name="body" placeholder="Write a note or @mention..." />
+              <span class="sf-note-tools"><i class="ti ti-paperclip"></i><i class="ti ti-at"></i></span>
+              <button class="sf-btn" type="submit">Post</button>
+            </form>
+            <div class="sf-filters">Filters: This job - All activities - All types</div>
+            <div class="sf-feed">
+              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : '<div class="sf-feed-empty">No job activity yet. Log a note, call, or meeting.</div>'}
+            </div>
+          </div>
+        </div>
+
+        <div class="sf-col">
+          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-bolt"></i>Quick Create</div>
+            <div class="sf-quick-grid">${quickTiles.map(([label, ico]) => `<button class="sf-quick-tile" type="button" data-action="job-quick" data-kind="${h(label)}" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i><span>${h(label)}</span></button>`).join('')}</div>
+          </div>
+          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-apps"></i>Linked Workspace</div>
+            <div class="sf-quick-grid">
+              <a class="sf-quick-tile" href="${appHref(companyPath('tasks', { job_id: job.id }, companyId))}" data-router><i class="ti ti-checkbox"></i><span>Open Tasks</span></a>
+              <a class="sf-quick-tile" href="${appHref(companyPath('files', { folder: 'jobs', job_id: job.id }, companyId))}" data-router><i class="ti ti-folder"></i><span>Files</span></a>
+              <a class="sf-quick-tile" href="${appHref(companyPath('forms', { job_id: job.id }, companyId))}" data-router><i class="ti ti-clipboard-list"></i><span>Forms</span></a>
+              <a class="sf-quick-tile" href="${appHref(companyPath('analytics', { job_id: job.id }, companyId))}" data-router><i class="ti ti-chart-bar"></i><span>Analytics</span></a>
+            </div>
+          </div>
+          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-checkbox"></i>Open Tasks<span class="sf-connect"><i class="ti ti-plug"></i>Connect</span></div>
+            <div class="sf-tasks">
+              ${tasks.map((task) => `<div class="sf-task-row ${task.status === 'done' ? 'done' : ''}"><button class="sf-check" type="button" data-select-task="${h(task.id)}" aria-label="Open task">${task.status === 'done' ? '<i class="ti ti-check"></i>' : ''}</button><span class="sf-task-title">${h(task.title)}</span>${task.due ? `<span class="sf-due">${h(formatDate(task.due))}</span>` : ''}</div>`).join('') || '<div class="sf-task-empty">No tasks yet.</div>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -6854,6 +7107,13 @@ function onDocumentClick(event) {
     return;
   }
 
+  const jobEditSpan = event.target.closest('[data-job-edit]');
+  if (jobEditSpan) {
+    event.preventDefault();
+    beginJobInlineEdit(jobEditSpan);
+    return;
+  }
+
   const link = event.target.closest('a[href][data-router]');
   if (!link) {
     if (closeAccountMenu || closeNotificationMenu) render();
@@ -7341,6 +7601,27 @@ function handleAction(event, node) {
     convertContactToJob(node.dataset.contactId);
     return;
   }
+  if (action === 'set-job-stage') {
+    event.preventDefault();
+    setJobStage(node.dataset.jobId, node.dataset.stage);
+    return;
+  }
+  if (action === 'job-mark-next') {
+    event.preventDefault();
+    markJobNextStage(node.dataset.jobId);
+    return;
+  }
+  if (action === 'job-quick') {
+    event.preventDefault();
+    jobQuickCreate(node.dataset.jobId, node.dataset.kind);
+    return;
+  }
+  if (action === 'job-activity-tab') {
+    event.preventDefault();
+    state.jobActivityTab = node.dataset.tab || 'Note';
+    render();
+    return;
+  }
   if (action === 'convert-deal') {
     event.preventDefault();
     convertDealToJob(node.dataset.dealId);
@@ -7787,6 +8068,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-contact-note-form]')) {
     event.preventDefault();
     postContactNote(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-job-note-form]')) {
+    event.preventDefault();
+    postJobNote(event.target);
     return;
   }
 
@@ -10624,6 +10911,7 @@ async function logActivity(input) {
     if (input.related_type === 'account') accountId = input.related_id;
     else if (input.related_type === 'deal') accountId = dealById(input.related_id)?.account_id || '';
     else if (input.related_type === 'contact') accountId = contactById(input.related_id)?.account_id || '';
+    else if (input.related_type === 'job') accountId = jobById(input.related_id)?.account_id || '';
   }
   if (!accountById(accountId)) accountId = '';
   const payload = normalizeActivity({
