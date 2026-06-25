@@ -21,18 +21,29 @@ const crmVariantMigrationName = migrationFiles.find((name) => {
   return /crm_plugin_variants/.test(sql) && /underwriter/.test(sql);
 });
 const crmVariantMigration = crmVariantMigrationName ? readFileSync(new URL(`../supabase/migrations/${crmVariantMigrationName}`, import.meta.url), 'utf8') : '';
+const crm2RegistryEntry = source.match(/\{ id: 'crm_2'[^}]+\}/)?.[0] || '';
 
 test('plugin registry maps every non-core route to a workspace plugin', () => {
   assert.match(source, /const CORE_MODULE_IDS = new Set\(\['home', 'jobs', 'tasks', 'users', 'settings'\]\);/);
   assert.match(source, /const WORKSPACE_PLUGIN_REGISTRY = \[/);
   assert.match(source, /id: 'crm'[\s\S]*module_ids: \['crm', 'contacts', 'deals'\]/);
-  assert.match(source, /id: 'crm_2'[\s\S]*module_ids: \['crm', 'contacts', 'deals'\]/);
+  assert.match(source, /id: 'crm_2'[\s\S]*module_ids: \['contacts', 'deals', 'jobs'\]/);
   assert.match(source, /id: 'underwriter'[\s\S]*module_ids: \['underwriter'\]/);
   assert.match(source, /id: 'time_clock'[\s\S]*module_ids: \['time', 'clock'\]/);
   assert.match(source, /id: 'reporting'[\s\S]*module_ids: \['analytics', 'team-chart'\]/);
   assert.match(source, /\{ id: 'underwriter'[\s\S]*label: 'Underwriter'[\s\S]*permission: 'underwriter\.view'/);
   assert.match(source, /function pluginsForModule\(moduleId\)/);
   assert.match(source, /function isModuleInstalled\(moduleId, companyId = activeCompanyId\(\)\)/);
+});
+
+test('crm 2 plugin contents match the contacts quotes jobs workspace', () => {
+  assert.match(crm2RegistryEntry, /label: 'CRM 2'/);
+  assert.match(crm2RegistryEntry, /summary: 'Contacts, quotes, and production jobs workspace.'/);
+  assert.match(crm2RegistryEntry, /module_ids: \['contacts', 'deals', 'jobs'\]/);
+  assert.doesNotMatch(crm2RegistryEntry, /module_ids: \['crm'/);
+  assert.match(source, /\{ label: 'Contacts · Top of Funnel', ids: \['contacts'\] \}/);
+  assert.match(source, /\{ label: 'Quotes · Bottom of Funnel', ids: \['deals'\] \}/);
+  assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
 });
 
 test('workspace presets install industry plugin bundles', () => {
