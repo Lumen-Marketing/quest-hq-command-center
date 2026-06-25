@@ -21,6 +21,10 @@ const crmVariantMigrationName = migrationFiles.find((name) => {
   return /crm_plugin_variants/.test(sql) && /underwriter/.test(sql);
 });
 const crmVariantMigration = crmVariantMigrationName ? readFileSync(new URL(`../supabase/migrations/${crmVariantMigrationName}`, import.meta.url), 'utf8') : '';
+const pluginAmbiguityMigrationName = migrationFiles.find((name) => /fix_plugin_id_ambiguity/.test(name));
+const pluginAmbiguityMigration = pluginAmbiguityMigrationName
+  ? readFileSync(new URL(`../supabase/migrations/${pluginAmbiguityMigrationName}`, import.meta.url), 'utf8')
+  : '';
 const crm2RegistryEntry = source.match(/\{ id: 'crm_2'[^}]+\}/)?.[0] || '';
 
 test('plugin registry maps every non-core route to a workspace plugin', () => {
@@ -111,6 +115,18 @@ test('crm plugins are mutually exclusive and migrated separately from underwrite
   assert.match(crmVariantMigration, /where company_id = clean_company_id[\s\S]*and plugin_id in \('crm', 'crm_2'\)/);
   assert.match(crmVariantMigration, /when permission like 'crm\.%' then array\['crm', 'crm_2'\]/);
   assert.match(crmVariantMigration, /when permission like 'underwriter\.%' then array\['underwriter'\]/);
+});
+
+test('plugin preset RPCs qualify plugin ids to avoid PL/pgSQL ambiguity', () => {
+  assert.ok(pluginAmbiguityMigrationName, 'Expected migration fixing plugin_id ambiguity');
+  assert.match(pluginAmbiguityMigration, /desired_plugin_id text;/);
+  assert.match(
+    pluginAmbiguityMigration,
+    /update public\.company_plugins cp[\s\S]*cp\.company_id = clean_company_id[\s\S]*cp\.plugin_id <> all\(desired_plugins\)/
+  );
+  assert.match(pluginAmbiguityMigration, /foreach desired_plugin_id in array desired_plugins loop/);
+  assert.doesNotMatch(pluginAmbiguityMigration, /\n\s*plugin_id text;/);
+  assert.doesNotMatch(pluginAmbiguityMigration, /foreach plugin_id in array desired_plugins loop/);
 });
 
 test('underwriter queue uses contact language and a dedicated table layout', () => {
