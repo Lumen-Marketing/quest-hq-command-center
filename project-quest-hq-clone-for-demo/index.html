@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#070706">
+<title>Quest HQ · Operations Command · Workspaces</title>
+<link rel="icon" href="images/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css">
+<style>
+/* ==================================================================
+   Quest HQ Operations Command — warm amber design tokens
+   (reconstructed to match quest-hq-command-center-gamma.vercel.app)
+   ================================================================== */
+:root{
+  --bg:#efe8d9; --surface:#fffaf0; --surface-2:#f6efe4; --surface-3:#fbf6ec;
+  --rail:#070706; --rail-2:#141311; --rail-line:rgba(255,244,218,.12);
+  --border:#e2d5bf; --border-strong:#d3c1a7;
+  --text:#17130f; --text-2:#473f34; --text-muted:#72695d;
+  --amber:#f4b234; --amber-2:#f8d995; --amber-soft:#fff1d2;
+  --orange:#e66a1f;
+  --primary:#e66a1f; --primary-hover:#cf5a16; --primary-soft:#fdecd8;
+  --ring:rgba(230,106,31,.22);
+  --success:#15803d; --success-soft:#dcfce7;
+  --warning:#b45309; --warning-soft:#fef3c7;
+  --danger:#b91c1c; --danger-soft:#fdecec;
+  --info:#2563eb; --info-soft:#dbeafe;
+  --purple:#7c3aed; --purple-soft:#ede9fe;
+  --teal:#0d9488; --teal-soft:#ccfbf1;
+  --shadow-sm:0 1px 2px rgba(33,31,27,.08);
+  --shadow-md:0 14px 38px rgba(29,24,17,.12);
+  --shadow-lg:0 22px 70px rgba(33,31,27,.22);
+  --soft-shadow:0 14px 38px rgba(29,24,17,.06);
+  --radius:14px; --radius-sm:10px;
+}
+[data-theme="dark"]{
+  --bg:#0f1115; --surface:#181b20; --surface-2:#20242b; --surface-3:#2a2f37;
+  --border:#2f343c; --border-strong:#3a4049;
+  --text:#f3eee4; --text-2:#cabfaf; --text-muted:#9ca3af;
+  --amber:#f6c259; --amber-soft:#3a2c12;
+  --orange:#f1843f;
+  --primary:#f1843f; --primary-hover:#f59a5e; --primary-soft:#3a2414;
+  --ring:rgba(241,132,63,.28);
+  --success:#34d399; --success-soft:#10362a;
+  --warning:#fbbf24; --warning-soft:#3a2c0a;
+  --danger:#f87171; --danger-soft:#3a1414;
+  --info:#60a5fa; --info-soft:#16243d;
+  --purple:#a78bfa; --purple-soft:#241a3d;
+  --teal:#2dd4bf; --teal-soft:#0c3631;
+  --soft-shadow:0 14px 38px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:'Inter',system-ui,sans-serif;color:var(--text);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;background:var(--bg)}
+.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;user-select:none}
+button{font-family:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:8px;border:2px solid var(--surface)}
+::-webkit-scrollbar-thumb:hover{background:var(--text-muted)}
+.mono{font-family:'JetBrains Mono',monospace}
+
+/* ---- buttons ---- */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-weight:700;font-size:.86rem;cursor:pointer;transition:.15s;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn .material-symbols-outlined,.btn i{font-size:18px}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 8px 20px rgba(230,106,31,.28)}
+.btn-primary:hover{background:var(--primary-hover)}
+.btn-ghost{border-color:transparent;background:transparent}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn-sm{padding:6px 11px;font-size:.82rem}
+.btn-danger{color:var(--danger);border-color:var(--border-strong)}
+.btn-danger:hover{background:var(--danger-soft);border-color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ==================================================================
+   APP SHELL — quest-app grid (deck + topbar + work surface)
+   ================================================================== */
+.quest-app{display:grid;grid-template-columns:212px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);min-height:100vh;
+  background:radial-gradient(circle at 84% 6%,rgba(244,178,52,.18),transparent 28%),linear-gradient(135deg,#f7f0e2,#efe6d6);padding:18px 20px}
+[data-theme="dark"] .quest-app{background:radial-gradient(circle at 84% 6%,rgba(244,178,52,.12),transparent 28%),var(--bg)}
+
+/* ---- DECK (dark sidebar) ---- */
+.deck{grid-column:1;grid-row:1 / span 2;display:flex;flex-direction:column;min-height:calc(100vh - 36px);min-width:0;
+  border:1px solid rgba(255,244,218,.08);border-right:0;border-radius:14px 0 0 14px;
+  background:radial-gradient(circle at 50% 0%,rgba(244,178,52,.18),transparent 24%),linear-gradient(180deg,#0b0b0a,#070706);
+  box-shadow:18px 0 50px rgba(18,16,12,.12);padding:18px 13px;overflow:auto}
+.deck-brand{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;gap:11px;margin-bottom:18px;color:#fff8e8}
+.deck-brand .logo{width:44px;height:44px;border-radius:12px;border:1px solid rgba(244,178,52,.72);
+  background:linear-gradient(145deg,#2a2113,#090807);box-shadow:inset 0 -6px rgba(244,178,52,.2),0 12px 30px rgba(0,0,0,.28);
+  display:grid;place-items:center;color:var(--amber);font-weight:900;font-size:1.25rem}
+.deck-brand strong{display:block;font-size:13.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deck-brand small{display:block;margin-top:3px;color:#e9d7ae;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.company-card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;border:1px solid var(--rail-line);border-radius:9px;background:rgba(255,250,240,.06);padding:11px;margin-bottom:16px;color:#fff8e8;cursor:pointer;transition:.15s}
+.company-card:hover{background:rgba(255,250,240,.1)}
+.company-card .csym{display:grid;place-items:center;width:40px;height:40px;border-radius:8px;border:1px solid rgba(244,178,52,.5);background:rgba(244,178,52,.16);color:var(--amber);box-shadow:inset 4px 0 var(--amber);overflow:hidden}
+.company-card .csym img{width:100%;height:100%;object-fit:cover}
+.company-card strong{display:block;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.company-card small{display:block;color:#bdb29f;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.company-card .material-symbols-outlined{color:#bdb29f;font-size:18px}
+
+.nav-groups{flex:1;min-height:0}
+.side-group{margin-bottom:15px}
+.side-label{display:flex;align-items:center;color:rgba(255,248,232,.6);font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;margin-bottom:4px}
+.side-label .add-mini{margin-left:auto;cursor:pointer;width:20px;height:20px;display:grid;place-items:center;border-radius:6px;color:rgba(255,248,232,.7);font-size:17px}
+.side-label .add-mini:hover{background:rgba(255,255,255,.12);color:var(--amber)}
+.side-items{display:grid;gap:4px}
+.side-item{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:9px;min-height:38px;border-radius:8px;color:rgba(255,248,232,.82);
+  padding:0 10px;font-size:13px;font-weight:800;border:none;background:none;cursor:pointer;text-align:left;width:100%;transition:.13s}
+.side-item i,.side-item .material-symbols-outlined{justify-self:center;font-size:19px;color:rgba(255,248,232,.72)}
+.side-item .wsdot{width:21px;height:21px;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:13px;justify-self:center}
+.side-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-item b{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;border-radius:999px;background:var(--amber);color:#090807;padding:0 7px;font-size:11px;font-weight:900}
+.side-item:hover,.side-item.active{background:rgba(255,255,255,.1);color:#fffaf0;box-shadow:inset 3px 0 var(--amber)}
+.side-item:hover i,.side-item.active i,.side-item.active .material-symbols-outlined{color:#fffaf0}
+.side-item.planned{color:rgba(255,248,232,.42);cursor:default}
+.side-item.planned b{background:rgba(255,248,232,.16);color:rgba(255,248,232,.7);font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+.side-item.planned:hover{background:none;box-shadow:none;color:rgba(255,248,232,.42)}
+.deck-empty{padding:6px 11px;font-size:12px;color:rgba(255,248,232,.45)}
+.deck-footer{display:grid;gap:9px;margin-top:auto;padding-top:16px}
+.deck-user-card{display:grid;grid-template-columns:32px minmax(0,1fr) auto;align-items:center;gap:9px;width:100%;min-height:50px;border:1px solid var(--rail-line);border-radius:9px;background:rgba(255,250,240,.05);color:#fff8e8;padding:8px;text-align:left;cursor:pointer;transition:.15s}
+.deck-user-card:hover{background:rgba(255,250,240,.1)}
+.deck-user-card .avatar{width:32px;height:32px}
+.deck-user-card strong{display:block;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deck-user-card small{display:block;color:#bdb29f;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deck-user-card .material-symbols-outlined{color:#bdb29f;font-size:19px}
+
+/* ---- TOPBAR ---- */
+.topbar{grid-column:2;grid-row:1;display:flex;align-items:center;gap:16px;min-width:0;min-height:74px;
+  border:1px solid var(--border);border-left:0;border-bottom:0;border-radius:0 14px 0 0;background:color-mix(in srgb,var(--surface) 90%,transparent);
+  box-shadow:0 -10px 40px rgba(33,31,27,.05);padding:12px 22px;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.menu-btn{display:none;border:none;background:none;cursor:pointer;color:var(--text)}
+.tb-title{min-width:0}
+.tb-title h1{font-size:1.18rem;font-weight:900;letter-spacing:-.01em;display:flex;align-items:center;gap:9px;line-height:1.1}
+.tb-title .crumbs{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--text-muted);font-weight:700;margin-top:2px}
+.tb-title .crumbs .sep{font-size:14px}
+.tb-title .crumb-link{cursor:pointer}
+.tb-title .crumb-link:hover{color:var(--primary)}
+.tb-spacer{flex:1}
+.global-search{display:flex;align-items:center;gap:8px;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface);padding:8px 12px;width:240px;color:var(--text-muted)}
+.global-search input{border:none;background:none;outline:none;font-family:inherit;font-size:.86rem;color:var(--text);width:100%}
+.global-search .material-symbols-outlined{font-size:19px}
+.tb-icon{position:relative;width:40px;height:40px;border-radius:10px;border:1px solid var(--border-strong);background:var(--surface);cursor:pointer;display:grid;place-items:center;color:var(--text-2)}
+.tb-icon:hover{background:var(--surface-2)}
+.tb-icon .dot{position:absolute;top:8px;right:9px;width:8px;height:8px;border-radius:50%;background:var(--orange);border:2px solid var(--surface)}
+.account-menu{display:flex;align-items:center;gap:9px;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface);padding:5px 10px 5px 5px;cursor:pointer}
+.account-menu:hover{background:var(--surface-2)}
+.account-menu .who{font-size:.8rem;font-weight:800;line-height:1.15}
+.account-menu .role{font-size:.7rem;color:var(--text-muted)}
+
+/* ---- WORK SURFACE ---- */
+.work-surface{grid-column:2;grid-row:2;min-width:0;overflow:auto;border:1px solid var(--border);border-left:0;border-top:0;border-radius:0 0 14px 0;
+  background:var(--surface);box-shadow:var(--soft-shadow)}
+.content{padding:26px 28px;max-width:1280px;width:100%;margin:0 auto}
+
+/* ---- generic page bits ---- */
+.page-head{display:flex;align-items:flex-start;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.page-title{font-size:1.5rem;font-weight:900;letter-spacing:-.01em;display:flex;align-items:center;gap:12px}
+.page-sub{color:var(--text-muted);font-size:.92rem;margin-top:3px}
+.page-head .spacer{flex:1}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm)}
+.grid{display:grid;gap:16px}
+.cols-3{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.cols-auto{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+
+/* ==================================================================
+   HOME DASHBOARD
+   ================================================================== */
+.home-hero{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:22px}
+.home-hero h1{font-size:1.7rem;font-weight:900;letter-spacing:-.02em}
+.home-hero .greet{color:var(--text-muted);font-size:.95rem;margin-top:4px}
+.home-hero .spacer{flex:1}
+.kpi-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));margin-bottom:18px}
+.kpi{padding:16px 18px;position:relative;overflow:hidden}
+.kpi .ki{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:#fff;position:absolute;top:16px;right:16px}
+.kpi .ki i{font-size:20px}
+.kpi .kv{font-size:1.7rem;font-weight:900;letter-spacing:-.02em}
+.kpi .kl{font-size:.74rem;color:var(--text-muted);font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-top:3px}
+.kpi .kd{font-size:.74rem;font-weight:800;margin-top:8px;display:flex;align-items:center;gap:4px}
+.kpi .kd.up{color:var(--success)} .kpi .kd.down{color:var(--danger)}
+.qa-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.qa{display:flex;align-items:center;gap:12px;padding:15px 16px;cursor:pointer;transition:.15s;text-align:left;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.qa:hover{box-shadow:var(--shadow-md);border-color:var(--primary);transform:translateY(-1px)}
+.qa .qi{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;color:#fff;flex:none}
+.qa .qi i{font-size:21px}
+.qa b{font-size:.92rem;font-weight:800;display:block}
+.qa span{font-size:.78rem;color:var(--text-muted)}
+.home-cols{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-top:20px;align-items:start}
+@media(max-width:900px){.home-cols{grid-template-columns:1fr}}
+.panel{padding:18px 20px}
+.panel h3{font-size:1rem;font-weight:900;margin-bottom:14px;display:flex;align-items:center;gap:9px}
+.panel h3 i{color:var(--orange);font-size:20px}
+.panel h3 .more{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--primary);cursor:pointer}
+.sched-row{display:flex;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)}
+.sched-row:last-child{border-bottom:none}
+.sched-row .time{font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:700;color:var(--text-muted);width:64px;flex:none}
+.sched-row .bar{width:4px;align-self:stretch;border-radius:3px;flex:none}
+.sched-row b{font-size:.88rem;font-weight:700;display:block}
+.sched-row span{font-size:.78rem;color:var(--text-muted)}
+.appr-row{display:flex;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)}
+.appr-row:last-child{border-bottom:none}
+.appr-row .material-symbols-outlined{color:var(--warning)}
+
+/* ---- module placeholder ---- */
+.module-stage{padding:10px 0}
+.module-hero{display:flex;gap:18px;align-items:center;padding:24px;border-radius:var(--radius);border:1px solid var(--border);
+  background:linear-gradient(135deg,var(--amber-soft),var(--surface));margin-bottom:22px}
+.module-hero .mh{width:64px;height:64px;border-radius:16px;display:grid;place-items:center;color:#fff;flex:none;box-shadow:var(--shadow-md)}
+.module-hero .mh i{font-size:32px}
+.module-hero h2{font-size:1.45rem;font-weight:900}
+.module-hero p{color:var(--text-muted);margin-top:4px;max-width:560px}
+.module-hero .badge-soon{display:inline-flex;align-items:center;gap:5px;margin-top:9px;padding:3px 10px;border-radius:999px;background:var(--amber);color:#3a2a05;font-size:.72rem;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
+.feat-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.feat{padding:16px 18px}
+.feat i{font-size:24px;color:var(--orange)}
+.feat b{display:block;font-weight:800;margin:9px 0 4px}
+.feat span{font-size:.84rem;color:var(--text-muted)}
+.demo-note{display:flex;gap:10px;align-items:center;padding:13px 16px;border-radius:var(--radius);background:var(--info-soft);color:var(--info);font-size:.85rem;font-weight:600;margin-top:20px}
+.demo-note .material-symbols-outlined{font-size:21px}
+
+/* ==================================================================
+   WORKSPACE MODULE COMPONENTS
+   ================================================================== */
+.ws-card{padding:20px;cursor:pointer;transition:.18s;position:relative;overflow:hidden}
+.ws-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:var(--primary)}
+.ws-card .topbar-stripe{position:absolute;inset:0 0 auto 0;height:5px}
+.ws-card .ws-emoji{width:50px;height:50px;border-radius:13px;display:grid;place-items:center;color:#fff;font-size:26px;margin:6px 0 14px}
+.ws-card h3{font-size:1.08rem;font-weight:800;margin-bottom:5px}
+.ws-card p{color:var(--text-muted);font-size:.86rem;min-height:38px}
+.ws-card .meta{display:flex;align-items:center;gap:14px;margin-top:14px;padding-top:13px;border-top:1px solid var(--border);font-size:.8rem;color:var(--text-muted);font-weight:600}
+.ws-card .meta span{display:flex;align-items:center;gap:5px}
+.avatars{display:flex}
+.avatars .avatar{width:27px;height:27px;border:2px solid var(--surface);margin-left:-8px;font-size:.7rem}
+.avatars .avatar:first-child{margin-left:0}
+.new-card{border:2px dashed var(--border-strong);background:transparent;box-shadow:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:210px;color:var(--text-muted);cursor:pointer;transition:.18s}
+.new-card:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+.new-card .material-symbols-outlined{font-size:40px}
+.app-card{padding:18px;cursor:pointer;transition:.16s;display:flex;gap:14px;align-items:flex-start}
+.app-card:hover{box-shadow:var(--shadow-md);border-color:var(--primary);transform:translateY(-1px)}
+.app-ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:#fff;font-size:23px;flex:none}
+.app-card h4{font-size:1rem;font-weight:700}
+.app-card .app-desc{color:var(--text-muted);font-size:.84rem;margin-top:3px}
+.app-card .app-stat{font-size:.78rem;color:var(--text-muted);font-weight:600;margin-top:9px;display:flex;gap:6px;align-items:center}
+.tag{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:.74rem;font-weight:700}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 5px;border:1px solid var(--border);border-radius:999px;font-size:.83rem;font-weight:600;background:var(--surface)}
+.chip .avatar{width:24px;height:24px;font-size:.66rem}
+.chip .x{margin-left:2px;cursor:pointer;color:var(--text-muted);font-size:17px;display:grid;place-items:center;border-radius:50%;width:20px;height:20px}
+.chip .x:hover{background:var(--danger-soft);color:var(--danger)}
+.avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:.78rem;flex:none}
+.builder-grid{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
+@media(max-width:1000px){.builder-grid{grid-template-columns:1fr}}
+.field-row{display:flex;align-items:center;gap:13px;padding:13px 15px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);margin-bottom:9px;transition:.14s}
+.field-row:hover{border-color:var(--primary);box-shadow:var(--shadow-sm)}
+.field-row .grip{color:var(--text-muted);cursor:grab;font-size:20px}
+.field-row.dragging{opacity:.4}
+.field-row.drop-target{border-color:var(--primary);border-style:dashed}
+.field-ic{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;flex:none;font-size:19px}
+.field-row .fmeta{flex:1;min-width:0}
+.field-row .fmeta b{font-weight:700;font-size:.92rem}
+.field-row .fmeta .ftype{font-size:.76rem;color:var(--text-muted);font-weight:600}
+.req-star{color:var(--danger);margin-left:4px}
+.field-acts{display:flex;gap:4px}
+.icon-btn{width:32px;height:32px;border-radius:8px;border:1px solid transparent;background:none;cursor:pointer;display:grid;place-items:center;color:var(--text-muted)}
+.icon-btn:hover{background:var(--surface-2);color:var(--text)}
+.icon-btn.danger:hover{background:var(--danger-soft);color:var(--danger)}
+.palette h4{font-size:.74rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);font-weight:800;margin:4px 0 10px}
+.palette-item{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer;margin-bottom:7px;transition:.14s;font-weight:600;font-size:.86rem;color:var(--text)}
+.palette-item:hover{border-color:var(--primary);background:var(--primary-soft);color:var(--primary);transform:translateX(2px)}
+.palette-item .pic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:17px;flex:none}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+thead th{text-align:left;padding:12px 15px;background:var(--surface-2);border-bottom:1px solid var(--border);font-weight:700;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);white-space:nowrap;position:sticky;top:0}
+tbody td{padding:12px 15px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+.cell-empty{color:var(--text-muted);opacity:.6}
+.status-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:.76rem;font-weight:700}
+.status-pill .ds{width:7px;height:7px;border-radius:50%}
+.empty{text-align:center;padding:60px 24px;color:var(--text-muted)}
+.empty .material-symbols-outlined{font-size:56px;opacity:.4;margin-bottom:12px}
+.empty h3{font-size:1.15rem;color:var(--text);margin-bottom:6px}
+.empty p{max-width:420px;margin:0 auto 18px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:22px;flex-wrap:wrap}
+.tab{padding:11px 16px;border:none;background:none;cursor:pointer;font-weight:600;font-size:.9rem;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+
+/* ---- modal ---- */
+.scrim{position:fixed;inset:0;background:rgba(33,31,27,.5);backdrop-filter:blur(2px);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
+.scrim.show{display:flex}
+.modal{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-lg);width:100%;max-width:560px;animation:pop .18s ease}
+.modal.wide{max-width:680px}
+@keyframes pop{from{transform:translateY(12px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+.modal-head{display:flex;align-items:center;gap:12px;padding:20px 22px;border-bottom:1px solid var(--border)}
+.modal-head h3{font-size:1.12rem;font-weight:800}
+.modal-head .mh-ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;color:#fff;flex:none}
+.modal-head .close{margin-left:auto;width:34px;height:34px;border-radius:9px;border:none;background:none;cursor:pointer;color:var(--text-muted);display:grid;place-items:center}
+.modal-head .close:hover{background:var(--surface-2)}
+.modal-body{padding:22px;max-height:64vh;overflow-y:auto}
+.modal-foot{display:flex;gap:10px;justify-content:flex-end;padding:16px 22px;border-top:1px solid var(--border)}
+.field{margin-bottom:16px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-weight:700;font-size:.84rem;margin-bottom:6px}
+.field label .opt{font-weight:500;color:var(--text-muted);font-size:.78rem}
+.field .hint{font-size:.78rem;color:var(--text-muted);margin-top:5px}
+.input,.select,textarea.input{width:100%;padding:10px 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-family:inherit;font-size:.9rem;transition:.14s}
+.input:focus,.select:focus,textarea.input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--ring)}
+textarea.input{resize:vertical;min-height:78px}
+.select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2372695d' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:34px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{width:32px;height:32px;border-radius:9px;cursor:pointer;border:3px solid transparent;transition:.12s}
+.swatch.sel{border-color:var(--text);transform:scale(1.08)}
+.emoji-pick{display:flex;gap:7px;flex-wrap:wrap}
+.emoji-opt{width:40px;height:40px;border-radius:10px;border:1px solid var(--border-strong);background:var(--surface);cursor:pointer;font-size:20px;display:grid;place-items:center;color:var(--text)}
+.emoji-opt.sel{border-color:var(--primary);background:var(--primary-soft);color:var(--primary)}
+.check-row{display:flex;align-items:center;gap:9px;padding:9px 0}
+.switch{position:relative;width:42px;height:24px;flex:none}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:var(--border-strong);border-radius:999px;cursor:pointer;transition:.18s}
+.slider::before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.18s}
+.switch input:checked+.slider{background:var(--primary)}
+.switch input:checked+.slider::before{transform:translateX(18px)}
+.member-pick{display:flex;flex-direction:column;gap:6px;max-height:230px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px}
+.member-opt{display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:9px;cursor:pointer}
+.member-opt:hover{background:var(--surface-2)}
+.member-opt .mo-info{flex:1;min-width:0}
+.member-opt .mo-info b{font-weight:700;font-size:.88rem;display:block}
+.member-opt .mo-info span{font-size:.76rem;color:var(--text-muted)}
+.member-opt .ck{width:22px;height:22px;border-radius:6px;border:2px solid var(--border-strong);display:grid;place-items:center;color:#fff;flex:none}
+.member-opt.on .ck{background:var(--primary);border-color:var(--primary)}
+.member-opt.on .ck .material-symbols-outlined{font-size:16px}
+.opt-list{display:flex;flex-direction:column;gap:8px}
+.opt-list .opt-item{display:flex;align-items:center;gap:8px}
+.opt-list .opt-item .input{flex:1}
+.opt-list .dot-pick{width:34px;height:38px;border-radius:7px;border:1px solid var(--border-strong);cursor:pointer;flex:none;padding:2px;background:var(--surface)}
+.toast-wrap{position:fixed;bottom:22px;right:22px;z-index:200;display:flex;flex-direction:column;gap:10px}
+.toast{background:var(--rail);color:#fff8e8;padding:12px 18px;border-radius:11px;box-shadow:var(--shadow-lg);font-weight:600;font-size:.88rem;display:flex;align-items:center;gap:9px;animation:slidein .25s ease}
+@keyframes slidein{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
+.kpi-grid .kpi .kv{}
+.report-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));align-items:start}
+.chart-card{padding:18px 20px}
+.chart-card h4{font-size:.95rem;font-weight:800;margin-bottom:15px;display:flex;align-items:center;gap:8px}
+.chart-card h4 .material-symbols-outlined{font-size:20px;color:var(--primary)}
+.donut-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.legend{display:flex;flex-direction:column;gap:8px;flex:1;min-width:130px}
+.legend .lg{display:flex;align-items:center;gap:9px;font-size:.85rem;font-weight:600}
+.legend .lg .sw{width:11px;height:11px;border-radius:3px;flex:none}
+.legend .lg .lv{margin-left:auto;color:var(--text-muted);font-weight:700}
+.bars{display:flex;flex-direction:column;gap:11px}
+.bar-row{display:flex;align-items:center;gap:11px}
+.bar-label{width:118px;font-size:.83rem;font-weight:600;text-align:right;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:22px;background:var(--surface-3);border-radius:7px;overflow:hidden}
+.bar-fill{height:100%;border-radius:7px;transition:width .6s cubic-bezier(.2,.7,.2,1);min-width:3px}
+.bar-val{width:90px;font-size:.83rem;font-weight:700}
+.spark{display:flex;align-items:flex-end;gap:5px;height:90px;padding-top:6px}
+.spark .sb{flex:1;background:linear-gradient(var(--primary),var(--primary-soft));border-radius:5px 5px 0 0;min-height:4px;transition:height .5s}
+.spark-x{display:flex;gap:5px;margin-top:7px}
+.spark-x span{flex:1;text-align:center;font-size:.66rem;color:var(--text-muted);font-weight:600}
+.auto-banner{display:flex;gap:13px;align-items:center;padding:14px 18px;border-radius:var(--radius);background:var(--purple-soft);color:var(--purple);margin-bottom:18px;font-size:.88rem;font-weight:600}
+.auto-banner .material-symbols-outlined{font-size:24px}
+.auto-row{display:flex;align-items:center;gap:14px;padding:15px 17px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);margin-bottom:10px;transition:.14s}
+.auto-row:hover{box-shadow:var(--shadow-sm)}
+.auto-row.off{opacity:.5}
+.auto-row .ai{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;color:#fff;flex:none;background:linear-gradient(135deg,var(--purple),#a855f7)}
+.auto-row .am{flex:1;min-width:0}
+.auto-row .am b{font-weight:700;font-size:.95rem}
+.auto-row .am .rule{font-size:.82rem;color:var(--text-muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rule-pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:6px;font-size:.76rem;font-weight:700;background:var(--surface-3);color:var(--text)}
+.rule-arrow{color:var(--text-muted);font-size:16px}
+.action-builder{display:flex;flex-direction:column;gap:9px}
+.action-card{border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 12px;display:flex;gap:9px;align-items:flex-start;background:var(--surface-2)}
+.action-card .acgrow{flex:1;display:flex;flex-direction:column;gap:8px}
+.activity{display:flex;flex-direction:column}
+.act-item{display:flex;gap:12px;padding:10px 2px;align-items:flex-start;border-bottom:1px solid var(--border)}
+.act-item:last-child{border-bottom:none}
+.act-ic{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:#fff;flex:none;font-size:17px}
+.act-item .at{font-size:.86rem;line-height:1.4}
+.act-item .att{font-size:.74rem;color:var(--text-muted);margin-top:1px}
+
+/* ---- responsive ---- */
+.scrim-m{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:90;display:none}
+.scrim-m.show{display:block}
+@media(max-width:920px){
+  .quest-app{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);padding:0}
+  .deck{position:fixed;left:0;top:0;z-index:120;width:264px;height:100vh;min-height:0;border-radius:0;transform:translateX(-100%);transition:transform .25s}
+  .deck.open{transform:none}
+  .topbar{grid-column:1;grid-row:1;border-radius:0;border-left:1px solid var(--border)}
+  .work-surface{grid-column:1;grid-row:2;border-radius:0;border-left:1px solid var(--border)}
+  .menu-btn{display:grid;place-items:center}
+  .global-search{display:none}
+  .account-menu .who,.account-menu .role{display:none}
+}
+@media(max-width:560px){.tb-title h1 .sub{display:none}.home-cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="quest-app" id="app" data-section="home">
+  <!-- ============ DECK / SIDEBAR ============ -->
+  <aside class="deck" id="deck">
+    <div class="deck-brand">
+      <div class="logo">Q</div>
+      <div>
+        <strong>Quest HQ</strong>
+        <small>Command Center</small>
+      </div>
+    </div>
+    <div class="company-card" id="companyCard">
+      <div class="csym"><img src="images/logo-official.png" alt="Lumen"></div>
+      <div>
+        <strong>Lumen Operations</strong>
+        <small>Roofing · Lumen Marketing</small>
+      </div>
+      <span class="material-symbols-outlined">unfold_more</span>
+    </div>
+    <div class="nav-groups" id="navGroups"></div>
+    <div class="deck-footer">
+      <button class="deck-user-card" id="userCard">
+        <div class="avatar" style="background:var(--orange)">RM</div>
+        <div>
+          <strong>You · Owner</strong>
+          <small>info@lumenmarketingusa.com</small>
+        </div>
+        <span class="material-symbols-outlined" id="themeToggle" title="Toggle theme">dark_mode</span>
+      </button>
+    </div>
+  </aside>
+  <div class="scrim-m" id="scrimM"></div>
+
+  <!-- ============ TOPBAR ============ -->
+  <header class="topbar">
+    <button class="menu-btn" id="menuBtn"><span class="material-symbols-outlined">menu</span></button>
+    <div class="tb-title" id="tbTitle"></div>
+    <div class="tb-spacer"></div>
+    <div class="global-search"><span class="material-symbols-outlined">search</span><input placeholder="Search Quest HQ…"></div>
+    <button class="tb-icon" title="Notifications"><span class="material-symbols-outlined">notifications</span><span class="dot"></span></button>
+    <button class="tb-icon" title="Help"><span class="material-symbols-outlined">help</span></button>
+    <button class="btn btn-primary btn-sm" id="quickNew"><span class="material-symbols-outlined">add</span> New workspace</button>
+  </header>
+
+  <!-- ============ WORK SURFACE ============ -->
+  <main class="work-surface"><div class="content" id="content"></div></main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+/* ==================================================================
+   Helpers + state
+   ================================================================== */
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>'id'+Math.random().toString(36).slice(2,10)+(window.__c=(window.__c||0)+1);
+const initials=n=>n.split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+const PALETTE=['#e66a1f','#2563eb','#7c3aed','#0d9488','#15803d','#d97706','#db2777','#0891b2','#dc2626','#4f46e5'];
+const WS_EMOJIS=['rocket_launch','campaign','engineering','support_agent','real_estate_agent','storefront','handyman','groups','analytics','payments','inventory_2','design_services'];
+const APP_ICONS=['contacts','assignment','folder_open','event','request_quote','bug_report','shopping_cart','badge','local_shipping','description','call','science'];
+
+/* ---- Command Center nav model (reconstructed from the live app) ---- */
+const NAV_GROUPS=[
+  {label:'Workspace',items:[
+    {id:'home',label:'Home',icon:'ti-home'},
+    {id:'workspaces',label:'Workspaces',icon:'ti-layout-grid-add',accent:true},
+    {id:'jobs',label:'Jobs',icon:'ti-hammer',badge:'8'},
+    {id:'files',label:'Files',icon:'ti-folder'},
+    {id:'forms',label:'Forms',icon:'ti-clipboard-list'},
+    {id:'analytics',label:'Analytics',icon:'ti-chart-bar'},
+    {id:'crm',label:'Accounts',icon:'ti-building-community'},
+    {id:'underwriter',label:'Underwriter',icon:'ti-clipboard-search'},
+    {id:'finance',label:'Finance',icon:'ti-receipt-2'},
+    {id:'knowledge',label:'Knowledge Base',icon:'ti-books',soon:true},
+    {id:'automations',label:'Automations',icon:'ti-bolt',soon:true},
+    {id:'templates',label:'Templates',icon:'ti-template',soon:true},
+  ]},
+  {label:'Funnel',items:[
+    {id:'contacts',label:'Contacts',icon:'ti-id-badge-2'},
+    {id:'deals',label:'Quotes',icon:'ti-briefcase'},
+  ]},
+  {label:'Work',items:[
+    {id:'tasks',label:'My tasks',icon:'ti-list-check',badge:'5'},
+    {id:'time',label:'My time',icon:'ti-clock'},
+    {id:'approvals',label:'Approvals',icon:'ti-user-check',badge:'2'},
+  ]},
+  {label:'Operations',items:[
+    {id:'calendar',label:'Calendar',icon:'ti-calendar'},
+    {id:'clock',label:'Clock dashboard',icon:'ti-clock-hour-4'},
+  ]},
+  {label:'Communication',items:[
+    {id:'messages',label:'Messages',icon:'ti-messages',badge:'3'},
+  ]},
+  {label:'Company',items:[
+    {id:'users',label:'Users',icon:'ti-users'},
+    {id:'settings',label:'Settings',icon:'ti-settings'},
+  ]},
+];
+const MODULE_META={
+  jobs:{icon:'ti-hammer',color:'#e66a1f',title:'Jobs',sum:'Production board for active roofing jobs — scheduling, crews, scope, and progress.',
+    feats:[['ti-layout-kanban','Production board','Drag jobs across Scheduled → In progress → QA → Done.'],['ti-users','Crew assignment','Assign field crews and track who is on site today.'],['ti-checkbox','Scope & punch lists','Per-job scope items and punch-list completion.'],['ti-camera','Photo logs','Before / after photo documentation per job.']]},
+  files:{icon:'ti-folder',color:'#2563eb',title:'Files',sum:'Shared files, job folders, and document storage for the whole company.',
+    feats:[['ti-folders','Job folders','Auto-created folders per account and job.'],['ti-file-upload','Drag & drop upload','Upload contracts, permits and inspection reports.'],['ti-versions','Versioning','Track document revisions and approvals.'],['ti-share','Sharing','Share read-only links with customers.']]},
+  forms:{icon:'ti-clipboard-list',color:'#0d9488',title:'Forms',sum:'Internal forms, templates, and response capture for field and office teams.',
+    feats:[['ti-forms','Form builder','Build inspection and intake forms.'],['ti-device-mobile','Field capture','Fill forms on mobile from the job site.'],['ti-database','Responses','Every submission stored and searchable.'],['ti-template','Templates','Reusable templates for common workflows.']]},
+  analytics:{icon:'ti-chart-bar',color:'#7c3aed',title:'Analytics',sum:'Company-wide analytics and team chart views across every module.',
+    feats:[['ti-chart-pie','Dashboards','Pipeline, revenue and production dashboards.'],['ti-trending-up','Trends','Track close rate and cycle time over time.'],['ti-sitemap','Team chart','Org chart and team performance views.'],['ti-report','Exports','Export reports to PDF and CSV.']]},
+  crm:{icon:'ti-building-community',color:'#0891b2',title:'Accounts',sum:'Accounts, contacts, quotes, and customer activity in one CRM.',
+    feats:[['ti-building','Accounts','Companies and properties you service.'],['ti-address-book','Contacts','Decision makers and site contacts.'],['ti-timeline','Activity','Full timeline of calls, emails and notes.'],['ti-file-invoice','Quotes','Linked quotes and deal stages.']]},
+  underwriter:{icon:'ti-clipboard-search',color:'#b45309',title:'Underwriter',sum:'Qualification, scope, pricing, and handoff readiness queue.',
+    feats:[['ti-list-check','Qualification','Score and qualify incoming opportunities.'],['ti-ruler-measure','Scope','Capture roof scope and measurements.'],['ti-coin','Pricing','Build pricing and margin checks.'],['ti-transfer','Handoff','Hand off ready jobs to production.']]},
+  finance:{icon:'ti-receipt-2',color:'#15803d',title:'Finance',sum:'Invoices, payments, expenses, vendors, and accounts receivable.',
+    feats:[['ti-file-invoice','Invoices','Create and send invoices.'],['ti-credit-card','Payments','Record payments and track AR.'],['ti-businessplan','Expenses','Track expenses and vendor bills.'],['ti-chart-dots','Cash flow','See cash flow at a glance.']]},
+  contacts:{icon:'ti-id-badge-2',color:'#2563eb',title:'Contacts',sum:'Top-of-funnel contacts — leads, inquiries, and new relationships.',
+    feats:[['ti-user-plus','Capture','Capture inbound leads from any source.'],['ti-tags','Segments','Tag and segment by source and status.'],['ti-phone','Outreach','Log calls and follow-ups.'],['ti-arrow-move-right','Convert','Convert qualified contacts to quotes.']]},
+  deals:{icon:'ti-briefcase',color:'#e66a1f',title:'Quotes',sum:'Bottom-of-funnel quotes and production jobs workspace.',
+    feats:[['ti-file-dollar','Quote builder','Build itemized roofing quotes.'],['ti-progress','Stages','Track quotes from sent to won.'],['ti-signature','E-sign','Customer approval and signatures.'],['ti-arrow-move-right','To production','Won quotes flow into Jobs.']]},
+  tasks:{icon:'ti-list-check',color:'#e66a1f',title:'My tasks',sum:'Your personal task queue across every workspace and job.',
+    feats:[['ti-checkbox','Task list','Everything assigned to you in one place.'],['ti-flag','Priorities','Sort by due date and priority.'],['ti-bell','Reminders','Get reminders before deadlines.'],['ti-checklist','Subtasks','Break work into checklists.']]},
+  time:{icon:'ti-clock',color:'#0d9488',title:'My time',sum:'Personal time queues and tracking.',
+    feats:[['ti-clock-play','Time entries','Log time against jobs and tasks.'],['ti-calendar-time','Timesheets','Weekly timesheet view.'],['ti-hourglass','Queues','See what is due today.'],['ti-report-analytics','Summary','Time summary by job.']]},
+  approvals:{icon:'ti-user-check',color:'#b45309',title:'Approvals',sum:'Review queues for handoffs, forms, and access requests.',
+    feats:[['ti-inbox','Review queue','Items waiting on your approval.'],['ti-thumb-up','Approve / reject','One-click decisions with notes.'],['ti-history','Audit trail','Full history of every decision.'],['ti-route','Routing','Multi-step approval routing.']]},
+  calendar:{icon:'ti-calendar',color:'#2563eb',title:'Calendar',sum:'Company schedule, task deadlines, and manual events.',
+    feats:[['ti-calendar-event','Schedule','Company-wide schedule view.'],['ti-clock-hour-3','Deadlines','Task and job deadlines overlaid.'],['ti-users','Team view','See the whole team’s availability.'],['ti-plus','Events','Add manual events and reminders.']]},
+  clock:{icon:'ti-clock-hour-4',color:'#7c3aed',title:'Clock dashboard',sum:'Live clock-in / clock-out dashboard for the crew.',
+    feats:[['ti-fingerprint','Clock in / out','Crews clock in from the field.'],['ti-map-pin','Geo stamp','Location-stamped entries.'],['ti-users','Who’s on','See who is currently on the clock.'],['ti-report','Payroll export','Export hours for payroll.']]},
+  messages:{icon:'ti-messages',color:'#0084ff',title:'Messages',sum:'Company chats, role rooms, direct messages, and attachments.',
+    feats:[['ti-message','Channels','Company and role-based channels.'],['ti-user','Direct messages','One-to-one and group DMs.'],['ti-paperclip','Attachments','Share files and photos inline.'],['ti-bell','Mentions','Get notified on @mentions.']]},
+  users:{icon:'ti-users',color:'#0891b2',title:'Users',sum:'Manage company users, roles, and permissions.',
+    feats:[['ti-user-plus','Invite','Invite teammates by email.'],['ti-shield-lock','Roles','Granular role-based permissions.'],['ti-users-group','Teams','Group users into teams.'],['ti-status-change','Status','Activate or deactivate accounts.']]},
+  settings:{icon:'ti-settings',color:'#72695d',title:'Settings',sum:'Company configuration, branding, and module setup.',
+    feats:[['ti-building','Company','Company profile and branding.'],['ti-puzzle','Modules','Enable or disable modules.'],['ti-palette','Appearance','Theme and display options.'],['ti-plug','Integrations','Connect external services.']]},
+  knowledge:{icon:'ti-books',color:'#b45309',title:'Knowledge Base',sum:'Company knowledge and SOP library.',soon:true,
+    feats:[['ti-article','Articles','Searchable SOPs and guides.'],['ti-category','Categories','Organize by department.'],['ti-search','Search','Find answers fast.'],['ti-edit','Authoring','Rich text authoring.']]},
+  automations:{icon:'ti-bolt',color:'#7c3aed',title:'Automations',sum:'No-code workflow automations across modules.',soon:true,
+    feats:[['ti-bolt','Triggers','Run rules on events.'],['ti-arrows-split','Conditions','Branch on field values.'],['ti-wand','Actions','Notify, assign, and update.'],['ti-clock','Schedules','Time-based automations.']]},
+  templates:{icon:'ti-template',color:'#0d9488',title:'Templates',sum:'Reusable workspace and app templates.',soon:true,
+    feats:[['ti-template','Library','Prebuilt workspace blueprints.'],['ti-copy','One-click','Spin up a workspace instantly.'],['ti-pencil','Customize','Tweak before you launch.'],['ti-share','Share','Share templates company-wide.']]},
+};
+
+/* org member directory available to invite */
+const DIRECTORY=[
+  {id:'u1',name:'Marcus Reed',email:'marcus@lumen.co',role:'Project Lead',color:'#2563eb'},
+  {id:'u2',name:'Priya Shah',email:'priya@lumen.co',role:'Designer',color:'#7c3aed'},
+  {id:'u3',name:'Diego Santos',email:'diego@lumen.co',role:'Developer',color:'#0d9488'},
+  {id:'u4',name:'Aisha Khan',email:'aisha@lumen.co',role:'Account Manager',color:'#db2777'},
+  {id:'u5',name:'Tom Becker',email:'tom@lumen.co',role:'Sales Rep',color:'#d97706'},
+  {id:'u6',name:'Lena Ortiz',email:'lena@lumen.co',role:'Operations',color:'#0891b2'},
+  {id:'u7',name:'Sam Carter',email:'sam@lumen.co',role:'Estimator',color:'#15803d'},
+  {id:'u8',name:'Nina Volkov',email:'nina@lumen.co',role:'Marketing',color:'#4f46e5'},
+];
+const memberById=id=>DIRECTORY.find(m=>m.id===id)||{id,name:'Unknown',color:'#6b7280',email:''};
+
+/* Field type catalogue */
+const FIELD_TYPES={
+  text:{label:'Text',icon:'title',color:'#2563eb',desc:'Single line of text'},
+  textarea:{label:'Text Area',icon:'notes',color:'#2563eb',desc:'Long multi-line text'},
+  number:{label:'Number',icon:'tag',color:'#0d9488',desc:'Numeric value'},
+  date:{label:'Date',icon:'calendar_today',color:'#7c3aed',desc:'Date picker'},
+  category:{label:'Category / Dropdown',icon:'list',color:'#d97706',desc:'Choose from options'},
+  status:{label:'Status',icon:'flag',color:'#15803d',desc:'Colored workflow state'},
+  relationship:{label:'Relationship',icon:'link',color:'#0891b2',desc:'Link to items in another app'},
+  file:{label:'File Attachment',icon:'attach_file',color:'#6b7280',desc:'Attach documents'},
+  user:{label:'User Assignment',icon:'person',color:'#e66a1f',desc:'Assign workspace members'},
+  email:{label:'Email',icon:'mail',color:'#2563eb',desc:'Email address'},
+  phone:{label:'Phone Number',icon:'call',color:'#15803d',desc:'Phone number'},
+  money:{label:'Money',icon:'payments',color:'#15803d',desc:'Currency amount'},
+  calculation:{label:'Calculation',icon:'functions',color:'#7c3aed',desc:'Formula over number fields'},
+  checkbox:{label:'Yes / No',icon:'check_box',color:'#0d9488',desc:'True or false toggle'},
+};
+const FIELD_ORDER=['text','textarea','number','money','date','category','status','user','relationship','email','phone','file','calculation','checkbox'];
+
+/* ---------- persistence ---------- */
+const KEY='qhq_cc_workspaces_v1';
+let DB=load();
+function load(){
+  try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&r.workspaces)return r;}catch(e){}
+  return seed();
+}
+function save(){localStorage.setItem(KEY,JSON.stringify(DB));}
+function seed(){
+  const wsId=uid(),appId=uid();
+  const fName=uid(),fCompany=uid(),fEmail=uid(),fPhone=uid(),fValue=uid(),fStatus=uid(),fOwner=uid(),fNext=uid();
+  return {
+    workspaces:[{
+      id:wsId,name:'Sales CRM',description:'Track roofing leads from first contact through signed contract.',
+      emoji:'real_estate_agent',color:'#2563eb',members:['u1','u4','u5'],createdAt:'2026-06-20',
+      activity:[
+        {id:uid(),ts:new Date(Date.now()-26*3600e3).toISOString(),icon:'bolt',color:'#7c3aed',text:'⚡ <b>Won deal → assign manager & notify</b> ran on <b>Westside Plaza</b>'},
+        {id:uid(),ts:new Date(Date.now()-25*3600e3).toISOString(),icon:'contacts',color:'#2563eb',text:'Added <b>Westside Plaza</b> to Leads'},
+        {id:uid(),ts:new Date(Date.now()-3*3600e3).toISOString(),icon:'contacts',color:'#2563eb',text:'Added <b>Tariq Mansour</b> to Leads'},
+        {id:uid(),ts:new Date(Date.now()-3*3600e3+2000).toISOString(),icon:'notifications',color:'#7c3aed',text:'🆕 A new lead entered the pipeline.'},
+      ],
+      apps:[{
+        id:appId,name:'Leads',description:'Inbound and outbound roofing leads.',type:'Contacts',
+        icon:'contacts',color:'#2563eb',
+        fields:[
+          {id:fName,type:'text',label:'Lead Name',required:true,config:{}},
+          {id:fCompany,type:'text',label:'Company',required:false,config:{}},
+          {id:fEmail,type:'email',label:'Email',required:false,config:{}},
+          {id:fPhone,type:'phone',label:'Phone',required:false,config:{}},
+          {id:fValue,type:'money',label:'Deal Value',required:false,config:{currency:'$'}},
+          {id:fStatus,type:'status',label:'Stage',required:true,config:{options:[
+            {id:uid(),label:'New',color:'#2563eb'},{id:uid(),label:'Contacted',color:'#d97706'},
+            {id:uid(),label:'Quoted',color:'#7c3aed'},{id:uid(),label:'Won',color:'#15803d'},{id:uid(),label:'Lost',color:'#dc2626'}]}},
+          {id:fOwner,type:'user',label:'Owner',required:false,config:{}},
+          {id:fNext,type:'date',label:'Next Follow-up',required:false,config:{}},
+        ],
+        items:[
+          {id:uid(),values:{[fName]:'Greenfield HOA',[fCompany]:'Greenfield HOA',[fEmail]:'board@greenfield.org',[fPhone]:'(555) 240-1180',[fValue]:48000,[fStatus]:'__s3',[fOwner]:'u5',[fNext]:'2026-07-02'},createdAt:'2026-06-21'},
+          {id:uid(),values:{[fName]:'Tariq Mansour',[fCompany]:'Mansour Residence',[fEmail]:'tariq.m@gmail.com',[fPhone]:'(555) 884-0021',[fValue]:12500,[fStatus]:'__s1',[fOwner]:'u5',[fNext]:'2026-06-29'},createdAt:'2026-06-23'},
+          {id:uid(),values:{[fName]:'Westside Plaza',[fCompany]:'Westside Property Mgmt',[fEmail]:'ops@westsideplaza.com',[fPhone]:'(555) 661-7788',[fValue]:96000,[fStatus]:'__s4',[fOwner]:'u4',[fNext]:''},createdAt:'2026-06-24'},
+        ],
+        automations:[{
+          id:uid(),name:'Won deal → assign manager & notify',enabled:true,
+          trigger:{event:'field_is',fieldId:fStatus,value:'__s4'},
+          actions:[{type:'assign',fieldId:fOwner,value:'u4'},{type:'notify',message:'🎉 A deal was marked Won — Account Manager assigned.'}]
+        },{
+          id:uid(),name:'New lead notification',enabled:true,
+          trigger:{event:'created'},
+          actions:[{type:'notify',message:'🆕 A new lead entered the pipeline.'}]
+        }]
+      }]
+    }],
+    activeWorkspaceId:wsId,
+    ui:{collapsed:{},theme:'light'}
+  };
+}
+(function fixSeed(){
+  DB.workspaces.forEach(ws=>{ws.activity=ws.activity||[];ws.apps.forEach(app=>{app.automations=app.automations||[];});});
+  if(!DB.__seedFixed){
+    DB.workspaces.forEach(ws=>ws.apps.forEach(app=>{
+      const st=app.fields.find(f=>f.type==='status');
+      if(st&&st.config.options){
+        const map={};st.config.options.forEach((o,i)=>map['__s'+(i+1)]=o.id);
+        app.items.forEach(it=>{for(const k in it.values){if(map[it.values[k]])it.values[k]=map[it.values[k]];}});
+        app.automations.forEach(au=>{
+          if(au.trigger&&map[au.trigger.value])au.trigger.value=map[au.trigger.value];
+          au.actions.forEach(ac=>{if(map[ac.value])ac.value=map[ac.value];});
+        });
+      }
+    }));
+    DB.__seedFixed=true;
+  }
+  DB.ui=DB.ui||{collapsed:{},theme:'light'};
+  save();
+})();
+
+/* ---------- routing/view state ---------- */
+let VIEW={page:'home'};
+function setTheme(t){document.documentElement.dataset.theme=t;DB.ui.theme=t;$('#themeToggle').textContent=t==='dark'?'light_mode':'dark_mode';save();}
+setTheme(DB.ui.theme||'light');
+
+function toast(msg,icon='check_circle'){
+  const t=document.createElement('div');t.className='toast';
+  t.innerHTML=`<span class="material-symbols-outlined" style="color:var(--amber)">${icon}</span>${esc(msg)}`;
+  $('#toasts').appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(40px)';t.style.transition='.3s';setTimeout(()=>t.remove(),300);},2600);
+}
+
+const curWs=()=>DB.workspaces.find(w=>w.id===VIEW.wsId);
+const curApp=()=>{const w=curWs();return w&&w.apps.find(a=>a.id===VIEW.appId);};
+
+/* ==================================================================
+   DECK / sidebar render
+   ================================================================== */
+function deckActiveId(){
+  if(VIEW.page==='home')return 'home';
+  if(['workspaces','workspace','app'].includes(VIEW.page))return 'workspaces';
+  if(VIEW.page==='module')return VIEW.moduleId;
+  return '';
+}
+function renderDeck(){
+  const active=deckActiveId();
+  let html=NAV_GROUPS.map(g=>{
+    const items=g.items.map(it=>{
+      if(it.soon)return `<button class="side-item planned" disabled><i class="ti ${it.icon}"></i><span>${esc(it.label)}</span><b>Soon</b></button>`;
+      const cls='side-item'+(active===it.id?' active':'')+(it.accent?' accent':'');
+      const badge=it.badge?`<b>${esc(it.badge)}</b>`:'<span></span>';
+      return `<button class="${cls}" data-nav="${it.id}"><i class="ti ${it.icon}"></i><span>${esc(it.label)}</span>${badge}</button>`;
+    }).join('');
+    return `<div class="side-group"><div class="side-label">${esc(g.label)}</div><div class="side-items">${items}</div></div>`;
+  }).join('');
+  /* dynamic "My workspaces" group */
+  const wsItems=DB.workspaces.length?DB.workspaces.map(w=>{
+    const on=(['workspace','app'].includes(VIEW.page))&&VIEW.wsId===w.id?' active':'';
+    return `<button class="side-item${on}" data-ws="${w.id}"><span class="wsdot material-symbols-outlined" style="background:${w.color}">${w.emoji}</span><span>${esc(w.name)}</span><b>${w.apps.length}</b></button>`;
+  }).join(''):'<div class="deck-empty">No workspaces yet</div>';
+  html+=`<div class="side-group"><div class="side-label">My Workspaces <span class="add-mini material-symbols-outlined" id="deckAddWs" title="New workspace">add</span></div><div class="side-items">${wsItems}</div></div>`;
+  $('#navGroups').innerHTML=html;
+  $$('#navGroups [data-nav]').forEach(b=>b.onclick=()=>{navTo(b.dataset.nav);closeSidebar();});
+  $$('#navGroups [data-ws]').forEach(b=>b.onclick=()=>{openWorkspace(b.dataset.ws);closeSidebar();});
+  const add=$('#deckAddWs');if(add)add.onclick=e=>{e.stopPropagation();openWsModal();};
+}
+function navTo(id){
+  if(id==='home'){VIEW={page:'home'};}
+  else if(id==='workspaces'){VIEW={page:'workspaces'};}
+  else {VIEW={page:'module',moduleId:id};}
+  render();
+}
+
+/* ==================================================================
+   Top-level render
+   ================================================================== */
+function render(){
+  renderDeck();renderTopbar();
+  $('#app').dataset.section=deckActiveId();
+  const c=$('#content');
+  if(VIEW.page==='home')c.innerHTML=viewHome();
+  else if(VIEW.page==='module')c.innerHTML=viewModule();
+  else if(VIEW.page==='workspaces')c.innerHTML=viewWorkspaces();
+  else if(VIEW.page==='workspace')c.innerHTML=viewWorkspace();
+  else if(VIEW.page==='app')c.innerHTML=viewApp();
+  bindContent();
+  $('.work-surface').scrollTop=0;
+}
+function renderTopbar(){
+  const t=$('#tbTitle');
+  let title='Home',crumbs='';
+  if(VIEW.page==='home'){title='Good morning, Lumen Operations';crumbs='Command Center overview';}
+  else if(VIEW.page==='module'){const m=MODULE_META[VIEW.moduleId];title=m?m.title:'Module';crumbs='Quest HQ · Command Center';}
+  else if(VIEW.page==='workspaces'){title='Workspaces';crumbs='<span class="crumb-link" data-go="home">Home</span><span class="material-symbols-outlined sep">chevron_right</span>Workspaces';}
+  else if(VIEW.page==='workspace'||VIEW.page==='app'){
+    const w=curWs();
+    crumbs=`<span class="crumb-link" data-go="workspaces">Workspaces</span>`;
+    if(w){crumbs+=`<span class="material-symbols-outlined sep">chevron_right</span>`+(VIEW.page==='app'?`<span class="crumb-link" data-go="ws">${esc(w.name)}</span>`:`${esc(w.name)}`);title=w?w.name:'Workspace';}
+    if(VIEW.page==='app'){const a=curApp();if(a){crumbs+=`<span class="material-symbols-outlined sep">chevron_right</span>${esc(a.name)}`;title=a.name;}}
+  }
+  t.innerHTML=`<h1>${esc(title)}</h1><div class="crumbs">${crumbs}</div>`;
+  $$('#tbTitle [data-go]').forEach(el=>el.onclick=()=>{el.dataset.go==='home'?(VIEW={page:'home'}):el.dataset.go==='workspaces'?(VIEW={page:'workspaces'}):openWorkspace(VIEW.wsId);render();});
+  $('#quickNew').innerHTML=`<span class="material-symbols-outlined">add</span> ${VIEW.page==='workspace'?'Add app':'New workspace'}`;
+  $('#quickNew').onclick=()=>{VIEW.page==='workspace'?openAppModal():openWsModal();};
+}
+
+/* ==================================================================
+   HOME dashboard
+   ================================================================== */
+function viewHome(){
+  const totalWs=DB.workspaces.length;
+  const totalApps=DB.workspaces.reduce((s,w)=>s+w.apps.length,0);
+  const totalItems=DB.workspaces.reduce((s,w)=>s+w.apps.reduce((x,a)=>x+a.items.length,0),0);
+  const kpis=[
+    {v:'8',l:'Active jobs',ic:'ti-hammer',c:'#e66a1f',d:'+2 this week',up:true},
+    {v:'$184k',l:'Quotes out',ic:'ti-file-dollar',c:'#15803d',d:'+12%',up:true},
+    {v:'5',l:'Open tasks',ic:'ti-list-check',c:'#2563eb',d:'2 due today',up:false},
+    {v:String(totalWs),l:'Workspaces',ic:'ti-layout-grid',c:'#7c3aed',d:`${totalApps} apps · ${totalItems} records`,up:true},
+  ];
+  const kpiHTML=`<div class="kpi-grid">${kpis.map(k=>`<div class="card kpi">
+    <div class="ki" style="background:${k.c}"><i class="ti ${k.ic}"></i></div>
+    <div class="kv">${esc(k.v)}</div><div class="kl">${esc(k.l)}</div>
+    <div class="kd ${k.up?'up':'down'}"><i class="ti ${k.up?'ti-trending-up':'ti-clock'}"></i>${esc(k.d)}</div></div>`).join('')}</div>`;
+  const quick=[
+    {t:'New workspace',s:'Build a custom dashboard',ic:'ti-layout-grid-add',c:'#e66a1f',act:'newWs'},
+    {t:'Add a job',s:'Start a production job',ic:'ti-hammer',c:'#2563eb',act:'jobs'},
+    {t:'Create quote',s:'Quote a new opportunity',ic:'ti-file-dollar',c:'#15803d',act:'deals'},
+    {t:'Open Workspaces',s:'Your no-code apps',ic:'ti-apps',c:'#7c3aed',act:'workspaces'},
+  ];
+  const quickHTML=`<div class="panel card" style="margin-bottom:20px"><h3><i class="ti ti-bolt"></i> Quick actions</h3>
+    <div class="qa-grid">${quick.map(q=>`<button class="qa" data-qa="${q.act}"><div class="qi" style="background:${q.c}"><i class="ti ${q.ic}"></i></div>
+      <div><b>${esc(q.t)}</b><span>${esc(q.s)}</span></div></button>`).join('')}</div></div>`;
+  const sched=[
+    {t:'08:30',b:'Crew dispatch — Greenfield HOA',s:'Tear-off & dry-in · Crew A',c:'#e66a1f'},
+    {t:'11:00',b:'Inspection — Mansour Residence',s:'Final walkthrough · Sam C.',c:'#2563eb'},
+    {t:'14:00',b:'Quote review — Westside Plaza',s:'$96,000 · Aisha K.',c:'#15803d'},
+    {t:'16:30',b:'Weekly ops sync',s:'All leads · Conference room',c:'#7c3aed'},
+  ];
+  const schedHTML=`<div class="panel card"><h3><i class="ti ti-calendar-event"></i> Today’s schedule <span class="more" data-qa="calendar">Open calendar</span></h3>
+    ${sched.map(s=>`<div class="sched-row"><div class="time">${s.t}</div><div class="bar" style="background:${s.c}"></div>
+      <div><b>${esc(s.b)}</b><span>${esc(s.s)}</span></div></div>`).join('')}</div>`;
+  /* recent activity pulled from workspaces */
+  const allActs=[];DB.workspaces.forEach(w=>(w.activity||[]).forEach(ev=>allActs.push({...ev,ws:w.name})));
+  allActs.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+  const actHTML=`<div class="panel card"><h3><i class="ti ti-history"></i> Recent activity <span class="more" data-qa="workspaces">All workspaces</span></h3>
+    <div class="activity">${allActs.slice(0,6).map(ev=>`<div class="act-item">
+      <div class="act-ic" style="background:${ev.color||'#6b7280'}"><span class="material-symbols-outlined">${ev.icon||'circle'}</span></div>
+      <div style="flex:1"><div class="at">${ev.text}</div><div class="att">${esc(ev.ws)} · ${timeAgo(ev.ts)}</div></div></div>`).join('')||'<div class="empty" style="padding:20px">No activity yet</div>'}</div></div>`;
+  const apprHTML=`<div class="panel card" style="margin-top:18px"><h3><i class="ti ti-user-check"></i> Outstanding approvals <span class="more" data-qa="approvals">Review</span></h3>
+    <div class="appr-row"><span class="material-symbols-outlined">pending_actions</span><div style="flex:1"><b style="font-size:.88rem">Handoff — Greenfield HOA</b><div style="font-size:.78rem;color:var(--text-muted)">Underwriter → Production</div></div><span class="tag" style="background:var(--warning-soft);color:var(--warning)">Pending</span></div>
+    <div class="appr-row"><span class="material-symbols-outlined">pending_actions</span><div style="flex:1"><b style="font-size:.88rem">Discount approval — Westside Plaza</b><div style="font-size:.78rem;color:var(--text-muted)">8% over standard</div></div><span class="tag" style="background:var(--warning-soft);color:var(--warning)">Pending</span></div></div>`;
+  /* workspace spotlight */
+  const wsHTML=`<div class="panel card" style="margin-top:20px"><h3><i class="ti ti-layout-grid"></i> Your workspaces <span class="more" data-qa="workspaces">View all</span></h3>
+    <div class="grid cols-3" style="margin-top:4px">${DB.workspaces.slice(0,3).map(w=>{
+      const items=w.apps.reduce((s,a)=>s+a.items.length,0);
+      return `<div class="card ws-card" data-open="${w.id}"><div class="topbar-stripe" style="background:${w.color}"></div>
+        <div class="ws-emoji material-symbols-outlined" style="background:${w.color};width:42px;height:42px;font-size:22px;margin:4px 0 12px">${w.emoji}</div>
+        <h3>${esc(w.name)}</h3><p style="min-height:auto">${esc(w.description||'')}</p>
+        <div class="meta"><span><span class="material-symbols-outlined" style="font-size:16px">apps</span>${w.apps.length}</span><span><span class="material-symbols-outlined" style="font-size:16px">database</span>${items}</span></div></div>`;
+    }).join('')}
+    <div class="new-card" data-new-ws style="min-height:auto;padding:20px"><span class="material-symbols-outlined">add_circle</span><b>New workspace</b></div></div></div>`;
+  return `<div class="home-hero">
+      <div><h1>Good morning 👋</h1><div class="greet">Here’s what’s happening across <b>Lumen Operations</b> today.</div></div>
+      <div class="spacer"></div>
+      <button class="btn btn-primary" data-new-ws><span class="material-symbols-outlined">add</span> Create workspace</button>
+    </div>
+    ${kpiHTML}
+    ${quickHTML}
+    <div class="home-cols">
+      <div>${schedHTML}${wsHTML}</div>
+      <div>${actHTML}${apprHTML}</div>
+    </div>`;
+}
+
+/* ==================================================================
+   MODULE placeholder (other Command Center sections)
+   ================================================================== */
+function viewModule(){
+  const m=MODULE_META[VIEW.moduleId];
+  if(!m)return `<div class="empty"><span class="material-symbols-outlined">grid_view</span><h3>Module</h3><p>Not found.</p></div>`;
+  const feats=(m.feats||[]).map(f=>`<div class="card feat"><i class="ti ${f[0]}"></i><b>${esc(f[1])}</b><span>${esc(f[2])}</span></div>`).join('');
+  return `<div class="module-stage">
+    <div class="module-hero">
+      <div class="mh" style="background:${m.color}"><i class="ti ${m.icon}"></i></div>
+      <div><h2>${esc(m.title)}</h2><p>${esc(m.sum)}</p>${m.soon?'<span class="badge-soon"><i class="ti ti-clock"></i> Coming soon</span>':''}</div>
+    </div>
+    <div class="feat-grid">${feats}</div>
+    <div class="demo-note"><span class="material-symbols-outlined">info</span>
+      This is a layout-accurate clone of the Quest HQ Command Center. The <b>${esc(m.title)}</b> module is represented here for navigation fidelity — the fully built-out, no-code section in this demo is <b>Workspaces</b>.
+      <button class="btn btn-sm btn-primary" data-qa="workspaces" style="margin-left:auto"><span class="material-symbols-outlined">arrow_forward</span> Open Workspaces</button></div>
+  </div>`;
+}
+
+/* ==================================================================
+   WORKSPACES module (full no-code builder)
+   ================================================================== */
+function viewWorkspaces(){
+  const cards=DB.workspaces.map(w=>{
+    const mem=w.members.slice(0,4).map(id=>{const m=memberById(id);return `<div class="avatar" style="background:${m.color}" title="${esc(m.name)}">${initials(m.name)}</div>`;}).join('');
+    const more=w.members.length>4?`<div class="avatar" style="background:var(--surface-3);color:var(--text-muted)">+${w.members.length-4}</div>`:'';
+    const items=w.apps.reduce((s,a)=>s+a.items.length,0);
+    return `<div class="card ws-card" data-open="${w.id}">
+      <div class="topbar-stripe" style="background:${w.color}"></div>
+      <div class="ws-emoji material-symbols-outlined" style="background:${w.color}">${w.emoji}</div>
+      <h3>${esc(w.name)}</h3>
+      <p>${esc(w.description||'No description')}</p>
+      <div class="meta">
+        <span><span class="material-symbols-outlined" style="font-size:17px">apps</span>${w.apps.length} apps</span>
+        <span><span class="material-symbols-outlined" style="font-size:17px">database</span>${items} items</span>
+        <div class="avatars" style="margin-left:auto">${mem}${more}</div>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="page-head">
+    <div>
+      <div class="page-title"><span class="material-symbols-outlined" style="color:var(--primary)">workspaces</span> Workspaces</div>
+      <div class="page-sub">Build customizable, no-code dashboards for any team, project, or department — Podio-style.</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn btn-primary" data-new-ws><span class="material-symbols-outlined">add</span> Create workspace</button>
+  </div>
+  <div class="grid cols-3">
+    ${cards}
+    <div class="new-card" data-new-ws><span class="material-symbols-outlined">add_circle</span><b>New Workspace</b><span style="font-size:.82rem">Start from a blank canvas</span></div>
+  </div>`;
+}
+
+function viewWorkspace(){
+  const w=curWs();if(!w){VIEW={page:'workspaces'};return viewWorkspaces();}
+  const mem=w.members.map(id=>{const m=memberById(id);return `<div class="avatar" style="background:${m.color};width:34px;height:34px" title="${esc(m.name)} · ${esc(m.role)}">${initials(m.name)}</div>`;}).join('');
+  const appCards=w.apps.map(a=>`<div class="card app-card" data-open-app="${a.id}">
+      <div class="app-ic" style="background:${a.color}"><span class="material-symbols-outlined">${a.icon}</span></div>
+      <div style="flex:1;min-width:0">
+        <h4>${esc(a.name)}</h4>
+        <div class="app-desc">${esc(a.description||'No description')}</div>
+        <div class="app-stat"><span class="material-symbols-outlined" style="font-size:16px">view_list</span>${a.items.length} items · ${a.fields.length} fields${a.type?` · ${esc(a.type)}`:''}</div>
+      </div>
+    </div>`).join('');
+  const appsBlock=w.apps.length?`<div class="grid cols-3">${appCards}
+      <div class="new-card" data-new-app style="min-height:120px"><span class="material-symbols-outlined">add</span><b>Add App</b></div></div>`
+    :`<div class="card"><div class="empty"><span class="material-symbols-outlined">apps</span>
+        <h3>No apps yet</h3><p>Apps are the building blocks of a workspace — like spreadsheets you design yourself. Add your first app to start capturing data.</p>
+        <button class="btn btn-primary" data-new-app><span class="material-symbols-outlined">add</span> Add your first app</button></div></div>`;
+  return `<div class="page-head">
+    <div>
+      <div class="page-title"><span class="material-symbols-outlined" style="color:#fff;background:${w.color};border-radius:10px;padding:7px">${w.emoji}</span> ${esc(w.name)}</div>
+      <div class="page-sub">${esc(w.description||'')}</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" data-manage-members><span class="material-symbols-outlined">group</span> Members</button>
+    <button class="btn btn-primary" data-new-app><span class="material-symbols-outlined">add</span> Add App</button>
+  </div>
+  <div class="card" style="padding:16px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;align-items:center"><div class="avatars">${mem}</div></div>
+    <div style="font-size:.86rem;color:var(--text-muted);font-weight:600">${w.members.length} member${w.members.length!==1?'s':''} collaborating</div>
+    <div style="flex:1"></div>
+    <button class="btn btn-sm" data-manage-members><span class="material-symbols-outlined">person_add</span> Invite</button>
+    <button class="btn btn-sm btn-danger" data-del-ws><span class="material-symbols-outlined">delete</span> Delete workspace</button>
+  </div>
+  <h3 style="font-size:1.05rem;font-weight:800;margin-bottom:14px">Apps</h3>
+  ${appsBlock}
+  ${activityCard(w)}`;
+}
+function activityCard(w){
+  const acts=(w.activity||[]).slice(0,8);
+  if(!acts.length)return '';
+  return `<h3 style="font-size:1.05rem;font-weight:800;margin:26px 0 14px;display:flex;align-items:center;gap:8px"><span class="material-symbols-outlined" style="color:var(--primary)">history</span> Recent activity</h3>
+  <div class="card" style="padding:8px 18px"><div class="activity">${acts.map(ev=>`<div class="act-item">
+    <div class="act-ic" style="background:${ev.color||'#6b7280'}"><span class="material-symbols-outlined">${ev.icon||'circle'}</span></div>
+    <div style="flex:1"><div class="at">${ev.text}</div><div class="att">${timeAgo(ev.ts)}</div></div></div>`).join('')}</div></div>`;
+}
+
+function viewApp(){
+  const w=curWs(),a=curApp();if(!a){return viewWorkspace();}
+  const head=`<div class="page-head">
+    <div>
+      <div class="page-title"><span class="material-symbols-outlined" style="color:#fff;background:${a.color};border-radius:10px;padding:7px">${a.icon}</span> ${esc(a.name)}</div>
+      <div class="page-sub">${esc(a.description||'')}</div>
+    </div>
+    <div class="spacer"></div>
+    ${VIEW.appTab==='items'&&a.fields.length?`<button class="btn btn-primary" data-add-item><span class="material-symbols-outlined">add</span> Add item</button>`:''}
+    ${VIEW.appTab==='fields'?`<button class="btn btn-primary" data-add-field><span class="material-symbols-outlined">add</span> Add field</button>`:''}
+    ${VIEW.appTab==='automations'?`<button class="btn btn-primary" data-add-auto><span class="material-symbols-outlined">add</span> New automation</button>`:''}
+  </div>
+  <div class="tabs">
+    <button class="tab ${VIEW.appTab==='items'?'active':''}" data-tab="items">Items <span style="opacity:.6">${a.items.length}</span></button>
+    <button class="tab ${VIEW.appTab==='fields'?'active':''}" data-tab="fields">Fields <span style="opacity:.6">${a.fields.length}</span></button>
+    <button class="tab ${VIEW.appTab==='reports'?'active':''}" data-tab="reports"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px;margin-right:3px">monitoring</span>Reports</button>
+    <button class="tab ${VIEW.appTab==='automations'?'active':''}" data-tab="automations"><span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px;margin-right:3px">bolt</span>Automations <span style="opacity:.6">${(a.automations||[]).length}</span></button>
+    <button class="tab ${VIEW.appTab==='settings'?'active':''}" data-tab="settings">Settings</button>
+  </div>`;
+  let body='';
+  if(VIEW.appTab==='items')body=viewItems(a);
+  else if(VIEW.appTab==='fields')body=viewBuilder(a);
+  else if(VIEW.appTab==='reports')body=viewReports(a);
+  else if(VIEW.appTab==='automations')body=viewAutomations(a);
+  else body=viewAppSettings(a);
+  return head+body;
+}
+
+function viewBuilder(a){
+  const list=a.fields.length?a.fields.map((f,i)=>{
+    const ft=FIELD_TYPES[f.type];
+    let extra='';
+    if((f.type==='category'||f.type==='status')&&f.config.options)extra=` · ${f.config.options.length} options`;
+    if(f.type==='relationship'&&f.config.targetApp){const ta=curWs().apps.find(x=>x.id===f.config.targetApp);extra=ta?` · → ${esc(ta.name)}`:' · (no target)';}
+    if(f.type==='calculation'&&f.config.formula)extra=` · ${esc(f.config.formula)}`;
+    return `<div class="field-row" draggable="true" data-fid="${f.id}" data-idx="${i}">
+      <span class="grip material-symbols-outlined">drag_indicator</span>
+      <div class="field-ic" style="background:${ft.color}22;color:${ft.color}"><span class="material-symbols-outlined">${ft.icon}</span></div>
+      <div class="fmeta"><b>${esc(f.label)}${f.required?'<span class="req-star">*</span>':''}</b><div class="ftype">${ft.label}${extra}</div></div>
+      <div class="field-acts">
+        <button class="icon-btn" data-edit-field="${f.id}" title="Configure"><span class="material-symbols-outlined">tune</span></button>
+        <button class="icon-btn danger" data-del-field="${f.id}" title="Delete"><span class="material-symbols-outlined">delete</span></button>
+      </div>
+    </div>`;
+  }).join(''):`<div class="empty" style="border:2px dashed var(--border-strong);border-radius:var(--radius)">
+      <span class="material-symbols-outlined">dashboard_customize</span>
+      <h3>Design your app</h3><p>Add fields from the palette to shape what data this app stores. Drag to reorder anytime.</p></div>`;
+  const palette=`<div class="card palette" style="padding:16px">
+    <h4>Add a field</h4>
+    ${FIELD_ORDER.map(t=>{const ft=FIELD_TYPES[t];return `<button class="palette-item" data-add-type="${t}">
+      <span class="pic" style="background:${ft.color}22;color:${ft.color}"><span class="material-symbols-outlined">${ft.icon}</span></span>
+      <span style="flex:1">${ft.label}<div style="font-weight:500;font-size:.74rem;color:var(--text-muted)">${ft.desc}</div></span>
+    </button>`;}).join('')}
+  </div>`;
+  return `<div class="builder-grid">
+    <div><div style="margin-bottom:12px;font-weight:700;color:var(--text-muted);font-size:.84rem">${a.fields.length} field${a.fields.length!==1?'s':''} — drag to reorder</div>${list}</div>
+    ${palette}
+  </div>`;
+}
+
+function fmtVal(f,v){
+  if(v===undefined||v===null||v===''||(Array.isArray(v)&&!v.length))return '<span class="cell-empty">—</span>';
+  const ft=FIELD_TYPES[f.type];
+  switch(f.type){
+    case 'status':{const o=(f.config.options||[]).find(o=>o.id===v);return o?`<span class="status-pill" style="background:${o.color}1f;color:${o.color}"><span class="ds" style="background:${o.color}"></span>${esc(o.label)}</span>`:'<span class="cell-empty">—</span>';}
+    case 'category':{const o=(f.config.options||[]).find(o=>o.id===v);return o?`<span class="tag" style="background:${o.color||'#6b7280'}1f;color:${o.color||'#6b7280'}">${esc(o.label)}</span>`:esc(v);}
+    case 'user':{const m=memberById(v);return `<span class="chip" style="padding:3px 10px 3px 3px"><span class="avatar" style="background:${m.color}">${initials(m.name)}</span>${esc(m.name)}</span>`;}
+    case 'money':return `<b>${esc(f.config.currency||'$')}${Number(v).toLocaleString()}</b>`;
+    case 'number':return Number(v).toLocaleString()+(f.config.unit?` <span style="color:var(--text-muted)">${esc(f.config.unit)}</span>`:'');
+    case 'email':return `<a href="mailto:${esc(v)}" style="color:var(--info)">${esc(v)}</a>`;
+    case 'phone':return esc(v);
+    case 'date':return v?new Date(v+'T00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'<span class="cell-empty">—</span>';
+    case 'checkbox':return v?`<span class="status-pill" style="background:var(--success-soft);color:var(--success)"><span class="material-symbols-outlined" style="font-size:15px">check</span>Yes</span>`:`<span class="cell-empty">No</span>`;
+    case 'file':return `<span class="tag" style="background:var(--surface-3);color:var(--text-muted)"><span class="material-symbols-outlined" style="font-size:14px">description</span>${esc(v)}</span>`;
+    case 'relationship':{const ta=curWs().apps.find(x=>x.id===f.config.targetApp);if(!ta)return esc(v);const arr=Array.isArray(v)?v:[v];return arr.map(id=>{const it=ta.items.find(i=>i.id===id);const lbl=it?itemTitle(ta,it):'?';return `<span class="tag" style="background:var(--info-soft);color:var(--info)">${esc(lbl)}</span>`;}).join(' ');}
+    case 'calculation':return `<b style="color:${ft.color}">${esc(computeCalc(f,window.__calcCtx||{}))}</b>`;
+    case 'textarea':return esc(v).length>60?esc(v.slice(0,60))+'…':esc(v);
+    default:return esc(v);
+  }
+}
+function itemTitle(app,item){
+  const f=app.fields.find(f=>['text','email'].includes(f.type))||app.fields[0];
+  return f?(item.values[f.id]||'Untitled'):'Untitled';
+}
+function computeCalc(f,values){
+  const formula=f.config.formula;if(!formula)return '—';
+  const app=curApp();
+  let expr=formula.replace(/\{([^}]+)\}/g,(m,name)=>{
+    const tf=app.fields.find(x=>x.label.toLowerCase()===name.trim().toLowerCase()&&['number','money','calculation'].includes(x.type));
+    const v=tf?Number(values[tf.id]||0):0;return isNaN(v)?0:v;
+  });
+  if(!/^[-+*/(). 0-9]+$/.test(expr))return '⚠';
+  try{const r=Function('"use strict";return('+expr+')')();return isFinite(r)?(Math.round(r*100)/100).toLocaleString():'—';}catch(e){return '⚠';}
+}
+
+function viewItems(a){
+  if(!a.fields.length)return `<div class="card"><div class="empty"><span class="material-symbols-outlined">dashboard_customize</span>
+    <h3>This app has no fields yet</h3><p>Before adding items you need to design the app's structure. Add fields like Text, Status, or Date.</p>
+    <button class="btn btn-primary" data-tab="fields"><span class="material-symbols-outlined">build</span> Open field builder</button></div></div>`;
+  if(!a.items.length)return `<div class="card"><div class="empty"><span class="material-symbols-outlined">inbox</span>
+    <h3>No items yet</h3><p>Add your first record using the form built from your custom fields.</p>
+    <button class="btn btn-primary" data-add-item><span class="material-symbols-outlined">add</span> Add item</button></div></div>`;
+  const cols=a.fields.slice(0,7);
+  const rows=a.items.map(it=>{
+    window.__calcCtx=it.values;
+    return `<tr data-item="${it.id}" style="cursor:pointer">${cols.map(f=>`<td>${fmtVal(f,it.values[f.id])}</td>`).join('')}
+      <td style="text-align:right;white-space:nowrap"><button class="icon-btn" data-edit-item="${it.id}"><span class="material-symbols-outlined">edit</span></button><button class="icon-btn danger" data-del-item="${it.id}"><span class="material-symbols-outlined">delete</span></button></td></tr>`;
+  }).join('');
+  return `<div class="tbl-wrap"><table>
+    <thead><tr>${cols.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <div style="margin-top:12px;color:var(--text-muted);font-size:.84rem">${a.items.length} item${a.items.length!==1?'s':''}${a.fields.length>7?` · showing first 7 of ${a.fields.length} fields`:''}</div>`;
+}
+
+function viewAppSettings(a){
+  return `<div class="card" style="padding:22px;max-width:560px">
+    <h3 style="font-weight:800;margin-bottom:16px">App settings</h3>
+    <div class="field"><label>App name</label><input class="input" id="setName" value="${esc(a.name)}"></div>
+    <div class="field"><label>Description</label><textarea class="input" id="setDesc">${esc(a.description||'')}</textarea></div>
+    <div class="field"><label>Type</label><input class="input" id="setType" value="${esc(a.type||'')}" placeholder="e.g. Contacts, Tasks, Projects"></div>
+    <div class="field"><label>Icon &amp; color</label>
+      <div class="emoji-pick" id="setIcons" style="margin-bottom:10px">${APP_ICONS.map(ic=>`<button class="emoji-opt ${a.icon===ic?'sel':''}" data-ic="${ic}"><span class="material-symbols-outlined">${ic}</span></button>`).join('')}</div>
+      <div class="swatches" id="setColors">${PALETTE.map(c=>`<div class="swatch ${a.color===c?'sel':''}" data-c="${c}" style="background:${c}"></div>`).join('')}</div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary" data-save-app><span class="material-symbols-outlined">save</span> Save changes</button>
+      <button class="btn btn-danger" data-del-app><span class="material-symbols-outlined">delete</span> Delete app</button>
+    </div>
+  </div>`;
+}
+
+/* ---- REPORTING ---- */
+function donutSVG(segs,size=176){
+  const total=segs.reduce((s,x)=>s+x.value,0)||1;
+  const r=size/2-16,cx=size/2,cy=size/2,C=2*Math.PI*r;let off=0;
+  const rings=segs.filter(s=>s.value>0).map(s=>{
+    const dash=s.value/total*C;
+    const el=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="20" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt"/>`;
+    off+=dash;return el;
+  }).join('');
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="20"/>
+    ${rings}
+    <text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="27" font-weight="800" fill="var(--text)">${total}</text>
+    <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="10.5" letter-spacing="1" fill="var(--text-muted)" font-weight="700">TOTAL</text>
+  </svg>`;
+}
+function barsHTML(bars,fmt){
+  const max=Math.max(...bars.map(b=>b.value),1);
+  return `<div class="bars">${bars.map(b=>`<div class="bar-row">
+    <div class="bar-label" title="${esc(b.label)}">${esc(b.label)}</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${Math.max(b.value/max*100,b.value>0?4:0)}%;background:${b.color}"></div></div>
+    <div class="bar-val">${fmt?fmt(b.value):b.value.toLocaleString()}</div></div>`).join('')}</div>`;
+}
+function groupKey(it,field){let k=it.values[field.id];if(Array.isArray(k))k=k[0];return (k==null||k==='')?'__none':k;}
+function keyMeta(field,key){
+  if(key==='__none')return{label:'(empty)',color:'#9ca3af'};
+  if(field.type==='user'){const m=memberById(key);return{label:m.name,color:m.color};}
+  if(field.type==='status'||field.type==='category'){const o=(field.config.options||[]).find(o=>o.id===key);return o?{label:o.label,color:o.color||'#6b7280'}:{label:String(key),color:'#6b7280'};}
+  return{label:String(key),color:'#6b7280'};
+}
+function viewReports(a){
+  if(!a.fields.length||!a.items.length)return `<div class="card"><div class="empty"><span class="material-symbols-outlined">monitoring</span>
+    <h3>Nothing to report yet</h3><p>Add fields and a few items to this app and charts will appear here automatically.</p>
+    <button class="btn btn-primary" data-tab="${a.fields.length?'items':'fields'}"><span class="material-symbols-outlined">add</span> ${a.fields.length?'Add items':'Add fields'}</button></div></div>`;
+  const moneyFields=a.fields.filter(f=>f.type==='money');
+  const groupField=a.fields.find(f=>f.type==='status')||a.fields.find(f=>f.type==='category')||a.fields.find(f=>f.type==='user');
+  let kpis=[{v:a.items.length,l:'Total items',ic:'database',c:'var(--primary)'}];
+  moneyFields.slice(0,2).forEach(mf=>{
+    const sum=a.items.reduce((s,it)=>s+Number(it.values[mf.id]||0),0);
+    kpis.push({v:(mf.config.currency||'$')+sum.toLocaleString(),l:'Σ '+mf.label,ic:'payments',c:'var(--success)'});
+  });
+  if(groupField&&groupField.type==='status'){
+    const opts=groupField.config.options||[];const last=opts[opts.length-1];
+    if(last){const n=a.items.filter(it=>it.values[groupField.id]===last.id).length;
+      kpis.push({v:n,l:last.label,ic:'flag',c:last.color});}
+    const first=opts[0];if(first){const n=a.items.filter(it=>it.values[groupField.id]===first.id).length;
+      kpis.push({v:n,l:first.label,ic:'fiber_new',c:first.color});}
+  }
+  const kpiHTML=`<div class="kpi-grid">${kpis.slice(0,5).map(k=>`<div class="card kpi">
+    <div class="ki" style="background:${k.c}"><span class="material-symbols-outlined" style="font-size:19px">${k.ic}</span></div>
+    <div class="kv">${esc(String(k.v))}</div><div class="kl">${esc(k.l)}</div></div>`).join('')}</div>`;
+  let donutCard='';
+  if(groupField){
+    const counts={};a.items.forEach(it=>{const k=groupKey(it,groupField);counts[k]=(counts[k]||0)+1;});
+    const segs=Object.keys(counts).map(k=>({...keyMeta(groupField,k),value:counts[k]})).sort((x,y)=>y.value-x.value);
+    donutCard=`<div class="card chart-card"><h4><span class="material-symbols-outlined">donut_large</span> ${esc(a.items.length)} items by ${esc(groupField.label)}</h4>
+      <div class="donut-wrap">${donutSVG(segs)}<div class="legend">${segs.map(s=>`<div class="lg"><span class="sw" style="background:${s.color}"></span>${esc(s.label)}<span class="lv">${s.value}</span></div>`).join('')}</div></div></div>`;
+  }
+  let barCard='';
+  if(groupField){
+    const mf=moneyFields[0];const agg={};
+    a.items.forEach(it=>{const k=groupKey(it,groupField);agg[k]=(agg[k]||0)+(mf?Number(it.values[mf.id]||0):1);});
+    const bars=Object.keys(agg).map(k=>({...keyMeta(groupField,k),value:agg[k]})).sort((x,y)=>y.value-x.value);
+    barCard=`<div class="card chart-card"><h4><span class="material-symbols-outlined">bar_chart</span> ${mf?`${esc(mf.label)} by ${esc(groupField.label)}`:`Count by ${esc(groupField.label)}`}</h4>
+      ${barsHTML(bars,mf?v=>(mf.config.currency||'$')+v.toLocaleString():null)}</div>`;
+  }
+  const byDate={};a.items.forEach(it=>{const d=it.createdAt||'—';byDate[d]=(byDate[d]||0)+1;});
+  const dates=Object.keys(byDate).sort().slice(-10);const dmax=Math.max(...dates.map(d=>byDate[d]),1);
+  const timeCard=`<div class="card chart-card"><h4><span class="material-symbols-outlined">timeline</span> Items added over time</h4>
+    <div class="spark">${dates.map(d=>`<div class="sb" style="height:${byDate[d]/dmax*100}%" title="${esc(d)}: ${byDate[d]}"></div>`).join('')}</div>
+    <div class="spark-x">${dates.map(d=>`<span>${esc(d.slice(5))}</span>`).join('')}</div></div>`;
+  return kpiHTML+`<div class="report-grid">${donutCard}${barCard}${timeCard}</div>`;
+}
+
+/* ---- AUTOMATIONS ---- */
+function fieldById(a,id){return a.fields.find(f=>f.id===id);}
+function valLabel(a,fieldId,val){
+  const f=fieldById(a,fieldId);if(!f)return esc(val);
+  if(f.type==='status'||f.type==='category'){const o=(f.config.options||[]).find(o=>o.id===val);return o?esc(o.label):esc(val);}
+  if(f.type==='user'){return esc(memberById(val).name);}
+  return esc(val);
+}
+function triggerText(a,t){
+  if(t.event==='created')return `<span class="rule-pill"><span class="material-symbols-outlined" style="font-size:14px">add_circle</span>Item is created</span>`;
+  if(t.event==='updated')return `<span class="rule-pill"><span class="material-symbols-outlined" style="font-size:14px">edit</span>Item is updated</span>`;
+  const f=fieldById(a,t.fieldId);
+  return `<span class="rule-pill"><span class="material-symbols-outlined" style="font-size:14px">flag</span>${esc(f?f.label:'?')} = ${valLabel(a,t.fieldId,t.value)}</span>`;
+}
+function actionText(a,ac){
+  if(ac.type==='set_field'){const f=fieldById(a,ac.fieldId);return `<span class="rule-pill"><span class="material-symbols-outlined" style="font-size:14px">edit_note</span>Set ${esc(f?f.label:'?')} → ${valLabel(a,ac.fieldId,ac.value)}</span>`;}
+  if(ac.type==='assign'){const f=fieldById(a,ac.fieldId);return `<span class="rule-pill"><span class="material-symbols-outlined" style="font-size:14px">person</span>Assign ${esc(memberById(ac.value).name)}${f?' as '+esc(f.label):''}</span>`;}
+  return `<span class="rule-pill"><span class="material-symbols-outlined" style="font-size:14px">notifications</span>Notify</span>`;
+}
+function viewAutomations(a){
+  const list=a.automations||[];
+  const banner=`<div class="auto-banner"><span class="material-symbols-outlined">bolt</span>
+    Automations run rules automatically when items are created, updated, or reach a status — no code required.</div>`;
+  if(!list.length)return banner+`<div class="card"><div class="empty"><span class="material-symbols-outlined">bolt</span>
+    <h3>No automations yet</h3><p>Create rules like “When Stage is Won, assign the Account Manager and post to the activity feed.”</p>
+    <button class="btn btn-primary" data-add-auto><span class="material-symbols-outlined">add</span> Create your first automation</button></div></div>`;
+  const rows=list.map(au=>`<div class="auto-row ${au.enabled?'':'off'}">
+    <div class="ai"><span class="material-symbols-outlined">bolt</span></div>
+    <div class="am"><b>${esc(au.name)}</b>
+      <div class="rule">When ${triggerText(a,au.trigger)} <span class="material-symbols-outlined rule-arrow">trending_flat</span> ${au.actions.map(ac=>actionText(a,ac)).join(' ')}</div></div>
+    <label class="switch" title="Enable/disable"><input type="checkbox" ${au.enabled?'checked':''} data-toggle-auto="${au.id}"><span class="slider"></span></label>
+    <button class="icon-btn" data-edit-auto="${au.id}"><span class="material-symbols-outlined">tune</span></button>
+    <button class="icon-btn danger" data-del-auto="${au.id}"><span class="material-symbols-outlined">delete</span></button>
+  </div>`).join('');
+  return banner+rows;
+}
+function logActivity(ws,entry){ws.activity=ws.activity||[];ws.activity.unshift({id:uid(),ts:new Date().toISOString(),...entry});if(ws.activity.length>60)ws.activity.length=60;}
+function timeAgo(ts){const s=(Date.now()-new Date(ts).getTime())/1000;if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
+function runAutomations(app,item,event,prev){
+  const ws=curWs();const fired=[];
+  (app.automations||[]).forEach(au=>{
+    if(!au.enabled)return;const t=au.trigger;let fire=false;
+    if(t.event==='created')fire=event==='created';
+    else if(t.event==='updated')fire=event==='updated';
+    else if(t.event==='field_is'){const now=item.values[t.fieldId];const was=prev?prev[t.fieldId]:undefined;fire=(event==='created'||event==='updated')&&now===t.value&&was!==t.value;}
+    if(!fire)return;
+    (au.actions||[]).forEach(ac=>{
+      if((ac.type==='set_field'||ac.type==='assign')&&ac.fieldId)item.values[ac.fieldId]=ac.value;
+      else if(ac.type==='notify')logActivity(ws,{icon:'notifications',color:'#7c3aed',text:esc(ac.message||`Notification from "${au.name}"`)});
+    });
+    fired.push(au.name);
+    logActivity(ws,{icon:'bolt',color:'#7c3aed',text:`⚡ <b>${esc(au.name)}</b> ran on <b>${esc(itemTitle(app,item))}</b>`});
+  });
+  if(fired.length)setTimeout(()=>toast(`Automation: ${fired.join(', ')}`,'bolt'),350);
+  return fired;
+}
+let autoDraft=null;
+function openAutomationModal(autoId){
+  const a=curApp();
+  const existing=autoId?(a.automations||[]).find(x=>x.id===autoId):null;
+  autoDraft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),name:'',enabled:true,trigger:{event:'created'},actions:[{type:'notify',message:''}]};
+  modal(`<div class="modal wide">
+    <div class="modal-head"><div class="mh-ic" style="background:linear-gradient(135deg,var(--purple),#a855f7)"><span class="material-symbols-outlined">bolt</span></div>
+      <h3>${existing?'Edit':'New'} automation</h3><button class="close" data-close><span class="material-symbols-outlined">close</span></button></div>
+    <div class="modal-body">
+      <div class="field"><label>Automation name</label><input class="input" id="auName" value="${esc(autoDraft.name)}" placeholder="e.g. Notify owner when deal is Won" autofocus></div>
+      <div class="field"><label>When… (trigger)</label>
+        <select class="select" id="auEvent">
+          <option value="created" ${autoDraft.trigger.event==='created'?'selected':''}>An item is created</option>
+          <option value="updated" ${autoDraft.trigger.event==='updated'?'selected':''}>An item is updated</option>
+          <option value="field_is" ${autoDraft.trigger.event==='field_is'?'selected':''}>A field changes to a specific value</option>
+        </select>
+        <div id="auTrigCfg" style="margin-top:10px"></div>
+      </div>
+      <div class="field"><label>Then… (actions)</label><div class="action-builder" id="auActions"></div>
+        <button class="btn btn-sm" id="auAddAction" style="margin-top:9px"><span class="material-symbols-outlined">add</span> Add action</button></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="auSave"><span class="material-symbols-outlined">check</span> ${existing?'Save automation':'Create automation'}</button></div>
+  </div>`);
+  renderTrigCfg(a);renderActionCards(a);
+  $('#auEvent').onchange=()=>{autoDraft.trigger={event:$('#auEvent').value};renderTrigCfg(a);};
+  $('#auAddAction').onclick=()=>{collectAuto(a);autoDraft.actions.push({type:'notify',message:''});renderActionCards(a);};
+  $('#auSave').onclick=()=>{
+    collectAuto(a);
+    autoDraft.name=$('#auName').value.trim();if(!autoDraft.name)return toast('Name your automation','error');
+    if(autoDraft.trigger.event==='field_is'&&!autoDraft.trigger.value)return toast('Pick a trigger value','error');
+    if(!autoDraft.actions.length)return toast('Add at least one action','error');
+    a.automations=a.automations||[];
+    if(existing){const i=a.automations.findIndex(x=>x.id===autoId);a.automations[i]=autoDraft;}else a.automations.push(autoDraft);
+    save();closeModal();render();toast(existing?'Automation saved':'Automation created','bolt');
+  };
+}
+function choiceFields(a){return a.fields.filter(f=>f.type==='status'||f.type==='category');}
+function renderTrigCfg(a){
+  const box=$('#auTrigCfg');if(!box)return;
+  if(autoDraft.trigger.event!=='field_is'){box.innerHTML='';return;}
+  const cf=choiceFields(a);
+  if(!cf.length){box.innerHTML=`<div class="hint" style="color:var(--warning)">Add a Status or Category field to use this trigger.</div>`;return;}
+  const fid=autoDraft.trigger.fieldId||cf[0].id;autoDraft.trigger.fieldId=fid;
+  const f=fieldById(a,fid);
+  box.innerHTML=`<div class="row2">
+    <select class="select" id="auTrigField">${cf.map(x=>`<option value="${x.id}" ${x.id===fid?'selected':''}>${esc(x.label)}</option>`).join('')}</select>
+    <select class="select" id="auTrigVal"><option value="">— value —</option>${(f.config.options||[]).map(o=>`<option value="${o.id}" ${autoDraft.trigger.value===o.id?'selected':''}>${esc(o.label)}</option>`).join('')}</select>
+  </div>`;
+  $('#auTrigField').onchange=()=>{autoDraft.trigger.fieldId=$('#auTrigField').value;autoDraft.trigger.value='';renderTrigCfg(a);};
+  $('#auTrigVal').onchange=()=>{autoDraft.trigger.value=$('#auTrigVal').value;};
+}
+function renderActionCards(a){
+  const box=$('#auActions');if(!box)return;
+  box.innerHTML=autoDraft.actions.map((ac,i)=>{
+    let cfg='';
+    if(ac.type==='set_field'){
+      const setable=a.fields.filter(f=>['text','textarea','status','category','date','number','money','email','phone','checkbox'].includes(f.type));
+      const fid=ac.fieldId||(setable[0]&&setable[0].id);const f=fieldById(a,fid);
+      let valInput='';
+      if(f&&(f.type==='status'||f.type==='category'))valInput=`<select class="select" data-acval="${i}"><option value="">— value —</option>${(f.config.options||[]).map(o=>`<option value="${o.id}" ${ac.value===o.id?'selected':''}>${esc(o.label)}</option>`).join('')}</select>`;
+      else if(f&&f.type==='checkbox')valInput=`<select class="select" data-acval="${i}"><option value="true" ${ac.value===true?'selected':''}>Yes</option><option value="false" ${ac.value===false?'selected':''}>No</option></select>`;
+      else valInput=`<input class="input" data-acval="${i}" value="${esc(ac.value??'')}" placeholder="Value to set">`;
+      cfg=`<select class="select" data-acfield="${i}">${setable.map(x=>`<option value="${x.id}" ${x.id===fid?'selected':''}>${esc(x.label)}</option>`).join('')}</select>${valInput}`;
+    }else if(ac.type==='assign'){
+      const userFields=a.fields.filter(f=>f.type==='user');
+      const members=curWs().members;
+      cfg=`<select class="select" data-acfield="${i}">${userFields.length?userFields.map(x=>`<option value="${x.id}" ${x.id===ac.fieldId?'selected':''}>${esc(x.label)}</option>`).join(''):'<option value="">(add a User field)</option>'}</select>
+        <select class="select" data-acval="${i}"><option value="">— member —</option>${members.map(id=>`<option value="${id}" ${ac.value===id?'selected':''}>${esc(memberById(id).name)}</option>`).join('')}</select>`;
+    }else{
+      cfg=`<input class="input" data-acmsg="${i}" value="${esc(ac.message||'')}" placeholder="Message for the activity feed">`;
+    }
+    return `<div class="action-card">
+      <div class="acgrow">
+        <select class="select" data-actype="${i}">
+          <option value="notify" ${ac.type==='notify'?'selected':''}>📣 Post a notification</option>
+          <option value="set_field" ${ac.type==='set_field'?'selected':''}>✏️ Set a field value</option>
+          <option value="assign" ${ac.type==='assign'?'selected':''}>👤 Assign a member</option>
+        </select>
+        ${cfg}
+      </div>
+      <button class="icon-btn danger" data-acdel="${i}" type="button"><span class="material-symbols-outlined">close</span></button>
+    </div>`;
+  }).join('');
+  $$('[data-actype]').forEach(s=>s.onchange=()=>{collectAuto(a);const i=+s.dataset.actype;const t=s.value;autoDraft.actions[i]={type:t,...(t==='notify'?{message:''}:{})};renderActionCards(a);});
+  $$('[data-acfield]').forEach(s=>s.onchange=()=>{collectAuto(a);renderActionCards(a);});
+  $$('[data-acdel]').forEach(b=>b.onclick=()=>{collectAuto(a);autoDraft.actions.splice(+b.dataset.acdel,1);renderActionCards(a);});
+}
+function collectAuto(a){
+  if($('#auName'))autoDraft.name=$('#auName').value;
+  if($('#auTrigField'))autoDraft.trigger.fieldId=$('#auTrigField').value;
+  if($('#auTrigVal'))autoDraft.trigger.value=$('#auTrigVal').value;
+  $$('[data-actype]').forEach(s=>{const i=+s.dataset.actype;autoDraft.actions[i].type=s.value;});
+  $$('[data-acfield]').forEach(s=>{autoDraft.actions[+s.dataset.acfield].fieldId=s.value;});
+  $$('[data-acval]').forEach(s=>{const i=+s.dataset.acval;let v=s.value;if(v==='true')v=true;else if(v==='false')v=false;autoDraft.actions[i].value=v;});
+  $$('[data-acmsg]').forEach(s=>{autoDraft.actions[+s.dataset.acmsg].message=s.value;});
+}
+function delAutomation(id){
+  const a=curApp();confirmModal('Delete automation?','This rule will stop running.',()=>{
+    a.automations=a.automations.filter(x=>x.id!==id);save();render();toast('Automation deleted','delete');
+  });
+}
+
+/* ==================================================================
+   Bind content actions
+   ================================================================== */
+function openWorkspace(id){VIEW={page:'workspace',wsId:id};render();}
+function openApp(id){VIEW={page:'app',wsId:VIEW.wsId,appId:id,appTab:'items'};render();}
+
+function bindContent(){
+  $$('[data-qa]').forEach(el=>el.onclick=()=>{const a=el.dataset.qa;
+    if(a==='newWs')openWsModal();else if(a==='workspaces'){VIEW={page:'workspaces'};render();}
+    else navTo(a);});
+  $$('[data-open]').forEach(el=>el.onclick=()=>openWorkspace(el.dataset.open));
+  $$('[data-new-ws]').forEach(el=>el.onclick=()=>openWsModal());
+  $$('[data-open-app]').forEach(el=>el.onclick=()=>openApp(el.dataset.openApp));
+  $$('[data-new-app]').forEach(el=>el.onclick=()=>openAppModal());
+  $$('[data-manage-members]').forEach(el=>el.onclick=()=>openMembersModal());
+  $$('[data-del-ws]').forEach(el=>el.onclick=()=>delWorkspace());
+  $$('[data-tab]').forEach(el=>el.onclick=()=>{VIEW.appTab=el.dataset.tab;render();});
+  $$('[data-add-field]').forEach(el=>el.onclick=()=>{VIEW.appTab='fields';render();});
+  $$('[data-add-type]').forEach(el=>el.onclick=()=>openFieldModal(null,el.dataset.addType));
+  $$('[data-edit-field]').forEach(el=>el.onclick=()=>openFieldModal(el.dataset.editField));
+  $$('[data-del-field]').forEach(el=>el.onclick=()=>delField(el.dataset.delField));
+  $$('[data-add-item]').forEach(el=>el.onclick=()=>openItemModal());
+  $$('[data-edit-item]').forEach(el=>el.onclick=(e)=>{e.stopPropagation();openItemModal(el.dataset.editItem);});
+  $$('[data-del-item]').forEach(el=>el.onclick=(e)=>{e.stopPropagation();delItem(el.dataset.delItem);});
+  $$('tr[data-item]').forEach(el=>el.onclick=()=>openItemModal(el.dataset.item));
+  $$('[data-save-app]').forEach(el=>el.onclick=()=>saveAppSettings());
+  $$('[data-del-app]').forEach(el=>el.onclick=()=>delApp());
+  $$('[data-add-auto]').forEach(el=>el.onclick=()=>openAutomationModal());
+  $$('[data-edit-auto]').forEach(el=>el.onclick=()=>openAutomationModal(el.dataset.editAuto));
+  $$('[data-del-auto]').forEach(el=>el.onclick=()=>delAutomation(el.dataset.delAuto));
+  $$('[data-toggle-auto]').forEach(el=>el.onchange=()=>{const a=curApp();const au=a.automations.find(x=>x.id===el.dataset.toggleAuto);au.enabled=el.checked;save();render();});
+  bindBuilderDnD();bindSettingsPickers();
+}
+function bindSettingsPickers(){
+  $$('#setIcons .emoji-opt').forEach(b=>b.onclick=()=>{$$('#setIcons .emoji-opt').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');});
+  $$('#setColors .swatch').forEach(b=>b.onclick=()=>{$$('#setColors .swatch').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');});
+}
+function bindBuilderDnD(){
+  let dragId=null;
+  $$('.field-row[draggable]').forEach(row=>{
+    row.ondragstart=()=>{dragId=row.dataset.fid;row.classList.add('dragging');};
+    row.ondragend=()=>{row.classList.remove('dragging');$$('.field-row').forEach(r=>r.classList.remove('drop-target'));};
+    row.ondragover=e=>{e.preventDefault();row.classList.add('drop-target');};
+    row.ondragleave=()=>row.classList.remove('drop-target');
+    row.ondrop=e=>{e.preventDefault();const a=curApp();const from=a.fields.findIndex(f=>f.id===dragId);const to=a.fields.findIndex(f=>f.id===row.dataset.fid);if(from<0||to<0||from===to)return;const[m]=a.fields.splice(from,1);a.fields.splice(to,0,m);save();render();};
+  });
+}
+
+/* ==================================================================
+   MODALS
+   ================================================================== */
+function modal(html){const s=$('#scrim');s.innerHTML=html;s.classList.add('show');s.onclick=e=>{if(e.target===s)closeModal();};$$('[data-close]',s).forEach(b=>b.onclick=closeModal);}
+function closeModal(){$('#scrim').classList.remove('show');$('#scrim').innerHTML='';}
+
+let wsDraft=null;
+function openWsModal(){
+  wsDraft={emoji:WS_EMOJIS[0],color:PALETTE[1],members:[]};
+  modal(`<div class="modal wide">
+    <div class="modal-head"><div class="mh-ic" style="background:${wsDraft.color}"><span class="material-symbols-outlined">workspaces</span></div>
+      <h3>Create workspace</h3><button class="close" data-close><span class="material-symbols-outlined">close</span></button></div>
+    <div class="modal-body">
+      <div class="field"><label>Workspace name</label><input class="input" id="wsName" placeholder="e.g. Marketing, Field Operations, Q3 Roof Replacements" autofocus></div>
+      <div class="field"><label>Description <span class="opt">(optional)</span></label><textarea class="input" id="wsDesc" placeholder="What is this workspace for?"></textarea></div>
+      <div class="row2">
+        <div class="field"><label>Icon</label><div class="emoji-pick" id="wsEmoji">${WS_EMOJIS.map((e,i)=>`<button class="emoji-opt ${i===0?'sel':''}" data-e="${e}"><span class="material-symbols-outlined">${e}</span></button>`).join('')}</div></div>
+        <div class="field"><label>Color</label><div class="swatches" id="wsColor">${PALETTE.map((c,i)=>`<div class="swatch ${i===1?'sel':''}" data-c="${c}" style="background:${c}"></div>`).join('')}</div></div>
+      </div>
+      <div class="field"><label>Invite members <span class="opt">(select who collaborates here)</span></label>
+        <div class="member-pick" id="wsMembers">${DIRECTORY.map(m=>`<div class="member-opt" data-m="${m.id}">
+          <div class="avatar" style="background:${m.color}">${initials(m.name)}</div>
+          <div class="mo-info"><b>${esc(m.name)}</b><span>${esc(m.role)} · ${esc(m.email)}</span></div>
+          <div class="ck"><span class="material-symbols-outlined">check</span></div></div>`).join('')}</div>
+        <div class="hint" id="wsMemCount">No members selected — you'll be the owner.</div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="wsCreate"><span class="material-symbols-outlined">add</span> Create workspace</button></div>
+  </div>`);
+  $$('#wsEmoji .emoji-opt').forEach(b=>b.onclick=()=>{$$('#wsEmoji .emoji-opt').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');wsDraft.emoji=b.dataset.e;$('.mh-ic .material-symbols-outlined').textContent=b.dataset.e;});
+  $$('#wsColor .swatch').forEach(b=>b.onclick=()=>{$$('#wsColor .swatch').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');wsDraft.color=b.dataset.c;$('.mh-ic').style.background=b.dataset.c;});
+  $$('#wsMembers .member-opt').forEach(b=>b.onclick=()=>{
+    b.classList.toggle('on');const id=b.dataset.m;
+    if(wsDraft.members.includes(id))wsDraft.members=wsDraft.members.filter(x=>x!==id);else wsDraft.members.push(id);
+    $('#wsMemCount').textContent=wsDraft.members.length?`${wsDraft.members.length} member${wsDraft.members.length!==1?'s':''} will be invited.`:"No members selected — you'll be the owner.";
+  });
+  $('#wsCreate').onclick=()=>{
+    const name=$('#wsName').value.trim();if(!name)return toast('Give your workspace a name','error');
+    const ws={id:uid(),name,description:$('#wsDesc').value.trim(),emoji:wsDraft.emoji,color:wsDraft.color,members:[...wsDraft.members],apps:[],activity:[],createdAt:new Date().toISOString().slice(0,10)};
+    logActivity(ws,{icon:ws.emoji,color:ws.color,text:`Workspace <b>${esc(name)}</b> created`});
+    DB.workspaces.push(ws);save();closeModal();openWorkspace(ws.id);toast(`Workspace "${name}" created`);
+  };
+}
+function delWorkspace(){
+  const w=curWs();if(!w)return;
+  confirmModal('Delete workspace?',`"${w.name}" and all ${w.apps.length} app(s) inside it will be permanently removed.`,()=>{
+    DB.workspaces=DB.workspaces.filter(x=>x.id!==w.id);save();VIEW={page:'workspaces'};render();toast('Workspace deleted','delete');
+  });
+}
+function openMembersModal(){
+  const w=curWs();
+  modal(`<div class="modal">
+    <div class="modal-head"><div class="mh-ic" style="background:${w.color}"><span class="material-symbols-outlined">group</span></div>
+      <h3>Members · ${esc(w.name)}</h3><button class="close" data-close><span class="material-symbols-outlined">close</span></button></div>
+    <div class="modal-body">
+      <div class="field"><label>Workspace members</label>
+        <div class="member-pick" id="mmList">${DIRECTORY.map(m=>`<div class="member-opt ${w.members.includes(m.id)?'on':''}" data-m="${m.id}">
+          <div class="avatar" style="background:${m.color}">${initials(m.name)}</div>
+          <div class="mo-info"><b>${esc(m.name)}</b><span>${esc(m.role)} · ${esc(m.email)}</span></div>
+          <div class="ck"><span class="material-symbols-outlined">check</span></div></div>`).join('')}</div>
+        <div class="hint">Toggle people in or out of this workspace.</div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>Done</button></div>
+  </div>`);
+  $$('#mmList .member-opt').forEach(b=>b.onclick=()=>{
+    b.classList.toggle('on');const id=b.dataset.m;
+    if(w.members.includes(id))w.members=w.members.filter(x=>x!==id);else w.members.push(id);
+    save();renderDeck();
+  });
+}
+let appDraft=null;
+function openAppModal(){
+  appDraft={icon:APP_ICONS[0],color:curWs().color};
+  modal(`<div class="modal">
+    <div class="modal-head"><div class="mh-ic" style="background:${appDraft.color}"><span class="material-symbols-outlined">${appDraft.icon}</span></div>
+      <h3>Add app</h3><button class="close" data-close><span class="material-symbols-outlined">close</span></button></div>
+    <div class="modal-body">
+      <div class="field"><label>App name</label><input class="input" id="apName" placeholder="e.g. Leads, Projects, Inspections, Invoices" autofocus></div>
+      <div class="field"><label>Description <span class="opt">(optional)</span></label><textarea class="input" id="apDesc" placeholder="What does this app track?"></textarea></div>
+      <div class="field"><label>App type <span class="opt">(optional)</span></label>
+        <select class="select" id="apType">
+          <option value="">— Select a type —</option>
+          ${['Contacts','Tasks','Projects','Records','Inventory','Documents','Calendar','Tickets','Invoices','Custom'].map(t=>`<option>${t}</option>`).join('')}
+        </select></div>
+      <div class="row2">
+        <div class="field"><label>Icon</label><div class="emoji-pick" id="apIcon">${APP_ICONS.map((ic,i)=>`<button class="emoji-opt ${i===0?'sel':''}" data-ic="${ic}"><span class="material-symbols-outlined">${ic}</span></button>`).join('')}</div></div>
+        <div class="field"><label>Color</label><div class="swatches" id="apColor">${PALETTE.map(c=>`<div class="swatch ${c===appDraft.color?'sel':''}" data-c="${c}" style="background:${c}"></div>`).join('')}</div></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="apCreate"><span class="material-symbols-outlined">add</span> Create app</button></div>
+  </div>`);
+  $$('#apIcon .emoji-opt').forEach(b=>b.onclick=()=>{$$('#apIcon .emoji-opt').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');appDraft.icon=b.dataset.ic;$('.mh-ic .material-symbols-outlined').textContent=b.dataset.ic;});
+  $$('#apColor .swatch').forEach(b=>b.onclick=()=>{$$('#apColor .swatch').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');appDraft.color=b.dataset.c;$('.mh-ic').style.background=b.dataset.c;});
+  $('#apCreate').onclick=()=>{
+    const name=$('#apName').value.trim();if(!name)return toast('Give your app a name','error');
+    const app={id:uid(),name,description:$('#apDesc').value.trim(),type:$('#apType').value,icon:appDraft.icon,color:appDraft.color,fields:[],items:[],automations:[]};
+    curWs().apps.push(app);save();closeModal();openApp(app.id);VIEW.appTab='fields';render();toast(`App "${name}" created — now add fields`);
+  };
+}
+function saveAppSettings(){
+  const a=curApp();a.name=$('#setName').value.trim()||a.name;a.description=$('#setDesc').value.trim();a.type=$('#setType').value.trim();
+  const ic=$('#setIcons .emoji-opt.sel');if(ic)a.icon=ic.dataset.ic;
+  const cl=$('#setColors .swatch.sel');if(cl)a.color=cl.dataset.c;
+  save();render();toast('App settings saved');
+}
+function delApp(){
+  const a=curApp();confirmModal('Delete app?',`"${a.name}" and its ${a.items.length} item(s) will be removed.`,()=>{
+    const w=curWs();w.apps=w.apps.filter(x=>x.id!==a.id);save();openWorkspace(w.id);toast('App deleted','delete');
+  });
+}
+let fieldDraft=null;
+function openFieldModal(fieldId,newType){
+  const a=curApp();
+  const existing=fieldId?a.fields.find(f=>f.id===fieldId):null;
+  const type=existing?existing.type:newType;
+  const ft=FIELD_TYPES[type];
+  fieldDraft=existing?JSON.parse(JSON.stringify(existing)):{id:uid(),type,label:'',required:false,config:{}};
+  if((type==='category'||type==='status')&&!fieldDraft.config.options){
+    fieldDraft.config.options=type==='status'
+      ?[{id:uid(),label:'To Do',color:'#6b7280'},{id:uid(),label:'In Progress',color:'#d97706'},{id:uid(),label:'Done',color:'#15803d'}]
+      :[{id:uid(),label:'Option 1',color:'#2563eb'},{id:uid(),label:'Option 2',color:'#7c3aed'}];
+  }
+  modal(`<div class="modal">
+    <div class="modal-head"><div class="mh-ic" style="background:${ft.color}"><span class="material-symbols-outlined">${ft.icon}</span></div>
+      <h3>${existing?'Configure':'Add'} ${ft.label} field</h3><button class="close" data-close><span class="material-symbols-outlined">close</span></button></div>
+    <div class="modal-body">
+      <div class="field"><label>Field label</label><input class="input" id="fLabel" value="${esc(fieldDraft.label)}" placeholder="${esc(ft.label)} field name" autofocus></div>
+      <div id="fConfig">${fieldConfigUI(fieldDraft,a)}</div>
+      <div class="check-row"><label class="switch"><input type="checkbox" id="fReq" ${fieldDraft.required?'checked':''}><span class="slider"></span></label>
+        <div><b style="font-size:.88rem">Required field</b><div class="hint" style="margin:0">Items can't be saved without it.</div></div></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="fSave"><span class="material-symbols-outlined">check</span> ${existing?'Save field':'Add field'}</button></div>
+  </div>`);
+  bindFieldConfig(a);
+  $('#fSave').onclick=()=>{
+    fieldDraft.label=$('#fLabel').value.trim();if(!fieldDraft.label)return toast('Give the field a label','error');
+    fieldDraft.required=$('#fReq').checked;
+    collectFieldConfig();
+    if(existing){const i=a.fields.findIndex(f=>f.id===fieldId);a.fields[i]=fieldDraft;}
+    else a.fields.push(fieldDraft);
+    save();closeModal();render();toast(existing?'Field updated':`"${fieldDraft.label}" added`);
+  };
+}
+function fieldConfigUI(fd,app){
+  const t=fd.type;
+  if(t==='category'||t==='status'){
+    return `<div class="field"><label>Options</label>
+      <div class="opt-list" id="optList">${(fd.config.options||[]).map(o=>optRow(o,t==='status')).join('')}</div>
+      <button class="btn btn-sm" id="addOpt" style="margin-top:9px"><span class="material-symbols-outlined">add</span> Add option</button></div>`;
+  }
+  if(t==='relationship'){
+    return `<div class="field"><label>Linked app</label>
+      <select class="select" id="relTarget"><option value="">— Select app to link —</option>
+        ${curWs().apps.map(ap=>`<option value="${ap.id}" ${fd.config.targetApp===ap.id?'selected':''}>${esc(ap.name)}</option>`).join('')}</select>
+      <div class="hint">Items in this app can reference items from the linked app.</div></div>
+      <div class="check-row"><label class="switch"><input type="checkbox" id="relMulti" ${fd.config.multiple?'checked':''}><span class="slider"></span></label>
+        <div><b style="font-size:.88rem">Allow multiple links</b></div></div>`;
+  }
+  if(t==='calculation'){
+    const numFields=app.fields.filter(f=>['number','money','calculation'].includes(f.type));
+    return `<div class="field"><label>Formula</label>
+      <input class="input" id="calcFormula" value="${esc(fd.config.formula||'')}" placeholder="e.g. {Quantity} * {Unit Price}">
+      <div class="hint">Reference number/money fields by name in {curly braces}. Operators: + - * / ( )</div>
+      ${numFields.length?`<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">${numFields.map(f=>`<button class="tag" style="background:var(--purple-soft);color:var(--purple);border:none;cursor:pointer" data-insert="{${esc(f.label)}}">${esc(f.label)}</button>`).join('')}</div>`:'<div class="hint" style="color:var(--warning)">Add Number or Money fields first to reference them.</div>'}
+    </div>`;
+  }
+  if(t==='money'){
+    return `<div class="field"><label>Currency symbol</label><input class="input" id="curSym" value="${esc(fd.config.currency||'$')}" maxlength="3" style="max-width:120px"></div>`;
+  }
+  if(t==='number'){
+    return `<div class="field"><label>Unit / suffix <span class="opt">(optional)</span></label><input class="input" id="numUnit" value="${esc(fd.config.unit||'')}" placeholder="e.g. sq ft, hrs" style="max-width:200px"></div>`;
+  }
+  if(t==='text'||t==='textarea'){
+    return `<div class="field"><label>Placeholder <span class="opt">(optional)</span></label><input class="input" id="phText" value="${esc(fd.config.placeholder||'')}" placeholder="Hint shown in the input"></div>`;
+  }
+  return `<div class="hint" style="margin-bottom:4px">No extra configuration needed for this field type.</div>`;
+}
+function optRow(o,isStatus){
+  return `<div class="opt-item" data-oid="${o.id}">
+    <input type="color" class="dot-pick" value="${o.color||'#2563eb'}">
+    <input class="input opt-label" value="${esc(o.label)}" placeholder="Option label">
+    <button class="icon-btn danger del-opt" type="button"><span class="material-symbols-outlined">close</span></button></div>`;
+}
+function bindFieldConfig(app){
+  const addOpt=$('#addOpt');
+  if(addOpt)addOpt.onclick=()=>{const list=$('#optList');const wrap=document.createElement('div');wrap.innerHTML=optRow({id:uid(),label:'',color:PALETTE[list.children.length%PALETTE.length]},fieldDraft.type==='status');list.appendChild(wrap.firstElementChild);bindOptDel();};
+  bindOptDel();
+  const calc=$('#calcFormula');
+  if(calc)$$('[data-insert]').forEach(b=>b.onclick=()=>{calc.value+=(calc.value&&!calc.value.endsWith(' ')?' ':'')+b.dataset.insert;calc.focus();});
+}
+function bindOptDel(){$$('.del-opt').forEach(b=>b.onclick=()=>{if($$('.opt-item').length<=1)return toast('Keep at least one option','error');b.closest('.opt-item').remove();});}
+function collectFieldConfig(){
+  const t=fieldDraft.type;fieldDraft.config=fieldDraft.config||{};
+  if(t==='category'||t==='status'){
+    fieldDraft.config.options=$$('.opt-item').map(r=>({id:r.dataset.oid,label:r.querySelector('.opt-label').value.trim()||'Untitled',color:r.querySelector('.dot-pick').value})).filter(o=>o.label);
+  }
+  if(t==='relationship'){fieldDraft.config.targetApp=$('#relTarget').value;fieldDraft.config.multiple=$('#relMulti').checked;}
+  if(t==='calculation')fieldDraft.config.formula=$('#calcFormula').value.trim();
+  if(t==='money')fieldDraft.config.currency=$('#curSym').value.trim()||'$';
+  if(t==='number')fieldDraft.config.unit=$('#numUnit').value.trim();
+  if(t==='text'||t==='textarea')fieldDraft.config.placeholder=$('#phText') ? $('#phText').value.trim():'';
+}
+function delField(fid){
+  const a=curApp();const f=a.fields.find(x=>x.id===fid);
+  confirmModal('Delete field?',`"${f.label}" and its data in all ${a.items.length} item(s) will be removed.`,()=>{
+    a.fields=a.fields.filter(x=>x.id!==fid);a.items.forEach(it=>delete it.values[fid]);save();render();toast('Field deleted','delete');
+  });
+}
+function openItemModal(itemId){
+  const a=curApp();const item=itemId?a.items.find(i=>i.id===itemId):null;
+  const vals=item?{...item.values}:{};
+  const body=a.fields.map(f=>renderFieldInput(f,vals[f.id])).join('');
+  modal(`<div class="modal">
+    <div class="modal-head"><div class="mh-ic" style="background:${a.color}"><span class="material-symbols-outlined">${a.icon}</span></div>
+      <h3>${item?'Edit':'New'} ${esc(a.name.replace(/s$/,''))}</h3><button class="close" data-close><span class="material-symbols-outlined">close</span></button></div>
+    <div class="modal-body" id="itemForm">${body||'<div class="hint">This app has no fields yet.</div>'}</div>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="itemSave"><span class="material-symbols-outlined">check</span> ${item?'Save':'Add item'}</button></div>
+  </div>`);
+  bindItemInputs(a);
+  $('#itemSave').onclick=()=>{
+    const v={};let missing=null;
+    a.fields.forEach(f=>{const val=readFieldInput(f);v[f.id]=val;if(f.required&&(val===''||val==null||(Array.isArray(val)&&!val.length)))missing=missing||f.label;});
+    if(missing)return toast(`"${missing}" is required`,'error');
+    let target;
+    if(item){item.values=v;target=item;logActivity(curWs(),{icon:a.icon,color:a.color,text:`Updated <b>${esc(itemTitle(a,item))}</b> in ${esc(a.name)}`});runAutomations(a,item,'updated',vals);}
+    else{target={id:uid(),values:v,createdAt:new Date().toISOString().slice(0,10)};a.items.push(target);logActivity(curWs(),{icon:a.icon,color:a.color,text:`Added <b>${esc(itemTitle(a,target))}</b> to ${esc(a.name)}`});runAutomations(a,target,'created',null);}
+    save();closeModal();render();toast(item?'Item saved':'Item added');
+  };
+}
+function renderFieldInput(f,val){
+  const ft=FIELD_TYPES[f.type];
+  const lbl=`<label>${esc(f.label)}${f.required?'<span class="req-star">*</span>':''} <span class="opt" style="text-transform:none">${ft.label}</span></label>`;
+  let input='';
+  switch(f.type){
+    case 'text':input=`<input class="input" data-f="${f.id}" value="${esc(val||'')}" placeholder="${esc(f.config.placeholder||'')}">`;break;
+    case 'textarea':input=`<textarea class="input" data-f="${f.id}" placeholder="${esc(f.config.placeholder||'')}">${esc(val||'')}</textarea>`;break;
+    case 'email':input=`<input type="email" class="input" data-f="${f.id}" value="${esc(val||'')}" placeholder="name@email.com">`;break;
+    case 'phone':input=`<input type="tel" class="input" data-f="${f.id}" value="${esc(val||'')}" placeholder="(555) 000-0000">`;break;
+    case 'number':input=`<div style="display:flex;align-items:center;gap:8px"><input type="number" class="input" data-f="${f.id}" value="${esc(val??'')}" style="max-width:200px">${f.config.unit?`<span style="color:var(--text-muted);font-size:.86rem">${esc(f.config.unit)}</span>`:''}</div>`;break;
+    case 'money':input=`<div style="display:flex;align-items:center;gap:8px"><span style="color:var(--text-muted);font-weight:700">${esc(f.config.currency||'$')}</span><input type="number" step="0.01" class="input" data-f="${f.id}" value="${esc(val??'')}" style="max-width:220px"></div>`;break;
+    case 'date':input=`<input type="date" class="input" data-f="${f.id}" value="${esc(val||'')}" style="max-width:220px">`;break;
+    case 'checkbox':input=`<label class="switch"><input type="checkbox" data-f="${f.id}" ${val?'checked':''}><span class="slider"></span></label>`;break;
+    case 'category':case 'status':
+      input=`<select class="select" data-f="${f.id}"><option value="">— Select —</option>${(f.config.options||[]).map(o=>`<option value="${o.id}" ${val===o.id?'selected':''}>${esc(o.label)}</option>`).join('')}</select>`;break;
+    case 'user':
+      input=`<select class="select" data-f="${f.id}"><option value="">— Unassigned —</option>${curWs().members.map(id=>{const m=memberById(id);return `<option value="${id}" ${val===id?'selected':''}>${esc(m.name)}</option>`;}).join('')}</select>`;
+      if(!curWs().members.length)input=`<div class="hint" style="color:var(--warning)">Invite members to the workspace to assign them.</div>`;break;
+    case 'relationship':{
+      const ta=curWs().apps.find(x=>x.id===f.config.targetApp);
+      if(!ta){input=`<div class="hint" style="color:var(--warning)">No linked app configured.</div>`;break;}
+      const cur=Array.isArray(val)?val:(val?[val]:[]);
+      input=`<select class="select" data-f="${f.id}" ${f.config.multiple?'multiple style="min-height:96px"':''}>${f.config.multiple?'':'<option value="">— None —</option>'}${ta.items.map(it=>`<option value="${it.id}" ${cur.includes(it.id)?'selected':''}>${esc(itemTitle(ta,it))}</option>`).join('')}</select>
+        <div class="hint">Linked to <b>${esc(ta.name)}</b>${f.config.multiple?' · hold Ctrl/Cmd to select multiple':''}</div>`;break;}
+    case 'file':input=`<input class="input" data-f="${f.id}" value="${esc(val||'')}" placeholder="Document name or URL"><div class="hint">Prototype: stores a filename/link reference.</div>`;break;
+    case 'calculation':input=`<div class="input" style="background:var(--surface-2);color:var(--purple);font-weight:700" data-calc="${f.id}">—</div><div class="hint">Auto-calculated: <code>${esc(f.config.formula||'(no formula)')}</code></div>`;break;
+    default:input=`<input class="input" data-f="${f.id}" value="${esc(val||'')}">`;
+  }
+  return `<div class="field">${lbl}${input}</div>`;
+}
+function bindItemInputs(a){
+  const recompute=()=>{
+    const vals={};a.fields.forEach(f=>{if(f.type!=='calculation')vals[f.id]=readFieldInput(f);});
+    a.fields.filter(f=>f.type==='calculation').forEach(f=>{const el=$(`[data-calc="${f.id}"]`);if(el)el.textContent=computeCalc(f,vals);});
+  };
+  $$('#itemForm [data-f]').forEach(el=>el.addEventListener('input',recompute));
+  recompute();
+}
+function readFieldInput(f){
+  const el=$(`[data-f="${f.id}"]`);if(!el)return f.type==='calculation'?undefined:'';
+  if(f.type==='checkbox')return el.checked;
+  if(f.type==='number'||f.type==='money')return el.value===''?'':Number(el.value);
+  if(f.type==='relationship'&&f.config.multiple)return [...el.selectedOptions].map(o=>o.value);
+  return el.value;
+}
+function delItem(id){
+  const a=curApp();confirmModal('Delete item?','This record will be permanently removed.',()=>{
+    a.items=a.items.filter(x=>x.id!==id);save();render();toast('Item deleted','delete');
+  });
+}
+function confirmModal(title,msg,onYes){
+  modal(`<div class="modal" style="max-width:420px">
+    <div class="modal-head"><div class="mh-ic" style="background:var(--danger)"><span class="material-symbols-outlined">warning</span></div>
+      <h3>${esc(title)}</h3></div>
+    <div class="modal-body"><p style="color:var(--text-muted)">${esc(msg)}</p></div>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" id="cfYes">Delete</button></div>
+  </div>`);
+  $('#cfYes').onclick=()=>{closeModal();onYes();};
+}
+
+/* ==================================================================
+   wiring
+   ================================================================== */
+$('#quickNew').onclick=()=>openWsModal();
+$('#themeToggle').onclick=e=>{e.stopPropagation();setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');};
+$('#userCard').onclick=()=>toast('Account menu — demo');
+$('#companyCard').onclick=()=>toast('Company switcher — demo');
+$('#menuBtn').onclick=()=>{$('#deck').classList.add('open');$('#scrimM').classList.add('show');};
+$('#scrimM').onclick=closeSidebar;
+function closeSidebar(){$('#deck').classList.remove('open');$('#scrimM').classList.remove('show');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeSidebar();}});
+
+render();
+</script>
+</body>
+</html>
