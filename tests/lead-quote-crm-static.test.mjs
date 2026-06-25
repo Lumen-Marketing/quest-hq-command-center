@@ -77,6 +77,23 @@ test('graduate action remains visible in compact contact record layouts', () => 
   assert.match(styles, /\.sf-graduate-btn \{ display: inline-flex; \}/);
 });
 
+test('contact entry formats phone, suggests addresses, links maps, and selects owners from members', () => {
+  const editorSource = source.match(/function renderContactEditor\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(source, /function formatPhoneNumber\(value\)/);
+  assert.match(source, /phone: formatPhoneNumber\(input\.phone\)/);
+  assert.match(source, /if \(key === 'phone'\) value = formatPhoneNumber\(raw\);/);
+  assert.match(source, /function contactAddressOptions\(companyId\)/);
+  assert.match(source, /function contactOwnerOptions\(companyId, selectedOwner = ''\)/);
+  assert.match(source, /function mapsSearchUrl\(address\)/);
+  assert.match(editorSource, /autocomplete="tel"/);
+  assert.match(editorSource, /list="contact-address-options"/);
+  assert.match(editorSource, /<datalist id="contact-address-options">/);
+  assert.match(editorSource, /selectField\('Owner', 'owner_name', edit\.owner_name, contactOwnerOptions\(companyId, edit\.owner_name\)\)/);
+  assert.match(recordSource, /mapsSearchUrl\(contact\.location\)/);
+  assert.match(recordSource, /<i class="ti ti-map-pin"><\/i>Map/);
+});
+
 test('account record tabs use contacts and quotes language', () => {
   assert.doesNotMatch(source, /\['deals', 'Deals'/);
   assert.match(source, /\['contacts', 'Contacts', contacts\.length\]/);

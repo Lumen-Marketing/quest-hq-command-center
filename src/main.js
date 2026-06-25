@@ -3406,7 +3406,7 @@ function renderContactRecord(companyId, contact) {
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
             ${fieldRow('Phone', ed('phone'))}
             ${fieldRow('Email', ed('email', { blue: true }))}
-            ${fieldRow('Location', ed('location'))}
+            ${fieldRow('Location', `${ed('location')}${contact.location ? `<a class="sf-field-action" href="${h(mapsSearchUrl(contact.location))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map</a>` : ''}`)}
             ${fieldRow('Job Type', `<span class="sf-pill">${h(contact.title || '—')}</span>`)}
             ${fieldRow('Owner', ed('owner_name', { blue: true }))}
             ${fieldRow('Source', ed('source'))}
@@ -3473,6 +3473,7 @@ function patchContactField(contactId, key, raw) {
   if (!contact) return;
   let value;
   if (key === 'value') value = Number(String(raw).replace(/[^0-9.]/g, '')) || 0;
+  else if (key === 'phone') value = formatPhoneNumber(raw);
   else if (key === 'temperature') value = resolveTemperature(raw);
   else value = String(raw).trim();
   if (contact[key] === value) { render(); return; }
@@ -3774,6 +3775,7 @@ function renderContactFormModal(companyId, contact) {
 
 function renderContactEditor(companyId, contact) {
   const edit = contact || blankContact(companyId);
+  const addressOptions = contactAddressOptions(companyId);
   return `
     <form class="job-editor" data-contact-form>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
@@ -3784,11 +3786,12 @@ function renderContactEditor(companyId, contact) {
       ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
       ${selectField('Account', 'account_id', edit.account_id, [['', '— None —']].concat(companyAccounts(companyId).map((account) => [account.id, account.name])))}
       ${field('Title', 'title', edit.title)}
-      ${field('Phone', 'phone', edit.phone)}
+      ${field('Phone', 'phone', edit.phone, false, 'tel', '', 'autocomplete="tel" inputmode="tel" data-phone-format')}
       ${field('Email', 'email', edit.email, false, 'email')}
-      ${field('Location', 'location', edit.location, false, 'text', 'span-2')}
+      ${field('Location', 'location', edit.location, false, 'text', 'span-2', 'autocomplete="street-address" list="contact-address-options"')}
+      <datalist id="contact-address-options">${addressOptions.map((address) => `<option value="${h(address)}"></option>`).join('')}</datalist>
       ${selectField('Stage', 'stage', edit.stage || contactStageNames()[0], contactStageNames().map((stage) => [stage, stage]))}
-      ${field('Owner', 'owner_name', edit.owner_name)}
+      ${selectField('Owner', 'owner_name', edit.owner_name, contactOwnerOptions(companyId, edit.owner_name))}
       ${field('Estimated value', 'value', edit.value || 0, false, 'number')}
       ${selectField('Temperature', 'temperature', edit.temperature || 'Warm', TEMPERATURES.map((t) => [t, t]))}
       ${field('Pay type', 'pay_type', edit.pay_type)}
@@ -10438,6 +10441,11 @@ async function openMessageAttachment(attachmentId) {
 }
 
 function onDocumentInput(event) {
+  if (event.target.matches('[data-phone-format]')) {
+    const formatted = formatPhoneNumber(event.target.value);
+    if (formatted !== event.target.value) event.target.value = formatted;
+    return;
+  }
   if (event.target.matches('[data-global-search]')) {
     state.query = event.target.value;
     updateWorkspaceOnly();
@@ -13056,6 +13064,34 @@ function memberName(id) {
   return member?.full_name || member?.name || id || 'Unassigned';
 }
 
+function formatPhoneNumber(value) {
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits[0] === '1') return `${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
+  return raw;
+}
+
+function mapsSearchUrl(address) {
+  const clean = String(address || '').trim();
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean)}`;
+}
+
+function contactAddressOptions(companyId) {
+  return compactUnique([
+    ...companyContacts(companyId).map((contact) => contact.location),
+    ...companyAccounts(companyId).map((account) => account.address),
+    ...companyJobs(companyId).map((job) => job.site_address),
+  ]).sort((a, b) => a.localeCompare(b));
+}
+
+function contactOwnerOptions(companyId, selectedOwner = '') {
+  const owners = companyAccessUsers(companyId)
+    .filter((user) => user.status !== 'disabled')
+    .map((user) => user.name || user.email);
+  return [['', 'Unassigned']].concat(compactUnique([selectedOwner, ...owners]).map((name) => [name, name]));
+}
+
 function profileName(id) {
   const profile = profileById(id);
   return profile?.full_name || profile?.email || memberName(id);
@@ -13169,7 +13205,7 @@ function normalizeContact(input) {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
     name: String(input.name || '').trim() || 'Untitled contact',
-    phone: String(input.phone || '').trim(),
+    phone: formatPhoneNumber(input.phone),
     email: String(input.email || '').trim(),
     location: String(input.location || '').trim(),
     stage: resolveContactStage(input.stage),
@@ -14124,8 +14160,8 @@ function contractRows(rows) {
   return `<div class="contract-rows">${rows.map(([label, value]) => `<div><span>${h(label)}</span><strong>${h(value)}</strong></div>`).join('')}</div>`;
 }
 
-function field(label, name, value = '', required = false, type = 'text', className = '') {
-  return `<label class="${h(className)}"><span>${h(label)}</span><input name="${h(name)}" type="${h(type)}" value="${h(value)}" ${required ? 'required' : ''} /></label>`;
+function field(label, name, value = '', required = false, type = 'text', className = '', attrs = '') {
+  return `<label class="${h(className)}"><span>${h(label)}</span><input name="${h(name)}" type="${h(type)}" value="${h(value)}" ${required ? 'required' : ''} ${attrs} /></label>`;
 }
 
 function textareaField(label, name, value = '', className = '') {
