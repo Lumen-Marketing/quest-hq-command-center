@@ -91,3 +91,11 @@ test('workspace settings can rename and change one of fifteen icons', () => {
   assert.match(quotaMigration, /update public\.companies c\s+set name = clean_name,\s+short_name = clean_name,\s+label = clean_name,\s+icon_key = clean_icon/);
   assert.match(quotaMigration, /grant execute on function public\.update_company_workspace\(text, text, text\) to authenticated;/);
 });
+
+test('workspace switcher lives in the sidebar workspace card, not the top nav', () => {
+  assert.match(source, /renderCompanySwitch\(companyId, 'topbar-company-indicator', \{ interactive: false \}\)/);
+  assert.match(source, /<div class="company-card">\s*\$\{renderCompanySwitch\(companyId, 'deck-company-select'\)\}/);
+  assert.match(source, /function renderCompanySwitch\(companyId, extraClass = '', options = \{\}\)/);
+  assert.match(source, /const interactive = options\.interactive !== false;/);
+  assert.match(source, /if \(companies\.length <= 1 \|\| !interactive\)/);
+});

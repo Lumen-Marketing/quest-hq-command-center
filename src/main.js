@@ -2209,16 +2209,32 @@ function metricSymbol(label) {
   return moduleSymbol();
 }
 
-function renderCompanySwitch(companyId, extraClass = '') {
+function renderCompanySwitch(companyId, extraClass = '', options = {}) {
   const companies = allowedCompanies();
   const current = companies.find((company) => company.id === companyId) || companyById(companyId) || companies[0] || {};
+  const interactive = options.interactive !== false;
+  const deckMode = extraClass.split(' ').includes('deck-company-select');
   const className = ['company-switch', extraClass, companies.length <= 1 ? 'single-company' : ''].filter(Boolean).join(' ');
-  if (companies.length <= 1) {
+  if (companies.length <= 1 || !interactive) {
     return `
       <div class="${h(className)}" aria-label="Active company">
         ${workspaceIconMarkup(current)}
-        <strong>${h(companyLabel(current))}</strong>
+        <span class="company-switch-copy"><strong>${h(companyLabel(current))}</strong>${deckMode ? `<small>${h(roleForCompany(companyId))} workspace</small>` : ''}</span>
       </div>
+    `;
+  }
+  if (deckMode) {
+    return `
+      <label class="${h(className)}">
+        ${workspaceIconMarkup(current)}
+        <span class="company-switch-copy">
+          <select data-company-switch aria-label="Active company">
+            ${companies.map((company) => `<option value="${h(company.id)}" ${company.id === companyId ? 'selected' : ''}>${h(companyLabel(company))}</option>`).join('')}
+          </select>
+          <small>${h(roleForCompany(companyId))} workspace</small>
+        </span>
+        <i class="ti ti-chevron-down"></i>
+      </label>
     `;
   }
   return `
@@ -2249,7 +2265,7 @@ function shellTemplate(route, workspace) {
           </div>
         </div>
         <div class="topbar-right">
-          ${renderCompanySwitch(companyId)}
+          ${renderCompanySwitch(companyId, 'topbar-company-indicator', { interactive: false })}
           <label class="global-search">
             ${svgIcon('q-search')}
             <input data-global-search value="${h(state.query)}" placeholder="Search this company" />
@@ -2456,7 +2472,6 @@ function renderDeck(route) {
   const companyId = activeCompanyId();
   const session = activeSession();
   const modulesById = new Map(MODULE_REGISTRY.map((module) => [module.id, module]));
-  const showWorkspaceSwitcherCue = allowedCompanies().length > 1;
   return `
     <div class="deck-brand">
       <a class="logo" href="${appHref(companyPath('home', {}, companyId))}" data-router aria-label="Quest HQ home">
@@ -2468,11 +2483,7 @@ function renderDeck(route) {
       </button>
     </div>
     <div class="company-card">
-      ${workspaceIconMarkup(companyId, 'company-card-symbol')}
-      <div>
-        <strong>${h(companyName(companyId))}</strong>
-        <small>${h(roleForCompany(companyId))} workspace</small>
-      </div>
+      ${renderCompanySwitch(companyId, 'deck-company-select')}
     </div>
     <div class="deck-scroll">
       ${NAV_GROUPS.map((group) => {
@@ -2491,7 +2502,7 @@ function renderDeck(route) {
       <a class="deck-company-switch" href="${appHref(companyPath('settings', { tab: 'company' }, companyId))}" data-router>
         ${workspaceIconMarkup(companyId)}
         <span><strong>${h(companyName(companyId))}</strong><small>Workspace</small></span>
-        ${showWorkspaceSwitcherCue ? '<i class="ti ti-chevron-down"></i>' : ''}
+        <i class="ti ti-settings"></i>
       </a>
       <button class="deck-user-card" type="button" data-action="open-profile">
         ${renderAvatar(session.profile, 'avatar small')}

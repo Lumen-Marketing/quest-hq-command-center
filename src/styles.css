@@ -206,6 +206,27 @@ button { cursor: pointer; }
   line-height: 1.2;
 }
 
+.company-switch-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.company-switch-copy strong,
+.company-switch-copy small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-switch-copy small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+}
+
 .company-switch.single-company {
   cursor: default;
 }
@@ -13297,6 +13318,73 @@ button {
 .topbar .icon-button {
   border-color: var(--border);
   background: var(--surface);
+}
+
+/* Workspace switcher belongs in the sidebar workspace card, not the top nav. */
+.topbar-company-indicator {
+  min-width: 184px;
+  pointer-events: none;
+}
+
+.topbar-company-indicator .workspace-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.company-card {
+  padding: 0;
+}
+
+.company-card .deck-company-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 58px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #fff8e8;
+  padding: 9px 11px;
+}
+
+.company-card .deck-company-select .workspace-icon {
+  width: 42px;
+  height: 42px;
+}
+
+.company-card .deck-company-select select {
+  min-width: 0;
+  width: 100%;
+  color: #fff8e8;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+}
+
+.company-card .deck-company-select option {
+  color: var(--ink);
+}
+
+.company-card .deck-company-select small {
+  color: #bdb29f;
+  font-size: 11px;
+}
+
+.company-card .deck-company-select > i {
+  color: rgba(255, 248, 232, .62);
+  font-size: 16px;
+}
+
+.sidebar-collapsed .company-card .deck-company-select {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 8px;
+}
+
+.sidebar-collapsed .company-card .company-switch-copy,
+.sidebar-collapsed .company-card .deck-company-select > i {
+  display: none;
 }
 
 /* Mobile "More" tab button + bottom-sheet that exposes the full side nav */
