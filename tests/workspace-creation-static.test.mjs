@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const tablerIconsCss = readFileSync(new URL('../taskmanagement/vendor/tabler-icons/tabler-icons.min.css', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202606251230_idempotent_workspace_creation.sql', import.meta.url), 'utf8');
 const quotaMigrationUrl = new URL('../supabase/migrations/202606260900_workspace_quota_icons.sql', import.meta.url);
@@ -94,6 +95,12 @@ test('workspace settings can rename and change one of many filled icons', () => 
   assert.match(source, /data-workspace-icon-choice/);
   assert.match(source, /async function saveWorkspaceSettings\(formNode\)/);
   assert.match(source, /client\.rpc\('update_company_workspace'/);
+  assert.match(styles, /\.workspace-icon i::before,\s*\.workspace-icon-choice i::before\s*\{/);
+  assert.match(styles, /\.workspace-icon\s*\{[\s\S]*position: relative;/);
+  assert.match(styles, /\.workspace-icon i\s*\{[\s\S]*position: absolute;[\s\S]*transform: translate\(-50%, -50%\);/);
+  assert.match(styles, /\.workspace-menu-option\s*\{[\s\S]*grid-template-columns: 42px minmax\(0, 1fr\) 18px;/);
+  assert.match(styles, /justify-content: center;/);
+  assert.match(styles, /text-align: center;/);
   assert.ok(quotaMigration, 'Expected workspace quota/icon migration');
   assert.match(quotaMigration, /alter table public\.companies\s+add column if not exists icon_key text not null default 'home'/);
   assert.match(quotaMigration, /create or replace function public\.update_company_workspace/);

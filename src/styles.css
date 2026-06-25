@@ -2527,6 +2527,7 @@ textarea:focus {
 }
 
 .workspace-icon {
+  position: relative;
   display: grid;
   place-items: center;
   width: 34px;
@@ -2539,6 +2540,9 @@ textarea:focus {
 }
 
 .workspace-icon i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2546,6 +2550,18 @@ textarea:focus {
   height: 1em;
   font-size: 20px;
   line-height: 1;
+  transform: translate(-50%, -50%);
+}
+
+.workspace-icon i::before,
+.workspace-icon-choice i::before {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  text-align: center;
 }
 
 .workspace-settings-form {
@@ -13751,15 +13767,15 @@ button {
 
 .workspace-menu-option {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  grid-template-columns: 42px minmax(0, 1fr) 18px;
   align-items: center;
   gap: 8px;
-  min-height: 48px;
+  min-height: 58px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--ink);
-  padding: 7px;
+  padding: 8px;
   text-align: left;
 }
 
@@ -13769,8 +13785,12 @@ button {
 }
 
 .workspace-menu-option .workspace-icon {
-  width: 32px;
-  height: 32px;
+  width: 42px;
+  height: 42px;
+}
+
+.workspace-menu-option .workspace-icon i {
+  font-size: 21px;
 }
 
 .workspace-menu-option span,
