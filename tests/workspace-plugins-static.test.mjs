@@ -56,7 +56,7 @@ test('workspace presets install industry plugin bundles', () => {
   assert.match(source, /construction: \['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting'\]/);
   assert.match(source, /generic: \['crm', 'files', 'messages'\]/);
   assert.match(source, /name="preset_code"/);
-  assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: presetCode \}\)/);
+  assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: presetCode, icon_key: iconKey \}\)/);
 });
 
 test('navigation and routes are gated by installed plugins', () => {

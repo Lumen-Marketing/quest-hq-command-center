@@ -140,6 +140,24 @@ const WORKSPACE_PLUGIN_PRESET_LABELS = {
   construction: 'Construction',
   generic: 'Generic services',
 };
+const WORKSPACE_SELF_CREATE_LIMIT = 3;
+const WORKSPACE_ICON_OPTIONS = [
+  { key: 'home', icon: 'ti-home', label: 'Home' },
+  { key: 'building', icon: 'ti-building', label: 'Building' },
+  { key: 'briefcase', icon: 'ti-briefcase', label: 'Briefcase' },
+  { key: 'tools', icon: 'ti-tools', label: 'Tools' },
+  { key: 'hammer', icon: 'ti-hammer', label: 'Hammer' },
+  { key: 'helmet', icon: 'ti-helmet', label: 'Helmet' },
+  { key: 'ruler', icon: 'ti-ruler-measure', label: 'Ruler' },
+  { key: 'truck', icon: 'ti-truck', label: 'Truck' },
+  { key: 'users', icon: 'ti-users', label: 'Users' },
+  { key: 'messages', icon: 'ti-messages', label: 'Messages' },
+  { key: 'calendar', icon: 'ti-calendar', label: 'Calendar' },
+  { key: 'folder', icon: 'ti-folder', label: 'Folder' },
+  { key: 'chart', icon: 'ti-chart-bar', label: 'Chart' },
+  { key: 'shield', icon: 'ti-shield-check', label: 'Shield' },
+  { key: 'star', icon: 'ti-star', label: 'Star' },
+];
 
 const MODULE_REGISTRY = [
   { id: 'home', group: 'Workspace', label: 'Home', icon: 'ti-home', symbol: 'q-logo', status: 'live', permission: '' },
@@ -1547,8 +1565,20 @@ function workspacePresetSelect(selected = 'generic') {
   `;
 }
 
+function workspaceIconSelect(selected = 'home') {
+  const activeIcon = workspaceIconOption(selected).key;
+  return `
+    <label>Workspace icon
+      <select name="icon_key">
+        ${WORKSPACE_ICON_OPTIONS.map((item) => `<option value="${h(item.key)}" ${item.key === activeIcon ? 'selected' : ''}>${h(item.label)}</option>`).join('')}
+      </select>
+    </label>
+  `;
+}
+
 function renderNoCompanyAccess() {
   const busy = /creating|joining|opening/i.test(state.authMessage || '');
+  const canCreate = canCreateAnotherWorkspace();
   document.title = 'Company access pending | Quest HQ';
   app.innerHTML = `
     <main class="login-shell">
@@ -1571,8 +1601,9 @@ function renderNoCompanyAccess() {
             <form data-company-create-form>
               <label>Company workspace<input name="company_name" placeholder="Example Roofing LLC" required /></label>
               ${workspacePresetSelect()}
-              <button class="btn btn-primary full" type="submit" ${busy ? 'disabled' : ''}>${busy ? 'Creating workspace...' : 'Create business workspace'}</button>
-              ${state.loginError ? `<div class="form-message error">${h(state.loginError)}</div>` : `<div class="form-message">${h(state.authMessage || 'You become Owner, then Quest approves access before live modules open.')}</div>`}
+              ${workspaceIconSelect()}
+              <button class="btn btn-primary full" type="submit" ${busy || !canCreate ? 'disabled' : ''}>${busy ? 'Creating workspace...' : 'Create business workspace'}</button>
+              ${state.loginError ? `<div class="form-message error">${h(state.loginError)}</div>` : `<div class="form-message">${h(state.authMessage || `${workspaceLimitMessage()} You become Owner, then Quest approves access before live modules open.`)}</div>`}
             </form>
           </article>
           <article class="login-lane-card">
@@ -1816,6 +1847,7 @@ async function loadSupabaseData() {
         color: company.color,
         label: company.label,
         pill: company.pill,
+        icon_key: company.icon_key,
       }))));
       state.subscriptions = mergeSubscriptions(state.subscriptions.concat(state.platformCompanies.map(normalizeSubscription)));
     }
@@ -2184,14 +2216,14 @@ function renderCompanySwitch(companyId, extraClass = '') {
   if (companies.length <= 1) {
     return `
       <div class="${h(className)}" aria-label="Active company">
-        ${svgIcon('q-company')}
+        ${workspaceIconMarkup(current)}
         <strong>${h(companyLabel(current))}</strong>
       </div>
     `;
   }
   return `
     <label class="${h(className)}">
-      ${svgIcon('q-company')}
+      ${workspaceIconMarkup(current)}
       <select data-company-switch aria-label="Active company">
         ${companies.map((company) => `<option value="${h(company.id)}" ${company.id === companyId ? 'selected' : ''}>${h(companyLabel(company))}</option>`).join('')}
       </select>
@@ -2436,7 +2468,7 @@ function renderDeck(route) {
       </button>
     </div>
     <div class="company-card">
-      <span class="company-card-symbol" style="--company-accent:${h(companyColor(companyId))}">${svgIcon('q-company')}</span>
+      ${workspaceIconMarkup(companyId, 'company-card-symbol')}
       <div>
         <strong>${h(companyName(companyId))}</strong>
         <small>${h(roleForCompany(companyId))} workspace</small>
@@ -2457,7 +2489,7 @@ function renderDeck(route) {
     </div>
     <div class="deck-footer">
       <a class="deck-company-switch" href="${appHref(companyPath('settings', { tab: 'company' }, companyId))}" data-router>
-        ${svgIcon('q-company')}
+        ${workspaceIconMarkup(companyId)}
         <span><strong>${h(companyName(companyId))}</strong><small>Workspace</small></span>
         ${showWorkspaceSwitcherCue ? '<i class="ti ti-chevron-down"></i>' : ''}
       </a>
@@ -4971,17 +5003,7 @@ function renderSettingsPage(route, companyId) {
     ${workspaceHeader('Settings', 'Company settings, roles, approvals, and admin controls.', '')}
     ${compactTabs('Settings sections', settingsTabs.map(([href, label, id]) => [href, label, tab === id]))}
     <section class="dashboard-grid compact-settings-grid">
-      ${tab === 'company' ? `
-      <article class="panel">
-        <div class="section-head"><div><h2>Company</h2><p>Workspace identity.</p></div></div>
-        ${contractRows([
-          ['Name', companyName(companyId)],
-          ['Company ID', companyId],
-          ['Color', company?.color || companyColor(companyId)],
-          ['Visible jobs', companyJobs(companyId).length],
-        ])}
-      </article>
-      ` : ''}
+      ${tab === 'company' ? renderWorkspaceSettings(companyId) : ''}
       ${tab === 'billing' ? renderBillingSettings(companyId) : ''}
       ${tab === 'plugins' ? renderPluginsSettings(companyId) : ''}
       ${tab === 'roles' ? renderRolesSettings(companyId) : ''}
@@ -5020,6 +5042,51 @@ function renderSettingsPage(route, companyId) {
       ` : ''}
       ${tab === 'master' && isQuestDeveloper() ? renderPlatformMasterPanel(companyId) : ''}
     </section>
+  `;
+}
+
+function renderWorkspaceSettings(companyId) {
+  const company = companyById(companyId) || normalizeCompany({ id: companyId });
+  const canManage = can('settings.manage', companyId) || ['owner', 'admin'].includes(String(membershipForProfile(companyId, activeSession().profile.id)?.role || '').toLowerCase()) || isQuestDeveloper();
+  const canCreate = canCreateAnotherWorkspace();
+  return `
+    <article class="panel span-2">
+      <div class="section-head"><div><h2>Workspace identity</h2><p>Rename this workspace and choose the icon your team sees in navigation.</p></div></div>
+      <form class="workspace-settings-form" data-workspace-settings-form>
+        <input type="hidden" name="company_id" value="${h(companyId)}" />
+        ${field('Workspace name', 'workspace_name', companyName(companyId), true)}
+        <div class="workspace-icon-picker">
+          ${WORKSPACE_ICON_OPTIONS.map((item) => `
+            <label class="workspace-icon-choice ${item.key === company.icon_key ? 'active' : ''}" data-workspace-icon-choice>
+              <input type="radio" name="icon_key" value="${h(item.key)}" ${item.key === company.icon_key ? 'checked' : ''} ${canManage ? '' : 'disabled'} />
+              <i class="ti ${h(item.icon)}"></i>
+              <span>${h(item.label)}</span>
+            </label>
+          `).join('')}
+        </div>
+        <div class="form-actions span-2">
+          <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save workspace</button>
+        </div>
+      </form>
+    </article>
+    <article class="panel">
+      <div class="section-head"><div><h2>Create another workspace</h2><p>${h(isQuestDeveloper() ? 'Platform owners can create unlimited workspaces.' : workspaceLimitMessage())}</p></div></div>
+      <form class="workspace-create-mini" data-company-create-form>
+        <label>Workspace name<input name="company_name" placeholder="New company workspace" required ${canCreate ? '' : 'disabled'} /></label>
+        ${workspacePresetSelect()}
+        ${workspaceIconSelect()}
+        <button class="btn btn-primary full" type="submit" ${canCreate ? '' : 'disabled'}><i class="ti ti-plus"></i>Create workspace</button>
+      </form>
+    </article>
+    <article class="panel">
+      <div class="section-head"><div><h2>Workspace data</h2><p>Setup, data, and plugins are isolated by workspace.</p></div></div>
+      ${contractRows([
+        ['Workspace ID', companyId],
+        ['Owned workspaces', isQuestDeveloper() ? 'Unlimited' : `${ownedWorkspaceCount()} / ${WORKSPACE_SELF_CREATE_LIMIT}`],
+        ['Visible jobs', companyJobs(companyId).length],
+        ['Installed plugins', availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length],
+      ])}
+    </article>
   `;
 }
 
@@ -5193,6 +5260,14 @@ function renderPlatformMasterPanel(currentCompanyId) {
         ${metricCard('Pending', totals.pending)}
         ${metricCard('Members', totals.members)}
       </section>
+      <form class="platform-workspace-create" data-platform-workspace-create-form>
+        <strong>Create workspace</strong>
+        <label>Workspace name<input name="company_name" placeholder="Customer workspace" required /></label>
+        <label>Owner email<input name="owner_email" type="email" placeholder="owner@company.com" /></label>
+        ${workspacePresetSelect()}
+        ${workspaceIconSelect()}
+        <button class="btn btn-primary" type="submit"><i class="ti ti-plus"></i>Create</button>
+      </form>
       <div class="platform-company-list">
         ${companies.map((company) => renderPlatformCompanyRow(company, currentCompanyId)).join('') || emptyState('No companies found for platform review.')}
       </div>
@@ -8990,6 +9065,22 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-platform-workspace-create-form]')) {
+    event.preventDefault();
+    createPlatformWorkspace(event.target).catch((error) => {
+      showToast(error.message || 'Platform workspace creation failed.', 'local', 'Master panel');
+    });
+    return;
+  }
+
+  if (event.target.matches('[data-workspace-settings-form]')) {
+    event.preventDefault();
+    saveWorkspaceSettings(event.target).catch((error) => {
+      showToast(error.message || 'Workspace settings failed.', 'local', 'Settings');
+    });
+    return;
+  }
+
   if (event.target.matches('[data-profile-form]')) {
     event.preventDefault();
     saveProfile(event.target).catch((error) => {
@@ -9455,6 +9546,7 @@ async function registerWorkspace(formNode) {
   const inviteToken = String(form.invite_token || '').trim();
   const companyName = String(form.company_name || '').trim();
   const presetCode = WORKSPACE_PLUGIN_PRESETS[form.preset_code] ? form.preset_code : 'generic';
+  const iconKey = workspaceIconOption(form.icon_key).key;
   if (!email || !password || !fullName || (!inviteToken && !companyName)) {
     state.loginError = inviteToken ? 'Name, email, and password are required.' : 'Name, email, password, and company workspace are required.';
     render();
@@ -9495,14 +9587,14 @@ async function registerWorkspace(formNode) {
     await acceptCompanyInvite(inviteToken, form.return_url);
     return;
   }
-  const workspace = await client.rpc('create_company_workspace', { company_name: companyName, preset_code: presetCode });
+  const workspace = await client.rpc('create_company_workspace', { company_name: companyName, preset_code: presetCode, icon_key: iconKey });
   if (workspace.error) {
     state.loginError = workspace.error.message || 'Account created, but workspace setup failed.';
     state.authMessage = '';
     render();
     return;
   }
-  applyCreatedWorkspace(workspace.data, companyName);
+  applyCreatedWorkspace(workspace.data, companyName, iconKey);
   applyPluginPresetLocal(state.activeCompanyId, presetCode);
   state.authMessage = '';
   navigate(companyPath('settings', { tab: 'billing' }, state.activeCompanyId), { replace: true });
@@ -9513,8 +9605,15 @@ async function createWorkspaceForCurrentUser(formNode) {
   const client = createSupabaseClient();
   const companyName = String(form.company_name || '').trim();
   const presetCode = WORKSPACE_PLUGIN_PRESETS[form.preset_code] ? form.preset_code : 'generic';
+  const iconKey = workspaceIconOption(form.icon_key).key;
   if (!client || !companyName) {
     state.loginError = 'Company workspace name is required.';
+    state.authMessage = '';
+    render();
+    return;
+  }
+  if (!canCreateAnotherWorkspace()) {
+    state.loginError = workspaceLimitMessage();
     state.authMessage = '';
     render();
     return;
@@ -9522,20 +9621,79 @@ async function createWorkspaceForCurrentUser(formNode) {
   state.loginError = '';
   state.authMessage = 'Creating workspace...';
   render();
-  const workspace = await safeSupabaseQuery(client.rpc('create_company_workspace', { company_name: companyName, preset_code: presetCode }));
+  const workspace = await safeSupabaseQuery(client.rpc('create_company_workspace', { company_name: companyName, preset_code: presetCode, icon_key: iconKey }));
   if (workspace.error) {
     state.loginError = workspace.error.message || 'Workspace setup failed.';
     state.authMessage = '';
     render();
     return;
   }
-  applyCreatedWorkspace(workspace.data, companyName);
+  applyCreatedWorkspace(workspace.data, companyName, iconKey);
   applyPluginPresetLocal(state.activeCompanyId, presetCode);
   state.authMessage = 'Opening workspace...';
   navigate(companyPath('settings', { tab: 'billing' }, state.activeCompanyId), { replace: true });
 }
 
-function applyCreatedWorkspace(workspaceId, requestedName = '') {
+async function createPlatformWorkspace(formNode) {
+  if (!isQuestDeveloper()) {
+    showToast('Platform owner access is required to create workspaces for others.', 'local', 'Master panel');
+    return;
+  }
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const client = createSupabaseClient();
+  const companyName = String(form.company_name || '').trim();
+  const ownerEmail = String(form.owner_email || '').trim();
+  const presetCode = WORKSPACE_PLUGIN_PRESETS[form.preset_code] ? form.preset_code : 'generic';
+  const iconKey = workspaceIconOption(form.icon_key).key;
+  if (!client || !companyName) {
+    showToast('Workspace name is required.', 'local', 'Master panel');
+    return;
+  }
+  const workspace = await safeSupabaseQuery(client.rpc('create_company_workspace', { company_name: companyName, preset_code: presetCode, icon_key: iconKey, owner_email: ownerEmail }));
+  if (workspace.error) {
+    showToast(workspace.error.message || 'Workspace creation failed.', 'local', 'Master panel');
+    return;
+  }
+  if (ownerEmail) applyPlatformCreatedWorkspace(workspace.data, companyName, iconKey);
+  else applyCreatedWorkspace(workspace.data, companyName, iconKey);
+  showToast(`${companyName} workspace created.`, 'live', 'Master panel');
+  navigate(companyPath('settings', { tab: 'master' }, state.activeCompanyId), { replace: true });
+}
+
+async function saveWorkspaceSettings(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const companyId = canonicalCompanyId(form.company_id || activeCompanyId());
+  const workspaceName = String(form.workspace_name || '').trim();
+  const iconKey = workspaceIconOption(form.icon_key).key;
+  if (!workspaceName) {
+    showToast('Workspace name is required.', 'local', 'Settings');
+    return;
+  }
+  const client = createSupabaseClient();
+  let live = false;
+  if (client && state.session?.auth === 'supabase') {
+    const result = await safeSupabaseQuery(client.rpc('update_company_workspace', { target_company_id: companyId, workspace_name: workspaceName, icon_key: iconKey }));
+    if (result.error) {
+      showToast(result.error.message || 'Workspace update failed.', 'local', 'Settings');
+      return;
+    }
+    live = true;
+  }
+  state.companies = mergeCompanies(state.companies
+    .filter((company) => company.id !== companyId)
+    .concat(normalizeCompany({
+      ...(companyById(companyId) || {}),
+      id: companyId,
+      name: workspaceName,
+      short_name: workspaceName,
+      label: workspaceName,
+      icon_key: iconKey,
+    })));
+  showToast('Workspace settings saved.', live ? 'live' : 'local', 'Settings');
+  render();
+}
+
+function applyCreatedWorkspace(workspaceId, requestedName = '', iconKey = 'home') {
   const companyId = canonicalCompanyId(workspaceId || defaultCompanyId());
   const cleanName = String(requestedName || companyName(companyId) || companyId).trim();
   const existingSubscription = companySubscription(companyId);
@@ -9545,6 +9703,7 @@ function applyCreatedWorkspace(workspaceId, requestedName = '') {
     name: cleanName,
     short_name: cleanName,
     color: companyColor(companyId),
+    icon_key: iconKey,
   })));
   state.memberships = state.memberships
     .filter((membership) => !(membership.company_id === companyId && membership.profile_id === activeSession().profile.id))
@@ -9572,6 +9731,26 @@ function applyCreatedWorkspace(workspaceId, requestedName = '') {
   if (subscription?.status === 'pending_review') markWorkspacePendingReview(companyId);
   else clearWorkspacePendingReview(companyId);
   localStorage.setItem(COMPANY_KEY, companyId);
+  state.dataLoaded = false;
+}
+
+function applyPlatformCreatedWorkspace(workspaceId, requestedName = '', iconKey = 'home') {
+  const companyId = canonicalCompanyId(workspaceId || '');
+  if (!companyId) return;
+  const cleanName = String(requestedName || companyId).trim();
+  state.companies = mergeCompanies(state.companies.concat(normalizeCompany({
+    id: companyId,
+    name: cleanName,
+    short_name: cleanName,
+    label: cleanName,
+    color: companyColor(companyId),
+    icon_key: iconKey,
+  })));
+  state.subscriptions = mergeSubscriptions(state.subscriptions.concat(normalizeSubscription({
+    company_id: companyId,
+    status: 'pending_review',
+  })));
+  markWorkspacePendingReview(companyId);
   state.dataLoaded = false;
 }
 
@@ -12824,6 +13003,23 @@ function companyById(id) {
   return state.companies.find((item) => item.id === canonical) || companiesFallback.map(normalizeCompany).find((item) => item.id === canonical) || null;
 }
 
+function ownedWorkspaceCount(profileId = activeSession().profile.id) {
+  const ownerId = String(profileId || '').trim();
+  if (!ownerId) return 0;
+  return compactUnique(state.memberships
+    .filter((membership) => membership.profile_id === ownerId && membership.role === 'owner' && membership.status === 'active')
+    .map((membership) => membership.company_id)).length;
+}
+
+function canCreateAnotherWorkspace() {
+  return isQuestDeveloper() || ownedWorkspaceCount() < WORKSPACE_SELF_CREATE_LIMIT;
+}
+
+function workspaceLimitMessage() {
+  if (canCreateAnotherWorkspace()) return `${ownedWorkspaceCount()} of ${WORKSPACE_SELF_CREATE_LIMIT} owner workspaces used.`;
+  return `Workspace limit reached. You can own up to ${WORKSPACE_SELF_CREATE_LIMIT} workspaces.`;
+}
+
 function companyName(id) {
   const company = companyById(id);
   return company ? companyLabel(company) : id || 'Company';
@@ -12835,6 +13031,16 @@ function companyLabel(company) {
 
 function companyColor(id) {
   return companyById(id)?.color || '#f0b23b';
+}
+
+function workspaceIconOption(key) {
+  return WORKSPACE_ICON_OPTIONS.find((item) => item.key === String(key || '').trim()) || WORKSPACE_ICON_OPTIONS[0];
+}
+
+function workspaceIconMarkup(companyOrId, className = '') {
+  const company = typeof companyOrId === 'object' ? normalizeCompany(companyOrId) : companyById(companyOrId);
+  const icon = workspaceIconOption(company?.icon_key);
+  return `<span class="workspace-icon ${h(className)}" style="--company-accent:${h(company?.color || companyColor(company?.id))}"><i class="ti ${h(icon.icon)}"></i></span>`;
 }
 
 function companyIdForJob(jobId) {
@@ -12931,6 +13137,7 @@ function platformCompanyRows() {
       color: company.color,
       label: company.label,
       pill: company.pill,
+      icon_key: company.icon_key,
       status: subscription?.status || (pendingReviewCompanyIds().includes(company.id) ? 'pending_review' : 'active'),
       plan_code: subscription?.plan_code || (company.id === 'lumen' ? 'manual_platform' : 'manual'),
       amount_cents: subscription?.amount_cents || 0,
@@ -13157,6 +13364,7 @@ function normalizeCompany(input) {
     color: String(input.color || '#f0b23b'),
     label: String(input.label || input.short_name || input.name || input.id || '').trim(),
     pill: String(input.pill || ''),
+    icon_key: workspaceIconOption(input.icon_key).key,
   };
 }
 
@@ -13522,6 +13730,7 @@ function normalizeWorkspaceReview(input) {
     color: String(input.color || '#f0b23b'),
     label: String(input.label || input.short_name || input.company_name || input.name || input.company_id || '').trim(),
     pill: String(input.pill || ''),
+    icon_key: workspaceIconOption(input.icon_key).key,
     status: normalizeSubscriptionStatus(input.status) || 'pending_review',
     plan_code: String(input.plan_code || 'quest_company_300'),
     amount_cents: number(input.amount_cents || 30000),

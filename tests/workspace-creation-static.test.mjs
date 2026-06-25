@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202606251230_idempotent_workspace_creation.sql', import.meta.url), 'utf8');
+const quotaMigrationUrl = new URL('../supabase/migrations/202606260900_workspace_quota_icons.sql', import.meta.url);
+const quotaMigration = existsSync(quotaMigrationUrl) ? readFileSync(quotaMigrationUrl, 'utf8') : '';
 
 test('no-company workspace creation shows progress and errors', () => {
   assert.match(source, /const busy = \/creating\|joining\|opening\/i\.test\(state\.authMessage \|\| ''\);/);
@@ -13,7 +15,7 @@ test('no-company workspace creation shows progress and errors', () => {
 });
 
 test('workspace creation applies optimistic active membership state', () => {
-  assert.match(source, /function applyCreatedWorkspace\(workspaceId, requestedName = ''\)/);
+  assert.match(source, /function applyCreatedWorkspace\(workspaceId, requestedName = '', iconKey = 'home'\)/);
   assert.match(source, /state\.memberships = state\.memberships/);
   assert.match(source, /role: 'owner'/);
   assert.match(source, /status: 'active'/);
@@ -42,10 +44,50 @@ test('same-user supabase auth events do not force full workspace reloads', () =>
   assert.doesNotMatch(source, /onAuthStateChange\(\(_event, session\) => \{\s*setSupabaseSession\(session \|\| null\)\.finally\(\(\) => \{\s*state\.dataLoaded = false;/);
 });
 
-test('supabase workspace creation is idempotent for active members', () => {
-  assert.match(migration, /create or replace function public\.create_company_workspace\(company_name text\)/);
-  assert.match(migration, /select cm\.company_id\s+into existing_company_id/);
-  assert.match(migration, /where cm\.profile_id = auth\.uid\(\)\s+and cm\.status = 'active'/);
+test('workspace quota migration supersedes one-workspace idempotency', () => {
+  assert.ok(quotaMigration, 'Expected workspace quota/icon migration');
+  assert.match(quotaMigration, /drop function if exists public\.create_company_workspace\(text\);/);
+  assert.match(quotaMigration, /drop function if exists public\.create_company_workspace\(text, text\);/);
+  assert.doesNotMatch(quotaMigration, /if existing_company_id is not null then\s+return existing_company_id;/);
   assert.match(migration, /if existing_company_id is not null then\s+return existing_company_id;/);
-  assert.match(migration, /grant execute on function public\.create_company_workspace\(text\) to authenticated;/);
+});
+
+test('workspace creation allows three self-owned workspaces and platform owner overrides', () => {
+  assert.match(source, /const WORKSPACE_SELF_CREATE_LIMIT = 3;/);
+  assert.match(source, /function ownedWorkspaceCount\(profileId = activeSession\(\)\.profile\.id\)/);
+  assert.match(source, /function canCreateAnotherWorkspace\(\)/);
+  assert.match(source, /isQuestDeveloper\(\) \|\| ownedWorkspaceCount\(\) < WORKSPACE_SELF_CREATE_LIMIT/);
+  assert.match(source, /workspaceLimitMessage\(\)/);
+  assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: presetCode, icon_key: iconKey \}\)/);
+  assert.match(source, /data-platform-workspace-create-form/);
+  assert.match(source, /owner_email/);
+  assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: presetCode, icon_key: iconKey, owner_email: ownerEmail \}\)/);
+  assert.ok(quotaMigration, 'Expected workspace quota/icon migration');
+  assert.match(quotaMigration, /create or replace function public\.create_company_workspace\(\s*company_name text,\s*preset_code text default 'generic',\s*icon_key text default 'home',\s*owner_email text default null\s*\)/);
+  assert.match(quotaMigration, /owned_workspace_count integer := 0;/);
+  assert.match(quotaMigration, /if not creator_is_platform_admin and owned_workspace_count >= 3 then\s+raise exception 'Workspace limit reached'/);
+  assert.match(quotaMigration, /if clean_owner_email <> '' and not creator_is_platform_admin then\s+raise exception 'Platform admin access required to create for another owner'/);
+  assert.match(quotaMigration, /drop function if exists public\.create_company_workspace\(text, text\);/);
+  assert.match(quotaMigration, /grant execute on function public\.create_company_workspace\(text, text, text, text\) to authenticated;/);
+});
+
+test('workspace settings can rename and change one of fifteen icons', () => {
+  const iconEntryCount = (source.match(/\{ key: '[^']+', icon: 'ti-[^']+', label: '[^']+' \}/g) || []).length;
+  assert.ok(iconEntryCount >= 15, `expected at least 15 workspace icon choices, got ${iconEntryCount}`);
+  assert.match(source, /const WORKSPACE_ICON_OPTIONS = \[/);
+  assert.match(source, /function workspaceIconOption\(key\)/);
+  assert.match(source, /function workspaceIconMarkup\(companyOrId, className = ''\)/);
+  assert.match(source, /icon_key: workspaceIconOption\(input\.icon_key\)\.key/);
+  assert.match(source, /renderWorkspaceSettings\(companyId\)/);
+  assert.match(source, /data-workspace-settings-form/);
+  assert.match(source, /name="icon_key"/);
+  assert.match(source, /data-workspace-icon-choice/);
+  assert.match(source, /async function saveWorkspaceSettings\(formNode\)/);
+  assert.match(source, /client\.rpc\('update_company_workspace'/);
+  assert.ok(quotaMigration, 'Expected workspace quota/icon migration');
+  assert.match(quotaMigration, /alter table public\.companies\s+add column if not exists icon_key text not null default 'home'/);
+  assert.match(quotaMigration, /create or replace function public\.update_company_workspace/);
+  assert.match(quotaMigration, /if not \(app_private\.is_company_admin\(clean_company_id\) or app_private\.is_quest_admin\(\)\) then/);
+  assert.match(quotaMigration, /update public\.companies c\s+set name = clean_name,\s+short_name = clean_name,\s+label = clean_name,\s+icon_key = clean_icon/);
+  assert.match(quotaMigration, /grant execute on function public\.update_company_workspace\(text, text, text\) to authenticated;/);
 });
