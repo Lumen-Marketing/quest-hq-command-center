@@ -113,14 +113,26 @@ test('crm plugins are mutually exclusive and migrated separately from underwrite
   assert.match(crmVariantMigration, /when permission like 'underwriter\.%' then array\['underwriter'\]/);
 });
 
-test('underwriter queue uses contact language and a dedicated table layout', () => {
-  assert.match(source, /<p>\$\{visible\.length\} contact\$\{visible\.length === 1 \? '' : 's'\} in this CRM 2 view\.<\/p>/);
-  assert.match(source, /<div class="data-table underwriter-table">/);
-  assert.match(source, /<div class="table-head"><span>Contact<\/span><span>Stage<\/span><span>Owner<\/span><span>Pay type<\/span><span>Value<\/span><\/div>/);
-  assert.match(source, /emptyState\('No contacts match this underwriter stage\.'\)/);
-  assert.doesNotMatch(source, /No leads match this underwriter stage\./);
-  assert.match(styles, /\.underwriter-table \.table-head,[\s\S]*grid-template-columns: minmax\(0, 1\.35fr\) minmax\(0, \.85fr\) minmax\(0, \.8fr\) minmax\(0, \.7fr\) minmax\(0, \.55fr\);/);
-  assert.match(styles, /\.underwriter-table \.empty-state span[\s\S]*overflow-wrap: anywhere;/);
+test('underwriter plugin renders the roof estimating and underwriting calculator', () => {
+  assert.match(source, /const ROOF_UNDERWRITER_SYSTEMS = \{/);
+  assert.match(source, /GAF Timberline HDZ shingles \/ sq/);
+  assert.match(source, /function createRoofEstimateFromSystem\(systemKey = 'shingle'\)/);
+  assert.match(source, /function calculateRoofUnderwriterEstimate\(estimate\)/);
+  assert.match(source, /function calculateRoofTargetQuote\(\{ hardCost, commissionRate, targetMargin \}\)/);
+  assert.match(source, /function renderUnderwriterPage\(route, companyId\)/);
+  assert.match(source, /Roof Underwriter/);
+  assert.match(source, /Material prices are locked/);
+  assert.match(source, /Client quote/);
+  assert.match(source, /Net profit/);
+  assert.match(source, /Quote \/ square/);
+  assert.match(source, /Payment schedule/);
+  assert.match(source, /data-roof-underwriter-field/);
+  assert.match(source, /data-action="roof-underwriter-system"/);
+  assert.match(source, /data-action="roof-underwriter-admin"/);
+  assert.match(source, /data-action="roof-underwriter-target-quote"/);
+  assert.match(styles, /\.roof-underwriter-page/);
+  assert.doesNotMatch(source, /Underwriter queue/);
+  assert.doesNotMatch(source, /No contacts match this underwriter stage\./);
 });
 
 test('plugin migration file exists in migrations directory', () => {

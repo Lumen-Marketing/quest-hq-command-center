@@ -56,6 +56,7 @@ const MESSAGE_CACHE_KEY = 'quest-hq-message-cache-v1';
 const MESSAGE_READ_CACHE_KEY = 'quest-hq-message-read-cache-v1';
 const MESSAGE_ATTACHMENT_CACHE_KEY = 'quest-hq-message-attachment-cache-v1';
 const CALENDAR_EVENT_CACHE_KEY = 'quest-hq-calendar-event-cache-v1';
+const ROOF_UNDERWRITER_CACHE_KEY = 'quest-hq-roof-underwriter-estimate-v1';
 
 const ROLE_PERMISSIONS = {
   developer: ['*'],
@@ -1348,6 +1349,9 @@ const state = {
   notificationMenuOpen: false,
   mobileMenuOpen: false,
   rolePreview: null,
+  roofUnderwriterEstimate: null,
+  roofUnderwriterAdmin: false,
+  roofUnderwriterTargetMargin: 22,
 };
 
 const app = document.getElementById('app');
@@ -3083,108 +3087,341 @@ function renderAnalyticsPage(route, companyId) {
   `;
 }
 
-const CRM2_UNDERWRITER_STAGES = [
-  { key: 'prospect', name: 'Prospect', color: '#9AA0A8' },
-  { key: 'lead', name: 'Lead', color: '#378ADD' },
-  { key: 'nurturing', name: 'Nurturing', color: '#2F9E8F' },
-  { key: 'underwriting', name: 'Underwriting', color: '#BA7517' },
-  { key: 'estimate', name: 'Estimate Sent', color: '#378ADD' },
-  { key: 'negotiating', name: 'Negotiating', color: '#BA7517' },
-  { key: 'won', name: 'Won', color: '#639922' },
-];
-
-const CRM2_UNDERWRITER_GUIDANCE = {
-  prospect: { title: 'Work the prospect.', lines: ['Confirm source and best contact method.', 'Decide if there is a real project.', 'Move them into a real conversation.'] },
-  lead: { title: 'Qualify the lead.', lines: ['Confirm the decision maker.', 'Capture roof age, visible damage, and timeline.', 'Separate retail pay from insurance work.'] },
-  nurturing: { title: 'Keep it warm.', lines: ['Set a follow-up cadence.', 'Send value before they go cold.', 'Capture the next decision needed.'] },
-  underwriting: { title: 'Scope it and price it.', lines: ['Confirm takeoff and measurements.', 'Attach the carrier scope when insurance is involved.', 'Confirm material selections and margin target.'] },
-  estimate: { title: 'Present the estimate.', lines: ['Confirm proposal delivery.', 'Walk through Standard versus Recommended.', 'Schedule the next follow-up.'] },
-  negotiating: { title: 'Close the deal.', lines: ['Resolve open questions.', 'Confirm all decision makers.', 'Move toward signature and deposit.'] },
-  won: { title: 'Won - convert to a job.', lines: ['Schedule production.', 'Order materials.', 'Confirm scope before handoff.'] },
+const ROOF_UNDERWRITER_TAX_RATE = 0.085;
+const ROOF_UNDERWRITER_SYSTEM_ORDER = ['shingle', 'tile', 'foam', 'metal'];
+const ROOF_UNDERWRITER_SYSTEMS = {
+  shingle: {
+    label: 'Shingle',
+    labor: [['Shingle install labor / sq', 0, 110], ['Walk deck', 0, 1000], ['Plywood labor / sheet', 0, 4], ['Solar un/re-install', 0, 200], ['Dump & gas', 1, 500]],
+    materials: [['GAF Timberline HDZ shingles / sq', 0, 125], ['GAF ridge cap / 33ft', 0, 86.25], ['GAF starter strip / bundle', 0, 84.85], ['SecureGrip 30 underlayment', 0, 100], ['Metal underlayment', 0, 125], ['Underlayment nails', 0, 24.6], ['Shingle coil nails 1-1/4', 0, 55.8], ['Staples (overhang)', 0, 41.5], ['Base sheet 2sq black', 0, 130], ['Cap sheet 1sq', 0, 130], ['Flashings', 0, 30], ['Drip edge 10ft', 0, 8], ['Plastic roof cement 5gal', 0, 74], ['Pipe jacks', 0, 20], ['Valley metal 10ft', 0, 40], ['Fascia trim 1x4 16ft', 0, 30], ['Misc', 0, 500]],
+  },
+  tile: {
+    label: 'Tile',
+    labor: [['Tile install labor / sq', 0, 120], ['Tile loader / sq', 0, 25], ['Metal', 0, 250], ['Solar un/re-install', 0, 200], ['Dump & gas', 1, 800]],
+    materials: [['Eagle tile / sq', 0, 120], ['Tile trim / ln ft', 0, 5], ['Ply40 / tile seal underlayment', 0, 55], ['Furring strips', 0, 14], ['Valley metals 10ft', 0, 44], ['Drip edge 2x2 10ft', 0, 8], ['Birdstop / eave riser', 0, 10], ['Pipejacks', 0, 15], ['Other flashings', 0, 15], ['Plastic cap nails', 0, 25], ['Nails', 0, 55], ['Hip & ridge blocker', 0, 100], ['Plastic cement 4.75gal', 0, 75], ['Base sheet 2sq', 0, 130], ['Cap sheet 1sq', 0, 130], ['Ice & water barrier', 0, 120], ['Misc', 0, 500]],
+  },
+  foam: {
+    label: 'Foam',
+    labor: [['SPF foam application / sq', 0, 150], ['Surface prep & clean / sq', 0, 40], ['Solar un/re-install', 0, 200], ['Dump & gas', 1, 400]],
+    materials: [['Spray foam 2.5lb / sq', 0, 120], ['Base coat / sq', 0, 60], ['Top coat + granules / sq', 0, 50], ['Primer', 0, 50], ['Caulking / sealant', 0, 25], ['Patch / repair', 0, 40], ['Misc', 0, 500]],
+  },
+  metal: {
+    label: 'Metal',
+    labor: [['Metal panel install / sq', 0, 150], ['Tear-off / sq', 0, 60], ['Trim & flashing labor / ln ft', 0, 8], ['Solar un/re-install', 0, 200], ['Dump & gas', 1, 500]],
+    materials: [['Metal panels (PBR / standing seam) / sq', 0, 120], ['Ridge cap / hip', 0, 15], ['Trim & rake flashing / ln ft', 0, 10], ['Roof-to-wall flashing / ln ft', 0, 10], ['Drip edge / eave', 0, 8], ['Zee bar', 0, 10], ['Inside/outside foam closures', 0, 5], ['Painted screws / box', 0, 40], ['Butyl tape / sealant', 0, 25], ['Synthetic underlayment / sq', 0, 100], ['Ice & water barrier', 0, 120], ['Pipe jacks', 0, 20], ['Misc', 0, 500]],
+  },
 };
 
+function roofLine([name, quantity, unitPrice], group = 'main') {
+  return { name, quantity, unitPrice, group };
+}
+
+function createRoofSystemLines(systemKey, group = 'main') {
+  const system = ROOF_UNDERWRITER_SYSTEMS[systemKey] || ROOF_UNDERWRITER_SYSTEMS.shingle;
+  return { labor: system.labor.map((item) => roofLine(item, group)), materials: system.materials.map((item) => roofLine(item, group)) };
+}
+
+function createRoofEstimateFromSystem(systemKey = 'shingle') {
+  const primary = ROOF_UNDERWRITER_SYSTEMS[systemKey] ? systemKey : 'shingle';
+  const lines = createRoofSystemLines(primary);
+  return { name: '', primary, secondary: '', projectType: 'rr', squares: 0, commissionRate: 10, quote: 0, labor: lines.labor, materials: lines.materials };
+}
+
+function normalizeRoofEstimate(value) {
+  const fallback = createRoofEstimateFromSystem('shingle');
+  if (!value || typeof value !== 'object') return fallback;
+  const primary = ROOF_UNDERWRITER_SYSTEMS[value.primary] ? value.primary : fallback.primary;
+  return { ...fallback, ...value, primary, secondary: ROOF_UNDERWRITER_SYSTEMS[value.secondary] && value.secondary !== primary ? value.secondary : '', labor: Array.isArray(value.labor) ? value.labor.map(normalizeRoofLine) : fallback.labor, materials: Array.isArray(value.materials) ? value.materials.map(normalizeRoofLine) : fallback.materials };
+}
+
+function normalizeRoofLine(line) {
+  return { name: String(line?.name || ''), quantity: number(line?.quantity), unitPrice: number(line?.unitPrice), group: line?.group || 'main' };
+}
+
+function roofUnderwriterEstimate() {
+  if (!state.roofUnderwriterEstimate) state.roofUnderwriterEstimate = normalizeRoofEstimate(readJson(ROOF_UNDERWRITER_CACHE_KEY, createRoofEstimateFromSystem('shingle')));
+  return state.roofUnderwriterEstimate;
+}
+
+function persistRoofUnderwriterEstimate() {
+  writeJson(ROOF_UNDERWRITER_CACHE_KEY, roofUnderwriterEstimate());
+}
+
+function applyRoofSecondarySystem(estimate, secondary) {
+  const primaryLabor = estimate.labor.filter((item) => item.group === 'main');
+  const primaryMaterials = estimate.materials.filter((item) => item.group === 'main');
+  if (!secondary) return { ...estimate, secondary: '', labor: primaryLabor, materials: primaryMaterials };
+  const addOn = createRoofSystemLines(secondary, secondary);
+  return { ...estimate, secondary, labor: primaryLabor.concat(addOn.labor), materials: primaryMaterials.concat(addOn.materials) };
+}
+
+function calculateRoofTargetQuote({ hardCost, commissionRate, targetMargin }) {
+  const denominator = 1 - number(commissionRate) / 100 - number(targetMargin) / 100;
+  return denominator > 0 ? number(hardCost) / denominator : 0;
+}
+
+function calculateRoofUnderwriterEstimate(estimate) {
+  const squares = number(estimate.squares);
+  const quote = number(estimate.quote);
+  const laborTotal = currency(sumRoofLines(estimate.labor));
+  const materialSubtotal = currency(sumRoofLines(estimate.materials));
+  const materialTax = currency(materialSubtotal * ROOF_UNDERWRITER_TAX_RATE);
+  const materialTotal = currency(materialSubtotal + materialTax);
+  const hardCost = currency(laborTotal + materialTotal);
+  const grossProfit = currency(quote - hardCost);
+  const commission = currency(quote * (number(estimate.commissionRate) / 100));
+  const netProfit = currency(grossProfit - commission);
+  return { laborTotal, materialSubtotal, materialTax, materialTotal, hardCost, grossProfit, commission, netProfit, netMargin: quote > 0 ? (netProfit / quote) * 100 : 0, quotePerSquare: squares > 0 ? quote / squares : 0, profitPerSquare: squares > 0 ? netProfit / squares : 0, payments: { deposit: currency(quote * 0.5), materialDrop: currency(quote * 0.3), completion: currency(quote * 0.2) } };
+}
+
+function sumRoofLines(lines = []) {
+  return lines.reduce((total, item) => total + number(item.quantity) * number(item.unitPrice), 0);
+}
+
+function currency(value) {
+  return Math.round((number(value) + Number.EPSILON) * 100) / 100;
+}
+
 function renderUnderwriterPage(route, companyId) {
-  const requestedStage = route.params.get('stage') || 'all';
-  const stageKeys = new Set(CRM2_UNDERWRITER_STAGES.map((stage) => stage.key));
-  const activeStage = stageKeys.has(requestedStage) ? requestedStage : 'all';
-  const contacts = companyContacts(companyId)
-    .map((contact) => ({ ...contact, underwriter_stage: underwriterStageForContact(contact) }))
-    .sort((a, b) => CRM2_UNDERWRITER_STAGES.findIndex((stage) => stage.key === a.underwriter_stage.key) - CRM2_UNDERWRITER_STAGES.findIndex((stage) => stage.key === b.underwriter_stage.key));
-  const visible = activeStage === 'all' ? contacts : contacts.filter((contact) => contact.underwriter_stage.key === activeStage);
-  const underwriting = contacts.filter((contact) => contact.underwriter_stage.key === 'underwriting');
-  const estimates = contacts.filter((contact) => ['estimate', 'negotiating'].includes(contact.underwriter_stage.key));
-  const canManageUnderwriter = can('underwriter.manage', companyId);
-  const guide = activeStage === 'all' ? CRM2_UNDERWRITER_GUIDANCE.underwriting : CRM2_UNDERWRITER_GUIDANCE[activeStage];
+  const estimate = roofUnderwriterEstimate();
+  const totals = calculateRoofUnderwriterEstimate(estimate);
+  const targetQuote = calculateRoofTargetQuote({ hardCost: totals.hardCost, commissionRate: estimate.commissionRate, targetMargin: state.roofUnderwriterTargetMargin });
+  const health = roofUnderwriterHealth(totals.netProfit, totals.netMargin, estimate.quote);
+  const materialLocked = !state.roofUnderwriterAdmin;
+  const laborLocked = estimate.projectType === 'new' && !state.roofUnderwriterAdmin;
   return `
-    <section class="tool-page underwriter-page">
-      ${workspaceHeader('Underwriter', 'CRM 2 workspace for qualification, scope, pricing, and quote handoff readiness.', `
-        ${can('crm.view', companyId) ? `<a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Open contacts</a>` : ''}
-        ${canManageUnderwriter && can('crm.view', companyId) ? `<button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>` : ''}
+    <section class="tool-page roof-underwriter-page">
+      ${workspaceHeader('Roof Underwriter', 'Estimating and underwriting calculator for roofing deals.', `
+        <button class="btn" type="button" data-action="roof-underwriter-admin"><i class="ti ${state.roofUnderwriterAdmin ? 'ti-lock-open' : 'ti-lock'}"></i>${state.roofUnderwriterAdmin ? 'Admin on' : 'Admin'}</button>
+        <button class="btn" type="button" data-action="roof-underwriter-new"><i class="ti ti-plus"></i>New</button>
+        <button class="btn" type="button" data-action="roof-underwriter-print"><i class="ti ti-printer"></i>Print</button>
+        <button class="btn btn-primary" type="button" data-action="roof-underwriter-save"><i class="ti ti-device-floppy"></i>Save deal</button>
       `)}
-      <section class="metric-grid">
-        ${metricCard('Underwriting', underwriting.length)}
-        ${metricCard('Estimate queue', estimates.length)}
-        ${metricCard('Pipeline value', money(sum(visible, 'value')))}
-        ${metricCard('CRM 2 stage', activeStage === 'all' ? 'All' : underwriterStageByKey(activeStage).name)}
-      </section>
-      <section class="pipe-toolbar">
-        <div class="pipe-chips" role="group" aria-label="CRM 2 underwriter stage">
-          <a class="pipe-chip ${activeStage === 'all' ? 'on' : ''}" href="${appHref(companyPath('underwriter', {}, companyId))}" data-router>All<b>${h(String(contacts.length))}</b></a>
-          ${CRM2_UNDERWRITER_STAGES.map((stage) => {
-            const count = contacts.filter((contact) => contact.underwriter_stage.key === stage.key).length;
-            return `<a class="pipe-chip ${activeStage === stage.key ? 'on' : ''}" href="${appHref(companyPath('underwriter', { stage: stage.key }, companyId))}" data-router>${pipelineDot(stage.color)}${h(stage.name)}<b>${h(String(count))}</b></a>`;
-          }).join('')}
+      <article class="panel roof-underwriter-setup">
+        <input class="roof-underwriter-title" data-roof-underwriter-field="name" value="${h(estimate.name)}" placeholder="Untitled job" aria-label="Job name" />
+        <div class="roof-underwriter-config">
+          ${roofUnderwriterSystemPicker(estimate)}
+          ${roofUnderwriterProjectTypePicker(estimate)}
+          <label class="roof-underwriter-field"><span>Second system</span><select data-roof-underwriter-field="secondary"><option value="">None</option>${ROOF_UNDERWRITER_SYSTEM_ORDER.filter((key) => key !== estimate.primary).map((key) => `<option value="${h(key)}" ${estimate.secondary === key ? 'selected' : ''}>${h(ROOF_UNDERWRITER_SYSTEMS[key].label)}</option>`).join('')}</select></label>
+          <label class="roof-underwriter-field"><span>Squares</span><input type="number" min="0" step="0.5" data-roof-underwriter-field="squares" value="${h(estimate.squares)}" /></label>
+          <label class="roof-underwriter-field"><span>Commission</span><div class="roof-underwriter-suffix"><input type="number" min="0" step="0.5" data-roof-underwriter-field="commissionRate" value="${h(estimate.commissionRate)}" /><span>%</span></div></label>
         </div>
-      </section>
-      <section class="home-dashboard-grid">
-        <article class="panel home-activity-panel">
-          <div class="section-head"><div><h2>Underwriter queue</h2><p>${visible.length} contact${visible.length === 1 ? '' : 's'} in this CRM 2 view.</p></div></div>
-          <div class="data-table underwriter-table">
-            <div class="table-head"><span>Contact</span><span>Stage</span><span>Owner</span><span>Pay type</span><span>Value</span></div>
-            ${visible.map(renderUnderwriterQueueRow).join('') || emptyState('No contacts match this underwriter stage.')}
-          </div>
-        </article>
-        <article class="panel home-health-panel">
-          <div class="section-head"><div><h2>Guidance</h2><p>${h(activeStage === 'all' ? 'Default underwriting guidance.' : underwriterStageByKey(activeStage).name)}</p></div></div>
-          <div class="home-health-list">
-            <div class="good"><i class="ti ti-clipboard-search"></i><span>${h(guide.title)}</span></div>
-            ${guide.lines.map((line) => `<div><i class="ti ti-point"></i><span>${h(line)}</span></div>`).join('')}
-          </div>
-        </article>
+        <div class="roof-underwriter-lock"><i class="ti ti-lock"></i><span>${estimate.projectType === 'new' ? 'Material and labor prices are locked for new construction.' : 'Material prices are locked — only Admin can edit them.'}</span></div>
+      </article>
+      <article class="panel roof-underwriter-summary">
+        <div class="roof-underwriter-net ${health.status}"><span>Net profit</span><strong>${money(totals.netProfit)}</strong><small>${number(estimate.quote) > 0 ? `${formatOneDecimal(totals.netMargin)}% margin` : 'No quote yet'} <b>${h(health.label)}</b></small></div>
+        <label class="roof-underwriter-stat input"><span>Client quote</span><div class="roof-underwriter-money-input"><span>$</span><input type="number" min="0" step="50" data-roof-underwriter-field="quote" value="${h(estimate.quote)}" /></div></label>
+        ${roofUnderwriterStat('Quote / square', number(estimate.squares) > 0 ? money(totals.quotePerSquare) : '-')}
+        ${roofUnderwriterStat('Hard cost', money(totals.hardCost))}
+        ${roofUnderwriterStat('Gross profit', money(totals.grossProfit))}
+        ${roofUnderwriterStat('Commission', money(totals.commission))}
+        ${roofUnderwriterStat('Profit / square', number(estimate.squares) > 0 ? money(totals.profitPerSquare) : '-')}
+      </article>
+      <section class="roof-underwriter-grid">
+        <div class="roof-underwriter-stack">
+          ${renderRoofLinePanel('Labor', 'labor', estimate.labor, totals.laborTotal, laborLocked)}
+          <article class="panel roof-underwriter-target"><div class="roof-underwriter-panel-head"><h2>Price to a margin</h2></div><div class="roof-underwriter-target-body"><label><span>Target net margin</span><strong>${h(state.roofUnderwriterTargetMargin)}%</strong><input type="range" min="0" max="45" data-roof-underwriter-field="targetMargin" value="${h(state.roofUnderwriterTargetMargin)}" /></label><div><span>Quote needed</span><strong>${targetQuote > 0 ? money(targetQuote) : 'Unavailable'}</strong></div><small>${number(estimate.squares) > 0 && targetQuote > 0 ? `${money(targetQuote / number(estimate.squares))} / sq` : 'Set squares for per-square target'}</small><button class="btn btn-primary" type="button" data-action="roof-underwriter-target-quote">Use this quote</button></div></article>
+          <article class="panel roof-underwriter-payments"><div class="roof-underwriter-panel-head"><h2>Payment schedule</h2></div>${roofUnderwriterPayment('50%', 'Deposit / start', totals.payments.deposit)}${roofUnderwriterPayment('30%', 'Material drop', totals.payments.materialDrop)}${roofUnderwriterPayment('20%', 'Completion', totals.payments.completion)}</article>
+        </div>
+        ${renderRoofLinePanel('Materials', 'materials', estimate.materials, totals.materialTotal, materialLocked, `${roofUnderwriterSummaryRow('Subtotal', totals.materialSubtotal)}${roofUnderwriterSummaryRow('Sales tax (8.5%)', totals.materialTax)}${roofUnderwriterSummaryRow('Materials w/ tax', totals.materialTotal, true)}`)}
       </section>
     </section>
   `;
 }
 
-function renderUnderwriterQueueRow(lead) {
+function roofUnderwriterSystemPicker(estimate) {
   return `
-    <button class="table-row" type="button" data-action="open-contact" data-contact-id="${h(lead.id)}">
-      <span class="cell-lead">${pipelineDot(lead.underwriter_stage.color)}<span><strong>${h(lead.name)}</strong><small>${h(lead.location || lead.phone || lead.email || 'No details')}</small></span></span>
-      <span>${underwriterStageTag(lead.underwriter_stage)}</span>
-      <span>${h(lead.owner_name || 'Unassigned')}</span>
-      <span>${h(lead.pay_type || 'Retail')}</span>
-      <span>${lead.value ? money(lead.value) : '<span class="muted-dash">-</span>'}</span>
-    </button>
+    <div class="roof-underwriter-control">
+      <span>Roof system</span>
+      <div class="roof-underwriter-segments">
+        ${ROOF_UNDERWRITER_SYSTEM_ORDER.map((key) => `<button class="${estimate.primary === key ? 'active' : ''}" type="button" data-action="roof-underwriter-system" data-system="${h(key)}">${h(ROOF_UNDERWRITER_SYSTEMS[key].label)}</button>`).join('')}
+      </div>
+    </div>
   `;
 }
 
-function underwriterStageByKey(key) {
-  return CRM2_UNDERWRITER_STAGES.find((stage) => stage.key === key) || CRM2_UNDERWRITER_STAGES[1];
+function roofUnderwriterProjectTypePicker(estimate) {
+  return `
+    <div class="roof-underwriter-control">
+      <span>Project type</span>
+      <div class="roof-underwriter-segments">
+        <button class="${estimate.projectType === 'rr' ? 'active' : ''}" type="button" data-action="roof-underwriter-project-type" data-project-type="rr">R&amp;R</button>
+        <button class="${estimate.projectType === 'new' ? 'active' : ''}" type="button" data-action="roof-underwriter-project-type" data-project-type="new">New construction</button>
+      </div>
+    </div>
+  `;
 }
 
-function underwriterStageTag(stage) {
-  return `<span class="stage-tag">${pipelineDot(stage.color)}${h(stage.name)}</span>`;
+function renderRoofLinePanel(title, kind, lines, total, locked, footer = '') {
+  return `
+    <article class="panel roof-underwriter-lines">
+      <div class="roof-underwriter-panel-head"><h2>${h(title)}</h2><span>${moneyCents(total)}</span></div>
+      <div class="roof-underwriter-line-head"><span>Item</span><span>Qty</span><span>Unit</span><span>Amount</span><span></span></div>
+      ${lines.map((line, index) => renderRoofLineRow(kind, line, index, locked)).join('')}
+      <button class="roof-underwriter-add" type="button" data-action="roof-underwriter-add-line" data-kind="${h(kind)}"><i class="ti ti-plus"></i>Add ${kind === 'labor' ? 'labor' : 'material'} line</button>
+      ${footer}
+    </article>
+  `;
 }
 
-function underwriterStageForContact(contact) {
-  const stage = String(contact.stage || '').toLowerCase();
-  if (stage.includes('prospect')) return underwriterStageByKey('prospect');
-  if (stage.includes('nurtur')) return underwriterStageByKey('nurturing');
-  if (stage.includes('underwrit')) return underwriterStageByKey('underwriting');
-  if (stage.includes('estimate') || stage.includes('proposal')) return underwriterStageByKey('estimate');
-  if (stage.includes('negotiat')) return underwriterStageByKey('negotiating');
-  if (stage.includes('won')) return underwriterStageByKey('won');
-  return underwriterStageByKey('lead');
+function renderRoofLineRow(kind, line, index, locked) {
+  const amount = number(line.quantity) * number(line.unitPrice);
+  const groupLabel = line.group !== 'main' ? `<div class="roof-underwriter-group">+ ${h(ROOF_UNDERWRITER_SYSTEMS[line.group]?.label || line.group)} add-on</div>` : '';
+  return `
+    ${groupLabel}
+    <div class="roof-underwriter-line">
+      <input data-roof-underwriter-line="${h(kind)}" data-line-index="${h(index)}" data-line-field="name" value="${h(line.name)}" placeholder="Item name" aria-label="${h(line.name || 'Line')} item name" />
+      <input type="number" step="0.5" data-roof-underwriter-line="${h(kind)}" data-line-index="${h(index)}" data-line-field="quantity" value="${h(line.quantity)}" aria-label="${h(line.name || 'Line')} quantity" />
+      <div class="roof-underwriter-unit ${locked ? 'locked' : ''}"><i class="ti ${locked ? 'ti-lock' : 'ti-currency-dollar'}"></i><input type="number" step="0.01" ${locked ? 'readonly' : ''} data-roof-underwriter-line="${h(kind)}" data-line-index="${h(index)}" data-line-field="unitPrice" value="${h(line.unitPrice)}" aria-label="${h(line.name || 'Line')} unit price" /></div>
+      <strong>${moneyCents(amount)}</strong>
+      <button class="icon-button danger" type="button" data-action="roof-underwriter-delete-line" data-kind="${h(kind)}" data-line-index="${h(index)}" aria-label="Delete ${h(line.name || 'line')}"><i class="ti ti-x"></i></button>
+    </div>
+  `;
+}
+
+function roofUnderwriterStat(label, value) {
+  return `<div class="roof-underwriter-stat"><span>${h(label)}</span><strong>${h(value)}</strong></div>`;
+}
+
+function roofUnderwriterPayment(pct, label, value) {
+  return `<div class="roof-underwriter-payment"><span>${h(pct)}</span><p>${h(label)}</p><strong>${money(value)}</strong></div>`;
+}
+
+function roofUnderwriterSummaryRow(label, value, strong = false) {
+  return `<div class="roof-underwriter-total ${strong ? 'strong' : ''}"><span>${h(label)}</span><strong>${moneyCents(value)}</strong></div>`;
+}
+
+function roofUnderwriterHealth(netProfit, margin, quote) {
+  if (number(quote) <= 0) return { status: 'neutral', label: 'Enter quote' };
+  if (netProfit < 0 || margin < 15) return { status: 'bad', label: netProfit < 0 ? 'Losing money' : 'Thin margin' };
+  if (margin < 22) return { status: 'warn', label: 'Workable' };
+  return { status: 'good', label: 'Healthy' };
+}
+
+function moneyCents(value) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number(value));
+}
+
+function formatOneDecimal(value) {
+  return number(value).toFixed(1);
+}
+
+function patchRoofUnderwriterEstimate(patch) {
+  state.roofUnderwriterEstimate = { ...roofUnderwriterEstimate(), ...patch };
+  persistRoofUnderwriterEstimate();
+}
+
+function setRoofUnderwriterSystem(systemKey) {
+  const current = roofUnderwriterEstimate();
+  const next = createRoofEstimateFromSystem(systemKey);
+  state.roofUnderwriterEstimate = { ...next, name: current.name, projectType: current.projectType, squares: current.squares, commissionRate: current.commissionRate, quote: current.quote };
+  persistRoofUnderwriterEstimate();
+}
+
+function setRoofUnderwriterSecondary(systemKey) {
+  state.roofUnderwriterEstimate = applyRoofSecondarySystem(roofUnderwriterEstimate(), systemKey);
+  persistRoofUnderwriterEstimate();
+}
+
+function updateRoofUnderwriterLine(kind, index, field, value) {
+  const estimate = roofUnderwriterEstimate();
+  const lines = Array.isArray(estimate[kind]) ? estimate[kind] : [];
+  state.roofUnderwriterEstimate = { ...estimate, [kind]: lines.map((line, itemIndex) => itemIndex === index ? { ...line, [field]: field === 'name' ? value : number(value) } : line) };
+  persistRoofUnderwriterEstimate();
+}
+
+function addRoofUnderwriterLine(kind) {
+  const estimate = roofUnderwriterEstimate();
+  const lines = Array.isArray(estimate[kind]) ? estimate[kind] : [];
+  state.roofUnderwriterEstimate = { ...estimate, [kind]: lines.concat({ name: '', quantity: 0, unitPrice: 0, group: 'main' }) };
+  persistRoofUnderwriterEstimate();
+}
+
+function deleteRoofUnderwriterLine(kind, index) {
+  const estimate = roofUnderwriterEstimate();
+  const lines = Array.isArray(estimate[kind]) ? estimate[kind] : [];
+  state.roofUnderwriterEstimate = { ...estimate, [kind]: lines.filter((_, itemIndex) => itemIndex !== index) };
+  persistRoofUnderwriterEstimate();
+}
+
+function handleRoofUnderwriterField(input) {
+  if (isReadOnlyDemo()) {
+    requireMutableWorkspace();
+    render();
+    return;
+  }
+  const field = input.dataset.roofUnderwriterField;
+  if (field === 'targetMargin') {
+    state.roofUnderwriterTargetMargin = number(input.value);
+    updateWorkspaceOnly();
+    return;
+  }
+  if (field === 'secondary') setRoofUnderwriterSecondary(input.value || '');
+  else patchRoofUnderwriterEstimate({ [field]: field === 'name' ? input.value : number(input.value) });
+  updateWorkspaceOnly();
+}
+
+function handleRoofUnderwriterLineInput(input) {
+  if (isReadOnlyDemo()) {
+    requireMutableWorkspace();
+    render();
+    return;
+  }
+  updateRoofUnderwriterLine(input.dataset.roofUnderwriterLine, Number(input.dataset.lineIndex), input.dataset.lineField, input.value);
+  updateWorkspaceOnly();
+}
+
+function handleRoofUnderwriterAction(action, node) {
+  if (action === 'roof-underwriter-admin') {
+    state.roofUnderwriterAdmin = !state.roofUnderwriterAdmin;
+    render();
+    return true;
+  }
+  if (action === 'roof-underwriter-new') {
+    state.roofUnderwriterEstimate = createRoofEstimateFromSystem(roofUnderwriterEstimate().primary);
+    persistRoofUnderwriterEstimate();
+    showToast('New estimate started.', 'local', 'Roof Underwriter');
+    render();
+    return true;
+  }
+  if (action === 'roof-underwriter-print') {
+    window.print();
+    return true;
+  }
+  if (action === 'roof-underwriter-save') {
+    persistRoofUnderwriterEstimate();
+    showToast('Roof underwriter deal saved locally.', 'local', 'Roof Underwriter');
+    return true;
+  }
+  if (action === 'roof-underwriter-system') {
+    setRoofUnderwriterSystem(node.dataset.system);
+    render();
+    return true;
+  }
+  if (action === 'roof-underwriter-project-type') {
+    patchRoofUnderwriterEstimate({ projectType: node.dataset.projectType === 'new' ? 'new' : 'rr' });
+    render();
+    return true;
+  }
+  if (action === 'roof-underwriter-target-quote') {
+    const estimate = roofUnderwriterEstimate();
+    const totals = calculateRoofUnderwriterEstimate(estimate);
+    const targetQuote = calculateRoofTargetQuote({ hardCost: totals.hardCost, commissionRate: estimate.commissionRate, targetMargin: state.roofUnderwriterTargetMargin });
+    if (targetQuote > 0) patchRoofUnderwriterEstimate({ quote: Math.round(targetQuote) });
+    render();
+    return true;
+  }
+  if (action === 'roof-underwriter-add-line') {
+    addRoofUnderwriterLine(node.dataset.kind === 'materials' ? 'materials' : 'labor');
+    render();
+    return true;
+  }
+  if (action === 'roof-underwriter-delete-line') {
+    deleteRoofUnderwriterLine(node.dataset.kind === 'materials' ? 'materials' : 'labor', Number(node.dataset.lineIndex));
+    render();
+    return true;
+  }
+  return false;
 }
 
 // ---- Pipeline (stages) shared building blocks -----------------------------
@@ -7965,6 +8202,11 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action.startsWith('roof-underwriter-')) {
+    event.preventDefault();
+    handleRoofUnderwriterAction(action, node);
+    return;
+  }
   if (action === 'sign-out') {
     event.preventDefault();
     state.accountMenuOpen = false;
@@ -10436,6 +10678,14 @@ function onDocumentInput(event) {
     updateProfileAvatarCrop(event.target.closest('[data-profile-form]'));
     return;
   }
+  if (event.target.matches('[data-roof-underwriter-field]')) {
+    handleRoofUnderwriterField(event.target);
+    return;
+  }
+  if (event.target.matches('[data-roof-underwriter-line]')) {
+    handleRoofUnderwriterLineInput(event.target);
+    return;
+  }
   if (event.target.matches('[data-form-field]')) {
     updateFormField(event.target);
     return;
@@ -10446,6 +10696,10 @@ function onDocumentInput(event) {
 }
 
 function onDocumentChange(event) {
+  if (event.target.matches('[data-roof-underwriter-field]')) {
+    handleRoofUnderwriterField(event.target);
+    return;
+  }
   if (event.target.matches('[data-company-switch]')) {
     const nextCompanyId = event.target.value || defaultCompanyId();
     setActiveCompany(nextCompanyId);
@@ -12701,6 +12955,7 @@ function isMutableAction(action = '') {
   ]);
   if (safeActions.has(clean)) return false;
   if (/^(new|edit|delete|save|publish|archive|duplicate|revoke|approve|reject)-/.test(clean)) return true;
+  if (clean.startsWith('roof-underwriter-') && !['roof-underwriter-print'].includes(clean)) return true;
   if (/^open-/.test(clean) && /(form|upload|tools|stage-manager)/.test(clean)) return true;
   return [
     'mark-all-notifications-read',

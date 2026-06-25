@@ -12539,6 +12539,370 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 
+.roof-underwriter-page {
+  --roof-blue: #1b4f8a;
+  --roof-line: #d9e1eb;
+  display: grid;
+  gap: 18px;
+}
+
+.roof-underwriter-setup {
+  padding: 20px 22px;
+}
+
+.roof-underwriter-title {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--roof-line);
+  outline: 0;
+  padding: 4px 0 18px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 850;
+}
+
+.roof-underwriter-config {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.roof-underwriter-control,
+.roof-underwriter-field {
+  display: grid;
+  gap: 6px;
+}
+
+.roof-underwriter-control > span,
+.roof-underwriter-field > span,
+.roof-underwriter-stat > span,
+.roof-underwriter-net > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.roof-underwriter-segments {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--roof-line);
+  border-radius: 8px;
+  background: #f7f8fa;
+}
+
+.roof-underwriter-segments button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  padding: 6px 12px;
+  font-weight: 800;
+}
+
+.roof-underwriter-segments button.active {
+  background: var(--roof-blue);
+  color: #fff;
+}
+
+.roof-underwriter-field input,
+.roof-underwriter-field select,
+.roof-underwriter-suffix,
+.roof-underwriter-money-input,
+.roof-underwriter-unit {
+  min-height: 38px;
+  border: 1px solid var(--roof-line);
+  border-radius: 8px;
+  background: #f7f8fa;
+}
+
+.roof-underwriter-field input,
+.roof-underwriter-field select {
+  min-width: 86px;
+  padding: 0 10px;
+  outline: 0;
+}
+
+.roof-underwriter-suffix,
+.roof-underwriter-money-input,
+.roof-underwriter-unit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+}
+
+.roof-underwriter-suffix input,
+.roof-underwriter-money-input input,
+.roof-underwriter-unit input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.roof-underwriter-lock {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--roof-line);
+  border-radius: 8px;
+  background: #f7f8fa;
+  color: var(--ink-2);
+  padding: 12px 14px;
+  font-weight: 750;
+}
+
+.roof-underwriter-summary {
+  display: grid;
+  grid-template-columns: minmax(230px, 300px) repeat(3, minmax(0, 1fr));
+}
+
+.roof-underwriter-net,
+.roof-underwriter-stat {
+  min-height: 92px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 18px 22px;
+  border-right: 1px solid var(--roof-line);
+  border-bottom: 1px solid var(--roof-line);
+}
+
+.roof-underwriter-net {
+  grid-row: span 2;
+}
+
+.roof-underwriter-net strong {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.roof-underwriter-net.bad strong {
+  color: #b42318;
+}
+
+.roof-underwriter-net.warn strong {
+  color: #b54708;
+}
+
+.roof-underwriter-net.good strong {
+  color: #067647;
+}
+
+.roof-underwriter-net small {
+  color: var(--ink-2);
+  font-weight: 750;
+}
+
+.roof-underwriter-stat strong {
+  font-size: 20px;
+}
+
+.roof-underwriter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 450px) 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.roof-underwriter-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.roof-underwriter-panel-head {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--roof-line);
+  background: #f5f7fa;
+}
+
+.roof-underwriter-panel-head h2 {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.roof-underwriter-line-head,
+.roof-underwriter-line {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 58px 96px 84px 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.roof-underwriter-line-head {
+  padding: 9px 18px 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.roof-underwriter-line {
+  padding: 5px 16px;
+  border-top: 1px solid var(--roof-line);
+}
+
+.roof-underwriter-line input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  outline: 0;
+  background: transparent;
+  padding: 7px 5px;
+}
+
+.roof-underwriter-line input:focus {
+  border-color: var(--roof-line);
+  background: #f7f8fa;
+}
+
+.roof-underwriter-line input[type="number"],
+.roof-underwriter-unit input,
+.roof-underwriter-line strong {
+  text-align: right;
+}
+
+.roof-underwriter-unit.locked {
+  background: #f1f3f6;
+  color: #94a3b8;
+}
+
+.roof-underwriter-unit.locked input {
+  color: #94a3b8;
+}
+
+.roof-underwriter-group {
+  padding: 8px 18px;
+  border-top: 1px solid var(--roof-line);
+  background: #eef3f9;
+  color: var(--roof-blue);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.roof-underwriter-add {
+  width: calc(100% - 36px);
+  min-height: 38px;
+  margin: 10px 18px;
+  border: 1px dashed var(--roof-line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 850;
+}
+
+.roof-underwriter-target-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.roof-underwriter-target-body label,
+.roof-underwriter-target-body div,
+.roof-underwriter-payment,
+.roof-underwriter-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.roof-underwriter-target-body input[type="range"] {
+  width: 100%;
+  accent-color: var(--roof-blue);
+}
+
+.roof-underwriter-payment,
+.roof-underwriter-total {
+  padding: 12px 18px;
+  border-top: 1px solid var(--roof-line);
+}
+
+.roof-underwriter-payment p {
+  flex: 1;
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.roof-underwriter-payment span {
+  color: var(--roof-blue);
+  font-weight: 900;
+}
+
+.roof-underwriter-total.strong strong {
+  font-size: 15px;
+}
+
+@media (max-width: 1100px) {
+  .roof-underwriter-summary,
+  .roof-underwriter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .roof-underwriter-net {
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .roof-underwriter-config {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .roof-underwriter-control {
+    grid-column: 1 / -1;
+  }
+
+  .roof-underwriter-segments {
+    width: 100%;
+  }
+
+  .roof-underwriter-segments button {
+    flex: 1;
+  }
+
+  .roof-underwriter-line-head {
+    display: none;
+  }
+
+  .roof-underwriter-line {
+    grid-template-columns: 1fr 68px 96px 32px;
+  }
+
+  .roof-underwriter-line > input:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .roof-underwriter-line strong {
+    grid-column: 1 / 2;
+    grid-row: 2;
+    text-align: left;
+  }
+}
+
 /* --- Stage manager modal --- */
 .stage-manager {
   display: grid;
