@@ -1,7 +1,7 @@
 # Quest HQ Browser QA Checklist
 
 Production target: https://quest-hq-command-center-gamma.vercel.app
-Date: 2026-06-25
+Date: 2026-06-26
 
 ## Legend
 
@@ -89,6 +89,34 @@ Date: 2026-06-25
 ## Browser Findings
 
 Record failures here during the browser pass:
+
+### 2026-06-26 Workspace Creation / Settings QA
+
+- [x] Production app opened authenticated as the Lumen master account.
+- [x] Contacts sidebar stage buttons remained responsive and updated routes:
+  - `Prospects` -> `/company/lumen/contacts?stage=Prospects`
+  - `Leads` -> `/company/lumen/contacts?stage=Leads`
+  - `Nurturing` -> `/company/lumen/contacts?stage=Nurturing`
+- [x] Quotes sidebar stage button updated routes:
+  - `Underwriting` -> `/company/lumen/deals?stage=Underwriting`
+- [x] Jobs sidebar stage buttons remained responsive and updated routes:
+  - `Scheduled` -> `/company/lumen/jobs?stage=Scheduled`
+  - `Material Ordered` -> `/company/lumen/jobs?stage=Material+Ordered`
+  - `In Production` -> `/company/lumen/jobs?stage=In+Production`
+  - `All jobs` -> `/company/lumen/jobs`
+- [x] Workspace settings live data settled correctly after initial load: Master tab appeared, Owner workspace state loaded, `Owned workspaces` showed `Unlimited`, and installed plugin count showed `10`.
+- [x] Workspace settings displayed 15 selectable workspace icons.
+- [x] Workspace icon save was browser-tested by changing Lumen to `Star`, verifying the sidebar icon changed to `ti-star`, then restoring `Home`.
+- [x] Workspace rename save path was browser-tested and the Lumen database row was restored to the pre-test value `Lumen Marketing` with `icon_key = home`.
+- [x] Master panel opened for platform owner and listed company, member details, plugin strip, and metrics.
+- [x] Master create-workspace form is present and enabled with `company_name`, `owner_email`, `preset_code`, `icon_key`, and submit button.
+- [x] Master create-workspace form payload was verified with `company_name = QA Not Submitted`, `owner_email = info@lumenmarketingusa.com`, `preset_code = roofing`, `icon_key = star`; the form was not submitted.
+- [x] Live database confirmed no `QA Not Submitted` workspace row was created.
+- [x] Browser console logs showed no errors or warnings during the tested flows.
+- [-] Actual production workspace creation was not submitted to avoid leaving a real test tenant behind; RPC signature and migration were already verified live.
+- [!] Minor UX finding: Workspace settings can render briefly with fallback/local counts during `Loading workspace...`; it corrects itself after live data settles, but the panel should probably hide counts until live load completes to avoid flicker/confusion.
+
+### 2026-06-25 Stage Navigation Fix
 
 - Reproduced stale-route stage navigation: from `/company/lumen/contacts?stage=Leads`, clicking the sidebar `Nurturing` stage did not update the URL or visible filtered list. Same pattern reproduced on Jobs from `Scheduled` to `Unscheduled`.
 - Root cause: `setPipelineStage()` updated in-memory state and called `render()` when already on the same section. Because the URL still had the old `?stage=...`, render restored the old filter.
