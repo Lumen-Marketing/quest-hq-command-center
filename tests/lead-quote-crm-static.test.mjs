@@ -16,11 +16,27 @@ test('contact and quote funnels match the provided crm model', () => {
   assert.match(source, /const DEFAULT_CONTACT_STAGES = \[\s*\{ name: 'Prospects'/);
   assert.match(source, /\{ name: 'Leads', color:/);
   assert.match(source, /\{ name: 'Nurturing', color:/);
-  assert.match(source, /const DEFAULT_DEAL_STAGES = \[\s*\{ name: 'Underwriting'/);
+  assert.match(source, /const CRM2_DEAL_STAGES = \[\s*\{ name: 'Underwriting'/);
   assert.match(source, /\{ name: 'Estimate Sent', color:/);
   assert.match(source, /\{ name: 'Contract Sent', color:/);
   assert.match(source, /\{ name: 'Waiting to Sign', color:/);
   assert.match(source, /\{ name: 'Won', color:/);
+});
+
+test('crm 1 and crm 2 use separate quote and job stage models', () => {
+  assert.match(source, /const CRM1_DEAL_STAGES = \[\s*\{ name: 'Prospect'/);
+  assert.match(source, /\{ name: 'Qualified', color:/);
+  assert.match(source, /\{ name: 'Proposal sent', color:/);
+  assert.match(source, /\{ name: 'Verbal commit', color:/);
+  assert.match(source, /\{ name: 'Lost', color:/);
+  assert.match(source, /const CRM2_JOB_STAGES = \[\s*\{ name: 'Unscheduled'/);
+  assert.match(source, /\{ name: 'Scheduled', color:/);
+  assert.match(source, /\{ name: 'Material Ordered', color:/);
+  assert.match(source, /\{ name: 'In Production', color:/);
+  assert.doesNotMatch(source.match(/const CRM2_JOB_STAGES = \[[\s\S]*?\];/)?.[0] || '', /QC \/ punch list|Invoiced|Paid \/ closed|On hold/);
+  assert.match(source, /function activeCrmPluginId\(companyId = activeCompanyId\(\)\)/);
+  assert.match(source, /function pipelineStages\(kind, companyId = activeCompanyId\(\)\)/);
+  assert.match(source, /if \(activeCrmPluginId\(companyId\) === 'crm_2'\)/);
 });
 
 test('record detail routes read as contacts and quotes', () => {

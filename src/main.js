@@ -200,7 +200,7 @@ const LEGACY_ROUTE_SECTIONS = {
 // Pipeline stages are customizable placeholder "groups" the client can edit.
 // Each stage is { name, color }. Contacts, quotes, and jobs each keep their own
 // editable list, persisted to localStorage.
-const DEFAULT_JOB_STAGES = [
+const CRM1_JOB_STAGES = [
   { name: 'Unscheduled', color: '#9AA0A8' },
   { name: 'Scheduled', color: '#378ADD' },
   { name: 'Material ordered', color: '#3C7BD0' },
@@ -210,12 +210,27 @@ const DEFAULT_JOB_STAGES = [
   { name: 'Paid / closed', color: '#639922' },
   { name: 'On hold', color: '#C4C7CC' },
 ];
+const CRM2_JOB_STAGES = [
+  { name: 'Unscheduled', color: '#9AA0A8' },
+  { name: 'Scheduled', color: '#378ADD' },
+  { name: 'Material Ordered', color: '#3C7BD0' },
+  { name: 'In Production', color: '#BA7517' },
+];
 const DEFAULT_CONTACT_STAGES = [
   { name: 'Prospects', color: '#9AA0A8' },
   { name: 'Leads', color: '#378ADD' },
   { name: 'Nurturing', color: '#5AB0A6' },
 ];
-const DEFAULT_DEAL_STAGES = [
+const CRM1_DEAL_STAGES = [
+  { name: 'Prospect', color: '#9AA0A8' },
+  { name: 'Qualified', color: '#378ADD' },
+  { name: 'Proposal sent', color: '#3C7BD0' },
+  { name: 'Negotiation', color: '#C08A2B' },
+  { name: 'Verbal commit', color: '#7F77DD' },
+  { name: 'Won', color: '#639922' },
+  { name: 'Lost', color: '#E24B4A' },
+];
+const CRM2_DEAL_STAGES = [
   { name: 'Underwriting', color: '#BA7517' },
   { name: 'Estimate Sent', color: '#3C7BD0' },
   { name: 'Negotiating', color: '#C08A2B' },
@@ -223,6 +238,8 @@ const DEFAULT_DEAL_STAGES = [
   { name: 'Waiting to Sign', color: '#7067CF' },
   { name: 'Won', color: '#639922' },
 ];
+const DEFAULT_JOB_STAGES = CRM1_JOB_STAGES;
+const DEFAULT_DEAL_STAGES = CRM1_DEAL_STAGES;
 const STAGE_COLOR_PALETTE = ['#9AA0A8', '#378ADD', '#BA7517', '#7F77DD', '#639922', '#E24B4A', '#3C7BD0', '#C08A2B', '#5AB0A6', '#C4C7CC'];
 const TEMPERATURES = ['Hot', 'Warm', 'Cold'];
 const CONTACT_GUIDANCE = [
@@ -315,8 +332,38 @@ function dealStageNames() { return DEAL_STAGES.map((stage) => stage.name); }
 function jobStageColor(name) { return (JOB_STAGES.find((stage) => stage.name === name) || {}).color || '#9AA0A8'; }
 function contactStageColor(name) { return (CONTACT_STAGES.find((stage) => stage.name === name) || {}).color || '#9AA0A8'; }
 function dealStageColor(name) { return (DEAL_STAGES.find((stage) => stage.name === name) || {}).color || '#9AA0A8'; }
-function pipelineStages(kind) { return kind === 'contacts' ? CONTACT_STAGES : kind === 'deals' ? DEAL_STAGES : JOB_STAGES; }
-function pipelineStageColor(kind, name) { return kind === 'contacts' ? contactStageColor(name) : kind === 'deals' ? dealStageColor(name) : jobStageColor(name); }
+function activeCrmPluginId(companyId = activeCompanyId()) {
+  if (isPluginInstalled(companyId, 'crm_2')) return 'crm_2';
+  if (isPluginInstalled(companyId, 'crm')) return 'crm';
+  return 'crm';
+}
+function pipelineStages(kind, companyId = activeCompanyId()) {
+  if (kind === 'contacts') return CONTACT_STAGES;
+  if (activeCrmPluginId(companyId) === 'crm_2') return kind === 'deals' ? CRM2_DEAL_STAGES : CRM2_JOB_STAGES;
+  return kind === 'deals' ? DEAL_STAGES : JOB_STAGES;
+}
+function pipelineStageColor(kind, name, companyId = activeCompanyId()) {
+  return (pipelineStages(kind, companyId).find((stage) => stage.name === name) || {}).color || '#9AA0A8';
+}
+function resolvePipelineStage(kind, value, companyId = activeCompanyId()) {
+  const stages = pipelineStages(kind, companyId);
+  const names = stages.map((stage) => stage.name);
+  const raw = String(value || '').trim();
+  if (names.includes(raw)) return raw;
+  const lower = raw.toLowerCase();
+  const aliases = {
+    'material ordered': 'Material Ordered',
+    'in production': 'In Production',
+    'estimate sent': 'Estimate Sent',
+    'proposal sent': activeCrmPluginId(companyId) === 'crm_2' ? 'Estimate Sent' : 'Proposal sent',
+    negotiating: activeCrmPluginId(companyId) === 'crm_2' ? 'Negotiating' : 'Negotiation',
+    negotiation: activeCrmPluginId(companyId) === 'crm_2' ? 'Negotiating' : 'Negotiation',
+    'contract out': 'Contract Sent',
+    'contract sent': 'Contract Sent',
+    'waiting to sign': 'Waiting to Sign',
+  };
+  return names.includes(aliases[lower]) ? aliases[lower] : names[0];
+}
 
 function resolveJobStage(value) {
   const names = jobStageNames();
@@ -2451,7 +2498,10 @@ function navItem(route, path, symbol, label, count = '') {
 function pipelineStageCounts(kind, companyId = activeCompanyId()) {
   const rows = kind === 'contacts' ? companyContacts(companyId) : kind === 'deals' ? companyDeals(companyId) : companyJobs(companyId);
   const counts = {};
-  rows.forEach((row) => { counts[row.stage] = (counts[row.stage] || 0) + 1; });
+  rows.forEach((row) => {
+    const stage = resolvePipelineStage(kind, row.stage, companyId);
+    counts[stage] = (counts[stage] || 0) + 1;
+  });
   return counts;
 }
 
@@ -2463,7 +2513,7 @@ function navItemPipeline(route, module, companyId) {
   const count = moduleBadgeCount(kind, companyId);
   const onSection = route.name === 'company' && route.section === kind;
   const filter = kind === 'contacts' ? state.contactStageFilter : kind === 'deals' ? state.stageFilterDeals : state.stageFilter;
-  const stages = pipelineStages(kind);
+  const stages = pipelineStages(kind, companyId);
   const counts = pipelineStageCounts(kind, companyId);
   return `
     <div class="side-pipe ${expanded ? 'expanded' : ''}">
@@ -3192,13 +3242,14 @@ function pipelineDot(color) {
   return `<span class="pipe-dot" style="background:${h(color || '#9AA0A8')}"></span>`;
 }
 
-function stageTagPipe(kind, name) {
-  if (!name) return '<span class="muted-dash">—</span>';
-  return `<span class="stage-tag">${pipelineDot(pipelineStageColor(kind, name))}${h(name)}</span>`;
+function stageTagPipe(kind, name, companyId = activeCompanyId()) {
+  if (!name) return '<span class="muted-dash">-</span>';
+  const resolved = resolvePipelineStage(kind, name, companyId);
+  return `<span class="stage-tag">${pipelineDot(pipelineStageColor(kind, resolved, companyId))}${h(resolved)}</span>`;
 }
 
 function pipelineToolbar(kind, companyId) {
-  const stages = pipelineStages(kind);
+  const stages = pipelineStages(kind, companyId);
   const counts = pipelineStageCounts(kind, companyId);
   const total = kind === 'contacts' ? companyContacts(companyId).length : kind === 'deals' ? companyDeals(companyId).length : companyJobs(companyId).length;
   const filter = kind === 'contacts' ? state.contactStageFilter : kind === 'deals' ? state.stageFilterDeals : state.stageFilter;
@@ -3253,7 +3304,7 @@ function renderContactTable(companyId) {
             <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">—</span>'}</span>
             <span>${contact.email ? h(contact.email) : '<span class="muted-dash">—</span>'}</span>
             <span>${contact.location ? h(contact.location) : '<span class="muted-dash">—</span>'}</span>
-            <span>${stageTagPipe('contacts', contact.stage)}</span>
+            <span>${stageTagPipe('contacts', contact.stage, companyId)}</span>
             <span>${contact.value ? money(contact.value) : '<span class="muted-dash">—</span>'}</span>
           </button>
         `).join('') || emptyState('No contacts in this view yet.')}
@@ -3265,11 +3316,11 @@ function renderContactTable(companyId) {
 function renderContactBoard(companyId) {
   const rows = filteredContacts(companyId, true);
   const filter = state.contactStageFilter;
-  const lanes = filter === 'all' ? contactStages() : contactStages().filter((stage) => stage.name === filter);
+  const lanes = filter === 'all' ? pipelineStages('contacts', companyId) : pipelineStages('contacts', companyId).filter((stage) => stage.name === filter);
   return `
     <section class="pipe-board">
       ${lanes.map((stage) => {
-        const cards = rows.filter((contact) => contact.stage === stage.name);
+        const cards = rows.filter((contact) => resolvePipelineStage('contacts', contact.stage, companyId) === stage.name);
         return `
           <article class="pipe-lane">
             <header class="pipe-lane-head">${pipelineDot(stage.color)}<span>${h(stage.name)}</span><b>${cards.length}</b></header>
@@ -3808,7 +3859,7 @@ async function deleteContact(id) {
 
 // ---- Stage manager (create / rename / recolor / delete) -------------------
 function renderStageManagerModal(kind) {
-  const stages = pipelineStages(kind);
+  const stages = pipelineStages(kind, activeCompanyId());
   const title = kind === 'contacts' ? 'Contact pipeline stages' : kind === 'deals' ? 'Quote pipeline stages' : 'Job pipeline stages';
   const body = `
     <form class="stage-manager" data-stage-form data-kind="${kind}">
@@ -4030,11 +4081,11 @@ function renderPipeline(companyId) {
 function renderJobBoard(companyId) {
   const rows = filteredJobs(companyId, true);
   const filter = state.stageFilter;
-  const lanes = filter === 'all' ? jobStages() : jobStages().filter((stage) => stage.name === filter);
+  const lanes = filter === 'all' ? pipelineStages('jobs', companyId) : pipelineStages('jobs', companyId).filter((stage) => stage.name === filter);
   return `
     <section class="pipe-board">
       ${lanes.map((stage) => {
-        const cards = rows.filter((job) => job.stage === stage.name);
+        const cards = rows.filter((job) => resolvePipelineStage('jobs', job.stage, companyId) === stage.name);
         return `
           <article class="pipe-lane">
             <header class="pipe-lane-head">${pipelineDot(stage.color)}<span>${h(stage.name)}</span><b>${cards.length}</b></header>
@@ -4057,9 +4108,9 @@ function renderJobList(companyId) {
         <div class="table-head"><span>Job</span><span>Type</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Value</span></div>
         ${rows.map((job) => `
           <button class="table-row ${job.id === state.selectedJobId ? 'active' : ''}" type="button" data-select-job="${h(job.id)}">
-            <span class="cell-lead">${pipelineDot(jobStageColor(job.stage))}<span><strong>${h(job.name)}</strong><small>${h(job.client_name || 'No client')} - ${h(job.site_address || 'No address')}</small></span></span>
+            <span class="cell-lead">${pipelineDot(pipelineStageColor('jobs', resolvePipelineStage('jobs', job.stage, companyId), companyId))}<span><strong>${h(job.name)}</strong><small>${h(job.client_name || 'No client')} - ${h(job.site_address || 'No address')}</small></span></span>
             <span>${h(job.job_type || '—')}</span>
-            <span>${stageTagPipe('jobs', job.stage)}</span>
+            <span>${stageTagPipe('jobs', job.stage, companyId)}</span>
             <span>${priorityPill(job.priority)}</span>
             <span>${h(job.owner_name || 'Unassigned')}</span>
             <span>${money(job.estimate_total)}</span>
@@ -4125,10 +4176,11 @@ function guidanceForJobStage(name) {
 
 function renderJobRecord(companyId, job) {
   if (!job) return emptyState('Create a job to see the record workspace.');
-  const stages = jobStages();
-  const ci = stages.findIndex((stage) => stage.name === job.stage);
+  const stages = pipelineStages('jobs', companyId);
+  const currentStage = resolvePipelineStage('jobs', job.stage, companyId);
+  const ci = stages.findIndex((stage) => stage.name === currentStage);
   const currentIndex = ci >= 0 ? ci : 0;
-  const g = guidanceForJobStage(job.stage);
+  const g = guidanceForJobStage(currentStage);
   const activeTab = state.jobActivityTab || 'Note';
   const feed = activitiesFor('job', job.id);
   const tasks = state.tasks
@@ -5760,9 +5812,9 @@ function renderAccountTab(companyId, account, tab, data) {
         <div class="table-head"><span>Job</span><span>Type</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Value</span></div>
         ${data.jobs.map((job) => `
           <a class="table-row" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router>
-            <span class="cell-lead">${pipelineDot(jobStageColor(job.stage))}<span><strong>${h(job.name)}</strong><small>${h(job.site_address || 'No address')}</small></span></span>
+            <span class="cell-lead">${pipelineDot(pipelineStageColor('jobs', resolvePipelineStage('jobs', job.stage, companyId), companyId))}<span><strong>${h(job.name)}</strong><small>${h(job.site_address || 'No address')}</small></span></span>
             <span>${h(job.job_type || '—')}</span>
-            <span>${stageTagPipe('jobs', job.stage)}</span>
+            <span>${stageTagPipe('jobs', job.stage, companyId)}</span>
             <span>${priorityPill(job.priority)}</span>
             <span>${h(job.owner_name || 'Unassigned')}</span>
             <span>${money(job.estimate_total)}</span>
@@ -5833,11 +5885,11 @@ function renderAccountEditor(companyId, account) {
 }
 
 // ---- Deals (pipeline) -----------------------------------------------------
-function dealRow(deal) {
+function dealRow(deal, companyId = activeCompanyId()) {
   return `
     <button class="table-row ${deal.id === state.selectedDealId ? 'active' : ''}" type="button" data-action="open-deal" data-deal-id="${h(deal.id)}">
-      <span class="cell-lead">${pipelineDot(dealStageColor(deal.stage))}<span><strong>${h(deal.name)}</strong><small>${h(accountName(deal.account_id) || 'No account')}</small></span></span>
-      <span>${stageTagPipe('deals', deal.stage)}</span>
+      <span class="cell-lead">${pipelineDot(pipelineStageColor('deals', resolvePipelineStage('deals', deal.stage, companyId), companyId))}<span><strong>${h(deal.name)}</strong><small>${h(accountName(deal.account_id) || 'No account')}</small></span></span>
+      <span>${stageTagPipe('deals', deal.stage, companyId)}</span>
       <span>${dealStatusPill(deal.status)}</span>
       <span class="cell-mono">${money(deal.value)}</span>
       <span>${h(deal.owner_name || 'Unassigned')}</span>
@@ -5884,11 +5936,11 @@ function renderDealsPage(route, companyId) {
 function renderDealBoard(companyId) {
   const rows = filteredDeals(companyId, true);
   const filter = state.stageFilterDeals;
-  const lanes = filter === 'all' ? dealStages() : dealStages().filter((stage) => stage.name === filter);
+  const lanes = filter === 'all' ? pipelineStages('deals', companyId) : pipelineStages('deals', companyId).filter((stage) => stage.name === filter);
   return `
     <section class="pipe-board">
       ${lanes.map((stage) => {
-        const cards = rows.filter((deal) => deal.stage === stage.name);
+        const cards = rows.filter((deal) => resolvePipelineStage('deals', deal.stage, companyId) === stage.name);
         return `
           <article class="pipe-lane">
             <header class="pipe-lane-head">${pipelineDot(stage.color)}<span>${h(stage.name)}</span><b>${cards.length}</b></header>
@@ -5917,7 +5969,7 @@ function renderDealTable(companyId) {
       <div class="section-head"><div><h2>Quotes</h2><p>${rows.length} visible</p></div></div>
       <div class="data-table deals-table">
         <div class="table-head"><span>Quote</span><span>Stage</span><span>Status</span><span>Value</span><span>Owner</span><span>Close</span></div>
-        ${rows.map((deal) => dealRow(deal)).join('') || emptyState('No quotes match this view.')}
+        ${rows.map((deal) => dealRow(deal, companyId)).join('') || emptyState('No quotes match this view.')}
       </div>
     </section>`;
 }
@@ -5926,9 +5978,10 @@ function renderDealDetail(companyId, deal) {
   const account = accountById(deal.account_id);
   const contact = contactById(deal.primary_contact_id);
   const job = deal.job_id ? jobById(deal.job_id) : null;
-  const stages = dealStages();
-  const ci = stages.findIndex((s) => s.name === deal.stage);
-  const g = guidanceForStage(deal.stage);
+  const stages = pipelineStages('deals', companyId);
+  const currentStage = resolvePipelineStage('deals', deal.stage, companyId);
+  const ci = stages.findIndex((s) => s.name === currentStage);
+  const g = guidanceForStage(currentStage);
   const activeTab = state.dealActivityTab || 'Email';
   const feed = activitiesFor('deal', deal.id);
   const tasks = tasksForDeal(deal);
@@ -11834,7 +11887,7 @@ function profileById(profileId) {
 function filteredJobs(companyId = activeCompanyId(), ignoreStage = false) {
   const q = state.query.trim().toLowerCase();
   return companyJobs(companyId).filter((job) => {
-    if (!ignoreStage && state.stageFilter !== 'all' && job.stage !== state.stageFilter) return false;
+    if (!ignoreStage && state.stageFilter !== 'all' && resolvePipelineStage('jobs', job.stage, companyId) !== state.stageFilter) return false;
     if (!q) return true;
     return [job.name, job.client_name, job.contact_name, job.owner_name, job.site_address, job.job_type, companyName(job.company_id)]
       .some((value) => String(value || '').toLowerCase().includes(q));
@@ -11848,7 +11901,7 @@ function companyContacts(companyId = activeCompanyId()) {
 function filteredContacts(companyId = activeCompanyId(), ignoreStage = false) {
   const q = state.contactQuery.trim().toLowerCase();
   return companyContacts(companyId).filter((contact) => {
-    if (!ignoreStage && state.contactStageFilter !== 'all' && contact.stage !== state.contactStageFilter) return false;
+    if (!ignoreStage && state.contactStageFilter !== 'all' && resolvePipelineStage('contacts', contact.stage, companyId) !== state.contactStageFilter) return false;
     if (!q) return true;
     return [contact.name, contact.phone, contact.email, contact.location, contact.owner_name, contact.stage]
       .some((value) => String(value || '').toLowerCase().includes(q));
@@ -11935,7 +11988,7 @@ function selectedDeal() {
 function filteredDeals(companyId = activeCompanyId(), ignoreStage = false) {
   const q = state.dealQuery.trim().toLowerCase();
   return companyDeals(companyId).filter((deal) => {
-    if (!ignoreStage && state.stageFilterDeals !== 'all' && deal.stage !== state.stageFilterDeals) return false;
+    if (!ignoreStage && state.stageFilterDeals !== 'all' && resolvePipelineStage('deals', deal.stage, companyId) !== state.stageFilterDeals) return false;
     if (!q) return true;
     return [deal.name, deal.owner_name, deal.source, deal.stage, accountName(deal.account_id), contactById(deal.primary_contact_id)?.name]
       .some((value) => String(value || '').toLowerCase().includes(q));
