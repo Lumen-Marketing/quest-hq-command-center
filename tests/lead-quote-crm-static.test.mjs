@@ -49,6 +49,13 @@ test('record detail routes read as contacts and quotes', () => {
   assert.match(source, /Convert to Job/);
 });
 
+test('nurturing contact records expose a stage-level graduate to job action', () => {
+  const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(recordSource, /const canGraduateContactToJob = resolvePipelineStage\('contacts', contact\.stage, companyId\) === 'Nurturing'/);
+  assert.match(recordSource, /canGraduateContactToJob \? `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="contact-convert-job"/);
+  assert.match(recordSource, /Graduate to Job/);
+});
+
 test('account record tabs use contacts and quotes language', () => {
   assert.doesNotMatch(source, /\['deals', 'Deals'/);
   assert.match(source, /\['contacts', 'Contacts', contacts\.length\]/);

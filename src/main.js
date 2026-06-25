@@ -3352,6 +3352,7 @@ function renderContactRecord(companyId, contact) {
   const activeTab = state.contactActivityTab || 'Email';
   const tasks = tasksForContact(contact.id);
   const feed = activitiesFor('contact', contact.id);
+  const canGraduateContactToJob = resolvePipelineStage('contacts', contact.stage, companyId) === 'Nurturing';
 
   const ed = (key, opts = {}) => {
     const display = (contact[key] === '' || contact[key] == null) ? '—' : contact[key];
@@ -3391,6 +3392,7 @@ function renderContactRecord(companyId, contact) {
             }).join('')}
           </div>
           <button class="sf-mark-btn" type="button" data-action="contact-mark-next" data-contact-id="${h(contact.id)}">Mark as Current Stage</button>
+          ${canGraduateContactToJob ? `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="contact-convert-job" data-contact-id="${h(contact.id)}"><i class="ti ti-briefcase"></i>Graduate to Job</button>` : ''}
         </div>
         <div class="sf-guidance">
           <div class="sf-guidance-label">Guidance for Success</div>
