@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('crm navigation uses contacts quotes and production funnels', () => {
   assert.match(source, /\{ id: 'contacts', group: 'Contacts · Top of Funnel', label: 'Contacts'/);
@@ -54,6 +55,11 @@ test('nurturing contact records expose a stage-level graduate to job action', ()
   assert.match(recordSource, /const canGraduateContactToJob = resolvePipelineStage\('contacts', contact\.stage, companyId\) === 'Nurturing'/);
   assert.match(recordSource, /canGraduateContactToJob \? `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="contact-convert-job"/);
   assert.match(recordSource, /Graduate to Job/);
+});
+
+test('graduate to job remains visible in compact contact record layouts', () => {
+  assert.match(styles, /\.sf-mark-btn \{ display: none; \}/);
+  assert.match(styles, /\.sf-graduate-btn \{ display: inline-flex; \}/);
 });
 
 test('account record tabs use contacts and quotes language', () => {

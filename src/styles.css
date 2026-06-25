@@ -13537,4 +13537,5 @@ button {
   .sf-three-col { grid-template-columns: 1fr; }
   .sf-stage-track { overflow-x: auto; }
   .sf-mark-btn { display: none; }
+  .sf-graduate-btn { display: inline-flex; }
 }
