@@ -122,6 +122,14 @@ const PERMISSION_ALIASES = {
   'messages.manage_groups': ['messages.manage'],
 };
 
+const ACTIVITY_FILTER_OPTIONS = [
+  { id: 'all', label: 'All', types: [] },
+  { id: 'notes', label: 'Notes', types: ['note', 'email'] },
+  { id: 'actions', label: 'Actions', types: ['stage_change', 'system'] },
+  { id: 'calls', label: 'Calls', types: ['call'] },
+  { id: 'meetings', label: 'Meetings', types: ['meeting'] },
+];
+
 const CORE_MODULE_IDS = new Set(['home', 'jobs', 'tasks', 'users', 'settings']);
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
@@ -1469,6 +1477,7 @@ const state = {
   accountTab: 'overview',
   dealPrefill: null,
   activityPrefill: null,
+  activityFilter: 'all',
   contactPrefill: null,
   selectedJobId: '',
   selectedTaskId: '',
@@ -3543,7 +3552,8 @@ function renderContactRecord(companyId, contact) {
   const tempColor = contact.temperature === 'Hot' ? '#C2410C' : contact.temperature === 'Warm' ? '#B07A12' : '#2E72B8';
   const activeTab = state.contactActivityTab || 'Email';
   const tasks = tasksForContact(contact.id);
-  const feed = activitiesFor('contact', contact.id);
+  const totalFeed = activitiesFor('contact', contact.id);
+  const feed = filteredActivitiesFor('contact', contact.id);
   const canGraduateContactToQuote = resolvePipelineStage('contacts', contact.stage, companyId) === 'Nurturing';
 
   const ed = (key, opts = {}) => {
@@ -3630,9 +3640,9 @@ function renderContactRecord(companyId, contact) {
               <input name="body" placeholder="Write a note or @mention…" />
               <span class="sf-note-tools"><i class="ti ti-paperclip"></i><i class="ti ti-at"></i></span>
             </form>
-            <div class="sf-filters">Filters: Within 2 months · All activities · All types</div>
+            ${renderActivityFilterBar(totalFeed.length, feed.length)}
             <div class="sf-feed">
-              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : '<div class="sf-feed-empty">No activity yet. Log a note, call, or meeting.</div>'}
+              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : `<div class="sf-feed-empty">${totalFeed.length ? 'No activity matches this filter.' : 'No activity yet. Log a note, call, or meeting.'}</div>`}
             </div>
           </div>
         </div>
@@ -4384,7 +4394,8 @@ function renderJobRecord(companyId, job) {
   const currentIndex = ci >= 0 ? ci : 0;
   const g = guidanceForJobStage(currentStage);
   const activeTab = state.jobActivityTab || 'Note';
-  const feed = activitiesFor('job', job.id);
+  const totalFeed = activitiesFor('job', job.id);
+  const feed = filteredActivitiesFor('job', job.id);
   const tasks = state.tasks
     .filter((task) => task.project_id === job.id)
     .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || String(a.due).localeCompare(String(b.due)));
@@ -4487,9 +4498,9 @@ function renderJobRecord(companyId, job) {
               <span class="sf-note-tools"><i class="ti ti-paperclip"></i><i class="ti ti-at"></i></span>
               <button class="sf-btn" type="submit">Post</button>
             </form>
-            <div class="sf-filters">Filters: This job - All activities - All types</div>
+            ${renderActivityFilterBar(totalFeed.length, feed.length)}
             <div class="sf-feed">
-              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : '<div class="sf-feed-empty">No job activity yet. Log a note, call, or meeting.</div>'}
+              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : `<div class="sf-feed-empty">${totalFeed.length ? 'No activity matches this filter.' : 'No job activity yet. Log a note, call, or meeting.'}</div>`}
             </div>
           </div>
         </div>
@@ -6825,7 +6836,8 @@ function renderDealDetail(companyId, deal) {
   const ci = stages.findIndex((s) => s.name === currentStage);
   const g = guidanceForStage(currentStage);
   const activeTab = state.dealActivityTab || 'Email';
-  const feed = activitiesFor('deal', deal.id);
+  const totalFeed = activitiesFor('deal', deal.id);
+  const feed = filteredActivitiesFor('deal', deal.id);
   const tasks = tasksForDeal(deal);
   const ed = (key, opts = {}) => {
     const display = (deal[key] === '' || deal[key] == null) ? '—' : deal[key];
@@ -6909,9 +6921,9 @@ function renderDealDetail(companyId, deal) {
               <input name="body" placeholder="Write a note or @mention..." />
               <span class="sf-note-tools"><i class="ti ti-paperclip"></i><i class="ti ti-at"></i></span>
             </form>
-            <div class="sf-filters">Filters: Within 2 months · All activities · All types</div>
+            ${renderActivityFilterBar(totalFeed.length, feed.length)}
             <div class="sf-feed">
-              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : '<div class="sf-feed-empty">No activity yet. Log a note, call, or meeting.</div>'}
+              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : `<div class="sf-feed-empty">${totalFeed.length ? 'No activity matches this filter.' : 'No activity yet. Log a note, call, or meeting.'}</div>`}
             </div>
           </div>
         </div>
@@ -9089,6 +9101,12 @@ function handleAction(event, node) {
       writeJson(NAV_EXPANDED_KEY, [...state.expandedNav]);
       render();
     }
+    return;
+  }
+  if (action === 'set-activity-filter') {
+    event.preventDefault();
+    state.activityFilter = node.dataset.filter || 'all';
+    render();
     return;
   }
   if (action === 'pipeline-open') {
@@ -13789,6 +13807,29 @@ function activitiesFor(relatedType, relatedId) {
     .filter((activity) => activity.related_type === relatedType && activity.related_id === relatedId)
     .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
 }
+function activityFilterOption(filterId = state.activityFilter) {
+  return ACTIVITY_FILTER_OPTIONS.find((filter) => filter.id === filterId) || ACTIVITY_FILTER_OPTIONS[0];
+}
+function filterActivities(items, filterId = state.activityFilter) {
+  const filter = activityFilterOption(filterId);
+  if (!filter.types.length) return items;
+  return items.filter((item) => filter.types.includes(String(item.type || 'note')));
+}
+function filteredActivitiesFor(relatedType, relatedId) {
+  return filterActivities(activitiesFor(relatedType, relatedId));
+}
+function renderActivityFilterBar(totalCount, visibleCount) {
+  const active = activityFilterOption();
+  return `
+    <div class="sf-filters" aria-label="Activity filters">
+      <span class="sf-filter-label">Activity</span>
+      ${ACTIVITY_FILTER_OPTIONS.map((filter) => `
+        <button class="sf-filter-chip ${active.id === filter.id ? 'active' : ''}" type="button" data-action="set-activity-filter" data-filter="${h(filter.id)}">${h(filter.label)}</button>
+      `).join('')}
+      <span class="sf-filter-count">${h(String(visibleCount))}/${h(String(totalCount))}</span>
+    </div>
+  `;
+}
 function activitiesForAccount(accountId) {
   if (!accountId) return [];
   return state.activities
@@ -14488,6 +14529,7 @@ function isMutableAction(action = '') {
     'toggle-sidebar',
     'toggle-nav-group',
     'toggle-nav-expand',
+    'set-activity-filter',
     'pipeline-open',
     'pipeline-stage',
     'open-notification',
@@ -14514,6 +14556,7 @@ function isMutableAction(action = '') {
     'set-account-tab',
     'account-type',
     'open-deal',
+    'deal-activity-tab',
     'open-contact',
     'contact-activity-tab',
     'job-activity-tab',

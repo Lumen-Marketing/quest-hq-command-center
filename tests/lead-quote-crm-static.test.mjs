@@ -94,6 +94,19 @@ test('contact entry formats phone, suggests addresses, links maps, and selects o
   assert.match(recordSource, /<i class="ti ti-map-pin"><\/i>Map/);
 });
 
+test('record activity feeds expose a usable filter bar', () => {
+  assert.match(source, /ACTIVITY_FILTER_OPTIONS/);
+  assert.match(source, /activityFilter: 'all'/);
+  assert.match(source, /function renderActivityFilterBar\(totalCount, visibleCount\)/);
+  assert.match(source, /function filteredActivitiesFor\(relatedType, relatedId\)/);
+  assert.match(source, /data-action="set-activity-filter"/);
+  assert.match(source, /data-filter="\$\{h\(filter\.id\)\}"/);
+  assert.match(source, /state\.activityFilter = node\.dataset\.filter \|\| 'all'/);
+  assert.match(source, /renderActivityFilterBar\(totalFeed\.length, feed\.length\)/);
+  assert.doesNotMatch(source, /Filters: Within 2 months/);
+  assert.doesNotMatch(source, /Filters: This job - All activities - All types/);
+});
+
 test('account record tabs use contacts and quotes language', () => {
   assert.doesNotMatch(source, /\['deals', 'Deals'/);
   assert.match(source, /\['contacts', 'Contacts', contacts\.length\]/);
