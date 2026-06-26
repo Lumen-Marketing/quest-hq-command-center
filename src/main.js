@@ -154,6 +154,7 @@ const WORKSPACE_PLUGIN_PRESET_LABELS = {
   generic: 'Generic services',
 };
 const WORKSPACE_SELF_CREATE_LIMIT = 3;
+const WORKSPACE_ICON_UPLOAD_MAX_BYTES = 220 * 1024;
 const WORKSPACE_ICON_OPTIONS = [
   { key: 'home', icon: 'ti-home-filled', label: 'Home' },
   { key: 'building', icon: 'ti-building-broadcast-tower-filled', label: 'Building' },
@@ -1448,6 +1449,7 @@ const state = {
   companyPlugins: [],
   pluginLoadFailed: false,
   companies: mergeCompanies(companiesFallback.map(normalizeCompany)),
+  workspaceIconDrafts: {},
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
   sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
   collapsedNavGroups: new Set(readJson(NAV_GROUP_COLLAPSED_KEY, [])),
@@ -5791,6 +5793,7 @@ function renderClientPortalDetail(portal, canManagePortals) {
 
 function renderWorkspaceSettings(companyId) {
   const company = companyById(companyId) || normalizeCompany({ id: companyId });
+  const iconDraft = workspaceIconDraft(companyId);
   const canManage = can('settings.manage', companyId) || ['owner', 'admin'].includes(String(membershipForProfile(companyId, activeSession().profile.id)?.role || '').toLowerCase()) || isQuestDeveloper();
   const canCreate = canCreateAnotherWorkspace();
   return `
@@ -5798,18 +5801,19 @@ function renderWorkspaceSettings(companyId) {
       <div class="section-head"><div><h2>Workspace identity</h2><p>Rename this workspace and choose the icon your team sees in navigation.</p></div></div>
       <form class="workspace-settings-form" data-workspace-settings-form>
         <input type="hidden" name="company_id" value="${h(companyId)}" />
+        <input type="hidden" name="icon_key" value="${h(iconDraft.icon_key)}" />
+        <input type="hidden" name="icon_image" value="${h(iconDraft.icon_image)}" />
         ${field('Workspace name', 'workspace_name', companyName(companyId), true, 'text', 'workspace-name-field')}
         <div class="workspace-icon-section">
           <span>Workspace icon</span>
-        <div class="workspace-icon-picker">
-          ${WORKSPACE_ICON_OPTIONS.map((item) => `
-            <label class="workspace-icon-choice ${item.key === company.icon_key ? 'active' : ''}" data-workspace-icon-choice>
-              <input type="radio" name="icon_key" value="${h(item.key)}" ${item.key === company.icon_key ? 'checked' : ''} ${canManage ? '' : 'disabled'} />
-              ${workspaceIconSvgMarkup(item)}
-              <span>${h(item.label)}</span>
-            </label>
-          `).join('')}
-        </div>
+          <div class="workspace-icon-current">
+            ${workspaceIconMarkup({ ...company, icon_key: iconDraft.icon_key, icon_image: iconDraft.icon_image }, 'large')}
+            <div>
+              <strong>${h(iconDraft.icon_image ? 'Uploaded icon' : workspaceIconOption(iconDraft.icon_key).label)}</strong>
+              <small>${h(iconDraft.icon_image ? 'Custom image for this workspace.' : 'Built-in icon from the Quest library.')}</small>
+            </div>
+            <button class="btn" type="button" data-action="open-workspace-icon-modal" ${canManage ? '' : 'disabled'}><i class="ti ti-photo-edit"></i>Change icon</button>
+          </div>
         </div>
         <div class="form-actions">
           <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save workspace</button>
@@ -8458,8 +8462,43 @@ function renderProfileModal(profile) {
   `;
 }
 
+function renderWorkspaceIconModal(companyId) {
+  const draft = workspaceIconDraft(companyId);
+  const selectedKey = workspaceIconOption(draft.icon_key).key;
+  return renderModalShell('Workspace', 'Change icon', `
+    <div class="workspace-icon-modal">
+      <section class="workspace-icon-preview-panel">
+        ${workspaceIconMarkup({ ...(companyById(companyId) || {}), icon_key: draft.icon_key, icon_image: draft.icon_image }, 'large')}
+        <div>
+          <strong>${h(draft.icon_image ? 'Uploaded icon' : workspaceIconOption(selectedKey).label)}</strong>
+          <span>${h(draft.icon_image ? 'This image will be saved when you save workspace settings.' : 'Choose an icon or upload a custom image.')}</span>
+        </div>
+      </section>
+      <section class="workspace-icon-upload-card">
+        <div>
+          <strong>Upload</strong>
+          <span>PNG, JPG, or WebP. Keep it simple; square logos work best.</span>
+        </div>
+        <input type="file" accept="image/png,image/jpeg,image/webp" data-workspace-icon-upload />
+      </section>
+      <section class="workspace-icon-picker modal-icon-picker" aria-label="Workspace icon choices">
+        ${WORKSPACE_ICON_OPTIONS.map((item) => `
+          <button class="workspace-icon-choice ${!draft.icon_image && item.key === selectedKey ? 'active' : ''}" type="button" data-action="select-workspace-icon" data-icon-key="${h(item.key)}">
+            ${workspaceIconSvgMarkup(item)}
+            <span>${h(item.label)}</span>
+          </button>
+        `).join('')}
+      </section>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="button" data-action="close-modal"><i class="ti ti-check"></i>Done</button>
+      </div>
+    </div>
+  `, 'wide-modal workspace-icon-modal-panel');
+}
+
 function renderActiveModal(route, session) {
   if (state.modal === 'profile') return renderProfileModal(session.profile);
+  if (state.modal === 'workspace-icon') return renderWorkspaceIconModal(activeCompanyId());
   if (state.modal === 'file-upload') return renderFileUploadModal();
   if (state.modal === 'client-portal-form') return renderClientPortalFormModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
   if (state.modal === 'client-portal-document') return renderClientPortalDocumentModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
@@ -9024,6 +9063,21 @@ function handleAction(event, node) {
     event.preventDefault();
     state.accountMenuOpen = false;
     state.modal = 'profile';
+    render();
+    return;
+  }
+  if (action === 'open-workspace-icon-modal') {
+    event.preventDefault();
+    state.modal = 'workspace-icon';
+    render();
+    return;
+  }
+  if (action === 'select-workspace-icon') {
+    event.preventDefault();
+    setWorkspaceIconDraft(activeCompanyId(), {
+      icon_key: workspaceIconOption(node.dataset.iconKey).key,
+      icon_image: '',
+    });
     render();
     return;
   }
@@ -10518,6 +10572,7 @@ async function saveWorkspaceSettings(formNode) {
   const companyId = canonicalCompanyId(form.company_id || activeCompanyId());
   const workspaceName = String(form.workspace_name || '').trim();
   const iconKey = workspaceIconOption(form.icon_key).key;
+  const iconImage = sanitizeWorkspaceIconImage(form.icon_image);
   if (!workspaceName) {
     showToast('Workspace name is required.', 'local', 'Settings');
     return;
@@ -10525,7 +10580,7 @@ async function saveWorkspaceSettings(formNode) {
   const client = createSupabaseClient();
   let live = false;
   if (client && state.session?.auth === 'supabase') {
-    const result = await safeSupabaseQuery(client.rpc('update_company_workspace', { target_company_id: companyId, workspace_name: workspaceName, icon_key: iconKey }));
+    const result = await safeSupabaseQuery(client.rpc('update_company_workspace', { target_company_id: companyId, workspace_name: workspaceName, icon_key: iconKey, icon_image: iconImage }));
     if (result.error) {
       showToast(result.error.message || 'Workspace update failed.', 'local', 'Settings');
       return;
@@ -10541,7 +10596,10 @@ async function saveWorkspaceSettings(formNode) {
       short_name: workspaceName,
       label: workspaceName,
       icon_key: iconKey,
+      icon_image: iconImage,
     })));
+  delete state.workspaceIconDrafts[companyId];
+  state.modal = '';
   showToast('Workspace settings saved.', live ? 'live' : 'local', 'Settings');
   render();
 }
@@ -11624,6 +11682,12 @@ function onDocumentChange(event) {
   if (event.target.matches('[data-profile-avatar-file]')) {
     prepareProfileAvatarCrop(event.target.closest('[data-profile-form]')).catch((error) => {
       showToast(error.message || 'Could not preview that profile picture.', 'local', 'Profile');
+    });
+    return;
+  }
+  if (event.target.matches('[data-workspace-icon-upload]')) {
+    prepareWorkspaceIconUpload(event.target.files?.[0] || null).catch((error) => {
+      showToast(error.message || 'Could not preview that workspace icon.', 'local', 'Settings');
     });
     return;
   }
@@ -14265,6 +14329,7 @@ function isMutableAction(action = '') {
     'manage-message-chat',
     'set-company-plugin',
     'apply-plugin-preset',
+    'select-workspace-icon',
     'start-checkout',
     'review-workspace',
     'platform-company-action',
@@ -14346,6 +14411,13 @@ function workspaceLimitMessage() {
   return `Workspace limit reached. You can own up to ${WORKSPACE_SELF_CREATE_LIMIT} workspaces.`;
 }
 
+function sanitizeWorkspaceIconImage(value) {
+  const clean = String(value || '').trim();
+  if (!clean) return '';
+  if (!/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(clean)) return '';
+  return clean.length <= WORKSPACE_ICON_UPLOAD_MAX_BYTES * 1.5 ? clean : '';
+}
+
 function companyName(id) {
   const company = companyById(id);
   return company ? companyLabel(company) : id || 'Company';
@@ -14363,6 +14435,56 @@ function workspaceIconOption(key) {
   return WORKSPACE_ICON_OPTIONS.find((item) => item.key === String(key || '').trim()) || WORKSPACE_ICON_OPTIONS[0];
 }
 
+function workspaceIconDraft(companyId) {
+  const canonical = canonicalCompanyId(companyId);
+  const company = companyById(canonical) || normalizeCompany({ id: canonical });
+  const draft = state.workspaceIconDrafts[canonical] || {};
+  return {
+    icon_key: workspaceIconOption(draft.icon_key || company.icon_key).key,
+    icon_image: sanitizeWorkspaceIconImage(draft.icon_image ?? company.icon_image),
+  };
+}
+
+function setWorkspaceIconDraft(companyId, patch = {}) {
+  const canonical = canonicalCompanyId(companyId);
+  const current = workspaceIconDraft(canonical);
+  state.workspaceIconDrafts[canonical] = {
+    icon_key: workspaceIconOption(patch.icon_key || current.icon_key).key,
+    icon_image: sanitizeWorkspaceIconImage(patch.icon_image ?? current.icon_image),
+  };
+}
+
+async function prepareWorkspaceIconUpload(file) {
+  if (isReadOnlyDemo()) {
+    requireMutableWorkspace();
+    return;
+  }
+  if (!file) return;
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowed.includes(file.type)) throw new Error('Use a PNG, JPG, or WebP workspace icon.');
+  if (file.size > 2 * 1024 * 1024) throw new Error('Workspace icon uploads must be 2 MB or smaller.');
+  const dataUrl = await fileToDataUrl(file);
+  const image = await loadImage(dataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = 192;
+  canvas.height = 192;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+  const drawWidth = image.naturalWidth * scale;
+  const drawHeight = image.naturalHeight * scale;
+  ctx.drawImage(image, (canvas.width - drawWidth) / 2, (canvas.height - drawHeight) / 2, drawWidth, drawHeight);
+  let output = canvas.toDataURL('image/webp', 0.82);
+  if (output.length > WORKSPACE_ICON_UPLOAD_MAX_BYTES * 1.5) output = canvas.toDataURL('image/png');
+  if (!sanitizeWorkspaceIconImage(output)) throw new Error('That image is too large for a workspace icon. Try a smaller logo.');
+  setWorkspaceIconDraft(activeCompanyId(), {
+    icon_key: workspaceIconDraft(activeCompanyId()).icon_key,
+    icon_image: output,
+  });
+  render();
+}
+
 function workspaceIconSvgMarkup(iconOption) {
   const option = workspaceIconOption(iconOption?.key);
   const shape = WORKSPACE_ICON_SVG[option.key] || WORKSPACE_ICON_SVG.home;
@@ -14371,6 +14493,10 @@ function workspaceIconSvgMarkup(iconOption) {
 
 function workspaceIconMarkup(companyOrId, className = '') {
   const company = typeof companyOrId === 'object' ? normalizeCompany(companyOrId) : companyById(companyOrId);
+  const iconImage = sanitizeWorkspaceIconImage(company?.icon_image);
+  if (iconImage) {
+    return `<span class="workspace-icon has-upload ${h(className)}" style="--company-accent:${h(company?.color || companyColor(company?.id))}"><img src="${h(iconImage)}" alt="" /></span>`;
+  }
   const icon = workspaceIconOption(company?.icon_key);
   return `<span class="workspace-icon ${h(className)}" style="--company-accent:${h(company?.color || companyColor(company?.id))}">${workspaceIconSvgMarkup(icon)}</span>`;
 }
@@ -14697,6 +14823,7 @@ function normalizeCompany(input) {
     label: String(input.label || input.short_name || input.name || input.id || '').trim(),
     pill: String(input.pill || ''),
     icon_key: workspaceIconOption(input.icon_key).key,
+    icon_image: sanitizeWorkspaceIconImage(input.icon_image),
   };
 }
 
@@ -15130,6 +15257,7 @@ function normalizeWorkspaceReview(input) {
     label: String(input.label || input.short_name || input.company_name || input.name || input.company_id || '').trim(),
     pill: String(input.pill || ''),
     icon_key: workspaceIconOption(input.icon_key).key,
+    icon_image: sanitizeWorkspaceIconImage(input.icon_image),
     status: normalizeSubscriptionStatus(input.status) || 'pending_review',
     plan_code: String(input.plan_code || 'quest_company_300'),
     amount_cents: number(input.amount_cents || 30000),

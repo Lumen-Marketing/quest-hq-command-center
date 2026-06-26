@@ -10,6 +10,8 @@ const quotaMigrationUrl = new URL('../supabase/migrations/202606260900_workspace
 const quotaMigration = existsSync(quotaMigrationUrl) ? readFileSync(quotaMigrationUrl, 'utf8') : '';
 const iconExpansionMigrationUrl = new URL('../supabase/migrations/202606261130_workspace_icon_expansion.sql', import.meta.url);
 const iconExpansionMigration = existsSync(iconExpansionMigrationUrl) ? readFileSync(iconExpansionMigrationUrl, 'utf8') : '';
+const iconUploadMigrationUrl = new URL('../supabase/migrations/202606271030_workspace_icon_uploads.sql', import.meta.url);
+const iconUploadMigration = existsSync(iconUploadMigrationUrl) ? readFileSync(iconUploadMigrationUrl, 'utf8') : '';
 
 test('no-company workspace creation shows progress and errors', () => {
   assert.match(source, /const busy = \/creating\|joining\|opening\/i\.test\(state\.authMessage \|\| ''\);/);
@@ -96,10 +98,19 @@ test('workspace settings can rename and change one of many filled icons', () => 
   assert.match(source, /renderWorkspaceSettings\(companyId\)/);
   assert.match(source, /data-workspace-settings-form/);
   assert.match(source, /name="icon_key"/);
-  assert.match(source, /data-workspace-icon-choice/);
+  assert.match(source, /name="icon_image"/);
+  assert.match(source, /data-action="open-workspace-icon-modal"/);
+  assert.match(source, /function renderWorkspaceIconModal\(companyId\)/);
+  assert.match(source, /data-action="select-workspace-icon"/);
+  assert.match(source, /data-workspace-icon-upload/);
+  assert.match(source, /async function prepareWorkspaceIconUpload\(file\)/);
+  assert.match(source, /function sanitizeWorkspaceIconImage\(value\)/);
   assert.match(source, /async function saveWorkspaceSettings\(formNode\)/);
-  assert.match(source, /client\.rpc\('update_company_workspace'/);
+  assert.match(source, /client\.rpc\('update_company_workspace', \{ target_company_id: companyId, workspace_name: workspaceName, icon_key: iconKey, icon_image: iconImage \}\)/);
   assert.match(styles, /\.workspace-icon i::before,\s*\.workspace-icon-choice i::before\s*\{/);
+  assert.match(styles, /\.workspace-icon-current\s*\{/);
+  assert.match(styles, /\.workspace-icon-modal\s*\{/);
+  assert.match(styles, /\.workspace-icon-upload-card\s*\{/);
   assert.match(styles, /\.workspace-icon-svg\s*\{[\s\S]*width: 26px;[\s\S]*height: 26px;[\s\S]*fill: currentColor;/);
   assert.match(styles, /\.workspace-menu-option \.workspace-icon-svg\s*\{[\s\S]*width: 27px;[\s\S]*height: 27px;/);
   assert.match(styles, /\.workspace-menu-option \.workspace-icon\s*\{[\s\S]*display: grid;[\s\S]*place-items: center;/);
@@ -120,6 +131,10 @@ test('workspace settings can rename and change one of many filled icons', () => 
   assert.match(iconExpansionMigration, /'warehouse'/);
   assert.match(iconExpansionMigration, /'headset'/);
   assert.match(iconExpansionMigration, /clean_icon text := app_private\.normalize_workspace_icon_key\(icon_key\);/);
+  assert.ok(iconUploadMigration, 'Expected workspace icon upload migration');
+  assert.match(iconUploadMigration, /add column if not exists icon_image text not null default ''/);
+  assert.match(iconUploadMigration, /create or replace function public\.update_company_workspace\(\s*target_company_id text,\s*workspace_name text,\s*icon_key text,\s*icon_image text default null/);
+  assert.match(iconUploadMigration, /grant execute on function public\.update_company_workspace\(text, text, text, text\) to authenticated;/);
 });
 
 test('workspace switcher lives in the sidebar workspace card, not the top nav', () => {
