@@ -10,6 +10,7 @@ const modules = [
   'tasks',
   'files',
   'client-portals',
+  'workspaces',
   'forms',
   'analytics',
   'crm',
