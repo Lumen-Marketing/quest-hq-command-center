@@ -38,6 +38,9 @@ test('workspace builder supports working no-code workspace app flows inside a co
   assert.match(source, /data-builder-field-label/);
   assert.match(source, /data-builder-item-field/);
   assert.match(source, /function handleWorkspaceBuilderAction\(node\)/);
+  assert.match(source, /function revealPluginModulesInNavigation\(plugin\)/);
+  assert.match(source, /if \(nextStatus === 'installed'\) revealPluginModulesInNavigation\(plugin\);/);
+  assert.match(source, /localStorage\.setItem\(SIDEBAR_COLLAPSED_KEY, 'false'\)/);
   assert.match(source, /workspaceBuilderCreateWorkspace\(companyId, name, description\)/);
   assert.match(source, /workspaceBuilderCreateApp\(companyId, workspaceId, name, type\)/);
   assert.match(source, /workspaceBuilderCreateField\(companyId, workspaceId, appId, label, fieldType\)/);

@@ -10630,6 +10630,19 @@ function upsertCompanyPluginLocal(companyId, pluginId, status) {
     .concat(row));
 }
 
+function revealPluginModulesInNavigation(plugin) {
+  if (!plugin?.module_ids?.length) return;
+  const groupsToOpen = NAV_GROUPS
+    .filter((group) => group.ids.some((id) => plugin.module_ids.includes(id)))
+    .map((group) => group.label);
+  groupsToOpen.forEach((group) => state.collapsedNavGroups.delete(group));
+  if (groupsToOpen.length) {
+    state.sidebarCollapsed = false;
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
+    writeJson(NAV_GROUP_COLLAPSED_KEY, [...state.collapsedNavGroups]);
+  }
+}
+
 async function setCompanyPlugin(companyId, pluginId, status) {
   const plugin = pluginById(pluginId);
   const nextStatus = status === 'disabled' ? 'disabled' : 'installed';
@@ -10655,6 +10668,7 @@ async function setCompanyPlugin(companyId, pluginId, status) {
   }
   conflictIds.forEach((conflictId) => upsertCompanyPluginLocal(companyId, conflictId, 'disabled'));
   upsertCompanyPluginLocal(companyId, plugin.id, nextStatus);
+  if (nextStatus === 'installed') revealPluginModulesInNavigation(plugin);
   state.sync = { label: `${plugin.label} ${nextStatus === 'installed' ? 'installed' : 'disabled'}`, mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
   showToast(`${plugin.label} ${nextStatus === 'installed' ? 'installed' : 'disabled'}.`, state.session?.auth === 'supabase' ? 'live' : 'local', 'Plugins');
   render();
