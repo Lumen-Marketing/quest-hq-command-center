@@ -15129,6 +15129,77 @@ button {
   transform: rotate(180deg);
 }
 
+.message-workspace-members {
+  display: grid;
+  gap: 16px;
+}
+
+.message-member-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.message-member-summary h3 {
+  margin: 0 0 3px;
+  font-size: 18px;
+}
+
+.message-member-summary p {
+  margin: 0;
+  color: var(--chat-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.message-workspace-member-list {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  overflow: auto;
+}
+
+.message-workspace-member-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--chat-line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+}
+
+.message-workspace-member-row strong,
+.message-workspace-member-row small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-workspace-member-row small {
+  color: var(--chat-soft);
+  font-size: 12px;
+}
+
+.message-pending-invites {
+  display: grid;
+  gap: 6px;
+  border: 1px dashed var(--chat-line-2);
+  border-radius: 12px;
+  background: var(--chat-surface-2);
+  padding: 12px;
+  color: var(--chat-soft);
+  font-size: 12px;
+}
+
+.message-pending-invites strong {
+  color: var(--chat-ink);
+}
+
 .message-modal-foot {
   display: flex;
   align-items: center;

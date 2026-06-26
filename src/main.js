@@ -7362,7 +7362,7 @@ function renderMessageGroupModal(companyId) {
           ${renderAvatar(activeSession().profile, 'avatar message-person-avatar')}
           <span><strong>${h(activeSession().profile.full_name || 'Lumen Marketing')} <b>You</b></strong><small>${h(activeSession().profile.email || '')}</small></span>
         </div>
-        <button class="btn btn-primary full" type="button" data-action="new-invite-from-message"><i class="ti ti-user-plus"></i>Invite a teammate</button>
+        <button class="btn btn-primary full" type="button" data-action="open-message-workspace-members"><i class="ti ti-users"></i>Workspace members</button>
         <button class="btn btn-ghost full" type="button" data-action="message-self"><i class="ti ti-notes"></i>Message myself instead</button>
       </section>
     `, 'message-modal message-create-modal');
@@ -7388,6 +7388,49 @@ function renderMessageGroupModal(companyId) {
       </form>
     </div>
   `, 'message-modal message-create-modal');
+}
+
+function renderMessageWorkspaceMembersModal(companyId) {
+  const users = companyAccessUsers(companyId);
+  const activeProfileId = activeSession().profile.id;
+  const activeUsers = users.filter((user) => user.status !== 'disabled' && user.status !== 'left');
+  const teammates = activeUsers.filter((user) => (user.profile_id || user.member_id) !== activeProfileId);
+  const pendingInvites = companyInvites(companyId).slice(0, 4);
+  const canManageUsers = can('users.manage', companyId);
+  return renderModalShell('Messages', 'Workspace members', `
+    <section class="message-workspace-members">
+      <div class="message-member-summary">
+        <span class="message-solo-badge"><i class="ti ti-users"></i></span>
+        <div>
+          <h3>${teammates.length ? `${teammates.length} teammate${teammates.length === 1 ? '' : 's'} available` : 'No teammates available yet'}</h3>
+          <p>Messages are for active members of this workspace. Add people from Users, then start direct or group chats here.</p>
+        </div>
+      </div>
+      <div class="message-workspace-member-list">
+        ${teammates.map((user) => {
+          const userId = user.profile_id || user.member_id;
+          return `
+            <article class="message-workspace-member-row">
+              ${renderAvatar({ full_name: user.name, email: user.email, avatar_url: user.avatar_url }, 'avatar message-person-avatar')}
+              <span><strong>${h(user.name || 'Workspace member')}</strong><small>${h(user.email || user.role_label || titleCase(user.role || 'member'))}</small></span>
+              <button class="btn btn-primary btn-sm" type="button" data-action="message-direct-member" data-profile-id="${h(userId)}"><i class="ti ti-message"></i>Message</button>
+            </article>
+          `;
+        }).join('') || emptyState('Only you are active in this workspace right now.')}
+      </div>
+      ${pendingInvites.length ? `
+        <div class="message-pending-invites">
+          <strong>Pending access</strong>
+          ${pendingInvites.map((invite) => `<span>${h(invite.email)} · ${h(titleCase(invite.status))}</span>`).join('')}
+        </div>
+      ` : ''}
+      <div class="message-modal-foot">
+        <span class="foot-note">${canManageUsers ? 'Manage invites and roles from Users.' : 'Ask an Owner/Admin to add workspace members.'}</span>
+        <button class="btn btn-ghost" type="button" data-action="close-modal">Close</button>
+        <button class="btn btn-primary" type="button" data-action="go-workspace-members" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-users-plus"></i>Open Users</button>
+      </div>
+    </section>
+  `, 'message-modal message-create-modal message-workspace-members-modal');
 }
 
 function renderDirectMessageModal(companyId) {
@@ -8558,6 +8601,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'role-new') return renderRoleFormModal(activeCompanyId());
   if (state.modal === 'invite-new') return renderInviteFormModal(activeCompanyId());
   if (state.modal === 'message-group-new') return renderMessageGroupModal(activeCompanyId());
+  if (state.modal === 'message-workspace-members') return renderMessageWorkspaceMembersModal(activeCompanyId());
   if (state.modal === 'message-direct-new') return renderDirectMessageModal(activeCompanyId());
   if (state.modal === 'message-access') return renderMessageAccessModal(activeCompanyId(), state.selectedConversationId);
   if (state.modal === 'message-details') return renderMessageDetailsModal(activeCompanyId(), state.selectedConversationId);
@@ -9180,11 +9224,25 @@ function handleAction(event, node) {
     render();
     return;
   }
-  if (action === 'new-invite-from-message') {
+  if (action === 'open-message-workspace-members') {
     event.preventDefault();
-    if (!requirePermission('users.manage', activeCompanyId(), 'Your role cannot invite teammates.', 'Messages')) return;
-    state.modal = 'invite-new';
+    if (!requirePermission('messages.view', activeCompanyId(), 'Your role cannot view message members.', 'Messages')) return;
+    state.modal = 'message-workspace-members';
     render();
+    return;
+  }
+  if (action === 'go-workspace-members') {
+    event.preventDefault();
+    const companyId = activeCompanyId();
+    if (!requirePermission('users.manage', companyId, 'Your role cannot manage workspace members.', 'Users')) return;
+    state.modal = '';
+    navigate(companyPath('users', { tab: 'members' }, companyId));
+    return;
+  }
+  if (action === 'message-direct-member') {
+    event.preventDefault();
+    if (!requirePermission('messages.send', activeCompanyId(), 'Your role cannot start direct messages.', 'Messages')) return;
+    startDirectMessageWithProfile(activeCompanyId(), node.dataset.profileId).catch((error) => showToast(error.message || 'Unable to start direct message.', 'local', 'Messages'));
     return;
   }
   if (action === 'message-self') {
@@ -11301,6 +11359,55 @@ async function saveDirectMessage(form) {
   const body = String(data.get('body') || '').trim();
   if (body) await createMessageRecord(conversation, body, []);
   notifyLocalEvent('message.direct', 'Direct message started', `${actorName()} started a direct message with ${conversation.title}.`, companyPath('messages', { conversation: conversation.id }, companyId), 'message_conversation', conversation.id, companyId, [targetId]);
+  navigate(companyPath('messages', { conversation: conversation.id }, companyId), { replace: true });
+}
+
+async function startDirectMessageWithProfile(companyId, targetId) {
+  const cleanTargetId = String(targetId || '').trim();
+  const profile = activeSession().profile;
+  if (!cleanTargetId) {
+    showToast('Choose a workspace member first.', 'local', 'Messages');
+    return;
+  }
+  if (cleanTargetId === profile.id) {
+    await startSelfMessage(companyId);
+    return;
+  }
+  const existing = companyMessageConversations(companyId).find((conversation) => {
+    if (conversation.type !== 'direct') return false;
+    const rowIds = conversationAccessRows(conversation.id)
+      .filter((row) => row.target_type === 'profile')
+      .map((row) => row.target_id)
+      .sort();
+    return rowIds.length === 2 && rowIds[0] === [profile.id, cleanTargetId].sort()[0] && rowIds[1] === [profile.id, cleanTargetId].sort()[1];
+  });
+  if (existing) {
+    state.selectedConversationId = existing.id;
+    state.modal = '';
+    navigate(companyPath('messages', { conversation: existing.id }, companyId), { replace: true });
+    return;
+  }
+  const targetUser = companyAccessUsers(companyId).find((user) => (user.profile_id || user.member_id) === cleanTargetId);
+  const now = new Date().toISOString();
+  const conversation = normalizeMessageConversation({
+    id: crypto.randomUUID(),
+    company_id: companyId,
+    title: targetUser?.name || profileName(cleanTargetId),
+    type: 'direct',
+    created_by: profile.id,
+    last_message_at: now,
+    created_at: now,
+    updated_at: now,
+  });
+  const accessRows = [
+    normalizeMessageAccess({ id: `msg-access-${crypto.randomUUID()}`, company_id: companyId, conversation_id: conversation.id, target_type: 'profile', target_id: profile.id }),
+    normalizeMessageAccess({ id: `msg-access-${crypto.randomUUID()}`, company_id: companyId, conversation_id: conversation.id, target_type: 'profile', target_id: cleanTargetId }),
+  ];
+  const saved = await persistConversation(conversation, accessRows);
+  if (!saved) return;
+  state.selectedConversationId = conversation.id;
+  state.modal = '';
+  notifyLocalEvent('message.direct', 'Direct message started', `${actorName()} started a direct message with ${conversation.title}.`, companyPath('messages', { conversation: conversation.id }, companyId), 'message_conversation', conversation.id, companyId, [cleanTargetId]);
   navigate(companyPath('messages', { conversation: conversation.id }, companyId), { replace: true });
 }
 

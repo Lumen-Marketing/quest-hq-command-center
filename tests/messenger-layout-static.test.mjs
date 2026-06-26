@@ -24,10 +24,18 @@ test('messages composer uses icon attach and send controls around the input', ()
 test('new group modal supports solo and team states from the mockup', () => {
   assert.match(source, /class="message-modal-solo"/);
   assert.match(source, /It's just you so far/);
-  assert.match(source, /data-action="new-invite-from-message"/);
   assert.match(source, /class="message-modal-team"/);
   assert.match(source, /data-message-access-filter/);
   assert.match(source, /data-message-role-toggle/);
+});
+
+test('message member flow uses workspace members instead of the generic invite-code modal', () => {
+  assert.match(source, /function renderMessageWorkspaceMembersModal\(companyId\)/);
+  assert.match(source, /state\.modal === 'message-workspace-members'/);
+  assert.match(source, /data-action="open-message-workspace-members"/);
+  assert.match(source, /data-action="message-direct-member"/);
+  assert.doesNotMatch(source, /data-action="new-invite-from-message"/);
+  assert.doesNotMatch(source, /if \(action === 'new-invite-from-message'\)/);
 });
 
 test('simplified chat styling matches the provided responsive mockup', () => {
