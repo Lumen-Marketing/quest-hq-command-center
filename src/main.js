@@ -130,6 +130,14 @@ const ACTIVITY_FILTER_OPTIONS = [
   { id: 'meetings', label: 'Meetings', types: ['meeting'] },
 ];
 
+const CONTACT_SORT_OPTIONS = [
+  { id: 'name', label: 'Name', field: 'name', dir: 'asc' },
+  { id: 'updated', label: 'Recently updated', field: 'updated_at', dir: 'desc' },
+  { id: 'stage', label: 'Stage', field: 'stage', dir: 'asc' },
+  { id: 'owner', label: 'Owner', field: 'owner_name', dir: 'asc' },
+  { id: 'value', label: 'Value', field: 'value', dir: 'desc' },
+];
+
 const CORE_MODULE_IDS = new Set(['home', 'jobs', 'tasks', 'users', 'settings']);
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
@@ -1467,6 +1475,7 @@ const state = {
   dealBoardView: localStorage.getItem(DEAL_BOARD_VIEW_KEY) || 'board',
   contactStageFilter: 'all',
   contactQuery: '',
+  contactSort: 'name',
   selectedContactId: '',
   stageFilterDeals: 'all',
   dealQuery: '',
@@ -3482,6 +3491,7 @@ function renderContactsPage(route, companyId) {
   }
   const stageParam = route.params.get('stage');
   if (stageParam) state.contactStageFilter = contactStageNames().includes(stageParam) ? stageParam : 'all';
+  if (state.contactBoardView === 'table') return renderContactTable(companyId);
   return `
     ${workspaceHeader('Contacts', 'Top-of-funnel contacts before quote handoff.', `
       <button class="btn" type="button" data-action="open-stage-manager" data-module="contacts"><i class="ti ti-adjustments-horizontal"></i>Manage stages</button>
@@ -3493,6 +3503,81 @@ function renderContactsPage(route, companyId) {
 }
 
 function renderContactTable(companyId) {
+  const rows = sortedContacts(filteredContacts(companyId));
+  const sort = CONTACT_SORT_OPTIONS.find((option) => option.id === state.contactSort) || CONTACT_SORT_OPTIONS[0];
+  const listLabel = state.contactStageFilter === 'all' ? 'All Contacts' : `${state.contactStageFilter} Contacts`;
+  const lastUpdated = rows[0]?.updated_at ? timeAgo(rows[0].updated_at) : 'no recent updates';
+  const headerSort = (label, sortId) => `
+    <button class="contact-header-sort ${state.contactSort === sortId ? 'active' : ''}" type="button" data-action="set-contact-sort" data-sort="${h(sortId)}">
+      ${h(label)} <i class="ti ${state.contactSort === sortId ? 'ti-chevron-up' : 'ti-chevron-down'}"></i>
+    </button>
+  `;
+  return `
+    <section class="panel contact-list-view">
+      <div class="contact-list-head">
+        <div class="contact-list-title">
+          <span class="contact-object-icon"><i class="ti ti-id-badge-2"></i></span>
+          <div>
+            <span class="contact-object-label">Contacts</span>
+            <h2>${h(listLabel)} <i class="ti ti-chevron-down"></i></h2>
+            <p>${rows.length} item${rows.length === 1 ? '' : 's'} - Sorted by ${h(sort.label)} - Filtered by ${h(listLabel)} - Updated ${h(lastUpdated)}</p>
+          </div>
+        </div>
+        <div class="contact-list-actions">
+          <button class="btn btn-compact" type="button"><i class="ti ti-upload"></i>Import</button>
+          <button class="btn btn-compact" type="button"><i class="ti ti-speakerphone"></i>Add to Campaign</button>
+          <button class="btn btn-compact" type="button"><i class="ti ti-mail"></i>Send Email</button>
+          <button class="btn btn-compact btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>New</button>
+          <button class="btn btn-compact" type="button"><i class="ti ti-tag"></i>Assign Label</button>
+        </div>
+      </div>
+      <div class="contact-list-toolbar">
+        <div class="contact-list-sort" aria-label="Sort contacts">
+          <span>Sort by</span>
+          ${CONTACT_SORT_OPTIONS.map((option) => `
+            <button class="${state.contactSort === option.id ? 'active' : ''}" type="button" data-action="set-contact-sort" data-sort="${h(option.id)}">${h(option.label)}</button>
+          `).join('')}
+        </div>
+        <label class="contact-list-search">
+          <i class="ti ti-search"></i>
+          <input type="search" data-contact-search value="${h(state.contactQuery)}" placeholder="Search this list..." />
+        </label>
+        <div class="contact-list-tools">
+          <button class="icon-btn ${state.contactBoardView === 'table' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="contacts" data-view="table" title="Table view"><i class="ti ti-table"></i></button>
+          <button class="icon-btn ${state.contactBoardView === 'board' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="contacts" data-view="board" title="Board view"><i class="ti ti-layout-kanban"></i></button>
+          <button class="icon-btn" type="button" data-action="open-stage-manager" data-module="contacts" title="Manage stages"><i class="ti ti-adjustments-horizontal"></i></button>
+          <button class="icon-btn" type="button" data-action="refresh-data" title="Refresh"><i class="ti ti-refresh"></i></button>
+        </div>
+      </div>
+      <div class="data-table contacts-table">
+        <div class="table-head">
+          <span class="select-cell"><input type="checkbox" aria-label="Select all contacts" /></span>
+          <span>${headerSort('Name', 'name')}</span>
+          <span>${headerSort('Account Name', 'owner')}</span>
+          <span>${headerSort('Title', 'stage')}</span>
+          <span>Phone</span>
+          <span>Email</span>
+          <span>Contact Owner Alias</span>
+          <span></span>
+        </div>
+        ${rows.map((contact) => `
+          <button class="table-row ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact" data-contact-id="${h(contact.id)}">
+            <span class="select-cell"><span class="fake-checkbox" aria-hidden="true"></span></span>
+            <span class="cell-lead">${pipelineDot(contactStageColor(contact.stage))}<span><strong>${h(contact.name)}</strong><small>${h(contact.stage || 'No stage')}</small></span></span>
+            <span>${contact.account_id ? h(accountName(contact.account_id) || '-') : '<span class="muted-dash">-</span>'}</span>
+            <span>${contact.title ? h(contact.title) : '<span class="muted-dash">-</span>'}</span>
+            <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">-</span>'}</span>
+            <span>${contact.email ? h(contact.email) : '<span class="muted-dash">-</span>'}</span>
+            <span>${contact.owner_name ? h(contact.owner_name) : '<span class="muted-dash">-</span>'}</span>
+            <span class="row-menu"><i class="ti ti-dots"></i></span>
+          </button>
+        `).join('') || emptyState('No contacts in this view yet.')}
+      </div>
+    </section>
+  `;
+}
+
+function renderContactTableLegacy(companyId) {
   const rows = filteredContacts(companyId);
   return `
     <section class="panel">
@@ -9692,6 +9777,13 @@ function handleAction(event, node) {
     deleteActivity(node.dataset.activityId);
     return;
   }
+  if (action === 'set-contact-sort') {
+    event.preventDefault();
+    const sort = CONTACT_SORT_OPTIONS.find((option) => option.id === node.dataset.sort);
+    state.contactSort = sort ? sort.id : 'name';
+    render();
+    return;
+  }
   if (action === 'set-pipeline-view') {
     event.preventDefault();
     const module = node.dataset.module;
@@ -11817,6 +11909,11 @@ function onDocumentInput(event) {
     updateWorkspaceOnly();
     return;
   }
+  if (event.target.matches('[data-contact-search]')) {
+    state.contactQuery = event.target.value;
+    updateWorkspaceOnly();
+    return;
+  }
   if (event.target.matches('[data-deal-search]')) {
     state.dealQuery = event.target.value;
     updateWorkspaceOnly();
@@ -13707,8 +13804,20 @@ function filteredContacts(companyId = activeCompanyId(), ignoreStage = false) {
   return companyContacts(companyId).filter((contact) => {
     if (!ignoreStage && state.contactStageFilter !== 'all' && resolvePipelineStage('contacts', contact.stage, companyId) !== state.contactStageFilter) return false;
     if (!q) return true;
-    return [contact.name, contact.phone, contact.email, contact.location, contact.owner_name, contact.stage]
+    return [contact.name, contact.phone, contact.email, contact.location, contact.owner_name, contact.stage, contact.title, accountName(contact.account_id)]
       .some((value) => String(value || '').toLowerCase().includes(q));
+  });
+}
+
+function sortedContacts(contacts) {
+  const sort = CONTACT_SORT_OPTIONS.find((option) => option.id === state.contactSort) || CONTACT_SORT_OPTIONS[0];
+  const direction = sort.dir === 'desc' ? -1 : 1;
+  return [...contacts].sort((a, b) => {
+    const av = sort.field === 'value' ? Number(a.value || 0) : String(a[sort.field] || '').toLowerCase();
+    const bv = sort.field === 'value' ? Number(b.value || 0) : String(b[sort.field] || '').toLowerCase();
+    if (av < bv) return -1 * direction;
+    if (av > bv) return 1 * direction;
+    return String(a.name || '').localeCompare(String(b.name || ''));
   });
 }
 
@@ -14561,6 +14670,7 @@ function isMutableAction(action = '') {
     'open-account',
     'set-account-tab',
     'account-type',
+    'set-contact-sort',
     'open-deal',
     'deal-activity-tab',
     'open-contact',

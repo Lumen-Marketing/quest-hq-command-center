@@ -111,6 +111,27 @@ test('contact record pencils edit only the clicked field value', () => {
   assert.match(inlineSource, /\.sf-field-value \[data-contact-edit\]/);
 });
 
+test('contacts list uses a Salesforce-style searchable sortable table view', () => {
+  const tableSource = source.match(/function renderContactTable\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(source, /contactSort: 'name'/);
+  assert.match(source, /const CONTACT_SORT_OPTIONS = \[/);
+  assert.match(source, /function sortedContacts\(contacts\)/);
+  assert.match(source, /if \(event\.target\.matches\('\[data-contact-search\]'\)\)/);
+  assert.match(source, /if \(action === 'set-contact-sort'\)/);
+  assert.match(tableSource, /class="panel contact-list-view"/);
+  assert.match(tableSource, /All Contacts/);
+  assert.match(tableSource, /data-contact-search/);
+  assert.match(tableSource, /data-action="set-contact-sort"/);
+  assert.match(tableSource, /data-sort="\$\{h\(option\.id\)\}"/);
+  assert.match(tableSource, /data-action="open-contact-form" data-mode="new"/);
+  assert.match(tableSource, /data-action="open-stage-manager" data-module="contacts"/);
+  assert.match(tableSource, /data-action="set-pipeline-view" data-module="contacts" data-view="table"/);
+  assert.match(tableSource, /data-action="set-pipeline-view" data-module="contacts" data-view="board"/);
+  assert.match(styles, /\.contact-list-view/);
+  assert.match(styles, /\.contact-list-sort/);
+  assert.match(styles, /\.contact-header-sort/);
+});
+
 test('record activity feeds expose a usable filter bar', () => {
   assert.match(source, /ACTIVITY_FILTER_OPTIONS/);
   assert.match(source, /activityFilter: 'all'/);
