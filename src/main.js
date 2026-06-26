@@ -3567,7 +3567,7 @@ function renderContactRecord(companyId, contact) {
         ${h(label)}
         ${editKey
           ? `<button class="sf-pencil" type="button" data-contact-edit="${h(editKey)}" data-contact-id="${h(contact.id)}" aria-label="Edit ${h(label)}"><i class="ti ti-pencil"></i></button>`
-          : `<button class="sf-pencil" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}" aria-label="Edit ${h(label)}"><i class="ti ti-pencil"></i></button>`}
+          : ''}
       </div>
       <div class="sf-field-value">${content}</div>
     </div>
@@ -3616,19 +3616,19 @@ function renderContactRecord(companyId, contact) {
       <div class="sf-three-col">
         <div class="sf-col">
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
-            ${fieldRow('Phone', ed('phone'))}
-            ${fieldRow('Email', ed('email', { blue: true }))}
-            ${fieldRow('Location', `${ed('location')}${contact.location ? `<a class="sf-field-action" href="${h(mapsSearchUrl(contact.location))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map</a>` : ''}`)}
-            ${fieldRow('Job Type', `<span class="sf-pill">${h(contact.title || '—')}</span>`)}
-            ${fieldRow('Owner', ed('owner_name', { blue: true }))}
-            ${fieldRow('Source', ed('source'))}
+            ${fieldRow('Phone', ed('phone'), 'phone')}
+            ${fieldRow('Email', ed('email', { blue: true }), 'email')}
+            ${fieldRow('Location', `${ed('location')}${contact.location ? `<a class="sf-field-action" href="${h(mapsSearchUrl(contact.location))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map</a>` : ''}`, 'location')}
+            ${fieldRow('Job Type', `<span class="sf-pill sf-edit" data-contact-edit="title" data-contact-id="${h(contact.id)}" title="Click to edit">${h(contact.title || '—')}</span>`, 'title')}
+            ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
+            ${fieldRow('Source', ed('source'), 'source')}
           </div></div>
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
-            ${fieldRow('Stage', `<span>${h(contact.stage)}</span>`)}
-            ${fieldRow('Est. Value', `<span class="sf-money"><span class="sf-edit mono" data-contact-edit="value" data-contact-id="${h(contact.id)}" title="Click to edit">${money(contact.value || 0)}</span></span>`)}
-            ${fieldRow('Temperature', `<span class="sf-edit" data-contact-edit="temperature" data-contact-id="${h(contact.id)}" style="color:${tempColor}" title="Click to edit">${h(contact.temperature)}</span>`)}
-            ${fieldRow('Pay Type', ed('pay_type'))}
-            ${fieldRow('Roof System', ed('roof_system'))}
+            ${fieldRow('Stage', ed('stage'), 'stage')}
+            ${fieldRow('Est. Value', `<span class="sf-money"><span class="sf-edit mono" data-contact-edit="value" data-contact-id="${h(contact.id)}" title="Click to edit">${money(contact.value || 0)}</span></span>`, 'value')}
+            ${fieldRow('Temperature', `<span class="sf-edit" data-contact-edit="temperature" data-contact-id="${h(contact.id)}" style="color:${tempColor}" title="Click to edit">${h(contact.temperature)}</span>`, 'temperature')}
+            ${fieldRow('Pay Type', ed('pay_type'), 'pay_type')}
+            ${fieldRow('Roof System', ed('roof_system'), 'roof_system')}
           </div></div>
         </div>
 
@@ -3697,6 +3697,12 @@ function beginContactInlineEdit(span) {
   const contactId = span.dataset.contactId;
   const contact = contactById(contactId);
   if (!contact) return;
+  const rowValueTarget = [...(span.closest('.sf-field')?.querySelectorAll('.sf-field-value [data-contact-edit]') || [])]
+    .find((node) => node.dataset.contactEdit === key && node.dataset.contactId === contactId);
+  if (rowValueTarget && rowValueTarget !== span) {
+    beginContactInlineEdit(rowValueTarget);
+    return;
+  }
   const input = document.createElement('input');
   input.className = 'sf-edit-input';
   input.value = key === 'value' ? (contact.value || 0) : (contact[key] || '');

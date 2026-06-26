@@ -94,6 +94,23 @@ test('contact entry formats phone, suggests addresses, links maps, and selects o
   assert.match(recordSource, /<i class="ti ti-map-pin"><\/i>Map/);
 });
 
+test('contact record pencils edit only the clicked field value', () => {
+  const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const inlineSource = source.match(/function beginContactInlineEdit\(span\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.doesNotMatch(recordSource, /data-action="open-contact-form" data-mode="edit" data-contact-id="\$\{h\(contact\.id\)\}" aria-label="Edit \$\{h\(label\)\}"/);
+  assert.match(recordSource, /fieldRow\('Phone', ed\('phone'\), 'phone'\)/);
+  assert.match(recordSource, /fieldRow\('Email', ed\('email', \{ blue: true \}\), 'email'\)/);
+  assert.match(recordSource, /fieldRow\('Location'[\s\S]*'location'\)/);
+  assert.match(recordSource, /fieldRow\('Owner', ed\('owner_name', \{ blue: true \}\), 'owner_name'\)/);
+  assert.match(recordSource, /fieldRow\('Source', ed\('source'\), 'source'\)/);
+  assert.match(recordSource, /fieldRow\('Stage', ed\('stage'\), 'stage'\)/);
+  assert.match(recordSource, /fieldRow\('Pay Type', ed\('pay_type'\), 'pay_type'\)/);
+  assert.match(recordSource, /fieldRow\('Roof System', ed\('roof_system'\), 'roof_system'\)/);
+  ['title', 'value', 'temperature'].forEach((key) => assert.match(recordSource, new RegExp(`data-contact-edit="${key}"`)));
+  assert.match(inlineSource, /closest\('\.sf-field'\)/);
+  assert.match(inlineSource, /\.sf-field-value \[data-contact-edit\]/);
+});
+
 test('record activity feeds expose a usable filter bar', () => {
   assert.match(source, /ACTIVITY_FILTER_OPTIONS/);
   assert.match(source, /activityFilter: 'all'/);
