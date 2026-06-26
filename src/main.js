@@ -285,7 +285,7 @@ const MODULE_REGISTRY = [
 ];
 
 const NAV_GROUPS = [
-  { label: 'Work', ids: ['home', 'tasks', 'underwriter'] },
+  { label: 'Work', ids: ['home', 'tasks', 'workspaces', 'underwriter'] },
   { label: 'Communication', ids: ['messages', 'calendar'] },
   { label: 'Contacts · Top of Funnel', ids: ['contacts'] },
   { label: 'Quotes · Bottom of Funnel', ids: ['deals'] },
