@@ -8,7 +8,7 @@ const json = (response, status, payload) => {
 
 const env = (key) => process.env[key] || '';
 const baseUrl = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
-const serviceKey = () => env('SUPABASE_SERVICE_ROLE_KEY');
+const serviceKey = () => env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY');
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex');
