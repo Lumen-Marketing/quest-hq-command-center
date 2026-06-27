@@ -13211,6 +13211,7 @@ textarea:focus {
   padding: 9px 18px;
   background: #fff;
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 
 .contact-list-sort {
@@ -13247,10 +13248,14 @@ textarea:focus {
 }
 
 .contact-filter-wrap {
-  display: grid;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-right: auto;
   min-width: 0;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .contact-filter-bar {
@@ -13259,9 +13264,9 @@ textarea:focus {
   flex-wrap: wrap;
   gap: 9px;
   min-width: 0;
-  padding: 11px 13px;
-  border: 1px solid #e7e8ea;
-  border-radius: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
   background: #fff;
 }
 
@@ -13278,7 +13283,10 @@ textarea:focus {
 
 .contact-filter-select {
   height: 34px;
+  flex: 0 0 auto;
+  width: auto;
   min-width: 122px;
+  max-width: 190px;
   border: 1px solid #d6d8db;
   border-radius: 8px;
   background: #fff;
@@ -13298,12 +13306,14 @@ textarea:focus {
 }
 
 .contact-filter-clear {
-  border: 0;
-  background: transparent;
-  color: #9aa1ab;
-  padding: 0 4px;
+  min-height: 34px;
+  border: 1px solid #d6d8db;
+  border-radius: 8px;
+  background: #fff;
+  color: #6b7280;
+  padding: 0 10px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .contact-filter-clear:hover {
@@ -13514,6 +13524,12 @@ textarea:focus {
   .contact-list-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+  .contact-filter-wrap,
+  .contact-filter-bar,
+  .contact-filter-select {
+    width: 100%;
+    max-width: none;
   }
   .contact-list-actions,
   .contact-list-tools {

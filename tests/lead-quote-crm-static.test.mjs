@@ -152,6 +152,9 @@ test('contacts list uses a Salesforce-style searchable filterable table view', (
   assert.match(styles, /\.contact-filter-select\.primed/);
   assert.match(styles, /\.contact-filter-chips/);
   assert.match(styles, /\.contact-header-sort/);
+  assert.match(styles, /\.contact-filter-wrap \{[\s\S]*?width: fit-content;/);
+  assert.match(styles, /\.contact-filter-select \{[\s\S]*?flex: 0 0 auto;[\s\S]*?max-width: 190px;/);
+  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.contact-filter-wrap,[\s\S]*?\.contact-filter-bar,[\s\S]*?\.contact-filter-select \{[\s\S]*?width: 100%;/);
 });
 
 test('record activity feeds expose a usable filter bar', () => {
