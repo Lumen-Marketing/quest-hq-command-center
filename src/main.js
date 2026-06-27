@@ -175,6 +175,14 @@ const CONTACT_SORT_OPTIONS = [
   { id: 'owner', label: 'Owner', field: 'owner_name', dir: 'asc' },
   { id: 'value', label: 'Value', field: 'value', dir: 'desc' },
 ];
+const CONTACT_FILTER_DEFAULTS = {
+  temperature: 'all',
+  job_type: 'all',
+  owner_name: 'all',
+  pay_type: 'all',
+};
+const CONTACT_JOB_TYPE_OPTIONS = ['Insurance / storm', 'Retail replacement', 'Repair', 'Inspection', 'Maintenance', 'Re-roof'];
+const CONTACT_PAY_TYPE_OPTIONS = ['Insurance', 'Retail', 'Financing', 'Cash'];
 
 const CORE_MODULE_IDS = new Set(['home', 'jobs', 'tasks', 'users', 'settings']);
 const WORKSPACE_PLUGIN_REGISTRY = [
@@ -1514,6 +1522,7 @@ const state = {
   contactStageFilter: 'all',
   contactQuery: '',
   contactSort: 'name',
+  contactFilters: { ...CONTACT_FILTER_DEFAULTS },
   selectedContactId: '',
   stageFilterDeals: 'all',
   dealQuery: '',
@@ -3572,12 +3581,7 @@ function renderContactTable(companyId) {
         </div>
       </div>
       <div class="contact-list-toolbar">
-        <div class="contact-list-sort" aria-label="Sort contacts">
-          <span>Sort by</span>
-          ${CONTACT_SORT_OPTIONS.map((option) => `
-            <button class="${state.contactSort === option.id ? 'active' : ''}" type="button" data-action="set-contact-sort" data-sort="${h(option.id)}">${h(option.label)}</button>
-          `).join('')}
-        </div>
+        ${renderContactFilterBar(companyId)}
         <label class="contact-list-search">
           <i class="ti ti-search"></i>
           <input type="search" data-contact-search value="${h(state.contactQuery)}" placeholder="Search this list..." />
@@ -3614,6 +3618,40 @@ function renderContactTable(companyId) {
         `).join('') || emptyState('No contacts in this view yet.')}
       </div>
     </section>
+  `;
+}
+
+function renderContactFilterBar(companyId) {
+  const filters = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}) };
+  const options = contactFilterOptions(companyId);
+  const activeFilters = activeContactFilters();
+  const select = (key, label, values) => `
+    <select class="contact-filter-select ${filters[key] !== 'all' ? 'primed' : ''}" data-contact-filter="${h(key)}" aria-label="${h(label)}">
+      <option value="all">${h(label)}: all</option>
+      ${values.map((value) => `<option value="${h(value)}" ${filters[key] === value ? 'selected' : ''}>${h(value)}</option>`).join('')}
+    </select>
+  `;
+  return `
+    <div class="contact-filter-wrap">
+      <div class="contact-filter-bar" aria-label="Filter contacts">
+        <span class="contact-filter-label"><i class="ti ti-settings"></i>Filter</span>
+        ${select('temperature', 'Temperature', options.temperature)}
+        ${select('job_type', 'Job type', options.job_type)}
+        ${select('owner_name', 'Owner', options.owner_name)}
+        ${select('pay_type', 'Pay type', options.pay_type)}
+        ${activeFilters.length ? '<button class="contact-filter-clear" type="button" data-action="clear-contact-filters">Clear all</button>' : ''}
+      </div>
+      ${activeFilters.length ? `
+        <div class="contact-filter-chips">
+          <span>Active filters:</span>
+          ${activeFilters.map((filter) => `
+            <button class="contact-filter-chip" type="button" data-action="remove-contact-filter" data-filter="${h(filter.key)}">
+              ${h(filter.label)}: ${h(filter.value)} <i class="ti ti-x"></i>
+            </button>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
   `;
 }
 
@@ -9870,6 +9908,21 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'clear-contact-filters') {
+    event.preventDefault();
+    state.contactFilters = { ...CONTACT_FILTER_DEFAULTS };
+    render();
+    return;
+  }
+  if (action === 'remove-contact-filter') {
+    event.preventDefault();
+    const key = node.dataset.filter;
+    if (Object.prototype.hasOwnProperty.call(CONTACT_FILTER_DEFAULTS, key)) {
+      state.contactFilters = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}), [key]: 'all' };
+      render();
+    }
+    return;
+  }
   if (action === 'set-pipeline-view') {
     event.preventDefault();
     const module = node.dataset.module;
@@ -12062,6 +12115,14 @@ function onDocumentChange(event) {
     render();
     return;
   }
+  if (event.target.matches('[data-contact-filter]')) {
+    const key = event.target.dataset.contactFilter;
+    if (Object.prototype.hasOwnProperty.call(CONTACT_FILTER_DEFAULTS, key)) {
+      state.contactFilters = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}), [key]: event.target.value || 'all' };
+      render();
+    }
+    return;
+  }
   if (event.target.matches('[data-task-status-filter]')) {
     state.taskStatusFilter = event.target.value || 'all';
     render();
@@ -13279,6 +13340,7 @@ function resetScopedUiState() {
   state.formQuery = '';
   state.crmQuery = '';
   state.contactQuery = '';
+  state.contactFilters = { ...CONTACT_FILTER_DEFAULTS };
   state.selectedContactId = '';
   state.contactStageFilter = 'all';
   state.dealQuery = '';
@@ -13896,10 +13958,46 @@ function companyContacts(companyId = activeCompanyId()) {
   return state.contacts.filter((contact) => contact.company_id === companyId);
 }
 
+function contactFilterJobType(contact) {
+  return String(contact.job_type || contact.roof_system || '').trim();
+}
+
+function contactFilterPayType(contact) {
+  return String(contact.pay_type || '').trim();
+}
+
+function contactFilterOptions(companyId) {
+  const contacts = companyContacts(companyId);
+  return {
+    temperature: compactUnique([...TEMPERATURES, ...contacts.map((contact) => contact.temperature)]),
+    job_type: compactUnique([...CONTACT_JOB_TYPE_OPTIONS, ...contacts.map(contactFilterJobType)]),
+    owner_name: compactUnique(contacts.map((contact) => contact.owner_name)).sort((a, b) => a.localeCompare(b)),
+    pay_type: compactUnique([...CONTACT_PAY_TYPE_OPTIONS, ...contacts.map(contactFilterPayType)]),
+  };
+}
+
+function activeContactFilters() {
+  const filters = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}) };
+  const labels = {
+    temperature: 'Temperature',
+    job_type: 'Job type',
+    owner_name: 'Owner',
+    pay_type: 'Pay type',
+  };
+  return Object.keys(CONTACT_FILTER_DEFAULTS)
+    .filter((key) => filters[key] && filters[key] !== 'all')
+    .map((key) => ({ key, label: labels[key], value: filters[key] }));
+}
+
 function filteredContacts(companyId = activeCompanyId(), ignoreStage = false) {
   const q = state.contactQuery.trim().toLowerCase();
+  const filters = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}) };
   return companyContacts(companyId).filter((contact) => {
     if (!ignoreStage && state.contactStageFilter !== 'all' && resolvePipelineStage('contacts', contact.stage, companyId) !== state.contactStageFilter) return false;
+    if (filters.temperature !== 'all' && String(contact.temperature || '') !== filters.temperature) return false;
+    if (filters.job_type !== 'all' && contactFilterJobType(contact) !== filters.job_type) return false;
+    if (filters.owner_name !== 'all' && String(contact.owner_name || '') !== filters.owner_name) return false;
+    if (filters.pay_type !== 'all' && contactFilterPayType(contact) !== filters.pay_type) return false;
     if (!q) return true;
     return [contact.name, contact.phone, contact.email, contact.location, contact.owner_name, contact.stage, contact.title, accountName(contact.account_id)]
       .some((value) => String(value || '').toLowerCase().includes(q));

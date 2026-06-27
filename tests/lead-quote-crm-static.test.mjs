@@ -124,24 +124,33 @@ test('contact inline editor uses selects for constrained fields', () => {
   assert.match(inlineSource, /input\.addEventListener\('change', commit\)/);
 });
 
-test('contacts list uses a Salesforce-style searchable sortable table view', () => {
+test('contacts list uses a Salesforce-style searchable filterable table view', () => {
   const tableSource = source.match(/function renderContactTable\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /contactSort: 'name'/);
   assert.match(source, /const CONTACT_SORT_OPTIONS = \[/);
+  assert.match(source, /const CONTACT_FILTER_DEFAULTS = /);
+  assert.match(source, /function renderContactFilterBar\(companyId\)/);
+  assert.match(source, /function contactFilterOptions\(companyId\)/);
+  assert.match(source, /function activeContactFilters\(\)/);
   assert.match(source, /function sortedContacts\(contacts\)/);
   assert.match(source, /if \(event\.target\.matches\('\[data-contact-search\]'\)\)/);
+  assert.match(source, /if \(event\.target\.matches\('\[data-contact-filter\]'\)\)/);
   assert.match(source, /if \(action === 'set-contact-sort'\)/);
+  assert.match(source, /if \(action === 'clear-contact-filters'\)/);
+  assert.match(source, /if \(action === 'remove-contact-filter'\)/);
   assert.match(tableSource, /class="panel contact-list-view"/);
   assert.match(tableSource, /All Contacts/);
   assert.match(tableSource, /data-contact-search/);
-  assert.match(tableSource, /data-action="set-contact-sort"/);
-  assert.match(tableSource, /data-sort="\$\{h\(option\.id\)\}"/);
+  assert.match(tableSource, /renderContactFilterBar\(companyId\)/);
   assert.match(tableSource, /data-action="open-contact-form" data-mode="new"/);
   assert.match(tableSource, /data-action="open-stage-manager" data-module="contacts"/);
   assert.match(tableSource, /data-action="set-pipeline-view" data-module="contacts" data-view="table"/);
   assert.match(tableSource, /data-action="set-pipeline-view" data-module="contacts" data-view="board"/);
   assert.match(styles, /\.contact-list-view/);
-  assert.match(styles, /\.contact-list-sort/);
+  assert.match(styles, /\.contact-filter-bar/);
+  assert.match(styles, /\.contact-filter-select/);
+  assert.match(styles, /\.contact-filter-select\.primed/);
+  assert.match(styles, /\.contact-filter-chips/);
   assert.match(styles, /\.contact-header-sort/);
 });
 
