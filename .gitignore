@@ -35,7 +35,14 @@ test-results/
 
 # Generated local artifacts
 artifacts/
+exports/
+output/
+supabase/.temp/
 *.tsbuildinfo
+
+# Local assistant/session notes
+.claude/
+handoff.md
 
 # Editor and OS files
 .DS_Store

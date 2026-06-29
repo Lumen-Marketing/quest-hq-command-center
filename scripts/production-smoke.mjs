@@ -6,6 +6,7 @@ const companies = String(process.env.QUEST_HQ_COMPANIES || 'lumen')
   .map((company) => company.trim())
   .filter(Boolean);
 const modules = [
+  'dashboard',
   'jobs',
   'tasks',
   'files',

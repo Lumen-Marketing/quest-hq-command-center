@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const smokeScript = readFileSync(new URL('../scripts/production-smoke.mjs', import.meta.url), 'utf8');
 
 test('dashboard replaces home as the canonical core workspace route', () => {
   assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'tasks', 'users', 'settings'\]\);/);
@@ -39,4 +40,8 @@ test('dashboard CSS includes responsive KPI, chart, and list layouts', () => {
   assert.match(styles, /\.donut-wrap\s*\{/);
   assert.match(styles, /\.cash-bar\s*\{/);
   assert.match(styles, /@media \(max-width:1300px\)[\s\S]*\.dash-kpis\{ grid-template-columns:repeat\(3,1fr\); \}[\s\S]*\.dash-overview\{ grid-template-columns:1fr; \}/);
+});
+
+test('production smoke includes the canonical dashboard route', () => {
+  assert.match(smokeScript, /'dashboard'/);
 });
