@@ -11,8 +11,8 @@ The active app is `Lumen Command Center`, deployed as **Quest HQ Operations Comm
 - Production: https://quest-hq-command-center-gamma.vercel.app
 - Framework: vanilla Vite SPA, no React
 - Main source: `src/main.js`, `src/styles.css`
-- GitHub Pages compatibility output: `docs/`
 - Vercel output: `dist/`
+- Documentation: `docs/`
 
 ## Non-Negotiables
 
@@ -202,7 +202,6 @@ Recommended checks before commit/deploy:
 ```powershell
 node --check src/main.js
 npm run build
-npm run build:pages
 git diff --check
 ```
 
@@ -224,7 +223,7 @@ Browser verification should target production or the Vercel deployment URL.
 
 Production QA checklist:
 
-- Reusable checklist file: `PRODUCTION_QA_CHECKLIST.md`
+- Reusable checklist file: `docs/qa/production-checklist.md`
 - Verify `/login` shows Supabase access and a read-only demo.
 - Verify single-company accounts see a static company badge, not a dropdown.
 - Verify every enabled module route loads for the active company.

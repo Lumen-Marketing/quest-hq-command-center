@@ -17,6 +17,7 @@ Use this checklist against `https://quest-hq-command-center.vercel.app` after ev
 Check each enabled module for the signed-in user's active company:
 
 - `/company/:companyId/jobs`
+- `/company/:companyId/dashboard`
 - `/company/:companyId/tasks`
 - `/company/:companyId/files`
 - `/company/:companyId/forms`
@@ -106,7 +107,6 @@ Run after the secure finance/files migrations are applied:
 
 - `node --check src/main.js`
 - `npm run build`
-- `npm run build:pages`
 - `npm run smoke:prod`
 - `git diff --check`
 - Commit, push, and deploy with `npx vercel --prod --yes`.

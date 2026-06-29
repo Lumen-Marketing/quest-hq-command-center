@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const envExample = readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
-const productionQa = readFileSync(new URL('../PRODUCTION_QA_CHECKLIST.md', import.meta.url), 'utf8');
+const productionQa = readFileSync(new URL('../docs/qa/production-checklist.md', import.meta.url), 'utf8');
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
 
 test('launch config supports public read-only demo and manual billing mode', () => {
