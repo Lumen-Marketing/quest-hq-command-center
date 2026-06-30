@@ -36,15 +36,22 @@ test('dashboard uses the team operating dashboard widgets', () => {
 test('dashboard restores customizable handoff framework controls', () => {
   assert.match(source, /const DASHBOARD_WIDGET_GROUPS = \[/);
   assert.match(source, /const DASHBOARD_WIDGET_DEFAULTS = \{/);
+  assert.match(source, /const DASHBOARD_ROLE_VIEW_CACHE_KEY = /);
   assert.match(source, /function dashboardWidgetRegistry\(companyId, ctx\)/);
+  assert.match(source, /function renderDashboardWidgetLibraryModal\(companyId\)/);
+  assert.match(source, /function renderDashboardViewManagerModal\(companyId\)/);
   assert.match(source, /data-action="dashboard-role"/);
   assert.match(source, /data-dashboard-rep/);
   assert.match(source, /data-action="dashboard-range"/);
   assert.match(source, /data-action="dashboard-toggle-tray"/);
   assert.match(source, /data-action="dashboard-toggle-customize"/);
+  assert.match(source, /data-action="dashboard-manage-views"/);
   assert.match(source, /data-action="dashboard-add-widget"/);
   assert.match(source, /data-action="dashboard-remove-widget"/);
   assert.match(source, /data-action="dashboard-move-widget"/);
+  assert.match(source, /data-action="dashboard-toggle-role-view"/);
+  assert.match(source, /data-action="dashboard-move-role-view"/);
+  assert.match(source, /state\.modal = 'dashboard-widget-library'/);
   assert.match(source, /Needs data source/);
 });
 
@@ -56,6 +63,9 @@ test('dashboard CSS includes responsive KPI, chart, and list layouts', () => {
   assert.match(styles, /\.cash-bar\s*\{/);
   assert.match(styles, /\.dash-filter-bar\s*\{/);
   assert.match(styles, /\.dash-widget-tray\s*\{/);
+  assert.match(styles, /\.dashboard-widget-modal\s*\{/);
+  assert.match(styles, /\.dash-view-manager\s*\{/);
+  assert.match(styles, /\.dash-edit-banner\s*\{/);
   assert.match(styles, /\.dash-widget-card\s*\{/);
   assert.match(styles, /@media \(max-width:1300px\)[\s\S]*\.dash-kpis\{ grid-template-columns:repeat\(3,1fr\); \}[\s\S]*\.dash-overview\{ grid-template-columns:1fr; \}/);
 });

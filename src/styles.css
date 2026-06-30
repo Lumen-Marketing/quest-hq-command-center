@@ -14624,13 +14624,13 @@ button {
   justify-content: space-between;
   gap: 12px;
   border: 1px solid #dde3eb;
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fff;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .05);
 }
 
 .dash-commandbar {
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 
 .dash-role-tabs,
@@ -14643,13 +14643,14 @@ button {
 }
 
 .dash-role-tabs button,
-.dash-range-seg button {
-  min-height: 38px;
+.dash-range-seg button,
+.dash-manage-view {
+  min-height: 36px;
   border: 1px solid #dde3eb;
   border-radius: 8px;
   background: #fff;
   color: #5f6b7a;
-  padding: 0 14px;
+  padding: 0 13px;
   font-size: 13px;
   font-weight: 900;
 }
@@ -14661,11 +14662,29 @@ button {
   color: #fff;
 }
 
-.dash-filter-bar {
-  padding: 12px 16px;
+.dash-manage-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.dash-filter-bar label {
+.dash-filter-bar {
+  justify-content: start;
+  padding: 10px 12px;
+}
+
+.dash-filter-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dash-filter-field:first-child {
+  flex: 1 1 360px;
+}
+
+.dash-filter-field label {
   color: #8a94a3;
   font-size: 11px;
   font-weight: 950;
@@ -14673,8 +14692,9 @@ button {
   text-transform: uppercase;
 }
 
-.dash-filter-bar select {
-  min-height: 38px;
+.dash-filter-field select {
+  width: min(100%, 520px);
+  min-height: 36px;
   border: 1px solid #dde3eb;
   border-radius: 9px;
   background: #fff;
@@ -14694,11 +14714,6 @@ button {
 .dash-widget-tray {
   display: grid;
   gap: 14px;
-  border: 1px solid #dde3eb;
-  border-radius: 14px;
-  background: #fff;
-  padding: 16px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
 }
 
 .dash-tray-group {
@@ -14721,7 +14736,7 @@ button {
 .dash-tray-options button {
   display: grid;
   gap: 4px;
-  min-height: 64px;
+  min-height: 76px;
   border: 1px solid #dde3eb;
   border-radius: 9px;
   background: #fff;
@@ -14737,6 +14752,12 @@ button {
   cursor: not-allowed;
 }
 
+.dash-tray-options button:not(:disabled):hover,
+.dash-manage-view:hover {
+  border-color: var(--orange);
+  box-shadow: 0 8px 20px rgba(232, 97, 26, .12);
+}
+
 .dash-tray-options span {
   color: #667085;
   font-size: 12px;
@@ -14748,6 +14769,40 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   align-items: start;
+}
+
+.dash-edit-banner {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(232, 97, 26, .26);
+  border-radius: 12px;
+  background: #fff7f2;
+  padding: 12px;
+}
+
+.dash-edit-banner > i {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--orange);
+  font-size: 20px;
+}
+
+.dash-edit-banner b,
+.dash-edit-banner span {
+  display: block;
+}
+
+.dash-edit-banner span {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 750;
 }
 
 .dash-widget-card {
@@ -14920,14 +14975,115 @@ button {
   white-space: nowrap;
 }
 
+.dashboard-widget-modal {
+  width: min(980px, calc(100vw - 40px));
+}
+
+.dashboard-view-modal {
+  width: min(620px, calc(100vw - 40px));
+}
+
+.dash-modal-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.dash-modal-summary b,
+.dash-modal-summary span {
+  display: block;
+}
+
+.dash-modal-summary span {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.dash-view-manager {
+  display: grid;
+  gap: 8px;
+}
+
+.dash-view-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+}
+
+.dash-view-row.active {
+  border-color: rgba(232, 97, 26, .36);
+  background: #fffaf7;
+}
+
+.dash-view-row label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dash-view-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--orange);
+}
+
+.dash-view-row b,
+.dash-view-row small {
+  display: block;
+}
+
+.dash-view-row small {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.dash-view-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.dash-view-actions button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #dde3eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #667085;
+}
+
+.dash-view-actions button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
 @media (max-width:1300px){ .dash-kpis{ grid-template-columns:repeat(3,1fr); } .dash-overview{ grid-template-columns:1fr; } }
-@media (max-width:900px){ .dash-kpis{ grid-template-columns:repeat(2,1fr); } .dash-lists,.dash-widget-grid{ grid-template-columns:1fr; } .dash-widget-card.span2{ grid-column:auto; } .dash-filter-bar{ align-items:flex-start; flex-direction:column; } .dash-filter-bar > span{ margin-left:0; } }
+@media (max-width:900px){ .dash-kpis{ grid-template-columns:repeat(2,1fr); } .dash-lists,.dash-widget-grid{ grid-template-columns:1fr; } .dash-widget-card.span2{ grid-column:auto; } .dash-filter-bar{ align-items:flex-start; flex-direction:column; } .dash-filter-bar > span{ margin-left:0; } .dash-filter-field,.dash-filter-field:first-child{ width:100%; flex:1 1 auto; } .dash-filter-range{ align-items:flex-start; flex-direction:column; } .dash-edit-banner{ grid-template-columns:36px minmax(0,1fr); } .dash-edit-banner .btn{ grid-column:1 / -1; } }
 @media (max-width:620px){
   .dash-kpis{ grid-template-columns:1fr; }
   .pipe-bar-row{ grid-template-columns:minmax(0,1fr); align-items:start; }
   .pbr-val{ text-align:left; }
   .donut-wrap{ align-items:flex-start; flex-direction:column; }
   .dash-commandbar{ align-items:flex-start; flex-direction:column; }
+  .dash-modal-summary{ align-items:flex-start; flex-direction:column; }
+  .dash-view-row{ grid-template-columns:1fr; }
 }
 
 /* Compact sidebar density — tighter, lighter nav rows (less chunky) */

@@ -65,6 +65,7 @@ const CLIENT_PORTAL_TOKEN_CACHE_KEY = 'quest-client-portal-token-cache-v1';
 const CLIENT_PORTAL_GUEST_NAME = 'Client';
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
 const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
+const DASHBOARD_ROLE_VIEW_CACHE_KEY = 'quest-hq-dashboard-role-views-v1';
 
 const ROLE_PERMISSIONS = {
   developer: ['*'],
@@ -1552,6 +1553,7 @@ const state = {
   dashboardCustomize: false,
   dashboardTrayOpen: false,
   dashboardLayouts: readJson(DASHBOARD_LAYOUT_CACHE_KEY, {}),
+  dashboardRoleViews: readJson(DASHBOARD_ROLE_VIEW_CACHE_KEY, []),
   workspaceIconDrafts: {},
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
   sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
@@ -3099,7 +3101,8 @@ function renderCompanyDashboard(companyId) {
   const showReporting = reportingModule && canViewModule(reportingModule, companyId);
   const unreadMessages = showMessages ? companyMessageUnreadCount(companyId) : 0;
   const recentActivity = homeRecentActivity(companyId, companyNotifications(companyId).slice(0, 4));
-  const role = DASHBOARD_WIDGET_DEFAULTS[state.dashboardRole] ? state.dashboardRole : 'exec';
+  const roleViews = dashboardVisibleRoleViews(companyId);
+  const role = roleViews.some(([id]) => id === state.dashboardRole) ? state.dashboardRole : roleViews[0]?.[0] || 'exec';
   state.dashboardRole = role;
   const ctx = dashboardContext(companyId);
   const registry = dashboardWidgetRegistry(companyId, ctx);
@@ -3127,7 +3130,8 @@ function renderCompanyDashboard(companyId) {
 
       <section class="dash-commandbar">
         <div class="dash-role-tabs">
-          ${DASHBOARD_ROLE_VIEWS.map(([id, label]) => `<button class="${role === id ? 'active' : ''}" type="button" data-action="dashboard-role" data-role="${id}">${h(label)}</button>`).join('')}
+          ${roleViews.map(([id, label]) => `<button class="${role === id ? 'active' : ''}" type="button" data-action="dashboard-role" data-role="${id}">${h(label)}</button>`).join('')}
+          ${state.dashboardCustomize ? `<button class="dash-manage-view" type="button" data-action="dashboard-manage-views"><i class="ti ti-settings"></i>Views</button>` : ''}
         </div>
         <div class="dash-command-actions">
           <button class="btn" type="button" data-action="dashboard-toggle-tray"><i class="ti ti-plus"></i>Add widget</button>
@@ -3136,18 +3140,28 @@ function renderCompanyDashboard(companyId) {
       </section>
 
       <section class="dash-filter-bar">
-        <label>Rep</label>
-        <select data-dashboard-rep>
-          ${repOptions.map((rep) => `<option value="${h(rep.id)}" ${rep.id === activeRep.id ? 'selected' : ''}>${h(rep.name)}</option>`).join('')}
-        </select>
-        <label>Range</label>
-        <div class="dash-range-seg">
-          ${DASHBOARD_RANGE_OPTIONS.map(([id, label]) => `<button class="${state.dashboardRange === id ? 'active' : ''}" type="button" data-action="dashboard-range" data-range="${id}">${h(label)}</button>`).join('')}
+        <div class="dash-filter-field">
+          <label>Rep</label>
+          <select data-dashboard-rep>
+            ${repOptions.map((rep) => `<option value="${h(rep.id)}" ${rep.id === activeRep.id ? 'selected' : ''}>${h(rep.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="dash-filter-field dash-filter-range">
+          <label>Range</label>
+          <div class="dash-range-seg">
+            ${DASHBOARD_RANGE_OPTIONS.map(([id, label]) => `<button class="${state.dashboardRange === id ? 'active' : ''}" type="button" data-action="dashboard-range" data-range="${id}">${h(label)}</button>`).join('')}
+          </div>
         </div>
         <span>${h(activeRep.name)} - ${h(activeRange[1])}</span>
       </section>
 
-      ${state.dashboardTrayOpen ? renderDashboardWidgetTray(registry, layout) : ''}
+      ${state.dashboardCustomize ? `
+        <section class="dash-edit-banner">
+          <i class="ti ti-layout-dashboard"></i>
+          <div><b>Customizing ${h(activeRange[1].toLowerCase())} dashboard</b><span>Reorder cards, remove noise, or manage the visible views for this workspace.</span></div>
+          <button class="btn" type="button" data-action="dashboard-reset-layout"><i class="ti ti-rotate"></i>Reset layout</button>
+        </section>
+      ` : ''}
 
       <section class="dash-widget-grid ${state.dashboardCustomize ? 'editing' : ''}">
         ${layout.map((id, index) => renderDashboardWidgetCard(registry[id], id, index, layout.length)).join('') || emptyState('No widgets in this dashboard view. Use Add widget to restore one.')}
@@ -3391,6 +3405,26 @@ function dashboardWidgetLayout(companyId, role = state.dashboardRole) {
   return Array.isArray(saved) && saved.length ? saved : fallback.slice();
 }
 
+function dashboardVisibleRoleViews(companyId = activeCompanyId()) {
+  const valid = new Set(DASHBOARD_ROLE_VIEWS.map(([id]) => id));
+  const savedSource = Array.isArray(state.dashboardRoleViews) ? state.dashboardRoleViews : state.dashboardRoleViews?.[companyId] || [];
+  const saved = compactUnique(savedSource).filter((id) => valid.has(id));
+  const visibleIds = saved.length ? saved : DASHBOARD_ROLE_VIEWS.map(([id]) => id);
+  const rows = visibleIds.map((id) => DASHBOARD_ROLE_VIEWS.find(([viewId]) => viewId === id)).filter(Boolean);
+  return rows.length ? rows : [DASHBOARD_ROLE_VIEWS[0]];
+}
+
+function saveDashboardRoleViews(viewIds, companyId = activeCompanyId()) {
+  const valid = new Set(DASHBOARD_ROLE_VIEWS.map(([id]) => id));
+  const next = compactUnique(viewIds).filter((id) => valid.has(id));
+  const current = Array.isArray(state.dashboardRoleViews) ? {} : { ...(state.dashboardRoleViews || {}) };
+  state.dashboardRoleViews = {
+    ...current,
+    [companyId]: next.length ? next : [DASHBOARD_ROLE_VIEWS[0][0]],
+  };
+  writeJson(DASHBOARD_ROLE_VIEW_CACHE_KEY, state.dashboardRoleViews);
+}
+
 function saveDashboardWidgetLayout(companyId, role, widgetIds) {
   state.dashboardLayouts = {
     ...(state.dashboardLayouts || {}),
@@ -3421,6 +3455,50 @@ function renderDashboardWidgetCard(widget, id, index, total) {
   `;
 }
 
+function renderDashboardWidgetLibraryModal(companyId) {
+  const role = state.dashboardRole || 'exec';
+  const ctx = dashboardContext(companyId);
+  const registry = dashboardWidgetRegistry(companyId, ctx);
+  const layout = dashboardWidgetLayout(companyId, role).filter((id) => registry[id]);
+  const roleLabel = DASHBOARD_ROLE_VIEWS.find(([id]) => id === role)?.[1] || 'Executive';
+  return renderModalShell('Dashboard', 'Add widget', `
+    <div class="dash-modal-summary">
+      <div><b>${h(roleLabel)} view</b><span>${h(layout.length)} widgets visible right now</span></div>
+      <button class="btn" type="button" data-action="dashboard-toggle-customize"><i class="ti ti-pencil"></i>${state.dashboardCustomize ? 'Exit customize' : 'Customize layout'}</button>
+    </div>
+    ${renderDashboardWidgetTray(registry, layout)}
+  `, 'wide-modal dashboard-widget-modal');
+}
+
+function renderDashboardViewManagerModal(companyId) {
+  const visibleIds = dashboardVisibleRoleViews(companyId).map(([id]) => id);
+  const selected = new Set(visibleIds);
+  return renderModalShell('Dashboard', 'Customize views', `
+    <div class="dash-modal-summary">
+      <div><b>${h(companyName(companyId) || 'Workspace')} dashboard tabs</b><span>Choose which views appear in the dashboard header and reorder the active set.</span></div>
+      <button class="btn" type="button" data-action="dashboard-reset-role-views"><i class="ti ti-rotate"></i>Reset views</button>
+    </div>
+    <div class="dash-view-manager">
+      ${DASHBOARD_ROLE_VIEWS.map(([id, label]) => {
+        const active = selected.has(id);
+        const index = visibleIds.indexOf(id);
+        return `
+          <div class="dash-view-row ${active ? 'active' : ''}">
+            <label>
+              <input type="checkbox" data-action="dashboard-toggle-role-view" data-role="${h(id)}" ${active ? 'checked' : ''} />
+              <span><b>${h(label)}</b><small>${active ? `Visible tab ${index + 1}` : 'Hidden from dashboard header'}</small></span>
+            </label>
+            <div class="dash-view-actions">
+              <button type="button" data-action="dashboard-move-role-view" data-role="${h(id)}" data-direction="-1" ${!active || index <= 0 ? 'disabled' : ''} aria-label="Move ${h(label)} left"><i class="ti ti-arrow-left"></i></button>
+              <button type="button" data-action="dashboard-move-role-view" data-role="${h(id)}" data-direction="1" ${!active || index >= visibleIds.length - 1 ? 'disabled' : ''} aria-label="Move ${h(label)} right"><i class="ti ti-arrow-right"></i></button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `, 'dashboard-view-modal');
+}
+
 function renderDashboardWidgetTray(registry, layout) {
   return `
     <section class="dash-widget-tray">
@@ -3434,7 +3512,8 @@ function renderDashboardWidgetTray(registry, layout) {
             <div class="dash-tray-options">
               ${items.map(([id, widget]) => {
                 const active = layout.includes(id);
-                return `<button class="${active ? 'active' : ''}" type="button" data-action="dashboard-add-widget" data-widget-id="${h(id)}" ${active ? 'disabled' : ''}><b>${h(widget.title)}</b><span>${widget.locked ? 'Needs data source' : h(widget.sub || 'Ready widget')}</span></button>`;
+                const status = active ? 'Added' : widget.locked ? 'Needs data source' : 'Ready';
+                return `<button class="${active ? 'active' : ''}" type="button" data-action="dashboard-add-widget" data-widget-id="${h(id)}" ${active ? 'disabled' : ''}><b>${h(widget.title)}</b><span>${h(status)} - ${widget.locked ? h(widget.sub || '') : h(widget.sub || 'Ready widget')}</span></button>`;
               }).join('')}
             </div>
           </div>
@@ -9514,6 +9593,8 @@ function renderWorkspaceIconModal(companyId) {
 function renderActiveModal(route, session) {
   if (state.modal === 'profile') return renderProfileModal(session.profile);
   if (state.modal === 'workspace-icon') return renderWorkspaceIconModal(activeCompanyId());
+  if (state.modal === 'dashboard-widget-library') return renderDashboardWidgetLibraryModal(activeCompanyId());
+  if (state.modal === 'dashboard-view-manager') return renderDashboardViewManagerModal(activeCompanyId());
   if (state.modal === 'file-upload') return renderFileUploadModal();
   if (state.modal === 'client-portal-form') return renderClientPortalFormModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
   if (state.modal === 'client-portal-document') return renderClientPortalDocumentModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
@@ -9915,7 +9996,8 @@ function handleAction(event, node) {
   }
   if (action === 'dashboard-role') {
     event.preventDefault();
-    state.dashboardRole = DASHBOARD_WIDGET_DEFAULTS[node.dataset.role] ? node.dataset.role : 'exec';
+    const nextRole = node.dataset.role || 'exec';
+    state.dashboardRole = DASHBOARD_WIDGET_DEFAULTS[nextRole] ? nextRole : 'exec';
     state.dashboardTrayOpen = false;
     render();
     return;
@@ -9928,7 +10010,14 @@ function handleAction(event, node) {
   }
   if (action === 'dashboard-toggle-tray') {
     event.preventDefault();
-    state.dashboardTrayOpen = !state.dashboardTrayOpen;
+    state.dashboardTrayOpen = true;
+    state.modal = 'dashboard-widget-library';
+    render();
+    return;
+  }
+  if (action === 'dashboard-manage-views') {
+    event.preventDefault();
+    state.modal = 'dashboard-view-manager';
     render();
     return;
   }
@@ -9948,6 +10037,55 @@ function handleAction(event, node) {
       saveDashboardWidgetLayout(activeCompanyId(), role, next);
       render();
     }
+    return;
+  }
+  if (action === 'dashboard-reset-layout') {
+    event.preventDefault();
+    const companyId = activeCompanyId();
+    const role = state.dashboardRole || 'exec';
+    state.dashboardLayouts = {
+      ...(state.dashboardLayouts || {}),
+      [companyId]: {
+        ...(state.dashboardLayouts?.[companyId] || {}),
+        [role]: (DASHBOARD_WIDGET_DEFAULTS[role] || DASHBOARD_WIDGET_DEFAULTS.exec).slice(),
+      },
+    };
+    writeJson(DASHBOARD_LAYOUT_CACHE_KEY, state.dashboardLayouts);
+    render();
+    return;
+  }
+  if (action === 'dashboard-toggle-role-view') {
+    event.preventDefault();
+    const roleId = node.dataset.role || '';
+    const companyId = activeCompanyId();
+    const current = dashboardVisibleRoleViews(companyId).map(([id]) => id);
+    const next = current.includes(roleId) ? current.filter((id) => id !== roleId) : current.concat(roleId);
+    saveDashboardRoleViews(next, companyId);
+    const visible = dashboardVisibleRoleViews(companyId).map(([id]) => id);
+    if (!visible.includes(state.dashboardRole)) state.dashboardRole = visible[0] || 'exec';
+    render();
+    return;
+  }
+  if (action === 'dashboard-move-role-view') {
+    event.preventDefault();
+    const roleId = node.dataset.role || '';
+    const dir = Number(node.dataset.direction || 0);
+    const companyId = activeCompanyId();
+    const order = dashboardVisibleRoleViews(companyId).map(([id]) => id);
+    const index = order.indexOf(roleId);
+    const nextIndex = Math.max(0, Math.min(order.length - 1, index + dir));
+    if (index >= 0 && nextIndex !== index) {
+      const [item] = order.splice(index, 1);
+      order.splice(nextIndex, 0, item);
+      saveDashboardRoleViews(order, companyId);
+      render();
+    }
+    return;
+  }
+  if (action === 'dashboard-reset-role-views') {
+    event.preventDefault();
+    saveDashboardRoleViews(DASHBOARD_ROLE_VIEWS.map(([id]) => id), activeCompanyId());
+    render();
     return;
   }
   if (action === 'dashboard-remove-widget') {
@@ -11077,6 +11215,7 @@ function handleAction(event, node) {
 
 function closeActiveModal() {
   const route = state.route || getRoute();
+  state.dashboardTrayOpen = false;
   state.modal = '';
   state.formStartTemplateId = '';
   state.formStartTab = 'blank';
