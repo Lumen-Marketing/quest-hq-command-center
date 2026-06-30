@@ -5889,7 +5889,7 @@ function renderClientPortalPublicPage(route) {
               { id: 'measure', attr: 'data-portal-tool="measure"', label: 'Measure', icon: 'ti-ruler-measure' },
               { id: 'stamp', attr: 'data-portal-tool="stamp"', label: 'Approve stamp', icon: 'ti-circle-check' },
             ].map((tool) => `
-              <button class="client-portal-tool ${state.clientPortalTool === tool.id ? 'active' : ''}" type="button" data-action="client-portal-tool" ${tool.attr} title="${h(tool.label)}" aria-label="${h(tool.label)}"><i class="ti ${h(tool.icon)}" aria-hidden="true"></i></button>
+              <button class="client-portal-tool ${state.clientPortalTool === tool.id ? 'active' : ''}" type="button" data-action="client-portal-tool" ${tool.attr} title="${h(tool.label)}" aria-label="${h(tool.label)}" aria-pressed="${state.clientPortalTool === tool.id ? 'true' : 'false'}"><i class="ti ${h(tool.icon)}" aria-hidden="true"></i></button>
             `).join('')}
             <input type="color" value="${h(state.clientPortalColor)}" data-action="client-portal-color" title="Markup color" />
             <button class="btn" type="button" data-action="client-portal-save-annotations"><i class="ti ti-device-floppy"></i>Save markups</button>
@@ -5916,6 +5916,15 @@ function renderClientPortalPublicPage(route) {
       </section>
     </main>
   `;
+}
+
+function updateClientPortalToolSelection(toolId) {
+  state.clientPortalTool = toolId || 'pan';
+  document.querySelectorAll('[data-action="client-portal-tool"]').forEach((button) => {
+    const active = button.dataset.portalTool === state.clientPortalTool;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
 }
 
 function renderClientPortalFormModal(companyId, portal = null) {
@@ -9269,8 +9278,7 @@ function handleAction(event, node) {
   }
   if (action === 'client-portal-tool') {
     event.preventDefault();
-    state.clientPortalTool = node.dataset.portalTool || 'pan';
-    render();
+    updateClientPortalToolSelection(node.dataset.portalTool || 'pan');
     return;
   }
   if (action === 'client-portal-color') {

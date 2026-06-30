@@ -61,12 +61,22 @@ test('public portal viewer exposes plan markup tools and persistent annotations'
   assert.match(source, /data-portal-tool="measure"/);
   assert.match(source, /icon: 'ti-pencil'/);
   assert.match(source, /aria-label="\$\{h\(tool\.label\)\}"/);
+  assert.match(source, /aria-pressed="\$\{state\.clientPortalTool === tool\.id \? 'true' : 'false'\}"/);
   assert.match(source, /data-action="client-portal-save-annotations"/);
   assert.match(source, /data-action="client-portal-export"/);
   assert.match(source, /loadClientPortalAnnotations/);
   assert.match(source, /saveClientPortalAnnotations/);
   assert.match(styles, /\.client-portal-public/);
   assert.match(styles, /\.client-portal-stage/);
+});
+
+test('client portal tool selection does not remount the PDF viewer', () => {
+  assert.match(source, /function updateClientPortalToolSelection\(toolId\)/);
+  assert.match(source, /button\.classList\.toggle\('active', active\)/);
+  assert.match(source, /button\.setAttribute\('aria-pressed', active \? 'true' : 'false'\)/);
+  const block = source.slice(source.indexOf("if (action === 'client-portal-tool')"), source.indexOf("if (action === 'client-portal-color')"));
+  assert.match(block, /updateClientPortalToolSelection\(node\.dataset\.portalTool \|\| 'pan'\)/);
+  assert.doesNotMatch(block, /render\(\)/);
 });
 
 test('client portal migration creates tables, RLS, bucket, grants, and plugin allowlist updates', () => {
