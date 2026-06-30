@@ -5887,7 +5887,7 @@ function renderClientPortalPublicPage(route) {
               { id: 'text', attr: 'data-portal-tool="text"', label: 'Text', icon: 'ti-letter-t' },
               { id: 'comment', attr: 'data-portal-tool="comment"', label: 'Pin comment', icon: 'ti-message-circle' },
               { id: 'measure', attr: 'data-portal-tool="measure"', label: 'Measure', icon: 'ti-ruler-measure' },
-              { id: 'stamp', attr: 'data-portal-tool="stamp"', label: 'Approve stamp', icon: 'ti-stamp' },
+              { id: 'stamp', attr: 'data-portal-tool="stamp"', label: 'Approve stamp', icon: 'ti-circle-check' },
             ].map((tool) => `
               <button class="client-portal-tool ${state.clientPortalTool === tool.id ? 'active' : ''}" type="button" data-action="client-portal-tool" ${tool.attr} title="${h(tool.label)}" aria-label="${h(tool.label)}"><i class="ti ${h(tool.icon)}" aria-hidden="true"></i></button>
             `).join('')}
