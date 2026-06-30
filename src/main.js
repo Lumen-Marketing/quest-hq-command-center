@@ -64,6 +64,7 @@ const CLIENT_PORTAL_SESSION_KEY = 'quest-client-portal-session-v1';
 const CLIENT_PORTAL_TOKEN_CACHE_KEY = 'quest-client-portal-token-cache-v1';
 const CLIENT_PORTAL_GUEST_NAME = 'Client';
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
+const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
 
 const ROLE_PERMISSIONS = {
   developer: ['*'],
@@ -184,6 +185,28 @@ const CONTACT_FILTER_DEFAULTS = {
 };
 const CONTACT_JOB_TYPE_OPTIONS = ['Insurance / storm', 'Retail replacement', 'Repair', 'Inspection', 'Maintenance', 'Re-roof'];
 const CONTACT_PAY_TYPE_OPTIONS = ['Insurance', 'Retail', 'Financing', 'Cash'];
+
+const DASHBOARD_WIDGET_GROUPS = ['Value drivers', 'Growth', 'Capacity', 'People', 'Cash flow', 'Strategy', 'EOS', 'Sales', 'Operations', 'Finance', 'Reputation'];
+const DASHBOARD_ROLE_VIEWS = [
+  ['exec', 'Executive'],
+  ['sales', 'Sales'],
+  ['ops', 'Operations'],
+  ['scale', 'Scale'],
+  ['eos', 'EOS'],
+];
+const DASHBOARD_RANGE_OPTIONS = [
+  ['today', 'Today'],
+  ['week', 'This week'],
+  ['month', 'This month'],
+  ['quarter', 'Quarter'],
+];
+const DASHBOARD_WIDGET_DEFAULTS = {
+  exec: ['kpis', 'avgTicket', 'revGrowth', 'goalPacing', 'leaderboard', 'backlog', 'pipelineCoverage', 'jobs', 'revenue', 'reviews'],
+  sales: ['kpis', 'leaderboard', 'callsTrend', 'sources', 'funnel', 'speed'],
+  ops: ['jobs', 'dispatch', 'weather', 'kpis', 'revenue'],
+  scale: ['pipelineCoverage', 'utilization', 'quota', 'dso', 'concentration', 'serviceMix', 'scorecard'],
+  eos: ['rocks', 'scorecard', 'oneYearPlan', 'l10pulse', 'issues', 'todos', 'peopleAnalyzer', 'eosComponents', 'coreValues'],
+};
 
 const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings']);
 const WORKSPACE_PLUGIN_REGISTRY = [
@@ -1523,6 +1546,12 @@ const state = {
   companyPlugins: [],
   pluginLoadFailed: false,
   companies: mergeCompanies(companiesFallback.map(normalizeCompany)),
+  dashboardRole: 'exec',
+  dashboardRange: 'week',
+  dashboardRep: 'all',
+  dashboardCustomize: false,
+  dashboardTrayOpen: false,
+  dashboardLayouts: readJson(DASHBOARD_LAYOUT_CACHE_KEY, {}),
   workspaceIconDrafts: {},
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
   sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
@@ -3068,53 +3097,16 @@ function renderCompanyDashboard(companyId) {
   const reportingModule = moduleById('analytics');
   const showMessages = messagesModule && canViewModule(messagesModule, companyId);
   const showReporting = reportingModule && canViewModule(reportingModule, companyId);
-  const jobs = companyJobs(companyId);
-  const tasks = companyTasks(companyId);
-  const openTasks = tasks.filter((task) => task.status !== 'done');
-  const overdueTasks = openTasks.filter((task) => task.due && new Date(task.due) < startOfToday());
   const unreadMessages = showMessages ? companyMessageUnreadCount(companyId) : 0;
   const recentActivity = homeRecentActivity(companyId, companyNotifications(companyId).slice(0, 4));
-  const deals = companyDeals(companyId);
-  const fin = financeSummary(companyId);
-  const openDeals = deals.filter((d) => resolvePipelineStage('deals', d.stage, companyId) !== 'Won');
-  const openPipeline = openDeals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
-  const jobsInProduction = jobs.filter((job) => /production|material/i.test(String(job.stage || ''))).length;
-  const dealStageData = pipelineStages('deals', companyId).map((stage) => {
-    const stageDeals = deals.filter((deal) => resolvePipelineStage('deals', deal.stage, companyId) === stage.name);
-    return {
-      name: stage.name,
-      color: stage.color,
-      count: stageDeals.length,
-      value: stageDeals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0),
-    };
-  });
-  const maxStageValue = Math.max(1, ...dealStageData.map((stage) => stage.value));
-  const statusColors = { todo: '#94a3b8', pending: '#2563eb', hold: '#d97706', review: '#7c3aed', done: '#16a34a' };
-  const taskStatusData = TASK_STATUSES.map((status) => ({
-    status,
-    label: statusLabel(status),
-    count: tasks.filter((task) => task.status === status).length,
-    color: statusColors[status] || '#94a3b8',
-  }));
-  const totalTasksDonut = tasks.length || 1;
-  let donutAcc = 0;
-  const donutSegments = taskStatusData.filter((status) => status.count > 0).map((status) => {
-    const start = (donutAcc / totalTasksDonut) * 100;
-    donutAcc += status.count;
-    const end = (donutAcc / totalTasksDonut) * 100;
-    return `${status.color} ${start}% ${end}%`;
-  });
-  const donutBg = donutSegments.length ? `conic-gradient(${donutSegments.join(', ')})` : 'conic-gradient(#e5e7eb 0% 100%)';
-  const collectedPct = fin.invoiced ? Math.round((fin.collected / fin.invoiced) * 100) : 0;
-  const dashKpi = (icon, label, value, sub, tone = '') => `
-    <div class="dash-kpi ${h(tone)}">
-      <span class="dk-ic"><i class="ti ${h(icon)}"></i></span>
-      <span class="dk-body">
-        <b>${h(value)}</b>
-        <span class="dk-label">${h(label)}</span>
-        ${sub ? `<span class="dk-sub">${h(sub)}</span>` : ''}
-      </span>
-    </div>`;
+  const role = DASHBOARD_WIDGET_DEFAULTS[state.dashboardRole] ? state.dashboardRole : 'exec';
+  state.dashboardRole = role;
+  const ctx = dashboardContext(companyId);
+  const registry = dashboardWidgetRegistry(companyId, ctx);
+  const layout = dashboardWidgetLayout(companyId, role).filter((id) => registry[id]);
+  const repOptions = dashboardRepOptions(companyId);
+  const activeRep = repOptions.find((rep) => rep.id === state.dashboardRep) || repOptions[0];
+  const activeRange = DASHBOARD_RANGE_OPTIONS.find(([id]) => id === state.dashboardRange) || DASHBOARD_RANGE_OPTIONS[1];
 
   return `
     <section class="home-cockpit dash">
@@ -3133,47 +3125,32 @@ function renderCompanyDashboard(companyId) {
         </div>
       </div>
 
-      <section class="dash-kpis">
-        ${dashKpi('ti-chart-arrows-vertical', 'Open pipeline', money(openPipeline), `${openDeals.length} active quotes`, 'pipe')}
-        ${dashKpi('ti-briefcase', 'Jobs in production', jobsInProduction || jobs.length, `${jobs.length} total jobs`, 'jobs')}
-        ${dashKpi('ti-checkbox', 'Open tasks', openTasks.length, overdueTasks.length ? `${overdueTasks.length} overdue` : 'On track', overdueTasks.length ? 'warn' : 'tasks')}
-        ${dashKpi('ti-cash', 'Collected', money(fin.collected), `${collectedPct}% of invoiced`, 'cash')}
-        ${dashKpi('ti-clock-dollar', 'Outstanding', money(fin.outstanding), 'Awaiting payment', 'ar')}
+      <section class="dash-commandbar">
+        <div class="dash-role-tabs">
+          ${DASHBOARD_ROLE_VIEWS.map(([id, label]) => `<button class="${role === id ? 'active' : ''}" type="button" data-action="dashboard-role" data-role="${id}">${h(label)}</button>`).join('')}
+        </div>
+        <div class="dash-command-actions">
+          <button class="btn" type="button" data-action="dashboard-toggle-tray"><i class="ti ti-plus"></i>Add widget</button>
+          <button class="btn ${state.dashboardCustomize ? 'btn-primary' : ''}" type="button" data-action="dashboard-toggle-customize"><i class="ti ti-pencil"></i>${state.dashboardCustomize ? 'Done' : 'Customize'}</button>
+        </div>
       </section>
 
-      <section class="dash-overview">
-        <article class="panel dash-pipeline">
-          <div class="section-head"><div><h2>Sales pipeline</h2><p>Open quote value by stage.</p></div><a href="${appHref(companyPath('deals', {}, companyId))}" data-router>Open <i class="ti ti-arrow-right"></i></a></div>
-          <div class="pipe-bars">
-            ${dealStageData.map((stage) => `
-              <div class="pipe-bar-row">
-                <span class="pbr-name">${pipelineDot(stage.color)}${h(stage.name)}</span>
-                <span class="pbr-track"><i style="width:${h(Math.round((stage.value / maxStageValue) * 100))}%;background:${h(stage.color)}"></i></span>
-                <span class="pbr-val">${h(money(stage.value))}<small>${h(stage.count)} ${stage.count === 1 ? 'quote' : 'quotes'}</small></span>
-              </div>`).join('')}
-          </div>
-        </article>
+      <section class="dash-filter-bar">
+        <label>Rep</label>
+        <select data-dashboard-rep>
+          ${repOptions.map((rep) => `<option value="${h(rep.id)}" ${rep.id === activeRep.id ? 'selected' : ''}>${h(rep.name)}</option>`).join('')}
+        </select>
+        <label>Range</label>
+        <div class="dash-range-seg">
+          ${DASHBOARD_RANGE_OPTIONS.map(([id, label]) => `<button class="${state.dashboardRange === id ? 'active' : ''}" type="button" data-action="dashboard-range" data-range="${id}">${h(label)}</button>`).join('')}
+        </div>
+        <span>${h(activeRep.name)} - ${h(activeRange[1])}</span>
+      </section>
 
-        <article class="panel dash-tasks">
-          <div class="section-head"><div><h2>Task status</h2><p>${h(openTasks.length)} open of ${h(tasks.length)}</p></div></div>
-          <div class="donut-wrap">
-            <div class="donut" style="background:${h(donutBg)}"><div class="donut-hole"><b>${h(tasks.length)}</b><small>tasks</small></div></div>
-            <div class="donut-legend">
-              ${taskStatusData.map((status) => `<div><span class="dl-dot" style="background:${h(status.color)}"></span><span class="dl-name">${h(status.label)}</span><b>${h(status.count)}</b></div>`).join('')}
-            </div>
-          </div>
-        </article>
+      ${state.dashboardTrayOpen ? renderDashboardWidgetTray(registry, layout) : ''}
 
-        <article class="panel dash-cash">
-          <div class="section-head"><div><h2>Receivables</h2><p>Invoiced vs collected.</p></div><a href="${appHref(companyPath('finance', {}, companyId))}" data-router>Finance <i class="ti ti-arrow-right"></i></a></div>
-          <div class="cash-figs">
-            <div><span>Invoiced</span><b>${h(money(fin.invoiced))}</b></div>
-            <div><span>Collected</span><b class="pos">${h(money(fin.collected))}</b></div>
-            <div><span>Outstanding</span><b class="warn">${h(money(fin.outstanding))}</b></div>
-          </div>
-          <div class="cash-bar"><i style="width:${h(collectedPct)}%"></i></div>
-          <p class="cash-note">${h(collectedPct)}% of invoiced has been collected.</p>
-        </article>
+      <section class="dash-widget-grid ${state.dashboardCustomize ? 'editing' : ''}">
+        ${layout.map((id, index) => renderDashboardWidgetCard(registry[id], id, index, layout.length)).join('') || emptyState('No widgets in this dashboard view. Use Add widget to restore one.')}
       </section>
 
       <section class="dash-lists">
@@ -3209,6 +3186,430 @@ function renderCompanyDashboard(companyId) {
       </section>
     </section>
   `;
+}
+
+function dashboardContext(companyId) {
+  const window = dashboardRangeWindow(state.dashboardRange);
+  const repId = state.dashboardRep || 'all';
+  const inRange = (item) => dashboardInRange(item, window);
+  const matchesRep = (item) => repId === 'all' || dashboardOwnerKey(dashboardOwnerName(item)) === repId;
+  const contacts = companyContacts(companyId).filter(inRange).filter(matchesRep);
+  const deals = companyDeals(companyId).filter(inRange).filter(matchesRep);
+  const jobs = companyJobs(companyId).filter(inRange).filter(matchesRep);
+  const tasks = companyTasks(companyId).filter(inRange).filter(matchesRep);
+  const activities = companyActivities(companyId).filter(inRange).filter(matchesRep);
+  const invoices = companyFinanceInvoices(companyId).filter((item) => dashboardInRange(item, window, ['issued_at', 'created_at', 'updated_at']));
+  const payments = companyFinancePayments(companyId).filter((item) => dashboardInRange(item, window, ['received_at', 'created_at', 'updated_at']));
+  const fin = financeSummary(companyId);
+  const wonDeals = deals.filter((d) => resolvePipelineStage('deals', d.stage, companyId) === 'Won');
+  const openDeals = deals.filter((d) => resolvePipelineStage('deals', d.stage, companyId) !== 'Won');
+  const openTasks = tasks.filter((task) => task.status !== 'done');
+  return { companyId, window, contacts, deals, jobs, tasks, openTasks, activities, invoices, payments, fin, wonDeals, openDeals };
+}
+
+function dashboardWidgetRegistry(companyId, ctx) {
+  const openPipeline = ctx.openDeals.reduce((total, deal) => total + number(deal.value), 0);
+  const jobsInProduction = ctx.jobs.filter((job) => /production|material/i.test(String(job.stage || ''))).length;
+  const overdueTasks = ctx.openTasks.filter((task) => task.due && new Date(task.due) < startOfToday()).length;
+  const periodRevenue = sum(ctx.payments, 'amount') || ctx.wonDeals.reduce((total, deal) => total + number(deal.value), 0);
+  const callCount = ctx.activities.filter((activity) => /call/i.test(String(activity.type || activity.subject || ''))).length;
+  const proposalCount = ctx.deals.length;
+  const leadCount = ctx.contacts.length;
+  const wonRevenue = ctx.wonDeals.reduce((total, deal) => total + number(deal.value), 0);
+  const avgTicket = dashboardAverage(ctx.jobs.map((job) => number(job.estimate_total || job.invoice_total)).filter(Boolean));
+  const residentialJobs = ctx.jobs.filter((job) => /residential|home|roof/i.test(String(job.job_type || job.name || '')) && !/commercial/i.test(String(job.job_type || job.name || '')));
+  const commercialJobs = ctx.jobs.filter((job) => /commercial|storage|office|retail/i.test(String(job.job_type || job.name || '')));
+  const collectedPct = ctx.fin.invoiced ? Math.round((ctx.fin.collected / ctx.fin.invoiced) * 100) : 0;
+  const widgets = {
+    kpis: {
+      title: 'Activity totals',
+      group: 'Sales',
+      span: true,
+      sub: 'Calls, leads, proposals, and won revenue.',
+      render: () => `
+        <section class="dash-kpis dash-widget-kpis">
+          ${dashboardMetricTile('ti-phone', callCount, 'Calls logged', `${ctx.activities.length} activities`)}
+          ${dashboardMetricTile('ti-users', leadCount, 'Leads', `${ctx.contacts.length} contacts`)}
+          ${dashboardMetricTile('ti-file-text', proposalCount, 'Proposals sent', `avg ${money(dashboardAverage(ctx.deals.map((deal) => number(deal.value)).filter(Boolean)))}`)}
+          ${dashboardMetricTile('ti-trophy', money(wonRevenue), 'Won revenue', `${ctx.wonDeals.length} won`)}
+        </section>`,
+    },
+    leaderboard: {
+      title: 'Rep leaderboard',
+      group: 'Sales',
+      span: true,
+      sub: 'Revenue and conversion by owner.',
+      render: () => renderDashboardLeaderboard(companyId, ctx),
+    },
+    callsTrend: {
+      title: 'Calls logged',
+      group: 'Sales',
+      sub: 'Activity by day in selected range.',
+      render: () => renderDashboardDayBars(ctx.activities.filter((activity) => /call/i.test(String(activity.type || activity.subject || ''))), 'created_at'),
+    },
+    sources: {
+      title: 'Leads by source',
+      group: 'Sales',
+      render: () => renderDashboardHorizontalBars(dashboardGroupCounts(ctx.contacts, (contact) => contact.source || 'Unknown')),
+    },
+    funnel: {
+      title: 'Sales funnel',
+      group: 'Sales',
+      sub: 'Lead to won, with conversion.',
+      render: () => {
+        const rows = [
+          ['Leads', leadCount],
+          ['Proposals', proposalCount],
+          ['Won', ctx.wonDeals.length],
+        ];
+        return renderDashboardHorizontalBars(rows.map(([name, count]) => ({ name, count, value: count })));
+      },
+    },
+    speed: dashboardNeedsDataWidget('Speed-to-lead', 'Sales', 'Needs first_contact_at timestamps on leads.'),
+    jobs: {
+      title: 'Jobs by stage',
+      group: 'Operations',
+      sub: 'Active production board.',
+      render: () => {
+        const rows = dashboardGroupCounts(ctx.jobs, (job) => resolvePipelineStage('jobs', job.stage, companyId) || job.stage || 'Unstaged');
+        return `<h3 class="dash-hidden-copy">Jobs in production</h3>${renderDashboardHorizontalBars(rows)}`;
+      },
+    },
+    dispatch: {
+      title: "Today's dispatch",
+      group: 'Operations',
+      sub: 'Due tasks and scheduled work today.',
+      render: () => {
+        const today = isoDate(0);
+        const due = companyTasks(companyId).filter((task) => task.due === today).slice(0, 5);
+        return due.length ? `<div class="dash-mini-list">${due.map((task) => `<div><b>${h(task.title)}</b><span>${h(memberName(task.assignee_id) || 'Unassigned')}</span></div>`).join('')}</div>` : dashboardEmptyNote('No dispatch items due today.');
+      },
+    },
+    weather: dashboardNeedsDataWidget('5-day field forecast', 'Operations', 'Needs weather API and company service area.'),
+    revenue: {
+      title: 'Revenue & Receivables',
+      group: 'Finance',
+      sub: 'Invoiced vs collected.',
+      render: () => `
+        <div class="cash-figs">
+          <div><span>Invoiced</span><b>${h(money(ctx.fin.invoiced))}</b></div>
+          <div><span>Collected</span><b class="pos">${h(money(ctx.fin.collected))}</b></div>
+          <div><span>Outstanding</span><b class="warn">${h(money(ctx.fin.outstanding))}</b></div>
+        </div>
+        <div class="cash-bar"><i style="width:${h(collectedPct)}%"></i></div>
+        <p class="cash-note">${h(collectedPct)}% of invoiced has been collected.</p>`,
+    },
+    reviews: dashboardNeedsDataWidget('Reviews & reputation', 'Reputation', 'Needs Google/GHL review integration.'),
+    avgTicket: {
+      title: 'Avg ticket',
+      group: 'Value drivers',
+      sub: 'Average job contract total',
+      render: () => `
+        <div class="dash-big-metric">
+          <strong>${h(money(avgTicket))}</strong>
+          <span>Residential ${h(money(dashboardAverage(residentialJobs.map((job) => number(job.estimate_total)).filter(Boolean))))} - Commercial ${h(money(dashboardAverage(commercialJobs.map((job) => number(job.estimate_total)).filter(Boolean))))}</span>
+          <div class="dash-spark">${[35, 45, 55, 62, 70, 78].map((height) => `<i style="height:${height}%"></i>`).join('')}</div>
+          <small>trailing 6 months</small>
+        </div>`,
+    },
+    grossMargin: dashboardNeedsDataWidget('Gross margin', 'Value drivers', 'Needs actual job cost capture.'),
+    ebitda: dashboardNeedsDataWidget('EBITDA', 'Value drivers', 'Needs GL/QBO integration.'),
+    revGrowth: {
+      title: 'Revenue growth',
+      group: 'Value drivers',
+      sub: 'Collected revenue in selected range.',
+      render: () => `<div class="dash-big-metric"><strong>${h(money(periodRevenue))}</strong><span>${h(ctx.payments.length)} payments in range</span><div class="dash-spark">${dashboardMonthlyValues(ctx.payments, 'received_at', 'amount').map((value) => `<i style="height:${value}%"></i>`).join('')}</div></div>`,
+    },
+    revPerCrew: dashboardNeedsDataWidget('Revenue per crew', 'Value drivers', 'Needs crew capacity/headcount settings.'),
+    marketing: dashboardNeedsDataWidget('Marketing efficiency', 'Value drivers', 'Needs ad spend and lead attribution.'),
+    backlog: {
+      title: 'Backlog',
+      group: 'Value drivers',
+      sub: 'Signed/open job value not complete.',
+      render: () => {
+        const activeJobs = ctx.jobs.filter((job) => !/complete|done|closed/i.test(String(job.stage || job.status || '')));
+        return `<div class="dash-big-metric"><strong>${h(money(sum(activeJobs, 'estimate_total')))}</strong><span>${h(activeJobs.length)} active jobs</span></div>`;
+      },
+    },
+    recurring: dashboardNeedsDataWidget('Recurring revenue', 'Value drivers', 'Needs membership/subscription plans.'),
+    goalPacing: {
+      title: 'Goal pacing',
+      group: 'Value drivers',
+      sub: 'Revenue pace using current collected revenue.',
+      render: () => `<div class="dash-big-metric"><strong>${h(money(periodRevenue))}</strong><span>Set a monthly target to calculate pacing percentage.</span></div>`,
+    },
+    concentration: {
+      title: 'Customer concentration',
+      group: 'Value drivers',
+      render: () => renderDashboardHorizontalBars(dashboardGroupSums(ctx.invoices, (invoice) => accountName(invoice.account_id) || 'Unknown', 'total').slice(0, 5)),
+    },
+    pipelineCoverage: {
+      title: 'Sales pipeline',
+      group: 'Growth',
+      sub: 'Open pipeline coverage and quote value.',
+      render: () => `<div class="dash-big-metric"><strong>${h(money(openPipeline))}</strong><span>${h(ctx.openDeals.length)} active quotes. Add a sales target for coverage ratio.</span></div>`,
+    },
+    utilization: dashboardNeedsDataWidget('Crew utilization', 'Capacity', 'Needs schedule and crew capacity.'),
+    recruiting: dashboardNeedsDataWidget('Recruiting funnel', 'People', 'Needs hiring pipeline.'),
+    turnover: dashboardNeedsDataWidget('Turnover & labor cost', 'People', 'Needs HR/payroll data.'),
+    quota: dashboardNeedsDataWidget('Quota attainment', 'People', 'Needs rep quota settings.'),
+    cash13: dashboardNeedsDataWidget('13-week cash flow', 'Cash flow', 'Needs cash forecast data.'),
+    dso: {
+      title: 'Collections (DSO)',
+      group: 'Cash flow',
+      sub: 'Average days outstanding on unpaid invoices.',
+      render: () => {
+        const openInvoices = companyFinanceInvoices(companyId).filter((invoice) => invoiceBalance(invoice.id) > 0);
+        const avgDays = dashboardAverage(openInvoices.map((invoice) => Math.max(0, daysPastDue(invoice.due_date))));
+        return `<div class="dash-big-metric"><strong>${h(Math.round(avgDays))} days</strong><span>${h(openInvoices.length)} invoices with open balance</span></div>`;
+      },
+    },
+    jobCostVariance: dashboardNeedsDataWidget('Job-cost variance', 'Cash flow', 'Needs actual job costing.'),
+    ltvCac: dashboardNeedsDataWidget('LTV : CAC', 'Strategy', 'Needs lifetime value and marketing spend model.'),
+    ownerScore: dashboardNeedsDataWidget('Owner-dependency score', 'Strategy', 'Needs manual owner-dependency checklist.'),
+    serviceMix: {
+      title: 'Revenue by service line',
+      group: 'Strategy',
+      render: () => renderDashboardHorizontalBars(dashboardGroupSums(ctx.jobs, (job) => job.job_type || 'Unclassified', 'estimate_total')),
+    },
+    rocks: dashboardNeedsDataWidget('Quarterly Rocks', 'EOS', 'Needs EOS rocks table.'),
+    scorecard: dashboardNeedsDataWidget('Company scorecard', 'EOS', 'Needs weekly scorecard metrics.'),
+    oneYearPlan: dashboardNeedsDataWidget('1-Year Plan', 'EOS', 'Needs VTO / annual plan settings.'),
+    l10pulse: dashboardNeedsDataWidget('L10 meeting pulse', 'EOS', 'Needs L10 meeting records.'),
+    issues: dashboardNeedsDataWidget('Issues list (IDS)', 'EOS', 'Needs EOS issues table.'),
+    todos: dashboardNeedsDataWidget('To-dos (7-day)', 'EOS', 'Needs EOS to-do table.'),
+    peopleAnalyzer: dashboardNeedsDataWidget('People Analyzer (GWC)', 'EOS', 'Needs people analyzer records.'),
+    eosComponents: dashboardNeedsDataWidget('EOS components checkup', 'EOS', 'Needs EOS checkup survey.'),
+    coreValues: dashboardNeedsDataWidget('Core values', 'EOS', 'Needs core values settings.'),
+  };
+  return widgets;
+}
+
+function dashboardWidgetLayout(companyId, role = state.dashboardRole) {
+  const saved = state.dashboardLayouts?.[companyId]?.[role];
+  const fallback = DASHBOARD_WIDGET_DEFAULTS[role] || DASHBOARD_WIDGET_DEFAULTS.exec;
+  return Array.isArray(saved) && saved.length ? saved : fallback.slice();
+}
+
+function saveDashboardWidgetLayout(companyId, role, widgetIds) {
+  state.dashboardLayouts = {
+    ...(state.dashboardLayouts || {}),
+    [companyId]: {
+      ...(state.dashboardLayouts?.[companyId] || {}),
+      [role]: compactUnique(widgetIds),
+    },
+  };
+  writeJson(DASHBOARD_LAYOUT_CACHE_KEY, state.dashboardLayouts);
+}
+
+function renderDashboardWidgetCard(widget, id, index, total) {
+  if (!widget) return '';
+  return `
+    <article class="panel dash-widget-card ${widget.span ? 'span2' : ''}" data-widget-id="${h(id)}">
+      <div class="dash-widget-head">
+        <div><h2>${h(widget.title)}</h2>${widget.sub ? `<p>${h(widget.sub)}</p>` : ''}</div>
+        ${state.dashboardCustomize ? `
+          <div class="dash-widget-tools">
+            <button type="button" data-action="dashboard-move-widget" data-widget-id="${h(id)}" data-direction="-1" ${index <= 0 ? 'disabled' : ''} title="Move left" aria-label="Move ${h(widget.title)} left"><i class="ti ti-arrow-left"></i></button>
+            <button type="button" data-action="dashboard-move-widget" data-widget-id="${h(id)}" data-direction="1" ${index >= total - 1 ? 'disabled' : ''} title="Move right" aria-label="Move ${h(widget.title)} right"><i class="ti ti-arrow-right"></i></button>
+            <button type="button" data-action="dashboard-remove-widget" data-widget-id="${h(id)}" title="Remove" aria-label="Remove ${h(widget.title)}"><i class="ti ti-x"></i></button>
+          </div>
+        ` : ''}
+      </div>
+      <div class="dash-widget-body">${widget.render()}</div>
+    </article>
+  `;
+}
+
+function renderDashboardWidgetTray(registry, layout) {
+  return `
+    <section class="dash-widget-tray">
+      <div class="section-head"><div><h2>Add widgets</h2><p>Click to add. Use Customize to remove or reorder cards.</p></div></div>
+      ${DASHBOARD_WIDGET_GROUPS.map((group) => {
+        const items = Object.entries(registry).filter(([, widget]) => widget.group === group);
+        if (!items.length) return '';
+        return `
+          <div class="dash-tray-group">
+            <strong>${h(group)}</strong>
+            <div class="dash-tray-options">
+              ${items.map(([id, widget]) => {
+                const active = layout.includes(id);
+                return `<button class="${active ? 'active' : ''}" type="button" data-action="dashboard-add-widget" data-widget-id="${h(id)}" ${active ? 'disabled' : ''}><b>${h(widget.title)}</b><span>${widget.locked ? 'Needs data source' : h(widget.sub || 'Ready widget')}</span></button>`;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </section>
+  `;
+}
+
+function dashboardNeedsDataWidget(title, group, reason) {
+  return {
+    title,
+    group,
+    locked: true,
+    sub: reason,
+    render: () => `<div class="dash-needs-data"><i class="ti ti-database-off"></i><b>Needs data source</b><span>${h(reason)}</span></div>`,
+  };
+}
+
+function dashboardMetricTile(icon, value, label, sub = '') {
+  return `
+    <div class="dash-kpi">
+      <span class="dk-ic"><i class="ti ${h(icon)}"></i></span>
+      <span class="dk-body">
+        <b>${h(String(value))}</b>
+        <span class="dk-label">${h(label)}</span>
+        ${sub ? `<span class="dk-sub">${h(sub)}</span>` : ''}
+      </span>
+    </div>
+  `;
+}
+
+function renderDashboardLeaderboard(companyId, ctx) {
+  const owners = new Map();
+  const ensure = (name) => {
+    const label = name || 'Unassigned';
+    const key = dashboardOwnerKey(label);
+    if (!owners.has(key)) owners.set(key, { name: label, calls: 0, leads: 0, proposals: 0, won: 0, revenue: 0 });
+    return owners.get(key);
+  };
+  ctx.activities.forEach((activity) => {
+    const row = ensure(dashboardOwnerName(activity));
+    if (/call/i.test(String(activity.type || activity.subject || ''))) row.calls += 1;
+  });
+  ctx.contacts.forEach((contact) => ensure(dashboardOwnerName(contact)).leads += 1);
+  ctx.deals.forEach((deal) => {
+    const row = ensure(dashboardOwnerName(deal));
+    row.proposals += 1;
+    if (resolvePipelineStage('deals', deal.stage, companyId) === 'Won') {
+      row.won += 1;
+      row.revenue += number(deal.value);
+    }
+  });
+  const rows = [...owners.values()].sort((a, b) => b.revenue - a.revenue || b.proposals - a.proposals);
+  if (!rows.length) return dashboardEmptyNote('No rep activity in this range.');
+  return `
+    <div class="dash-table-wrap">
+      <table class="dash-table">
+        <thead><tr><th>Rep</th><th>Calls</th><th>Leads</th><th>Props</th><th>Won</th><th>Revenue</th><th>Close</th></tr></thead>
+        <tbody>
+          ${rows.map((row) => `<tr><td>${h(row.name)}</td><td>${h(row.calls)}</td><td>${h(row.leads)}</td><td>${h(row.proposals)}</td><td>${h(row.won)}</td><td>${h(money(row.revenue))}</td><td>${h(row.proposals ? `${Math.round((row.won / row.proposals) * 100)}%` : '0%')}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDashboardDayBars(items, dateField) {
+  const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const counts = labels.map((label, index) => ({
+    name: label,
+    count: items.filter((item) => new Date(item[dateField] || item.created_at || 0).getDay() === index).length,
+  }));
+  return renderDashboardHorizontalBars(counts);
+}
+
+function renderDashboardHorizontalBars(rows) {
+  if (!rows.length) return dashboardEmptyNote('No data in this range.');
+  const max = Math.max(1, ...rows.map((row) => number(row.value ?? row.count)));
+  return `
+    <div class="pipe-bars">
+      ${rows.map((row) => {
+        const value = number(row.value ?? row.count);
+        return `<div class="pipe-bar-row"><span class="pbr-name">${h(row.name)}</span><span class="pbr-track"><i style="width:${Math.round((value / max) * 100)}%"></i></span><span class="pbr-val">${h(row.money ? money(value) : String(value))}<small>${h(row.count !== undefined && row.value !== undefined ? `${row.count} records` : '')}</small></span></div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function dashboardGroupCounts(items, getName) {
+  const counts = new Map();
+  items.forEach((item) => {
+    const name = String(getName(item) || 'Unknown');
+    counts.set(name, (counts.get(name) || 0) + 1);
+  });
+  return [...counts.entries()].map(([name, count]) => ({ name, count, value: count })).sort((a, b) => b.count - a.count);
+}
+
+function dashboardGroupSums(items, getName, field) {
+  const rows = new Map();
+  items.forEach((item) => {
+    const name = String(getName(item) || 'Unknown');
+    const current = rows.get(name) || { name, count: 0, value: 0, money: true };
+    current.count += 1;
+    current.value += number(item[field]);
+    rows.set(name, current);
+  });
+  return [...rows.values()].sort((a, b) => b.value - a.value);
+}
+
+function dashboardAverage(values) {
+  const nums = values.map(number).filter((value) => Number.isFinite(value) && value > 0);
+  return nums.length ? nums.reduce((total, value) => total + value, 0) / nums.length : 0;
+}
+
+function dashboardMonthlyValues(items, dateField, valueField) {
+  const months = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (5 - index));
+    return { key: `${date.getFullYear()}-${date.getMonth()}`, value: 0 };
+  });
+  items.forEach((item) => {
+    const date = new Date(item[dateField] || item.created_at || 0);
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    const bucket = months.find((month) => month.key === key);
+    if (bucket) bucket.value += number(item[valueField]);
+  });
+  const max = Math.max(1, ...months.map((month) => month.value));
+  return months.map((month) => Math.max(8, Math.round((month.value / max) * 100)));
+}
+
+function dashboardEmptyNote(text) {
+  return `<div class="dash-empty-note">${h(text)}</div>`;
+}
+
+function dashboardRepOptions(companyId) {
+  const names = compactUnique([
+    ...companyMembers(companyId).map((member) => member.full_name || member.name),
+    ...companyContacts(companyId).map((item) => item.owner_name),
+    ...companyDeals(companyId).map((item) => item.owner_name),
+    ...companyJobs(companyId).map((item) => item.owner_name),
+    ...companyActivities(companyId).map((item) => item.owner_name),
+  ].filter(Boolean)).sort((a, b) => a.localeCompare(b));
+  return [{ id: 'all', name: 'Whole team' }].concat(names.map((name) => ({ id: dashboardOwnerKey(name), name })));
+}
+
+function dashboardOwnerKey(value) {
+  return String(value || 'unassigned').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unassigned';
+}
+
+function dashboardOwnerName(item) {
+  return item?.owner_name || item?.rep_name || item?.sales_rep || memberName(item?.assignee_id) || memberName(item?.assigned_profile_id) || 'Unassigned';
+}
+
+function dashboardRangeWindow(range) {
+  const now = new Date();
+  const start = startOfToday();
+  if (range === 'today') return { start, end: new Date(start.getTime() + 86400000) };
+  if (range === 'month') return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: new Date(now.getFullYear(), now.getMonth() + 1, 1) };
+  if (range === 'quarter') {
+    const quarterStart = Math.floor(now.getMonth() / 3) * 3;
+    return { start: new Date(now.getFullYear(), quarterStart, 1), end: new Date(now.getFullYear(), quarterStart + 3, 1) };
+  }
+  const day = start.getDay();
+  const weekStart = new Date(start);
+  weekStart.setDate(start.getDate() - day);
+  return { start: weekStart, end: new Date(weekStart.getTime() + 7 * 86400000) };
+}
+
+function dashboardInRange(item, window, fields = ['created_at', 'updated_at', 'completed_at', 'due', 'issued_at', 'received_at']) {
+  const value = fields.map((field) => item?.[field]).find(Boolean);
+  if (!value) return true;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return true;
+  return date >= window.start && date < window.end;
 }
 
 function renderCompanyHomePage(companyId) {
@@ -9512,6 +9913,67 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'dashboard-role') {
+    event.preventDefault();
+    state.dashboardRole = DASHBOARD_WIDGET_DEFAULTS[node.dataset.role] ? node.dataset.role : 'exec';
+    state.dashboardTrayOpen = false;
+    render();
+    return;
+  }
+  if (action === 'dashboard-range') {
+    event.preventDefault();
+    state.dashboardRange = DASHBOARD_RANGE_OPTIONS.some(([id]) => id === node.dataset.range) ? node.dataset.range : 'week';
+    render();
+    return;
+  }
+  if (action === 'dashboard-toggle-tray') {
+    event.preventDefault();
+    state.dashboardTrayOpen = !state.dashboardTrayOpen;
+    render();
+    return;
+  }
+  if (action === 'dashboard-toggle-customize') {
+    event.preventDefault();
+    state.dashboardCustomize = !state.dashboardCustomize;
+    render();
+    return;
+  }
+  if (action === 'dashboard-add-widget') {
+    event.preventDefault();
+    const id = node.dataset.widgetId || '';
+    const role = state.dashboardRole || 'exec';
+    const registry = dashboardWidgetRegistry(activeCompanyId(), dashboardContext(activeCompanyId()));
+    if (registry[id]) {
+      const next = dashboardWidgetLayout(activeCompanyId(), role).concat(id);
+      saveDashboardWidgetLayout(activeCompanyId(), role, next);
+      render();
+    }
+    return;
+  }
+  if (action === 'dashboard-remove-widget') {
+    event.preventDefault();
+    const id = node.dataset.widgetId || '';
+    const role = state.dashboardRole || 'exec';
+    saveDashboardWidgetLayout(activeCompanyId(), role, dashboardWidgetLayout(activeCompanyId(), role).filter((item) => item !== id));
+    render();
+    return;
+  }
+  if (action === 'dashboard-move-widget') {
+    event.preventDefault();
+    const id = node.dataset.widgetId || '';
+    const dir = Number(node.dataset.direction || 0);
+    const role = state.dashboardRole || 'exec';
+    const layout = dashboardWidgetLayout(activeCompanyId(), role);
+    const index = layout.indexOf(id);
+    const nextIndex = Math.max(0, Math.min(layout.length - 1, index + dir));
+    if (index >= 0 && nextIndex !== index) {
+      const [item] = layout.splice(index, 1);
+      layout.splice(nextIndex, 0, item);
+      saveDashboardWidgetLayout(activeCompanyId(), role, layout);
+      render();
+    }
+    return;
+  }
   if (action === 'client-portal-tool') {
     event.preventDefault();
     updateClientPortalToolSelection(node.dataset.portalTool || 'pan');
@@ -12475,6 +12937,11 @@ function onDocumentInput(event) {
 }
 
 function onDocumentChange(event) {
+  if (event.target.matches('[data-dashboard-rep]')) {
+    state.dashboardRep = event.target.value || 'all';
+    render();
+    return;
+  }
   if (event.target.matches('[data-action="client-portal-color"], [data-action="client-portal-stamp"]')) {
     handleAction(event, event.target);
     return;

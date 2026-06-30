@@ -33,12 +33,30 @@ test('dashboard uses the team operating dashboard widgets', () => {
   assert.doesNotMatch(source, /Company access'[\s\S]*Workspace health'[\s\S]*Access control'/);
 });
 
+test('dashboard restores customizable handoff framework controls', () => {
+  assert.match(source, /const DASHBOARD_WIDGET_GROUPS = \[/);
+  assert.match(source, /const DASHBOARD_WIDGET_DEFAULTS = \{/);
+  assert.match(source, /function dashboardWidgetRegistry\(companyId, ctx\)/);
+  assert.match(source, /data-action="dashboard-role"/);
+  assert.match(source, /data-dashboard-rep/);
+  assert.match(source, /data-action="dashboard-range"/);
+  assert.match(source, /data-action="dashboard-toggle-tray"/);
+  assert.match(source, /data-action="dashboard-toggle-customize"/);
+  assert.match(source, /data-action="dashboard-add-widget"/);
+  assert.match(source, /data-action="dashboard-remove-widget"/);
+  assert.match(source, /data-action="dashboard-move-widget"/);
+  assert.match(source, /Needs data source/);
+});
+
 test('dashboard CSS includes responsive KPI, chart, and list layouts', () => {
   assert.match(styles, /\.dash-kpis\s*\{/);
   assert.match(styles, /\.dash-overview\s*\{/);
   assert.match(styles, /\.pipe-bar-row\s*\{/);
   assert.match(styles, /\.donut-wrap\s*\{/);
   assert.match(styles, /\.cash-bar\s*\{/);
+  assert.match(styles, /\.dash-filter-bar\s*\{/);
+  assert.match(styles, /\.dash-widget-tray\s*\{/);
+  assert.match(styles, /\.dash-widget-card\s*\{/);
   assert.match(styles, /@media \(max-width:1300px\)[\s\S]*\.dash-kpis\{ grid-template-columns:repeat\(3,1fr\); \}[\s\S]*\.dash-overview\{ grid-template-columns:1fr; \}/);
 });
 
