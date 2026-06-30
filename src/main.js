@@ -407,9 +407,15 @@ const DASHBOARD_WIDGET_DEFAULTS = {
 };
 
 const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings']);
+const PRIVATE_PLUGIN_ACCESS = {
+  crm_2: {
+    label: 'Quest CRM',
+    password: 'LumenQuest@2026',
+  },
+};
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
-  { id: 'crm_2', label: 'CRM 2', summary: 'Contacts, quotes, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['contacts', 'deals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
+  { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['contacts', 'deals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
   { id: 'underwriter', label: 'Underwriter', summary: 'Qualification, scope, pricing, and handoff readiness queue.', icon: 'ti-clipboard-search', module_ids: ['underwriter'], permissions: ['underwriter.view', 'underwriter.manage'], recommendedWith: ['crm_2'] },
   { id: 'files', label: 'Files', summary: 'Shared files, job folders, and document storage.', icon: 'ti-folder', module_ids: ['files'], permissions: ['files.view', 'files.manage'] },
   { id: 'client_portal', label: 'Client Portal', summary: 'Password-protected plan links, markups, comments, and client review.', icon: 'ti-world-upload', module_ids: ['client-portals'], permissions: ['client_portals.view', 'client_portals.manage'], recommendedWith: ['files'] },
@@ -1743,6 +1749,8 @@ const state = {
   auditEvents: [],
   companyPlugins: [],
   pluginLoadFailed: false,
+  privatePluginInstall: null,
+  privatePluginError: '',
   companies: mergeCompanies(companiesFallback.map(normalizeCompany)),
   dashboardRole: 'exec',
   dashboardRange: 'week',
@@ -3064,6 +3072,14 @@ function pluginById(pluginId) {
   return WORKSPACE_PLUGIN_REGISTRY.find((plugin) => plugin.id === pluginId) || null;
 }
 
+function privatePluginAccess(pluginId) {
+  return PRIVATE_PLUGIN_ACCESS[pluginId] || null;
+}
+
+function pluginInstallNeedsPrivateAccess(companyId, pluginId, status) {
+  return status !== 'disabled' && !!privatePluginAccess(pluginId) && !isPluginInstalled(companyId, pluginId);
+}
+
 function availableWorkspacePlugins() {
   return WORKSPACE_PLUGIN_REGISTRY.filter((plugin) => !plugin.comingSoon);
 }
@@ -4160,7 +4176,7 @@ function renderUnderwriterPage(route, companyId) {
   const guide = activeStage === 'all' ? CRM2_UNDERWRITER_GUIDANCE.underwriting : CRM2_UNDERWRITER_GUIDANCE[activeStage];
   return `
     <section class="tool-page underwriter-page">
-      ${workspaceHeader('Underwriter', 'CRM 2 workspace for qualification, scope, pricing, and quote handoff readiness.', `
+      ${workspaceHeader('Underwriter', 'Quest CRM workspace for qualification, scope, pricing, and quote handoff readiness.', `
         ${can('crm.view', companyId) ? `<a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Open contacts</a>` : ''}
         ${canManageUnderwriter && can('crm.view', companyId) ? `<button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>` : ''}
       `)}
@@ -4168,10 +4184,10 @@ function renderUnderwriterPage(route, companyId) {
         ${metricCard('Underwriting', underwriting.length)}
         ${metricCard('Estimate queue', estimates.length)}
         ${metricCard('Pipeline value', money(sum(visible, 'value')))}
-        ${metricCard('CRM 2 stage', activeStage === 'all' ? 'All' : underwriterStageByKey(activeStage).name)}
+        ${metricCard('Quest CRM stage', activeStage === 'all' ? 'All' : underwriterStageByKey(activeStage).name)}
       </section>
       <section class="pipe-toolbar">
-        <div class="pipe-chips" role="group" aria-label="CRM 2 underwriter stage">
+        <div class="pipe-chips" role="group" aria-label="Quest CRM underwriter stage">
           <a class="pipe-chip ${activeStage === 'all' ? 'on' : ''}" href="${appHref(companyPath('underwriter', {}, companyId))}" data-router>All<b>${h(String(contacts.length))}</b></a>
           ${CRM2_UNDERWRITER_STAGES.map((stage) => {
             const count = contacts.filter((contact) => contact.underwriter_stage.key === stage.key).length;
@@ -4181,7 +4197,7 @@ function renderUnderwriterPage(route, companyId) {
       </section>
       <section class="home-dashboard-grid">
         <article class="panel home-activity-panel">
-          <div class="section-head"><div><h2>Underwriter queue</h2><p>${visible.length} contact${visible.length === 1 ? '' : 's'} in this CRM 2 view.</p></div></div>
+          <div class="section-head"><div><h2>Underwriter queue</h2><p>${visible.length} contact${visible.length === 1 ? '' : 's'} in this Quest CRM view.</p></div></div>
           <div class="data-table underwriter-table">
             <div class="table-head"><span>Contact</span><span>Stage</span><span>Owner</span><span>Pay type</span><span>Value</span></div>
             ${visible.map(renderUnderwriterQueueRow).join('') || emptyState('No contacts match this underwriter stage.')}
@@ -7096,6 +7112,51 @@ function renderPluginCard(companyId, plugin, canManagePlugins) {
   `;
 }
 
+function openPrivatePluginInstallModal(companyId, pluginId, status = 'installed', extra = {}) {
+  const plugin = pluginById(pluginId);
+  const access = privatePluginAccess(pluginId);
+  if (!plugin || !access) return false;
+  state.privatePluginInstall = {
+    companyId,
+    pluginId,
+    status: status === 'disabled' ? 'disabled' : 'installed',
+    presetCode: extra.presetCode || '',
+  };
+  state.privatePluginError = '';
+  state.modal = 'private-plugin-install';
+  render();
+  return true;
+}
+
+function renderPrivatePluginInstallModal() {
+  const pending = state.privatePluginInstall || {};
+  const plugin = pluginById(pending.pluginId);
+  const access = privatePluginAccess(pending.pluginId);
+  if (!plugin || !access) return renderModalShell('Plugins', 'Private plugin', emptyState('Choose a private plugin before continuing.'));
+  const preset = pending.presetCode ? WORKSPACE_PLUGIN_PRESET_LABELS[pending.presetCode] || titleCase(pending.presetCode) : '';
+  return renderModalShell('Plugins', `${access.label} access`, `
+    <form class="private-plugin-form" data-private-plugin-form>
+      <input type="hidden" name="company_id" value="${h(pending.companyId || activeCompanyId())}" />
+      <input type="hidden" name="plugin_id" value="${h(pending.pluginId)}" />
+      <input type="hidden" name="status" value="${h(pending.status || 'installed')}" />
+      <input type="hidden" name="preset_code" value="${h(pending.presetCode || '')}" />
+      <div class="private-plugin-card">
+        <i class="ti ti-lock"></i>
+        <div>
+          <strong>This is a private plugin.</strong>
+          <p>${preset ? `${h(preset)} includes ${h(access.label)}.` : `${h(access.label)} is built into this workspace as a private CRM plugin.`} Enter the plugin password to continue.</p>
+        </div>
+      </div>
+      <label><span>Password</span><input name="password" type="password" autocomplete="off" autofocus /></label>
+      ${state.privatePluginError ? `<p class="form-error">${h(state.privatePluginError)}</p>` : ''}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i class="ti ti-lock-open"></i>Unlock plugin</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'plugin-access-modal');
+}
+
 function conflictingPluginIds(companyId, pluginId, nextStatus) {
   const plugin = pluginById(pluginId);
   if (nextStatus !== 'installed' || !plugin?.exclusiveGroup) return [];
@@ -7105,7 +7166,7 @@ function conflictingPluginIds(companyId, pluginId, nextStatus) {
 }
 
 function pluginPrerequisiteNote(companyId, plugin) {
-  if (plugin.id === 'underwriter' && !isPluginInstalled(companyId, 'crm_2')) return 'Underwriter connects best when CRM 2 is installed.';
+  if (plugin.id === 'underwriter' && !isPluginInstalled(companyId, 'crm_2')) return 'Underwriter connects best when Quest CRM is installed.';
   if (!plugin.recommendedWith?.length) return '';
   const recommended = plugin.recommendedWith
     .filter((pluginId) => !isPluginInstalled(companyId, pluginId))
@@ -9825,6 +9886,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'deal-edit') return renderDealFormModal(activeCompanyId(), selectedDeal());
   if (state.modal === 'estimate-builder') return renderEstimateBuilderModal(activeCompanyId());
   if (state.modal === 'proposal-builder') return renderProposalBuilderModal(activeCompanyId());
+  if (state.modal === 'private-plugin-install') return renderPrivatePluginInstallModal();
   if (state.modal === 'activity-new') return renderActivityFormModal(activeCompanyId());
   if (state.modal === 'stages-jobs') return renderStageManagerModal('jobs');
   if (state.modal === 'stages-contacts') return renderStageManagerModal('contacts');
@@ -9885,13 +9947,16 @@ function showToast(message, mode = 'local', title = 'Not available yet') {
   }, 4200);
 }
 
-function renderModalShell(eyebrow, title, content, className = '') {
+function renderModalShell(eyebrow, title, content, className = '', headerActions = '') {
   return `
     <div class="modal-overlay">
       <div class="modal-panel ${h(className)}" role="dialog" aria-modal="true">
         <div class="modal-head">
           <div><div class="eyebrow">${h(eyebrow)}</div><h2>${h(title)}</h2></div>
-          <button class="btn" type="button" data-action="close-modal">Close</button>
+          <div class="modal-head-actions">
+            ${headerActions}
+            <button class="btn" type="button" data-action="close-modal">Close</button>
+          </div>
         </div>
         <div class="modal-body">${content}</div>
       </div>
@@ -10437,7 +10502,7 @@ function renderProposalBuilderModal(companyId) {
   if (!ctx || ctx.company_id !== companyId) return renderModalShell('Job Center', 'Proposal', emptyState('Choose a contact, quote, or job before creating a proposal.'));
   const draft = proposalDraftForContext(ctx);
   return renderModalShell('Job Center', `${ctx.label} proposal`, `
-    <form class="proposal-builder" data-proposal-builder-form>
+    <form id="proposal-builder-form" class="proposal-builder" data-proposal-builder-form>
       <input type="hidden" name="related_type" value="${h(ctx.type)}" />
       <input type="hidden" name="related_id" value="${h(ctx.id)}" />
       <section class="proposal-builder-rail">
@@ -10458,14 +10523,10 @@ function renderProposalBuilderModal(companyId) {
         <label><span>Materials</span><textarea data-proposal-field name="materials">${h(draft.materials)}</textarea></label>
         <label><span>Terms</span><textarea data-proposal-field name="terms">${h(draft.terms)}</textarea></label>
         <section class="proposal-scope-editor"><div><strong>Scope lines</strong><small>Asterisk marks featured items.</small></div>${renderProposalScopeRows(draft.items)}</section>
-        <div class="form-actions">
-          <button class="btn btn-primary" type="submit"><i class="ti ti-file-text"></i>Save proposal</button>
-          <button class="btn" type="button" data-action="close-modal">Cancel</button>
-        </div>
       </section>
       <section class="proposal-builder-preview" data-proposal-preview>${renderProposalPreview(draft)}</section>
     </form>
-  `, 'proposal-modal');
+  `, 'proposal-modal', '<button class="btn btn-primary" type="submit" form="proposal-builder-form"><i class="ti ti-file-text"></i>Save proposal</button>');
 }
 
 function proposalActivityBody(draft) {
@@ -12036,6 +12097,8 @@ function closeActiveModal() {
   state.formStartTab = 'blank';
   state.estimateContext = null;
   state.proposalContext = null;
+  state.privatePluginInstall = null;
+  state.privatePluginError = '';
   state.selectedFinanceInvoiceId = '';
   state.selectedFinanceExpenseId = '';
   state.selectedFinanceVendorId = '';
@@ -12236,6 +12299,15 @@ function onDocumentSubmit(event) {
     event.preventDefault();
     saveBuiltProposal(event.target).catch((error) => {
       showToast(error.message || 'Proposal could not be saved.', 'local', 'Proposal');
+    });
+    return;
+  }
+
+  if (event.target.matches('[data-private-plugin-form]')) {
+    event.preventDefault();
+    submitPrivatePluginInstall(event.target).catch((error) => {
+      state.privatePluginError = error.message || 'Private plugin could not be unlocked.';
+      render();
     });
     return;
   }
@@ -12909,11 +12981,43 @@ function revealPluginModulesInNavigation(plugin) {
   }
 }
 
-async function setCompanyPlugin(companyId, pluginId, status) {
+function privatePluginIdsForPreset(companyId, presetCode) {
+  const pluginIds = WORKSPACE_PLUGIN_PRESETS[presetCode] || [];
+  return pluginIds.filter((pluginId) => pluginInstallNeedsPrivateAccess(companyId, pluginId, 'installed'));
+}
+
+async function submitPrivatePluginInstall(form) {
+  const fields = Object.fromEntries(new FormData(form).entries());
+  const pluginId = String(fields.plugin_id || '');
+  const access = privatePluginAccess(pluginId);
+  if (!access) throw new Error('Private plugin access is not available.');
+  if (String(fields.password || '') !== access.password) {
+    state.privatePluginError = 'Incorrect plugin password.';
+    render();
+    return;
+  }
+  const companyId = canonicalCompanyId(fields.company_id || activeCompanyId());
+  const status = String(fields.status || 'installed');
+  const presetCode = String(fields.preset_code || '');
+  state.modal = '';
+  state.privatePluginInstall = null;
+  state.privatePluginError = '';
+  if (presetCode) {
+    await applyCompanyPluginPreset(companyId, presetCode, { privateAccessGranted: true });
+  } else {
+    await setCompanyPlugin(companyId, pluginId, status, { privateAccessGranted: true });
+  }
+}
+
+async function setCompanyPlugin(companyId, pluginId, status, options = {}) {
   const plugin = pluginById(pluginId);
   const nextStatus = status === 'disabled' ? 'disabled' : 'installed';
   if (!plugin || plugin.comingSoon) {
     showToast('That plugin is not available yet.', 'local', 'Plugins');
+    return;
+  }
+  if (pluginInstallNeedsPrivateAccess(companyId, plugin.id, nextStatus) && !options.privateAccessGranted) {
+    openPrivatePluginInstallModal(companyId, plugin.id, nextStatus);
     return;
   }
   const conflictIds = conflictingPluginIds(companyId, plugin.id, nextStatus);
@@ -12940,9 +13044,14 @@ async function setCompanyPlugin(companyId, pluginId, status) {
   render();
 }
 
-async function applyCompanyPluginPreset(companyId, presetCode) {
+async function applyCompanyPluginPreset(companyId, presetCode, options = {}) {
   const cleanPreset = WORKSPACE_PLUGIN_PRESETS[presetCode] ? presetCode : 'generic';
   const pluginIds = WORKSPACE_PLUGIN_PRESETS[cleanPreset];
+  const privatePluginIds = privatePluginIdsForPreset(companyId, cleanPreset);
+  if (privatePluginIds.length && !options.privateAccessGranted) {
+    openPrivatePluginInstallModal(companyId, privatePluginIds[0], 'installed', { presetCode: cleanPreset });
+    return;
+  }
   state.sync = { label: 'Applying plugin preset...', mode: 'loading' };
   render();
   const client = createSupabaseClient();

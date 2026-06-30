@@ -31,19 +31,19 @@ Date: 2026-06-26
 
 - [x] Main sidebar top-level items route correctly.
 - [x] Contacts stage items route/filter correctly and remain clickable. Reproduced stale-route bug before the fix; post-deploy verification passed for `Leads -> Nurturing`.
-- [x] Quotes stage items route/filter correctly and remain clickable in the current CRM 2 install.
+- [x] Quotes stage items route/filter correctly and remain clickable in the current Quest CRM install.
 - [x] Jobs stage items route/filter correctly and remain clickable. Reproduced stale-route bug before the fix; post-deploy verification passed for `Scheduled -> Unscheduled`.
 - [x] Direct URL refresh works for Home, Jobs, CRM/Contacts, Messages, Users, Settings, and Plugins.
 - [x] Uninstalled plugin routes show a plugin-not-installed state instead of blank or broken content.
 
 ## CRM And Jobs
 
-- [x] CRM 1 and CRM 2 are mutually exclusive in plugin settings. CRM is disabled and warns that installing it disables CRM 2; CRM 2 is installed.
-- [x] CRM 2 sidebar contains Contacts, Quotes, and Jobs with the expected stages.
+- [x] CRM and Quest CRM are mutually exclusive in plugin settings. CRM is disabled and warns that installing it disables Quest CRM; Quest CRM is installed.
+- [x] Quest CRM sidebar contains Contacts, Quotes, and Jobs with the expected stages.
 - [-] CRM 1 keeps its own quote/job stages. CRM 1 is currently disabled in Lumen, so this was not browser-tested.
 - [x] Contact record opens and renders the Salesforce-style record shell.
 - [-] Job record opens and its sub-tabs/actions still work. Blocked because the Lumen workspace currently has 0 jobs and QA avoided creating production data.
-- [x] Underwriter is separate from CRM 2 and appears as its own installed plugin.
+- [x] Underwriter is separate from Quest CRM and appears as its own installed plugin.
 
 ## Plugins
 

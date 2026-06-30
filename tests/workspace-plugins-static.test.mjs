@@ -40,14 +40,21 @@ test('plugin registry maps every non-core route to a workspace plugin', () => {
   assert.match(source, /function isModuleInstalled\(moduleId, companyId = activeCompanyId\(\)\)/);
 });
 
-test('crm 2 plugin contents match the contacts quotes jobs workspace', () => {
-  assert.match(crm2RegistryEntry, /label: 'CRM 2'/);
-  assert.match(crm2RegistryEntry, /summary: 'Contacts, quotes, and production jobs workspace.'/);
+test('quest crm plugin contents match the contacts quotes jobs workspace', () => {
+  assert.match(crm2RegistryEntry, /label: 'Quest CRM'/);
+  assert.match(crm2RegistryEntry, /summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.'/);
   assert.match(crm2RegistryEntry, /module_ids: \['contacts', 'deals', 'jobs'\]/);
+  assert.match(crm2RegistryEntry, /private: true/);
   assert.doesNotMatch(crm2RegistryEntry, /module_ids: \['crm'/);
   assert.match(source, /\{ label: 'Contacts · Top of Funnel', ids: \['contacts'\] \}/);
   assert.match(source, /\{ label: 'Quotes · Bottom of Funnel', ids: \['deals'\] \}/);
   assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
+  assert.match(source, /const PRIVATE_PLUGIN_ACCESS = \{/);
+  assert.match(source, /password: 'LumenQuest@2026'/);
+  assert.match(source, /function renderPrivatePluginInstallModal\(\)/);
+  assert.match(source, /data-private-plugin-form/);
+  assert.match(source, /function submitPrivatePluginInstall\(form\)/);
+  assert.match(source, /pluginInstallNeedsPrivateAccess\(companyId, plugin\.id, nextStatus\)/);
 });
 
 test('workspace presets install industry plugin bundles', () => {
@@ -94,12 +101,12 @@ test('plugin migration creates tenant plugin records, RPCs, grants, RLS, and Lum
   assert.match(pluginMigration, /app_private\.company_has_plugin/);
 });
 
-test('crm 2 and underwriter plugins are separate in the registry', () => {
+test('quest crm and underwriter plugins are separate in the registry', () => {
   assert.match(source, /\['underwriter\.view', 'View underwriter'\]/);
   assert.match(source, /\['underwriter\.manage', 'Manage underwriter'\]/);
   assert.match(source, /if \(clean\.startsWith\('underwriter\.'\)\) return \['underwriter'\];/);
   assert.match(source, /recommendedWith: \['crm_2'\]/);
-  assert.match(source, /Underwriter connects best when CRM 2 is installed/);
+  assert.match(source, /Underwriter connects best when Quest CRM is installed/);
   assert.doesNotMatch(source, /if \(clean\.startsWith\('underwriter\.'\)\) return 'crm_2';/);
 });
 
@@ -131,7 +138,7 @@ test('plugin preset RPCs qualify plugin ids to avoid PL/pgSQL ambiguity', () => 
 });
 
 test('underwriter queue uses contact language and a dedicated table layout', () => {
-  assert.match(source, /<p>\$\{visible\.length\} contact\$\{visible\.length === 1 \? '' : 's'\} in this CRM 2 view\.<\/p>/);
+  assert.match(source, /<p>\$\{visible\.length\} contact\$\{visible\.length === 1 \? '' : 's'\} in this Quest CRM view\.<\/p>/);
   assert.match(source, /<div class="data-table underwriter-table">/);
   assert.match(source, /<div class="table-head"><span>Contact<\/span><span>Stage<\/span><span>Owner<\/span><span>Pay type<\/span><span>Value<\/span><\/div>/);
   assert.match(source, /emptyState\('No contacts match this underwriter stage\.'\)/);

@@ -205,6 +205,8 @@ test('record quick create tiles open real workflows instead of placeholder toast
   assert.match(source, /function openProposalBuilder\(type, id\)/);
   assert.match(source, /async function saveBuiltProposal\(form\)/);
   assert.match(source, /data-proposal-builder-form/);
+  assert.match(source, /id="proposal-builder-form"/);
+  assert.match(source, /form="proposal-builder-form"/);
   assert.match(source, /await persistDeal\(\{ \.\.\.deal, value: total/);
   assert.match(source, /if \(kind === 'Task' \|\| kind === 'New Task'\) return openDockedActivityComposer\('contact', contactId, 'New Task'\)/);
   assert.match(source, /if \(kind === 'Estimate' \|\| kind === 'New Estimate'\) return openEstimateBuilder\('contact', contactId\)/);
