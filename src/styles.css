@@ -10616,8 +10616,17 @@ button.side-item.planned b {
 .client-portal-workbench {
   height: calc(100vh - 72px);
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  grid-template-columns: 280px minmax(0, 1fr) 340px;
   overflow: hidden;
+}
+
+.client-portal-public-actions,
+.client-portal-tool-group,
+.client-portal-page-controls,
+.client-portal-note-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .client-portal-docs,
@@ -10657,6 +10666,35 @@ button.side-item.planned b {
   min-width: 0;
 }
 
+.client-portal-rail-title,
+.client-portal-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.client-portal-rail-title span,
+.client-portal-panel-head span,
+.client-portal-save-state {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.client-portal-save-state[data-mode="pending"] {
+  color: #b45309;
+}
+
+.client-portal-save-state[data-mode="saved"] {
+  color: #157347;
+}
+
+.client-portal-save-state[data-mode="error"] {
+  color: #b42318;
+}
+
 .client-portal-docs button small,
 .client-portal-help {
   display: block;
@@ -10682,6 +10720,13 @@ button.side-item.planned b {
   overflow-x: auto;
 }
 
+.client-portal-tool-group {
+  flex: 0 0 auto;
+  padding-right: 8px;
+  margin-right: 2px;
+  border-right: 1px solid #e6ebf2;
+}
+
 .client-portal-tool {
   flex: 0 0 40px;
   width: 40px;
@@ -10697,8 +10742,23 @@ button.side-item.planned b {
   line-height: 1;
 }
 
+.client-portal-mini-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d9e0ea;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.client-portal-mini-btn:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
 .client-portal-tool.active,
-.client-portal-tool:hover {
+.client-portal-tool:hover,
+.client-portal-mini-btn:hover {
   border-color: var(--orange);
   color: var(--orange);
   background: #fff0e8;
@@ -10715,6 +10775,7 @@ button.side-item.planned b {
   display: grid;
   place-items: start center;
   padding: 24px;
+  background: #eef2f7;
 }
 
 .client-portal-canvas-wrap {
@@ -10736,18 +10797,231 @@ button.side-item.planned b {
 }
 
 .client-portal-comment {
-  padding: 10px;
+  padding: 0;
   margin-top: 8px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.client-portal-comment.selected {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 2px #ffeadb;
+}
+
+.client-portal-comment > button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.client-portal-comment b,
+.client-portal-comment p,
+.client-portal-comment em,
+.client-portal-comment small {
+  display: block;
+}
+
+.client-portal-comment b {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.client-portal-comment b span {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--orange);
+  color: #fff;
+  font-size: 12px;
+}
+
+.client-portal-comment p {
+  margin: 8px 0 6px;
+  color: #1f2937;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.client-portal-comment em,
+.client-portal-comment small {
+  color: #667085;
+  overflow-wrap: anywhere;
+}
+
+.client-portal-comment-actions {
+  padding: 0 10px 10px;
+}
+
+.client-portal-comment-actions button {
+  border: 1px solid #d9e0ea;
+  border-radius: 999px;
+  background: #fff;
+  color: #475467;
+  padding: 4px 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.client-portal-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.client-portal-tabs button,
+.client-portal-pages-grid button,
+.client-portal-stroke {
+  border: 1px solid #d9e0ea;
+  border-radius: 7px;
+  background: #fff;
+  color: #344054;
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.client-portal-tabs button {
+  min-height: 38px;
+}
+
+.client-portal-tabs button span {
+  display: block;
+  color: #667085;
+  font-size: 11px;
+}
+
+.client-portal-tabs button.active,
+.client-portal-pages-grid button.active,
+.client-portal-stroke.active {
+  border-color: var(--orange);
+  background: #fff0e8;
+  color: var(--orange);
+}
+
+.client-portal-swatch {
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  outline: 1px solid #cfd7e3;
+  border-radius: 999px;
+  background: var(--swatch);
+  cursor: pointer;
+}
+
+.client-portal-swatch.active {
+  outline: 3px solid var(--orange);
+}
+
+.client-portal-color-input {
+  width: 32px;
+  height: 32px;
   border: 1px solid #d9e0ea;
   border-radius: 8px;
   background: #fff;
 }
 
-.client-portal-comment span,
-.client-portal-comment small {
+.client-portal-stroke {
+  width: 32px;
+  height: 32px;
+}
+
+.client-portal-stamp-select {
+  flex: 0 0 auto;
+  height: 36px;
+  border: 1px solid #d9e0ea;
+  border-radius: 7px;
+  background: #fff;
+  color: #344054;
+  font-weight: 800;
+  padding: 0 8px;
+}
+
+.client-portal-zoom-label {
+  min-width: 48px;
+  text-align: center;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.client-portal-note-editor {
+  border: 1px solid #ffd2b8;
+  border-radius: 8px;
+  background: #fff7f2;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.client-portal-note-editor b,
+.client-portal-note-editor small,
+.client-portal-note-editor textarea {
   display: block;
+}
+
+.client-portal-note-editor small {
   color: #667085;
-  overflow-wrap: anywhere;
+  margin: 4px 0 8px;
+}
+
+.client-portal-note-editor textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+  color: #101828;
+}
+
+.client-portal-note-actions {
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
+.client-portal-layer-list {
+  display: grid;
+  gap: 8px;
+}
+
+.client-portal-layer-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+}
+
+.client-portal-layer-row span {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--layer);
+}
+
+.client-portal-layer-row em {
+  color: #667085;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.client-portal-pages-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.client-portal-pages-grid button {
+  min-height: 44px;
 }
 
 @media (max-width: 980px) {

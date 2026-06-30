@@ -1491,6 +1491,14 @@ const state = {
   clientPortalTool: 'pan',
   clientPortalColor: '#E8611A',
   clientPortalStroke: 2,
+  clientPortalZoom: 1,
+  clientPortalPage: 1,
+  clientPortalPageCount: 1,
+  clientPortalFitMode: true,
+  clientPortalPanelTab: 'comments',
+  clientPortalStamp: 'Approved',
+  clientPortalPendingComment: null,
+  clientPortalSelectedAnnotationId: '',
   timeEntries: readJson(TIME_ENTRY_CACHE_KEY, []),
   activeTimer: readJson(ACTIVE_TIMER_KEY, null),
   teamMembers: readSeededList(TEAM_CACHE_KEY, teamMembersFallback).map(normalizeTeamMember),
@@ -5858,41 +5866,84 @@ function renderClientPortalPublicPage(route) {
   }
   const documents = portal.documents || [];
   const selectedDoc = documents.find((doc) => doc.id === portal.documentId) || documents[0] || null;
+  if (selectedDoc && portal.documentId !== selectedDoc.id) portal.documentId = selectedDoc.id;
+  const pageNumber = Math.max(1, Number(state.clientPortalPage || 1));
+  const pageCount = Math.max(1, Number(state.clientPortalPageCount || selectedDoc?.page_count || 1));
+  const currentAnnotations = clientPortalAnnotationsForCurrentDocument(selectedDoc, pageNumber);
+  const commentAnnotations = currentAnnotations.filter((annotation) => annotation.payload?.type === 'comment' || annotation.annotation_type === 'comment');
+  const markups = currentAnnotations.filter((annotation) => annotation.payload?.type !== 'comment' && annotation.annotation_type !== 'comment');
+  const tabs = [
+    ['comments', 'Comments', commentAnnotations.length],
+    ['layers', 'Layers', currentAnnotations.length],
+    ['pages', 'Pages', pageCount],
+  ];
+  const tools = [
+    { id: 'pan', label: 'Pan', icon: 'ti-hand-move' },
+    { id: 'pen', label: 'Pen', icon: 'ti-pencil' },
+    { id: 'line', label: 'Line', icon: 'ti-slash' },
+    { id: 'arrow', label: 'Arrow', icon: 'ti-arrow-up-right' },
+    { id: 'rect', label: 'Box', icon: 'ti-square' },
+    { id: 'comment', label: 'Add note', icon: 'ti-message-circle' },
+    { id: 'stamp', label: 'Stamp', icon: 'ti-rosette-discount-check' },
+    { id: 'measure', label: 'Measure', icon: 'ti-ruler-measure' },
+  ];
+  const swatches = ['#E8611A', '#C0392B', '#1A4A8A', '#1A7A4A', '#6B2FA0', '#111827'];
+  const strokes = [
+    ['1', 'S'],
+    ['2', 'M'],
+    ['4', 'L'],
+  ];
+  const stamps = ['Approved', 'Revise', 'Question', 'Received'];
   return `
     <main class="client-portal-public open">
       <header class="client-portal-public-top">
         <div class="client-portal-brand"><span class="side-mark">Q</span><span><strong>${h(portal.portal?.title || 'Client Portal')}</strong><small>${h(portal.portal?.client_name || portal.guestName || 'Plan review')}</small></span></div>
-        <button class="btn" type="button" data-action="client-portal-export"><i class="ti ti-download"></i>Export marked PDF</button>
+        <div class="client-portal-public-actions">
+          <span class="client-portal-save-state" data-client-portal-save-state>Ready</span>
+          <button class="btn" type="button" data-action="client-portal-save-annotations"><i class="ti ti-device-floppy"></i>Save</button>
+          <button class="btn btn-primary" type="button" data-action="client-portal-export"><i class="ti ti-download"></i>Export marked PDF</button>
+        </div>
       </header>
       <section class="client-portal-workbench">
         <aside class="client-portal-docs">
-          <strong>Plan set</strong>
+          <div class="client-portal-rail-title"><strong>Plan set</strong><span>${documents.length} file${documents.length === 1 ? '' : 's'}</span></div>
           ${documents.map((doc) => `
             <button class="${selectedDoc?.id === doc.id ? 'active' : ''}" type="button" data-action="client-portal-doc" data-document-id="${h(doc.id)}">
               <i class="ti ${doc.mime_type?.includes('pdf') ? 'ti-file-type-pdf' : 'ti-photo'}"></i>
               <span>${h(doc.file_name)}<small>${formatBytes(doc.size_bytes)}</small></span>
             </button>
           `).join('') || emptyState('No documents are available.')}
+          <div class="client-portal-page-controls">
+            <button class="client-portal-mini-btn" type="button" data-action="client-portal-prev-page" ${pageNumber <= 1 ? 'disabled' : ''} title="Previous page" aria-label="Previous page"><i class="ti ti-chevron-left"></i></button>
+            <span>Page ${pageNumber} / ${pageCount}</span>
+            <button class="client-portal-mini-btn" type="button" data-action="client-portal-next-page" ${pageNumber >= pageCount ? 'disabled' : ''} title="Next page" aria-label="Next page"><i class="ti ti-chevron-right"></i></button>
+          </div>
           <div class="client-portal-help">DWG files should be exported to PDF before upload.</div>
         </aside>
         <section class="client-portal-viewer">
           <div class="client-portal-toolbar">
-            ${[
-              { id: 'pan', attr: 'data-portal-tool="pan"', label: 'Pan', icon: 'ti-hand-move' },
-              { id: 'pen', attr: 'data-portal-tool="pen"', label: 'Pen', icon: 'ti-pencil' },
-              { id: 'line', attr: 'data-portal-tool="line"', label: 'Line', icon: 'ti-slash' },
-              { id: 'rect', attr: 'data-portal-tool="rect"', label: 'Box', icon: 'ti-square' },
-              { id: 'circle', attr: 'data-portal-tool="circle"', label: 'Oval', icon: 'ti-circle' },
-              { id: 'arrow', attr: 'data-portal-tool="arrow"', label: 'Arrow', icon: 'ti-arrow-up-right' },
-              { id: 'text', attr: 'data-portal-tool="text"', label: 'Text', icon: 'ti-letter-t' },
-              { id: 'comment', attr: 'data-portal-tool="comment"', label: 'Pin comment', icon: 'ti-message-circle' },
-              { id: 'measure', attr: 'data-portal-tool="measure"', label: 'Measure', icon: 'ti-ruler-measure' },
-              { id: 'stamp', attr: 'data-portal-tool="stamp"', label: 'Approve stamp', icon: 'ti-circle-check' },
-            ].map((tool) => `
-              <button class="client-portal-tool ${state.clientPortalTool === tool.id ? 'active' : ''}" type="button" data-action="client-portal-tool" ${tool.attr} title="${h(tool.label)}" aria-label="${h(tool.label)}" aria-pressed="${state.clientPortalTool === tool.id ? 'true' : 'false'}"><i class="ti ${h(tool.icon)}" aria-hidden="true"></i></button>
-            `).join('')}
-            <input type="color" value="${h(state.clientPortalColor)}" data-action="client-portal-color" title="Markup color" />
-            <button class="btn" type="button" data-action="client-portal-save-annotations"><i class="ti ti-device-floppy"></i>Save markups</button>
+            <div class="client-portal-tool-group" aria-label="Markup tools">
+              ${tools.map((tool) => `
+                <button class="client-portal-tool ${state.clientPortalTool === tool.id ? 'active' : ''}" type="button" data-action="client-portal-tool" data-portal-tool="${tool.id}" title="${h(tool.label)}" aria-label="${h(tool.label)}" aria-pressed="${state.clientPortalTool === tool.id ? 'true' : 'false'}"><i class="ti ${h(tool.icon)}" aria-hidden="true"></i></button>
+              `).join('')}
+            </div>
+            <div class="client-portal-tool-group" aria-label="Colors">
+              ${swatches.map((color) => `<button class="client-portal-swatch ${state.clientPortalColor === color ? 'active' : ''}" type="button" data-action="client-portal-swatch" data-color="${h(color)}" title="Color ${h(color)}" aria-label="Color ${h(color)}" style="--swatch:${h(color)}"></button>`).join('')}
+              <input class="client-portal-color-input" type="color" value="${h(state.clientPortalColor)}" data-action="client-portal-color" title="Custom color" aria-label="Custom markup color" />
+            </div>
+            <div class="client-portal-tool-group" aria-label="Stroke width">
+              ${strokes.map(([value, label]) => `<button class="client-portal-stroke ${Number(state.clientPortalStroke) === Number(value) ? 'active' : ''}" type="button" data-action="client-portal-stroke" data-stroke="${value}" title="${label} stroke" aria-label="${label} stroke">${label}</button>`).join('')}
+            </div>
+            <select class="client-portal-stamp-select" data-action="client-portal-stamp" title="Stamp label" aria-label="Stamp label">
+              ${stamps.map((stamp) => `<option value="${h(stamp)}" ${state.clientPortalStamp === stamp ? 'selected' : ''}>${h(stamp)}</option>`).join('')}
+            </select>
+            <div class="client-portal-tool-group" aria-label="View controls">
+              <button class="client-portal-tool" type="button" data-action="client-portal-zoom-out" title="Zoom out" aria-label="Zoom out"><i class="ti ti-minus"></i></button>
+              <span class="client-portal-zoom-label">${Math.round((state.clientPortalZoom || 1) * 100)}%</span>
+              <button class="client-portal-tool" type="button" data-action="client-portal-zoom-in" title="Zoom in" aria-label="Zoom in"><i class="ti ti-plus"></i></button>
+              <button class="client-portal-tool" type="button" data-action="client-portal-fit" title="Fit page" aria-label="Fit page"><i class="ti ti-arrows-maximize"></i></button>
+            </div>
+            <button class="client-portal-tool" type="button" data-action="client-portal-undo" title="Undo last markup" aria-label="Undo last markup"><i class="ti ti-arrow-back-up"></i></button>
           </div>
           <div class="client-portal-stage" data-client-portal-stage>
             ${selectedDoc ? `
@@ -5904,17 +5955,89 @@ function renderClientPortalPublicPage(route) {
           </div>
         </section>
         <aside class="client-portal-comments">
-          <strong>Comments</strong>
-          ${(portal.annotations || []).filter((annotation) => !selectedDoc || annotation.document_id === selectedDoc.id).map((annotation) => `
-            <div class="client-portal-comment">
-              <b>${h(annotation.guest_name || portal.guestName || 'Guest')}</b>
-              <span>${h(annotation.payload?.text || annotation.payload?.label || annotation.annotation_type || 'Markup')}</span>
-              <small>Page ${h(annotation.page_number || 1)}</small>
-            </div>
-          `).join('') || emptyState('No comments yet.')}
+          <div class="client-portal-tabs">
+            ${tabs.map(([id, label, count]) => `<button class="${state.clientPortalPanelTab === id ? 'active' : ''}" type="button" data-action="client-portal-panel-tab" data-tab="${id}">${label}<span>${count}</span></button>`).join('')}
+          </div>
+          ${state.clientPortalPanelTab === 'comments' ? renderClientPortalCommentsPanel(portal, selectedDoc, commentAnnotations, pageNumber) : ''}
+          ${state.clientPortalPanelTab === 'layers' ? renderClientPortalLayersPanel(commentAnnotations, markups) : ''}
+          ${state.clientPortalPanelTab === 'pages' ? renderClientPortalPagesPanel(pageNumber, pageCount) : ''}
         </aside>
       </section>
     </main>
+  `;
+}
+
+function clientPortalAnnotationsForCurrentDocument(selectedDoc, pageNumber = state.clientPortalPage || 1) {
+  if (!selectedDoc) return [];
+  return (state.clientPortalPublic?.annotations || []).filter((annotation) => {
+    return annotation.document_id === selectedDoc.id && Number(annotation.page_number || 1) === Number(pageNumber || 1);
+  });
+}
+
+function renderClientPortalCommentsPanel(portal, selectedDoc, comments, pageNumber) {
+  const pending = state.clientPortalPendingComment;
+  return `
+    <div class="client-portal-panel-head">
+      <strong>Plan notes</strong>
+      <span>${comments.length} on page ${pageNumber}</span>
+    </div>
+    ${pending && selectedDoc?.id === pending.documentId ? `
+      <div class="client-portal-note-editor">
+        <b>New note</b>
+        <small>Page ${h(pending.pageNumber)} at ${Math.round(pending.x)}, ${Math.round(pending.y)}</small>
+        <textarea data-client-portal-comment-input rows="4" placeholder="Type the note for this spot on the plan"></textarea>
+        <div class="client-portal-note-actions">
+          <button class="btn btn-primary" type="button" data-action="client-portal-comment-submit"><i class="ti ti-message-plus"></i>Save note</button>
+          <button class="btn" type="button" data-action="client-portal-comment-cancel">Cancel</button>
+        </div>
+      </div>
+    ` : '<div class="client-portal-help">Use the note tool, then click the plan where the customer comment belongs.</div>'}
+    <div class="client-portal-comment-list">
+      ${comments.map((annotation, index) => {
+        const status = annotation.payload.status || 'open';
+        const selected = state.clientPortalSelectedAnnotationId === annotation.id;
+        return `
+          <article class="client-portal-comment ${selected ? 'selected' : ''}" data-annotation-id="${h(annotation.id)}">
+            <button type="button" data-action="client-portal-select-comment" data-annotation-id="${h(annotation.id)}">
+              <b><span>${index + 1}</span>${h(annotation.guest_name || portal.guestName || 'Client')}</b>
+              <em>${h(status)}</em>
+              <p>${h(annotation.payload?.text || 'No note text')}</p>
+              <small>Page ${h(annotation.page_number || 1)} · ${formatDate(annotation.created_at)}</small>
+            </button>
+            <div class="client-portal-comment-actions">
+              <button type="button" data-action="client-portal-toggle-comment" data-annotation-id="${h(annotation.id)}">${status === 'resolved' ? 'Reopen' : 'Resolve'}</button>
+            </div>
+          </article>
+        `;
+      }).join('') || emptyState('No notes on this page yet.')}
+    </div>
+  `;
+}
+
+function renderClientPortalLayersPanel(comments, markups) {
+  const layerRows = [
+    ['Comments', comments.length, '#1A4A8A'],
+    ['Markups', markups.length, '#E8611A'],
+    ['Stamps', markups.filter((annotation) => annotation.payload?.type === 'stamp').length, '#1A7A4A'],
+    ['Measurements', markups.filter((annotation) => annotation.payload?.type === 'measure').length, '#6B2FA0'],
+  ];
+  return `
+    <div class="client-portal-panel-head"><strong>Layers</strong><span>Current page</span></div>
+    <div class="client-portal-layer-list">
+      ${layerRows.map(([label, count, color]) => `<div class="client-portal-layer-row"><span style="--layer:${h(color)}"></span><b>${h(label)}</b><em>${count}</em></div>`).join('')}
+    </div>
+  `;
+}
+
+function renderClientPortalPagesPanel(pageNumber, pageCount) {
+  return `
+    <div class="client-portal-panel-head"><strong>Pages</strong><span>${pageCount} total</span></div>
+    <div class="client-portal-pages-grid">
+      ${Array.from({ length: pageCount }, (_, index) => {
+        const page = index + 1;
+        return `<button class="${page === pageNumber ? 'active' : ''}" type="button" data-action="client-portal-page" data-page="${page}">Page ${page}</button>`;
+      }).join('')}
+    </div>
   `;
 }
 
@@ -5925,6 +6048,107 @@ function updateClientPortalToolSelection(toolId) {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
+}
+
+function updateClientPortalColorSelection() {
+  document.querySelectorAll('[data-action="client-portal-swatch"]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.color === state.clientPortalColor);
+  });
+  const colorInput = document.querySelector('[data-action="client-portal-color"]');
+  if (colorInput) colorInput.value = state.clientPortalColor;
+}
+
+function updateClientPortalStrokeSelection() {
+  document.querySelectorAll('[data-action="client-portal-stroke"]').forEach((button) => {
+    button.classList.toggle('active', Number(button.dataset.stroke || 0) === Number(state.clientPortalStroke || 2));
+  });
+}
+
+function setClientPortalSaveState(label, mode = '') {
+  const el = document.querySelector('[data-client-portal-save-state]');
+  if (!el) return;
+  el.textContent = label;
+  el.dataset.mode = mode;
+}
+
+function setClientPortalZoom(value) {
+  state.clientPortalZoom = Math.max(0.35, Math.min(3, Number(value || 1)));
+  state.clientPortalFitMode = false;
+  render();
+}
+
+function setClientPortalPage(page) {
+  const max = Math.max(1, Number(state.clientPortalPageCount || 1));
+  state.clientPortalPage = Math.max(1, Math.min(max, Number(page || 1)));
+  state.clientPortalPendingComment = null;
+  state.clientPortalSelectedAnnotationId = '';
+  render();
+}
+
+function submitClientPortalComment() {
+  const pending = state.clientPortalPendingComment;
+  const text = String(document.querySelector('[data-client-portal-comment-input]')?.value || '').trim();
+  if (!pending || !text) {
+    showToast('Type a note before saving.', 'local', 'Client Portal');
+    return;
+  }
+  const portal = state.clientPortalPublic;
+  const doc = (portal?.documents || []).find((item) => item.id === pending.documentId);
+  if (!portal?.session || !doc) {
+    showToast('Open a plan before adding notes.', 'local', 'Client Portal');
+    return;
+  }
+  addClientPortalAnnotation(doc, 'comment', {
+    x: pending.x,
+    y: pending.y,
+    text,
+    label: text,
+    status: 'open',
+    pageNumber: pending.pageNumber,
+  });
+  state.clientPortalPendingComment = null;
+  state.clientPortalSelectedAnnotationId = state.clientPortalPublic.annotations.at(-1)?.id || '';
+  setClientPortalSaveState('Unsaved changes', 'pending');
+  render();
+}
+
+function selectClientPortalAnnotation(annotationId) {
+  state.clientPortalSelectedAnnotationId = annotationId;
+  const overlay = document.getElementById('client-portal-draw-canvas');
+  if (overlay) redrawClientPortalAnnotations(overlay);
+  document.querySelectorAll('.client-portal-comment').forEach((card) => {
+    card.classList.toggle('selected', card.dataset.annotationId === annotationId);
+  });
+}
+
+function toggleClientPortalCommentStatus(annotationId) {
+  const annotation = (state.clientPortalPublic?.annotations || []).find((item) => item.id === annotationId);
+  if (!annotation) return;
+  annotation.payload = { ...(annotation.payload || {}), status: annotation.payload?.status === 'resolved' ? 'open' : 'resolved' };
+  annotation.updated_at = new Date().toISOString();
+  writeJson(CLIENT_PORTAL_SESSION_KEY, state.clientPortalPublic);
+  setClientPortalSaveState('Unsaved changes', 'pending');
+  render();
+}
+
+function undoClientPortalAnnotation() {
+  const portal = state.clientPortalPublic;
+  if (!portal?.documentId) return;
+  const page = Number(state.clientPortalPage || 1);
+  const annotations = portal.annotations || [];
+  const index = annotations.map((annotation, itemIndex) => ({ annotation, itemIndex })).reverse().find((entry) => {
+    return entry.annotation.document_id === portal.documentId && Number(entry.annotation.page_number || 1) === page;
+  })?.itemIndex;
+  if (index === undefined) {
+    showToast('Nothing to undo on this page.', 'local', 'Client Portal');
+    return;
+  }
+  annotations.splice(index, 1);
+  state.clientPortalSelectedAnnotationId = '';
+  state.clientPortalPendingComment = null;
+  writeJson(CLIENT_PORTAL_SESSION_KEY, portal);
+  setClientPortalSaveState('Unsaved changes', 'pending');
+  render();
 }
 
 function renderClientPortalFormModal(companyId, portal = null) {
@@ -9283,6 +9507,78 @@ function handleAction(event, node) {
   }
   if (action === 'client-portal-color') {
     state.clientPortalColor = node.value || node.getAttribute('value') || '#E8611A';
+    updateClientPortalColorSelection();
+    return;
+  }
+  if (action === 'client-portal-swatch') {
+    event.preventDefault();
+    state.clientPortalColor = node.dataset.color || '#E8611A';
+    updateClientPortalColorSelection();
+    return;
+  }
+  if (action === 'client-portal-stroke') {
+    event.preventDefault();
+    state.clientPortalStroke = Number(node.dataset.stroke || 2);
+    updateClientPortalStrokeSelection();
+    return;
+  }
+  if (action === 'client-portal-stamp') {
+    state.clientPortalStamp = node.value || 'Approved';
+    return;
+  }
+  if (action === 'client-portal-panel-tab') {
+    event.preventDefault();
+    state.clientPortalPanelTab = node.dataset.tab || 'comments';
+    render();
+    return;
+  }
+  if (action === 'client-portal-comment-cancel') {
+    event.preventDefault();
+    state.clientPortalPendingComment = null;
+    render();
+    return;
+  }
+  if (action === 'client-portal-comment-submit') {
+    event.preventDefault();
+    submitClientPortalComment();
+    return;
+  }
+  if (action === 'client-portal-select-comment') {
+    event.preventDefault();
+    selectClientPortalAnnotation(node.dataset.annotationId || '');
+    return;
+  }
+  if (action === 'client-portal-toggle-comment') {
+    event.preventDefault();
+    toggleClientPortalCommentStatus(node.dataset.annotationId || '');
+    return;
+  }
+  if (action === 'client-portal-zoom-in') {
+    event.preventDefault();
+    setClientPortalZoom((state.clientPortalZoom || 1) + 0.15);
+    return;
+  }
+  if (action === 'client-portal-zoom-out') {
+    event.preventDefault();
+    setClientPortalZoom((state.clientPortalZoom || 1) - 0.15);
+    return;
+  }
+  if (action === 'client-portal-fit') {
+    event.preventDefault();
+    state.clientPortalFitMode = true;
+    render();
+    return;
+  }
+  if (action === 'client-portal-undo') {
+    event.preventDefault();
+    undoClientPortalAnnotation();
+    return;
+  }
+  if (action === 'client-portal-page' || action === 'client-portal-prev-page' || action === 'client-portal-next-page') {
+    event.preventDefault();
+    const delta = action === 'client-portal-prev-page' ? -1 : action === 'client-portal-next-page' ? 1 : 0;
+    const nextPage = action === 'client-portal-page' ? Number(node.dataset.page || 1) : Number(state.clientPortalPage || 1) + delta;
+    setClientPortalPage(nextPage);
     return;
   }
   if (action === 'client-portal-doc') {
@@ -9291,6 +9587,12 @@ function handleAction(event, node) {
       state.clientPortalPublic.documentId = node.dataset.documentId || '';
       state.clientPortalPublic.documentUrl = '';
       state.clientPortalPublic.annotations = [];
+      state.clientPortalPage = 1;
+      state.clientPortalPageCount = 1;
+      state.clientPortalZoom = 1;
+      state.clientPortalFitMode = true;
+      state.clientPortalPendingComment = null;
+      state.clientPortalSelectedAnnotationId = '';
       writeJson(CLIENT_PORTAL_SESSION_KEY, state.clientPortalPublic);
       render();
     }
@@ -12158,6 +12460,10 @@ function onDocumentInput(event) {
 }
 
 function onDocumentChange(event) {
+  if (event.target.matches('[data-action="client-portal-color"], [data-action="client-portal-stamp"]')) {
+    handleAction(event, event.target);
+    return;
+  }
   if (event.target.matches('[data-company-switch]')) {
     const nextCompanyId = event.target.value || defaultCompanyId();
     setActiveCompany(nextCompanyId);
@@ -12687,13 +12993,18 @@ async function saveClientPortalAnnotations() {
   const portal = state.clientPortalPublic;
   if (!portal?.session || !portal.documentId) throw new Error('Open a document first.');
   const annotations = (portal.annotations || []).filter((annotation) => annotation.document_id === portal.documentId);
+  setClientPortalSaveState('Saving...', 'saving');
   const response = await fetch('/api/client-portal-annotations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session: portal.session, document_id: portal.documentId, annotations }),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || 'Markup save failed.');
+  if (!response.ok) {
+    setClientPortalSaveState('Save failed', 'error');
+    throw new Error(payload.error || 'Markup save failed.');
+  }
+  setClientPortalSaveState('Saved', 'saved');
   showToast('Markups saved.', 'live', 'Client Portal');
 }
 
@@ -12717,8 +13028,17 @@ async function renderClientPortalDocumentCanvas(doc, base, overlay) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const pdfData = new Uint8Array(await file.arrayBuffer());
     const pdf = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: Math.min(1.35, Math.max(0.8, (document.querySelector('.client-portal-stage')?.clientWidth || 900) / page.getViewport({ scale: 1 }).width)) });
+    state.clientPortalPageCount = Math.max(1, pdf.numPages || 1);
+    state.clientPortalPage = Math.max(1, Math.min(state.clientPortalPageCount, Number(state.clientPortalPage || 1)));
+    const page = await pdf.getPage(state.clientPortalPage);
+    const stageWidth = document.querySelector('.client-portal-stage')?.clientWidth || 900;
+    const baseViewport = page.getViewport({ scale: 1 });
+    const fitScale = Math.min(1.35, Math.max(0.45, (stageWidth - 48) / baseViewport.width));
+    const scale = state.clientPortalFitMode ? fitScale : Math.max(0.35, Math.min(3, Number(state.clientPortalZoom || fitScale)));
+    state.clientPortalZoom = scale;
+    const zoomLabel = document.querySelector('.client-portal-zoom-label');
+    if (zoomLabel) zoomLabel.textContent = `${Math.round(scale * 100)}%`;
+    const viewport = page.getViewport({ scale });
     base.width = viewport.width;
     base.height = viewport.height;
     overlay.width = viewport.width;
@@ -12729,7 +13049,13 @@ async function renderClientPortalDocumentCanvas(doc, base, overlay) {
     try {
       const image = await loadClientPortalImage(objectUrl);
       const maxWidth = Math.min(1200, document.querySelector('.client-portal-stage')?.clientWidth || 900);
-      const scale = Math.min(1, maxWidth / image.width);
+      state.clientPortalPage = 1;
+      state.clientPortalPageCount = 1;
+      const fitScale = Math.min(1, maxWidth / image.width);
+      const scale = state.clientPortalFitMode ? fitScale : Math.max(0.35, Math.min(3, Number(state.clientPortalZoom || fitScale)));
+      state.clientPortalZoom = scale;
+      const zoomLabel = document.querySelector('.client-portal-zoom-label');
+      if (zoomLabel) zoomLabel.textContent = `${Math.round(scale * 100)}%`;
       base.width = image.width * scale;
       base.height = image.height * scale;
       overlay.width = base.width;
@@ -12756,9 +13082,21 @@ function attachClientPortalDrawing(_base, overlay, doc) {
     event.preventDefault();
     start = point(event);
     drawing = true;
-    if (['text', 'comment', 'stamp'].includes(state.clientPortalTool)) {
-      const text = state.clientPortalTool === 'stamp' ? 'APPROVED' : window.prompt(state.clientPortalTool === 'text' ? 'Text' : 'Comment') || '';
-      if (text) addClientPortalAnnotation(doc, state.clientPortalTool, { ...start, text, label: text });
+    if (state.clientPortalTool === 'comment') {
+      state.clientPortalPendingComment = {
+        documentId: doc.id,
+        pageNumber: state.clientPortalPage || 1,
+        x: start.x,
+        y: start.y,
+      };
+      state.clientPortalPanelTab = 'comments';
+      state.clientPortalSelectedAnnotationId = '';
+      render();
+      return;
+    }
+    if (state.clientPortalTool === 'stamp') {
+      addClientPortalAnnotation(doc, 'stamp', { ...start, text: state.clientPortalStamp || 'Approved', label: state.clientPortalStamp || 'Approved' });
+      setClientPortalSaveState('Unsaved changes', 'pending');
       drawing = false;
       start = null;
       redrawClientPortalAnnotations(overlay);
@@ -12776,6 +13114,7 @@ function attachClientPortalDrawing(_base, overlay, doc) {
     event.preventDefault();
     const current = point(event);
     addClientPortalAnnotation(doc, state.clientPortalTool, { x: start.x, y: start.y, x2: current.x, y2: current.y });
+    setClientPortalSaveState('Unsaved changes', 'pending');
     drawing = false;
     start = null;
     redrawClientPortalAnnotations(overlay);
@@ -12795,10 +13134,10 @@ function addClientPortalAnnotation(doc, type, points) {
     company_id: state.clientPortalPublic.portal?.company_id,
     portal_id: state.clientPortalPublic.portal?.id,
     document_id: doc.id,
-    page_number: 1,
+    page_number: Number(points.pageNumber || state.clientPortalPage || 1),
     guest_name: state.clientPortalPublic.guestName || 'Guest',
     annotation_type: type,
-    payload: { type, ...points, color: state.clientPortalColor, sw: state.clientPortalStroke },
+    payload: { type, ...points, color: state.clientPortalColor, sw: state.clientPortalStroke, status: points.status || 'open' },
   });
   state.clientPortalPublic.annotations = (state.clientPortalPublic.annotations || []).concat(annotation);
   writeJson(CLIENT_PORTAL_SESSION_KEY, state.clientPortalPublic);
@@ -12807,9 +13146,18 @@ function addClientPortalAnnotation(doc, type, points) {
 function redrawClientPortalAnnotations(overlay) {
   const ctx = overlay.getContext('2d');
   ctx.clearRect(0, 0, overlay.width, overlay.height);
+  let commentNumber = 0;
   (state.clientPortalPublic?.annotations || [])
-    .filter((annotation) => annotation.document_id === state.clientPortalPublic.documentId)
-    .forEach((annotation) => drawClientPortalShape(ctx, annotation.payload || {}));
+    .filter((annotation) => annotation.document_id === state.clientPortalPublic.documentId && Number(annotation.page_number || 1) === Number(state.clientPortalPage || 1))
+    .forEach((annotation) => {
+      const payload = annotation.payload || {};
+      if (payload.type === 'comment' || annotation.annotation_type === 'comment') commentNumber += 1;
+      drawClientPortalShape(ctx, {
+        ...payload,
+        noteNumber: payload.type === 'comment' || annotation.annotation_type === 'comment' ? commentNumber : undefined,
+        selected: state.clientPortalSelectedAnnotationId === annotation.id,
+      });
+    });
 }
 
 function drawClientPortalShape(ctx, item) {
@@ -12829,7 +13177,23 @@ function drawClientPortalShape(ctx, item) {
     ctx.beginPath();
     ctx.ellipse(x + (x2 - x) / 2, y + (y2 - y) / 2, Math.abs(x2 - x) / 2, Math.abs(y2 - y) / 2, 0, 0, Math.PI * 2);
     ctx.stroke();
-  } else if (item.type === 'text' || item.type === 'comment' || item.type === 'stamp') {
+  } else if (item.type === 'comment') {
+    const radius = item.selected ? 14 : 11;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = item.selected ? '#111827' : '#fff';
+    ctx.lineWidth = item.selected ? 4 : 3;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = '800 11px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(item.noteNumber || 'N'), x, y + 0.5);
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+  } else if (item.type === 'text' || item.type === 'stamp') {
     ctx.font = item.type === 'stamp' ? '700 14px Inter, sans-serif' : '600 14px Inter, sans-serif';
     const text = item.text || item.label || 'Comment';
     const width = ctx.measureText(text).width + 16;
@@ -12878,6 +13242,28 @@ async function exportClientPortalMarkedPdf() {
   ctx.drawImage(overlay, 0, 0);
   const pdf = new window.jspdf.jsPDF({ orientation: merged.width > merged.height ? 'l' : 'p', unit: 'px', format: [merged.width, merged.height], compress: true });
   pdf.addImage(merged.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, merged.width, merged.height);
+  const comments = (state.clientPortalPublic?.annotations || []).filter((annotation) => {
+    return annotation.document_id === state.clientPortalPublic?.documentId && (annotation.payload?.type === 'comment' || annotation.annotation_type === 'comment');
+  });
+  if (comments.length) {
+    pdf.addPage([612, 792], 'p');
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.text('Plan Review Notes', 36, 48);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    let y = 78;
+    comments.forEach((annotation, index) => {
+      const status = annotation.payload.status || 'open';
+      const lines = pdf.splitTextToSize(`${index + 1}. Page ${annotation.page_number || 1} · ${annotation.guest_name || 'Client'} · ${status}\n${annotation.payload?.text || 'No note text'}`, 540);
+      if (y + lines.length * 13 > 744) {
+        pdf.addPage([612, 792], 'p');
+        y = 48;
+      }
+      pdf.text(lines, 36, y);
+      y += lines.length * 13 + 12;
+    });
+  }
   pdf.save(`Quest-Portal-Markups-${new Date().toISOString().slice(0, 10)}.pdf`);
   await fetch('/api/client-portal-export-event', {
     method: 'POST',
