@@ -171,6 +171,98 @@ const ROOF_ESTIMATE_SYSTEMS = {
     ],
   },
 };
+const PROPOSAL_TEMPLATES = [
+  {
+    id: 'tile_refelt',
+    name: 'Tile Roof Refelt',
+    category: 'Roofing',
+    jobTitle: 'Tile Roof Refelt',
+    items: [
+      ['Detach & Reset Solar Panels', '', false],
+      ['Remove & Reset Tiles', '', false],
+      ['Supply Up To 1/2 Pallet of Tiles To Replace Broken Tiles', '', true],
+      ['Install New 2"x2" Metal Drip Edge', 'Color: TBD', true],
+      ['Install New Bird Stop at Eaves (Bottom Edge)', 'Color: TBD', true],
+      ['Install New Hip & Ridge Enclosure', '', true],
+      ['Install All New Roof Flashings at All Roof Penetrations', '', true],
+      ['Install New 2 Layers of Ply 40 Underlayment', '20 Year Manufacturer Warranty', true],
+      ['Install New Triple Ribbed Metal Valleys', '', true],
+      ['Clean up and Haul Away All Roofing Debris', '', true],
+    ],
+  },
+  {
+    id: 'shingle',
+    name: 'Shingle Roof Replacement',
+    category: 'Roofing',
+    jobTitle: 'Shingle Roof Replacement',
+    items: [
+      ['Tear Off Existing Roof Down to Decking', '', true],
+      ['Install New 2"x2" Metal Drip Edge', 'Color: TBD', true],
+      ['Install New Synthetic Underlayment', '', true],
+      ['Install New Ice & Water Shield at Valleys & Penetrations', '', true],
+      ['Install All New Roof Flashings at All Roof Penetrations', '', true],
+      ['Install New Architectural Shingles', '30 Year Manufacturer Warranty', true],
+      ['Install New Ridge Cap Shingles', '', true],
+      ['Install New Ridge Vent / Replace Vents as Needed', '', true],
+      ['Includes Up to 2 Sheets of OSB', '', true],
+      ['Clean up and Haul Away All Roofing Debris', '', true],
+    ],
+  },
+  {
+    id: 'flat_modbit',
+    name: 'Flat Roof - Modified Bitumen',
+    category: 'Roofing',
+    jobTitle: 'Flat Roof Recover (Modified Bitumen)',
+    items: [
+      ['Remove Loose / Failing Existing Membrane as Needed', '', true],
+      ['Install Base Sheet Polyglass', '', true],
+      ['Install Cap Sheet Polyglass', 'Color: TBD', true],
+      ['Install New Metal Edge Flashing', 'Color: TBD', true],
+      ['Install All New Flashings at All Penetrations', '', true],
+      ['Includes Up to 2 Sheets of OSB', '', true],
+      ['Clean up and Haul Away All Roofing Debris', '', true],
+    ],
+  },
+  {
+    id: 'foam',
+    name: 'Foam Roof (SPF) Recoat',
+    category: 'Roofing',
+    jobTitle: 'Foam Roof Recoat',
+    items: [
+      ['Power Wash & Prep Existing Foam Surface', '', true],
+      ['Repair / Re-Foam Damaged & Low Areas', '', true],
+      ['Apply Base Coat Elastomeric Coating', '', true],
+      ['Apply Top Coat Elastomeric Coating', 'Color: TBD', true],
+      ['Re-Flash All Penetrations & Parapet Walls', '', true],
+      ['Clean up and Haul Away All Debris', '', true],
+    ],
+  },
+  {
+    id: 'gutters',
+    name: 'Seamless Gutter Installation',
+    category: 'Gutters',
+    jobTitle: 'Seamless Gutter Installation',
+    items: [
+      ['Remove & Haul Away Existing Gutters', '', false],
+      ['Install New Seamless Aluminum Gutters', 'Color: TBD', true],
+      ['Install New Downspouts & Extensions', 'Color: TBD', true],
+      ['Install Gutter Guards / Leaf Protection', '', true],
+      ['Seal All Seams, Miters & End Caps', '', false],
+      ['Clean up and Haul Away All Debris', '', true],
+    ],
+  },
+];
+const DEFAULT_PROPOSAL_PREMIUM = {
+  tagline: 'On a quest to serve you better',
+  rating: '5.0',
+  reviews: '200+',
+  monthly: '',
+  deposit: 50,
+  warranty: '5-Year Quest Craftsmanship Warranty',
+  manufacturerWarranty: 'Manufacturer warranty on materials',
+  materials: 'GAF - GAF-certified system and factory-trained crew\nPLY 40 - 2-layer underlayment with manufacturer warranty\nMETAL - valleys, drip edge, and flashings color-matched',
+  terms: 'Proposal pricing is valid through the date shown. Scope is subject to final inspection, material availability, and signed approval.',
+};
 
 const ROLE_PERMISSIONS = {
   developer: ['*'],
@@ -1681,6 +1773,7 @@ const state = {
   accountTab: 'overview',
   dealPrefill: null,
   estimateContext: null,
+  proposalContext: null,
   activityPrefill: null,
   activityFilter: 'all',
   dockedActivityComposers: [],
@@ -4575,7 +4668,7 @@ function contactQuickCreate(contactId, kind) {
   if (kind === 'Call Log' || kind === 'Log a Call') return openDockedActivityComposer('contact', contactId, 'Log a Call');
   if (kind === 'Meeting' || kind === 'New Event') return openDockedActivityComposer('contact', contactId, 'New Event');
   if (kind === 'Estimate' || kind === 'New Estimate') return openEstimateBuilder('contact', contactId);
-  if (kind === 'Proposal') return convertContactToQuote(contactId);
+  if (kind === 'Proposal') return openProposalBuilder('contact', contactId);
   if (kind === 'Follow') return showToast('Following this contact.', 'local', 'Contacts');
   return showToast(`${kind} isn't set up yet.`, 'local', 'Contacts');
 }
@@ -4773,6 +4866,7 @@ function jobQuickCreate(jobId, kind) {
   if (kind === 'Log a Call') return logJobActivity(jobId, 'call', 'Logged a call');
   if (kind === 'New Event') return logJobActivity(jobId, 'meeting', 'Meeting scheduled');
   if (kind === 'Estimate' || kind === 'New Estimate') return openEstimateBuilder('job', jobId);
+  if (kind === 'Proposal') return openProposalBuilder('job', jobId);
   if (['Files', 'Open Files'].includes(kind) && !can('files.view', job.company_id)) return showToast('Files is not available for this workspace.', 'local', 'Plugins');
   if (kind === 'Form' && !can('forms.view', job.company_id)) return showToast('Forms is not available for this workspace.', 'local', 'Plugins');
   if (kind === 'Invoice' && !can('finance.view', job.company_id)) return showToast('Finance is not available for this workspace.', 'local', 'Plugins');
@@ -5266,6 +5360,7 @@ function renderJobRecord(companyId, job) {
     ['New Task', 'ti-checkbox'],
     ['Log a Call', 'ti-phone'],
     ['New Estimate', 'ti-calculator'],
+    ['Proposal', 'ti-file-text'],
     ['Add Note', 'ti-note'],
     ...(can('files.view', companyId) ? [['Open Files', 'ti-folder']] : []),
     ['Edit', 'ti-pencil'],
@@ -5274,6 +5369,7 @@ function renderJobRecord(companyId, job) {
   const quickTiles = [
     ['Task', 'ti-checkbox'],
     ['Estimate', 'ti-calculator'],
+    ['Proposal', 'ti-file-text'],
     ...(can('files.view', companyId) ? [['Files', 'ti-folder']] : []),
     ...(can('forms.view', companyId) ? [['Form', 'ti-clipboard-list']] : []),
     ...(can('finance.view', companyId) ? [['Invoice', 'ti-receipt-dollar']] : []),
@@ -9728,6 +9824,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'deal-new') return renderDealFormModal(activeCompanyId(), null);
   if (state.modal === 'deal-edit') return renderDealFormModal(activeCompanyId(), selectedDeal());
   if (state.modal === 'estimate-builder') return renderEstimateBuilderModal(activeCompanyId());
+  if (state.modal === 'proposal-builder') return renderProposalBuilderModal(activeCompanyId());
   if (state.modal === 'activity-new') return renderActivityFormModal(activeCompanyId());
   if (state.modal === 'stages-jobs') return renderStageManagerModal('jobs');
   if (state.modal === 'stages-contacts') return renderStageManagerModal('contacts');
@@ -10153,6 +10250,272 @@ function openEstimateBuilder(type, id) {
   if (!ctx) return;
   state.estimateContext = { type, id };
   state.modal = 'estimate-builder';
+  render();
+}
+
+function proposalTemplateById(id) {
+  return PROPOSAL_TEMPLATES.find((template) => template.id === id) || PROPOSAL_TEMPLATES[0];
+}
+
+function proposalContext(type, id) {
+  if (type === 'contact') {
+    const contact = contactById(id);
+    if (!contact) return null;
+    return {
+      type,
+      id,
+      company_id: contact.company_id,
+      label: 'Contact',
+      title: contact.name,
+      client: { name: contact.name, email: contact.email, phone: contact.phone, address: contact.location },
+      total: contact.value || 0,
+      jobTitle: contact.title || 'Roofing Proposal',
+      account_id: contact.account_id,
+    };
+  }
+  if (type === 'deal') {
+    const deal = dealById(id);
+    if (!deal) return null;
+    const contact = contactById(deal.primary_contact_id);
+    const account = accountById(deal.account_id);
+    return {
+      type,
+      id,
+      company_id: deal.company_id,
+      label: 'Quote',
+      title: deal.name,
+      client: {
+        name: contact?.name || account?.name || deal.name,
+        email: contact?.email || account?.email || '',
+        phone: contact?.phone || account?.phone || '',
+        address: account?.address || contact?.location || '',
+      },
+      total: deal.value || 0,
+      jobTitle: deal.name,
+      account_id: deal.account_id,
+    };
+  }
+  if (type === 'job') {
+    const job = jobById(id);
+    if (!job) return null;
+    return {
+      type,
+      id,
+      company_id: job.company_id,
+      label: 'Job',
+      title: job.name,
+      client: { name: job.client_name || job.contact_name, email: '', phone: '', address: job.site_address },
+      total: job.estimate_total || 0,
+      jobTitle: job.name,
+      account_id: job.account_id,
+    };
+  }
+  return null;
+}
+
+function currentProposalContext() {
+  const ctx = state.proposalContext || {};
+  const base = proposalContext(ctx.type, ctx.id);
+  if (!base) return null;
+  return { ...base, templateId: ctx.template || PROPOSAL_TEMPLATES[0].id };
+}
+
+function proposalDraftForContext(ctx) {
+  const template = proposalTemplateById(ctx.templateId);
+  return {
+    ...DEFAULT_PROPOSAL_PREMIUM,
+    style: 'premium',
+    templateId: template.id,
+    templateName: template.name,
+    issued: isoDate(0),
+    valid: isoDate(14),
+    proposalNo: `QR-${String(new Date().getFullYear()).slice(2)}-${String(ctx.id || '').slice(-5).toUpperCase() || 'NEW'}`,
+    client: ctx.client,
+    jobTitle: ctx.jobTitle || template.jobTitle,
+    includes: 'Includes - Labor & Materials',
+    total: ctx.total || 0,
+    items: template.items.map(([service, description, star]) => ({ service, description, star })),
+  };
+}
+
+function proposalDraftFromForm(form) {
+  const data = new FormData(form);
+  const services = data.getAll('scope_service');
+  const descriptions = data.getAll('scope_description');
+  return {
+    style: String(data.get('style') || 'premium'),
+    templateId: String(data.get('template_id') || PROPOSAL_TEMPLATES[0].id),
+    proposalNo: String(data.get('proposal_no') || '').trim(),
+    issued: String(data.get('issued') || isoDate(0)),
+    valid: String(data.get('valid') || isoDate(14)),
+    client: {
+      name: String(data.get('client_name') || '').trim(),
+      email: String(data.get('client_email') || '').trim(),
+      phone: String(data.get('client_phone') || '').trim(),
+      address: String(data.get('client_address') || '').trim(),
+    },
+    jobTitle: String(data.get('job_title') || '').trim(),
+    includes: String(data.get('includes') || '').trim() || 'Includes - Labor & Materials',
+    total: number(data.get('total')),
+    monthly: String(data.get('monthly') || '').trim(),
+    deposit: number(data.get('deposit')),
+    warranty: String(data.get('warranty') || '').trim(),
+    manufacturerWarranty: String(data.get('manufacturer_warranty') || '').trim(),
+    materials: String(data.get('materials') || '').trim(),
+    terms: String(data.get('terms') || '').trim(),
+    items: services.map((service, index) => ({
+      service: String(service || '').trim(),
+      description: String(descriptions[index] || '').trim(),
+      star: data.get(`scope_star_${index}`) === 'on',
+    })).filter((item) => item.service || item.description),
+  };
+}
+
+function renderProposalScopeRows(items) {
+  return items.map((item, index) => `
+    <div class="proposal-scope-row">
+      <label class="proposal-star"><input data-proposal-field type="checkbox" name="scope_star_${index}" ${item.star ? 'checked' : ''} /><span>*</span></label>
+      <input data-proposal-field name="scope_service" value="${h(item.service)}" aria-label="Scope service ${index + 1}" />
+      <input data-proposal-field name="scope_description" value="${h(item.description)}" aria-label="Scope description ${index + 1}" />
+    </div>
+  `).join('');
+}
+
+function renderProposalPreview(draft) {
+  const valid = draft.valid || isoDate(14);
+  const depositAmount = roundCurrency((draft.total || 0) * (number(draft.deposit) / 100));
+  const scope = draft.items.map((item) => `<li>${item.star ? '<b>*</b> ' : ''}${h(item.service)}${item.description ? `<span>${h(item.description)}</span>` : ''}</li>`).join('');
+  const materials = String(draft.materials || '').split('\n').map((line) => line.trim()).filter(Boolean)
+    .map((line) => {
+      const [name, ...rest] = line.split(' - ');
+      return `<div><b>${h(name)}</b><span>${h(rest.join(' - '))}</span></div>`;
+    }).join('');
+  return `
+    <article class="proposal-preview-sheet ${draft.style === 'simple' ? 'simple' : 'premium'}">
+      <header>
+        <div><strong>Quest Roofing</strong><span>Proposal - ${h(draft.proposalNo || 'Draft')}</span></div>
+        <b>${h(money(draft.total || 0))}</b>
+      </header>
+      <section class="proposal-hero">
+        <div>
+          <small>${draft.style === 'premium' ? 'On a quest to serve you better' : 'Prepared proposal'}</small>
+          <h3>${h(draft.jobTitle || 'Proposal')}</h3>
+          <p>Prepared for ${h(draft.client.name || 'Client')} ${draft.client.address ? `at ${h(draft.client.address)}` : ''}</p>
+        </div>
+        <div class="proposal-investment">
+          <span>Your investment</span>
+          <strong>${h(money(draft.total || 0))}</strong>
+          ${draft.monthly ? `<em>or as low as $${h(String(draft.monthly).replace(/^\$/, ''))}/mo with financing</em>` : ''}
+        </div>
+      </section>
+      <section>
+        <h4>Scope of work</h4>
+        <ul class="proposal-scope-preview">${scope || '<li>Scope lines will appear here.</li>'}</ul>
+      </section>
+      ${draft.style === 'premium' ? `<section class="proposal-materials"><h4>Built to last</h4><div>${materials}</div></section>` : ''}
+      <section class="proposal-warranty">
+        <div><b>${h(draft.warranty || DEFAULT_PROPOSAL_PREMIUM.warranty)}</b><span>Quest craftsmanship warranty</span></div>
+        <div><b>${h(draft.manufacturerWarranty || DEFAULT_PROPOSAL_PREMIUM.manufacturerWarranty)}</b><span>Material protection</span></div>
+      </section>
+      <section class="proposal-accept">
+        <h4>Ready to move forward?</h4>
+        <p>Sign to lock in your price and schedule.${draft.deposit ? ` A ${draft.deposit}% deposit reserves your install date (${money(depositAmount)}).` : ''}</p>
+        <div><span>Customer signature & date</span><span>Valid through ${h(formatDate(valid))}</span></div>
+      </section>
+    </article>
+  `;
+}
+
+function updateProposalBuilderPreview(form) {
+  if (!form) return;
+  const preview = form.querySelector('[data-proposal-preview]');
+  if (preview) preview.innerHTML = renderProposalPreview(proposalDraftFromForm(form));
+}
+
+function renderProposalBuilderModal(companyId) {
+  const ctx = currentProposalContext();
+  if (!ctx || ctx.company_id !== companyId) return renderModalShell('Job Center', 'Proposal', emptyState('Choose a contact, quote, or job before creating a proposal.'));
+  const draft = proposalDraftForContext(ctx);
+  return renderModalShell('Job Center', `${ctx.label} proposal`, `
+    <form class="proposal-builder" data-proposal-builder-form>
+      <input type="hidden" name="related_type" value="${h(ctx.type)}" />
+      <input type="hidden" name="related_id" value="${h(ctx.id)}" />
+      <section class="proposal-builder-rail">
+        <label><span>Template</span><select data-proposal-template name="template_id">${PROPOSAL_TEMPLATES.map((template) => `<option value="${h(template.id)}" ${template.id === draft.templateId ? 'selected' : ''}>${h(template.name)}</option>`).join('')}</select></label>
+        <label><span>Style</span><select data-proposal-field name="style"><option value="premium" selected>Premium</option><option value="simple">Simple</option></select></label>
+        <label><span>Proposal #</span><input data-proposal-field name="proposal_no" value="${h(draft.proposalNo)}" /></label>
+        <div class="proposal-two"><label><span>Issued</span><input data-proposal-field name="issued" type="date" value="${h(draft.issued)}" /></label><label><span>Valid through</span><input data-proposal-field name="valid" type="date" value="${h(draft.valid)}" /></label></div>
+        <label><span>Client name</span><input data-proposal-field name="client_name" value="${h(draft.client.name)}" /></label>
+        <label><span>Client email</span><input data-proposal-field name="client_email" value="${h(draft.client.email)}" /></label>
+        <label><span>Client phone</span><input data-proposal-field name="client_phone" value="${h(draft.client.phone)}" /></label>
+        <label><span>Client address</span><input data-proposal-field name="client_address" value="${h(draft.client.address)}" /></label>
+        <label><span>Job title</span><input data-proposal-field name="job_title" value="${h(draft.jobTitle)}" /></label>
+        <label><span>Total</span><input data-proposal-field name="total" type="number" step="0.01" value="${h(String(draft.total || ''))}" /></label>
+        <div class="proposal-two"><label><span>Monthly</span><input data-proposal-field name="monthly" value="${h(draft.monthly)}" /></label><label><span>Deposit %</span><input data-proposal-field name="deposit" type="number" step="1" value="${h(String(draft.deposit))}" /></label></div>
+        <label><span>Includes row</span><input data-proposal-field name="includes" value="${h(draft.includes)}" /></label>
+        <label><span>Warranty</span><input data-proposal-field name="warranty" value="${h(draft.warranty)}" /></label>
+        <label><span>Manufacturer warranty</span><input data-proposal-field name="manufacturer_warranty" value="${h(draft.manufacturerWarranty)}" /></label>
+        <label><span>Materials</span><textarea data-proposal-field name="materials">${h(draft.materials)}</textarea></label>
+        <label><span>Terms</span><textarea data-proposal-field name="terms">${h(draft.terms)}</textarea></label>
+        <section class="proposal-scope-editor"><div><strong>Scope lines</strong><small>Asterisk marks featured items.</small></div>${renderProposalScopeRows(draft.items)}</section>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit"><i class="ti ti-file-text"></i>Save proposal</button>
+          <button class="btn" type="button" data-action="close-modal">Cancel</button>
+        </div>
+      </section>
+      <section class="proposal-builder-preview" data-proposal-preview>${renderProposalPreview(draft)}</section>
+    </form>
+  `, 'proposal-modal');
+}
+
+function proposalActivityBody(draft) {
+  const scope = draft.items.slice(0, 12).map((item) => `${item.star ? '* ' : ''}${item.service}${item.description ? ' - ' + item.description : ''}`).join('\n');
+  return [
+    `Proposal: ${draft.jobTitle || 'Proposal'}`,
+    `Total: ${money(draft.total || 0)}`,
+    draft.monthly ? `Financing: ${draft.monthly}/mo` : '',
+    draft.deposit ? `Deposit: ${draft.deposit}% (${money((draft.total || 0) * draft.deposit / 100)})` : '',
+    `Valid through: ${formatDate(draft.valid)}`,
+    draft.warranty ? `Warranty: ${draft.warranty}` : '',
+    scope ? `Scope:\n${scope}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+async function saveBuiltProposal(form) {
+  const data = new FormData(form);
+  const type = String(data.get('related_type') || '');
+  const id = String(data.get('related_id') || '');
+  const ctx = proposalContext(type, id);
+  if (!ctx) throw new Error('Proposal record was not found.');
+  if (!requirePermission(type === 'job' ? 'jobs.manage' : 'crm.view', ctx.company_id, 'Your role cannot save proposals here.', 'Proposal')) return;
+  const draft = proposalDraftFromForm(form);
+  const total = roundCurrency(draft.total || 0);
+  const body = proposalActivityBody(draft);
+  if (type === 'contact') {
+    const contact = contactById(id);
+    await persistContact({ ...contact, value: total });
+    await logContactActivity(id, 'email', `Proposal prepared - ${money(total)}`, body);
+  } else if (type === 'deal') {
+    const deal = dealById(id);
+    const proposalStage = dealStageNames().find((stage) => /estimate|proposal/i.test(stage));
+    await persistDeal({ ...deal, value: total, stage: proposalStage || deal.stage }, 'Proposal saved to quote.');
+    await logDealActivity(id, 'email', `Proposal prepared - ${money(total)}`, body);
+  } else if (type === 'job') {
+    const job = jobById(id);
+    await persistJob({ ...job, estimate_total: total }, 'Proposal saved to job.');
+    await logJobActivity(id, 'email', `Proposal prepared - ${money(total)}`, body);
+  }
+  state.modal = '';
+  state.proposalContext = null;
+  showToast(`Proposal saved at ${money(total)}.`, 'live', 'Proposal');
+  render();
+}
+
+function openProposalBuilder(type, id) {
+  const ctx = proposalContext(type, id);
+  if (!ctx) return;
+  state.proposalContext = { type, id };
+  state.modal = 'proposal-builder';
   render();
 }
 
@@ -11672,6 +12035,7 @@ function closeActiveModal() {
   state.formStartTemplateId = '';
   state.formStartTab = 'blank';
   state.estimateContext = null;
+  state.proposalContext = null;
   state.selectedFinanceInvoiceId = '';
   state.selectedFinanceExpenseId = '';
   state.selectedFinanceVendorId = '';
@@ -11864,6 +12228,14 @@ function onDocumentSubmit(event) {
     event.preventDefault();
     saveBuiltEstimate(event.target).catch((error) => {
       showToast(error.message || 'Estimate could not be saved.', 'local', 'Estimate');
+    });
+    return;
+  }
+
+  if (event.target.matches('[data-proposal-builder-form]')) {
+    event.preventDefault();
+    saveBuiltProposal(event.target).catch((error) => {
+      showToast(error.message || 'Proposal could not be saved.', 'local', 'Proposal');
     });
     return;
   }
@@ -13527,6 +13899,10 @@ function onDocumentInput(event) {
     updateEstimateBuilderPreview(event.target.closest('[data-estimate-builder-form]'));
     return;
   }
+  if (event.target.matches('[data-proposal-field]')) {
+    updateProposalBuilderPreview(event.target.closest('[data-proposal-builder-form]'));
+    return;
+  }
   if (event.target.matches('[data-profile-crop-zoom], [data-profile-crop-x], [data-profile-crop-y]')) {
     updateProfileAvatarCrop(event.target.closest('[data-profile-form]'));
     return;
@@ -13560,8 +13936,17 @@ function onDocumentChange(event) {
     render();
     return;
   }
+  if (event.target.matches('[data-proposal-template]')) {
+    state.proposalContext = { ...(state.proposalContext || {}), template: event.target.value || PROPOSAL_TEMPLATES[0].id };
+    render();
+    return;
+  }
   if (event.target.matches('[data-estimate-field]')) {
     updateEstimateBuilderPreview(event.target.closest('[data-estimate-builder-form]'));
+    return;
+  }
+  if (event.target.matches('[data-proposal-field]')) {
+    updateProposalBuilderPreview(event.target.closest('[data-proposal-builder-form]'));
     return;
   }
   if (event.target.matches('[data-stage-filter]')) {
@@ -16244,7 +16629,7 @@ function dealQuickCreate(dealId, kind) {
   if (kind === 'Call Log' || kind === 'Log a Call') return openDockedActivityComposer('deal', dealId, 'Log a Call');
   if (kind === 'Meeting' || kind === 'New Event') return openDockedActivityComposer('deal', dealId, 'New Event');
   if (kind === 'Estimate' || kind === 'New Estimate') return openEstimateBuilder('deal', dealId);
-  if (kind === 'Proposal') return createDealProposal(dealId);
+  if (kind === 'Proposal') return openProposalBuilder('deal', dealId);
   if (kind === 'Follow') return showToast('Following this quote.', 'local', 'Quotes');
   return showToast(`${kind} isn't set up yet.`, 'local', 'Quotes');
 }
