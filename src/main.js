@@ -5032,12 +5032,30 @@ function renderContactEditor(companyId, contact) {
 
 function blankContact(companyId = activeCompanyId()) {
   const pf = state.contactPrefill || {};
-  return normalizeContact({ id: '', company_id: companyId, name: '', stage: contactStageNames()[0], value: 0, account_id: pf.account_id || '' });
+  const contact = normalizeContact({ id: '', company_id: companyId, name: '', stage: contactStageNames()[0], value: 0, account_id: pf.account_id || '' });
+  contact.name = '';
+  return contact;
+}
+
+function validateContactForm(form) {
+  const formData = Object.fromEntries(new FormData(form).entries());
+  const nameInput = form.querySelector('[name="name"]');
+  const rawName = String(formData.name || '').trim();
+  if (!rawName) {
+    nameInput?.setCustomValidity('Contact name is required.');
+    nameInput?.reportValidity();
+    showToast('Contact name is required.', 'local', 'Contacts');
+    return { ok: false };
+  }
+  nameInput?.setCustomValidity('');
+  formData.name = rawName;
+  return { ok: true, data: formData };
 }
 
 async function saveContact(form) {
-  const formData = Object.fromEntries(new FormData(form).entries());
-  const payload = normalizeContact(formData);
+  const validation = validateContactForm(form);
+  if (!validation.ok) return;
+  const payload = normalizeContact(validation.data);
   payload.id = payload.id || `contact-${crypto.randomUUID()}`;
   payload.updated_at = new Date().toISOString();
   const client = createSupabaseClient();

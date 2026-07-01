@@ -75,3 +75,11 @@ test('contact filters hide junk values and company names from launch filter menu
   assert.match(source, /contacts\.map\(contactFilterJobType\)\.map\(\(value\) => cleanContactFilterOption\(value, 'job_type', companyId\)\)/);
   assert.match(source, /contacts\.map\(\(contact\) => cleanContactFilterOption\(contact\.owner_name, 'owner_name', companyId\)\)/);
 });
+
+test('contact save blocks blank names instead of creating Untitled contact records', () => {
+  assert.match(source, /function validateContactForm\s*\(/);
+  assert.match(source, /const rawName = String\(formData\.name \|\| ''\)\.trim\(\);/);
+  assert.match(source, /Contact name is required\./);
+  assert.match(source, /const validation = validateContactForm\(form\);[\s\S]*if \(!validation\.ok\) return;/);
+  assert.match(source, /contact\.name = '';/);
+});
