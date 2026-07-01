@@ -19,6 +19,9 @@ test('client portal PDF viewer has a customer-visible fallback instead of a blan
   assert.match(source, /function showClientPortalPdfFallback\s*\(/);
   assert.match(source, /looksBlankClientPortalCanvas\(base\)/);
   assert.match(source, /The plan preview did not render in this browser/);
+  assert.match(source, /let darkPixels = 0;/);
+  assert.match(source, /if \(darkPixels > 24\) return false;/);
+  assert.match(source, /catch \(_error\) \{\s*return true;\s*\}/);
   assert.match(styles, /\.client-portal-pdf-fallback/);
 });
 

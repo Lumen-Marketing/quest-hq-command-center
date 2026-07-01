@@ -14741,19 +14741,26 @@ function looksBlankClientPortalCanvas(base) {
     const width = base.width;
     const height = base.height;
     if (!ctx || !width || !height) return true;
-    const sampleWidth = Math.max(1, Math.min(width, 80));
-    const sampleHeight = Math.max(1, Math.min(height, 80));
-    const data = ctx.getImageData(Math.floor((width - sampleWidth) / 2), Math.floor((height - sampleHeight) / 2), sampleWidth, sampleHeight).data;
-    let nonWhitePixels = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const alpha = data[i + 3];
-      const isWhite = data[i] > 248 && data[i + 1] > 248 && data[i + 2] > 248;
-      if (alpha > 8 && !isWhite) nonWhitePixels += 1;
-      if (nonWhitePixels > 12) return false;
+    let darkPixels = 0;
+    const sampleSize = 12;
+    const columns = 12;
+    const rows = 12;
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < columns; col += 1) {
+        const x = Math.max(0, Math.min(width - sampleSize, Math.floor((width * (col + 0.5)) / columns)));
+        const y = Math.max(0, Math.min(height - sampleSize, Math.floor((height * (row + 0.5)) / rows)));
+        const data = ctx.getImageData(x, y, Math.min(sampleSize, width - x), Math.min(sampleSize, height - y)).data;
+        for (let i = 0; i < data.length; i += 4) {
+          const alpha = data[i + 3];
+          const dark = Math.min(data[i], data[i + 1], data[i + 2]) < 235;
+          if (alpha > 16 && dark) darkPixels += 1;
+          if (darkPixels > 24) return false;
+        }
+      }
     }
     return true;
   } catch (_error) {
-    return false;
+    return true;
   }
 }
 
