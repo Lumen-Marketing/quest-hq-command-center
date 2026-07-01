@@ -20,6 +20,7 @@ test('client portal PDF viewer has a customer-visible fallback instead of a blan
   assert.match(source, /showClientPortalPdfFallback\(fallbackUrl\);/);
   assert.match(source, /if \(document\.querySelector\('\.client-portal-canvas-wrap\.fallback-visible'\)\) return;/);
   assert.match(source, /if \(zoomLabel\) zoomLabel\.textContent = 'PDF';/);
+  assert.match(source, /cachedUrl && cachedUrl\.includes\('\/storage\/v1\/object\/sign\/'\)/);
   assert.match(source, /The plan preview did not render in this browser/);
   assert.doesNotMatch(source, /looksBlankClientPortalCanvas/);
   assert.match(styles, /\.client-portal-pdf-fallback/);

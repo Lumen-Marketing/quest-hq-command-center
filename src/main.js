@@ -14631,7 +14631,9 @@ async function openClientPortalToken(token, password = '') {
 
 async function ensureClientPortalDocumentUrl() {
   const portal = state.clientPortalPublic;
-  if (!portal?.session || portal.documentUrl) return portal?.documentUrl || '';
+  const cachedUrl = String(portal?.documentUrl || '');
+  if (!portal?.session) return '';
+  if (cachedUrl && cachedUrl.includes('/storage/v1/object/sign/')) return cachedUrl;
   const documentId = portal.documentId || portal.documents?.[0]?.id || '';
   if (!documentId) return '';
   const response = await fetch('/api/client-portal-document-url', {
