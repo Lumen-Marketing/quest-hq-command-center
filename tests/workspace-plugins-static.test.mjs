@@ -131,7 +131,10 @@ test('plugin preset RPCs qualify plugin ids to avoid PL/pgSQL ambiguity', () => 
 });
 
 test('underwriter queue uses contact language and a dedicated table layout', () => {
-  assert.match(source, /<p>\$\{visible\.length\} contact\$\{visible\.length === 1 \? '' : 's'\} in this CRM 2 view\.<\/p>/);
+  assert.match(source, /<p>\$\{visible\.length\} contact\$\{visible\.length === 1 \? '' : 's'\} in the underwriter queue\.<\/p>/);
+  // Internal "CRM 2" naming must not leak into the user-facing Underwriter UI.
+  assert.doesNotMatch(source, /in this CRM 2 view/);
+  assert.doesNotMatch(source, /'CRM 2 stage'/);
   assert.match(source, /<div class="data-table underwriter-table">/);
   assert.match(source, /<div class="table-head"><span>Contact<\/span><span>Stage<\/span><span>Owner<\/span><span>Pay type<\/span><span>Value<\/span><\/div>/);
   assert.match(source, /emptyState\('No contacts match this underwriter stage\.'\)/);

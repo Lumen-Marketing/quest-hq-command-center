@@ -1,0 +1,3 @@
+-- Owner-gated full deletion of a company workspace + a scoped bypass of the last-owner guard.
+-- (Applied to the live project via Supabase MCP; this file mirrors it for source tracking.)
+-- See app_private.prevent_last_owner_loss + public.delete_company_workspace.

@@ -1,4 +1,5 @@
 import './styles.css';
+import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import cockpitArtUrl from './assets/quest-secure-workspace-cockpit-tight.png';
 
 const CONFIG = {
@@ -119,6 +120,8 @@ const PERMISSION_KEYS = [
   ['client_portals.manage', 'Manage client portals'],
   ['workspaces.view', 'View workspace builder'],
   ['workspaces.manage', 'Manage workspace builder'],
+  ['price_book.view', 'View price book'],
+  ['price_book.manage', 'Manage price book (vendors, materials, costs, imports)'],
 ];
 
 const PERMISSION_ALIASES = {
@@ -196,6 +199,7 @@ const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'files', label: 'Files', summary: 'Shared files, job folders, and document storage.', icon: 'ti-folder', module_ids: ['files'], permissions: ['files.view', 'files.manage'] },
   { id: 'client_portal', label: 'Client Portal', summary: 'Password-protected plan links, markups, comments, and client review.', icon: 'ti-world-upload', module_ids: ['client-portals'], permissions: ['client_portals.view', 'client_portals.manage'], recommendedWith: ['files'] },
   { id: 'workspace_builder', label: 'Workspace Builder', summary: 'No-code workspaces, custom apps, fields, items, reports, and automations.', icon: 'ti-layout-grid-add', module_ids: ['workspaces'], permissions: ['workspaces.view', 'workspaces.manage'] },
+  { id: 'price_book', label: 'Price Book', summary: 'Vendor cost catalog for estimating — materials, per-vendor pricing, best-price and stale flags.', icon: 'ti-book', module_ids: ['price-book'], permissions: ['price_book.view', 'price_book.manage'] },
   { id: 'forms', label: 'Forms', summary: 'Internal forms, templates, and response capture.', icon: 'ti-clipboard-list', module_ids: ['forms'], permissions: ['forms.view', 'forms.manage'] },
   { id: 'finance', label: 'Finance', summary: 'Invoices, payments, expenses, vendors, and AR.', icon: 'ti-receipt-dollar', module_ids: ['finance'], permissions: ['finance.view', 'finance.manage'] },
   { id: 'messages', label: 'Messages', summary: 'Company chats, role rooms, direct messages, and attachments.', icon: 'ti-messages', module_ids: ['messages'], permissions: ['messages.view', 'messages.send', 'messages.create_group', 'messages.manage_groups', 'messages.attach_files', 'messages.delete_own', 'messages.delete_any', 'messages.manage'] },
@@ -329,6 +333,7 @@ const MODULE_REGISTRY = [
   { id: 'files', group: 'Workspace', label: 'Files', icon: 'ti-folder', symbol: 'q-symbol-files', status: 'live', permission: 'files.view' },
   { id: 'forms', group: 'Workspace', label: 'Forms', icon: 'ti-clipboard-list', symbol: 'q-symbol-forms', status: 'live', permission: 'forms.view' },
   { id: 'client-portals', group: 'Workspace', label: 'Client portals', icon: 'ti-world-upload', symbol: 'q-symbol-files', status: 'live', permission: 'client_portals.view' },
+  { id: 'price-book', group: 'Estimating', label: 'Price Book', icon: 'ti-book', symbol: 'q-symbol-finance', status: 'live', permission: 'price_book.view' },
   { id: 'workspaces', group: 'Workspace', label: 'Workspaces', icon: 'ti-layout-grid-add', symbol: 'q-symbol-templates', status: 'live', permission: 'workspaces.view' },
   { id: 'analytics', group: 'Workspace', label: 'Analytics', icon: 'ti-chart-bar', symbol: 'q-symbol-analytics', status: 'live', permission: 'jobs.view' },
   { id: 'crm', group: 'Workspace', label: 'Accounts', icon: 'ti-building-community', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
@@ -357,7 +362,7 @@ const NAV_GROUPS = [
   { label: 'Contacts · Top of Funnel', ids: ['contacts'] },
   { label: 'Quotes · Bottom of Funnel', ids: ['deals'] },
   { label: 'Production', ids: ['jobs'] },
-  { label: 'Estimating', ids: ['finance', 'files', 'forms', 'client-portals'] },
+  { label: 'Estimating', ids: ['price-book', 'finance', 'files', 'forms', 'client-portals'] },
   { label: 'Review', ids: ['analytics', 'users', 'team-chart', 'time', 'approvals', 'clock'] },
   { label: 'Control', ids: ['settings'] },
   { label: 'Future', ids: ['tickets', 'knowledge', 'automations', 'templates', 'team-workload'] },
@@ -1560,6 +1565,18 @@ const state = {
   fileQuery: '',
   formQuery: '',
   clientPortalQuery: '',
+  pricebookVendors: [],
+  pricebookMaterials: [],
+  pricebookPrices: [],
+  pricebookTab: 'vendors',
+  pricebookQuery: '',
+  pricebookCategory: 'All',
+  pricebookVendorId: '',
+  pricebookSort: { key: '', dir: 'asc' },
+  pbCostEditId: '',
+  pbEditingVendor: '',
+  pbMaterialEditId: '',
+  pbMaterialVendorId: '',
   crmQuery: '',
   stageFilter: 'all',
   crmStageFilter: 'all',
@@ -1602,7 +1619,20 @@ const app = document.getElementById('app');
 let supabaseClientCache = null;
 init();
 
+const THEME_KEY = 'quest-theme';
+function getTheme() { try { return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'; } catch { return 'light'; } }
+function applyTheme(theme = getTheme()) {
+  document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+}
+function setTheme(theme) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* ignore */ }
+  applyTheme(next);
+  render();
+}
+
 function init() {
+  applyTheme();
   normalizeLegacyLocation();
   window.addEventListener('popstate', render);
   document.addEventListener('click', onDocumentClick);
@@ -1621,7 +1651,12 @@ function onClientPortalKeydown(event) {
   if (target && (target.matches('input, textarea, select') || target.isContentEditable)) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
     event.preventDefault();
-    cpUndoLast();
+    if (event.shiftKey) cpRedoLast(); else cpUndoLast();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+    event.preventDefault();
+    cpRedoLast();
     return;
   }
   if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -1779,6 +1814,22 @@ function render() {
 
   reconcileCompany(state.route);
   reconcileSelection(state.route);
+
+  // Full-screen drafting-team review: the plan opens in its own window (fs=1) without
+  // the dashboard shell, so staff can review the client's edits on the full canvas.
+  if (state.route.section === 'client-portals'
+      && state.route.params.get('annotate') === '1'
+      && state.route.params.get('fs') === '1'
+      && state.route.params.get('portal_id')
+      && clientPortalById(state.route.params.get('portal_id'))) {
+    const portalId = state.route.params.get('portal_id');
+    ensureClientPortalAnnotateState('owner', portalId, state.route.params.get('document_id') || '');
+    document.title = 'Plan review | Quest HQ';
+    app.innerHTML = `<div class="cp-fullscreen">${renderClientPortalAnnotate('owner')}</div>`;
+    queueMicrotask(() => mountClientPortalAnnotate().catch((error) => console.warn('Annotate mount failed', error)));
+    return;
+  }
+
   if (state.route.params.get('account') === 'profile') state.modal = 'profile';
   document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Quest HQ`;
   try {
@@ -1789,6 +1840,12 @@ function render() {
   }
   if (state.modal === 'contact-new' || state.modal === 'contact-edit') {
     queueMicrotask(() => initContactAddressForm());
+  }
+  if (state.modal === 'price-book-import') {
+    queueMicrotask(() => mountPriceBookImport());
+  }
+  if (state.modal === 'price-book-vendor') {
+    queueMicrotask(() => mountPriceBookVendorModal());
   }
   if (state.clientPortalAnnotate?.mode === 'owner' && document.querySelector('[data-cp-frame]')) {
     queueMicrotask(() => mountClientPortalAnnotate().catch((error) => console.warn('Annotate mount failed', error)));
@@ -1948,7 +2005,7 @@ function ensureDataLoad() {
       if (state.session?.auth === 'supabase') {
         await loadSupabaseBootstrapData().catch((bootstrapError) => console.warn('Workspace bootstrap load failed', bootstrapError));
       }
-      if (state.sync.mode === 'loading') state.sync = { label: 'Local fallback', mode: 'local' };
+      if (state.sync.mode === 'loading') state.sync = { label: 'Local only', mode: 'local' };
     })
     .finally(() => {
       state.dataLoaded = true;
@@ -1969,12 +2026,20 @@ async function loadSupabaseData() {
     return;
   }
 
+  // Two-phase load: block first paint only on the small core set the shell, navigation,
+  // access-control and notifications need everywhere. Stream every module's own data in
+  // the background afterwards, so opening the app no longer waits on the entire dataset.
+  await loadCoreWorkspaceData(client);
+  loadModuleWorkspaceData(client)
+    .then(() => { persistClientPortalCaches(); persistAll(); render(); })
+    .catch((error) => console.warn('Module data load failed', error));
+}
+
+// Core: auth, tenancy, roles/permissions, plugins and notifications — everything the
+// shell + nav render on every page. This is the only thing on the first-paint path.
+async function loadCoreWorkspaceData(client) {
   const [
     companiesResult,
-    jobsResult,
-    tasksResult,
-    filesResult,
-    teamResult,
     membershipsResult,
     profilesResult,
     subscriptionsResult,
@@ -1983,37 +2048,12 @@ async function loadSupabaseData() {
     roleAssignmentsResult,
     resourceAclResult,
     fieldPermissionsResult,
-    invitesResult,
-    joinRequestsResult,
-    auditEventsResult,
-    messageConversationsResult,
-    messageAccessResult,
-    messagesResult,
-    messageAttachmentsResult,
-    messageReadsResult,
-    calendarEventsResult,
-    notificationsResult,
-    financeInvoicesResult,
-    financePaymentsResult,
-    financeExpensesResult,
-    financeVendorsResult,
-    contactsResult,
     pipelineStagesResult,
-    accountsResult,
-    dealsResult,
-    activitiesResult,
+    notificationsResult,
     companyPluginsResult,
-    clientPortalsResult,
-    clientPortalDocumentsResult,
-    clientPortalAnnotationsResult,
-    clientPortalEventsResult,
     platformAdminResult,
   ] = await Promise.all([
     client.from('companies').select('*').order('name', { ascending: true }),
-    client.from('jobs').select('*').order('updated_at', { ascending: false }),
-    client.from('tasks').select('*').order('updated_at', { ascending: false }),
-    client.from('job_files').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
-    client.from('team_members').select('*').order('name', { ascending: true }),
     client.from('company_memberships').select('*'),
     client.from('profiles').select('*'),
     client.from('company_subscriptions').select('*'),
@@ -2022,125 +2062,34 @@ async function loadSupabaseData() {
     client.from('user_role_assignments').select('*'),
     client.from('resource_acl').select('*'),
     client.from('field_permissions').select('*'),
-    client.from('company_invites').select('*').order('created_at', { ascending: false }),
-    client.from('company_join_requests').select('*').order('created_at', { ascending: false }),
-    client.from('audit_events').select('*').order('created_at', { ascending: false }).limit(100),
-    client.from('message_conversations').select('*').order('last_message_at', { ascending: false }),
-    client.from('message_conversation_access').select('*'),
-    client.from('messages').select('*').order('created_at', { ascending: true }).limit(500),
-    client.from('message_attachments').select('*').order('created_at', { ascending: true }).limit(500),
-    client.from('message_reads').select('*'),
-    client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
-    client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
-    client.from('finance_invoices').select('*').order('updated_at', { ascending: false }),
-    client.from('finance_payments').select('*').order('received_at', { ascending: false }),
-    client.from('finance_expenses').select('*').order('spent_at', { ascending: false }),
-    client.from('finance_vendors').select('*').order('name', { ascending: true }),
-    client.from('contacts').select('*').order('updated_at', { ascending: false }),
     client.from('pipeline_stages').select('*').order('position', { ascending: true }),
-    client.from('accounts').select('*').order('name', { ascending: true }),
-    client.from('deals').select('*').order('updated_at', { ascending: false }),
-    client.from('activities').select('*').order('created_at', { ascending: false }).limit(500),
+    client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
     safeSupabaseQuery(client.from('company_plugins').select('*')),
-    safeSupabaseQuery(client.from('client_portals').select('*').order('updated_at', { ascending: false })),
-    safeSupabaseQuery(client.from('client_portal_documents').select('*').order('created_at', { ascending: false })),
-    safeSupabaseQuery(client.from('client_portal_annotations').select('*').order('created_at', { ascending: true })),
-    safeSupabaseQuery(client.from('client_portal_events').select('*').order('created_at', { ascending: false }).limit(500)),
     safeSupabaseQuery(client.rpc('is_platform_admin')),
   ]);
 
-  let liveTables = 0;
-  if (!companiesResult.error) {
-    state.companies = (companiesResult.data || []).map(normalizeCompany);
-    liveTables += 1;
-  }
-  if (!jobsResult.error) {
-    state.jobs = (jobsResult.data || []).map(normalizeJob);
-    liveTables += 1;
-  }
-  if (!tasksResult.error) {
-    state.tasks = (tasksResult.data || []).map(normalizeTask);
-    liveTables += 1;
-  }
-  if (!filesResult.error) {
-    state.files = (filesResult.data || []).map(normalizeFile);
-    liveTables += 1;
-  }
-  if (!teamResult.error) {
-    state.teamMembers = (teamResult.data || []).map(normalizeTeamMember);
-    liveTables += 1;
-  }
-  if (!membershipsResult.error) {
-    state.memberships = (membershipsResult.data || []).map(normalizeMembership);
-    liveTables += 1;
-  }
-  if (!profilesResult.error) {
-    state.profiles = (profilesResult.data || []).map((profile) => normalizeProfile(profile));
-    liveTables += 1;
-  }
-  if (!subscriptionsResult.error) {
-    state.subscriptions = (subscriptionsResult.data || []).map(normalizeSubscription);
-    liveTables += 1;
-  }
-  if (!rolesResult.error) {
-    state.roles = (rolesResult.data || []).map(normalizeRole);
-    liveTables += 1;
-  }
+  if (!companiesResult.error) state.companies = (companiesResult.data || []).map(normalizeCompany);
+  if (!membershipsResult.error) state.memberships = (membershipsResult.data || []).map(normalizeMembership);
+  if (!profilesResult.error) state.profiles = (profilesResult.data || []).map((profile) => normalizeProfile(profile));
+  if (!subscriptionsResult.error) state.subscriptions = (subscriptionsResult.data || []).map(normalizeSubscription);
+  if (!rolesResult.error) state.roles = (rolesResult.data || []).map(normalizeRole);
   if (!rolePermissionsResult.error) state.rolePermissions = (rolePermissionsResult.data || []).map(normalizeRolePermission);
   if (!roleAssignmentsResult.error) state.roleAssignments = (roleAssignmentsResult.data || []).map(normalizeRoleAssignment);
   if (!resourceAclResult.error) state.resourceAcl = (resourceAclResult.data || []).map(normalizeResourceAcl);
   if (!fieldPermissionsResult.error) state.fieldPermissions = (fieldPermissionsResult.data || []).map(normalizeFieldPermission);
-  if (!invitesResult.error) state.companyInvites = (invitesResult.data || []).map(normalizeCompanyInvite);
-  if (!joinRequestsResult.error) state.joinRequests = (joinRequestsResult.data || []).map(normalizeJoinRequest);
-  if (!auditEventsResult.error) state.auditEvents = auditEventsResult.data || [];
-  if (!messageConversationsResult.error) state.messageConversations = (messageConversationsResult.data || []).map(normalizeMessageConversation);
-  if (!messageAccessResult.error) state.messageAccess = (messageAccessResult.data || []).map(normalizeMessageAccess);
-  if (!messagesResult.error) state.messages = (messagesResult.data || []).map(normalizeMessage);
-  if (!messageAttachmentsResult.error) state.messageAttachments = (messageAttachmentsResult.data || []).map(normalizeMessageAttachment);
-  if (!messageReadsResult.error) state.messageReads = (messageReadsResult.data || []).map(normalizeMessageRead);
-  if (!calendarEventsResult.error) state.calendarEvents = (calendarEventsResult.data || []).map(normalizeCalendarEvent);
-  if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
-  if (!financeInvoicesResult.error) {
-    state.financeInvoices = (financeInvoicesResult.data || []).map(normalizeFinanceInvoice);
-    liveTables += 1;
-  }
-  if (!financePaymentsResult.error) state.financePayments = (financePaymentsResult.data || []).map(normalizeFinancePayment);
-  if (!financeExpensesResult.error) state.financeExpenses = (financeExpensesResult.data || []).map(normalizeFinanceExpense);
-  if (!financeVendorsResult.error) state.financeVendors = (financeVendorsResult.data || []).map(normalizeFinanceVendor);
-  if (!contactsResult.error) {
-    state.contacts = (contactsResult.data || []).map(normalizeContact);
-    liveTables += 1;
-  }
   if (!pipelineStagesResult.error) {
     state.pipelineStages = pipelineStagesResult.data || [];
     applyPipelineStagesForCompany(activeCompanyId());
   }
-  if (!accountsResult.error) {
-    state.accounts = (accountsResult.data || []).map(normalizeAccount);
-    liveTables += 1;
-  }
-  if (!dealsResult.error) {
-    state.deals = (dealsResult.data || []).map(normalizeDeal);
-    liveTables += 1;
-  }
-  if (!activitiesResult.error) {
-    state.activities = (activitiesResult.data || []).map(normalizeActivity);
-  }
+  if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
   if (!companyPluginsResult.error) {
     state.companyPlugins = (companyPluginsResult.data || []).map(normalizeCompanyPlugin);
     state.pluginLoadFailed = false;
   } else {
     state.pluginLoadFailed = true;
   }
-  if (!clientPortalsResult.error) state.clientPortals = (clientPortalsResult.data || []).map(normalizeClientPortal);
-  if (!clientPortalDocumentsResult.error) state.clientPortalDocuments = (clientPortalDocumentsResult.data || []).map(normalizeClientPortalDocument);
-  if (!clientPortalAnnotationsResult.error) state.clientPortalAnnotations = (clientPortalAnnotationsResult.data || []).map(normalizeClientPortalAnnotation);
-  if (!clientPortalEventsResult.error) state.clientPortalEvents = (clientPortalEventsResult.data || []).map(normalizeClientPortalEvent);
-  // Mirror portal data into localStorage even on live sessions so the public
-  // /portal route (which does not load workspace data) can resolve the link
-  // locally when the serverless backend is not running (e.g. `vite dev`).
-  persistClientPortalCaches();
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
+  state.sync = !companiesResult.error ? { label: 'Live', mode: 'live' } : { label: 'Local only', mode: 'local' };
 
   if (state.platformAdmin) {
     const [platformCompaniesResult, platformMembersResult] = await Promise.all([
@@ -2189,8 +2138,100 @@ async function loadSupabaseData() {
       state.subscriptions = mergeSubscriptions(state.subscriptions.concat(reviewSubscriptions));
     }
   }
+}
 
-  state.sync = liveTables ? { label: 'Quest Supabase live', mode: 'live' } : { label: 'Local fallback', mode: 'local' };
+// Module data: everything a specific module renders (jobs, tasks, CRM, finance, messages,
+// calendar, client portals, price book, files, admin queues). Loaded in the background
+// after the shell paints, then triggers a re-render. Not on the first-paint path.
+async function loadModuleWorkspaceData(client) {
+  const [
+    jobsResult,
+    tasksResult,
+    filesResult,
+    teamResult,
+    invitesResult,
+    joinRequestsResult,
+    auditEventsResult,
+    messageConversationsResult,
+    messageAccessResult,
+    messagesResult,
+    messageAttachmentsResult,
+    messageReadsResult,
+    calendarEventsResult,
+    financeInvoicesResult,
+    financePaymentsResult,
+    financeExpensesResult,
+    financeVendorsResult,
+    contactsResult,
+    accountsResult,
+    dealsResult,
+    activitiesResult,
+    clientPortalsResult,
+    clientPortalDocumentsResult,
+    clientPortalAnnotationsResult,
+    clientPortalEventsResult,
+    pricebookVendorsResult,
+    pricebookMaterialsResult,
+    pricebookPricesResult,
+  ] = await Promise.all([
+    client.from('jobs').select('*').order('updated_at', { ascending: false }),
+    client.from('tasks').select('*').order('updated_at', { ascending: false }),
+    client.from('job_files').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+    client.from('team_members').select('*').order('name', { ascending: true }),
+    client.from('company_invites').select('*').order('created_at', { ascending: false }),
+    client.from('company_join_requests').select('*').order('created_at', { ascending: false }),
+    client.from('audit_events').select('*').order('created_at', { ascending: false }).limit(100),
+    client.from('message_conversations').select('*').order('last_message_at', { ascending: false }),
+    client.from('message_conversation_access').select('*'),
+    client.from('messages').select('*').order('created_at', { ascending: true }).limit(300),
+    client.from('message_attachments').select('*').order('created_at', { ascending: true }).limit(200),
+    client.from('message_reads').select('*'),
+    client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
+    client.from('finance_invoices').select('*').order('updated_at', { ascending: false }),
+    client.from('finance_payments').select('*').order('received_at', { ascending: false }),
+    client.from('finance_expenses').select('*').order('spent_at', { ascending: false }),
+    client.from('finance_vendors').select('*').order('name', { ascending: true }),
+    client.from('contacts').select('*').order('updated_at', { ascending: false }),
+    client.from('accounts').select('*').order('name', { ascending: true }),
+    client.from('deals').select('*').order('updated_at', { ascending: false }),
+    client.from('activities').select('*').order('created_at', { ascending: false }).limit(250),
+    safeSupabaseQuery(client.from('client_portals').select('*').order('updated_at', { ascending: false })),
+    safeSupabaseQuery(client.from('client_portal_documents').select('*').order('created_at', { ascending: false })),
+    safeSupabaseQuery(client.from('client_portal_annotations').select('*').order('created_at', { ascending: true })),
+    safeSupabaseQuery(client.from('client_portal_events').select('*').order('created_at', { ascending: false }).limit(200)),
+    safeSupabaseQuery(client.from('pricebook_vendors').select('*').order('name', { ascending: true })),
+    safeSupabaseQuery(client.from('pricebook_materials').select('*').order('name', { ascending: true })),
+    safeSupabaseQuery(client.from('pricebook_vendor_prices').select('*').order('updated_at', { ascending: false })),
+  ]);
+
+  if (!jobsResult.error) state.jobs = (jobsResult.data || []).map(normalizeJob);
+  if (!tasksResult.error) state.tasks = (tasksResult.data || []).map(normalizeTask);
+  if (!filesResult.error) state.files = (filesResult.data || []).map(normalizeFile);
+  if (!teamResult.error) state.teamMembers = (teamResult.data || []).map(normalizeTeamMember);
+  if (!invitesResult.error) state.companyInvites = (invitesResult.data || []).map(normalizeCompanyInvite);
+  if (!joinRequestsResult.error) state.joinRequests = (joinRequestsResult.data || []).map(normalizeJoinRequest);
+  if (!auditEventsResult.error) state.auditEvents = auditEventsResult.data || [];
+  if (!messageConversationsResult.error) state.messageConversations = (messageConversationsResult.data || []).map(normalizeMessageConversation);
+  if (!messageAccessResult.error) state.messageAccess = (messageAccessResult.data || []).map(normalizeMessageAccess);
+  if (!messagesResult.error) state.messages = (messagesResult.data || []).map(normalizeMessage);
+  if (!messageAttachmentsResult.error) state.messageAttachments = (messageAttachmentsResult.data || []).map(normalizeMessageAttachment);
+  if (!messageReadsResult.error) state.messageReads = (messageReadsResult.data || []).map(normalizeMessageRead);
+  if (!calendarEventsResult.error) state.calendarEvents = (calendarEventsResult.data || []).map(normalizeCalendarEvent);
+  if (!financeInvoicesResult.error) state.financeInvoices = (financeInvoicesResult.data || []).map(normalizeFinanceInvoice);
+  if (!financePaymentsResult.error) state.financePayments = (financePaymentsResult.data || []).map(normalizeFinancePayment);
+  if (!financeExpensesResult.error) state.financeExpenses = (financeExpensesResult.data || []).map(normalizeFinanceExpense);
+  if (!financeVendorsResult.error) state.financeVendors = (financeVendorsResult.data || []).map(normalizeFinanceVendor);
+  if (!contactsResult.error) state.contacts = (contactsResult.data || []).map(normalizeContact);
+  if (!accountsResult.error) state.accounts = (accountsResult.data || []).map(normalizeAccount);
+  if (!dealsResult.error) state.deals = (dealsResult.data || []).map(normalizeDeal);
+  if (!activitiesResult.error) state.activities = (activitiesResult.data || []).map(normalizeActivity);
+  if (!clientPortalsResult.error) state.clientPortals = (clientPortalsResult.data || []).map(normalizeClientPortal);
+  if (!clientPortalDocumentsResult.error) state.clientPortalDocuments = (clientPortalDocumentsResult.data || []).map(normalizeClientPortalDocument);
+  if (!clientPortalAnnotationsResult.error) state.clientPortalAnnotations = (clientPortalAnnotationsResult.data || []).map(normalizeClientPortalAnnotation);
+  if (!clientPortalEventsResult.error) state.clientPortalEvents = (clientPortalEventsResult.data || []).map(normalizeClientPortalEvent);
+  if (!pricebookVendorsResult.error) state.pricebookVendors = (pricebookVendorsResult.data || []).map(normalizePricebookVendor);
+  if (!pricebookMaterialsResult.error) state.pricebookMaterials = (pricebookMaterialsResult.data || []).map(normalizePricebookMaterial);
+  if (!pricebookPricesResult.error) state.pricebookPrices = (pricebookPricesResult.data || []).map(normalizePricebookPrice);
 }
 
 async function loadSupabaseBootstrapData() {
@@ -2257,14 +2298,17 @@ async function loadSupabaseBootstrapData() {
     }
     if (!platformMembersResult.error) state.platformCompanyMembers = (platformMembersResult.data || []).map(normalizePlatformCompanyMember);
   }
-  state.sync = { label: 'Quest Supabase limited', mode: 'live' };
+  state.sync = { label: 'Limited', mode: 'live' };
 }
 
 function createSupabaseClient() {
   if (isReadOnlyDemo()) return null;
-  if (!window.supabase || typeof window.supabase.createClient !== 'function') return null;
+  // Bundled + version-pinned via package.json (see index.html — no runtime CDN dependency
+  // on the critical path). Falls back to a CDN global only if the import somehow failed.
+  const createClient = createSupabaseJsClient || window.supabase?.createClient;
+  if (typeof createClient !== 'function' || !CONFIG.supabaseUrl || !CONFIG.supabaseKey) return null;
   if (!supabaseClientCache) {
-    supabaseClientCache = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+    supabaseClientCache = createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
   }
   return supabaseClientCache;
 }
@@ -2295,6 +2339,9 @@ function resetLiveWorkspaceData() {
   state.clientPortalDocuments = [];
   state.clientPortalAnnotations = [];
   state.clientPortalEvents = [];
+  state.pricebookVendors = [];
+  state.pricebookMaterials = [];
+  state.pricebookPrices = [];
   state.timeEntries = [];
   state.activeTimer = null;
   state.teamMembers = [];
@@ -2598,7 +2645,7 @@ function shellTemplate(route, workspace) {
             ${svgIcon('q-search')}
             <input data-global-search value="${h(state.query)}" placeholder="Search this company" />
           </label>
-          <span class="sync-pill ${h(state.sync.mode)}" data-sync-state>${h(state.sync.label)}</span>
+          ${state.sync.label !== 'Live' ? `<span class="sync-pill ${h(state.sync.mode)}" data-sync-state title="Data status">${h(state.sync.label)}</span>` : ''}
           <button class="btn" type="button" data-action="refresh-data" title="Refresh workspace data"><i class="ti ti-refresh"></i></button>
           ${renderNotificationCenter(companyId)}
           <div class="account-menu ${state.accountMenuOpen ? 'open' : ''}">
@@ -2615,6 +2662,7 @@ function shellTemplate(route, workspace) {
                 </div>
               ` : ''}
               <button type="button" data-action="open-profile"><i class="ti ti-user-circle"></i>Profile</button>
+              ${can('settings.view', companyId) ? `<a href="${appHref(companyPath('settings', {}, companyId))}" data-router><i class="ti ti-settings"></i>Settings</a>` : ''}
               <button type="button" data-action="sign-out"><i class="ti ti-logout"></i>Sign out</button>
             </div>
           </div>
@@ -2994,6 +3042,7 @@ function permissionPluginIds(permission) {
   if (clean.startsWith('forms.')) return ['forms'];
   if (clean.startsWith('finance.')) return ['finance'];
   if (clean.startsWith('client_portals.')) return ['client_portal'];
+  if (clean.startsWith('price_book.')) return ['price_book'];
   if (clean.startsWith('workspaces.')) return ['workspace_builder'];
   if (clean.startsWith('messages.')) return ['messages'];
   if (clean.startsWith('calendar.')) return ['calendar'];
@@ -3070,6 +3119,7 @@ function renderWorkspace(route) {
   if (route.section === 'tasks') return renderTasksPage(route, companyId);
   if (route.section === 'files') return renderFilesPage(route, companyId);
   if (route.section === 'client-portals') return renderClientPortalsPage(route, companyId);
+  if (route.section === 'price-book') return renderPriceBookPage(route, companyId);
   if (route.section === 'workspaces') return renderWorkspaceBuilderPage(route, companyId);
   if (route.section === 'users') return renderUsersPage(route, companyId);
   if (route.section === 'settings') return renderSettingsPage(route, companyId);
@@ -3084,6 +3134,542 @@ function renderWorkspace(route) {
   if (route.section === 'team-chart') return renderTeamChartPage(companyId);
   if (route.section === 'time' || route.section === 'calendar' || route.section === 'approvals' || route.section === 'clock') return renderOperationsPage(route, companyId);
   return renderPlannedPage(route.section);
+}
+
+/* =========================================================================
+   PRICE BOOK (Estimating) — tenant-scoped vendor cost catalog.
+   Cost only; sell price/margin live downstream in the Estimator.
+   ========================================================================= */
+const PB_STALE_DAYS = 45;
+const PB_VENDOR_TYPES = [['supply_house', 'Supply House'], ['lumber_yard', 'Lumber Yard'], ['distributor', 'Distributor'], ['manufacturer', 'Manufacturer']];
+const PB_ACCOUNT_OPTIONS = [['0', 'No credit line — cash / COD'], ['1', 'On account — credit line open']];
+const PB_PAYMENT_TERMS = [['cod', 'COD'], ['net_15', 'Net 15'], ['net_30', 'Net 30'], ['net_45', 'Net 45'], ['net_60', 'Net 60']];
+function pbPaymentLabel(term) { return (PB_PAYMENT_TERMS.find((entry) => entry[0] === term) || PB_PAYMENT_TERMS[0])[1]; }
+function pbMoneyWhole(n) { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 }); }
+// Credit-line chip shown on vendor cards / detail. On account → green with terms; else neutral cash/COD.
+function pbTermsChip(vendor) {
+  const on = !!vendor?.on_account;
+  const label = on ? `On account · ${pbPaymentLabel(vendor.payment_terms)}` : 'Cash / COD';
+  const limit = on && Number(vendor.credit_limit) > 0 ? ` · $${pbMoneyWhole(vendor.credit_limit)} limit` : '';
+  return `<span class="pb-terms ${on ? 'on' : ''}"><i class="ti ${on ? 'ti-credit-card' : 'ti-cash'}"></i>${h(label + limit)}</span>`;
+}
+const PB_VENDOR_COLORS = ['#ED4E0D', '#C8341E', '#16864A', '#6B4A1E', '#E8731A', '#2C6BB0', '#7A4FA0'];
+const PB_UNITS = ['each', 'square', 'roll', 'piece', 'bundle', 'sheet', 'box', 'gallon', 'linear ft'];
+
+function normalizePricebookVendor(input) {
+  input = input || {};
+  return {
+    id: String(input.id || crypto.randomUUID()),
+    company_id: String(input.company_id || ''),
+    name: String(input.name || 'Vendor'),
+    type: String(input.type || 'supply_house'),
+    account_ref: input.account_ref || '',
+    on_account: !!input.on_account,
+    payment_terms: input.payment_terms || 'cod',
+    credit_limit: input.credit_limit != null && input.credit_limit !== '' ? Number(input.credit_limit) : null,
+    color: input.color || '#ED4E0D',
+    last_synced_at: input.last_synced_at || null,
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+function normalizePricebookMaterial(input) {
+  input = input || {};
+  return {
+    id: String(input.id || crypto.randomUUID()),
+    company_id: String(input.company_id || ''),
+    name: String(input.name || ''),
+    category: input.category || '',
+    unit: String(input.unit || 'each'),
+    created_at: input.created_at || new Date().toISOString(),
+  };
+}
+function normalizePricebookPrice(input) {
+  input = input || {};
+  return {
+    id: String(input.id || crypto.randomUUID()),
+    company_id: String(input.company_id || ''),
+    material_id: String(input.material_id || ''),
+    vendor_id: String(input.vendor_id || ''),
+    sku: input.sku || '',
+    unit_cost: Number(input.unit_cost) || 0,
+    updated_at: input.updated_at || new Date().toISOString(),
+  };
+}
+
+function pbVendorTypeLabel(type) { return (PB_VENDOR_TYPES.find((entry) => entry[0] === type) || ['', '—'])[1]; }
+function pbMoney(n) { return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function pbDate(d) { if (!d) return '—'; const t = new Date(d); return Number.isNaN(t.getTime()) ? '—' : t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+function pbIsStale(d) { if (!d) return false; return (Date.now() - new Date(d).getTime()) / 864e5 > PB_STALE_DAYS; }
+function pbInitials(name) { return String(name || 'V').split(' ').slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || 'V'; }
+
+// Flatten prices into display rows joined with their material + vendor.
+function pbRows(companyId = activeCompanyId()) {
+  const materials = new Map(state.pricebookMaterials.filter((m) => m.company_id === companyId).map((m) => [m.id, m]));
+  const vendors = new Map(state.pricebookVendors.filter((v) => v.company_id === companyId).map((v) => [v.id, v]));
+  return state.pricebookPrices.filter((p) => p.company_id === companyId).map((p) => {
+    const m = materials.get(p.material_id); const v = vendors.get(p.vendor_id);
+    if (!m || !v) return null;
+    return { id: p.id, materialId: m.id, material: m.name, category: m.category || 'Uncategorized', sku: p.sku || '—', unit: m.unit || 'each', cost: Number(p.unit_cost) || 0, vendorId: v.id, vendor: v.name, vendorColor: v.color, updated: p.updated_at };
+  }).filter(Boolean);
+}
+function pbBest(companyId = activeCompanyId()) {
+  const best = {};
+  pbRows(companyId).forEach((r) => { if (!(r.materialId in best) || r.cost < best[r.materialId]) best[r.materialId] = r.cost; });
+  return best;
+}
+function pbSortRows(rows) {
+  const s = state.pricebookSort || {};
+  if (!s.key) return rows;
+  const dir = s.dir === 'desc' ? -1 : 1;
+  const val = (r) => s.key === 'cost' ? r.cost : s.key === 'updated' ? new Date(r.updated).getTime() : String(r[s.key] || '').toLowerCase();
+  return [...rows].sort((a, b) => { const x = val(a); const y = val(b); return x < y ? -dir : x > y ? dir : 0; });
+}
+function pbCompanyVendors(companyId = activeCompanyId()) { return state.pricebookVendors.filter((v) => v.company_id === companyId); }
+
+function renderPriceBookPage(route, companyId) {
+  const canManage = can('price_book.manage', companyId);
+  const rows = pbRows(companyId);
+  const vendors = pbCompanyVendors(companyId);
+  const stale = rows.filter((r) => pbIsStale(r.updated)).length;
+  const onAccount = vendors.filter((v) => v.on_account).length;
+  const lastSynced = vendors.filter((v) => v.last_synced_at).sort((a, b) => new Date(b.last_synced_at) - new Date(a.last_synced_at))[0];
+  const view = state.pricebookVendorId ? 'detail' : (state.pricebookTab === 'all' ? 'all' : 'vendors');
+  return `
+    <section class="tool-page price-book-page">
+      ${workspaceHeader('Price Book', 'Vendor cost catalog for estimating — cost only, never sell price.', `
+        ${canManage ? '<button class="btn" type="button" data-action="pb-import"><i class="ti ti-file-import"></i>Import prices</button>' : ''}
+        ${canManage ? '<button class="btn" type="button" data-action="pb-add-material"><i class="ti ti-plus"></i>Add material</button>' : ''}
+        ${canManage ? '<button class="btn btn-primary" type="button" data-action="pb-add-vendor"><i class="ti ti-building-store"></i>Add vendor</button>' : ''}
+      `)}
+      <div class="pb-stats">
+        <div class="pb-stat"><div class="pb-stat-k">Vendors</div><div class="pb-stat-v">${vendors.length}</div></div>
+        <div class="pb-stat"><div class="pb-stat-k">Materials (SKUs)</div><div class="pb-stat-v">${rows.length}</div></div>
+        <div class="pb-stat"><div class="pb-stat-k">Last import</div><div class="pb-stat-v">${lastSynced ? pbDate(lastSynced.last_synced_at) : '—'}${lastSynced ? ` <span class="pb-stat-sub">· ${h(pbInitials(lastSynced.name))}</span>` : ''}</div></div>
+        <div class="pb-stat ${stale ? 'warn' : ''}"><div class="pb-stat-k">Prices &gt; ${PB_STALE_DAYS} days</div><div class="pb-stat-v">${stale}</div></div>
+        <div class="pb-stat"><div class="pb-stat-k">On account</div><div class="pb-stat-v">${onAccount} <span class="pb-stat-sub">of ${vendors.length}</span></div></div>
+      </div>
+      <div class="pb-tabs">
+        <button class="pb-tab ${view !== 'all' ? 'active' : ''}" type="button" data-action="pb-tab" data-tab="vendors">Vendors <span>${vendors.length}</span></button>
+        <button class="pb-tab ${view === 'all' ? 'active' : ''}" type="button" data-action="pb-tab" data-tab="all">All materials <span>${rows.length}</span></button>
+      </div>
+      ${view === 'detail' ? pbVendorDetail(companyId, canManage) : view === 'all' ? pbAllMaterials(companyId, canManage) : pbVendorsGrid(companyId, canManage)}
+    </section>
+  `;
+}
+
+function pbVendorsGrid(companyId, canManage) {
+  const vendors = pbCompanyVendors(companyId);
+  const rows = pbRows(companyId);
+  if (!vendors.length) return `<div class="panel">${emptyState('No vendors yet. Add a supply house, lumber yard, or distributor to start your price book.')}</div>`;
+  return `<div class="pb-vendor-grid">
+    ${vendors.map((v) => {
+      const count = rows.filter((r) => r.vendorId === v.id).length;
+      const st = pbIsStale(v.last_synced_at);
+      return `<button class="pb-vcard" type="button" data-action="pb-open-vendor" data-vendor-id="${h(v.id)}">
+        <div class="pb-vtop"><span class="pb-vlogo" style="background:${h(v.color || '#ED4E0D')}">${h(pbInitials(v.name))}</span>
+          <span class="pb-vname"><strong>${h(v.name)}</strong><small>${h(pbVendorTypeLabel(v.type))}</small></span></div>
+        <div class="pb-vmeta"><div><div class="pb-mk">Materials</div><div class="pb-mv">${count}</div></div>
+          <div class="pb-vsync ${st ? 'stale' : ''}"><div class="pb-mk">Last synced</div><div class="pb-mv">${v.last_synced_at ? pbDate(v.last_synced_at) : 'Never'}</div></div></div>
+        <div class="pb-vfoot">${pbTermsChip(v)}</div>
+      </button>`;
+    }).join('')}
+    ${canManage ? '<button class="pb-vcard add" type="button" data-action="pb-add-vendor"><i class="ti ti-plus"></i>Add vendor</button>' : ''}
+  </div>`;
+}
+
+function pbTh(label, key) {
+  const s = state.pricebookSort || {};
+  const dir = s.key === key ? s.dir : '';
+  return `<th class="pb-sortable ${dir ? 'sorted' : ''}" data-action="pb-sort" data-key="${key}">${h(label)}${dir ? (dir === 'asc' ? ' ↑' : ' ↓') : ''}</th>`;
+}
+
+function pbRowHtml(r, best, showVendor, canManage) {
+  const isBest = r.cost === best[r.materialId];
+  const st = pbIsStale(r.updated);
+  const editing = state.pbCostEditId === r.id;
+  const costCell = editing
+    ? `<form class="pb-cost-edit" data-pb-cost-form data-price-id="${h(r.id)}"><input name="cost" type="number" min="0" step="0.01" value="${r.cost}" autofocus />
+        <button class="pb-cost-save" type="submit" title="Save"><i class="ti ti-check"></i></button></form>`
+    : `<button class="pb-cost" type="button" ${canManage ? `data-action="pb-edit-cost" data-price-id="${h(r.id)}"` : 'disabled'}>$${pbMoney(r.cost)}</button>${isBest ? '<span class="pb-best"><i class="ti ti-check"></i>best</span>' : ''}`;
+  return `<tr>
+    <td class="pb-mat">${h(r.material)}</td>
+    <td><span class="pb-cat">${h(r.category)}</span></td>
+    <td class="pb-mono pb-muted">${h(r.sku)}</td>
+    <td class="pb-mono pb-muted">${h(r.unit)}</td>
+    <td class="pb-num">${costCell}</td>
+    ${showVendor ? `<td><span class="pb-vtag"><span class="pb-dot" style="background:${h(r.vendorColor || '#ED4E0D')}"></span>${h(r.vendor)}</span></td>` : ''}
+    <td class="pb-mono pb-upd ${st ? 'stale' : ''}">${pbDate(r.updated)}</td>
+    <td class="pb-rowact">${canManage ? `<button type="button" data-action="pb-edit-material" data-price-id="${h(r.id)}" title="Edit"><i class="ti ti-pencil"></i></button><button type="button" data-action="pb-delete-row" data-price-id="${h(r.id)}" title="Remove"><i class="ti ti-trash"></i></button>` : ''}</td>
+  </tr>`;
+}
+
+function pbAllMaterials(companyId, canManage) {
+  const rows = pbRows(companyId);
+  const best = pbBest(companyId);
+  const cats = ['All', ...Array.from(new Set(rows.map((r) => r.category))).sort()];
+  const q = (state.pricebookQuery || '').toLowerCase();
+  const cat = state.pricebookCategory || 'All';
+  let filtered = rows.filter((r) => (cat === 'All' || r.category === cat)
+    && (!q || r.material.toLowerCase().includes(q) || r.sku.toLowerCase().includes(q) || r.category.toLowerCase().includes(q) || r.vendor.toLowerCase().includes(q)));
+  filtered = pbSortRows(filtered);
+  return `
+    <div class="pb-toolbar">
+      <label class="crm-search"><i class="ti ti-search"></i><input data-pb-search value="${h(state.pricebookQuery)}" placeholder="Search materials, SKU, vendor" /></label>
+      <div class="pb-chips">${cats.map((c) => `<button class="pb-chip ${c === cat ? 'active' : ''}" type="button" data-action="pb-set-cat" data-cat="${h(c)}">${h(c)}</button>`).join('')}</div>
+    </div>
+    <div class="panel pb-table-wrap">
+      <table class="pb-table"><thead><tr>
+        ${pbTh('Material', 'material')}${pbTh('Category', 'category')}<th>SKU</th><th>Unit</th>${pbTh('Unit cost', 'cost')}${pbTh('Vendor', 'vendor')}${pbTh('Updated', 'updated')}<th></th>
+      </tr></thead><tbody>${filtered.length ? filtered.map((r) => pbRowHtml(r, best, true, canManage)).join('') : '<tr><td colspan="8" class="pb-empty">No materials match. Try another search or import a vendor sheet.</td></tr>'}</tbody></table>
+    </div>`;
+}
+
+function pbVendorDetail(companyId, canManage) {
+  const v = state.pricebookVendors.find((x) => x.id === state.pricebookVendorId && x.company_id === companyId);
+  if (!v) { state.pricebookVendorId = ''; return pbVendorsGrid(companyId, canManage); }
+  const best = pbBest(companyId);
+  const q = (state.pricebookQuery || '').toLowerCase();
+  let rows = pbRows(companyId).filter((r) => r.vendorId === v.id && (!q || r.material.toLowerCase().includes(q) || r.sku.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)));
+  rows = pbSortRows(rows);
+  return `
+    <div class="pb-detail-head">
+      <button class="btn btn-sm" type="button" data-action="pb-back"><i class="ti ti-arrow-left"></i>Vendors</button>
+      <span class="pb-vlogo lg" style="background:${h(v.color || '#ED4E0D')}">${h(pbInitials(v.name))}</span>
+      <span class="pb-vname"><strong>${h(v.name)}</strong><small>${h(pbVendorTypeLabel(v.type))}${v.account_ref ? ` · ${h(v.account_ref)}` : ''}${v.last_synced_at ? ` · synced ${pbDate(v.last_synced_at)}` : ''}</small></span>
+      ${pbTermsChip(v)}
+      <span class="pb-sp"></span>
+      ${canManage ? `<button class="btn btn-sm" type="button" data-action="pb-add-material" data-vendor-id="${h(v.id)}"><i class="ti ti-plus"></i>Add material</button>` : ''}
+      ${canManage ? `<button class="btn btn-sm" type="button" data-action="pb-edit-vendor" data-vendor-id="${h(v.id)}"><i class="ti ti-pencil"></i>Edit</button>` : ''}
+      ${canManage ? `<button class="btn btn-sm btn-danger" type="button" data-action="pb-delete-vendor" data-vendor-id="${h(v.id)}"><i class="ti ti-trash"></i>Delete</button>` : ''}
+    </div>
+    <div class="pb-toolbar"><label class="crm-search"><i class="ti ti-search"></i><input data-pb-search value="${h(state.pricebookQuery)}" placeholder="Search this vendor's catalog" /></label></div>
+    <div class="panel pb-table-wrap">
+      <table class="pb-table"><thead><tr>${pbTh('Material', 'material')}${pbTh('Category', 'category')}<th>SKU</th><th>Unit</th>${pbTh('Unit cost', 'cost')}${pbTh('Updated', 'updated')}<th></th></tr></thead>
+      <tbody>${rows.length ? rows.map((r) => pbRowHtml(r, best, false, canManage)).join('') : `<tr><td colspan="7" class="pb-empty">${q ? 'No materials match your search.' : 'No materials yet for this vendor. Add one or import a sheet.'}</td></tr>`}</tbody></table>
+    </div>`;
+}
+
+/* ---- Price Book modals ---- */
+function renderPriceBookVendorModal() {
+  const editing = state.pbEditingVendor ? state.pricebookVendors.find((v) => v.id === state.pbEditingVendor) : null;
+  return renderModalShell('Price Book', editing ? 'Edit vendor' : 'Add vendor', `
+    <form class="compact-tool-form" data-pb-vendor-form>
+      ${editing ? `<input type="hidden" name="id" value="${h(editing.id)}" />` : ''}
+      ${field('Vendor name', 'name', editing?.name || '', true)}
+      ${selectField('Type', 'type', editing?.type || 'supply_house', PB_VENDOR_TYPES)}
+      ${field('Account # / rep (optional)', 'account_ref', editing?.account_ref || '')}
+      <label><span>Credit line with you</span>
+        <select name="on_account" data-pb-account-select>
+          ${PB_ACCOUNT_OPTIONS.map(([val, lab]) => `<option value="${val}" ${String(editing?.on_account ? '1' : '0') === val ? 'selected' : ''}>${lab}</option>`).join('')}
+        </select></label>
+      <div class="pb-field-row pb-credit-fields" data-pb-credit-fields ${editing?.on_account ? '' : 'hidden'}>
+        ${selectField('Payment terms', 'payment_terms', editing?.payment_terms || 'cod', PB_PAYMENT_TERMS)}
+        <label><span>Credit limit ($)</span><input name="credit_limit" type="number" min="0" step="100" value="${editing?.credit_limit != null ? editing.credit_limit : ''}" placeholder="25000" /></label>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">${editing ? 'Save changes' : 'Add vendor'}</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+function renderPriceBookMaterialModal() {
+  const companyId = activeCompanyId();
+  const editing = state.pbMaterialEditId ? pbRows(companyId).find((r) => r.id === state.pbMaterialEditId) : null;
+  const vendors = pbCompanyVendors(companyId);
+  const presetVendor = state.pbMaterialVendorId || editing?.vendorId || vendors[0]?.id || '';
+  const cats = Array.from(new Set(pbRows(companyId).map((r) => r.category)));
+  const materialNames = Array.from(new Set(state.pricebookMaterials.filter((m) => m.company_id === companyId).map((m) => m.name)));
+  return renderModalShell('Price Book', editing ? 'Edit material' : 'Add material', `
+    <form class="compact-tool-form" data-pb-material-form>
+      ${editing ? `<input type="hidden" name="price_id" value="${h(editing.id)}" />` : ''}
+      <label><span>Material</span><input name="name" value="${h(editing?.material || '')}" list="pb-mat-list" placeholder="e.g. GAF Timberline HDZ Shingles" autocomplete="off" required /></label>
+      <div class="pb-field-row">
+        <label><span>Category</span><input name="category" value="${h(editing?.category || '')}" list="pb-cat-list" placeholder="Shingles" autocomplete="off" /></label>
+        <label><span>Unit</span><input name="unit" value="${h(editing?.unit || 'each')}" list="pb-unit-list" autocomplete="off" /></label>
+      </div>
+      <div class="pb-field-row">
+        <label><span>SKU (optional)</span><input name="sku" value="${h(editing && editing.sku !== '—' ? editing.sku : '')}" autocomplete="off" /></label>
+        <label><span>Unit cost</span><input name="cost" type="number" min="0" step="0.01" value="${editing ? editing.cost : ''}" placeholder="0.00" required /></label>
+      </div>
+      ${selectField('Vendor', 'vendor_id', presetVendor, vendors.map((v) => [v.id, v.name]))}
+      <datalist id="pb-cat-list">${cats.map((c) => `<option value="${h(c)}"></option>`).join('')}</datalist>
+      <datalist id="pb-unit-list">${PB_UNITS.map((u) => `<option value="${u}"></option>`).join('')}</datalist>
+      <datalist id="pb-mat-list">${materialNames.map((n) => `<option value="${h(n)}"></option>`).join('')}</datalist>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">${editing ? 'Save changes' : 'Add material'}</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+let pbImportFile = null;
+function renderPriceBookImportModal() {
+  const vendors = pbCompanyVendors();
+  const chosen = pbImportFile ? pbImportFile.name : '';
+  return renderModalShell('Price Book', 'Import prices', `
+    <form class="compact-tool-form" data-pb-import-form>
+      <p class="pb-modal-sub">Upload a vendor price sheet (CSV or Excel), or paste rows. Columns: <b>Material, Category, SKU, Unit, Cost</b>.</p>
+      ${selectField('Import into vendor', 'vendor_id', vendors[0]?.id || '', vendors.map((v) => [v.id, v.name]))}
+      <label class="pb-drop ${chosen ? 'has-file' : ''}" data-pb-dropzone>
+        <input type="file" name="file" accept=".csv,.tsv,.xlsx,.xls,text/csv,text/plain" hidden data-pb-file-input />
+        <i class="ti ${chosen ? 'ti-file-check' : 'ti-cloud-upload'}"></i>
+        <strong data-pb-drop-title>${chosen ? h(chosen) : 'Drop a CSV or Excel file'}</strong>
+        <small>${chosen ? 'Ready to import — or drop another file' : 'or click to browse · .csv .tsv .xlsx .xls'}</small>
+      </label>
+      <button type="button" class="pb-link" data-action="pb-download-template"><i class="ti ti-download"></i>Download CSV template</button>
+      <details class="pb-paste"><summary>…or paste rows instead</summary>
+        <textarea name="csv" rows="5" placeholder="GAF Timberline HDZ Shingles, Shingles, GAF-HDZ, square, 118.90"></textarea>
+      </details>
+      <div class="file-policy-note"><strong>Idempotent</strong><span>Re-importing updates existing prices (matched by vendor + material) — no duplicates.</span></div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i class="ti ti-file-import"></i>Import</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+// Toggle the payment-terms + credit-limit fields based on the on-account selector.
+function mountPriceBookVendorModal() {
+  const sel = document.querySelector('[data-pb-account-select]');
+  const fields = document.querySelector('[data-pb-credit-fields]');
+  if (!sel || !fields || sel.dataset.bound) return;
+  sel.dataset.bound = '1';
+  sel.addEventListener('change', () => { fields.hidden = sel.value !== '1'; });
+}
+// Wire the dropzone (drag/drop + click-to-browse) after the modal renders.
+function mountPriceBookImport() {
+  const zone = document.querySelector('[data-pb-dropzone]');
+  const input = document.querySelector('[data-pb-file-input]');
+  if (!zone || !input || zone.dataset.bound) return;
+  zone.dataset.bound = '1';
+  const setFile = (file) => {
+    pbImportFile = file || null;
+    const title = zone.querySelector('[data-pb-drop-title]');
+    const sub = zone.querySelector('small');
+    const icon = zone.querySelector('i');
+    zone.classList.toggle('has-file', !!file);
+    if (title) title.textContent = file ? file.name : 'Drop a CSV or Excel file';
+    if (sub) sub.textContent = file ? 'Ready to import — or drop another file' : 'or click to browse · .csv .tsv .xlsx .xls';
+    if (icon) icon.className = `ti ${file ? 'ti-file-check' : 'ti-cloud-upload'}`;
+  };
+  input.addEventListener('change', () => setFile(input.files?.[0] || null));
+  ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('drag'); }));
+  ['dragleave', 'dragend'].forEach((ev) => zone.addEventListener(ev, () => zone.classList.remove('drag')));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('drag');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) { try { input.files = e.dataTransfer.files; } catch { /* some browsers block assigning */ } setFile(file); }
+  });
+}
+function pbDownloadTemplate() {
+  const sample = 'Material,Category,SKU,Unit,Cost\n'
+    + 'GAF Timberline HDZ Shingles,Shingles,GAF-HDZ,square,118.90\n'
+    + 'Synthetic Underlayment (10 sq),Underlayment,UL-SYN10,roll,68.00\n'
+    + 'Drip Edge 2"x2" 10ft,Flashing & Edge,DE-2210,piece,9.95\n';
+  const blob = new Blob([sample], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'price-book-template.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ---- Price Book mutations (Supabase + local state mirror) ---- */
+async function pbStampVendorSynced(vendorId, live, client, now) {
+  const v = state.pricebookVendors.find((x) => x.id === vendorId);
+  if (!v) return;
+  state.pricebookVendors = [{ ...v, last_synced_at: now }, ...state.pricebookVendors.filter((x) => x.id !== vendorId)];
+  if (live) await client.from('pricebook_vendors').update({ last_synced_at: now }).eq('id', vendorId).then(() => null, () => null);
+}
+async function pbSaveVendor(form) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('price_book.manage', companyId, 'Your role cannot manage the price book.', 'Price Book')) return;
+  const f = Object.fromEntries(new FormData(form).entries());
+  const name = String(f.name || '').trim();
+  if (!name) { showToast('Enter a vendor name.', 'local', 'Price Book'); return; }
+  const type = String(f.type || 'supply_house');
+  const accountRef = String(f.account_ref || '').trim();
+  const onAccount = String(f.on_account || '0') === '1';
+  const paymentTerms = onAccount ? String(f.payment_terms || 'cod') : 'cod';
+  const creditLimit = onAccount && String(f.credit_limit || '').trim() !== '' ? Number(f.credit_limit) : null;
+  const credit = { on_account: onAccount, payment_terms: paymentTerms, credit_limit: creditLimit };
+  const existing = f.id ? state.pricebookVendors.find((v) => v.id === String(f.id)) : null;
+  const client = createSupabaseClient(); const live = isLiveSupabaseSession() && client;
+  let saved;
+  if (existing) {
+    const now = new Date().toISOString();
+    saved = normalizePricebookVendor({ ...existing, name, type, account_ref: accountRef, ...credit, updated_at: now });
+    if (live) {
+      const { data, error } = await client.from('pricebook_vendors').update({ name, type, account_ref: accountRef || null, ...credit, updated_at: now }).eq('id', existing.id).select().single();
+      if (error) { showToast(error.message || 'Vendor save failed.', 'local', 'Price Book'); return; }
+      saved = normalizePricebookVendor(data);
+    }
+  } else {
+    const color = PB_VENDOR_COLORS[pbCompanyVendors(companyId).length % PB_VENDOR_COLORS.length];
+    saved = normalizePricebookVendor({ id: crypto.randomUUID(), company_id: companyId, name, type, account_ref: accountRef, ...credit, color });
+    if (live) {
+      const { data, error } = await client.from('pricebook_vendors').insert({ company_id: companyId, name, type, account_ref: accountRef || null, ...credit, color }).select().single();
+      if (error) { showToast(error.message || 'Vendor add failed.', 'local', 'Price Book'); return; }
+      saved = normalizePricebookVendor(data);
+    }
+  }
+  state.pricebookVendors = [saved, ...state.pricebookVendors.filter((v) => v.id !== saved.id)];
+  state.modal = ''; state.pbEditingVendor = '';
+  showToast(existing ? 'Vendor updated.' : 'Vendor added.', live ? 'live' : 'local', 'Price Book');
+  render();
+}
+async function pbDeleteVendor(vendorId) {
+  const companyId = activeCompanyId();
+  const v = state.pricebookVendors.find((x) => x.id === vendorId);
+  if (!v) return;
+  if (!requirePermission('price_book.manage', companyId, 'Your role cannot manage the price book.', 'Price Book')) return;
+  if (!window.confirm(`Delete ${v.name}? This removes its prices from the price book.`)) return;
+  const client = createSupabaseClient(); const live = isLiveSupabaseSession() && client;
+  if (live) { const { error } = await client.from('pricebook_vendors').delete().eq('id', vendorId); if (error) { showToast(error.message || 'Vendor delete failed.', 'local', 'Price Book'); return; } }
+  state.pricebookVendors = state.pricebookVendors.filter((x) => x.id !== vendorId);
+  state.pricebookPrices = state.pricebookPrices.filter((p) => p.vendor_id !== vendorId);
+  if (state.pricebookVendorId === vendorId) state.pricebookVendorId = '';
+  showToast('Vendor deleted.', live ? 'live' : 'local', 'Price Book');
+  render();
+}
+// Resolve (create/update) a canonical material row, returning it.
+async function pbUpsertMaterial(companyId, name, category, unit, live, client) {
+  if (live) {
+    const { data, error } = await client.from('pricebook_materials').upsert({ company_id: companyId, name, category, unit }, { onConflict: 'company_id,name' }).select().single();
+    if (error) throw new Error(error.message || 'Material save failed.');
+    return normalizePricebookMaterial(data);
+  }
+  const found = state.pricebookMaterials.find((m) => m.company_id === companyId && m.name.toLowerCase() === name.toLowerCase());
+  return normalizePricebookMaterial(found ? { ...found, category, unit } : { id: crypto.randomUUID(), company_id: companyId, name, category, unit });
+}
+async function pbSaveMaterial(form) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('price_book.manage', companyId, 'Your role cannot manage the price book.', 'Price Book')) return;
+  const f = Object.fromEntries(new FormData(form).entries());
+  const name = String(f.name || '').trim();
+  const cost = parseFloat(f.cost);
+  const vendorId = String(f.vendor_id || '');
+  if (!name || Number.isNaN(cost) || !vendorId) { showToast('Need a material name, cost, and vendor.', 'local', 'Price Book'); return; }
+  const category = String(f.category || '').trim() || 'Uncategorized';
+  const unit = String(f.unit || 'each').trim() || 'each';
+  const sku = String(f.sku || '').trim() || null;
+  const editingPriceId = String(f.price_id || '');
+  const client = createSupabaseClient(); const live = isLiveSupabaseSession() && client;
+  const now = new Date().toISOString();
+  const material = await pbUpsertMaterial(companyId, name, category, unit, live, client);
+  state.pricebookMaterials = [material, ...state.pricebookMaterials.filter((m) => m.id !== material.id)];
+  let price;
+  if (live) {
+    const { data, error } = await client.from('pricebook_vendor_prices').upsert({ company_id: companyId, material_id: material.id, vendor_id: vendorId, sku, unit_cost: cost, updated_at: now }, { onConflict: 'company_id,vendor_id,material_id' }).select().single();
+    if (error) { showToast(error.message || 'Price save failed.', 'local', 'Price Book'); return; }
+    price = normalizePricebookPrice(data);
+  } else {
+    const ex = editingPriceId ? state.pricebookPrices.find((p) => p.id === editingPriceId) : state.pricebookPrices.find((p) => p.company_id === companyId && p.vendor_id === vendorId && p.material_id === material.id);
+    price = normalizePricebookPrice(ex ? { ...ex, material_id: material.id, vendor_id: vendorId, sku, unit_cost: cost, updated_at: now } : { id: crypto.randomUUID(), company_id: companyId, material_id: material.id, vendor_id: vendorId, sku, unit_cost: cost, updated_at: now });
+  }
+  // Editing moved the price to a different (vendor, material) row — drop the old one.
+  if (editingPriceId && editingPriceId !== price.id) {
+    state.pricebookPrices = state.pricebookPrices.filter((p) => p.id !== editingPriceId);
+    if (live) await client.from('pricebook_vendor_prices').delete().eq('id', editingPriceId).then(() => null, () => null);
+  }
+  state.pricebookPrices = [price, ...state.pricebookPrices.filter((p) => p.id !== price.id)];
+  await pbStampVendorSynced(vendorId, live, client, now);
+  state.modal = ''; state.pbMaterialEditId = ''; state.pbMaterialVendorId = '';
+  showToast(editingPriceId ? 'Material updated.' : 'Material added.', live ? 'live' : 'local', 'Price Book');
+  render();
+}
+async function pbEditCostCommit(priceId, value) {
+  const price = state.pricebookPrices.find((p) => p.id === priceId);
+  state.pbCostEditId = '';
+  const cost = parseFloat(value);
+  if (!price || Number.isNaN(cost) || cost < 0) { render(); return; }
+  const now = new Date().toISOString();
+  const updated = normalizePricebookPrice({ ...price, unit_cost: cost, updated_at: now });
+  state.pricebookPrices = [updated, ...state.pricebookPrices.filter((p) => p.id !== priceId)];
+  const client = createSupabaseClient(); const live = isLiveSupabaseSession() && client;
+  if (live) { const { error } = await client.from('pricebook_vendor_prices').update({ unit_cost: cost, updated_at: now }).eq('id', priceId); if (error) showToast(error.message || 'Price update failed.', 'local', 'Price Book'); }
+  await pbStampVendorSynced(updated.vendor_id, live, client, now);
+  showToast('Price updated.', live ? 'live' : 'local', 'Price Book');
+  render();
+}
+async function pbDeleteRow(priceId) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('price_book.manage', companyId, 'Your role cannot manage the price book.', 'Price Book')) return;
+  const client = createSupabaseClient(); const live = isLiveSupabaseSession() && client;
+  if (live) { const { error } = await client.from('pricebook_vendor_prices').delete().eq('id', priceId); if (error) { showToast(error.message || 'Delete failed.', 'local', 'Price Book'); return; } }
+  state.pricebookPrices = state.pricebookPrices.filter((p) => p.id !== priceId);
+  showToast('Removed.', live ? 'live' : 'local', 'Price Book');
+  render();
+}
+function pbParseCsvLine(line, delimiter = ',') {
+  const out = []; let cur = ''; let q = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const c = line[i];
+    if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i += 1; } else q = false; } else cur += c; }
+    else if (c === '"') q = true; else if (c === delimiter) { out.push(cur); cur = ''; } else cur += c;
+  }
+  out.push(cur);
+  return out.map((s) => s.trim());
+}
+async function pbRunImport(form) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('price_book.manage', companyId, 'Your role cannot manage the price book.', 'Price Book')) return;
+  const fd = new FormData(form);
+  const vendorId = String(fd.get('vendor_id') || '');
+  if (!vendorId) { showToast('Choose a vendor for this import.', 'local', 'Price Book'); return; }
+  let text = String(fd.get('csv') || '').trim();
+  const file = pbImportFile || form.elements.file?.files?.[0];
+  if (file) {
+    if (/\.(xlsx|xls)$/i.test(file.name)) {
+      // Excel: lazily load SheetJS and convert the first sheet to CSV text.
+      await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'XLSX');
+      const buf = await file.arrayBuffer();
+      const wb = window.XLSX.read(buf, { type: 'array' });
+      text = window.XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+    } else {
+      text = await file.text().catch(() => text);
+    }
+    text = String(text || '').trim();
+  }
+  if (!text) { showToast('Paste rows or choose a CSV/Excel file.', 'local', 'Price Book'); return; }
+  const delimiter = (text.split(/\r?\n/)[0] || '').includes('\t') ? '\t' : ',';
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length && /name|description|material/i.test(lines[0]) && /cost|price/i.test(lines[0])) lines.shift();
+  const client = createSupabaseClient(); const live = isLiveSupabaseSession() && client;
+  const now = new Date().toISOString();
+  let count = 0;
+  for (const line of lines) {
+    const cells = pbParseCsvLine(line, delimiter);
+    const name = (cells[0] || '').trim();
+    const rawCost = (cells[4] != null && cells[4] !== '' ? cells[4] : cells[cells.length - 1] || '').toString().replace(/[$,]/g, '');
+    const cost = parseFloat(rawCost);
+    if (!name || Number.isNaN(cost)) continue;
+    const category = (cells[1] || '').trim() || 'Uncategorized';
+    const sku = (cells[2] || '').trim() || null;
+    const unit = (cells[3] || '').trim() || 'each';
+    let material;
+    try { material = await pbUpsertMaterial(companyId, name, category, unit, live, client); } catch { continue; }
+    state.pricebookMaterials = [material, ...state.pricebookMaterials.filter((m) => m.id !== material.id)];
+    let price;
+    if (live) {
+      const { data, error } = await client.from('pricebook_vendor_prices').upsert({ company_id: companyId, material_id: material.id, vendor_id: vendorId, sku, unit_cost: cost, updated_at: now }, { onConflict: 'company_id,vendor_id,material_id' }).select().single();
+      if (error) continue;
+      price = normalizePricebookPrice(data);
+    } else {
+      const ex = state.pricebookPrices.find((p) => p.company_id === companyId && p.vendor_id === vendorId && p.material_id === material.id);
+      price = normalizePricebookPrice(ex ? { ...ex, sku, unit_cost: cost, updated_at: now } : { id: crypto.randomUUID(), company_id: companyId, material_id: material.id, vendor_id: vendorId, sku, unit_cost: cost, updated_at: now });
+    }
+    state.pricebookPrices = [price, ...state.pricebookPrices.filter((p) => p.id !== price.id)];
+    count += 1;
+  }
+  await pbStampVendorSynced(vendorId, live, client, now);
+  state.modal = '';
+  pbImportFile = null;
+  showToast(count ? `Imported ${count} row${count === 1 ? '' : 's'}.` : 'No valid rows found in that file.', live ? 'live' : 'local', 'Price Book');
+  render();
 }
 
 function renderSubscriptionBlockedPage(companyId) {
@@ -3571,7 +4157,7 @@ function renderUnderwriterPage(route, companyId) {
   const guide = activeStage === 'all' ? CRM2_UNDERWRITER_GUIDANCE.underwriting : CRM2_UNDERWRITER_GUIDANCE[activeStage];
   return `
     <section class="tool-page underwriter-page">
-      ${workspaceHeader('Underwriter', 'CRM 2 workspace for qualification, scope, pricing, and quote handoff readiness.', `
+      ${workspaceHeader('Underwriter', 'Qualification, scope, pricing, and quote handoff readiness.', `
         ${can('crm.view', companyId) ? `<a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Open contacts</a>` : ''}
         ${canManageUnderwriter && can('crm.view', companyId) ? `<button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>` : ''}
       `)}
@@ -3579,10 +4165,10 @@ function renderUnderwriterPage(route, companyId) {
         ${metricCard('Underwriting', underwriting.length)}
         ${metricCard('Estimate queue', estimates.length)}
         ${metricCard('Pipeline value', money(sum(visible, 'value')))}
-        ${metricCard('CRM 2 stage', activeStage === 'all' ? 'All' : underwriterStageByKey(activeStage).name)}
+        ${metricCard('Stage', activeStage === 'all' ? 'All' : underwriterStageByKey(activeStage).name)}
       </section>
       <section class="pipe-toolbar">
-        <div class="pipe-chips" role="group" aria-label="CRM 2 underwriter stage">
+        <div class="pipe-chips" role="group" aria-label="Underwriter stage">
           <a class="pipe-chip ${activeStage === 'all' ? 'on' : ''}" href="${appHref(companyPath('underwriter', {}, companyId))}" data-router>All<b>${h(String(contacts.length))}</b></a>
           ${CRM2_UNDERWRITER_STAGES.map((stage) => {
             const count = contacts.filter((contact) => contact.underwriter_stage.key === stage.key).length;
@@ -3592,7 +4178,7 @@ function renderUnderwriterPage(route, companyId) {
       </section>
       <section class="home-dashboard-grid">
         <article class="panel home-activity-panel">
-          <div class="section-head"><div><h2>Underwriter queue</h2><p>${visible.length} contact${visible.length === 1 ? '' : 's'} in this CRM 2 view.</p></div></div>
+          <div class="section-head"><div><h2>Underwriter queue</h2><p>${visible.length} contact${visible.length === 1 ? '' : 's'} in the underwriter queue.</p></div></div>
           <div class="data-table underwriter-table">
             <div class="table-head"><span>Contact</span><span>Stage</span><span>Owner</span><span>Pay type</span><span>Value</span></div>
             ${visible.map(renderUnderwriterQueueRow).join('') || emptyState('No contacts match this underwriter stage.')}
@@ -4210,7 +4796,7 @@ async function persistJob(job, label = 'Job saved locally') {
   const { ok, data } = await supabaseWrite('jobs', jobSupabaseRow(payload));
   if (ok && data) {
     upsertJob(normalizeJob(data));
-    state.sync = { label: 'Quest Supabase live', mode: 'live' };
+    state.sync = { label: 'Live', mode: 'live' };
     render();
   }
   return payload;
@@ -6257,6 +6843,7 @@ function wbViewCompanyHome(companyId, workspace) {
         <div class="wb-sub">Build customizable, no-code dashboards for ${h(companyName(companyId) || 'this company')}.</div>
       </div>
       <div class="wb-spacer"></div>
+      ${canManage ? `<button class="btn danger" data-wb-delete-workspace><i class="ti ti-trash"></i>Delete workspace</button>` : ''}
       ${canManage ? `<button class="btn btn-primary" data-new-app><i class="ti ti-plus"></i>Add app</button>` : ''}
     </div>
     ${appsBlock}
@@ -6539,6 +7126,10 @@ function openWbAutoModal(companyId, workspaceId, appId, autoId) {
   openWbModal({ kind: 'automation', companyId, workspaceId, appId, editId: autoId || '', draft });
 }
 function openWbConfirm(companyId, op, message, ids) { openWbModal({ kind: 'confirm', companyId, confirm: { op, message, ...ids } }); }
+function openWbDeleteWorkspace(companyId, workspace) {
+  if (!wbGuard()) return;
+  openWbModal({ kind: 'delete-workspace', companyId, workspaceId: workspace.id, workspaceName: workspace.name, error: '' });
+}
 
 /* ---- Modal renderer (dispatched from renderActiveModal) --------------------- */
 function renderWorkspaceBuilderModal() {
@@ -6548,6 +7139,14 @@ function renderWorkspaceBuilderModal() {
     return wbModalShell('Delete', 'wb-modal-sm', `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Confirm delete</h3>`,
       `<p class="wb-sub">${h(m.confirm.message)}</p>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-confirm><i class="ti ti-trash"></i>Delete</button>`);
+  }
+  if (m.kind === 'delete-workspace') {
+    return wbModalShell('Delete workspace', 'wb-modal-sm', `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Delete this workspace</h3>`,
+      `<p class="wb-sub">This permanently removes <b>${h(m.workspaceName || 'this workspace')}</b> and all of its apps, fields, records, reports and automations. This cannot be undone.</p>
+      <div class="wb-field"><label>Enter your password</label><input class="wb-input" id="wbDelPw1" type="password" autocomplete="off" placeholder="Your account password" autofocus></div>
+      <div class="wb-field"><label>Re-enter your password to confirm</label><input class="wb-input" id="wbDelPw2" type="password" autocomplete="off" placeholder="Type it again"></div>
+      ${m.error ? `<div class="wb-form-error">${h(m.error)}</div>` : ''}`,
+      `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-delete-ws-confirm><i class="ti ti-trash"></i>Delete workspace</button>`);
   }
   if (m.kind === 'members') {
     const ws = wbFind(m.companyId, m.workspaceId).workspace;
@@ -6795,6 +7394,32 @@ function wbSubmitModal() {
   }
 }
 
+async function wbConfirmDeleteWorkspace() {
+  const m = state.builderModal;
+  if (!m || m.kind !== 'delete-workspace') return;
+  const pw1 = document.getElementById('wbDelPw1')?.value || '';
+  const pw2 = document.getElementById('wbDelPw2')?.value || '';
+  if (!pw1 || !pw2) { m.error = 'Enter your password in both fields.'; render(); return; }
+  if (pw1 !== pw2) { m.error = 'The two passwords do not match.'; render(); return; }
+  const client = createSupabaseClient();
+  // On a live session, verify the password is actually correct by re-authenticating.
+  if (isLiveSupabaseSession() && client) {
+    let email = activeSession()?.profile?.email || '';
+    if (!email) { try { email = (await client.auth.getUser())?.data?.user?.email || ''; } catch { /* ignore */ } }
+    if (!email) { m.error = 'Could not verify your account. Try again.'; render(); return; }
+    const btn = document.querySelector('[data-wb-delete-ws-confirm]'); if (btn) btn.disabled = true;
+    const { error } = await client.auth.signInWithPassword({ email, password: pw1 });
+    if (error) { m.error = 'Incorrect password.'; render(); return; }
+  }
+  const companyId = m.companyId;
+  const doc = wbDoc(companyId);
+  if (doc) doc.workspaces = doc.workspaces.filter((w) => w.id !== m.workspaceId);
+  state.builderModal = null;
+  wbSave(companyId);
+  showToast('Workspace deleted.', isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
+  navigate(companyPath('workspaces', {}, companyId));
+}
+
 function wbConfirmDelete() {
   const m = state.builderModal;
   if (!m || m.kind !== 'confirm') return;
@@ -6829,6 +7454,7 @@ function mountWorkspaceBuilder() {
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp, tab: 'items' }));
     bind('[data-new-app]', () => openWbAppModal(companyId, workspaceId));
+    bind('[data-wb-delete-workspace]', () => { const ws = wbCompanyWorkspace(companyId); if (ws) openWbDeleteWorkspace(companyId, ws); });
     bind('[data-tab]', (el) => nav({ app_id: appId, tab: el.dataset.tab }));
     bind('[data-add-field]', () => nav({ app_id: appId, tab: 'fields' }));
     bind('[data-add-type]', (el) => openWbFieldModal(companyId, workspaceId, appId, '', el.dataset.addType));
@@ -6884,6 +7510,7 @@ function wbMountModal() {
   const addAct = overlay.querySelector('[data-wb-auto-add-action]'); if (addAct) addAct.onclick = () => { wbCollectModalDraft(); m.draft.actions.push({ type: 'notify', message: '' }); render(); };
   const submit = overlay.querySelector('[data-wb-submit]'); if (submit) submit.onclick = () => wbSubmitModal();
   const confirmBtn = overlay.querySelector('[data-wb-confirm]'); if (confirmBtn) confirmBtn.onclick = () => wbConfirmDelete();
+  const delWsBtn = overlay.querySelector('[data-wb-delete-ws-confirm]'); if (delWsBtn) delWsBtn.onclick = () => wbConfirmDeleteWorkspace();
   if (m.kind === 'item') {
     const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
     const recompute = () => {
@@ -7093,6 +7720,9 @@ function ensureClientPortalAnnotateState(mode, portalId, documentId) {
       page: 0,
       selectedId: null,
       placement: null,
+      openCommentId: null,
+      editingMessage: null,
+      redoStack: [],
     };
     return state.clientPortalAnnotate;
   }
@@ -7100,6 +7730,7 @@ function ensureClientPortalAnnotateState(mode, portalId, documentId) {
     current.documentId = documentId;
     current.page = 0;
     current.selectedId = null;
+    current.redoStack = []; // undo history doesn't carry across plans
     current.panX = null; // re-centre the view on the new plan
     current.panY = null;
   }
@@ -7147,10 +7778,26 @@ function cpActorId() {
 
 function cpActorName(author) {
   if (author === 'guest') {
-    return state.clientPortalPublic?.portal?.client_name || state.clientPortalPublic?.guestName || 'Client';
+    return cpPortalClientName() || 'Client';
   }
   if (cpIsGuest()) return 'Drafting Team';
   return activeSession()?.profile?.full_name || 'Drafting Team';
+}
+
+// The client's display name, resolvable from EITHER surface: the guest reads it from
+// its own session; the drafting team reads it from the portal record it's reviewing.
+// (Previously the owner view had no client session, so client markups fell back to a
+// generic/stale name — that's why they showed "lumen".)
+function cpPortalClientName() {
+  if (cpIsGuest()) return state.clientPortalPublic?.portal?.client_name || state.clientPortalPublic?.guestName || '';
+  return clientPortalById(cpA()?.portalId)?.client_name || '';
+}
+
+// Prefer the name captured when the markup/message was authored (stable across views),
+// falling back to the role-based name for older records that predate name capture.
+function cpAuthorLabel(author, storedName) {
+  if (author === 'draft' && cpIsGuest()) return 'Drafting Team'; // clients see the team, not individuals
+  return storedName || cpActorName(author);
 }
 
 function cpActorColor(author) {
@@ -7230,6 +7877,7 @@ function renderClientPortalAnnotate(mode) {
         </aside>
       </div>
       ${annotate.placement ? renderClientPortalPlacementModal(annotate.placement) : ''}
+      ${annotate.openCommentId ? renderClientPortalCommentModal(cpFindAnnotation(annotate.openCommentId)) : ''}
     </div>
   `;
 }
@@ -7291,6 +7939,7 @@ function renderClientPortalToolbar(doc) {
           <button type="button" data-action="cp-zoom" data-dir="in" title="Zoom in">+</button>
         </div>
         <button class="cp-tbtn" type="button" data-action="cp-undo" title="Undo (Ctrl+Z)"><i class="ti ti-arrow-back-up"></i></button>
+        <button class="cp-tbtn" type="button" data-action="cp-redo" title="Redo (Ctrl+Shift+Z)" ${(annotate.redoStack || []).length ? '' : 'disabled'}><i class="ti ti-arrow-forward-up"></i></button>
       </div>
     </div>
   `;
@@ -7324,6 +7973,7 @@ function renderClientPortalAnnoCard(annotation) {
   const payload = annotation.payload || {};
   const selected = annotate.selectedId === annotation.id;
   const author = payload.author || (annotation.guest_name ? 'guest' : 'draft');
+  const canManageAnno = author === cpActorId(); // only the author's side may edit/delete
   const tool = CP_TOOLS.find((item) => item.id === annotation.annotation_type);
   const thread = Array.isArray(payload.thread) ? payload.thread : [];
   const summary = payload.text || (annotation.annotation_type === 'marker' ? cpReviewStatusLabel(payload.markerStatus) : '') || (tool?.tip || titleCase(annotation.annotation_type));
@@ -7331,17 +7981,36 @@ function renderClientPortalAnnoCard(annotation) {
     <div class="cp-anno-card ${selected ? 'sel' : ''}" data-action="cp-select" data-annotation-id="${h(annotation.id)}">
       <div class="cp-anno-head">
         <span class="cp-anno-ico" style="background:${h(payload.color || cpActorColor(author))}"><i class="ti ${tool?.icon || 'ti-pencil'}"></i></span>
-        <div class="cp-anno-meta"><strong>${h(cpActorName(author))}</strong><small>${h(tool?.tip || titleCase(annotation.annotation_type))} · ${cpTimeAgo(annotation.created_at)}</small></div>
-        <button class="cp-anno-del" type="button" data-action="cp-delete-annotation" data-annotation-id="${h(annotation.id)}" title="Delete"><i class="ti ti-trash"></i></button>
+        <div class="cp-anno-meta"><strong>${h(cpAuthorLabel(author, payload.author_name))}</strong><small>${h(tool?.tip || titleCase(annotation.annotation_type))} · ${cpTimeAgo(annotation.created_at)}</small></div>
+        ${canManageAnno ? `<button class="cp-anno-del" type="button" data-action="cp-delete-annotation" data-annotation-id="${h(annotation.id)}" title="Delete"><i class="ti ti-trash"></i></button>` : ''}
       </div>
-      ${summary ? `<div class="cp-anno-summary">${h(summary)}</div>` : ''}
+      ${summary && annotation.annotation_type !== 'comment' ? `<div class="cp-anno-summary">${h(summary)}</div>` : ''}
       ${thread.length ? `<div class="cp-thread">
-        ${thread.map((message) => `
+        ${thread.map((message) => {
+          const editing = annotate.editingMessage === message.id;
+          const canManageMsg = message.author === cpActorId(); // only your own messages
+          return `
           <div class="cp-msg">
-            <span class="cp-msg-av" style="background:${h(cpActorColor(message.author))}">${h((message.author_name || cpActorName(message.author) || '?').charAt(0).toUpperCase())}</span>
-            <div><b>${h(message.author_name || cpActorName(message.author))}</b> <small>${cpTimeAgo(message.at)}</small><p>${h(message.text)}</p></div>
-          </div>
-        `).join('')}
+            <span class="cp-msg-av" style="background:${h(cpActorColor(message.author))}">${h((cpAuthorLabel(message.author, message.author_name) || '?').charAt(0).toUpperCase())}</span>
+            <div class="cp-msg-main">
+              <div class="cp-msg-top">
+                <b>${h(cpAuthorLabel(message.author, message.author_name))}</b>
+                <small>${cpTimeAgo(message.at)}${message.edited_at ? ' · edited' : ''}</small>
+                ${canManageMsg ? `<span class="cp-msg-tools">
+                  <button type="button" class="cp-msg-tool" data-action="cp-edit-message" data-annotation-id="${h(annotation.id)}" data-message-id="${h(message.id)}" title="Edit"><i class="ti ti-pencil"></i></button>
+                  <button type="button" class="cp-msg-tool" data-action="cp-delete-message" data-annotation-id="${h(annotation.id)}" data-message-id="${h(message.id)}" title="Delete"><i class="ti ti-trash"></i></button>
+                </span>` : ''}
+              </div>
+              ${editing
+                ? `<form class="cp-msg-edit" data-cp-message-edit-form data-annotation-id="${h(annotation.id)}" data-message-id="${h(message.id)}">
+                     <input name="text" value="${h(message.text)}" autocomplete="off" autofocus />
+                     <button class="btn btn-mini btn-primary" type="submit" title="Save"><i class="ti ti-check"></i></button>
+                     <button class="btn btn-mini" type="button" data-action="cp-edit-message-cancel" title="Cancel"><i class="ti ti-x"></i></button>
+                   </form>`
+                : `<p>${h(message.text)}</p>`}
+            </div>
+          </div>`;
+        }).join('')}
       </div>` : ''}
       <form class="cp-reply" data-cp-reply-form data-annotation-id="${h(annotation.id)}">
         <input name="text" placeholder="Reply…" autocomplete="off" />
@@ -7537,7 +8206,15 @@ function renderWorkspaceSettings(companyId) {
   const iconDraft = workspaceIconDraft(companyId);
   const canManage = can('settings.manage', companyId) || ['owner', 'admin'].includes(String(membershipForProfile(companyId, activeSession().profile.id)?.role || '').toLowerCase()) || isQuestDeveloper();
   const canCreate = canCreateAnotherWorkspace();
+  const theme = getTheme();
   return `
+    <article class="panel">
+      <div class="section-head"><div><h2>Appearance</h2><p>Choose light or dark theme. Saved on this browser.</p></div></div>
+      <div class="theme-toggle">
+        <button class="theme-opt ${theme === 'light' ? 'active' : ''}" type="button" data-action="set-theme" data-theme="light"><i class="ti ti-sun"></i>Light</button>
+        <button class="theme-opt ${theme === 'dark' ? 'active' : ''}" type="button" data-action="set-theme" data-theme="dark"><i class="ti ti-moon"></i>Dark</button>
+      </div>
+    </article>
     <article class="panel span-2">
       <div class="section-head"><div><h2>Workspace identity</h2><p>Rename this workspace and choose the icon your team sees in navigation.</p></div></div>
       <form class="workspace-settings-form" data-workspace-settings-form>
@@ -7579,7 +8256,59 @@ function renderWorkspaceSettings(companyId) {
         ['Installed plugins', availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length],
       ])}
     </article>
+    ${isCompanyOwner(companyId) ? `<article class="panel danger-zone span-3">
+      <div class="section-head"><div><h2>Danger zone</h2><p>Irreversible actions for this workspace.</p></div></div>
+      <div class="danger-zone-row">
+        <div><strong>Delete this workspace</strong><span>Permanently removes ${h(companyName(companyId))} and every job, contact, quote, invoice, file, message, portal and record in it. This cannot be undone.</span></div>
+        <button class="btn danger" type="button" data-action="open-delete-company"><i class="ti ti-trash"></i>Delete workspace</button>
+      </div>
+    </article>` : ''}
   `;
+}
+
+function isCompanyOwner(companyId = activeCompanyId()) {
+  if (isQuestDeveloper()) return true;
+  const role = String(membershipForProfile(companyId, activeSession()?.profile?.id)?.role || '').toLowerCase();
+  return role === 'owner' || role === 'developer';
+}
+
+function renderDeleteCompanyModal(companyId) {
+  const name = companyName(companyId);
+  return renderModalShell('Danger zone', 'Delete workspace', `
+    <form class="compact-tool-form" data-delete-company-form>
+      <div class="file-policy-note"><strong>Permanently delete ${h(name)}</strong><span>Every job, contact, quote, invoice, file, message, portal and record in this workspace is removed. This cannot be undone.</span></div>
+      <label><span>Enter your password</span><input name="pw1" type="password" autocomplete="off" placeholder="Your account password" required autofocus /></label>
+      <label><span>Re-enter your password to confirm</span><input name="pw2" type="password" autocomplete="off" placeholder="Type it again" required /></label>
+      ${state.deleteCompanyError ? `<div class="wb-form-error">${h(state.deleteCompanyError)}</div>` : ''}
+      <div class="form-actions">
+        <button class="btn danger" type="submit"><i class="ti ti-trash"></i>Delete workspace</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+
+async function deleteCompanyWorkspace(companyId, pw) {
+  const client = createSupabaseClient();
+  if (!(isLiveSupabaseSession() && client)) { state.deleteCompanyError = 'Deleting a workspace requires a live session.'; render(); return; }
+  let email = activeSession()?.profile?.email || '';
+  if (!email) { try { email = (await client.auth.getUser())?.data?.user?.email || ''; } catch { /* ignore */ } }
+  if (!email) { state.deleteCompanyError = 'Could not verify your account. Try again.'; render(); return; }
+  // Verify the password by re-authenticating before the destructive call.
+  const { error: authErr } = await client.auth.signInWithPassword({ email, password: pw });
+  if (authErr) { state.deleteCompanyError = 'Incorrect password.'; render(); return; }
+  const { error } = await client.rpc('delete_company_workspace', { target_company_id: companyId });
+  if (error) { state.deleteCompanyError = error.message || 'Could not delete the workspace.'; render(); return; }
+  // Success — drop it from local state and switch to another workspace.
+  state.companies = state.companies.filter((c) => c.id !== companyId);
+  state.memberships = state.memberships.filter((m) => m.company_id !== companyId);
+  const next = allowedCompanyIds().find((id) => id !== companyId) || state.companies[0]?.id || '';
+  state.modal = '';
+  state.deleteCompanyError = '';
+  state.dataLoaded = false;
+  if (next) { state.activeCompanyId = next; try { localStorage.setItem(COMPANY_KEY, next); } catch { /* ignore */ } }
+  showToast('Workspace deleted.', 'live', 'Settings');
+  navigate(next ? companyPath('dashboard', {}, next) : appHref('/'), { replace: true });
 }
 
 function renderPluginsSettings(companyId) {
@@ -10350,6 +11079,10 @@ function renderActiveModal(route, session) {
   if (state.modal === 'client-portal-form') return renderClientPortalFormModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
   if (state.modal === 'client-portal-document') return renderClientPortalDocumentModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
   if (state.modal === 'client-portal-delete') return renderClientPortalDeleteModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
+  if (state.modal === 'price-book-vendor') return renderPriceBookVendorModal();
+  if (state.modal === 'price-book-material') return renderPriceBookMaterialModal();
+  if (state.modal === 'price-book-import') return renderPriceBookImportModal();
+  if (state.modal === 'delete-company') return renderDeleteCompanyModal(activeCompanyId());
   if (state.modal === 'folder-new') return renderNewFolderModal();
   if (state.modal === 'file-detail') return renderFileDetailModal(activeCompanyId());
   if (state.modal === 'forms-tools') return renderFormsToolsModal(activeCompanyId());
@@ -10776,7 +11509,102 @@ function handleAction(event, node) {
   }
   if (action === 'cp-undo') {
     event.preventDefault();
-    cpUndoLast();
+    cpUndoLast().catch(() => null);
+    return;
+  }
+  if (action === 'cp-redo') {
+    event.preventDefault();
+    cpRedoLast().catch(() => null);
+    return;
+  }
+  if (action === 'pb-tab') {
+    event.preventDefault();
+    state.pricebookTab = node.dataset.tab === 'all' ? 'all' : 'vendors';
+    state.pricebookVendorId = '';
+    state.pricebookQuery = '';
+    render();
+    return;
+  }
+  if (action === 'pb-open-vendor') {
+    event.preventDefault();
+    state.pricebookVendorId = node.dataset.vendorId || '';
+    state.pricebookQuery = '';
+    render();
+    return;
+  }
+  if (action === 'pb-back') {
+    event.preventDefault();
+    state.pricebookVendorId = '';
+    state.pricebookQuery = '';
+    render();
+    return;
+  }
+  if (action === 'pb-set-cat') {
+    event.preventDefault();
+    state.pricebookCategory = node.dataset.cat || 'All';
+    render();
+    return;
+  }
+  if (action === 'pb-sort') {
+    event.preventDefault();
+    const key = node.dataset.key;
+    const s = state.pricebookSort || {};
+    state.pricebookSort = s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' };
+    render();
+    return;
+  }
+  if (action === 'pb-add-vendor') {
+    event.preventDefault();
+    if (!requirePermission('price_book.manage', activeCompanyId(), 'Your role cannot manage the price book.', 'Price Book')) return;
+    state.pbEditingVendor = ''; state.modal = 'price-book-vendor'; render();
+    return;
+  }
+  if (action === 'pb-edit-vendor') {
+    event.preventDefault();
+    if (!requirePermission('price_book.manage', activeCompanyId(), 'Your role cannot manage the price book.', 'Price Book')) return;
+    state.pbEditingVendor = node.dataset.vendorId || ''; state.modal = 'price-book-vendor'; render();
+    return;
+  }
+  if (action === 'pb-delete-vendor') {
+    event.preventDefault();
+    pbDeleteVendor(node.dataset.vendorId).catch((error) => showToast(error.message || 'Delete failed.', 'local', 'Price Book'));
+    return;
+  }
+  if (action === 'pb-add-material') {
+    event.preventDefault();
+    if (!requirePermission('price_book.manage', activeCompanyId(), 'Your role cannot manage the price book.', 'Price Book')) return;
+    if (!pbCompanyVendors(activeCompanyId()).length) { showToast('Add a vendor first.', 'local', 'Price Book'); return; }
+    state.pbMaterialEditId = ''; state.pbMaterialVendorId = node.dataset.vendorId || ''; state.modal = 'price-book-material'; render();
+    return;
+  }
+  if (action === 'pb-edit-material') {
+    event.preventDefault();
+    if (!requirePermission('price_book.manage', activeCompanyId(), 'Your role cannot manage the price book.', 'Price Book')) return;
+    state.pbMaterialEditId = node.dataset.priceId || ''; state.pbMaterialVendorId = ''; state.modal = 'price-book-material'; render();
+    return;
+  }
+  if (action === 'pb-edit-cost') {
+    event.preventDefault();
+    if (!requirePermission('price_book.manage', activeCompanyId(), 'Your role cannot manage the price book.', 'Price Book')) return;
+    state.pbCostEditId = node.dataset.priceId || ''; render();
+    return;
+  }
+  if (action === 'pb-delete-row') {
+    event.preventDefault();
+    pbDeleteRow(node.dataset.priceId).catch((error) => showToast(error.message || 'Delete failed.', 'local', 'Price Book'));
+    return;
+  }
+  if (action === 'pb-import') {
+    event.preventDefault();
+    if (!requirePermission('price_book.manage', activeCompanyId(), 'Your role cannot manage the price book.', 'Price Book')) return;
+    if (!pbCompanyVendors(activeCompanyId()).length) { showToast('Add a vendor first.', 'local', 'Price Book'); return; }
+    pbImportFile = null;
+    state.modal = 'price-book-import'; render();
+    return;
+  }
+  if (action === 'pb-download-template') {
+    event.preventDefault();
+    pbDownloadTemplate();
     return;
   }
   if (action === 'cp-open-document' || action === 'cp-open-version') {
@@ -10790,7 +11618,9 @@ function handleAction(event, node) {
       cpA().page = 0;
       cpA().selectedId = null;
       if (cpA().mode === 'owner') {
-        navigate(companyPath('client-portals', { portal_id: cpA().portalId, document_id: cpA().documentId, annotate: '1' }, activeCompanyId()), { replace: true });
+        const params = { portal_id: cpA().portalId, document_id: cpA().documentId, annotate: '1' };
+        if (state.route.params.get('fs') === '1') params.fs = '1'; // stay full-screen when switching plans
+        navigate(companyPath('client-portals', params, activeCompanyId()), { replace: true });
       } else {
         render();
       }
@@ -10799,7 +11629,10 @@ function handleAction(event, node) {
   }
   if (action === 'cp-open-document-page') {
     event.preventDefault();
-    navigate(companyPath('client-portals', { portal_id: node.dataset.portalId, document_id: node.dataset.documentId, annotate: '1' }, activeCompanyId()));
+    // Open the plan in its own full-screen review window (no dashboard chrome) so the
+    // drafting team can review the client's edits in full.
+    const reviewPath = companyPath('client-portals', { portal_id: node.dataset.portalId, document_id: node.dataset.documentId, annotate: '1', fs: '1' }, activeCompanyId());
+    window.open(appHref(reviewPath), '_blank', 'noopener');
     return;
   }
   if (action === 'cp-back') {
@@ -10808,7 +11641,7 @@ function handleAction(event, node) {
     return;
   }
   if (action === 'cp-select') {
-    if (event.target.closest('[data-cp-reply-form], .cp-anno-del')) return;
+    if (event.target.closest('[data-cp-reply-form], [data-cp-message-edit-form], .cp-msg-tools, .cp-anno-del')) return;
     event.preventDefault();
     if (cpA()) { cpA().selectedId = node.dataset.annotationId; render(); }
     return;
@@ -10816,7 +11649,35 @@ function handleAction(event, node) {
   if (action === 'cp-delete-annotation') {
     event.preventDefault();
     event.stopPropagation();
-    cpDeleteAnnotation(node.dataset.annotationId).catch((error) => showToast(error.message || 'Delete failed.', 'local', 'Client Portal'));
+    const delId = node.dataset.annotationId;
+    if (cpA()?.openCommentId === delId) cpA().openCommentId = null; // close the modal if it's showing this comment
+    cpDeleteAnnotation(delId).catch((error) => showToast(error.message || 'Delete failed.', 'local', 'Client Portal'));
+    return;
+  }
+  if (action === 'cp-comment-close') {
+    // Only the backdrop itself closes the modal — clicks inside the card pass through.
+    if (node.classList.contains('cp-modal-backdrop') && event.target !== node) return;
+    event.preventDefault();
+    if (cpA()) cpA().openCommentId = null;
+    render();
+    return;
+  }
+  if (action === 'cp-edit-message') {
+    event.preventDefault();
+    event.stopPropagation();
+    if (cpA()) { cpA().editingMessage = node.dataset.messageId || null; render(); }
+    return;
+  }
+  if (action === 'cp-edit-message-cancel') {
+    event.preventDefault();
+    event.stopPropagation();
+    if (cpA()) { cpA().editingMessage = null; render(); }
+    return;
+  }
+  if (action === 'cp-delete-message') {
+    event.preventDefault();
+    event.stopPropagation();
+    cpDeleteThreadMessage(node.dataset.annotationId, node.dataset.messageId).catch((error) => showToast(error.message || 'Delete failed.', 'local', 'Client Portal'));
     return;
   }
   if (action === 'cp-doc-status') {
@@ -11649,7 +12510,21 @@ function handleAction(event, node) {
   }
   if (action === 'close-modal') {
     event.preventDefault();
+    pbImportFile = null;
     closeActiveModal();
+    return;
+  }
+  if (action === 'set-theme') {
+    event.preventDefault();
+    setTheme(node.dataset.theme);
+    return;
+  }
+  if (action === 'open-delete-company') {
+    event.preventDefault();
+    if (!isCompanyOwner(activeCompanyId())) { showToast('Only the workspace owner can delete it.', 'local', 'Settings'); return; }
+    state.deleteCompanyError = '';
+    state.modal = 'delete-company';
+    render();
     return;
   }
   if (action === 'set-task-view') {
@@ -12135,6 +13010,44 @@ function onDocumentSubmit(event) {
     const input = event.target.elements.text;
     const text = String(input?.value || '');
     if (text.trim()) cpAddThreadReply(event.target.dataset.annotationId, text).catch((error) => showToast(error.message || 'Reply failed.', 'local', 'Client Portal'));
+    return;
+  }
+
+  if (event.target.matches('[data-cp-message-edit-form]')) {
+    event.preventDefault();
+    cpEditThreadMessage(event.target.dataset.annotationId, event.target.dataset.messageId, String(event.target.elements.text?.value || ''))
+      .catch((error) => showToast(error.message || 'Edit failed.', 'local', 'Client Portal'));
+    return;
+  }
+
+  if (event.target.matches('[data-pb-vendor-form]')) {
+    event.preventDefault();
+    pbSaveVendor(event.target).catch((error) => showToast(error.message || 'Save failed.', 'local', 'Price Book'));
+    return;
+  }
+  if (event.target.matches('[data-pb-material-form]')) {
+    event.preventDefault();
+    pbSaveMaterial(event.target).catch((error) => showToast(error.message || 'Save failed.', 'local', 'Price Book'));
+    return;
+  }
+  if (event.target.matches('[data-pb-import-form]')) {
+    event.preventDefault();
+    pbRunImport(event.target).catch((error) => showToast(error.message || 'Import failed.', 'local', 'Price Book'));
+    return;
+  }
+  if (event.target.matches('[data-pb-cost-form]')) {
+    event.preventDefault();
+    pbEditCostCommit(event.target.dataset.priceId, event.target.elements.cost?.value).catch(() => null);
+    return;
+  }
+  if (event.target.matches('[data-delete-company-form]')) {
+    event.preventDefault();
+    const pw1 = event.target.elements.pw1?.value || '';
+    const pw2 = event.target.elements.pw2?.value || '';
+    if (!pw1 || !pw2) { state.deleteCompanyError = 'Enter your password in both fields.'; render(); return; }
+    if (pw1 !== pw2) { state.deleteCompanyError = 'The two passwords do not match.'; render(); return; }
+    state.deleteCompanyError = '';
+    deleteCompanyWorkspace(activeCompanyId(), pw1).catch((error) => { state.deleteCompanyError = error.message || 'Delete failed.'; render(); });
     return;
   }
 
@@ -13668,7 +14581,7 @@ async function persistConversation(conversation, accessRows, update = false) {
       }
     }
     conversation = normalizeMessageConversation(conversationResult.data);
-    state.sync = { label: 'Quest Supabase live', mode: 'live' };
+    state.sync = { label: 'Live', mode: 'live' };
   }
   state.messageConversations = [conversation].concat(state.messageConversations.filter((item) => item.id !== conversation.id));
   state.messageAccess = accessRows.concat(state.messageAccess.filter((item) => item.conversation_id !== conversation.id));
@@ -13758,6 +14671,15 @@ function onDocumentInput(event) {
   if (event.target.matches('[data-client-portal-search]')) {
     state.clientPortalQuery = event.target.value;
     updateWorkspaceOnly();
+    return;
+  }
+  if (event.target.matches('[data-pb-search]')) {
+    const caret = event.target.selectionStart;
+    state.pricebookQuery = event.target.value;
+    updateWorkspaceOnly();
+    // updateWorkspaceOnly() rebuilds the DOM, so re-focus the search and restore the caret.
+    const next = document.querySelector('[data-pb-search]');
+    if (next) { next.focus(); try { next.setSelectionRange(caret, caret); } catch { /* non-text input */ } }
     return;
   }
   if (event.target.matches('[data-crm-search]')) {
@@ -13930,7 +14852,7 @@ async function saveJob(form) {
       : await client.from('jobs').insert(payload).select().single();
     if (!result.error && result.data) {
       upsertJob(normalizeJob(result.data));
-      state.sync = { label: 'Quest Supabase live', mode: 'live' };
+      state.sync = { label: 'Live', mode: 'live' };
       state.modal = '';
       navigate(companyPath('jobs', { tab: 'profile', job_id: result.data.id }, payload.company_id), { replace: true });
       return;
@@ -13984,7 +14906,7 @@ async function saveTask(form) {
       const savedTask = normalizeTask(result.data);
       upsertTask(savedTask);
       notifyTaskChange(savedTask, previous);
-      state.sync = { label: 'Quest Supabase live', mode: 'live' };
+      state.sync = { label: 'Live', mode: 'live' };
       state.modal = '';
       navigate(companyPath('tasks', { ...(payload.project_id ? { job_id: payload.project_id } : {}), task_id: payload.id }, companyId), { replace: true });
       return;
@@ -14070,7 +14992,7 @@ async function saveFileRecord(form) {
   }
 
   state.sync = liveSaved === uploadList.length
-    ? { label: 'Quest Supabase live', mode: 'live' }
+    ? { label: 'Live', mode: 'live' }
     : { label: liveSaved ? 'Some files saved locally' : 'File record saved locally', mode: liveSaved ? 'loading' : 'local' };
   notifyLocalEvent(
     'file.added',
@@ -14616,6 +15538,73 @@ async function mountClientPortalAnnotate() {
     return;
   }
   cpRenderFrame(frame, doc, annotate.page, base);
+  cpStartAnnotationPolling();
+}
+
+// --- Near-real-time markup sync -------------------------------------------------
+// Poll the backend for new markups/comments so staff and clients see each other's
+// activity live, without a manual Refresh. Works for both surfaces (owner: direct
+// Supabase; guest: signed API). Re-renders only when something actually changed and
+// the user isn't mid-draw or mid-type, so it never disrupts what they're doing.
+let cpPollTimer = null;
+let cpPollBusy = false;
+let cpLastSig = null;
+
+function cpStartAnnotationPolling() {
+  if (cpPollTimer) return;
+  cpLastSig = cpAnnotationSignature();
+  cpPollTimer = setInterval(cpPollAnnotations, 5000);
+}
+
+function cpStopAnnotationPolling() {
+  if (cpPollTimer) { clearInterval(cpPollTimer); cpPollTimer = null; }
+  cpLastSig = null;
+}
+
+// A stable fingerprint of the active document's markups (id + last-change + reply
+// count) so we can detect remote additions/edits/replies cheaply.
+function cpAnnotationSignature() {
+  const doc = cpActiveDoc();
+  if (!doc) return '';
+  const list = cpIsGuest()
+    ? (state.clientPortalPublic?.annotations || [])
+    : clientPortalAnnotationsForDocument(doc.id);
+  return list
+    .filter((annotation) => annotation.document_id === doc.id)
+    .map((annotation) => `${annotation.id}:${annotation.updated_at || annotation.created_at || ''}:${(annotation.payload?.thread || []).length}`)
+    .sort()
+    .join('|');
+}
+
+// True while the user is actively drawing, placing, or typing — suppress the live
+// re-render in those moments to avoid yanking focus or interrupting a stroke.
+function cpUserIsBusy() {
+  if (cpPointerState || cpA()?.placement) return true;
+  const el = document.activeElement;
+  return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && el.closest('[data-cp-annotate]'));
+}
+
+async function cpPollAnnotations() {
+  const annotate = cpA();
+  const frame = document.querySelector('[data-cp-frame]');
+  if (!annotate || !frame) { cpStopAnnotationPolling(); return; } // left the annotate view
+  if (cpPollBusy) return;
+  cpPollBusy = true;
+  try {
+    const portalId = cpIsGuest() ? state.clientPortalPublic?.portal?.id : annotate.portalId;
+    if (!portalId) return;
+    if (cpIsGuest() && !state.clientPortalPublic?.local) await loadClientPortalAnnotations();
+    else await cpReloadPortalAnnotations(portalId);
+    const sig = cpAnnotationSignature();
+    if (sig !== cpLastSig && !cpUserIsBusy()) {
+      cpLastSig = sig;
+      render();
+    }
+  } catch {
+    // Ignore transient network errors; the next tick retries.
+  } finally {
+    cpPollBusy = false;
+  }
 }
 
 function cpRenderFrame(frame, doc, page, base) {
@@ -14705,7 +15694,7 @@ function cpAnnotationsPins(annotations) {
     const common = `data-cp-pin data-annotation-id="${h(annotation.id)}" style="left:${left};top:${top};--cp-c:${h(color)}"`;
     if (type === 'comment') {
       commentIndex += 1;
-      return `<button class="cp-pin${sel}" ${common} title="Comment"><span class="cp-pin-bub">${commentIndex}</span></button>`;
+      return `<button class="cp-pin${sel}" ${common} title="${h(cpCommentTip(annotation))}" data-cp-comment-open><span class="cp-pin-bub">${commentIndex}</span></button>`;
     }
     if (type === 'label') {
       return `<button class="cp-label-tag${sel}" ${common}>${h(payload.text || 'Note')}</button>`;
@@ -14715,6 +15704,37 @@ function cpAnnotationsPins(annotations) {
     const markerIcon = meta ? meta.icon : 'ti-flag';
     return `<button class="cp-marker-tag${sel} ${h(meta ? payload.markerStatus : 'custom')}" ${common}><i class="ti ${markerIcon}"></i>${h(markerLabel)}</button>`;
   }).join('');
+}
+
+// Plain-text preview of a comment thread, used for the pin's hover tooltip.
+function cpCommentTip(annotation) {
+  const thread = Array.isArray(annotation.payload?.thread) ? annotation.payload.thread : [];
+  const first = thread[0];
+  const text = (first?.text || annotation.payload?.text || '').trim();
+  if (!text) return 'Empty comment — click to open';
+  const preview = text.length > 140 ? `${text.slice(0, 140)}…` : text;
+  const replies = Math.max(0, thread.length - 1);
+  const who = cpActorName(first?.author || 'draft');
+  const tail = replies ? ` (+${replies} repl${replies === 1 ? 'y' : 'ies'})` : '';
+  return `${who}: ${preview}${tail} — click to open`;
+}
+
+// Modal showing a comment pin's full thread + reply box (opened by tapping a pin).
+function renderClientPortalCommentModal(annotation) {
+  if (!annotation) return '';
+  return `
+    <div class="cp-modal-backdrop" data-action="cp-comment-close">
+      <div class="cp-modal cp-comment-modal">
+        <div class="cp-modal-head">
+          <span class="cp-modal-ico comment"><i class="ti ti-message-2"></i></span>
+          <h3>Comment</h3>
+          <button class="cp-modal-x" type="button" data-action="cp-comment-close" title="Close"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="cp-modal-body cp-comment-modal-body">
+          ${renderClientPortalAnnoCard(annotation)}
+        </div>
+      </div>
+    </div>`;
 }
 
 // Pointer position normalized to 0..1 within the frame.
@@ -14777,8 +15797,10 @@ function cpApplyView(frame, stage, base) {
   const dispW = fitW * annotate.zoom;
   const dispH = dispW * (base.h / base.w);
   if (annotate.panX == null || annotate.panY == null) {
+    // Horizontally centre, but sit the sheet near the top of the canvas rather than
+    // vertically centring it (leaves the empty space below, not above the plan).
     annotate.panX = (stage.clientWidth - dispW) / 2;
-    annotate.panY = (stage.clientHeight - dispH) / 2;
+    annotate.panY = 16;
   }
   cpClampPan(annotate, stage, dispW, dispH);
   frame.style.transform = `translate(${annotate.panX.toFixed(1)}px, ${annotate.panY.toFixed(1)}px) scale(${annotate.zoom})`;
@@ -14844,7 +15866,7 @@ function cpPointerDown(event, frame, doc, stage) {
     const shapeEl = event.target.closest('[data-annotation-id]');
     if (pinEl) {
       annotate.selectedId = pinEl.dataset.annotationId;
-      cpPointerState = { mode: 'drag-pin', id: pinEl.dataset.annotationId };
+      cpPointerState = { mode: 'drag-pin', id: pinEl.dataset.annotationId, startX: event.clientX, startY: event.clientY };
       capture();
       event.preventDefault();
       return;
@@ -14911,12 +15933,18 @@ async function cpPointerUp(event, frame, doc) {
     return;
   }
   if (ps.mode === 'drag-pin') {
-    if (ps.point) {
+    const movedPx = Math.hypot((event.clientX ?? ps.startX) - ps.startX, (event.clientY ?? ps.startY) - ps.startY);
+    if (ps.point && movedPx > 6) {
+      // Real drag → persist the pin's new position.
       const annotation = cpFindAnnotation(ps.id);
       if (annotation) {
         annotation.payload = { ...annotation.payload, x: ps.point.x, y: ps.point.y };
         await cpSaveAnnotation(annotation);
       }
+    } else {
+      // Tap (no meaningful drag) → open a comment's thread in a modal; other pins just select.
+      const annotation = cpFindAnnotation(ps.id);
+      if (annotation?.annotation_type === 'comment') cpA().openCommentId = ps.id;
     }
     render();
     return;
@@ -15030,7 +16058,7 @@ function cpNewAnnotation(doc, type, payload) {
     guest_name: cpIsGuest() ? (state.clientPortalPublic.guestName || 'Client') : '',
     author_profile_id: cpIsGuest() ? '' : (activeSession()?.profile?.id || ''),
     annotation_type: type,
-    payload: { ...payload, type, author: cpActorId() },
+    payload: { ...payload, type, author: cpActorId(), author_name: cpActorName(cpActorId()) },
   });
 }
 
@@ -15044,6 +16072,8 @@ async function cpCreateAnnotation(doc, type, payload) {
 
 // Persist a new/updated annotation through the right adapter.
 async function cpSaveAnnotation(annotation, isNew = false) {
+  // A brand-new markup invalidates the redo history (unless it's Redo re-inserting one).
+  if (isNew && cpA() && !cpA().suppressRedoClear) cpA().redoStack = [];
   if (cpIsGuest()) {
     const list = state.clientPortalPublic.annotations || [];
     state.clientPortalPublic.annotations = list.filter((item) => item.id !== annotation.id).concat([annotation]);
@@ -15111,6 +16141,37 @@ async function cpAddThreadReply(id, text) {
   if (!annotation || !text.trim()) return;
   const message = { id: crypto.randomUUID(), author: cpActorId(), author_name: cpActorName(cpActorId()), text: text.trim(), at: new Date().toISOString() };
   annotation.payload = { ...annotation.payload, thread: [...(annotation.payload.thread || []), message] };
+  await cpSaveAnnotation(annotation);
+  render();
+}
+
+// Edit a single message in a comment thread (the first message is the comment itself).
+async function cpEditThreadMessage(annotationId, messageId, text) {
+  const annotation = cpFindAnnotation(annotationId);
+  if (!annotation) return;
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return;
+  const thread = (annotation.payload?.thread || []).map((message) =>
+    message.id === messageId ? { ...message, text: trimmed, edited_at: new Date().toISOString() } : message);
+  annotation.payload = { ...annotation.payload, thread };
+  if (cpA()) cpA().editingMessage = null;
+  await cpSaveAnnotation(annotation);
+  render();
+}
+
+// Delete a single message from a thread. If a comment's last message is removed, the
+// whole comment pin goes with it (an empty comment has nothing to show).
+async function cpDeleteThreadMessage(annotationId, messageId) {
+  const annotation = cpFindAnnotation(annotationId);
+  if (!annotation) return;
+  const thread = (annotation.payload?.thread || []).filter((message) => message.id !== messageId);
+  if (!thread.length && annotation.annotation_type === 'comment') {
+    if (cpA()?.openCommentId === annotationId) cpA().openCommentId = null;
+    await cpDeleteAnnotation(annotationId);
+    render();
+    return;
+  }
+  annotation.payload = { ...annotation.payload, thread };
   await cpSaveAnnotation(annotation);
   render();
 }
@@ -15413,12 +16474,33 @@ async function cpSetDocStatus(status) {
   render();
 }
 
-function cpUndoLast() {
+async function cpUndoLast() {
   const doc = cpActiveDoc();
   if (!doc) return;
-  const annotations = cpAnnotationsFor(doc, cpA().page);
-  const last = annotations[annotations.length - 1];
-  if (last) cpDeleteAnnotation(last.id);
+  // Only undo your own markups — never remove the other party's work.
+  const mine = cpAnnotationsFor(doc, cpA().page)
+    .filter((annotation) => (annotation.payload?.author || (annotation.guest_name ? 'guest' : 'draft')) === cpActorId());
+  const last = mine[mine.length - 1];
+  if (!last) return;
+  // Snapshot the markup before removing it so Redo can restore it verbatim.
+  const snapshot = JSON.parse(JSON.stringify(last));
+  await cpDeleteAnnotation(last.id);
+  (cpA().redoStack = cpA().redoStack || []).push(snapshot);
+  render();
+}
+
+async function cpRedoLast() {
+  const stack = cpA()?.redoStack;
+  if (!stack || !stack.length) return;
+  const annotation = stack.pop();
+  // Re-insert the undone markup (same id) without clearing the rest of the redo stack.
+  cpA().suppressRedoClear = true;
+  try {
+    await cpSaveAnnotation(annotation, true);
+  } finally {
+    cpA().suppressRedoClear = false;
+  }
+  render();
 }
 
 async function exportClientPortalMarkedPdf() {

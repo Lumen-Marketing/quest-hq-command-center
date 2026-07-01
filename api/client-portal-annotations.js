@@ -102,6 +102,18 @@ export default async function handler(request, response) {
     const documentId = String(body.document_id || body.annotation.document_id || '').trim();
     if (!documentId) return json(response, 400, { error: 'document_id is required.' });
     const row = sanitize(body.annotation, documentId);
+    // If this markup already exists and belongs to staff or another guest, only the
+    // thread may change — never the original author, name, position, or type. This lets
+    // a client reply to / edit replies on a drafting-team comment without hijacking it.
+    const existingRes = await supabaseFetch(`/rest/v1/client_portal_annotations?id=eq.${encodeURIComponent(row.id)}&portal_id=eq.${encodeURIComponent(session.portal_id)}&select=guest_name,annotation_type,page_number,payload`);
+    const existing = existingRes.ok ? (await existingRes.json())[0] : null;
+    if (existing && String(existing.guest_name || '') !== guestName) {
+      const incomingThread = Array.isArray(row.payload?.thread) ? row.payload.thread : [];
+      row.guest_name = existing.guest_name;
+      row.annotation_type = existing.annotation_type;
+      row.page_number = existing.page_number;
+      row.payload = { ...(existing.payload && typeof existing.payload === 'object' ? existing.payload : {}), thread: incomingThread };
+    }
     const result = await supabaseFetch('/rest/v1/client_portal_annotations?on_conflict=id', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
