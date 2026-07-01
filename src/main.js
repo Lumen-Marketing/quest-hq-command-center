@@ -1,5 +1,6 @@
 import './styles.css';
 import opsCommandHeroUrl from './assets/quest-hq-ops-command-hero.png';
+import questLogoMarkUrl from './assets/quest-hq-logo-mark.png';
 
 const CONFIG = {
   buildId: 'Quest HQ Company Workspace v1',
@@ -2019,7 +2020,7 @@ function renderWorkspaceLoading(route) {
     <main class="login-shell">
       <section class="login-panel">
         <div class="login-brand">
-          <span class="side-mark">Q</span>
+          <span class="side-mark logo-image-mark">${questLogoImage()}</span>
           <span><strong>Quest HQ</strong><small>Secure workspace</small></span>
         </div>
         ${emptyState('Loading workspace data...')}
@@ -2059,7 +2060,7 @@ function renderNoCompanyAccess() {
     <main class="login-shell">
       <section class="login-panel">
         <div class="login-brand">
-          <span class="side-mark">Q</span>
+          <span class="side-mark logo-image-mark">${questLogoImage()}</span>
           <span><strong>Quest HQ</strong><small>Access pending</small></span>
         </div>
         <div>
@@ -2111,7 +2112,7 @@ function renderAuthLoading() {
     <main class="login-shell">
       <section class="login-panel">
         <div class="login-brand">
-          <span class="side-mark">Q</span>
+          <span class="side-mark logo-image-mark">${questLogoImage()}</span>
           <span><strong>Quest HQ</strong><small>Secure workspace</small></span>
         </div>
         ${emptyState('Checking secure session...')}
@@ -2697,6 +2698,10 @@ function svgIcon(id, className = 'symbol-icon') {
   return `<svg class="${h(className)}" aria-hidden="true" focusable="false"><use href="#${h(id)}"></use></svg>`;
 }
 
+function questLogoImage(alt = 'Quest HQ') {
+  return `<img class="quest-logo-image" src="${h(questLogoMarkUrl)}" alt="${h(alt)}" />`;
+}
+
 function moduleSymbol(section = state.route?.section || 'jobs') {
   return MODULE_REGISTRY.find((module) => module.id === section)?.symbol || 'q-empty';
 }
@@ -2771,8 +2776,8 @@ function shellTemplate(route, workspace) {
       ${renderSvgSprite()}
       <header class="topbar">
         <div class="topbar-left">
-          <a class="logo" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Quest HQ workspace">
-            ${svgIcon('q-logo', 'brand-symbol')}
+          <a class="logo logo-image-mark" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Quest HQ workspace">
+            ${questLogoImage()}
           </a>
           <div>
             <div class="brand-name">Quest HQ</div>
@@ -2988,8 +2993,8 @@ function renderDeck(route) {
   const modulesById = new Map(MODULE_REGISTRY.map((module) => [module.id, module]));
   return `
     <div class="deck-brand">
-      <a class="logo" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Quest HQ dashboard">
-        ${svgIcon('q-logo', 'brand-symbol')}
+      <a class="logo logo-image-mark" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Quest HQ dashboard">
+        ${questLogoImage()}
       </a>
       <span><strong>Quest HQ</strong><small>Command Center</small></span>
       <button class="deck-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}" aria-expanded="${state.sidebarCollapsed ? 'false' : 'true'}">
@@ -6640,7 +6645,7 @@ function renderClientPortalPublicPage(route) {
     return `
       <main class="client-portal-public">
         <section class="client-portal-gate ${portal?.loading ? 'loading' : ''}">
-          <div class="client-portal-brand"><span class="side-mark">Q</span><span><strong>Quest Client Portal</strong><small>Plan review</small></span></div>
+          <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Client Portal')}</span><span><strong>Quest Client Portal</strong><small>Plan review</small></span></div>
           <h1>${portal?.error ? 'Could not open portal' : 'Opening plan portal'}</h1>
           <p>${portal?.error ? 'This public portal link could not be opened. Ask the workspace team to confirm the link is active.' : 'Checking this link. If no password was set, the plan review will open automatically.'}</p>
           ${portal?.error ? `<div class="form-message error">${h(portal.error)}</div>` : '<div class="client-portal-status">Opening...</div>'}
@@ -6683,7 +6688,7 @@ function renderClientPortalPublicPage(route) {
   return `
     <main class="client-portal-public open">
       <header class="client-portal-public-top">
-        <div class="client-portal-brand"><span class="side-mark">Q</span><span><strong>${h(portal.portal?.title || 'Client Portal')}</strong><small>${h(portal.portal?.client_name || portal.guestName || 'Plan review')}</small></span></div>
+        <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Client Portal')}</span><span><strong>${h(portal.portal?.title || 'Client Portal')}</strong><small>${h(portal.portal?.client_name || portal.guestName || 'Plan review')}</small></span></div>
         <div class="client-portal-public-actions">
           <span class="client-portal-save-state" data-client-portal-save-state data-mode="${h(saveMode)}">${h(saveLabel)}</span>
           <button class="btn" type="button" data-action="client-portal-save-annotations"><i class="ti ti-device-floppy"></i>Save</button>
@@ -8458,7 +8463,7 @@ function renderClientPortalPasswordGate(token, portal) {
   return `
     <main class="client-portal-public">
       <section class="client-portal-gate">
-        <div class="client-portal-brand"><span class="side-mark">Q</span><span><strong>Quest Client Portal</strong><small>Plan review</small></span></div>
+        <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Client Portal')}</span><span><strong>Quest Client Portal</strong><small>Plan review</small></span></div>
         <h1>Portal password</h1>
         <p>This portal is password protected. Enter the password shared with you to review the plans.</p>
         <form data-client-portal-open-form autocomplete="off">
@@ -9543,7 +9548,7 @@ function renderLandingPage(forceAuthModal = false) {
     <main class="landing-shell">
       <nav class="landing-nav">
         <a class="login-brand landing-brand" href="${appHref('/')}" data-router>
-          <span class="side-mark">Q</span>
+          <span class="side-mark logo-image-mark">${questLogoImage()}</span>
           <span><strong>Quest HQ</strong><small>Command Center</small></span>
         </a>
         <div class="landing-nav-links" aria-label="Landing navigation">

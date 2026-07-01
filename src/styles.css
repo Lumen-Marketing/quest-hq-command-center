@@ -164,6 +164,22 @@ button { cursor: pointer; }
   box-shadow: inset 0 -5px rgba(240, 178, 59, .16);
 }
 
+.logo-image-mark {
+  overflow: hidden;
+  border: 1px solid rgba(240, 178, 59, .5);
+  background: #0b0a08;
+  color: transparent;
+  box-shadow: 0 8px 18px rgba(17, 12, 6, .16), inset 0 0 0 1px rgba(255, 255, 255, .04);
+}
+
+.quest-logo-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
 .brand-symbol {
   width: 25px;
   height: 25px;
@@ -17560,4 +17576,27 @@ button {
   font-weight: 800;
   letter-spacing: .22em;
   text-shadow: 0 1px 0 rgba(0, 0, 0, .45);
+}
+
+/* Generated Quest HQ logo mark. Keep it image-led across shell, landing, login, and portal surfaces. */
+.logo.logo-image-mark,
+.side-mark.logo-image-mark,
+.landing-nav .landing-brand .side-mark.logo-image-mark,
+.topbar-left .logo.logo-image-mark,
+.deck-brand .logo.logo-image-mark,
+.client-portal-brand .side-mark.logo-image-mark {
+  overflow: hidden;
+  border-color: rgba(240, 178, 59, .55);
+  background: #0b0a08;
+  color: transparent;
+  padding: 0;
+  box-shadow: 0 8px 18px rgba(17, 12, 6, .16), inset 0 0 0 1px rgba(255, 255, 255, .04);
+}
+
+.logo-image-mark .quest-logo-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
