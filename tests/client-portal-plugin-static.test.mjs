@@ -55,7 +55,7 @@ test('staff portal workspace supports create, upload, copy, revoke, and annotati
 
 test('public portal viewer exposes plan markup tools and persistent annotations', () => {
   assert.match(source, /fetchClientPortalDocumentFile/);
-  assert.match(source, /pdfjsLib\.getDocument\(\{ data: pdfData \}\)/);
+  assert.match(source, /showClientPortalPdfFallback\(fallbackUrl\);/);
   assert.match(source, /client-portal-tool/);
   assert.match(source, /id: 'pen', label: 'Pen'/);
   assert.match(source, /id: 'measure', label: 'Measure'/);

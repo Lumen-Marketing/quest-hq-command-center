@@ -14706,6 +14706,7 @@ async function mountClientPortalViewer() {
   if (!doc) return;
   if (!portal.annotations?.length) await loadClientPortalAnnotations();
   await renderClientPortalDocumentCanvas(doc, base, overlay);
+  if (document.querySelector('.client-portal-canvas-wrap.fallback-visible')) return;
   attachClientPortalDrawing(base, overlay, doc);
 }
 
@@ -14735,71 +14736,18 @@ function showClientPortalPdfFallback(url, message = 'The plan preview did not re
   wrap.classList.add('fallback-visible');
 }
 
-function looksBlankClientPortalCanvas(base) {
-  try {
-    const ctx = base.getContext('2d', { willReadFrequently: true });
-    const width = base.width;
-    const height = base.height;
-    if (!ctx || !width || !height) return true;
-    let darkPixels = 0;
-    const sampleSize = 12;
-    const columns = 12;
-    const rows = 12;
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < columns; col += 1) {
-        const x = Math.max(0, Math.min(width - sampleSize, Math.floor((width * (col + 0.5)) / columns)));
-        const y = Math.max(0, Math.min(height - sampleSize, Math.floor((height * (row + 0.5)) / rows)));
-        const data = ctx.getImageData(x, y, Math.min(sampleSize, width - x), Math.min(sampleSize, height - y)).data;
-        for (let i = 0; i < data.length; i += 4) {
-          const alpha = data[i + 3];
-          const dark = Math.min(data[i], data[i + 1], data[i + 2]) < 235;
-          if (alpha > 16 && dark) darkPixels += 1;
-          if (darkPixels > 24) return false;
-        }
-      }
-    }
-    return true;
-  } catch (_error) {
-    return true;
-  }
-}
-
 async function renderClientPortalDocumentCanvas(doc, base, overlay) {
   const ctx = base.getContext('2d');
   setClientPortalPdfFallback('', '');
   const file = await fetchClientPortalDocumentFile(doc.id);
   if (doc.mime_type?.includes('pdf') || /\.pdf($|\?)/i.test(doc.file_name || '')) {
     const fallbackUrl = await ensureClientPortalDocumentUrl().catch(() => '') || URL.createObjectURL(file);
-    try {
-      await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      const pdfData = new Uint8Array(await file.arrayBuffer());
-      const pdf = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
-      state.clientPortalPageCount = Math.max(1, pdf.numPages || 1);
-      state.clientPortalPage = Math.max(1, Math.min(state.clientPortalPageCount, Number(state.clientPortalPage || 1)));
-      const page = await pdf.getPage(state.clientPortalPage);
-      const stageWidth = document.querySelector('.client-portal-stage')?.clientWidth || 900;
-      const baseViewport = page.getViewport({ scale: 1 });
-      const fitScale = Math.min(1.35, Math.max(0.45, (stageWidth - 48) / baseViewport.width));
-      const scale = state.clientPortalFitMode ? fitScale : Math.max(0.35, Math.min(3, Number(state.clientPortalZoom || fitScale)));
-      state.clientPortalZoom = scale;
-      const zoomLabel = document.querySelector('.client-portal-zoom-label');
-      if (zoomLabel) zoomLabel.textContent = `${Math.round(scale * 100)}%`;
-      const viewport = page.getViewport({ scale });
-      base.width = viewport.width;
-      base.height = viewport.height;
-      overlay.width = viewport.width;
-      overlay.height = viewport.height;
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      if (looksBlankClientPortalCanvas(base)) {
-        showClientPortalPdfFallback(fallbackUrl);
-        return;
-      }
-    } catch (error) {
-      console.warn('PDF canvas render failed; showing portal fallback', error);
-      showClientPortalPdfFallback(fallbackUrl);
-      return;
-    }
+    showClientPortalPdfFallback(fallbackUrl);
+    state.clientPortalPage = 1;
+    state.clientPortalPageCount = 1;
+    const zoomLabel = document.querySelector('.client-portal-zoom-label');
+    if (zoomLabel) zoomLabel.textContent = 'PDF';
+    return;
   } else {
     const objectUrl = URL.createObjectURL(file);
     try {
