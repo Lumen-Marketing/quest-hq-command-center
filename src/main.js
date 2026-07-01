@@ -1,5 +1,5 @@
 import './styles.css';
-import cockpitArtUrl from './assets/quest-secure-workspace-cockpit-tight.png';
+import opsCommandHeroUrl from './assets/quest-hq-ops-command-hero.png';
 
 const CONFIG = {
   buildId: 'Quest HQ Company Workspace v1',
@@ -9526,15 +9526,15 @@ function renderLandingPage(forceAuthModal = false) {
       <nav class="landing-nav">
         <a class="login-brand landing-brand" href="${appHref('/')}" data-router>
           <span class="side-mark">Q</span>
-          <span><strong>Quest HQ</strong><small>Workplace Center</small></span>
+          <span><strong>Quest HQ</strong><small>Command Center</small></span>
         </a>
         <div class="landing-nav-links" aria-label="Landing navigation">
           ${[
-            ['Why Quest HQ', 'why-quest-hq'],
-            ['Security', 'security'],
-            ['Platform', 'platform'],
-            ['Access', 'platform'],
-            ['Company', 'why-quest-hq'],
+            ['Quest CRM', 'platform'],
+            ['Files', 'platform'],
+            ['Forms', 'platform'],
+            ['Client Portal', 'security'],
+            ['Access', 'why-quest-hq'],
           ].map(([item, target]) => `<a href="#${h(target)}">${h(item)}</a>`).join('')}
         </div>
         <div class="landing-nav-actions">
@@ -9545,32 +9545,39 @@ function renderLandingPage(forceAuthModal = false) {
       <section class="landing-hero">
         <div class="landing-hero-bg" aria-hidden="true"></div>
         <div class="landing-hero-copy">
-          <div class="landing-pill"><i class="ti ti-shield-lock"></i>Secure. Controlled. Built for business.</div>
-          <h1>Run your entire company workspace from one secure command center</h1>
-          <p>Quest HQ brings your teams, projects, files, messages, finance, and customer follow-ups into one place with invite-only access and clear role controls.</p>
+          <div class="landing-pill"><i class="ti ti-shield-lock"></i>Private operations cockpit</div>
+          <h1>Quest HQ Command Center for the whole roofing operation</h1>
+          <p>Run Quest CRM, job files, forms, client portals, tasks, estimates, proposals, and team work from one controlled workspace built for daily production use.</p>
           <div class="landing-hero-actions">
-            <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="register">Start business workspace<i class="ti ti-arrow-right"></i></button>
+            <button class="btn btn-primary" type="button" data-action="open-auth-modal" data-auth-mode="register">Start workspace<i class="ti ti-arrow-right"></i></button>
             <button class="btn landing-ghost-btn" type="button" data-action="open-auth-modal" data-auth-mode="invite"><i class="ti ti-users-plus"></i>Join by invite</button>
           </div>
-          <div class="landing-security-line"><i class="ti ti-circle-check"></i>Invite-only workspaces <i class="ti ti-circle-check"></i>Role-based access <i class="ti ti-circle-check"></i>Audit every action</div>
+          <div class="landing-security-line"><i class="ti ti-circle-check"></i>Quest CRM ready <i class="ti ti-circle-check"></i>Files & forms wired <i class="ti ti-circle-check"></i>Client portals secured</div>
         </div>
-        <div class="landing-console" aria-label="Quest HQ workspace command center preview">
-          <img class="landing-console-art" src="${h(cockpitArtUrl)}" alt="Generated Quest HQ secure workspace cockpit preview showing company access, tasks, messages, finance, files, users, reports, and audit controls." />
+        <div class="landing-console image-mode" aria-label="Quest HQ workspace command center preview">
+          <img class="landing-console-art" src="${h(opsCommandHeroUrl)}" alt="Quest HQ operations command center preview showing CRM, files, forms, client portal plan review, finance, and job workflows." />
+          <div class="landing-symbol-strip" aria-hidden="true">
+            ${[
+              ['ti-users', 'Quest CRM'],
+              ['ti-folder', 'Files'],
+              ['ti-forms', 'Forms'],
+              ['ti-world-upload', 'Client Portal'],
+              ['ti-briefcase', 'Jobs'],
+            ].map(([icon, label]) => `<span><i class="ti ${h(icon)}"></i>${h(label)}</span>`).join('')}
+          </div>
           <aside class="landing-console-rail" aria-hidden="true">
             <span class="console-mark">Q</span>
             ${[
               ['ti-layout-dashboard', 'Dashboard', true],
               ['ti-list-check', 'Tasks'],
-              ['ti-calendar', 'Calendar'],
-              ['ti-users', 'CRM'],
+              ['ti-users', 'Quest CRM'],
+              ['ti-briefcase', 'Jobs'],
+              ['ti-world-upload', 'Client Portal'],
               ['ti-lock-dollar', 'Finance'],
               ['ti-folder', 'Files'],
               ['ti-forms', 'Forms'],
               ['ti-message-circle', 'Messages', false, '3'],
-              ['ti-user-cog', 'Users'],
-              ['ti-report-analytics', 'Reports'],
-              ['ti-settings', 'Settings'],
-              ['ti-clipboard-check', 'Audit'],
+              ['ti-user-cog', 'Team'],
             ].map(([icon, label, active, badge]) => `
               <span class="${active ? 'active' : ''}"><i class="ti ${h(icon)}"></i><em>${h(label)}</em>${badge ? `<b>${h(badge)}</b>` : ''}</span>
             `).join('')}
@@ -9578,20 +9585,20 @@ function renderLandingPage(forceAuthModal = false) {
           <div class="landing-console-main">
             <div class="landing-console-top">
               <div>
-                <strong>Good morning, Quest Admin</strong>
-                <span>Here is what is happening across your workspace.</span>
+                <strong>Good morning, Quest team</strong>
+                <span>Live work across sales, production, files, and client review.</span>
               </div>
-              <button type="button"><i class="ti ti-building"></i>Acme Global<i class="ti ti-chevron-down"></i></button>
-              <span class="landing-avatar">QA</span>
+              <button type="button"><i class="ti ti-building"></i>Lumen Marketing<i class="ti ti-chevron-down"></i></button>
+              <span class="landing-avatar">QH</span>
             </div>
             <div class="landing-console-stats">
               ${[
-                ['ti-shield-check', 'Company access', 'Pending approval', 'Approval required before modules open.', 'View status'],
-                ['ti-user-check', 'Active users', '24', '18 active · 6 pending', 'Manage users'],
-                ['ti-circle-check', 'Open tasks', '42', '12 overdue', 'View tasks'],
-                ['ti-message-circle', 'Unread messages', '8', 'Across team chats', 'Open inbox'],
+                ['ti-users', 'Quest CRM', 'Live', 'Contacts, quotes, and jobs in one flow.', 'Open CRM'],
+                ['ti-folder', 'Files', 'Ready', 'Company drive and job documents.', 'Open files'],
+                ['ti-forms', 'Forms', 'Ready', 'Internal forms and responses.', 'Open forms'],
+                ['ti-world-upload', 'Client portals', 'Secure', 'Plan review links and comments.', 'Open portals'],
               ].map(([icon, label, value, body, action], index) => `
-                <article class="${index === 0 ? 'warning' : ''}">
+                <article class="${index === 3 ? 'warning' : ''}">
                   <i class="ti ${h(icon)}"></i>
                   <span>${h(label)}</span>
                   <strong>${h(value)}</strong>
@@ -9604,11 +9611,11 @@ function renderLandingPage(forceAuthModal = false) {
               <article class="landing-activity">
                 <strong>Recent activity</strong>
                 ${[
-                  ['ti-file-dollar', 'Invoice #INV-1024 was created', 'Finance', '10m ago'],
-                  ['ti-forms', 'Shan submitted a form response', 'Forms', '25m ago'],
-                  ['ti-alert-circle', 'Leak inspection task was assigned', 'Tasks', '1h ago'],
-                  ['ti-file-upload', 'Permit packet.pdf was uploaded', 'Files', '2h ago'],
-                  ['ti-user-plus', 'Abraham joined the workspace', 'Users', '3h ago'],
+                  ['ti-users', 'New lead moved into Quest CRM', 'Quest CRM', '10m ago'],
+                  ['ti-file-upload', 'Floor plan uploaded to client portal', 'Files', '25m ago'],
+                  ['ti-forms', 'Client intake response received', 'Forms', '1h ago'],
+                  ['ti-clipboard-check', 'Proposal prepared for review', 'Jobs', '2h ago'],
+                  ['ti-message-circle', 'Production note added', 'Team', '3h ago'],
                 ].map(([icon, title, label, time]) => `
                   <div><i class="ti ${h(icon)}"></i><span><b>${h(title)}</b><small>${h(label)}</small></span><em>${h(time)}</em></div>
                 `).join('')}
@@ -9616,11 +9623,11 @@ function renderLandingPage(forceAuthModal = false) {
               <article class="landing-health">
                 <strong>Workspace health</strong>
                 ${[
-                  ['ti-circle-check', 'Company created', 'ok'],
-                  ['ti-clock', 'Pending approval', 'wait'],
-                  ['ti-link', 'Billing connected', 'muted'],
-                  ['ti-shield-lock', 'Payment active', 'muted'],
-                  ['ti-users', 'Full access enabled', 'muted'],
+                  ['ti-circle-check', 'Quest CRM online', 'ok'],
+                  ['ti-circle-check', 'Files storage online', 'ok'],
+                  ['ti-circle-check', 'Forms connected', 'ok'],
+                  ['ti-shield-lock', 'Portal links hashed', 'muted'],
+                  ['ti-users', 'Roles enforced', 'muted'],
                 ].map(([icon, label, tone]) => `<div class="${h(tone)}"><i class="ti ${h(icon)}"></i>${h(label)}</div>`).join('')}
                 <span class="landing-watermark">Q</span>
               </article>
@@ -9628,11 +9635,11 @@ function renderLandingPage(forceAuthModal = false) {
             <div class="landing-quick-access">
               ${[
                 ['ti-folder', 'Files'],
-                ['ti-users', 'CRM'],
+                ['ti-users', 'Quest CRM'],
                 ['ti-currency-dollar', 'Finance'],
-                ['ti-calendar', 'Calendar'],
-                ['ti-user-cog', 'Users'],
-                ['ti-clipboard-check', 'Audit'],
+                ['ti-forms', 'Forms'],
+                ['ti-world-upload', 'Portal'],
+                ['ti-briefcase', 'Jobs'],
               ].map(([icon, label]) => `<span><i class="ti ${h(icon)}"></i>${h(label)}</span>`).join('')}
             </div>
           </div>
@@ -9641,33 +9648,33 @@ function renderLandingPage(forceAuthModal = false) {
       <section class="landing-command-panels" id="security">
         <article class="landing-trust-card">
           <div>
-            <div class="eyebrow">Trusted & secure</div>
-            <p>Every workspace is isolated. You stay in control of who can see what.</p>
+            <div class="eyebrow">Private by default</div>
+            <p>Company data stays scoped to the workspace with role controls and storage policies behind the scenes.</p>
           </div>
           <div class="landing-trust-grid">
             ${[
-              ['ti-shield-check', 'SOC 2', 'Type II path'],
-              ['ti-lock', 'AES-256', 'Encryption'],
+              ['ti-shield-check', 'RLS', 'Data boundaries'],
+              ['ti-lock', 'Private', 'Storage buckets'],
               ['ti-database-lock', 'RLS', 'Row-level security'],
-              ['ti-clock-check', '99.9%', 'Uptime target'],
-              ['ti-clipboard-list', 'Audit', 'Every action'],
-              ['ti-key', 'Private', 'By default'],
+              ['ti-world-upload', 'Portal', 'Hashed links'],
+              ['ti-clipboard-list', 'Audit', 'Action trail'],
+              ['ti-key', 'Roles', 'Permission gates'],
             ].map(([icon, title, body]) => `<span><i class="ti ${h(icon)}"></i><strong>${h(title)}</strong><small>${h(body)}</small></span>`).join('')}
           </div>
-          <small class="landing-boundary"><i class="ti ti-lock"></i>Your data never leaves your company boundary.</small>
+          <small class="landing-boundary"><i class="ti ti-lock"></i>Built for internal launch with real Supabase-backed workflows.</small>
         </article>
         <article class="landing-access-card" id="platform">
           <div class="landing-access-head">
-            <div class="eyebrow">Access model</div>
-            <p>The right access for the right people. No shortcuts. No guesswork.</p>
+            <div class="eyebrow">Launch modules</div>
+            <p>Keep the first shift focused on the modules that are actually wired and useful today.</p>
           </div>
           <div class="landing-role-flow">
             ${[
-              ['ti-crown', 'Owner', 'Full access · Billing · Invites · Transfer ownership'],
-              ['ti-user-shield', 'Admin', 'Manage users · Roles · Module access'],
-              ['ti-user', 'Worker', 'Assigned access · Own tasks · Team collaboration'],
-              ['ti-shield-x', 'Finance denied', 'Finance hidden · No billing · No payments'],
-              ['ti-hourglass', 'Pending approval', 'Workspace created · Modules locked'],
+              ['ti-users', 'Quest CRM', 'Contacts, quotes, jobs, and quick actions'],
+              ['ti-folder', 'Files', 'Storage upload, signed download, and job records'],
+              ['ti-forms', 'Forms', 'Shared form builder and response capture'],
+              ['ti-world-upload', 'Client Portal', 'Plan links, PDF viewing, comments, and review'],
+              ['ti-user-shield', 'Roles', 'Owner, admin, worker, and module permissions'],
             ].map(([icon, title, body], index) => `
               <div class="${index === 4 ? 'pending' : ''}">
                 <i class="ti ${h(icon)}"></i>
@@ -9680,18 +9687,18 @@ function renderLandingPage(forceAuthModal = false) {
       </section>
       <section class="landing-proof" id="why-quest-hq">
         ${[
-          ['ti-cube', 'One workspace', 'Everything connected'],
-          ['ti-user-shield', 'Role-based access', 'Built-in guardrails'],
-          ['ti-calendar-user', 'Company control', 'You decide who sees what'],
-          ['ti-shield-check', 'Audit & accountability', 'Every action tracked'],
-          ['ti-chart-arrows', 'Scale with confidence', 'Built for growth'],
+          ['ti-users', 'Quest CRM', 'Live sales flow'],
+          ['ti-folder', 'Files', 'Storage verified'],
+          ['ti-forms', 'Forms', 'Supabase wired'],
+          ['ti-world-upload', 'Client portals', 'Plan review'],
+          ['ti-shield-check', 'Access control', 'Permissioned'],
         ].map(([icon, title, body]) => `
           <article>
             <i class="ti ${h(icon)}"></i>
             <span><strong>${h(title)}</strong><small>${h(body)}</small></span>
           </article>
         `).join('')}
-        <blockquote>"Quest HQ lets our team work from one clean place without giving everyone access to everything."</blockquote>
+        <blockquote>"Quest HQ keeps the team inside one clean operating system instead of a pile of disconnected tools."</blockquote>
       </section>
       ${showAuthModal ? renderAuthModal(returnUrl, inviteToken, authEnabled) : ''}
       ${renderToast()}

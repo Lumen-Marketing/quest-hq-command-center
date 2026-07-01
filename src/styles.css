@@ -17369,7 +17369,145 @@ button {
     flex-direction: column;
   }
 
-  .message-modal-foot .foot-note {
+.message-modal-foot .foot-note {
     margin-right: 0;
+  }
+}
+
+/* Front-page refresh: current Quest HQ launch modules and generated command-center art. */
+.landing-shell {
+  background: #f6f0e6;
+}
+
+.landing-nav {
+  border-bottom-color: rgba(240, 178, 59, .34);
+  background: rgba(13, 12, 10, .96);
+}
+
+.landing-hero {
+  grid-template-columns: minmax(380px, .78fr) minmax(560px, 1.22fr);
+  min-height: calc(100vh - 76px);
+  padding-bottom: 34px;
+}
+
+.landing-hero-copy h1 {
+  max-width: 620px;
+  font-family: var(--font-sans);
+  font-size: clamp(44px, 4.8vw, 68px);
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+.landing-hero-copy p {
+  max-width: 560px;
+  color: #4f463a;
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.landing-console.image-mode {
+  position: relative;
+  display: block;
+  min-height: clamp(430px, 45vw, 640px);
+  border: 1px solid rgba(32, 26, 18, .16);
+  border-radius: 14px;
+  background: #17130f;
+  box-shadow: 0 30px 90px rgba(36, 28, 17, .24);
+  overflow: hidden;
+}
+
+.landing-console.image-mode::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.landing-console.image-mode > :not(.landing-console-art, .landing-symbol-strip) {
+  display: none;
+}
+
+.landing-console.image-mode > .landing-console-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  object-fit: cover;
+  border-radius: 0;
+  filter: saturate(1.04) contrast(1.02);
+}
+
+.landing-console.image-mode > .landing-symbol-strip {
+  display: grid;
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.landing-symbol-strip span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border: 1px solid rgba(255, 250, 240, .18);
+  border-radius: 8px;
+  background: rgba(13, 12, 10, .78);
+  color: #fffaf0;
+  font-size: 12px;
+  font-weight: 900;
+  backdrop-filter: blur(10px);
+}
+
+.landing-symbol-strip i {
+  color: #f36b21;
+  font-size: 18px;
+}
+
+.landing-trust-card,
+.landing-access-card {
+  background: rgba(255, 253, 247, .86);
+}
+
+.landing-role-flow div {
+  min-height: 132px;
+}
+
+@media (max-width: 1180px) {
+  .landing-hero {
+    min-height: auto;
+  }
+
+  .landing-console.image-mode {
+    min-height: 520px;
+  }
+}
+
+@media (max-width: 820px) {
+  .landing-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-console.image-mode {
+    min-height: 360px;
+  }
+
+  .landing-symbol-strip {
+    grid-template-columns: 1fr;
+    left: 12px;
+    right: auto;
+    width: min(260px, calc(100% - 24px));
+  }
+
+  .landing-symbol-strip span {
+    justify-content: flex-start;
+    padding-inline: 12px;
   }
 }
