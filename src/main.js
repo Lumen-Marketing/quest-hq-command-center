@@ -3928,8 +3928,7 @@ function dashboardRepOptions(companyId) {
 }
 
 function dashboardRepDisplayName(user) {
-  const name = String(user?.name || user?.email || '').trim();
-  return isInternalDashboardRepName(name) ? '' : name;
+  return personOwnerDisplayName(user?.name || user?.email);
 }
 
 function isInternalDashboardRepName(name) {
@@ -3937,12 +3936,23 @@ function isInternalDashboardRepName(name) {
   return key === 'basic-quest-user' || key === 'demo-readonly-user' || /^profile-[a-f0-9-]+$/.test(key);
 }
 
+function personOwnerDisplayName(name, companyId = activeCompanyId()) {
+  const clean = String(name || '').trim();
+  if (!clean || isInternalDashboardRepName(clean)) return '';
+  if (dashboardOwnerKey(clean) === dashboardOwnerKey(companyName(companyId))) return '';
+  return clean;
+}
+
+function personOwnerLabel(name, companyId = activeCompanyId()) {
+  return personOwnerDisplayName(name, companyId) || 'Unassigned';
+}
+
 function dashboardOwnerKey(value) {
   return String(value || 'unassigned').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unassigned';
 }
 
 function dashboardOwnerName(item) {
-  return item?.owner_name || item?.rep_name || item?.sales_rep || memberName(item?.assignee_id) || memberName(item?.assigned_profile_id) || 'Unassigned';
+  return personOwnerLabel(item?.owner_name || item?.rep_name || item?.sales_rep || memberName(item?.assignee_id) || memberName(item?.assigned_profile_id));
 }
 
 function dashboardRangeWindow(range) {
@@ -4410,7 +4420,7 @@ function renderContactTable(companyId) {
             <span>${contact.title ? h(contact.title) : '<span class="muted-dash">-</span>'}</span>
             <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">-</span>'}</span>
             <span>${contact.email ? h(contact.email) : '<span class="muted-dash">-</span>'}</span>
-            <span>${contact.owner_name ? h(contact.owner_name) : '<span class="muted-dash">-</span>'}</span>
+            <span>${personOwnerDisplayName(contact.owner_name, companyId) ? h(personOwnerDisplayName(contact.owner_name, companyId)) : '<span class="muted-dash">-</span>'}</span>
             <span class="row-menu"><i class="ti ti-dots"></i></span>
           </button>
         `).join('') || emptyState('No contacts in this view yet.')}
@@ -16178,13 +16188,24 @@ function contactFilterPayType(contact) {
   return String(contact.pay_type || '').trim();
 }
 
+function cleanContactFilterOption(value, kind, companyId = activeCompanyId()) {
+  const clean = String(value || '').trim();
+  if (!clean) return '';
+  if (kind === 'owner_name') return personOwnerDisplayName(clean, companyId);
+  if (kind === 'job_type' || kind === 'pay_type') {
+    if (clean.length < 2) return '';
+    if (!/[a-z]/i.test(clean)) return '';
+  }
+  return clean;
+}
+
 function contactFilterOptions(companyId) {
   const contacts = companyContacts(companyId);
   return {
     temperature: compactUnique([...TEMPERATURES, ...contacts.map((contact) => contact.temperature)]),
-    job_type: compactUnique([...CONTACT_JOB_TYPE_OPTIONS, ...contacts.map(contactFilterJobType)]),
-    owner_name: compactUnique(contacts.map((contact) => contact.owner_name)).sort((a, b) => a.localeCompare(b)),
-    pay_type: compactUnique([...CONTACT_PAY_TYPE_OPTIONS, ...contacts.map(contactFilterPayType)]),
+    job_type: compactUnique([...CONTACT_JOB_TYPE_OPTIONS, ...contacts.map(contactFilterJobType).map((value) => cleanContactFilterOption(value, 'job_type', companyId))]),
+    owner_name: compactUnique(contacts.map((contact) => cleanContactFilterOption(contact.owner_name, 'owner_name', companyId))).sort((a, b) => a.localeCompare(b)),
+    pay_type: compactUnique([...CONTACT_PAY_TYPE_OPTIONS, ...contacts.map(contactFilterPayType).map((value) => cleanContactFilterOption(value, 'pay_type', companyId))]),
   };
 }
 
@@ -17849,8 +17870,8 @@ function contactAddressOptions(companyId) {
 function contactOwnerOptions(companyId, selectedOwner = '') {
   const owners = companyAccessUsers(companyId)
     .filter((user) => user.status !== 'disabled')
-    .map((user) => user.name || user.email);
-  return [['', 'Unassigned']].concat(compactUnique([selectedOwner, ...owners]).map((name) => [name, name]));
+    .map((user) => personOwnerDisplayName(user.name || user.email, companyId));
+  return [['', 'Unassigned']].concat(compactUnique([personOwnerDisplayName(selectedOwner, companyId), ...owners]).map((name) => [name, name]));
 }
 
 function profileName(id) {

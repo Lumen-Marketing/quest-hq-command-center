@@ -60,6 +60,18 @@ test('dashboard nav badge helpers do not read underwriter stages before initiali
 test('dashboard rep filter hides internal placeholder account ids', () => {
   assert.match(source, /function dashboardRepDisplayName\s*\(/);
   assert.match(source, /function isInternalDashboardRepName\s*\(/);
+  assert.match(source, /function personOwnerDisplayName\s*\(/);
   assert.match(source, /key === 'basic-quest-user'/);
   assert.match(source, /\.map\(\(user\) => dashboardRepDisplayName\(user\)\)/);
+  assert.match(source, /dashboardOwnerKey\(clean\) === dashboardOwnerKey\(companyName\(companyId\)\)/);
+  assert.match(source, /return personOwnerLabel\(item\?\.owner_name/);
+});
+
+test('contact filters hide junk values and company names from launch filter menus', () => {
+  assert.match(source, /function cleanContactFilterOption\s*\(/);
+  assert.match(source, /if \(kind === 'owner_name'\) return personOwnerDisplayName\(clean, companyId\);/);
+  assert.match(source, /if \(clean\.length < 2\) return '';/);
+  assert.match(source, /if \(!\/\[a-z\]\/i\.test\(clean\)\) return '';/);
+  assert.match(source, /contacts\.map\(contactFilterJobType\)\.map\(\(value\) => cleanContactFilterOption\(value, 'job_type', companyId\)\)/);
+  assert.match(source, /contacts\.map\(\(contact\) => cleanContactFilterOption\(contact\.owner_name, 'owner_name', companyId\)\)/);
 });
