@@ -209,6 +209,9 @@ test('record quick create tiles open real workflows instead of placeholder toast
   assert.match(source, /data-proposal-builder-form/);
   assert.match(source, /id="proposal-builder-form"/);
   assert.match(source, /form="proposal-builder-form"/);
+  assert.match(source, /renderAddressLookupField\('Client address', 'client_address', draft\.client\.address/);
+  assert.match(source, /const quoteAddress = job\?\.site_address \|\| account\?\.address \|\| contact\?\.location \|\| ''/);
+  assert.match(source, /fieldRow\('Location', quoteAddress \? `\$\{h\(quoteAddress\)\}<a class="sf-field-action"/);
   assert.match(source, /await persistDeal\(\{ \.\.\.deal, value: total/);
   assert.match(source, /if \(kind === 'Task' \|\| kind === 'New Task'\) return openDockedActivityComposer\('contact', contactId, 'New Task'\)/);
   assert.match(source, /if \(kind === 'Estimate' \|\| kind === 'New Estimate'\) return openEstimateBuilder\('contact', contactId\)/);

@@ -40,12 +40,18 @@ test('contact locations support google maps autocomplete and pin links', () => {
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function googleMapsPlaceSearchUrl\(address\)/);
   assert.match(source, /function renderAddressLookupField\(label, name, value = '', options = \[\]/);
+  assert.match(source, /function beginAddressInlineEdit\(span, value, companyId, commitValue\)/);
   assert.match(source, /data-address-map-link/);
   assert.match(source, /data-address-lookup-input/);
   assert.match(editorSource, /renderAddressLookupField\('Location', 'location', edit\.location/);
   assert.match(jobEditorSource, /renderAddressLookupField\('Site address', 'site_address', edit\.site_address/);
   assert.match(accountEditorSource, /renderAddressLookupField\('Address', 'address', edit\.address/);
+  assert.match(source, /beginAddressInlineEdit\(span, contact\.location, contact\.company_id/);
+  assert.match(source, /beginAddressInlineEdit\(span, job\.site_address, job\.company_id/);
+  assert.match(source, /renderAddressLookupField\('Client address', 'client_address', draft\.client\.address/);
+  assert.match(source, /const quoteAddress = job\?\.site_address \|\| account\?\.address \|\| contact\?\.location \|\| ''/);
   assert.match(styles, /\.address-pin-button/);
+  assert.match(styles, /\.sf-inline-address-editor/);
   assert.match(recordSource, /googleMapsPlaceSearchUrl\(contact\.location\)/);
   assert.match(recordSource, /Exact pin/);
 });

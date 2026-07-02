@@ -24,7 +24,8 @@ test('job record pencil controls trigger inline editing for editable fields', ()
   assert.match(source, /const fieldRow = \(label, content, editKey = ''\) =>/);
   assert.match(source, /data-job-edit="\$\{h\(editKey\)\}"/);
   assert.match(source, /aria-label="Edit \$\{h\(label\)\}"/);
-  assert.match(source, /fieldRow\('Site Address', ed\('site_address'\), 'site_address'\)/);
+  assert.match(source, /fieldRow\('Site Address', `\$\{ed\('site_address'\)\}\$\{job\.site_address \? `<a class="sf-field-action"/);
+  assert.match(source, /beginAddressInlineEdit\(span, job\.site_address, job\.company_id/);
   assert.match(source, /fieldRow\('Owner', ed\('owner_name'/);
   assert.match(source, /fieldRow\('Stage', `<span>\$\{h\(job.stage\)\}<\/span>`, 'stage'\)/);
   assert.doesNotMatch(source, /<i class="ti ti-pencil sf-pencil"><\/i>/);

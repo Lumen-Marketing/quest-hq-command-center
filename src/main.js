@@ -4842,6 +4842,10 @@ function beginContactInlineEdit(span) {
     beginContactInlineEdit(rowValueTarget);
     return;
   }
+  if (key === 'location') {
+    beginAddressInlineEdit(span, contact.location, contact.company_id, (value) => patchContactField(contactId, key, value));
+    return;
+  }
   const options = contactInlineOptions(contact, key);
   const input = document.createElement(options.length ? 'select' : 'input');
   input.className = 'sf-edit-input';
@@ -4860,6 +4864,50 @@ function beginContactInlineEdit(span) {
   const commit = () => { if (done) return; done = true; patchContactField(contactId, key, input.value); };
   input.addEventListener('blur', commit);
   input.addEventListener('change', commit);
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+    if (ev.key === 'Escape') { done = true; render(); }
+  });
+}
+
+function beginAddressInlineEdit(span, value, companyId, commitValue) {
+  const wrapper = document.createElement('span');
+  wrapper.className = 'sf-inline-address-editor';
+  const input = document.createElement('input');
+  const listId = `inline-address-${crypto.randomUUID()}`;
+  input.className = 'sf-edit-input';
+  input.type = 'text';
+  input.value = value || '';
+  input.setAttribute('list', listId);
+  input.setAttribute('autocomplete', 'street-address');
+  input.setAttribute('data-google-address-input', '');
+  input.setAttribute('data-address-lookup-input', '');
+  const link = document.createElement('a');
+  link.className = 'address-pin-button';
+  link.setAttribute('data-address-map-link', '');
+  link.target = '_blank';
+  link.rel = 'noreferrer';
+  link.title = 'Open Google Maps pin';
+  link.innerHTML = '<i class="ti ti-map-pin"></i><span>Map pin</span>';
+  const datalist = document.createElement('datalist');
+  datalist.id = listId;
+  contactAddressOptions(companyId).forEach((address) => {
+    const option = document.createElement('option');
+    option.value = address;
+    datalist.appendChild(option);
+  });
+  wrapper.append(input, link, datalist);
+  span.replaceWith(wrapper);
+  bindGoogleAddressInputs();
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    commitValue(input.value);
+  };
+  input.addEventListener('blur', commit);
   input.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
     if (ev.key === 'Escape') { done = true; render(); }
@@ -5167,6 +5215,10 @@ function beginJobInlineEdit(span) {
   const jobId = span.dataset.jobId;
   const job = jobById(jobId);
   if (!job) return;
+  if (key === 'site_address') {
+    beginAddressInlineEdit(span, job.site_address, job.company_id, (value) => patchJobField(jobId, key, value));
+    return;
+  }
   const input = document.createElement('input');
   input.className = 'sf-edit-input';
   input.value = (key === 'estimate_total' || key === 'invoice_total') ? (job[key] || 0) : (job[key] || '');
@@ -5704,7 +5756,7 @@ function renderJobRecord(companyId, job) {
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>Job Details</div><div class="sf-card-body">
             ${fieldRow('Client', ed('client_name', { blue: true }), 'client_name')}
             ${fieldRow('Contact', ed('contact_name', { blue: true }), 'contact_name')}
-            ${fieldRow('Site Address', ed('site_address'), 'site_address')}
+            ${fieldRow('Site Address', `${ed('site_address')}${job.site_address ? `<a class="sf-field-action" href="${h(googleMapsPlaceSearchUrl(job.site_address))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map pin</a>` : ''}`, 'site_address')}
             ${fieldRow('Job Type', `<span class="sf-pill">${h(job.job_type || '-')}</span>`, 'job_type')}
             ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
             ${fieldRow('Priority', `<span class="sf-pill">${h(job.priority || 'Medium')}</span>`, 'priority')}
@@ -8600,6 +8652,7 @@ function renderDealDetail(companyId, deal) {
   const account = accountById(deal.account_id);
   const contact = contactById(deal.primary_contact_id);
   const job = deal.job_id ? jobById(deal.job_id) : null;
+  const quoteAddress = job?.site_address || account?.address || contact?.location || '';
   const stages = pipelineStages('deals', companyId);
   const currentStage = resolvePipelineStage('deals', deal.stage, companyId);
   const ci = stages.findIndex((s) => s.name === currentStage);
@@ -8667,7 +8720,7 @@ function renderDealDetail(companyId, deal) {
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
             ${fieldRow('Phone', contact?.phone ? h(contact.phone) : '<span class="muted-dash">—</span>')}
             ${fieldRow('Email', contact?.email ? `<span class="sf-edit blue">${h(contact.email)}</span>` : '<span class="muted-dash">—</span>')}
-            ${fieldRow('Location', account?.address ? h(account.address) : '<span class="muted-dash">—</span>')}
+            ${fieldRow('Location', quoteAddress ? `${h(quoteAddress)}<a class="sf-field-action" href="${h(googleMapsPlaceSearchUrl(quoteAddress))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map pin</a>` : '<span class="muted-dash">—</span>')}
             ${fieldRow('Job Type', `<span class="sf-pill">${h(deal.source || 'Re-roof')}</span>`)}
             ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
             ${fieldRow('Account', account ? `<button class="link-button" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(account.name)}</button>` : '<span class="muted-dash">—</span>')}
@@ -11169,6 +11222,7 @@ function renderProposalBuilderModal(companyId) {
   const ctx = currentProposalContext();
   if (!ctx || ctx.company_id !== companyId) return renderModalShell('Job Center', 'Proposal', emptyState('Choose a contact, quote, or job before creating a proposal.'));
   const draft = proposalDraftForContext(ctx);
+  const addressOptions = contactAddressOptions(companyId);
   const saved = proposalsFor(ctx.type, ctx.id);
   const activeProposal = ctx.proposalId ? proposalById(ctx.proposalId) : null;
   const savedPanel = saved.length ? `
@@ -11196,7 +11250,7 @@ function renderProposalBuilderModal(companyId) {
         <label><span>Client name</span><input data-proposal-field name="client_name" value="${h(draft.client.name)}" /></label>
         <label><span>Client email</span><input data-proposal-field name="client_email" value="${h(draft.client.email)}" /></label>
         <label><span>Client phone</span><input data-proposal-field name="client_phone" value="${h(draft.client.phone)}" /></label>
-        <label><span>Client address</span><input data-proposal-field name="client_address" value="${h(draft.client.address)}" /></label>
+        ${renderAddressLookupField('Client address', 'client_address', draft.client.address, addressOptions, '', 'proposal-client-address-options', 'data-proposal-field')}
         <label><span>Job title</span><input data-proposal-field name="job_title" value="${h(draft.jobTitle)}" /></label>
         <label><span>Total</span><input data-proposal-field name="total" type="number" step="0.01" value="${h(String(draft.total || ''))}" /></label>
         <div class="proposal-two"><label><span>Monthly</span><input data-proposal-field name="monthly" value="${h(draft.monthly)}" /></label><label><span>Deposit %</span><input data-proposal-field name="deposit" type="number" step="1" value="${h(String(draft.deposit))}" /></label></div>
@@ -18704,7 +18758,7 @@ function googleMapsPlaceSearchUrl(address) {
   return mapsSearchUrl(address);
 }
 
-function renderAddressLookupField(label, name, value = '', options = [], className = 'span-2', listId = '') {
+function renderAddressLookupField(label, name, value = '', options = [], className = 'span-2', listId = '', inputAttrs = '') {
   const clean = String(value || '').trim();
   const resolvedListId = listId || `${String(name).replace(/[^a-z0-9_-]/gi, '-')}-address-options`;
   const classes = [className, 'address-lookup-field'].filter(Boolean).join(' ');
@@ -18712,7 +18766,7 @@ function renderAddressLookupField(label, name, value = '', options = [], classNa
     <label class="${h(classes)}">
       <span>${h(label)}</span>
       <div class="address-lookup-control">
-        <input name="${h(name)}" type="text" value="${h(value)}" autocomplete="street-address" list="${h(resolvedListId)}" data-google-address-input data-address-lookup-input placeholder="Start typing the site address" />
+        <input name="${h(name)}" type="text" value="${h(value)}" autocomplete="street-address" list="${h(resolvedListId)}" data-google-address-input data-address-lookup-input placeholder="Start typing the site address" ${inputAttrs} />
         <a class="address-pin-button ${clean ? '' : 'is-disabled'}" href="${clean ? h(googleMapsPlaceSearchUrl(clean)) : '#'}" data-address-map-link target="_blank" rel="noreferrer" aria-disabled="${clean ? 'false' : 'true'}" title="Open Google Maps pin">
           <i class="ti ti-map-pin"></i><span>Map pin</span>
         </a>
