@@ -2078,7 +2078,25 @@ function render() {
   if (state.route.params.get('account') === 'profile') state.modal = 'profile';
   document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Quest HQ`;
   app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route));
+  queueMicrotask(bindTimePickerInputs);
   queueMicrotask(bindGoogleAddressInputs);
+}
+
+function openNativeTimePicker(input) {
+  if (typeof input.showPicker !== 'function') return;
+  try {
+    input.showPicker();
+  } catch (error) {
+    // Browsers can reject showPicker outside trusted user activation.
+  }
+}
+
+function bindTimePickerInputs() {
+  document.querySelectorAll('input[type="time"]:not([data-time-picker-bound])').forEach((input) => {
+    input.dataset.timePickerBound = 'true';
+    input.addEventListener('pointerdown', () => openNativeTimePicker(input));
+    input.addEventListener('focus', () => openNativeTimePicker(input));
+  });
 }
 
 function bindGoogleAddressInputs() {

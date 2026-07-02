@@ -73,6 +73,16 @@ test('contact tasks preserve details time and can be opened for editing', () => 
   assert.match(styles, /\.sf-task-details/);
 });
 
+test('native time inputs open their picker when the field is clicked or focused', () => {
+  assert.match(source, /queueMicrotask\(bindTimePickerInputs\)/);
+  assert.match(source, /function openNativeTimePicker\(input\)/);
+  assert.match(source, /function bindTimePickerInputs\(\)/);
+  assert.match(source, /input\[type="time"\]:not\(\[data-time-picker-bound\]\)/);
+  assert.match(source, /input\.showPicker\(\)/);
+  assert.match(source, /addEventListener\('pointerdown'/);
+  assert.match(source, /addEventListener\('focus'/);
+});
+
 test('supabase contact migration persists crm intake fields', () => {
   assert.match(migration, /alter table public\.contacts/);
   assert.match(migration, /add column if not exists pay_type/);
