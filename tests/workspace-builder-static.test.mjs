@@ -23,8 +23,11 @@ test('workspace builder is integrated as a current app plugin, not an old standa
 test('workspace builder supports working no-code workspace app flows inside a company', () => {
   assert.match(source, /const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';/);
   assert.match(source, /function workspaceBuilderStorageKey\(companyId\)/);
+  assert.match(source, /function normalizeWorkspaceBuilderDoc\(value, fallbackCompanyId = activeCompanyId\(\)\)/);
   assert.match(source, /function loadWorkspaceBuilderState\(companyId\)/);
   assert.match(source, /function saveWorkspaceBuilderState\(companyId, builderState\)/);
+  assert.match(source, /client\.from\('workspace_builder_state'\)\.upsert/);
+  assert.match(source, /client\.from\('workspace_builder_state'\)\.select\('\*'\)/);
   assert.match(source, /function seedWorkspaceBuilderState\(companyId\)/);
   assert.match(source, /function renderBuilderWorkspaceList\(companyId, builderState\)/);
   assert.match(source, /function renderBuilderWorkspaceDetail\(route, companyId, builderState\)/);
@@ -33,18 +36,24 @@ test('workspace builder supports working no-code workspace app flows inside a co
   assert.match(source, /data-action="builder-create-app"/);
   assert.match(source, /data-action="builder-create-field"/);
   assert.match(source, /data-action="builder-create-item"/);
+  assert.match(source, /data-action="builder-create-automation"/);
+  assert.match(source, /data-action="builder-save-app-settings"/);
   assert.match(source, /data-builder-workspace-name/);
   assert.match(source, /data-builder-app-name/);
   assert.match(source, /data-builder-field-label/);
   assert.match(source, /data-builder-item-field/);
+  assert.match(source, /function renderBuilderAppSettingsTab\(companyId, workspace, app\)/);
+  assert.match(source, /function renderBuilderItemInput\(field, canManage\)/);
   assert.match(source, /function handleWorkspaceBuilderAction\(node\)/);
   assert.match(source, /function revealPluginModulesInNavigation\(plugin\)/);
   assert.match(source, /if \(nextStatus === 'installed'\) revealPluginModulesInNavigation\(plugin\);/);
   assert.match(source, /localStorage\.setItem\(SIDEBAR_COLLAPSED_KEY, 'false'\)/);
   assert.match(source, /workspaceBuilderCreateWorkspace\(companyId, name, description\)/);
   assert.match(source, /workspaceBuilderCreateApp\(companyId, workspaceId, name, type\)/);
-  assert.match(source, /workspaceBuilderCreateField\(companyId, workspaceId, appId, label, fieldType\)/);
+  assert.match(source, /workspaceBuilderCreateField\(companyId, workspaceId, appId, label, fieldType, options = ''\)/);
   assert.match(source, /workspaceBuilderCreateItem\(companyId, workspaceId, appId, values\)/);
+  assert.match(source, /function workspaceBuilderCreateAutomation\(companyId, workspaceId, appId, fields\)/);
+  assert.match(source, /function workspaceBuilderSaveAppSettings\(companyId, workspaceId, appId, fields\)/);
 });
 
 test('workspace builder UI is scoped and styled for dense command-center use', () => {
@@ -54,6 +63,8 @@ test('workspace builder UI is scoped and styled for dense command-center use', (
   assert.match(styles, /\.builder-app-table\s*\{/);
   assert.match(styles, /\.builder-inline-form\s*\{/);
   assert.match(styles, /\.builder-field-pill\s*\{/);
+  assert.match(styles, /\.builder-command-row\s*\{/);
+  assert.match(styles, /\.builder-automation-form\s*\{/);
 });
 
 test('workspace builder plugin is allowed by Supabase plugin RPCs', () => {

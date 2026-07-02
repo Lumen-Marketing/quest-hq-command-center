@@ -51,6 +51,10 @@ test('staff portal workspace supports create, upload, copy, revoke, and annotati
   assert.match(source, /copy-client-portal-link/);
   assert.match(source, /regenerate-client-portal-link/);
   assert.match(source, /revoke-client-portal/);
+  assert.match(source, /renderClientPortalStaffReviewPage\(portal, state\.route\.params\.get\('document_id'\) \|\| ''\)/);
+  assert.match(source, /function renderClientPortalStaffReviewPage\(portal, documentId = ''\)/);
+  assert.match(source, /annotate: '1', fs: '1'/);
+  assert.match(source, /Review plan/);
   assert.match(source, /clientPortalAnnotationsForPortal/);
 });
 
@@ -77,8 +81,12 @@ test('public portal viewer exposes plan markup tools and persistent annotations'
   assert.match(source, /data-action="client-portal-export"/);
   assert.match(source, /loadClientPortalAnnotations/);
   assert.match(source, /saveClientPortalAnnotations/);
+  assert.match(source, /portal\.staff/);
+  assert.match(source, /client\.storage\.from\(doc\.bucket_id\)\.createSignedUrl/);
+  assert.match(source, /client\.from\('client_portal_annotations'\)\.upsert/);
   assert.match(styles, /\.client-portal-public/);
   assert.match(styles, /\.client-portal-stage/);
+  assert.match(styles, /\.client-portal-public\.staff-review/);
 });
 
 test('client portal tool selection does not remount the PDF viewer', () => {

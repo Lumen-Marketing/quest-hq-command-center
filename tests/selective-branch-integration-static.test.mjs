@@ -66,6 +66,13 @@ test('dark theme, drag-drop pipeline, activity detail modal, and map picker are 
   assert.match(source, /state\.modal = 'activity-detail'/);
   assert.match(source, /function renderLocationPickerModal\(\)/);
   assert.match(source, /data-action="open-location-picker"/);
+  assert.match(source, /data-action="location-picker-search"/);
+  assert.match(source, /data-action="location-picker-current"/);
+  assert.match(source, /function searchLocationPickerAddress\(\)/);
+  assert.match(source, /function useCurrentLocationForPicker\(\)/);
+  assert.match(source, /navigator\.geolocation\.getCurrentPosition/);
+  assert.match(source, /function reverseGeocodeLocationPicker\(lat, lng\)/);
+  assert.match(source, /Manual pin/);
   assert.match(source, /data-location-picker-form/);
   assert.match(source, /function mountLocationPicker\(\)/);
   assert.match(source, /leaflet/);

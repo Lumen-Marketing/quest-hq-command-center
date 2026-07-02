@@ -1838,6 +1838,8 @@ const state = {
   platformCompanyMembers: [],
   subscriptions: [],
   workspaceReviews: [],
+  workspaceBuilderDocs: {},
+  workspaceBuilderLive: {},
   roles: [],
   rolePermissions: [],
   roleAssignments: [],
@@ -2149,6 +2151,15 @@ function render() {
   reconcileCompany(state.route);
   reconcileSelection(state.route);
   if (state.route.params.get('account') === 'profile') state.modal = 'profile';
+  if (state.route.name === 'company' && state.route.section === 'client-portals' && state.route.params.get('annotate') === '1' && state.route.params.get('fs') === '1') {
+    const portal = clientPortalById(state.route.params.get('portal_id') || '');
+    if (portal) {
+      document.title = `Plan review | ${companyName(activeCompanyId())} | Quest HQ`;
+      app.innerHTML = renderClientPortalStaffReviewPage(portal, state.route.params.get('document_id') || '');
+      queueMicrotask(() => mountClientPortalViewer().catch((error) => console.warn('Client portal staff viewer failed', error)));
+      return;
+    }
+  }
   document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Quest HQ`;
   app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route));
   queueMicrotask(restoreSidebarScroll);
@@ -2519,6 +2530,7 @@ async function loadSupabaseData() {
     pricebookVendorsResult,
     pricebookMaterialsResult,
     pricebookPricesResult,
+    workspaceBuilderResult,
     platformAdminResult,
   ] = await Promise.all([
     client.from('companies').select('*').order('name', { ascending: true }),
@@ -2565,6 +2577,7 @@ async function loadSupabaseData() {
     safeSupabaseQuery(client.from('pricebook_vendors').select('*').order('name', { ascending: true })),
     safeSupabaseQuery(client.from('pricebook_materials').select('*').order('name', { ascending: true })),
     safeSupabaseQuery(client.from('pricebook_vendor_prices').select('*').order('updated_at', { ascending: false })),
+    safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
     safeSupabaseQuery(client.rpc('is_platform_admin')),
   ]);
 
@@ -2669,6 +2682,15 @@ async function loadSupabaseData() {
   if (!pricebookVendorsResult.error) state.pricebookVendors = (pricebookVendorsResult.data || []).map(normalizePricebookVendor);
   if (!pricebookMaterialsResult.error) state.pricebookMaterials = (pricebookMaterialsResult.data || []).map(normalizePricebookMaterial);
   if (!pricebookPricesResult.error) state.pricebookPrices = (pricebookPricesResult.data || []).map(normalizePricebookPrice);
+  if (!workspaceBuilderResult.error) {
+    state.workspaceBuilderDocs = {};
+    state.workspaceBuilderLive = {};
+    (workspaceBuilderResult.data || []).forEach((row) => {
+      const companyId = canonicalCompanyId(row.company_id);
+      state.workspaceBuilderDocs[companyId] = normalizeWorkspaceBuilderDoc(row.doc);
+      state.workspaceBuilderLive[companyId] = true;
+    });
+  }
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
 
   if (state.platformAdmin) {
@@ -2842,6 +2864,8 @@ function resetLiveWorkspaceData() {
   state.platformCompanyMembers = [];
   state.subscriptions = [];
   state.workspaceReviews = [];
+  state.workspaceBuilderDocs = {};
+  state.workspaceBuilderLive = {};
   state.roles = [];
   state.rolePermissions = [];
   state.roleAssignments = [];
@@ -5663,18 +5687,22 @@ function beginAddressInlineEdit(span, value, companyId, commitValue) {
   const input = document.createElement('input');
   input.className = 'sf-edit-input';
   input.type = 'text';
+  input.name = 'location';
   input.value = value || '';
   input.setAttribute('autocomplete', 'street-address');
   input.setAttribute('data-google-address-input', '');
   input.setAttribute('data-address-lookup-input', '');
   input.dataset.addressOptions = JSON.stringify(contactAddressOptions(companyId));
-  const link = document.createElement('a');
+  const link = document.createElement('button');
   link.className = 'address-pin-button';
+  link.type = 'button';
   link.setAttribute('data-address-map-link', '');
-  link.target = '_blank';
-  link.rel = 'noreferrer';
-  link.title = 'Open Google Maps pin';
+  link.setAttribute('data-action', 'open-location-picker');
+  link.dataset.locationKind = 'input';
+  link.dataset.locationField = 'location';
+  link.title = 'Set exact map pin';
   link.innerHTML = '<i class="ti ti-map-pin"></i><span>Map pin</span>';
+  link.addEventListener('pointerdown', (event) => event.preventDefault());
   wrapper.append(input, link);
   span.replaceWith(wrapper);
   bindGoogleAddressInputs();
@@ -7275,6 +7303,45 @@ function workspaceBuilderStorageKey(companyId) {
   return `${WORKSPACE_BUILDER_STORAGE_PREFIX}:${canonicalCompanyId(companyId)}`;
 }
 
+function normalizeWorkspaceBuilderDoc(value, fallbackCompanyId = activeCompanyId()) {
+  const seeded = seedWorkspaceBuilderState(fallbackCompanyId);
+  const rawWorkspaces = Array.isArray(value?.workspaces) ? value.workspaces : seeded.workspaces;
+  return {
+    version: 1,
+    workspaces: rawWorkspaces.map((workspace) => ({
+      id: workspace.id || crypto.randomUUID(),
+      name: workspace.name || 'Untitled workspace',
+      description: workspace.description || '',
+      color: workspace.color || '#e66a1f',
+      apps: Array.isArray(workspace.apps) ? workspace.apps.map((app) => ({
+        id: app.id || crypto.randomUUID(),
+        name: app.name || 'Untitled app',
+        type: app.type || 'Custom',
+        description: app.description || '',
+        color: app.color || workspace.color || '#e66a1f',
+        fields: Array.isArray(app.fields) ? app.fields.map((field) => ({
+          id: field.id || crypto.randomUUID(),
+          label: field.label || 'Untitled field',
+          type: BUILDER_FIELD_TYPES.some((item) => item.id === field.type) ? field.type : 'text',
+          options: Array.isArray(field.options) ? field.options : String(field.options || '').split(',').map((item) => item.trim()).filter(Boolean),
+        })) : [],
+        items: Array.isArray(app.items) ? app.items.map((item) => ({
+          id: item.id || crypto.randomUUID(),
+          values: item.values && typeof item.values === 'object' ? item.values : {},
+          created_at: item.created_at || new Date().toISOString(),
+        })) : [],
+        automations: Array.isArray(app.automations) ? app.automations.map((automation) => ({
+          id: automation.id || crypto.randomUUID(),
+          name: automation.name || 'Untitled automation',
+          trigger: automation.trigger || 'When item changes',
+          action: automation.action || 'Notify owner',
+          enabled: automation.enabled !== false,
+        })) : [],
+      })) : [],
+    })),
+  };
+}
+
 function seedWorkspaceBuilderState(companyId) {
   const workspaceId = `builder-workspace-${canonicalCompanyId(companyId)}-sales`;
   const appId = `builder-app-${canonicalCompanyId(companyId)}-contacts`;
@@ -7311,31 +7378,34 @@ function seedWorkspaceBuilderState(companyId) {
 }
 
 function loadWorkspaceBuilderState(companyId) {
+  const key = canonicalCompanyId(companyId);
+  if (state.workspaceBuilderDocs[key]) return state.workspaceBuilderDocs[key];
   const seeded = seedWorkspaceBuilderState(companyId);
   const value = readJson(workspaceBuilderStorageKey(companyId), seeded);
-  if (!value || !Array.isArray(value.workspaces)) return seeded;
-  return {
-    version: 1,
-    workspaces: value.workspaces.map((workspace) => ({
-      id: workspace.id || crypto.randomUUID(),
-      name: workspace.name || 'Untitled workspace',
-      description: workspace.description || '',
-      color: workspace.color || '#e66a1f',
-      apps: Array.isArray(workspace.apps) ? workspace.apps.map((app) => ({
-        id: app.id || crypto.randomUUID(),
-        name: app.name || 'Untitled app',
-        type: app.type || 'Custom',
-        description: app.description || '',
-        fields: Array.isArray(app.fields) ? app.fields : [],
-        items: Array.isArray(app.items) ? app.items : [],
-        automations: Array.isArray(app.automations) ? app.automations : [],
-      })) : [],
-    })),
-  };
+  const normalized = normalizeWorkspaceBuilderDoc(value, companyId);
+  state.workspaceBuilderDocs[key] = normalized;
+  return normalized;
 }
 
-function saveWorkspaceBuilderState(companyId, builderState) {
-  writeJson(workspaceBuilderStorageKey(companyId), builderState);
+async function saveWorkspaceBuilderState(companyId, builderState) {
+  const key = canonicalCompanyId(companyId);
+  const normalized = normalizeWorkspaceBuilderDoc(builderState, companyId);
+  state.workspaceBuilderDocs[key] = normalized;
+  writeJson(workspaceBuilderStorageKey(companyId), normalized);
+  const client = createSupabaseClient();
+  if (!isLiveSupabaseSession() || !client) return;
+  const { error } = await client.from('workspace_builder_state').upsert({
+    company_id: key,
+    doc: normalized,
+    updated_by: activeSession()?.profile?.id || null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'company_id' });
+  if (error) {
+    state.workspaceBuilderLive[key] = false;
+    showToast(error.message || 'Workspace builder saved locally only.', 'local', 'Workspaces');
+    return;
+  }
+  state.workspaceBuilderLive[key] = true;
 }
 
 function workspaceBuilderFind(builderState, workspaceId, appId = '') {
@@ -7355,8 +7425,10 @@ function renderWorkspaceBuilderPage(route, companyId) {
 
 function renderBuilderWorkspaceList(companyId, builderState) {
   const canManage = can('workspaces.manage', companyId);
+  const live = state.workspaceBuilderLive?.[canonicalCompanyId(companyId)];
   return `
     ${workspaceHeader('Workspaces', 'Build no-code dashboards, custom apps, fields, items, reports, and automation notes inside this company.', `
+      <span class="sync-pill ${live ? 'live' : 'local'}"><i class="ti ti-database"></i>${live ? 'Live workspace doc' : 'Local workspace draft'}</span>
       <a class="btn" href="${appHref(companyPath('settings', { tab: 'plugins' }, companyId))}" data-router><i class="ti ti-plug"></i>Plugin settings</a>
     `)}
     <section class="builder-shell">
@@ -7393,11 +7465,17 @@ function renderBuilderWorkspaceDetail(route, companyId, builderState) {
   const { workspace } = workspaceBuilderFind(builderState, route.params.get('workspace_id') || '');
   if (!workspace) return renderBuilderWorkspaceList(companyId, builderState);
   const canManage = can('workspaces.manage', companyId);
+  const itemCount = workspace.apps.reduce((sum, app) => sum + app.items.length, 0);
   return `
     ${workspaceHeader(workspace.name, workspace.description || 'Custom app workspace.', `
       <a class="btn" href="${appHref(companyPath('workspaces', {}, companyId))}" data-router><i class="ti ti-arrow-left"></i>All workspaces</a>
     `)}
     <section class="builder-shell">
+      <div class="builder-command-row">
+        ${metricCard('Apps', workspace.apps.length, 'Custom tools', 'ti-apps')}
+        ${metricCard('Items', itemCount, 'Records tracked', 'ti-database')}
+        ${metricCard('Automations', workspace.apps.reduce((sum, app) => sum + app.automations.length, 0), 'Rules configured', 'ti-bolt')}
+      </div>
       <div class="builder-grid">
         ${workspace.apps.map((app) => renderBuilderAppCard(companyId, workspace, app)).join('')}
         <article class="builder-card builder-create-card">
@@ -7429,7 +7507,7 @@ function renderBuilderAppCard(companyId, workspace, app) {
 function renderBuilderAppDetail(route, companyId, builderState) {
   const { workspace, app } = workspaceBuilderFind(builderState, route.params.get('workspace_id') || '', route.params.get('app_id') || '');
   if (!workspace || !app) return renderBuilderWorkspaceList(companyId, builderState);
-  const tab = ['items', 'fields', 'reports', 'automations'].includes(route.params.get('tab')) ? route.params.get('tab') : 'items';
+  const tab = ['items', 'fields', 'reports', 'automations', 'settings'].includes(route.params.get('tab')) ? route.params.get('tab') : 'items';
   const tabPath = (nextTab) => companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: nextTab }, companyId);
   return `
     ${workspaceHeader(app.name, `${workspace.name} / ${app.type || 'Custom app'}`, `
@@ -7437,12 +7515,13 @@ function renderBuilderAppDetail(route, companyId, builderState) {
     `)}
     <section class="builder-shell">
       <nav class="tabbar">
-        ${['items', 'fields', 'reports', 'automations'].map((item) => `<a class="${tab === item ? 'active' : ''}" href="${appHref(tabPath(item))}" data-router>${h(titleCase(item))}</a>`).join('')}
+        ${['items', 'fields', 'reports', 'automations', 'settings'].map((item) => `<a class="${tab === item ? 'active' : ''}" href="${appHref(tabPath(item))}" data-router>${h(titleCase(item))}</a>`).join('')}
       </nav>
       ${tab === 'items' ? renderBuilderItemsTab(companyId, workspace, app) : ''}
       ${tab === 'fields' ? renderBuilderFieldsTab(companyId, workspace, app) : ''}
       ${tab === 'reports' ? renderBuilderReportsTab(app) : ''}
-      ${tab === 'automations' ? renderBuilderAutomationsTab(app) : ''}
+      ${tab === 'automations' ? renderBuilderAutomationsTab(companyId, workspace, app) : ''}
+      ${tab === 'settings' ? renderBuilderAppSettingsTab(companyId, workspace, app) : ''}
     </section>
   `;
 }
@@ -7462,6 +7541,7 @@ function renderBuilderFieldsTab(companyId, workspace, app) {
         <form class="builder-inline-form" data-builder-field-form data-workspace-id="${h(workspace.id)}" data-app-id="${h(app.id)}">
           <input data-builder-field-label name="label" placeholder="Field label" ${canManage ? '' : 'disabled'} />
           <select name="field_type" ${canManage ? '' : 'disabled'}>${BUILDER_FIELD_TYPES.map((fieldType) => `<option value="${h(fieldType.id)}">${h(fieldType.label)}</option>`).join('')}</select>
+          <input name="options" placeholder="Options for Status/Category, comma separated" ${canManage ? '' : 'disabled'} />
           <button class="btn btn-primary" type="button" data-action="builder-create-field" ${canManage ? '' : 'disabled'}><i class="ti ti-plus"></i>Add field</button>
         </form>
       </article>
@@ -7481,7 +7561,7 @@ function renderBuilderItemsTab(companyId, workspace, app) {
         <div class="section-head"><div><h2>Add item</h2><p>Uses the fields configured for this app.</p></div></div>
         ${app.fields.length ? `
           <form class="builder-inline-form" data-builder-item-form data-workspace-id="${h(workspace.id)}" data-app-id="${h(app.id)}">
-            ${app.fields.map((field) => `<label><span>${h(field.label)}</span><input data-builder-item-field name="${h(field.id)}" placeholder="${h(builderFieldLabel(field.type))}" ${canManage ? '' : 'disabled'} /></label>`).join('')}
+            ${app.fields.map((field) => renderBuilderItemInput(field, canManage)).join('')}
             <button class="btn btn-primary" type="button" data-action="builder-create-item" ${canManage ? '' : 'disabled'}><i class="ti ti-plus"></i>Add item</button>
           </form>
         ` : emptyState('Add fields before creating items.')}
@@ -7502,6 +7582,22 @@ function renderBuilderItemsTable(app) {
   `;
 }
 
+function renderBuilderItemInput(field, canManage) {
+  const disabled = canManage ? '' : 'disabled';
+  const base = `data-builder-item-field name="${h(field.id)}" ${disabled}`;
+  const label = `<span>${h(field.label)}</span>`;
+  if (['status', 'category'].includes(field.type) && field.options?.length) {
+    return `<label>${label}<select ${base}>${field.options.map((option) => `<option value="${h(option)}">${h(option)}</option>`).join('')}</select></label>`;
+  }
+  if (field.type === 'textarea') return `<label>${label}<textarea ${base} rows="3" placeholder="${h(builderFieldLabel(field.type))}"></textarea></label>`;
+  if (field.type === 'date') return `<label>${label}<input ${base} type="date" /></label>`;
+  if (field.type === 'number' || field.type === 'money') return `<label>${label}<input ${base} type="number" step="${field.type === 'money' ? '0.01' : '1'}" placeholder="${h(builderFieldLabel(field.type))}" /></label>`;
+  if (field.type === 'email') return `<label>${label}<input ${base} type="email" placeholder="name@example.com" /></label>`;
+  if (field.type === 'phone') return `<label>${label}<input ${base} type="tel" placeholder="Phone number" /></label>`;
+  if (field.type === 'checkbox') return `<label class="builder-check-field">${label}<input ${base} type="checkbox" value="true" /></label>`;
+  return `<label>${label}<input ${base} placeholder="${h(builderFieldLabel(field.type))}" /></label>`;
+}
+
 function renderBuilderReportsTab(app) {
   const moneyFields = app.fields.filter((field) => field.type === 'money');
   const total = moneyFields[0] ? app.items.reduce((sum, item) => sum + number(item.values?.[moneyFields[0].id]), 0) : 0;
@@ -7515,26 +7611,52 @@ function renderBuilderReportsTab(app) {
   `;
 }
 
-function renderBuilderAutomationsTab(app) {
+function renderBuilderAutomationsTab(companyId, workspace, app) {
+  const canManage = can('workspaces.manage', companyId);
   return `
-    <article class="panel">
+    <article class="panel builder-automation-panel">
       <div class="section-head"><div><h2>Automations</h2><p>Rules attached to this custom app.</p></div></div>
+      <form class="builder-inline-form builder-automation-form" data-builder-automation-form data-workspace-id="${h(workspace.id)}" data-app-id="${h(app.id)}">
+        <input name="name" placeholder="Automation name" ${canManage ? '' : 'disabled'} />
+        <input name="trigger" placeholder="Trigger, e.g. Status changes to Won" ${canManage ? '' : 'disabled'} />
+        <input name="action" placeholder="Action, e.g. Notify owner" ${canManage ? '' : 'disabled'} />
+        <button class="btn btn-primary" type="button" data-action="builder-create-automation" ${canManage ? '' : 'disabled'}><i class="ti ti-bolt"></i>Add automation</button>
+      </form>
       <div class="builder-automation-list">
-        ${app.automations.map((automation) => `<div><i class="ti ti-bolt"></i><strong>${h(automation.name)}</strong><span>${automation.enabled ? 'Enabled' : 'Disabled'}</span></div>`).join('') || emptyState('No automations yet.')}
+        ${app.automations.map((automation) => `<div><i class="ti ti-bolt"></i><strong>${h(automation.name)}</strong><span>${h(automation.trigger || 'When item changes')} -> ${h(automation.action || 'Notify owner')} / ${automation.enabled ? 'Enabled' : 'Disabled'}</span></div>`).join('') || emptyState('No automations yet.')}
       </div>
+    </article>
+  `;
+}
+
+function renderBuilderAppSettingsTab(companyId, workspace, app) {
+  const canManage = can('workspaces.manage', companyId);
+  return `
+    <article class="panel builder-settings-panel">
+      <div class="section-head"><div><h2>App settings</h2><p>Rename the app and tune the description your team sees.</p></div></div>
+      <form class="builder-inline-form" data-builder-app-settings-form data-workspace-id="${h(workspace.id)}" data-app-id="${h(app.id)}">
+        <label><span>App name</span><input name="name" value="${h(app.name)}" ${canManage ? '' : 'disabled'} /></label>
+        <label><span>Type</span><input name="type" value="${h(app.type || '')}" ${canManage ? '' : 'disabled'} /></label>
+        <label><span>Description</span><textarea name="description" rows="4" ${canManage ? '' : 'disabled'}>${h(app.description || '')}</textarea></label>
+        <button class="btn btn-primary" type="button" data-action="builder-save-app-settings" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save settings</button>
+      </form>
     </article>
   `;
 }
 
 const BUILDER_FIELD_TYPES = [
   { id: 'text', label: 'Text', icon: 'ti-text-caption' },
+  { id: 'textarea', label: 'Text area', icon: 'ti-align-left' },
   { id: 'number', label: 'Number', icon: 'ti-number' },
   { id: 'money', label: 'Money', icon: 'ti-currency-dollar' },
   { id: 'date', label: 'Date', icon: 'ti-calendar' },
+  { id: 'category', label: 'Category', icon: 'ti-tags' },
   { id: 'status', label: 'Status', icon: 'ti-flag' },
   { id: 'user', label: 'User', icon: 'ti-user' },
   { id: 'email', label: 'Email', icon: 'ti-mail' },
   { id: 'phone', label: 'Phone', icon: 'ti-phone' },
+  { id: 'file', label: 'File link', icon: 'ti-paperclip' },
+  { id: 'relationship', label: 'Relationship', icon: 'ti-link' },
   { id: 'checkbox', label: 'Yes / No', icon: 'ti-checkbox' },
 ];
 
@@ -7558,7 +7680,7 @@ function workspaceBuilderCreateWorkspace(companyId, name, description) {
   const builderState = loadWorkspaceBuilderState(companyId);
   const workspace = { id: crypto.randomUUID(), name: cleanName, description: String(description || '').trim(), color: '#e66a1f', apps: [] };
   builderState.workspaces.unshift(workspace);
-  saveWorkspaceBuilderState(companyId, builderState);
+  saveWorkspaceBuilderState(companyId, builderState).catch((error) => showToast(error.message || 'Workspace save failed.', 'local', 'Workspaces'));
   return workspace;
 }
 
@@ -7570,19 +7692,20 @@ function workspaceBuilderCreateApp(companyId, workspaceId, name, type) {
   if (!workspace) throw new Error('Workspace not found.');
   const app = { id: crypto.randomUUID(), name: cleanName, type: String(type || 'Custom').trim() || 'Custom', description: '', fields: [], items: [], automations: [] };
   workspace.apps.unshift(app);
-  saveWorkspaceBuilderState(companyId, builderState);
+  saveWorkspaceBuilderState(companyId, builderState).catch((error) => showToast(error.message || 'Workspace save failed.', 'local', 'Workspaces'));
   return app;
 }
 
-function workspaceBuilderCreateField(companyId, workspaceId, appId, label, fieldType) {
+function workspaceBuilderCreateField(companyId, workspaceId, appId, label, fieldType, options = '') {
   const cleanLabel = String(label || '').trim();
   if (!cleanLabel) throw new Error('Field label is required.');
   const builderState = loadWorkspaceBuilderState(companyId);
   const { workspace, app } = workspaceBuilderFind(builderState, workspaceId, appId);
   if (!workspace || !app) throw new Error('App not found.');
   const cleanType = BUILDER_FIELD_TYPES.some((item) => item.id === fieldType) ? fieldType : 'text';
-  app.fields.push({ id: crypto.randomUUID(), label: cleanLabel, type: cleanType });
-  saveWorkspaceBuilderState(companyId, builderState);
+  const optionList = String(options || '').split(',').map((item) => item.trim()).filter(Boolean);
+  app.fields.push({ id: crypto.randomUUID(), label: cleanLabel, type: cleanType, options: optionList });
+  saveWorkspaceBuilderState(companyId, builderState).catch((error) => showToast(error.message || 'Workspace save failed.', 'local', 'Workspaces'));
   return app.fields[app.fields.length - 1];
 }
 
@@ -7592,8 +7715,39 @@ function workspaceBuilderCreateItem(companyId, workspaceId, appId, values) {
   if (!workspace || !app) throw new Error('App not found.');
   const item = { id: crypto.randomUUID(), values: values || {}, created_at: new Date().toISOString() };
   app.items.unshift(item);
-  saveWorkspaceBuilderState(companyId, builderState);
+  saveWorkspaceBuilderState(companyId, builderState).catch((error) => showToast(error.message || 'Workspace save failed.', 'local', 'Workspaces'));
   return item;
+}
+
+function workspaceBuilderCreateAutomation(companyId, workspaceId, appId, fields) {
+  const cleanName = String(fields.name || '').trim();
+  if (!cleanName) throw new Error('Automation name is required.');
+  const builderState = loadWorkspaceBuilderState(companyId);
+  const { workspace, app } = workspaceBuilderFind(builderState, workspaceId, appId);
+  if (!workspace || !app) throw new Error('App not found.');
+  const automation = {
+    id: crypto.randomUUID(),
+    name: cleanName,
+    trigger: String(fields.trigger || 'When item changes').trim(),
+    action: String(fields.action || 'Notify owner').trim(),
+    enabled: true,
+  };
+  app.automations.unshift(automation);
+  saveWorkspaceBuilderState(companyId, builderState).catch((error) => showToast(error.message || 'Workspace save failed.', 'local', 'Workspaces'));
+  return automation;
+}
+
+function workspaceBuilderSaveAppSettings(companyId, workspaceId, appId, fields) {
+  const builderState = loadWorkspaceBuilderState(companyId);
+  const { workspace, app } = workspaceBuilderFind(builderState, workspaceId, appId);
+  if (!workspace || !app) throw new Error('App not found.');
+  const cleanName = String(fields.name || '').trim();
+  if (!cleanName) throw new Error('App name is required.');
+  app.name = cleanName;
+  app.type = String(fields.type || 'Custom').trim() || 'Custom';
+  app.description = String(fields.description || '').trim();
+  saveWorkspaceBuilderState(companyId, builderState).catch((error) => showToast(error.message || 'Workspace save failed.', 'local', 'Workspaces'));
+  return app;
 }
 
 function handleWorkspaceBuilderAction(node) {
@@ -7616,7 +7770,7 @@ function handleWorkspaceBuilderAction(node) {
     }
     if (node.dataset.action === 'builder-create-field') {
       const form = node.closest('[data-builder-field-form]');
-      workspaceBuilderCreateField(companyId, form?.dataset.workspaceId, form?.dataset.appId, form?.querySelector('[data-builder-field-label]')?.value, form?.elements?.field_type?.value);
+      workspaceBuilderCreateField(companyId, form?.dataset.workspaceId, form?.dataset.appId, form?.querySelector('[data-builder-field-label]')?.value, form?.elements?.field_type?.value, form?.elements?.options?.value);
       showToast('Field added.', 'local', 'Workspaces');
       render();
       return;
@@ -7626,6 +7780,20 @@ function handleWorkspaceBuilderAction(node) {
       const values = Object.fromEntries([...form.querySelectorAll('[data-builder-item-field]')].map((input) => [input.name, input.value]));
       workspaceBuilderCreateItem(companyId, form?.dataset.workspaceId, form?.dataset.appId, values);
       showToast('Item added.', 'local', 'Workspaces');
+      render();
+      return;
+    }
+    if (node.dataset.action === 'builder-create-automation') {
+      const form = node.closest('[data-builder-automation-form]');
+      workspaceBuilderCreateAutomation(companyId, form?.dataset.workspaceId, form?.dataset.appId, Object.fromEntries(new FormData(form).entries()));
+      showToast('Automation added.', 'local', 'Workspaces');
+      render();
+      return;
+    }
+    if (node.dataset.action === 'builder-save-app-settings') {
+      const form = node.closest('[data-builder-app-settings-form]');
+      const app = workspaceBuilderSaveAppSettings(companyId, form?.dataset.workspaceId, form?.dataset.appId, Object.fromEntries(new FormData(form).entries()));
+      showToast(`${app.name} settings saved.`, isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
       render();
     }
   } catch (error) {
@@ -7817,6 +7985,27 @@ function renderClientPortalPublicPage(route) {
       </section>
     </main>
   `;
+}
+
+function renderClientPortalStaffReviewPage(portal, documentId = '') {
+  const documents = clientPortalDocumentsForPortal(portal.id);
+  const selectedDoc = documents.find((doc) => doc.id === documentId) || documents[0] || null;
+  state.clientPortalPublic = {
+    token: `staff-${portal.id}`,
+    guestName: companyName(portal.company_id) || 'Quest team',
+    session: `staff-${portal.id}`,
+    staff: true,
+    portal,
+    documents,
+    documentId: selectedDoc?.id || '',
+    documentUrl: '',
+    annotations: clientPortalAnnotationsForPortal(portal.id),
+  };
+  const review = renderClientPortalPublicPage({ token: `staff-${portal.id}` });
+  return review.replace(
+    '<main class="client-portal-public open">',
+    `<main class="client-portal-public open staff-review"><a class="client-portal-back-btn" href="${appHref(companyPath('client-portals', { portal_id: portal.id }, portal.company_id))}" data-router><i class="ti ti-arrow-left"></i>Back to portal</a>`,
+  );
 }
 
 function clientPortalAnnotationsForCurrentDocument(selectedDoc, pageNumber = state.clientPortalPage || 1) {
@@ -8123,6 +8312,7 @@ function renderClientPortalDetail(portal, canManagePortals) {
             <div class="client-portal-doc-row">
               ${fileTypeBadge({ file_name: doc.file_name, mime_type: doc.mime_type })}
               <span><strong>${h(doc.file_name)}</strong><small>${formatBytes(doc.size_bytes)} / ${formatDate(doc.created_at)}</small></span>
+              <a class="btn" href="${appHref(companyPath('client-portals', { portal_id: portal.id, document_id: doc.id, annotate: '1', fs: '1' }, portal.company_id))}" data-router><i class="ti ti-pencil"></i>Review plan</a>
             </div>
           `).join('') || emptyState('No plan documents uploaded.')}
         </div>
@@ -12931,6 +13121,16 @@ function handleAction(event, node) {
     saveLocationPicker().catch((error) => showToast(error.message || 'Could not save that pin.', 'local', 'Map Pin'));
     return;
   }
+  if (action === 'location-picker-search') {
+    event.preventDefault();
+    searchLocationPickerAddress().catch((error) => showToast(error.message || 'Map search failed.', 'local', 'Map Pin'));
+    return;
+  }
+  if (action === 'location-picker-current') {
+    event.preventDefault();
+    useCurrentLocationForPicker();
+    return;
+  }
   if (action === 'pb-tab') {
     event.preventDefault();
     state.pricebookTab = node.dataset.tab || 'vendors';
@@ -16567,6 +16767,15 @@ async function ensureClientPortalDocumentUrl() {
   if (cachedUrl && cachedUrl.includes('/storage/v1/object/sign/')) return cachedUrl;
   const documentId = portal.documentId || portal.documents?.[0]?.id || '';
   if (!documentId) return '';
+  if (portal.staff) {
+    const doc = (portal.documents || []).find((item) => item.id === documentId);
+    const client = createSupabaseClient();
+    if (!client || !doc?.bucket_id || !doc?.object_path) return '';
+    const { data, error } = await client.storage.from(doc.bucket_id).createSignedUrl(doc.object_path, 3600);
+    if (error) throw new Error(error.message || 'Document unavailable.');
+    state.clientPortalPublic.documentUrl = data?.signedUrl || '';
+    return state.clientPortalPublic.documentUrl;
+  }
   const response = await fetch('/api/client-portal-document-url', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -16583,6 +16792,13 @@ async function ensureClientPortalDocumentUrl() {
 async function fetchClientPortalDocumentFile(documentId) {
   const portal = state.clientPortalPublic;
   if (!portal?.session || !documentId) throw new Error('Open a document first.');
+  if (portal.staff) {
+    const signedUrl = await ensureClientPortalDocumentUrl();
+    if (!signedUrl) throw new Error('Document unavailable.');
+    const fileResponse = await fetch(signedUrl);
+    if (!fileResponse.ok) throw new Error('Document unavailable.');
+    return fileResponse.blob();
+  }
   const response = await fetch('/api/client-portal-document-file', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -16598,6 +16814,18 @@ async function fetchClientPortalDocumentFile(documentId) {
 async function loadClientPortalAnnotations() {
   const portal = state.clientPortalPublic;
   if (!portal?.session || !portal.documentId) return [];
+  if (portal.staff) {
+    const client = createSupabaseClient();
+    if (!client) return portal.annotations || [];
+    const { data, error } = await client.from('client_portal_annotations')
+      .select('*')
+      .eq('portal_id', portal.portal?.id || '')
+      .eq('document_id', portal.documentId)
+      .order('created_at', { ascending: true });
+    if (error) return portal.annotations || [];
+    state.clientPortalPublic.annotations = (data || []).map(normalizeClientPortalAnnotation);
+    return state.clientPortalPublic.annotations;
+  }
   const url = `/api/client-portal-annotations?session=${encodeURIComponent(portal.session)}&document_id=${encodeURIComponent(portal.documentId)}`;
   const response = await fetch(url);
   const payload = await response.json().catch(() => ({}));
@@ -16612,6 +16840,25 @@ async function saveClientPortalAnnotations() {
   if (!portal?.session || !portal.documentId) throw new Error('Open a document first.');
   const annotations = (portal.annotations || []).filter((annotation) => annotation.document_id === portal.documentId);
   setClientPortalSaveState('Saving...', 'saving');
+  if (portal.staff) {
+    const client = createSupabaseClient();
+    if (!client) throw new Error('Supabase unavailable.');
+    const rows = annotations.map((annotation) => emptyToNull(supabaseRow(annotation, CLIENT_PORTAL_ANNOTATION_COLS), ['author_profile_id']));
+    if (rows.length) {
+      const { error } = await client.from('client_portal_annotations').upsert(rows, { onConflict: 'id' });
+      if (error) {
+        setClientPortalSaveState('Save failed', 'error');
+        throw new Error(error.message || 'Markup save failed.');
+      }
+    }
+    state.clientPortalAnnotations = state.clientPortalAnnotations
+      .filter((annotation) => !(annotation.document_id === portal.documentId && annotation.portal_id === portal.portal?.id))
+      .concat(annotations.map(normalizeClientPortalAnnotation));
+    state.clientPortalDirty = false;
+    setClientPortalSaveState('Saved', 'saved');
+    showToast('Staff markups saved.', 'live', 'Client Portal');
+    return;
+  }
   const response = await fetch('/api/client-portal-annotations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -18731,6 +18978,7 @@ const JOB_COLS = ['id', 'company_id', 'name', 'client_name', 'contact_name', 'si
 const PROPOSAL_COLS = ['id', 'company_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
 const ACTIVITY_COLS = ['id', 'company_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
 const CONTACT_COLS = ['id', 'company_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'last_activity_at', 'notes', 'updated_at'];
+const CLIENT_PORTAL_ANNOTATION_COLS = ['id', 'company_id', 'portal_id', 'document_id', 'page_number', 'guest_name', 'author_profile_id', 'annotation_type', 'payload', 'created_at', 'updated_at'];
 
 function emptyToNull(row, keys) {
   keys.forEach((key) => { if (row[key] === '') row[key] = null; });
@@ -19610,6 +19858,8 @@ function isMutableAction(action = '') {
     'builder-create-app',
     'builder-create-field',
     'builder-create-item',
+    'builder-create-automation',
+    'builder-save-app-settings',
     'set-contact-stage',
     'set-contact-temp',
     'toggle-contact-task',
@@ -20029,7 +20279,7 @@ function locationPickerDefaultPin(address = '') {
 }
 
 function openLocationPicker(node) {
-  const sourceInput = node.closest('.address-lookup-control')?.querySelector('[data-address-lookup-input]');
+  const sourceInput = node.closest('.address-lookup-control, .sf-inline-address-editor')?.querySelector('[data-address-lookup-input]');
   const kind = node.dataset.locationKind || (sourceInput ? 'input' : '');
   const id = node.dataset.locationId || '';
   const field = node.dataset.locationField || sourceInput?.name || 'address';
@@ -20059,12 +20309,18 @@ function renderLocationPickerModal() {
         <span>Address</span>
         <div class="address-lookup-control">
           <input name="address" value="${h(picker.address || '')}" data-location-picker-search data-google-address-input data-address-lookup-input data-address-options="${h(JSON.stringify(contactAddressOptions(activeCompanyId())))}" autocomplete="street-address" placeholder="Type the full site address" />
+          <button class="address-pin-button" type="button" data-action="location-picker-search"><i class="ti ti-search"></i><span>Search</span></button>
+          <button class="address-pin-button" type="button" data-action="location-picker-current"><i class="ti ti-current-location"></i><span>Use my location</span></button>
         </div>
+      </div>
+      <div class="location-picker-mode">
+        <span><i class="ti ti-click"></i>Manual pin</span>
+        <p>Click the map or drag the pin to set the exact spot. Search will move the pin to the best address match.</p>
       </div>
       <input type="hidden" name="lat" value="${h(String(lat))}" data-location-lat />
       <input type="hidden" name="lng" value="${h(String(lng))}" data-location-lng />
       <div class="location-map" data-location-map data-lat="${h(String(lat))}" data-lng="${h(String(lng))}"></div>
-      <p class="location-picker-hint">Search the address, drag the pin if needed, then save it to this customer record.</p>
+      <p class="location-picker-hint" data-location-picker-status>Search the address, drag the pin if needed, then save it to this customer record.</p>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit" data-action="save-location-picker"><i class="ti ti-map-pin"></i>Save exact pin</button>
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
@@ -20075,6 +20331,64 @@ function renderLocationPickerModal() {
 
 async function refreshLocationPickerSuggestions(input) {
   await refreshAddressSuggestions(input);
+}
+
+function setLocationPickerStatus(text) {
+  const status = document.querySelector('[data-location-picker-status]');
+  if (status) status.textContent = text;
+}
+
+function setLocationPickerPin(lat, lng, { center = false, reverse = false } = {}) {
+  if (!locationPickerMap || !locationPickerMarker) return;
+  locationPickerMarker.setLatLng([lat, lng]);
+  if (center) locationPickerMap.setView([lat, lng], Math.max(locationPickerMap.getZoom(), 16));
+  const latInput = document.querySelector('[data-location-lat]');
+  const lngInput = document.querySelector('[data-location-lng]');
+  if (latInput) latInput.value = String(lat);
+  if (lngInput) lngInput.value = String(lng);
+  state.locationPicker = { ...(state.locationPicker || {}), lat, lng };
+  setLocationPickerStatus(`Pinned at ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}.`);
+  if (reverse) reverseGeocodeLocationPicker(lat, lng).catch(() => {});
+}
+
+async function reverseGeocodeLocationPicker(lat, lng) {
+  const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`, {
+    headers: { Accept: 'application/json' },
+  }).catch(() => null);
+  const payload = response?.ok ? await response.json().catch(() => ({})) : {};
+  const address = String(payload.display_name || '').trim();
+  const input = document.querySelector('[data-location-picker-search]');
+  if (address && input) {
+    input.value = address;
+    state.locationPicker = { ...(state.locationPicker || {}), address };
+    setLocationPickerStatus('Address filled from the dropped pin.');
+  }
+}
+
+async function searchLocationPickerAddress() {
+  const input = document.querySelector('[data-location-picker-search]');
+  const query = String(input?.value || '').trim();
+  if (!query) return showToast('Type an address to search.', 'local', 'Map Pin');
+  setLocationPickerStatus('Searching the map...');
+  const params = new URLSearchParams({ q: query, format: 'jsonv2', addressdetails: '1', limit: '1', countrycodes: 'us', 'accept-language': 'en' });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, { headers: { Accept: 'application/json' } }).catch(() => null);
+  const payload = response?.ok ? await response.json().catch(() => []) : [];
+  const match = Array.isArray(payload) ? payload[0] : null;
+  if (!match) return showToast('No map match found. You can still click the map to drop a manual pin.', 'local', 'Map Pin');
+  const address = String(match.display_name || query).trim();
+  if (input) input.value = address;
+  state.locationPicker = { ...(state.locationPicker || {}), address };
+  setLocationPickerPin(Number(match.lat), Number(match.lon), { center: true });
+}
+
+function useCurrentLocationForPicker() {
+  if (!navigator.geolocation) return showToast('Current location is not available in this browser.', 'local', 'Map Pin');
+  setLocationPickerStatus('Requesting current location...');
+  navigator.geolocation.getCurrentPosition(
+    (position) => setLocationPickerPin(position.coords.latitude, position.coords.longitude, { center: true, reverse: true }),
+    () => showToast('Could not get your current location.', 'local', 'Map Pin'),
+    { enableHighAccuracy: true, timeout: 10000 },
+  );
 }
 
 function mountLocationPicker() {
@@ -20092,18 +20406,14 @@ function mountLocationPicker() {
     draggable: true,
     icon: L.divIcon({ className: 'quest-map-pin', html: '<i class="ti ti-map-pin-filled"></i>', iconSize: [34, 34], iconAnchor: [17, 34] }),
   }).addTo(locationPickerMap);
-  const sync = () => {
+  const sync = (reverse = false) => {
     const pos = locationPickerMarker.getLatLng();
-    const latInput = document.querySelector('[data-location-lat]');
-    const lngInput = document.querySelector('[data-location-lng]');
-    if (latInput) latInput.value = String(pos.lat);
-    if (lngInput) lngInput.value = String(pos.lng);
-    state.locationPicker = { ...(state.locationPicker || {}), lat: pos.lat, lng: pos.lng };
+    setLocationPickerPin(pos.lat, pos.lng, { reverse });
   };
-  locationPickerMarker.on('dragend', sync);
+  locationPickerMarker.on('dragend', () => sync(true));
   locationPickerMap.on('click', (event) => {
     locationPickerMarker.setLatLng(event.latlng);
-    sync();
+    sync(true);
   });
   setTimeout(() => locationPickerMap?.invalidateSize(), 80);
 }

@@ -520,6 +520,30 @@ button { cursor: pointer; }
   gap: 6px;
 }
 
+.location-picker-mode {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orange) 8%, var(--surface));
+}
+
+.location-picker-mode span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.location-picker-mode p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .location-map {
   min-height: 420px;
   border: 1px solid var(--border);
@@ -11815,6 +11839,28 @@ button.side-item.planned b {
   color: #101828;
 }
 
+.client-portal-public.staff-review {
+  position: relative;
+}
+
+.client-portal-back-btn {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid #d9e0ea;
+  border-radius: 999px;
+  background: #fff;
+  color: #101828;
+  font-weight: 850;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .16);
+}
+
 .client-portal-gate {
   width: min(520px, calc(100vw - 32px));
   margin: 9vh auto;
@@ -12310,6 +12356,11 @@ button.side-item.planned b {
   .client-portal-comments {
     border: 0;
     border-bottom: 1px solid #d9e0ea;
+  }
+
+  .builder-command-row,
+  .builder-automation-form {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -17240,6 +17291,12 @@ button {
   align-items: stretch;
 }
 
+.builder-command-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .builder-card {
   display: grid;
   gap: 9px;
@@ -17325,7 +17382,8 @@ button {
 }
 
 .builder-inline-form input,
-.builder-inline-form select {
+.builder-inline-form select,
+.builder-inline-form textarea {
   width: 100%;
   min-height: 38px;
   border: 1px solid var(--border-strong);
@@ -17333,6 +17391,31 @@ button {
   background: var(--surface);
   color: var(--ink);
   padding: 0 10px;
+}
+
+.builder-inline-form textarea {
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.builder-check-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.builder-check-field input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.builder-automation-form {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.builder-settings-panel,
+.builder-automation-panel {
+  max-width: 900px;
 }
 
 .builder-two-col {
