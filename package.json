@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
-    "leaflet": "^1.9.4"
+    "leaflet": "^1.9.4",
+    "pdfjs-dist": "^6.1.200"
   },
   "devDependencies": {
     "vite": "^7.0.0"

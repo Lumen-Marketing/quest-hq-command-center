@@ -2,6 +2,8 @@ import './styles.css';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import opsCommandHeroUrl from './assets/quest-hq-ops-command-hero.png';
 import questLogoMarkUrl from './assets/quest-hq-logo-mark.png';
 
@@ -8939,8 +8941,7 @@ const CP_LABEL_PRESETS = ['Kitchen Revision', 'Window Adjustment', 'Electrical C
 
 // Width in feet assumed for a freshly uploaded sheet until the ruler is calibrated.
 const CP_DEFAULT_SHEET_FT = 40;
-const PDFJS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const PDFJS_WORKER = pdfjsWorkerUrl;
 const cpBaseCache = new Map();
 let cpFrameBound = null;
 let cpPointerState = null;
@@ -8993,9 +8994,8 @@ async function cpResolveBase(doc, page) {
   const isPdf = doc.mime_type?.includes('pdf') || /\.pdf($|\?)/i.test(doc.file_name || '');
   let result;
   if (isPdf) {
-    await loadExternalScript(PDFJS_SRC, 'pdfjsLib');
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-    const pdf = await window.pdfjsLib.getDocument(url).promise;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const pdf = await pdfjsLib.getDocument(url).promise;
     const pageObj = await pdf.getPage(Math.min(page + 1, pdf.numPages));
     const unit = pageObj.getViewport({ scale: 1 });
     const scale = Math.min(4, Math.max(1.5, 2400 / unit.width));

@@ -62,14 +62,15 @@ test('staff portal workspace supports create, upload, copy, revoke, and annotati
 test('public portal viewer exposes plan markup tools and persistent annotations', () => {
   assert.match(source, /fetchClientPortalDocumentFile/);
   assert.match(source, /cpResolveBase/);
-  assert.match(source, /const PDFJS_SRC = 'https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdf\.js\/3\.11\.174\/pdf\.min\.js';/);
-  assert.match(source, /const PDFJS_WORKER = 'https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdf\.js\/3\.11\.174\/pdf\.worker\.min\.js';/);
+  assert.match(source, /import \* as pdfjsLib from 'pdfjs-dist\/build\/pdf\.mjs';/);
+  assert.match(source, /import pdfjsWorkerUrl from 'pdfjs-dist\/build\/pdf\.worker\.min\.mjs\?url';/);
+  assert.match(source, /const PDFJS_WORKER = pdfjsWorkerUrl;/);
   assert.match(source, /const cpBaseCache = new Map\(\);/);
   assert.match(source, /function cpWithTimeout\(promise, ms, label\)/);
   assert.match(source, /cpWithTimeout\(cpReloadPortalAnnotations\(portalId\), 5000, 'Markup refresh'\)/);
   assert.match(source, /cpWithTimeout\(client\.storage\.from\(bucket\)\.createSignedUrl\(doc\.object_path, 900\), 8000, 'Document URL'\)/);
   assert.match(source, /function cpDocumentSourceUrl\(doc\)/);
-  assert.match(source, /window\.pdfjsLib\.getDocument\(url\)\.promise/);
+  assert.match(source, /pdfjsLib\.getDocument\(url\)\.promise/);
   assert.match(source, /pageObj\.render\(\{ canvasContext: canvas\.getContext\('2d'\), viewport \}\)\.promise/);
   assert.match(source, /data-cp-annotate/);
   assert.match(source, /data-cp-frame/);
