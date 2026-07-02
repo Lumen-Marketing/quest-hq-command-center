@@ -87,8 +87,10 @@ test('contact entry formats phone, suggests addresses, links maps, and selects o
   assert.match(source, /function contactOwnerOptions\(companyId, selectedOwner = ''\)/);
   assert.match(source, /function mapsSearchUrl\(address\)/);
   assert.match(editorSource, /autocomplete="tel"/);
-  assert.match(editorSource, /list="contact-address-options"/);
-  assert.match(editorSource, /<datalist id="contact-address-options">/);
+  assert.match(editorSource, /renderAddressLookupField\('Location', 'location', edit\.location, addressOptions, 'span-2', 'contact-address-options'\)/);
+  assert.match(source, /list="\$\{h\(resolvedListId\)\}"/);
+  assert.match(source, /<datalist id="\$\{h\(resolvedListId\)\}">/);
+  assert.match(source, /data-address-map-link/);
   assert.match(editorSource, /selectField\('Owner', 'owner_name', edit\.owner_name, contactOwnerOptions\(companyId, edit\.owner_name\)\)/);
   assert.match(recordSource, /mapsSearchUrl\(contact\.location\)/);
   assert.match(recordSource, /<i class="ti ti-map-pin"><\/i>Map/);

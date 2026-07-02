@@ -2080,6 +2080,23 @@ function render() {
 }
 
 function bindGoogleAddressInputs() {
+  document.querySelectorAll('[data-address-lookup-input]:not([data-address-lookup-bound])').forEach((input) => {
+    input.dataset.addressLookupBound = 'true';
+    const field = input.closest('.address-lookup-field');
+    const link = field?.querySelector('[data-address-map-link]');
+    const updatePinLink = () => {
+      const address = String(input.value || '').trim();
+      if (!link) return;
+      link.href = address ? googleMapsPlaceSearchUrl(address) : '#';
+      link.classList.toggle('is-disabled', !address);
+      link.setAttribute('aria-disabled', address ? 'false' : 'true');
+    };
+    input.addEventListener('input', updatePinLink);
+    link?.addEventListener('click', (ev) => {
+      if (link.getAttribute('aria-disabled') === 'true') ev.preventDefault();
+    });
+    updatePinLink();
+  });
   const places = window.google?.maps?.places;
   if (!places?.Autocomplete) return;
   document.querySelectorAll('[data-google-address-input]:not([data-google-bound])').forEach((input) => {
@@ -2087,7 +2104,10 @@ function bindGoogleAddressInputs() {
     const autocomplete = new places.Autocomplete(input, { fields: ['formatted_address', 'geometry', 'name'], types: ['address'] });
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
-      if (place?.formatted_address) input.value = place.formatted_address;
+      if (place?.formatted_address) {
+        input.value = place.formatted_address;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
     });
   });
 }
@@ -5184,8 +5204,7 @@ function renderContactEditor(companyId, contact) {
       <datalist id="contact-job-type-options">${jobTypeOptions.map((item) => `<option value="${h(item)}"></option>`).join('')}</datalist>
       ${field('Phone', 'phone', edit.phone, false, 'tel', '', 'autocomplete="tel" inputmode="tel" data-phone-format')}
       ${field('Email', 'email', edit.email, false, 'email')}
-      <label class="span-2 contact-location-field"><span>Location</span><input name="location" type="text" value="${h(edit.location)}" autocomplete="street-address" list="contact-address-options" data-google-address-input />${renderGoogleMapsHint(edit.location)}</label>
-      <datalist id="contact-address-options">${addressOptions.map((address) => `<option value="${h(address)}"></option>`).join('')}</datalist>
+      ${renderAddressLookupField('Location', 'location', edit.location, addressOptions, 'span-2', 'contact-address-options')}
       ${selectField('Stage', 'stage', edit.stage || contactStageNames()[0], contactStageNames().map((stage) => [stage, stage]))}
       ${selectField('Owner', 'owner_name', edit.owner_name, contactOwnerOptions(companyId, edit.owner_name))}
       ${field('Estimated value', 'value', edit.value || 0, false, 'number')}
@@ -5740,6 +5759,7 @@ function renderJobRecord(companyId, job) {
 
 function renderJobEditor(companyId, job) {
   const edit = job || blankJob(companyId);
+  const addressOptions = contactAddressOptions(companyId);
   return `
     <form class="job-editor" data-job-form>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
@@ -5756,7 +5776,7 @@ function renderJobEditor(companyId, job) {
       ${selectField('Client urgency', 'priority', edit.priority || 'Medium', ['Low', 'Medium', 'High', 'Urgent'].map((item) => [item, item]))}
       ${field('Estimate total', 'estimate_total', edit.estimate_total || 0, false, 'number')}
       ${field('Invoice total', 'invoice_total', edit.invoice_total || 0, false, 'number')}
-      ${field('Site address', 'site_address', edit.site_address, false, 'text', 'span-2')}
+      ${renderAddressLookupField('Site address', 'site_address', edit.site_address, addressOptions, 'span-2', 'job-site-address-options')}
       ${textareaField('Scope', 'scope', edit.scope, 'span-2')}
       ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
       <div class="form-actions span-2">
@@ -8228,6 +8248,7 @@ function renderAccountFormModal(companyId, account) {
 }
 function renderAccountEditor(companyId, account) {
   const edit = account || blankAccount(companyId);
+  const addressOptions = contactAddressOptions(companyId);
   return `
     <form class="job-editor" data-account-form>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
@@ -8241,7 +8262,7 @@ function renderAccountEditor(companyId, account) {
       ${field('Email', 'email', edit.email, false, 'email')}
       ${field('Website', 'website', edit.website)}
       ${selectField('Status', 'status', edit.status, [['Active', 'Active'], ['Inactive', 'Inactive']])}
-      ${field('Address', 'address', edit.address, false, 'text', 'span-2')}
+      ${renderAddressLookupField('Address', 'address', edit.address, addressOptions, 'span-2', 'account-address-options')}
       ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
       <div class="form-actions span-2">
         <button class="btn btn-primary" type="submit">Save account</button>
@@ -18683,10 +18704,23 @@ function googleMapsPlaceSearchUrl(address) {
   return mapsSearchUrl(address);
 }
 
-function renderGoogleMapsHint(address) {
-  const clean = String(address || '').trim();
-  if (!clean) return '<small class="field-hint">Start typing an address, then open the Google Maps pin after saving.</small>';
-  return `<small class="field-hint"><a href="${h(googleMapsPlaceSearchUrl(clean))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Open exact Google Maps pin</a></small>`;
+function renderAddressLookupField(label, name, value = '', options = [], className = 'span-2', listId = '') {
+  const clean = String(value || '').trim();
+  const resolvedListId = listId || `${String(name).replace(/[^a-z0-9_-]/gi, '-')}-address-options`;
+  const classes = [className, 'address-lookup-field'].filter(Boolean).join(' ');
+  return `
+    <label class="${h(classes)}">
+      <span>${h(label)}</span>
+      <div class="address-lookup-control">
+        <input name="${h(name)}" type="text" value="${h(value)}" autocomplete="street-address" list="${h(resolvedListId)}" data-google-address-input data-address-lookup-input placeholder="Start typing the site address" />
+        <a class="address-pin-button ${clean ? '' : 'is-disabled'}" href="${clean ? h(googleMapsPlaceSearchUrl(clean)) : '#'}" data-address-map-link target="_blank" rel="noreferrer" aria-disabled="${clean ? 'false' : 'true'}" title="Open Google Maps pin">
+          <i class="ti ti-map-pin"></i><span>Map pin</span>
+        </a>
+      </div>
+      <small class="field-hint">Pick a saved address or type the full site address, then verify the pin in Google Maps.</small>
+    </label>
+    <datalist id="${h(resolvedListId)}">${options.map((address) => `<option value="${h(address)}"></option>`).join('')}</datalist>
+  `;
 }
 
 function contactAddressOptions(companyId) {

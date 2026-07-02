@@ -35,11 +35,17 @@ test('contact intake fields have real suggestions and constrained source options
 
 test('contact locations support google maps autocomplete and pin links', () => {
   const editorSource = source.match(/function renderContactEditor\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const jobEditorSource = source.match(/function renderJobEditor\(companyId, job\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const accountEditorSource = source.match(/function renderAccountEditor\(companyId, account\) \{[\s\S]*?\n\}/)?.[0] || '';
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function googleMapsPlaceSearchUrl\(address\)/);
-  assert.match(source, /function renderGoogleMapsHint\(address\)/);
-  assert.match(editorSource, /data-google-address-input/);
-  assert.match(editorSource, /renderGoogleMapsHint\(edit\.location\)/);
+  assert.match(source, /function renderAddressLookupField\(label, name, value = '', options = \[\]/);
+  assert.match(source, /data-address-map-link/);
+  assert.match(source, /data-address-lookup-input/);
+  assert.match(editorSource, /renderAddressLookupField\('Location', 'location', edit\.location/);
+  assert.match(jobEditorSource, /renderAddressLookupField\('Site address', 'site_address', edit\.site_address/);
+  assert.match(accountEditorSource, /renderAddressLookupField\('Address', 'address', edit\.address/);
+  assert.match(styles, /\.address-pin-button/);
   assert.match(recordSource, /googleMapsPlaceSearchUrl\(contact\.location\)/);
   assert.match(recordSource, /Exact pin/);
 });
