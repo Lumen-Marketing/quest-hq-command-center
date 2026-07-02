@@ -65,6 +65,9 @@ test('public portal viewer exposes plan markup tools and persistent annotations'
   assert.match(source, /const PDFJS_SRC = 'https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdf\.js\/3\.11\.174\/pdf\.min\.js';/);
   assert.match(source, /const PDFJS_WORKER = 'https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdf\.js\/3\.11\.174\/pdf\.worker\.min\.js';/);
   assert.match(source, /const cpBaseCache = new Map\(\);/);
+  assert.match(source, /function cpWithTimeout\(promise, ms, label\)/);
+  assert.match(source, /cpWithTimeout\(cpReloadPortalAnnotations\(portalId\), 5000, 'Markup refresh'\)/);
+  assert.match(source, /cpWithTimeout\(client\.storage\.from\(bucket\)\.createSignedUrl\(doc\.object_path, 900\), 8000, 'Document URL'\)/);
   assert.match(source, /function cpDocumentSourceUrl\(doc\)/);
   assert.match(source, /window\.pdfjsLib\.getDocument\(url\)\.promise/);
   assert.match(source, /pageObj\.render\(\{ canvasContext: canvas\.getContext\('2d'\), viewport \}\)\.promise/);

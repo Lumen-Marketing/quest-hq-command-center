@@ -8945,6 +8945,14 @@ const cpBaseCache = new Map();
 let cpFrameBound = null;
 let cpPointerState = null;
 
+function cpWithTimeout(promise, ms, label) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out.`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function cpCacheKey(docId, page) {
   return `${docId}:${page}`;
 }
@@ -8969,9 +8977,9 @@ async function cpDocumentSourceUrl(doc) {
   const client = createSupabaseClient();
   if (client && doc.object_path) {
     const bucket = doc.bucket_id || 'quest-client-portal-documents';
-    const signed = await client.storage.from(bucket).createSignedUrl(doc.object_path, 900);
+    const signed = await cpWithTimeout(client.storage.from(bucket).createSignedUrl(doc.object_path, 900), 8000, 'Document URL');
     if (!signed.error && signed.data?.signedUrl) return signed.data.signedUrl;
-    const download = await client.storage.from(bucket).download(doc.object_path);
+    const download = await cpWithTimeout(client.storage.from(bucket).download(doc.object_path), 15000, 'Document download');
     if (!download.error && download.data) return URL.createObjectURL(download.data);
     throw new Error(signed.error?.message || download.error?.message || 'Document unavailable.');
   }
@@ -18158,7 +18166,13 @@ async function mountClientPortalAnnotate() {
   if (!annotate.synced) {
     annotate.synced = true;
     const portalId = cpIsGuest() ? state.clientPortalPublic?.portal?.id : annotate.portalId;
-    if ((!cpIsGuest() || state.clientPortalPublic?.local) && await cpReloadPortalAnnotations(portalId)) {
+    const refreshed = (!cpIsGuest() || state.clientPortalPublic?.local)
+      ? await cpWithTimeout(cpReloadPortalAnnotations(portalId), 5000, 'Markup refresh').catch((error) => {
+        console.warn('Client portal markup refresh skipped:', error.message || error);
+        return false;
+      })
+      : false;
+    if (refreshed) {
       render();
       return;
     }
@@ -18168,7 +18182,10 @@ async function mountClientPortalAnnotate() {
   if (cpIsGuest()) {
     state.clientPortalPublic.documentId = doc.id;
     if (!state.clientPortalPublic.local && !(state.clientPortalPublic.annotations || []).some((item) => item.document_id === doc.id)) {
-      await loadClientPortalAnnotations();
+      await cpWithTimeout(loadClientPortalAnnotations(), 5000, 'Markup refresh').catch((error) => {
+        console.warn('Client portal markup refresh skipped:', error.message || error);
+        return [];
+      });
     }
   }
   let base;
