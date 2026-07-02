@@ -22942,10 +22942,18 @@ function normalizeClientPortal(input) {
 }
 
 function normalizeClientPortalDocument(input) {
+  const id = String(input.id || crypto.randomUUID());
   return {
-    id: String(input.id || crypto.randomUUID()),
+    id,
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
     portal_id: String(input.portal_id || ''),
+    version_group_id: String(input.version_group_id || input.versionGroupId || id),
+    version_number: Number(input.version_number || input.versionNumber || 1) || 1,
+    is_current: input.is_current !== false,
+    review_status: ['approved', 'revision', 'rejected', 'pending'].includes(String(input.review_status || '').toLowerCase())
+      ? String(input.review_status).toLowerCase()
+      : 'pending',
+    scale: input.scale && typeof input.scale === 'object' ? input.scale : null,
     bucket_id: String(input.bucket_id || 'quest-client-portal-documents'),
     object_path: String(input.object_path || ''),
     file_name: String(input.file_name || 'Plan set.pdf'),
@@ -23890,6 +23898,11 @@ function clientPortalDocumentPayload(doc) {
     id: doc.id,
     company_id: doc.company_id,
     portal_id: doc.portal_id,
+    version_group_id: doc.version_group_id || doc.id,
+    version_number: doc.version_number || 1,
+    is_current: doc.is_current !== false,
+    review_status: doc.review_status || 'pending',
+    scale: doc.scale || null,
     bucket_id: doc.bucket_id,
     object_path: doc.object_path,
     file_name: doc.file_name,
@@ -24725,6 +24738,33 @@ function clientPortalById(id) {
 
 function clientPortalDocumentsForPortal(portalId) {
   return state.clientPortalDocuments.filter((doc) => doc.portal_id === portalId).sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+}
+
+function portalDocumentGroups(portalId) {
+  const groups = new Map();
+  clientPortalDocumentsForPortal(portalId).forEach((doc) => {
+    const key = doc.version_group_id || doc.id;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(doc);
+  });
+  return Array.from(groups.values()).map((versions) => versionsForSort(versions));
+}
+
+function versionsForSort(versions) {
+  return versions.slice().sort((a, b) => {
+    const versionDelta = Number(b.version_number || 1) - Number(a.version_number || 1);
+    if (versionDelta) return versionDelta;
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+  });
+}
+
+function versionsForGroup(portalId, groupId) {
+  return versionsForSort(clientPortalDocumentsForPortal(portalId).filter((doc) => (doc.version_group_id || doc.id) === groupId));
+}
+
+function currentVersionOf(versions) {
+  const list = Array.isArray(versions) ? versionsForSort(versions) : [];
+  return list.find((doc) => doc.is_current) || list[0] || null;
 }
 
 function clientPortalAnnotationsForPortal(portalId) {
