@@ -8995,7 +8995,7 @@ async function cpResolveBase(doc, page) {
   let result;
   if (isPdf) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-    const pdf = await pdfjsLib.getDocument(url).promise;
+    const pdf = await pdfjsLib.getDocument({ url }).promise;
     const pageObj = await pdf.getPage(Math.min(page + 1, pdf.numPages));
     const unit = pageObj.getViewport({ scale: 1 });
     const scale = Math.min(4, Math.max(1.5, 2400 / unit.width));
