@@ -24771,6 +24771,10 @@ function clientPortalAnnotationsForPortal(portalId) {
   return state.clientPortalAnnotations.filter((annotation) => annotation.portal_id === portalId).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 }
 
+function clientPortalAnnotationsForDocument(documentId) {
+  return state.clientPortalAnnotations.filter((annotation) => annotation.document_id === documentId).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+}
+
 function clientPortalEventsForPortal(portalId) {
   return state.clientPortalEvents.filter((event) => event.portal_id === portalId).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 }
