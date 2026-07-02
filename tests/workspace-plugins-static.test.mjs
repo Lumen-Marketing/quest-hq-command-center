@@ -46,8 +46,8 @@ test('quest crm plugin contents match the contacts quotes jobs workspace', () =>
   assert.match(crm2RegistryEntry, /module_ids: \['contacts', 'deals', 'proposals', 'jobs'\]/);
   assert.match(crm2RegistryEntry, /private: true/);
   assert.doesNotMatch(crm2RegistryEntry, /module_ids: \['crm'/);
-  assert.match(source, /\{ label: 'Contacts · Top of Funnel', ids: \['contacts'\] \}/);
-  assert.match(source, /\{ label: 'Quotes · Bottom of Funnel', ids: \['deals', 'proposals'\] \}/);
+  assert.match(source, /\{ label: 'Contacts - Top of Funnel', ids: \['contacts'\] \}/);
+  assert.match(source, /\{ label: 'Quotes - Bottom of Funnel', ids: \['deals', 'proposals'\] \}/);
   assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
   assert.match(source, /const PRIVATE_PLUGIN_ACCESS = \{/);
   assert.match(source, /password: 'LumenQuest@2026'/);

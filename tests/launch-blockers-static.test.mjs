@@ -14,16 +14,12 @@ test('job save blocks blank names before normalizeJob can create Untitled Job', 
 });
 
 test('client portal PDF viewer has a customer-visible fallback instead of a blank canvas', () => {
-  assert.match(source, /id="client-portal-pdf-fallback"/);
-  assert.match(source, /function setClientPortalPdfFallback\s*\(/);
-  assert.match(source, /function showClientPortalPdfFallback\s*\(/);
-  assert.match(source, /showClientPortalPdfFallback\(fallbackUrl\);/);
-  assert.match(source, /if \(document\.querySelector\('\.client-portal-canvas-wrap\.fallback-visible'\)\) return;/);
-  assert.match(source, /if \(zoomLabel\) zoomLabel\.textContent = 'PDF';/);
-  assert.match(source, /cachedUrl && cachedUrl\.includes\('\/storage\/v1\/object\/sign\/'\)/);
-  assert.match(source, /The plan preview did not render in this browser/);
+  assert.match(source, /data-cp-frame/);
+  assert.match(source, /base = await cpResolveBase\(doc, annotate\.page\);/);
+  assert.match(source, /catch \(error\) \{\s*frame\.innerHTML = `<div class="cp-loading error">/);
+  assert.match(source, /Could not load this plan\./);
   assert.doesNotMatch(source, /looksBlankClientPortalCanvas/);
-  assert.match(styles, /\.client-portal-pdf-fallback/);
+  assert.match(styles, /\.cp-loading\.error/);
 });
 
 test('company routes wait for live workspace data instead of rendering local fallback data', () => {

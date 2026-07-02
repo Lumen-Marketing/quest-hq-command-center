@@ -6,11 +6,11 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('crm navigation uses contacts quotes and production funnels', () => {
-  assert.match(source, /\{ id: 'contacts', group: 'Contacts · Top of Funnel', label: 'Contacts'/);
-  assert.match(source, /\{ id: 'deals', group: 'Quotes · Bottom of Funnel', label: 'Quotes'/);
+  assert.match(source, /\{ id: 'contacts', group: 'Contacts [^']+ Top of Funnel', label: 'Contacts'/);
+  assert.match(source, /\{ id: 'deals', group: 'Quotes [^']+ Bottom of Funnel', label: 'Quotes'/);
   assert.match(source, /\{ id: 'jobs', group: 'Production', label: 'Jobs'/);
-  assert.match(source, /\{ label: 'Contacts · Top of Funnel', ids: \['contacts'\] \}/);
-  assert.match(source, /\{ label: 'Quotes · Bottom of Funnel', ids: \['deals', 'proposals'\] \}/);
+  assert.match(source, /\{ label: 'Contacts - Top of Funnel', ids: \['contacts'\] \}/);
+  assert.match(source, /\{ label: 'Quotes - Bottom of Funnel', ids: \['deals', 'proposals'\] \}/);
 });
 
 test('contact and quote funnels match the provided crm model', () => {
@@ -87,7 +87,14 @@ test('contact entry formats phone, suggests addresses, links maps, and selects o
   assert.match(source, /function contactOwnerOptions\(companyId, selectedOwner = ''\)/);
   assert.match(source, /function mapsSearchUrl\(address\)/);
   assert.match(editorSource, /autocomplete="tel"/);
-  assert.match(editorSource, /renderAddressLookupField\('Location', 'location', edit\.location, addressOptions, 'span-2', 'contact-address-options'\)/);
+  assert.match(editorSource, /data-contact-address-form/);
+  assert.match(editorSource, /id="qc-contact-map"/);
+  assert.match(editorSource, /id="qc-country"/);
+  assert.match(editorSource, /id="qc-province"/);
+  assert.match(editorSource, /id="qc-city"/);
+  assert.match(editorSource, /name="country_code"/);
+  assert.match(source, /function composeContactLocation\(parts\)/);
+  assert.match(source, /country_code,.*country,.*province,.*city,.*barangay,.*street,.*block_no,.*zip,.*lat,.*lng/s);
   assert.match(source, /data-address-options="\$\{h\(JSON\.stringify\(options\)\)\}"/);
   assert.match(source, /function renderAddressSuggestionMenu\(input, suggestions, status = ''\)/);
   assert.match(source, /async function refreshAddressSuggestions\(input\)/);
