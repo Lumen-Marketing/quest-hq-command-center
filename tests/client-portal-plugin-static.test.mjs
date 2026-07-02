@@ -59,6 +59,19 @@ test('staff portal workspace supports create, upload, copy, revoke, and annotati
   assert.match(source, /clientPortalAnnotationsForPortal/);
 });
 
+test('staff portal lists use readable action controls and markup cards', () => {
+  assert.match(source, /class="cp-row-main"/);
+  assert.match(source, /class="cp-row-actions"/);
+  assert.match(source, /function renderClientPortalMarkCard\(annotation\)/);
+  assert.match(source, /class="cp-mark-card"/);
+  assert.match(source, /class="cp-mark-ico"/);
+  assert.match(styles, /\.cp-row-main\s*\{/);
+  assert.match(styles, /\.cp-row-actions button\s*\{/);
+  assert.match(styles, /\.client-portal-row:hover \.cp-row-actions/);
+  assert.match(styles, /\.cp-mark-card\s*\{/);
+  assert.match(styles, /\.cp-mark-meta span\s*\{/);
+});
+
 test('public portal viewer exposes plan markup tools and persistent annotations', () => {
   assert.match(source, /fetchClientPortalDocumentFile/);
   assert.match(source, /cpResolveBase/);
