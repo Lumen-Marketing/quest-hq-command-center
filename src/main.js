@@ -8939,6 +8939,81 @@ const CP_LABEL_PRESETS = ['Kitchen Revision', 'Window Adjustment', 'Electrical C
 
 // Width in feet assumed for a freshly uploaded sheet until the ruler is calibrated.
 const CP_DEFAULT_SHEET_FT = 40;
+const PDFJS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const cpBaseCache = new Map();
+let cpFrameBound = null;
+let cpPointerState = null;
+
+function cpCacheKey(docId, page) {
+  return `${docId}:${page}`;
+}
+
+async function cpDocumentSourceUrl(doc) {
+  if (doc.data_url) return doc.data_url;
+  const remoteGuest = cpIsGuest() && state.clientPortalPublic?.session && !state.clientPortalPublic?.local;
+  if (remoteGuest) {
+    const portal = state.clientPortalPublic;
+    const response = await fetch('/api/client-portal-document-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: portal.session, document_id: doc.id }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || 'Document unavailable.');
+    }
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  }
+  const client = createSupabaseClient();
+  if (client && doc.object_path) {
+    const bucket = doc.bucket_id || 'quest-client-portal-documents';
+    const signed = await client.storage.from(bucket).createSignedUrl(doc.object_path, 900);
+    if (!signed.error && signed.data?.signedUrl) return signed.data.signedUrl;
+    const download = await client.storage.from(bucket).download(doc.object_path);
+    if (!download.error && download.data) return URL.createObjectURL(download.data);
+    throw new Error(signed.error?.message || download.error?.message || 'Document unavailable.');
+  }
+  throw new Error('This plan has no stored file in the current workspace.');
+}
+
+async function cpResolveBase(doc, page) {
+  const key = cpCacheKey(doc.id, page);
+  if (cpBaseCache.has(key)) return cpBaseCache.get(key);
+  const url = await cpDocumentSourceUrl(doc);
+  const isPdf = doc.mime_type?.includes('pdf') || /\.pdf($|\?)/i.test(doc.file_name || '');
+  let result;
+  if (isPdf) {
+    await loadExternalScript(PDFJS_SRC, 'pdfjsLib');
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const pdf = await window.pdfjsLib.getDocument(url).promise;
+    const pageObj = await pdf.getPage(Math.min(page + 1, pdf.numPages));
+    const unit = pageObj.getViewport({ scale: 1 });
+    const scale = Math.min(4, Math.max(1.5, 2400 / unit.width));
+    const viewport = pageObj.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await pageObj.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    result = { dataUrl: canvas.toDataURL('image/jpeg', 0.9), w: viewport.width, h: viewport.height, pages: pdf.numPages };
+  } else {
+    const image = await loadClientPortalImage(url);
+    const w = image.naturalWidth || image.width;
+    const h = image.naturalHeight || image.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d').drawImage(image, 0, 0, w, h);
+    result = { dataUrl: canvas.toDataURL('image/jpeg', 0.92), w, h, pages: 1 };
+  }
+  cpBaseCache.set(key, result);
+  if (!cpIsGuest() && doc.page_count !== result.pages) {
+    const stored = clientPortalDocumentById(doc.id);
+    if (stored) stored.page_count = result.pages;
+  }
+  return result;
+}
 
 function clientPortalDocumentById(documentId) {
   return state.clientPortalDocuments.find((doc) => doc.id === documentId) || null;

@@ -62,6 +62,12 @@ test('staff portal workspace supports create, upload, copy, revoke, and annotati
 test('public portal viewer exposes plan markup tools and persistent annotations', () => {
   assert.match(source, /fetchClientPortalDocumentFile/);
   assert.match(source, /cpResolveBase/);
+  assert.match(source, /const PDFJS_SRC = 'https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdf\.js\/3\.11\.174\/pdf\.min\.js';/);
+  assert.match(source, /const PDFJS_WORKER = 'https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdf\.js\/3\.11\.174\/pdf\.worker\.min\.js';/);
+  assert.match(source, /const cpBaseCache = new Map\(\);/);
+  assert.match(source, /function cpDocumentSourceUrl\(doc\)/);
+  assert.match(source, /window\.pdfjsLib\.getDocument\(url\)\.promise/);
+  assert.match(source, /pageObj\.render\(\{ canvasContext: canvas\.getContext\('2d'\), viewport \}\)\.promise/);
   assert.match(source, /data-cp-annotate/);
   assert.match(source, /data-cp-frame/);
   assert.match(source, /id: 'freehand'[\s\S]*tip: 'Pen'/);
