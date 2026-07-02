@@ -71,9 +71,9 @@ test('public portal viewer exposes plan markup tools and persistent annotations'
   assert.match(source, /cpWithTimeout\(client\.storage\.from\(bucket\)\.createSignedUrl\(doc\.object_path, 900\), 8000, 'Document URL'\)/);
   assert.match(source, /function cpDocumentSourceUrl\(doc\)/);
   assert.match(source, /const response = await cpWithTimeout\(fetch\(url\), 15000, 'Document download'\)/);
-  assert.match(source, /const data = new Uint8Array\(await response\.arrayBuffer\(\)\)/);
-  assert.match(source, /pdfjsLib\.getDocument\(\{ data \}\)\.promise/);
-  assert.match(source, /pageObj\.render\(\{ canvasContext: canvas\.getContext\('2d'\), viewport \}\)\.promise/);
+  assert.match(source, /const data = new Uint8Array\(await cpWithTimeout\(response\.arrayBuffer\(\), 15000, 'Document download'\)\)/);
+  assert.match(source, /pdfjsLib\.getDocument\(\{ data, disableWorker: true \}\)\.promise/);
+  assert.match(source, /cpWithTimeout\(pageObj\.render\(\{ canvasContext: canvas\.getContext\('2d'\), viewport \}\)\.promise, 15000, 'PDF render'\)/);
   assert.match(source, /data-cp-annotate/);
   assert.match(source, /data-cp-frame/);
   assert.match(source, /id: 'freehand'[\s\S]*tip: 'Pen'/);

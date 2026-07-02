@@ -8997,8 +8997,8 @@ async function cpResolveBase(doc, page) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
     const response = await cpWithTimeout(fetch(url), 15000, 'Document download');
     if (!response.ok) throw new Error('Document unavailable.');
-    const data = new Uint8Array(await response.arrayBuffer());
-    const pdf = await pdfjsLib.getDocument({ data }).promise;
+    const data = new Uint8Array(await cpWithTimeout(response.arrayBuffer(), 15000, 'Document download'));
+    const pdf = await cpWithTimeout(pdfjsLib.getDocument({ data, disableWorker: true }).promise, 15000, 'PDF parser');
     const pageObj = await pdf.getPage(Math.min(page + 1, pdf.numPages));
     const unit = pageObj.getViewport({ scale: 1 });
     const scale = Math.min(4, Math.max(1.5, 2400 / unit.width));
@@ -9006,7 +9006,7 @@ async function cpResolveBase(doc, page) {
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    await pageObj.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    await cpWithTimeout(pageObj.render({ canvasContext: canvas.getContext('2d'), viewport }).promise, 15000, 'PDF render');
     result = { dataUrl: canvas.toDataURL('image/jpeg', 0.9), w: viewport.width, h: viewport.height, pages: pdf.numPages };
   } else {
     const image = await loadClientPortalImage(url);
