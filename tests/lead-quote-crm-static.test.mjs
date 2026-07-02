@@ -10,7 +10,7 @@ test('crm navigation uses contacts quotes and production funnels', () => {
   assert.match(source, /\{ id: 'deals', group: 'Quotes · Bottom of Funnel', label: 'Quotes'/);
   assert.match(source, /\{ id: 'jobs', group: 'Production', label: 'Jobs'/);
   assert.match(source, /\{ label: 'Contacts · Top of Funnel', ids: \['contacts'\] \}/);
-  assert.match(source, /\{ label: 'Quotes · Bottom of Funnel', ids: \['deals'\] \}/);
+  assert.match(source, /\{ label: 'Quotes · Bottom of Funnel', ids: \['deals', 'proposals'\] \}/);
 });
 
 test('contact and quote funnels match the provided crm model', () => {
@@ -202,7 +202,7 @@ test('record quick create tiles open real workflows instead of placeholder toast
   assert.doesNotMatch(source, /roofUnderwriterUrl|ROOF_UNDERWRITER_URL|window\.open\(estimateUrl/);
   assert.match(source, /const PROPOSAL_TEMPLATES = \[/);
   assert.match(source, /function renderProposalBuilderModal\(companyId\)/);
-  assert.match(source, /function openProposalBuilder\(type, id\)/);
+  assert.match(source, /function openProposalBuilder\(type, id, proposalId = ''\)/);
   assert.match(source, /async function saveBuiltProposal\(form\)/);
   assert.match(source, /data-proposal-builder-form/);
   assert.match(source, /id="proposal-builder-form"/);

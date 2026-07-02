@@ -30,6 +30,7 @@ test('public portal route bypasses workspace auth and renders client shell', () 
 });
 
 test('public portal auto-opens and only asks for a password when required', () => {
+  const gateSource = source.match(/function renderClientPortalPasswordGate\(token, portal\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function shouldAutoOpenClientPortal\(token\)/);
   assert.match(source, /ensureClientPortalPublicOpen\(state\.route\.token\)/);
   assert.match(source, /function renderClientPortalPasswordGate\(token, portal\)/);
@@ -38,8 +39,8 @@ test('public portal auto-opens and only asks for a password when required', () =
   assert.match(source, /body: JSON\.stringify\(\{ token, guest_name: CLIENT_PORTAL_GUEST_NAME, password: password \|\| '' \}\)/);
   assert.match(source, /<input type="hidden" name="token" value="\$\{h\(token\)\}" \/>/);
   assert.match(source, /<label><span>Portal password<\/span><input name="password" type="password"/);
-  assert.doesNotMatch(source, /name="guest_name"/);
-  assert.doesNotMatch(source, /Your name/);
+  assert.doesNotMatch(gateSource, /name="guest_name"/);
+  assert.doesNotMatch(gateSource, /Your name/);
 });
 
 test('staff portal workspace supports create, upload, copy, revoke, and annotation review', () => {

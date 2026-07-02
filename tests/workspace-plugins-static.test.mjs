@@ -31,7 +31,7 @@ test('plugin registry maps every non-core route to a workspace plugin', () => {
   assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'tasks', 'users', 'settings'\]\);/);
   assert.match(source, /const WORKSPACE_PLUGIN_REGISTRY = \[/);
   assert.match(source, /id: 'crm'[\s\S]*module_ids: \['crm', 'contacts', 'deals'\]/);
-  assert.match(source, /id: 'crm_2'[\s\S]*module_ids: \['contacts', 'deals', 'jobs'\]/);
+  assert.match(source, /id: 'crm_2'[\s\S]*module_ids: \['contacts', 'deals', 'proposals', 'jobs'\]/);
   assert.match(source, /id: 'underwriter'[\s\S]*module_ids: \['underwriter'\]/);
   assert.match(source, /id: 'time_clock'[\s\S]*module_ids: \['time', 'clock'\]/);
   assert.match(source, /id: 'reporting'[\s\S]*module_ids: \['analytics', 'team-chart'\]/);
@@ -43,11 +43,11 @@ test('plugin registry maps every non-core route to a workspace plugin', () => {
 test('quest crm plugin contents match the contacts quotes jobs workspace', () => {
   assert.match(crm2RegistryEntry, /label: 'Quest CRM'/);
   assert.match(crm2RegistryEntry, /summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.'/);
-  assert.match(crm2RegistryEntry, /module_ids: \['contacts', 'deals', 'jobs'\]/);
+  assert.match(crm2RegistryEntry, /module_ids: \['contacts', 'deals', 'proposals', 'jobs'\]/);
   assert.match(crm2RegistryEntry, /private: true/);
   assert.doesNotMatch(crm2RegistryEntry, /module_ids: \['crm'/);
   assert.match(source, /\{ label: 'Contacts · Top of Funnel', ids: \['contacts'\] \}/);
-  assert.match(source, /\{ label: 'Quotes · Bottom of Funnel', ids: \['deals'\] \}/);
+  assert.match(source, /\{ label: 'Quotes · Bottom of Funnel', ids: \['deals', 'proposals'\] \}/);
   assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
   assert.match(source, /const PRIVATE_PLUGIN_ACCESS = \{/);
   assert.match(source, /password: 'LumenQuest@2026'/);

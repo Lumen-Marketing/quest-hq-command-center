@@ -394,8 +394,55 @@ const CONTACT_FILTER_DEFAULTS = {
   owner_name: 'all',
   pay_type: 'all',
 };
-const CONTACT_JOB_TYPE_OPTIONS = ['Insurance / storm', 'Retail replacement', 'Repair', 'Inspection', 'Maintenance', 'Re-roof'];
+const CONTACT_JOB_TYPE_OPTIONS = [
+  'Insurance / storm',
+  'Retail replacement',
+  'Repair',
+  'Inspection',
+  'Maintenance',
+  'Re-roof',
+  'Roof replacement',
+  'Roof repair',
+  'Roof inspection',
+  'Tile roof refelt',
+  'Shingle roof replacement',
+  'Flat roof repair',
+  'Foam roof recoating',
+  'Metal roof',
+  'Storm damage',
+  'Leak repair',
+  'Remodel',
+  'Service call',
+  'Gutter work',
+  'Solar detach and reset',
+];
 const CONTACT_PAY_TYPE_OPTIONS = ['Insurance', 'Retail', 'Financing', 'Cash'];
+const CONTACT_ROOF_SYSTEM_OPTIONS = [
+  'Shingle',
+  'Tile',
+  'Foam',
+  'Metal',
+  'Flat / Modified Bitumen',
+  'TPO',
+  'Built-up roof',
+  'Shake',
+  'Slate',
+  'Unknown',
+];
+const CONTACT_SOURCE_OPTIONS = [
+  ['', 'Select source'],
+  ['PPC', 'PPC'],
+  ['LSA', 'LSA'],
+  ['Meta Ads', 'Meta Ads'],
+  ['Referral', 'Referral'],
+  ['Door Knock', 'Door Knock'],
+  ['Calls', 'Calls'],
+  ['Website', 'Website'],
+  ['Google Business Profile', 'Google Business Profile'],
+  ['Repeat Customer', 'Repeat Customer'],
+  ['Canvassing', 'Canvassing'],
+  ['Other', 'Other'],
+];
 
 const DASHBOARD_WIDGET_GROUPS = ['Value drivers', 'Growth', 'Capacity', 'People', 'Cash flow', 'Strategy', 'EOS', 'Sales', 'Operations', 'Finance', 'Reputation'];
 const DASHBOARD_ROLE_VIEWS = [
@@ -1804,6 +1851,7 @@ const state = {
   activityPrefill: null,
   activityFilter: 'all',
   dockedActivityComposers: [],
+  contactWorkspaceTab: 'Notes',
   contactPrefill: null,
   selectedJobId: '',
   selectedTaskId: '',
@@ -2028,6 +2076,20 @@ function render() {
   if (state.route.params.get('account') === 'profile') state.modal = 'profile';
   document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Quest HQ`;
   app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route));
+  queueMicrotask(bindGoogleAddressInputs);
+}
+
+function bindGoogleAddressInputs() {
+  const places = window.google?.maps?.places;
+  if (!places?.Autocomplete) return;
+  document.querySelectorAll('[data-google-address-input]:not([data-google-bound])').forEach((input) => {
+    input.dataset.googleBound = 'true';
+    const autocomplete = new places.Autocomplete(input, { fields: ['formatted_address', 'geometry', 'name'], types: ['address'] });
+    autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace();
+      if (place?.formatted_address) input.value = place.formatted_address;
+    });
+  });
 }
 
 function shouldHoldCompanyRouteForLiveData(route) {
@@ -4557,7 +4619,7 @@ function renderContactRecord(companyId, contact) {
   const ci = stages.findIndex((s) => s.name === contact.stage);
   const g = guidanceForStage(contact.stage);
   const tempColor = contact.temperature === 'Hot' ? '#C2410C' : contact.temperature === 'Warm' ? '#B07A12' : '#2E72B8';
-  const activeTab = state.contactActivityTab || 'Email';
+  const activeWorkspaceTab = state.contactWorkspaceTab || 'Notes';
   const tasks = tasksForContact(contact.id);
   const totalFeed = activitiesFor('contact', contact.id);
   const feed = filteredActivitiesFor('contact', contact.id);
@@ -4580,9 +4642,8 @@ function renderContactRecord(companyId, contact) {
     </div>
   `;
 
-  const headerActions = [['Follow', 'ti-plus'], ['New Task', 'ti-checkbox'], ['Log a Call', 'ti-phone'], ['New Estimate', 'ti-calculator'], ['Edit', 'ti-pencil']];
-  const quickTiles = [['Task', 'ti-checkbox'], ['Meeting', 'ti-calendar'], ['Estimate', 'ti-calculator'], ['Proposal', 'ti-file-text'], ['Note', 'ti-note'], ['Call Log', 'ti-phone']];
-  const activityTabs = [['Email', 'ti-mail'], ['New Task', 'ti-checkbox'], ['New Event', 'ti-calendar'], ['Log a Call', 'ti-phone']];
+  const workspaceTabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Activity', 'ti-activity']];
+  const quickTiles = [['Task', 'ti-checkbox'], ['Meeting', 'ti-calendar'], ['Estimate', 'ti-calculator'], ['Proposal', 'ti-file-text'], ['Email', 'ti-mail'], ['Call Log', 'ti-phone']];
 
   return `
     <div class="sf-record">
@@ -4596,9 +4657,8 @@ function renderContactRecord(companyId, contact) {
         <span class="sf-record-icon"><i class="ti ti-user"></i></span>
         <div><div class="sf-record-label">Contact</div><div class="sf-record-name">${h(contact.name)}</div></div>
         <div class="sf-actions">
-          ${headerActions.map(([label, ico]) => label === 'Edit'
-            ? `<button class="sf-btn" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ${ico}"></i>${label}</button>`
-            : `<button class="sf-btn" type="button" data-action="contact-quick" data-kind="${h(label)}" data-contact-id="${h(contact.id)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
+          ${workspaceTabs.map(([label, ico]) => `<button class="sf-btn ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
+          <button class="sf-btn" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit</button>
         </div>
       </div>
 
@@ -4625,7 +4685,7 @@ function renderContactRecord(companyId, contact) {
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
             ${fieldRow('Phone', ed('phone'), 'phone')}
             ${fieldRow('Email', ed('email', { blue: true }), 'email')}
-            ${fieldRow('Location', `${ed('location')}${contact.location ? `<a class="sf-field-action" href="${h(mapsSearchUrl(contact.location))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map</a>` : ''}`, 'location')}
+            ${fieldRow('Location', `${ed('location')}${contact.location ? `<a class="sf-field-action" href="${h(googleMapsPlaceSearchUrl(contact.location))}" data-map-url="${h(mapsSearchUrl(contact.location))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map: Exact pin</a>` : ''}`, 'location')}
             ${fieldRow('Job Type', `<span class="sf-pill sf-edit" data-contact-edit="title" data-contact-id="${h(contact.id)}" title="Click to edit">${h(contact.title || '—')}</span>`, 'title')}
             ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
             ${fieldRow('Source', ed('source'), 'source')}
@@ -4636,22 +4696,12 @@ function renderContactRecord(companyId, contact) {
             ${fieldRow('Temperature', `<span class="sf-edit" data-contact-edit="temperature" data-contact-id="${h(contact.id)}" style="color:${tempColor}" title="Click to edit">${h(contact.temperature)}</span>`, 'temperature')}
             ${fieldRow('Pay Type', ed('pay_type'), 'pay_type')}
             ${fieldRow('Roof System', ed('roof_system'), 'roof_system')}
+            ${contact.has_multiple_roof_systems || contact.secondary_roof_system ? fieldRow('Second Roof System', ed('secondary_roof_system'), 'secondary_roof_system') : ''}
           </div></div>
         </div>
 
         <div class="sf-col">
-          <div class="sf-card">
-            <div class="sf-activity-tabs">${activityTabs.map(([label, ico]) => `<button class="sf-activity-tab ${activeTab === label ? 'active' : ''}" type="button" data-action="open-docked-activity" data-related-type="contact" data-related-id="${h(contact.id)}" data-kind="${h(label)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}</div>
-            <form class="sf-note-box" data-contact-note-form autocomplete="off">
-              <input type="hidden" name="contact_id" value="${h(contact.id)}" />
-              <input name="body" placeholder="Write a note or @mention…" />
-              <span class="sf-note-tools"><i class="ti ti-paperclip"></i><i class="ti ti-at"></i></span>
-            </form>
-            ${renderActivityFilterBar(totalFeed.length, feed.length)}
-            <div class="sf-feed">
-              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : `<div class="sf-feed-empty">${totalFeed.length ? 'No activity matches this filter.' : 'No activity yet. Log a note, call, or meeting.'}</div>`}
-            </div>
-          </div>
+          ${renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed)}
         </div>
 
         <div class="sf-col">
@@ -4663,9 +4713,63 @@ function renderContactRecord(companyId, contact) {
             <div class="sf-tasks">
               ${tasks.map((t) => renderSfTaskRow(t)).join('') || '<div class="sf-task-empty">No tasks yet.</div>'}
             </div>
-            <form class="sf-task-add" data-contact-task-form autocomplete="off"><input type="hidden" name="contact_id" value="${h(contact.id)}" /><i class="ti ti-plus"></i><input name="title" placeholder="Add a task…" /></form>
+            <form class="sf-task-add sf-task-add-rich" data-contact-task-form autocomplete="off">
+              <input type="hidden" name="contact_id" value="${h(contact.id)}" />
+              <i class="ti ti-plus"></i>
+              <input name="title" placeholder="Add a task…" />
+              <input name="due" type="date" value="${h(isoDate(1))}" aria-label="Due date" />
+              <input name="due_time" type="time" aria-label="Due time" />
+              <button type="submit" title="Save task" aria-label="Save task"><i class="ti ti-check"></i></button>
+            </form>
           </div>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed) {
+  const tabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Activity', 'ti-activity']];
+  const noteItems = filteredActivitiesFor('contact', contact.id).filter((activity) => activity.type === 'note');
+  const emailItems = filteredActivitiesFor('contact', contact.id).filter((activity) => activity.type === 'email');
+  const panelFeed = activeWorkspaceTab === 'Notes' ? noteItems : activeWorkspaceTab === 'Email' ? emailItems : feed;
+  const composer = activeWorkspaceTab === 'Email'
+    ? `
+      <div class="sf-email-panel">
+        <div>
+          <strong>${h(contact.email || 'No email on file')}</strong>
+          <small>${contact.email ? 'Send or log customer email from this record.' : 'Add an email address before sending.'}</small>
+        </div>
+        <button class="sf-primary-mini" type="button" data-action="open-docked-activity" data-related-type="contact" data-related-id="${h(contact.id)}" data-kind="Email"><i class="ti ti-mail"></i>Compose email</button>
+      </div>
+      <form class="sf-note-box" data-contact-note-form autocomplete="off">
+        <input type="hidden" name="contact_id" value="${h(contact.id)}" />
+        <input type="hidden" name="activity_type" value="email" />
+        <input name="body" placeholder="Log an email summary..." />
+        <span class="sf-note-tools"><i class="ti ti-mail"></i></span>
+      </form>
+    `
+    : activeWorkspaceTab === 'Activity'
+      ? renderActivityFilterBar(totalFeed.length, feed.length)
+      : `
+        <form class="sf-note-box" data-contact-note-form autocomplete="off">
+          <input type="hidden" name="contact_id" value="${h(contact.id)}" />
+          <input type="hidden" name="activity_type" value="note" />
+          <input name="body" placeholder="Write a note or @mention..." />
+          <span class="sf-note-tools"><i class="ti ti-paperclip"></i><i class="ti ti-at"></i></span>
+        </form>
+      `;
+  const emptyText = activeWorkspaceTab === 'Email'
+    ? 'No email history yet.'
+    : activeWorkspaceTab === 'Activity'
+      ? (totalFeed.length ? 'No activity matches this filter.' : 'No activity yet. Log a note, email, call, meeting, or task.')
+      : 'No notes yet.';
+  return `
+    <div class="sf-card sf-workspace-card">
+      <div class="sf-activity-tabs">${tabs.map(([label, ico]) => `<button class="sf-activity-tab ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}</div>
+      ${composer}
+      <div class="sf-feed">
+        ${panelFeed.length ? panelFeed.map((a) => sfFeedItem(a)).join('') : `<div class="sf-feed-empty">${emptyText}</div>`}
       </div>
     </div>
   `;
@@ -4703,6 +4807,7 @@ function contactInlineOptions(contact, key) {
   if (key === 'stage') return contactStageNames().map((stage) => [stage, stage]);
   if (key === 'temperature') return TEMPERATURES.map((temperature) => [temperature, temperature]);
   if (key === 'owner_name') return contactOwnerOptions(contact.company_id, contact.owner_name);
+  if (key === 'source') return contactSourceOptions(contact.company_id);
   return [];
 }
 
@@ -4741,18 +4846,30 @@ function beginContactInlineEdit(span) {
   });
 }
 
-async function createContactTask(contactId, title) {
+async function createContactTask(contactId, taskInput) {
   const companyId = activeCompanyId();
-  const clean = String(title || '').trim();
-  if (!clean) return;
+  const clean = typeof taskInput === 'object'
+    ? {
+      title: String(taskInput.title || '').trim(),
+      description: String(taskInput.description || taskInput.details || '').trim(),
+      due: String(taskInput.due || isoDate(1)).slice(0, 10),
+      due_time: String(taskInput.due_time || '').trim(),
+      priority: String(taskInput.priority || 'medium').toLowerCase(),
+    }
+    : { title: String(taskInput || '').trim(), description: '', due: isoDate(1), due_time: '', priority: 'medium' };
+  if (!clean.title) return;
   const payload = normalizeTask({
     id: `task-${crypto.randomUUID()}`,
     company_id: companyId,
-    title: clean,
+    title: clean.title,
+    description: clean.description,
     contact_id: contactId,
     creator_id: activeSession().profile.member_id || companyMembers(companyId)[0]?.id || 'abraham',
     status: 'todo',
-    due: isoDate(1),
+    due: clean.due,
+    due_time: clean.due_time,
+    priority: clean.priority,
+    urgency: clean.priority,
   });
   upsertTask(payload);
   render();
@@ -4775,6 +4892,7 @@ async function logContactActivity(contactId, type, subject, body = '') {
 function contactQuickCreate(contactId, kind) {
   if (kind === 'Task' || kind === 'New Task') return openDockedActivityComposer('contact', contactId, 'New Task');
   if (kind === 'Note') return openDockedActivityComposer('contact', contactId, 'Note');
+  if (kind === 'Email') return openDockedActivityComposer('contact', contactId, 'Email');
   if (kind === 'Call Log' || kind === 'Log a Call') return openDockedActivityComposer('contact', contactId, 'Log a Call');
   if (kind === 'Meeting' || kind === 'New Event') return openDockedActivityComposer('contact', contactId, 'New Event');
   if (kind === 'Estimate' || kind === 'New Estimate') return openEstimateBuilder('contact', contactId);
@@ -4788,6 +4906,7 @@ async function postContactNote(form) {
   const text = String(data.body || '').trim();
   const contactId = String(data.contact_id || '');
   if (!text) return;
+  if (data.activity_type) return logContactActivity(contactId, String(data.activity_type), '', text);
   const tab = state.contactActivityTab || 'Email';
   if (tab === 'New Task') return createContactTask(contactId, text);
   const typeMap = { Email: 'email', 'Log a Call': 'call', 'New Event': 'meeting' };
@@ -4840,10 +4959,18 @@ function renderSfTaskRow(task, options = {}) {
     ? `<button class="sf-check" type="button" data-select-task="${h(task.id)}" aria-label="Open task">${task.status === 'done' ? '<i class="ti ti-check"></i>' : ''}</button>`
     : `<button class="sf-check" type="button" data-action="toggle-contact-task" data-task-id="${h(task.id)}" aria-label="Toggle task">${task.status === 'done' ? '<i class="ti ti-check"></i>' : ''}</button>`;
   return `
-    <div class="sf-task-row ${task.status === 'done' ? 'done' : ''}">
+    <div class="sf-task-row ${task.status === 'done' ? 'done' : ''}" data-action="open-contact-task" data-task-id="${h(task.id)}">
       ${checkControl}
-      <span class="sf-task-title">${h(task.title)}</span>
-      ${task.due ? `<span class="sf-due">${h(formatDate(task.due))}</span>` : ''}
+      <span class="sf-task-main">
+        <span class="sf-task-title">${h(task.title)}</span>
+        <span class="sf-task-meta">
+          ${task.due ? `<span><i class="ti ti-calendar"></i>${h(formatDate(task.due))}</span>` : ''}
+          ${task.due_time ? `<span><i class="ti ti-clock"></i>${h(formatTime(task.due_time))}</span>` : ''}
+          <span>${h(titleCase(task.priority))}</span>
+        </span>
+        ${task.description ? `<span class="sf-task-details">${h(task.description)}</span>` : ''}
+      </span>
+      <button class="sf-task-edit" type="button" data-action="edit-contact-task" data-task-id="${h(task.id)}" data-task-return="${h(returnMode)}" aria-label="Edit task" title="Edit task"><i class="ti ti-pencil"></i></button>
       <button class="sf-task-delete" type="button" data-action="delete-task" data-task-id="${h(task.id)}" data-task-return="${h(returnMode)}" aria-label="Delete task" title="Delete task"><i class="ti ti-trash"></i></button>
     </div>
   `;
@@ -4884,7 +5011,13 @@ function setContactTemperature(contactId, temp) {
 
 function addContactTask(form) {
   const data = Object.fromEntries(new FormData(form).entries());
-  createContactTask(String(data.contact_id || ''), String(data.title || ''));
+  createContactTask(String(data.contact_id || ''), {
+    title: data.title,
+    description: data.description,
+    due: data.due,
+    due_time: data.due_time,
+    priority: data.priority,
+  });
 }
 
 async function toggleContactTask(taskId) {
@@ -5036,6 +5169,8 @@ function renderContactFormModal(companyId, contact) {
 function renderContactEditor(companyId, contact) {
   const edit = contact || blankContact(companyId);
   const addressOptions = contactAddressOptions(companyId);
+  const jobTypeOptions = contactJobTypeOptions(companyId);
+  const roofSystemOptions = contactRoofSystemOptions(companyId);
   return `
     <form class="job-editor" data-contact-form>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
@@ -5045,17 +5180,22 @@ function renderContactEditor(companyId, contact) {
       ${field('Name', 'name', edit.name, true)}
       ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
       ${selectField('Account', 'account_id', edit.account_id, [['', '— None —']].concat(companyAccounts(companyId).map((account) => [account.id, account.name])))}
-      ${field('Title', 'title', edit.title)}
+      ${field('Job type', 'title', edit.title, false, 'text', '', 'list="contact-job-type-options" autocomplete="off"')}
+      <datalist id="contact-job-type-options">${jobTypeOptions.map((item) => `<option value="${h(item)}"></option>`).join('')}</datalist>
       ${field('Phone', 'phone', edit.phone, false, 'tel', '', 'autocomplete="tel" inputmode="tel" data-phone-format')}
       ${field('Email', 'email', edit.email, false, 'email')}
-      ${field('Location', 'location', edit.location, false, 'text', 'span-2', 'autocomplete="street-address" list="contact-address-options"')}
+      <label class="span-2 contact-location-field"><span>Location</span><input name="location" type="text" value="${h(edit.location)}" autocomplete="street-address" list="contact-address-options" data-google-address-input />${renderGoogleMapsHint(edit.location)}</label>
       <datalist id="contact-address-options">${addressOptions.map((address) => `<option value="${h(address)}"></option>`).join('')}</datalist>
       ${selectField('Stage', 'stage', edit.stage || contactStageNames()[0], contactStageNames().map((stage) => [stage, stage]))}
       ${selectField('Owner', 'owner_name', edit.owner_name, contactOwnerOptions(companyId, edit.owner_name))}
       ${field('Estimated value', 'value', edit.value || 0, false, 'number')}
       ${selectField('Temperature', 'temperature', edit.temperature || 'Warm', TEMPERATURES.map((t) => [t, t]))}
       ${field('Pay type', 'pay_type', edit.pay_type)}
-      ${field('Roof system', 'roof_system', edit.roof_system)}
+      ${field('Roof system', 'roof_system', edit.roof_system, false, 'text', '', 'list="contact-roof-system-options" autocomplete="off"')}
+      <datalist id="contact-roof-system-options">${roofSystemOptions.map((item) => `<option value="${h(item)}"></option>`).join('')}</datalist>
+      <label class="checkbox-field"><span>Multiple roof systems?</span><input name="has_multiple_roof_systems" type="checkbox" ${edit.has_multiple_roof_systems ? 'checked' : ''} /></label>
+      ${field('Secondary roof system', 'secondary_roof_system', edit.secondary_roof_system, false, 'text', '', 'list="contact-roof-system-options" autocomplete="off"')}
+      ${selectField('Source', 'source', edit.source, contactSourceOptions(companyId))}
       ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
       <div class="form-actions span-2">
         <button class="btn btn-primary" type="submit">Save contact</button>
@@ -5749,6 +5889,8 @@ function renderTaskForm(companyId, job, task) {
   return `
     <form class="task-form" data-task-form>
       <input type="hidden" name="id" value="${h(task ? edit.id : '')}" />
+      <input type="hidden" name="contact_id" value="${h(edit.contact_id || state.route?.params?.get('return_contact_id') || '')}" />
+      <input type="hidden" name="return_contact_id" value="${h(state.route?.params?.get('return_contact_id') || '')}" />
       <div class="section-head">
         <div><h2>${task ? 'Edit task' : 'New task'}</h2><p>Writes company_id and optional project_id directly to Quest tasks.</p></div>
       </div>
@@ -5759,6 +5901,7 @@ function renderTaskForm(companyId, job, task) {
       ${selectField('Type', 'type', edit.type, TASK_TYPES.map((item) => [item, taskTypeLabel(item)]))}
       ${selectField('Assignee', 'assignee_id', edit.assignee_id, companyMembers(companyId).map((item) => [item.id, memberName(item.id)]))}
       ${field('Due date', 'due', edit.due || isoDate(1), true, 'date')}
+      ${field('Due time', 'due_time', edit.due_time || '', false, 'time')}
       ${textareaField('Description', 'description', edit.description)}
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">Save task</button>
@@ -12388,6 +12531,20 @@ function handleAction(event, node) {
     toggleContactTask(node.dataset.taskId);
     return;
   }
+  if (action === 'open-contact-task') {
+    event.preventDefault();
+    const task = taskById(node.dataset.taskId);
+    if (!task) return;
+    navigate(companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id, return_contact_id: task.contact_id || '' }, task.company_id));
+    return;
+  }
+  if (action === 'edit-contact-task') {
+    event.preventDefault();
+    const task = taskById(node.dataset.taskId);
+    if (!task) return;
+    navigate(companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id, edit: '1', return_contact_id: task.contact_id || '' }, task.company_id));
+    return;
+  }
   if (action === 'contact-quick') {
     event.preventDefault();
     contactQuickCreate(node.dataset.contactId, node.dataset.kind);
@@ -12407,6 +12564,12 @@ function handleAction(event, node) {
     event.preventDefault();
     state.contactActivityTab = node.dataset.tab;
     openDockedActivityComposer('contact', node.dataset.contactId, node.dataset.kind || node.dataset.tab);
+    return;
+  }
+  if (action === 'set-contact-workspace-tab') {
+    event.preventDefault();
+    state.contactWorkspaceTab = ['Notes', 'Email', 'Activity'].includes(node.dataset.tab) ? node.dataset.tab : 'Notes';
+    updateWorkspaceOnly();
     return;
   }
   if (action === 'contact-convert-quote') {
@@ -12810,6 +12973,11 @@ function closeActiveModal() {
     return;
   }
   if (route.name === 'company' && route.section === 'tasks' && (route.params.get('new') || route.params.get('edit') || route.params.get('task_id'))) {
+    const returnContactId = route.params.get('return_contact_id');
+    if (returnContactId) {
+      navigate(companyPath('contacts', { contact_id: returnContactId }, route.companyId), { replace: true });
+      return;
+    }
     navigate(companyPath('tasks', route.jobId ? { job_id: route.jobId } : {}, route.companyId), { replace: true });
     return;
   }
@@ -14948,6 +15116,7 @@ async function saveTask(form) {
   const previous = taskById(payload.id);
   const existing = !!previous;
   const client = createSupabaseClient();
+  const returnContactId = String(formData.return_contact_id || '').trim();
   if (client) {
     const savePayload = taskPayload(payload);
     const result = existing
@@ -14959,6 +15128,10 @@ async function saveTask(form) {
       notifyTaskChange(savedTask, previous);
       state.sync = { label: 'Quest Supabase live', mode: 'live' };
       state.modal = '';
+      if (returnContactId) {
+        navigate(companyPath('contacts', { contact_id: returnContactId }, companyId), { replace: true });
+        return;
+      }
       navigate(companyPath('tasks', { ...(payload.project_id ? { job_id: payload.project_id } : {}), task_id: payload.id }, companyId), { replace: true });
       return;
     }
@@ -14968,6 +15141,10 @@ async function saveTask(form) {
   upsertTask(payload);
   notifyTaskChange(payload, previous);
   state.modal = '';
+  if (returnContactId) {
+    navigate(companyPath('contacts', { contact_id: returnContactId }, companyId), { replace: true });
+    return;
+  }
   navigate(companyPath('tasks', { ...(payload.project_id ? { job_id: payload.project_id } : {}), task_id: payload.id }, companyId), { replace: true });
 }
 
@@ -17133,6 +17310,10 @@ function renderDockedActivityFields(composer, record, config) {
           <input name="due_date" type="date" value="${h(isoDate(1))}" aria-label="Due date" />
         </label>
         <label class="activity-dock-field">
+          <span>Due time</span>
+          <input name="due_time" type="time" value="" aria-label="Due time" />
+        </label>
+        <label class="activity-dock-field">
           <span>Priority</span>
           <select name="priority" aria-label="Priority">
             <option>Normal</option>
@@ -17262,7 +17443,13 @@ async function submitDockedActivityComposer(form) {
   state.dockedActivityComposers = state.dockedActivityComposers.filter((item) => item.id !== composerId);
 
   if (config.type === 'task') {
-    if (composer.related_type === 'contact') await createContactTask(composer.related_id, subject);
+    if (composer.related_type === 'contact') await createContactTask(composer.related_id, {
+      title: subject,
+      description: formData.task_notes,
+      due: formData.due_date,
+      due_time: formData.due_time,
+      priority: formData.priority,
+    });
     if (composer.related_type === 'job') await createJobTask(composer.related_id, subject);
     if (composer.related_type === 'deal') await createDealTask(composer.related_id, subject);
     return;
@@ -17358,7 +17545,7 @@ const ACCOUNT_COLS = ['id', 'company_id', 'name', 'type', 'industry', 'website',
 const DEAL_COLS = ['id', 'company_id', 'account_id', 'primary_contact_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'notes', 'updated_at'];
 const PROPOSAL_COLS = ['id', 'company_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
 const ACTIVITY_COLS = ['id', 'company_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
-const CONTACT_COLS = ['id', 'company_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'last_activity_at', 'notes', 'updated_at'];
+const CONTACT_COLS = ['id', 'company_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'last_activity_at', 'notes', 'updated_at'];
 
 function emptyToNull(row, keys) {
   keys.forEach((key) => { if (row[key] === '') row[key] = null; });
@@ -18492,12 +18679,48 @@ function mapsSearchUrl(address) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean)}`;
 }
 
+function googleMapsPlaceSearchUrl(address) {
+  return mapsSearchUrl(address);
+}
+
+function renderGoogleMapsHint(address) {
+  const clean = String(address || '').trim();
+  if (!clean) return '<small class="field-hint">Start typing an address, then open the Google Maps pin after saving.</small>';
+  return `<small class="field-hint"><a href="${h(googleMapsPlaceSearchUrl(clean))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Open exact Google Maps pin</a></small>`;
+}
+
 function contactAddressOptions(companyId) {
   return compactUnique([
     ...companyContacts(companyId).map((contact) => contact.location),
     ...companyAccounts(companyId).map((account) => account.address),
     ...companyJobs(companyId).map((job) => job.site_address),
   ]).sort((a, b) => a.localeCompare(b));
+}
+
+function contactJobTypeOptions(companyId) {
+  return compactUnique([
+    ...CONTACT_JOB_TYPE_OPTIONS,
+    ...companyContacts(companyId).map((contact) => contact.title),
+    ...companyJobs(companyId).map((job) => job.job_type),
+    ...state.proposals.filter((proposal) => proposal.company_id === companyId).map((proposal) => proposal.title),
+  ]).sort((a, b) => a.localeCompare(b));
+}
+
+function contactRoofSystemOptions(companyId) {
+  return compactUnique([
+    ...CONTACT_ROOF_SYSTEM_OPTIONS,
+    ...Object.values(ROOF_ESTIMATE_SYSTEMS).map((system) => system.label),
+    ...companyContacts(companyId).flatMap((contact) => [contact.roof_system, contact.secondary_roof_system]),
+  ]).sort((a, b) => a.localeCompare(b));
+}
+
+function contactSourceOptions(companyId) {
+  const known = compactUnique([
+    ...CONTACT_SOURCE_OPTIONS.map(([value]) => value).filter(Boolean),
+    ...companyContacts(companyId).map((contact) => contact.source),
+    ...companyDeals(companyId).map((deal) => deal.source),
+  ]);
+  return [['', 'Select source']].concat(known.map((source) => [source, source]));
 }
 
 function contactOwnerOptions(companyId, selectedOwner = '') {
@@ -18634,6 +18857,8 @@ function normalizeContact(input) {
     temperature: resolveTemperature(input.temperature),
     pay_type: String(input.pay_type || '').trim(),
     roof_system: String(input.roof_system || '').trim(),
+    secondary_roof_system: String(input.secondary_roof_system || '').trim(),
+    has_multiple_roof_systems: input.has_multiple_roof_systems === true || input.has_multiple_roof_systems === 'true' || input.has_multiple_roof_systems === 'on',
     last_activity_at: input.last_activity_at || null,
     notes: String(input.notes || '').trim(),
     created_at: input.created_at || new Date().toISOString(),
@@ -21409,6 +21634,15 @@ function formatDateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date);
+}
+
+function formatTime(value) {
+  const clean = String(value || '').trim();
+  const match = clean.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return clean;
+  const date = new Date();
+  date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date);
 }
 
 function timeAgo(value) {
