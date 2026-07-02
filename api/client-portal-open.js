@@ -89,7 +89,7 @@ export default async function handler(request, response) {
     }),
   }).catch(() => null);
 
-  const docsResult = await supabaseFetch(`/rest/v1/client_portal_documents?portal_id=eq.${encodeURIComponent(portal.id)}&select=id,company_id,portal_id,file_name,mime_type,size_bytes,page_count,created_at&order=created_at.asc`);
+  const docsResult = await supabaseFetch(`/rest/v1/client_portal_documents?portal_id=eq.${encodeURIComponent(portal.id)}&is_current=eq.true&select=id,company_id,portal_id,file_name,mime_type,size_bytes,page_count,version_group_id,version_number,is_current,review_status,scale,created_at&order=created_at.asc`);
   const documents = docsResult.ok ? await docsResult.json() : [];
   const session = signSession({
     portal_id: portal.id,

@@ -118,7 +118,7 @@ test('client portal migration creates tables, RLS, bucket, grants, and plugin al
 
 test('client portal Vercel APIs exist and do not expose raw token or password fields', () => {
   const apiDir = new URL('../api/', import.meta.url);
-  for (const name of ['client-portal-open.js', 'client-portal-document-url.js', 'client-portal-document-file.js', 'client-portal-annotations.js', 'client-portal-export-event.js']) {
+  for (const name of ['client-portal-open.js', 'client-portal-document-url.js', 'client-portal-document-file.js', 'client-portal-annotations.js', 'client-portal-document-status.js', 'client-portal-export-event.js']) {
     assert.ok(existsSync(new URL(name, apiDir)), `${name} should exist`);
     const api = readFileSync(new URL(name, apiDir), 'utf8');
     assert.match(api, /SUPABASE_SERVICE_ROLE_KEY/);
@@ -129,6 +129,16 @@ test('client portal Vercel APIs exist and do not expose raw token or password fi
     assert.doesNotMatch(api, /select=token/);
     assert.doesNotMatch(api, /select=password/);
   }
+  const openApi = readFileSync(new URL('client-portal-open.js', apiDir), 'utf8');
+  assert.match(openApi, /is_current=eq\.true/);
+  assert.match(openApi, /version_group_id,version_number,is_current,review_status,scale/);
+  const annotationsApi = readFileSync(new URL('client-portal-annotations.js', apiDir), 'utf8');
+  assert.match(annotationsApi, /body\.action === 'delete'/);
+  assert.match(annotationsApi, /body\.annotation && typeof body\.annotation === 'object'/);
+  assert.match(annotationsApi, /on_conflict=id/);
+  const statusApi = readFileSync(new URL('client-portal-document-status.js', apiDir), 'utf8');
+  assert.match(statusApi, /REVIEW_STATUSES = \['pending', 'approved', 'revision', 'rejected'\]/);
+  assert.match(statusApi, /portal_id=eq\.\$\{encodeURIComponent\(session\.portal_id\)\}/);
   const documentUrlApi = readFileSync(new URL('client-portal-document-url.js', apiDir), 'utf8');
   assert.match(documentUrlApi, /function absoluteStorageUrl\s*\(/);
   assert.match(documentUrlApi, /\$\{baseUrl\(\)\}\/storage\/v1\$\{cleanPath\}/);
