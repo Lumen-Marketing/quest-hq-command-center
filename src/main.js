@@ -7984,6 +7984,11 @@ function normalizeWorkspaceBuilderDoc(doc) {
 function wbDoc(companyId) {
   return state.workspaceBuilderDocs[canonicalCompanyId(companyId)] || null;
 }
+function loadWorkspaceBuilderState(companyId) {
+  const key = canonicalCompanyId(companyId);
+  if (!state.workspaceBuilderDocs[key]) ensureWorkspaceBuilderLoaded(companyId);
+  return state.workspaceBuilderDocs[key] || normalizeWorkspaceBuilderDoc({ workspaces: [] });
+}
 function ensureWorkspaceBuilderLoaded(companyId) {
   const key = canonicalCompanyId(companyId);
   if (state.workspaceBuilderDocs[key]) return true;
