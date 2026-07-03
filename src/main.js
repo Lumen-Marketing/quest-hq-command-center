@@ -1990,6 +1990,7 @@ function init() {
     render();
   });
   document.addEventListener('click', onDocumentClick);
+  document.addEventListener('keydown', onDocumentKeydown);
   document.addEventListener('submit', onDocumentSubmit);
   document.addEventListener('input', onDocumentInput);
   document.addEventListener('change', onDocumentChange);
@@ -5402,7 +5403,7 @@ function selectedContactRows(companyId = activeCompanyId(), fallbackToAll = fals
 
 function bulkContactsEmail() {
   const targets = selectedContactRows(activeCompanyId(), true);
-  const emails = [...new Set(targets.map((c) => String(c.email || '').trim()).filter((e) => e.includes('@')))];
+  const emails = [...new Set(targets.map((c) => String(c.email || '').trim()).filter((e) => isValidEmail(e)))];
   if (!emails.length) { showToast('No valid email addresses to send to.', 'local', 'Contacts'); return; }
   window.location.href = `mailto:?bcc=${encodeURIComponent(emails.join(','))}`;
 }
@@ -6956,6 +6957,12 @@ function blankContact(companyId = activeCompanyId()) {
   return contact;
 }
 
+// Basic-but-real email validation: exactly one @, non-empty local part, and a
+// dotted domain. Replaces the old `.includes('@')` check that accepted "a@".
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
 function validateContactForm(form) {
   const formData = Object.fromEntries(new FormData(form).entries());
   const nameInput = form.querySelector('[name="name"]');
@@ -6969,10 +6976,10 @@ function validateContactForm(form) {
   nameInput?.setCustomValidity('');
   const emailInput = form.querySelector('[name="email"]');
   const rawEmail = String(formData.email || '').trim();
-  if (rawEmail && !rawEmail.includes('@')) {
-    emailInput?.setCustomValidity('Enter a valid email address (include "@").');
+  if (rawEmail && !isValidEmail(rawEmail)) {
+    emailInput?.setCustomValidity('Enter a valid email address, e.g. name@company.com.');
     emailInput?.reportValidity();
-    showToast('Enter a valid email address (include "@").', 'local', 'Contacts');
+    showToast('Enter a valid email address, e.g. name@company.com.', 'local', 'Contacts');
     return { ok: false };
   }
   emailInput?.setCustomValidity('');
@@ -9167,8 +9174,8 @@ function wbSubmitModal() {
     // otherwise repaint the form from an empty draft and clear the fields).
     if (missing) { m.draft.values = values; showToast(`"${missing}" is required.`, 'local', 'Workspaces'); return; }
     let badEmail = null;
-    app.fields.forEach((f) => { if (f.type === 'email') { const v = String(values[f.id] || '').trim(); if (v && !v.includes('@')) badEmail = badEmail || f.label; } });
-    if (badEmail) { m.draft.values = values; showToast(`"${badEmail}" must be a valid email address (include "@").`, 'local', 'Workspaces'); return; }
+    app.fields.forEach((f) => { if (f.type === 'email') { const v = String(values[f.id] || '').trim(); if (v && !isValidEmail(v)) badEmail = badEmail || f.label; } });
+    if (badEmail) { m.draft.values = values; showToast(`"${badEmail}" must be a valid email address, e.g. name@company.com.`, 'local', 'Workspaces'); return; }
     if (m.editId) {
       const item = app.items.find((i) => i.id === m.editId); const prev = { ...item.values }; item.values = values;
       wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Updated <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
@@ -14606,6 +14613,22 @@ function renderFormActionsModal(companyId, form) {
   `);
 }
 
+// Keyboard bridge: custom action elements (e.g. <div role="button" data-action>)
+// aren't natively operable by keyboard. Activate them on Enter/Space so lists
+// like the contacts table are usable without a mouse. Native controls
+// (button/a/input) already handle their own keys and are skipped.
+function onDocumentKeydown(event) {
+  if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
+  const el = event.target;
+  if (!el || typeof el.closest !== 'function') return;
+  const tag = el.tagName;
+  if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  const action = el.closest('[role="button"][data-action], [tabindex][data-action]');
+  if (!action || action !== el) return;
+  event.preventDefault();
+  handleAction(event, action);
+}
+
 function onDocumentClick(event) {
   const closeAccountMenu = state.accountMenuOpen && !event.target.closest('.account-menu');
   const closeNotificationMenu = state.notificationMenuOpen && !event.target.closest('.notification-center');
@@ -15575,6 +15598,16 @@ function handleAction(event, node) {
   if (action === 'revoke-client-portal') {
     event.preventDefault();
     revokeClientPortal(node.dataset.portalId);
+    return;
+  }
+  if (action === 'restore-client-portal') {
+    event.preventDefault();
+    restoreClientPortal(node.dataset.portalId);
+    return;
+  }
+  if (action === 'delete-client-portal') {
+    event.preventDefault();
+    deleteClientPortal(node.dataset.portalId);
     return;
   }
   if (action === 'open-folder-form') {
@@ -18939,6 +18972,39 @@ async function revokeClientPortal(portalId) {
   }
   upsertClientPortal(next);
   showToast('Portal revoked.', state.session?.auth === 'supabase' ? 'live' : 'local', 'Client Portal');
+  render();
+}
+
+async function restoreClientPortal(portalId) {
+  const portal = clientPortalById(portalId);
+  if (!portal || !requirePermission('client_portals.manage', portal.company_id, 'Your role cannot manage portals.', 'Client Portal')) return;
+  const next = normalizeClientPortal({ ...portal, status: 'active', revoked_at: null, updated_at: new Date().toISOString() });
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await client.from('client_portals').update({ status: 'active', revoked_at: null, updated_at: next.updated_at }).eq('id', portal.id).select().single();
+    if (result.error) { showToast(result.error.message || 'Portal reactivate failed.', 'error', 'Client Portal'); return; }
+  }
+  upsertClientPortal(next);
+  showToast('Portal reactivated.', isLiveSupabaseSession() ? 'live' : 'local', 'Client Portal');
+  render();
+}
+
+async function deleteClientPortal(portalId) {
+  const portal = clientPortalById(portalId);
+  if (!portal || !requirePermission('client_portals.manage', portal.company_id, 'Your role cannot manage portals.', 'Client Portal')) return;
+  if (!window.confirm(`Delete ${portal.title}? This permanently removes the portal and its share link.`)) return;
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await client.from('client_portals').delete().eq('id', portal.id);
+    if (result.error) { showToast(result.error.message || 'Portal delete failed.', 'error', 'Client Portal'); return; }
+  }
+  state.clientPortals = state.clientPortals.filter((item) => item.id !== portal.id);
+  state.clientPortalDocuments = state.clientPortalDocuments.filter((doc) => doc.portal_id !== portal.id);
+  persistAll();
+  if (state.route?.params?.get('portal_id') === portal.id) {
+    navigate(companyPath('client-portals', {}, portal.company_id), { replace: true });
+  }
+  showToast('Portal deleted.', isLiveSupabaseSession() ? 'live' : 'local', 'Client Portal');
   render();
 }
 
