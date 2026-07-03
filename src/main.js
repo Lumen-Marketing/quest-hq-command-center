@@ -8508,7 +8508,7 @@ function wbFmtVal(ctx, field, value) {
     case 'phone': return h(formatPhoneNumber(value));
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
     case 'checkbox': return value ? '<span class="wb-status-pill wb-yes"><i class="ti ti-check"></i>Yes</span>' : '<span class="wb-cell-empty">No</span>';
-    case 'file': return `<span class="wb-tag wb-file"><i class="ti ti-file"></i>${h(value)}</span>`;
+    case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; return fv.url ? `<a class="wb-tag wb-file" href="${h(fv.url)}" target="_blank" rel="noreferrer" title="View ${h(fv.name)}"><i class="ti ti-file"></i>${h(fv.name)}</a>` : `<span class="wb-tag wb-file"><i class="ti ti-file"></i>${h(fv.name)}</span>`; }
     case 'relationship': { const ta = ctx.workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return h(value); const arr = Array.isArray(value) ? value : [value]; return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbItemTitle(ta, it) : '?')}</span>`; }).join(' '); }
     case 'calculation': return `<b style="color:${meta.color}">${h(wbComputeCalc(ctx.app, field, ctx.values || {}))}</b>`;
     case 'textarea': { const str = String(value); return h(str.length > 60 ? `${str.slice(0, 60)}…` : str); }
@@ -8888,11 +8888,170 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
       const cur = Array.isArray(val) ? val : (val ? [val] : []);
       input = `<select class="wb-input" data-f="${h(f.id)}" ${f.config.multiple ? 'multiple style="min-height:96px"' : ''}>${f.config.multiple ? '' : '<option value="">— None —</option>'}${ta.items.map((it) => `<option value="${h(it.id)}" ${cur.includes(it.id) ? 'selected' : ''}>${h(wbItemTitle(ta, it))}</option>`).join('')}</select><div class="wb-sub">Linked to <b>${h(ta.name)}</b>${f.config.multiple ? ' · hold Ctrl/Cmd to select multiple' : ''}</div>`; break;
     }
-    case 'file': input = `<input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="Document name or URL"><div class="wb-sub">Prototype: stores a filename/link reference.</div>`; break;
+    case 'file': input = `
+      <div class="wb-file-field" data-wb-file>
+        <input type="hidden" data-f="${h(f.id)}" value="${h(typeof val === 'object' ? JSON.stringify(val) : (val || ''))}" />
+        <input type="file" hidden data-wb-file-input />
+        <button type="button" class="wb-file-drop" data-wb-file-open>
+          <i class="ti ti-cloud-upload" data-wb-file-ico></i>
+          <span class="wb-file-label" data-wb-file-label></span>
+        </button>
+        <div class="wb-file-actions" data-wb-file-actions hidden>
+          <a class="btn btn-mini" data-wb-file-view target="_blank" rel="noreferrer"><i class="ti ti-eye"></i>View</a>
+          <a class="btn btn-mini" data-wb-file-download><i class="ti ti-download"></i>Download</a>
+          <button type="button" class="btn btn-mini danger" data-wb-file-remove><i class="ti ti-x"></i>Remove</button>
+        </div>
+        <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
+      </div>`; break;
     case 'calculation': input = `<div class="wb-input wb-calc-display" data-calc="${h(f.id)}">—</div><div class="wb-sub">Auto-calculated: <code>${h(f.config.formula || '(no formula)')}</code></div>`; break;
     default: input = `<input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}">`;
   }
   return `<div class="wb-field">${lbl}${input}</div>`;
+}
+
+// Parse a stored workspace file value into { name, url }. Supports the current
+// JSON form and legacy plain strings (a URL or a bare filename).
+function wbFileValue(val) {
+  if (!val) return null;
+  if (typeof val === 'object') return val.url || val.name ? val : null;
+  const s = String(val).trim();
+  if (!s) return null;
+  if (s[0] === '{') { try { const o = JSON.parse(s); if (o && (o.url || o.name)) return o; } catch { /* fall through */ } }
+  const isUrl = /^(https?:|data:|blob:)/i.test(s);
+  let name = s;
+  if (isUrl) { try { name = decodeURIComponent(new URL(s).pathname.split('/').pop() || s).replace(/^[0-9a-f-]{36}-/i, ''); } catch { name = 'Attached file'; } }
+  return { name: name || 'Attached file', url: isUrl ? s : '' };
+}
+function wbFileDisplay(val) { return wbFileValue(val)?.name || ''; }
+
+function wbReadFileAsDataUrl(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+}
+
+// Mirror a workspace-app file upload into Company Drive, inside a folder named
+// after the app that owns the file field. Returns the folder name (or '').
+function wbMirrorFileToDrive(file, objectPath, companyId) {
+  try {
+    const m = state.builderModal;
+    const app = m ? wbFind(companyId, m.workspaceId, m.appId)?.app : null;
+    const appName = String(app?.name || 'Workspace files').trim() || 'Workspace files';
+    const canon = canonicalCompanyId(companyId);
+    let folder = state.driveFolders.find((f) => canonicalCompanyId(f.company_id) === canon && f.name === appName);
+    if (!folder) {
+      folder = normalizeDriveFolder({ id: `folder-${crypto.randomUUID()}`, company_id: companyId, name: appName, parent_key: 'home', created_by_label: activeSession().profile.full_name || 'Quest HQ', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      state.driveFolders.unshift(folder);
+    }
+    const payload = normalizeFile({
+      id: `file-${crypto.randomUUID()}`,
+      company_id: companyId,
+      job_id: '',
+      folder: folder.id,
+      file_name: file.name,
+      mime_type: file.type || 'application/octet-stream',
+      size_bytes: file.size,
+      category: appName,
+      notes: `Uploaded from workspace app "${appName}".`,
+      uploaded_by_label: activeSession().profile.full_name || 'Quest HQ',
+      bucket_id: 'quest-job-files',
+      object_path: objectPath,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    upsertFile(payload);
+    const client = createSupabaseClient();
+    if (client) { client.from('job_files').insert(filePayload(payload)).then((r) => { if (r.error) console.warn('Drive mirror insert failed', r.error); }).catch((e) => console.warn('Drive mirror insert failed', e)); }
+    persistAll();
+    return appName;
+  } catch (error) { console.warn('Drive mirror failed', error); return ''; }
+}
+
+// Wire up drag-and-drop / click-to-upload for workspace "file" fields.
+function wbMountFileFields(overlay) {
+  overlay.querySelectorAll('[data-wb-file]').forEach((zone) => {
+    if (zone.dataset.bound) return;
+    zone.dataset.bound = '1';
+    const hidden = zone.querySelector('input[data-f]');
+    const fileInput = zone.querySelector('[data-wb-file-input]');
+    const openBtn = zone.querySelector('[data-wb-file-open]');
+    const actions = zone.querySelector('[data-wb-file-actions]');
+    const viewBtn = zone.querySelector('[data-wb-file-view]');
+    const downloadBtn = zone.querySelector('[data-wb-file-download]');
+    const removeBtn = zone.querySelector('[data-wb-file-remove]');
+    const progress = zone.querySelector('[data-wb-file-progress]');
+    const bar = zone.querySelector('[data-wb-file-bar]');
+    const ico = zone.querySelector('[data-wb-file-ico]');
+    const label = zone.querySelector('[data-wb-file-label]');
+    const paint = () => {
+      const fv = wbFileValue(hidden.value);
+      if (fv) {
+        ico.className = 'ti ti-file-check';
+        label.innerHTML = `<strong>${h(fv.name || 'Attached file')}</strong><small>Click to replace</small>`;
+        openBtn.classList.add('has-file');
+        if (fv.url) {
+          actions.hidden = false;
+          viewBtn.hidden = false; viewBtn.href = fv.url;
+          downloadBtn.hidden = false; downloadBtn.href = fv.url; downloadBtn.setAttribute('download', fv.name || 'file');
+        } else {
+          actions.hidden = false;
+          viewBtn.hidden = true; downloadBtn.hidden = true;
+        }
+      } else {
+        ico.className = 'ti ti-cloud-upload';
+        label.innerHTML = '<strong>Click or drop a file</strong><small>Uploads to this workspace</small>';
+        openBtn.classList.remove('has-file');
+        actions.hidden = true;
+      }
+    };
+    const upload = async (file) => {
+      if (!file) return;
+      openBtn.disabled = true;
+      progress.hidden = false;
+      bar.style.width = '20%';
+      const companyId = activeCompanyId();
+      const client = createSupabaseClient();
+      let url = '';
+      let objectPath = '';
+      if (client) {
+        try {
+          const path = `${canonicalCompanyId(companyId)}/workspace/${crypto.randomUUID()}-${slugify(file.name)}`;
+          const up = await client.storage.from('quest-job-files').upload(path, file, { cacheControl: '3600', contentType: file.type || 'application/octet-stream' });
+          bar.style.width = '70%';
+          if (!up.error) {
+            objectPath = path;
+            const signed = await client.storage.from('quest-job-files').createSignedUrl(path, 31536000);
+            if (signed.data?.signedUrl) url = signed.data.signedUrl;
+          }
+        } catch (error) { console.warn('Workspace file upload failed', error); }
+      }
+      // Fallback: embed the file as a data URL so it stays viewable/downloadable
+      // even when Supabase Storage is blocked by policy (cap size to keep docs small).
+      if (!url && file.size <= 6 * 1024 * 1024) { bar.style.width = '85%'; url = await wbReadFileAsDataUrl(file); }
+      bar.style.width = '100%';
+      hidden.value = JSON.stringify({ name: file.name, url });
+      hidden.dispatchEvent(new Event('input', { bubbles: true }));
+      openBtn.disabled = false;
+      paint();
+      setTimeout(() => { progress.hidden = true; bar.style.width = '0%'; }, 400);
+      // Mirror the upload into Company Drive under a folder named after this app.
+      const mirrored = objectPath ? wbMirrorFileToDrive(file, objectPath, companyId) : '';
+      const msg = !url ? 'File is too large to attach here — link it by URL instead.'
+        : mirrored ? `File attached and saved to Company Drive → "${mirrored}".`
+          : 'File attached.';
+      showToast(msg, url ? (isLiveSupabaseSession() ? 'live' : 'local') : 'local', 'Workspaces');
+    };
+    openBtn.onclick = () => fileInput.click();
+    removeBtn.onclick = () => { hidden.value = ''; hidden.dispatchEvent(new Event('input', { bubbles: true })); fileInput.value = ''; paint(); };
+    fileInput.onchange = () => upload(fileInput.files?.[0]);
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragging'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragging'));
+    zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('dragging'); upload(e.dataTransfer?.files?.[0]); });
+    paint();
+  });
 }
 
 function wbReadFieldInput(f) {
@@ -8977,10 +9136,12 @@ function wbSubmitModal() {
     const { workspace, app } = wbFind(companyId, m.workspaceId, m.appId);
     const values = {}; let missing = null;
     app.fields.forEach((f) => { const v = wbReadFieldInput(f); values[f.id] = v; if (f.required && (v === '' || v == null || (Array.isArray(v) && !v.length))) missing = missing || f.label; });
-    if (missing) { showToast(`"${missing}" is required.`, 'local', 'Workspaces'); return; }
+    // Keep the user's input on any validation error (render() from showToast would
+    // otherwise repaint the form from an empty draft and clear the fields).
+    if (missing) { m.draft.values = values; showToast(`"${missing}" is required.`, 'local', 'Workspaces'); return; }
     let badEmail = null;
     app.fields.forEach((f) => { if (f.type === 'email') { const v = String(values[f.id] || '').trim(); if (v && !v.includes('@')) badEmail = badEmail || f.label; } });
-    if (badEmail) { showToast(`"${badEmail}" must be a valid email address (include "@").`, 'local', 'Workspaces'); return; }
+    if (badEmail) { m.draft.values = values; showToast(`"${badEmail}" must be a valid email address (include "@").`, 'local', 'Workspaces'); return; }
     if (m.editId) {
       const item = app.items.find((i) => i.id === m.editId); const prev = { ...item.values }; item.values = values;
       wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Updated <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
@@ -9154,9 +9315,14 @@ function wbMountModal() {
     const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
     const recompute = () => {
       const vals = {}; app.fields.forEach((f) => { if (f.type !== 'calculation') vals[f.id] = wbReadFieldInput(f); });
+      // Persist every keystroke into the draft so no render() (a toast, its
+      // auto-dismiss, a background sync, a file upload) can clear the form.
+      m.draft.values = { ...(m.draft.values || {}), ...vals };
       app.fields.filter((f) => f.type === 'calculation').forEach((f) => { const el = document.querySelector(`[data-calc="${f.id}"]`); if (el) el.textContent = wbComputeCalc(app, f, vals); });
     };
     overlay.querySelectorAll('#wbItemForm [data-f]').forEach((el) => el.addEventListener('input', recompute));
+    overlay.querySelectorAll('#wbItemForm [data-f]').forEach((el) => el.addEventListener('change', recompute));
+    wbMountFileFields(overlay);
     recompute();
   }
   const af = overlay.querySelector('[autofocus]'); if (af) af.focus();

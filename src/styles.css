@@ -1017,7 +1017,7 @@ button { cursor: pointer; }
   position: fixed;
   right: 18px;
   bottom: 18px;
-  z-index: 80;
+  z-index: 1000;
   display: grid;
   gap: 3px;
   width: min(360px, calc(100vw - 36px));
@@ -18581,6 +18581,22 @@ button {
 .wb-opt { color: var(--text-muted, #72695d); font-weight: 500; text-transform: none; font-size: .78rem; }
 .wb-input { width: 100%; border: 1px solid var(--border-strong, #d3c1a7); border-radius: 10px; padding: 10px 12px; font: inherit; background: var(--surface); color: var(--text, #17130f); }
 textarea.wb-input { min-height: 70px; resize: vertical; }
+
+/* Workspace "file" field: drag-and-drop / click-to-upload */
+.wb-file-field { position: relative; }
+.wb-file-drop { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px; border: 1.5px dashed var(--border-strong); border-radius: 12px; background: var(--surface-2); cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.wb-file-drop:hover, .wb-file-field.dragging .wb-file-drop { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 7%, var(--surface-2)); }
+.wb-file-drop[disabled] { opacity: .7; cursor: default; }
+.wb-file-drop > i { font-size: 22px; color: var(--orange); flex: none; }
+.wb-file-label { display: grid; min-width: 0; }
+.wb-file-label strong { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-file-label small { color: var(--text-muted); font-size: 11.5px; }
+.wb-file-remove { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text-muted); cursor: pointer; }
+.wb-file-remove:hover { color: var(--danger); border-color: var(--danger); }
+.wb-file-progress { height: 6px; margin-top: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.wb-file-bar { height: 100%; width: 0; background: var(--orange); border-radius: 999px; transition: width .3s ease; }
+.wb-file-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.wb-file-actions .btn-mini { text-decoration: none; }
 .wb-input:focus { outline: none; border-color: #e0552d; box-shadow: 0 0 0 3px var(--ring, rgba(224, 85, 45, .22)); }
 .wb-emoji-pick { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
 .wb-emoji-opt { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; border: 1px solid var(--border, #e2d5bf); background: var(--surface, #fffaf0); cursor: pointer; font-size: 19px; color: var(--text-2, #473f34); }
