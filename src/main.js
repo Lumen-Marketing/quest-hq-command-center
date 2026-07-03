@@ -416,33 +416,23 @@ const CONTACT_FILTER_DEFAULTS = {
   pay_type: 'all',
 };
 const CONTACT_JOB_TYPE_OPTIONS = [
-  'Insurance / storm',
-  'Retail replacement',
-  'Repair',
-  'Inspection',
+  'Tile Roofing',
+  'Shingle Roofing',
+  'Metal Roofing',
+  'Foam Roofing',
+  'Roof Repair',
+  'Free Inspection',
+  'Storm & Emergency',
+  'Insurance Claims',
   'Maintenance',
-  'Re-roof',
-  'Roof replacement',
-  'Roof repair',
-  'Roof inspection',
-  'Tile roof refelt',
-  'Shingle roof replacement',
-  'Flat roof repair',
-  'Foam roof recoating',
-  'Metal roof',
-  'Storm damage',
-  'Leak repair',
-  'Remodel',
-  'Service call',
-  'Gutter work',
-  'Solar detach and reset',
+  'Not Sure',
 ];
 const CONTACT_PAY_TYPE_OPTIONS = ['Insurance', 'Retail', 'Financing', 'Cash'];
 const CONTACT_ROOF_SYSTEM_OPTIONS = [
-  'Tile',
-  'Shingle',
-  'Metal',
-  'Foam',
+  'Tile Roofing',
+  'Shingle Roofing',
+  'Metal Roofing',
+  'Foam Roofing',
   'Not Sure',
 ];
 const CONTACT_SOURCE_OPTIONS = [
@@ -5803,13 +5793,13 @@ function contactInlineOptions(contact, key) {
   if (key === 'stage') return contactStageNames().map((stage) => [stage, stage]);
   if (key === 'temperature') return TEMPERATURES.map((temperature) => [temperature, temperature]);
   if (key === 'owner_name') return contactOwnerOptions(contact.company_id, contact.owner_name);
+  if (key === 'title') return contactJobTypeSelectOptions(contact.company_id);
   if (['roof_system', 'secondary_roof_system'].includes(key)) return contactRoofSystemSelectOptions(contact.company_id);
   if (key === 'source') return contactSourceOptions(contact.company_id);
   return [];
 }
 
 function contactInlineSuggestions(contact, key) {
-  if (key === 'title') return contactJobTypeOptions(contact.company_id);
   return [];
 }
 
@@ -6860,7 +6850,6 @@ function initContactAddressForm() {
 
 function renderContactEditor(companyId, contact) {
   const edit = contact || blankContact(companyId);
-  const jobTypeOptions = contactJobTypeOptions(companyId);
   return `
     <form class="job-editor contact-editor" data-contact-form data-contact-address-form>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
@@ -6870,8 +6859,7 @@ function renderContactEditor(companyId, contact) {
       ${field('Name', 'name', edit.name, true)}
       ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
       ${selectField('Account', 'account_id', edit.account_id, [['', '- None -']].concat(companyAccounts(companyId).map((account) => [account.id, account.name])))}
-      ${field('Job type', 'title', edit.title, false, 'text', '', 'list="contact-job-type-options" autocomplete="off"')}
-      <datalist id="contact-job-type-options">${jobTypeOptions.map((item) => `<option value="${h(item)}"></option>`).join('')}</datalist>
+      ${selectField('Job type', 'title', edit.title, contactJobTypeSelectOptions(companyId))}
       ${field('Email', 'email', edit.email, false, 'email')}
       <label class="span-2">
         <span>Phone</span>
@@ -23992,19 +23980,15 @@ function contactAddressOptions(companyId) {
 }
 
 function contactJobTypeOptions(companyId) {
-  return compactUnique([
-    ...CONTACT_JOB_TYPE_OPTIONS,
-    ...companyContacts(companyId).map((contact) => contact.title),
-    ...companyJobs(companyId).map((job) => job.job_type),
-    ...state.proposals.filter((proposal) => proposal.company_id === companyId).map((proposal) => proposal.title),
-  ]).sort((a, b) => a.localeCompare(b));
+  return compactUnique([...CONTACT_JOB_TYPE_OPTIONS]);
+}
+
+function contactJobTypeSelectOptions(companyId) {
+  return [['', 'Select job type']].concat(contactJobTypeOptions(companyId).map((type) => [type, type]));
 }
 
 function contactRoofSystemOptions(companyId) {
-  return compactUnique([
-    ...CONTACT_ROOF_SYSTEM_OPTIONS,
-    ...Object.values(ROOF_ESTIMATE_SYSTEMS).map((system) => system.label),
-  ]);
+  return compactUnique([...CONTACT_ROOF_SYSTEM_OPTIONS]);
 }
 
 function contactRoofSystemSelectOptions(companyId, includeBlank = false) {

@@ -133,6 +133,7 @@ test('contact inline editor uses selects for constrained fields', () => {
   assert.match(helperSource, /if \(key === 'stage'\) return contactStageNames\(\)\.map/);
   assert.match(helperSource, /if \(key === 'temperature'\) return TEMPERATURES\.map/);
   assert.match(helperSource, /if \(key === 'owner_name'\) return contactOwnerOptions\(contact\.company_id, contact\.owner_name\)/);
+  assert.match(helperSource, /if \(key === 'title'\) return contactJobTypeSelectOptions\(contact\.company_id\)/);
   assert.match(helperSource, /if \(\['roof_system', 'secondary_roof_system'\]\.includes\(key\)\) return contactRoofSystemSelectOptions\(contact\.company_id\)/);
   assert.match(helperSource, /if \(key === 'source'\) return contactSourceOptions\(contact\.company_id\)/);
   assert.match(inlineSource, /const options = contactInlineOptions\(contact, key\)/);
@@ -141,11 +142,11 @@ test('contact inline editor uses selects for constrained fields', () => {
   assert.match(inlineSource, /input\.addEventListener\('change', commit\)/);
 });
 
-test('contact inline editor keeps autofill suggestions only for open-ended job type', () => {
+test('contact inline editor does not use browser datalist bubbles for fixed crm fields', () => {
   const suggestionSource = source.match(/function contactInlineSuggestions\(contact, key\) \{[\s\S]*?\n\}/)?.[0] || '';
   const inlineSource = source.match(/function beginContactInlineEdit\(span\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function contactInlineSuggestions\(contact, key\)/);
-  assert.match(suggestionSource, /if \(key === 'title'\) return contactJobTypeOptions\(contact\.company_id\)/);
+  assert.doesNotMatch(suggestionSource, /key === 'title'/);
   assert.doesNotMatch(suggestionSource, /roof_system/);
   assert.doesNotMatch(suggestionSource, /key === 'source'/);
   assert.match(inlineSource, /const suggestions = contactInlineSuggestions\(contact, key\)/);
@@ -154,13 +155,25 @@ test('contact inline editor keeps autofill suggestions only for open-ended job t
   assert.match(inlineSource, /span\.replaceWith\(fragment\)/);
 });
 
+test('job type options use Quest Roofing services instead of saved junk values', () => {
+  const constantSource = source.match(/const CONTACT_JOB_TYPE_OPTIONS = \[[\s\S]*?\];/)?.[0] || '';
+  const helperSource = source.match(/function contactJobTypeOptions\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(source, /function contactJobTypeSelectOptions\(companyId\)/);
+  ['Tile Roofing', 'Shingle Roofing', 'Metal Roofing', 'Foam Roofing', 'Roof Repair', 'Free Inspection', 'Storm & Emergency', 'Insurance Claims', 'Maintenance', 'Not Sure'].forEach((item) => assert.ok(constantSource.includes(`'${item}'`)));
+  ['Flat roof repair', 'QA Proposal Workflow Test', 'Solar detach and reset', 'Retail replacement'].forEach((item) => assert.doesNotMatch(constantSource, new RegExp(`'${item}'`)));
+  assert.doesNotMatch(helperSource, /companyContacts\(companyId\)\.map/);
+  assert.doesNotMatch(helperSource, /companyJobs\(companyId\)\.map/);
+  assert.doesNotMatch(helperSource, /state\.proposals/);
+});
+
 test('roof system options use Quest Roofing service roof types instead of saved junk values', () => {
   const constantSource = source.match(/const CONTACT_ROOF_SYSTEM_OPTIONS = \[[\s\S]*?\];/)?.[0] || '';
   const helperSource = source.match(/function contactRoofSystemOptions\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function contactRoofSystemSelectOptions\(companyId, includeBlank = false\)/);
-  ['Tile', 'Shingle', 'Metal', 'Foam', 'Not Sure'].forEach((item) => assert.match(constantSource, new RegExp(`'${item}'`)));
+  ['Tile Roofing', 'Shingle Roofing', 'Metal Roofing', 'Foam Roofing', 'Not Sure'].forEach((item) => assert.match(constantSource, new RegExp(`'${item}'`)));
   ['TPO', 'Built-up roof', 'Shake', 'Slate', 'Unknown'].forEach((item) => assert.doesNotMatch(constantSource, new RegExp(`'${item}'`)));
   assert.doesNotMatch(helperSource, /companyContacts\(companyId\)\.flatMap/);
+  assert.doesNotMatch(helperSource, /Object\.values\(ROOF_ESTIMATE_SYSTEMS\)/);
 });
 
 test('contacts list uses a Salesforce-style searchable filterable table view', () => {
