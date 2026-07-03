@@ -10,12 +10,16 @@ import questLogoMarkUrl from './assets/quest-hq-logo-mark.png';
 const CONFIG = {
   buildId: 'Quest HQ Company Workspace v1',
   questAuthEnabled: import.meta.env.VITE_QUEST_AUTH_ENABLED !== 'false',
-  localLoginEnabled: import.meta.env.VITE_LOCAL_LOGIN_ENABLED === 'true',
+  // Local login is a dev/demo convenience with a client-side credential check —
+  // it must never be active in a production build. Gate it behind DEV so even
+  // VITE_LOCAL_LOGIN_ENABLED=true cannot turn it on in a `vite build`.
+  localLoginEnabled: import.meta.env.DEV && import.meta.env.VITE_LOCAL_LOGIN_ENABLED === 'true',
   demoModeEnabled: import.meta.env.VITE_DEMO_MODE_ENABLED !== 'false',
   demoReadonly: import.meta.env.VITE_DEMO_READONLY !== 'false',
   billingMode: import.meta.env.VITE_BILLING_MODE || 'manual',
-  localUsername: import.meta.env.VITE_LOCAL_LOGIN_USERNAME || 'local-demo',
-  localPassword: import.meta.env.VITE_LOCAL_LOGIN_PASSWORD || 'local-demo',
+  // No baked-in default credentials — must be supplied via env when used in dev.
+  localUsername: import.meta.env.VITE_LOCAL_LOGIN_USERNAME || '',
+  localPassword: import.meta.env.VITE_LOCAL_LOGIN_PASSWORD || '',
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL || 'https://rqundirizvojpzhljtdn.supabase.co',
   supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U',
   stripePriceId: import.meta.env.VITE_STRIPE_PRICE_ID || '',
@@ -3230,7 +3234,6 @@ function shellTemplate(route, workspace) {
     </div>
     ${renderActiveModal(route, session)}
     ${renderDockedActivityComposers()}
-    ${renderToast()}
   `;
 }
 
@@ -6986,6 +6989,7 @@ async function saveContact(form) {
   const client = createSupabaseClient();
   if (client) {
     const record = emptyToNull(supabaseRow(payload, CONTACT_COLS), ['account_id']);
+    let syncError = null;
     try {
       const result = await client.from('contacts').upsert(record).select().single();
       if (!result.error && result.data) {
@@ -6996,8 +7000,16 @@ async function saveContact(form) {
         render();
         return;
       }
+      syncError = result.error;
     } catch (error) {
-      console.warn('Contact save sync failed', error);
+      syncError = error;
+    }
+    // On a live session a failed write is a real error: don't claim it saved
+    // and keep the modal open so the user can retry without re-typing.
+    if (isLiveSupabaseSession() && syncError) {
+      console.warn('Contact save failed', syncError);
+      showToast(syncError.message || 'Could not save this contact to the server.', 'error', 'Save failed');
+      return;
     }
   }
   upsertContact(payload);
@@ -9014,8 +9026,10 @@ function wbMountFileFields(overlay) {
       bar.style.width = '20%';
       const companyId = activeCompanyId();
       const client = createSupabaseClient();
+      const live = isLiveSupabaseSession();
       let url = '';
       let objectPath = '';
+      let uploadError = null;
       if (client) {
         try {
           const path = `${canonicalCompanyId(companyId)}/workspace/${crypto.randomUUID()}-${slugify(file.name)}`;
@@ -9023,26 +9037,39 @@ function wbMountFileFields(overlay) {
           bar.style.width = '70%';
           if (!up.error) {
             objectPath = path;
-            const signed = await client.storage.from('quest-job-files').createSignedUrl(path, 31536000);
+            // Short-lived signed URL for immediate viewing. We persist object_path
+            // (below) so links can be re-minted on demand instead of storing a
+            // year-long bearer token inside the shared workspace doc.
+            const signed = await client.storage.from('quest-job-files').createSignedUrl(path, 604800);
             if (signed.data?.signedUrl) url = signed.data.signedUrl;
-          }
-        } catch (error) { console.warn('Workspace file upload failed', error); }
+          } else { uploadError = up.error; }
+        } catch (error) { uploadError = error; console.warn('Workspace file upload failed', error); }
       }
-      // Fallback: embed the file as a data URL so it stays viewable/downloadable
-      // even when Supabase Storage is blocked by policy (cap size to keep docs small).
-      if (!url && file.size <= 6 * 1024 * 1024) { bar.style.width = '85%'; url = await wbReadFileAsDataUrl(file); }
+      const stop = () => { openBtn.disabled = false; progress.hidden = true; bar.style.width = '0%'; };
+      // On a live session, never embed file bytes into the synced doc and never
+      // present an un-stored file as attached — surface the failure and stop.
+      if (live && !objectPath) {
+        stop();
+        showToast(uploadError?.message || 'Upload failed — the file was not attached. Please try again.', 'error', 'Upload failed');
+        return;
+      }
+      // Local/demo only: embed a small data URL for preview. This never syncs to
+      // the shared server doc; cap size to protect localStorage.
+      if (!url && !live && file.size <= 2 * 1024 * 1024) { bar.style.width = '85%'; url = await wbReadFileAsDataUrl(file); }
+      if (!url && !objectPath) {
+        stop();
+        showToast('File is too large to attach here — link it by URL instead.', 'error', 'Workspaces');
+        return;
+      }
       bar.style.width = '100%';
-      hidden.value = JSON.stringify({ name: file.name, url });
+      hidden.value = JSON.stringify({ name: file.name, url, path: objectPath });
       hidden.dispatchEvent(new Event('input', { bubbles: true }));
       openBtn.disabled = false;
       paint();
       setTimeout(() => { progress.hidden = true; bar.style.width = '0%'; }, 400);
       // Mirror the upload into Company Drive under a folder named after this app.
       const mirrored = objectPath ? wbMirrorFileToDrive(file, objectPath, companyId) : '';
-      const msg = !url ? 'File is too large to attach here — link it by URL instead.'
-        : mirrored ? `File attached and saved to Company Drive → "${mirrored}".`
-          : 'File attached.';
-      showToast(msg, url ? (isLiveSupabaseSession() ? 'live' : 'local') : 'local', 'Workspaces');
+      showToast(mirrored ? `File attached and saved to Company Drive → "${mirrored}".` : 'File attached.', live ? 'live' : 'local', 'Workspaces');
     };
     openBtn.onclick = () => fileInput.click();
     removeBtn.onclick = () => { hidden.value = ''; hidden.dispatchEvent(new Event('input', { bubbles: true })); fileInput.value = ''; paint(); };
@@ -13042,7 +13069,6 @@ function renderLandingPage(forceAuthModal = false) {
         <blockquote>"Quest HQ keeps the team inside one clean operating system instead of a pile of disconnected tools."</blockquote>
       </section>
       ${showAuthModal ? renderAuthModal(returnUrl, inviteToken, authEnabled) : ''}
-      ${renderToast()}
     </main>
   `;
 }
@@ -13378,14 +13404,29 @@ function renderToast() {
   `;
 }
 
+// Paint the toast into a dedicated body-level layer that lives OUTSIDE the
+// `app` innerHTML. This is critical: showing a toast must never call the global
+// render(), because a full re-render repaints every open edit form from state
+// and wipes whatever the user was typing (the toast is position:fixed, so it
+// renders correctly from the body regardless of the app subtree).
+function paintToast() {
+  let layer = document.getElementById('app-toast-layer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'app-toast-layer';
+    document.body.appendChild(layer);
+  }
+  layer.innerHTML = state.toast ? renderToast() : '';
+}
+
 function showToast(message, mode = 'local', title = 'Not available yet') {
   if (state.toastTimer) clearTimeout(state.toastTimer);
   state.toast = { title, message, mode };
-  render();
+  paintToast();
   state.toastTimer = setTimeout(() => {
     state.toast = null;
     state.toastTimer = null;
-    render();
+    paintToast();
   }, 4200);
 }
 
@@ -16290,7 +16331,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-login-form]')) {
     event.preventDefault();
     const form = Object.fromEntries(new FormData(event.target).entries());
-    const ok = String(form.username || '').trim() === CONFIG.localUsername && String(form.password || '') === CONFIG.localPassword;
+    // Never authenticate against empty/unconfigured credentials, and only when
+    // local login is actually enabled (DEV-gated).
+    const ok = CONFIG.localLoginEnabled
+      && CONFIG.localUsername && CONFIG.localPassword
+      && String(form.username || '').trim() === CONFIG.localUsername
+      && String(form.password || '') === CONFIG.localPassword;
     if (!ok) {
       state.loginError = 'Invalid temporary credentials.';
       render();
@@ -18632,7 +18678,10 @@ async function saveFileRecord(form) {
   const setProgress = () => { if (progressBar) progressBar.style.width = `${Math.max(6, Math.round((done / total) * 100))}%`; };
   setProgress();
   const client = createSupabaseClient();
+  const live = isLiveSupabaseSession();
   let liveSaved = 0;
+  let failed = 0;
+  let lastError = null;
   for (const item of uploadList) {
     done += 1;
     setProgress();
@@ -18646,7 +18695,11 @@ async function saveFileRecord(form) {
         .from('quest-job-files')
         .upload(objectPath, item, { cacheControl: '3600', upsert: false, contentType: item.type || 'application/octet-stream' });
       uploaded = !storageResult.error;
+      if (storageResult.error) lastError = storageResult.error;
     }
+    // On a live session, an actual file whose bytes never reached storage must
+    // NOT be recorded — that produces a phantom (name/size shown, no bytes).
+    if (live && item && !uploaded) { failed += 1; continue; }
     const payload = normalizeFile({
       id: fileId,
       company_id: companyId,
@@ -18672,20 +18725,34 @@ async function saveFileRecord(form) {
         continue;
       }
       if (uploaded) await client.storage.from('quest-job-files').remove([objectPath]);
+      // Live session but the DB record failed to persist — don't keep a phantom
+      // local-only row; report it as failed so the user knows to retry.
+      if (live && item) { failed += 1; lastError = result.error; continue; }
     }
     upsertFile(payload);
   }
 
-  state.sync = liveSaved === uploadList.length
-    ? { label: 'Quest Supabase live', mode: 'live' }
-    : { label: liveSaved ? 'Some files saved locally' : 'File record saved locally', mode: liveSaved ? 'loading' : 'local' };
   const uploadCount = uploadList.length;
-  if (liveSaved === uploadCount) {
+  state.sync = failed === 0 && liveSaved === uploadCount
+    ? { label: 'Quest Supabase live', mode: 'live' }
+    : { label: failed ? 'Some uploads failed' : (liveSaved ? 'Some files saved locally' : 'File record saved locally'), mode: failed ? 'local' : (liveSaved ? 'loading' : 'local') };
+  if (failed > 0 && liveSaved === 0) {
+    showToast(lastError?.message || `Upload failed — ${failed} file${failed === 1 ? '' : 's'} were not saved. Please try again.`, 'error', 'Upload failed');
+  } else if (failed > 0) {
+    showToast(`Uploaded ${liveSaved} of ${uploadCount} — ${failed} failed and ${failed === 1 ? 'was' : 'were'} not saved.`, 'error', 'Files');
+  } else if (liveSaved === uploadCount) {
     showToast(`Uploaded ${uploadCount} file${uploadCount === 1 ? '' : 's'} to the drive.`, isLiveSupabaseSession() ? 'live' : 'local', 'Files');
   } else if (liveSaved > 0) {
     showToast(`Uploaded ${liveSaved} of ${uploadCount} — the rest were saved locally.`, 'local', 'Files');
   } else {
     showToast(`Saved ${uploadCount} file record${uploadCount === 1 ? '' : 's'} locally (storage upload was blocked).`, 'local', 'Files');
+  }
+  // If nothing persisted on a live session, keep the upload modal open so the
+  // user can retry without re-selecting files.
+  if (live && liveSaved === 0 && failed > 0) {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'Upload'; }
+    if (progressWrap) progressWrap.hidden = true;
+    return;
   }
   notifyLocalEvent(
     'file.added',
@@ -22063,16 +22130,27 @@ function supabaseRow(payload, allowed) {
   return row;
 }
 
+// Tell the user when a write/delete failed to reach the server. Only surfaced
+// on a live Supabase session — in local/demo mode, local-only persistence is
+// the expected behavior, not a failure. Prevents the "shows Saved but the
+// server rejected it" silent-data-loss trap.
+function notifySyncFailure(error, action = 'Save') {
+  if (!isLiveSupabaseSession()) return;
+  const detail = error?.message || error?.details || '';
+  showToast(detail ? `${detail} — changes are stored only on this device.` : 'Changes could not be saved to the server and are only stored on this device.', 'error', `${action} failed`);
+}
+
 async function supabaseWrite(table, row, { onConflict = 'id' } = {}) {
   const client = createSupabaseClient();
   if (!client) return { ok: false, data: null, error: null };
   try {
     const result = await client.from(table).upsert(row, { onConflict }).select().single();
     if (!result.error && result.data) return { ok: true, data: result.data, error: null };
-    if (result.error) console.warn(`${table} write rejected:`, result.error.message || result.error, result.error.details || '');
+    if (result.error) { console.warn(`${table} write rejected:`, result.error.message || result.error, result.error.details || ''); notifySyncFailure(result.error, 'Save'); }
     return { ok: false, data: null, error: result.error };
   } catch (error) {
     console.warn(`${table} save sync failed`, error);
+    notifySyncFailure(error, 'Save');
     return { ok: false, data: null, error };
   }
 }
@@ -22081,9 +22159,11 @@ async function supabaseDelete(table, id) {
   const client = createSupabaseClient();
   if (!client) return;
   try {
-    await client.from(table).delete().eq('id', id);
+    const result = await client.from(table).delete().eq('id', id);
+    if (result?.error) { console.warn(`${table} delete rejected:`, result.error.message || result.error); notifySyncFailure(result.error, 'Delete'); }
   } catch (error) {
     console.warn(`${table} delete sync failed`, error);
+    notifySyncFailure(error, 'Delete');
   }
 }
 
@@ -25325,6 +25405,14 @@ function fileToDataUrl(file) {
   });
 }
 
+// True when the user is actively typing somewhere — a full render() now would
+// wipe the focused input/textarea (message composer or any open edit form).
+function anEditableIsFocused() {
+  const el = document.activeElement;
+  if (!el) return false;
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable === true;
+}
+
 function subscribeToMessageRealtime(companyId, conversationId) {
   const client = createSupabaseClient();
   if (state.session?.auth !== 'supabase' || !client?.channel || !conversationId) return;
@@ -25332,16 +25420,21 @@ function subscribeToMessageRealtime(companyId, conversationId) {
   if (state.messageRealtimeKey === key) return;
   if (state.messageRealtimeChannel) client.removeChannel(state.messageRealtimeChannel);
   state.messageRealtimeKey = key;
+  // Refresh on inbound changes, but never yank the DOM out from under someone
+  // who is mid-type — defer the reload until they stop typing.
+  const refreshFromRealtime = () => {
+    if (anEditableIsFocused()) {
+      clearTimeout(state.messageRealtimeRetry);
+      state.messageRealtimeRetry = setTimeout(refreshFromRealtime, 1500);
+      return;
+    }
+    state.dataLoaded = false;
+    render();
+  };
   state.messageRealtimeChannel = client
     .channel(`quest-messages-${conversationId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, () => {
-      state.dataLoaded = false;
-      render();
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'message_attachments', filter: `conversation_id=eq.${conversationId}` }, () => {
-      state.dataLoaded = false;
-      render();
-    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, refreshFromRealtime)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'message_attachments', filter: `conversation_id=eq.${conversationId}` }, refreshFromRealtime)
     .subscribe();
 }
 

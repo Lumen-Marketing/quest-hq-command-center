@@ -1038,6 +1038,24 @@ button { cursor: pointer; }
   background: #f0fdf4;
 }
 
+.app-toast.error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.app-toast.error strong {
+  color: #b91c1c;
+}
+
+:root[data-theme="dark"] .app-toast.error {
+  border-color: #7f1d1d;
+  background: #2a1414;
+}
+
+:root[data-theme="dark"] .app-toast.error strong {
+  color: #fca5a5;
+}
+
 .app-toast strong,
 .app-toast span {
   display: block;
