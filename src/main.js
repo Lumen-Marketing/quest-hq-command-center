@@ -6064,24 +6064,47 @@ function patchJobField(jobId, key, raw) {
   persistJob({ ...job, [key]: value }, 'Job field saved locally');
 }
 
+function jobInlineOptions(job, key) {
+  if (key === 'stage') return jobStageNames().map((stage) => [stage, stage]);
+  if (key === 'priority') return ['Low', 'Medium', 'High', 'Urgent'].map((priority) => [priority, priority]);
+  if (key === 'owner_name') return contactOwnerOptions(job.company_id, job.owner_name);
+  if (key === 'job_type') return contactJobTypeOptions(job.company_id).map((type) => [type, type]);
+  return [];
+}
+
 function beginJobInlineEdit(span) {
   const key = span.dataset.jobEdit;
   const jobId = span.dataset.jobId;
   const job = jobById(jobId);
   if (!job) return;
+  const rowValueTarget = [...(span.closest('.sf-field')?.querySelectorAll('.sf-field-value [data-job-edit]') || [])]
+    .find((node) => node.dataset.jobEdit === key && node.dataset.jobId === jobId);
+  if (rowValueTarget && rowValueTarget !== span) {
+    beginJobInlineEdit(rowValueTarget);
+    return;
+  }
   if (key === 'site_address') {
     beginAddressInlineEdit(span, job.site_address, job.company_id, (value) => patchJobField(jobId, key, value));
     return;
   }
-  const input = document.createElement('input');
+  const options = jobInlineOptions(job, key);
+  const input = document.createElement(options.length ? 'select' : 'input');
   input.className = 'sf-edit-input';
+  input.value = (key === 'estimate_total' || key === 'invoice_total') ? (job[key] || 0) : (job[key] || '');
+  options.forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    input.appendChild(option);
+  });
   input.value = (key === 'estimate_total' || key === 'invoice_total') ? (job[key] || 0) : (job[key] || '');
   span.replaceWith(input);
   input.focus();
-  input.select();
+  if (typeof input.select === 'function') input.select();
   let done = false;
   const commit = () => { if (done) return; done = true; patchJobField(jobId, key, input.value); };
   input.addEventListener('blur', commit);
+  input.addEventListener('change', commit);
   input.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
     if (ev.key === 'Escape') { done = true; render(); }
@@ -7249,9 +7272,9 @@ function renderJobRecord(companyId, job) {
             ${fieldRow('Client', ed('client_name', { blue: true }), 'client_name')}
             ${fieldRow('Contact', ed('contact_name', { blue: true }), 'contact_name')}
             ${fieldRow('Site Address', `${ed('site_address')}${job.site_address ? `<button class="sf-field-action" type="button" data-action="open-location-picker" data-location-kind="job" data-location-id="${h(job.id)}" data-location-field="site_address" data-address="${h(job.site_address)}"><i class="ti ti-map-pin"></i>Map pin</button>` : ''}`, 'site_address')}
-            ${fieldRow('Job Type', `<span class="sf-pill">${h(job.job_type || '-')}</span>`, 'job_type')}
+            ${fieldRow('Job Type', `<span class="sf-pill sf-edit" data-job-edit="job_type" data-job-id="${h(job.id)}" title="Click to edit">${h(job.job_type || '-')}</span>`, 'job_type')}
             ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
-            ${fieldRow('Priority', `<span class="sf-pill">${h(job.priority || 'Medium')}</span>`, 'priority')}
+            ${fieldRow('Priority', `<span class="sf-pill sf-edit" data-job-edit="priority" data-job-id="${h(job.id)}" title="Click to edit">${h(job.priority || 'Medium')}</span>`, 'priority')}
           </div></div>
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
             ${fieldRow('Stage', `<span>${h(job.stage)}</span>`, 'stage')}
