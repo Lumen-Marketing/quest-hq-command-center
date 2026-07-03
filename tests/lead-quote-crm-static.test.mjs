@@ -126,23 +126,25 @@ test('contact record pencils edit only the clicked field value', () => {
   assert.match(inlineSource, /\.sf-field-value \[data-contact-edit\]/);
 });
 
-test('contact inline editor uses selects for constrained fields', () => {
+test('contact inline editor uses selects for constrained fields and a custom job type autocomplete', () => {
   const helperSource = source.match(/function contactInlineOptions\(contact, key\) \{[\s\S]*?\n\}/)?.[0] || '';
   const inlineSource = source.match(/function beginContactInlineEdit\(span\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function contactInlineOptions\(contact, key\)/);
   assert.match(helperSource, /if \(key === 'stage'\) return contactStageNames\(\)\.map/);
   assert.match(helperSource, /if \(key === 'temperature'\) return TEMPERATURES\.map/);
   assert.match(helperSource, /if \(key === 'owner_name'\) return contactOwnerOptions\(contact\.company_id, contact\.owner_name\)/);
-  assert.match(helperSource, /if \(key === 'title'\) return contactJobTypeSelectOptions\(contact\.company_id\)/);
+  assert.doesNotMatch(helperSource, /if \(key === 'title'\) return contactJobTypeSelectOptions/);
   assert.match(helperSource, /if \(\['roof_system', 'secondary_roof_system'\]\.includes\(key\)\) return contactRoofSystemSelectOptions\(contact\.company_id\)/);
   assert.match(helperSource, /if \(key === 'source'\) return contactSourceOptions\(contact\.company_id\)/);
   assert.match(inlineSource, /const options = contactInlineOptions\(contact, key\)/);
   assert.match(inlineSource, /document\.createElement\(options\.length \? 'select' : 'input'\)/);
   assert.match(inlineSource, /option\.value = value/);
+  assert.match(inlineSource, /if \(key === 'title'\) \{/);
+  assert.match(inlineSource, /wireJobTypeAutocomplete\(input, contactJobTypeOptions\(contact\.company_id\)\)/);
   assert.match(inlineSource, /input\.addEventListener\('change', commit\)/);
 });
 
-test('contact inline editor does not use browser datalist bubbles for fixed crm fields', () => {
+test('contact inline editor does not use browser datalist bubbles for job type or fixed crm fields', () => {
   const suggestionSource = source.match(/function contactInlineSuggestions\(contact, key\) \{[\s\S]*?\n\}/)?.[0] || '';
   const inlineSource = source.match(/function beginContactInlineEdit\(span\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function contactInlineSuggestions\(contact, key\)/);
@@ -158,12 +160,13 @@ test('contact inline editor does not use browser datalist bubbles for fixed crm 
 test('job type options use Quest Roofing services instead of saved junk values', () => {
   const constantSource = source.match(/const CONTACT_JOB_TYPE_OPTIONS = \[[\s\S]*?\];/)?.[0] || '';
   const helperSource = source.match(/function contactJobTypeOptions\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
-  assert.match(source, /function contactJobTypeSelectOptions\(companyId\)/);
+  assert.match(source, /function renderJobTypeCombobox\(label, name, value, companyId\)/);
   ['Tile Roofing', 'Shingle Roofing', 'Metal Roofing', 'Foam Roofing', 'Roof Repair', 'Free Inspection', 'Storm & Emergency', 'Insurance Claims', 'Maintenance', 'Not Sure'].forEach((item) => assert.ok(constantSource.includes(`'${item}'`)));
+  ['General Construction', 'Remodeling', 'Painting', 'Plumbing', 'Electrical', 'HVAC', 'Flooring', 'Landscaping', 'Solar', 'Windows & Doors'].forEach((item) => assert.ok(constantSource.includes(`'${item}'`)));
   ['Flat roof repair', 'QA Proposal Workflow Test', 'Solar detach and reset', 'Retail replacement'].forEach((item) => assert.doesNotMatch(constantSource, new RegExp(`'${item}'`)));
-  assert.doesNotMatch(helperSource, /companyContacts\(companyId\)\.map/);
-  assert.doesNotMatch(helperSource, /companyJobs\(companyId\)\.map/);
-  assert.doesNotMatch(helperSource, /state\.proposals/);
+  assert.match(helperSource, /companyContacts\(companyId\)\.map\(\(contact\) => contact\.title\)/);
+  assert.match(helperSource, /companyJobs\(companyId\)\.map\(\(job\) => job\.job_type\)/);
+  assert.match(source, /function cleanJobTypeSuggestion\(value\)/);
 });
 
 test('roof system options use Quest Roofing service roof types instead of saved junk values', () => {

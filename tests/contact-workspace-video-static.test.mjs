@@ -30,12 +30,15 @@ test('contact intake fields have real suggestions and constrained source options
   assert.match(source, /function contactJobTypeOptions\(companyId\)/);
   assert.match(source, /function contactRoofSystemOptions\(companyId\)/);
   assert.match(source, /function contactSourceOptions\(companyId\)/);
-  assert.match(editorSource, /selectField\('Job type', 'title', edit\.title, contactJobTypeSelectOptions\(companyId\)\)/);
+  assert.match(editorSource, /renderJobTypeCombobox\('Job type', 'title', edit\.title, companyId\)/);
+  assert.match(source, /data-job-type-input/);
+  assert.doesNotMatch(editorSource, /selectField\('Job type', 'title'/);
+  assert.doesNotMatch(editorSource, /list="contact-job-type-options"/);
   assert.match(editorSource, /selectField\('Roof system', 'roof_system', edit\.roof_system, contactRoofSystemSelectOptions\(companyId\)\)/);
   assert.match(editorSource, /selectField\('Source', 'source', edit\.source, contactSourceOptions\(companyId\)\)/);
   assert.match(editorSource, /name="has_multiple_roof_systems"/);
   assert.match(editorSource, /selectField\('Secondary roof system', 'secondary_roof_system', edit\.secondary_roof_system, contactRoofSystemSelectOptions\(companyId, true\)\)/);
-  assert.match(inlineSource, /if \(key === 'title'\) return contactJobTypeSelectOptions\(contact\.company_id\)/);
+  assert.doesNotMatch(inlineSource, /if \(key === 'title'\) return contactJobTypeSelectOptions/);
   assert.match(inlineSource, /if \(\['roof_system', 'secondary_roof_system'\]\.includes\(key\)\) return contactRoofSystemSelectOptions\(contact\.company_id\)/);
   assert.match(inlineSource, /if \(key === 'source'\) return contactSourceOptions\(contact\.company_id\)/);
 });

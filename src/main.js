@@ -425,6 +425,28 @@ const CONTACT_JOB_TYPE_OPTIONS = [
   'Storm & Emergency',
   'Insurance Claims',
   'Maintenance',
+  'General Construction',
+  'Remodeling',
+  'Home Addition',
+  'Kitchen Remodel',
+  'Bathroom Remodel',
+  'Painting',
+  'Drywall',
+  'Flooring',
+  'Plumbing',
+  'Electrical',
+  'HVAC',
+  'Landscaping',
+  'Concrete',
+  'Masonry',
+  'Fencing',
+  'Windows & Doors',
+  'Solar',
+  'Gutters',
+  'Siding',
+  'Inspection',
+  'Repair',
+  'Installation',
   'Not Sure',
 ];
 const CONTACT_PAY_TYPE_OPTIONS = ['Insurance', 'Retail', 'Financing', 'Cash'];
@@ -2197,6 +2219,75 @@ function bindTimePickerInputs() {
     input.addEventListener('pointerdown', () => openNativeTimePicker(input));
     input.addEventListener('focus', () => openNativeTimePicker(input));
   });
+}
+
+function parseJobTypeOptions(input) {
+  try {
+    const parsed = JSON.parse(input.dataset.jobTypeOptions || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function jobTypeMenu(input) {
+  const host = input.closest('.job-type-combobox');
+  if (!host) return null;
+  let menu = host.querySelector('[data-job-type-menu]');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.className = 'job-type-suggestions-menu';
+    menu.setAttribute('data-job-type-menu', '');
+    menu.hidden = true;
+    host.appendChild(menu);
+  }
+  if (!menu.dataset.jobTypeBound) {
+    menu.dataset.jobTypeBound = 'true';
+    menu.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('[data-job-type-option]')) event.preventDefault();
+    });
+  }
+  return menu;
+}
+
+function jobTypeMatches(input) {
+  const query = input.value.trim().toLowerCase();
+  const options = parseJobTypeOptions(input);
+  const filtered = query
+    ? options.filter((item) => item.toLowerCase().includes(query))
+    : options;
+  return filtered.slice(0, 12);
+}
+
+function renderJobTypeSuggestions(input, force = false) {
+  const menu = jobTypeMenu(input);
+  if (!menu) return;
+  const query = input.value.trim();
+  const matches = jobTypeMatches(input);
+  const exact = matches.some((item) => item.toLowerCase() === query.toLowerCase());
+  const custom = query && !exact ? [`<button type="button" class="job-type-suggestion-option custom" data-job-type-option="${h(query)}"><i class="ti ti-plus"></i><span>Use "${h(query)}"</span></button>`] : [];
+  if (!force && !query && !matches.length) {
+    menu.hidden = true;
+    menu.innerHTML = '';
+    return;
+  }
+  menu.innerHTML = `${custom.join('')}${matches.map((item) => `<button type="button" class="job-type-suggestion-option" data-job-type-option="${h(item)}"><span>${h(item)}</span></button>`).join('')}`;
+  menu.hidden = !menu.innerHTML;
+}
+
+function closeJobTypeMenus(exceptInput = null) {
+  document.querySelectorAll('[data-job-type-menu]').forEach((menu) => {
+    if (exceptInput && menu.closest('.job-type-combobox')?.contains(exceptInput)) return;
+    menu.hidden = true;
+  });
+}
+
+function wireJobTypeAutocomplete(input, options = null) {
+  if (options) input.dataset.jobTypeOptions = JSON.stringify(options);
+  input.setAttribute('autocomplete', 'off');
+  input.setAttribute('data-job-type-input', '');
+  jobTypeMenu(input);
+  renderJobTypeSuggestions(input, true);
 }
 
 function addressLookupContainer(input) {
@@ -5793,7 +5884,6 @@ function contactInlineOptions(contact, key) {
   if (key === 'stage') return contactStageNames().map((stage) => [stage, stage]);
   if (key === 'temperature') return TEMPERATURES.map((temperature) => [temperature, temperature]);
   if (key === 'owner_name') return contactOwnerOptions(contact.company_id, contact.owner_name);
-  if (key === 'title') return contactJobTypeSelectOptions(contact.company_id);
   if (['roof_system', 'secondary_roof_system'].includes(key)) return contactRoofSystemSelectOptions(contact.company_id);
   if (key === 'source') return contactSourceOptions(contact.company_id);
   return [];
@@ -5822,7 +5912,16 @@ function beginContactInlineEdit(span) {
   const suggestions = contactInlineSuggestions(contact, key);
   const input = document.createElement(options.length ? 'select' : 'input');
   input.className = 'sf-edit-input';
-  if (!options.length && suggestions.length) {
+  if (key === 'title') {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'job-type-combobox sf-inline-job-type';
+    input.type = 'text';
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('data-job-type-input', '');
+    wrapper.append(input);
+    span.replaceWith(wrapper);
+    wireJobTypeAutocomplete(input, contactJobTypeOptions(contact.company_id));
+  } else if (!options.length && suggestions.length) {
     const listId = `contact-inline-${key}-${crypto.randomUUID()}`;
     input.setAttribute('list', listId);
     input.setAttribute('autocomplete', 'off');
@@ -6859,7 +6958,7 @@ function renderContactEditor(companyId, contact) {
       ${field('Name', 'name', edit.name, true)}
       ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
       ${selectField('Account', 'account_id', edit.account_id, [['', '- None -']].concat(companyAccounts(companyId).map((account) => [account.id, account.name])))}
-      ${selectField('Job type', 'title', edit.title, contactJobTypeSelectOptions(companyId))}
+      ${renderJobTypeCombobox('Job type', 'title', edit.title, companyId)}
       ${field('Email', 'email', edit.email, false, 'email')}
       <label class="span-2">
         <span>Phone</span>
@@ -14749,6 +14848,45 @@ function onDocumentClick(event) {
   if (closeNotificationMenu) state.notificationMenuOpen = false;
   if (closeWorkspaceMenu) state.workspaceMenuOpen = false;
   if (!event.target.closest('.address-lookup-control, .sf-inline-address-editor')) closeAddressSuggestionMenus();
+  if (!event.target.closest('.job-type-combobox')) closeJobTypeMenus();
+
+  const jobTypeOption = event.target.closest('[data-job-type-option]');
+  if (jobTypeOption) {
+    event.preventDefault();
+    const combo = jobTypeOption.closest('.job-type-combobox');
+    const input = combo?.querySelector('[data-job-type-input]');
+    if (input) {
+      input.value = jobTypeOption.dataset.jobTypeOption || '';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.focus();
+      closeJobTypeMenus(input);
+    }
+    return;
+  }
+
+  const jobTypeToggle = event.target.closest('[data-job-type-toggle]');
+  if (jobTypeToggle) {
+    event.preventDefault();
+    const input = jobTypeToggle.closest('.job-type-combobox')?.querySelector('[data-job-type-input]');
+    if (input) {
+      wireJobTypeAutocomplete(input);
+      const menu = jobTypeMenu(input);
+      const open = menu?.hidden;
+      closeJobTypeMenus(input);
+      renderJobTypeSuggestions(input, true);
+      if (menu) menu.hidden = !open;
+      input.focus();
+    }
+    return;
+  }
+
+  const jobTypeInput = event.target.closest('[data-job-type-input]');
+  if (jobTypeInput) {
+    wireJobTypeAutocomplete(jobTypeInput);
+    closeJobTypeMenus(jobTypeInput);
+    renderJobTypeSuggestions(jobTypeInput, true);
+    return;
+  }
 
   const action = event.target.closest('[data-action]');
   if (action) {
@@ -18496,6 +18634,12 @@ function onDocumentInput(event) {
     const cleaned = event.target.value.replace(/[^0-9+\-]/g, '');
     const formatted = formatPhoneNumber(cleaned);
     if (formatted !== event.target.value) event.target.value = formatted;
+    return;
+  }
+  if (event.target.matches('[data-job-type-input]')) {
+    wireJobTypeAutocomplete(event.target);
+    closeJobTypeMenus(event.target);
+    renderJobTypeSuggestions(event.target, true);
     return;
   }
   if (event.target.matches('[data-digits-only]')) {
@@ -23980,11 +24124,21 @@ function contactAddressOptions(companyId) {
 }
 
 function contactJobTypeOptions(companyId) {
-  return compactUnique([...CONTACT_JOB_TYPE_OPTIONS]);
+  return compactUnique([
+    ...CONTACT_JOB_TYPE_OPTIONS,
+    ...companyContacts(companyId).map((contact) => contact.title),
+    ...companyJobs(companyId).map((job) => job.job_type),
+    ...companyDeals(companyId).map((deal) => deal.title),
+    ...state.proposals.filter((proposal) => proposal.company_id === companyId).map((proposal) => proposal.title),
+  ].map(cleanJobTypeSuggestion).filter(Boolean));
 }
 
-function contactJobTypeSelectOptions(companyId) {
-  return [['', 'Select job type']].concat(contactJobTypeOptions(companyId).map((type) => [type, type]));
+function cleanJobTypeSuggestion(value) {
+  const text = String(value || '').trim().replace(/\s+/g, ' ');
+  if (text.length < 2) return '';
+  if (/^(qa|test|demo)\b/i.test(text)) return '';
+  if (/workflow test/i.test(text)) return '';
+  return text;
 }
 
 function contactRoofSystemOptions(companyId) {
@@ -25310,6 +25464,20 @@ function contractRows(rows) {
 
 function field(label, name, value = '', required = false, type = 'text', className = '', attrs = '') {
   return `<label class="${h(className)}"><span>${h(label)}</span><input name="${h(name)}" type="${h(type)}" value="${h(value)}" ${required ? 'required' : ''} ${attrs} /></label>`;
+}
+
+function renderJobTypeCombobox(label, name, value, companyId) {
+  const options = contactJobTypeOptions(companyId);
+  return `
+    <label class="job-type-field">
+      <span>${h(label)}</span>
+      <div class="job-type-combobox">
+        <input name="${h(name)}" type="text" value="${h(value || '')}" data-job-type-input data-job-type-options="${h(JSON.stringify(options))}" autocomplete="off" placeholder="Type or choose job type" />
+        <button class="job-type-toggle" type="button" data-job-type-toggle aria-label="Show job type suggestions"><i class="ti ti-chevron-down"></i></button>
+        <div class="job-type-suggestions-menu" data-job-type-menu hidden></div>
+      </div>
+    </label>
+  `;
 }
 
 function textareaField(label, name, value = '', className = '') {
