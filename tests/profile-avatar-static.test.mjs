@@ -26,7 +26,7 @@ test('profile save uploads the cropped avatar instead of raw file when present',
 test('image avatars do not use the fallback yellow initials background', () => {
   assert.match(source, /class="\$\{h\(`\$\{className\} has-image`\)\}"/);
   assert.match(styles, /\.avatar\.has-image \{/);
-  assert.match(styles, /background: #fff;/);
+  assert.match(styles, /background: var\(--surface\);/);
   assert.match(styles, /\.profile-cropper \{/);
 });
 

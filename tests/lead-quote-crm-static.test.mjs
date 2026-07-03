@@ -81,8 +81,11 @@ test('contact entry formats phone, suggests addresses, links maps, and selects o
   const editorSource = source.match(/function renderContactEditor\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function formatPhoneNumber\(value\)/);
-  assert.match(source, /phone: formatPhoneNumber\(input\.phone\)/);
-  assert.match(source, /if \(key === 'phone'\) value = formatPhoneNumber\(raw\);/);
+  // Contact fields are auto-formatted through a single shared formatter so the
+  // form, inline edits, and record upserts all normalize identically.
+  assert.match(source, /phone: formatContactField\('phone', input\.phone\)/);
+  assert.match(source, /case 'phone': return formatPhoneNumber\(value\);/);
+  assert.match(source, /const value = formatContactField\(key, raw\);/);
   assert.match(source, /function contactAddressOptions\(companyId\)/);
   assert.match(source, /function contactOwnerOptions\(companyId, selectedOwner = ''\)/);
   assert.match(source, /function mapsSearchUrl\(address\)/);
@@ -100,8 +103,10 @@ test('contact entry formats phone, suggests addresses, links maps, and selects o
   assert.match(source, /async function refreshAddressSuggestions\(input\)/);
   assert.match(source, /data-address-map-link/);
   assert.match(editorSource, /selectField\('Owner', 'owner_name', edit\.owner_name, contactOwnerOptions\(companyId, edit\.owner_name\)\)/);
-  assert.match(recordSource, /mapsSearchUrl\(contact\.location\)/);
-  assert.match(recordSource, /<i class="ti ti-map-pin"><\/i>Map/);
+  // Location is an editable field; the exact-pin map picker is reached via the
+  // inline address editor's "Map pin" button (kind: 'contact'), not a separate link.
+  assert.match(source, /fieldRow\('Location', ed\('location'\), 'location'\)/);
+  assert.match(source, /<i class="ti ti-map-pin"><\/i><span>Map pin<\/span>/);
 });
 
 test('contact record pencils edit only the clicked field value', () => {

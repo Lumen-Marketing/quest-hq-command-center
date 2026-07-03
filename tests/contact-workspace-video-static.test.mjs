@@ -40,7 +40,7 @@ test('contact locations support google maps autocomplete and pin links', () => {
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function googleMapsPlaceSearchUrl\(address\)/);
   assert.match(source, /function renderAddressLookupField\(label, name, value = '', options = \[\]/);
-  assert.match(source, /function beginAddressInlineEdit\(span, value, companyId, commitValue\)/);
+  assert.match(source, /function beginAddressInlineEdit\(span, value, companyId, commitValue, picker = \{\}\)/);
   assert.match(source, /async function refreshAddressSuggestions\(input\)/);
   assert.match(source, /fetch\(`\/api\/address-suggestions\?q=\$\{encodeURIComponent\(query\)\}`\)/);
   assert.match(source, /function renderAddressSuggestionMenu\(input, suggestions, status = ''\)/);
@@ -79,8 +79,9 @@ test('contact locations support google maps autocomplete and pin links', () => {
   assert.match(styles, /\.contact-editor \.qc-fieldset/);
   assert.match(styles, /\.contact-editor \.qc-map/);
   assert.match(styles, /\.contact-editor \.qc-address-grid/);
-  assert.match(recordSource, /googleMapsPlaceSearchUrl\(contact\.location\)/);
-  assert.match(recordSource, /Exact pin/);
+  // Contact location opens the exact-pin map picker via the inline editor (kind: 'contact').
+  assert.match(source, /kind: 'contact', id: contactId, field: 'location'/);
+  assert.match(source, /<i class="ti ti-map-pin"><\/i><span>Map pin<\/span>/);
 });
 
 test('contact tasks preserve details time and can be opened for editing', () => {

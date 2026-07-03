@@ -27,6 +27,12 @@ const PROFILE_KEY = 'quest-hq-local-profile';
 const JOB_CACHE_KEY = 'quest-hq-job-cache-v2';
 const CONTACT_CACHE_KEY = 'quest-hq-contact-cache-v1';
 const ACCOUNT_CACHE_KEY = 'quest-hq-account-cache-v1';
+// Contact auto-formatting field sets. Declared here (not next to formatContactField)
+// so they are initialized before the module-load state seed runs normalizeContact.
+// Shown in place of an empty editable field value (instead of a bare "?").
+const EMPTY_FIELD_PLACEHOLDER = '—';
+const CONTACT_PROPER_CASE_FIELDS = new Set(['name', 'owner_name', 'street', 'city', 'province', 'country', 'barangay']);
+const CONTACT_FORM_FORMAT_FIELDS = new Set(['name', 'owner_name', 'street', 'block_no', 'zip', 'email', 'title', 'pay_type', 'roof_system', 'secondary_roof_system', 'source']);
 const DEAL_CACHE_KEY = 'quest-hq-deal-cache-v1';
 const SITE_CACHE_KEY = 'quest-hq-crm-site-cache-v1';
 const PROPOSAL_CACHE_KEY = 'quest-hq-proposal-cache-v1';
@@ -3201,6 +3207,7 @@ function shellTemplate(route, workspace) {
                 </div>
               ` : ''}
               <button type="button" data-action="open-profile"><i class="ti ti-user-circle"></i>Profile</button>
+              <button type="button" data-action="open-settings"><i class="ti ti-settings"></i>Settings</button>
               <button type="button" data-action="sign-out"><i class="ti ti-logout"></i>Sign out</button>
             </div>
           </div>
@@ -5419,11 +5426,11 @@ function renderContactTableLegacy(companyId) {
         ${rows.map((contact) => `
           <button class="table-row ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact" data-contact-id="${h(contact.id)}">
             <span class="cell-lead">${pipelineDot(contactStageColor(contact.stage))}<span><strong>${h(contact.name)}</strong><small>${h(contact.owner_name || 'Unassigned')}</small></span></span>
-            <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">?</span>'}</span>
-            <span>${contact.email ? h(contact.email) : '<span class="muted-dash">?</span>'}</span>
-            <span>${contact.location ? h(contact.location) : '<span class="muted-dash">?</span>'}</span>
+            <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">—</span>'}</span>
+            <span>${contact.email ? h(contact.email) : '<span class="muted-dash">—</span>'}</span>
+            <span>${contact.location ? h(contact.location) : '<span class="muted-dash">—</span>'}</span>
             <span>${stageTagPipe('contacts', contact.stage, companyId)}</span>
-            <span>${contact.value ? money(contact.value) : '<span class="muted-dash">?</span>'}</span>
+            <span>${contact.value ? money(contact.value) : '<span class="muted-dash">—</span>'}</span>
           </button>
         `).join('') || emptyState('No contacts in this view yet.')}
       </div>
@@ -5474,9 +5481,10 @@ function renderContactRecord(companyId, contact) {
   const canGraduateContactToQuote = resolvePipelineStage('contacts', contact.stage, companyId) === 'Nurturing';
 
   const ed = (key, opts = {}) => {
-    const display = (contact[key] === '' || contact[key] == null) ? '?' : contact[key];
-    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : ''].filter(Boolean).join(' ');
-    return `<span class="${cls}" data-contact-edit="${h(key)}" data-contact-id="${h(contact.id)}" title="Click to edit">${h(String(display))}</span>`;
+    const isEmpty = contact[key] === '' || contact[key] == null;
+    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : '', isEmpty ? 'sf-empty' : ''].filter(Boolean).join(' ');
+    const inner = isEmpty ? EMPTY_FIELD_PLACEHOLDER : h(String(contact[key]));
+    return `<span class="${cls}" data-contact-edit="${h(key)}" data-contact-id="${h(contact.id)}" title="Click to edit">${inner}</span>`;
   };
   const fieldRow = (label, content, editKey = '') => `
     <div class="sf-field">
@@ -5524,7 +5532,7 @@ function renderContactRecord(companyId, contact) {
         <div class="sf-guidance">
           <div class="sf-guidance-label">Guidance for Success</div>
           <div class="sf-guidance-title">${h(g.t)}</div>
-          <div class="sf-guidance-lines">${g.b.map((x) => `<div>? ${h(x)}</div>`).join('')}</div>
+          <div class="sf-guidance-lines">${g.b.map((x) => `<div><span class="sf-guidance-bullet">•</span> ${h(x)}</div>`).join('')}</div>
         </div>
       </div>
 
@@ -5533,8 +5541,8 @@ function renderContactRecord(companyId, contact) {
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
             ${fieldRow('Phone', ed('phone'), 'phone')}
             ${fieldRow('Email', ed('email', { blue: true }), 'email')}
-            ${fieldRow('Location', `${ed('location')}${contact.location ? `<button class="sf-field-action" type="button" data-action="open-location-picker" data-location-kind="contact" data-location-id="${h(contact.id)}" data-location-field="location" data-address="${h(contact.location)}" data-map-url="${h(mapsSearchUrl(contact.location))}" data-google-url="${h(googleMapsPlaceSearchUrl(contact.location))}"><i class="ti ti-map-pin"></i>Map: Exact pin</button>` : ''}`, 'location')}
-            ${fieldRow('Job Type', `<span class="sf-pill sf-edit" data-contact-edit="title" data-contact-id="${h(contact.id)}" title="Click to edit">${h(contact.title || '?')}</span>`, 'title')}
+            ${fieldRow('Location', ed('location'), 'location')}
+            ${fieldRow('Job Type', `<span class="sf-pill sf-edit${contact.title ? '' : ' sf-empty'}" data-contact-edit="title" data-contact-id="${h(contact.id)}" title="Click to edit">${contact.title ? h(contact.title) : EMPTY_FIELD_PLACEHOLDER}</span>`, 'title')}
             ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
             ${fieldRow('Source', ed('source'), 'source')}
           </div></div>
@@ -5642,11 +5650,7 @@ function sfFeedItem(a) {
 function patchContactField(contactId, key, raw) {
   const contact = contactById(contactId);
   if (!contact) return;
-  let value;
-  if (key === 'value') value = Number(String(raw).replace(/[^0-9.]/g, '')) || 0;
-  else if (key === 'phone') value = formatPhoneNumber(raw);
-  else if (key === 'temperature') value = resolveTemperature(raw);
-  else value = String(raw).trim();
+  const value = formatContactField(key, raw);
   if (contact[key] === value) { render(); return; }
   persistContact({ ...contact, [key]: value });
 }
@@ -5671,7 +5675,7 @@ function beginContactInlineEdit(span) {
     return;
   }
   if (key === 'location') {
-    beginAddressInlineEdit(span, contact.location, contact.company_id, (value) => patchContactField(contactId, key, value));
+    beginAddressInlineEdit(span, contact.location, contact.company_id, (value) => patchContactField(contactId, key, value), { kind: 'contact', id: contactId, field: 'location' });
     return;
   }
   const options = contactInlineOptions(contact, key);
@@ -5698,7 +5702,7 @@ function beginContactInlineEdit(span) {
   });
 }
 
-function beginAddressInlineEdit(span, value, companyId, commitValue) {
+function beginAddressInlineEdit(span, value, companyId, commitValue, picker = {}) {
   const wrapper = document.createElement('span');
   wrapper.className = 'sf-inline-address-editor';
   const input = document.createElement('input');
@@ -5715,8 +5719,11 @@ function beginAddressInlineEdit(span, value, companyId, commitValue) {
   link.type = 'button';
   link.setAttribute('data-address-map-link', '');
   link.setAttribute('data-action', 'open-location-picker');
-  link.dataset.locationKind = 'input';
-  link.dataset.locationField = 'location';
+  // Persist directly to the owning record (contact/job) via the picker's Save,
+  // since the inline input is destroyed when the picker modal opens.
+  link.dataset.locationKind = picker.kind || 'input';
+  if (picker.id) link.dataset.locationId = picker.id;
+  link.dataset.locationField = picker.field || 'location';
   link.title = 'Set exact map pin';
   link.innerHTML = '<i class="ti ti-map-pin"></i><span>Map pin</span>';
   link.addEventListener('pointerdown', (event) => event.preventDefault());
@@ -6084,7 +6091,7 @@ function beginJobInlineEdit(span) {
     return;
   }
   if (key === 'site_address') {
-    beginAddressInlineEdit(span, job.site_address, job.company_id, (value) => patchJobField(jobId, key, value));
+    beginAddressInlineEdit(span, job.site_address, job.company_id, (value) => patchJobField(jobId, key, value), { kind: 'job', id: jobId, field: 'site_address' });
     return;
   }
   const options = jobInlineOptions(job, key);
@@ -6810,6 +6817,15 @@ function validateContactForm(form) {
     return { ok: false };
   }
   nameInput?.setCustomValidity('');
+  const emailInput = form.querySelector('[name="email"]');
+  const rawEmail = String(formData.email || '').trim();
+  if (rawEmail && !rawEmail.includes('@')) {
+    emailInput?.setCustomValidity('Enter a valid email address (include "@").');
+    emailInput?.reportValidity();
+    showToast('Enter a valid email address (include "@").', 'local', 'Contacts');
+    return { ok: false };
+  }
+  emailInput?.setCustomValidity('');
   formData.name = rawName;
   return { ok: true, data: formData };
 }
@@ -7113,7 +7129,7 @@ function renderJobList(companyId) {
         ${rows.map((job) => `
           <button class="table-row ${job.id === state.selectedJobId ? 'active' : ''}" type="button" data-select-job="${h(job.id)}">
             <span class="cell-lead">${pipelineDot(pipelineStageColor('jobs', resolvePipelineStage('jobs', job.stage, companyId), companyId))}<span><strong>${h(job.name)}</strong><small>${h(job.client_name || 'No client')} - ${h(job.site_address || 'No address')}</small></span></span>
-            <span>${h(job.job_type || '?')}</span>
+            <span>${h(job.job_type || '—')}</span>
             <span>${stageTagPipe('jobs', job.stage, companyId)}</span>
             <span>${priorityPill(job.priority)}</span>
             <span>${h(job.owner_name || 'Unassigned')}</span>
@@ -8006,6 +8022,50 @@ function normalizeWorkspaceBuilderDoc(doc) {
     })),
   };
 }
+
+const WB_PALETTE = ['#e0552d', '#2563eb', '#7c3aed', '#0d9488', '#16a34a', '#d97706', '#db2777', '#0891b2', '#dc2626', '#4f46e5'];
+const WB_WS_ICONS = ['ti-rocket', 'ti-speakerphone', 'ti-tools', 'ti-headset', 'ti-home-2', 'ti-building-store', 'ti-hammer', 'ti-users-group', 'ti-chart-bar', 'ti-cash', 'ti-package', 'ti-palette'];
+const WB_APP_ICONS = ['ti-address-book', 'ti-checklist', 'ti-folder', 'ti-calendar-event', 'ti-receipt', 'ti-bug', 'ti-shopping-cart', 'ti-id-badge', 'ti-truck', 'ti-file-description', 'ti-phone', 'ti-flask'];
+const WB_FIELD_TYPES = {
+  text: { label: 'Text', icon: 'ti-letter-case', color: '#2563eb', desc: 'Single line of text' },
+  textarea: { label: 'Text Area', icon: 'ti-align-left', color: '#2563eb', desc: 'Long multi-line text' },
+  number: { label: 'Number', icon: 'ti-number-9', color: '#0d9488', desc: 'Numeric value' },
+  date: { label: 'Date', icon: 'ti-calendar', color: '#7c3aed', desc: 'Date picker' },
+  category: { label: 'Category / Dropdown', icon: 'ti-list', color: '#d97706', desc: 'Choose from options' },
+  status: { label: 'Status', icon: 'ti-flag', color: '#16a34a', desc: 'Colored workflow state' },
+  relationship: { label: 'Relationship', icon: 'ti-link', color: '#0891b2', desc: 'Link to items in another app' },
+  file: { label: 'File Attachment', icon: 'ti-paperclip', color: '#6b7280', desc: 'Attach documents' },
+  user: { label: 'User Assignment', icon: 'ti-user', color: '#e0552d', desc: 'Assign workspace members' },
+  email: { label: 'Email', icon: 'ti-mail', color: '#2563eb', desc: 'Email address' },
+  phone: { label: 'Phone Number', icon: 'ti-phone', color: '#16a34a', desc: 'Phone number' },
+  money: { label: 'Money', icon: 'ti-currency-dollar', color: '#16a34a', desc: 'Currency amount' },
+  calculation: { label: 'Calculation', icon: 'ti-math-function', color: '#7c3aed', desc: 'Formula over number fields' },
+  checkbox: { label: 'Yes / No', icon: 'ti-checkbox', color: '#0d9488', desc: 'True or false toggle' },
+};
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'date', 'category', 'status', 'user', 'relationship', 'email', 'phone', 'file', 'calculation', 'checkbox'];
+
+function wbUid() { return `wb-${crypto.randomUUID().slice(0, 12)}`; }
+function wbInitials(name) { return String(name || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?'; }
+function wbColorFor(id) {
+  const key = String(id || '');
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return WB_PALETTE[hash % WB_PALETTE.length];
+}
+function wbMembers(companyId) {
+  return companyAccessUsers(companyId).map((user) => {
+    const id = user.profile_id || user.member_id;
+    return { id, name: user.name, email: user.email || '', role: user.role_label || titleCase(user.role || 'Member'), color: wbColorFor(id), avatar_url: user.avatar_url || '' };
+  });
+}
+function wbMemberById(companyId, id) {
+  return wbMembers(companyId).find((member) => member.id === id) || { id, name: 'Unknown', color: '#6b7280', email: '', role: '' };
+}
+function wbAvatar(member, size = 30) {
+  if (member.avatar_url) return `<span class="wb-avatar has-image" style="width:${size}px;height:${size}px"><img src="${h(member.avatar_url)}" alt="" /></span>`;
+  return `<span class="wb-avatar" style="width:${size}px;height:${size}px;background:${h(member.color)}" title="${h(member.name)}">${h(wbInitials(member.name))}</span>`;
+}
+
 function wbDoc(companyId) {
   return state.workspaceBuilderDocs[canonicalCompanyId(companyId)] || null;
 }
@@ -8111,7 +8171,6 @@ function wbViewCompanyHome(companyId, workspace) {
         <div class="wb-sub">Build customizable, no-code dashboards for ${h(companyName(companyId) || 'this company')}.</div>
       </div>
       <div class="wb-spacer"></div>
-      ${canManage ? `<button class="btn danger" data-wb-delete-workspace><i class="ti ti-trash"></i>Delete workspace</button>` : ''}
       ${canManage ? `<button class="btn btn-primary" data-new-app><i class="ti ti-plus"></i>Add app</button>` : ''}
     </div>
     ${appsBlock}
@@ -8185,7 +8244,7 @@ function wbFmtVal(ctx, field, value) {
     case 'money': return `<b>${h(field.config.currency || '$')}${Number(value).toLocaleString()}</b>`;
     case 'number': return `${Number(value).toLocaleString()}${field.config.unit ? ` ${h(field.config.unit)}` : ''}`;
     case 'email': return `<a href="mailto:${h(value)}" style="color:var(--info,#2563eb)">${h(value)}</a>`;
-    case 'phone': return h(value);
+    case 'phone': return h(formatPhoneNumber(value));
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
     case 'checkbox': return value ? '<span class="wb-status-pill wb-yes"><i class="ti ti-check"></i>Yes</span>' : '<span class="wb-cell-empty">No</span>';
     case 'file': return `<span class="wb-tag wb-file"><i class="ti ti-file"></i>${h(value)}</span>`;
@@ -8399,6 +8458,11 @@ function openWbDeleteWorkspace(companyId, workspace) {
   openWbModal({ kind: 'delete-workspace', companyId, workspaceId: workspace.id, workspaceName: workspace.name, error: '' });
 }
 
+function openWbDeleteApp(companyId, workspaceId, app) {
+  if (!wbGuard()) return;
+  openWbModal({ kind: 'delete-app', companyId, workspaceId, appId: app.id, appName: app.name, itemCount: app.items.length, error: '' });
+}
+
 /* ---- Modal renderer (dispatched from renderActiveModal) --------------------- */
 function renderWorkspaceBuilderModal() {
   const m = state.builderModal;
@@ -8416,6 +8480,15 @@ function renderWorkspaceBuilderModal() {
       ${m.error ? `<div class="wb-form-error">${h(m.error)}</div>` : ''}`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-delete-ws-confirm><i class="ti ti-trash"></i>Delete workspace</button>`);
   }
+  if (m.kind === 'delete-app') {
+    return wbModalShell('Delete app', 'wb-modal-sm', `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Delete this app</h3>`,
+      `<p class="wb-sub">This permanently removes <b>${h(m.appName || 'this app')}</b> and all ${m.itemCount || 0} record(s), plus its fields, reports and automations. This cannot be undone.</p>
+      <div class="wb-field"><label>Type the app name to confirm</label><input class="wb-input" id="wbDelAppName" type="text" autocomplete="off" placeholder="${h(m.appName || '')}" autofocus></div>
+      <div class="wb-field"><label>Enter your password</label><input class="wb-input" id="wbDelAppPw1" type="password" autocomplete="off" placeholder="Your account password"></div>
+      <div class="wb-field"><label>Re-enter your password to confirm</label><input class="wb-input" id="wbDelAppPw2" type="password" autocomplete="off" placeholder="Type it again"></div>
+      ${m.error ? `<div class="wb-form-error">${h(m.error)}</div>` : ''}`,
+      `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-delete-app-confirm><i class="ti ti-trash"></i>Delete app</button>`);
+  }
   if (m.kind === 'members') {
     const ws = wbFind(m.companyId, m.workspaceId).workspace;
     return wbModalShell('Members', '', `<div class="wb-modal-ic" style="background:${h(ws.color)}"><i class="ti ti-users"></i></div><h3>Members · ${h(ws.name)}</h3>`,
@@ -8425,8 +8498,8 @@ function renderWorkspaceBuilderModal() {
   if (m.kind === 'workspace') {
     const editing = m.editId ? wbFind(m.companyId, m.editId).workspace : null;
     return wbModalShell(editing ? 'Edit workspace' : 'Create workspace', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:${h(m.draft.color)}"><i class="ti ${h(m.draft.icon)}"></i></div><h3>${editing ? 'Edit workspace' : 'Create workspace'}</h3>`,
-      `<div class="wb-field"><label>Workspace name</label><input class="wb-input" id="wbWsName" value="${h(editing?.name || '')}" placeholder="e.g. Marketing, Field Operations" autofocus></div>
-      <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbWsDesc" placeholder="What is this workspace for?">${h(editing?.description || '')}</textarea></div>
+      `<div class="wb-field"><label>Workspace name</label><input class="wb-input" id="wbWsName" value="${h(m.draft.name ?? editing?.name ?? '')}" placeholder="e.g. Marketing, Field Operations" autofocus></div>
+      <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbWsDesc" placeholder="What is this workspace for?">${h(m.draft.description ?? editing?.description ?? '')}</textarea></div>
       <div class="wb-row2"><div class="wb-field"><label>Icon</label><div class="wb-emoji-pick">${WB_WS_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" data-wb-pick-icon="${icon}"><i class="ti ${icon}"></i></button>`).join('')}</div></div>
       <div class="wb-field"><label>Color</label><div class="wb-swatches">${WB_PALETTE.map((color) => `<button class="wb-swatch ${color === m.draft.color ? 'sel' : ''}" data-wb-pick-color="${color}" style="background:${color}"></button>`).join('')}</div></div></div>
       <div class="wb-field"><label>${editing ? 'Members' : 'Invite members'} <span class="wb-opt">(who collaborates here)</span></label><div class="wb-member-pick">${wbMembers(m.companyId).map((member) => `<button class="wb-member-opt ${m.draft.members.includes(member.id) ? 'on' : ''}" data-wb-toggle-member="${h(member.id)}">${wbAvatar(member, 30)}<div class="wb-mo-info"><b>${h(member.name)}</b><span>${h(member.role)} · ${h(member.email)}</span></div><span class="wb-ck"><i class="ti ti-check"></i></span></button>`).join('') || '<div class="wb-sub">No company members found.</div>'}</div></div>`,
@@ -8434,9 +8507,9 @@ function renderWorkspaceBuilderModal() {
   }
   if (m.kind === 'app') {
     return wbModalShell('Add app', '', `<div class="wb-modal-ic" style="background:${h(m.draft.color)}"><i class="ti ${h(m.draft.icon)}"></i></div><h3>Add app</h3>`,
-      `<div class="wb-field"><label>App name</label><input class="wb-input" id="wbApName" placeholder="e.g. Leads, Projects, Inspections" autofocus></div>
-      <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbApDesc" placeholder="What does this app track?"></textarea></div>
-      <div class="wb-field"><label>App type <span class="wb-opt">(optional)</span></label><select class="wb-input" id="wbApType"><option value="">— Select a type —</option>${['Contacts', 'Tasks', 'Projects', 'Records', 'Inventory', 'Documents', 'Calendar', 'Tickets', 'Invoices', 'Custom'].map((t) => `<option>${t}</option>`).join('')}</select></div>
+      `<div class="wb-field"><label>App name</label><input class="wb-input" id="wbApName" value="${h(m.draft.name || '')}" placeholder="e.g. Leads, Projects, Inspections" autofocus></div>
+      <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbApDesc" placeholder="What does this app track?">${h(m.draft.description || '')}</textarea></div>
+      <div class="wb-field"><label>App type <span class="wb-opt">(optional)</span></label><select class="wb-input" id="wbApType"><option value="">— Select a type —</option>${['Contacts', 'Tasks', 'Projects', 'Records', 'Inventory', 'Documents', 'Calendar', 'Tickets', 'Invoices', 'Custom'].map((t) => `<option ${m.draft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div class="wb-row2"><div class="wb-field"><label>Icon</label><div class="wb-emoji-pick">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" data-wb-pick-icon="${icon}"><i class="ti ${icon}"></i></button>`).join('')}</div></div>
       <div class="wb-field"><label>Color</label><div class="wb-swatches">${WB_PALETTE.map((color) => `<button class="wb-swatch ${color === m.draft.color ? 'sel' : ''}" data-wb-pick-color="${color}" style="background:${color}"></button>`).join('')}</div></div></div>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-plus"></i>Create app</button>`);
@@ -8472,7 +8545,10 @@ function renderWorkspaceBuilderModal() {
   return '';
 }
 function wbModalShell(eyebrow, extraClass, head, body, foot) {
-  return `<div class="modal-overlay wb-modal-overlay" data-action="wb-modal-close"><div class="wb-modal ${extraClass}"><div class="wb-modal-head">${head}<button class="wb-modal-close" data-action="wb-modal-close"><i class="ti ti-x"></i></button></div><div class="wb-modal-body">${body}</div><div class="wb-modal-foot">${foot}</div></div></div>`;
+  // Generic modal format: explicit "Close" button (no 'X' icon) and no
+  // backdrop-close — the overlay carries no close action, so only the header
+  // Close button or a footer Cancel/Close dismisses the modal.
+  return `<div class="modal-overlay wb-modal-overlay"><div class="wb-modal ${extraClass}"><div class="wb-modal-head">${head}<button class="btn wb-modal-close-btn" type="button" data-action="wb-modal-close">Close</button></div><div class="wb-modal-body">${body}</div><div class="wb-modal-foot">${foot}</div></div></div>`;
 }
 function wbFieldConfigUI(fd, app) {
   const t = fd.type;
@@ -8535,8 +8611,8 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
     case 'text': input = `<input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="${h(f.config.placeholder || '')}">`; break;
     case 'textarea': input = `<textarea class="wb-input" data-f="${h(f.id)}" placeholder="${h(f.config.placeholder || '')}">${h(val || '')}</textarea>`; break;
     case 'email': input = `<input type="email" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="name@email.com">`; break;
-    case 'phone': input = `<input type="tel" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="(555) 000-0000">`; break;
-    case 'number': input = `<div class="wb-inline"><input type="number" class="wb-input" data-f="${h(f.id)}" value="${h(val ?? '')}" style="max-width:200px">${f.config.unit ? `<span class="wb-sub">${h(f.config.unit)}</span>` : ''}</div>`; break;
+    case 'phone': input = `<input type="tel" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="555 123 4567" inputmode="tel" autocomplete="tel" data-phone-format>`; break;
+    case 'number': input = `<div class="wb-inline"><input type="text" inputmode="numeric" class="wb-input" data-f="${h(f.id)}" data-digits-only value="${h(val ?? '')}" style="max-width:200px">${f.config.unit ? `<span class="wb-sub">${h(f.config.unit)}</span>` : ''}</div>`; break;
     case 'money': input = `<div class="wb-inline"><span class="wb-cur">${h(f.config.currency || '$')}</span><input type="number" step="0.01" class="wb-input" data-f="${h(f.id)}" value="${h(val ?? '')}" style="max-width:220px"></div>`; break;
     case 'date': input = `<input type="date" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" style="max-width:220px">`; break;
     case 'checkbox': input = `<label class="wb-switch"><input type="checkbox" data-f="${h(f.id)}" ${val ? 'checked' : ''}><span class="wb-slider"></span></label>`; break;
@@ -8564,6 +8640,8 @@ function wbReadFieldInput(f) {
   if (f.type === 'checkbox') return el.checked;
   if (f.type === 'number' || f.type === 'money') return el.value === '' ? '' : Number(el.value);
   if (f.type === 'relationship' && f.config.multiple) return [...el.selectedOptions].map((o) => o.value);
+  // Match the contacts form: normalize phone numbers on save.
+  if (f.type === 'phone') return formatPhoneNumber(el.value);
   return el.value;
 }
 
@@ -8639,6 +8717,9 @@ function wbSubmitModal() {
     const values = {}; let missing = null;
     app.fields.forEach((f) => { const v = wbReadFieldInput(f); values[f.id] = v; if (f.required && (v === '' || v == null || (Array.isArray(v) && !v.length))) missing = missing || f.label; });
     if (missing) { showToast(`"${missing}" is required.`, 'local', 'Workspaces'); return; }
+    let badEmail = null;
+    app.fields.forEach((f) => { if (f.type === 'email') { const v = String(values[f.id] || '').trim(); if (v && !v.includes('@')) badEmail = badEmail || f.label; } });
+    if (badEmail) { showToast(`"${badEmail}" must be a valid email address (include "@").`, 'local', 'Workspaces'); return; }
     if (m.editId) {
       const item = app.items.find((i) => i.id === m.editId); const prev = { ...item.values }; item.values = values;
       wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Updated <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
@@ -8688,6 +8769,34 @@ async function wbConfirmDeleteWorkspace() {
   navigate(companyPath('workspaces', {}, companyId));
 }
 
+async function wbConfirmDeleteApp() {
+  const m = state.builderModal;
+  if (!m || m.kind !== 'delete-app') return;
+  const typed = (document.getElementById('wbDelAppName')?.value || '').trim();
+  const pw1 = document.getElementById('wbDelAppPw1')?.value || '';
+  const pw2 = document.getElementById('wbDelAppPw2')?.value || '';
+  if (typed.toLowerCase() !== String(m.appName || '').trim().toLowerCase()) { m.error = 'The app name does not match.'; render(); return; }
+  if (!pw1 || !pw2) { m.error = 'Enter your password in both fields.'; render(); return; }
+  if (pw1 !== pw2) { m.error = 'The two passwords do not match.'; render(); return; }
+  const client = createSupabaseClient();
+  // On a live session, verify the password is actually correct by re-authenticating.
+  if (isLiveSupabaseSession() && client) {
+    let email = activeSession()?.profile?.email || '';
+    if (!email) { try { email = (await client.auth.getUser())?.data?.user?.email || ''; } catch { /* ignore */ } }
+    if (!email) { m.error = 'Could not verify your account. Try again.'; render(); return; }
+    const btn = document.querySelector('[data-wb-delete-app-confirm]'); if (btn) btn.disabled = true;
+    const { error } = await client.auth.signInWithPassword({ email, password: pw1 });
+    if (error) { m.error = 'Incorrect password.'; render(); return; }
+  }
+  const companyId = m.companyId;
+  const { workspace } = wbFind(companyId, m.workspaceId, m.appId);
+  if (workspace) workspace.apps = workspace.apps.filter((a) => a.id !== m.appId);
+  state.builderModal = null;
+  wbSave(companyId);
+  showToast('App deleted.', isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
+  navigate(companyPath('workspaces', {}, companyId));
+}
+
 function wbConfirmDelete() {
   const m = state.builderModal;
   if (!m || m.kind !== 'confirm') return;
@@ -8733,7 +8842,7 @@ function mountWorkspaceBuilder() {
     bind('[data-del-item]', (el, e) => { e.stopPropagation(); openWbConfirm(companyId, 'del-item', 'This record will be permanently removed.', { workspaceId, appId, itemId: el.dataset.delItem }); });
     bind('tr[data-item]', (el) => openWbItemModal(companyId, workspaceId, appId, el.dataset.item));
     bind('[data-save-app]', () => wbSaveAppSettings(companyId, workspaceId, appId));
-    bind('[data-del-app]', () => { const { app } = wbFind(companyId, workspaceId, appId); openWbConfirm(companyId, 'del-app', `"${app.name}" and its ${app.items.length} item(s) will be removed.`, { workspaceId, appId }); });
+    bind('[data-del-app]', () => { const { app } = wbFind(companyId, workspaceId, appId); if (app) openWbDeleteApp(companyId, workspaceId, app); });
     bind('[data-add-auto]', () => openWbAutoModal(companyId, workspaceId, appId, ''));
     bind('[data-edit-auto]', (el) => openWbAutoModal(companyId, workspaceId, appId, el.dataset.editAuto));
     bind('[data-del-auto]', (el) => openWbConfirm(companyId, 'del-auto', 'This rule will stop running.', { workspaceId, appId, autoId: el.dataset.delAuto }));
@@ -8779,6 +8888,7 @@ function wbMountModal() {
   const submit = overlay.querySelector('[data-wb-submit]'); if (submit) submit.onclick = () => wbSubmitModal();
   const confirmBtn = overlay.querySelector('[data-wb-confirm]'); if (confirmBtn) confirmBtn.onclick = () => wbConfirmDelete();
   const delWsBtn = overlay.querySelector('[data-wb-delete-ws-confirm]'); if (delWsBtn) delWsBtn.onclick = () => wbConfirmDeleteWorkspace();
+  const delAppBtn = overlay.querySelector('[data-wb-delete-app-confirm]'); if (delAppBtn) delAppBtn.onclick = () => wbConfirmDeleteApp();
   if (m.kind === 'item') {
     const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
     const recompute = () => {
@@ -9626,6 +9736,17 @@ function renderWorkspaceSettings(companyId) {
         ['Storage mode', connectionMode === 'live' ? 'Quest cloud database' : connectionMode === 'loading' ? 'Checking' : 'This browser only'],
       ])}
     </article>
+    ${(canManage || !isLiveSupabaseSession()) ? `
+    <article class="panel danger-zone">
+      <div class="section-head"><div><h2>Danger zone</h2><p>Irreversible actions for this workspace.</p></div></div>
+      <div class="danger-row">
+        <div>
+          <b>Delete this workspace</b>
+          <span>Permanently removes <b>${h(companyName(companyId) || companyId)}</b> and everything in it — jobs, contacts, quotes, files, finance, plugins, and members. This cannot be undone.</span>
+        </div>
+        <button class="btn danger" type="button" data-action="open-delete-company"><i class="ti ti-trash"></i>Delete workspace</button>
+      </div>
+    </article>` : ''}
   `;
 }
 
@@ -10393,7 +10514,7 @@ function renderAccountList(companyId) {
           const deals = dealsForAccount(account.id).filter((deal) => deal.status === 'open');
           return `
           <button class="table-row" type="button" data-action="open-account" data-account-id="${h(account.id)}">
-            <span class="cell-lead"><span class="account-avatar">${h(initials(account.name))}</span><span><strong>${h(account.name)}</strong><small>${h(account.industry || account.email || '?')}</small></span></span>
+            <span class="cell-lead"><span class="account-avatar">${h(initials(account.name))}</span><span><strong>${h(account.name)}</strong><small>${h(account.industry || account.email || '—')}</small></span></span>
             <span>${accountTypePill(account.type)}</span>
             <span>${h(account.owner_name || 'Unassigned')}</span>
             <span>${contactsForAccount(account.id).length}</span>
@@ -10448,9 +10569,9 @@ function renderAccountTab(companyId, account, tab, data) {
         ${data.contacts.map((contact) => `
           <button class="table-row" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}">
             <span class="cell-lead"><span class="account-avatar sm">${h(initials(contact.name))}</span><span><strong>${h(contact.name)}</strong></span></span>
-            <span>${h(contact.title || '?')}</span>
-            <span>${h(contact.phone || '?')}</span>
-            <span>${contact.email ? h(contact.email) : '<span class="muted-dash">?</span>'}</span>
+            <span>${h(contact.title || '—')}</span>
+            <span>${h(contact.phone || '—')}</span>
+            <span>${contact.email ? h(contact.email) : '<span class="muted-dash">—</span>'}</span>
             <span>${h(contact.owner_name || 'Unassigned')}</span>
             <span></span>
           </button>`).join('') || emptyState('No contacts linked to this account yet.')}
@@ -10474,7 +10595,7 @@ function renderAccountTab(companyId, account, tab, data) {
         ${data.jobs.map((job) => `
           <a class="table-row" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router>
             <span class="cell-lead">${pipelineDot(pipelineStageColor('jobs', resolvePipelineStage('jobs', job.stage, companyId), companyId))}<span><strong>${h(job.name)}</strong><small>${h(job.site_address || 'No address')}</small></span></span>
-            <span>${h(job.job_type || '?')}</span>
+            <span>${h(job.job_type || '—')}</span>
             <span>${stageTagPipe('jobs', job.stage, companyId)}</span>
             <span>${priorityPill(job.priority)}</span>
             <span>${h(job.owner_name || 'Unassigned')}</span>
@@ -10496,12 +10617,12 @@ function renderAccountTab(companyId, account, tab, data) {
         <div class="section-head"><div><h2>Details</h2></div></div>
         ${contractRows([
           ['Type', account.type],
-          ['Industry', account.industry || '?'],
+          ['Industry', account.industry || '—'],
           ['Owner', account.owner_name || 'Unassigned'],
-          ['Phone', account.phone || '?'],
-          ['Email', account.email || '?'],
-          ['Website', account.website || '?'],
-          ['Address', account.address || '?'],
+          ['Phone', account.phone || '—'],
+          ['Email', account.email || '—'],
+          ['Website', account.website || '—'],
+          ['Address', account.address || '—'],
           ['Status', account.status],
         ])}
         ${account.notes ? `<p class="crm-notes">${h(account.notes)}</p>` : ''}
@@ -10555,7 +10676,7 @@ function dealRow(deal, companyId = activeCompanyId()) {
       <span>${dealStatusPill(deal.status)}</span>
       <span class="cell-mono">${money(deal.value)}</span>
       <span>${h(deal.owner_name || 'Unassigned')}</span>
-      <span>${deal.close_date ? formatDate(deal.close_date) : '<span class="muted-dash">?</span>'}</span>
+      <span>${deal.close_date ? formatDate(deal.close_date) : '<span class="muted-dash">—</span>'}</span>
     </button>`;
 }
 
@@ -10884,9 +11005,10 @@ function renderDealDetail(companyId, deal) {
   const feed = filteredActivitiesFor('deal', deal.id);
   const tasks = tasksForDeal(deal);
   const ed = (key, opts = {}) => {
-    const display = (deal[key] === '' || deal[key] == null) ? '?' : deal[key];
-    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : ''].filter(Boolean).join(' ');
-    return `<span class="${cls}" data-deal-edit="${h(key)}" data-deal-id="${h(deal.id)}" title="Click to edit">${h(String(display))}</span>`;
+    const isEmpty = deal[key] === '' || deal[key] == null;
+    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : '', isEmpty ? 'sf-empty' : ''].filter(Boolean).join(' ');
+    const inner = isEmpty ? EMPTY_FIELD_PLACEHOLDER : h(String(deal[key]));
+    return `<span class="${cls}" data-deal-edit="${h(key)}" data-deal-id="${h(deal.id)}" title="Click to edit">${inner}</span>`;
   };
   const fieldRow = (label, content, editKey = '') => `
     <div class="sf-field">
@@ -10933,19 +11055,19 @@ function renderDealDetail(companyId, deal) {
         <div class="sf-guidance">
           <div class="sf-guidance-label">Guidance for Success</div>
           <div class="sf-guidance-title">${h(g.t)}</div>
-          <div class="sf-guidance-lines">${g.b.map((x) => `<div>? ${h(x)}</div>`).join('')}</div>
+          <div class="sf-guidance-lines">${g.b.map((x) => `<div><span class="sf-guidance-bullet">•</span> ${h(x)}</div>`).join('')}</div>
         </div>
       </div>
 
       <div class="sf-three-col">
         <div class="sf-col">
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
-            ${fieldRow('Phone', contact?.phone ? h(contact.phone) : '<span class="muted-dash">?</span>')}
-            ${fieldRow('Email', contact?.email ? `<span class="sf-edit blue">${h(contact.email)}</span>` : '<span class="muted-dash">?</span>')}
-            ${fieldRow('Location', quoteAddress ? `${h(quoteAddress)}<a class="sf-field-action" href="${h(googleMapsPlaceSearchUrl(quoteAddress))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map pin</a>` : '<span class="muted-dash">?</span>')}
+            ${fieldRow('Phone', contact?.phone ? h(contact.phone) : '<span class="muted-dash">—</span>')}
+            ${fieldRow('Email', contact?.email ? `<span class="sf-edit blue">${h(contact.email)}</span>` : '<span class="muted-dash">—</span>')}
+            ${fieldRow('Location', quoteAddress ? `${h(quoteAddress)}<a class="sf-field-action" href="${h(googleMapsPlaceSearchUrl(quoteAddress))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map pin</a>` : '<span class="muted-dash">—</span>')}
             ${fieldRow('Job Type', `<span class="sf-pill">${h(deal.source || 'Re-roof')}</span>`)}
             ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
-            ${fieldRow('Account', account ? `<button class="link-button" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(account.name)}</button>` : '<span class="muted-dash">?</span>')}
+            ${fieldRow('Account', account ? `<button class="link-button" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(account.name)}</button>` : '<span class="muted-dash">—</span>')}
           </div></div>
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
             ${fieldRow('Funnel', '<span>Quotes (bottom of funnel)</span>')}
@@ -10953,7 +11075,7 @@ function renderDealDetail(companyId, deal) {
             ${fieldRow('Est. Value', `<span class="sf-money"><span class="sf-edit mono" data-deal-edit="value" data-deal-id="${h(deal.id)}" title="Click to edit">${money(deal.value || 0)}</span></span>`, 'value')}
             ${fieldRow('Probability', `<span class="sf-edit mono" data-deal-edit="probability" data-deal-id="${h(deal.id)}" title="Click to edit">${h(String(deal.probability || 0))}</span>%`, 'probability')}
             ${fieldRow('Pay Type', `<span>${h(deal.status === 'won' ? 'Won' : 'Retail')}</span>`)}
-            ${fieldRow('Linked Job', job ? `<a class="link-button" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router>${h(job.name)}</a>` : '<span class="muted-dash">?</span>')}
+            ${fieldRow('Linked Job', job ? `<a class="link-button" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router>${h(job.name)}</a>` : '<span class="muted-dash">—</span>')}
           </div></div>
         </div>
 
@@ -12713,6 +12835,7 @@ function renderWorkspaceIconModal(companyId) {
 }
 
 function renderActiveModal(route, session) {
+  if (state.builderModal) return renderWorkspaceBuilderModal();
   if (state.modal === 'profile') return renderProfileModal(session.profile);
   if (state.modal === 'workspace-icon') return renderWorkspaceIconModal(activeCompanyId());
   if (state.modal === 'dashboard-widget-library') return renderDashboardWidgetLibraryModal(activeCompanyId());
@@ -12764,6 +12887,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'calendar-event-detail') return renderCalendarEventDetailModal(activeCompanyId());
   if (state.modal === 'calendar-event-new') return renderCalendarEventFormModal(activeCompanyId(), null);
   if (state.modal === 'calendar-event-edit') return renderCalendarEventFormModal(activeCompanyId(), manualCalendarEventById(state.selectedCalendarEventId));
+  if (state.modal === 'delete-company') return renderDeleteCompanyModal();
   if (route.name === 'company' && route.section === 'crm' && route.params.get('account')) {
     return renderCrmAccountModal(route.companyId, route.params.get('account'));
   }
@@ -12817,6 +12941,68 @@ function renderModalShell(eyebrow, title, content, className = '', headerActions
       </div>
     </div>
   `;
+}
+
+function renderDeleteCompanyModal() {
+  const ctx = state.deleteCompanyCtx || { companyId: activeCompanyId(), error: '' };
+  const companyId = ctx.companyId || activeCompanyId();
+  const name = companyName(companyId) || companyId;
+  const content = `
+    <p class="wb-sub">This permanently deletes <b>${h(name)}</b> and everything inside it — jobs, contacts, quotes, files, finance, plugins, portals, and members. This cannot be undone.</p>
+    <div class="wb-field"><label>Enter your password</label><input class="wb-input" id="dcDelPw1" type="password" autocomplete="off" placeholder="Your account password" autofocus></div>
+    <div class="wb-field"><label>Re-enter your password to confirm</label><input class="wb-input" id="dcDelPw2" type="password" autocomplete="off" placeholder="Type it again"></div>
+    <div class="wb-field"><label>Type the workspace name to confirm</label><input class="wb-input" id="dcDelName" type="text" autocomplete="off" placeholder="${h(name)}"></div>
+    ${ctx.error ? `<div class="wb-form-error">${h(ctx.error)}</div>` : ''}
+    <div class="modal-actions dc-actions">
+      <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      <button class="btn danger" type="button" data-action="confirm-delete-company"><i class="ti ti-trash"></i>Delete workspace</button>
+    </div>
+  `;
+  return renderModalShell('Danger zone', `Delete ${name}`, content, '');
+}
+
+function openDeleteCompanyWorkspace() {
+  state.deleteCompanyCtx = { companyId: activeCompanyId(), error: '' };
+  state.modal = 'delete-company';
+  render();
+}
+
+async function confirmDeleteCompanyWorkspace() {
+  const ctx = state.deleteCompanyCtx;
+  if (!ctx || state.modal !== 'delete-company') return;
+  const companyId = ctx.companyId;
+  const name = companyName(companyId) || companyId;
+  const pw1 = document.getElementById('dcDelPw1')?.value || '';
+  const pw2 = document.getElementById('dcDelPw2')?.value || '';
+  const typed = (document.getElementById('dcDelName')?.value || '').trim();
+  if (!pw1 || !pw2) { ctx.error = 'Enter your password in both fields.'; render(); return; }
+  if (pw1 !== pw2) { ctx.error = 'The two passwords do not match.'; render(); return; }
+  if (typed.toLowerCase() !== String(name).trim().toLowerCase()) { ctx.error = 'The workspace name does not match.'; render(); return; }
+  // Never strand the user without a workspace.
+  if (allowedCompanyIds().filter((id) => id !== companyId).length === 0) {
+    ctx.error = 'This is your only workspace — create another before deleting this one.'; render(); return;
+  }
+  const btn = document.querySelector('[data-action="confirm-delete-company"]'); if (btn) btn.disabled = true;
+  const live = isLiveSupabaseSession();
+  const client = createSupabaseClient();
+  if (live && client) {
+    // Re-authenticate to confirm identity; the RPC also enforces owner-only server-side.
+    let email = activeSession()?.profile?.email || '';
+    if (!email) { try { email = (await client.auth.getUser())?.data?.user?.email || ''; } catch { /* ignore */ } }
+    if (!email) { ctx.error = 'Could not verify your account. Try again.'; render(); return; }
+    const reauth = await client.auth.signInWithPassword({ email, password: pw1 });
+    if (reauth.error) { ctx.error = 'Incorrect password.'; render(); return; }
+    const { error } = await client.rpc('delete_company_workspace', { target_company_id: companyId });
+    if (error) { ctx.error = error.message || 'Could not delete the workspace. Try again.'; render(); return; }
+  }
+  // Apply locally (covers both a live delete and local/demo sessions).
+  state.companies = state.companies.filter((c) => c.id !== companyId);
+  state.memberships = state.memberships.filter((m) => m.company_id !== companyId);
+  if (Array.isArray(state.roleAssignments)) state.roleAssignments = state.roleAssignments.filter((r) => r.company_id !== companyId);
+  state.modal = '';
+  state.deleteCompanyCtx = null;
+  showToast(`${name} deleted.`, live ? 'live' : 'local', 'Settings');
+  setActiveCompany(allowedCompanyIds()[0] || defaultCompanyId());
 }
 
 function renderDrawerShell(eyebrow, title, content) {
@@ -13984,6 +14170,13 @@ function handleAction(event, node) {
     requireMutableWorkspace();
     return;
   }
+  if (action === 'wb-modal-close') {
+    // Only explicit Close/Cancel buttons carry this action — the backdrop does
+    // not, so clicking outside the modal never closes it.
+    event.preventDefault();
+    closeWbModal();
+    return;
+  }
   if (action === 'refresh-data') {
     event.preventDefault();
     state.dataLoaded = false;
@@ -14382,6 +14575,16 @@ function handleAction(event, node) {
     setTheme(node.dataset.theme || 'light');
     return;
   }
+  if (action === 'open-delete-company') {
+    event.preventDefault();
+    openDeleteCompanyWorkspace();
+    return;
+  }
+  if (action === 'confirm-delete-company') {
+    event.preventDefault();
+    confirmDeleteCompanyWorkspace();
+    return;
+  }
   if (action === 'open-activity') {
     event.preventDefault();
     state.selectedActivityId = node.dataset.activityId || '';
@@ -14559,6 +14762,12 @@ function handleAction(event, node) {
     state.accountMenuOpen = false;
     state.modal = 'profile';
     render();
+    return;
+  }
+  if (action === 'open-settings') {
+    event.preventDefault();
+    state.accountMenuOpen = false;
+    navigate(companyPath('settings', {}, activeCompanyId()));
     return;
   }
   if (action === 'open-workspace-icon-modal') {
@@ -17450,8 +17659,16 @@ async function openMessageAttachment(attachmentId) {
 
 function onDocumentInput(event) {
   if (event.target.matches('[data-phone-format]')) {
-    const formatted = formatPhoneNumber(event.target.value);
+    // Only digits, '+' and '-' are allowed; strip anything else, then format.
+    const cleaned = event.target.value.replace(/[^0-9+\-]/g, '');
+    const formatted = formatPhoneNumber(cleaned);
     if (formatted !== event.target.value) event.target.value = formatted;
+    return;
+  }
+  if (event.target.matches('[data-digits-only]')) {
+    // Restrict to digits, '+' and '-' only.
+    const cleaned = event.target.value.replace(/[^0-9+\-]/g, '');
+    if (cleaned !== event.target.value) event.target.value = cleaned;
     return;
   }
   if (event.target.matches('[data-cp-color-input]')) {
@@ -17553,6 +17770,17 @@ function onDocumentInput(event) {
 }
 
 function onDocumentChange(event) {
+  // Auto-format contact form text fields on blur/commit so the entry the user
+  // sees matches exactly what gets stored (name casing, email case, zip, etc.).
+  const cf = event.target;
+  if (cf && (cf.tagName === 'INPUT' || cf.tagName === 'TEXTAREA')
+      && !cf.matches('[data-phone-format]')
+      && cf.closest('[data-contact-form]')
+      && CONTACT_FORM_FORMAT_FIELDS.has(cf.name)) {
+    const formatted = String(formatContactField(cf.name, cf.value));
+    if (formatted !== cf.value) cf.value = formatted;
+    // fall through: no early return, this is a passive normalization
+  }
   if (event.target.matches('[data-dashboard-rep]')) {
     state.dashboardRep = event.target.value || 'all';
     render();
@@ -21917,6 +22145,7 @@ function isMutableAction(action = '') {
   if (!clean) return false;
   const safeActions = new Set([
     'refresh-data',
+    'wb-modal-close',
     'sign-out',
     'toggle-account-menu',
     'toggle-notifications',
@@ -21939,6 +22168,7 @@ function isMutableAction(action = '') {
     'close-auth-modal',
     'set-auth-mode',
     'open-profile',
+    'open-settings',
     'view-as-role',
     'exit-role-preview',
     'message-details',
@@ -22453,6 +22683,10 @@ function renderLocationPickerModal() {
           <button class="address-pin-button" type="button" data-action="location-picker-current"><i class="ti ti-current-location"></i><span>Use my location</span></button>
         </div>
       </div>
+      <div class="form-actions location-picker-actions">
+        <button class="btn btn-primary" type="submit" data-action="save-location-picker"><i class="ti ti-map-pin"></i>Save exact pin</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
       <div class="location-picker-mode">
         <span><i class="ti ti-click"></i>Manual pin</span>
         <p>Click the map or drag the pin to set the exact spot. Search will move the pin to the best address match.</p>
@@ -22461,10 +22695,6 @@ function renderLocationPickerModal() {
       <input type="hidden" name="lng" value="${h(String(lng))}" data-location-lng />
       <div class="location-map" data-location-map data-lat="${h(String(lat))}" data-lng="${h(String(lng))}"></div>
       <p class="location-picker-hint" data-location-picker-status>Search the address, drag the pin if needed, then save it to this customer record.</p>
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit" data-action="save-location-picker"><i class="ti ti-map-pin"></i>Save exact pin</button>
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
     </form>
   `, 'wide-modal location-picker-modal');
 }
@@ -22505,16 +22735,27 @@ async function reverseGeocodeLocationPicker(lat, lng) {
   }
 }
 
+// Forward-geocode a free-text address to the best-matching place (worldwide,
+// no country restriction) using Nominatim — the same concept as the template.
+async function geocodeLocationPickerAddress(query) {
+  const clean = String(query || '').trim();
+  if (!clean) return null;
+  const params = new URLSearchParams({ q: clean, format: 'jsonv2', addressdetails: '1', limit: '1', 'accept-language': 'en' });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, { headers: { Accept: 'application/json' } }).catch(() => null);
+  const payload = response?.ok ? await response.json().catch(() => []) : [];
+  return Array.isArray(payload) ? payload[0] : null;
+}
+
 async function searchLocationPickerAddress() {
   const input = document.querySelector('[data-location-picker-search]');
   const query = String(input?.value || '').trim();
   if (!query) return showToast('Type an address to search.', 'local', 'Map Pin');
   setLocationPickerStatus('Searching the map...');
-  const params = new URLSearchParams({ q: query, format: 'jsonv2', addressdetails: '1', limit: '1', countrycodes: 'us', 'accept-language': 'en' });
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, { headers: { Accept: 'application/json' } }).catch(() => null);
-  const payload = response?.ok ? await response.json().catch(() => []) : [];
-  const match = Array.isArray(payload) ? payload[0] : null;
-  if (!match) return showToast('No map match found. You can still click the map to drop a manual pin.', 'local', 'Map Pin');
+  const match = await geocodeLocationPickerAddress(query);
+  if (!match) {
+    setLocationPickerStatus('No match found — click or drag on the map to drop a manual pin.');
+    return showToast('No map match found. You can still click the map to drop a manual pin.', 'local', 'Map Pin');
+  }
   const address = String(match.display_name || query).trim();
   if (input) input.value = address;
   state.locationPicker = { ...(state.locationPicker || {}), address };
@@ -22556,6 +22797,16 @@ function mountLocationPicker() {
     sync(true);
   });
   setTimeout(() => locationPickerMap?.invalidateSize(), 80);
+  // On open, geocode the record's address so the map lands on the real place
+  // (worldwide) instead of the hardcoded fallback pin.
+  const initialAddress = String(state.locationPicker?.address || '').trim();
+  if (initialAddress) {
+    setLocationPickerStatus('Locating the address on the map…');
+    geocodeLocationPickerAddress(initialAddress).then((match) => {
+      if (match) setLocationPickerPin(Number(match.lat), Number(match.lon), { center: true });
+      else setLocationPickerStatus('Click or drag on the map to set the exact pin.');
+    }).catch(() => {});
+  }
 }
 
 async function persistCrmSite(site) {
@@ -22779,6 +23030,54 @@ function normalizeJob(input) {
   };
 }
 
+// ---- Contact field auto-formatting -----------------------------------------
+// Single source of truth so the full form, inline edits, and record upserts all
+// normalize a value the same way -> consistent, tidy data in Supabase.
+// NOTE: CONTACT_PROPER_CASE_FIELDS / CONTACT_FORM_FORMAT_FIELDS are declared
+// near the top of the file so they are initialized before the module-load state
+// seed (which maps contacts through normalizeContact) runs.
+
+function contactCollapse(value) {
+  return String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+}
+
+// Capitalize each word while preserving deliberate interior capitals
+// (McDonald, O'Brien, JPMorgan) so real names/place names are never mangled.
+function contactProperCase(value) {
+  return contactCollapse(value)
+    .split(' ')
+    .map((word) => {
+      if (!word) return word;
+      // Leave words that already carry an interior capital untouched.
+      if (/[a-z]/.test(word) && /[A-Z]/.test(word.slice(1))) return word;
+      return word.replace(/[^\s'/-]+/g, (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+    })
+    .join(' ');
+}
+
+// Normalize a dialing code to "+<digits>" (e.g. "1" or "+1 " -> "+1").
+function formatDialCode(value) {
+  const digits = String(value == null ? '' : value).replace(/[^\d]/g, '');
+  return digits ? `+${digits}` : '';
+}
+
+// Format one contact field by its key. Idempotent: formatting an already
+// formatted value returns it unchanged, so re-saves never churn the record.
+function formatContactField(key, value) {
+  switch (key) {
+    case 'phone': return formatPhoneNumber(value);
+    case 'email': return contactCollapse(value).toLowerCase();
+    case 'zip': return contactCollapse(value).toUpperCase();
+    case 'country_code': return formatDialCode(value);
+    case 'value': return number(String(value == null ? '' : value).replace(/[^0-9.]/g, ''));
+    case 'temperature': return resolveTemperature(value);
+    case 'stage': return resolveContactStage(value);
+    case 'notes': return String(value == null ? '' : value).trim();
+    default:
+      return CONTACT_PROPER_CASE_FIELDS.has(key) ? contactProperCase(value) : contactCollapse(value);
+  }
+}
+
 function composeContactLocation(parts) {
   const line1 = [parts.block_no, parts.street].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
   const segments = [line1, parts.barangay, parts.city, parts.province, parts.country]
@@ -22791,34 +23090,34 @@ function composeContactLocation(parts) {
 }
 
 function normalizeContact(input) {
-  const country_code = String(input.country_code || '').trim();
-  const country = String(input.country || '').trim();
-  const province = String(input.province || '').trim();
-  const city = String(input.city || '').trim();
-  const barangay = String(input.barangay || '').trim();
-  const street = String(input.street || '').trim();
-  const block_no = String(input.block_no || '').trim();
-  const zip = String(input.zip || '').trim();
+  const country_code = formatContactField('country_code', input.country_code);
+  const country = formatContactField('country', input.country);
+  const province = formatContactField('province', input.province);
+  const city = formatContactField('city', input.city);
+  const barangay = formatContactField('barangay', input.barangay);
+  const street = formatContactField('street', input.street);
+  const block_no = formatContactField('block_no', input.block_no);
+  const zip = formatContactField('zip', input.zip);
   const lat = String(input.lat ?? '').trim();
   const lng = String(input.lng ?? '').trim();
   const composed = composeContactLocation({ block_no, street, barangay, city, province, country, zip });
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
-    name: String(input.name || '').trim() || 'Untitled contact',
-    phone: formatPhoneNumber(input.phone),
-    email: String(input.email || '').trim(),
-    location: String(input.location || '').trim() || composed,
+    name: formatContactField('name', input.name) || 'Untitled contact',
+    phone: formatContactField('phone', input.phone),
+    email: formatContactField('email', input.email),
+    location: contactCollapse(input.location) || composed,
     stage: resolveContactStage(input.stage),
     value: number(input.value),
-    owner_name: String(input.owner_name || '').trim(),
+    owner_name: formatContactField('owner_name', input.owner_name),
     account_id: input.account_id ? String(input.account_id) : '',
-    title: String(input.title || '').trim(),
-    source: String(input.source || '').trim(),
+    title: formatContactField('title', input.title),
+    source: formatContactField('source', input.source),
     temperature: resolveTemperature(input.temperature),
-    pay_type: String(input.pay_type || '').trim(),
-    roof_system: String(input.roof_system || '').trim(),
-    secondary_roof_system: String(input.secondary_roof_system || '').trim(),
+    pay_type: formatContactField('pay_type', input.pay_type),
+    roof_system: formatContactField('roof_system', input.roof_system),
+    secondary_roof_system: formatContactField('secondary_roof_system', input.secondary_roof_system),
     has_multiple_roof_systems: input.has_multiple_roof_systems === true || input.has_multiple_roof_systems === 'true' || input.has_multiple_roof_systems === 'on',
     last_activity_at: input.last_activity_at || null,
     notes: String(input.notes || '').trim(),
