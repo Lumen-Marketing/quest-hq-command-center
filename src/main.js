@@ -11778,7 +11778,7 @@ function renderMessageActionItemsCard(companyId, conversation) {
           <a class="message-action-row" href="${appHref(companyPath('tasks', { task_id: task.id }, companyId))}" data-router>
             <span></span>
             <strong>${h(task.title)}</strong>
-            <small>${h(profileName(task.assignee_id)) || 'Unassigned'} ? ${h(formatDate(task.due))}</small>
+            <small>${h(profileName(task.assignee_id)) || 'Unassigned'} · ${h(formatDate(task.due))}</small>
           </a>
         `).join('') || emptyState('No action items linked yet.')}
       </div>
@@ -11972,7 +11972,7 @@ function renderMessageWorkspaceMembersModal(companyId) {
       ${pendingInvites.length ? `
         <div class="message-pending-invites">
           <strong>Pending access</strong>
-          ${pendingInvites.map((invite) => `<span>${h(invite.email)} ? ${h(titleCase(invite.status))}</span>`).join('')}
+          ${pendingInvites.map((invite) => `<span>${h(invite.email)} · ${h(titleCase(invite.status))}</span>`).join('')}
         </div>
       ` : ''}
       <div class="message-modal-foot">
@@ -12533,7 +12533,7 @@ function renderCalendarAgendaItem(item) {
   return `
     <button class="calendar-agenda-item" type="button" data-action="open-calendar-event" data-event-id="${h(item.id)}">
       <i class="ti ${h(calendarTypeIcon(item.type))}"></i>
-      <span><strong>${h(item.title)}</strong><small>${h(`${formatDate(item.dateKey)} ? ${calendarTimeLabel(item)} ? ${item.type}`)}</small></span>
+      <span><strong>${h(item.title)}</strong><small>${h(`${formatDate(item.dateKey)} · ${calendarTimeLabel(item)} · ${item.type}`)}</small></span>
     </button>
   `;
 }
