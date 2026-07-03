@@ -2191,6 +2191,7 @@ function render() {
   queueMicrotask(mountPriceBookImport);
   queueMicrotask(mountLocationPicker);
   queueMicrotask(mountWorkspaceBuilder);
+  queueMicrotask(mountFileViewer);
 }
 
 function openNativeTimePicker(input) {
@@ -5337,9 +5338,10 @@ function renderContactTable(companyId) {
           </div>
         </div>
         <div class="contact-list-actions">
-          ${selCount ? `<span class="contact-sel-count">${selCount} selected<button type="button" class="link-button" data-action="contacts-clear-selection">Clear</button></span>` : ''}
+          ${selCount ? `<span class="contact-sel-count">${selCount} selected</span><button class="btn btn-compact" type="button" data-action="contacts-clear-selection"><i class="ti ti-x"></i>Clear</button>` : ''}
           <button class="btn btn-compact" type="button" data-action="contacts-import"><i class="ti ti-upload"></i>Import</button>
           <button class="btn btn-compact" type="button" data-action="contacts-campaign"><i class="ti ti-speakerphone"></i>Add to Campaign</button>
+          <button class="btn btn-compact danger" type="button" data-action="contacts-delete"><i class="ti ti-trash"></i>Delete</button>
           <button class="btn btn-compact" type="button" data-action="contacts-email"><i class="ti ti-mail"></i>Send Email</button>
           <button class="btn btn-compact btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>New</button>
           <button class="btn btn-compact" type="button" data-action="contacts-label"><i class="ti ti-tag"></i>Assign Label</button>
@@ -5402,22 +5404,89 @@ function bulkContactsEmail() {
   window.location.href = `mailto:?bcc=${encodeURIComponent(emails.join(','))}`;
 }
 
-function bulkContactsCampaign() {
+function bulkContactsCampaign() { openContactBulkModal('campaign'); }
+function bulkContactsLabel() { openContactBulkModal('label'); }
+function bulkContactsDelete() { openContactBulkModal('delete'); }
+
+// Open the in-app modal for a bulk action on the selected contacts.
+function openContactBulkModal(kind) {
   const targets = selectedContactRows();
-  if (!targets.length) { showToast('Select contacts first, then add them to a campaign.', 'local', 'Contacts'); return; }
-  const name = String(window.prompt('Campaign / source to add the selected contacts to:') || '').trim();
-  if (!name) return;
-  targets.forEach((c) => persistContact({ ...c, source: name }));
-  showToast(`${targets.length} contact${targets.length === 1 ? '' : 's'} added to "${name}".`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+  if (!targets.length) {
+    const msg = kind === 'delete' ? 'Select contacts first to delete.'
+      : kind === 'campaign' ? 'Select contacts first, then add them to a campaign.'
+        : 'Select contacts first to assign a label.';
+    showToast(msg, 'local', 'Contacts');
+    return;
+  }
+  state.contactBulk = { kind, count: targets.length, value: '', error: '' };
+  state.modal = 'contact-bulk';
+  render();
+  queueMicrotask(() => document.getElementById('contactBulkInput')?.focus());
 }
 
-function bulkContactsLabel() {
+function renderContactBulkModal() {
+  const b = state.contactBulk || {};
+  const n = b.count || 0;
+  const s = n === 1 ? '' : 's';
+  if (b.kind === 'delete') {
+    const content = `
+      <p class="modal-lead">Permanently delete <b>${n}</b> selected contact${s}? This cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+        <button class="btn danger" type="button" data-action="contact-bulk-confirm"><i class="ti ti-trash"></i>Delete ${n} contact${s}</button>
+      </div>`;
+    return renderModalShell('Contacts', `Delete ${n} contact${s}`, content, '');
+  }
+  const isCampaign = b.kind === 'campaign';
+  const fieldLabel = isCampaign ? 'Campaign / source name' : 'Label';
+  const title = isCampaign ? 'Add to campaign' : 'Assign label';
+  const placeholder = isCampaign ? 'e.g. Spring 2026 Campaign' : 'e.g. VIP, Follow-up';
+  const content = `
+    <p class="modal-lead">Apply to <b>${n}</b> selected contact${s}.</p>
+    <div class="wb-field"><label>${fieldLabel}</label><input class="wb-input" id="contactBulkInput" value="${h(b.value || '')}" placeholder="${placeholder}" autocomplete="off" autofocus></div>
+    ${b.error ? `<div class="wb-form-error">${h(b.error)}</div>` : ''}
+    <div class="modal-actions">
+      <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary" type="button" data-action="contact-bulk-confirm"><i class="ti ti-check"></i>${title}</button>
+    </div>`;
+  return renderModalShell('Contacts', title, content, '');
+}
+
+function submitContactBulk() {
+  const b = state.contactBulk || {};
   const targets = selectedContactRows();
-  if (!targets.length) { showToast('Select contacts first to assign a label.', 'local', 'Contacts'); return; }
-  const label = String(window.prompt('Label to add to the selected contacts:') || '').trim();
-  if (!label) return;
-  targets.forEach((c) => { const line = `Label: ${label}`; const notes = c.notes ? (c.notes.includes(line) ? c.notes : `${c.notes}\n${line}`) : line; persistContact({ ...c, notes }); });
-  showToast(`Labeled ${targets.length} contact${targets.length === 1 ? '' : 's'} "${label}".`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+  if (!targets.length) { state.modal = ''; state.contactBulk = null; render(); return; }
+  if (b.kind === 'delete') { performBulkContactsDelete(targets); return; }
+  const value = String(document.getElementById('contactBulkInput')?.value || '').trim();
+  if (!value) { state.contactBulk = { ...b, error: `Enter a ${b.kind === 'campaign' ? 'campaign' : 'label'} name.` }; render(); return; }
+  if (b.kind === 'campaign') {
+    targets.forEach((c) => persistContact({ ...c, source: value }));
+    showToast(`${targets.length} contact${targets.length === 1 ? '' : 's'} added to "${value}".`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+  } else {
+    targets.forEach((c) => { const line = `Label: ${value}`; const notes = c.notes ? (c.notes.includes(line) ? c.notes : `${c.notes}\n${line}`) : line; persistContact({ ...c, notes }); });
+    showToast(`Labeled ${targets.length} contact${targets.length === 1 ? '' : 's'} "${value}".`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+  }
+  state.modal = '';
+  state.contactBulk = null;
+  render();
+}
+
+async function performBulkContactsDelete(targets) {
+  const ids = new Set(targets.map((c) => c.id));
+  state.modal = '';
+  state.contactBulk = null;
+  const client = createSupabaseClient();
+  if (client) {
+    for (const id of ids) {
+      try { await client.from('contacts').delete().eq('id', id); } catch (error) { console.warn('Contact delete failed', error); }
+    }
+  }
+  state.contacts = state.contacts.filter((c) => !ids.has(c.id));
+  persistContacts();
+  state.selectedContactIds = [];
+  if (ids.has(state.selectedContactId)) state.selectedContactId = '';
+  showToast(`Deleted ${ids.size} contact${ids.size === 1 ? '' : 's'}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+  render();
 }
 
 function parseContactsCsv(text) {
@@ -7547,7 +7616,10 @@ function renderTaskDetail(companyId, task) {
   return `
     <div class="section-head">
       <div><h2>${h(task.title)}</h2><p>${h(jobById(task.project_id)?.name || companyName(companyId))}</p></div>
-      <a class="btn" href="${appHref(companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id, edit: '1' }, companyId))}" data-router>Edit</a>
+      <div class="detail-actions">
+        <a class="btn" href="${appHref(companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id, edit: '1' }, companyId))}" data-router>Edit</a>
+        <button class="btn danger" type="button" data-action="task-delete" data-task-id="${h(task.id)}"><i class="ti ti-trash"></i>Delete</button>
+      </div>
     </div>
     ${contractRows([
       ['Status', statusLabel(task.status)],
@@ -7563,6 +7635,18 @@ function renderTaskDetail(companyId, task) {
       <p>${h(task.description || 'No description yet.')}</p>
     </div>
   `;
+}
+
+function renderTaskDeleteModal() {
+  const task = (state.tasks || []).find((t) => t.id === state.taskDeleteId);
+  const title = task?.title || 'this task';
+  const content = `
+    <p class="modal-lead">Delete <b>${h(title)}</b>? This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      <button class="btn danger" type="button" data-action="task-delete-confirm"><i class="ti ti-trash"></i>Delete task</button>
+    </div>`;
+  return renderModalShell('Task', 'Delete task', content, '');
 }
 
 function renderTaskForm(companyId, job, task) {
@@ -7599,6 +7683,7 @@ function renderFilesPage(route, companyId) {
   const job = route.jobId ? jobById(route.jobId) : null;
   const files = filteredDriveFiles(companyId, folder, job?.id || '');
   const canManageFiles = can('files.manage', companyId);
+  ensureFileThumbnails(files);
   return `
     <section class="tool-page drive-page">
       <section class="drive-app panel">
@@ -7649,9 +7734,16 @@ function renderDriveExplorer(companyId, folder, job, files) {
   const folders = driveExplorerFolders(companyId, folder, job);
   const items = folders.map((item) => ({ kind: 'folder', ...item })).concat(files.map((file) => ({ kind: 'file', file })));
   const title = job ? job.name : folder === 'home' ? 'This folder' : folderLabel(folder);
+  const selCount = (state.selectedFileIds || []).filter((id) => files.some((f) => f.id === id)).length;
+  const allSelected = files.length > 0 && selCount === files.length;
   return `
     <section class="drive-section-title">
       <div><h3>${h(title)}</h3><span>${folders.length} folder${folders.length === 1 ? '' : 's'} / ${files.length} file${files.length === 1 ? '' : 's'}</span></div>
+      ${files.length ? `<div class="drive-select-bar">
+        ${selCount ? `<span>${selCount} selected</span>` : ''}
+        <button class="btn btn-compact" type="button" data-action="files-select-all"><i class="ti ti-checks"></i>${allSelected ? 'Deselect all' : 'Select all'}</button>
+        ${selCount ? `<button class="btn btn-compact" type="button" data-action="files-clear-selection"><i class="ti ti-x"></i>Clear</button><button class="btn btn-compact" type="button" data-action="files-copy"><i class="ti ti-copy"></i>Copy</button><button class="btn btn-compact" type="button" data-action="files-move"><i class="ti ti-arrow-move-right"></i>Move</button><button class="btn btn-compact danger" type="button" data-action="files-delete"><i class="ti ti-trash"></i>Delete</button>` : ''}
+      </div>` : ''}
     </section>
     ${state.driveView === 'list' ? renderExplorerDetails(items) : renderExplorerIcons(items)}
   `;
@@ -7701,9 +7793,10 @@ function renderFolderRow(folder) {
 }
 
 function renderFileRow(file) {
+  const selected = (state.selectedFileIds || []).includes(file.id);
   return `
-    <button type="button" class="explorer-row ${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}" role="row">
-      <span class="explorer-name">${fileTypeBadge(file)}<strong>${h(file.file_name)}</strong></span>
+    <button type="button" class="explorer-row ${selected ? 'selected ' : ''}${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}" role="row">
+      <span class="explorer-name"><span class="file-check ${selected ? 'on' : ''}" data-action="toggle-file-select" data-file-id="${h(file.id)}" title="Select file"><i class="ti ${selected ? 'ti-checkbox' : 'ti-square'}"></i></span>${fileTypeBadge(file)}<strong>${h(file.file_name)}</strong></span>
       <span>${formatDate(file.updated_at || file.created_at)}</span>
       <span>${h(fileTypeLabel(file))}</span>
       <span>${formatBytes(file.size_bytes)}</span>
@@ -7712,6 +7805,9 @@ function renderFileRow(file) {
 }
 
 function fileTypeBadge(file) {
+  if (file.signed_url && fileTypeKind(file) === 'image') {
+    return `<span class="file-type image-thumb"><img src="${h(file.signed_url)}" alt="" loading="lazy" /></span>`;
+  }
   return `
     <span class="file-type ${h(fileTypeClass(file))}">
       ${fileIconAsset(file, fileTypeLabel(file))}
@@ -7721,8 +7817,10 @@ function fileTypeBadge(file) {
 }
 
 function renderFileTile(file) {
+  const selected = (state.selectedFileIds || []).includes(file.id);
   return `
-    <button type="button" class="file-card-live ${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}">
+    <button type="button" class="file-card-live ${selected ? 'selected ' : ''}${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}">
+      <span class="file-check tile ${selected ? 'on' : ''}" data-action="toggle-file-select" data-file-id="${h(file.id)}" title="Select file"><i class="ti ${selected ? 'ti-checkbox' : 'ti-square'}"></i></span>
       <span class="file-thumb">${fileThumb(file)}</span>
       <strong>${h(file.file_name)}</strong>
       <span>${h(fileTypeLabel(file))} / ${formatBytes(file.size_bytes)}</span>
@@ -7764,11 +7862,21 @@ function renderFileDetails(file, companyId) {
 }
 
 function renderFileViewer(file, companyId) {
+  if (file && !file.signed_url && file.object_path) ensureFileSignedUrl(file);
   const canManageFiles = can('files.manage', companyId);
+  const zoomable = Boolean(file.signed_url) && ['image', 'video'].includes(fileTypeClass(file));
   return `
     <section class="file-viewer-layout">
-      <div class="file-viewer-stage">
+      <div class="file-viewer-stage ${zoomable ? 'is-zoomable' : ''}" ${zoomable ? 'data-zoomable' : ''}>
         ${renderFilePreview(file)}
+        ${zoomable ? `
+          <span class="file-zoom-hint">Ctrl + scroll to zoom · drag to pan · double-click to reset</span>
+          <div class="file-zoom-controls">
+            <button type="button" data-zoom="out" title="Zoom out"><i class="ti ti-minus"></i></button>
+            <span data-zoom-level>100%</span>
+            <button type="button" data-zoom="in" title="Zoom in"><i class="ti ti-plus"></i></button>
+            <button type="button" data-zoom="reset" title="Reset zoom"><i class="ti ti-arrows-minimize"></i></button>
+          </div>` : ''}
       </div>
       <aside class="file-viewer-meta">
         <div class="file-open-head">
@@ -7796,20 +7904,87 @@ function renderFileViewer(file, companyId) {
 
 function renderFilePreview(file) {
   const type = fileTypeClass(file);
-  if (file.signed_url && type === 'image') return `<img class="file-preview-media" src="${h(file.signed_url)}" alt="" />`;
-  if (file.signed_url && type === 'pdf') return `<iframe class="file-preview-frame" src="${h(file.signed_url)}" title="${h(file.file_name)}"></iframe>`;
-  if (file.signed_url && type === 'text') return `<iframe class="file-preview-frame text" src="${h(file.signed_url)}" title="${h(file.file_name)}"></iframe>`;
-  if (['doc', 'sheet'].includes(type) && file.signed_url) {
-    return `<iframe class="file-preview-frame" src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(file.signed_url)}" title="${h(file.file_name)}"></iframe>`;
+  const url = file.signed_url;
+  if (url && type === 'image') return `<img class="file-preview-media" src="${h(url)}" alt="${h(file.file_name)}" draggable="false" />`;
+  if (url && type === 'video') return `<video class="file-preview-media file-preview-video" src="${h(url)}" controls playsinline preload="metadata"></video>`;
+  if (url && type === 'audio') return `<div class="file-preview-audio-wrap"><div class="file-preview-audio-ico"><i class="ti ti-music"></i></div><strong>${h(file.file_name)}</strong><audio src="${h(url)}" controls preload="metadata"></audio></div>`;
+  if (url && type === 'pdf') return `<iframe class="file-preview-frame" src="${h(url)}#toolbar=1&navpanes=0" title="${h(file.file_name)}"></iframe>`;
+  if (url && type === 'text') return `<iframe class="file-preview-frame text" src="${h(url)}" title="${h(file.file_name)}"></iframe>`;
+  if (['doc', 'sheet', 'presentation'].includes(type) && url) {
+    return `<iframe class="file-preview-frame" src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}" title="${h(file.file_name)}"></iframe>`;
+  }
+  if (file.object_path && !file._urlFailed) {
+    return `
+      <div class="file-preview-empty">
+        <span class="btn-spinner file-preview-spinner"></span>
+        <strong>Loading ${h(fileTypeLabel(file))} preview…</strong>
+        <p>Fetching a secure link to this file.</p>
+      </div>
+    `;
+  }
+  if (file.object_path && file._urlFailed) {
+    return `
+      <div class="file-preview-empty">
+        ${fileThumb(file, true)}
+        <strong>Preview unavailable</strong>
+        <p>Couldn't load a preview for this file. Use <b>Download</b> to open it.</p>
+      </div>
+    `;
   }
   return `
     <div class="file-preview-empty">
       ${fileThumb(file, true)}
       <strong>${h(fileTypeLabel(file))} preview</strong>
-      <p>${h(file.object_path ? 'Preview will load when a signed file URL is available.' : 'This is a metadata-only file record. Upload the actual file object to preview it here.')}</p>
+      <p>This is a metadata-only file record. Upload the actual file object to preview it here.</p>
       ${file.notes ? `<pre>${h(file.notes)}</pre>` : ''}
     </div>
   `;
+}
+
+// Bind Ctrl+scroll zoom, drag-to-pan, and the zoom controls on the file viewer.
+function mountFileViewer() {
+  const stage = document.querySelector('.file-viewer-stage[data-zoomable]');
+  if (!stage || stage.dataset.zoomBound) return;
+  const media = stage.querySelector('.file-preview-media');
+  if (!media) return;
+  stage.dataset.zoomBound = '1';
+  let scale = 1;
+  let ox = 0;
+  let oy = 0;
+  const level = stage.querySelector('[data-zoom-level]');
+  const apply = () => {
+    scale = Math.min(6, Math.max(1, scale));
+    if (scale === 1) { ox = 0; oy = 0; }
+    media.style.transform = `translate(${ox}px, ${oy}px) scale(${scale})`;
+    stage.classList.toggle('zoomed', scale > 1);
+    if (level) level.textContent = `${Math.round(scale * 100)}%`;
+  };
+  const zoomBy = (factor) => { scale *= factor; apply(); };
+  stage.addEventListener('wheel', (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    zoomBy(event.deltaY < 0 ? 1.12 : 0.9);
+  }, { passive: false });
+  stage.querySelectorAll('[data-zoom]').forEach((btn) => btn.addEventListener('click', (event) => {
+    event.preventDefault();
+    const kind = btn.dataset.zoom;
+    if (kind === 'in') zoomBy(1.25);
+    else if (kind === 'out') zoomBy(0.8);
+    else { scale = 1; ox = 0; oy = 0; apply(); }
+  }));
+  let dragging = false;
+  let sx = 0;
+  let sy = 0;
+  stage.addEventListener('pointerdown', (event) => {
+    if (scale <= 1 || event.button !== 0 || event.target.closest('[data-zoom], video, audio')) return;
+    dragging = true; sx = event.clientX - ox; sy = event.clientY - oy;
+    try { stage.setPointerCapture(event.pointerId); } catch { /* noop */ }
+  });
+  stage.addEventListener('pointermove', (event) => { if (!dragging) return; ox = event.clientX - sx; oy = event.clientY - sy; apply(); });
+  const endDrag = () => { dragging = false; };
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+  media.addEventListener('dblclick', () => { scale = scale > 1 ? 1 : 2; if (scale === 1) { ox = 0; oy = 0; } apply(); });
 }
 
 function renderNewFolderModal() {
@@ -7861,10 +8036,11 @@ function renderFileUploadModal() {
           ${field('Uploaded by', 'uploaded_by_label', activeSession().profile.full_name || 'Quest HQ')}
           ${textareaField('Notes', 'notes', '', 'span-2')}
           <div class="form-actions span-2">
-            <button class="btn btn-primary" type="submit">Upload to drive</button>
+            <button class="btn btn-primary" type="submit" data-upload-submit><i class="ti ti-upload"></i>Upload to drive</button>
             <button class="btn" type="button" data-action="close-modal">Cancel</button>
             <button class="btn" type="reset">Clear</button>
           </div>
+          <div class="upload-progress span-2" data-upload-progress hidden><div class="upload-progress-bar" data-upload-bar></div></div>
           <div class="file-upload-log span-2">
             <strong>Upload target</strong>
             <span>${h(companyId)}/${h(jobId ? `jobs/${jobId}` : folder)}</span>
@@ -9092,9 +9268,10 @@ function renderClientPortalDocumentModal(companyId, portal) {
       </div>
       <label class="span-2"><span>Plan documents</span><input name="files" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple required /></label>
       <div class="form-actions span-2">
-        <button class="btn btn-primary" type="submit">Upload documents</button>
+        <button class="btn btn-primary" type="submit" data-upload-submit><i class="ti ti-upload"></i>Upload documents</button>
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
       </div>
+      <div class="upload-progress span-2" data-upload-progress hidden><div class="upload-progress-bar" data-upload-bar></div></div>
     </form>
   `, 'file-modal-panel');
 }
@@ -9732,13 +9909,42 @@ function renderClientPortalMarkCard(annotation) {
   const summary = annotation.payload?.text || lastMessage?.text || (tool?.tip || titleCase(annotation.annotation_type));
   return `
     <div class="cp-mark-card">
-      <span class="cp-mark-ico" style="background:${h(color)}"><i class="ti ${tool?.icon || 'ti-pencil'}"></i></span>
+      <button class="cp-mark-ico" type="button" style="background:${h(color)}" data-action="cp-mark-info" data-annotation-id="${h(annotation.id)}" title="View markup details"><i class="ti ${tool?.icon || 'ti-pencil'}"></i></button>
       <div class="cp-mark-meta">
         <strong>${h(tool?.tip || titleCase(annotation.annotation_type))}</strong>
         <small>${h(doc?.file_name || 'Document')} · ${cpTimeAgo(annotation.created_at)}</small>
         <span>${h(summary)}</span>
       </div>
     </div>`;
+}
+
+function renderClientPortalMarkModal() {
+  const portalId = state.selectedClientPortalId;
+  const annotation = clientPortalAnnotationsForPortal(portalId).find((a) => a.id === state.markInfoId);
+  if (!annotation) {
+    return renderModalShell('Markup', 'Markup details',
+      `<p class="modal-lead">This markup is no longer available.</p><div class="modal-actions"><button class="btn" type="button" data-action="close-modal">Close</button></div>`, '');
+  }
+  const doc = clientPortalDocumentById(annotation.document_id);
+  const tool = CP_TOOLS.find((item) => item.id === annotation.annotation_type);
+  const author = annotation.payload?.author || (annotation.guest_name ? 'guest' : 'draft');
+  const color = annotation.payload?.color || cpActorColor(author);
+  const summary = annotation.payload?.text || '';
+  const thread = annotation.payload?.thread || [];
+  const rows = contractRows([
+    ['Type', tool?.tip || titleCase(annotation.annotation_type)],
+    ['Document', doc?.file_name || 'Document'],
+    ['By', cpAuthorLabel(author, annotation.guest_name || annotation.payload?.author_name)],
+    ['Created', formatDate(annotation.created_at)],
+    ['Page', annotation.page != null ? `Page ${Number(annotation.page) + 1}` : '—'],
+  ]);
+  const content = `
+    <div class="cp-mark-modal-head"><span class="cp-mark-ico" style="background:${h(color)}"><i class="ti ${tool?.icon || 'ti-pencil'}"></i></span><div><strong>${h(tool?.tip || titleCase(annotation.annotation_type))}</strong><small>${h(doc?.file_name || 'Document')} · ${cpTimeAgo(annotation.created_at)}</small></div></div>
+    ${rows}
+    ${summary ? `<div class="detail-copy"><strong>Note</strong><p>${h(summary)}</p></div>` : ''}
+    ${thread.length ? `<div class="detail-copy"><strong>Comments (${thread.length})</strong>${thread.map((m) => `<p><b>${h(cpAuthorLabel(m.author, m.author_name))}:</b> ${h(m.text)}</p>`).join('')}</div>` : ''}
+    <div class="modal-actions"><button class="btn" type="button" data-action="close-modal">Close</button></div>`;
+  return renderModalShell('Guest markup', 'Markup details', content, '');
 }
 
 function renderWorkspaceSettings(companyId) {
@@ -12914,6 +13120,12 @@ function renderWorkspaceIconModal(companyId) {
 
 function renderActiveModal(route, session) {
   if (state.builderModal) return renderWorkspaceBuilderModal();
+  if (state.modal === 'contact-bulk') return renderContactBulkModal();
+  if (state.modal === 'task-delete') return renderTaskDeleteModal();
+  if (state.modal === 'files-delete') return renderFilesDeleteModal();
+  if (state.modal === 'files-transfer') return renderFilesTransferModal();
+  if (state.modal === 'system-status') return renderSystemStatusModal();
+  if (state.modal === 'cp-mark-info') return renderClientPortalMarkModal();
   if (state.modal === 'profile') return renderProfileModal(session.profile);
   if (state.modal === 'workspace-icon') return renderWorkspaceIconModal(activeCompanyId());
   if (state.modal === 'dashboard-widget-library') return renderDashboardWidgetLibraryModal(activeCompanyId());
@@ -15345,6 +15557,38 @@ function handleAction(event, node) {
     bulkContactsLabel();
     return;
   }
+  if (action === 'contacts-delete') {
+    event.preventDefault();
+    bulkContactsDelete();
+    return;
+  }
+  if (action === 'contact-bulk-confirm') {
+    event.preventDefault();
+    submitContactBulk();
+    return;
+  }
+  if (action === 'task-delete') {
+    event.preventDefault();
+    state.taskDeleteId = node.dataset.taskId || '';
+    state.modal = 'task-delete';
+    render();
+    return;
+  }
+  if (action === 'cp-mark-info') {
+    event.preventDefault();
+    state.markInfoId = node.dataset.annotationId || '';
+    state.modal = 'cp-mark-info';
+    render();
+    return;
+  }
+  if (action === 'task-delete-confirm') {
+    event.preventDefault();
+    const id = state.taskDeleteId;
+    state.modal = '';
+    state.taskDeleteId = '';
+    deleteTask(id, { stayOnPage: false });
+    return;
+  }
   if (action === 'contacts-import') {
     event.preventDefault();
     importContactsFromFile();
@@ -15582,6 +15826,32 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'toggle-file-select') {
+    event.preventDefault();
+    const id = node.dataset.fileId;
+    const set = new Set(state.selectedFileIds || []);
+    if (set.has(id)) set.delete(id); else set.add(id);
+    state.selectedFileIds = [...set];
+    render();
+    return;
+  }
+  if (action === 'files-clear-selection') { event.preventDefault(); state.selectedFileIds = []; render(); return; }
+  if (action === 'files-select-all') {
+    event.preventDefault();
+    const companyId = activeCompanyId();
+    const route = state.route || getRoute();
+    const folder = route.params.get('folder') || state.driveFolder || 'home';
+    const files = filteredDriveFiles(companyId, folder, route.jobId || '');
+    const allSel = files.length > 0 && files.every((f) => (state.selectedFileIds || []).includes(f.id));
+    state.selectedFileIds = allSel ? [] : files.map((f) => f.id);
+    render();
+    return;
+  }
+  if (action === 'files-delete') { event.preventDefault(); openFilesDeleteModal(); return; }
+  if (action === 'files-delete-confirm') { event.preventDefault(); performBulkFilesDelete(); return; }
+  if (action === 'files-copy') { event.preventDefault(); openFilesTransferModal('copy'); return; }
+  if (action === 'files-move') { event.preventDefault(); openFilesTransferModal('move'); return; }
+  if (action === 'files-transfer-confirm') { event.preventDefault(); performFilesTransfer(); return; }
   if (action === 'download-file') {
     event.preventDefault();
     downloadFile(node.dataset.fileId);
@@ -17832,7 +18102,10 @@ function onDocumentInput(event) {
   }
   if (event.target.matches('[data-contact-search]')) {
     state.contactQuery = event.target.value;
+    const pos = event.target.selectionStart;
     updateWorkspaceOnly();
+    const next = document.querySelector('[data-contact-search]');
+    if (next) { next.focus(); try { next.setSelectionRange(pos, pos); } catch { /* noop */ } }
     return;
   }
   if (event.target.matches('[data-deal-search]')) {
@@ -18174,9 +18447,22 @@ async function saveFileRecord(form) {
     render();
     return;
   }
+  // Uploading UI: disable the submit button (prevents duplicate uploads) and
+  // animate a progress bar as each file is processed.
+  const submitBtn = form.querySelector('[data-upload-submit]');
+  const progressWrap = form.querySelector('[data-upload-progress]');
+  const progressBar = form.querySelector('[data-upload-bar]');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="btn-spinner"></span>Uploading…'; }
+  if (progressWrap) progressWrap.hidden = false;
+  const total = uploadList.length;
+  let done = 0;
+  const setProgress = () => { if (progressBar) progressBar.style.width = `${Math.max(6, Math.round((done / total) * 100))}%`; };
+  setProgress();
   const client = createSupabaseClient();
   let liveSaved = 0;
   for (const item of uploadList) {
+    done += 1;
+    setProgress();
     const fileId = crypto.randomUUID();
     const fileName = item?.name || metadataName;
     const folder = String(fields.folder || 'shared');
@@ -18220,6 +18506,14 @@ async function saveFileRecord(form) {
   state.sync = liveSaved === uploadList.length
     ? { label: 'Quest Supabase live', mode: 'live' }
     : { label: liveSaved ? 'Some files saved locally' : 'File record saved locally', mode: liveSaved ? 'loading' : 'local' };
+  const uploadCount = uploadList.length;
+  if (liveSaved === uploadCount) {
+    showToast(`Uploaded ${uploadCount} file${uploadCount === 1 ? '' : 's'} to the drive.`, isLiveSupabaseSession() ? 'live' : 'local', 'Files');
+  } else if (liveSaved > 0) {
+    showToast(`Uploaded ${liveSaved} of ${uploadCount} — the rest were saved locally.`, 'local', 'Files');
+  } else {
+    showToast(`Saved ${uploadCount} file record${uploadCount === 1 ? '' : 's'} locally (storage upload was blocked).`, 'local', 'Files');
+  }
   notifyLocalEvent(
     'file.added',
     uploadList.length > 1 ? 'Files added' : 'File added',
@@ -18292,9 +18586,20 @@ async function saveClientPortalDocuments(form) {
     showToast('Choose at least one PDF, PNG, or JPG.', 'local', 'Client Portal');
     return;
   }
+  const submitBtn = form.querySelector('[data-upload-submit]');
+  const progressWrap = form.querySelector('[data-upload-progress]');
+  const progressBar = form.querySelector('[data-upload-bar]');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="btn-spinner"></span>Uploading…'; }
+  if (progressWrap) progressWrap.hidden = false;
+  const total = files.length;
+  let done = 0;
+  const setProgress = () => { if (progressBar) progressBar.style.width = `${Math.max(6, Math.round((done / total) * 100))}%`; };
+  setProgress();
   const client = createSupabaseClient();
   let savedCount = 0;
   for (const file of files) {
+    done += 1;
+    setProgress();
     const id = crypto.randomUUID();
     const objectPath = `${companyId}/portals/${portal.id}/${id}-${slugify(file.name || 'plan-set')}`;
     let uploaded = false;
@@ -18333,7 +18638,11 @@ async function saveClientPortalDocuments(form) {
   }
   state.modal = '';
   persistAll();
-  showToast(`${savedCount} document${savedCount === 1 ? '' : 's'} uploaded.`, state.session?.auth === 'supabase' ? 'live' : 'local', 'Client Portal');
+  if (savedCount) {
+    showToast(`${savedCount} document${savedCount === 1 ? '' : 's'} uploaded.`, state.session?.auth === 'supabase' ? 'live' : 'local', 'Client Portal');
+  } else {
+    showToast('Upload failed — no documents were saved.', 'local', 'Client Portal');
+  }
   navigate(companyPath('client-portals', { portal_id: portal.id }, companyId), { replace: true });
 }
 
@@ -19892,6 +20201,151 @@ async function downloadFile(id) {
     return;
   }
   window.open(result.data.signedUrl, '_blank', 'noopener,noreferrer');
+}
+
+function openFilesDeleteModal() {
+  const ids = state.selectedFileIds || [];
+  if (!ids.length) { showToast('Select files first to delete.', 'local', 'Files'); return; }
+  if (!requirePermission('files.manage', activeCompanyId(), 'Your role cannot delete files.', 'Files')) return;
+  state.modal = 'files-delete';
+  render();
+}
+
+function renderFilesDeleteModal() {
+  const p = state.filesDeleteProgress;
+  if (p?.deleting) {
+    return renderModalShell('Files', 'Deleting files', `
+      <p class="modal-lead">Removing ${p.total} file${p.total === 1 ? '' : 's'}…</p>
+      <div class="upload-progress"><div class="upload-progress-bar" data-delete-bar style="width:6%"></div></div>`, '');
+  }
+  const n = (state.selectedFileIds || []).length;
+  const s = n === 1 ? '' : 's';
+  const content = `
+    <p class="modal-lead">Delete <b>${n}</b> selected file${s}? This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      <button class="btn danger" type="button" data-action="files-delete-confirm"><i class="ti ti-trash"></i>Delete ${n} file${s}</button>
+    </div>`;
+  return renderModalShell('Files', `Delete ${n} file${s}`, content, '');
+}
+
+async function performBulkFilesDelete() {
+  const ids = [...(state.selectedFileIds || [])];
+  const total = ids.length;
+  if (!total) { state.modal = ''; render(); return; }
+  const idSet = new Set(ids);
+  // Show the in-modal deletion progress bar.
+  state.filesDeleteProgress = { total, deleting: true };
+  render();
+  const setBar = (done) => { const b = document.querySelector('[data-delete-bar]'); if (b) b.style.width = `${Math.max(6, Math.round((done / total) * 100))}%`; };
+  const client = createSupabaseClient();
+  let deleted = 0;
+  for (const id of ids) {
+    const file = state.files.find((f) => f.id === id);
+    if (file && client) {
+      try {
+        if (file.object_path) await client.storage.from(file.bucket_id || 'quest-job-files').remove([file.object_path]);
+        await client.from('job_files').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+      } catch (error) { console.warn('File delete failed', error); }
+    }
+    deleted += 1;
+    setBar(deleted);
+  }
+  state.files = state.files.filter((f) => !idSet.has(f.id));
+  if (idSet.has(state.selectedFileId)) state.selectedFileId = '';
+  state.selectedFileIds = [];
+  state.filesDeleteProgress = null;
+  persistAll();
+  // System-wide completion modal.
+  showSystemStatus('Files deleted', `${deleted} file${deleted === 1 ? '' : 's'} ${deleted === 1 ? 'was' : 'were'} permanently removed.`, 'success');
+}
+
+// ---- Copy / Move selected files to a folder --------------------------------
+function openFilesTransferModal(mode) {
+  const ids = state.selectedFileIds || [];
+  if (!ids.length) { showToast('Select files first.', 'local', 'Files'); return; }
+  if (!requirePermission('files.manage', activeCompanyId(), 'Your role cannot manage files.', 'Files')) return;
+  state.filesTransfer = { mode, error: '' };
+  state.modal = 'files-transfer';
+  render();
+  queueMicrotask(() => document.getElementById('filesTransferFolder')?.focus());
+}
+
+function renderFilesTransferModal() {
+  const t = state.filesTransfer || {};
+  const companyId = activeCompanyId();
+  const n = (state.selectedFileIds || []).length;
+  const s = n === 1 ? '' : 's';
+  const isCopy = t.mode === 'copy';
+  const verb = isCopy ? 'Copy' : 'Move';
+  const opts = driveFolderOptions(companyId);
+  const content = `
+    <p class="modal-lead">${verb} <b>${n}</b> selected file${s} into a folder.</p>
+    <div class="wb-field"><label>Destination folder</label>
+      <select class="wb-input" id="filesTransferFolder"><option value="">— Choose an existing folder —</option>${opts.map(([id, label]) => `<option value="${h(id)}">${h(label)}</option>`).join('')}</select>
+    </div>
+    <div class="wb-field"><label>…or create a new folder</label><input class="wb-input" id="filesTransferNew" placeholder="New folder name" autocomplete="off"></div>
+    ${t.error ? `<div class="wb-form-error">${h(t.error)}</div>` : ''}
+    <div class="modal-actions">
+      <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary" type="button" data-action="files-transfer-confirm"><i class="ti ti-${isCopy ? 'copy' : 'arrow-move-right'}"></i>${verb} ${n} file${s}</button>
+    </div>`;
+  return renderModalShell('Files', `${verb} files`, content, '');
+}
+
+async function performFilesTransfer() {
+  const t = state.filesTransfer || {};
+  const companyId = activeCompanyId();
+  const ids = [...(state.selectedFileIds || [])];
+  if (!ids.length) { state.modal = ''; state.filesTransfer = null; render(); return; }
+  const newName = String(document.getElementById('filesTransferNew')?.value || '').trim();
+  let target = String(document.getElementById('filesTransferFolder')?.value || '');
+  if (!newName && !target) { state.filesTransfer = { ...t, error: 'Choose a folder or enter a new folder name.' }; render(); return; }
+  if (newName) {
+    const folder = normalizeDriveFolder({ id: `folder-${crypto.randomUUID()}`, company_id: companyId, name: newName, parent_key: 'home', created_by_label: activeSession().profile.full_name || 'Quest HQ', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    state.driveFolders.unshift(folder);
+    target = folder.id;
+  }
+  const isCopy = t.mode === 'copy';
+  const client = createSupabaseClient();
+  let count = 0;
+  for (const id of ids) {
+    const file = state.files.find((f) => f.id === id);
+    if (!file) continue;
+    if (isCopy) {
+      const copy = normalizeFile({ ...file, id: `file-${crypto.randomUUID()}`, folder: target, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      if (client) { try { await client.from('job_files').insert(filePayload(copy)); } catch (error) { console.warn('File copy failed', error); } }
+      upsertFile(copy);
+    } else {
+      const moved = { ...file, folder: target, updated_at: new Date().toISOString() };
+      if (client) { try { await client.from('job_files').update({ folder: target, updated_at: moved.updated_at }).eq('id', id); } catch (error) { console.warn('File move failed', error); } }
+      upsertFile(moved);
+    }
+    count += 1;
+  }
+  state.selectedFileIds = [];
+  state.filesTransfer = null;
+  persistAll();
+  showSystemStatus(isCopy ? 'Files copied' : 'Files moved', `${count} file${count === 1 ? '' : 's'} ${isCopy ? 'copied' : 'moved'} to "${folderLabel(target)}".`, 'success');
+}
+
+// Generic system-wide completion modal.
+function showSystemStatus(title, message, tone = 'success') {
+  state.systemModal = { title, message, tone };
+  state.modal = 'system-status';
+  render();
+}
+
+function renderSystemStatusModal() {
+  const m = state.systemModal || {};
+  const icon = m.tone === 'error' ? 'ti-alert-triangle' : m.tone === 'warning' ? 'ti-alert-circle' : 'ti-circle-check';
+  const content = `
+    <div class="system-status-body ${h(m.tone || 'success')}">
+      <span class="system-status-icon"><i class="ti ${icon}"></i></span>
+      <p>${h(m.message || '')}</p>
+    </div>
+    <div class="modal-actions"><button class="btn btn-primary" type="button" data-action="close-modal"><i class="ti ti-check"></i>Done</button></div>`;
+  return renderModalShell('Status', m.title || 'Update complete', content, '');
 }
 
 async function deleteFile(id) {
@@ -22294,6 +22748,11 @@ function isMutableAction(action = '') {
     'toggle-contact-select-all',
     'contacts-clear-selection',
     'contacts-email',
+    'toggle-file-select',
+    'files-clear-selection',
+    'files-select-all',
+    'files-copy',
+    'files-move',
     'view-as-role',
     'exit-role-preview',
     'message-details',
@@ -25384,8 +25843,46 @@ function avatarFileExtension(file) {
 }
 
 function fileThumb(file, large = false) {
-  if (file.signed_url && fileTypeKind(file) === 'image') return `<img src="${h(file.signed_url)}" alt="" />`;
+  if (file.signed_url && fileTypeKind(file) === 'image') return `<img src="${h(file.signed_url)}" alt="" loading="lazy" />`;
   return `<span class="file-doc-icon ${h(fileTypeClass(file))} ${large ? 'large' : ''}">${fileIconAsset(file, fileTypeLabel(file))}<small>${h(fileTypeShortLabel(file))}</small></span>`;
+}
+
+// Lazily fetch signed URLs for image files so folder views can show real
+// thumbnails. Fire-and-forget; each file is only attempted once per session.
+async function ensureFileThumbnails(files) {
+  const client = createSupabaseClient();
+  if (!client) return;
+  const need = files.filter((f) => fileTypeKind(f) === 'image' && f.object_path && !f.signed_url && !f._thumbTried);
+  if (!need.length) return;
+  need.forEach((f) => { f._thumbTried = true; });
+  const byBucket = {};
+  need.forEach((f) => { const b = f.bucket_id || 'quest-job-files'; (byBucket[b] = byBucket[b] || []).push(f); });
+  let changed = false;
+  for (const [bucket, list] of Object.entries(byBucket)) {
+    try {
+      const { data } = await client.storage.from(bucket).createSignedUrls(list.map((f) => f.object_path), 3600);
+      (data || []).forEach((row, i) => { if (row && row.signedUrl && !row.error && list[i]) { list[i].signed_url = row.signedUrl; changed = true; } });
+    } catch (error) { console.warn('Thumbnail fetch failed', error); }
+  }
+  if (changed) updateWorkspaceOnly();
+}
+
+// Fetch a signed URL for a single file (any type) so the viewer can play/preview
+// it. Fired when the viewer opens; re-renders once the URL arrives.
+async function ensureFileSignedUrl(file) {
+  if (!file || file.signed_url || !file.object_path || file._urlTried) return;
+  file._urlTried = true;
+  const client = createSupabaseClient();
+  if (!client) { file._urlFailed = true; return; }
+  try {
+    const { data, error } = await client.storage.from(file.bucket_id || 'quest-job-files').createSignedUrl(file.object_path, 3600);
+    if (!error && data?.signedUrl) file.signed_url = data.signedUrl;
+    else file._urlFailed = true;
+  } catch (err) {
+    console.warn('Signed URL fetch failed', err);
+    file._urlFailed = true;
+  }
+  render();
 }
 
 function fileTypeShortLabel(file) {
