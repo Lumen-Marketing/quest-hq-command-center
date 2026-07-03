@@ -7805,8 +7805,15 @@ function renderFileRow(file) {
 }
 
 function fileTypeBadge(file) {
-  if (file.signed_url && fileTypeKind(file) === 'image') {
+  const kind = fileTypeKind(file);
+  if (file.signed_url && kind === 'image') {
     return `<span class="file-type image-thumb"><img src="${h(file.signed_url)}" alt="" loading="lazy" /></span>`;
+  }
+  if (file.thumb_url && kind === 'pdf') {
+    return `<span class="file-type image-thumb"><img src="${h(file.thumb_url)}" alt="" loading="lazy" /></span>`;
+  }
+  if (file.signed_url && kind === 'video') {
+    return `<span class="file-type video-thumb"><video src="${h(file.signed_url)}#t=0.1" muted preload="metadata" playsinline></video><i class="ti ti-player-play-filled"></i></span>`;
   }
   return `
     <span class="file-type ${h(fileTypeClass(file))}">
@@ -25843,7 +25850,10 @@ function avatarFileExtension(file) {
 }
 
 function fileThumb(file, large = false) {
-  if (file.signed_url && fileTypeKind(file) === 'image') return `<img src="${h(file.signed_url)}" alt="" loading="lazy" />`;
+  const kind = fileTypeKind(file);
+  if (file.signed_url && kind === 'image') return `<img src="${h(file.signed_url)}" alt="" loading="lazy" />`;
+  if (file.thumb_url && kind === 'pdf') return `<img src="${h(file.thumb_url)}" alt="" loading="lazy" />`;
+  if (file.signed_url && kind === 'video') return `<span class="file-thumb-video"><video src="${h(file.signed_url)}#t=0.1" muted preload="metadata" playsinline></video><i class="ti ti-player-play-filled"></i></span>`;
   return `<span class="file-doc-icon ${h(fileTypeClass(file))} ${large ? 'large' : ''}">${fileIconAsset(file, fileTypeLabel(file))}<small>${h(fileTypeShortLabel(file))}</small></span>`;
 }
 
@@ -25852,19 +25862,46 @@ function fileThumb(file, large = false) {
 async function ensureFileThumbnails(files) {
   const client = createSupabaseClient();
   if (!client) return;
-  const need = files.filter((f) => fileTypeKind(f) === 'image' && f.object_path && !f.signed_url && !f._thumbTried);
-  if (!need.length) return;
-  need.forEach((f) => { f._thumbTried = true; });
-  const byBucket = {};
-  need.forEach((f) => { const b = f.bucket_id || 'quest-job-files'; (byBucket[b] = byBucket[b] || []).push(f); });
-  let changed = false;
-  for (const [bucket, list] of Object.entries(byBucket)) {
-    try {
-      const { data } = await client.storage.from(bucket).createSignedUrls(list.map((f) => f.object_path), 3600);
-      (data || []).forEach((row, i) => { if (row && row.signedUrl && !row.error && list[i]) { list[i].signed_url = row.signedUrl; changed = true; } });
-    } catch (error) { console.warn('Thumbnail fetch failed', error); }
+  // Fetch signed URLs for previewable types (images, video, pdf) so the folder
+  // view can show real thumbnails.
+  const need = files.filter((f) => ['image', 'video', 'pdf'].includes(fileTypeKind(f)) && f.object_path && !f.signed_url && !f._thumbTried);
+  if (need.length) {
+    need.forEach((f) => { f._thumbTried = true; });
+    const byBucket = {};
+    need.forEach((f) => { const b = f.bucket_id || 'quest-job-files'; (byBucket[b] = byBucket[b] || []).push(f); });
+    let changed = false;
+    for (const [bucket, list] of Object.entries(byBucket)) {
+      try {
+        const { data } = await client.storage.from(bucket).createSignedUrls(list.map((f) => f.object_path), 3600);
+        (data || []).forEach((row, i) => { if (row && row.signedUrl && !row.error && list[i]) { list[i].signed_url = row.signedUrl; changed = true; } });
+      } catch (error) { console.warn('Thumbnail fetch failed', error); }
+    }
+    if (changed) updateWorkspaceOnly();
   }
-  if (changed) updateWorkspaceOnly();
+  // Render first-page thumbnails for PDFs (a few at a time to stay smooth).
+  files.filter((f) => fileTypeKind(f) === 'pdf' && f.signed_url && !f.thumb_url && !f._pdfThumbTried).slice(0, 3).forEach((f) => ensurePdfThumbnail(f));
+}
+
+// Render page 1 of a PDF to a small JPEG data URL for a folder thumbnail.
+async function ensurePdfThumbnail(file) {
+  if (!file || file.thumb_url || file._pdfThumbTried || !file.signed_url) return;
+  file._pdfThumbTried = true;
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const response = await fetch(file.signed_url);
+    if (!response.ok) return;
+    const data = new Uint8Array(await response.arrayBuffer());
+    const pdf = await pdfjsLib.getDocument({ data, disableWorker: true }).promise;
+    const page = await pdf.getPage(1);
+    const unit = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: Math.min(2, 260 / unit.width) });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    file.thumb_url = canvas.toDataURL('image/jpeg', 0.78);
+    updateWorkspaceOnly();
+  } catch (error) { console.warn('PDF thumbnail failed', error); }
 }
 
 // Fetch a signed URL for a single file (any type) so the viewer can play/preview
