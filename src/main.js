@@ -13366,16 +13366,28 @@ function renderProfileModal(profile) {
             <input name="avatar_file" type="file" accept="image/png,image/jpeg,image/webp" data-profile-avatar-file />
             <small>PNG, JPG, or WebP. Live accounts support up to 2 MB.</small>
           </label>
-          <section class="profile-cropper" data-profile-cropper hidden>
-            <div class="profile-crop-frame">
-              <canvas width="256" height="256" data-profile-crop-canvas aria-label="Profile picture crop preview"></canvas>
-            </div>
-            <div class="profile-crop-controls">
-              <label>Zoom<input type="range" min="1" max="3" step="0.01" value="1" data-profile-crop-zoom /></label>
-              <label>Horizontal<input type="range" min="-100" max="100" step="1" value="0" data-profile-crop-x /></label>
-              <label>Vertical<input type="range" min="-100" max="100" step="1" value="0" data-profile-crop-y /></label>
-            </div>
-          </section>
+          <div class="profile-crop-modal" data-profile-avatar-crop-modal hidden>
+            <section class="profile-cropper" data-profile-cropper>
+              <div class="profile-crop-copy">
+                <strong>Crop profile picture</strong>
+                <span>Drag the image inside the circle, then zoom until the framing feels right.</span>
+              </div>
+              <div class="profile-crop-stage" data-profile-crop-stage>
+                <div class="profile-crop-frame">
+                  <canvas width="320" height="320" data-profile-crop-canvas aria-label="Profile picture crop preview"></canvas>
+                </div>
+              </div>
+              <div class="profile-crop-controls">
+                <label>Zoom<input type="range" min="1" max="3" step="0.01" value="1" data-profile-crop-zoom /></label>
+                <input type="hidden" value="0" data-profile-crop-x />
+                <input type="hidden" value="0" data-profile-crop-y />
+              </div>
+              <div class="profile-crop-actions">
+                <button class="btn btn-primary" type="button" data-action="apply-profile-avatar-crop">Use picture</button>
+                <button class="btn" type="button" data-action="cancel-profile-avatar-crop">Cancel</button>
+              </div>
+            </section>
+          </div>
           <div class="form-actions">
             <button class="btn btn-primary" type="submit">Save profile</button>
             <button class="btn" type="button" data-action="close-modal">Cancel</button>
@@ -16138,6 +16150,16 @@ function handleAction(event, node) {
     closeActiveModal();
     return;
   }
+  if (action === 'apply-profile-avatar-crop') {
+    event.preventDefault();
+    applyProfileAvatarCrop(node.closest('[data-profile-form]'));
+    return;
+  }
+  if (action === 'cancel-profile-avatar-crop') {
+    event.preventDefault();
+    cancelProfileAvatarCrop(node.closest('[data-profile-form]'));
+    return;
+  }
   if (action === 'set-task-view') {
     event.preventDefault();
     state.taskView = node.dataset.view === 'board' ? 'board' : 'table';
@@ -16981,16 +17003,20 @@ async function prepareProfileAvatarCrop(formNode) {
   const dataUrl = await fileToDataUrl(file);
   if (!dataUrl) throw new Error('Could not read that image file.');
   const image = await loadImage(dataUrl);
-  const cropper = formNode.querySelector('[data-profile-cropper]');
-  if (cropper) cropper.hidden = false;
+  const modal = formNode.querySelector('[data-profile-avatar-crop-modal]');
+  if (modal) modal.hidden = false;
+  const preview = formNode.querySelector('#profile-avatar-preview');
+  formNode._profileOriginalPreview = preview?.innerHTML || '';
+  formNode._profileOriginalHadImage = preview?.classList.contains('has-image') || false;
   formNode._profileCropImage = image;
   formNode.querySelector('[data-profile-crop-zoom]').value = '1';
   formNode.querySelector('[data-profile-crop-x]').value = '0';
   formNode.querySelector('[data-profile-crop-y]').value = '0';
+  bindProfileAvatarCropper(formNode);
   updateProfileAvatarCrop(formNode);
 }
 
-function updateProfileAvatarCrop(formNode) {
+function updateProfileAvatarCrop(formNode, options = {}) {
   if (!formNode?._profileCropImage) return;
   const canvas = formNode.querySelector('[data-profile-crop-canvas]');
   const hidden = formNode.querySelector('[data-profile-cropped-avatar]');
@@ -17013,10 +17039,74 @@ function updateProfileAvatarCrop(formNode) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, size, size);
   ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  if (!options.commit) return;
   hidden.value = canvas.toDataURL('image/png');
   const preview = formNode.querySelector('#profile-avatar-preview');
   if (preview) preview.innerHTML = `<img src="${h(hidden.value)}" alt="" />`;
   if (preview) preview.classList.add('has-image');
+}
+
+function bindProfileAvatarCropper(formNode) {
+  const stage = formNode?.querySelector('[data-profile-crop-stage]');
+  if (!stage || stage.dataset.bound) return;
+  stage.dataset.bound = '1';
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+  stage.addEventListener('pointerdown', (event) => {
+    if (!formNode._profileCropImage) return;
+    dragging = true;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    stage.classList.add('dragging');
+    stage.setPointerCapture?.(event.pointerId);
+  });
+  stage.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    moveProfileAvatarCrop(formNode, event.clientX - lastX, event.clientY - lastY);
+    lastX = event.clientX;
+    lastY = event.clientY;
+  });
+  const endDrag = (event) => {
+    dragging = false;
+    stage.classList.remove('dragging');
+    if (event?.pointerId !== undefined) stage.releasePointerCapture?.(event.pointerId);
+  };
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+}
+
+function moveProfileAvatarCrop(formNode, deltaX, deltaY) {
+  const x = formNode?.querySelector('[data-profile-crop-x]');
+  const y = formNode?.querySelector('[data-profile-crop-y]');
+  if (!x || !y) return;
+  const nextX = Math.max(-100, Math.min(100, Number(x.value || 0) + deltaX));
+  const nextY = Math.max(-100, Math.min(100, Number(y.value || 0) + deltaY));
+  x.value = String(nextX);
+  y.value = String(nextY);
+  updateProfileAvatarCrop(formNode);
+}
+
+function applyProfileAvatarCrop(formNode) {
+  updateProfileAvatarCrop(formNode, { commit: true });
+  const modal = formNode?.querySelector('[data-profile-avatar-crop-modal]');
+  if (modal) modal.hidden = true;
+}
+
+function cancelProfileAvatarCrop(formNode) {
+  if (!formNode) return;
+  const modal = formNode.querySelector('[data-profile-avatar-crop-modal]');
+  const hidden = formNode.querySelector('[data-profile-cropped-avatar]');
+  const file = formNode.elements.avatar_file;
+  const preview = formNode.querySelector('#profile-avatar-preview');
+  if (modal) modal.hidden = true;
+  if (hidden) hidden.value = '';
+  if (file) file.value = '';
+  if (preview && formNode._profileOriginalPreview !== undefined) {
+    preview.innerHTML = formNode._profileOriginalPreview;
+    preview.classList.toggle('has-image', Boolean(formNode._profileOriginalHadImage));
+  }
+  formNode._profileCropImage = null;
 }
 
 async function saveProfileAvatar(file) {
@@ -22336,7 +22426,8 @@ const JOB_COLS = ['id', 'company_id', 'name', 'client_name', 'contact_name', 'si
 const PROPOSAL_COLS = ['id', 'company_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
 const ACTIVITY_COLS = ['id', 'company_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
 const CONTACT_COLS = ['id', 'company_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'last_activity_at', 'notes', 'country_code', 'country', 'province', 'city', 'barangay', 'street', 'block_no', 'zip', 'lat', 'lng', 'updated_at'];
-const CLIENT_PORTAL_ANNOTATION_COLS = ['id', 'company_id', 'portal_id', 'document_id', 'page_number', 'guest_name', 'author_profile_id', 'annotation_type', 'payload', 'created_at', 'updated_at'];
+const CLIENT_PORTAL_DOCUMENT_COLS = ['id', 'company_id', 'portal_id', 'version_group_id', 'version_number', 'is_current', 'review_status', 'scale', 'scale_unit', 'bucket_id', 'object_path', 'file_name', 'mime_type', 'size_bytes', 'page_count', 'uploaded_by', 'created_at', 'updated_at'];
+const CLIENT_PORTAL_ANNOTATION_COLS = ['id', 'company_id', 'portal_id', 'document_id', 'page_number', 'guest_name', 'author_profile_id', 'annotation_type', 'payload', 'resolved_at', 'created_at', 'updated_at'];
 
 function emptyToNull(row, keys) {
   keys.forEach((key) => { if (row[key] === '') row[key] = null; });
@@ -24359,6 +24450,8 @@ function normalizeClientPortal(input) {
 
 function normalizeClientPortalDocument(input) {
   const id = String(input.id || crypto.randomUUID());
+  const scale = Number(input.scale);
+  const scaleUnit = String(input.scale_unit || input.scaleUnit || '').toLowerCase();
   return {
     id,
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
@@ -24369,7 +24462,8 @@ function normalizeClientPortalDocument(input) {
     review_status: ['approved', 'revision', 'rejected', 'pending'].includes(String(input.review_status || '').toLowerCase())
       ? String(input.review_status).toLowerCase()
       : 'pending',
-    scale: input.scale && typeof input.scale === 'object' ? input.scale : null,
+    scale: Number.isFinite(scale) && scale > 0 ? scale : null,
+    scale_unit: ['ft', 'in', 'cm'].includes(scaleUnit) ? scaleUnit : '',
     bucket_id: String(input.bucket_id || 'quest-client-portal-documents'),
     object_path: String(input.object_path || ''),
     file_name: String(input.file_name || 'Plan set.pdf'),
@@ -24390,6 +24484,7 @@ function normalizeClientPortalAnnotation(input) {
     document_id: String(input.document_id || ''),
     page_number: Number(input.page_number || input.page || 1) || 1,
     guest_name: String(input.guest_name || 'Guest'),
+    author_profile_id: String(input.author_profile_id || ''),
     annotation_type: String(input.annotation_type || input.type || 'markup'),
     payload: input.payload && typeof input.payload === 'object' ? input.payload : {},
     resolved_at: input.resolved_at || '',
@@ -25318,7 +25413,8 @@ function clientPortalDocumentPayload(doc) {
     version_number: doc.version_number || 1,
     is_current: doc.is_current !== false,
     review_status: doc.review_status || 'pending',
-    scale: doc.scale || null,
+    scale: Number(doc.scale) > 0 ? Number(doc.scale) : null,
+    scale_unit: ['ft', 'in', 'cm'].includes(doc.scale_unit) ? doc.scale_unit : null,
     bucket_id: doc.bucket_id,
     object_path: doc.object_path,
     file_name: doc.file_name,
@@ -25329,6 +25425,13 @@ function clientPortalDocumentPayload(doc) {
   };
 }
 
+function clientPortalAnnotationPayload(annotation) {
+  return emptyToNull(supabaseRow({
+    ...normalizeClientPortalAnnotation(annotation),
+    updated_at: annotation.updated_at || new Date().toISOString(),
+  }, CLIENT_PORTAL_ANNOTATION_COLS), ['document_id', 'guest_name', 'author_profile_id']);
+}
+
 function upsertClientPortal(portal) {
   state.clientPortals = [portal].concat(state.clientPortals.filter((item) => item.id !== portal.id));
   persistAll();
@@ -25337,6 +25440,56 @@ function upsertClientPortal(portal) {
 function upsertClientPortalDocument(doc) {
   state.clientPortalDocuments = [doc].concat(state.clientPortalDocuments.filter((item) => item.id !== doc.id));
   persistAll();
+}
+
+function upsertClientPortalAnnotationLocal(annotation) {
+  const normalized = normalizeClientPortalAnnotation(annotation);
+  state.clientPortalAnnotations = [normalized].concat(state.clientPortalAnnotations.filter((item) => item.id !== normalized.id));
+  if (state.clientPortalPublic?.local && state.clientPortalPublic.portal?.id === normalized.portal_id) {
+    state.clientPortalPublic.annotations = [normalized].concat((state.clientPortalPublic.annotations || []).filter((item) => item.id !== normalized.id));
+    writeJson(CLIENT_PORTAL_SESSION_KEY, state.clientPortalPublic);
+  }
+  persistClientPortalCaches();
+}
+
+async function persistClientPortalAnnotation(annotation) {
+  const normalized = normalizeClientPortalAnnotation({ ...annotation, updated_at: new Date().toISOString() });
+  upsertClientPortalAnnotationLocal(normalized);
+  const client = createSupabaseClient();
+  if (!isLiveSupabaseSession() || !client) return;
+  const { data, error } = await client.from('client_portal_annotations').upsert(clientPortalAnnotationPayload(normalized), { onConflict: 'id' }).select().single();
+  if (error) {
+    notifySyncFailure(error, 'Markup save');
+    return;
+  }
+  if (data) upsertClientPortalAnnotationLocal(normalizeClientPortalAnnotation(data));
+}
+
+async function deleteClientPortalAnnotationRow(id) {
+  state.clientPortalAnnotations = state.clientPortalAnnotations.filter((item) => item.id !== id);
+  if (state.clientPortalPublic?.local) {
+    state.clientPortalPublic.annotations = (state.clientPortalPublic.annotations || []).filter((item) => item.id !== id);
+    writeJson(CLIENT_PORTAL_SESSION_KEY, state.clientPortalPublic);
+  }
+  persistClientPortalCaches();
+  const client = createSupabaseClient();
+  if (!isLiveSupabaseSession() || !client) return;
+  const { error } = await client.from('client_portal_annotations').delete().eq('id', id);
+  if (error) notifySyncFailure(error, 'Markup delete');
+}
+
+async function persistClientPortalDocument(doc) {
+  const normalized = normalizeClientPortalDocument({ ...doc, updated_at: new Date().toISOString() });
+  upsertClientPortalDocument(normalized);
+  const client = createSupabaseClient();
+  if (!isLiveSupabaseSession() || !client) return;
+  const payload = emptyToNull(supabaseRow(clientPortalDocumentPayload(normalized), CLIENT_PORTAL_DOCUMENT_COLS), ['scale', 'scale_unit', 'page_count', 'uploaded_by']);
+  const { data, error } = await client.from('client_portal_documents').update(payload).eq('id', normalized.id).select().single();
+  if (error) {
+    notifySyncFailure(error, 'Document save');
+    return;
+  }
+  if (data) upsertClientPortalDocument(normalizeClientPortalDocument(data));
 }
 
 function copyParams(params, keys) {

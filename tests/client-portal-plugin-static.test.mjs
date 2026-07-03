@@ -156,7 +156,7 @@ test('client portal Vercel APIs exist and do not expose raw token or password fi
   }
   const openApi = readFileSync(new URL('client-portal-open.js', apiDir), 'utf8');
   assert.match(openApi, /is_current=eq\.true/);
-  assert.match(openApi, /version_group_id,version_number,is_current,review_status,scale/);
+  assert.match(openApi, /version_group_id,version_number,is_current,review_status,scale,scale_unit/);
   const annotationsApi = readFileSync(new URL('client-portal-annotations.js', apiDir), 'utf8');
   assert.match(annotationsApi, /body\.action === 'delete'/);
   assert.match(annotationsApi, /body\.annotation && typeof body\.annotation === 'object'/);
@@ -167,4 +167,26 @@ test('client portal Vercel APIs exist and do not expose raw token or password fi
   const documentUrlApi = readFileSync(new URL('client-portal-document-url.js', apiDir), 'utf8');
   assert.match(documentUrlApi, /function absoluteStorageUrl\s*\(/);
   assert.match(documentUrlApi, /\$\{baseUrl\(\)\}\/storage\/v1\$\{cleanPath\}/);
+});
+
+test('client portal document review and scale fields are tracked in migrations', () => {
+  const migration = migrationFiles
+    .map((name) => readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'))
+    .find((sql) => /client_portal_documents[\s\S]*version_group_id[\s\S]*review_status[\s\S]*scale_unit/.test(sql)) || '';
+  assert.match(migration, /add column if not exists version_group_id uuid/);
+  assert.match(migration, /add column if not exists review_status text not null default 'pending'/);
+  assert.match(migration, /add column if not exists scale numeric/);
+  assert.match(migration, /add column if not exists scale_unit text/);
+  assert.match(migration, /add column if not exists author_profile_id uuid/);
+});
+
+test('staff portal annotation and document persistence helpers are wired', () => {
+  assert.match(source, /async function persistClientPortalAnnotation\(annotation\)/);
+  assert.match(source, /function clientPortalAnnotationPayload\(annotation\)/);
+  assert.match(source, /function upsertClientPortalAnnotationLocal\(annotation\)/);
+  assert.match(source, /async function deleteClientPortalAnnotationRow\(id\)/);
+  assert.match(source, /async function persistClientPortalDocument\(doc\)/);
+  assert.match(source, /client\.from\('client_portal_annotations'\)\.upsert/);
+  assert.match(source, /client\.from\('client_portal_annotations'\)\.delete\(\)\.eq\('id', id\)/);
+  assert.match(source, /client\.from\('client_portal_documents'\)\.update/);
 });

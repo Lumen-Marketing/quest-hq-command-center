@@ -86,3 +86,18 @@ test('source-tracked migrations mirror production-applied price book and line it
   assert.ok(migrations.includes('20260701172824_price_book_vendor_credit_line.sql'));
   assert.ok(migrations.includes('20260702010731_deals_line_items.sql'));
 });
+
+test('price book plugin and RLS use the live company plugin system safely', () => {
+  const priceBookSql = readFileSync(new URL('../supabase/migrations/20260701164822_price_book_module.sql', import.meta.url), 'utf8');
+  const allowlistSql = readFileSync(new URL('../supabase/migrations/20260701170157_price_book_plugin_allowlist.sql', import.meta.url), 'utf8');
+  assert.doesNotMatch(allowlistSql, /workspace_plugins/);
+  assert.doesNotMatch(allowlistSql, /workspace_plugin_modules/);
+  assert.match(allowlistSql, /alter table public\.company_plugins[\s\S]*company_plugins_known_plugin_check[\s\S]*'price_book'/);
+  assert.match(allowlistSql, /create or replace function public\.set_company_plugin/);
+  assert.match(allowlistSql, /'price_book'/);
+  assert.match(allowlistSql, /when permission like 'price_book\.%' then array\['price_book'\]/);
+  assert.match(priceBookSql, /for select to authenticated[\s\S]*app_private\.has_company_permission\(company_id, 'price_book\.view'\)/);
+  assert.match(priceBookSql, /for insert to authenticated[\s\S]*app_private\.has_company_permission\(company_id, 'price_book\.manage'\)/);
+  assert.match(priceBookSql, /for update to authenticated[\s\S]*app_private\.has_company_permission\(company_id, 'price_book\.manage'\)/);
+  assert.match(priceBookSql, /for delete to authenticated[\s\S]*app_private\.has_company_permission\(company_id, 'price_book\.manage'\)/);
+});

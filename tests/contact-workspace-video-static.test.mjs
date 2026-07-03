@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const migrationUrl = new URL('../supabase/migrations/202607020945_contact_workspace_intake_fields.sql', import.meta.url);
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';
+const migrationDir = new URL('../supabase/migrations/', import.meta.url);
+const allMigrations = readdirSync(migrationDir)
+  .filter((name) => name.endsWith('.sql'))
+  .map((name) => readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'))
+  .join('\n');
 
 test('contact workspace uses notes email and activity instead of old action clutter', () => {
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
@@ -118,4 +123,15 @@ test('supabase contact migration persists crm intake fields', () => {
   assert.match(migration, /add column if not exists secondary_roof_system/);
   assert.match(migration, /add column if not exists has_multiple_roof_systems/);
   assert.match(migration, /add column if not exists source/);
+});
+
+test('supabase contact migrations persist structured address fields', () => {
+  assert.match(allMigrations, /alter table public\.contacts[\s\S]*add column if not exists country_code/);
+  assert.match(allMigrations, /add column if not exists country text/);
+  assert.match(allMigrations, /add column if not exists province text/);
+  assert.match(allMigrations, /add column if not exists city text/);
+  assert.match(allMigrations, /add column if not exists barangay text/);
+  assert.match(allMigrations, /add column if not exists block_no text/);
+  assert.match(allMigrations, /add column if not exists lat text/);
+  assert.match(allMigrations, /add column if not exists lng text/);
 });

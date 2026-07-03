@@ -7,12 +7,20 @@ const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8
 
 test('profile modal supports avatar crop and zoom before save', () => {
   assert.match(source, /data-profile-cropper/);
+  assert.match(source, /data-profile-avatar-crop-modal/);
   assert.match(source, /data-profile-crop-canvas/);
+  assert.match(source, /data-profile-crop-stage/);
   assert.match(source, /data-profile-crop-zoom/);
   assert.match(source, /data-profile-crop-x/);
   assert.match(source, /data-profile-crop-y/);
+  assert.match(source, /data-action="apply-profile-avatar-crop"/);
+  assert.match(source, /data-action="cancel-profile-avatar-crop"/);
   assert.match(source, /function prepareProfileAvatarCrop\(formNode\)/);
-  assert.match(source, /function updateProfileAvatarCrop\(formNode\)/);
+  assert.match(source, /function updateProfileAvatarCrop\(formNode/);
+  assert.match(source, /function bindProfileAvatarCropper\(formNode\)/);
+  assert.match(source, /function moveProfileAvatarCrop\(formNode, deltaX, deltaY\)/);
+  assert.match(source, /\.addEventListener\('pointerdown'/);
+  assert.match(source, /\.addEventListener\('pointermove'/);
   assert.match(source, /canvas\.toDataURL\('image\/png'\)/);
 });
 
