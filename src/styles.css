@@ -12116,6 +12116,27 @@ button.side-item.planned b {
 }
 .cp-planset { border-right: 1px solid var(--border, #e2d5bf); }
 .cp-cmts { border-left: 1px solid var(--border, #e2d5bf); }
+
+/* Owner annotate view in dark mode: keep the plan-set / review text and reply
+   inputs legible. The public guest portal never sets data-theme=dark, so this
+   only affects the in-app owner view. */
+:root[data-theme="dark"] .cp-planset,
+:root[data-theme="dark"] .cp-cmts,
+:root[data-theme="dark"] .cp-anno-card,
+:root[data-theme="dark"] .cp-anno-meta strong,
+:root[data-theme="dark"] .cp-anno-summary,
+:root[data-theme="dark"] .cp-msg-main p,
+:root[data-theme="dark"] .cp-msg-top b {
+  color: var(--text);
+}
+:root[data-theme="dark"] .cp-reply input,
+:root[data-theme="dark"] .cp-msg-edit input {
+  background: var(--surface-3, #262e37);
+  color: var(--text);
+}
+:root[data-theme="dark"] .cp-reply input::placeholder {
+  color: var(--text-muted);
+}
 .cp-ph, .cp-ch { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .cp-ph h3, .cp-ch h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted, #72695d); }
 .cp-count { font-size: 12px; font-weight: 800; color: var(--text-muted, #72695d); }
@@ -12136,6 +12157,11 @@ button.side-item.planned b {
   cursor: pointer;
 }
 .cp-plan-tile.active, .cp-plan-tile:hover { border-color: #e66a1f; background: #fdecd8; }
+:root[data-theme="dark"] .cp-plan-tile.active,
+:root[data-theme="dark"] .cp-plan-tile:hover {
+  background: rgba(230, 106, 31, .16);
+  background: color-mix(in srgb, var(--orange) 16%, var(--surface));
+}
 .cp-plan-ico { font-size: 18px; color: #b91c1c; }
 .cp-plan-name { display: flex; flex-direction: column; min-width: 0; }
 .cp-plan-name { font-weight: 700; font-size: 13px; color: var(--text, #17130f); }
@@ -15977,6 +16003,31 @@ textarea:focus {
   gap: 10px;
   align-items: center;
 }
+
+/* Multi-select: the checkbox cell toggles selection; clicks never open the row. */
+.contacts-table .table-row { cursor: pointer; }
+.contacts-table .select-cell { cursor: pointer; padding: 6px; margin: -6px; border-radius: 6px; }
+.contacts-table .select-cell input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--orange);
+  pointer-events: none;
+}
+.contacts-table .table-row.selected {
+  border-color: var(--orange);
+  background: rgba(230, 106, 31, .1);
+  background: color-mix(in srgb, var(--orange) 10%, var(--surface-2));
+}
+.contact-sel-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.contact-sel-count .link-button { color: var(--orange); font-weight: 700; }
 
 .underwriter-table .table-head,
 .underwriter-table .table-row {

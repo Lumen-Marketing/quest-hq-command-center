@@ -5317,6 +5317,9 @@ function renderContactTable(companyId) {
   const sort = CONTACT_SORT_OPTIONS.find((option) => option.id === state.contactSort) || CONTACT_SORT_OPTIONS[0];
   const listLabel = state.contactStageFilter === 'all' ? 'All Contacts' : `${state.contactStageFilter} Contacts`;
   const lastUpdated = rows[0]?.updated_at ? timeAgo(rows[0].updated_at) : 'no recent updates';
+  const selected = new Set((state.selectedContactIds || []).filter((id) => rows.some((r) => r.id === id)));
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  const selCount = selected.size;
   const headerSort = (label, sortId) => `
     <button class="contact-header-sort ${state.contactSort === sortId ? 'active' : ''}" type="button" data-action="set-contact-sort" data-sort="${h(sortId)}">
       ${h(label)} <i class="ti ${state.contactSort === sortId ? 'ti-chevron-up' : 'ti-chevron-down'}"></i>
@@ -5334,11 +5337,12 @@ function renderContactTable(companyId) {
           </div>
         </div>
         <div class="contact-list-actions">
-          <button class="btn btn-compact" type="button"><i class="ti ti-upload"></i>Import</button>
-          <button class="btn btn-compact" type="button"><i class="ti ti-speakerphone"></i>Add to Campaign</button>
-          <button class="btn btn-compact" type="button"><i class="ti ti-mail"></i>Send Email</button>
+          ${selCount ? `<span class="contact-sel-count">${selCount} selected<button type="button" class="link-button" data-action="contacts-clear-selection">Clear</button></span>` : ''}
+          <button class="btn btn-compact" type="button" data-action="contacts-import"><i class="ti ti-upload"></i>Import</button>
+          <button class="btn btn-compact" type="button" data-action="contacts-campaign"><i class="ti ti-speakerphone"></i>Add to Campaign</button>
+          <button class="btn btn-compact" type="button" data-action="contacts-email"><i class="ti ti-mail"></i>Send Email</button>
           <button class="btn btn-compact btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>New</button>
-          <button class="btn btn-compact" type="button"><i class="ti ti-tag"></i>Assign Label</button>
+          <button class="btn btn-compact" type="button" data-action="contacts-label"><i class="ti ti-tag"></i>Assign Label</button>
         </div>
       </div>
       <div class="contact-list-toolbar">
@@ -5356,7 +5360,7 @@ function renderContactTable(companyId) {
       </div>
       <div class="data-table contacts-table">
         <div class="table-head">
-          <span class="select-cell"><input type="checkbox" aria-label="Select all contacts" /></span>
+          <span class="select-cell" data-action="toggle-contact-select-all"><input type="checkbox" ${allSelected ? 'checked' : ''} tabindex="-1" aria-label="Select all contacts" /></span>
           <span>${headerSort('Name', 'name')}</span>
           <span>${headerSort('Account Name', 'owner')}</span>
           <span>${headerSort('Title', 'stage')}</span>
@@ -5366,8 +5370,8 @@ function renderContactTable(companyId) {
           <span></span>
         </div>
         ${rows.map((contact) => `
-          <button class="table-row ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact" data-contact-id="${h(contact.id)}">
-            <span class="select-cell"><span class="fake-checkbox" aria-hidden="true"></span></span>
+          <div class="table-row ${selected.has(contact.id) ? 'selected ' : ''}${contact.id === state.selectedContactId ? 'active' : ''}" role="button" tabindex="0" data-action="open-contact" data-contact-id="${h(contact.id)}">
+            <span class="select-cell" data-action="toggle-contact-select" data-contact-id="${h(contact.id)}"><input type="checkbox" ${selected.has(contact.id) ? 'checked' : ''} tabindex="-1" aria-label="Select ${h(contact.name)}" /></span>
             <span class="cell-lead">${pipelineDot(contactStageColor(contact.stage))}<span><strong>${h(contact.name)}</strong><small>${h(contact.stage || 'No stage')}</small></span></span>
             <span>${contact.account_id ? h(accountName(contact.account_id) || '-') : '<span class="muted-dash">-</span>'}</span>
             <span>${contact.title ? h(contact.title) : '<span class="muted-dash">-</span>'}</span>
@@ -5375,11 +5379,85 @@ function renderContactTable(companyId) {
             <span>${contact.email ? h(contact.email) : '<span class="muted-dash">-</span>'}</span>
             <span>${personOwnerDisplayName(contact.owner_name, companyId) ? h(personOwnerDisplayName(contact.owner_name, companyId)) : '<span class="muted-dash">-</span>'}</span>
             <span class="row-menu"><i class="ti ti-dots"></i></span>
-          </button>
+          </div>
         `).join('') || emptyState('No contacts in this view yet.')}
       </div>
     </section>
   `;
+}
+
+// Contacts the bulk actions apply to: the current selection, or (optionally) all
+// contacts in the filtered view when nothing is selected.
+function selectedContactRows(companyId = activeCompanyId(), fallbackToAll = false) {
+  const rows = sortedContacts(filteredContacts(companyId));
+  const sel = new Set(state.selectedContactIds || []);
+  const picked = rows.filter((r) => sel.has(r.id));
+  return picked.length ? picked : (fallbackToAll ? rows : []);
+}
+
+function bulkContactsEmail() {
+  const targets = selectedContactRows(activeCompanyId(), true);
+  const emails = [...new Set(targets.map((c) => String(c.email || '').trim()).filter((e) => e.includes('@')))];
+  if (!emails.length) { showToast('No valid email addresses to send to.', 'local', 'Contacts'); return; }
+  window.location.href = `mailto:?bcc=${encodeURIComponent(emails.join(','))}`;
+}
+
+function bulkContactsCampaign() {
+  const targets = selectedContactRows();
+  if (!targets.length) { showToast('Select contacts first, then add them to a campaign.', 'local', 'Contacts'); return; }
+  const name = String(window.prompt('Campaign / source to add the selected contacts to:') || '').trim();
+  if (!name) return;
+  targets.forEach((c) => persistContact({ ...c, source: name }));
+  showToast(`${targets.length} contact${targets.length === 1 ? '' : 's'} added to "${name}".`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+}
+
+function bulkContactsLabel() {
+  const targets = selectedContactRows();
+  if (!targets.length) { showToast('Select contacts first to assign a label.', 'local', 'Contacts'); return; }
+  const label = String(window.prompt('Label to add to the selected contacts:') || '').trim();
+  if (!label) return;
+  targets.forEach((c) => { const line = `Label: ${label}`; const notes = c.notes ? (c.notes.includes(line) ? c.notes : `${c.notes}\n${line}`) : line; persistContact({ ...c, notes }); });
+  showToast(`Labeled ${targets.length} contact${targets.length === 1 ? '' : 's'} "${label}".`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+}
+
+function parseContactsCsv(text) {
+  const lines = String(text || '').split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+  const split = (line) => (line.match(/(?:"[^"]*"|[^,])+/g) || []).map((s) => s.replace(/^"|"$/g, '').trim());
+  const headers = split(lines[0]).map((x) => x.toLowerCase());
+  const findIdx = (names) => headers.findIndex((x) => names.some((n) => x.includes(n)));
+  const iName = findIdx(['name', 'contact', 'full']);
+  const iEmail = findIdx(['email', 'e-mail']);
+  const iPhone = findIdx(['phone', 'mobile', 'cell', 'tel']);
+  const iTitle = findIdx(['title', 'job']);
+  const out = [];
+  for (let i = 1; i < lines.length; i += 1) {
+    const cols = split(lines[i]);
+    const name = (iName >= 0 ? cols[iName] : cols[0]) || '';
+    if (!name.trim()) continue;
+    out.push({ name, email: iEmail >= 0 ? (cols[iEmail] || '') : '', phone: iPhone >= 0 ? (cols[iPhone] || '') : '', title: iTitle >= 0 ? (cols[iTitle] || '') : '' });
+  }
+  return out;
+}
+
+function importContactsFromFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,text/csv,text/plain';
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    let text = '';
+    try { text = await file.text(); } catch { showToast('Could not read that file.', 'local', 'Contacts'); return; }
+    const parsed = parseContactsCsv(text);
+    if (!parsed.length) { showToast('No contacts found. Use a CSV with a header row (Name, Email, Phone).', 'local', 'Contacts'); return; }
+    const companyId = activeCompanyId();
+    for (const c of parsed) {
+      await persistContact(normalizeContact({ id: `contact-${crypto.randomUUID()}`, company_id: companyId, name: c.name, email: c.email, phone: c.phone, title: c.title, stage: contactStageNames()[0], value: 0 }));
+    }
+    showToast(`Imported ${parsed.length} contact${parsed.length === 1 ? '' : 's'}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+  });
+  input.click();
 }
 
 function renderContactFilterBar(companyId) {
@@ -15229,6 +15307,49 @@ function handleAction(event, node) {
     navigate(companyPath('contacts', { contact_id: node.dataset.contactId }, activeCompanyId()));
     return;
   }
+  if (action === 'toggle-contact-select') {
+    event.preventDefault();
+    const id = node.dataset.contactId;
+    const set = new Set(state.selectedContactIds || []);
+    if (set.has(id)) set.delete(id); else set.add(id);
+    state.selectedContactIds = [...set];
+    render();
+    return;
+  }
+  if (action === 'toggle-contact-select-all') {
+    event.preventDefault();
+    const rows = sortedContacts(filteredContacts(activeCompanyId()));
+    const allSel = rows.length > 0 && rows.every((r) => (state.selectedContactIds || []).includes(r.id));
+    state.selectedContactIds = allSel ? [] : rows.map((r) => r.id);
+    render();
+    return;
+  }
+  if (action === 'contacts-clear-selection') {
+    event.preventDefault();
+    state.selectedContactIds = [];
+    render();
+    return;
+  }
+  if (action === 'contacts-email') {
+    event.preventDefault();
+    bulkContactsEmail();
+    return;
+  }
+  if (action === 'contacts-campaign') {
+    event.preventDefault();
+    bulkContactsCampaign();
+    return;
+  }
+  if (action === 'contacts-label') {
+    event.preventDefault();
+    bulkContactsLabel();
+    return;
+  }
+  if (action === 'contacts-import') {
+    event.preventDefault();
+    importContactsFromFile();
+    return;
+  }
   if (action === 'set-contact-stage') {
     event.preventDefault();
     setContactStage(node.dataset.contactId, node.dataset.stage);
@@ -22169,6 +22290,10 @@ function isMutableAction(action = '') {
     'set-auth-mode',
     'open-profile',
     'open-settings',
+    'toggle-contact-select',
+    'toggle-contact-select-all',
+    'contacts-clear-selection',
+    'contacts-email',
     'view-as-role',
     'exit-role-preview',
     'message-details',
