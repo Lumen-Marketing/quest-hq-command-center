@@ -8533,7 +8533,7 @@ function wbFmtVal(ctx, field, value) {
     case 'email': return `<a href="mailto:${h(value)}" style="color:var(--info,#2563eb)">${h(value)}</a>`;
     case 'phone': return h(formatPhoneNumber(value));
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
-    case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; return fv.url ? `<button type="button" class="wb-tag wb-file" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="Open ${h(fv.name)}"><i class="ti ti-file"></i>${h(fv.name)}</button>` : `<span class="wb-tag wb-file"><i class="ti ti-file"></i>${h(fv.name)}</span>`; }
+    case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; const kind = fileTypeKind({ file_name: fv.name }); return fv.url ? `<button type="button" class="wb-file-icon-btn" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="${h(fv.name)}" aria-label="Open ${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></button>` : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`; }
     case 'relationship': { const ta = ctx.workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return h(value); const arr = Array.isArray(value) ? value : [value]; return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbItemTitle(ta, it) : '?')}</span>`; }).join(' '); }
     case 'calculation': return `<b style="color:${meta.color}">${h(wbComputeCalc(ctx.app, field, ctx.values || {}))}</b>`;
     case 'textarea': { const str = String(value); return h(str.length > 60 ? `${str.slice(0, 60)}…` : str); }
@@ -8739,6 +8739,12 @@ function openWbAutoModal(companyId, workspaceId, appId, autoId) {
   openWbModal({ kind: 'automation', companyId, workspaceId, appId, editId: autoId || '', draft });
 }
 function openWbConfirm(companyId, op, message, ids) { openWbModal({ kind: 'confirm', companyId, confirm: { op, message, ...ids } }); }
+// Tabler icon for a file kind (from fileTypeKind), used for the compact file
+// cell and the preview modal header.
+function wbFileIcon(kind) {
+  return ({ image: 'ti-photo', video: 'ti-video', audio: 'ti-music', pdf: 'ti-file-type-pdf', sheet: 'ti-file-spreadsheet', doc: 'ti-file-text', presentation: 'ti-presentation', archive: 'ti-file-zip', code: 'ti-file-code', text: 'ti-file-text' })[kind] || 'ti-file';
+}
+
 function openWbFilePreview(url, name) { if (!url) { showToast('No file is attached to this field.', 'local', 'Workspaces'); return; } openWbModal({ kind: 'file-preview', url, name: name || 'File' }); }
 
 // Flip a checkbox field straight from the item table (no modal). Mirrors the
@@ -8781,11 +8787,25 @@ function renderWorkspaceBuilderModal() {
   if (m.kind === 'file-preview') {
     const url = m.url || '';
     const name = m.name || 'File';
+    const isData = url.startsWith('data:');
+    const kind = fileTypeKind({ file_name: name });
     // Supabase (and most CDNs) honor a `download` query param to force a
     // save-as; data: URLs download via the anchor's download attribute.
-    const dlUrl = url.startsWith('data:') ? url : `${url}${url.includes('?') ? '&' : '?'}download=${encodeURIComponent(name)}`;
-    return wbModalShell('File', 'wb-modal-sm', `<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-file"></i></div><h3>${h(name)}</h3>`,
-      `<p class="wb-sub">How would you like to open this file?</p>`,
+    const dlUrl = isData ? url : `${url}${url.includes('?') ? '&' : '?'}download=${encodeURIComponent(name)}`;
+    const unsupported = (msg) => `<div class="file-preview-empty"><div class="wb-file-unsupported-ico"><i class="ti ${wbFileIcon(kind)}"></i></div><strong>Preview not available</strong><p>${h(msg)}</p></div>`;
+    let stage;
+    if (!url) stage = unsupported('This file has no stored content to preview.');
+    else if (kind === 'image') stage = `<img class="file-preview-media" src="${h(url)}" alt="${h(name)}" />`;
+    else if (kind === 'video') stage = `<video class="file-preview-media file-preview-video" src="${h(url)}" controls playsinline preload="metadata"></video>`;
+    else if (kind === 'audio') stage = `<div class="file-preview-audio-wrap"><div class="file-preview-audio-ico"><i class="ti ti-music"></i></div><strong>${h(name)}</strong><audio src="${h(url)}" controls preload="metadata"></audio></div>`;
+    else if (kind === 'pdf') stage = `<iframe class="file-preview-frame" src="${h(url)}#toolbar=1&navpanes=0" title="${h(name)}"></iframe>`;
+    else if (kind === 'text' || kind === 'code') stage = `<iframe class="file-preview-frame text" src="${h(url)}" title="${h(name)}"></iframe>`;
+    // Office docs render through Microsoft's viewer, which needs a public URL
+    // (works with Supabase signed URLs, not with embedded data: URLs).
+    else if (['doc', 'sheet', 'presentation'].includes(kind) && !isData) stage = `<iframe class="file-preview-frame" src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}" title="${h(name)}"></iframe>`;
+    else stage = unsupported("This file type can't be previewed here — open it in a new tab or download it.");
+    return wbModalShell('File', 'wb-modal-file', `<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ${wbFileIcon(kind)}"></i></div><h3>${h(name)}</h3>`,
+      `<div class="wb-file-stage">${stage}</div>`,
       `<button class="btn" data-action="wb-modal-close">Close</button>
        <a class="btn" href="${h(url)}" target="_blank" rel="noreferrer"><i class="ti ti-external-link"></i>Open in new tab</a>
        <a class="btn btn-primary" href="${h(dlUrl)}" download="${h(name)}"><i class="ti ti-download"></i>Download</a>`);

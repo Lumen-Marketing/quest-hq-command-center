@@ -18551,6 +18551,16 @@ button {
    the native button chrome so it reads as the tag it replaced. */
 button.wb-tag { appearance: none; -webkit-appearance: none; border: 0; background: none; font: inherit; font-weight: 700; color: inherit; cursor: pointer; }
 button.wb-file:hover { color: var(--orange); text-decoration: underline; }
+/* Compact file cell: just an icon (filename hidden; shown as tooltip/aria). */
+.wb-file-icon-btn { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border, #e2d5bf); background: var(--surface-2, #f6efe4); color: var(--orange, #ea580c); font-size: 18px; cursor: pointer; transition: border-color .15s ease, background .15s ease, transform .1s ease; }
+.wb-file-icon-btn:hover { border-color: var(--orange, #ea580c); background: color-mix(in srgb, var(--orange) 9%, var(--surface-2)); transform: translateY(-1px); }
+.wb-file-icon-btn.muted { color: var(--text-muted, #72695d); cursor: default; }
+/* File preview modal */
+.wb-modal.wb-modal-file { width: min(880px, 100%); }
+.wb-file-stage { display: flex; align-items: center; justify-content: center; width: 100%; height: min(62vh, 560px); background: var(--surface-2, #f6efe4); border: 1px solid var(--border, #e2d5bf); border-radius: 12px; overflow: hidden; }
+.wb-file-stage .file-preview-frame { width: 100%; height: 100%; border: 0; background: #fff; }
+.wb-file-stage .file-preview-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 28px; color: var(--text-muted, #72695d); }
+.wb-file-unsupported-ico { width: 62px; height: 62px; display: grid; place-items: center; border-radius: 14px; background: var(--surface, #fff); border: 1px solid var(--border, #e2d5bf); font-size: 30px; color: var(--text-muted, #72695d); margin-bottom: 4px; }
 /* Inline yes/no toggle shown in checkbox cells of the item table. */
 .wb-check-toggle { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border, #e2d5bf); background: var(--surface-2, #f6efe4); border-radius: 999px; padding: 3px 11px 3px 4px; cursor: pointer; font: inherit; font-size: .78rem; font-weight: 800; color: var(--text-muted, #72695d); transition: background .15s ease, border-color .15s ease, color .15s ease; }
 .wb-check-toggle .wb-check-knob { width: 26px; height: 15px; border-radius: 999px; background: var(--border-strong, #cdb595); position: relative; flex: none; transition: background .15s ease; }
