@@ -18538,7 +18538,7 @@ button {
 .wb-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .wb-table th { text-align: left; padding: 11px 14px; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted, #72695d); border-bottom: 1px solid var(--border, #e2d5bf); white-space: nowrap; }
 .wb-table td { padding: 11px 14px; border-bottom: 1px solid var(--border, #e2d5bf); }
-.wb-table tbody tr { cursor: pointer; } .wb-table tbody tr:hover { background: var(--surface-2, #f6efe4); }
+.wb-table tbody tr:hover { background: var(--surface-2, #f6efe4); }
 .wb-table tbody tr:last-child td { border-bottom: 0; }
 .wb-row-acts { text-align: right; white-space: nowrap; }
 .wb-table-foot { margin-top: 12px; color: var(--text-muted, #72695d); font-size: .84rem; }
@@ -18547,6 +18547,10 @@ button {
 .wb-status-pill.wb-yes { background: var(--success-soft, #dcfce7); color: var(--success, #16a34a); }
 .wb-dot { width: 7px; height: 7px; border-radius: 50%; }
 .wb-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 7px; font-size: .78rem; font-weight: 700; }
+/* File cells render as a <button> that opens the open/download chooser — strip
+   the native button chrome so it reads as the tag it replaced. */
+button.wb-tag { appearance: none; -webkit-appearance: none; border: 0; background: none; font: inherit; font-weight: 700; color: inherit; cursor: pointer; }
+button.wb-file:hover { color: var(--orange); text-decoration: underline; }
 .wb-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 2px; border-radius: 999px; background: var(--surface-2, #f6efe4); font-size: .8rem; font-weight: 600; }
 
 .wb-icon-btn { width: 30px; height: 30px; border-radius: 8px; display: inline-grid; place-items: center; border: 1px solid transparent; background: none; color: var(--text-muted, #72695d); cursor: pointer; }

@@ -8525,7 +8525,7 @@ function wbFmtVal(ctx, field, value) {
     case 'phone': return h(formatPhoneNumber(value));
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
     case 'checkbox': return value ? '<span class="wb-status-pill wb-yes"><i class="ti ti-check"></i>Yes</span>' : '<span class="wb-cell-empty">No</span>';
-    case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; return fv.url ? `<a class="wb-tag wb-file" href="${h(fv.url)}" target="_blank" rel="noreferrer" title="View ${h(fv.name)}"><i class="ti ti-file"></i>${h(fv.name)}</a>` : `<span class="wb-tag wb-file"><i class="ti ti-file"></i>${h(fv.name)}</span>`; }
+    case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; return fv.url ? `<button type="button" class="wb-tag wb-file" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="Open ${h(fv.name)}"><i class="ti ti-file"></i>${h(fv.name)}</button>` : `<span class="wb-tag wb-file"><i class="ti ti-file"></i>${h(fv.name)}</span>`; }
     case 'relationship': { const ta = ctx.workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return h(value); const arr = Array.isArray(value) ? value : [value]; return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbItemTitle(ta, it) : '?')}</span>`; }).join(' '); }
     case 'calculation': return `<b style="color:${meta.color}">${h(wbComputeCalc(ctx.app, field, ctx.values || {}))}</b>`;
     case 'textarea': { const str = String(value); return h(str.length > 60 ? `${str.slice(0, 60)}…` : str); }
@@ -8731,6 +8731,7 @@ function openWbAutoModal(companyId, workspaceId, appId, autoId) {
   openWbModal({ kind: 'automation', companyId, workspaceId, appId, editId: autoId || '', draft });
 }
 function openWbConfirm(companyId, op, message, ids) { openWbModal({ kind: 'confirm', companyId, confirm: { op, message, ...ids } }); }
+function openWbFilePreview(url, name) { if (!url) { showToast('No file is attached to this field.', 'local', 'Workspaces'); return; } openWbModal({ kind: 'file-preview', url, name: name || 'File' }); }
 function openWbDeleteWorkspace(companyId, workspace) {
   if (!wbGuard()) return;
   openWbModal({ kind: 'delete-workspace', companyId, workspaceId: workspace.id, workspaceName: workspace.name, error: '' });
@@ -8749,6 +8750,18 @@ function renderWorkspaceBuilderModal() {
     return wbModalShell('Delete', 'wb-modal-sm', `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Confirm delete</h3>`,
       `<p class="wb-sub">${h(m.confirm.message)}</p>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-confirm><i class="ti ti-trash"></i>Delete</button>`);
+  }
+  if (m.kind === 'file-preview') {
+    const url = m.url || '';
+    const name = m.name || 'File';
+    // Supabase (and most CDNs) honor a `download` query param to force a
+    // save-as; data: URLs download via the anchor's download attribute.
+    const dlUrl = url.startsWith('data:') ? url : `${url}${url.includes('?') ? '&' : '?'}download=${encodeURIComponent(name)}`;
+    return wbModalShell('File', 'wb-modal-sm', `<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-file"></i></div><h3>${h(name)}</h3>`,
+      `<p class="wb-sub">How would you like to open this file?</p>`,
+      `<button class="btn" data-action="wb-modal-close">Close</button>
+       <a class="btn" href="${h(url)}" target="_blank" rel="noreferrer"><i class="ti ti-external-link"></i>Open in new tab</a>
+       <a class="btn btn-primary" href="${h(dlUrl)}" download="${h(name)}"><i class="ti ti-download"></i>Download</a>`);
   }
   if (m.kind === 'delete-workspace') {
     return wbModalShell('Delete workspace', 'wb-modal-sm', `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Delete this workspace</h3>`,
@@ -9294,7 +9307,8 @@ function mountWorkspaceBuilder() {
     bind('[data-add-item]', () => openWbItemModal(companyId, workspaceId, appId, ''));
     bind('[data-edit-item]', (el, e) => { e.stopPropagation(); openWbItemModal(companyId, workspaceId, appId, el.dataset.editItem); });
     bind('[data-del-item]', (el, e) => { e.stopPropagation(); openWbConfirm(companyId, 'del-item', 'This record will be permanently removed.', { workspaceId, appId, itemId: el.dataset.delItem }); });
-    bind('tr[data-item]', (el) => openWbItemModal(companyId, workspaceId, appId, el.dataset.item));
+    // A file cell opens a preview/download chooser (not the row's edit modal).
+    bind('[data-wb-view-file]', (el, e) => { e.stopPropagation(); openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
     bind('[data-save-app]', () => wbSaveAppSettings(companyId, workspaceId, appId));
     bind('[data-del-app]', () => { const { app } = wbFind(companyId, workspaceId, appId); if (app) openWbDeleteApp(companyId, workspaceId, app); });
     bind('[data-add-auto]', () => openWbAutoModal(companyId, workspaceId, appId, ''));
