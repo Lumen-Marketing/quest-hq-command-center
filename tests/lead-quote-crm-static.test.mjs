@@ -133,19 +133,21 @@ test('contact inline editor uses selects for constrained fields', () => {
   assert.match(helperSource, /if \(key === 'stage'\) return contactStageNames\(\)\.map/);
   assert.match(helperSource, /if \(key === 'temperature'\) return TEMPERATURES\.map/);
   assert.match(helperSource, /if \(key === 'owner_name'\) return contactOwnerOptions\(contact\.company_id, contact\.owner_name\)/);
+  assert.match(helperSource, /if \(\['roof_system', 'secondary_roof_system'\]\.includes\(key\)\) return contactRoofSystemSelectOptions\(contact\.company_id\)/);
+  assert.match(helperSource, /if \(key === 'source'\) return contactSourceOptions\(contact\.company_id\)/);
   assert.match(inlineSource, /const options = contactInlineOptions\(contact, key\)/);
   assert.match(inlineSource, /document\.createElement\(options\.length \? 'select' : 'input'\)/);
   assert.match(inlineSource, /option\.value = value/);
   assert.match(inlineSource, /input\.addEventListener\('change', commit\)/);
 });
 
-test('contact inline editor keeps autofill suggestions for job type and roof system fields', () => {
+test('contact inline editor keeps autofill suggestions only for open-ended job type', () => {
   const suggestionSource = source.match(/function contactInlineSuggestions\(contact, key\) \{[\s\S]*?\n\}/)?.[0] || '';
   const inlineSource = source.match(/function beginContactInlineEdit\(span\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function contactInlineSuggestions\(contact, key\)/);
   assert.match(suggestionSource, /if \(key === 'title'\) return contactJobTypeOptions\(contact\.company_id\)/);
-  assert.match(suggestionSource, /if \(\['roof_system', 'secondary_roof_system'\]\.includes\(key\)\) return contactRoofSystemOptions\(contact\.company_id\)/);
-  assert.match(suggestionSource, /if \(key === 'source'\) return contactSourceSuggestionOptions\(contact\.company_id\)/);
+  assert.doesNotMatch(suggestionSource, /roof_system/);
+  assert.doesNotMatch(suggestionSource, /key === 'source'/);
   assert.match(inlineSource, /const suggestions = contactInlineSuggestions\(contact, key\)/);
   assert.match(inlineSource, /input\.setAttribute\('list', listId\)/);
   assert.match(inlineSource, /document\.createElement\('datalist'\)/);
@@ -155,6 +157,7 @@ test('contact inline editor keeps autofill suggestions for job type and roof sys
 test('roof system options use Quest Roofing service roof types instead of saved junk values', () => {
   const constantSource = source.match(/const CONTACT_ROOF_SYSTEM_OPTIONS = \[[\s\S]*?\];/)?.[0] || '';
   const helperSource = source.match(/function contactRoofSystemOptions\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(source, /function contactRoofSystemSelectOptions\(companyId, includeBlank = false\)/);
   ['Tile', 'Shingle', 'Metal', 'Foam', 'Not Sure'].forEach((item) => assert.match(constantSource, new RegExp(`'${item}'`)));
   ['TPO', 'Built-up roof', 'Shake', 'Slate', 'Unknown'].forEach((item) => assert.doesNotMatch(constantSource, new RegExp(`'${item}'`)));
   assert.doesNotMatch(helperSource, /companyContacts\(companyId\)\.flatMap/);
