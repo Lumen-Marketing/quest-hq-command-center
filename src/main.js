@@ -8680,7 +8680,15 @@ function wbRunAutomations(companyId, workspace, app, item, event, prev) {
     const t = au.trigger; let fire = false;
     if (t.event === 'created') fire = event === 'created';
     else if (t.event === 'updated') fire = event === 'updated';
-    else if (t.event === 'field_is') { const now = item.values[t.fieldId]; const was = prev ? prev[t.fieldId] : undefined; fire = (event === 'created' || event === 'updated') && now === t.value && was !== t.value; }
+    else if (t.event === 'field_is') {
+      // Compare as normalized strings so any field type matches its saved target
+      // (booleans -> 'true'/'false', numbers coerced, empty/undefined -> '').
+      const norm = (v) => (v === undefined || v === null) ? '' : (typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v));
+      const now = norm(item.values[t.fieldId]);
+      const was = norm(prev ? prev[t.fieldId] : undefined);
+      const target = norm(t.value);
+      fire = (event === 'created' || event === 'updated') && target !== '' && now === target && was !== target;
+    }
     if (!fire) return;
     (au.actions || []).forEach((ac) => {
       if ((ac.type === 'set_field' || ac.type === 'assign') && ac.fieldId) item.values[ac.fieldId] = ac.value;
@@ -8912,12 +8920,32 @@ function wbOptRow(o) {
 }
 function wbTrigCfgUI(draft, app) {
   if (draft.trigger.event !== 'field_is') return '';
-  const choiceFields = app.fields.filter((f) => f.type === 'status' || f.type === 'category');
-  if (!choiceFields.length) return '<div class="wb-sub" style="color:var(--warning,#d97706)">Add a Status or Category field to use this trigger.</div>';
-  const fid = draft.trigger.fieldId || choiceFields[0].id;
+  // Any field can trigger this, except file uploads (no comparable "value").
+  const fields = app.fields.filter((f) => f.type !== 'file');
+  if (!fields.length) return '<div class="wb-sub" style="color:var(--warning,#d97706)">Add a field to use this trigger.</div>';
+  const fid = fields.some((f) => f.id === draft.trigger.fieldId) ? draft.trigger.fieldId : fields[0].id;
   draft.trigger.fieldId = fid;
   const field = app.fields.find((f) => f.id === fid);
-  return `<div class="wb-row2"><select class="wb-input" data-wb-trig-field>${choiceFields.map((x) => `<option value="${h(x.id)}" ${x.id === fid ? 'selected' : ''}>${h(x.label)}</option>`).join('')}</select><select class="wb-input" data-wb-trig-val><option value="">— value —</option>${(field.config.options || []).map((o) => `<option value="${h(o.id)}" ${draft.trigger.value === o.id ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</select></div>`;
+  const val = draft.trigger.value == null ? '' : String(draft.trigger.value);
+  const opt = (value, label) => `<option value="${h(value)}" ${val === String(value) ? 'selected' : ''}>${h(label)}</option>`;
+  const fieldSelect = `<select class="wb-input" data-wb-trig-field>${fields.map((x) => `<option value="${h(x.id)}" ${x.id === fid ? 'selected' : ''}>${h(x.label)}</option>`).join('')}</select>`;
+  // The value control adapts to the chosen field's type.
+  let valueControl;
+  if (field.type === 'status' || field.type === 'category') {
+    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${(field.config.options || []).map((o) => opt(o.id, o.label)).join('')}</select>`;
+  } else if (field.type === 'checkbox') {
+    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${opt('true', 'Yes (checked)')}${opt('false', 'No (unchecked)')}</select>`;
+  } else if (field.type === 'user') {
+    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${wbMembers(state.builderModal?.companyId).map((mem) => opt(mem.id, mem.name)).join('')}</select>`;
+  } else if (field.type === 'relationship') {
+    const ws = wbFind(state.builderModal?.companyId, state.builderModal?.workspaceId).workspace;
+    const ta = ws?.apps.find((x) => x.id === field.config.targetApp);
+    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${(ta?.items || []).map((it) => opt(it.id, wbItemTitle(ta, it))).join('')}</select>`;
+  } else {
+    const inputType = field.type === 'date' ? 'date' : (field.type === 'number' || field.type === 'money') ? 'number' : field.type === 'email' ? 'email' : 'text';
+    valueControl = `<input class="wb-input" data-wb-trig-val type="${inputType}" value="${h(val)}" placeholder="Exact value to match">`;
+  }
+  return `<div class="wb-row2">${fieldSelect}${valueControl}</div>`;
 }
 function wbActionCardsUI(companyId, draft, app) {
   return draft.actions.map((ac, i) => {
