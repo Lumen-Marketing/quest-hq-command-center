@@ -139,6 +139,18 @@ test('contact inline editor uses selects for constrained fields', () => {
   assert.match(inlineSource, /input\.addEventListener\('change', commit\)/);
 });
 
+test('contact inline editor keeps autofill suggestions for job type and roof system fields', () => {
+  const suggestionSource = source.match(/function contactInlineSuggestions\(contact, key\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const inlineSource = source.match(/function beginContactInlineEdit\(span\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(source, /function contactInlineSuggestions\(contact, key\)/);
+  assert.match(suggestionSource, /if \(key === 'title'\) return contactJobTypeOptions\(contact\.company_id\)/);
+  assert.match(suggestionSource, /if \(\['roof_system', 'secondary_roof_system'\]\.includes\(key\)\) return contactRoofSystemOptions\(contact\.company_id\)/);
+  assert.match(inlineSource, /const suggestions = contactInlineSuggestions\(contact, key\)/);
+  assert.match(inlineSource, /input\.setAttribute\('list', listId\)/);
+  assert.match(inlineSource, /document\.createElement\('datalist'\)/);
+  assert.match(inlineSource, /span\.replaceWith\(fragment\)/);
+});
+
 test('contacts list uses a Salesforce-style searchable filterable table view', () => {
   const tableSource = source.match(/function renderContactTable\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /contactSort: 'name'/);

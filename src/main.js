@@ -5812,6 +5812,12 @@ function contactInlineOptions(contact, key) {
   return [];
 }
 
+function contactInlineSuggestions(contact, key) {
+  if (key === 'title') return contactJobTypeOptions(contact.company_id);
+  if (['roof_system', 'secondary_roof_system'].includes(key)) return contactRoofSystemOptions(contact.company_id);
+  return [];
+}
+
 function beginContactInlineEdit(span) {
   const key = span.dataset.contactEdit;
   const contactId = span.dataset.contactId;
@@ -5828,8 +5834,26 @@ function beginContactInlineEdit(span) {
     return;
   }
   const options = contactInlineOptions(contact, key);
+  const suggestions = contactInlineSuggestions(contact, key);
   const input = document.createElement(options.length ? 'select' : 'input');
   input.className = 'sf-edit-input';
+  if (!options.length && suggestions.length) {
+    const listId = `contact-inline-${key}-${crypto.randomUUID()}`;
+    input.setAttribute('list', listId);
+    input.setAttribute('autocomplete', 'off');
+    const datalist = document.createElement('datalist');
+    datalist.id = listId;
+    suggestions.forEach((value) => {
+      const option = document.createElement('option');
+      option.value = value;
+      datalist.appendChild(option);
+    });
+    const fragment = document.createDocumentFragment();
+    fragment.append(input, datalist);
+    span.replaceWith(fragment);
+  } else {
+    span.replaceWith(input);
+  }
   input.value = key === 'value' ? (contact.value || 0) : (contact[key] || '');
   options.forEach(([value, label]) => {
     const option = document.createElement('option');
@@ -5838,7 +5862,6 @@ function beginContactInlineEdit(span) {
     input.appendChild(option);
   });
   input.value = key === 'value' ? (contact.value || 0) : (contact[key] || '');
-  span.replaceWith(input);
   input.focus();
   if (typeof input.select === 'function') input.select();
   let done = false;
