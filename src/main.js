@@ -439,16 +439,11 @@ const CONTACT_JOB_TYPE_OPTIONS = [
 ];
 const CONTACT_PAY_TYPE_OPTIONS = ['Insurance', 'Retail', 'Financing', 'Cash'];
 const CONTACT_ROOF_SYSTEM_OPTIONS = [
-  'Shingle',
   'Tile',
-  'Foam',
+  'Shingle',
   'Metal',
-  'Flat / Modified Bitumen',
-  'TPO',
-  'Built-up roof',
-  'Shake',
-  'Slate',
-  'Unknown',
+  'Foam',
+  'Not Sure',
 ];
 const CONTACT_SOURCE_OPTIONS = [
   ['', 'Select source'],
@@ -5808,13 +5803,13 @@ function contactInlineOptions(contact, key) {
   if (key === 'stage') return contactStageNames().map((stage) => [stage, stage]);
   if (key === 'temperature') return TEMPERATURES.map((temperature) => [temperature, temperature]);
   if (key === 'owner_name') return contactOwnerOptions(contact.company_id, contact.owner_name);
-  if (key === 'source') return contactSourceOptions(contact.company_id);
   return [];
 }
 
 function contactInlineSuggestions(contact, key) {
   if (key === 'title') return contactJobTypeOptions(contact.company_id);
   if (['roof_system', 'secondary_roof_system'].includes(key)) return contactRoofSystemOptions(contact.company_id);
+  if (key === 'source') return contactSourceSuggestionOptions(contact.company_id);
   return [];
 }
 
@@ -6867,6 +6862,7 @@ function renderContactEditor(companyId, contact) {
   const edit = contact || blankContact(companyId);
   const jobTypeOptions = contactJobTypeOptions(companyId);
   const roofSystemOptions = contactRoofSystemOptions(companyId);
+  const sourceOptions = contactSourceSuggestionOptions(companyId);
   return `
     <form class="job-editor contact-editor" data-contact-form data-contact-address-form>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
@@ -6960,7 +6956,8 @@ function renderContactEditor(companyId, contact) {
       <datalist id="contact-roof-system-options">${roofSystemOptions.map((item) => `<option value="${h(item)}"></option>`).join('')}</datalist>
       <label class="checkbox-field"><span>Multiple roof systems?</span><input name="has_multiple_roof_systems" type="checkbox" ${edit.has_multiple_roof_systems ? 'checked' : ''} /></label>
       ${field('Secondary roof system', 'secondary_roof_system', edit.secondary_roof_system, false, 'text', '', 'list="contact-roof-system-options" autocomplete="off"')}
-      ${selectField('Source', 'source', edit.source, contactSourceOptions(companyId))}
+      ${field('Source', 'source', edit.source, false, 'text', '', 'list="contact-source-options" autocomplete="off" placeholder="Select or type source"')}
+      <datalist id="contact-source-options">${sourceOptions.map((item) => `<option value="${h(item)}"></option>`).join('')}</datalist>
       ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
       <div class="form-actions span-2">
         <button class="btn btn-primary" type="submit">Save contact</button>
@@ -24011,16 +24008,19 @@ function contactRoofSystemOptions(companyId) {
   return compactUnique([
     ...CONTACT_ROOF_SYSTEM_OPTIONS,
     ...Object.values(ROOF_ESTIMATE_SYSTEMS).map((system) => system.label),
-    ...companyContacts(companyId).flatMap((contact) => [contact.roof_system, contact.secondary_roof_system]),
+  ]);
+}
+
+function contactSourceSuggestionOptions(companyId) {
+  return compactUnique([
+    ...CONTACT_SOURCE_OPTIONS.map(([value]) => value).filter(Boolean),
+    ...companyContacts(companyId).map((contact) => contact.source),
+    ...companyDeals(companyId).map((deal) => deal.source),
   ]).sort((a, b) => a.localeCompare(b));
 }
 
 function contactSourceOptions(companyId) {
-  const known = compactUnique([
-    ...CONTACT_SOURCE_OPTIONS.map(([value]) => value).filter(Boolean),
-    ...companyContacts(companyId).map((contact) => contact.source),
-    ...companyDeals(companyId).map((deal) => deal.source),
-  ]);
+  const known = contactSourceSuggestionOptions(companyId);
   return [['', 'Select source']].concat(known.map((source) => [source, source]));
 }
 

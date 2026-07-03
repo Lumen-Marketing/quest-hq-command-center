@@ -32,10 +32,10 @@ test('contact intake fields have real suggestions and constrained source options
   assert.match(source, /function contactSourceOptions\(companyId\)/);
   assert.match(editorSource, /list="contact-job-type-options"/);
   assert.match(editorSource, /list="contact-roof-system-options"/);
-  assert.match(editorSource, /selectField\('Source', 'source', edit\.source, contactSourceOptions\(companyId\)\)/);
+  assert.match(editorSource, /list="contact-source-options"/);
   assert.match(editorSource, /name="has_multiple_roof_systems"/);
   assert.match(editorSource, /field\('Secondary roof system', 'secondary_roof_system'/);
-  assert.match(inlineSource, /if \(key === 'source'\) return contactSourceOptions\(contact\.company_id\)/);
+  assert.doesNotMatch(inlineSource, /if \(key === 'source'\) return contactSourceOptions\(contact\.company_id\)/);
 });
 
 test('contact locations support google maps autocomplete and pin links', () => {

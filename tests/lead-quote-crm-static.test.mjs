@@ -145,10 +145,19 @@ test('contact inline editor keeps autofill suggestions for job type and roof sys
   assert.match(source, /function contactInlineSuggestions\(contact, key\)/);
   assert.match(suggestionSource, /if \(key === 'title'\) return contactJobTypeOptions\(contact\.company_id\)/);
   assert.match(suggestionSource, /if \(\['roof_system', 'secondary_roof_system'\]\.includes\(key\)\) return contactRoofSystemOptions\(contact\.company_id\)/);
+  assert.match(suggestionSource, /if \(key === 'source'\) return contactSourceSuggestionOptions\(contact\.company_id\)/);
   assert.match(inlineSource, /const suggestions = contactInlineSuggestions\(contact, key\)/);
   assert.match(inlineSource, /input\.setAttribute\('list', listId\)/);
   assert.match(inlineSource, /document\.createElement\('datalist'\)/);
   assert.match(inlineSource, /span\.replaceWith\(fragment\)/);
+});
+
+test('roof system options use Quest Roofing service roof types instead of saved junk values', () => {
+  const constantSource = source.match(/const CONTACT_ROOF_SYSTEM_OPTIONS = \[[\s\S]*?\];/)?.[0] || '';
+  const helperSource = source.match(/function contactRoofSystemOptions\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  ['Tile', 'Shingle', 'Metal', 'Foam', 'Not Sure'].forEach((item) => assert.match(constantSource, new RegExp(`'${item}'`)));
+  ['TPO', 'Built-up roof', 'Shake', 'Slate', 'Unknown'].forEach((item) => assert.doesNotMatch(constantSource, new RegExp(`'${item}'`)));
+  assert.doesNotMatch(helperSource, /companyContacts\(companyId\)\.flatMap/);
 });
 
 test('contacts list uses a Salesforce-style searchable filterable table view', () => {
