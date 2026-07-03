@@ -75,9 +75,9 @@ test('staff portal lists use readable action controls and markup cards', () => {
 test('public portal viewer exposes plan markup tools and persistent annotations', () => {
   assert.match(source, /fetchClientPortalDocumentFile/);
   assert.match(source, /cpResolveBase/);
-  assert.match(source, /import \* as pdfjsLib from 'pdfjs-dist\/build\/pdf\.mjs';/);
-  assert.match(source, /import pdfjsWorkerUrl from 'pdfjs-dist\/build\/pdf\.worker\.min\.mjs\?url';/);
-  assert.match(source, /const PDFJS_WORKER = pdfjsWorkerUrl;/);
+  // pdf.js is lazy-loaded (dynamic import) so it stays out of the initial bundle.
+  assert.match(source, /pdfjsLibPromise = import\('pdfjs-dist\/build\/pdf\.mjs'\)/);
+  assert.match(source, /const pdfjsLib = await loadPdfjs\(\);/);
   assert.match(source, /const cpBaseCache = new Map\(\);/);
   assert.match(source, /function cpWithTimeout\(promise, ms, label\)/);
   assert.match(source, /cpWithTimeout\(cpReloadPortalAnnotations\(portalId\), 5000, 'Markup refresh'\)/);

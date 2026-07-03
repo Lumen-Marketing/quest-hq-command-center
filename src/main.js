@@ -2,8 +2,6 @@ import './styles.css';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
-import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
-import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import opsCommandHeroUrl from './assets/quest-hq-ops-command-hero.png';
 import questLogoMarkUrl from './assets/quest-hq-logo-mark.png';
 
@@ -9536,7 +9534,14 @@ const CP_LABEL_PRESETS = ['Kitchen Revision', 'Window Adjustment', 'Electrical C
 
 // Width in feet assumed for a freshly uploaded sheet until the ruler is calibrated.
 const CP_DEFAULT_SHEET_FT = 40;
-const PDFJS_WORKER = pdfjsWorkerUrl;
+// Lazy-load pdf.js only when a PDF actually needs rendering (thumbnail or the
+// plan viewer). This keeps ~350KB of pdf.js out of the initial app bundle. PDFs
+// are parsed with disableWorker:true, so no separate worker asset is needed.
+let pdfjsLibPromise = null;
+function loadPdfjs() {
+  if (!pdfjsLibPromise) pdfjsLibPromise = import('pdfjs-dist/build/pdf.mjs');
+  return pdfjsLibPromise;
+}
 const cpBaseCache = new Map();
 let cpFrameBound = null;
 let cpPointerState = null;
@@ -9589,7 +9594,7 @@ async function cpResolveBase(doc, page) {
   const isPdf = doc.mime_type?.includes('pdf') || /\.pdf($|\?)/i.test(doc.file_name || '');
   let result;
   if (isPdf) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const pdfjsLib = await loadPdfjs();
     const response = await cpWithTimeout(fetch(url), 15000, 'Document download');
     if (!response.ok) throw new Error('Document unavailable.');
     const data = new Uint8Array(await cpWithTimeout(response.arrayBuffer(), 15000, 'Document download'));
@@ -26212,7 +26217,7 @@ async function ensurePdfThumbnail(file) {
   if (!file || file.thumb_url || file._pdfThumbTried || !file.signed_url) return;
   file._pdfThumbTried = true;
   try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const pdfjsLib = await loadPdfjs();
     const response = await fetch(file.signed_url);
     if (!response.ok) return;
     const data = new Uint8Array(await response.arrayBuffer());
