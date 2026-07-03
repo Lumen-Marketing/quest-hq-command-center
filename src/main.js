@@ -8513,6 +8513,15 @@ function wbComputeCalc(app, field, values) {
   try { const result = Function(`"use strict";return(${expr})`)(); return Number.isFinite(result) ? (Math.round(result * 100) / 100).toLocaleString() : '—'; } catch { return '⚠'; }
 }
 function wbFmtVal(ctx, field, value) {
+  // Checkbox renders as an inline toggle (even when unset) so managers can flip
+  // it straight from the table — handled before the empty-value guard below.
+  if (field.type === 'checkbox') {
+    const on = value === true || value === 'true' || value === 1;
+    if (ctx.item && ctx.canManage) {
+      return `<button type="button" class="wb-check-toggle ${on ? 'on' : ''}" data-wb-toggle-check data-item-id="${h(ctx.item.id)}" data-field-id="${h(field.id)}" role="switch" aria-checked="${on}" title="Toggle ${h(field.label)}"><span class="wb-check-knob"></span><span class="wb-check-txt">${on ? 'Yes' : 'No'}</span></button>`;
+    }
+    return on ? '<span class="wb-status-pill wb-yes"><i class="ti ti-check"></i>Yes</span>' : '<span class="wb-cell-empty">No</span>';
+  }
   if (value === undefined || value === null || value === '' || (Array.isArray(value) && !value.length)) return '<span class="wb-cell-empty">—</span>';
   const meta = WB_FIELD_TYPES[field.type];
   switch (field.type) {
@@ -8524,7 +8533,6 @@ function wbFmtVal(ctx, field, value) {
     case 'email': return `<a href="mailto:${h(value)}" style="color:var(--info,#2563eb)">${h(value)}</a>`;
     case 'phone': return h(formatPhoneNumber(value));
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
-    case 'checkbox': return value ? '<span class="wb-status-pill wb-yes"><i class="ti ti-check"></i>Yes</span>' : '<span class="wb-cell-empty">No</span>';
     case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; return fv.url ? `<button type="button" class="wb-tag wb-file" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="Open ${h(fv.name)}"><i class="ti ti-file"></i>${h(fv.name)}</button>` : `<span class="wb-tag wb-file"><i class="ti ti-file"></i>${h(fv.name)}</span>`; }
     case 'relationship': { const ta = ctx.workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return h(value); const arr = Array.isArray(value) ? value : [value]; return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbItemTitle(ta, it) : '?')}</span>`; }).join(' '); }
     case 'calculation': return `<b style="color:${meta.color}">${h(wbComputeCalc(ctx.app, field, ctx.values || {}))}</b>`;
@@ -8539,7 +8547,7 @@ function wbViewItems(companyId, workspace, app) {
   if (!app.items.length) return `<div class="wb-empty"><i class="ti ti-inbox"></i><h3>No items yet</h3><p>Add your first record using the form built from your custom fields.</p>${canManage ? '<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>Add item</button>' : ''}</div>`;
   const cols = app.fields.slice(0, 7);
   const rows = app.items.map((item) => {
-    const ctx = { companyId, workspace, app, values: item.values };
+    const ctx = { companyId, workspace, app, values: item.values, item, canManage };
     return `<tr data-item="${h(item.id)}">${cols.map((field) => `<td>${wbFmtVal(ctx, field, item.values[field.id])}</td>`).join('')}<td class="wb-row-acts">${canManage ? `<button class="wb-icon-btn" data-edit-item="${h(item.id)}"><i class="ti ti-pencil"></i></button><button class="wb-icon-btn danger" data-del-item="${h(item.id)}"><i class="ti ti-trash"></i></button>` : ''}</td></tr>`;
   }).join('');
   return `<div class="wb-tbl-wrap"><table class="wb-table"><thead><tr>${cols.map((field) => `<th>${h(field.label)}</th>`).join('')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -8732,6 +8740,25 @@ function openWbAutoModal(companyId, workspaceId, appId, autoId) {
 }
 function openWbConfirm(companyId, op, message, ids) { openWbModal({ kind: 'confirm', companyId, confirm: { op, message, ...ids } }); }
 function openWbFilePreview(url, name) { if (!url) { showToast('No file is attached to this field.', 'local', 'Workspaces'); return; } openWbModal({ kind: 'file-preview', url, name: name || 'File' }); }
+
+// Flip a checkbox field straight from the item table (no modal). Mirrors the
+// item-modal "updated" path: log the change and run automations.
+function wbToggleItemCheckbox(companyId, workspaceId, appId, itemId, fieldId) {
+  if (!can('workspaces.manage', companyId)) return;
+  const found = wbFind(companyId, workspaceId, appId);
+  if (!found?.app) return;
+  const { workspace, app } = found;
+  const item = app.items.find((i) => i.id === itemId);
+  const field = app.fields.find((f) => f.id === fieldId);
+  if (!item || !field) return;
+  const cur = item.values[fieldId] === true || item.values[fieldId] === 'true' || item.values[fieldId] === 1;
+  const prev = { ...item.values };
+  item.values = { ...item.values, [fieldId]: !cur };
+  wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Set <b>${h(field.label)}</b> to ${!cur ? 'Yes' : 'No'} on <b>${h(wbItemTitle(app, item))}</b>` });
+  wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
+  wbSave(companyId);
+  render();
+}
 function openWbDeleteWorkspace(companyId, workspace) {
   if (!wbGuard()) return;
   openWbModal({ kind: 'delete-workspace', companyId, workspaceId: workspace.id, workspaceName: workspace.name, error: '' });
@@ -9309,6 +9336,8 @@ function mountWorkspaceBuilder() {
     bind('[data-del-item]', (el, e) => { e.stopPropagation(); openWbConfirm(companyId, 'del-item', 'This record will be permanently removed.', { workspaceId, appId, itemId: el.dataset.delItem }); });
     // A file cell opens a preview/download chooser (not the row's edit modal).
     bind('[data-wb-view-file]', (el, e) => { e.stopPropagation(); openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
+    // Checkbox cells toggle inline without opening the item.
+    bind('[data-wb-toggle-check]', (el, e) => { e.stopPropagation(); wbToggleItemCheckbox(companyId, workspaceId, appId, el.dataset.itemId, el.dataset.fieldId); });
     bind('[data-save-app]', () => wbSaveAppSettings(companyId, workspaceId, appId));
     bind('[data-del-app]', () => { const { app } = wbFind(companyId, workspaceId, appId); if (app) openWbDeleteApp(companyId, workspaceId, app); });
     bind('[data-add-auto]', () => openWbAutoModal(companyId, workspaceId, appId, ''));
