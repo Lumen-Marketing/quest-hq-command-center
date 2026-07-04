@@ -13,6 +13,10 @@ test('settings exposes backup controls for manual automatic import export and re
   assert.match(source, /BACKUP_INTERVAL_OPTIONS/);
   assert.match(source, /WORKSPACE_BACKUP_CACHE_KEY/);
   assert.match(source, /function renderBackupsSettings\(companyId\)/);
+  assert.match(source, /async function maybeRunAutomaticBackups\(\)/);
+  assert.match(source, /function automaticBackupDue\(companyId/);
+  assert.match(source, /createWorkspaceBackup\(companyId, 'automatic'\)/);
+  assert.match(source, /last_backup_at/);
   assert.match(source, /data-backup-settings-form/);
   assert.match(source, /data-action="create-workspace-backup"/);
   assert.match(source, /data-workspace-backup-import/);

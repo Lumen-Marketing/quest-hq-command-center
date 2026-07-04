@@ -2100,6 +2100,7 @@ const state = {
   workspaceReviews: [],
   workspaceBackups: readSeededList(WORKSPACE_BACKUP_CACHE_KEY, []).map(normalizeWorkspaceBackup),
   backupSettings: readJson(WORKSPACE_BACKUP_SETTINGS_KEY, {}),
+  backupAutoRunKeys: new Set(),
   selectedWorkspaceBackupId: '',
   selectedPlatformBackupCopyId: '',
   workspaceBuilderDocs: {},
@@ -2815,9 +2816,10 @@ function ensureDataLoad() {
       }
       if (state.sync.mode === 'loading') state.sync = { label: 'Local fallback', mode: 'local' };
     })
-    .finally(() => {
+    .finally(async () => {
       state.dataLoaded = true;
       state.dataLoading = false;
+      await maybeRunAutomaticBackups().catch((error) => console.warn('Automatic backup failed', error));
       persistAll();
       render();
     });
@@ -23156,6 +23158,43 @@ function backupSettingsForCompany(companyId = activeCompanyId()) {
   return { interval_key: 'manual', ...(state.backupSettings?.[companyId] || {}) };
 }
 
+function backupIntervalMs(intervalKey) {
+  return {
+    daily: 24 * 60 * 60 * 1000,
+    weekly: 7 * 24 * 60 * 60 * 1000,
+    monthly: 30 * 24 * 60 * 60 * 1000,
+  }[intervalKey] || 0;
+}
+
+function latestWorkspaceBackupAt(companyId) {
+  const latest = workspaceBackupsForCompany(companyId)
+    .filter((backup) => backup.status === 'active')
+    .map((backup) => Date.parse(backup.created_at || backup.updated_at || 0))
+    .filter((time) => Number.isFinite(time))
+    .sort((a, b) => b - a)[0];
+  const settingsTime = Date.parse(backupSettingsForCompany(companyId).last_backup_at || 0);
+  return Math.max(Number.isFinite(latest) ? latest : 0, Number.isFinite(settingsTime) ? settingsTime : 0);
+}
+
+function automaticBackupDue(companyId, now = Date.now()) {
+  const intervalKey = backupSettingsForCompany(companyId).interval_key;
+  const interval = backupIntervalMs(intervalKey);
+  if (!interval) return false;
+  const last = latestWorkspaceBackupAt(companyId);
+  return !last || now - last >= interval;
+}
+
+async function maybeRunAutomaticBackups() {
+  const companyIds = allowedCompanyIds().length ? allowedCompanyIds() : [activeCompanyId()].filter(Boolean);
+  for (const companyId of companyIds) {
+    const intervalKey = backupSettingsForCompany(companyId).interval_key;
+    const runKey = `${companyId}:${intervalKey}:${new Date().toISOString().slice(0, 10)}`;
+    if (state.backupAutoRunKeys.has(runKey) || !automaticBackupDue(companyId)) continue;
+    state.backupAutoRunKeys.add(runKey);
+    await createWorkspaceBackup(companyId, 'automatic');
+  }
+}
+
 function backupPayloadRows(rows, companyId) {
   return (rows || []).filter((row) => row.company_id === companyId).map((row) => clone(row));
 }
@@ -23238,7 +23277,12 @@ async function createWorkspaceBackup(companyId = activeCompanyId(), kind = 'manu
     updated_at: now,
   });
   state.workspaceBackups = [backup].concat((state.workspaceBackups || []).filter((item) => item.id !== backup.id));
+  state.backupSettings = {
+    ...(state.backupSettings || {}),
+    [companyId]: { ...backupSettingsForCompany(companyId), last_backup_at: now },
+  };
   writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  writeJson(WORKSPACE_BACKUP_SETTINGS_KEY, state.backupSettings);
   if (isLiveSupabaseSession()) {
     const { ok, data } = await supabaseWrite('workspace_backups', backup);
     if (ok && data) state.workspaceBackups = [normalizeWorkspaceBackup(data)].concat(state.workspaceBackups.filter((item) => item.id !== backup.id));
