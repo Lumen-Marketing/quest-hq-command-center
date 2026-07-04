@@ -82,6 +82,15 @@ const CLIENT_PORTAL_ANNOTATION_CACHE_KEY = 'quest-hq-client-portal-annotation-ca
 const CLIENT_PORTAL_EVENT_CACHE_KEY = 'quest-hq-client-portal-event-cache-v1';
 const CLIENT_PORTAL_SESSION_KEY = 'quest-client-portal-session-v1';
 const CLIENT_PORTAL_GUEST_NAME = 'Client';
+const WORKSPACE_BACKUP_CACHE_KEY = 'quest-hq-workspace-backup-cache-v1';
+const WORKSPACE_BACKUP_SETTINGS_KEY = 'quest-hq-workspace-backup-settings-v1';
+const WORKSPACE_BACKUP_VERSION = 1;
+const BACKUP_INTERVAL_OPTIONS = [
+  ['manual', 'Manual only'],
+  ['daily', 'Daily'],
+  ['weekly', 'Weekly'],
+  ['monthly', 'Monthly'],
+];
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
 const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
 const DASHBOARD_ROLE_VIEW_CACHE_KEY = 'quest-hq-dashboard-role-views-v1';
@@ -2085,8 +2094,14 @@ const state = {
   platformAdmin: false,
   platformCompanies: [],
   platformCompanyMembers: [],
+  platformBackupCopies: [],
+  platformBackupFilters: { company_id: 'all', status: 'all', kind: 'all', query: '' },
   subscriptions: [],
   workspaceReviews: [],
+  workspaceBackups: readSeededList(WORKSPACE_BACKUP_CACHE_KEY, []).map(normalizeWorkspaceBackup),
+  backupSettings: readJson(WORKSPACE_BACKUP_SETTINGS_KEY, {}),
+  selectedWorkspaceBackupId: '',
+  selectedPlatformBackupCopyId: '',
   workspaceBuilderDocs: {},
   workspaceBuilderLive: {},
   workspaceBuilderLoading: '',
@@ -2864,6 +2879,7 @@ async function loadSupabaseData() {
     pricebookVendorsResult,
     pricebookMaterialsResult,
     pricebookPricesResult,
+    workspaceBackupsResult,
     workspaceBuilderResult,
     platformAdminResult,
   ] = await Promise.all([
@@ -2911,6 +2927,7 @@ async function loadSupabaseData() {
     safeSupabaseQuery(client.from('pricebook_vendors').select('*').order('name', { ascending: true })),
     safeSupabaseQuery(client.from('pricebook_materials').select('*').order('name', { ascending: true })),
     safeSupabaseQuery(client.from('pricebook_vendor_prices').select('*').order('updated_at', { ascending: false })),
+    safeSupabaseQuery(client.from('workspace_backups').select('*').order('created_at', { ascending: false })),
     safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
     safeSupabaseQuery(client.rpc('is_platform_admin')),
   ]);
@@ -3016,6 +3033,7 @@ async function loadSupabaseData() {
   if (!pricebookVendorsResult.error) state.pricebookVendors = (pricebookVendorsResult.data || []).map(normalizePricebookVendor);
   if (!pricebookMaterialsResult.error) state.pricebookMaterials = (pricebookMaterialsResult.data || []).map(normalizePricebookMaterial);
   if (!pricebookPricesResult.error) state.pricebookPrices = (pricebookPricesResult.data || []).map(normalizePricebookPrice);
+  if (!workspaceBackupsResult.error) state.workspaceBackups = (workspaceBackupsResult.data || []).map(normalizeWorkspaceBackup);
   if (!workspaceBuilderResult.error) {
     state.workspaceBuilderDocs = {};
     state.workspaceBuilderLive = {};
@@ -3028,9 +3046,10 @@ async function loadSupabaseData() {
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
 
   if (state.platformAdmin) {
-    const [platformCompaniesResult, platformMembersResult] = await Promise.all([
+    const [platformCompaniesResult, platformMembersResult, platformBackupCopiesResult] = await Promise.all([
       safeSupabaseQuery(client.rpc('list_platform_companies')),
       safeSupabaseQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
+      safeSupabaseQuery(client.rpc('list_platform_backup_copies', { filter_company_id: null, filter_status: null, filter_kind: null })),
     ]);
     if (!platformCompaniesResult.error) {
       state.platformCompanies = (platformCompaniesResult.data || []).map(normalizePlatformCompany);
@@ -3048,6 +3067,9 @@ async function loadSupabaseData() {
     }
     if (!platformMembersResult.error) {
       state.platformCompanyMembers = (platformMembersResult.data || []).map(normalizePlatformCompanyMember);
+    }
+    if (!platformBackupCopiesResult.error) {
+      state.platformBackupCopies = (platformBackupCopiesResult.data || []).map(normalizePlatformBackupCopy);
     }
   }
 
@@ -9787,12 +9809,14 @@ function wbMountModal() {
 
 function renderSettingsPage(route, companyId) {
   const company = companyById(companyId);
+  const backupSettingsPath = companyPath('settings', { tab: 'backups' });
   const settingsTabs = [
     [companyPath('settings', { tab: 'company' }, companyId), 'Company', 'company'],
     [companyPath('settings', { tab: 'billing' }, companyId), 'Billing', 'billing'],
     [companyPath('settings', { tab: 'plugins' }, companyId), 'Plugins', 'plugins'],
     [companyPath('settings', { tab: 'roles' }, companyId), 'Roles', 'roles'],
     [companyPath('settings', { tab: 'access' }, companyId), 'Access', 'access'],
+    [backupSettingsPath, 'Backups', 'backups'],
     [companyPath('settings', { tab: 'team' }, companyId), 'Workers', 'team'],
   ];
   if (isQuestDeveloper()) settingsTabs.push([companyPath('settings', { tab: 'master' }, companyId), 'Master', 'master']);
@@ -9806,6 +9830,7 @@ function renderSettingsPage(route, companyId) {
       ${tab === 'billing' ? renderBillingSettings(companyId) : ''}
       ${tab === 'plugins' ? renderPluginsSettings(companyId) : ''}
       ${tab === 'roles' ? renderRolesSettings(companyId) : ''}
+      ${tab === 'backups' ? renderBackupsSettings(companyId) : ''}
       ${tab === 'access' ? `
       <article class="panel">
         <div class="section-head"><div><h2>Access</h2><p>Memberships, invites, and join requests.</p></div></div>
@@ -9842,6 +9867,101 @@ function renderSettingsPage(route, companyId) {
       ${tab === 'master' && isQuestDeveloper() ? renderPlatformMasterPanel(companyId) : ''}
     </section>
   `;
+}
+
+function renderBackupsSettings(companyId) {
+  const settings = backupSettingsForCompany(companyId);
+  const backups = workspaceBackupsForCompany(companyId);
+  const lastBackup = backups.find((backup) => backup.status === 'active');
+  return `
+    <article class="panel span-3 backup-settings-panel">
+      <div class="section-head">
+        <div>
+          <h2>Backups</h2>
+          <p>Exportable workspace snapshots for recovery, transfer, and rollback.</p>
+        </div>
+        <button class="btn btn-primary" type="button" data-action="create-workspace-backup">
+          <i class="ti ti-database-export"></i>Backup now
+        </button>
+      </div>
+      <div class="backup-settings-grid">
+        <form class="backup-config-card" data-backup-settings-form>
+          <label>
+            <span>Automatic backup interval</span>
+            <select name="interval_key">
+              ${BACKUP_INTERVAL_OPTIONS.map(([value, label]) => `<option value="${h(value)}" ${settings.interval_key === value ? 'selected' : ''}>${h(label)}</option>`).join('')}
+            </select>
+          </label>
+          <button class="btn" type="submit"><i class="ti ti-device-floppy"></i>Save interval</button>
+          <small>Automatic backup scheduling uses this setting. Manual backups are always available.</small>
+        </form>
+        <div class="backup-config-card">
+          <strong>Import backup zip</strong>
+          <label class="file-drop small">
+            <span>Choose a Quest backup zip</span>
+            <input type="file" accept=".zip,application/zip" data-workspace-backup-import />
+          </label>
+          <small>Import adds the backup to this list. Restore is a separate confirmation step.</small>
+        </div>
+        <div class="backup-config-card">
+          <strong>Current state</strong>
+          ${contractRows([
+            ['Active backups', String(backups.filter((item) => item.status === 'active').length)],
+            ['Deleted markers', String(backups.filter((item) => item.status === 'deleted').length)],
+            ['Last backup', lastBackup ? formatDateTime(lastBackup.created_at) : 'None yet'],
+          ])}
+        </div>
+      </div>
+      <div class="backup-list">
+        ${backups.map(renderWorkspaceBackupRow).join('') || emptyState('No backups yet. Use Backup now to create the first snapshot.')}
+      </div>
+    </article>
+  `;
+}
+
+function renderWorkspaceBackupRow(backup) {
+  const statusClass = backup.status === 'active' ? 'active' : 'muted';
+  return `
+    <article class="backup-row ${backup.status === 'deleted' ? 'deleted' : ''}">
+      <div>
+        <strong>${h(backup.label || 'Workspace backup')}</strong>
+        <small>${h(titleCase(backup.kind))} / ${formatDateTime(backup.created_at)} / ${formatBytes(backup.size_bytes)}</small>
+      </div>
+      <div class="backup-record-counts">
+        ${Object.entries(backup.record_counts || {}).slice(0, 5).map(([key, value]) => `<span>${h(titleCase(key))}: ${h(String(value))}</span>`).join('')}
+      </div>
+      <b class="status-pill ${statusClass}">${h(titleCase(backup.status))}</b>
+      <div class="backup-actions">
+        <button class="btn" type="button" data-action="download-workspace-backup" data-backup-id="${h(backup.id)}"><i class="ti ti-download"></i>Download</button>
+        <button class="btn" type="button" data-action="open-restore-backup" data-backup-id="${h(backup.id)}" ${backup.status !== 'active' ? 'disabled' : ''}><i class="ti ti-restore"></i>Restore</button>
+        <button class="btn danger" type="button" data-action="mark-workspace-backup-deleted" data-backup-id="${h(backup.id)}"><i class="ti ti-trash"></i>Mark deleted</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderWorkspaceBackupRestoreModal() {
+  const backup = workspaceBackupById(state.selectedWorkspaceBackupId);
+  if (!backup) return renderModalShell('Backups', 'Restore backup', emptyState('Backup not found.'));
+  return renderModalShell('Backups', 'Restore backup', `
+    <form class="compact-tool-form" data-workspace-backup-restore-form>
+      <input type="hidden" name="backup_id" value="${h(backup.id)}" />
+      <div class="file-policy-note danger">
+        <strong>Restore ${h(backup.label)}</strong>
+        <span>This replaces the current workspace state with the selected backup snapshot. Download a fresh backup first if you need a rollback point.</span>
+      </div>
+      ${contractRows([
+        ['Company', companyName(backup.company_id)],
+        ['Created', formatDateTime(backup.created_at)],
+        ['Size', formatBytes(backup.size_bytes)],
+        ['Status', titleCase(backup.status)],
+      ])}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i class="ti ti-restore"></i>Restore backup</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
 }
 
 function renderClientPortalPublicPage(route) {
@@ -10899,8 +11019,89 @@ function renderPlatformMasterPanel(currentCompanyId) {
       <div class="platform-company-list">
         ${companies.map((company) => renderPlatformCompanyRow(company, currentCompanyId)).join('') || emptyState('No companies found for platform review.')}
       </div>
+      ${renderPlatformBackupLedger(currentCompanyId)}
     </article>
   `;
+}
+
+function renderPlatformBackupLedger(currentCompanyId) {
+  const rows = filteredPlatformBackupCopies(currentCompanyId);
+  const filters = state.platformBackupFilters || {};
+  const companyOptions = [['all', 'All companies']].concat(platformCompanyRows().map((company) => [company.company_id, company.company_name || companyName(company.company_id)]));
+  return `
+    <section class="platform-backup-ledger">
+      <div class="section-head">
+        <div>
+          <h3>Backup safety copies</h3>
+          <p>Master-only ledger of the second backup table. These are separate from the visible workspace backups.</p>
+        </div>
+      </div>
+      <div class="platform-backup-filters">
+        <label><span>Company</span><select data-platform-backup-filter="company_id">${companyOptions.map(([value, label]) => `<option value="${h(value)}" ${filters.company_id === value ? 'selected' : ''}>${h(label)}</option>`).join('')}</select></label>
+        <label><span>State</span><select data-platform-backup-filter="status">${['all', 'active', 'deleted'].map((value) => `<option value="${value}" ${filters.status === value ? 'selected' : ''}>${h(titleCase(value))}</option>`).join('')}</select></label>
+        <label><span>Type</span><select data-platform-backup-filter="kind">${['all', 'manual', 'automatic', 'import', 'restore', 'mirror'].map((value) => `<option value="${value}" ${filters.kind === value ? 'selected' : ''}>${h(titleCase(value))}</option>`).join('')}</select></label>
+        <label><span>Search</span><input data-platform-backup-filter="query" value="${h(filters.query || '')}" placeholder="Company, user, backup..." /></label>
+      </div>
+      <div class="platform-backup-list">
+        ${rows.map(renderPlatformBackupCopyRow).join('') || emptyState('No backup safety copies match these filters.')}
+      </div>
+    </section>
+  `;
+}
+
+function renderPlatformBackupCopyRow(copy) {
+  return `
+    <article class="platform-backup-row ${copy.status === 'deleted' ? 'deleted' : ''}">
+      <div>
+        <strong>${h(copy.company_name || companyName(copy.company_id))}</strong>
+        <small>${h(copy.company_id)} / ${h(copy.created_by_label || copy.owner_email || 'Unknown user')} / ${formatDateTime(copy.created_at)}</small>
+      </div>
+      <span>${h(titleCase(copy.kind))}</span>
+      <span>${formatBytes(copy.size_bytes)}</span>
+      <b class="status-pill ${copy.status === 'active' ? 'active' : 'muted'}">${h(titleCase(copy.status))}</b>
+      <div class="backup-actions">
+        <button class="btn" type="button" data-action="platform-backup-mark-deleted" data-copy-id="${h(copy.id)}" ${copy.status === 'deleted' ? 'disabled' : ''}>Mark deleted</button>
+        <button class="btn danger" type="button" data-action="open-platform-backup-permanent-delete" data-copy-id="${h(copy.id)}">Delete forever</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderPlatformBackupDeleteModal(copyId) {
+  const copy = state.platformBackupCopies.find((item) => item.id === copyId);
+  if (!copy) return renderModalShell('Master', 'Delete backup copy', emptyState('Backup copy not found.'));
+  return renderModalShell('Master', 'Delete backup copy forever', `
+    <form class="compact-tool-form" data-platform-backup-delete-form>
+      <input type="hidden" name="copy_id" value="${h(copy.id)}" />
+      <div class="file-policy-note danger">
+        <strong>Permanent delete</strong>
+        <span>This deletes the original copy and deletes it from the database forever. Only continue when this backup copy is not needed for recovery.</span>
+      </div>
+      ${contractRows([
+        ['Company', copy.company_name || companyName(copy.company_id)],
+        ['User', copy.created_by_label || copy.owner_email || 'Unknown'],
+        ['State', titleCase(copy.status)],
+        ['Created', formatDateTime(copy.created_at)],
+      ])}
+      <div class="form-actions">
+        <button class="btn danger" type="submit"><i class="ti ti-trash"></i>Delete forever</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+
+function filteredPlatformBackupCopies(currentCompanyId) {
+  const filters = { company_id: 'all', status: 'all', kind: 'all', query: '', ...(state.platformBackupFilters || {}) };
+  const query = String(filters.query || '').trim().toLowerCase();
+  return (state.platformBackupCopies || []).filter((copy) => {
+    if (filters.company_id && filters.company_id !== 'all' && copy.company_id !== filters.company_id) return false;
+    if (filters.status && filters.status !== 'all' && copy.status !== filters.status) return false;
+    if (filters.kind && filters.kind !== 'all' && copy.kind !== filters.kind) return false;
+    if (!query) return true;
+    return [copy.id, copy.backup_id, copy.company_id, copy.company_name, copy.owner_email, copy.created_by_label]
+      .some((value) => String(value || '').toLowerCase().includes(query));
+  });
 }
 
 function renderPlatformCompanyRow(company, currentCompanyId) {
@@ -13816,6 +14017,8 @@ function renderActiveModal(route, session) {
   if (state.modal === 'price-book-vendor') return renderPriceBookVendorModal();
   if (state.modal === 'price-book-material') return renderPriceBookMaterialModal();
   if (state.modal === 'price-book-import') return renderPriceBookImportModal();
+  if (state.modal === 'workspace-backup-restore') return renderWorkspaceBackupRestoreModal();
+  if (state.modal === 'platform-backup-delete') return renderPlatformBackupDeleteModal(state.selectedPlatformBackupCopyId);
   if (state.modal === 'stages-jobs') return renderStageManagerModal('jobs');
   if (state.modal === 'stages-contacts') return renderStageManagerModal('contacts');
   if (state.modal === 'stages-deals') return renderStageManagerModal('deals');
@@ -15202,6 +15405,40 @@ function handleAction(event, node) {
     event.preventDefault();
     state.dataLoaded = false;
     state.sync = { label: 'Refreshing...', mode: 'loading' };
+    render();
+    return;
+  }
+  if (action === 'create-workspace-backup') {
+    event.preventDefault();
+    createWorkspaceBackup(activeCompanyId(), 'manual').catch((error) => showToast(error.message || 'Backup failed.', 'error', 'Backups'));
+    return;
+  }
+  if (action === 'download-workspace-backup') {
+    event.preventDefault();
+    downloadBackupZip(workspaceBackupById(node.dataset.backupId)).catch((error) => showToast(error.message || 'Download failed.', 'error', 'Backups'));
+    return;
+  }
+  if (action === 'open-restore-backup') {
+    event.preventDefault();
+    state.selectedWorkspaceBackupId = node.dataset.backupId || '';
+    state.modal = 'workspace-backup-restore';
+    render();
+    return;
+  }
+  if (action === 'mark-workspace-backup-deleted') {
+    event.preventDefault();
+    markWorkspaceBackupDeleted(node.dataset.backupId || '').catch((error) => showToast(error.message || 'Backup update failed.', 'error', 'Backups'));
+    return;
+  }
+  if (action === 'platform-backup-mark-deleted') {
+    event.preventDefault();
+    markPlatformBackupCopyDeleted(node.dataset.copyId || '').catch((error) => showToast(error.message || 'Backup update failed.', 'error', 'Master'));
+    return;
+  }
+  if (action === 'open-platform-backup-permanent-delete') {
+    event.preventDefault();
+    state.selectedPlatformBackupCopyId = node.dataset.copyId || '';
+    state.modal = 'platform-backup-delete';
     render();
     return;
   }
@@ -16974,6 +17211,34 @@ function onDocumentSubmit(event) {
     saveWorkspaceSettings(event.target).catch((error) => {
       showToast(error.message || 'Workspace settings failed.', 'local', 'Settings');
     });
+    return;
+  }
+
+  if (event.target.matches('[data-backup-settings-form]')) {
+    event.preventDefault();
+    const form = Object.fromEntries(new FormData(event.target).entries());
+    const companyId = activeCompanyId();
+    state.backupSettings = {
+      ...(state.backupSettings || {}),
+      [companyId]: { interval_key: BACKUP_INTERVAL_OPTIONS.some(([value]) => value === form.interval_key) ? form.interval_key : 'manual' },
+    };
+    writeJson(WORKSPACE_BACKUP_SETTINGS_KEY, state.backupSettings);
+    showToast('Backup interval saved.', 'saved', 'Backups');
+    render();
+    return;
+  }
+
+  if (event.target.matches('[data-workspace-backup-restore-form]')) {
+    event.preventDefault();
+    const form = Object.fromEntries(new FormData(event.target).entries());
+    restoreWorkspaceBackup(form.backup_id).catch((error) => showToast(error.message || 'Restore failed.', 'error', 'Backups'));
+    return;
+  }
+
+  if (event.target.matches('[data-platform-backup-delete-form]')) {
+    event.preventDefault();
+    const form = Object.fromEntries(new FormData(event.target).entries());
+    permanentlyDeletePlatformBackupCopy(form.copy_id).catch((error) => showToast(error.message || 'Delete failed.', 'error', 'Master'));
     return;
   }
 
@@ -19071,6 +19336,12 @@ function onDocumentInput(event) {
     updateProfileAvatarCrop(event.target.closest('[data-profile-form]'));
     return;
   }
+  if (event.target.matches('[data-platform-backup-filter]')) {
+    const key = event.target.dataset.platformBackupFilter;
+    state.platformBackupFilters = { company_id: 'all', status: 'all', kind: 'all', query: '', ...(state.platformBackupFilters || {}), [key]: event.target.value };
+    updateWorkspaceOnly();
+    return;
+  }
   if (event.target.matches('[data-form-field]')) {
     updateFormField(event.target);
     return;
@@ -19094,6 +19365,18 @@ function onDocumentChange(event) {
   }
   if (event.target.matches('[data-dashboard-rep]')) {
     state.dashboardRep = event.target.value || 'all';
+    render();
+    return;
+  }
+  if (event.target.matches('[data-workspace-backup-import]')) {
+    const file = event.target.files?.[0];
+    importWorkspaceBackupFile(file).catch((error) => showToast(error.message || 'Import failed.', 'error', 'Backups'));
+    event.target.value = '';
+    return;
+  }
+  if (event.target.matches('select[data-platform-backup-filter]')) {
+    const key = event.target.dataset.platformBackupFilter;
+    state.platformBackupFilters = { company_id: 'all', status: 'all', kind: 'all', query: '', ...(state.platformBackupFilters || {}), [key]: event.target.value };
     render();
     return;
   }
@@ -22854,6 +23137,314 @@ function upsertActivity(activity) {
   persistActivities();
 }
 
+async function loadJsZip() {
+  const module = await import('jszip');
+  return module.default || module;
+}
+
+function workspaceBackupsForCompany(companyId = activeCompanyId()) {
+  return (state.workspaceBackups || [])
+    .filter((backup) => backup.company_id === companyId)
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+}
+
+function workspaceBackupById(id) {
+  return (state.workspaceBackups || []).find((backup) => backup.id === id) || null;
+}
+
+function backupSettingsForCompany(companyId = activeCompanyId()) {
+  return { interval_key: 'manual', ...(state.backupSettings?.[companyId] || {}) };
+}
+
+function backupPayloadRows(rows, companyId) {
+  return (rows || []).filter((row) => row.company_id === companyId).map((row) => clone(row));
+}
+
+function buildWorkspaceBackupPayload(companyId) {
+  const company = companyById(companyId);
+  return {
+    version: WORKSPACE_BACKUP_VERSION,
+    exported_at: new Date().toISOString(),
+    company_id: companyId,
+    company: clone(company),
+    data: {
+      jobs: backupPayloadRows(state.jobs, companyId),
+      contacts: backupPayloadRows(state.contacts, companyId),
+      accounts: backupPayloadRows(state.accounts, companyId),
+      deals: backupPayloadRows(state.deals, companyId),
+      sites: backupPayloadRows(state.sites, companyId),
+      proposals: backupPayloadRows(state.proposals, companyId),
+      activities: backupPayloadRows(state.activities, companyId),
+      tasks: backupPayloadRows(state.tasks, companyId),
+      files: backupPayloadRows(state.files, companyId),
+      driveFolders: backupPayloadRows(state.driveFolders, companyId),
+      forms: backupPayloadRows(state.forms, companyId),
+      formResponses: backupPayloadRows(state.formResponses, companyId),
+      financeInvoices: backupPayloadRows(state.financeInvoices, companyId),
+      financePayments: backupPayloadRows(state.financePayments, companyId),
+      financeExpenses: backupPayloadRows(state.financeExpenses, companyId),
+      financeVendors: backupPayloadRows(state.financeVendors, companyId),
+      pricebookVendors: backupPayloadRows(state.pricebookVendors, companyId),
+      pricebookMaterials: backupPayloadRows(state.pricebookMaterials, companyId),
+      pricebookPrices: backupPayloadRows(state.pricebookPrices, companyId),
+      clientPortals: backupPayloadRows(state.clientPortals, companyId),
+      clientPortalDocuments: backupPayloadRows(state.clientPortalDocuments, companyId),
+      clientPortalAnnotations: backupPayloadRows(state.clientPortalAnnotations, companyId),
+      clientPortalEvents: backupPayloadRows(state.clientPortalEvents, companyId),
+      messageConversations: backupPayloadRows(state.messageConversations, companyId),
+      messageAccess: backupPayloadRows(state.messageAccess, companyId),
+      messages: backupPayloadRows(state.messages, companyId),
+      messageReads: backupPayloadRows(state.messageReads, companyId),
+      messageAttachments: backupPayloadRows(state.messageAttachments, companyId),
+      calendarEvents: backupPayloadRows(state.calendarEvents, companyId),
+      roles: backupPayloadRows(state.roles, companyId),
+      rolePermissions: backupPayloadRows(state.rolePermissions, companyId),
+      roleAssignments: backupPayloadRows(state.roleAssignments, companyId),
+      resourceAcl: backupPayloadRows(state.resourceAcl, companyId),
+      fieldPermissions: backupPayloadRows(state.fieldPermissions, companyId),
+      companyPlugins: backupPayloadRows(state.companyPlugins, companyId),
+      teamMembers: backupPayloadRows(state.teamMembers, companyId),
+      memberships: backupPayloadRows(state.memberships, companyId),
+      workspaceBuilderDoc: clone(state.workspaceBuilderDocs?.[companyId] || null),
+    },
+  };
+}
+
+function workspaceBackupRecordCounts(payload) {
+  return Object.entries(payload?.data || {}).reduce((acc, [key, value]) => {
+    if (Array.isArray(value)) acc[key] = value.length;
+    return acc;
+  }, {});
+}
+
+async function createWorkspaceBackup(companyId = activeCompanyId(), kind = 'manual') {
+  const payload = buildWorkspaceBackupPayload(companyId);
+  const now = new Date().toISOString();
+  const profile = activeSession()?.profile || {};
+  const backup = normalizeWorkspaceBackup({
+    id: `backup-${crypto.randomUUID()}`,
+    company_id: companyId,
+    label: `${companyName(companyId)} ${titleCase(kind)} backup`,
+    kind,
+    status: 'active',
+    interval_key: backupSettingsForCompany(companyId).interval_key,
+    payload,
+    size_bytes: new Blob([JSON.stringify(payload)]).size,
+    record_counts: workspaceBackupRecordCounts(payload),
+    created_by: isUuid(profile.id) ? profile.id : null,
+    created_by_label: profile.full_name || profile.email || 'Quest user',
+    source: 'settings',
+    created_at: now,
+    updated_at: now,
+  });
+  state.workspaceBackups = [backup].concat((state.workspaceBackups || []).filter((item) => item.id !== backup.id));
+  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  if (isLiveSupabaseSession()) {
+    const { ok, data } = await supabaseWrite('workspace_backups', backup);
+    if (ok && data) state.workspaceBackups = [normalizeWorkspaceBackup(data)].concat(state.workspaceBackups.filter((item) => item.id !== backup.id));
+    await refreshPlatformBackupCopies();
+  }
+  showToast('Backup snapshot created.', 'saved', 'Backups');
+  render();
+  return backup;
+}
+
+async function downloadBackupZip(backup) {
+  const target = backup || workspaceBackupById(state.selectedWorkspaceBackupId);
+  if (!target) {
+    showToast('Backup not found.', 'local', 'Backups');
+    return;
+  }
+  const JSZip = await loadJsZip();
+  const zip = new JSZip();
+  zip.file('quest-backup.json', JSON.stringify(target.payload || buildWorkspaceBackupPayload(target.company_id), null, 2));
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${slugify(target.label || 'quest-backup') || 'quest-backup'}.zip`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function importWorkspaceBackupFile(file) {
+  if (!file) return;
+  const JSZip = await loadJsZip();
+  const zip = await JSZip.loadAsync(file);
+  const entry = zip.file('quest-backup.json');
+  if (!entry) throw new Error('This zip does not contain quest-backup.json.');
+  const payload = JSON.parse(await entry.async('string'));
+  validateWorkspaceBackupPayload(payload);
+  const now = new Date().toISOString();
+  const profile = activeSession()?.profile || {};
+  const backup = normalizeWorkspaceBackup({
+    id: `backup-${crypto.randomUUID()}`,
+    company_id: payload.company_id,
+    label: `${companyName(payload.company_id)} imported backup`,
+    kind: 'import',
+    status: 'active',
+    interval_key: backupSettingsForCompany(payload.company_id).interval_key,
+    payload,
+    size_bytes: file.size || new Blob([JSON.stringify(payload)]).size,
+    record_counts: workspaceBackupRecordCounts(payload),
+    created_by: isUuid(profile.id) ? profile.id : null,
+    created_by_label: profile.full_name || profile.email || 'Quest user',
+    source: 'settings-import',
+    created_at: now,
+    updated_at: now,
+  });
+  state.workspaceBackups = [backup].concat((state.workspaceBackups || []).filter((item) => item.id !== backup.id));
+  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  if (isLiveSupabaseSession()) await supabaseWrite('workspace_backups', backup);
+  showToast('Backup imported. Restore it when you are ready.', 'saved', 'Backups');
+  render();
+}
+
+function validateWorkspaceBackupPayload(payload) {
+  if (!payload || payload.version !== WORKSPACE_BACKUP_VERSION) throw new Error('This backup version is not supported.');
+  if (!payload.company_id || !payload.data || typeof payload.data !== 'object') throw new Error('This backup file is missing workspace data.');
+}
+
+function replaceCompanyRows(currentRows, nextRows, companyId, normalizer) {
+  const preserved = (currentRows || []).filter((row) => row.company_id !== companyId);
+  return preserved.concat((nextRows || []).map(normalizer));
+}
+
+function applyWorkspaceBackupPayload(payload) {
+  validateWorkspaceBackupPayload(payload);
+  const companyId = payload.company_id;
+  const data = payload.data || {};
+  if (payload.company) state.companies = mergeCompanies(state.companies.concat([normalizeCompany(payload.company)]));
+  state.jobs = replaceCompanyRows(state.jobs, data.jobs, companyId, normalizeJob);
+  state.contacts = replaceCompanyRows(state.contacts, data.contacts, companyId, normalizeContact);
+  state.accounts = replaceCompanyRows(state.accounts, data.accounts, companyId, normalizeAccount);
+  state.deals = replaceCompanyRows(state.deals, data.deals, companyId, normalizeDeal);
+  state.sites = replaceCompanyRows(state.sites, data.sites, companyId, normalizeCrmSite);
+  state.proposals = replaceCompanyRows(state.proposals, data.proposals, companyId, normalizeProposal);
+  state.activities = replaceCompanyRows(state.activities, data.activities, companyId, normalizeActivity);
+  state.tasks = replaceCompanyRows(state.tasks, data.tasks, companyId, normalizeTask);
+  state.files = replaceCompanyRows(state.files, data.files, companyId, normalizeFile);
+  state.driveFolders = replaceCompanyRows(state.driveFolders, data.driveFolders, companyId, normalizeDriveFolder);
+  state.forms = replaceCompanyRows(state.forms, data.forms, companyId, normalizeForm);
+  state.formResponses = replaceCompanyRows(state.formResponses, data.formResponses, companyId, normalizeFormResponse);
+  state.financeInvoices = replaceCompanyRows(state.financeInvoices, data.financeInvoices, companyId, normalizeFinanceInvoice);
+  state.financePayments = replaceCompanyRows(state.financePayments, data.financePayments, companyId, normalizeFinancePayment);
+  state.financeExpenses = replaceCompanyRows(state.financeExpenses, data.financeExpenses, companyId, normalizeFinanceExpense);
+  state.financeVendors = replaceCompanyRows(state.financeVendors, data.financeVendors, companyId, normalizeFinanceVendor);
+  state.pricebookVendors = replaceCompanyRows(state.pricebookVendors, data.pricebookVendors, companyId, normalizePricebookVendor);
+  state.pricebookMaterials = replaceCompanyRows(state.pricebookMaterials, data.pricebookMaterials, companyId, normalizePricebookMaterial);
+  state.pricebookPrices = replaceCompanyRows(state.pricebookPrices, data.pricebookPrices, companyId, normalizePricebookPrice);
+  state.clientPortals = replaceCompanyRows(state.clientPortals, data.clientPortals, companyId, normalizeClientPortal);
+  state.clientPortalDocuments = replaceCompanyRows(state.clientPortalDocuments, data.clientPortalDocuments, companyId, normalizeClientPortalDocument);
+  state.clientPortalAnnotations = replaceCompanyRows(state.clientPortalAnnotations, data.clientPortalAnnotations, companyId, normalizeClientPortalAnnotation);
+  state.clientPortalEvents = replaceCompanyRows(state.clientPortalEvents, data.clientPortalEvents, companyId, normalizeClientPortalEvent);
+  state.messageConversations = replaceCompanyRows(state.messageConversations, data.messageConversations, companyId, normalizeMessageConversation);
+  state.messageAccess = replaceCompanyRows(state.messageAccess, data.messageAccess, companyId, normalizeMessageAccess);
+  state.messages = replaceCompanyRows(state.messages, data.messages, companyId, normalizeMessage);
+  state.messageReads = replaceCompanyRows(state.messageReads, data.messageReads, companyId, normalizeMessageRead);
+  state.messageAttachments = replaceCompanyRows(state.messageAttachments, data.messageAttachments, companyId, normalizeMessageAttachment);
+  state.calendarEvents = replaceCompanyRows(state.calendarEvents, data.calendarEvents, companyId, normalizeCalendarEvent);
+  state.roles = replaceCompanyRows(state.roles, data.roles, companyId, normalizeRole);
+  state.rolePermissions = replaceCompanyRows(state.rolePermissions, data.rolePermissions, companyId, normalizeRolePermission);
+  state.roleAssignments = replaceCompanyRows(state.roleAssignments, data.roleAssignments, companyId, normalizeRoleAssignment);
+  state.resourceAcl = replaceCompanyRows(state.resourceAcl, data.resourceAcl, companyId, normalizeResourceAcl);
+  state.fieldPermissions = replaceCompanyRows(state.fieldPermissions, data.fieldPermissions, companyId, normalizeFieldPermission);
+  state.companyPlugins = replaceCompanyRows(state.companyPlugins, data.companyPlugins, companyId, normalizeCompanyPlugin);
+  state.teamMembers = replaceCompanyRows(state.teamMembers, data.teamMembers, companyId, normalizeTeamMember);
+  state.memberships = replaceCompanyRows(state.memberships, data.memberships, companyId, normalizeMembership);
+  if (data.workspaceBuilderDoc) state.workspaceBuilderDocs = { ...(state.workspaceBuilderDocs || {}), [companyId]: normalizeWorkspaceBuilderDoc(data.workspaceBuilderDoc) };
+  persistAll();
+}
+
+async function restoreWorkspaceBackup(backupId) {
+  const backup = workspaceBackupById(backupId);
+  if (!backup) throw new Error('Backup not found.');
+  applyWorkspaceBackupPayload(backup.payload);
+  if (isLiveSupabaseSession()) await persistWorkspaceBackupPayloadToSupabase(backup.payload);
+  state.modal = '';
+  showToast('Workspace restored from backup.', 'saved', 'Backups');
+  render();
+}
+
+async function persistWorkspaceBackupPayloadToSupabase(payload) {
+  const client = createSupabaseClient();
+  if (!client) return;
+  const data = payload?.data || {};
+  const tableMap = [
+    ['jobs', data.jobs, JOB_COLS],
+    ['contacts', data.contacts, CONTACT_COLS],
+    ['accounts', data.accounts, ACCOUNT_COLS],
+    ['deals', data.deals, DEAL_COLS],
+    ['crm_sites', data.sites, SITE_COLS],
+    ['proposal_documents', data.proposals, PROPOSAL_COLS],
+    ['activities', data.activities, ACTIVITY_COLS],
+    ['client_portal_documents', data.clientPortalDocuments, CLIENT_PORTAL_DOCUMENT_COLS],
+    ['client_portal_annotations', data.clientPortalAnnotations, CLIENT_PORTAL_ANNOTATION_COLS],
+  ];
+  for (const [table, rows, cols] of tableMap) {
+    if (!Array.isArray(rows) || !rows.length) continue;
+    const cleanRows = rows.map((row) => supabaseRow(row, cols));
+    const result = await client.from(table).upsert(cleanRows, { onConflict: 'id' });
+    if (result.error) notifySyncFailure(result.error, 'Restore');
+  }
+  if (data.workspaceBuilderDoc) {
+    const result = await client.from('workspace_builder_state').upsert({ company_id: payload.company_id, doc: data.workspaceBuilderDoc, updated_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null });
+    if (result.error) notifySyncFailure(result.error, 'Restore');
+  }
+}
+
+async function markWorkspaceBackupDeleted(backupId) {
+  const now = new Date().toISOString();
+  state.workspaceBackups = (state.workspaceBackups || []).map((backup) => (
+    backup.id === backupId ? normalizeWorkspaceBackup({ ...backup, status: 'deleted', deleted_at: now, deleted_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null, updated_at: now }) : backup
+  ));
+  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  if (isLiveSupabaseSession()) {
+    await supabaseWrite('workspace_backups', state.workspaceBackups.find((backup) => backup.id === backupId));
+    await refreshPlatformBackupCopies();
+  }
+  render();
+}
+
+async function refreshPlatformBackupCopies() {
+  if (!state.platformAdmin || !isLiveSupabaseSession()) return;
+  const client = createSupabaseClient();
+  if (!client) return;
+  const result = await safeSupabaseQuery(client.rpc('list_platform_backup_copies', { filter_company_id: null, filter_status: null, filter_kind: null }));
+  if (!result.error) state.platformBackupCopies = (result.data || []).map(normalizePlatformBackupCopy);
+}
+
+async function markPlatformBackupCopyDeleted(copyId) {
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await safeSupabaseQuery(client.rpc('mark_platform_backup_copy_deleted', { copy_id: copyId }));
+    if (result.error) {
+      showToast(result.error.message || 'Unable to mark backup deleted.', 'error', 'Master');
+      return;
+    }
+  }
+  const now = new Date().toISOString();
+  state.platformBackupCopies = (state.platformBackupCopies || []).map((copy) => (copy.id === copyId ? normalizePlatformBackupCopy({ ...copy, status: 'deleted', deleted_at: now, updated_at: now }) : copy));
+  render();
+}
+
+async function permanentlyDeletePlatformBackupCopy(copyId) {
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await safeSupabaseQuery(client.rpc('permanently_delete_platform_backup_copy', { copy_id: copyId }));
+    if (result.error) {
+      showToast(result.error.message || 'Unable to delete backup copy.', 'error', 'Master');
+      return;
+    }
+  }
+  state.platformBackupCopies = (state.platformBackupCopies || []).filter((copy) => copy.id !== copyId);
+  state.modal = '';
+  showToast('Backup copy permanently deleted.', 'saved', 'Master');
+  render();
+}
+
 // Strip app-only/derived keys before sending a row to Supabase.
 function supabaseRow(payload, allowed) {
   const row = {};
@@ -25163,6 +25754,51 @@ function normalizePlatformCompanyMember(input) {
   };
 }
 
+function normalizeWorkspaceBackup(input = {}) {
+  return {
+    id: String(input.id || `backup-${crypto.randomUUID()}`),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    label: String(input.label || 'Workspace backup').trim() || 'Workspace backup',
+    kind: ['manual', 'automatic', 'import', 'restore'].includes(String(input.kind)) ? String(input.kind) : 'manual',
+    status: ['active', 'deleted'].includes(String(input.status)) ? String(input.status) : 'active',
+    interval_key: BACKUP_INTERVAL_OPTIONS.some(([value]) => value === input.interval_key) ? String(input.interval_key) : 'manual',
+    payload: input.payload && typeof input.payload === 'object' ? input.payload : {},
+    size_bytes: number(input.size_bytes),
+    record_counts: input.record_counts && typeof input.record_counts === 'object' ? input.record_counts : {},
+    created_by: input.created_by || null,
+    created_by_label: String(input.created_by_label || ''),
+    source: String(input.source || 'settings'),
+    imported_from_backup_id: String(input.imported_from_backup_id || ''),
+    deleted_at: input.deleted_at || null,
+    deleted_by: input.deleted_by || null,
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+
+function normalizePlatformBackupCopy(input = {}) {
+  return {
+    id: String(input.id || `backup-copy-${crypto.randomUUID()}`),
+    backup_id: String(input.backup_id || ''),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    company_name: String(input.company_name || ''),
+    owner_profile_id: input.owner_profile_id || null,
+    owner_email: String(input.owner_email || ''),
+    created_by: input.created_by || null,
+    created_by_label: String(input.created_by_label || ''),
+    kind: ['manual', 'automatic', 'import', 'restore', 'mirror'].includes(String(input.kind)) ? String(input.kind) : 'manual',
+    status: ['active', 'deleted'].includes(String(input.status)) ? String(input.status) : 'active',
+    size_bytes: number(input.size_bytes),
+    record_counts: input.record_counts && typeof input.record_counts === 'object' ? input.record_counts : {},
+    source_table: String(input.source_table || 'workspace_backups'),
+    original_created_at: input.original_created_at || '',
+    deleted_at: input.deleted_at || null,
+    deleted_by: input.deleted_by || null,
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+
 function normalizeRole(input) {
   return {
     id: String(input.id || ''),
@@ -26044,6 +26680,8 @@ function persistAll() {
   writeJson(CLIENT_PORTAL_DOCUMENT_CACHE_KEY, state.clientPortalDocuments);
   writeJson(CLIENT_PORTAL_ANNOTATION_CACHE_KEY, state.clientPortalAnnotations);
   writeJson(CLIENT_PORTAL_EVENT_CACHE_KEY, state.clientPortalEvents);
+  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  writeJson(WORKSPACE_BACKUP_SETTINGS_KEY, state.backupSettings);
 }
 
 function persistTimeState() {

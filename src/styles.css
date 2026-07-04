@@ -3027,6 +3027,91 @@ textarea:focus {
   font-weight: 800;
 }
 
+.backup-settings-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.backup-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.backup-config-card,
+.backup-row,
+.platform-backup-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.backup-config-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.backup-list,
+.platform-backup-list {
+  display: grid;
+  gap: 10px;
+}
+
+.backup-row,
+.platform-backup-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.35fr) minmax(180px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.backup-row.deleted,
+.platform-backup-row.deleted {
+  opacity: .68;
+}
+
+.backup-record-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.backup-record-counts span {
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.platform-backup-ledger {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 14px;
+}
+
+.platform-backup-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.platform-backup-row {
+  grid-template-columns: minmax(260px, 1.4fr) .6fr .6fr auto auto;
+}
+
 .workspace-icon {
   position: relative;
   display: grid;
@@ -6763,6 +6848,8 @@ input[type="file"]::file-selector-button:active {
   .folder-grid,
   .drive-grid,
   .users-grid,
+  .backup-settings-grid,
+  .platform-backup-filters,
   .team-chart {
     grid-template-columns: 1fr;
   }
@@ -6812,6 +6899,15 @@ input[type="file"]::file-selector-button:active {
 
   .finance-compact-row {
     grid-template-columns: 1fr;
+  }
+
+  .backup-row,
+  .platform-backup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .backup-actions {
+    justify-content: flex-start;
   }
 
   .access-user-row,
