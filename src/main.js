@@ -23208,6 +23208,7 @@ function buildWorkspaceBackupPayload(companyId) {
     company: clone(company),
     data: {
       jobs: backupPayloadRows(state.jobs, companyId),
+      pipelineStages: backupPayloadRows(state.pipelineStages, companyId),
       contacts: backupPayloadRows(state.contacts, companyId),
       accounts: backupPayloadRows(state.accounts, companyId),
       deals: backupPayloadRows(state.deals, companyId),
@@ -23362,6 +23363,8 @@ function applyWorkspaceBackupPayload(payload) {
   const data = payload.data || {};
   if (payload.company) state.companies = mergeCompanies(state.companies.concat([normalizeCompany(payload.company)]));
   state.jobs = replaceCompanyRows(state.jobs, data.jobs, companyId, normalizeJob);
+  state.pipelineStages = replaceCompanyRows(state.pipelineStages, data.pipelineStages, companyId, (row) => ({ ...row, company_id: canonicalCompanyId(row.company_id || companyId) }));
+  applyPipelineStagesForCompany(companyId);
   state.contacts = replaceCompanyRows(state.contacts, data.contacts, companyId, normalizeContact);
   state.accounts = replaceCompanyRows(state.accounts, data.accounts, companyId, normalizeAccount);
   state.deals = replaceCompanyRows(state.deals, data.deals, companyId, normalizeDeal);
@@ -23418,6 +23421,13 @@ async function persistWorkspaceBackupPayloadToSupabase(payload) {
   const data = payload?.data || {};
   const tableMap = [
     ['jobs', data.jobs, (row) => supabaseRow(row, JOB_COLS), 'id'],
+    ['pipeline_stages', data.pipelineStages, (row) => ({
+      company_id: row.company_id,
+      kind: row.kind,
+      name: row.name,
+      color: row.color || '#9AA0A8',
+      position: number(row.position),
+    }), 'company_id,kind,name'],
     ['contacts', data.contacts, (row) => supabaseRow(row, CONTACT_COLS), 'id'],
     ['accounts', data.accounts, (row) => supabaseRow(row, ACCOUNT_COLS), 'id'],
     ['deals', data.deals, (row) => supabaseRow(row, DEAL_COLS), 'id'],

@@ -34,7 +34,10 @@ test('backup exports are real zip payloads and restore through validated workspa
   assert.match(source, /async function importWorkspaceBackupFile\(file\)/);
   assert.match(source, /async function restoreWorkspaceBackup\(backupId\)/);
   assert.match(source, /function buildWorkspaceBackupPayload\(companyId\)/);
+  assert.match(source, /pipelineStages: backupPayloadRows\(state\.pipelineStages, companyId\)/);
   assert.match(source, /function applyWorkspaceBackupPayload\(payload\)/);
+  assert.match(source, /data\.pipelineStages/);
+  assert.match(source, /\['pipeline_stages', data\.pipelineStages/);
   assert.match(source, /payload\.version !== WORKSPACE_BACKUP_VERSION/);
   assert.match(source, /persistAll\(\)/);
 });
