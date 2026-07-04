@@ -160,9 +160,12 @@ test('contact inline editor does not use browser datalist bubbles for job type o
 test('job type options use Quest Roofing services instead of saved junk values', () => {
   const constantSource = source.match(/const CONTACT_JOB_TYPE_OPTIONS = \[[\s\S]*?\];/)?.[0] || '';
   const helperSource = source.match(/function contactJobTypeOptions\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const defaultOptions = [...constantSource.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+  assert.ok(defaultOptions.length >= 200, `expected at least 200 default job types, found ${defaultOptions.length}`);
   assert.match(source, /function renderJobTypeCombobox\(label, name, value, companyId\)/);
   ['Tile Roofing', 'Shingle Roofing', 'Metal Roofing', 'Foam Roofing', 'Roof Repair', 'Free Inspection', 'Storm & Emergency', 'Insurance Claims', 'Maintenance', 'Not Sure'].forEach((item) => assert.ok(constantSource.includes(`'${item}'`)));
   ['General Construction', 'Remodeling', 'Painting', 'Plumbing', 'Electrical', 'HVAC', 'Flooring', 'Landscaping', 'Solar', 'Windows & Doors'].forEach((item) => assert.ok(constantSource.includes(`'${item}'`)));
+  ['Software Development', 'Web Development', 'Mobile App Development', 'DevOps Engineering', 'Cybersecurity', 'IT Support', 'Data Analytics', 'AI Automation', 'Cloud Migration', 'Database Administration'].forEach((item) => assert.ok(constantSource.includes(`'${item}'`)));
   ['Flat roof repair', 'QA Proposal Workflow Test', 'Solar detach and reset', 'Retail replacement'].forEach((item) => assert.doesNotMatch(constantSource, new RegExp(`'${item}'`)));
   assert.match(helperSource, /companyContacts\(companyId\)\.map\(\(contact\) => contact\.title\)/);
   assert.match(helperSource, /companyJobs\(companyId\)\.map\(\(job\) => job\.job_type\)/);
