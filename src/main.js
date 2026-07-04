@@ -10980,6 +10980,7 @@ function renderPlatformMemberRow(member) {
 function renderRolesSettings(companyId) {
   const roles = companyRoles(companyId);
   const previewRole = rolePreviewForCompany(companyId);
+  const canManageRoles = can('roles.manage', companyId);
   return `
     <article class="panel span-2">
       <div class="section-head">
@@ -11000,6 +11001,10 @@ function renderRolesSettings(companyId) {
                 <button class="btn" type="button" data-action="view-as-role" data-role-id="${h(role.id)}" ${viewing ? 'disabled' : ''}>
                   <i class="ti ${viewing ? 'ti-eye-check' : 'ti-eye'}"></i>${viewing ? 'Viewing' : 'View as role'}
                 </button>
+                ${!role.is_system && canManageRoles ? `
+                  <button class="btn" type="button" data-action="edit-role" data-role-id="${h(role.id)}"><i class="ti ti-pencil"></i>Edit</button>
+                  <button class="btn danger" type="button" data-action="delete-role" data-role-id="${h(role.id)}"><i class="ti ti-trash"></i>Delete</button>
+                ` : ''}
               </div>
             </article>
           `;
@@ -11038,19 +11043,26 @@ function renderRoleAccessPreview(companyId, role) {
   `;
 }
 
-function renderRoleFormModal(companyId) {
-  return renderModalShell('Settings', 'New role', `
+function renderRoleFormModal(companyId, role = null) {
+  const editing = !!role;
+  const selectedPermissions = new Set(
+    editing
+      ? state.rolePermissions.filter((item) => item.role_id === role.id && item.effect === 'allow').map((item) => item.permission_key)
+      : []
+  );
+  return renderModalShell('Settings', editing ? 'Edit role' : 'New role', `
     <form class="role-form" data-role-form>
-      ${field('Role name', 'name', '')}
-      ${field('Color', 'color', '#f0b23b', false, 'color')}
-      ${field('Priority', 'priority', '100', false, 'number')}
+      <input type="hidden" name="id" value="${h(editing ? role.id : '')}" />
+      ${field('Role name', 'name', editing ? role.name : '', true)}
+      ${field('Color', 'color', editing ? role.color : '#f0b23b', false, 'color')}
+      ${field('Priority', 'priority', editing ? String(role.priority) : '100', false, 'number')}
       <div class="permission-grid span-2">
         ${PERMISSION_KEYS.filter(([key]) => permissionAvailableForCompany(key, companyId)).map(([key, label]) => `
-          <label><input type="checkbox" name="permissions" value="${h(key)}" /> <span>${h(label)}</span></label>
+          <label><input type="checkbox" name="permissions" value="${h(key)}" ${selectedPermissions.has(key) ? 'checked' : ''} /> <span>${h(label)}</span></label>
         `).join('')}
       </div>
       <div class="form-actions span-2">
-        <button class="btn btn-primary" type="submit">Create role</button>
+        <button class="btn btn-primary" type="submit">${editing ? 'Save role' : 'Create role'}</button>
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
       </div>
     </form>
@@ -13815,6 +13827,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'finance-vendor-new') return renderFinanceVendorFormModal(activeCompanyId(), null);
   if (state.modal === 'finance-vendor-edit') return renderFinanceVendorFormModal(activeCompanyId(), financeVendorById(state.selectedFinanceVendorId));
   if (state.modal === 'role-new') return renderRoleFormModal(activeCompanyId());
+  if (state.modal === 'role-edit') return renderRoleFormModal(activeCompanyId(), roleById(activeCompanyId(), state.selectedRoleId));
   if (state.modal === 'invite-new') return renderInviteFormModal(activeCompanyId());
   if (state.modal === 'message-group-new') return renderMessageGroupModal(activeCompanyId());
   if (state.modal === 'message-workspace-members') return renderMessageWorkspaceMembersModal(activeCompanyId());
@@ -15798,6 +15811,32 @@ function handleAction(event, node) {
     if (!requirePermission('roles.manage', activeCompanyId(), 'Your role cannot manage roles.', 'Roles')) return;
     state.modal = 'role-new';
     render();
+    return;
+  }
+  if (action === 'edit-role') {
+    event.preventDefault();
+    const companyId = activeCompanyId();
+    if (!requirePermission('roles.manage', companyId, 'Your role cannot manage roles.', 'Roles')) return;
+    const role = roleById(companyId, node.dataset.roleId);
+    if (!role) {
+      showToast('That role is no longer available.', 'local', 'Roles');
+      return;
+    }
+    if (role.is_system) {
+      showToast('System roles cannot be edited.', 'local', 'Roles');
+      return;
+    }
+    state.selectedRoleId = role.id;
+    state.modal = 'role-edit';
+    render();
+    return;
+  }
+  if (action === 'delete-role') {
+    event.preventDefault();
+    deleteRole(node.dataset.roleId).catch((error) => {
+      state.sync = { label: error?.message || 'Role delete failed', mode: 'local' };
+      render();
+    });
     return;
   }
   if (action === 'view-as-role') {
@@ -18160,36 +18199,91 @@ async function saveRole(formNode) {
   const companyId = activeCompanyId();
   if (!requirePermission('roles.manage', companyId, 'Your role cannot manage roles.', 'Roles')) return;
   const data = new FormData(formNode);
+  const existingId = String(data.get('id') || '').trim();
+  const existing = existingId ? roleById(companyId, existingId) : null;
+  if (existing && existing.is_system) {
+    showToast('System roles cannot be edited.', 'local', 'Roles');
+    return;
+  }
   const role = normalizeRole({
-    id: crypto.randomUUID(),
+    id: existing ? existing.id : crypto.randomUUID(),
     company_id: companyId,
     name: data.get('name'),
     color: data.get('color') || '#f0b23b',
     priority: data.get('priority') || 100,
     is_system: false,
-    created_by: activeSession().profile.id,
+    created_by: existing ? existing.created_by : activeSession().profile.id,
   });
   const permissions = data.getAll('permissions').map((permission) => String(permission || '')).filter(Boolean);
+  const upsertRoleInState = (saved) => {
+    const index = state.roles.findIndex((item) => item.id === saved.id);
+    if (index >= 0) state.roles[index] = saved;
+    else state.roles.unshift(saved);
+  };
+  const replacePermissionsInState = (roleId, keys) => {
+    const rows = keys.map((permission_key) => normalizeRolePermission({ role_id: roleId, permission_key, effect: 'allow' }));
+    state.rolePermissions = rows.concat(state.rolePermissions.filter((item) => item.role_id !== roleId));
+  };
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
-    const roleResult = await client.from('roles').insert(role).select().single();
+    const roleResult = existing
+      ? await client.from('roles').update({ name: role.name, color: role.color, priority: role.priority }).eq('id', role.id).select().single()
+      : await client.from('roles').insert(role).select().single();
     if (roleResult.error) {
       state.sync = { label: roleResult.error.message || 'Role save failed', mode: 'local' };
       render();
       return;
     }
     const savedRole = normalizeRole(roleResult.data);
+    if (existing) await client.from('role_permissions').delete().eq('role_id', savedRole.id);
     const rows = permissions.map((permission_key) => ({ role_id: savedRole.id, permission_key, effect: 'allow' }));
     if (rows.length) await client.from('role_permissions').insert(rows);
-    state.roles.unshift(savedRole);
-    state.rolePermissions = rows.concat(state.rolePermissions).map(normalizeRolePermission);
-    state.sync = { label: 'Role saved', mode: 'live' };
+    upsertRoleInState(savedRole);
+    replacePermissionsInState(savedRole.id, permissions);
+    state.sync = { label: existing ? 'Role updated' : 'Role saved', mode: 'live' };
   } else {
-    state.roles.unshift(role);
-    state.rolePermissions = permissions.map((permission_key) => normalizeRolePermission({ role_id: role.id, permission_key, effect: 'allow' })).concat(state.rolePermissions);
-    state.sync = { label: 'Role saved locally', mode: 'local' };
+    upsertRoleInState(role);
+    replacePermissionsInState(role.id, permissions);
+    state.sync = { label: existing ? 'Role updated locally' : 'Role saved locally', mode: 'local' };
   }
+  state.selectedRoleId = '';
   state.modal = '';
+  render();
+}
+
+async function deleteRole(roleId) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('roles.manage', companyId, 'Your role cannot manage roles.', 'Roles')) return;
+  const role = roleById(companyId, roleId);
+  if (!role) {
+    showToast('That role is no longer available.', 'local', 'Roles');
+    return;
+  }
+  if (role.is_system) {
+    showToast('System roles cannot be deleted.', 'local', 'Roles');
+    return;
+  }
+  const assignedCount = state.roleAssignments.filter((item) => item.company_id === companyId && item.role_id === role.id).length;
+  if (assignedCount > 0) {
+    showToast(`Reassign the ${assignedCount} member${assignedCount === 1 ? '' : 's'} using "${role.name}" before deleting it.`, 'local', 'Roles');
+    return;
+  }
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession() && client;
+  if (live) {
+    await client.from('role_permissions').delete().eq('role_id', role.id);
+    const result = await client.from('roles').delete().eq('id', role.id);
+    if (result.error) {
+      state.sync = { label: result.error.message || 'Role delete failed', mode: 'local' };
+      render();
+      return;
+    }
+  }
+  state.roles = state.roles.filter((item) => item.id !== role.id);
+  state.rolePermissions = state.rolePermissions.filter((item) => item.role_id !== role.id);
+  if (state.rolePreview?.role_id === role.id) state.rolePreview = null;
+  if (state.selectedRoleId === role.id) state.selectedRoleId = '';
+  state.sync = { label: live ? 'Role deleted' : 'Role deleted locally', mode: live ? 'live' : 'local' };
   render();
 }
 
@@ -18646,6 +18740,12 @@ async function saveCalendarEvent(form) {
   }
   const linkedJobId = String(fields.linked_job_id || '').trim();
   const now = new Date().toISOString();
+  const startsAtIso = localDateTimeToIso(fields.starts_at);
+  const endsAtIso = localDateTimeToIso(fields.ends_at || fields.starts_at);
+  if (Date.parse(endsAtIso) < Date.parse(startsAtIso)) {
+    showToast('End date must be the same as or after the start date.', 'local', 'Calendar');
+    return;
+  }
   let eventRecord = normalizeCalendarEvent({
     ...(existing || {}),
     id: existing?.id || crypto.randomUUID(),
@@ -18653,8 +18753,8 @@ async function saveCalendarEvent(form) {
     title: String(fields.title || '').trim() || 'Calendar event',
     description: String(fields.description || '').trim(),
     event_type: CALENDAR_EVENT_TYPES.includes(fields.event_type) ? String(fields.event_type) : 'Company event',
-    starts_at: localDateTimeToIso(fields.starts_at),
-    ends_at: localDateTimeToIso(fields.ends_at || fields.starts_at),
+    starts_at: startsAtIso,
+    ends_at: endsAtIso,
     all_day: fields.all_day === 'on',
     visibility: fields.visibility === 'private' ? 'private' : 'company',
     linked_type: linkedJobId ? 'job' : '',

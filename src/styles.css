@@ -1964,6 +1964,15 @@ textarea {
   outline: 0;
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--amber);
+}
+
 input:focus,
 select:focus,
 textarea:focus {
