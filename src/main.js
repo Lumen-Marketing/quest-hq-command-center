@@ -6143,6 +6143,7 @@ function beginContactInlineEdit(span) {
   const suggestions = contactInlineSuggestions(contact, key);
   const input = document.createElement(options.length ? 'select' : 'input');
   input.className = 'sf-edit-input';
+  input.value = key === 'value' ? (contact.value || 0) : (contact[key] || '');
   if (key === 'title') {
     const wrapper = document.createElement('span');
     wrapper.className = 'job-type-combobox sf-inline-job-type';
@@ -6169,7 +6170,6 @@ function beginContactInlineEdit(span) {
   } else {
     span.replaceWith(input);
   }
-  input.value = key === 'value' ? (contact.value || 0) : (contact[key] || '');
   options.forEach(([value, label]) => {
     const option = document.createElement('option');
     option.value = value;

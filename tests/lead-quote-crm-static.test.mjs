@@ -141,6 +141,10 @@ test('contact inline editor uses selects for constrained fields and a custom job
   assert.match(inlineSource, /option\.value = value/);
   assert.match(inlineSource, /if \(key === 'title'\) \{/);
   assert.match(inlineSource, /wireJobTypeAutocomplete\(input, contactJobTypeOptions\(contact\.company_id\)\)/);
+  assert.ok(
+    inlineSource.indexOf("input.value = key === 'value' ? (contact.value || 0) : (contact[key] || '');") < inlineSource.indexOf('wireJobTypeAutocomplete(input, contactJobTypeOptions(contact.company_id))'),
+    'inline job type autocomplete should receive the current field value before rendering suggestions',
+  );
   assert.match(inlineSource, /input\.addEventListener\('change', commit\)/);
 });
 
