@@ -23373,20 +23373,36 @@ async function persistWorkspaceBackupPayloadToSupabase(payload) {
   if (!client) return;
   const data = payload?.data || {};
   const tableMap = [
-    ['jobs', data.jobs, JOB_COLS],
-    ['contacts', data.contacts, CONTACT_COLS],
-    ['accounts', data.accounts, ACCOUNT_COLS],
-    ['deals', data.deals, DEAL_COLS],
-    ['crm_sites', data.sites, SITE_COLS],
-    ['proposal_documents', data.proposals, PROPOSAL_COLS],
-    ['activities', data.activities, ACTIVITY_COLS],
-    ['client_portal_documents', data.clientPortalDocuments, CLIENT_PORTAL_DOCUMENT_COLS],
-    ['client_portal_annotations', data.clientPortalAnnotations, CLIENT_PORTAL_ANNOTATION_COLS],
+    ['jobs', data.jobs, (row) => supabaseRow(row, JOB_COLS), 'id'],
+    ['contacts', data.contacts, (row) => supabaseRow(row, CONTACT_COLS), 'id'],
+    ['accounts', data.accounts, (row) => supabaseRow(row, ACCOUNT_COLS), 'id'],
+    ['deals', data.deals, (row) => supabaseRow(row, DEAL_COLS), 'id'],
+    ['crm_sites', data.sites, (row) => supabaseRow(row, SITE_COLS), 'id'],
+    ['proposal_documents', data.proposals, (row) => supabaseRow(row, PROPOSAL_COLS), 'id'],
+    ['activities', data.activities, (row) => supabaseRow(row, ACTIVITY_COLS), 'id'],
+    ['tasks', data.tasks, taskPayload, 'id'],
+    ['forms', data.forms, formPayload, 'id'],
+    ['form_responses', data.formResponses, formResponsePayload, 'id'],
+    ['finance_invoices', data.financeInvoices, invoicePayload, 'id'],
+    ['finance_payments', data.financePayments, paymentPayload, 'id'],
+    ['finance_expenses', data.financeExpenses, expensePayload, 'id'],
+    ['finance_vendors', data.financeVendors, vendorPayload, 'id'],
+    ['pricebook_vendors', data.pricebookVendors, (row) => row, 'id'],
+    ['pricebook_materials', data.pricebookMaterials, (row) => row, 'id'],
+    ['pricebook_vendor_prices', data.pricebookPrices, (row) => row, 'company_id,vendor_id,material_id'],
+    ['client_portals', data.clientPortals, clientPortalPayload, 'id'],
+    ['client_portal_documents', data.clientPortalDocuments, (row) => supabaseRow(clientPortalDocumentPayload(row), CLIENT_PORTAL_DOCUMENT_COLS), 'id'],
+    ['client_portal_annotations', data.clientPortalAnnotations, (row) => supabaseRow(clientPortalAnnotationPayload(row), CLIENT_PORTAL_ANNOTATION_COLS), 'id'],
+    ['message_conversations', data.messageConversations, messageConversationPayload, 'id'],
+    ['messages', data.messages, messagePayload, 'id'],
+    ['message_attachments', data.messageAttachments, messageAttachmentPayload, 'id'],
+    ['message_reads', data.messageReads, messageReadPayload, 'conversation_id,profile_id'],
   ];
-  for (const [table, rows, cols] of tableMap) {
+  for (const [table, rows, mapper, onConflict] of tableMap) {
     if (!Array.isArray(rows) || !rows.length) continue;
-    const cleanRows = rows.map((row) => supabaseRow(row, cols));
-    const result = await client.from(table).upsert(cleanRows, { onConflict: 'id' });
+    const cleanRows = rows.map(mapper).filter((row) => row && Object.keys(row).length);
+    if (!cleanRows.length) continue;
+    const result = await client.from(table).upsert(cleanRows, { onConflict });
     if (result.error) notifySyncFailure(result.error, 'Restore');
   }
   if (data.workspaceBuilderDoc) {
