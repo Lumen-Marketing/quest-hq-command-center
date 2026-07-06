@@ -6610,6 +6610,16 @@ input[type="file"]::file-selector-button:active {
   text-decoration: none;
 }
 
+.form-file-answer-preview {
+  width: 96px;
+  height: 72px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
 .form-file-answer span {
   display: grid;
   gap: 2px;

@@ -56,6 +56,9 @@ function cleanAnswerValue(value) {
       type: String(value.type || '').slice(0, 120),
       lastModified: Number(value.lastModified || 0) || 0,
       data_url: String(value.data_url || '').length <= 3_000_000 ? String(value.data_url || '') : '',
+      bucket_id: String(value.bucket_id || '').slice(0, 120),
+      object_path: String(value.object_path || '').slice(0, 800),
+      uploaded_at: String(value.uploaded_at || '').slice(0, 80),
     };
     return Object.fromEntries(Object.entries(file).filter(([, item]) => item !== undefined && item !== ''));
   }

@@ -11765,7 +11765,7 @@ async function submitPublicFormResponse(formEl) {
   const form = state.publicForm?.form?.id === formId ? state.publicForm.form : null;
   if (!form) throw new Error('Form is not loaded.');
   const data = new FormData(formEl);
-  const answers = await collectFormAnswers(form, data);
+  const answers = await collectFormAnswers(form, data, { publicUpload: true });
   const response = await fetch('/api/public-form-submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -28095,6 +28095,7 @@ function previewWrap(question, control) {
 
 function formFileAnswerMeta(file) {
   const dataUrl = arguments.length > 1 ? arguments[1] : '';
+  const extra = arguments.length > 2 && arguments[2] && typeof arguments[2] === 'object' ? arguments[2] : {};
   return {
     kind: 'file',
     name: file.name,
@@ -28102,26 +28103,33 @@ function formFileAnswerMeta(file) {
     type: file.type,
     lastModified: file.lastModified,
     data_url: dataUrl,
+    ...extra,
   };
 }
 
 function renderFormAnswerValue(value) {
-  if (Array.isArray(value)) return value.map(renderFormAnswerValue).join('');
+  const response = arguments.length > 1 ? arguments[1] : null;
+  if (Array.isArray(value)) return value.map((item) => renderFormAnswerValue(item, response)).join('');
   if (value && typeof value === 'object' && value.kind === 'file') {
     const meta = `${value.type || 'File'}${value.size ? ` / ${formatBytes(value.size)}` : ''}`;
-    const content = `<i class="ti ti-paperclip"></i><span><strong>${h(value.name || 'Uploaded file')}</strong><small>${h(meta)}</small></span>`;
-    return value.data_url
-      ? `<a class="form-file-answer" href="${h(value.data_url)}" download="${h(value.name || 'form-upload')}" target="_blank" rel="noreferrer">${content}</a>`
+    const url = value.signed_url || value.public_url || value.data_url || '';
+    const isImage = /^image\//i.test(value.type || '');
+    const preview = url && isImage ? `<img class="form-file-answer-preview" src="${h(url)}" alt="${h(value.name || 'Uploaded image')}" loading="lazy">` : '<i class="ti ti-paperclip"></i>';
+    const status = !url && value.bucket_id && value.object_path ? 'Preparing preview...' : meta;
+    const content = `${preview}<span><strong>${h(value.name || 'Uploaded file')}</strong><small>${h(status)}</small></span>`;
+    return url
+      ? `<a class="form-file-answer" href="${h(url)}" download="${h(value.name || 'form-upload')}" target="_blank" rel="noreferrer">${content}</a>`
       : `<span class="form-file-answer">${content}</span>`;
   }
   return h(String(value || 'No answer'));
 }
 
 function renderResponseDetail(response) {
+  ensureFormResponseFileUrls(response);
   const form = formById(response.form_id);
   const answerRows = Object.entries(response.answers || {}).map(([questionId, value]) => {
     const question = form?.questions.find((item) => item.id === questionId);
-    return `<div><strong>${h(question?.label || questionId)}</strong><span>${renderFormAnswerValue(value) || 'No answer'}</span></div>`;
+    return `<div><strong>${h(question?.label || questionId)}</strong><span>${renderFormAnswerValue(value, response) || 'No answer'}</span></div>`;
   }).join('');
   return `
     <div class="response-detail-head">
@@ -28130,6 +28138,47 @@ function renderResponseDetail(response) {
     ${renderResponseActions(response)}
     <div class="file-detail-list">${answerRows || detailRow('Response', 'No answers captured.')}</div>
   `;
+}
+
+function formAnswerFiles(value) {
+  if (Array.isArray(value)) return value.flatMap(formAnswerFiles);
+  if (value && typeof value === 'object') {
+    if (value.kind === 'file') return [value];
+    return Object.values(value).flatMap(formAnswerFiles);
+  }
+  return [];
+}
+
+function ensureFormResponseFileUrls(response) {
+  if (!response?.id || !response?.answers) return;
+  const files = formAnswerFiles(response.answers).filter((file) => (
+    file.bucket_id && file.object_path && !file.signed_url && !file.public_url && !file.data_url && !file._signing && !file._urlFailed
+  ));
+  if (!files.length) return;
+  for (const file of files) file._signing = true;
+  Promise.all(files.map(async (file) => {
+    try {
+      const result = await fetch('/api/public-form-file-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          response_id: response.id,
+          form_id: response.form_id,
+          bucket_id: file.bucket_id,
+          object_path: file.object_path,
+          file_name: file.name,
+        }),
+      });
+      const payload = await result.json().catch(() => ({}));
+      if (!result.ok) throw new Error(payload.error || 'Could not open file.');
+      file.signed_url = payload.signed_url || '';
+    } catch (error) {
+      file._urlFailed = true;
+      file.error = error.message || 'Could not open file.';
+    } finally {
+      delete file._signing;
+    }
+  })).finally(() => render());
 }
 
 function renderResponseActions(response) {
@@ -28582,14 +28631,47 @@ async function saveFormResponse(formEl) {
   render();
 }
 
+async function uploadPublicFormFile(form, question, file) {
+  const response = await fetch('/api/public-form-file-upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      form_id: form.id,
+      question_id: question.id,
+      file_name: file.name,
+      file_type: file.type,
+      file_size: file.size,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Could not prepare file upload.');
+  const client = createSupabaseClient();
+  if (!client) throw new Error('File upload is not available in this session.');
+  const upload = await client
+    .storage
+    .from(payload.bucket_id)
+    .uploadToSignedUrl(payload.object_path, payload.token, file, {
+      contentType: file.type || 'application/octet-stream',
+    });
+  if (upload.error) throw upload.error;
+  return formFileAnswerMeta(file, '', {
+    bucket_id: payload.bucket_id,
+    object_path: payload.object_path,
+    uploaded_at: new Date().toISOString(),
+  });
+}
+
 async function collectFormAnswers(form, data) {
+  const options = arguments.length > 2 && arguments[2] && typeof arguments[2] === 'object' ? arguments[2] : {};
   const answers = {};
   for (const question of form.questions) {
     const key = `answer:${question.id}`;
     const values = data.getAll(key).filter((value) => value instanceof File ? value.name : String(value || '').trim());
     const normalized = [];
     for (const value of values) {
-      if (value instanceof File) normalized.push(formFileAnswerMeta(value, value.size <= 2 * 1024 * 1024 ? await fileToDataUrl(value) : ''));
+      if (value instanceof File) {
+        normalized.push(options.publicUpload ? await uploadPublicFormFile(form, question, value) : formFileAnswerMeta(value, value.size <= 2 * 1024 * 1024 ? await fileToDataUrl(value) : ''));
+      }
       else normalized.push(String(value || '').trim());
     }
     answers[question.id] = normalized.length > 1 ? normalized : (normalized[0] || '');
