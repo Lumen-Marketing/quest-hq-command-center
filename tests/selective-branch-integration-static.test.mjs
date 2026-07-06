@@ -53,7 +53,7 @@ test('quote records support reusable line items and total from price book or man
 
 test('dark theme, drag-drop pipeline, activity detail modal, and map picker are wired', () => {
   assert.match(source, /const THEME_KEY = 'quest-theme';/);
-  assert.match(source, /function applyTheme\(theme = getTheme\(\)\)/);
+  assert.match(source, /function applyTheme\(theme = getTheme\(\), accent = getAccent\(\)\)/);
   assert.match(source, /data-action="set-theme"/);
   assert.match(styles, /\[data-theme="dark"\]/);
   assert.match(source, /let pipeDrag = null;/);

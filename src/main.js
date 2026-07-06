@@ -69,6 +69,7 @@ const NAV_EXPANDED_KEY = 'quest-hq-nav-expanded-v1';
 const JOB_BOARD_VIEW_KEY = 'quest-hq-job-board-view';
 const CONTACT_BOARD_VIEW_KEY = 'quest-hq-contact-board-view';
 const THEME_KEY = 'quest-theme';
+const ACCENT_KEY = 'quest-accent';
 const NOTIFICATION_CACHE_KEY = 'quest-hq-notification-cache-v1';
 const MESSAGE_CONVERSATION_CACHE_KEY = 'quest-hq-message-conversation-cache-v1';
 const MESSAGE_ACCESS_CACHE_KEY = 'quest-hq-message-access-cache-v1';
@@ -90,6 +91,17 @@ const BACKUP_INTERVAL_OPTIONS = [
   ['daily', 'Daily'],
   ['weekly', 'Weekly'],
   ['monthly', 'Monthly'],
+];
+const THEME_OPTIONS = [
+  ['light', 'Light', 'ti-sun'],
+  ['dark', 'Dark', 'ti-moon'],
+  ['system', 'System', 'ti-device-desktop'],
+];
+const ACCENT_OPTIONS = [
+  ['quest', 'Quest Orange', '#f45d22'],
+  ['blue', 'Signal Blue', '#2563eb'],
+  ['green', 'Field Green', '#15803d'],
+  ['slate', 'Command Slate', '#475569'],
 ];
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
 const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
@@ -2237,6 +2249,9 @@ init();
 function init() {
   normalizeLegacyLocation();
   applyTheme();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (getThemeMode() === 'system') applyTheme();
+  });
   window.addEventListener('popstate', () => {
     rememberSidebarScroll();
     render();
@@ -2254,18 +2269,45 @@ function init() {
   render();
 }
 
-function getTheme() {
-  return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+function getThemeMode() {
+  const saved = localStorage.getItem(THEME_KEY);
+  return ['light', 'dark', 'system'].includes(saved) ? saved : 'light';
 }
 
-function applyTheme(theme = getTheme()) {
-  document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+function resolveThemeMode(mode = getThemeMode()) {
+  if (mode === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return mode === 'dark' ? 'dark' : 'light';
+}
+
+function getTheme() {
+  return resolveThemeMode();
+}
+
+function getAccent() {
+  const saved = localStorage.getItem(ACCENT_KEY);
+  return ACCENT_OPTIONS.some(([id]) => id === saved) ? saved : 'quest';
+}
+
+function applyTheme(theme = getTheme(), accent = getAccent()) {
+  const mode = arguments.length === 0 ? getThemeMode() : theme;
+  document.documentElement.dataset.themeMode = mode;
+  document.documentElement.dataset.theme = resolveThemeMode(mode);
+  document.documentElement.dataset.accent = accent;
 }
 
 function setTheme(theme) {
-  const next = theme === 'dark' ? 'dark' : 'light';
+  const next = ['light', 'dark', 'system'].includes(theme) ? theme : 'light';
   localStorage.setItem(THEME_KEY, next);
   applyTheme(next);
+  render();
+}
+
+function setAccent(accent) {
+  const next = ACCENT_OPTIONS.some(([id]) => id === accent) ? accent : 'quest';
+  localStorage.setItem(ACCENT_KEY, next);
+  applyTheme(getThemeMode(), next);
   render();
 }
 
@@ -3541,6 +3583,7 @@ function shellTemplate(route, workspace) {
                   <button type="button" data-action="verify-email">Click here to verify</button>
                 </div>
               ` : ''}
+              ${renderAccountThemeControls()}
               <button type="button" data-action="open-profile"><i class="ti ti-user-circle"></i>Profile</button>
               <button type="button" data-action="open-settings"><i class="ti ti-settings"></i>Settings</button>
               <button type="button" data-action="sign-out"><i class="ti ti-logout"></i>Sign out</button>
@@ -3658,6 +3701,28 @@ function mobileTabItem(route, path, icon, label, count, sections) {
       ${count ? `<b>${h(String(Math.min(Number(count) || 0, 99)))}</b>` : ''}
       <span>${h(label)}</span>
     </a>
+  `;
+}
+
+function renderAccountThemeControls() {
+  const mode = getThemeMode();
+  const accent = getAccent();
+  return `
+    <div class="account-theme-panel" aria-label="Theme chooser">
+      <div class="account-theme-title"><i class="ti ti-palette"></i><span>Theme</span></div>
+      <div class="account-theme-options" role="group" aria-label="Color mode">
+        ${THEME_OPTIONS.map(([id, label, icon]) => `
+          <button class="${mode === id ? 'active' : ''}" type="button" data-action="set-theme" data-theme="${h(id)}" aria-pressed="${mode === id ? 'true' : 'false'}">
+            <i class="ti ${h(icon)}"></i>${h(label)}
+          </button>
+        `).join('')}
+      </div>
+      <div class="account-accent-row" role="group" aria-label="Accent color">
+        ${ACCENT_OPTIONS.map(([id, label, color]) => `
+          <button class="account-accent-swatch ${accent === id ? 'active' : ''}" type="button" data-action="set-accent" data-accent="${h(id)}" title="${h(label)}" aria-label="${h(label)}" aria-pressed="${accent === id ? 'true' : 'false'}" style="--swatch:${h(color)}"></button>
+        `).join('')}
+      </div>
+    </div>
   `;
 }
 
@@ -10762,10 +10827,7 @@ function renderWorkspaceSettings(companyId) {
     </article>
     <article class="panel">
       <div class="section-head"><div><h2>Appearance</h2><p>Choose the workspace color mode for this browser.</p></div></div>
-      <div class="theme-toggle-row">
-        <button class="btn ${getTheme() === 'light' ? 'btn-primary' : ''}" type="button" data-action="set-theme" data-theme="light"><i class="ti ti-sun"></i>Light</button>
-        <button class="btn ${getTheme() === 'dark' ? 'btn-primary' : ''}" type="button" data-action="set-theme" data-theme="dark"><i class="ti ti-moon"></i>Dark</button>
-      </div>
+      <div class="theme-toggle-row">${renderAccountThemeControls()}</div>
     </article>
     <article class="panel settings-connection-card">
       <div class="section-head"><div><h2>Data connection</h2><p>Admin-only health check for where workspace changes are being saved.</p></div></div>
@@ -15833,6 +15895,11 @@ function handleAction(event, node) {
   if (action === 'set-theme') {
     event.preventDefault();
     setTheme(node.dataset.theme || 'light');
+    return;
+  }
+  if (action === 'set-accent') {
+    event.preventDefault();
+    setAccent(node.dataset.accent || 'quest');
     return;
   }
   if (action === 'open-delete-company') {
@@ -24380,6 +24447,8 @@ function isMutableAction(action = '') {
     'minimize-docked-activity',
     'close-docked-activity',
     'set-activity-filter',
+    'set-theme',
+    'set-accent',
     'pipeline-open',
     'pipeline-stage',
     'open-notification',

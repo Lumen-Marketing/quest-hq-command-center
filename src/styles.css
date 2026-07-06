@@ -32,6 +32,24 @@
   background: var(--bg);
 }
 
+:root[data-accent="blue"] {
+  --amber: #3b82f6;
+  --amber-2: #bfdbfe;
+  --orange: #2563eb;
+}
+
+:root[data-accent="green"] {
+  --amber: #22c55e;
+  --amber-2: #bbf7d0;
+  --orange: #15803d;
+}
+
+:root[data-accent="slate"] {
+  --amber: #64748b;
+  --amber-2: #cbd5e1;
+  --orange: #475569;
+}
+
 * { box-sizing: border-box; }
 html, body, #app { min-height: 100%; margin: 0; }
 [hidden] { display: none !important; }
@@ -939,7 +957,7 @@ button { cursor: pointer; }
   right: 0;
   z-index: 40;
   display: none;
-  width: 210px;
+  width: 270px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--surface);
@@ -1005,12 +1023,83 @@ button { cursor: pointer; }
 
 .account-popover button:hover { background: #f3e6c9; }
 
+[data-theme="dark"] .account-popover button:hover { background: var(--surface-3); }
+
 .account-popover .account-status button {
   min-height: 26px;
   padding: 0;
   color: #9a3412;
   font-size: 12px;
   text-decoration: underline;
+}
+
+.account-theme-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+  padding: 8px;
+}
+
+.account-theme-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.account-theme-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.account-popover .account-theme-options button {
+  justify-content: center;
+  gap: 4px;
+  min-height: 30px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.account-popover .account-theme-options button.active {
+  border-color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 13%, var(--surface));
+  color: var(--orange);
+}
+
+.account-accent-row {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.account-popover .account-accent-swatch,
+.account-accent-swatch {
+  display: block;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--swatch);
+  padding: 0;
+}
+
+.account-popover .account-accent-swatch:hover,
+.account-accent-swatch:hover {
+  background: var(--swatch);
+}
+
+.account-accent-swatch.active {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--orange);
 }
 
 .app-toast {
