@@ -76,7 +76,9 @@ test('public portal viewer exposes plan markup tools and persistent annotations'
   assert.match(source, /fetchClientPortalDocumentFile/);
   assert.match(source, /cpResolveBase/);
   // pdf.js is lazy-loaded (dynamic import) so it stays out of the initial bundle.
+  assert.match(source, /import pdfWorkerUrl from 'pdfjs-dist\/build\/pdf\.worker\.mjs\?url';/);
   assert.match(source, /pdfjsLibPromise = import\('pdfjs-dist\/build\/pdf\.mjs'\)/);
+  assert.match(source, /pdfjsLib\.GlobalWorkerOptions\.workerSrc = pdfWorkerUrl/);
   assert.match(source, /const pdfjsLib = await loadPdfjs\(\);/);
   assert.match(source, /const cpBaseCache = new Map\(\);/);
   assert.match(source, /function cpWithTimeout\(promise, ms, label\)/);

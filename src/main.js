@@ -2,6 +2,7 @@ import './styles.css';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import opsCommandHeroUrl from './assets/quest-hq-ops-command-hero.png';
 import questLogoMarkUrl from './assets/quest-hq-logo-mark.png';
 
@@ -10154,11 +10155,16 @@ const CP_LABEL_PRESETS = ['Kitchen Revision', 'Window Adjustment', 'Electrical C
 // Width in feet assumed for a freshly uploaded sheet until the ruler is calibrated.
 const CP_DEFAULT_SHEET_FT = 40;
 // Lazy-load pdf.js only when a PDF actually needs rendering (thumbnail or the
-// plan viewer). This keeps ~350KB of pdf.js out of the initial app bundle. PDFs
-// are parsed with disableWorker:true, so no separate worker asset is needed.
+// plan viewer). The worker URL is still registered because pdf.js can touch it
+// before honoring per-document disableWorker options in some render paths.
 let pdfjsLibPromise = null;
 function loadPdfjs() {
-  if (!pdfjsLibPromise) pdfjsLibPromise = import('pdfjs-dist/build/pdf.mjs');
+  if (!pdfjsLibPromise) {
+    pdfjsLibPromise = import('pdfjs-dist/build/pdf.mjs').then((pdfjsLib) => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+      return pdfjsLib;
+    });
+  }
   return pdfjsLibPromise;
 }
 const cpBaseCache = new Map();
