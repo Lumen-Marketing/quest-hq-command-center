@@ -17166,6 +17166,12 @@ function handleAction(event, node) {
     selectFormResponse(node.dataset.responseId || '');
     return;
   }
+  if (action === 'delete-form-response') {
+    event.preventDefault();
+    if (!requirePermission('forms.manage', activeCompanyId(), 'Your role cannot delete form responses.', 'Forms')) return;
+    deleteFormResponse(node.dataset.responseId || '').catch((error) => showToast(error.message || 'Could not delete response.', 'local', 'Forms'));
+    return;
+  }
   if (action === 'response-create-contact') {
     event.preventDefault();
     createContactFromFormResponse(node.dataset.responseId || '').catch((error) => showToast(error.message || 'Could not create contact.', 'local', 'Forms'));
@@ -28187,6 +28193,7 @@ function renderResponseActions(response) {
       <button class="btn btn-primary" type="button" data-action="response-create-contact" data-response-id="${h(response.id)}"><i class="ti ti-id-badge-2"></i>Create contact</button>
       <button class="btn" type="button" data-action="response-create-job" data-response-id="${h(response.id)}"><i class="ti ti-hammer"></i>Create job</button>
       <button class="btn" type="button" data-action="response-create-task" data-response-id="${h(response.id)}"><i class="ti ti-checkbox"></i>Create task</button>
+      <button class="btn danger" type="button" data-action="delete-form-response" data-response-id="${h(response.id)}"><i class="ti ti-trash"></i>Delete response</button>
     </div>
   `;
 }
@@ -28299,6 +28306,16 @@ async function persistFormResponseRecord(response) {
   const result = await client.from('form_responses').insert(formResponsePayload(response)).select().single();
   if (result.error) throw new Error(result.error.message || 'Form response save failed.');
   return normalizeFormResponse(result.data);
+}
+
+async function deleteFormResponseRecord(response) {
+  if (!isLiveSupabaseSession()) return true;
+  const client = createSupabaseClient();
+  if (!client) throw new Error('Supabase is unavailable.');
+  if (!can('forms.manage', response.company_id)) throw new Error('Your role cannot delete form responses.');
+  const result = await client.from('form_responses').delete().eq('id', response.id).eq('company_id', response.company_id);
+  if (result.error) throw new Error(result.error.message || 'Form response delete failed.');
+  return true;
 }
 
 async function createForm(companyId, overrides = {}) {
@@ -28462,6 +28479,21 @@ async function deleteForm(id) {
   writeJson(FORM_CACHE_KEY, state.forms);
   writeJson(FORM_RESPONSE_CACHE_KEY, state.formResponses);
   state.sync = { label: isLiveSupabaseSession() ? 'Form deleted from Supabase' : 'Form deleted locally', mode: isLiveSupabaseSession() ? 'live' : 'local' };
+  render();
+}
+
+async function deleteFormResponse(responseId) {
+  const response = responseById(responseId);
+  if (!response) return;
+  if (!requirePermission('forms.manage', response.company_id, 'Your role cannot delete form responses.', 'Forms')) return;
+  if (!window.confirm('Delete this response? This removes the submitted answers from Forms.')) return;
+  await deleteFormResponseRecord(response);
+  state.formResponses = state.formResponses.filter((item) => item.id !== response.id);
+  state.selectedFormId = response.form_id || state.selectedFormId;
+  state.selectedFormResponseId = responsesForForm(response.form_id)[0]?.id || '';
+  writeJson(FORM_RESPONSE_CACHE_KEY, state.formResponses);
+  state.sync = { label: isLiveSupabaseSession() ? 'Response deleted from Supabase' : 'Response deleted locally', mode: isLiveSupabaseSession() ? 'live' : 'local' };
+  showToast(isLiveSupabaseSession() ? 'Response deleted from Supabase.' : 'Response deleted locally.', isLiveSupabaseSession() ? 'live' : 'local', 'Forms');
   render();
 }
 
