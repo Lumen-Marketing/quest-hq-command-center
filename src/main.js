@@ -11492,19 +11492,24 @@ function renderFormEditorTabs(form, mode) {
   const responses = responsesForForm(form.id);
   return `
     <div class="gform-editor-tabs panel" role="tablist" aria-label="Form editor sections">
-      <div>
+      <div class="gform-editor-summary">
         <strong>${h(form.title)}</strong>
         <span>${h(form.status)} / ${formQuestionCount(form)} questions / ${responses.length} responses</span>
       </div>
-      ${['questions', 'responses', 'settings'].map((tab) => `
-        <button class="${mode === tab ? 'active' : ''}" type="button" data-action="set-form-editor-tab" data-tab="${h(tab)}">
-          ${tab === 'questions' ? '<i class="ti ti-list-details"></i>' : tab === 'responses' ? '<i class="ti ti-inbox"></i>' : '<i class="ti ti-settings"></i>'}
-          ${h(titleCase(tab))}
-        </button>
-      `).join('')}
-      <button class="btn" type="button" data-action="open-form-preview" data-form-id="${h(form.id)}"><i class="ti ti-eye"></i>Preview</button>
-      <button class="btn" type="button" data-action="open-form-actions" data-form-id="${h(form.id)}"><i class="ti ti-share"></i>Share</button>
-      <button class="btn btn-primary" type="button" data-action="save-form" data-form-id="${h(form.id)}">Save</button>
+      <div class="gform-editor-tab-group">
+        ${['questions', 'responses', 'settings'].map((tab) => `
+          <button class="${mode === tab ? 'active' : ''}" type="button" data-action="set-form-editor-tab" data-tab="${h(tab)}">
+            ${tab === 'questions' ? '<i class="ti ti-list-details"></i>' : tab === 'responses' ? '<i class="ti ti-inbox"></i>' : '<i class="ti ti-settings"></i>'}
+            ${h(titleCase(tab))}
+          </button>
+        `).join('')}
+      </div>
+      <div class="gform-editor-actions">
+        <button class="btn" type="button" data-action="open-form-preview" data-form-id="${h(form.id)}"><i class="ti ti-eye"></i>Preview</button>
+        <button class="btn" type="button" data-action="open-form-actions" data-form-id="${h(form.id)}"><i class="ti ti-share"></i>Share</button>
+        <button class="btn" type="button" data-action="publish-form" data-form-id="${h(form.id)}"><i class="ti ti-world-upload"></i>Publish</button>
+        <button class="btn btn-primary" type="button" data-action="save-form" data-form-id="${h(form.id)}">Save</button>
+      </div>
     </div>
   `;
 }
@@ -11521,11 +11526,6 @@ function renderFormIdentityPanel(companyId, form) {
         <span>${h(form.audience || 'Internal')}</span>
         <span>${h(jobById(form.linked_job_id)?.name || 'Company level')}</span>
         <span>${h(companyName(companyId))}</span>
-      </div>
-      <div class="form-actions">
-        <button class="btn" type="button" data-action="set-form-editor-tab" data-tab="settings">Settings</button>
-        <button class="btn" type="button" data-action="open-form-preview" data-form-id="${h(form.id)}">Preview</button>
-        <button class="btn" type="button" data-action="publish-form" data-form-id="${h(form.id)}">Publish</button>
       </div>
     </article>
   `;

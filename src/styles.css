@@ -6248,10 +6248,26 @@ input[type="file"]::file-selector-button:active {
 .gform-editor-tabs.panel {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) repeat(3, auto) auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   padding: 10px;
+}
+
+.gform-editor-summary {
+  min-width: 0;
+}
+
+.gform-editor-tab-group,
+.gform-editor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.gform-editor-actions {
+  justify-self: end;
 }
 
 .gform-editor-tabs strong,
@@ -8219,8 +8235,32 @@ button.side-item {
   position: sticky;
   top: 0;
   z-index: 3;
-  grid-template-columns: minmax(220px, 1fr) repeat(3, auto) auto auto auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 12px;
+  padding: 12px;
   box-shadow: 0 10px 24px rgba(33, 31, 27, .04);
+}
+
+.gform-editor-tab-group {
+  justify-self: center;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.gform-editor-tab-group .active {
+  box-shadow: 0 6px 14px rgba(245, 93, 34, .12);
+}
+
+.gform-editor-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.gform-editor-actions .btn {
+  min-height: 38px;
+  padding-inline: 13px;
 }
 
 .gform-title-card,
@@ -8242,6 +8282,18 @@ button.side-item {
   position: relative;
   overflow: hidden;
   padding-top: 24px;
+}
+
+.gform-title-card .forms-simple-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.gform-title-card .forms-simple-meta span {
+  border-color: var(--border);
+  background: var(--surface-2);
 }
 
 .gform-accent-strip {
@@ -10505,6 +10557,18 @@ button.side-item {
   .gform-editor-tabs.panel {
     position: static;
     grid-template-columns: 1fr;
+  }
+
+  .gform-editor-tab-group,
+  .gform-editor-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .gform-editor-tab-group {
+    border-radius: 8px;
   }
 
   .gform-editor-tabs button,
