@@ -34,6 +34,16 @@ test('dashboard uses the team operating dashboard widgets', () => {
   assert.doesNotMatch(source, /Company access'[\s\S]*Workspace health'[\s\S]*Access control'/);
 });
 
+test('dashboard all activity opens the activity feed instead of analytics', () => {
+  assert.match(source, /data-action="open-dashboard-activity"/);
+  assert.match(source, /function renderDashboardActivityModal\(companyId\)/);
+  assert.match(source, /function dashboardActivityItems\(companyId, limit = 0\)/);
+  assert.match(source, /state\.modal === 'dashboard-activity'/);
+  const dashboardSource = source.match(/function renderCompanyDashboard\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.doesNotMatch(dashboardSource, /All activity<\/a>/);
+  assert.doesNotMatch(dashboardSource, /companyPath\('analytics', \{\}, companyId\)/);
+});
+
 test('dashboard restores customizable handoff framework controls', () => {
   assert.match(source, /const DASHBOARD_WIDGET_GROUPS = \[/);
   assert.match(source, /const DASHBOARD_WIDGET_DEFAULTS = \{/);

@@ -4706,11 +4706,9 @@ function renderCompanyAccessDeniedPage(companyId) {
 
 function renderCompanyDashboard(companyId) {
   const messagesModule = moduleById('messages');
-  const reportingModule = moduleById('analytics');
   const showMessages = messagesModule && canViewModule(messagesModule, companyId);
-  const showReporting = reportingModule && canViewModule(reportingModule, companyId);
   const unreadMessages = showMessages ? companyMessageUnreadCount(companyId) : 0;
-  const recentActivity = homeRecentActivity(companyId, companyNotifications(companyId).slice(0, 4));
+  const recentActivity = dashboardActivityItems(companyId, 5);
   const roleViews = dashboardVisibleRoleViews(companyId);
   const role = roleViews.some(([id]) => id === state.dashboardRole) ? state.dashboardRole : roleViews[0]?.[0] || 'exec';
   state.dashboardRole = role;
@@ -4781,7 +4779,7 @@ function renderCompanyDashboard(companyId) {
         <article class="panel home-activity-panel">
           <div class="section-head">
             <div><h2>Recent activity</h2><p>Latest company work and inbox events.</p></div>
-            ${showReporting ? `<a class="btn" href="${appHref(companyPath('analytics', {}, companyId))}" data-router>All activity</a>` : ''}
+            <button class="btn" type="button" data-action="open-dashboard-activity">All activity</button>
           </div>
           <div class="home-activity-list">
             ${recentActivity.map(renderHomeActivity).join('') || emptyState('No recent activity yet.')}
@@ -5358,8 +5356,8 @@ function homeShortcut(section, symbol, label, count, companyId) {
   `;
 }
 
-function homeRecentActivity(companyId, notifications = []) {
-  const notificationItems = notifications.map((item) => ({
+function dashboardActivityItems(companyId, limit = 0) {
+  const notificationItems = companyNotifications(companyId).map((item) => ({
     icon: 'ti-bell',
     title: item.body || item.title,
     meta: notificationTypeLabel(item.type),
@@ -5367,7 +5365,7 @@ function homeRecentActivity(companyId, notifications = []) {
     href: item.href || companyPath('dashboard', {}, companyId),
     avatar: activeSession().profile,
   }));
-  const taskItems = companyTasks(companyId).slice(0, 3).map((task) => ({
+  const taskItems = companyTasks(companyId).map((task) => ({
     icon: 'ti-circle-check',
     title: `${task.title} was updated`,
     meta: 'Tasks',
@@ -5375,7 +5373,7 @@ function homeRecentActivity(companyId, notifications = []) {
     href: companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id }, companyId),
     avatar: { full_name: memberName(task.assignee_id) },
   }));
-  const fileItems = can('files.view', companyId) ? companyFiles(companyId).slice(0, 2).map((file) => ({
+  const fileItems = can('files.view', companyId) ? companyFiles(companyId).map((file) => ({
     icon: 'ti-folder',
     title: `${file.name} was uploaded`,
     meta: 'Files',
@@ -5383,9 +5381,9 @@ function homeRecentActivity(companyId, notifications = []) {
     href: companyPath('files', file.job_id ? { job_id: file.job_id } : {}, companyId),
     avatar: { full_name: memberName(file.owner_id || file.created_by) },
   })) : [];
-  return notificationItems.concat(taskItems, fileItems)
-    .sort((a, b) => Date.parse(b.time || 0) - Date.parse(a.time || 0))
-    .slice(0, 5);
+  const items = notificationItems.concat(taskItems, fileItems)
+    .sort((a, b) => Date.parse(b.time || 0) - Date.parse(a.time || 0));
+  return limit ? items.slice(0, limit) : items;
 }
 
 function renderHomeActivity(item) {
@@ -5397,6 +5395,15 @@ function renderHomeActivity(item) {
       <em>${h(timeAgo(item.time))}</em>
     </a>
   `;
+}
+
+function renderDashboardActivityModal(companyId) {
+  const items = dashboardActivityItems(companyId, 50);
+  return renderModalShell('Dashboard', 'All activity', `
+    <div class="home-activity-list dashboard-activity-modal-list">
+      ${items.map(renderHomeActivity).join('') || emptyState('No activity yet.')}
+    </div>
+  `, '<button class="btn" type="button" data-action="close-modal">Close</button>');
 }
 
 function homeUnreadMessages(companyId) {
@@ -14055,6 +14062,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'workspace-icon') return renderWorkspaceIconModal(activeCompanyId());
   if (state.modal === 'dashboard-widget-library') return renderDashboardWidgetLibraryModal(activeCompanyId());
   if (state.modal === 'dashboard-view-manager') return renderDashboardViewManagerModal(activeCompanyId());
+  if (state.modal === 'dashboard-activity') return renderDashboardActivityModal(activeCompanyId());
   if (state.modal === 'file-upload') return renderFileUploadModal();
   if (state.modal === 'client-portal-form') return renderClientPortalFormModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
   if (state.modal === 'client-portal-document') return renderClientPortalDocumentModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
@@ -15531,6 +15539,12 @@ function handleAction(event, node) {
   if (action === 'dashboard-range') {
     event.preventDefault();
     state.dashboardRange = DASHBOARD_RANGE_OPTIONS.some(([id]) => id === node.dataset.range) ? node.dataset.range : 'week';
+    render();
+    return;
+  }
+  if (action === 'open-dashboard-activity') {
+    event.preventDefault();
+    state.modal = 'dashboard-activity';
     render();
     return;
   }
