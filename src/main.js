@@ -11424,7 +11424,7 @@ function renderFormsLibrary(companyId, forms, current) {
         </div>
         <div class="forms-list forms-list-cards">
           ${forms.map((form) => `
-            <article class="form-card ${state.expandedFormIds.has(form.id) ? 'expanded' : ''} ${current?.id === form.id ? 'active' : ''}">
+            <article class="form-card ${state.expandedFormIds.has(form.id) ? 'expanded' : ''} ${current?.id === form.id ? 'active' : ''}" role="button" tabindex="0" data-action="toggle-form-card" data-card-action="toggle-form-card" data-form-id="${h(form.id)}" aria-expanded="${state.expandedFormIds.has(form.id) ? 'true' : 'false'}">
               <span class="form-card-top">
                 <i class="ti ti-clipboard-list"></i>
               </span>
@@ -17108,6 +17108,7 @@ function handleAction(event, node) {
   }
   if (action === 'toggle-form-card') {
     event.preventDefault();
+    if (node.dataset.cardAction && shouldIgnoreCardToggle(event.target)) return;
     const id = node.dataset.formId || '';
     if (state.expandedFormIds.has(id)) state.expandedFormIds.delete(id);
     else state.expandedFormIds.add(id);
@@ -28332,6 +28333,10 @@ function selectFormResponse(id) {
   state.selectedFormResponseId = response.id;
   state.selectedFormId = response.form_id || state.selectedFormId;
   render();
+}
+
+function shouldIgnoreCardToggle(target) {
+  return Boolean(target?.closest?.('button, a, input, textarea, select, label, [data-action]:not([data-card-action])'));
 }
 
 function saveFormsState(label = 'Forms saved', options = {}) {

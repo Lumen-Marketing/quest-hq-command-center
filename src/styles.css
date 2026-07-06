@@ -6086,6 +6086,10 @@ input[type="file"]::file-selector-button:active {
   text-align: left;
 }
 
+.form-card[role="button"] {
+  cursor: pointer;
+}
+
 .form-card.expanded {
   align-items: start;
 }
@@ -6107,9 +6111,15 @@ input[type="file"]::file-selector-button:active {
 }
 
 .form-card:hover,
-.form-card.active {
+.form-card.active,
+.form-card:focus-visible {
   border-color: var(--amber);
   background: #fff8e7;
+}
+
+.form-card:focus-visible {
+  outline: 3px solid rgba(244, 93, 34, .18);
+  outline-offset: 2px;
 }
 
 .form-card strong,
