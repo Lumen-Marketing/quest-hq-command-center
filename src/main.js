@@ -2084,6 +2084,7 @@ const state = {
   clientPortalAnnotations: readSeededList(CLIENT_PORTAL_ANNOTATION_CACHE_KEY, []).map(normalizeClientPortalAnnotation),
   clientPortalEvents: readSeededList(CLIENT_PORTAL_EVENT_CACHE_KEY, []).map(normalizeClientPortalEvent),
   clientPortalPublic: readJson(CLIENT_PORTAL_SESSION_KEY, null),
+  publicForm: null,
   clientPortalAnnotate: null,
   clientPortalTool: 'pan',
   clientPortalColor: '#E8611A',
@@ -2176,6 +2177,7 @@ const state = {
   selectedTaskId: '',
   selectedFileId: '',
   selectedFormId: '',
+  selectedFormResponseId: '',
   selectedClientPortalId: '',
   selectedQuestionId: '',
   selectedFinanceInvoiceId: '',
@@ -2439,6 +2441,18 @@ function render() {
     queueMicrotask(() => {
       ensureProposalPublicOpen(state.route.token).catch((error) => {
         state.proposalPublic = { token: state.route.token || '', error: error.message || 'Could not open proposal.' };
+        render();
+      });
+    });
+    return;
+  }
+
+  if (state.route.name === 'form-public') {
+    document.title = 'Form | Quest HQ';
+    app.innerHTML = renderPublicFormPage(state.route);
+    queueMicrotask(() => {
+      ensurePublicFormOpen(state.route.token).catch((error) => {
+        state.publicForm = { formId: state.route.token || '', error: error.message || 'Could not open form.' };
         render();
       });
     });
@@ -2738,7 +2752,7 @@ function bindGoogleAddressInputs() {
 }
 
 function shouldHoldCompanyRouteForLiveData(route) {
-  return !!route && route.name !== 'home' && route.name !== 'login' && route.name !== 'client-portal' && route.name !== 'proposal-public' && state.session?.auth === 'supabase' && !state.dataLoaded;
+  return !!route && route.name !== 'home' && route.name !== 'login' && route.name !== 'client-portal' && route.name !== 'proposal-public' && route.name !== 'form-public' && state.session?.auth === 'supabase' && !state.dataLoaded;
 }
 
 function renderWorkspaceLoading(route) {
@@ -2829,7 +2843,7 @@ function renderNoCompanyAccess() {
 
 function needsLocalLogin(route) {
   if (!CONFIG.questAuthEnabled && !CONFIG.localLoginEnabled) return false;
-  if (route.name === 'login' || route.name === 'home' || route.name === 'proposal-public') return false;
+  if (route.name === 'login' || route.name === 'home' || route.name === 'proposal-public' || route.name === 'form-public') return false;
   return !state.session;
 }
 
@@ -11365,6 +11379,9 @@ function renderInviteFormModal(companyId) {
 }
 
 function renderFormsPage(companyId) {
+  const routeTab = state.route?.params?.get('tab');
+  if (routeTab === 'responses') state.formsTab = 'responses';
+  if (routeTab === 'library') state.formsTab = 'library';
   const forms = filteredForms(companyId);
   const current = selectedForm(companyId);
   const activeTab = state.formsTab === 'builder' && current ? 'builder' : state.formsTab === 'responses' ? 'responses' : 'library';
@@ -11430,6 +11447,7 @@ function renderFormsLibrary(companyId, forms, current) {
                   <div class="form-actions">
                     <button class="btn btn-primary" type="button" data-action="edit-form" data-form-id="${h(form.id)}"><i class="ti ti-pencil"></i>Open builder</button>
                     <button class="btn" type="button" data-action="open-form-preview" data-form-id="${h(form.id)}"><i class="ti ti-eye"></i>Preview</button>
+                    <button class="btn" type="button" data-action="copy-form-link" data-form-id="${h(form.id)}"><i class="ti ti-link"></i>Copy public link</button>
                   </div>
                 </div>
               ` : ''}
@@ -11552,7 +11570,7 @@ function renderFormSettingsEditor(companyId, form) {
 
 function renderFormResponseEditor(companyId, form) {
   const responses = responsesForForm(form.id);
-  const selected = responses[0] || null;
+  const selected = selectedFormResponse(responses);
   return `
     <article class="panel response-list-panel forms-response-editor">
       <div class="section-head">
@@ -11561,7 +11579,7 @@ function renderFormResponseEditor(companyId, form) {
       </div>
       <div class="response-list">
         ${responses.map((response) => `
-          <button type="button" class="response-card">
+          <button type="button" class="response-card ${selected?.id === response.id ? 'active' : ''}" data-action="select-form-response" data-response-id="${h(response.id)}">
             <strong>${h(response.submitted_by || response.submitter_email || 'Anonymous')}</strong>
             <span>${h(form.title)}</span>
             <small>${formatDate(response.created_at)}</small>
@@ -11647,14 +11665,14 @@ function renderPreviewQuestion(question) {
 
 function renderFormsResponses(companyId, form) {
   const responses = form ? responsesForForm(form.id) : companyFormResponses(companyId);
-  const selected = responses[0] || null;
+  const selected = selectedFormResponse(responses);
   return `
     <section class="forms-response-grid">
       <article class="panel response-list-panel">
         <div class="section-head"><div><h2>Responses</h2><p>${responses.length} response${responses.length === 1 ? '' : 's'}</p></div></div>
         <div class="response-list">
           ${responses.map((response) => `
-            <button type="button" class="response-card">
+            <button type="button" class="response-card ${selected?.id === response.id ? 'active' : ''}" data-action="select-form-response" data-response-id="${h(response.id)}">
               <strong>${h(formById(response.form_id)?.title || 'Unknown form')}</strong>
               <span>${h(response.submitted_by || response.submitter_email || 'Anonymous')}</span>
               <small>${formatDate(response.created_at)}</small>
@@ -11667,6 +11685,99 @@ function renderFormsResponses(companyId, form) {
       </aside>
     </section>
   `;
+}
+
+function renderPublicFormPage(route) {
+  const formId = route.token || '';
+  const current = state.publicForm;
+  const form = current?.formId === formId ? current.form : null;
+  const company = current?.company || {};
+  if (current?.formId === formId && current.submitted) {
+    return `
+      <main class="form-public-shell">
+        <section class="form-public-card complete">
+          <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Form')}</span><span><strong>Quest Forms</strong><small>${h(company.name || 'Submission received')}</small></span></div>
+          <h1>Thanks, we received it.</h1>
+          <p>Your response was sent to the workspace team.</p>
+        </section>
+      </main>
+    `;
+  }
+  if (!form) {
+    return `
+      <main class="form-public-shell">
+        <section class="form-public-card ${current?.loading ? 'loading' : ''}">
+          <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Form')}</span><span><strong>Quest Forms</strong><small>Secure response</small></span></div>
+          <h1>${current?.error ? 'Could not open form' : 'Opening form'}</h1>
+          <p>${current?.error ? 'This form link is unavailable or no longer published.' : 'Checking this public form link.'}</p>
+          ${current?.error ? `<div class="form-message error">${h(current.error)}</div>` : '<div class="client-portal-status">Opening...</div>'}
+        </section>
+      </main>
+    `;
+  }
+  return `
+    <main class="form-public-shell">
+      <form class="form-public-card response-form" data-public-form-response data-form-id="${h(form.id)}" style="--form-accent:${h(form.theme_color || company.color || '#f45d22')}">
+        <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Form')}</span><span><strong>${h(company.name || 'Quest Forms')}</strong><small>${h(form.audience || 'Response')}</small></span></div>
+        <div class="designed-form-header">
+          <span>${h(company.name || 'Quest HQ')}</span>
+          <h1>${h(form.title)}</h1>
+          <p>${h(form.description || 'Complete this form and send it to the workspace team.')}</p>
+        </div>
+        ${form.collect_email ? `<label><span>Email</span><input name="submitter_email" type="email" placeholder="name@example.com" /></label>` : ''}
+        ${form.questions.map((question) => renderPreviewQuestion(question)).join('') || emptyState('This form has no questions yet.')}
+        ${current?.error ? `<div class="form-message error">${h(current.error)}</div>` : ''}
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">${h(form.submit_label || 'Submit')}</button>
+        </div>
+      </form>
+    </main>
+  `;
+}
+
+async function ensurePublicFormOpen(formId) {
+  if (!formId) throw new Error('Missing form link.');
+  if (state.publicForm?.formId === formId && (state.publicForm.form || state.publicForm.error || state.publicForm.loading)) return state.publicForm;
+  const local = formById(formId);
+  if (local && local.status === 'Published') {
+    state.publicForm = { formId, form: local, company: companyById(local.company_id) || { name: companyName(local.company_id) } };
+    render();
+    return state.publicForm;
+  }
+  state.publicForm = { formId, loading: true };
+  render();
+  const response = await fetch('/api/public-form-open?form_id=' + encodeURIComponent(formId));
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Could not open form.');
+  state.publicForm = {
+    formId,
+    form: normalizeForm(payload.form || {}),
+    company: payload.company || {},
+  };
+  render();
+  return state.publicForm;
+}
+
+async function submitPublicFormResponse(formEl) {
+  const formId = formEl.dataset.formId || state.publicForm?.form?.id || '';
+  const form = state.publicForm?.form?.id === formId ? state.publicForm.form : null;
+  if (!form) throw new Error('Form is not loaded.');
+  const data = new FormData(formEl);
+  const answers = await collectFormAnswers(form, data);
+  const response = await fetch('/api/public-form-submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      form_id: form.id,
+      submitter_email: String(data.get('submitter_email') || ''),
+      submitted_by: String(data.get('submitter_email') || 'Public respondent'),
+      answers,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Could not submit this response.');
+  state.publicForm = { ...state.publicForm, submitted: true, response: payload.response };
+  render();
 }
 
 // ===========================================================================
@@ -15334,8 +15445,8 @@ function renderFormActionsModal(companyId, form) {
   if (!form) return renderModalShell('Forms', 'Manage form', emptyState('Choose a form first.'));
   return renderModalShell('Forms', 'Manage form', `
     <div class="forms-summary-share compact">
-      <strong>Shareable preview URL</strong>
-      <input readonly value="${h(`${window.location.origin}${appHref(companyPath('forms', { form_id: form.id }, companyId))}`)}" />
+      <strong>Public form link</strong>
+      <input readonly value="${h(formPublicLink(form))}" />
       <button class="btn" type="button" data-action="copy-form-link" data-form-id="${h(form.id)}">Copy link</button>
     </div>
     <div class="modal-action-grid">
@@ -17047,6 +17158,26 @@ function handleAction(event, node) {
     copyFormLink(node.dataset.formId);
     return;
   }
+  if (action === 'select-form-response') {
+    event.preventDefault();
+    selectFormResponse(node.dataset.responseId || '');
+    return;
+  }
+  if (action === 'response-create-contact') {
+    event.preventDefault();
+    createContactFromFormResponse(node.dataset.responseId || '').catch((error) => showToast(error.message || 'Could not create contact.', 'local', 'Forms'));
+    return;
+  }
+  if (action === 'response-create-job') {
+    event.preventDefault();
+    createJobFromFormResponse(node.dataset.responseId || '').catch((error) => showToast(error.message || 'Could not create job.', 'local', 'Forms'));
+    return;
+  }
+  if (action === 'response-create-task') {
+    event.preventDefault();
+    createTaskFromFormResponse(node.dataset.responseId || '').catch((error) => showToast(error.message || 'Could not create task.', 'local', 'Forms'));
+    return;
+  }
   if (action === 'export-forms') {
     event.preventDefault();
     exportForms(activeCompanyId());
@@ -17633,6 +17764,15 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-user-role-form]')) {
     event.preventDefault();
     saveUserAccess(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-public-form-response]')) {
+    event.preventDefault();
+    submitPublicFormResponse(event.target).catch((error) => {
+      state.publicForm = { ...(state.publicForm || {}), error: error.message || 'Form response failed.' };
+      render();
+    });
     return;
   }
 
@@ -21805,6 +21945,7 @@ function getRoute() {
   const params = new URLSearchParams(window.location.search);
   if (path.startsWith('/portal/')) return { name: 'client-portal', path, params, section: 'client-portal', companyId: '', token: decodeURIComponent(path.replace(/^\/portal\//, '')), jobId: '' };
   if (path.startsWith('/proposal/')) return { name: 'proposal-public', path, params, section: 'proposal-public', companyId: '', token: decodeURIComponent(path.replace(/^\/proposal\//, '')), jobId: '' };
+  if (path.startsWith('/form/')) return { name: 'form-public', path, params, section: 'form-public', companyId: '', token: decodeURIComponent(path.replace(/^\/form\//, '')), jobId: '' };
   if (path === '/login') return { name: 'login', path, params, section: '', companyId: '', jobId: '' };
   if (path === '/') return { name: 'home', path, params, section: '', companyId: '', jobId: '' };
   if (path === '/command') return { name: 'command', path, params, section: 'dashboard', companyId: activeCompanyId(), jobId: params.get('job_id') || '' };
@@ -24523,6 +24664,7 @@ function isMutableAction(action = '') {
     'set-forms-tab',
     'set-form-editor-tab',
     'select-form',
+    'select-form-response',
     'toggle-form-card',
     'copy-form-link',
     'copy-client-portal-link',
@@ -24555,6 +24697,9 @@ function isMutableAction(action = '') {
     'contact-quick',
     'contact-mark-next',
     'contact-convert-quote',
+    'response-create-contact',
+    'response-create-job',
+    'response-create-task',
     'set-job-stage',
     'job-mark-next',
     'job-quick',
@@ -24569,6 +24714,7 @@ function isMutableAction(action = '') {
 function isMutableFormSubmit(formNode) {
   if (!formNode || !formNode.matches('form')) return false;
   if (formNode.matches('[data-login-form], [data-auth-sign-in-form], [data-auth-register-form], [data-auth-invite-code-form], [data-auth-request-form]')) return false;
+  if (formNode.matches('[data-public-form-response], [data-proposal-public-form], [data-client-portal-open-form]')) return false;
   return Object.keys(formNode.dataset || {}).some((key) => key.toLowerCase().includes('form'));
 }
 
@@ -27869,6 +28015,19 @@ function responsesForForm(formId) {
   return state.formResponses.filter((response) => response.form_id === formId);
 }
 
+function selectedFormResponse(responses) {
+  const rows = Array.isArray(responses) ? responses : [];
+  const routeResponseId = state.route?.params?.get('response_id') || '';
+  if (routeResponseId && rows.some((response) => response.id === routeResponseId)) state.selectedFormResponseId = routeResponseId;
+  if (!rows.length) {
+    state.selectedFormResponseId = '';
+    return null;
+  }
+  const selected = rows.find((response) => response.id === state.selectedFormResponseId) || rows[0];
+  state.selectedFormResponseId = selected.id;
+  return selected;
+}
+
 function formQuestionCount(form) {
   return Array.isArray(form?.questions) ? form.questions.length : 0;
 }
@@ -27931,18 +28090,52 @@ function previewWrap(question, control) {
   `;
 }
 
+function formFileAnswerMeta(file) {
+  const dataUrl = arguments.length > 1 ? arguments[1] : '';
+  return {
+    kind: 'file',
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    lastModified: file.lastModified,
+    data_url: dataUrl,
+  };
+}
+
+function renderFormAnswerValue(value) {
+  if (Array.isArray(value)) return value.map(renderFormAnswerValue).join('');
+  if (value && typeof value === 'object' && value.kind === 'file') {
+    const meta = `${value.type || 'File'}${value.size ? ` / ${formatBytes(value.size)}` : ''}`;
+    const content = `<i class="ti ti-paperclip"></i><span><strong>${h(value.name || 'Uploaded file')}</strong><small>${h(meta)}</small></span>`;
+    return value.data_url
+      ? `<a class="form-file-answer" href="${h(value.data_url)}" download="${h(value.name || 'form-upload')}" target="_blank" rel="noreferrer">${content}</a>`
+      : `<span class="form-file-answer">${content}</span>`;
+  }
+  return h(String(value || 'No answer'));
+}
+
 function renderResponseDetail(response) {
   const form = formById(response.form_id);
   const answerRows = Object.entries(response.answers || {}).map(([questionId, value]) => {
     const question = form?.questions.find((item) => item.id === questionId);
-    const printable = Array.isArray(value) ? value.join(', ') : value;
-    return detailRow(question?.label || questionId, printable || 'No answer');
+    return `<div><strong>${h(question?.label || questionId)}</strong><span>${renderFormAnswerValue(value) || 'No answer'}</span></div>`;
   }).join('');
   return `
     <div class="response-detail-head">
       <div><h2>${h(form?.title || 'Response')}</h2><p>${h(response.submitted_by || response.submitter_email || 'Anonymous')} / ${formatDate(response.created_at)}</p></div>
     </div>
+    ${renderResponseActions(response)}
     <div class="file-detail-list">${answerRows || detailRow('Response', 'No answers captured.')}</div>
+  `;
+}
+
+function renderResponseActions(response) {
+  return `
+    <div class="response-actions">
+      <button class="btn btn-primary" type="button" data-action="response-create-contact" data-response-id="${h(response.id)}"><i class="ti ti-id-badge-2"></i>Create contact</button>
+      <button class="btn" type="button" data-action="response-create-job" data-response-id="${h(response.id)}"><i class="ti ti-hammer"></i>Create job</button>
+      <button class="btn" type="button" data-action="response-create-task" data-response-id="${h(response.id)}"><i class="ti ti-checkbox"></i>Create task</button>
+    </div>
   `;
 }
 
@@ -28127,7 +28320,16 @@ function selectForm(id, shouldRender = true) {
   if (!form) return;
   state.selectedFormId = form.id;
   state.selectedQuestionId = form.questions[0]?.id || '';
+  state.selectedFormResponseId = responsesForForm(form.id)[0]?.id || '';
   if (shouldRender) render();
+}
+
+function selectFormResponse(id) {
+  const response = state.formResponses.find((item) => item.id === id);
+  if (!response) return;
+  state.selectedFormResponseId = response.id;
+  state.selectedFormId = response.form_id || state.selectedFormId;
+  render();
 }
 
 function saveFormsState(label = 'Forms saved') {
@@ -28201,11 +28403,20 @@ async function deleteForm(id) {
 }
 
 async function copyFormLink(id) {
+  return copyFormPublicLink(id);
+}
+
+function formPublicLink(form) {
+  const formId = typeof form === 'string' ? form : form?.id;
+  return `${window.location.origin}${appHref(`/form/${encodeURIComponent(formId)}`)}`;
+}
+
+async function copyFormPublicLink(id) {
   const formId = id || state.selectedFormId;
-  const url = `${window.location.origin}${appHref(companyPath('forms', { form_id: formId }, activeCompanyId()))}`;
+  const url = formPublicLink(formId);
   try {
     await navigator.clipboard.writeText(url);
-    state.sync = { label: 'Form link copied', mode: 'live' };
+    state.sync = { label: 'Public form link copied', mode: 'live' };
   } catch {
     state.sync = { label: 'Copy failed', mode: 'local' };
   }
@@ -28330,12 +28541,7 @@ async function saveFormResponse(formEl) {
   const form = formById(formEl.dataset.formId);
   if (!form) return;
   const data = new FormData(formEl);
-  const answers = {};
-  form.questions.forEach((question) => {
-    const key = `answer:${question.id}`;
-    const values = data.getAll(key).filter((value) => value instanceof File ? value.name : String(value || '').trim());
-    answers[question.id] = values.length > 1 ? values.map((value) => value instanceof File ? value.name : value) : (values[0] instanceof File ? values[0].name : values[0] || '');
-  });
+  const answers = await collectFormAnswers(form, data);
   const response = normalizeFormResponse({
     company_id: form.company_id,
     form_id: form.id,
@@ -28360,6 +28566,134 @@ async function saveFormResponse(formEl) {
     form.company_id,
   );
   render();
+}
+
+async function collectFormAnswers(form, data) {
+  const answers = {};
+  for (const question of form.questions) {
+    const key = `answer:${question.id}`;
+    const values = data.getAll(key).filter((value) => value instanceof File ? value.name : String(value || '').trim());
+    const normalized = [];
+    for (const value of values) {
+      if (value instanceof File) normalized.push(formFileAnswerMeta(value, value.size <= 2 * 1024 * 1024 ? await fileToDataUrl(value) : ''));
+      else normalized.push(String(value || '').trim());
+    }
+    answers[question.id] = normalized.length > 1 ? normalized : (normalized[0] || '');
+  }
+  return answers;
+}
+
+function responseById(id) {
+  return state.formResponses.find((response) => response.id === id) || null;
+}
+
+function responseAnswerText(response, patterns) {
+  const form = formById(response.form_id);
+  const matchers = patterns.map((pattern) => pattern instanceof RegExp ? pattern : new RegExp(pattern, 'i'));
+  for (const [questionId, value] of Object.entries(response.answers || {})) {
+    const question = form?.questions.find((item) => item.id === questionId);
+    const label = question?.label || questionId;
+    if (!matchers.some((pattern) => pattern.test(label))) continue;
+    const flattened = Array.isArray(value) ? value : [value];
+    const text = flattened
+      .filter((item) => !(item && typeof item === 'object' && item.kind === 'file'))
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .join(', ');
+    if (text) return text;
+  }
+  return '';
+}
+
+function responseSummary(response) {
+  const form = formById(response.form_id);
+  const firstAnswer = Object.values(response.answers || {}).flat?.().find((value) => String(value || '').trim()) || '';
+  return {
+    form,
+    name: responseAnswerText(response, [/name|client|customer|contact/i]) || response.submitted_by || response.submitter_email || 'Form respondent',
+    email: response.submitter_email || responseAnswerText(response, [/email/i]),
+    phone: responseAnswerText(response, [/phone|mobile|cell/i]),
+    location: responseAnswerText(response, [/address|location|site/i]),
+    jobType: responseAnswerText(response, [/job type|service|request|work/i]) || form?.type || 'Form request',
+    title: responseAnswerText(response, [/title|request|subject|project/i]) || form?.title || 'Form response',
+    notes: responseAnswerText(response, [/detail|note|scope|description|message/i]) || String(firstAnswer || ''),
+  };
+}
+
+async function createContactFromFormResponse(responseId) {
+  const response = responseById(responseId);
+  if (!response) return showToast('Response not found.', 'local', 'Forms');
+  if (!requirePermission('crm.view', response.company_id, 'Your role cannot create CRM records.', 'Forms')) return;
+  const summary = responseSummary(response);
+  const contact = normalizeContact({
+    id: `contact-${crypto.randomUUID()}`,
+    company_id: response.company_id,
+    name: summary.name,
+    email: summary.email,
+    phone: summary.phone,
+    location: summary.location,
+    job_type: summary.jobType,
+    stage: contactStageNames()[0],
+    owner_name: actorName(),
+    source: 'Form',
+    notes: `Created from ${summary.form?.title || 'form'} response.\n${summary.notes}`.trim(),
+    value: 0,
+  });
+  await persistContact(contact);
+  await logActivity({ type: 'form', subject: `Form response converted to contact`, body: summary.notes, related_type: 'contact', related_id: contact.id, contact_id: contact.id, company_id: response.company_id });
+  navigate(companyPath('contacts', { contact_id: contact.id }, response.company_id));
+}
+
+async function createJobFromFormResponse(responseId) {
+  const response = responseById(responseId);
+  if (!response) return showToast('Response not found.', 'local', 'Forms');
+  if (!requirePermission('jobs.manage', response.company_id, 'Your role cannot create jobs.', 'Forms')) return;
+  const summary = responseSummary(response);
+  const job = normalizeJob({
+    ...blankJob(response.company_id),
+    id: crypto.randomUUID(),
+    company_id: response.company_id,
+    name: summary.title,
+    client_name: summary.name,
+    client_email: summary.email,
+    client_phone: summary.phone,
+    site_address: summary.location,
+    job_type: summary.jobType,
+    scope: summary.notes,
+    stage: jobStageNames()[0],
+    priority: 'Medium',
+    owner_name: actorName(),
+    updated_at: new Date().toISOString(),
+  });
+  await persistJob(job, 'Job created from form');
+  await logActivity({ type: 'form', subject: `Form response converted to job`, body: summary.notes, related_type: 'job', related_id: job.id, job_id: job.id, company_id: response.company_id });
+  navigate(companyPath('jobs', { tab: 'profile', job_id: job.id }, response.company_id));
+}
+
+async function createTaskFromFormResponse(responseId) {
+  const response = responseById(responseId);
+  if (!response) return showToast('Response not found.', 'local', 'Forms');
+  if (!requirePermission('tasks.manage', response.company_id, 'Your role cannot create tasks.', 'Forms')) return;
+  const summary = responseSummary(response);
+  const task = normalizeTask({
+    ...blankTask(response.company_id),
+    id: `task-${crypto.randomUUID()}`,
+    company_id: response.company_id,
+    title: `Review form: ${summary.form?.title || summary.title}`,
+    description: `${summary.name}${summary.email ? ` / ${summary.email}` : ''}\n${summary.notes}`.trim(),
+    due: isoDate(1),
+    priority: 'medium',
+    type: 'admin',
+    status: 'todo',
+  });
+  upsertTask(task);
+  const client = createSupabaseClient();
+  if (client) {
+    const result = await client.from('tasks').insert(taskPayload(task)).select().single();
+    if (!result.error && result.data) upsertTask(normalizeTask(result.data));
+  }
+  showToast('Task created from form response.', 'saved', 'Forms');
+  navigate(companyPath('tasks', { task_id: task.id }, response.company_id));
 }
 
 function downloadText(filename, text, type = 'text/plain') {

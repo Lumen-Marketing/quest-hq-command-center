@@ -6543,6 +6543,12 @@ input[type="file"]::file-selector-button:active {
   text-align: left;
 }
 
+.response-card:hover,
+.response-card.active {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 14%, transparent);
+}
+
 .response-card span,
 .response-card small {
   color: var(--muted);
@@ -6554,6 +6560,69 @@ input[type="file"]::file-selector-button:active {
   border-bottom: 1px solid var(--border);
   margin-bottom: 12px;
   padding-bottom: 12px;
+}
+
+.response-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+}
+
+.form-file-answer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 8px 10px;
+  text-decoration: none;
+}
+
+.form-file-answer span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.form-file-answer strong,
+.form-file-answer small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form-public-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: start center;
+  background: var(--app-bg);
+  padding: 36px 16px;
+}
+
+.form-public-card {
+  width: min(760px, 100%);
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.form-public-card.complete {
+  text-align: center;
+}
+
+.form-public-card .designed-form-header {
+  border-left: 4px solid var(--form-accent, var(--brand));
+  padding-left: 14px;
 }
 
 .analytics-workspace {
