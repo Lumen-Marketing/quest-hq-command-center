@@ -11385,10 +11385,12 @@ function renderFormsPage(companyId) {
   const forms = filteredForms(companyId);
   const current = selectedForm(companyId);
   const activeTab = state.formsTab === 'builder' && current ? 'builder' : state.formsTab === 'responses' ? 'responses' : 'library';
+  const formsSyncLabel = state.sync?.label || (isLiveSupabaseSession() ? 'Supabase live' : 'Local draft');
+  const formsSyncMode = state.sync?.mode || (isLiveSupabaseSession() ? 'live' : 'local');
   return `
     <section class="tool-page forms-center">
       <div class="forms-command panel">
-        <span class="sync-pill ${isLiveSupabaseSession() ? 'live' : 'local'}"><i class="ti ti-device-floppy"></i>${isLiveSupabaseSession() ? 'Supabase live' : 'Local draft'}</span>
+        <span class="sync-pill ${h(formsSyncMode)}"><i class="ti ti-device-floppy"></i>${h(formsSyncLabel)}</span>
         <label>
           <span>Search</span>
           <input data-form-search value="${h(state.formQuery)}" placeholder="Find form, audience, or job" />
@@ -17125,8 +17127,8 @@ function handleAction(event, node) {
   if (action === 'save-form') {
     event.preventDefault();
     if (!requirePermission('forms.manage', activeCompanyId(), 'Your role cannot edit forms.', 'Forms')) return;
-    saveFormsState('Form saved');
-    render();
+    if (node.dataset.formId) state.selectedFormId = node.dataset.formId;
+    saveFormsState('Form saved', { manual: true });
     return;
   }
   if (action === 'publish-form') {
@@ -28332,26 +28334,33 @@ function selectFormResponse(id) {
   render();
 }
 
-function saveFormsState(label = 'Forms saved') {
+function saveFormsState(label = 'Forms saved', options = {}) {
+  const manual = Boolean(options.manual);
   const form = selectedFormMutable();
   if (form) form.updated_at = new Date().toISOString();
   writeJson(FORM_CACHE_KEY, state.forms);
   writeJson(FORM_RESPONSE_CACHE_KEY, state.formResponses);
   if (!isLiveSupabaseSession() || !form) {
     state.sync = { label: `${label} locally`, mode: 'local' };
-    return;
+    if (manual) showToast(`${label} locally.`, 'local', 'Forms');
+    if (manual) render();
+    return Promise.resolve(form);
   }
   state.sync = { label: 'Saving form to Supabase...', mode: 'loading' };
-  persistFormRecord(form)
+  if (manual) render();
+  return persistFormRecord(form)
     .then((saved) => {
       if (saved) state.forms = [saved].concat(state.forms.filter((item) => item.id !== saved.id));
       state.sync = { label: `${label} in Supabase`, mode: 'live' };
+      if (manual) showToast(`${label} in Supabase.`, 'live', 'Forms');
       render();
+      return saved;
     })
     .catch((error) => {
       state.sync = { label: error.message || 'Form save failed', mode: 'local' };
       showToast(error.message || 'Form save failed.', 'local', 'Forms');
       render();
+      return null;
     });
 }
 
