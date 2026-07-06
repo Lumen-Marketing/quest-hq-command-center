@@ -22612,6 +22612,25 @@ function companyDriveFolders(companyId = activeCompanyId()) {
 }
 
 function companyMembers(companyId = activeCompanyId()) {
+  if (state.session?.auth === 'supabase') {
+    return state.memberships
+      .filter((membership) => membership.company_id === companyId && membership.status === 'active')
+      .map((membership) => {
+        const profile = profileById(membership.profile_id);
+        const member = membership.member_id ? state.teamMembers.find((item) => item.id === membership.member_id) : null;
+        const id = membership.profile_id || membership.member_id;
+        return normalizeTeamMember({
+          id,
+          name: profile?.full_name || member?.name || profile?.email || id,
+          full_name: profile?.full_name || member?.full_name || profile?.email || id,
+          email: profile?.email || member?.email || '',
+          avatar_url: profile?.avatar_url || member?.avatar_url || '',
+          active: membership.status === 'active',
+          company_ids: [companyId],
+        });
+      })
+      .filter((member) => member.id);
+  }
   return state.teamMembers.filter((member) => Array.isArray(member.company_ids) && member.company_ids.includes(companyId));
 }
 
@@ -25092,6 +25111,8 @@ function isQuestDeveloper() {
 }
 
 function memberName(id) {
+  const profile = profileById(id);
+  if (profile) return profile?.full_name || profile?.email || id || 'Unassigned';
   const member = state.teamMembers.find((item) => item.id === id);
   return member?.full_name || member?.name || id || 'Unassigned';
 }
