@@ -79,4 +79,4 @@ Expected: FAIL because Workday does not exist yet.
 - [x] **Step 1: Add Workday page, metric, queue, panel, and action-grid CSS**
 - [x] **Step 2: Run `node --test tests/*.mjs`**
 - [x] **Step 3: Run `npm run build`**
-- [ ] **Step 4: Deploy and run production smoke**
+- [x] **Step 4: Deploy and run production smoke**
