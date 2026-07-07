@@ -5803,12 +5803,58 @@ function workdayQueueItems(companyId = activeCompanyId()) {
 }
 
 function workdayMetricCard(label, value, detail, icon) {
+  const tone = workdayMetricTone(label, value);
   return `
-    <article class="workday-metric">
+    <article class="workday-metric ${h(tone)}">
       <span><i class="ti ${h(icon)}"></i></span>
       <div><strong>${h(String(value))}</strong><small>${h(label)}</small><em>${h(detail)}</em></div>
     </article>
   `;
+}
+
+function workdayMetricTone(label, value) {
+  const count = Number(value) || 0;
+  if (/overdue/i.test(label) && count > 0) return 'tone-critical';
+  if (/no next step|untouched/i.test(label) && count > 0) return 'tone-warning';
+  if (/form responses/i.test(label) && count > 0) return 'tone-info';
+  if (/calls|touched/i.test(label) && count > 0) return 'tone-success';
+  return 'tone-neutral';
+}
+
+function workdayStatusTone(status) {
+  const clean = String(status || '').toLowerCase();
+  if (clean.includes('needs')) return 'critical';
+  if (clean.includes('active')) return 'success';
+  if (clean.includes('watch')) return 'warning';
+  return 'neutral';
+}
+
+function workdayStatusIcon(status) {
+  const tone = workdayStatusTone(status);
+  if (tone === 'critical') return 'ti-alert-triangle';
+  if (tone === 'success') return 'ti-circle-check';
+  if (tone === 'warning') return 'ti-eye';
+  return 'ti-circle-dashed';
+}
+
+function workdayAlertTone(type) {
+  if (type === 'overdue') return 'critical';
+  if (type === 'no_next_step') return 'warning';
+  if (type === 'untouched') return 'info';
+  if (type === 'new_response') return 'success';
+  return 'neutral';
+}
+
+function workdayAlertIcon(type) {
+  if (type === 'overdue') return 'ti-alert-triangle';
+  if (type === 'no_next_step') return 'ti-route';
+  if (type === 'untouched') return 'ti-user-question';
+  if (type === 'new_response') return 'ti-clipboard-list';
+  return 'ti-bell';
+}
+
+function workdayFilterCount(alerts, filter) {
+  return filter === 'all' ? alerts.length : alerts.filter((alert) => alert.type === filter).length;
 }
 
 function renderWorkdayModeTabs() {
@@ -5891,6 +5937,16 @@ function renderWorkdayManagerView(companyId) {
         <section class="panel">
           <div class="section-head"><div><h2>Rep Visibility</h2><p>${rows.length} active workspace member${rows.length === 1 ? '' : 's'}</p></div></div>
           <div class="workday-rep-table">
+            ${rows.length ? `
+              <div class="workday-rep-head" aria-hidden="true">
+                <span>Rep</span>
+                <span>Calls</span>
+                <span>Touches</span>
+                <span>Tasks</span>
+                <span>Overdue</span>
+                <span>Last activity</span>
+              </div>
+            ` : ''}
             ${rows.map(renderWorkdayRepRow).join('') || emptyState('No team activity yet today.')}
           </div>
         </section>
@@ -5898,7 +5954,12 @@ function renderWorkdayManagerView(companyId) {
         <section class="panel">
           <div class="section-head"><div><h2>Needs Attention</h2><p>${visibleAlerts.length} alert${visibleAlerts.length === 1 ? '' : 's'}</p></div></div>
           <div class="workday-alert-filters">
-            ${filters.map(([id, label]) => `<button class="${filter === id ? 'active' : ''}" type="button" data-action="filter-workday-alerts" data-filter="${h(id)}">${h(label)}</button>`).join('')}
+            ${filters.map(([id, label]) => `
+              <button class="${filter === id ? 'active' : ''}" type="button" data-action="filter-workday-alerts" data-filter="${h(id)}">
+                <span>${h(label)}</span>
+                <strong class="workday-filter-count">${h(String(workdayFilterCount(alerts, id)))}</strong>
+              </button>
+            `).join('')}
           </div>
           <div class="workday-alert-list">
             ${visibleAlerts.map(renderWorkdayManagerAlert).join('') || emptyState('No manager alerts for this filter.')}
@@ -5910,41 +5971,52 @@ function renderWorkdayManagerView(companyId) {
 }
 
 function renderWorkdayRepRow(row) {
+  const tone = workdayStatusTone(row.status);
   return `
-    <button class="workday-rep-row ${state.selectedWorkdayManagerRepId === row.id ? 'active' : ''}" type="button" data-action="open-workday-rep" data-rep-id="${h(row.id)}">
-      <span><strong>${h(row.name)}</strong><small>${h(row.status)}</small></span>
-      <span>${h(String(row.callsToday))}<small>Calls</small></span>
-      <span>${h(String(row.touchesToday))}<small>Touches</small></span>
-      <span>${h(String(row.openTasks))}<small>Tasks</small></span>
-      <span>${h(String(row.overdueTasks))}<small>Overdue</small></span>
-      <span>${h(row.lastActivityAt ? timeAgo(row.lastActivityAt) : 'No activity')}<small>Last activity</small></span>
+    <button class="workday-rep-row tone-${h(tone)} ${state.selectedWorkdayManagerRepId === row.id ? 'active' : ''}" type="button" data-action="open-workday-rep" data-rep-id="${h(row.id)}">
+      <span class="workday-rep-person">
+        ${renderAvatar({ full_name: row.name, email: row.email }, 'avatar small workday-rep-avatar')}
+        <span><strong>${h(row.name)}</strong><small class="workday-status-pill tone-${h(tone)}"><i class="ti ${h(workdayStatusIcon(row.status))}"></i>${h(row.status)}</small></span>
+      </span>
+      <span class="workday-rep-cell"><strong>${h(String(row.callsToday))}</strong><small>Calls</small></span>
+      <span class="workday-rep-cell"><strong>${h(String(row.touchesToday))}</strong><small>Touches</small></span>
+      <span class="workday-rep-cell"><strong>${h(String(row.openTasks))}</strong><small>Tasks</small></span>
+      <span class="workday-rep-cell"><strong>${h(String(row.overdueTasks))}</strong><small>Overdue</small></span>
+      <span class="workday-rep-cell"><strong>${h(row.lastActivityAt ? timeAgo(row.lastActivityAt) : 'No activity')}</strong><small>Last activity</small></span>
     </button>
   `;
 }
 
 function renderWorkdayManagerAlert(alert) {
+  const tone = workdayAlertTone(alert.type);
   return `
-    <button class="workday-alert-item" type="button" data-action="open-workday-alert" data-alert-id="${h(alert.id)}">
-      <span class="workday-kind">${h(alert.type.replaceAll('_', ' '))}</span>
-      <span><strong>${h(alert.title)}</strong><small>${h(alert.reason)}</small></span>
-      <span class="workday-owner">${h(alert.owner)}</span>
+    <button class="workday-alert-item tone-${h(tone)}" type="button" data-action="open-workday-alert" data-alert-id="${h(alert.id)}">
+      <span class="workday-alert-icon"><i class="ti ${h(workdayAlertIcon(alert.type))}"></i></span>
+      <span class="workday-alert-copy"><strong>${h(alert.title)}</strong><small>${h(alert.reason)}</small></span>
+      <span class="workday-alert-meta"><span class="workday-kind">${h(alert.type.replaceAll('_', ' '))}</span><small class="workday-owner">${h(alert.owner)}</small></span>
     </button>
   `;
 }
 
 function renderWorkdayRepDetailPanel(repRow, companyId) {
   if (!repRow) return `<section class="workday-rep-detail panel">${emptyState('Select a rep to see workload.')}</section>`;
+  const tone = workdayStatusTone(repRow.status);
   const overdue = repRow.workload.filter((item) => item.type === 'task' && item.overdue === true);
   const noNextStep = repRow.workload.filter((item) => item.reason === 'No open next step');
   const miniList = (items, emptyText) => items.slice(0, 5).map((item) => `
     <button type="button" data-action="open-workday-rep-workload" data-record-type="${h(item.type)}" data-record-id="${h(item.id)}">
-      ${h(item.title)}
-      <small>${h(item.reason)}</small>
+      <span class="workday-mini-type">${h(item.type.replaceAll('_', ' '))}</span>
+      <span><strong>${h(item.title)}</strong><small>${h(item.reason)}</small></span>
+      <i class="ti ti-chevron-right"></i>
     </button>
   `).join('') || `<div class="sf-task-empty">${h(emptyText)}</div>`;
   return `
     <section class="workday-rep-detail panel">
-      <div class="section-head"><div><h2>${h(repRow.name)}</h2><p>Open workload</p></div></div>
+      <div class="workday-rep-detail-head">
+        ${renderAvatar({ full_name: repRow.name, email: repRow.email }, 'avatar workday-rep-avatar')}
+        <div><small>Focused rep</small><h2>${h(repRow.name)}</h2><p>${h(repRow.lastActivityAt ? `Open workload - Last active ${timeAgo(repRow.lastActivityAt)}` : 'Open workload - No activity logged yet')}</p></div>
+        <span class="workday-status-pill tone-${h(tone)}"><i class="ti ${h(workdayStatusIcon(repRow.status))}"></i>${h(repRow.status)}</span>
+      </div>
       <div class="workday-rep-detail-grid">
         <span><strong>${h(String(repRow.callsToday))}</strong><small>Calls today</small></span>
         <span><strong>${h(String(repRow.touchesToday))}</strong><small>Touches today</small></span>

@@ -109,3 +109,18 @@ test('Workday manager view has responsive non-overflow styling', () => {
   assert.match(styles, /\.workday-rep-detail/);
   assert.match(styles, /@media \(max-width: 980px\) \{[\s\S]*?\.workday-manager-view/);
 });
+
+test('Workday manager UI uses scannable command components', () => {
+  assert.match(source, /function workdayMetricTone\(/);
+  assert.match(source, /function workdayStatusTone\(/);
+  assert.match(source, /function workdayAlertTone\(/);
+  assert.match(source, /workday-rep-head/);
+  assert.match(source, /workday-status-pill/);
+  assert.match(source, /workday-alert-icon/);
+  assert.match(source, /workday-filter-count/);
+  assert.match(styles, /\.workday-rep-head/);
+  assert.match(styles, /\.workday-status-pill/);
+  assert.match(styles, /\.workday-alert-item\.tone-critical/);
+  assert.match(styles, /\.workday-alert-icon/);
+  assert.match(styles, /\.workday-filter-count/);
+});
