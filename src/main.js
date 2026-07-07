@@ -8738,7 +8738,7 @@ function normalizeWorkspaceBuilderDoc(doc) {
         type: app.type || '',
         icon: app.icon || WB_APP_ICONS[0],
         color: app.color || ws.color || WB_PALETTE[1],
-        fields: Array.isArray(app.fields) ? app.fields.map((field) => ({ id: field.id || wbUid(), label: field.label || 'Field', type: WB_FIELD_TYPES[field.type] ? field.type : 'text', required: !!field.required, config: field.config && typeof field.config === 'object' ? field.config : {} })) : [],
+        fields: Array.isArray(app.fields) ? app.fields.map((field) => ({ id: field.id || wbUid(), label: field.label || 'Field', type: WB_FIELD_TYPES[field.type] ? field.type : 'text', required: !!field.required, hidden: !!field.hidden, config: field.config && typeof field.config === 'object' ? field.config : {} })) : [],
         items: Array.isArray(app.items) ? app.items.map((item) => ({ id: item.id || wbUid(), values: item.values && typeof item.values === 'object' ? item.values : {}, createdAt: item.createdAt || new Date().toISOString().slice(0, 10) })) : [],
         automations: Array.isArray(app.automations) ? app.automations.map((auto) => ({ id: auto.id || wbUid(), name: auto.name || 'Automation', enabled: auto.enabled !== false, trigger: auto.trigger && typeof auto.trigger === 'object' ? auto.trigger : { event: 'created' }, actions: Array.isArray(auto.actions) ? auto.actions : [] })) : [],
       })) : [],
@@ -8764,8 +8764,15 @@ const WB_FIELD_TYPES = {
   money: { label: 'Money', icon: 'ti-currency-dollar', color: '#16a34a', desc: 'Currency amount' },
   calculation: { label: 'Calculation', icon: 'ti-math-function', color: '#7c3aed', desc: 'Formula over number fields' },
   checkbox: { label: 'Yes / No', icon: 'ti-checkbox', color: '#0d9488', desc: 'True or false toggle' },
+  location: { label: 'Location', icon: 'ti-map-pin', color: '#dc2626', desc: 'Address or place' },
+  duration: { label: 'Duration', icon: 'ti-clock-hour-4', color: '#0d9488', desc: 'Length of time (hrs / mins)' },
+  progress: { label: 'Progress', icon: 'ti-progress', color: '#7c3aed', desc: 'Percent complete (0–100%)' },
+  image: { label: 'Image', icon: 'ti-photo', color: '#0891b2', desc: 'Circular picture, like an avatar' },
 };
-const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'date', 'category', 'status', 'user', 'relationship', 'email', 'phone', 'file', 'calculation', 'checkbox'];
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'date', 'category', 'status', 'user', 'relationship', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'checkbox'];
+// Comparison operators for numeric (number/money) automation triggers:
+// [operator, dropdown label, symbol for the human-readable rule summary].
+const WB_TRIG_OPS = [['==', 'equals', '='], ['!=', 'not equal', '≠'], ['>', 'greater than', '>'], ['<', 'less than', '<'], ['>=', 'at least', '≥'], ['<=', 'at most', '≤']];
 
 function wbUid() { return `wb-${crypto.randomUUID().slice(0, 12)}`; }
 function wbInitials(name) { return String(name || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?'; }
@@ -8916,9 +8923,14 @@ function wbViewApp(route, companyId, workspace, app) {
   const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'items';
   const tabPath = (next) => appHref(companyPath('workspaces', { app_id: app.id, tab: next }, companyId));
   let headBtn = '';
-  if (canManage && tab === 'items' && app.fields.length) headBtn = `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>Add item</button>`;
-  else if (canManage && tab === 'fields') headBtn = `<button class="btn btn-primary" data-add-field><i class="ti ti-plus"></i>Add field</button>`;
-  else if (canManage && tab === 'automations') headBtn = `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
+  // Print/Export are read-only and available to all roles; Import writes data.
+  if (tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-export><i class="ti ti-file-export"></i>Export</button>`;
+  if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-import><i class="ti ti-file-import"></i>Import</button>`;
+  if (tab === 'items' && app.items.length) headBtn += `<button class="btn" data-wb-print-data><i class="ti ti-printer"></i>Print</button>`;
+  if (tab === 'reports' && app.fields.length && app.items.length) headBtn += `<button class="btn" data-wb-print-reports><i class="ti ti-printer"></i>Print</button>`;
+  if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>Add item</button>`;
+  else if (canManage && tab === 'fields') headBtn += `<button class="btn btn-primary" data-add-field><i class="ti ti-plus"></i>Add field</button>`;
+  else if (canManage && tab === 'automations') headBtn += `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
   const tabLabel = { items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, settings: 'Settings' };
   let body = '';
   if (tab === 'items') body = wbViewItems(companyId, workspace, app);
@@ -8946,16 +8958,25 @@ function wbItemTitle(app, item) {
   const field = app.fields.find((x) => ['text', 'email'].includes(x.type)) || app.fields[0];
   return field ? (item.values[field.id] || 'Untitled') : 'Untitled';
 }
-function wbComputeCalc(app, field, values) {
+// Raw numeric result of a calculation field's formula, or null (no/blank result)
+// or NaN (invalid formula / eval error). Used both for display and for numeric
+// automation triggers that compare against the computed value.
+function wbCalcRaw(app, field, values) {
   const formula = field.config.formula;
-  if (!formula) return '—';
+  if (!formula) return null;
   const expr = formula.replace(/\{([^}]+)\}/g, (match, name) => {
-    const target = app.fields.find((x) => x.label.toLowerCase() === name.trim().toLowerCase() && ['number', 'money', 'calculation'].includes(x.type));
+    const target = app.fields.find((x) => x.label.toLowerCase() === name.trim().toLowerCase() && ['number', 'money', 'calculation', 'duration', 'progress'].includes(x.type));
     const value = target ? Number(values[target.id] || 0) : 0;
     return Number.isNaN(value) ? 0 : value;
   });
-  if (!/^[-+*/(). 0-9]+$/.test(expr)) return '⚠';
-  try { const result = Function(`"use strict";return(${expr})`)(); return Number.isFinite(result) ? (Math.round(result * 100) / 100).toLocaleString() : '—'; } catch { return '⚠'; }
+  if (!/^[-+*/(). 0-9]+$/.test(expr)) return NaN;
+  try { const result = Function(`"use strict";return(${expr})`)(); return Number.isFinite(result) ? Math.round(result * 100) / 100 : null; } catch { return NaN; }
+}
+function wbComputeCalc(app, field, values) {
+  if (!field.config.formula) return '—';
+  const r = wbCalcRaw(app, field, values);
+  if (Number.isNaN(r)) return '⚠';
+  return r === null ? '—' : r.toLocaleString();
 }
 function wbFmtVal(ctx, field, value) {
   // Checkbox renders as an inline toggle (even when unset) so managers can flip
@@ -8967,8 +8988,13 @@ function wbFmtVal(ctx, field, value) {
     }
     return on ? '<span class="wb-status-pill wb-yes"><i class="ti ti-check"></i>Yes</span>' : '<span class="wb-cell-empty">No</span>';
   }
-  if (value === undefined || value === null || value === '' || (Array.isArray(value) && !value.length)) return '<span class="wb-cell-empty">—</span>';
+  // Calculation fields have no stored value — they compute from other fields —
+  // so they must render before the empty-value guard below (which would else swallow them).
   const meta = WB_FIELD_TYPES[field.type];
+  if (field.type === 'calculation') return `<b style="color:${meta.color}">${h(wbComputeCalc(ctx.app, field, ctx.values || {}))}</b>`;
+  // Progress always shows its bar (0% included), so it renders before the empty guard.
+  if (field.type === 'progress') { const p = Math.max(0, Math.min(100, Math.round(Number(value) || 0))); return `<div class="wb-prog" title="${p}%"><span class="wb-prog-track"><span class="wb-prog-fill" style="width:${p}%;background:${meta.color}"></span></span><span class="wb-prog-num">${p}%</span></div>`; }
+  if (value === undefined || value === null || value === '' || (Array.isArray(value) && !value.length)) return '<span class="wb-cell-empty">—</span>';
   switch (field.type) {
     case 'status': { const o = (field.config.options || []).find((x) => x.id === value); return o ? `<span class="wb-status-pill" style="background:${o.color}1f;color:${o.color}"><span class="wb-dot" style="background:${o.color}"></span>${h(o.label)}</span>` : '<span class="wb-cell-empty">—</span>'; }
     case 'category': { const o = (field.config.options || []).find((x) => x.id === value); return o ? `<span class="wb-tag" style="background:${o.color || '#6b7280'}1f;color:${o.color || '#6b7280'}">${h(o.label)}</span>` : h(value); }
@@ -8980,23 +9006,201 @@ function wbFmtVal(ctx, field, value) {
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
     case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; const kind = fileTypeKind({ file_name: fv.name }); return fv.url ? `<button type="button" class="wb-file-icon-btn" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="${h(fv.name)}" aria-label="Open ${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></button>` : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`; }
     case 'relationship': { const ta = ctx.workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return h(value); const arr = Array.isArray(value) ? value : [value]; return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbItemTitle(ta, it) : '?')}</span>`; }).join(' '); }
-    case 'calculation': return `<b style="color:${meta.color}">${h(wbComputeCalc(ctx.app, field, ctx.values || {}))}</b>`;
+    case 'location': return `<a class="wb-loc" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(value))}" target="_blank" rel="noreferrer" title="Open in Google Maps"><i class="ti ti-map-pin"></i>${h(value)}</a>`;
+    case 'duration': return h(wbFmtDuration(value));
+    case 'image': { const fv = wbFileValue(value); return fv && fv.url ? `<img class="wb-img-avatar" src="${h(fv.url)}" alt="${h(fv.name || 'image')}" loading="lazy">` : '<span class="wb-cell-empty">—</span>'; }
     case 'textarea': { const str = String(value); return h(str.length > 60 ? `${str.slice(0, 60)}…` : str); }
     default: return h(value);
   }
 }
 
+// Per-app, in-memory view state for the Items table (search / sort / filters).
+// Not persisted — it's a transient view preference, reset on reload.
+function wbItemsUI(appId) {
+  state.wbUI = state.wbUI || {};
+  return state.wbUI[appId] || (state.wbUI[appId] = { q: '', sort: null, filters: [], sel: new Set() });
+}
+// Group field types into a handful of "kinds" that share filter/sort behavior.
+function wbFieldKind(f) {
+  if (['number', 'money', 'duration', 'progress', 'calculation'].includes(f.type)) return 'numeric';
+  if (f.type === 'date') return 'date';
+  if (f.type === 'status' || f.type === 'category') return 'option';
+  if (f.type === 'user') return 'user';
+  if (f.type === 'checkbox') return 'bool';
+  if (['relationship', 'file', 'image'].includes(f.type)) return 'rel';
+  return 'text';
+}
+function wbFilterOps(kind) {
+  switch (kind) {
+    case 'numeric': return [['=', '='], ['≠', '≠'], ['>', '>'], ['<', '<'], ['≥', '≥'], ['≤', '≤'], ['empty', 'is empty'], ['notempty', 'is not empty']];
+    case 'date': return [['on', 'on'], ['before', 'before'], ['after', 'after'], ['empty', 'is empty'], ['notempty', 'is not empty']];
+    case 'option': case 'user': return [['is', 'is'], ['isnot', 'is not'], ['empty', 'is empty'], ['notempty', 'is not empty']];
+    case 'bool': return [['is', 'is']];
+    case 'rel': return [['notempty', 'is set'], ['empty', 'is empty']];
+    default: return [['contains', 'contains'], ['=', 'equals'], ['≠', 'not equals'], ['empty', 'is empty'], ['notempty', 'is not empty']];
+  }
+}
+// Plain-text (no HTML) rendering of a value, used for search and text sort/filter.
+function wbPlainVal(companyId, workspace, app, field, value, values) {
+  if (field.type === 'calculation') { const r = wbCalcRaw(app, field, values || {}); return (r === null || Number.isNaN(r)) ? '' : String(r); }
+  if (value === undefined || value === null || value === '') return field.type === 'checkbox' ? 'no' : '';
+  switch (field.type) {
+    case 'status': case 'category': { const o = (field.config.options || []).find((x) => x.id === value); return o ? o.label : String(value); }
+    case 'user': { const m = wbMemberById(companyId, value); return m ? m.name : ''; }
+    case 'relationship': { const ta = workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return ''; const arr = Array.isArray(value) ? value : [value]; return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return it ? wbItemTitle(ta, it) : ''; }).join(' '); }
+    case 'file': case 'image': { const fv = wbFileValue(value); return fv ? (fv.name || '') : ''; }
+    case 'money': return `${field.config.currency || '$'}${value}`;
+    case 'number': return `${value}${field.config.unit ? ` ${field.config.unit}` : ''}`;
+    case 'duration': return wbFmtDuration(value);
+    case 'progress': return `${value}%`;
+    case 'checkbox': return (value === true || value === 'true' || value === 1) ? 'yes' : 'no';
+    default: return String(value);
+  }
+}
+function wbFieldNumber(app, field, raw, values) {
+  if (field.type === 'calculation') { const r = wbCalcRaw(app, field, values || {}); return (r === null || Number.isNaN(r)) ? NaN : r; }
+  return Number(raw);
+}
+function wbIsEmptyVal(field, raw) {
+  if (field.type === 'calculation') return false;
+  if (Array.isArray(raw)) return raw.length === 0;
+  if (field.type === 'file' || field.type === 'image') return !wbFileValue(raw);
+  return raw === undefined || raw === null || raw === '';
+}
+function wbEvalFilter(companyId, workspace, app, item, flt) {
+  const field = app.fields.find((f) => f.id === flt.fieldId);
+  if (!field) return true;
+  const raw = item.values[field.id];
+  const kind = wbFieldKind(field);
+  const empty = wbIsEmptyVal(field, raw);
+  if (flt.op === 'empty') return empty;
+  if (flt.op === 'notempty') return !empty;
+  // A filter with no value yet is treated as inactive (matches everything).
+  if (kind !== 'bool' && (flt.value === undefined || flt.value === '')) return true;
+  if (empty) return false;
+  switch (kind) {
+    case 'numeric': { const n = wbFieldNumber(app, field, raw, item.values); const t = Number(flt.value); if (Number.isNaN(n) || Number.isNaN(t)) return false; switch (flt.op) { case '=': return n === t; case '≠': return n !== t; case '>': return n > t; case '<': return n < t; case '≥': return n >= t; case '≤': return n <= t; default: return false; } }
+    case 'date': switch (flt.op) { case 'on': return raw === flt.value; case 'before': return raw < flt.value; case 'after': return raw > flt.value; default: return false; }
+    case 'option': case 'user': return flt.op === 'isnot' ? raw !== flt.value : raw === flt.value;
+    case 'bool': { const on = raw === true || raw === 'true' || raw === 1; return on === (flt.value === 'true'); }
+    case 'rel': return true;
+    default: { const s = wbPlainVal(companyId, workspace, app, field, raw, item.values).toLowerCase(); const v = String(flt.value).toLowerCase(); switch (flt.op) { case 'contains': return s.includes(v); case '=': return s === v; case '≠': return s !== v; default: return false; } }
+  }
+}
+function wbSortKey(companyId, workspace, app, field, kind, value, values) {
+  switch (kind) {
+    case 'numeric': { if (field.type !== 'calculation' && (value === '' || value == null)) return null; const n = wbFieldNumber(app, field, value, values); return Number.isNaN(n) ? null : n; }
+    case 'date': return value || null;
+    case 'bool': return (value === true || value === 'true' || value === 1) ? 1 : 0;
+    case 'option': { const o = (field.config.options || []).find((x) => x.id === value); return o ? o.label.toLowerCase() : null; }
+    case 'user': { const m = value ? wbMemberById(companyId, value) : null; return m ? m.name.toLowerCase() : null; }
+    default: { const t = wbPlainVal(companyId, workspace, app, field, value, values); return t ? t.toLowerCase() : null; }
+  }
+}
+function wbSortItems(companyId, workspace, app, rows, field, dir) {
+  const kind = wbFieldKind(field);
+  const isEmptyKey = (k) => k === null || k === undefined || k === '';
+  const sorted = [...rows].sort((a, b) => {
+    const ka = wbSortKey(companyId, workspace, app, field, kind, a.values[field.id], a.values);
+    const kb = wbSortKey(companyId, workspace, app, field, kind, b.values[field.id], b.values);
+    const ea = isEmptyKey(ka), eb = isEmptyKey(kb);
+    if (ea && eb) return 0;
+    if (ea) return 1; // empties always sort last, regardless of direction
+    if (eb) return -1;
+    const cmp = (typeof ka === 'number' && typeof kb === 'number') ? ka - kb : String(ka).localeCompare(String(kb));
+    return dir === 'desc' ? -cmp : cmp;
+  });
+  return sorted;
+}
+// Live client-side search: hide/show already-rendered rows by their data-search
+// text so typing keeps focus (no full re-render) and works both ways.
+function wbApplyItemSearch() {
+  const input = document.querySelector('[data-wb-search-input]');
+  if (!input) return;
+  const q = input.value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('#wbItemsTable tbody tr[data-search]').forEach((tr) => {
+    const match = !q || tr.dataset.search.includes(q);
+    tr.hidden = !match;
+    if (match) shown++;
+  });
+  const countEl = document.querySelector('[data-wb-items-count]');
+  if (countEl) countEl.textContent = `${shown} item${shown === 1 ? '' : 's'}`;
+}
+function wbFilterValueControl(companyId, app, field, kind, flt, i) {
+  const v = flt.value == null ? '' : String(flt.value);
+  const attrs = `class="wb-input wb-filter-val" data-wb-filter-val data-idx="${i}"`;
+  if (kind === 'numeric') return `<input type="number" step="any" ${attrs} value="${h(v)}" placeholder="Value">`;
+  if (kind === 'date') return `<input type="date" ${attrs} value="${h(v)}">`;
+  if (kind === 'bool') return `<select ${attrs}><option value="true" ${flt.value === 'true' || flt.value === undefined ? 'selected' : ''}>Yes</option><option value="false" ${flt.value === 'false' ? 'selected' : ''}>No</option></select>`;
+  if (kind === 'option') return `<select ${attrs}><option value="">— value —</option>${(field.config.options || []).map((o) => `<option value="${h(o.id)}" ${flt.value === o.id ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</select>`;
+  if (kind === 'user') return `<select ${attrs}><option value="">— member —</option>${wbMembers(companyId).map((m) => `<option value="${h(m.id)}" ${flt.value === m.id ? 'selected' : ''}>${h(m.name)}</option>`).join('')}</select>`;
+  return `<input type="text" ${attrs} value="${h(v)}" placeholder="Value">`;
+}
+function wbFilterRow(companyId, app, flt, i) {
+  const field = app.fields.find((f) => f.id === flt.fieldId) || app.fields[0];
+  const kind = wbFieldKind(field);
+  const ops = wbFilterOps(kind);
+  if (!ops.some(([o]) => o === flt.op)) flt.op = ops[0][0];
+  const needsValue = !['empty', 'notempty'].includes(flt.op);
+  const fieldSel = `<select class="wb-input wb-filter-field" data-wb-filter-field data-idx="${i}">${app.fields.map((f) => `<option value="${h(f.id)}" ${f.id === field.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select>`;
+  const opSel = `<select class="wb-input wb-filter-op" data-wb-filter-op data-idx="${i}">${ops.map(([o, l]) => `<option value="${h(o)}" ${flt.op === o ? 'selected' : ''}>${h(l)}</option>`).join('')}</select>`;
+  const valCtrl = needsValue ? wbFilterValueControl(companyId, app, field, kind, flt, i) : '';
+  return `<div class="wb-filter-row">${fieldSel}${opSel}${valCtrl}<button class="wb-icon-btn danger" type="button" data-wb-del-filter data-idx="${i}" title="Remove filter"><i class="ti ti-x"></i></button></div>`;
+}
+function wbItemsToolbar(companyId, app, ui) {
+  const filterRows = ui.filters.map((flt, i) => wbFilterRow(companyId, app, flt, i)).join('');
+  return `
+    <div class="wb-items-toolbar">
+      <div class="wb-search-box"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-search-input value="${h(ui.q || '')}" placeholder="Search ${h(app.name)}…"></div>
+      <button class="btn btn-sm" type="button" data-wb-add-filter><i class="ti ti-filter"></i>Add filter</button>
+      ${ui.filters.length ? `<button class="btn btn-sm" type="button" data-wb-clear-filters><i class="ti ti-filter-off"></i>Clear filters</button>` : ''}
+      ${ui.sort && ui.sort.fieldId ? `<button class="btn btn-sm" type="button" data-wb-clear-sort><i class="ti ti-arrows-sort"></i>Clear sort</button>` : ''}
+    </div>
+    ${ui.filters.length ? `<div class="wb-filter-rows">${filterRows}</div>` : ''}`;
+}
 function wbViewItems(companyId, workspace, app) {
   const canManage = can('workspaces.manage', companyId);
   if (!app.fields.length) return `<div class="wb-empty"><i class="ti ti-layout-dashboard"></i><h3>This app has no fields yet</h3><p>Before adding items you need to design the app's structure. Add fields like Text, Status, or Date.</p>${canManage ? '<button class="btn btn-primary" data-tab="fields"><i class="ti ti-tools"></i>Open field builder</button>' : ''}</div>`;
   if (!app.items.length) return `<div class="wb-empty"><i class="ti ti-inbox"></i><h3>No items yet</h3><p>Add your first record using the form built from your custom fields.</p>${canManage ? '<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>Add item</button>' : ''}</div>`;
-  const cols = app.fields.slice(0, 7);
-  const rows = app.items.map((item) => {
+  const ui = wbItemsUI(app.id);
+  // Hidden fields drop out of the table columns but stay fully editable on each
+  // record (the item form iterates every field). Fall back to all fields if the
+  // user has hidden every one, so the table never renders empty.
+  const visibleCols = app.fields.filter((f) => !f.hidden);
+  const cols = visibleCols.length ? visibleCols : app.fields;
+  // Drop any selected ids that no longer exist (e.g. deleted since selection).
+  if (ui.sel.size) { const live = new Set(app.items.map((i) => i.id)); ui.sel.forEach((id) => { if (!live.has(id)) ui.sel.delete(id); }); }
+  const toolbar = wbItemsToolbar(companyId, app, ui);
+  // Filter, then sort (search is applied live in the DOM after render).
+  let rows = ui.filters.length ? app.items.filter((it) => ui.filters.every((flt) => wbEvalFilter(companyId, workspace, app, it, flt))) : app.items.slice();
+  if (ui.sort && ui.sort.fieldId) { const sf = app.fields.find((x) => x.id === ui.sort.fieldId); if (sf) rows = wbSortItems(companyId, workspace, app, rows, sf, ui.sort.dir); }
+  const selectable = canManage;
+  const allSel = selectable && rows.length > 0 && rows.every((r) => ui.sel.has(r.id));
+  const bulkBar = (selectable && ui.sel.size) ? `<div class="wb-bulk-bar">
+      <span class="wb-bulk-count"><i class="ti ti-checkbox"></i><b>${ui.sel.size}</b> selected</span>
+      <div class="wb-spacer"></div>
+      <button class="btn btn-sm" type="button" data-wb-select-all-btn><i class="ti ti-checks"></i>Select all</button>
+      <button class="btn btn-sm" type="button" data-wb-clear-sel><i class="ti ti-square-x"></i>Clear</button>
+      <button class="btn btn-sm" type="button" data-wb-print-sel><i class="ti ti-printer"></i>Print selected</button>
+      <button class="btn btn-sm danger" type="button" data-wb-del-sel><i class="ti ti-trash"></i>Delete selected</button>
+    </div>` : '';
+  const head = `<tr>${selectable ? `<th class="wb-check-col"><input type="checkbox" data-wb-select-all ${allSel ? 'checked' : ''} title="Select all"></th>` : ''}${cols.map((field) => {
+    const active = ui.sort && ui.sort.fieldId === field.id;
+    const caret = active ? (ui.sort.dir === 'desc' ? 'ti-caret-down-filled' : 'ti-caret-up-filled') : 'ti-arrows-sort';
+    return `<th class="wb-th-sort ${active ? 'active' : ''}" data-wb-sort="${h(field.id)}" title="Sort by ${h(field.label)}"><span>${h(field.label)}</span><i class="ti ${caret}"></i></th>`;
+  }).join('')}<th></th></tr>`;
+  const body = rows.map((item) => {
     const ctx = { companyId, workspace, app, values: item.values, item, canManage };
-    return `<tr data-item="${h(item.id)}">${cols.map((field) => `<td>${wbFmtVal(ctx, field, item.values[field.id])}</td>`).join('')}<td class="wb-row-acts">${canManage ? `<button class="wb-icon-btn" data-edit-item="${h(item.id)}"><i class="ti ti-pencil"></i></button><button class="wb-icon-btn danger" data-del-item="${h(item.id)}"><i class="ti ti-trash"></i></button>` : ''}</td></tr>`;
+    const searchText = cols.map((field) => wbPlainVal(companyId, workspace, app, field, item.values[field.id], item.values)).join(' ').toLowerCase();
+    const checkCell = selectable ? `<td class="wb-check-col"><input type="checkbox" data-wb-select="${h(item.id)}" ${ui.sel.has(item.id) ? 'checked' : ''}></td>` : '';
+    return `<tr data-item="${h(item.id)}" data-search="${h(searchText)}" class="${ui.sel.has(item.id) ? 'wb-row-sel' : ''}">${checkCell}${cols.map((field) => `<td>${wbFmtVal(ctx, field, item.values[field.id])}</td>`).join('')}<td class="wb-row-acts">${canManage ? `<button class="wb-icon-btn" data-edit-item="${h(item.id)}"><i class="ti ti-pencil"></i></button><button class="wb-icon-btn danger" data-del-item="${h(item.id)}"><i class="ti ti-trash"></i></button>` : ''}</td></tr>`;
   }).join('');
-  return `<div class="wb-tbl-wrap"><table class="wb-table"><thead><tr>${cols.map((field) => `<th>${h(field.label)}</th>`).join('')}<th></th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="wb-table-foot">${app.items.length} item${app.items.length === 1 ? '' : 's'}${app.fields.length > 7 ? ` · showing first 7 of ${app.fields.length} fields` : ''}</div>`;
+  const table = rows.length
+    ? `<div class="wb-tbl-wrap"><table class="wb-table" id="wbItemsTable"><thead>${head}</thead><tbody>${body}</tbody></table></div>`
+    : `<div class="wb-empty wb-empty-inline"><i class="ti ti-filter-search"></i><h3>No items match</h3><p>No records match your current filters. Try adjusting or clearing them.</p></div>`;
+  return `${toolbar}${bulkBar}${table}
+    <div class="wb-table-foot"><span data-wb-items-count>${rows.length} item${rows.length === 1 ? '' : 's'}</span> · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'}</div>`;
 }
 
 function wbViewBuilder(companyId, workspace, app) {
@@ -9007,11 +9211,11 @@ function wbViewBuilder(companyId, workspace, app) {
     if ((field.type === 'category' || field.type === 'status') && field.config.options) extra = ` · ${field.config.options.length} options`;
     if (field.type === 'relationship' && field.config.targetApp) { const ta = workspace.apps.find((x) => x.id === field.config.targetApp); extra = ta ? ` · → ${h(ta.name)}` : ' · (no target)'; }
     if (field.type === 'calculation' && field.config.formula) extra = ` · ${h(field.config.formula)}`;
-    return `<div class="wb-field-row" ${canManage ? 'draggable="true"' : ''} data-fid="${h(field.id)}">
+    return `<div class="wb-field-row ${field.hidden ? 'wb-field-hidden' : ''}" ${canManage ? 'draggable="true"' : ''} data-fid="${h(field.id)}">
       ${canManage ? '<span class="wb-grip"><i class="ti ti-grip-vertical"></i></span>' : ''}
       <div class="wb-field-ic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></div>
-      <div class="wb-field-meta"><b>${h(field.label)}${field.required ? '<span class="wb-req">*</span>' : ''}</b><div class="wb-field-type">${h(meta.label)}${extra}</div></div>
-      ${canManage ? `<div class="wb-field-acts"><button class="wb-icon-btn" data-edit-field="${h(field.id)}" title="Configure"><i class="ti ti-adjustments"></i></button><button class="wb-icon-btn danger" data-del-field="${h(field.id)}" title="Delete"><i class="ti ti-trash"></i></button></div>` : ''}
+      <div class="wb-field-meta"><b>${h(field.label)}${field.required ? '<span class="wb-req">*</span>' : ''}${field.hidden ? '<span class="wb-hidden-tag"><i class="ti ti-eye-off"></i>Hidden in table</span>' : ''}</b><div class="wb-field-type">${h(meta.label)}${extra}</div></div>
+      ${canManage ? `<div class="wb-field-acts"><button class="wb-icon-btn ${field.hidden ? 'active' : ''}" data-hide-field="${h(field.id)}" title="${field.hidden ? 'Show this field in the items table' : 'Hide this field from the items table (still editable on each record)'}"><i class="ti ti-${field.hidden ? 'eye-off' : 'eye'}"></i></button><button class="wb-icon-btn" data-edit-field="${h(field.id)}" title="Configure"><i class="ti ti-adjustments"></i></button><button class="wb-icon-btn danger" data-del-field="${h(field.id)}" title="Delete"><i class="ti ti-trash"></i></button></div>` : ''}
     </div>`;
   }).join('') : '<div class="wb-empty wb-empty-dashed"><i class="ti ti-layout-dashboard"></i><h3>Design your app</h3><p>Add fields from the palette to shape what data this app stores. Drag to reorder anytime.</p></div>';
   const palette = canManage ? `<div class="wb-palette"><h4>Add a field</h4>${WB_FIELD_ORDER.map((type) => { const meta = WB_FIELD_TYPES[type]; return `<button class="wb-palette-item" data-add-type="${type}"><span class="wb-pic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-palette-text">${h(meta.label)}<small>${h(meta.desc)}</small></span></button>`; }).join('')}</div>` : '';
@@ -9085,6 +9289,159 @@ function wbViewReports(companyId, workspace, app) {
   return kpiHTML + `<div class="wb-report-grid">${donutCard}${barCard}${timeCard}</div>`;
 }
 
+// Open a print-ready window carrying the app's own stylesheets (so report cards
+// and tables look identical), then auto-invoke the browser print dialog.
+function wbOpenPrintWindow(title, bodyHTML) {
+  const win = window.open('', '_blank', 'width=1100,height=800');
+  if (!win) { showToast('Allow pop-ups for this site to print.', 'local', 'Workspaces'); return; }
+  // Absolute hrefs so root-relative /assets/*.css resolve in the blank window;
+  // inline <style> tags (Vite dev) are copied verbatim.
+  const heads = [...document.querySelectorAll('link[rel="stylesheet"], style')].map((n) => n.tagName === 'LINK' ? `<link rel="stylesheet" href="${n.href}">` : n.outerHTML).join('\n');
+  win.document.open();
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${h(title)}</title>${heads}<style>
+    @page { margin: 14mm; }
+    body { background:#fff !important; padding:22px; color:#111; }
+    .wb-print-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; border-bottom:2px solid #333; padding-bottom:12px; }
+    .wb-print-head h1 { font-size:20px; margin:0 0 4px; }
+    .wb-print-meta { color:#666; font-size:12px; }
+    .wb-print-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .wb-print-table th, .wb-print-table td { border:1px solid #ccc; padding:6px 9px; text-align:left; vertical-align:top; }
+    .wb-print-table thead th { background:#f1f1f1; font-weight:700; white-space:nowrap; }
+    .wb-print-table tbody tr:nth-child(even) { background:#fafafa; }
+    @media print { .wb-report-grid { display:block; } .wb-chart-card { break-inside:avoid; page-break-inside:avoid; margin-bottom:14px; } }
+  </style></head><body>${bodyHTML}<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};<\/script></body></html>`);
+  win.document.close();
+}
+function wbPrintTitleBlock(companyId, app, subtitle) {
+  const when = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return `<div class="wb-print-head">
+    <div><h1>${h(app.name)}${subtitle ? ` — ${h(subtitle)}` : ''}</h1><div class="wb-print-meta">${app.items.length} item${app.items.length === 1 ? '' : 's'} · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'}</div></div>
+    <div class="wb-print-meta">${h(companyName(companyId) || 'Quest HQ')}<br>Printed ${h(when)}</div>
+  </div>`;
+}
+// Print items in the app (all fields). With `onlyIds` (a Set), prints just those
+// records; otherwise every item (ignores search/filter — a full export).
+function wbPrintData(companyId, workspaceId, appId, onlyIds) {
+  const { workspace, app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const items = onlyIds ? app.items.filter((it) => onlyIds.has(it.id)) : app.items;
+  if (!app.fields.length || !items.length) { showToast('Nothing to print yet — add fields and items first.', 'local', 'Workspaces'); return; }
+  const cols = app.fields;
+  const thead = `<tr><th>#</th>${cols.map((f) => `<th>${h(f.label)}</th>`).join('')}</tr>`;
+  const rows = items.map((it, i) => `<tr><td>${i + 1}</td>${cols.map((f) => `<td>${h(wbPlainVal(companyId, workspace, app, f, it.values[f.id], it.values))}</td>`).join('')}</tr>`).join('');
+  const subtitle = onlyIds ? `${items.length} selected record${items.length === 1 ? '' : 's'}` : 'Data';
+  const body = `${wbPrintTitleBlock(companyId, app, subtitle)}<table class="wb-print-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>`;
+  wbOpenPrintWindow(`${app.name} — ${onlyIds ? 'selected' : 'data'}`, body);
+}
+// Print the Reports tab (KPIs + charts) using the live report markup.
+function wbPrintReports(companyId, workspaceId, appId) {
+  const { workspace, app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  if (!app.fields.length || !app.items.length) { showToast('No report data yet — add items first.', 'local', 'Workspaces'); return; }
+  const body = `${wbPrintTitleBlock(companyId, app, 'Reports')}<section class="tool-page wb-page">${wbViewReports(companyId, workspace, app)}</section>`;
+  wbOpenPrintWindow(`${app.name} — reports`, body);
+}
+
+/* ---- Workspace import / export (CSV) --------------------------------------- */
+function wbCsvEscape(v) { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+// Export every item to a CSV using field labels as headers (human-friendly text).
+function wbExportCsv(companyId, workspaceId, appId) {
+  const { workspace, app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  if (!app.fields.length) { showToast('Add fields before exporting.', 'local', 'Workspaces'); return; }
+  const cols = app.fields;
+  const header = cols.map((f) => wbCsvEscape(f.label)).join(',');
+  const lines = app.items.map((it) => cols.map((f) => wbCsvEscape(wbPlainVal(companyId, workspace, app, f, it.values[f.id], it.values))).join(','));
+  const csv = `﻿${[header, ...lines].join('\r\n')}`; // BOM so Excel reads UTF-8
+  const safeName = (app.name || 'app').replace(/[^\w.-]+/g, '_');
+  downloadText(`${safeName}.csv`, csv, 'text/csv;charset=utf-8;');
+  showToast(`Exported ${app.items.length} item${app.items.length === 1 ? '' : 's'} to CSV.`, 'local', 'Workspaces');
+}
+// RFC-4180-ish parser: handles quoted fields with embedded commas/newlines and "" escapes.
+function wbParseCsv(text) {
+  const s = String(text || '').replace(/^﻿/, '');
+  const rows = []; let row = []; let field = ''; let inQ = false; let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (inQ) {
+      if (c === '"') { if (s[i + 1] === '"') { field += '"'; i += 2; continue; } inQ = false; i++; continue; }
+      field += c; i++; continue;
+    }
+    if (c === '"') { inQ = true; i++; continue; }
+    if (c === ',') { row.push(field); field = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+    field += c; i++;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+function wbParseDurationCell(s) {
+  const t = String(s).trim();
+  const hm = t.match(/(\d+)\s*h/i); const mm = t.match(/(\d+)\s*m/i);
+  if (hm || mm) return (hm ? +hm[1] : 0) * 60 + (mm ? +mm[1] : 0);
+  const n = Number(t.replace(/[^0-9.]/g, '')); return Number.isNaN(n) ? '' : Math.round(n);
+}
+function wbParseDateCell(s) {
+  const t = String(s).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const d = new Date(t); return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+// Coerce a raw CSV cell into the stored value for a given field type.
+function wbCoerceImport(companyId, app, field, cell) {
+  const s = String(cell ?? '').trim();
+  if (s === '') return '';
+  switch (field.type) {
+    case 'number': case 'money': case 'progress': { const n = Number(s.replace(/[^0-9.\-]/g, '')); return Number.isNaN(n) ? '' : n; }
+    case 'duration': return wbParseDurationCell(s);
+    case 'checkbox': return /^(y|yes|true|1|on|✓)$/i.test(s);
+    case 'date': return wbParseDateCell(s);
+    case 'status': case 'category': { const o = (field.config.options || []).find((x) => x.label.toLowerCase() === s.toLowerCase() || x.id === s); return o ? o.id : ''; }
+    case 'user': { const m = wbMembers(companyId).find((x) => x.name.toLowerCase() === s.toLowerCase() || x.id === s); return m ? m.id : ''; }
+    case 'calculation': return undefined; // computed — never imported
+    case 'relationship': case 'file': case 'image': return ''; // not supported via CSV
+    default: return s; // text, textarea, email, phone, location
+  }
+}
+function wbImportCsvPrompt(companyId, workspaceId, appId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,text/csv,text/plain';
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    let text = '';
+    try { text = await file.text(); } catch { showToast('Could not read that file.', 'local', 'Workspaces'); return; }
+    wbImportCsvText(companyId, workspaceId, appId, text);
+  };
+  input.click();
+}
+function wbImportCsvText(companyId, workspaceId, appId, text) {
+  const { workspace, app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const rows = wbParseCsv(text).filter((r) => r.some((c) => String(c).trim() !== ''));
+  if (rows.length < 2) { showToast('That CSV has no data rows. Row 1 must be column headers.', 'local', 'Workspaces'); return; }
+  const headers = rows[0].map((hd) => String(hd).trim().toLowerCase());
+  const fieldForCol = headers.map((hd) => app.fields.find((f) => f.label.toLowerCase() === hd));
+  const matched = fieldForCol.filter(Boolean).length;
+  if (!matched) { showToast('No column headers matched this app\'s field names. Export a CSV first to see the expected headers.', 'local', 'Workspaces'); return; }
+  let added = 0;
+  const today = new Date().toISOString().slice(0, 10);
+  rows.slice(1).forEach((cells) => {
+    const values = {};
+    fieldForCol.forEach((f, i) => { if (!f) return; const v = wbCoerceImport(companyId, app, f, cells[i]); if (v !== undefined && v !== '') values[f.id] = v; });
+    if (!Object.keys(values).length) return;
+    app.items.unshift({ id: wbUid(), values, createdAt: today });
+    added++;
+  });
+  if (!added) { showToast('No rows could be imported — check that values line up with the headers.', 'local', 'Workspaces'); return; }
+  const skipped = headers.length - matched;
+  wbLogActivity(workspace, { icon: 'ti-file-import', color: '#16a34a', text: `Imported <b>${added}</b> item${added === 1 ? '' : 's'} into ${h(app.name)} from CSV` });
+  wbSave(companyId);
+  showToast(`Imported ${added} item${added === 1 ? '' : 's'}${skipped ? ` · ${skipped} unmatched column${skipped === 1 ? '' : 's'} skipped` : ''}.`, 'local', 'Workspaces');
+  render();
+}
+
 // ---- Automations (rules engine + display) -----------------------------------
 function wbFieldById(app, id) { return app.fields.find((f) => f.id === id); }
 function wbValLabel(companyId, app, fieldId, val) {
@@ -9097,7 +9454,9 @@ function wbTriggerText(companyId, app, t) {
   if (t.event === 'created') return '<span class="wb-rule-pill"><i class="ti ti-circle-plus"></i>Item is created</span>';
   if (t.event === 'updated') return '<span class="wb-rule-pill"><i class="ti ti-pencil"></i>Item is updated</span>';
   const field = wbFieldById(app, t.fieldId);
-  return `<span class="wb-rule-pill"><i class="ti ti-flag"></i>${h(field ? field.label : '?')} = ${wbValLabel(companyId, app, t.fieldId, t.value)}</span>`;
+  const numeric = field && ['number', 'money', 'calculation', 'duration', 'progress'].includes(field.type);
+  const opSym = (numeric && WB_TRIG_OPS.find(([v]) => v === t.op) || [])[2] || '=';
+  return `<span class="wb-rule-pill"><i class="ti ti-flag"></i>${h(field ? field.label : '?')} ${h(opSym)} ${wbValLabel(companyId, app, t.fieldId, t.value)}</span>`;
 }
 function wbActionText(companyId, app, ac) {
   if (ac.type === 'set_field') { const field = wbFieldById(app, ac.fieldId); return `<span class="wb-rule-pill"><i class="ti ti-edit"></i>Set ${h(field ? field.label : '?')} → ${wbValLabel(companyId, app, ac.fieldId, ac.value)}</span>`; }
@@ -9126,13 +9485,39 @@ function wbRunAutomations(companyId, workspace, app, item, event, prev) {
     if (t.event === 'created') fire = event === 'created';
     else if (t.event === 'updated') fire = event === 'updated';
     else if (t.event === 'field_is') {
-      // Compare as normalized strings so any field type matches its saved target
-      // (booleans -> 'true'/'false', numbers coerced, empty/undefined -> '').
-      const norm = (v) => (v === undefined || v === null) ? '' : (typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v));
-      const now = norm(item.values[t.fieldId]);
-      const was = norm(prev ? prev[t.fieldId] : undefined);
-      const target = norm(t.value);
-      fire = (event === 'created' || event === 'updated') && target !== '' && now === target && was !== target;
+      const triggerField = (app.fields || []).find((f) => f.id === t.fieldId);
+      const isNumeric = triggerField && ['number', 'money', 'calculation', 'duration', 'progress'].includes(triggerField.type) && WB_TRIG_OPS.some(([v]) => v === t.op);
+      if (isNumeric) {
+        // Numeric fields fire when the value satisfies the operator condition
+        // (e.g. Manhour >= 40) and did NOT satisfy it before the change — so the
+        // rule triggers on entering the range, not on every save while inside it.
+        // Calculation fields store no value, so compute their result from the formula.
+        const readNum = (vals) => triggerField.type === 'calculation' ? wbCalcRaw(app, triggerField, vals || {}) : (vals ? vals[t.fieldId] : undefined);
+        const target = Number(t.value);
+        const matches = (raw) => {
+          if (raw === undefined || raw === null || raw === '') return false;
+          const n = Number(raw);
+          if (Number.isNaN(n) || Number.isNaN(target)) return false;
+          switch (t.op) {
+            case '!=': return n !== target;
+            case '>': return n > target;
+            case '<': return n < target;
+            case '>=': return n >= target;
+            case '<=': return n <= target;
+            default: return n === target;
+          }
+        };
+        const wasMatch = prev ? matches(readNum(prev)) : false;
+        fire = (event === 'created' || event === 'updated') && t.value !== '' && t.value != null && matches(readNum(item.values)) && !wasMatch;
+      } else {
+        // Compare as normalized strings so any field type matches its saved target
+        // (booleans -> 'true'/'false', numbers coerced, empty/undefined -> '').
+        const norm = (v) => (v === undefined || v === null) ? '' : (typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v));
+        const now = norm(item.values[t.fieldId]);
+        const was = norm(prev ? prev[t.fieldId] : undefined);
+        const target = norm(t.value);
+        fire = (event === 'created' || event === 'updated') && target !== '' && now === target && was !== target;
+      }
     }
     if (!fire) return;
     (au.actions || []).forEach((ac) => {
@@ -9352,7 +9737,7 @@ function wbFieldConfigUI(fd, app) {
       <div class="wb-check-row"><label class="wb-switch"><input type="checkbox" id="wbRelMulti" ${fd.config.multiple ? 'checked' : ''}><span class="wb-slider"></span></label><div><b>Allow multiple links</b></div></div>`;
   }
   if (t === 'calculation') {
-    const numFields = app.fields.filter((f) => ['number', 'money', 'calculation'].includes(f.type));
+    const numFields = app.fields.filter((f) => ['number', 'money', 'calculation', 'duration', 'progress'].includes(f.type));
     return `<div class="wb-field"><label>Formula</label><input class="wb-input" id="wbCalcFormula" value="${h(fd.config.formula || '')}" placeholder="e.g. {Quantity} * {Unit Price}"><div class="wb-sub">Reference number/money fields by name in {curly braces}. Operators: + - * / ( )</div>${numFields.length ? `<div class="wb-calc-chips">${numFields.map((f) => `<button class="wb-tag wb-calc-chip" data-wb-insert="{${h(f.label)}}">${h(f.label)}</button>`).join('')}</div>` : '<div class="wb-sub" style="color:var(--warning,#d97706)">Add Number or Money fields first to reference them.</div>'}</div>`;
   }
   if (t === 'money') return `<div class="wb-field"><label>Currency symbol</label><input class="wb-input" id="wbCurSym" value="${h(fd.config.currency || '$')}" maxlength="3" style="max-width:120px"></div>`;
@@ -9365,8 +9750,8 @@ function wbOptRow(o) {
 }
 function wbTrigCfgUI(draft, app) {
   if (draft.trigger.event !== 'field_is') return '';
-  // Any field can trigger this, except file uploads (no comparable "value").
-  const fields = app.fields.filter((f) => f.type !== 'file');
+  // Any field can trigger this, except file/image uploads (no comparable "value").
+  const fields = app.fields.filter((f) => !['file', 'image'].includes(f.type));
   if (!fields.length) return '<div class="wb-sub" style="color:var(--warning,#d97706)">Add a field to use this trigger.</div>';
   const fid = fields.some((f) => f.id === draft.trigger.fieldId) ? draft.trigger.fieldId : fields[0].id;
   draft.trigger.fieldId = fid;
@@ -9386,8 +9771,16 @@ function wbTrigCfgUI(draft, app) {
     const ws = wbFind(state.builderModal?.companyId, state.builderModal?.workspaceId).workspace;
     const ta = ws?.apps.find((x) => x.id === field.config.targetApp);
     valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${(ta?.items || []).map((it) => opt(it.id, wbItemTitle(ta, it))).join('')}</select>`;
+  } else if (['number', 'money', 'calculation', 'duration', 'progress'].includes(field.type)) {
+    // Numeric fields (including calculation results, durations in minutes, and
+    // progress %) compare by operator so the rule can fire on a range,
+    // not just an exact match (e.g. Manhour >= 40, Progress >= 100).
+    const op = WB_TRIG_OPS.some(([v]) => v === draft.trigger.op) ? draft.trigger.op : '==';
+    draft.trigger.op = op;
+    const opSelect = `<select class="wb-input" data-wb-trig-op style="flex:0 0 128px">${WB_TRIG_OPS.map(([v, l]) => `<option value="${h(v)}" ${op === v ? 'selected' : ''}>${h(l)}</option>`).join('')}</select>`;
+    valueControl = `<div style="display:flex;gap:8px">${opSelect}<input class="wb-input" data-wb-trig-val type="number" step="any" value="${h(val)}" placeholder="Value" style="flex:1;min-width:0"></div>`;
   } else {
-    const inputType = field.type === 'date' ? 'date' : (field.type === 'number' || field.type === 'money') ? 'number' : field.type === 'email' ? 'email' : 'text';
+    const inputType = field.type === 'date' ? 'date' : field.type === 'email' ? 'email' : 'text';
     valueControl = `<input class="wb-input" data-wb-trig-val type="${inputType}" value="${h(val)}" placeholder="Exact value to match">`;
   }
   return `<div class="wb-row2">${fieldSelect}${valueControl}</div>`;
@@ -9396,7 +9789,7 @@ function wbActionCardsUI(companyId, draft, app) {
   return draft.actions.map((ac, i) => {
     let cfg = '';
     if (ac.type === 'set_field') {
-      const setable = app.fields.filter((f) => ['text', 'textarea', 'status', 'category', 'date', 'number', 'money', 'email', 'phone', 'checkbox'].includes(f.type));
+      const setable = app.fields.filter((f) => ['text', 'textarea', 'status', 'category', 'date', 'number', 'money', 'email', 'phone', 'checkbox', 'location', 'duration', 'progress'].includes(f.type));
       const fid = ac.fieldId || (setable[0] && setable[0].id);
       const field = app.fields.find((f) => f.id === fid);
       let valInput = '';
@@ -9454,6 +9847,33 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
         <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
       </div>`; break;
     case 'calculation': input = `<div class="wb-input wb-calc-display" data-calc="${h(f.id)}">—</div><div class="wb-sub">Auto-calculated: <code>${h(f.config.formula || '(no formula)')}</code></div>`; break;
+    case 'location': input = `<div class="wb-inline"><span class="wb-cur"><i class="ti ti-map-pin"></i></span><input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="Address, city, or place"></div>`; break;
+    case 'duration': {
+      const mins = Math.max(0, Math.round(Number(val) || 0));
+      input = `<div class="wb-inline wb-duration" data-wb-duration>
+        <input type="hidden" data-f="${h(f.id)}" value="${val === '' || val == null ? '' : h(String(mins))}">
+        <input type="number" min="0" class="wb-input" data-wb-dur-h value="${val === '' || val == null ? '' : h(String(Math.floor(mins / 60)))}" placeholder="0" style="max-width:90px"><span class="wb-sub">hrs</span>
+        <input type="number" min="0" max="59" class="wb-input" data-wb-dur-m value="${val === '' || val == null ? '' : h(String(mins % 60))}" placeholder="0" style="max-width:90px"><span class="wb-sub">mins</span>
+      </div>`; break;
+    }
+    case 'progress': {
+      const p = Math.max(0, Math.min(100, Math.round(Number(val) || 0)));
+      input = `<div class="wb-inline wb-progress-edit" data-wb-progress><input type="range" min="0" max="100" step="1" data-f="${h(f.id)}" value="${p}" style="flex:1"><output data-wb-prog-out class="wb-prog-num" style="min-width:48px;text-align:right">${p}%</output></div>`; break;
+    }
+    case 'image': input = `
+      <div class="wb-file-field wb-image-field" data-wb-file data-wb-image>
+        <input type="hidden" data-f="${h(f.id)}" value="${h(typeof val === 'object' ? JSON.stringify(val) : (val || ''))}" />
+        <input type="file" hidden accept="image/*" data-wb-file-input />
+        <button type="button" class="wb-image-drop" data-wb-file-open>
+          <span class="wb-img-preview" data-wb-img-preview><i class="ti ti-photo" data-wb-file-ico></i></span>
+          <span class="wb-file-label" data-wb-file-label></span>
+        </button>
+        <div class="wb-file-actions" data-wb-file-actions hidden>
+          <a class="btn btn-mini" data-wb-file-view target="_blank" rel="noreferrer"><i class="ti ti-eye"></i>View</a>
+          <button type="button" class="btn btn-mini danger" data-wb-file-remove><i class="ti ti-x"></i>Remove</button>
+        </div>
+        <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
+      </div>`; break;
     default: input = `<input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}">`;
   }
   return `<div class="wb-field">${lbl}${input}</div>`;
@@ -9473,6 +9893,13 @@ function wbFileValue(val) {
   return { name: name || 'Attached file', url: isUrl ? s : '' };
 }
 function wbFileDisplay(val) { return wbFileValue(val)?.name || ''; }
+// Humanize a duration stored as total minutes -> "2h 30m" / "45m" / "3h".
+function wbFmtDuration(mins) {
+  const total = Math.max(0, Math.round(Number(mins) || 0));
+  if (!total) return '0m';
+  const h = Math.floor(total / 60), m = total % 60;
+  return [h ? `${h}h` : '', m ? `${m}m` : ''].filter(Boolean).join(' ');
+}
 
 function wbReadFileAsDataUrl(file) {
   return new Promise((resolve) => {
@@ -9536,23 +9963,27 @@ function wbMountFileFields(overlay) {
     const bar = zone.querySelector('[data-wb-file-bar]');
     const ico = zone.querySelector('[data-wb-file-ico]');
     const label = zone.querySelector('[data-wb-file-label]');
+    const isImage = zone.hasAttribute('data-wb-image');
+    const preview = zone.querySelector('[data-wb-img-preview]');
     const paint = () => {
       const fv = wbFileValue(hidden.value);
       if (fv) {
-        ico.className = 'ti ti-file-check';
-        label.innerHTML = `<strong>${h(fv.name || 'Attached file')}</strong><small>Click to replace</small>`;
+        if (isImage && preview) preview.innerHTML = fv.url ? `<img src="${h(fv.url)}" alt="${h(fv.name || 'image')}">` : '<i class="ti ti-photo"></i>';
+        else if (ico) ico.className = 'ti ti-file-check';
+        label.innerHTML = `<strong>${h(fv.name || (isImage ? 'Image' : 'Attached file'))}</strong><small>Click to replace</small>`;
         openBtn.classList.add('has-file');
         if (fv.url) {
           actions.hidden = false;
           viewBtn.hidden = false; viewBtn.href = fv.url;
-          downloadBtn.hidden = false; downloadBtn.href = fv.url; downloadBtn.setAttribute('download', fv.name || 'file');
+          if (downloadBtn) { downloadBtn.hidden = false; downloadBtn.href = fv.url; downloadBtn.setAttribute('download', fv.name || 'file'); }
         } else {
           actions.hidden = false;
-          viewBtn.hidden = true; downloadBtn.hidden = true;
+          viewBtn.hidden = true; if (downloadBtn) downloadBtn.hidden = true;
         }
       } else {
-        ico.className = 'ti ti-cloud-upload';
-        label.innerHTML = '<strong>Click or drop a file</strong><small>Uploads to this workspace</small>';
+        if (isImage && preview) preview.innerHTML = '<i class="ti ti-photo"></i>';
+        else if (ico) ico.className = 'ti ti-cloud-upload';
+        label.innerHTML = isImage ? '<strong>Click or drop an image</strong><small>Shown as a circular avatar</small>' : '<strong>Click or drop a file</strong><small>Uploads to this workspace</small>';
         openBtn.classList.remove('has-file');
         actions.hidden = true;
       }
@@ -9619,11 +10050,45 @@ function wbMountFileFields(overlay) {
   });
 }
 
+// Duration fields show hours + minutes boxes; keep the hidden [data-f] (total
+// minutes) in sync so it saves and feeds calculation fields like any number.
+function wbMountDurationFields(overlay) {
+  overlay.querySelectorAll('[data-wb-duration]').forEach((zone) => {
+    if (zone.dataset.bound) return;
+    zone.dataset.bound = '1';
+    const hidden = zone.querySelector('input[data-f]');
+    const hEl = zone.querySelector('[data-wb-dur-h]');
+    const mEl = zone.querySelector('[data-wb-dur-m]');
+    if (!hidden || !hEl || !mEl) return;
+    const sync = () => {
+      const hv = hEl.value.trim(), mv = mEl.value.trim();
+      if (hv === '' && mv === '') hidden.value = '';
+      else hidden.value = String((Math.max(0, parseInt(hv || '0', 10) || 0) * 60) + Math.max(0, parseInt(mv || '0', 10) || 0));
+      hidden.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    hEl.addEventListener('input', sync);
+    mEl.addEventListener('input', sync);
+  });
+}
+// Progress fields: reflect the range value into the live "%" label.
+function wbMountProgressFields(overlay) {
+  overlay.querySelectorAll('[data-wb-progress]').forEach((zone) => {
+    if (zone.dataset.bound) return;
+    zone.dataset.bound = '1';
+    const range = zone.querySelector('input[data-f]');
+    const out = zone.querySelector('[data-wb-prog-out]');
+    if (!range) return;
+    const sync = () => { if (out) out.textContent = `${range.value}%`; };
+    range.addEventListener('input', sync);
+    sync();
+  });
+}
+
 function wbReadFieldInput(f) {
   const el = document.querySelector(`[data-f="${f.id}"]`);
   if (!el) return f.type === 'calculation' ? undefined : '';
   if (f.type === 'checkbox') return el.checked;
-  if (f.type === 'number' || f.type === 'money') return el.value === '' ? '' : Number(el.value);
+  if (f.type === 'number' || f.type === 'money' || f.type === 'duration' || f.type === 'progress') return el.value === '' ? '' : Number(el.value);
   if (f.type === 'relationship' && f.config.multiple) return [...el.selectedOptions].map((o) => o.value);
   // Match the contacts form: normalize phone numbers on save.
   if (f.type === 'phone') return formatPhoneNumber(el.value);
@@ -9652,6 +10117,7 @@ function wbCollectModalDraft() {
     if (val('wbAuName') !== undefined) m.draft.name = val('wbAuName');
     const tf = document.querySelector('[data-wb-trig-field]'); if (tf) m.draft.trigger.fieldId = tf.value;
     const tv = document.querySelector('[data-wb-trig-val]'); if (tv) m.draft.trigger.value = tv.value;
+    const to = document.querySelector('[data-wb-trig-op]'); if (to) m.draft.trigger.op = to.value; else delete m.draft.trigger.op;
     document.querySelectorAll('[data-wb-actype]').forEach((s) => { const i = +s.dataset.wbActype; if (m.draft.actions[i]) m.draft.actions[i].type = s.value; });
     document.querySelectorAll('[data-wb-acfield]').forEach((s) => { const i = +s.dataset.wbAcfield; if (m.draft.actions[i]) m.draft.actions[i].fieldId = s.value; });
     document.querySelectorAll('[data-wb-acval]').forEach((s) => { const i = +s.dataset.wbAcval; let v = s.value; if (v === 'true') v = true; else if (v === 'false') v = false; if (m.draft.actions[i]) m.draft.actions[i].value = v; });
@@ -9793,6 +10259,7 @@ function wbConfirmDelete() {
   if (c.op === 'del-app') { workspace.apps = workspace.apps.filter((a) => a.id !== c.appId); state.builderModal = null; wbSave(companyId); showToast('App deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
   if (c.op === 'del-field') { app.fields = app.fields.filter((f) => f.id !== c.fieldId); app.items.forEach((it) => { delete it.values[c.fieldId]; }); }
   else if (c.op === 'del-item') { app.items = app.items.filter((i) => i.id !== c.itemId); }
+  else if (c.op === 'del-items') { const kill = new Set(c.itemIds || []); app.items = app.items.filter((i) => !kill.has(i.id)); wbItemsUI(app.id).sel.clear(); }
   else if (c.op === 'del-auto') { app.automations = app.automations.filter((a) => a.id !== c.autoId); }
   state.builderModal = null; wbSave(companyId); showToast('Deleted.', 'local', 'Workspaces'); render();
 }
@@ -9823,10 +10290,36 @@ function mountWorkspaceBuilder() {
     bind('[data-add-field]', () => nav({ app_id: appId, tab: 'fields' }));
     bind('[data-add-type]', (el) => openWbFieldModal(companyId, workspaceId, appId, '', el.dataset.addType));
     bind('[data-edit-field]', (el) => openWbFieldModal(companyId, workspaceId, appId, el.dataset.editField));
+    bind('[data-hide-field]', (el) => { const { app } = wbFind(companyId, workspaceId, appId); const f = app.fields.find((x) => x.id === el.dataset.hideField); if (f) { f.hidden = !f.hidden; wbSave(companyId); showToast(f.hidden ? `"${f.label}" hidden from the items table.` : `"${f.label}" shown in the items table.`, 'local', 'Workspaces'); render(); } });
     bind('[data-del-field]', (el) => { const { app } = wbFind(companyId, workspaceId, appId); const f = app.fields.find((x) => x.id === el.dataset.delField); openWbConfirm(companyId, 'del-field', `"${f.label}" and its data in all ${app.items.length} item(s) will be removed.`, { workspaceId, appId, fieldId: el.dataset.delField }); });
     bind('[data-add-item]', () => openWbItemModal(companyId, workspaceId, appId, ''));
     bind('[data-edit-item]', (el, e) => { e.stopPropagation(); openWbItemModal(companyId, workspaceId, appId, el.dataset.editItem); });
     bind('[data-del-item]', (el, e) => { e.stopPropagation(); openWbConfirm(companyId, 'del-item', 'This record will be permanently removed.', { workspaceId, appId, itemId: el.dataset.delItem }); });
+    // Items table: sort (header click), filters, and live search.
+    bind('[data-wb-sort]', (el) => { const ui = wbItemsUI(appId); const fid = el.dataset.wbSort; if (ui.sort && ui.sort.fieldId === fid) ui.sort.dir = ui.sort.dir === 'asc' ? 'desc' : 'asc'; else ui.sort = { fieldId: fid, dir: 'asc' }; render(); });
+    bind('[data-wb-clear-sort]', () => { wbItemsUI(appId).sort = null; render(); });
+    bind('[data-wb-add-filter]', () => { const { app } = wbFind(companyId, workspaceId, appId); const f0 = app.fields[0]; if (!f0) return; wbItemsUI(appId).filters.push({ fieldId: f0.id, op: wbFilterOps(wbFieldKind(f0))[0][0], value: '' }); render(); });
+    bind('[data-wb-del-filter]', (el) => { wbItemsUI(appId).filters.splice(+el.dataset.idx, 1); render(); });
+    bind('[data-wb-clear-filters]', () => { wbItemsUI(appId).filters = []; render(); });
+    bind('[data-wb-filter-field]', (el) => { const { app } = wbFind(companyId, workspaceId, appId); const flt = wbItemsUI(appId).filters[+el.dataset.idx]; if (!flt) return; flt.fieldId = el.value; const f = app.fields.find((x) => x.id === el.value); flt.op = wbFilterOps(wbFieldKind(f))[0][0]; flt.value = ''; render(); }, 'onchange');
+    bind('[data-wb-filter-op]', (el) => { const flt = wbItemsUI(appId).filters[+el.dataset.idx]; if (flt) { flt.op = el.value; render(); } }, 'onchange');
+    bind('[data-wb-filter-val]', (el) => { const flt = wbItemsUI(appId).filters[+el.dataset.idx]; if (flt) { flt.value = el.value; render(); } }, 'onchange');
+    const wbSearchInput = document.querySelector('[data-wb-search-input]');
+    if (wbSearchInput) { wbSearchInput.oninput = () => { wbItemsUI(appId).q = wbSearchInput.value; wbApplyItemSearch(); }; wbApplyItemSearch(); }
+    bind('[data-wb-print-data]', () => wbPrintData(companyId, workspaceId, appId));
+    bind('[data-wb-print-reports]', () => wbPrintReports(companyId, workspaceId, appId));
+    bind('[data-wb-export]', () => wbExportCsv(companyId, workspaceId, appId));
+    bind('[data-wb-import]', () => wbImportCsvPrompt(companyId, workspaceId, appId));
+    // Bulk selection: per-row checkbox, select-all, and the action bar.
+    bind('[data-wb-select]', (el) => { const ui = wbItemsUI(appId); if (el.checked) ui.sel.add(el.dataset.wbSelect); else ui.sel.delete(el.dataset.wbSelect); render(); }, 'onchange');
+    bind('[data-wb-select-all]', (el) => { const ui = wbItemsUI(appId); document.querySelectorAll('#wbItemsTable [data-wb-select]').forEach((cb) => { if (el.checked) ui.sel.add(cb.dataset.wbSelect); else ui.sel.delete(cb.dataset.wbSelect); }); render(); }, 'onchange');
+    bind('[data-wb-select-all-btn]', () => { const ui = wbItemsUI(appId); document.querySelectorAll('#wbItemsTable [data-wb-select]').forEach((cb) => ui.sel.add(cb.dataset.wbSelect)); render(); });
+    bind('[data-wb-clear-sel]', () => { wbItemsUI(appId).sel.clear(); render(); });
+    bind('[data-wb-print-sel]', () => wbPrintData(companyId, workspaceId, appId, new Set(wbItemsUI(appId).sel)));
+    bind('[data-wb-del-sel]', () => { const ids = [...wbItemsUI(appId).sel]; if (!ids.length) return; openWbConfirm(companyId, 'del-items', `${ids.length} record${ids.length === 1 ? '' : 's'} will be permanently removed.`, { workspaceId, appId, itemIds: ids }); });
+    // Reflect a partial selection as the indeterminate ("—") state on select-all.
+    const selAll = document.querySelector('[data-wb-select-all]');
+    if (selAll) { const boxes = document.querySelectorAll('#wbItemsTable [data-wb-select]'); const checked = [...boxes].filter((b) => b.checked).length; selAll.indeterminate = checked > 0 && checked < boxes.length; }
     // A file cell opens a preview/download chooser (not the row's edit modal).
     bind('[data-wb-view-file]', (el, e) => { e.stopPropagation(); openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
     // Checkbox cells toggle inline without opening the item.
@@ -9891,6 +10384,8 @@ function wbMountModal() {
     overlay.querySelectorAll('#wbItemForm [data-f]').forEach((el) => el.addEventListener('input', recompute));
     overlay.querySelectorAll('#wbItemForm [data-f]').forEach((el) => el.addEventListener('change', recompute));
     wbMountFileFields(overlay);
+    wbMountDurationFields(overlay);
+    wbMountProgressFields(overlay);
     recompute();
   }
   const af = overlay.querySelector('[autofocus]'); if (af) af.focus();
