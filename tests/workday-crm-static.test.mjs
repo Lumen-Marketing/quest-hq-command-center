@@ -124,3 +124,19 @@ test('Workday manager UI uses scannable command components', () => {
   assert.match(styles, /\.workday-alert-icon/);
   assert.match(styles, /\.workday-filter-count/);
 });
+
+test('Workday My Queue uses scannable command components', () => {
+  assert.match(source, /function workdayQueueTone\(/);
+  assert.match(source, /function workdayQueueIcon\(/);
+  assert.match(source, /function workdayQueueActionHint\(/);
+  assert.match(source, /workday-queue-summary/);
+  assert.match(source, /workday-queue-icon/);
+  assert.match(source, /workday-queue-priority/);
+  assert.match(source, /workday-panel-summary/);
+  assert.match(source, /workday-panel-action-head/);
+  assert.match(styles, /\.workday-queue-item\.tone-critical/);
+  assert.match(styles, /\.workday-queue-icon/);
+  assert.match(styles, /\.workday-queue-priority/);
+  assert.match(styles, /\.workday-panel-summary/);
+  assert.match(styles, /\.workday-panel-action-head/);
+});

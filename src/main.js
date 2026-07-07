@@ -5857,6 +5857,33 @@ function workdayFilterCount(alerts, filter) {
   return filter === 'all' ? alerts.length : alerts.filter((alert) => alert.type === filter).length;
 }
 
+function workdayQueueTone(item) {
+  if (!item) return 'neutral';
+  if (item.priority >= 95 || /overdue/i.test(item.reason || '')) return 'critical';
+  if (item.priority >= 80 || /today|untouched|hot/i.test(`${item.kind} ${item.reason}`)) return 'warning';
+  if (item.recordType === 'form_response') return 'success';
+  if (item.recordType === 'deal' || item.recordType === 'job') return 'info';
+  return 'neutral';
+}
+
+function workdayQueueIcon(item) {
+  if (!item) return 'ti-circle-dashed';
+  if (item.recordType === 'task') return /overdue/i.test(item.reason || '') ? 'ti-alert-triangle' : 'ti-checkbox';
+  if (item.recordType === 'contact') return item.kind === 'Untouched' ? 'ti-user-question' : 'ti-id-badge-2';
+  if (item.recordType === 'deal') return 'ti-briefcase';
+  if (item.recordType === 'job') return 'ti-hammer';
+  if (item.recordType === 'form_response') return 'ti-clipboard-list';
+  return 'ti-bell';
+}
+
+function workdayQueueActionHint(item) {
+  if (!item) return 'Open';
+  if (item.action) return item.action;
+  if (item.recordType === 'task') return 'Finish follow-up';
+  if (item.recordType === 'form_response') return 'Create CRM record';
+  return 'Work record';
+}
+
 function renderWorkdayModeTabs() {
   return `
     <div class="workday-mode-tabs" role="tablist" aria-label="Workday view">
@@ -5871,6 +5898,8 @@ function renderWorkdayPage(companyId) {
   const items = workdayQueueItems(companyId);
   const active = items.find((item) => item.id === state.selectedWorkdayItemId) || items[0] || null;
   if (active && state.selectedWorkdayItemId !== active.id) state.selectedWorkdayItemId = active.id;
+  const urgentItems = items.filter((item) => ['critical', 'warning'].includes(workdayQueueTone(item))).length;
+  const ownedItems = items.filter((item) => item.owner && item.owner !== 'Unassigned').length;
   return `
     <section class="workday-page">
       ${workspaceHeader('Workday', 'Daily CRM queue for calls, follow-ups, quotes, jobs, and form responses.', `
@@ -5892,6 +5921,11 @@ function renderWorkdayPage(companyId) {
           <section class="workday-queue panel">
             <div class="section-head">
               <div><h2>Command queue</h2><p>${items.length} item${items.length === 1 ? '' : 's'} needing work</p></div>
+            </div>
+            <div class="workday-queue-summary" aria-label="My Queue summary">
+              <span><strong>${h(String(items.length))}</strong><small>Total</small></span>
+              <span><strong>${h(String(urgentItems))}</strong><small>Priority</small></span>
+              <span><strong>${h(String(ownedItems))}</strong><small>Assigned</small></span>
             </div>
             <div class="workday-queue-list">
               ${items.map((item) => renderWorkdayQueueItem(item, active?.id === item.id)).join('') || emptyState('No urgent Workday items.')}
@@ -6032,11 +6066,20 @@ function renderWorkdayRepDetailPanel(repRow, companyId) {
 }
 
 function renderWorkdayQueueItem(item, active) {
+  const tone = workdayQueueTone(item);
   return `
-    <button class="workday-queue-item ${active ? 'active' : ''}" type="button" data-action="workday-open-item" data-workday-item-id="${h(item.id)}">
-      <span class="workday-kind">${h(item.kind)}</span>
-      <span class="workday-main"><strong>${h(item.title)}</strong><small>${h(item.meta || item.reason)}</small></span>
-      <span class="workday-owner">${h(item.owner)}</span>
+    <button class="workday-queue-item tone-${h(tone)} ${active ? 'active' : ''}" type="button" data-action="workday-open-item" data-workday-item-id="${h(item.id)}">
+      <span class="workday-queue-icon"><i class="ti ${h(workdayQueueIcon(item))}"></i></span>
+      <span class="workday-main workday-queue-copy">
+        <span class="workday-queue-title"><span class="workday-kind">${h(item.kind)}</span><strong>${h(item.title)}</strong></span>
+        <small>${h(item.reason)}</small>
+        ${item.meta ? `<em>${h(item.meta)}</em>` : ''}
+      </span>
+      <span class="workday-queue-meta">
+        <strong class="workday-queue-priority">${h(String(item.priority))}</strong>
+        <small>${h(item.owner)}</small>
+        <span>${h(workdayQueueActionHint(item))}</span>
+      </span>
     </button>
   `;
 }
@@ -6052,8 +6095,9 @@ function renderWorkdayPanel(item, companyId) {
       : type === 'job' ? companyTasks(companyId).filter((task) => task.project_id === record.id && isOpenTask(task))
         : [];
   const canQuick = ['contact', 'deal', 'job'].includes(type);
+  const tone = workdayQueueTone(item);
   return `
-    <section class="workday-panel panel">
+    <section class="workday-panel panel tone-${h(tone)}">
       <div class="workday-panel-head">
         <span class="workday-panel-icon"><i class="ti ${type === 'deal' ? 'ti-briefcase' : type === 'job' ? 'ti-hammer' : type === 'form_response' ? 'ti-clipboard-list' : 'ti-user'}"></i></span>
         <div>
@@ -6063,7 +6107,16 @@ function renderWorkdayPanel(item, companyId) {
         </div>
         <button class="btn" type="button" data-action="workday-open-record" data-workday-item-id="${h(item.id)}"><i class="ti ti-external-link"></i>Open record</button>
       </div>
+      <div class="workday-panel-summary">
+        <span><strong>${h(workdayQueueActionHint(item))}</strong><small>Next best action</small></span>
+        <span><strong>${h(String(item.priority))}</strong><small>Queue priority</small></span>
+        <span><strong>${h(type.replaceAll('_', ' '))}</strong><small>Record type</small></span>
+      </div>
       ${canQuick ? `
+        <div class="workday-panel-action-head">
+          <div><h3>Work this record</h3><p>Choose the next move and keep the activity trail current.</p></div>
+          <span class="workday-status-pill tone-${h(tone === 'critical' ? 'critical' : tone === 'warning' ? 'warning' : tone === 'success' ? 'success' : 'neutral')}"><i class="ti ${h(workdayQueueIcon(item))}"></i>${h(item.kind)}</span>
+        </div>
         <div class="workday-action-grid">
           ${['Log a Call', 'Email', 'Note', 'New Task', 'New Event', 'Estimate', 'Proposal'].map((kind) => `
             <button type="button" data-action="workday-quick-action" data-workday-item-id="${h(item.id)}" data-kind="${h(kind)}">
@@ -6073,12 +6126,20 @@ function renderWorkdayPanel(item, companyId) {
           `).join('')}
         </div>
       ` : type === 'form_response' ? `
+        <div class="workday-panel-action-head">
+          <div><h3>Create from response</h3><p>Turn the submitted form into a live CRM record or follow-up.</p></div>
+          <span class="workday-status-pill tone-success"><i class="ti ti-clipboard-list"></i>${h(item.kind)}</span>
+        </div>
         <div class="workday-action-grid">
           <button type="button" data-action="response-create-contact" data-response-id="${h(record.id)}"><i class="ti ti-id-badge-2"></i><span>Create contact</span></button>
           <button type="button" data-action="response-create-job" data-response-id="${h(record.id)}"><i class="ti ti-hammer"></i><span>Create job</span></button>
           <button type="button" data-action="response-create-task" data-response-id="${h(record.id)}"><i class="ti ti-checkbox"></i><span>Create task</span></button>
         </div>
       ` : `
+        <div class="workday-panel-action-head">
+          <div><h3>Finish the follow-up</h3><p>Open the task or mark it handled when it is complete.</p></div>
+          <span class="workday-status-pill tone-${h(tone === 'critical' ? 'critical' : tone === 'warning' ? 'warning' : 'neutral')}"><i class="ti ${h(workdayQueueIcon(item))}"></i>${h(item.kind)}</span>
+        </div>
         <div class="workday-action-grid">
           <button type="button" data-action="workday-open-record" data-workday-item-id="${h(item.id)}"><i class="ti ti-checkbox"></i><span>Open task</span></button>
           <button type="button" data-action="workday-complete-item" data-workday-item-id="${h(item.id)}"><i class="ti ti-check"></i><span>Done for now</span></button>
