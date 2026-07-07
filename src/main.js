@@ -3040,6 +3040,7 @@ async function loadSupabaseData() {
   }
   if (!filesResult.error) {
     state.files = (filesResult.data || []).map(normalizeFile);
+    wbReconstructAppDriveFolders();
     liveTables += 1;
   }
   if (!teamResult.error) {
@@ -3344,6 +3345,7 @@ function resetDemoWorkspaceData() {
   state.tasks = activeRows(readDemoList(TASK_CACHE_KEY, tasksFallback)).map(normalizeTask);
   state.files = activeRows(readDemoList(FILE_CACHE_KEY, filesFallback)).map(normalizeFile);
   state.driveFolders = readDemoList(DRIVE_FOLDER_CACHE_KEY, []).map(normalizeDriveFolder);
+  wbReconstructAppDriveFolders();
   state.forms = activeRows(readDemoList(FORM_CACHE_KEY, formsFallback)).map(normalizeForm);
   state.formResponses = activeRows(readDemoList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback)).map(normalizeFormResponse);
   state.financeInvoices = activeRows(readDemoList(FINANCE_INVOICE_CACHE_KEY, financeInvoicesFallback)).map(normalizeFinanceInvoice);
@@ -9760,6 +9762,7 @@ function wbViewCompanyHome(companyId, workspace) {
         <div class="wb-sub">Build customizable, no-code dashboards for ${h(companyName(companyId) || 'this company')}.</div>
       </div>
       <div class="wb-spacer"></div>
+      ${canManage ? `<button class="btn" data-wb-install-app><i class="ti ti-package-import"></i>Install app</button>` : ''}
       ${canManage ? `<button class="btn btn-primary" data-new-app><i class="ti ti-plus"></i>Add app</button>` : ''}
     </div>
     ${appsBlock}
@@ -10092,6 +10095,10 @@ function wbViewAppSettings(companyId, workspace, app) {
       <div class="wb-emoji-pick" id="wbSetIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${app.icon === icon ? 'sel' : ''}" data-icon="${icon}"><i class="ti ${icon}"></i></button>`).join('')}</div>
       <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}</div>
     </div>
+    <div class="wb-field"><label>Portability</label>
+      <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — including all fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'} and ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'} — to back it up or install it into another workspace.</div>
+      <div class="wb-settings-actions" style="margin-top:10px"><button class="btn" data-wb-download-app><i class="ti ti-download"></i>Download app</button></div>
+    </div>
     ${canManage ? `<div class="wb-settings-actions"><button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save changes</button><button class="btn danger" data-del-app><i class="ti ti-trash"></i>Delete app</button></div>` : ''}
   </div>`;
 }
@@ -10299,6 +10306,102 @@ function wbImportCsvText(companyId, workspaceId, appId, text) {
   wbSave(companyId);
   showToast(`Imported ${added} item${added === 1 ? '' : 's'}${skipped ? ` · ${skipped} unmatched column${skipped === 1 ? '' : 's'} skipped` : ''}.`, 'local', 'Workspaces');
   render();
+}
+
+/* ---- Whole-app download / install (portable .questapp.json) ----------------- */
+// Serialize a full app — its fields, records and automations — to a portable file.
+function wbDownloadApp(companyId, workspaceId, appId) {
+  const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const bundle = {
+    format: 'quest-hq-app',
+    version: 1,
+    exported_at: new Date().toISOString(),
+    app: {
+      name: app.name,
+      description: app.description || '',
+      type: app.type || '',
+      icon: app.icon,
+      color: app.color,
+      fields: clone(app.fields || []),
+      items: clone(app.items || []),
+      automations: clone(app.automations || []),
+    },
+  };
+  const safeName = (app.name || 'app').replace(/[^\w.-]+/g, '_');
+  downloadText(`${safeName}.questapp.json`, JSON.stringify(bundle, null, 2), 'application/json');
+  showToast(`Downloaded "${app.name}" (${app.fields.length} fields · ${app.items.length} records · ${app.automations.length} automations).`, 'local', 'Workspaces');
+}
+function wbInstallAppPrompt(companyId, workspaceId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,.questapp.json,application/json';
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    let text = '';
+    try { text = await file.text(); } catch { showToast('Could not read that file.', 'local', 'Workspaces'); return; }
+    wbInstallAppFromJson(companyId, workspaceId, text);
+  };
+  input.click();
+}
+// Rebuild an app from a downloaded bundle with fresh ids so it can't collide with
+// existing apps/fields/items. Field ids are remapped everywhere they're referenced
+// (item values, automation triggers/actions); option ids inside a field's config
+// are kept, so status/category automations stay valid.
+function wbInstallAppFromJson(companyId, workspaceId, text) {
+  let bundle;
+  try { bundle = JSON.parse(text); } catch { showToast('That file isn\'t valid JSON.', 'local', 'Workspaces'); return; }
+  const src = bundle && bundle.app ? bundle.app : bundle;
+  if (!src || !Array.isArray(src.fields)) { showToast('That doesn\'t look like a Quest HQ app file.', 'local', 'Workspaces'); return; }
+  const { workspace } = wbFind(companyId, workspaceId);
+  if (!workspace) return;
+  // Fresh field ids + a map from the old ids for remapping references.
+  const fieldIdMap = {};
+  const fields = src.fields.map((f) => {
+    const id = wbUid();
+    fieldIdMap[f.id] = id;
+    return {
+      id,
+      label: String(f.label || 'Field'),
+      type: WB_FIELD_TYPES[f.type] ? f.type : 'text',
+      required: !!f.required,
+      hidden: !!f.hidden,
+      config: f.config && typeof f.config === 'object' ? clone(f.config) : {},
+    };
+  });
+  const items = (Array.isArray(src.items) ? src.items : []).map((it) => {
+    const values = {};
+    Object.keys(it.values || {}).forEach((oldFid) => { const nf = fieldIdMap[oldFid]; if (nf) values[nf] = it.values[oldFid]; });
+    return { id: wbUid(), values, createdAt: it.createdAt || new Date().toISOString().slice(0, 10) };
+  });
+  const automations = (Array.isArray(src.automations) ? src.automations : []).map((au) => {
+    const trigger = au.trigger && typeof au.trigger === 'object' ? { ...au.trigger } : { event: 'created' };
+    if (trigger.fieldId && fieldIdMap[trigger.fieldId]) trigger.fieldId = fieldIdMap[trigger.fieldId];
+    const actions = (Array.isArray(au.actions) ? au.actions : []).map((ac) => {
+      const next = { ...ac };
+      if (next.fieldId && fieldIdMap[next.fieldId]) next.fieldId = fieldIdMap[next.fieldId];
+      return next;
+    });
+    return { id: wbUid(), name: au.name || 'Automation', enabled: au.enabled !== false, trigger, actions };
+  });
+  // Keep the app name unique within the workspace.
+  let name = String(src.name || 'Imported app').trim() || 'Imported app';
+  if (workspace.apps.some((a) => a.name === name)) { let n = 2; while (workspace.apps.some((a) => a.name === `${name} (${n})`)) n += 1; name = `${name} (${n})`; }
+  const app = {
+    id: wbUid(),
+    name,
+    description: String(src.description || ''),
+    type: String(src.type || ''),
+    icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0],
+    color: src.color || WB_PALETTE[1],
+    fields, items, automations,
+  };
+  workspace.apps.push(app);
+  wbLogActivity(workspace, { icon: 'ti-package-import', color: '#16a34a', text: `Installed app <b>${h(name)}</b> (${fields.length} fields · ${items.length} records · ${automations.length} automations)` });
+  wbSave(companyId);
+  showToast(`Installed "${name}".`, 'local', 'Workspaces');
+  navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
 }
 
 // ---- Automations (rules engine + display) -----------------------------------
@@ -10769,29 +10872,74 @@ function wbReadFileAsDataUrl(file) {
   });
 }
 
-// Mirror a workspace-app file upload into Company Drive, inside a folder named
-// after the app that owns the file field. Returns the folder name (or '').
-function wbMirrorFileToDrive(file, objectPath, companyId) {
+// Deterministic folder id from (company, parent, name). Drive folders have no
+// server table — they only persist in local caches / backups — so app folders
+// use a stable, derivable id (not a random UUID). That lets us rebuild the exact
+// same folder tree from the durable file records on every load (see
+// wbReconstructAppDriveFolders), so uploaded files never orphan to the root.
+function wbFolderKey(companyId, parentKey, name) {
+  const s = `${canonicalCompanyId(companyId)}|${parentKey}|${String(name).trim().toLowerCase()}`;
+  let hash = 5381;
+  for (let i = 0; i < s.length; i += 1) hash = ((hash << 5) + hash + s.charCodeAt(i)) >>> 0;
+  return `wbf-${hash.toString(36)}`;
+}
+// Find (or create) a Company Drive folder by name under a specific parent, scoped
+// to the company. Matching on parent + name keeps same-named folders at different
+// depths distinct (e.g. two apps can each have an "Assets & Briefs" field folder).
+function wbFindOrCreateDriveFolder(companyId, name, parentKey) {
+  const canon = canonicalCompanyId(companyId);
+  const clean = String(name || '').trim() || 'Untitled';
+  const id = wbFolderKey(companyId, parentKey, clean);
+  let folder = state.driveFolders.find((f) => f.id === id)
+    || state.driveFolders.find((f) => canonicalCompanyId(f.company_id) === canon && String(f.parent_key || 'home') === parentKey && f.name === clean);
+  if (!folder) {
+    folder = normalizeDriveFolder({ id, company_id: companyId, name: clean, parent_key: parentKey, created_by_label: activeSession().profile.full_name || 'Quest HQ', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    state.driveFolders.unshift(folder);
+  }
+  return folder;
+}
+// Drive folders don't persist server-side, but the uploaded files do (job_files).
+// Rebuild the App > (App) > (Field) tree from each mirrored file's notes so the
+// folders reappear after any reload, and re-file any file whose stored folder id
+// no longer exists back into its reconstructed field folder.
+function wbReconstructAppDriveFolders() {
+  const rx = /workspace app "(.+?)"(?: · field "(.+?)")?/;
+  const existingIds = new Set((state.driveFolders || []).map((f) => f.id));
+  (state.files || []).forEach((file) => {
+    const mm = rx.exec(file.notes || '');
+    if (!mm) return;
+    const appName = (mm[1] || '').trim();
+    if (!appName) return;
+    const fieldName = (mm[2] || 'Attached files').trim();
+    const appRoot = wbFindOrCreateDriveFolder(file.company_id, 'App', 'home');
+    const appFolder = wbFindOrCreateDriveFolder(file.company_id, appName, appRoot.id);
+    const leaf = wbFindOrCreateDriveFolder(file.company_id, fieldName, appFolder.id);
+    if (!existingIds.has(file.folder) && file.folder !== leaf.id) file.folder = leaf.id;
+  });
+}
+// Mirror a workspace-app file upload into Company Drive, filed under a nested
+// structure: App > (App name) > (Field name). Returns a breadcrumb string (or '').
+function wbMirrorFileToDrive(file, objectPath, companyId, fieldId) {
   try {
     const m = state.builderModal;
     const app = m ? wbFind(companyId, m.workspaceId, m.appId)?.app : null;
     const appName = String(app?.name || 'Workspace files').trim() || 'Workspace files';
-    const canon = canonicalCompanyId(companyId);
-    let folder = state.driveFolders.find((f) => canonicalCompanyId(f.company_id) === canon && f.name === appName);
-    if (!folder) {
-      folder = normalizeDriveFolder({ id: `folder-${crypto.randomUUID()}`, company_id: companyId, name: appName, parent_key: 'home', created_by_label: activeSession().profile.full_name || 'Quest HQ', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-      state.driveFolders.unshift(folder);
-    }
+    const field = app && fieldId ? app.fields.find((f) => f.id === fieldId) : null;
+    const fieldName = String(field?.label || 'Attached files').trim() || 'Attached files';
+    // Build (or reuse) the App > (App) > (Field) folder chain.
+    const appRoot = wbFindOrCreateDriveFolder(companyId, 'App', 'home');
+    const appFolder = wbFindOrCreateDriveFolder(companyId, appName, appRoot.id);
+    const fieldFolder = wbFindOrCreateDriveFolder(companyId, fieldName, appFolder.id);
     const payload = normalizeFile({
       id: `file-${crypto.randomUUID()}`,
       company_id: companyId,
       job_id: '',
-      folder: folder.id,
+      folder: fieldFolder.id,
       file_name: file.name,
       mime_type: file.type || 'application/octet-stream',
       size_bytes: file.size,
       category: appName,
-      notes: `Uploaded from workspace app "${appName}".`,
+      notes: `Uploaded from workspace app "${appName}" · field "${fieldName}".`,
       uploaded_by_label: activeSession().profile.full_name || 'Quest HQ',
       bucket_id: 'quest-job-files',
       object_path: objectPath,
@@ -10802,7 +10950,7 @@ function wbMirrorFileToDrive(file, objectPath, companyId) {
     const client = createSupabaseClient();
     if (client) { client.from('job_files').insert(filePayload(payload)).then((r) => { if (r.error) console.warn('Drive mirror insert failed', r.error); }).catch((e) => console.warn('Drive mirror insert failed', e)); }
     persistAll();
-    return appName;
+    return `App / ${appName} / ${fieldName}`;
   } catch (error) { console.warn('Drive mirror failed', error); return ''; }
 }
 
@@ -10895,9 +11043,9 @@ function wbMountFileFields(overlay) {
       openBtn.disabled = false;
       paint();
       setTimeout(() => { progress.hidden = true; bar.style.width = '0%'; }, 400);
-      // Mirror the upload into Company Drive under a folder named after this app.
-      const mirrored = objectPath ? wbMirrorFileToDrive(file, objectPath, companyId) : '';
-      showToast(mirrored ? `File attached and saved to Company Drive → "${mirrored}".` : 'File attached.', live ? 'live' : 'local', 'Workspaces');
+      // Mirror the upload into Company Drive under App > (App) > (Field).
+      const mirrored = objectPath ? wbMirrorFileToDrive(file, objectPath, companyId, hidden.getAttribute('data-f')) : '';
+      showToast(mirrored ? `File attached and saved to Company Drive → ${mirrored}.` : 'File attached.', live ? 'live' : 'local', 'Workspaces');
     };
     openBtn.onclick = () => fileInput.click();
     removeBtn.onclick = () => { hidden.value = ''; hidden.dispatchEvent(new Event('input', { bubbles: true })); fileInput.value = ''; paint(); };
@@ -11144,6 +11292,8 @@ function mountWorkspaceBuilder() {
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp, tab: 'items' }));
     bind('[data-new-app]', () => openWbAppModal(companyId, workspaceId));
+    bind('[data-wb-install-app]', () => wbInstallAppPrompt(companyId, workspaceId));
+    bind('[data-wb-download-app]', () => wbDownloadApp(companyId, workspaceId, appId));
     bind('[data-wb-delete-workspace]', () => { const ws = wbCompanyWorkspace(companyId); if (ws) openWbDeleteWorkspace(companyId, ws); });
     bind('[data-tab]', (el) => nav({ app_id: appId, tab: el.dataset.tab }));
     bind('[data-add-field]', () => nav({ app_id: appId, tab: 'fields' }));
@@ -11246,8 +11396,19 @@ function wbMountModal() {
     wbMountDurationFields(overlay);
     wbMountProgressFields(overlay);
     recompute();
+  } else if (['workspace', 'app', 'field', 'automation'].includes(m.kind)) {
+    // Persist every keystroke into the draft (no re-render) so a background sync,
+    // toast, or tab-refocus render can never wipe half-entered input.
+    const persist = () => wbCollectModalDraft();
+    overlay.querySelectorAll('input, textarea, select').forEach((el) => {
+      el.addEventListener('input', persist);
+      el.addEventListener('change', persist);
+    });
   }
-  const af = overlay.querySelector('[autofocus]'); if (af) af.focus();
+  // Only pull focus to the autofocus target on the initial open — never when a
+  // background re-render re-runs this while the user is already typing in the modal.
+  const af = overlay.querySelector('[autofocus]');
+  if (af && !overlay.contains(document.activeElement)) af.focus();
 }
 
 function renderSettingsPage(route, companyId) {
@@ -29486,6 +29647,13 @@ function driveMetrics(companyId = activeCompanyId()) {
   return { count: files.length, bytes: sum(files, 'size_bytes') };
 }
 
+// True when a file's folder resolves to a real folder (built-in, custom, or app),
+// meaning the file already lives somewhere and shouldn't also list at the root.
+function driveFolderExists(companyId, folderId) {
+  if (!folderId || folderId === 'home' || folderId === 'root') return false;
+  if (DRIVE_FOLDERS.some(([id]) => id === folderId)) return true;
+  return companyDriveFolders(companyId).some((f) => f.id === folderId);
+}
 function filteredDriveFiles(companyId = activeCompanyId(), folder = 'home', jobId = '') {
   const query = (state.fileQuery || state.query || '').trim().toLowerCase();
   const category = state.fileCategoryFilter;
@@ -29495,6 +29663,11 @@ function filteredDriveFiles(companyId = activeCompanyId(), folder = 'home', jobI
   } else if (folder && folder !== 'home') {
     if (folder === 'jobs') files = files.filter((file) => file.job_id);
     else files = files.filter((file) => file.folder === folder);
+  } else {
+    // Root view: show only files that truly live at the root — not ones already
+    // filed inside a folder or attached to a job (those stay in their folder).
+    // Orphaned files whose folder no longer exists still surface so they're never lost.
+    files = files.filter((file) => !file.job_id && !driveFolderExists(companyId, file.folder));
   }
   if (category && category !== 'All categories') {
     files = files.filter((file) => String(file.category || folderLabel(file.folder)).toLowerCase() === category.toLowerCase());
