@@ -8,7 +8,7 @@ const smoke = readFileSync(new URL('../scripts/production-smoke.mjs', import.met
 
 assert.match(main, /const PROPOSAL_CACHE_KEY = 'quest-hq-proposal-cache-v1'/);
 assert.match(main, /id: 'proposals'.*label: 'Proposals'/s);
-assert.match(main, /module_ids: \['contacts', 'deals', 'proposals', 'jobs'\]/);
+assert.match(main, /module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
 assert.match(main, /if \(route\.section === 'proposals'\) return renderProposalsPage\(route, companyId\);/);
 
 assert.match(main, /function normalizeProposal\(/);

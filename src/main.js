@@ -776,7 +776,7 @@ const PRIVATE_PLUGIN_ACCESS = {
 };
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
-  { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
+  { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
   { id: 'underwriter', label: 'Underwriter', summary: 'Qualification, scope, pricing, and handoff readiness queue.', icon: 'ti-clipboard-search', module_ids: ['underwriter'], permissions: ['underwriter.view', 'underwriter.manage'], recommendedWith: ['crm_2'] },
   { id: 'files', label: 'Files', summary: 'Shared files, job folders, and document storage.', icon: 'ti-folder', module_ids: ['files'], permissions: ['files.view', 'files.manage'] },
   { id: 'client_portal', label: 'Client Portal', summary: 'Password-protected plan links, markups, comments, and client review.', icon: 'ti-world-upload', module_ids: ['client-portals'], permissions: ['client_portals.view', 'client_portals.manage'], recommendedWith: ['files'] },
@@ -910,6 +910,7 @@ const WORKSPACE_ICON_SVG = {
 
 const MODULE_REGISTRY = [
   { id: 'dashboard', group: 'Workspace', label: 'Dashboard', icon: 'ti-layout-dashboard', symbol: 'q-logo', status: 'live', permission: '' },
+  { id: 'workday', group: 'Work', label: 'Workday', icon: 'ti-clipboard-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'crm.view' },
   { id: 'jobs', group: 'Production', label: 'Jobs', icon: 'ti-hammer', symbol: 'q-symbol-jobs', status: 'live', permission: 'jobs.view' },
   { id: 'tasks', group: 'Work', label: 'My tasks', icon: 'ti-list-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'tasks.view' },
   { id: 'files', group: 'Workspace', label: 'Files', icon: 'ti-folder', symbol: 'q-symbol-files', status: 'live', permission: 'files.view' },
@@ -940,7 +941,7 @@ const MODULE_REGISTRY = [
 ];
 
 const NAV_GROUPS = [
-  { label: 'Work', ids: ['dashboard', 'tasks', 'workspaces', 'underwriter'] },
+  { label: 'Work', ids: ['dashboard', 'workday', 'tasks', 'workspaces', 'underwriter'] },
   { label: 'Communication', ids: ['messages', 'calendar'] },
   { label: 'Contacts - Top of Funnel', ids: ['contacts'] },
   { label: 'Quotes - Bottom of Funnel', ids: ['deals', 'proposals'] },
@@ -2171,6 +2172,9 @@ const state = {
   activityPrefill: null,
   activityFilter: 'all',
   dockedActivityComposers: [],
+  selectedWorkdayItemId: '',
+  workdayFilter: 'all',
+  workdayNextStepContext: null,
   contactWorkspaceTab: 'Notes',
   contactPrefill: null,
   selectedJobId: '',
@@ -4083,6 +4087,7 @@ function renderWorkspace(route) {
     if (!isModuleInstalled(route.section, companyId)) return renderPluginBlockedPage(companyId, moduleMeta);
     if (moduleMeta?.permission && !can(moduleMeta.permission, companyId)) return renderPermissionBlockedPage(companyId, moduleMeta.permission);
   }
+  if (route.section === 'workday') return renderWorkdayPage(companyId);
   if (route.section === 'jobs') return renderJobsPage(route, companyId);
   if (route.section === 'tasks') return renderTasksPage(route, companyId);
   if (route.section === 'files') return renderFilesPage(route, companyId);
@@ -5419,6 +5424,377 @@ function renderDashboardActivityModal(companyId) {
       ${items.map(renderHomeActivity).join('') || emptyState('No activity yet.')}
     </div>
   `, '<button class="btn" type="button" data-action="close-modal">Close</button>');
+}
+
+function isTodayDate(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return date.toDateString() === new Date().toDateString();
+}
+
+function workdayRecordUrl(record) {
+  if (!record) return companyPath('workday', {}, activeCompanyId());
+  if (record.type === 'contact') return companyPath('contacts', { contact_id: record.id }, record.company_id);
+  if (record.type === 'deal') return companyPath('deals', { deal_id: record.id }, record.company_id);
+  if (record.type === 'job') return companyPath('jobs', { tab: 'profile', job_id: record.id }, record.company_id);
+  if (record.type === 'task') return companyPath('tasks', { ...(record.project_id ? { job_id: record.project_id } : {}), task_id: record.id }, record.company_id);
+  if (record.type === 'form_response') return companyPath('forms', { form_id: record.form_id, tab: 'responses', response_id: record.id }, record.company_id);
+  return companyPath('workday', {}, record.company_id || activeCompanyId());
+}
+
+function workdayRecordFromItem(item) {
+  if (!item) return null;
+  if (item.recordType === 'contact') return contactById(item.recordId);
+  if (item.recordType === 'deal') return dealById(item.recordId);
+  if (item.recordType === 'job') return jobById(item.recordId);
+  if (item.recordType === 'task') return taskById(item.recordId);
+  if (item.recordType === 'form_response') return companyFormResponses(item.companyId).find((response) => response.id === item.recordId) || null;
+  return null;
+}
+
+function workdayRelatedRecord(item) {
+  const record = workdayRecordFromItem(item);
+  if (!record) return null;
+  if (item.recordType === 'task') {
+    if (record.contact_id) return { type: 'contact', id: record.contact_id, record: contactById(record.contact_id) };
+    if (record.project_id) return { type: 'job', id: record.project_id, record: jobById(record.project_id) };
+  }
+  if (item.recordType === 'form_response') return { type: 'form_response', id: record.id, record };
+  return { type: item.recordType, id: record.id, record };
+}
+
+function workdayRecordLabel(record, type) {
+  if (!record) return 'Record';
+  if (type === 'form_response') return formById(record.form_id)?.title || 'Form response';
+  return record.name || record.title || record.client_name || 'Record';
+}
+
+function workdayRecordOwner(record, type) {
+  if (!record) return 'Unassigned';
+  if (type === 'task') return memberName(record.assignee_id) || 'Unassigned';
+  if (type === 'form_response') return record.submitted_by || record.submitter_email || 'Customer';
+  return record.owner_name || 'Unassigned';
+}
+
+function workdayRecordMeta(record, type) {
+  if (!record) return '';
+  if (type === 'contact') return [record.phone, record.email, record.location].filter(Boolean).join(' / ');
+  if (type === 'deal') return [accountName(record.account_id), money(record.value || 0), record.stage].filter(Boolean).join(' / ');
+  if (type === 'job') return [record.site_address, record.stage, money(record.estimate_total || 0)].filter(Boolean).join(' / ');
+  if (type === 'task') return [statusLabel(record.status), record.due ? `Due ${formatDate(record.due)}` : '', titleCase(record.priority)].filter(Boolean).join(' / ');
+  if (type === 'form_response') return [record.submitter_email, formatDate(record.created_at)].filter(Boolean).join(' / ');
+  return '';
+}
+
+function workdayHasOpenNextStep(type, id) {
+  if (!type || !id) return false;
+  if (type === 'contact') return tasksForContact(id).some(isOpenTask);
+  if (type === 'deal') return tasksForDeal(dealById(id)).some(isOpenTask);
+  if (type === 'job') return companyTasks(activeCompanyId()).some((task) => task.project_id === id && isOpenTask(task));
+  return false;
+}
+
+function workdayManagerMetrics(companyId = activeCompanyId()) {
+  const activities = companyActivities(companyId);
+  const tasks = companyTasks(companyId);
+  const contacts = companyContacts(companyId);
+  const deals = companyDeals(companyId);
+  const jobs = companyJobs(companyId);
+  const todayActivities = activities.filter((activity) => isTodayDate(activity.completed_at || activity.created_at));
+  const touchedIds = new Set(todayActivities.flatMap((activity) => [activity.contact_id, activity.deal_id, activity.job_id].filter(Boolean)));
+  const untouchedLeads = contacts.filter((contact) => {
+    const stage = resolvePipelineStage('contacts', contact.stage, companyId);
+    return ['Prospects', 'Leads', 'Nurturing'].includes(stage) && !contact.last_activity_at;
+  });
+  const overdueFollowups = tasks.filter((task) => isOpenTask(task) && daysUntil(task.due) < 0);
+  const noNextStep = contacts.filter((contact) => !workdayHasOpenNextStep('contact', contact.id))
+    .concat(deals.filter((deal) => deal.status === 'open' && !workdayHasOpenNextStep('deal', deal.id)))
+    .concat(jobs.filter((job) => !workdayHasOpenNextStep('job', job.id)));
+  return {
+    callsToday: todayActivities.filter((activity) => activity.type === 'call').length,
+    touchedToday: touchedIds.size,
+    untouchedLeads: untouchedLeads.length,
+    overdueFollowups: overdueFollowups.length,
+    quotesSentToday: todayActivities.filter((activity) => /proposal|quote|estimate/i.test(`${activity.subject || ''} ${activity.body || ''}`)).length,
+    noNextStep: noNextStep.length,
+    formResponsesNeedingAction: companyFormResponses(companyId).filter((response) => !contacts.some((contact) => contact.email && contact.email === response.submitter_email)).length,
+  };
+}
+
+function workdayItem(id, kind, priority, recordType, record, reason, action = 'Work record') {
+  return {
+    id,
+    kind,
+    priority,
+    recordType,
+    recordId: record.id,
+    companyId: record.company_id,
+    title: workdayRecordLabel(record, recordType),
+    meta: workdayRecordMeta(record, recordType),
+    owner: workdayRecordOwner(record, recordType),
+    reason,
+    action,
+    updatedAt: record.updated_at || record.created_at || record.due || '',
+  };
+}
+
+function workdayQueueItems(companyId = activeCompanyId()) {
+  const tasks = companyTasks(companyId).filter(isOpenTask);
+  const contacts = companyContacts(companyId);
+  const deals = companyDeals(companyId).filter((deal) => deal.status === 'open');
+  const jobs = companyJobs(companyId);
+  const responses = companyFormResponses(companyId);
+  const queue = [];
+
+  tasks.filter((task) => daysUntil(task.due) < 0).forEach((task) => {
+    queue.push(workdayItem(`task-overdue:${task.id}`, 'Follow-up', 100, 'task', task, `Overdue since ${formatDate(task.due)}`, 'Finish follow-up'));
+  });
+  tasks.filter((task) => daysUntil(task.due) === 0).forEach((task) => {
+    queue.push(workdayItem(`task-today:${task.id}`, 'Due today', 90, 'task', task, task.due_time ? `Due today at ${formatTime(task.due_time)}` : 'Due today', 'Open task'));
+  });
+  contacts.filter((contact) => ['Hot', 'Warm'].includes(contact.temperature) && !workdayHasOpenNextStep('contact', contact.id)).forEach((contact) => {
+    queue.push(workdayItem(`contact-next:${contact.id}`, 'Lead', contact.temperature === 'Hot' ? 86 : 72, 'contact', contact, `${contact.temperature} contact has no open next step`, 'Set follow-up'));
+  });
+  contacts.filter((contact) => !contact.last_activity_at && ['Prospects', 'Leads'].includes(resolvePipelineStage('contacts', contact.stage, companyId))).forEach((contact) => {
+    queue.push(workdayItem(`contact-untouched:${contact.id}`, 'Untouched', 80, 'contact', contact, 'No activity logged yet', 'First touch'));
+  });
+  deals.filter((deal) => !workdayHasOpenNextStep('deal', deal.id)).forEach((deal) => {
+    queue.push(workdayItem(`deal-next:${deal.id}`, 'Quote', 70, 'deal', deal, 'Open quote has no next task', 'Push quote'));
+  });
+  jobs.filter((job) => !workdayHasOpenNextStep('job', job.id)).forEach((job) => {
+    queue.push(workdayItem(`job-next:${job.id}`, 'Job', 58, 'job', job, 'Production job has no next task', 'Plan work'));
+  });
+  responses.filter((response) => !contacts.some((contact) => contact.email && contact.email === response.submitter_email)).forEach((response) => {
+    queue.push(workdayItem(`form-response:${response.id}`, 'Form', 76, 'form_response', response, 'New form response needs CRM action', 'Create CRM record'));
+  });
+
+  return queue
+    .sort((a, b) => b.priority - a.priority || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+    .slice(0, 60);
+}
+
+function workdayMetricCard(label, value, detail, icon) {
+  return `
+    <article class="workday-metric">
+      <span><i class="ti ${h(icon)}"></i></span>
+      <div><strong>${h(String(value))}</strong><small>${h(label)}</small><em>${h(detail)}</em></div>
+    </article>
+  `;
+}
+
+function renderWorkdayPage(companyId) {
+  const metrics = workdayManagerMetrics(companyId);
+  const items = workdayQueueItems(companyId);
+  const active = items.find((item) => item.id === state.selectedWorkdayItemId) || items[0] || null;
+  if (active && state.selectedWorkdayItemId !== active.id) state.selectedWorkdayItemId = active.id;
+  return `
+    <section class="workday-page">
+      ${workspaceHeader('Workday', 'Daily CRM queue for calls, follow-ups, quotes, jobs, and form responses.', `
+        <a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Contacts</a>
+        <a class="btn" href="${appHref(companyPath('deals', {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Quotes</a>
+        <a class="btn btn-primary" href="${appHref(companyPath('forms', {}, companyId))}" data-router><i class="ti ti-clipboard-list"></i>Forms</a>
+      `)}
+      <div class="workday-manager-grid">
+        ${workdayMetricCard('Calls today', metrics.callsToday, 'Logged call activity', 'ti-phone-call')}
+        ${workdayMetricCard('Touched today', metrics.touchedToday, 'Contacts, quotes, and jobs worked', 'ti-activity')}
+        ${workdayMetricCard('Untouched leads', metrics.untouchedLeads, 'Need a first touch', 'ti-user-question')}
+        ${workdayMetricCard('Overdue follow-ups', metrics.overdueFollowups, 'Open tasks past due', 'ti-alert-circle')}
+        ${workdayMetricCard('No next step', metrics.noNextStep, 'Records missing an open task', 'ti-route')}
+        ${workdayMetricCard('Form responses', metrics.formResponsesNeedingAction, 'Need CRM action', 'ti-clipboard-list')}
+      </div>
+      <div class="workday-shell">
+        <section class="workday-queue panel">
+          <div class="section-head">
+            <div><h2>Command queue</h2><p>${items.length} item${items.length === 1 ? '' : 's'} needing work</p></div>
+          </div>
+          <div class="workday-queue-list">
+            ${items.map((item) => renderWorkdayQueueItem(item, active?.id === item.id)).join('') || emptyState('No urgent Workday items.')}
+          </div>
+        </section>
+        ${renderWorkdayPanel(active, companyId)}
+      </div>
+    </section>
+  `;
+}
+
+function renderWorkdayQueueItem(item, active) {
+  return `
+    <button class="workday-queue-item ${active ? 'active' : ''}" type="button" data-action="workday-open-item" data-workday-item-id="${h(item.id)}">
+      <span class="workday-kind">${h(item.kind)}</span>
+      <span class="workday-main"><strong>${h(item.title)}</strong><small>${h(item.meta || item.reason)}</small></span>
+      <span class="workday-owner">${h(item.owner)}</span>
+    </button>
+  `;
+}
+
+function renderWorkdayPanel(item, companyId) {
+  if (!item) return `<section class="workday-panel panel">${emptyState('No queue item selected.')}</section>`;
+  const related = workdayRelatedRecord(item);
+  const record = related?.record || workdayRecordFromItem(item);
+  const type = related?.type || item.recordType;
+  const recent = ['contact', 'deal', 'job'].includes(type) ? activitiesFor(type, record.id).slice(0, 5) : [];
+  const tasks = type === 'contact' ? tasksForContact(record.id).filter(isOpenTask)
+    : type === 'deal' ? tasksForDeal(record).filter(isOpenTask)
+      : type === 'job' ? companyTasks(companyId).filter((task) => task.project_id === record.id && isOpenTask(task))
+        : [];
+  const canQuick = ['contact', 'deal', 'job'].includes(type);
+  return `
+    <section class="workday-panel panel">
+      <div class="workday-panel-head">
+        <span class="workday-panel-icon"><i class="ti ${type === 'deal' ? 'ti-briefcase' : type === 'job' ? 'ti-hammer' : type === 'form_response' ? 'ti-clipboard-list' : 'ti-user'}"></i></span>
+        <div>
+          <small>${h(item.kind)} / ${h(item.owner)}</small>
+          <h2>${h(workdayRecordLabel(record, type))}</h2>
+          <p>${h(item.reason)}</p>
+        </div>
+        <button class="btn" type="button" data-action="workday-open-record" data-workday-item-id="${h(item.id)}"><i class="ti ti-external-link"></i>Open record</button>
+      </div>
+      ${canQuick ? `
+        <div class="workday-action-grid">
+          ${['Log a Call', 'Email', 'Note', 'New Task', 'New Event', 'Estimate', 'Proposal'].map((kind) => `
+            <button type="button" data-action="workday-quick-action" data-workday-item-id="${h(item.id)}" data-kind="${h(kind)}">
+              <i class="ti ${kind === 'Log a Call' ? 'ti-phone' : kind === 'Email' ? 'ti-mail' : kind === 'Note' ? 'ti-note' : kind === 'New Task' ? 'ti-checkbox' : kind === 'New Event' ? 'ti-calendar' : kind === 'Estimate' ? 'ti-calculator' : 'ti-file-text'}"></i>
+              <span>${h(kind)}</span>
+            </button>
+          `).join('')}
+        </div>
+      ` : type === 'form_response' ? `
+        <div class="workday-action-grid">
+          <button type="button" data-action="response-create-contact" data-response-id="${h(record.id)}"><i class="ti ti-id-badge-2"></i><span>Create contact</span></button>
+          <button type="button" data-action="response-create-job" data-response-id="${h(record.id)}"><i class="ti ti-hammer"></i><span>Create job</span></button>
+          <button type="button" data-action="response-create-task" data-response-id="${h(record.id)}"><i class="ti ti-checkbox"></i><span>Create task</span></button>
+        </div>
+      ` : `
+        <div class="workday-action-grid">
+          <button type="button" data-action="workday-open-record" data-workday-item-id="${h(item.id)}"><i class="ti ti-checkbox"></i><span>Open task</span></button>
+          <button type="button" data-action="workday-complete-item" data-workday-item-id="${h(item.id)}"><i class="ti ti-check"></i><span>Done for now</span></button>
+        </div>
+      `}
+      <div class="workday-panel-grid">
+        <section>
+          <h3>Open next steps</h3>
+          <div class="sf-tasks">${tasks.length ? tasks.slice(0, 5).map((task) => renderSfTaskRow(task)).join('') : '<div class="sf-task-empty">No open next step.</div>'}</div>
+        </section>
+        <section>
+          <h3>Recent activity</h3>
+          <div class="sf-feed">${recent.length ? recent.map((activity) => sfFeedItem(activity)).join('') : '<div class="sf-feed-empty">No recent activity.</div>'}</div>
+        </section>
+      </div>
+      <div class="workday-panel-foot">
+        <button class="btn btn-primary" type="button" data-action="workday-complete-item" data-workday-item-id="${h(item.id)}"><i class="ti ti-check"></i>Done for now</button>
+      </div>
+    </section>
+  `;
+}
+
+function workdayOpenRecord(itemId) {
+  const item = workdayQueueItems(activeCompanyId()).find((row) => row.id === itemId);
+  const record = workdayRecordFromItem(item);
+  if (!item || !record) return;
+  navigate(workdayRecordUrl({ ...record, type: item.recordType }));
+}
+
+function workdayQuickAction(itemId, kind) {
+  const item = workdayQueueItems(activeCompanyId()).find((row) => row.id === itemId);
+  const related = workdayRelatedRecord(item);
+  if (!related?.record || !['contact', 'deal', 'job'].includes(related.type)) return;
+  const record = { type: related.type, id: related.record.id };
+  if (kind === 'Estimate') return openEstimateBuilder(record.type, record.id);
+  if (kind === 'Proposal') return openProposalBuilder(record.type, record.id);
+  return openDockedActivityComposer(record.type, record.id, kind);
+}
+
+function completeWorkdayItem(itemId) {
+  const item = workdayQueueItems(activeCompanyId()).find((row) => row.id === itemId);
+  const related = workdayRelatedRecord(item);
+  const record = workdayRecordFromItem(item);
+  if (!item || !record) return;
+  if (item.recordType === 'task') {
+    toggleContactTask(record.id);
+    state.selectedWorkdayItemId = '';
+    return;
+  }
+  if (related?.record && ['contact', 'deal', 'job'].includes(related.type)) {
+    openWorkdayNextStepPrompt({
+      related_type: related.type,
+      related_id: related.record.id,
+      company_id: item.companyId,
+      label: workdayRecordLabel(related.record, related.type),
+    });
+    return;
+  }
+  workdayOpenRecord(item.id);
+}
+
+function openWorkdayNextStepPrompt(context) {
+  if (!context?.related_type || !context?.related_id) return;
+  state.workdayNextStepContext = {
+    related_type: context.related_type,
+    related_id: context.related_id,
+    company_id: context.company_id || activeCompanyId(),
+    activity_type: context.activity_type || '',
+    label: context.label || activityRelatedLabel(activityRelatedRecord(context.related_type, context.related_id)),
+  };
+  state.modal = 'workday-next-step';
+  render();
+}
+
+function renderWorkdayNextStepModal() {
+  const context = state.workdayNextStepContext || {};
+  const label = context.label || 'this record';
+  return renderModalShell('Workday', 'What happens next?', `
+    <form class="job-editor workday-next-step-form" data-workday-next-step-form>
+      <input type="hidden" name="related_type" value="${h(context.related_type || '')}" />
+      <input type="hidden" name="related_id" value="${h(context.related_id || '')}" />
+      <div class="section-head span-2"><div><h2>What happens next?</h2><p>Keep ${h(label)} from going cold after this activity.</p></div></div>
+      ${selectField('Next action', 'next_action', 'task', [['task', 'Create follow-up task'], ['estimate', 'Create estimate'], ['proposal', 'Create proposal'], ['quote', 'Open quote'], ['job', 'Open job'], ['none', 'Nothing else right now']])}
+      ${field('Follow-up title', 'title', `Follow up with ${label}`, false, 'text', 'span-2')}
+      ${field('Due date', 'due', isoDate(1), false, 'date')}
+      ${field('Due time', 'due_time', '', false, 'time')}
+      ${selectField('Priority', 'priority', 'medium', [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['urgent', 'Urgent']])}
+      ${textareaField('Details', 'details', '', 'span-2')}
+      <div class="form-actions span-2">
+        <button class="btn btn-primary" type="submit"><i class="ti ti-check"></i>Save next step</button>
+        <button class="btn" type="button" data-action="skip-workday-next-step">Skip</button>
+      </div>
+    </form>
+  `, 'wide-modal');
+}
+
+async function createWorkdayFollowupTask(context, fields) {
+  const relatedType = String(context.related_type || '');
+  const relatedId = String(context.related_id || '');
+  const title = String(fields.title || '').trim() || 'Follow up';
+  const taskFields = {
+    title,
+    description: String(fields.details || '').trim(),
+    due: String(fields.due || isoDate(1)).slice(0, 10),
+    due_time: String(fields.due_time || '').trim(),
+    priority: String(fields.priority || 'medium').toLowerCase(),
+  };
+  if (relatedType === 'contact') return createContactTask(relatedId, taskFields);
+  if (relatedType === 'deal') return createDealTask(relatedId, title);
+  if (relatedType === 'job') return createJobTask(relatedId, title);
+}
+
+async function saveWorkdayNextStep(form) {
+  const formData = Object.fromEntries(new FormData(form).entries());
+  const context = state.workdayNextStepContext || formData;
+  const next = String(formData.next_action || 'task');
+  state.workdayNextStepContext = null;
+  state.modal = '';
+  if (next === 'task') {
+    await createWorkdayFollowupTask(context, formData);
+    showToast('Follow-up task created.', isLiveSupabaseSession() ? 'live' : 'local', 'Workday');
+    navigate(companyPath('workday', {}, context.company_id || activeCompanyId()), { replace: true });
+    return;
+  }
+  if (next === 'estimate') return openEstimateBuilder(context.related_type, context.related_id);
+  if (next === 'proposal') return openProposalBuilder(context.related_type, context.related_id);
+  if (next === 'quote' && context.related_type === 'contact') return convertContactToQuote(context.related_id);
+  if (next === 'job' && context.related_type === 'deal') return convertDealToJob(context.related_id);
+  render();
 }
 
 function homeUnreadMessages(companyId) {
@@ -14677,6 +15053,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'dashboard-widget-library') return renderDashboardWidgetLibraryModal(activeCompanyId());
   if (state.modal === 'dashboard-view-manager') return renderDashboardViewManagerModal(activeCompanyId());
   if (state.modal === 'dashboard-activity') return renderDashboardActivityModal(activeCompanyId());
+  if (state.modal === 'workday-next-step') return renderWorkdayNextStepModal();
   if (state.modal === 'file-upload') return renderFileUploadModal();
   if (state.modal === 'client-portal-form') return renderClientPortalFormModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
   if (state.modal === 'client-portal-document') return renderClientPortalDocumentModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
@@ -16504,6 +16881,34 @@ function handleAction(event, node) {
     openDockedActivityComposer(node.dataset.relatedType, node.dataset.relatedId, node.dataset.kind || node.dataset.tab);
     return;
   }
+  if (action === 'workday-open-item') {
+    event.preventDefault();
+    state.selectedWorkdayItemId = node.dataset.workdayItemId || '';
+    render();
+    return;
+  }
+  if (action === 'workday-open-record') {
+    event.preventDefault();
+    workdayOpenRecord(node.dataset.workdayItemId || '');
+    return;
+  }
+  if (action === 'workday-quick-action') {
+    event.preventDefault();
+    workdayQuickAction(node.dataset.workdayItemId || '', node.dataset.kind || 'Note');
+    return;
+  }
+  if (action === 'workday-complete-item') {
+    event.preventDefault();
+    completeWorkdayItem(node.dataset.workdayItemId || '');
+    return;
+  }
+  if (action === 'skip-workday-next-step') {
+    event.preventDefault();
+    state.workdayNextStepContext = null;
+    state.modal = '';
+    render();
+    return;
+  }
   if (action === 'minimize-docked-activity') {
     event.preventDefault();
     minimizeDockedActivityComposer(node.dataset.composerId);
@@ -17996,6 +18401,14 @@ function onDocumentSubmit(event) {
     event.preventDefault();
     submitDockedActivityComposer(event.target).catch((error) => {
       showToast(error.message || 'Could not save activity.', 'local', 'Activity');
+    });
+    return;
+  }
+
+  if (event.target.matches('[data-workday-next-step-form]')) {
+    event.preventDefault();
+    saveWorkdayNextStep(event.target).catch((error) => {
+      showToast(error.message || 'Could not save next step.', 'local', 'Workday');
     });
     return;
   }
@@ -23831,6 +24244,13 @@ async function submitDockedActivityComposer(form) {
   if (composer.related_type === 'contact') await logContactActivity(composer.related_id, config.type, subject, body);
   if (composer.related_type === 'job') await logJobActivity(composer.related_id, config.type, subject, body);
   if (composer.related_type === 'deal') await logDealActivity(composer.related_id, config.type, subject, body);
+  if (['call', 'email', 'note'].includes(config.type)) openWorkdayNextStepPrompt({
+    related_type: composer.related_type,
+    related_id: composer.related_id,
+    company_id: activeCompanyId(),
+    activity_type: config.type,
+    label: activityRelatedLabel(activityRelatedRecord(composer.related_type, composer.related_id)),
+  });
 }
 
 function renderActivityFilterBar(totalCount, visibleCount) {

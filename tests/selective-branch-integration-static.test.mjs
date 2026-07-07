@@ -31,7 +31,7 @@ test('price book is a real installed workspace module without removing proposals
   assert.match(source, /client\.from\('pricebook_vendors'\)\.select\('\*'\)/);
   assert.match(source, /client\.from\('pricebook_materials'\)\.select\('\*'\)/);
   assert.match(source, /client\.from\('pricebook_vendor_prices'\)\.select\('\*'\)/);
-  assert.match(source, /id: 'crm_2'[\s\S]*label: 'Quest CRM'[\s\S]*module_ids: \['contacts', 'deals', 'proposals', 'jobs'\]/);
+  assert.match(source, /id: 'crm_2'[\s\S]*label: 'Quest CRM'[\s\S]*module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
   assert.match(source, /\{ id: 'proposals', group: 'Quotes .* Bottom of Funnel', label: 'Proposals'/);
   assert.match(source, /\{ label: 'Quotes .* Bottom of Funnel', ids: \['deals', 'proposals'\] \}/);
   assert.match(styles, /\.price-book-page/);

@@ -248,6 +248,226 @@ button { cursor: pointer; }
   flex-wrap: wrap;
 }
 
+.workday-page {
+  display: grid;
+  gap: 16px;
+}
+
+.workday-manager-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.workday-metric {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--soft-shadow);
+  padding: 13px;
+  min-width: 0;
+}
+
+.workday-metric > span,
+.workday-panel-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orange) 14%, var(--surface));
+  color: var(--orange);
+}
+
+.workday-metric strong,
+.workday-metric small,
+.workday-metric em {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workday-metric strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.workday-metric small {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.workday-metric em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.workday-shell {
+  display: grid;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.workday-queue,
+.workday-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.workday-queue-list {
+  display: grid;
+  gap: 8px;
+}
+
+.workday-queue-item {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-3);
+  color: var(--ink);
+  padding: 10px;
+  text-align: left;
+}
+
+.workday-queue-item.active {
+  border-color: var(--orange);
+  box-shadow: inset 3px 0 0 var(--orange);
+}
+
+.workday-kind {
+  display: inline-flex;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--amber) 22%, var(--surface));
+  color: var(--ink);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.workday-main strong,
+.workday-main small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workday-main small,
+.workday-owner,
+.workday-panel-head small,
+.workday-panel-head p {
+  color: var(--muted);
+}
+
+.workday-owner {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workday-panel-head {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.workday-panel-head h2,
+.workday-panel-head p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.workday-action-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.workday-action-grid button {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 74px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.workday-action-grid button:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+.workday-panel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.workday-panel-grid h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.workday-panel-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.workday-next-step-form {
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .workday-manager-grid {
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+  }
+
+  .workday-action-grid {
+    grid-template-columns: repeat(4, minmax(92px, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .workday-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .workday-panel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .workday-manager-grid,
+  .workday-action-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .workday-queue-item,
+  .workday-panel-head {
+    grid-template-columns: 1fr;
+  }
+
+  .workday-owner {
+    justify-self: start;
+  }
+}
+
 .price-book-page {
   display: grid;
   gap: 16px;
