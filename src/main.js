@@ -25424,7 +25424,10 @@ function contactOwnerOptions(companyId, selectedOwner = '') {
   const owners = companyAccessUsers(companyId)
     .filter((user) => user.status !== 'disabled')
     .map((user) => personOwnerDisplayName(user.name || user.email, companyId));
-  return [['', 'Unassigned']].concat(compactUnique([personOwnerDisplayName(selectedOwner, companyId), ...owners]).map((name) => [name, name]));
+  const activeOwners = compactUnique(owners);
+  const selected = personOwnerDisplayName(selectedOwner, companyId);
+  const safeOwners = activeOwners.includes(selected) ? compactUnique([selected, ...activeOwners]) : activeOwners;
+  return [['', 'Unassigned']].concat(safeOwners.map((name) => [name, name]));
 }
 
 function profileName(id) {

@@ -6,6 +6,7 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const companyMembersBody = source.slice(source.indexOf('function companyMembers(companyId = activeCompanyId())'), source.indexOf('function companyAccessUsers(companyId = activeCompanyId())'));
 const liveBranchBody = companyMembersBody.slice(companyMembersBody.indexOf("if (state.session?.auth === 'supabase')"), companyMembersBody.indexOf('return state.teamMembers.filter'));
 const memberNameBody = source.slice(source.indexOf('function memberName(id)'), source.indexOf('function formatPhoneNumber(value)'));
+const contactOwnerOptionsBody = source.slice(source.indexOf('function contactOwnerOptions(companyId, selectedOwner = \'\')'), source.indexOf('function profileName(id)'));
 
 test('live company members come from active memberships instead of fallback team member seeds', () => {
   assert.match(companyMembersBody, /state\.session\?\.auth === 'supabase'/);
@@ -18,4 +19,10 @@ test('member display names resolve live profile ids before legacy team member id
   assert.match(memberNameBody, /const profile = profileById\(id\)/);
   assert.match(memberNameBody, /profile\?\.full_name \|\| profile\?\.email/);
   assert.match(memberNameBody, /state\.teamMembers\.find/);
+});
+
+test('owner dropdowns do not preserve stale selected owners outside active workspace members', () => {
+  assert.match(contactOwnerOptionsBody, /const activeOwners = compactUnique\(owners\)/);
+  assert.match(contactOwnerOptionsBody, /activeOwners\.includes\(selected\)/);
+  assert.doesNotMatch(contactOwnerOptionsBody, /compactUnique\(\[personOwnerDisplayName\(selectedOwner, companyId\), \.\.\.owners\]\)/);
 });
