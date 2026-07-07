@@ -4012,6 +4012,92 @@ textarea:focus {
   grid-template-columns: minmax(260px, 1.4fr) .6fr .6fr auto auto;
 }
 
+.recycle-bin-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.recycle-toolbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 260px));
+  gap: 12px;
+  align-items: end;
+}
+
+.recycle-toolbar label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.recycle-toolbar select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.recycle-list {
+  display: grid;
+  gap: 10px;
+}
+
+.recycle-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.recycle-row.warning {
+  border-color: color-mix(in srgb, var(--amber) 42%, var(--border));
+  background: color-mix(in srgb, var(--amber) 8%, var(--surface));
+}
+
+.recycle-row.danger {
+  border-color: color-mix(in srgb, #dc2626 42%, var(--border));
+  background: color-mix(in srgb, #dc2626 7%, var(--surface));
+}
+
+.recycle-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--orange);
+}
+
+.recycle-row strong,
+.recycle-row small {
+  display: block;
+}
+
+.recycle-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.recycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .workspace-icon {
   position: relative;
   display: grid;
@@ -7907,11 +7993,14 @@ input[type="file"]::file-selector-button:active {
   }
 
   .backup-row,
-  .platform-backup-row {
+  .platform-backup-row,
+  .recycle-toolbar,
+  .recycle-row {
     grid-template-columns: 1fr;
   }
 
-  .backup-actions {
+  .backup-actions,
+  .recycle-actions {
     justify-content: flex-start;
   }
 

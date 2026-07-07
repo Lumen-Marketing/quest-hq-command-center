@@ -11,8 +11,8 @@ test('forms load from Supabase tables during live workspace bootstrap', () => {
   assert.match(source, /formResponsesResult/);
   assert.match(source, /client\.from\('forms'\)\.select\('\*'\)\.order\('updated_at'/);
   assert.match(source, /client\.from\('form_responses'\)\.select\('\*'\)\.order\('created_at'/);
-  assert.match(source, /state\.forms = \(formsResult\.data \|\| \[\]\)\.map\(normalizeForm\)/);
-  assert.match(source, /state\.formResponses = \(formResponsesResult\.data \|\| \[\]\)\.map\(normalizeFormResponse\)/);
+  assert.match(source, /state\.forms = activeRows\(formsResult\.data \|\| \[\]\)\.map\(normalizeForm\)/);
+  assert.match(source, /state\.formResponses = activeRows\(formResponsesResult\.data \|\| \[\]\)\.map\(normalizeFormResponse\)/);
 });
 
 test('forms save and response submission use Supabase in live sessions', () => {

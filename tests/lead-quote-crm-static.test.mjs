@@ -311,9 +311,9 @@ test('record open task rows expose an inline delete action', () => {
   assert.match(source, /data-action="delete-task"/);
   assert.match(source, /data-task-return="\$\{h\(returnMode\)\}"/);
   assert.match(source, /aria-label="Delete task"/);
-  assert.match(source, /deleteTask\(node\.dataset\.taskId, \{ stayOnPage: node\.dataset\.taskReturn === 'record' \}\)/);
+  assert.match(source, /openRecycleDeleteModal\(\{ type: 'task', id: node\.dataset\.taskId, options: \{ stayOnPage: node\.dataset\.taskReturn === 'record' \} \}\)/);
   assert.match(source, /async function deleteTask\(id, options = \{\}\)/);
-  assert.match(source, /if \(options\.stayOnPage\) render\(\);/);
+  assert.match(source, /await recycleDeleteRecord\(\{ type: 'task', id, options \}\)/);
   assert.match(source, /renderSfTaskRow\(t/);
   assert.match(source, /renderSfTaskRow\(task/);
   assert.match(styles, /\.sf-task-delete/);

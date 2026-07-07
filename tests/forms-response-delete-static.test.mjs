@@ -8,14 +8,14 @@ test('form response detail exposes a real delete response action', () => {
   assert.match(source, /data-action="delete-form-response"/);
   assert.match(source, /Delete response/);
   assert.match(source, /if \(action === 'delete-form-response'\)/);
-  assert.match(source, /deleteFormResponse\(node\.dataset\.responseId \|\| ''\)/);
+  assert.match(source, /openRecycleDeleteModal\(\{ type: 'form_response', id: node\.dataset\.responseId \|\| '' \}\)/);
 });
 
-test('form response delete removes the row from Supabase and updates selection', () => {
-  assert.match(source, /async function deleteFormResponseRecord\(response\)/);
-  assert.match(source, /client\.from\('form_responses'\)\.delete\(\)\.eq\('id', response\.id\)\.eq\('company_id', response\.company_id\)/);
+test('form response delete moves the row to the recycle bin instead of hard deleting', () => {
+  assert.match(source, /form_response: \{[\s\S]*table: 'form_responses'[\s\S]*stateKey: 'formResponses'/);
   assert.match(source, /async function deleteFormResponse\(responseId\)/);
-  assert.match(source, /window\.confirm\('Delete this response\?/);
-  assert.match(source, /state\.formResponses = state\.formResponses\.filter\(\(item\) => item\.id !== response\.id\)/);
-  assert.match(source, /state\.selectedFormResponseId = responsesForForm\(response\.form_id\)\[0\]\?\.id \|\| ''/);
+  assert.match(source, /await recycleDeleteRecord\(\{ type: 'form_response', id: response\.id \}\)/);
+  assert.match(source, /async function softDeleteRecycleSource\(typeConfig, record, item\)/);
+  assert.match(source, /const patch = \{[\s\S]*deleted_at: item\.deleted_at,[\s\S]*deleted_by: item\.deleted_by \|\| null/);
+  assert.doesNotMatch(source, /window\.confirm\('Delete this response\?/);
 });

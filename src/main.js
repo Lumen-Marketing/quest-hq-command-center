@@ -87,6 +87,8 @@ const CLIENT_PORTAL_GUEST_NAME = 'Client';
 const WORKSPACE_BACKUP_CACHE_KEY = 'quest-hq-workspace-backup-cache-v1';
 const WORKSPACE_BACKUP_SETTINGS_KEY = 'quest-hq-workspace-backup-settings-v1';
 const WORKSPACE_BACKUP_VERSION = 1;
+const RECYCLE_BIN_CACHE_KEY = 'quest-hq-recycle-bin-cache-v1';
+const RECYCLE_BIN_RETENTION_DAYS = 30;
 const BACKUP_INTERVAL_OPTIONS = [
   ['manual', 'Manual only'],
   ['daily', 'Daily'],
@@ -104,6 +106,27 @@ const ACCENT_OPTIONS = [
   ['green', 'Field Green', '#15803d'],
   ['slate', 'Command Slate', '#475569'],
 ];
+const RECYCLE_BIN_TYPES = {
+  contact: { type: 'contact', label: 'Contact', table: 'contacts', stateKey: 'contacts', permission: 'crm.view', normalize: normalizeContact, title: (record) => record.name || 'Contact', redirect: (companyId) => companyPath('contacts', {}, companyId) },
+  account: { type: 'account', label: 'Account', table: 'accounts', stateKey: 'accounts', permission: 'crm.view', normalize: normalizeAccount, title: (record) => record.name || 'Account', redirect: (companyId) => companyPath('crm', {}, companyId) },
+  deal: { type: 'deal', label: 'Quote', table: 'deals', stateKey: 'deals', permission: 'crm.view', normalize: normalizeDeal, title: (record) => record.name || 'Quote', redirect: (companyId) => companyPath('deals', {}, companyId) },
+  job: { type: 'job', label: 'Job', table: 'jobs', stateKey: 'jobs', permission: 'jobs.manage', normalize: normalizeJob, title: (record) => record.name || record.client_name || 'Job', redirect: (companyId) => companyPath('jobs', { tab: 'list' }, companyId) },
+  task: { type: 'task', label: 'Task', table: 'tasks', stateKey: 'tasks', permission: 'tasks.manage', normalize: normalizeTask, title: (record) => record.title || record.name || 'Task', redirect: (companyId) => companyPath('tasks', {}, companyId) },
+  file: { type: 'file', label: 'File', table: 'job_files', stateKey: 'files', permission: 'files.manage', normalize: normalizeFile, title: (record) => record.file_name || 'File', redirect: (companyId) => companyPath('files', {}, companyId) },
+  form: { type: 'form', label: 'Form', table: 'forms', stateKey: 'forms', permission: 'forms.manage', normalize: normalizeForm, title: (record) => record.title || 'Form', redirect: (companyId) => companyPath('forms', {}, companyId) },
+  form_response: { type: 'form_response', label: 'Form response', table: 'form_responses', stateKey: 'formResponses', permission: 'forms.manage', normalize: normalizeFormResponse, title: (record) => `${formById(record.form_id)?.title || 'Form'} response`, redirect: (companyId) => companyPath('forms', { tab: 'responses' }, companyId) },
+  proposal: { type: 'proposal', label: 'Proposal', table: 'proposal_documents', stateKey: 'proposals', permission: 'crm.view', normalize: normalizeProposal, title: (record) => record.title || record.proposal_no || 'Proposal', redirect: (companyId) => companyPath('proposals', {}, companyId) },
+  client_portal: { type: 'client_portal', label: 'Client portal', table: 'client_portals', stateKey: 'clientPortals', permission: 'client_portals.manage', normalize: normalizeClientPortal, title: (record) => record.title || 'Client portal', redirect: (companyId) => companyPath('client-portals', {}, companyId) },
+  pricebook_vendor: { type: 'pricebook_vendor', label: 'Price book vendor', table: 'pricebook_vendors', stateKey: 'pricebookVendors', permission: 'price_book.manage', normalize: normalizePricebookVendor, title: (record) => record.name || 'Vendor', redirect: (companyId) => companyPath('price-book', {}, companyId) },
+  pricebook_material: { type: 'pricebook_material', label: 'Price book material', table: 'pricebook_materials', stateKey: 'pricebookMaterials', permission: 'price_book.manage', normalize: normalizePricebookMaterial, title: (record) => record.name || 'Material', redirect: (companyId) => companyPath('price-book', {}, companyId) },
+  pricebook_price: { type: 'pricebook_price', label: 'Price book price', table: 'pricebook_vendor_prices', stateKey: 'pricebookPrices', permission: 'price_book.manage', normalize: normalizePricebookPrice, title: (record) => record.sku || 'Vendor price', redirect: (companyId) => companyPath('price-book', {}, companyId) },
+  finance_invoice: { type: 'finance_invoice', label: 'Invoice', table: 'finance_invoices', stateKey: 'financeInvoices', permission: 'finance.manage', normalize: normalizeFinanceInvoice, title: (record) => record.invoice_number || 'Invoice', redirect: (companyId) => companyPath('finance', {}, companyId) },
+  finance_payment: { type: 'finance_payment', label: 'Payment', table: 'finance_payments', stateKey: 'financePayments', permission: 'finance.manage', normalize: normalizeFinancePayment, title: (record) => record.reference || 'Payment', redirect: (companyId) => companyPath('finance', {}, companyId) },
+  finance_expense: { type: 'finance_expense', label: 'Expense', table: 'finance_expenses', stateKey: 'financeExpenses', permission: 'finance.manage', normalize: normalizeFinanceExpense, title: (record) => record.category || 'Expense', redirect: (companyId) => companyPath('finance', {}, companyId) },
+  finance_vendor: { type: 'finance_vendor', label: 'Finance vendor', table: 'finance_vendors', stateKey: 'financeVendors', permission: 'finance.manage', normalize: normalizeFinanceVendor, title: (record) => record.name || 'Vendor', redirect: (companyId) => companyPath('finance', {}, companyId) },
+  calendar_event: { type: 'calendar_event', label: 'Calendar event', table: 'calendar_events', stateKey: 'calendarEvents', permission: 'calendar.manage', normalize: normalizeCalendarEvent, title: (record) => record.title || 'Calendar event', redirect: (companyId) => companyPath('calendar', {}, companyId) },
+  activity: { type: 'activity', label: 'Activity', table: 'activities', stateKey: 'activities', permission: 'crm.view', normalize: normalizeActivity, title: (record) => record.subject || 'Activity', redirect: (companyId) => companyPath('dashboard', { activity: '1' }, companyId) },
+};
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
 const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
 const DASHBOARD_ROLE_VIEW_CACHE_KEY = 'quest-hq-dashboard-role-views-v1';
@@ -2051,35 +2074,35 @@ const state = {
   profileDraft: readJson(PROFILE_KEY, null),
   authReady: !CONFIG.questAuthEnabled,
   authMode: 'signin',
-  jobs: readSeededList(JOB_CACHE_KEY, jobsFallback).map(normalizeJob),
-  contacts: readSeededList(CONTACT_CACHE_KEY, contactsFallback).map(normalizeContact),
-  accounts: readSeededList(ACCOUNT_CACHE_KEY, accountsFallback).map(normalizeAccount),
-  deals: readSeededList(DEAL_CACHE_KEY, dealsFallback).map(normalizeDeal),
+  jobs: activeRows(readSeededList(JOB_CACHE_KEY, jobsFallback)).map(normalizeJob),
+  contacts: activeRows(readSeededList(CONTACT_CACHE_KEY, contactsFallback)).map(normalizeContact),
+  accounts: activeRows(readSeededList(ACCOUNT_CACHE_KEY, accountsFallback)).map(normalizeAccount),
+  deals: activeRows(readSeededList(DEAL_CACHE_KEY, dealsFallback)).map(normalizeDeal),
   sites: readSeededList(SITE_CACHE_KEY, []).map(normalizeCrmSite),
-  proposals: readSeededList(PROPOSAL_CACHE_KEY, []).map(normalizeProposal),
-  activities: readSeededList(ACTIVITY_CACHE_KEY, activitiesFallback).map(normalizeActivity),
+  proposals: activeRows(readSeededList(PROPOSAL_CACHE_KEY, [])).map(normalizeProposal),
+  activities: activeRows(readSeededList(ACTIVITY_CACHE_KEY, activitiesFallback)).map(normalizeActivity),
   pipelineStages: [],
-  tasks: readSeededList(TASK_CACHE_KEY, tasksFallback).map(normalizeTask),
-  files: readSeededList(FILE_CACHE_KEY, filesFallback).map(normalizeFile),
+  tasks: activeRows(readSeededList(TASK_CACHE_KEY, tasksFallback)).map(normalizeTask),
+  files: activeRows(readSeededList(FILE_CACHE_KEY, filesFallback)).map(normalizeFile),
   driveFolders: readSeededList(DRIVE_FOLDER_CACHE_KEY, []).map(normalizeDriveFolder),
-  forms: readSeededList(FORM_CACHE_KEY, formsFallback).map(normalizeForm),
-  formResponses: readSeededList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback).map(normalizeFormResponse),
-  financeInvoices: readSeededList(FINANCE_INVOICE_CACHE_KEY, financeInvoicesFallback).map(normalizeFinanceInvoice),
-  financePayments: readSeededList(FINANCE_PAYMENT_CACHE_KEY, financePaymentsFallback).map(normalizeFinancePayment),
-  financeExpenses: readSeededList(FINANCE_EXPENSE_CACHE_KEY, financeExpensesFallback).map(normalizeFinanceExpense),
-  financeVendors: readSeededList(FINANCE_VENDOR_CACHE_KEY, financeVendorsFallback).map(normalizeFinanceVendor),
-  pricebookVendors: readSeededList(PRICEBOOK_VENDOR_CACHE_KEY, []).map(normalizePricebookVendor),
-  pricebookMaterials: readSeededList(PRICEBOOK_MATERIAL_CACHE_KEY, []).map(normalizePricebookMaterial),
-  pricebookPrices: readSeededList(PRICEBOOK_PRICE_CACHE_KEY, []).map(normalizePricebookPrice),
+  forms: activeRows(readSeededList(FORM_CACHE_KEY, formsFallback)).map(normalizeForm),
+  formResponses: activeRows(readSeededList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback)).map(normalizeFormResponse),
+  financeInvoices: activeRows(readSeededList(FINANCE_INVOICE_CACHE_KEY, financeInvoicesFallback)).map(normalizeFinanceInvoice),
+  financePayments: activeRows(readSeededList(FINANCE_PAYMENT_CACHE_KEY, financePaymentsFallback)).map(normalizeFinancePayment),
+  financeExpenses: activeRows(readSeededList(FINANCE_EXPENSE_CACHE_KEY, financeExpensesFallback)).map(normalizeFinanceExpense),
+  financeVendors: activeRows(readSeededList(FINANCE_VENDOR_CACHE_KEY, financeVendorsFallback)).map(normalizeFinanceVendor),
+  pricebookVendors: activeRows(readSeededList(PRICEBOOK_VENDOR_CACHE_KEY, [])).map(normalizePricebookVendor),
+  pricebookMaterials: activeRows(readSeededList(PRICEBOOK_MATERIAL_CACHE_KEY, [])).map(normalizePricebookMaterial),
+  pricebookPrices: activeRows(readSeededList(PRICEBOOK_PRICE_CACHE_KEY, [])).map(normalizePricebookPrice),
   notifications: readSeededList(NOTIFICATION_CACHE_KEY, notificationsFallback).map(normalizeNotification),
   messageConversations: readSeededList(MESSAGE_CONVERSATION_CACHE_KEY, messageConversationsFallback).map(normalizeMessageConversation),
   messageAccess: readSeededList(MESSAGE_ACCESS_CACHE_KEY, messageAccessFallback).map(normalizeMessageAccess),
   messages: readSeededList(MESSAGE_CACHE_KEY, messagesFallback).map(normalizeMessage),
   messageReads: readSeededList(MESSAGE_READ_CACHE_KEY, messageReadsFallback).map(normalizeMessageRead),
   messageAttachments: readSeededList(MESSAGE_ATTACHMENT_CACHE_KEY, messageAttachmentsFallback).map(normalizeMessageAttachment),
-  calendarEvents: readSeededList(CALENDAR_EVENT_CACHE_KEY, calendarEventsFallback).map(normalizeCalendarEvent),
-  clientPortals: readSeededList(CLIENT_PORTAL_CACHE_KEY, []).map(normalizeClientPortal),
-  clientPortalDocuments: readSeededList(CLIENT_PORTAL_DOCUMENT_CACHE_KEY, []).map(normalizeClientPortalDocument),
+  calendarEvents: activeRows(readSeededList(CALENDAR_EVENT_CACHE_KEY, calendarEventsFallback)).map(normalizeCalendarEvent),
+  clientPortals: activeRows(readSeededList(CLIENT_PORTAL_CACHE_KEY, [])).map(normalizeClientPortal),
+  clientPortalDocuments: activeRows(readSeededList(CLIENT_PORTAL_DOCUMENT_CACHE_KEY, [])).map(normalizeClientPortalDocument),
   clientPortalAnnotations: readSeededList(CLIENT_PORTAL_ANNOTATION_CACHE_KEY, []).map(normalizeClientPortalAnnotation),
   clientPortalEvents: readSeededList(CLIENT_PORTAL_EVENT_CACHE_KEY, []).map(normalizeClientPortalEvent),
   clientPortalPublic: readJson(CLIENT_PORTAL_SESSION_KEY, null),
@@ -2112,10 +2135,14 @@ const state = {
   subscriptions: [],
   workspaceReviews: [],
   workspaceBackups: readSeededList(WORKSPACE_BACKUP_CACHE_KEY, []).map(normalizeWorkspaceBackup),
+  recycleBinItems: readSeededList(RECYCLE_BIN_CACHE_KEY, []).map(normalizeRecycleBinItem),
   backupSettings: readJson(WORKSPACE_BACKUP_SETTINGS_KEY, {}),
   backupAutoRunKeys: new Set(),
   selectedWorkspaceBackupId: '',
   selectedPlatformBackupCopyId: '',
+  recycleDeleteCtx: null,
+  selectedRecycleItemId: '',
+  recycleFilters: { type: 'all', status: 'active' },
   workspaceBuilderDocs: {},
   workspaceBuilderLive: {},
   workspaceBuilderLoading: '',
@@ -2944,6 +2971,7 @@ async function loadSupabaseData() {
     pricebookMaterialsResult,
     pricebookPricesResult,
     workspaceBackupsResult,
+    recycleBinResult,
     workspaceBuilderResult,
     platformAdminResult,
   ] = await Promise.all([
@@ -2992,6 +3020,7 @@ async function loadSupabaseData() {
     safeSupabaseQuery(client.from('pricebook_materials').select('*').order('name', { ascending: true })),
     safeSupabaseQuery(client.from('pricebook_vendor_prices').select('*').order('updated_at', { ascending: false })),
     safeSupabaseQuery(client.from('workspace_backups').select('*').order('created_at', { ascending: false })),
+    safeSupabaseQuery(client.from('recycle_bin_items').select('*').order('deleted_at', { ascending: false })),
     safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
     safeSupabaseQuery(client.rpc('is_platform_admin')),
   ]);
@@ -3002,11 +3031,11 @@ async function loadSupabaseData() {
     liveTables += 1;
   }
   if (!jobsResult.error) {
-    state.jobs = (jobsResult.data || []).map(normalizeJob);
+    state.jobs = activeRows(jobsResult.data || []).map(normalizeJob);
     liveTables += 1;
   }
   if (!tasksResult.error) {
-    state.tasks = (tasksResult.data || []).map(normalizeTask);
+    state.tasks = activeRows(tasksResult.data || []).map(normalizeTask);
     liveTables += 1;
   }
   if (!filesResult.error) {
@@ -3045,22 +3074,22 @@ async function loadSupabaseData() {
   if (!messagesResult.error) state.messages = (messagesResult.data || []).map(normalizeMessage);
   if (!messageAttachmentsResult.error) state.messageAttachments = (messageAttachmentsResult.data || []).map(normalizeMessageAttachment);
   if (!messageReadsResult.error) state.messageReads = (messageReadsResult.data || []).map(normalizeMessageRead);
-  if (!calendarEventsResult.error) state.calendarEvents = (calendarEventsResult.data || []).map(normalizeCalendarEvent);
+  if (!calendarEventsResult.error) state.calendarEvents = activeRows(calendarEventsResult.data || []).map(normalizeCalendarEvent);
   if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
   if (!formsResult.error) {
-    state.forms = (formsResult.data || []).map(normalizeForm);
+    state.forms = activeRows(formsResult.data || []).map(normalizeForm);
     liveTables += 1;
   }
-  if (!formResponsesResult.error) state.formResponses = (formResponsesResult.data || []).map(normalizeFormResponse);
+  if (!formResponsesResult.error) state.formResponses = activeRows(formResponsesResult.data || []).map(normalizeFormResponse);
   if (!financeInvoicesResult.error) {
-    state.financeInvoices = (financeInvoicesResult.data || []).map(normalizeFinanceInvoice);
+    state.financeInvoices = activeRows(financeInvoicesResult.data || []).map(normalizeFinanceInvoice);
     liveTables += 1;
   }
-  if (!financePaymentsResult.error) state.financePayments = (financePaymentsResult.data || []).map(normalizeFinancePayment);
-  if (!financeExpensesResult.error) state.financeExpenses = (financeExpensesResult.data || []).map(normalizeFinanceExpense);
-  if (!financeVendorsResult.error) state.financeVendors = (financeVendorsResult.data || []).map(normalizeFinanceVendor);
+  if (!financePaymentsResult.error) state.financePayments = activeRows(financePaymentsResult.data || []).map(normalizeFinancePayment);
+  if (!financeExpensesResult.error) state.financeExpenses = activeRows(financeExpensesResult.data || []).map(normalizeFinanceExpense);
+  if (!financeVendorsResult.error) state.financeVendors = activeRows(financeVendorsResult.data || []).map(normalizeFinanceVendor);
   if (!contactsResult.error) {
-    state.contacts = (contactsResult.data || []).map(normalizeContact);
+    state.contacts = activeRows(contactsResult.data || []).map(normalizeContact);
     liveTables += 1;
   }
   if (!pipelineStagesResult.error) {
@@ -3068,21 +3097,21 @@ async function loadSupabaseData() {
     applyPipelineStagesForCompany(activeCompanyId());
   }
   if (!accountsResult.error) {
-    state.accounts = (accountsResult.data || []).map(normalizeAccount);
+    state.accounts = activeRows(accountsResult.data || []).map(normalizeAccount);
     liveTables += 1;
   }
   if (!dealsResult.error) {
-    state.deals = (dealsResult.data || []).map(normalizeDeal);
+    state.deals = activeRows(dealsResult.data || []).map(normalizeDeal);
     liveTables += 1;
   }
   if (!sitesResult.error) {
     state.sites = (sitesResult.data || []).map(normalizeCrmSite);
   }
   if (!proposalsResult.error) {
-    state.proposals = (proposalsResult.data || []).map(normalizeProposal);
+    state.proposals = activeRows(proposalsResult.data || []).map(normalizeProposal);
   }
   if (!activitiesResult.error) {
-    state.activities = (activitiesResult.data || []).map(normalizeActivity);
+    state.activities = activeRows(activitiesResult.data || []).map(normalizeActivity);
   }
   if (!companyPluginsResult.error) {
     state.companyPlugins = (companyPluginsResult.data || []).map(normalizeCompanyPlugin);
@@ -3090,14 +3119,15 @@ async function loadSupabaseData() {
   } else {
     state.pluginLoadFailed = true;
   }
-  if (!clientPortalsResult.error) state.clientPortals = (clientPortalsResult.data || []).map(normalizeClientPortal);
-  if (!clientPortalDocumentsResult.error) state.clientPortalDocuments = (clientPortalDocumentsResult.data || []).map(normalizeClientPortalDocument);
+  if (!clientPortalsResult.error) state.clientPortals = activeRows(clientPortalsResult.data || []).map(normalizeClientPortal);
+  if (!clientPortalDocumentsResult.error) state.clientPortalDocuments = activeRows(clientPortalDocumentsResult.data || []).map(normalizeClientPortalDocument);
   if (!clientPortalAnnotationsResult.error) state.clientPortalAnnotations = (clientPortalAnnotationsResult.data || []).map(normalizeClientPortalAnnotation);
   if (!clientPortalEventsResult.error) state.clientPortalEvents = (clientPortalEventsResult.data || []).map(normalizeClientPortalEvent);
-  if (!pricebookVendorsResult.error) state.pricebookVendors = (pricebookVendorsResult.data || []).map(normalizePricebookVendor);
-  if (!pricebookMaterialsResult.error) state.pricebookMaterials = (pricebookMaterialsResult.data || []).map(normalizePricebookMaterial);
-  if (!pricebookPricesResult.error) state.pricebookPrices = (pricebookPricesResult.data || []).map(normalizePricebookPrice);
+  if (!pricebookVendorsResult.error) state.pricebookVendors = activeRows(pricebookVendorsResult.data || []).map(normalizePricebookVendor);
+  if (!pricebookMaterialsResult.error) state.pricebookMaterials = activeRows(pricebookMaterialsResult.data || []).map(normalizePricebookMaterial);
+  if (!pricebookPricesResult.error) state.pricebookPrices = activeRows(pricebookPricesResult.data || []).map(normalizePricebookPrice);
   if (!workspaceBackupsResult.error) state.workspaceBackups = (workspaceBackupsResult.data || []).map(normalizeWorkspaceBackup);
+  if (!recycleBinResult.error) state.recycleBinItems = (recycleBinResult.data || []).map(normalizeRecycleBinItem);
   if (!workspaceBuilderResult.error) {
     state.workspaceBuilderDocs = {};
     state.workspaceBuilderLive = {};
@@ -3284,6 +3314,7 @@ function resetLiveWorkspaceData() {
   state.platformCompanyMembers = [];
   state.subscriptions = [];
   state.workspaceReviews = [];
+  state.recycleBinItems = [];
   state.workspaceBuilderDocs = {};
   state.workspaceBuilderLive = {};
   state.roles = [];
@@ -3303,34 +3334,34 @@ function resetLiveWorkspaceData() {
 function resetDemoWorkspaceData() {
   const readDemoList = isReadOnlyDemo() ? ((_key, fallback) => (Array.isArray(fallback) ? fallback : [])) : readSeededList;
   const readDemoJson = isReadOnlyDemo() ? ((_key, fallback) => fallback) : readJson;
-  state.jobs = readDemoList(JOB_CACHE_KEY, jobsFallback).map(normalizeJob);
-  state.contacts = readDemoList(CONTACT_CACHE_KEY, contactsFallback).map(normalizeContact);
-  state.accounts = readDemoList(ACCOUNT_CACHE_KEY, accountsFallback).map(normalizeAccount);
-  state.deals = readDemoList(DEAL_CACHE_KEY, dealsFallback).map(normalizeDeal);
+  state.jobs = activeRows(readDemoList(JOB_CACHE_KEY, jobsFallback)).map(normalizeJob);
+  state.contacts = activeRows(readDemoList(CONTACT_CACHE_KEY, contactsFallback)).map(normalizeContact);
+  state.accounts = activeRows(readDemoList(ACCOUNT_CACHE_KEY, accountsFallback)).map(normalizeAccount);
+  state.deals = activeRows(readDemoList(DEAL_CACHE_KEY, dealsFallback)).map(normalizeDeal);
   state.sites = readDemoList(SITE_CACHE_KEY, []).map(normalizeCrmSite);
-  state.proposals = readDemoList(PROPOSAL_CACHE_KEY, []).map(normalizeProposal);
-  state.activities = readDemoList(ACTIVITY_CACHE_KEY, activitiesFallback).map(normalizeActivity);
-  state.tasks = readDemoList(TASK_CACHE_KEY, tasksFallback).map(normalizeTask);
-  state.files = readDemoList(FILE_CACHE_KEY, filesFallback).map(normalizeFile);
+  state.proposals = activeRows(readDemoList(PROPOSAL_CACHE_KEY, [])).map(normalizeProposal);
+  state.activities = activeRows(readDemoList(ACTIVITY_CACHE_KEY, activitiesFallback)).map(normalizeActivity);
+  state.tasks = activeRows(readDemoList(TASK_CACHE_KEY, tasksFallback)).map(normalizeTask);
+  state.files = activeRows(readDemoList(FILE_CACHE_KEY, filesFallback)).map(normalizeFile);
   state.driveFolders = readDemoList(DRIVE_FOLDER_CACHE_KEY, []).map(normalizeDriveFolder);
-  state.forms = readDemoList(FORM_CACHE_KEY, formsFallback).map(normalizeForm);
-  state.formResponses = readDemoList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback).map(normalizeFormResponse);
-  state.financeInvoices = readDemoList(FINANCE_INVOICE_CACHE_KEY, financeInvoicesFallback).map(normalizeFinanceInvoice);
-  state.financePayments = readDemoList(FINANCE_PAYMENT_CACHE_KEY, financePaymentsFallback).map(normalizeFinancePayment);
-  state.financeExpenses = readDemoList(FINANCE_EXPENSE_CACHE_KEY, financeExpensesFallback).map(normalizeFinanceExpense);
-  state.financeVendors = readDemoList(FINANCE_VENDOR_CACHE_KEY, financeVendorsFallback).map(normalizeFinanceVendor);
-  state.pricebookVendors = readDemoList(PRICEBOOK_VENDOR_CACHE_KEY, []).map(normalizePricebookVendor);
-  state.pricebookMaterials = readDemoList(PRICEBOOK_MATERIAL_CACHE_KEY, []).map(normalizePricebookMaterial);
-  state.pricebookPrices = readDemoList(PRICEBOOK_PRICE_CACHE_KEY, []).map(normalizePricebookPrice);
+  state.forms = activeRows(readDemoList(FORM_CACHE_KEY, formsFallback)).map(normalizeForm);
+  state.formResponses = activeRows(readDemoList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback)).map(normalizeFormResponse);
+  state.financeInvoices = activeRows(readDemoList(FINANCE_INVOICE_CACHE_KEY, financeInvoicesFallback)).map(normalizeFinanceInvoice);
+  state.financePayments = activeRows(readDemoList(FINANCE_PAYMENT_CACHE_KEY, financePaymentsFallback)).map(normalizeFinancePayment);
+  state.financeExpenses = activeRows(readDemoList(FINANCE_EXPENSE_CACHE_KEY, financeExpensesFallback)).map(normalizeFinanceExpense);
+  state.financeVendors = activeRows(readDemoList(FINANCE_VENDOR_CACHE_KEY, financeVendorsFallback)).map(normalizeFinanceVendor);
+  state.pricebookVendors = activeRows(readDemoList(PRICEBOOK_VENDOR_CACHE_KEY, [])).map(normalizePricebookVendor);
+  state.pricebookMaterials = activeRows(readDemoList(PRICEBOOK_MATERIAL_CACHE_KEY, [])).map(normalizePricebookMaterial);
+  state.pricebookPrices = activeRows(readDemoList(PRICEBOOK_PRICE_CACHE_KEY, [])).map(normalizePricebookPrice);
   state.notifications = readDemoList(NOTIFICATION_CACHE_KEY, notificationsFallback).map(normalizeNotification);
   state.messageConversations = readDemoList(MESSAGE_CONVERSATION_CACHE_KEY, messageConversationsFallback).map(normalizeMessageConversation);
   state.messageAccess = readDemoList(MESSAGE_ACCESS_CACHE_KEY, messageAccessFallback).map(normalizeMessageAccess);
   state.messages = readDemoList(MESSAGE_CACHE_KEY, messagesFallback).map(normalizeMessage);
   state.messageReads = readDemoList(MESSAGE_READ_CACHE_KEY, messageReadsFallback).map(normalizeMessageRead);
   state.messageAttachments = readDemoList(MESSAGE_ATTACHMENT_CACHE_KEY, messageAttachmentsFallback).map(normalizeMessageAttachment);
-  state.calendarEvents = readDemoList(CALENDAR_EVENT_CACHE_KEY, calendarEventsFallback).map(normalizeCalendarEvent);
-  state.clientPortals = readDemoList(CLIENT_PORTAL_CACHE_KEY, []).map(normalizeClientPortal);
-  state.clientPortalDocuments = readDemoList(CLIENT_PORTAL_DOCUMENT_CACHE_KEY, []).map(normalizeClientPortalDocument);
+  state.calendarEvents = activeRows(readDemoList(CALENDAR_EVENT_CACHE_KEY, calendarEventsFallback)).map(normalizeCalendarEvent);
+  state.clientPortals = activeRows(readDemoList(CLIENT_PORTAL_CACHE_KEY, [])).map(normalizeClientPortal);
+  state.clientPortalDocuments = activeRows(readDemoList(CLIENT_PORTAL_DOCUMENT_CACHE_KEY, [])).map(normalizeClientPortalDocument);
   state.clientPortalAnnotations = readDemoList(CLIENT_PORTAL_ANNOTATION_CACHE_KEY, []).map(normalizeClientPortalAnnotation);
   state.clientPortalEvents = readDemoList(CLIENT_PORTAL_EVENT_CACHE_KEY, []).map(normalizeClientPortalEvent);
   state.timeEntries = readDemoJson(TIME_ENTRY_CACHE_KEY, []);
@@ -3343,6 +3374,7 @@ function resetDemoWorkspaceData() {
   state.platformCompanyMembers = [];
   state.subscriptions = [];
   state.workspaceReviews = [];
+  state.recycleBinItems = readDemoList(RECYCLE_BIN_CACHE_KEY, []).map(normalizeRecycleBinItem);
   state.roles = [];
   state.rolePermissions = [];
   state.roleAssignments = [];
@@ -4437,20 +4469,7 @@ async function savePricebookVendor(form) {
 async function deletePricebookVendor(vendorId) {
   const companyId = activeCompanyId();
   if (!requirePermission('price_book.manage', companyId, 'Your role cannot manage the price book.', 'Price Book')) return;
-  const vendor = state.pricebookVendors.find((item) => item.id === vendorId);
-  if (!vendor || !window.confirm(`Delete ${vendor.name}? This removes its catalog prices.`)) return;
-  const client = createSupabaseClient();
-  const live = isLiveSupabaseSession() && client;
-  if (live) {
-    const result = await client.from('pricebook_vendors').delete().eq('id', vendorId);
-    if (result.error) return showToast(result.error.message || 'Vendor delete failed.', 'local', 'Price Book');
-  }
-  state.pricebookVendors = state.pricebookVendors.filter((item) => item.id !== vendorId);
-  state.pricebookPrices = state.pricebookPrices.filter((item) => item.vendor_id !== vendorId);
-  if (state.pricebookVendorId === vendorId) state.pricebookVendorId = '';
-  pricebookPersistLocal();
-  showToast('Vendor deleted.', live ? 'live' : 'local', 'Price Book');
-  render();
+  await recycleDeleteRecord({ type: 'pricebook_vendor', id: vendorId });
 }
 async function upsertPricebookMaterial(companyId, name, category, unit, live, client) {
   const existing = state.pricebookMaterials.find((item) => item.company_id === companyId && item.name.toLowerCase() === name.toLowerCase());
@@ -4526,15 +4545,7 @@ async function commitPricebookCost(priceId, value) {
 async function deletePricebookRow(priceId) {
   const companyId = activeCompanyId();
   if (!requirePermission('price_book.manage', companyId, 'Your role cannot manage the price book.', 'Price Book')) return;
-  const client = createSupabaseClient();
-  const live = isLiveSupabaseSession() && client;
-  if (live) {
-    const result = await client.from('pricebook_vendor_prices').delete().eq('id', priceId);
-    if (result.error) return showToast(result.error.message || 'Delete failed.', 'local', 'Price Book');
-  }
-  state.pricebookPrices = state.pricebookPrices.filter((item) => item.id !== priceId);
-  pricebookPersistLocal();
-  render();
+  await recycleDeleteRecord({ type: 'pricebook_price', id: priceId });
 }
 function parsePricebookCsvLine(line, delimiter = ',') {
   const cells = [];
@@ -6714,10 +6725,10 @@ function renderContactBulkModal() {
   const s = n === 1 ? '' : 's';
   if (b.kind === 'delete') {
     const content = `
-      <p class="modal-lead">Permanently delete <b>${n}</b> selected contact${s}? This cannot be undone.</p>
+      <p class="modal-lead">Move <b>${n}</b> selected contact${s} to Recycle Bin for 30 days?</p>
       <div class="modal-actions">
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
-        <button class="btn danger" type="button" data-action="contact-bulk-confirm"><i class="ti ti-trash"></i>Delete ${n} contact${s}</button>
+        <button class="btn danger" type="button" data-action="contact-bulk-confirm"><i class="ti ti-trash"></i>Move ${n} contact${s}</button>
       </div>`;
     return renderModalShell('Contacts', `Delete ${n} contact${s}`, content, '');
   }
@@ -6756,20 +6767,16 @@ function submitContactBulk() {
 }
 
 async function performBulkContactsDelete(targets) {
-  const ids = new Set(targets.map((c) => c.id));
   state.modal = '';
   state.contactBulk = null;
-  const client = createSupabaseClient();
-  if (client) {
-    for (const id of ids) {
-      try { await client.from('contacts').delete().eq('id', id); } catch (error) { console.warn('Contact delete failed', error); }
-    }
+  let moved = 0;
+  for (const contact of targets) {
+    const ok = await recycleDeleteRecord({ type: 'contact', id: contact.id, options: { stayOnPage: true } });
+    if (ok) moved += 1;
   }
-  state.contacts = state.contacts.filter((c) => !ids.has(c.id));
   persistContacts();
   state.selectedContactIds = [];
-  if (ids.has(state.selectedContactId)) state.selectedContactId = '';
-  showToast(`Deleted ${ids.size} contact${ids.size === 1 ? '' : 's'}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+  showToast(`Moved ${moved} contact${moved === 1 ? '' : 's'} to Recycle Bin.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
   render();
 }
 
@@ -8335,19 +8342,7 @@ async function saveContact(form) {
 
 async function deleteContact(id) {
   if (!id) return;
-  const client = createSupabaseClient();
-  if (client) {
-    try {
-      await client.from('contacts').delete().eq('id', id);
-    } catch (error) {
-      console.warn('Contact delete sync failed', error);
-    }
-  }
-  state.contacts = state.contacts.filter((contact) => contact.id !== id);
-  persistContacts();
-  if (state.selectedContactId === id) state.selectedContactId = '';
-  state.modal = '';
-  render();
+  await recycleDeleteRecord({ type: 'contact', id });
 }
 
 // ---- Stage manager (create / rename / recolor / delete) -------------------
@@ -11265,6 +11260,7 @@ function renderSettingsPage(route, companyId) {
     [companyPath('settings', { tab: 'roles' }, companyId), 'Roles', 'roles'],
     [companyPath('settings', { tab: 'access' }, companyId), 'Access', 'access'],
     [backupSettingsPath, 'Backups', 'backups'],
+    [companyPath('settings', { tab: 'recycle-bin' }, companyId), 'Recycle Bin', 'recycle-bin'],
     [companyPath('settings', { tab: 'team' }, companyId), 'Workers', 'team'],
   ];
   if (isQuestDeveloper()) settingsTabs.push([companyPath('settings', { tab: 'master' }, companyId), 'Master', 'master']);
@@ -11279,6 +11275,7 @@ function renderSettingsPage(route, companyId) {
       ${tab === 'plugins' ? renderPluginsSettings(companyId) : ''}
       ${tab === 'roles' ? renderRolesSettings(companyId) : ''}
       ${tab === 'backups' ? renderBackupsSettings(companyId) : ''}
+      ${tab === 'recycle-bin' ? renderRecycleBinSettings(companyId) : ''}
       ${tab === 'access' ? `
       <article class="panel">
         <div class="section-head"><div><h2>Access</h2><p>Memberships, invites, and join requests.</p></div></div>
@@ -11383,6 +11380,75 @@ function renderWorkspaceBackupRow(backup) {
         <button class="btn" type="button" data-action="download-workspace-backup" data-backup-id="${h(backup.id)}"><i class="ti ti-download"></i>Download</button>
         <button class="btn" type="button" data-action="open-restore-backup" data-backup-id="${h(backup.id)}" ${backup.status !== 'active' ? 'disabled' : ''}><i class="ti ti-restore"></i>Restore</button>
         <button class="btn danger" type="button" data-action="mark-workspace-backup-deleted" data-backup-id="${h(backup.id)}"><i class="ti ti-trash"></i>Mark deleted</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderRecycleBinSettings(companyId) {
+  const items = recycleBinItemsForCompany(companyId);
+  const filters = state.recycleFilters || { type: 'all', status: 'active' };
+  const typeOptions = Object.values(RECYCLE_BIN_TYPES).map((config) => [config.type, config.label]).sort((a, b) => a[1].localeCompare(b[1]));
+  const filtered = items.filter((item) => {
+    const days = recycleDaysLeft(item);
+    const statusMatch = filters.status === 'all'
+      || (filters.status === 'active' && days >= 0)
+      || (filters.status === 'expiring' && days >= 0 && days <= 7)
+      || (filters.status === 'expired' && days < 0);
+    const typeMatch = filters.type === 'all' || item.source_type === filters.type;
+    return statusMatch && typeMatch;
+  });
+  const counts = [
+    ['Items', String(items.length)],
+    ['Expiring soon', String(items.filter((item) => recycleDaysLeft(item) >= 0 && recycleDaysLeft(item) <= 7).length)],
+    ['Expired', String(items.filter((item) => recycleDaysLeft(item) < 0).length)],
+  ];
+  return `
+    <article class="panel span-3 recycle-bin-panel">
+      <div class="section-head">
+        <div>
+          <h2>Recycle Bin</h2>
+          <p>Deleted workspace items stay recoverable for 30 days before permanent cleanup.</p>
+        </div>
+        <div class="backup-record-counts">${counts.map(([label, value]) => `<span>${h(label)}: ${h(value)}</span>`).join('')}</div>
+      </div>
+      <div class="recycle-toolbar">
+        <label><span>Type</span><select data-recycle-filter="type">
+          <option value="all" ${filters.type === 'all' ? 'selected' : ''}>All types</option>
+          ${typeOptions.map(([value, label]) => `<option value="${h(value)}" ${filters.type === value ? 'selected' : ''}>${h(label)}</option>`).join('')}
+        </select></label>
+        <label><span>Status</span><select data-recycle-filter="status">
+          ${[
+            ['active', 'Active'],
+            ['expiring', 'Expiring soon'],
+            ['expired', 'Expired'],
+            ['all', 'All'],
+          ].map(([value, label]) => `<option value="${value}" ${filters.status === value ? 'selected' : ''}>${label}</option>`).join('')}
+        </select></label>
+      </div>
+      <div class="recycle-list">
+        ${filtered.map(renderRecycleBinRow).join('') || emptyState('Recycle Bin is empty. Deleted items will appear here.')}
+      </div>
+    </article>
+  `;
+}
+
+function renderRecycleBinRow(item) {
+  const typeConfig = recycleTypeConfig(item.source_type);
+  const days = recycleDaysLeft(item);
+  const dayLabel = days < 0 ? `${Math.abs(days)}d expired` : `${days}d left`;
+  const statusClass = days < 0 ? 'danger' : days <= 7 ? 'warning' : 'active';
+  return `
+    <article class="recycle-row ${statusClass}">
+      <div class="recycle-icon"><i class="ti ti-recycle"></i></div>
+      <div>
+        <strong>${h(item.item_label)}</strong>
+        <small>${h(typeConfig?.label || titleCase(item.source_type))} / Deleted by ${h(item.deleted_by_label || 'Unknown')} / ${formatDateTime(item.deleted_at)}</small>
+      </div>
+      <b class="status-pill ${statusClass}">${h(dayLabel)}</b>
+      <div class="recycle-actions">
+        <button class="btn" type="button" data-action="restore-recycle-item" data-recycle-id="${h(item.id)}"><i class="ti ti-restore"></i>Restore</button>
+        <button class="btn danger" type="button" data-action="open-permanent-delete-recycle-item" data-recycle-id="${h(item.id)}"><i class="ti ti-trash"></i>Delete forever</button>
       </div>
     </article>
   `;
@@ -15569,6 +15635,8 @@ function renderActiveModal(route, session) {
   if (state.modal === 'price-book-material') return renderPriceBookMaterialModal();
   if (state.modal === 'price-book-import') return renderPriceBookImportModal();
   if (state.modal === 'workspace-backup-restore') return renderWorkspaceBackupRestoreModal();
+  if (state.modal === 'recycle-delete') return renderRecycleDeleteModal();
+  if (state.modal === 'recycle-permanent-delete') return renderRecyclePermanentDeleteModal();
   if (state.modal === 'platform-backup-delete') return renderPlatformBackupDeleteModal(state.selectedPlatformBackupCopyId);
   if (state.modal === 'stages-jobs') return renderStageManagerModal('jobs');
   if (state.modal === 'stages-contacts') return renderStageManagerModal('contacts');
@@ -15679,6 +15747,60 @@ function renderDeleteCompanyModal() {
     </div>
   `;
   return renderModalShell('Danger zone', `Delete ${name}`, content, '');
+}
+
+function openRecycleDeleteModal(config) {
+  const typeConfig = recycleTypeConfig(config?.type);
+  const record = recycleRecordByConfig(config);
+  if (!typeConfig || !record) return showToast('Could not find the item to delete.', 'error', 'Recycle Bin');
+  if (typeConfig.permission && !requirePermission(typeConfig.permission, record.company_id, `Your role cannot delete this ${typeConfig.label.toLowerCase()}.`, typeConfig.label)) return;
+  state.recycleDeleteCtx = { type: typeConfig.type, id: record.id, options: config.options || {} };
+  state.modal = 'recycle-delete';
+  render();
+}
+
+function renderRecycleDeleteModal() {
+  const ctx = state.recycleDeleteCtx || {};
+  const typeConfig = recycleTypeConfig(ctx.type);
+  const record = recycleRecordByConfig(ctx);
+  if (!typeConfig || !record) return renderModalShell('Recycle Bin', 'Delete item', emptyState('Item not found.'));
+  const label = typeConfig.title(record);
+  return renderModalShell('Recycle Bin', `Delete ${typeConfig.label.toLowerCase()}`, `
+    <div class="compact-tool-form">
+      <div class="file-policy-note danger">
+        <strong>${h(label)}</strong>
+        <span>This moves the item to Recycle Bin for 30 days. You can restore it from Settings.</span>
+      </div>
+      <div class="form-actions">
+        <button class="btn danger" type="button" data-action="confirm-recycle-delete"><i class="ti ti-trash"></i>Move to Recycle Bin</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </div>
+  `, 'task-modal');
+}
+
+function openRecyclePermanentDeleteModal(itemId) {
+  state.selectedRecycleItemId = itemId || '';
+  state.modal = 'recycle-permanent-delete';
+  render();
+}
+
+function renderRecyclePermanentDeleteModal() {
+  const item = recycleItemById(state.selectedRecycleItemId);
+  const typeConfig = recycleTypeConfig(item?.source_type);
+  if (!item || !typeConfig) return renderModalShell('Recycle Bin', 'Delete forever', emptyState('Recycle Bin item not found.'));
+  return renderModalShell('Recycle Bin', 'Delete forever', `
+    <div class="compact-tool-form">
+      <div class="file-policy-note danger">
+        <strong>${h(item.item_label)}</strong>
+        <span>This permanently deletes the original record and cannot be undone. Restoring will no longer be possible.</span>
+      </div>
+      <div class="form-actions">
+        <button class="btn danger" type="button" data-action="confirm-permanent-delete-recycle-item" data-recycle-id="${h(item.id)}"><i class="ti ti-trash"></i>Delete forever</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </div>
+  `, 'task-modal');
 }
 
 function openDeleteCompanyWorkspace() {
@@ -16981,6 +17103,26 @@ function handleAction(event, node) {
     markWorkspaceBackupDeleted(node.dataset.backupId || '').catch((error) => showToast(error.message || 'Backup update failed.', 'error', 'Backups'));
     return;
   }
+  if (action === 'confirm-recycle-delete') {
+    event.preventDefault();
+    confirmRecycleDelete().catch((error) => showToast(error.message || 'Delete failed.', 'error', 'Recycle Bin'));
+    return;
+  }
+  if (action === 'restore-recycle-item') {
+    event.preventDefault();
+    restoreRecycleBinItem(node.dataset.recycleId || '').catch((error) => showToast(error.message || 'Restore failed.', 'error', 'Recycle Bin'));
+    return;
+  }
+  if (action === 'open-permanent-delete-recycle-item') {
+    event.preventDefault();
+    openRecyclePermanentDeleteModal(node.dataset.recycleId || '');
+    return;
+  }
+  if (action === 'confirm-permanent-delete-recycle-item') {
+    event.preventDefault();
+    permanentlyDeleteRecycleBinItem(node.dataset.recycleId || state.selectedRecycleItemId).catch((error) => showToast(error.message || 'Permanent delete failed.', 'error', 'Recycle Bin'));
+    return;
+  }
   if (action === 'platform-backup-mark-deleted') {
     event.preventDefault();
     markPlatformBackupCopyDeleted(node.dataset.copyId || '').catch((error) => showToast(error.message || 'Backup update failed.', 'error', 'Master'));
@@ -17522,7 +17664,7 @@ function handleAction(event, node) {
   }
   if (action === 'pb-delete-vendor') {
     event.preventDefault();
-    deletePricebookVendor(node.dataset.vendorId || '').catch((error) => showToast(error.message || 'Vendor delete failed.', 'local', 'Price Book'));
+    openRecycleDeleteModal({ type: 'pricebook_vendor', id: node.dataset.vendorId || '' });
     return;
   }
   if (action === 'pb-add-material' || action === 'pb-edit-material') {
@@ -17561,7 +17703,7 @@ function handleAction(event, node) {
   }
   if (action === 'pb-delete-row') {
     event.preventDefault();
-    deletePricebookRow(node.dataset.priceId || '').catch((error) => showToast(error.message || 'Price delete failed.', 'local', 'Price Book'));
+    openRecycleDeleteModal({ type: 'pricebook_price', id: node.dataset.priceId || '' });
     return;
   }
   if (action === 'pipeline-open') {
@@ -17891,7 +18033,7 @@ function handleAction(event, node) {
   }
   if (action === 'delete-calendar-event') {
     event.preventDefault();
-    deleteCalendarEvent(node.dataset.eventId);
+    openRecycleDeleteModal({ type: 'calendar_event', id: node.dataset.eventId });
     return;
   }
   if (action === 'copy-invite-link') {
@@ -17984,7 +18126,7 @@ function handleAction(event, node) {
   }
   if (action === 'delete-client-portal') {
     event.preventDefault();
-    deleteClientPortal(node.dataset.portalId);
+    openRecycleDeleteModal({ type: 'client_portal', id: node.dataset.portalId });
     return;
   }
   if (action === 'open-folder-form') {
@@ -18014,7 +18156,7 @@ function handleAction(event, node) {
   }
   if (action === 'delete-contact') {
     event.preventDefault();
-    deleteContact(node.dataset.contactId);
+    openRecycleDeleteModal({ type: 'contact', id: node.dataset.contactId });
     return;
   }
   if (action === 'open-account-form') {
@@ -18026,7 +18168,7 @@ function handleAction(event, node) {
   }
   if (action === 'delete-account') {
     event.preventDefault();
-    deleteAccount(node.dataset.accountId);
+    openRecycleDeleteModal({ type: 'account', id: node.dataset.accountId });
     return;
   }
   if (action === 'open-account') {
@@ -18058,7 +18200,7 @@ function handleAction(event, node) {
   }
   if (action === 'delete-deal') {
     event.preventDefault();
-    deleteDeal(node.dataset.dealId);
+    openRecycleDeleteModal({ type: 'deal', id: node.dataset.dealId });
     return;
   }
   if (action === 'remove-quote-line-item') {
@@ -18193,9 +18335,7 @@ function handleAction(event, node) {
   }
   if (action === 'task-delete') {
     event.preventDefault();
-    state.taskDeleteId = node.dataset.taskId || '';
-    state.modal = 'task-delete';
-    render();
+    openRecycleDeleteModal({ type: 'task', id: node.dataset.taskId || '' });
     return;
   }
   if (action === 'cp-mark-info') {
@@ -18208,9 +18348,8 @@ function handleAction(event, node) {
   if (action === 'task-delete-confirm') {
     event.preventDefault();
     const id = state.taskDeleteId;
-    state.modal = '';
     state.taskDeleteId = '';
-    deleteTask(id, { stayOnPage: false });
+    openRecycleDeleteModal({ type: 'task', id });
     return;
   }
   if (action === 'contacts-import') {
@@ -18319,7 +18458,7 @@ function handleAction(event, node) {
   }
   if (action === 'delete-activity') {
     event.preventDefault();
-    deleteActivity(node.dataset.activityId);
+    openRecycleDeleteModal({ type: 'activity', id: node.dataset.activityId });
     return;
   }
   if (action === 'set-contact-sort') {
@@ -18494,7 +18633,7 @@ function handleAction(event, node) {
   if (action === 'delete-file') {
     event.preventDefault();
     if (!requirePermission('files.manage', activeCompanyId(), 'Your role cannot delete files.', 'Files')) return;
-    deleteFile(node.dataset.fileId);
+    openRecycleDeleteModal({ type: 'file', id: node.dataset.fileId });
     return;
   }
   if (action === 'set-forms-tab') {
@@ -18571,7 +18710,7 @@ function handleAction(event, node) {
   if (action === 'delete-form') {
     event.preventDefault();
     if (!requirePermission('forms.manage', activeCompanyId(), 'Your role cannot delete forms.', 'Forms')) return;
-    deleteForm(node.dataset.formId).catch((error) => showToast(error.message || 'Form delete failed.', 'local', 'Forms'));
+    openRecycleDeleteModal({ type: 'form', id: node.dataset.formId });
     return;
   }
   if (action === 'copy-form-link') {
@@ -18587,7 +18726,7 @@ function handleAction(event, node) {
   if (action === 'delete-form-response') {
     event.preventDefault();
     if (!requirePermission('forms.manage', activeCompanyId(), 'Your role cannot delete form responses.', 'Forms')) return;
-    deleteFormResponse(node.dataset.responseId || '').catch((error) => showToast(error.message || 'Could not delete response.', 'local', 'Forms'));
+    openRecycleDeleteModal({ type: 'form_response', id: node.dataset.responseId || '' });
     return;
   }
   if (action === 'response-create-contact') {
@@ -18706,13 +18845,13 @@ function handleAction(event, node) {
   if (action === 'delete-job') {
     event.preventDefault();
     if (!requirePermission('jobs.manage', activeCompanyId(), 'Your role cannot delete jobs.', 'Jobs')) return;
-    deleteJob(node.dataset.jobId);
+    openRecycleDeleteModal({ type: 'job', id: node.dataset.jobId });
     return;
   }
   if (action === 'delete-task') {
     event.preventDefault();
     if (!requirePermission('tasks.manage', activeCompanyId(), 'Your role cannot delete tasks.', 'Tasks')) return;
-    deleteTask(node.dataset.taskId, { stayOnPage: node.dataset.taskReturn === 'record' });
+    openRecycleDeleteModal({ type: 'task', id: node.dataset.taskId, options: { stayOnPage: node.dataset.taskReturn === 'record' } });
     return;
   }
 }
@@ -20720,20 +20859,7 @@ async function deleteCalendarEvent(eventId) {
     showToast('This event cannot be deleted from Calendar.', 'local', 'Calendar');
     return;
   }
-  const client = createSupabaseClient();
-  if (isLiveSupabaseSession() && client) {
-    const result = await client.from('calendar_events').delete().eq('id', eventRecord.id);
-    if (result.error) {
-      showToast(result.error.message || 'Calendar event delete failed.', 'local', 'Calendar');
-      return;
-    }
-  }
-  state.calendarEvents = state.calendarEvents.filter((item) => item.id !== eventRecord.id);
-  persistCalendarEvents();
-  notifyLocalEvent('calendar.event', 'Calendar event deleted', `${actorName()} deleted ${eventRecord.title}.`, companyPath('calendar', {}, eventRecord.company_id), 'calendar_event', eventRecord.id, eventRecord.company_id);
-  state.selectedCalendarEventId = '';
-  state.modal = '';
-  render();
+  await recycleDeleteRecord({ type: 'calendar_event', id: eventRecord.id });
 }
 
 async function createMessageRecord(conversation, body, files) {
@@ -21044,6 +21170,12 @@ function onDocumentChange(event) {
     render();
     return;
   }
+  if (event.target.matches('[data-recycle-filter]')) {
+    const key = event.target.dataset.recycleFilter;
+    state.recycleFilters = { type: 'all', status: 'active', ...(state.recycleFilters || {}), [key]: event.target.value || 'all' };
+    render();
+    return;
+  }
   if (event.target.matches('[data-cp-unit-select]')) {
     cpChangeUnit(event.target.value || 'ft').catch((error) => showToast(error.message || 'Unit update failed.', 'local', 'Client Portal'));
     return;
@@ -21223,13 +21355,7 @@ async function deleteJob(id) {
   if (!id) return;
   const companyId = activeCompanyId();
   if (!requirePermission('jobs.manage', companyId, 'Your role cannot delete jobs.', 'Jobs')) return;
-  const client = createSupabaseClient();
-  if (client) await client.from('jobs').delete().eq('id', id);
-  state.jobs = state.jobs.filter((job) => job.id !== id);
-  state.selectedJobId = companyJobs(companyId)[0]?.id || '';
-  state.modal = '';
-  persistAll();
-  navigate(companyPath('jobs', { tab: 'list' }, companyId), { replace: true });
+  await recycleDeleteRecord({ type: 'job', id });
 }
 
 async function saveTask(form) {
@@ -21287,15 +21413,7 @@ async function deleteTask(id, options = {}) {
   if (!id) return;
   const companyId = activeCompanyId();
   if (!requirePermission('tasks.manage', companyId, 'Your role cannot delete tasks.', 'Tasks')) return;
-  const client = createSupabaseClient();
-  if (client) await client.from('tasks').delete().eq('id', id);
-  state.tasks = state.tasks.filter((task) => task.id !== id);
-  state.selectedTaskId = '';
-  state.modal = '';
-  persistAll();
-  if (options.stayOnPage) render();
-  if (options.stayOnPage) return;
-  navigate(companyPath('tasks', {}, companyId), { replace: true });
+  await recycleDeleteRecord({ type: 'task', id, options });
 }
 
 async function saveFileRecord(form) {
@@ -21604,20 +21722,7 @@ async function restoreClientPortal(portalId) {
 async function deleteClientPortal(portalId) {
   const portal = clientPortalById(portalId);
   if (!portal || !requirePermission('client_portals.manage', portal.company_id, 'Your role cannot manage portals.', 'Client Portal')) return;
-  if (!window.confirm(`Delete ${portal.title}? This permanently removes the portal and its share link.`)) return;
-  const client = createSupabaseClient();
-  if (isLiveSupabaseSession() && client) {
-    const result = await client.from('client_portals').delete().eq('id', portal.id);
-    if (result.error) { showToast(result.error.message || 'Portal delete failed.', 'error', 'Client Portal'); return; }
-  }
-  state.clientPortals = state.clientPortals.filter((item) => item.id !== portal.id);
-  state.clientPortalDocuments = state.clientPortalDocuments.filter((doc) => doc.portal_id !== portal.id);
-  persistAll();
-  if (state.route?.params?.get('portal_id') === portal.id) {
-    navigate(companyPath('client-portals', {}, portal.company_id), { replace: true });
-  }
-  showToast('Portal deleted.', isLiveSupabaseSession() ? 'live' : 'local', 'Client Portal');
-  render();
+  await recycleDeleteRecord({ type: 'client_portal', id: portal.id });
 }
 
 async function openClientPortal(form) {
@@ -23139,10 +23244,10 @@ function renderFilesDeleteModal() {
   const n = (state.selectedFileIds || []).length;
   const s = n === 1 ? '' : 's';
   const content = `
-    <p class="modal-lead">Delete <b>${n}</b> selected file${s}? This cannot be undone.</p>
+    <p class="modal-lead">Move <b>${n}</b> selected file${s} to Recycle Bin for 30 days?</p>
     <div class="modal-actions">
       <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      <button class="btn danger" type="button" data-action="files-delete-confirm"><i class="ti ti-trash"></i>Delete ${n} file${s}</button>
+      <button class="btn danger" type="button" data-action="files-delete-confirm"><i class="ti ti-trash"></i>Move ${n} file${s}</button>
     </div>`;
   return renderModalShell('Files', `Delete ${n} file${s}`, content, '');
 }
@@ -23151,31 +23256,23 @@ async function performBulkFilesDelete() {
   const ids = [...(state.selectedFileIds || [])];
   const total = ids.length;
   if (!total) { state.modal = ''; render(); return; }
-  const idSet = new Set(ids);
   // Show the in-modal deletion progress bar.
   state.filesDeleteProgress = { total, deleting: true };
   render();
   const setBar = (done) => { const b = document.querySelector('[data-delete-bar]'); if (b) b.style.width = `${Math.max(6, Math.round((done / total) * 100))}%`; };
-  const client = createSupabaseClient();
-  let deleted = 0;
+  let moved = 0;
+  let processed = 0;
   for (const id of ids) {
-    const file = state.files.find((f) => f.id === id);
-    if (file && client) {
-      try {
-        if (file.object_path) await client.storage.from(file.bucket_id || 'quest-job-files').remove([file.object_path]);
-        await client.from('job_files').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-      } catch (error) { console.warn('File delete failed', error); }
-    }
-    deleted += 1;
-    setBar(deleted);
+    const ok = await recycleDeleteRecord({ type: 'file', id, options: { stayOnPage: true } });
+    if (ok) moved += 1;
+    processed += 1;
+    setBar(processed);
   }
-  state.files = state.files.filter((f) => !idSet.has(f.id));
-  if (idSet.has(state.selectedFileId)) state.selectedFileId = '';
   state.selectedFileIds = [];
   state.filesDeleteProgress = null;
   persistAll();
   // System-wide completion modal.
-  showSystemStatus('Files deleted', `${deleted} file${deleted === 1 ? '' : 's'} ${deleted === 1 ? 'was' : 'were'} permanently removed.`, 'success');
+  showSystemStatus('Files moved to Recycle Bin', `${moved} file${moved === 1 ? '' : 's'} ${moved === 1 ? 'was' : 'were'} moved to Recycle Bin.`, 'success');
 }
 
 // ---- Copy / Move selected files to a folder --------------------------------
@@ -23270,16 +23367,7 @@ async function deleteFile(id) {
   const file = state.files.find((item) => item.id === id);
   if (!file) return;
   if (!requirePermission('files.manage', file.company_id, 'Your role cannot delete files.', 'Files')) return;
-  const client = createSupabaseClient();
-  if (client) {
-    if (file.object_path) await client.storage.from(file.bucket_id || 'quest-job-files').remove([file.object_path]);
-    await client.from('job_files').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-  }
-  state.files = state.files.filter((item) => item.id !== id);
-  state.selectedFileId = '';
-  state.modal = '';
-  persistAll();
-  render();
+  await recycleDeleteRecord({ type: 'file', id });
 }
 
 function upsertJob(job) {
@@ -25248,6 +25336,195 @@ async function supabaseDelete(table, id) {
   }
 }
 
+const RECYCLE_BIN_COLS = ['id', 'company_id', 'source_type', 'source_table', 'source_id', 'item_label', 'status', 'deleted_by', 'deleted_by_label', 'deleted_at', 'restore_until', 'restored_at', 'restored_by', 'snapshot', 'created_at', 'updated_at'];
+
+function recycleTypeConfig(type) {
+  return RECYCLE_BIN_TYPES[String(type || '')] || null;
+}
+
+function recycleRecordByConfig(config) {
+  const typeConfig = recycleTypeConfig(config?.type);
+  if (!typeConfig || !config?.id) return null;
+  const id = typeConfig.type === 'calendar_event' ? String(config.id).replace(/^manual:/, '') : String(config.id);
+  return (state[typeConfig.stateKey] || []).find((record) => String(record.id) === id) || null;
+}
+
+function recycleActorId() {
+  const profileId = activeSession()?.profile?.id || '';
+  return isUuid(profileId) ? profileId : null;
+}
+
+function buildRecycleBinItem(record, config) {
+  const typeConfig = recycleTypeConfig(config?.type);
+  const now = new Date();
+  const restoreUntil = new Date(now.getTime() + RECYCLE_BIN_RETENTION_DAYS * 86400000);
+  const snapshot = { ...(record || {}), deleted_at: null, deleted_by: null };
+  return normalizeRecycleBinItem({
+    id: `recycle-${typeConfig.type}-${record.id}-${now.getTime()}`,
+    company_id: record.company_id || activeCompanyId(),
+    source_type: typeConfig.type,
+    source_table: typeConfig.table,
+    source_id: record.id,
+    item_label: typeConfig.title(record),
+    status: 'active',
+    deleted_by: recycleActorId(),
+    deleted_by_label: actorName(),
+    deleted_at: now.toISOString(),
+    restore_until: restoreUntil.toISOString(),
+    snapshot,
+    created_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  });
+}
+
+function upsertRecycleBinItemLocal(item) {
+  const normalized = normalizeRecycleBinItem(item);
+  state.recycleBinItems = [normalized].concat((state.recycleBinItems || []).filter((row) => row.id !== normalized.id));
+  if (!isLiveSupabaseSession() && !isReadOnlyDemo()) writeJson(RECYCLE_BIN_CACHE_KEY, state.recycleBinItems);
+  return normalized;
+}
+
+async function insertRecycleBinItem(item) {
+  const normalized = upsertRecycleBinItemLocal(item);
+  const client = createSupabaseClient();
+  if (!isLiveSupabaseSession() || !client) return { ok: true, item: normalized };
+  const row = supabaseRow(normalized, RECYCLE_BIN_COLS);
+  const result = await client.from('recycle_bin_items').insert(row).select().single();
+  if (result.error) {
+    state.recycleBinItems = state.recycleBinItems.filter((entry) => entry.id !== normalized.id);
+    notifySyncFailure(result.error, 'Recycle bin');
+    return { ok: false, item: normalized, error: result.error };
+  }
+  if (result.data) upsertRecycleBinItemLocal(normalizeRecycleBinItem(result.data));
+  return { ok: true, item: result.data ? normalizeRecycleBinItem(result.data) : normalized };
+}
+
+function removeRecycleSourceLocal(typeConfig, id) {
+  state[typeConfig.stateKey] = (state[typeConfig.stateKey] || []).filter((record) => String(record.id) !== String(id));
+  if (typeConfig.type === 'contact' && state.selectedContactId === id) state.selectedContactId = '';
+  if (typeConfig.type === 'deal' && state.selectedDealId === id) state.selectedDealId = '';
+  if (typeConfig.type === 'job' && state.selectedJobId === id) state.selectedJobId = '';
+  if (typeConfig.type === 'task' && state.selectedTaskId === id) state.selectedTaskId = '';
+  if (typeConfig.type === 'file' && state.selectedFileId === id) state.selectedFileId = '';
+  if (typeConfig.type === 'form' && state.selectedFormId === id) state.selectedFormId = '';
+  if (typeConfig.type === 'form_response' && state.selectedFormResponseId === id) state.selectedFormResponseId = '';
+  if (typeConfig.type === 'proposal' && state.selectedProposalId === id) state.selectedProposalId = '';
+  if (typeConfig.type === 'account' && state.selectedAccountId === id) state.selectedAccountId = '';
+  if (typeConfig.type === 'client_portal' && state.selectedClientPortalId === id) state.selectedClientPortalId = '';
+  if (typeConfig.type === 'calendar_event' && String(state.selectedCalendarEventId || '').replace(/^manual:/, '') === id) state.selectedCalendarEventId = '';
+  if (typeConfig.type === 'pricebook_vendor' && state.pricebookVendorId === id) state.pricebookVendorId = '';
+  if (typeConfig.type === 'pricebook_price' && state.pbCostEditId === id) state.pbCostEditId = '';
+}
+
+function restoreRecycleSourceLocal(typeConfig, snapshot) {
+  const restored = typeConfig.normalize({ ...(snapshot || {}), deleted_at: null, deleted_by: null, updated_at: new Date().toISOString() });
+  state[typeConfig.stateKey] = [restored].concat((state[typeConfig.stateKey] || []).filter((record) => String(record.id) !== String(restored.id)));
+  return restored;
+}
+
+async function softDeleteRecycleSource(typeConfig, record, item) {
+  const client = createSupabaseClient();
+  if (!isLiveSupabaseSession() || !client) return { ok: true };
+  const patch = {
+    deleted_at: item.deleted_at,
+    deleted_by: item.deleted_by || null,
+  };
+  if (typeConfig.type !== 'form_response') patch.updated_at = item.deleted_at;
+  const result = await client.from(typeConfig.table).update(patch).eq('id', record.id);
+  if (result.error) {
+    await client.from('recycle_bin_items').delete().eq('id', item.id);
+    state.recycleBinItems = state.recycleBinItems.filter((entry) => entry.id !== item.id);
+    notifySyncFailure(result.error, 'Delete');
+    return { ok: false, error: result.error };
+  }
+  return { ok: true };
+}
+
+async function recycleDeleteRecord(config) {
+  const typeConfig = recycleTypeConfig(config?.type);
+  const record = recycleRecordByConfig(config);
+  if (!typeConfig || !record) return false;
+  if (typeConfig.permission && !requirePermission(typeConfig.permission, record.company_id, `Your role cannot delete this ${typeConfig.label.toLowerCase()}.`, typeConfig.label)) return false;
+  const item = buildRecycleBinItem(record, config);
+  const inserted = await insertRecycleBinItem(item);
+  if (!inserted.ok) return false;
+  const deleted = await softDeleteRecycleSource(typeConfig, record, item);
+  if (!deleted.ok) return false;
+  removeRecycleSourceLocal(typeConfig, record.id);
+  persistAll();
+  state.modal = '';
+  state.recycleDeleteCtx = null;
+  showToast(`${typeConfig.label} moved to Recycle Bin.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
+  const redirect = config.options?.stayOnPage ? '' : typeConfig.redirect?.(record.company_id);
+  if (redirect) navigate(redirect, { replace: true });
+  else render();
+  return true;
+}
+
+async function confirmRecycleDelete() {
+  if (!state.recycleDeleteCtx) return;
+  await recycleDeleteRecord(state.recycleDeleteCtx);
+}
+
+function recycleBinItemsForCompany(companyId) {
+  return (state.recycleBinItems || [])
+    .map(normalizeRecycleBinItem)
+    .filter((item) => item.company_id === companyId && item.status === 'active')
+    .sort((a, b) => Date.parse(b.deleted_at || 0) - Date.parse(a.deleted_at || 0));
+}
+
+function recycleItemById(itemId) {
+  return (state.recycleBinItems || []).map(normalizeRecycleBinItem).find((item) => item.id === itemId) || null;
+}
+
+function recycleDaysLeft(item) {
+  return Math.ceil((Date.parse(item.restore_until || 0) - Date.now()) / 86400000);
+}
+
+async function restoreRecycleBinItem(itemId) {
+  const item = recycleItemById(itemId);
+  const typeConfig = recycleTypeConfig(item?.source_type);
+  if (!item || !typeConfig) return;
+  if (!requirePermission('settings.manage', item.company_id, 'Your role cannot restore recycle bin items.', 'Recycle Bin')) return;
+  const now = new Date().toISOString();
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const restorePatch = { deleted_at: null, deleted_by: null };
+    if (typeConfig.type !== 'form_response') restorePatch.updated_at = now;
+    const restored = await client.from(typeConfig.table).update(restorePatch).eq('id', item.source_id);
+    if (restored.error) { notifySyncFailure(restored.error, 'Restore'); return; }
+    const marked = await client.from('recycle_bin_items').update({ status: 'restored', restored_at: now, restored_by: recycleActorId(), updated_at: now }).eq('id', item.id);
+    if (marked.error) notifySyncFailure(marked.error, 'Recycle bin');
+  }
+  restoreRecycleSourceLocal(typeConfig, item.snapshot);
+  state.recycleBinItems = state.recycleBinItems.map((row) => (row.id === item.id ? normalizeRecycleBinItem({ ...row, status: 'restored', restored_at: now, restored_by: recycleActorId(), updated_at: now }) : row));
+  persistAll();
+  showToast(`${typeConfig.label} restored.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
+  render();
+}
+
+async function permanentlyDeleteRecycleBinItem(itemId) {
+  const item = recycleItemById(itemId);
+  const typeConfig = recycleTypeConfig(item?.source_type);
+  if (!item || !typeConfig) return;
+  if (!requirePermission('settings.manage', item.company_id, 'Your role cannot permanently delete recycle bin items.', 'Recycle Bin')) return;
+  const snapshot = item.snapshot || {};
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    if (typeConfig.type === 'file' && snapshot.object_path) await client.storage.from('quest-job-files').remove([snapshot.object_path]);
+    const sourceResult = await client.from(typeConfig.table).delete().eq('id', item.source_id);
+    if (sourceResult.error) { notifySyncFailure(sourceResult.error, 'Permanent delete'); return; }
+    const binResult = await client.from('recycle_bin_items').delete().eq('id', item.id);
+    if (binResult.error) { notifySyncFailure(binResult.error, 'Recycle bin'); return; }
+  }
+  state.recycleBinItems = (state.recycleBinItems || []).filter((row) => row.id !== item.id);
+  persistAll();
+  state.modal = '';
+  state.selectedRecycleItemId = '';
+  showToast(`${typeConfig.label} permanently deleted.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
+  render();
+}
+
 const ACCOUNT_COLS = ['id', 'company_id', 'name', 'type', 'industry', 'website', 'phone', 'email', 'address', 'owner_name', 'status', 'notes', 'updated_at'];
 const SITE_COLS = ['id', 'company_id', 'contact_id', 'account_id', 'label', 'address', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'notes', 'updated_at'];
 const DEAL_COLS = ['id', 'company_id', 'account_id', 'primary_contact_id', 'site_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'line_items', 'notes', 'updated_at'];
@@ -25277,12 +25554,7 @@ async function saveAccount(form) {
 
 async function deleteAccount(id) {
   if (!id) return;
-  await supabaseDelete('accounts', id);
-  state.accounts = state.accounts.filter((account) => account.id !== id);
-  persistAccounts();
-  if (state.selectedAccountId === id) state.selectedAccountId = '';
-  state.modal = '';
-  navigate(companyPath('crm', {}, activeCompanyId()), { replace: true });
+  await recycleDeleteRecord({ type: 'account', id });
 }
 
 async function saveDeal(form) {
@@ -25571,12 +25843,7 @@ async function postDealNote(form) {
 
 async function deleteDeal(id) {
   if (!id) return;
-  await supabaseDelete('deals', id);
-  state.deals = state.deals.filter((deal) => deal.id !== id);
-  persistDeals();
-  if (state.selectedDealId === id) state.selectedDealId = '';
-  state.modal = '';
-  navigate(companyPath('deals', {}, activeCompanyId()), { replace: true });
+  await recycleDeleteRecord({ type: 'deal', id });
 }
 
 async function logActivity(input) {
@@ -25647,10 +25914,7 @@ async function saveActivityForm(form) {
 
 async function deleteActivity(id) {
   if (!id) return;
-  await supabaseDelete('activities', id);
-  state.activities = state.activities.filter((activity) => activity.id !== id);
-  persistActivities();
-  render();
+  await recycleDeleteRecord({ type: 'activity', id, options: { stayOnPage: true } });
 }
 
 // Convert a won deal into a production Job (interconnect CRM -> Jobs).
@@ -26972,6 +27236,31 @@ function normalizeJob(input) {
     file_count: number(input.file_count),
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || new Date().toISOString(),
+  };
+}
+
+function activeRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).filter((row) => !row?.deleted_at);
+}
+
+function normalizeRecycleBinItem(input = {}) {
+  return {
+    id: String(input.id || `recycle-${crypto.randomUUID()}`),
+    company_id: canonicalCompanyId(input.company_id || activeCompanyId()),
+    source_type: String(input.source_type || ''),
+    source_table: String(input.source_table || ''),
+    source_id: String(input.source_id || ''),
+    item_label: String(input.item_label || 'Deleted item').trim() || 'Deleted item',
+    status: ['active', 'restored'].includes(String(input.status)) ? String(input.status) : 'active',
+    deleted_by: input.deleted_by || null,
+    deleted_by_label: String(input.deleted_by_label || ''),
+    deleted_at: input.deleted_at || new Date().toISOString(),
+    restore_until: input.restore_until || new Date(Date.now() + RECYCLE_BIN_RETENTION_DAYS * 86400000).toISOString(),
+    restored_at: input.restored_at || null,
+    restored_by: input.restored_by || null,
+    snapshot: typeof input.snapshot === 'string' ? safeJson(input.snapshot, {}) : (input.snapshot || {}),
+    created_at: input.created_at || input.deleted_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.deleted_at || new Date().toISOString(),
   };
 }
 
@@ -28453,6 +28742,7 @@ function persistAll() {
   writeJson(CLIENT_PORTAL_EVENT_CACHE_KEY, state.clientPortalEvents);
   writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
   writeJson(WORKSPACE_BACKUP_SETTINGS_KEY, state.backupSettings);
+  writeJson(RECYCLE_BIN_CACHE_KEY, state.recycleBinItems);
 }
 
 function persistTimeState() {
@@ -29927,31 +30217,14 @@ async function deleteForm(id) {
   if (!formId) return;
   const form = formById(formId);
   if (form && !requirePermission('forms.manage', form.company_id, 'Your role cannot delete forms.', 'Forms')) return;
-  if (form) await deleteFormRecord(form);
-  state.forms = state.forms.filter((form) => form.id !== formId);
-  state.formResponses = state.formResponses.filter((response) => response.form_id !== formId);
-  state.selectedFormId = companyForms(activeCompanyId())[0]?.id || '';
-  state.selectedQuestionId = selectedForm(activeCompanyId())?.questions[0]?.id || '';
-  state.modal = '';
-  writeJson(FORM_CACHE_KEY, state.forms);
-  writeJson(FORM_RESPONSE_CACHE_KEY, state.formResponses);
-  state.sync = { label: isLiveSupabaseSession() ? 'Form deleted from Supabase' : 'Form deleted locally', mode: isLiveSupabaseSession() ? 'live' : 'local' };
-  render();
+  await recycleDeleteRecord({ type: 'form', id: formId });
 }
 
 async function deleteFormResponse(responseId) {
   const response = responseById(responseId);
   if (!response) return;
   if (!requirePermission('forms.manage', response.company_id, 'Your role cannot delete form responses.', 'Forms')) return;
-  if (!window.confirm('Delete this response? This removes the submitted answers from Forms.')) return;
-  await deleteFormResponseRecord(response);
-  state.formResponses = state.formResponses.filter((item) => item.id !== response.id);
-  state.selectedFormId = response.form_id || state.selectedFormId;
-  state.selectedFormResponseId = responsesForForm(response.form_id)[0]?.id || '';
-  writeJson(FORM_RESPONSE_CACHE_KEY, state.formResponses);
-  state.sync = { label: isLiveSupabaseSession() ? 'Response deleted from Supabase' : 'Response deleted locally', mode: isLiveSupabaseSession() ? 'live' : 'local' };
-  showToast(isLiveSupabaseSession() ? 'Response deleted from Supabase.' : 'Response deleted locally.', isLiveSupabaseSession() ? 'live' : 'local', 'Forms');
-  render();
+  await recycleDeleteRecord({ type: 'form_response', id: response.id });
 }
 
 async function copyFormLink(id) {
