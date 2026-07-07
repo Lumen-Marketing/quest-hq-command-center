@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const smoke = readFileSync(new URL('../scripts/production-smoke.mjs', import.meta.url), 'utf8');
 
 test('Quest CRM exposes a Workday route for the daily action queue', () => {
   assert.match(source, /\{ id: 'workday', group: 'Work', label: 'Workday'/);
@@ -55,4 +56,8 @@ test('Workday has responsive command-center styling', () => {
   assert.match(styles, /\.workday-panel/);
   assert.match(styles, /\.workday-action-grid/);
   assert.match(styles, /@media \(max-width: 980px\) \{[\s\S]*?\.workday-shell/);
+});
+
+test('Workday route is covered by production smoke checks', () => {
+  assert.match(smoke, /'workday'/);
 });

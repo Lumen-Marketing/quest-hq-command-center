@@ -7,6 +7,7 @@ const companies = String(process.env.QUEST_HQ_COMPANIES || 'lumen')
   .filter(Boolean);
 const modules = [
   'dashboard',
+  'workday',
   'jobs',
   'tasks',
   'files',
