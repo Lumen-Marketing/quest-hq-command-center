@@ -432,8 +432,181 @@ button { cursor: pointer; }
   align-items: start;
 }
 
+.workday-mode-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 5px;
+}
+
+.workday-mode-tabs button,
+.workday-alert-filters button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 900;
+  padding: 9px 12px;
+}
+
+.workday-mode-tabs button.active,
+.workday-alert-filters button.active {
+  background: var(--orange);
+  color: #fff;
+}
+
+.workday-manager-view {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.workday-team-pulse {
+  display: grid;
+  gap: 14px;
+}
+
+.workday-team-pulse .workday-manager-grid {
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+}
+
+.workday-manager-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+.workday-manager-layout > .panel:last-child {
+  grid-column: 1 / -1;
+}
+
+.workday-rep-table,
+.workday-alert-list,
+.workday-mini-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workday-rep-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) repeat(5, minmax(72px, .7fr));
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 10px;
+  text-align: left;
+}
+
+.workday-rep-row.active {
+  border-color: var(--orange);
+  box-shadow: inset 3px 0 0 var(--orange);
+}
+
+.workday-rep-row span,
+.workday-rep-detail-grid span,
+.workday-alert-item span,
+.workday-mini-list button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workday-rep-row strong,
+.workday-rep-row small,
+.workday-alert-item strong,
+.workday-alert-item small,
+.workday-mini-list small {
+  display: block;
+}
+
+.workday-rep-row small,
+.workday-alert-item small,
+.workday-mini-list small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workday-rep-detail {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.workday-rep-detail h3 {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.workday-rep-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  gap: 8px;
+}
+
+.workday-rep-detail-grid span {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 10px;
+}
+
+.workday-rep-detail-grid strong,
+.workday-rep-detail-grid small {
+  display: block;
+}
+
+.workday-rep-detail-grid small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workday-alert-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.workday-alert-item,
+.workday-mini-list button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 10px;
+  text-align: left;
+}
+
+.workday-alert-item:hover,
+.workday-mini-list button:hover,
+.workday-rep-row:hover {
+  border-color: var(--orange);
+}
+
 @media (max-width: 1180px) {
   .workday-manager-grid {
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+  }
+
+  .workday-team-pulse .workday-manager-grid {
     grid-template-columns: repeat(3, minmax(160px, 1fr));
   }
 
@@ -443,6 +616,21 @@ button { cursor: pointer; }
 }
 
 @media (max-width: 980px) {
+  .workday-manager-view,
+  .workday-manager-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workday-manager-layout > .panel:last-child {
+    grid-column: auto;
+  }
+
+  .workday-rep-row,
+  .workday-alert-item,
+  .workday-mini-list button {
+    grid-template-columns: 1fr;
+  }
+
   .workday-shell {
     grid-template-columns: 1fr;
   }
@@ -454,13 +642,26 @@ button { cursor: pointer; }
 
 @media (max-width: 720px) {
   .workday-manager-grid,
+  .workday-team-pulse .workday-manager-grid,
   .workday-action-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .workday-mode-tabs {
+    width: 100%;
+  }
+
+  .workday-mode-tabs button {
+    flex: 1 1 130px;
   }
 
   .workday-queue-item,
   .workday-panel-head {
     grid-template-columns: 1fr;
+  }
+
+  .workday-rep-detail-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
   .workday-owner {

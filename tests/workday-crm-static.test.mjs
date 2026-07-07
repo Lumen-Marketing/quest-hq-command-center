@@ -61,3 +61,51 @@ test('Workday has responsive command-center styling', () => {
 test('Workday route is covered by production smoke checks', () => {
   assert.match(smoke, /'workday'/);
 });
+
+test('Workday exposes a manager view mode beside the rep queue', () => {
+  assert.match(source, /workdayMode: 'queue'/);
+  assert.match(source, /selectedWorkdayManagerRepId: ''/);
+  assert.match(source, /workdayManagerAlertFilter: 'all'/);
+  assert.match(source, /function renderWorkdayModeTabs\(/);
+  assert.match(source, /My Queue/);
+  assert.match(source, /Manager View/);
+  assert.match(source, /data-action="set-workday-mode"/);
+});
+
+test('Workday manager helpers derive team visibility from existing CRM data', () => {
+  assert.match(source, /function workdayRepVisibilityRows\(companyId = activeCompanyId\(\)\)/);
+  assert.match(source, /function workdayManagerAlertItems\(companyId = activeCompanyId\(\)\)/);
+  assert.match(source, /callsToday/);
+  assert.match(source, /touchesToday/);
+  assert.match(source, /openTasks/);
+  assert.match(source, /overdueTasks/);
+  assert.match(source, /noNextStep/);
+  assert.match(source, /lastActivityAt/);
+  assert.match(source, /Unassigned/);
+});
+
+test('Workday manager view renders team pulse rep visibility and attention alerts', () => {
+  assert.match(source, /function renderWorkdayManagerView\(companyId\)/);
+  assert.match(source, /Team Pulse/);
+  assert.match(source, /Rep Visibility/);
+  assert.match(source, /Needs Attention/);
+  assert.match(source, /data-action="open-workday-rep"/);
+  assert.match(source, /data-action="open-workday-alert"/);
+  assert.match(source, /data-action="filter-workday-alerts"/);
+});
+
+test('Workday manager detail panel can focus one rep workload', () => {
+  assert.match(source, /function renderWorkdayRepDetailPanel\(repRow, companyId\)/);
+  assert.match(source, /Open workload/);
+  assert.match(source, /Overdue follow-ups/);
+  assert.match(source, /Records with no next step/);
+});
+
+test('Workday manager view has responsive non-overflow styling', () => {
+  assert.match(styles, /\.workday-mode-tabs/);
+  assert.match(styles, /\.workday-manager-view/);
+  assert.match(styles, /\.workday-rep-table/);
+  assert.match(styles, /\.workday-alert-list/);
+  assert.match(styles, /\.workday-rep-detail/);
+  assert.match(styles, /@media \(max-width: 980px\) \{[\s\S]*?\.workday-manager-view/);
+});

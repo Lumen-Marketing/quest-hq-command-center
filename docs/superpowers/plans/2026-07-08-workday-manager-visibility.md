@@ -28,7 +28,7 @@
 - Consumes: existing `src/main.js`, `src/styles.css`, and `scripts/production-smoke.mjs`.
 - Produces: failing test coverage for Manager View state, helper functions, render functions, actions, and CSS.
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Append these tests to `tests/workday-crm-static.test.mjs`:
 
@@ -82,7 +82,7 @@ test('Workday manager view has responsive non-overflow styling', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -106,7 +106,7 @@ Expected: FAIL with missing `workdayMode`, manager helper, renderer, action, and
   - `workdayRepVisibilityRows(companyId = activeCompanyId()): Array<object>`
   - `workdayManagerAlertItems(companyId = activeCompanyId()): Array<object>`
 
-- [ ] **Step 1: Add state fields**
+- [x] **Step 1: Add state fields**
 
 In the existing `state` object near `selectedWorkdayItemId`, add:
 
@@ -116,7 +116,7 @@ In the existing `state` object near `selectedWorkdayItemId`, add:
   workdayManagerAlertFilter: 'all',
 ```
 
-- [ ] **Step 2: Add helper functions after `workdayManagerMetrics`**
+- [x] **Step 2: Add helper functions after `workdayManagerMetrics`**
 
 Add:
 
@@ -152,7 +152,7 @@ function workdayRecordLastActivity(type, id) {
 }
 ```
 
-- [ ] **Step 3: Add rep visibility rows**
+- [x] **Step 3: Add rep visibility rows**
 
 Add:
 
@@ -246,7 +246,7 @@ function workdayRepVisibilityRows(companyId = activeCompanyId()) {
 }
 ```
 
-- [ ] **Step 4: Add manager alert items**
+- [x] **Step 4: Add manager alert items**
 
 Add:
 
@@ -312,7 +312,7 @@ function workdayManagerAlertItems(companyId = activeCompanyId()) {
 }
 ```
 
-- [ ] **Step 5: Run focused test**
+- [x] **Step 5: Run focused test**
 
 Run:
 
@@ -336,7 +336,7 @@ Expected: still FAIL because rendering and CSS are not implemented yet.
   - `renderWorkdayManagerAlert(alert): string`
   - `renderWorkdayRepDetailPanel(repRow, companyId): string`
 
-- [ ] **Step 1: Add mode tabs**
+- [x] **Step 1: Add mode tabs**
 
 Add before `renderWorkdayPage`:
 
@@ -351,7 +351,7 @@ function renderWorkdayModeTabs() {
 }
 ```
 
-- [ ] **Step 2: Update `renderWorkdayPage`**
+- [x] **Step 2: Update `renderWorkdayPage`**
 
 Inside `renderWorkdayPage(companyId)`, render the tabs after `workspaceHeader(...)` and before the existing content. Wrap the existing queue UI in:
 
@@ -369,7 +369,7 @@ ${state.workdayMode === 'manager' ? renderWorkdayManagerView(companyId) : `
 
 Keep the existing `My Queue` HTML unchanged inside the queue branch.
 
-- [ ] **Step 3: Add manager view renderer**
+- [x] **Step 3: Add manager view renderer**
 
 Add:
 
@@ -419,7 +419,7 @@ function renderWorkdayManagerView(companyId) {
 }
 ```
 
-- [ ] **Step 4: Add row and alert renderers**
+- [x] **Step 4: Add row and alert renderers**
 
 Add:
 
@@ -448,7 +448,7 @@ function renderWorkdayManagerAlert(alert) {
 }
 ```
 
-- [ ] **Step 5: Add rep detail panel**
+- [x] **Step 5: Add rep detail panel**
 
 Add:
 
@@ -475,7 +475,7 @@ function renderWorkdayRepDetailPanel(repRow, companyId) {
 }
 ```
 
-- [ ] **Step 6: Run focused test**
+- [x] **Step 6: Run focused test**
 
 Run:
 
@@ -496,7 +496,7 @@ Expected: still FAIL until actions and CSS are added.
   - `openWorkdayManagerAlert(alertId): void`
   - `openWorkdayRepWorkload(type, id): void`
 
-- [ ] **Step 1: Add action helpers**
+- [x] **Step 1: Add action helpers**
 
 Add near `workdayOpenRecord`:
 
@@ -515,7 +515,7 @@ function openWorkdayRepWorkload(type, id) {
 }
 ```
 
-- [ ] **Step 2: Add action handlers in `handleAction`**
+- [x] **Step 2: Add action handlers in `handleAction`**
 
 Add near the existing Workday action handlers:
 
@@ -552,7 +552,7 @@ Add near the existing Workday action handlers:
   }
 ```
 
-- [ ] **Step 3: Run focused test**
+- [x] **Step 3: Run focused test**
 
 Run:
 
@@ -572,7 +572,7 @@ Expected: still FAIL only on CSS assertions.
 - Consumes: classes from Tasks 3 and 4.
 - Produces: responsive manager view layout with no horizontal overflow.
 
-- [ ] **Step 1: Add CSS**
+- [x] **Step 1: Add CSS**
 
 Add after existing Workday CSS:
 
@@ -728,7 +728,7 @@ Add after existing Workday CSS:
 }
 ```
 
-- [ ] **Step 2: Run focused Workday test**
+- [x] **Step 2: Run focused Workday test**
 
 Run:
 
@@ -738,7 +738,7 @@ node --test tests/workday-crm-static.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 3: Run full static suite**
+- [x] **Step 3: Run full static suite**
 
 Run:
 
@@ -748,7 +748,7 @@ node --test tests/*.mjs
 
 Expected: all tests PASS.
 
-- [ ] **Step 4: Run production build**
+- [x] **Step 4: Run production build**
 
 Run:
 
@@ -758,7 +758,7 @@ npm run build
 
 Expected: Vite build completes successfully.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 

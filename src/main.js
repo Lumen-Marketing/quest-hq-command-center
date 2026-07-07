@@ -2174,6 +2174,9 @@ const state = {
   dockedActivityComposers: [],
   selectedWorkdayItemId: '',
   workdayFilter: 'all',
+  workdayMode: 'queue',
+  selectedWorkdayManagerRepId: '',
+  workdayManagerAlertFilter: 'all',
   workdayNextStepContext: null,
   contactWorkspaceTab: 'Notes',
   contactPrefill: null,
@@ -5487,11 +5490,11 @@ function workdayRecordMeta(record, type) {
   return '';
 }
 
-function workdayHasOpenNextStep(type, id) {
+function workdayHasOpenNextStep(type, id, companyId = activeCompanyId()) {
   if (!type || !id) return false;
   if (type === 'contact') return tasksForContact(id).some(isOpenTask);
   if (type === 'deal') return tasksForDeal(dealById(id)).some(isOpenTask);
-  if (type === 'job') return companyTasks(activeCompanyId()).some((task) => task.project_id === id && isOpenTask(task));
+  if (type === 'job') return companyTasks(companyId).some((task) => task.project_id === id && isOpenTask(task));
   return false;
 }
 
@@ -5508,11 +5511,14 @@ function workdayManagerMetrics(companyId = activeCompanyId()) {
     return ['Prospects', 'Leads', 'Nurturing'].includes(stage) && !contact.last_activity_at;
   });
   const overdueFollowups = tasks.filter((task) => isOpenTask(task) && daysUntil(task.due) < 0);
-  const noNextStep = contacts.filter((contact) => !workdayHasOpenNextStep('contact', contact.id))
-    .concat(deals.filter((deal) => deal.status === 'open' && !workdayHasOpenNextStep('deal', deal.id)))
-    .concat(jobs.filter((job) => !workdayHasOpenNextStep('job', job.id)));
+  const noNextStep = contacts.filter((contact) => !workdayHasOpenNextStep('contact', contact.id, companyId))
+    .concat(deals.filter((deal) => deal.status === 'open' && !workdayHasOpenNextStep('deal', deal.id, companyId)))
+    .concat(jobs.filter((job) => !workdayHasOpenNextStep('job', job.id, companyId)));
   return {
     callsToday: todayActivities.filter((activity) => activity.type === 'call').length,
+    emailsToday: todayActivities.filter((activity) => activity.type === 'email').length,
+    notesToday: todayActivities.filter((activity) => activity.type === 'note').length,
+    completedTasksToday: tasks.filter((task) => !isOpenTask(task) && isTodayDate(task.updated_at || task.completed_at)).length,
     touchedToday: touchedIds.size,
     untouchedLeads: untouchedLeads.length,
     overdueFollowups: overdueFollowups.length,
@@ -5520,6 +5526,228 @@ function workdayManagerMetrics(companyId = activeCompanyId()) {
     noNextStep: noNextStep.length,
     formResponsesNeedingAction: companyFormResponses(companyId).filter((response) => !contacts.some((contact) => contact.email && contact.email === response.submitter_email)).length,
   };
+}
+
+function workdayMemberKey(value, companyId = activeCompanyId()) {
+  const raw = String(value || '').trim();
+  if (!raw) return 'unassigned';
+  const lower = raw.toLowerCase();
+  const member = companyMembers(companyId).find((item) => {
+    return [item.id, item.profile_id, item.member_id, item.email, item.name, item.full_name]
+      .filter(Boolean)
+      .some((candidate) => String(candidate).trim().toLowerCase() === lower);
+  });
+  return member?.id || 'unassigned';
+}
+
+function workdayMemberLabel(memberId, companyId = activeCompanyId()) {
+  const key = workdayMemberKey(memberId, companyId);
+  if (!key || key === 'unassigned') return 'Unassigned';
+  const member = companyMembers(companyId).find((item) => item.id === key || item.profile_id === key || item.member_id === key);
+  return member?.name || member?.full_name || member?.email || 'Unassigned';
+}
+
+function workdayActivityMemberId(activity, companyId = activeCompanyId()) {
+  return workdayMemberKey(activity.member_id || activity.owner_id || activity.created_by || activity.owner_name, companyId);
+}
+
+function workdayTaskMemberId(task, companyId = activeCompanyId()) {
+  return workdayMemberKey(task.assignee_id || task.creator_id, companyId);
+}
+
+function workdayRecordOwnerId(record, companyId = activeCompanyId()) {
+  if (!record) return 'unassigned';
+  return workdayMemberKey(record.owner_id || record.owner_name, companyId);
+}
+
+function workdayRecordLastActivity(type, id) {
+  return activitiesFor(type, id)[0]?.created_at || '';
+}
+
+function workdayRepVisibilityRows(companyId = activeCompanyId()) {
+  const members = companyMembers(companyId).map((member) => ({
+    id: member.id,
+    name: member.name || member.full_name || member.email || 'Team member',
+    email: member.email || '',
+  }));
+  const memberIds = new Set(members.map((member) => member.id));
+  const rows = new Map(members.map((member) => [member.id, {
+    ...member,
+    callsToday: 0,
+    emailsToday: 0,
+    notesToday: 0,
+    touchesToday: 0,
+    completedTasksToday: 0,
+    openTasks: 0,
+    overdueTasks: 0,
+    noNextStep: 0,
+    lastActivityAt: '',
+    status: 'Quiet',
+    workload: [],
+  }]));
+  const ensureRow = (memberId) => {
+    const key = workdayMemberKey(memberId, companyId);
+    if (!rows.has(key)) {
+      rows.set(key, {
+        id: key,
+        name: workdayMemberLabel(key, companyId),
+        email: '',
+        callsToday: 0,
+        emailsToday: 0,
+        notesToday: 0,
+        touchesToday: 0,
+        completedTasksToday: 0,
+        openTasks: 0,
+        overdueTasks: 0,
+        noNextStep: 0,
+        lastActivityAt: '',
+        status: 'Quiet',
+        workload: [],
+      });
+    }
+    return rows.get(key);
+  };
+
+  companyActivities(companyId).forEach((activity) => {
+    const row = ensureRow(workdayActivityMemberId(activity, companyId));
+    if (isTodayDate(activity.completed_at || activity.created_at)) {
+      if (activity.type === 'call') row.callsToday += 1;
+      if (activity.type === 'email') row.emailsToday += 1;
+      if (activity.type === 'note') row.notesToday += 1;
+      row.touchesToday += 1;
+    }
+    if (!row.lastActivityAt || Date.parse(activity.created_at || 0) > Date.parse(row.lastActivityAt || 0)) row.lastActivityAt = activity.created_at || '';
+  });
+
+  companyTasks(companyId).forEach((task) => {
+    const row = ensureRow(workdayTaskMemberId(task, companyId));
+    if (isOpenTask(task)) {
+      const overdue = daysUntil(task.due) < 0;
+      row.openTasks += 1;
+      if (overdue) row.overdueTasks += 1;
+      row.workload.push({
+        type: 'task',
+        id: task.id,
+        title: task.title,
+        reason: task.due ? `Due ${formatDate(task.due)}` : 'Open task',
+        overdue,
+      });
+    } else if (isTodayDate(task.updated_at || task.completed_at)) {
+      row.completedTasksToday += 1;
+    }
+  });
+
+  const ownedRecords = [
+    ...companyContacts(companyId).map((record) => ({ type: 'contact', record })),
+    ...companyDeals(companyId).filter((record) => record.status === 'open').map((record) => ({ type: 'deal', record })),
+    ...companyJobs(companyId).map((record) => ({ type: 'job', record })),
+  ];
+  ownedRecords.forEach(({ type, record }) => {
+    const row = ensureRow(workdayRecordOwnerId(record, companyId));
+    if (!workdayHasOpenNextStep(type, record.id, companyId)) {
+      row.noNextStep += 1;
+      row.workload.push({
+        type,
+        id: record.id,
+        title: workdayRecordLabel(record, type),
+        reason: 'No open next step',
+      });
+    }
+  });
+
+  return Array.from(rows.values())
+    .filter((row) => memberIds.has(row.id) || row.openTasks || row.overdueTasks || row.noNextStep || row.touchesToday)
+    .map((row) => ({
+      ...row,
+      status: row.overdueTasks ? 'Needs help' : row.touchesToday ? 'Active' : row.openTasks || row.noNextStep ? 'Watch' : 'Quiet',
+    }))
+    .sort((a, b) => b.overdueTasks - a.overdueTasks || b.noNextStep - a.noNextStep || b.touchesToday - a.touchesToday || a.name.localeCompare(b.name));
+}
+
+function workdayManagerAlertItems(companyId = activeCompanyId()) {
+  const alerts = [];
+  const contacts = companyContacts(companyId);
+  const contactEmails = new Set(contacts.map((contact) => String(contact.email || '').trim().toLowerCase()).filter(Boolean));
+  companyTasks(companyId).filter((task) => isOpenTask(task) && daysUntil(task.due) < 0).forEach((task) => {
+    alerts.push({
+      id: `overdue:${task.id}`,
+      type: 'overdue',
+      severity: 100,
+      title: task.title || 'Overdue task',
+      owner: workdayMemberLabel(workdayTaskMemberId(task, companyId), companyId),
+      reason: `Past due since ${formatDate(task.due)}`,
+      record: { ...task, type: 'task' },
+    });
+  });
+  contacts.filter((contact) => ['Hot', 'Warm'].includes(contact.temperature) && !workdayHasOpenNextStep('contact', contact.id, companyId)).forEach((contact) => {
+    alerts.push({
+      id: `contact-next:${contact.id}`,
+      type: 'no_next_step',
+      severity: contact.temperature === 'Hot' ? 92 : 78,
+      title: contact.name || 'Contact',
+      owner: workdayMemberLabel(workdayRecordOwnerId(contact, companyId), companyId),
+      reason: `${contact.temperature} contact has no next step`,
+      record: { ...contact, type: 'contact' },
+    });
+  });
+  contacts.filter((contact) => !workdayRecordLastActivity('contact', contact.id) && ['Prospects', 'Leads'].includes(resolvePipelineStage('contacts', contact.stage, companyId))).forEach((contact) => {
+    alerts.push({
+      id: `contact-untouched:${contact.id}`,
+      type: 'untouched',
+      severity: 72,
+      title: contact.name || 'Contact',
+      owner: workdayMemberLabel(workdayRecordOwnerId(contact, companyId), companyId),
+      reason: 'Lead has no logged activity',
+      record: { ...contact, type: 'contact' },
+    });
+  });
+  companyDeals(companyId).filter((deal) => deal.status === 'open' && !workdayHasOpenNextStep('deal', deal.id, companyId)).forEach((deal) => {
+    alerts.push({
+      id: `deal-next:${deal.id}`,
+      type: 'no_next_step',
+      severity: 74,
+      title: deal.name || 'Quote',
+      owner: workdayMemberLabel(workdayRecordOwnerId(deal, companyId), companyId),
+      reason: 'Open quote has no next task',
+      record: { ...deal, type: 'deal' },
+    });
+  });
+  companyDeals(companyId).filter((deal) => deal.status === 'open' && !workdayRecordLastActivity('deal', deal.id)).forEach((deal) => {
+    alerts.push({
+      id: `deal-untouched:${deal.id}`,
+      type: 'untouched',
+      severity: 68,
+      title: deal.name || 'Quote',
+      owner: workdayMemberLabel(workdayRecordOwnerId(deal, companyId), companyId),
+      reason: 'Quote has no logged activity',
+      record: { ...deal, type: 'deal' },
+    });
+  });
+  companyJobs(companyId).filter((job) => !workdayHasOpenNextStep('job', job.id, companyId)).forEach((job) => {
+    alerts.push({
+      id: `job-next:${job.id}`,
+      type: 'no_next_step',
+      severity: 66,
+      title: job.name || job.client_name || 'Job',
+      owner: workdayMemberLabel(workdayRecordOwnerId(job, companyId), companyId),
+      reason: 'Production job has no next step',
+      record: { ...job, type: 'job' },
+    });
+  });
+  companyFormResponses(companyId)
+    .filter((response) => !contactEmails.has(String(response.submitter_email || '').trim().toLowerCase()))
+    .forEach((response) => {
+      alerts.push({
+        id: `response:${response.id}`,
+        type: 'new_response',
+        severity: 70,
+        title: formById(response.form_id)?.title || 'Form response',
+        owner: response.submitter_email || 'Customer',
+        reason: 'Response needs CRM action',
+        record: { ...response, type: 'form_response' },
+      });
+    });
+  return alerts.sort((a, b) => b.severity - a.severity || a.title.localeCompare(b.title));
 }
 
 function workdayItem(id, kind, priority, recordType, record, reason, action = 'Work record') {
@@ -5583,6 +5811,15 @@ function workdayMetricCard(label, value, detail, icon) {
   `;
 }
 
+function renderWorkdayModeTabs() {
+  return `
+    <div class="workday-mode-tabs" role="tablist" aria-label="Workday view">
+      <button class="${state.workdayMode === 'queue' ? 'active' : ''}" type="button" data-action="set-workday-mode" data-mode="queue">My Queue</button>
+      <button class="${state.workdayMode === 'manager' ? 'active' : ''}" type="button" data-action="set-workday-mode" data-mode="manager">Manager View</button>
+    </div>
+  `;
+}
+
 function renderWorkdayPage(companyId) {
   const metrics = workdayManagerMetrics(companyId);
   const items = workdayQueueItems(companyId);
@@ -5595,25 +5832,129 @@ function renderWorkdayPage(companyId) {
         <a class="btn" href="${appHref(companyPath('deals', {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Quotes</a>
         <a class="btn btn-primary" href="${appHref(companyPath('forms', {}, companyId))}" data-router><i class="ti ti-clipboard-list"></i>Forms</a>
       `)}
-      <div class="workday-manager-grid">
-        ${workdayMetricCard('Calls today', metrics.callsToday, 'Logged call activity', 'ti-phone-call')}
-        ${workdayMetricCard('Touched today', metrics.touchedToday, 'Contacts, quotes, and jobs worked', 'ti-activity')}
-        ${workdayMetricCard('Untouched leads', metrics.untouchedLeads, 'Need a first touch', 'ti-user-question')}
-        ${workdayMetricCard('Overdue follow-ups', metrics.overdueFollowups, 'Open tasks past due', 'ti-alert-circle')}
-        ${workdayMetricCard('No next step', metrics.noNextStep, 'Records missing an open task', 'ti-route')}
-        ${workdayMetricCard('Form responses', metrics.formResponsesNeedingAction, 'Need CRM action', 'ti-clipboard-list')}
-      </div>
-      <div class="workday-shell">
-        <section class="workday-queue panel">
-          <div class="section-head">
-            <div><h2>Command queue</h2><p>${items.length} item${items.length === 1 ? '' : 's'} needing work</p></div>
-          </div>
-          <div class="workday-queue-list">
-            ${items.map((item) => renderWorkdayQueueItem(item, active?.id === item.id)).join('') || emptyState('No urgent Workday items.')}
+      ${renderWorkdayModeTabs()}
+      ${state.workdayMode === 'manager' ? renderWorkdayManagerView(companyId) : `
+        <div class="workday-manager-grid">
+          ${workdayMetricCard('Calls today', metrics.callsToday, 'Logged call activity', 'ti-phone-call')}
+          ${workdayMetricCard('Touched today', metrics.touchedToday, 'Contacts, quotes, and jobs worked', 'ti-activity')}
+          ${workdayMetricCard('Untouched leads', metrics.untouchedLeads, 'Need a first touch', 'ti-user-question')}
+          ${workdayMetricCard('Overdue follow-ups', metrics.overdueFollowups, 'Open tasks past due', 'ti-alert-circle')}
+          ${workdayMetricCard('No next step', metrics.noNextStep, 'Records missing an open task', 'ti-route')}
+          ${workdayMetricCard('Form responses', metrics.formResponsesNeedingAction, 'Need CRM action', 'ti-clipboard-list')}
+        </div>
+        <div class="workday-shell">
+          <section class="workday-queue panel">
+            <div class="section-head">
+              <div><h2>Command queue</h2><p>${items.length} item${items.length === 1 ? '' : 's'} needing work</p></div>
+            </div>
+            <div class="workday-queue-list">
+              ${items.map((item) => renderWorkdayQueueItem(item, active?.id === item.id)).join('') || emptyState('No urgent Workday items.')}
+            </div>
+          </section>
+          ${renderWorkdayPanel(active, companyId)}
+        </div>
+      `}
+    </section>
+  `;
+}
+
+function renderWorkdayManagerView(companyId) {
+  const metrics = workdayManagerMetrics(companyId);
+  const rows = workdayRepVisibilityRows(companyId);
+  const alerts = workdayManagerAlertItems(companyId);
+  const filter = state.workdayManagerAlertFilter || 'all';
+  const visibleAlerts = filter === 'all' ? alerts : alerts.filter((alert) => alert.type === filter);
+  const selectedRow = rows.find((row) => row.id === state.selectedWorkdayManagerRepId) || rows[0] || null;
+  if (selectedRow && state.selectedWorkdayManagerRepId !== selectedRow.id) state.selectedWorkdayManagerRepId = selectedRow.id;
+  const filters = [
+    ['all', 'All'],
+    ['overdue', 'Overdue'],
+    ['no_next_step', 'No next step'],
+    ['untouched', 'Untouched'],
+    ['new_response', 'Responses'],
+  ];
+  return `
+    <section class="workday-manager-view">
+      <section class="panel workday-team-pulse">
+        <div class="section-head">
+          <div><h2>Team Pulse</h2><p>Today across calls, tasks, form responses, and missing next steps.</p></div>
+        </div>
+        <div class="workday-manager-grid">
+          ${workdayMetricCard('Calls today', metrics.callsToday, 'Logged call activity', 'ti-phone-call')}
+          ${workdayMetricCard('Touched today', metrics.touchedToday, 'Records worked today', 'ti-activity')}
+          ${workdayMetricCard('Overdue follow-ups', metrics.overdueFollowups, 'Open tasks past due', 'ti-alert-circle')}
+          ${workdayMetricCard('No next step', metrics.noNextStep, 'Records missing an open task', 'ti-route')}
+          ${workdayMetricCard('Form responses', metrics.formResponsesNeedingAction, 'Need CRM action', 'ti-clipboard-list')}
+        </div>
+      </section>
+      <div class="workday-manager-layout">
+        <section class="panel">
+          <div class="section-head"><div><h2>Rep Visibility</h2><p>${rows.length} active workspace member${rows.length === 1 ? '' : 's'}</p></div></div>
+          <div class="workday-rep-table">
+            ${rows.map(renderWorkdayRepRow).join('') || emptyState('No team activity yet today.')}
           </div>
         </section>
-        ${renderWorkdayPanel(active, companyId)}
+        ${renderWorkdayRepDetailPanel(selectedRow, companyId)}
+        <section class="panel">
+          <div class="section-head"><div><h2>Needs Attention</h2><p>${visibleAlerts.length} alert${visibleAlerts.length === 1 ? '' : 's'}</p></div></div>
+          <div class="workday-alert-filters">
+            ${filters.map(([id, label]) => `<button class="${filter === id ? 'active' : ''}" type="button" data-action="filter-workday-alerts" data-filter="${h(id)}">${h(label)}</button>`).join('')}
+          </div>
+          <div class="workday-alert-list">
+            ${visibleAlerts.map(renderWorkdayManagerAlert).join('') || emptyState('No manager alerts for this filter.')}
+          </div>
+        </section>
       </div>
+    </section>
+  `;
+}
+
+function renderWorkdayRepRow(row) {
+  return `
+    <button class="workday-rep-row ${state.selectedWorkdayManagerRepId === row.id ? 'active' : ''}" type="button" data-action="open-workday-rep" data-rep-id="${h(row.id)}">
+      <span><strong>${h(row.name)}</strong><small>${h(row.status)}</small></span>
+      <span>${h(String(row.callsToday))}<small>Calls</small></span>
+      <span>${h(String(row.touchesToday))}<small>Touches</small></span>
+      <span>${h(String(row.openTasks))}<small>Tasks</small></span>
+      <span>${h(String(row.overdueTasks))}<small>Overdue</small></span>
+      <span>${h(row.lastActivityAt ? timeAgo(row.lastActivityAt) : 'No activity')}<small>Last activity</small></span>
+    </button>
+  `;
+}
+
+function renderWorkdayManagerAlert(alert) {
+  return `
+    <button class="workday-alert-item" type="button" data-action="open-workday-alert" data-alert-id="${h(alert.id)}">
+      <span class="workday-kind">${h(alert.type.replaceAll('_', ' '))}</span>
+      <span><strong>${h(alert.title)}</strong><small>${h(alert.reason)}</small></span>
+      <span class="workday-owner">${h(alert.owner)}</span>
+    </button>
+  `;
+}
+
+function renderWorkdayRepDetailPanel(repRow, companyId) {
+  if (!repRow) return `<section class="workday-rep-detail panel">${emptyState('Select a rep to see workload.')}</section>`;
+  const overdue = repRow.workload.filter((item) => item.type === 'task' && item.overdue === true);
+  const noNextStep = repRow.workload.filter((item) => item.reason === 'No open next step');
+  const miniList = (items, emptyText) => items.slice(0, 5).map((item) => `
+    <button type="button" data-action="open-workday-rep-workload" data-record-type="${h(item.type)}" data-record-id="${h(item.id)}">
+      ${h(item.title)}
+      <small>${h(item.reason)}</small>
+    </button>
+  `).join('') || `<div class="sf-task-empty">${h(emptyText)}</div>`;
+  return `
+    <section class="workday-rep-detail panel">
+      <div class="section-head"><div><h2>${h(repRow.name)}</h2><p>Open workload</p></div></div>
+      <div class="workday-rep-detail-grid">
+        <span><strong>${h(String(repRow.callsToday))}</strong><small>Calls today</small></span>
+        <span><strong>${h(String(repRow.touchesToday))}</strong><small>Touches today</small></span>
+        <span><strong>${h(String(repRow.openTasks))}</strong><small>Open tasks</small></span>
+        <span><strong>${h(String(repRow.noNextStep))}</strong><small>No next step</small></span>
+      </div>
+      <h3>Overdue follow-ups</h3>
+      <div class="workday-mini-list">${miniList(overdue, 'No overdue follow-ups.')}</div>
+      <h3>Records with no next step</h3>
+      <div class="workday-mini-list">${miniList(noNextStep, 'No missing next steps.')}</div>
     </section>
   `;
 }
@@ -5693,6 +6034,22 @@ function workdayOpenRecord(itemId) {
   const record = workdayRecordFromItem(item);
   if (!item || !record) return;
   navigate(workdayRecordUrl({ ...record, type: item.recordType }));
+}
+
+function openWorkdayManagerAlert(alertId) {
+  const alert = workdayManagerAlertItems(activeCompanyId()).find((item) => item.id === alertId);
+  if (!alert?.record) return;
+  navigate(workdayRecordUrl(alert.record));
+}
+
+function openWorkdayRepWorkload(type, id) {
+  let record = null;
+  if (type === 'task') record = taskById(id);
+  if (type === 'contact') record = contactById(id);
+  if (type === 'deal') record = dealById(id);
+  if (type === 'job') record = jobById(id);
+  if (!record) return;
+  navigate(workdayRecordUrl({ ...record, type }));
 }
 
 function workdayQuickAction(itemId, kind) {
@@ -16879,6 +17236,36 @@ function handleAction(event, node) {
   if (action === 'open-docked-activity') {
     event.preventDefault();
     openDockedActivityComposer(node.dataset.relatedType, node.dataset.relatedId, node.dataset.kind || node.dataset.tab);
+    return;
+  }
+  if (action === 'set-workday-mode') {
+    event.preventDefault();
+    state.workdayMode = node.dataset.mode === 'manager' ? 'manager' : 'queue';
+    render();
+    return;
+  }
+  if (action === 'open-workday-rep') {
+    event.preventDefault();
+    state.selectedWorkdayManagerRepId = node.dataset.repId || '';
+    state.workdayMode = 'manager';
+    render();
+    return;
+  }
+  if (action === 'filter-workday-alerts') {
+    event.preventDefault();
+    state.workdayManagerAlertFilter = node.dataset.filter || 'all';
+    state.workdayMode = 'manager';
+    render();
+    return;
+  }
+  if (action === 'open-workday-alert') {
+    event.preventDefault();
+    openWorkdayManagerAlert(node.dataset.alertId || '');
+    return;
+  }
+  if (action === 'open-workday-rep-workload') {
+    event.preventDefault();
+    openWorkdayRepWorkload(node.dataset.recordType || '', node.dataset.recordId || '');
     return;
   }
   if (action === 'workday-open-item') {
