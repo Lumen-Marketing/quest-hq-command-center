@@ -7,9 +7,10 @@ const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8
 const smoke = readFileSync(new URL('../scripts/production-smoke.mjs', import.meta.url), 'utf8');
 
 test('Quest CRM exposes a Workday route for the daily action queue', () => {
-  assert.match(source, /\{ id: 'workday', group: 'Work', label: 'Workday'/);
+  assert.match(source, /\{ id: 'workday', group: 'Quest CRM', label: 'Workday'/);
   assert.match(source, /module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
-  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'workday', 'tasks', 'workspaces', 'underwriter'\] \}/);
+  assert.match(source, /\{ label: 'Quest CRM', ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\] \}/);
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'workspaces', 'underwriter'\] \}/);
   assert.match(source, /if \(route\.section === 'workday'\) return renderWorkdayPage\(companyId\);/);
 });
 

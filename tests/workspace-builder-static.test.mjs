@@ -13,7 +13,8 @@ test('workspace builder is integrated as a current app plugin, not an old standa
   assert.match(source, /module_ids: \['workspaces'\]/);
   assert.match(source, /permissions: \['workspaces.view', 'workspaces.manage'\]/);
   assert.match(source, /id: 'workspaces'[\s\S]*label: 'Workspaces'[\s\S]*permission: 'workspaces.view'/);
-  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'workday', 'tasks', 'workspaces', 'underwriter'\] \}/);
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'workspaces', 'underwriter'\] \}/);
+  assert.match(source, /\{ label: 'Quest CRM', ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\] \}/);
   assert.match(source, /if \(route\.section === 'workspaces'\) return renderWorkspaceBuilderPage\(route, companyId\);/);
   assert.match(source, /function renderWorkspaceBuilderPage\(route, companyId\)/);
   assert.doesNotMatch(source, /id="companyCard"/);

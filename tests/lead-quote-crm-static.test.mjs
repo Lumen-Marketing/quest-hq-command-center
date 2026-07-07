@@ -6,11 +6,12 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('crm navigation uses contacts quotes and production funnels', () => {
-  assert.match(source, /\{ id: 'contacts', group: 'Contacts [^']+ Top of Funnel', label: 'Contacts'/);
-  assert.match(source, /\{ id: 'deals', group: 'Quotes [^']+ Bottom of Funnel', label: 'Quotes'/);
-  assert.match(source, /\{ id: 'jobs', group: 'Production', label: 'Jobs'/);
-  assert.match(source, /\{ label: 'Contacts - Top of Funnel', ids: \['contacts'\] \}/);
-  assert.match(source, /\{ label: 'Quotes - Bottom of Funnel', ids: \['deals', 'proposals'\] \}/);
+  assert.match(source, /\{ id: 'workday', group: 'Quest CRM', label: 'Workday'/);
+  assert.match(source, /\{ id: 'contacts', group: 'Quest CRM', label: 'Contacts'/);
+  assert.match(source, /\{ id: 'deals', group: 'Quest CRM', label: 'Quotes'/);
+  assert.match(source, /\{ id: 'proposals', group: 'Quest CRM', label: 'Proposals'/);
+  assert.match(source, /\{ id: 'jobs', group: 'Quest CRM', label: 'Jobs'/);
+  assert.match(source, /\{ label: 'Quest CRM', ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\] \}/);
 });
 
 test('contact and quote funnels match the provided crm model', () => {

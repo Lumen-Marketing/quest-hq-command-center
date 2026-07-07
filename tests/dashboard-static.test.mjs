@@ -10,7 +10,8 @@ const dashboardRepOptionsBody = source.slice(source.indexOf('function dashboardR
 test('dashboard replaces home as the canonical core workspace route', () => {
   assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'tasks', 'users', 'settings'\]\);/);
   assert.match(source, /\{ id: 'dashboard', group: 'Workspace', label: 'Dashboard'/);
-  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'workday', 'tasks', 'workspaces', 'underwriter'\] \}/);
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'workspaces', 'underwriter'\] \}/);
+  assert.match(source, /\{ label: 'Quest CRM', ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\] \}/);
   assert.match(source, /const section = companyMatch\[2\] \|\| 'dashboard';/);
   assert.match(source, /if \(route\.section === 'dashboard'\) return renderCompanyDashboard\(companyId\);/);
 });

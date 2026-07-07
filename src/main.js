@@ -910,8 +910,8 @@ const WORKSPACE_ICON_SVG = {
 
 const MODULE_REGISTRY = [
   { id: 'dashboard', group: 'Workspace', label: 'Dashboard', icon: 'ti-layout-dashboard', symbol: 'q-logo', status: 'live', permission: '' },
-  { id: 'workday', group: 'Work', label: 'Workday', icon: 'ti-clipboard-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'crm.view' },
-  { id: 'jobs', group: 'Production', label: 'Jobs', icon: 'ti-hammer', symbol: 'q-symbol-jobs', status: 'live', permission: 'jobs.view' },
+  { id: 'workday', group: 'Quest CRM', label: 'Workday', icon: 'ti-clipboard-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'crm.view' },
+  { id: 'jobs', group: 'Quest CRM', label: 'Jobs', icon: 'ti-hammer', symbol: 'q-symbol-jobs', status: 'live', permission: 'jobs.view' },
   { id: 'tasks', group: 'Work', label: 'My tasks', icon: 'ti-list-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'tasks.view' },
   { id: 'files', group: 'Workspace', label: 'Files', icon: 'ti-folder', symbol: 'q-symbol-files', status: 'live', permission: 'files.view' },
   { id: 'forms', group: 'Workspace', label: 'Forms', icon: 'ti-clipboard-list', symbol: 'q-symbol-forms', status: 'live', permission: 'forms.view' },
@@ -920,9 +920,9 @@ const MODULE_REGISTRY = [
   { id: 'workspaces', group: 'Workspace', label: 'Workspaces', icon: 'ti-layout-grid-add', symbol: 'q-symbol-templates', status: 'live', permission: 'workspaces.view' },
   { id: 'analytics', group: 'Workspace', label: 'Analytics', icon: 'ti-chart-bar', symbol: 'q-symbol-analytics', status: 'live', permission: 'jobs.view' },
   { id: 'crm', group: 'Workspace', label: 'Accounts', icon: 'ti-building-community', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
-  { id: 'contacts', group: 'Contacts - Top of Funnel', label: 'Contacts', icon: 'ti-id-badge-2', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
-  { id: 'deals', group: 'Quotes - Bottom of Funnel', label: 'Quotes', icon: 'ti-briefcase', symbol: 'q-symbol-jobs', status: 'live', permission: 'crm.view' },
-  { id: 'proposals', group: 'Quotes - Bottom of Funnel', label: 'Proposals', icon: 'ti-file-dollar', symbol: 'q-symbol-files', status: 'live', permission: 'crm.view' },
+  { id: 'contacts', group: 'Quest CRM', label: 'Contacts', icon: 'ti-id-badge-2', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
+  { id: 'deals', group: 'Quest CRM', label: 'Quotes', icon: 'ti-briefcase', symbol: 'q-symbol-jobs', status: 'live', permission: 'crm.view' },
+  { id: 'proposals', group: 'Quest CRM', label: 'Proposals', icon: 'ti-file-dollar', symbol: 'q-symbol-files', status: 'live', permission: 'crm.view' },
   { id: 'underwriter', group: 'Workspace', label: 'Underwriter', icon: 'ti-clipboard-search', symbol: 'q-symbol-crm', status: 'live', permission: 'underwriter.view' },
   { id: 'tickets', group: 'Workspace', label: 'Tickets', icon: 'ti-ticket', symbol: 'q-symbol-tickets', status: 'planned' },
   { id: 'finance', group: 'Workspace', label: 'Finance', icon: 'ti-receipt-dollar', symbol: 'q-symbol-finance', status: 'live', permission: 'finance.view' },
@@ -941,11 +941,9 @@ const MODULE_REGISTRY = [
 ];
 
 const NAV_GROUPS = [
-  { label: 'Work', ids: ['dashboard', 'workday', 'tasks', 'workspaces', 'underwriter'] },
+  { label: 'Work', ids: ['dashboard', 'tasks', 'workspaces', 'underwriter'] },
+  { label: 'Quest CRM', ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'] },
   { label: 'Communication', ids: ['messages', 'calendar'] },
-  { label: 'Contacts - Top of Funnel', ids: ['contacts'] },
-  { label: 'Quotes - Bottom of Funnel', ids: ['deals', 'proposals'] },
-  { label: 'Production', ids: ['jobs'] },
   { label: 'Estimating', ids: ['price-book', 'finance', 'files', 'forms', 'client-portals'] },
   { label: 'Review', ids: ['analytics', 'users', 'team-chart', 'time', 'approvals', 'clock'] },
   { label: 'Control', ids: ['settings'] },
