@@ -47,7 +47,7 @@ test('workspace builder supports working no-code workspace app flows inside a co
   assert.match(source, /function openWbWorkspaceModal\(companyId, editId\)/);
   assert.match(source, /function openWbAppModal\(companyId, workspaceId\)/);
   assert.match(source, /function openWbFieldModal\(companyId, workspaceId, appId, fieldId, fieldType\)/);
-  assert.match(source, /function openWbItemModal\(companyId, workspaceId, appId, itemId\)/);
+  assert.match(source, /function openWbItemModal\(companyId, workspaceId, appId, itemId, mode\)/);
   assert.match(source, /function openWbAutoModal\(companyId, workspaceId, appId, autoId\)/);
   assert.match(source, /function wbMountDnD\(companyId, workspaceId, appId\)/);
   assert.match(source, /function revealPluginModulesInNavigation\(plugin\)/);

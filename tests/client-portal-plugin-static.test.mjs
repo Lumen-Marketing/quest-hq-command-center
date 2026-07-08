@@ -14,8 +14,8 @@ const portalMigration = portalMigrationName ? readFileSync(new URL(`../supabase/
 
 test('client portal plugin is registered, gated, and permissioned', () => {
   assert.match(source, /id: 'client_portal'[\s\S]*module_ids: \['client-portals'\]/);
-  assert.match(source, /\['client_portals\.view', 'View client portals'\]/);
-  assert.match(source, /\['client_portals\.manage', 'Manage client portals'\]/);
+  assert.match(source, /\['client_portals\.view', 'View client portal'\]/);
+  assert.match(source, /\['client_portals\.manage', 'Create\/edit client portal'\]/);
   assert.match(source, /\{ id: 'client-portals'[\s\S]*label: 'Client portals'[\s\S]*permission: 'client_portals\.view'/);
   assert.match(source, /if \(route\.section === 'client-portals'\) return renderClientPortalsPage\(route, companyId\);/);
   assert.match(source, /if \(clean\.startsWith\('client_portals\.'\)\) return \['client_portal'\];/);
