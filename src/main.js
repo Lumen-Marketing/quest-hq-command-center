@@ -803,7 +803,7 @@ const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'underwriter', label: 'Underwriter', summary: 'Qualification, scope, pricing, and handoff readiness queue.', icon: 'ti-clipboard-search', module_ids: ['underwriter'], permissions: ['underwriter.view', 'underwriter.manage'], recommendedWith: ['crm_2'] },
   { id: 'files', label: 'Files', summary: 'Shared files, job folders, and document storage.', icon: 'ti-folder', module_ids: ['files'], permissions: ['files.view', 'files.manage'] },
   { id: 'client_portal', label: 'Client Portal', summary: 'Password-protected plan links, markups, comments, and client review.', icon: 'ti-world-upload', module_ids: ['client-portals'], permissions: ['client_portals.view', 'client_portals.manage'], recommendedWith: ['files'] },
-  { id: 'workspace_builder', label: 'Workspace Builder', summary: 'No-code workspaces, custom apps, fields, items, reports, and automations.', icon: 'ti-layout-grid-add', module_ids: ['workspaces'], permissions: ['workspaces.view', 'workspaces.manage'] },
+  { id: 'workspace_builder', label: 'Workspace App Builder', summary: 'No-code workspaces, custom apps, fields, items, reports, and automations.', icon: 'ti-layout-grid-add', module_ids: ['workspaces'], permissions: ['workspaces.view', 'workspaces.manage'] },
   { id: 'price_book', label: 'Price Book', summary: 'Vendor cost catalog for estimating materials, costs, stale pricing, and best-price checks.', icon: 'ti-book', module_ids: ['price-book'], permissions: ['price_book.view', 'price_book.manage'] },
   { id: 'forms', label: 'Forms', summary: 'Internal forms, templates, and response capture.', icon: 'ti-clipboard-list', module_ids: ['forms'], permissions: ['forms.view', 'forms.manage'] },
   { id: 'finance', label: 'Finance', summary: 'Invoices, payments, expenses, vendors, and AR.', icon: 'ti-receipt-dollar', module_ids: ['finance'], permissions: ['finance.view', 'finance.manage'] },
@@ -2260,6 +2260,7 @@ const state = {
   driveView: localStorage.getItem(DRIVE_VIEW_KEY) || 'list',
   sync: { label: 'Loading workspace...', mode: 'loading' },
   dataLoaded: false,
+  everLoaded: false,
   dataLoading: false,
   loginError: '',
   authMessage: '',
@@ -2784,7 +2785,10 @@ function bindGoogleAddressInputs() {
 }
 
 function shouldHoldCompanyRouteForLiveData(route) {
-  return !!route && route.name !== 'home' && route.name !== 'login' && route.name !== 'client-portal' && route.name !== 'proposal-public' && route.name !== 'form-public' && state.session?.auth === 'supabase' && !state.dataLoaded;
+  // Only show the full "Loading workspace data…" screen on the very first load.
+  // Once data has loaded once, later re-fetches (a save, or a realtime update)
+  // refresh in place using the data already on screen — no blocking loader.
+  return !!route && route.name !== 'home' && route.name !== 'login' && route.name !== 'client-portal' && route.name !== 'proposal-public' && route.name !== 'form-public' && state.session?.auth === 'supabase' && !state.dataLoaded && !state.everLoaded;
 }
 
 function renderWorkspaceLoading(route) {
@@ -2907,9 +2911,11 @@ function ensureDataLoad() {
     })
     .finally(async () => {
       state.dataLoaded = true;
+      state.everLoaded = true;
       state.dataLoading = false;
       await maybeRunAutomaticBackups().catch((error) => console.warn('Automatic backup failed', error));
       persistAll();
+      if (state.session?.auth === 'supabase') { try { subscribeToGlobalRealtime(); } catch (err) { console.warn('Realtime subscribe failed', err); } }
       render();
     });
 }
@@ -3276,6 +3282,7 @@ function safeSupabaseQuery(query) {
 }
 
 function resetLiveWorkspaceData() {
+  state.everLoaded = false;
   state.jobs = [];
   state.contacts = [];
   state.accounts = [];
@@ -9599,8 +9606,9 @@ function normalizeWorkspaceBuilderDoc(doc) {
         type: app.type || '',
         icon: app.icon || WB_APP_ICONS[0],
         color: app.color || ws.color || WB_PALETTE[1],
+        shared: !!app.shared,
         fields: Array.isArray(app.fields) ? app.fields.map((field) => ({ id: field.id || wbUid(), label: field.label || 'Field', type: WB_FIELD_TYPES[field.type] ? field.type : 'text', required: !!field.required, hidden: !!field.hidden, config: field.config && typeof field.config === 'object' ? field.config : {} })) : [],
-        items: Array.isArray(app.items) ? app.items.map((item) => { const createdAt = item.createdAt || new Date().toISOString().slice(0, 10); return { id: item.id || wbUid(), values: item.values && typeof item.values === 'object' ? item.values : {}, createdAt, updatedAt: item.updatedAt || createdAt, lastActivityAt: item.lastActivityAt || item.updatedAt || createdAt, comments: Array.isArray(item.comments) ? item.comments : [] }; }) : [],
+        items: Array.isArray(app.items) ? app.items.map((item) => { const createdAt = item.createdAt || new Date().toISOString().slice(0, 10); return { id: item.id || wbUid(), values: item.values && typeof item.values === 'object' ? item.values : {}, createdAt, createdBy: item.createdBy || '', updatedAt: item.updatedAt || createdAt, lastActivityAt: item.lastActivityAt || item.updatedAt || createdAt, comments: Array.isArray(item.comments) ? item.comments : [] }; }) : [],
         automations: Array.isArray(app.automations) ? app.automations.map((auto) => ({ id: auto.id || wbUid(), name: auto.name || 'Automation', enabled: auto.enabled !== false, trigger: auto.trigger && typeof auto.trigger === 'object' ? auto.trigger : { event: 'created' }, actions: Array.isArray(auto.actions) ? auto.actions : [] })) : [],
       })) : [],
     })),
@@ -10104,10 +10112,24 @@ function wbItemActions(item, canManage) {
 // Comment thread shown inside the item detail modal.
 function wbItemCommentsHtml(companyId, item) {
   const comments = Array.isArray(item.comments) ? item.comments : [];
+  const myId = activeSession().profile?.id || '';
+  const editingId = state.builderModal?.editingCommentId || null;
   const list = comments.length
     ? comments.map((c) => {
-      const member = c.authorId ? wbMemberById(companyId, c.authorId) : { name: c.author || 'User', color: '#6b7280' };
-      return `<div class="wb-comment"><span class="wb-avatar" style="width:26px;height:26px;background:${h(member.color || '#6b7280')}" title="${h(c.author || member.name)}">${h(wbInitials(c.author || member.name))}</span><div class="wb-comment-body"><div class="wb-comment-head"><b>${h(c.author || member.name)}</b><span>${h(wbTimeAgo(c.ts))}</span></div><div class="wb-comment-text">${h(c.text)}</div></div></div>`;
+      // Resolve the author's CURRENT profile name/color from their id so a later
+      // profile rename shows everywhere; fall back to the stored snapshot only if
+      // the author is no longer a resolvable member.
+      const member = c.authorId ? wbMemberById(companyId, c.authorId) : null;
+      const live = member && member.name && member.name !== 'Unknown' ? member : null;
+      const name = live ? live.name : (c.author || 'User');
+      const color = live ? live.color : '#6b7280';
+      const mine = !!c.authorId && c.authorId === myId;
+      const avatar = `<span class="wb-avatar" style="width:26px;height:26px;background:${h(color || '#6b7280')}" title="${h(name)}">${h(wbInitials(name))}</span>`;
+      if (mine && editingId === c.id) {
+        return `<div class="wb-comment">${avatar}<div class="wb-comment-body"><textarea class="wb-input" id="wbEditComment-${h(c.id)}" rows="2">${h(c.text)}</textarea><div class="wb-comment-edit-acts"><button class="btn btn-primary btn-sm" type="button" data-wb-comment-save="${h(c.id)}"><i class="ti ti-check"></i>Save</button><button class="btn btn-sm" type="button" data-wb-comment-cancel>Cancel</button></div></div></div>`;
+      }
+      const acts = mine ? `<span class="wb-comment-acts"><button class="wb-comment-act" type="button" data-wb-comment-edit="${h(c.id)}" title="Edit"><i class="ti ti-pencil"></i></button><button class="wb-comment-act danger" type="button" data-wb-comment-del="${h(c.id)}" title="Delete"><i class="ti ti-trash"></i></button></span>` : '';
+      return `<div class="wb-comment">${avatar}<div class="wb-comment-body"><div class="wb-comment-head"><b>${h(name)}</b><span>${h(wbTimeAgo(c.ts))}${c.editedAt ? ' · edited' : ''}</span>${acts}</div><div class="wb-comment-text">${h(c.text)}</div></div></div>`;
     }).join('')
     : '<div class="wb-sub">No comments yet — start the conversation.</div>';
   return `<div class="wb-comments">
@@ -10126,23 +10148,90 @@ function wbAddItemComment() {
   const item = app.items.find((i) => i.id === m.editId);
   if (!item) return;
   const prof = activeSession().profile || {};
+  const comment = { id: wbUid(), author: prof.full_name || prof.email || 'User', authorId: prof.id || '', text, ts: new Date().toISOString() };
   item.comments = Array.isArray(item.comments) ? item.comments : [];
-  item.comments.push({ id: wbUid(), author: prof.full_name || prof.email || 'User', authorId: prof.id || '', text, ts: new Date().toISOString() });
+  item.comments.push(comment);
   item.lastActivityAt = new Date().toISOString();
-  wbLogActivity(workspace, { icon: 'ti-message-circle', color: '#2563eb', text: `Commented on <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
   wbNotifyItem(m.companyId, workspace, app, item, `New comment on ${wbItemTitle(app, item)}`, `${actorName()}: ${text.length > 90 ? `${text.slice(0, 90)}…` : text}`);
-  wbSave(m.companyId);
+  // View-only members can comment, but can't save the whole workspace doc (RLS is
+  // manage-gated). Persist just their comment through the SECURITY DEFINER RPC.
+  const viewerOnly = isLiveSupabaseSession() && !can('workspaces.manage', m.companyId);
+  if (viewerOnly) {
+    const client = createSupabaseClient();
+    if (client) {
+      client.rpc('wb_add_item_comment', { p_company_id: canonicalCompanyId(m.companyId), p_workspace_id: m.workspaceId, p_app_id: m.appId, p_item_id: m.editId, p_comment: comment })
+        .then(({ error }) => { if (error) { console.warn('Comment save failed', error); showToast('Could not save your comment — try again.', 'error', 'Workspaces'); } });
+    }
+  } else {
+    wbLogActivity(workspace, { icon: 'ti-message-circle', color: '#2563eb', text: `Commented on <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
+    wbSave(m.companyId);
+  }
+  wbKeepModalScroll();
   render();
 }
-// Notify the workspace's members — and any member assigned on the item (via a
-// user field) — of an item event. Fire-and-forget; the actor isn't notified.
+// Persist an edit/delete of one's own comment. Managers save the whole doc;
+// view-only authors go through the authorship-checked RPC (RLS is manage-gated).
+function wbPersistCommentChange(m, action, commentId, text) {
+  const viewerOnly = isLiveSupabaseSession() && !can('workspaces.manage', m.companyId);
+  if (viewerOnly) {
+    const client = createSupabaseClient();
+    if (client) client.rpc('wb_modify_item_comment', { p_company_id: canonicalCompanyId(m.companyId), p_workspace_id: m.workspaceId, p_app_id: m.appId, p_item_id: m.editId, p_comment_id: commentId, p_action: action, p_text: text || '' })
+      .then(({ error }) => { if (error) { console.warn('Comment change failed', error); showToast('Could not save the change — try again.', 'error', 'Workspaces'); } });
+  } else {
+    wbSave(m.companyId);
+  }
+}
+function wbDeleteItemComment(commentId) {
+  const m = state.builderModal;
+  if (!m || m.kind !== 'item' || !m.editId) return;
+  const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
+  const item = app.items.find((i) => i.id === m.editId);
+  const c = item && Array.isArray(item.comments) ? item.comments.find((x) => x.id === commentId) : null;
+  if (!c) return;
+  if (c.authorId !== (activeSession().profile?.id || '')) { showToast('You can only delete your own comments.', 'local', 'Workspaces'); return; }
+  item.comments = item.comments.filter((x) => x.id !== commentId);
+  if (m.editingCommentId === commentId) m.editingCommentId = null;
+  wbPersistCommentChange(m, 'delete', commentId, '');
+  wbKeepModalScroll();
+  render();
+}
+function wbSaveEditedComment(commentId) {
+  const m = state.builderModal;
+  if (!m || m.kind !== 'item' || !m.editId) return;
+  const ta = document.getElementById(`wbEditComment-${commentId}`);
+  const text = (ta && ta.value ? ta.value : '').trim();
+  if (!text) { showToast('Comment can\'t be empty.', 'local', 'Workspaces'); return; }
+  const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
+  const item = app.items.find((i) => i.id === m.editId);
+  const c = item && Array.isArray(item.comments) ? item.comments.find((x) => x.id === commentId) : null;
+  if (!c) return;
+  if (c.authorId !== (activeSession().profile?.id || '')) { showToast('You can only edit your own comments.', 'local', 'Workspaces'); return; }
+  c.text = text; c.editedAt = new Date().toISOString();
+  m.editingCommentId = null;
+  wbPersistCommentChange(m, 'edit', commentId, text);
+  wbKeepModalScroll();
+  render();
+}
+// Notify the workspace's members, the item's creator, and any member assigned on
+// the item (via a user field) of an item event. Fire-and-forget; not the actor.
 function wbNotifyItem(companyId, workspace, app, item, title, body) {
   try {
     const recipients = [...(workspace.members || [])];
+    if (item.createdBy) recipients.push(item.createdBy);
     (app.fields || []).filter((f) => f.type === 'user').forEach((f) => { const v = item.values[f.id]; if (v) recipients.push(v); });
     if (!recipients.length) return;
     const href = companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId);
     notifyEvent({ companyId, recipients, type: 'workspace', title, body, href, sourceType: 'workspace_item', sourceId: item.id, excludeActor: true }).catch(() => { /* ignore */ });
+  } catch { /* ignore */ }
+}
+// Notify all workspace members of an app-level event (e.g. bulk delete) — no
+// per-item assignee targeting. Fire-and-forget; the actor isn't notified.
+function wbNotifyWorkspace(companyId, workspace, app, title, body) {
+  try {
+    const recipients = [...(workspace.members || [])];
+    if (!recipients.length) return;
+    const href = companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId);
+    notifyEvent({ companyId, recipients, type: 'workspace', title, body, href, sourceType: 'workspace_app', sourceId: app.id, excludeActor: true }).catch(() => { /* ignore */ });
   } catch { /* ignore */ }
 }
 // The first status/category value gives every view a colored accent + pill.
@@ -10173,9 +10262,11 @@ function wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectabl
     const ctx = { companyId, workspace, app, values: item.values, item, canManage };
     const pill = wbItemBadgePill(app, item);
     const fieldRows = cols.filter((f) => f.id !== titleField.id).slice(0, 6).map((field) => `<div class="wb-ic-row"><span class="wb-ic-label">${h(field.label)}</span><span class="wb-ic-val">${wbFmtVal(ctx, field, item.values[field.id])}</span></div>`).join('');
+    const cCount = (item.comments || []).length;
     return `<div class="wb-item-card ${ui.sel.has(item.id) ? 'sel' : ''}" data-item="${h(item.id)}" data-search="${h(wbItemSearchAttr(companyId, workspace, app, cols, item))}">
       <div class="wb-ic-head">${selectable ? wbItemCheckbox(item, ui, selectable) : ''}<b class="wb-ic-title">${h(wbItemTitle(app, item))}</b>${pill ? `<span class="wb-status-pill" style="background:${pill.color}1f;color:${pill.color}"><span class="wb-dot" style="background:${pill.color}"></span>${h(pill.label)}</span>` : ''}<div class="wb-spacer"></div>${wbItemActions(item, canManage)}</div>
       <div class="wb-ic-fields">${fieldRows || '<div class="wb-sub">No other fields</div>'}</div>
+      <div class="wb-ic-foot"><button class="wb-card-comment ${cCount ? 'has' : ''}" type="button" data-wb-open-comments="${h(item.id)}" title="${cCount ? `${cCount} comment${cCount === 1 ? '' : 's'} — click to add` : 'Add a comment'}"><i class="ti ti-message-circle"></i><span>${cCount}</span></button></div>
     </div>`;
   }).join('');
   return `<div class="wb-card-grid">${cards}</div>`;
@@ -10262,6 +10353,10 @@ function wbViewAppSettings(companyId, workspace, app) {
     <div class="wb-field"><label>Portability</label>
       <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — including all fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'} and ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'} — to back it up or install it into another workspace.</div>
       <div class="wb-settings-actions" style="margin-top:10px"><button class="btn" data-wb-download-app><i class="ti ti-download"></i>Download app</button></div>
+    </div>
+    <div class="wb-field"><label>Quest App Market</label>
+      <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Quest HQ can install its fields &amp; automations from the Quest App Market. Your records are never shared.' : 'Share this app so anyone on Quest HQ can install its fields &amp; automations from the Quest App Market. Your records are never shared.'}</div>
+      ${canManage ? `<div class="wb-settings-actions" style="margin-top:10px"><button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share this app'}</button></div>` : ''}
     </div>
     ${canManage ? `<div class="wb-settings-actions"><button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save changes</button><button class="btn danger" data-del-app><i class="ti ti-trash"></i>Delete app</button></div>` : ''}
   </div>`;
@@ -10461,7 +10556,7 @@ function wbImportCsvText(companyId, workspaceId, appId, text) {
     const values = {};
     fieldForCol.forEach((f, i) => { if (!f) return; const v = wbCoerceImport(companyId, app, f, cells[i]); if (v !== undefined && v !== '') values[f.id] = v; });
     if (!Object.keys(values).length) return;
-    app.items.unshift({ id: wbUid(), values, createdAt: today, updatedAt: today, lastActivityAt: today });
+    app.items.unshift({ id: wbUid(), values, createdAt: today, createdBy: activeSession().profile?.id || '', updatedAt: today, lastActivityAt: today });
     added++;
   });
   if (!added) { showToast('No rows could be imported — check that values line up with the headers.', 'local', 'Workspaces'); return; }
@@ -10509,10 +10604,34 @@ function wbInstallAppPrompt(companyId, workspaceId) {
   };
   input.click();
 }
-// Rebuild an app from a downloaded bundle with fresh ids so it can't collide with
+// Rebuild an app from a source definition with fresh ids so it can't collide with
 // existing apps/fields/items. Field ids are remapped everywhere they're referenced
 // (item values, automation triggers/actions); option ids inside a field's config
-// are kept, so status/category automations stay valid.
+// are kept, so status/category automations stay valid. With includeItems=false
+// only the structure (fields + automations) is copied — used by the app library.
+function wbBuildInstalledApp(workspace, src, includeItems) {
+  const fieldIdMap = {};
+  const fields = (src.fields || []).map((f) => {
+    const id = wbUid();
+    fieldIdMap[f.id] = id;
+    return { id, label: String(f.label || 'Field'), type: WB_FIELD_TYPES[f.type] ? f.type : 'text', required: !!f.required, hidden: !!f.hidden, config: f.config && typeof f.config === 'object' ? clone(f.config) : {} };
+  });
+  const stamp = new Date().toISOString();
+  const items = includeItems ? (Array.isArray(src.items) ? src.items : []).map((it) => {
+    const values = {};
+    Object.keys(it.values || {}).forEach((oldFid) => { const nf = fieldIdMap[oldFid]; if (nf) values[nf] = it.values[oldFid]; });
+    return { id: wbUid(), values, createdAt: it.createdAt || stamp, updatedAt: it.updatedAt || it.createdAt || stamp, lastActivityAt: it.lastActivityAt || it.updatedAt || it.createdAt || stamp, comments: [] };
+  }) : [];
+  const automations = (Array.isArray(src.automations) ? src.automations : []).map((au) => {
+    const trigger = au.trigger && typeof au.trigger === 'object' ? { ...au.trigger } : { event: 'created' };
+    if (trigger.fieldId && fieldIdMap[trigger.fieldId]) trigger.fieldId = fieldIdMap[trigger.fieldId];
+    const actions = (Array.isArray(au.actions) ? au.actions : []).map((ac) => { const next = { ...ac }; if (next.fieldId && fieldIdMap[next.fieldId]) next.fieldId = fieldIdMap[next.fieldId]; return next; });
+    return { id: wbUid(), name: au.name || 'Automation', enabled: au.enabled !== false, trigger, actions };
+  });
+  let name = String(src.name || 'Imported app').trim() || 'Imported app';
+  if (workspace.apps.some((a) => a.name === name)) { let n = 2; while (workspace.apps.some((a) => a.name === `${name} (${n})`)) n += 1; name = `${name} (${n})`; }
+  return { id: wbUid(), name, description: String(src.description || ''), type: String(src.type || ''), icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0], color: src.color || WB_PALETTE[1], fields, items, automations };
+}
 function wbInstallAppFromJson(companyId, workspaceId, text) {
   let bundle;
   try { bundle = JSON.parse(text); } catch { showToast('That file isn\'t valid JSON.', 'local', 'Workspaces'); return; }
@@ -10520,52 +10639,64 @@ function wbInstallAppFromJson(companyId, workspaceId, text) {
   if (!src || !Array.isArray(src.fields)) { showToast('That doesn\'t look like a Quest HQ app file.', 'local', 'Workspaces'); return; }
   const { workspace } = wbFind(companyId, workspaceId);
   if (!workspace) return;
-  // Fresh field ids + a map from the old ids for remapping references.
-  const fieldIdMap = {};
-  const fields = src.fields.map((f) => {
-    const id = wbUid();
-    fieldIdMap[f.id] = id;
-    return {
-      id,
-      label: String(f.label || 'Field'),
-      type: WB_FIELD_TYPES[f.type] ? f.type : 'text',
-      required: !!f.required,
-      hidden: !!f.hidden,
-      config: f.config && typeof f.config === 'object' ? clone(f.config) : {},
-    };
-  });
-  const items = (Array.isArray(src.items) ? src.items : []).map((it) => {
-    const values = {};
-    Object.keys(it.values || {}).forEach((oldFid) => { const nf = fieldIdMap[oldFid]; if (nf) values[nf] = it.values[oldFid]; });
-    return { id: wbUid(), values, createdAt: it.createdAt || new Date().toISOString().slice(0, 10) };
-  });
-  const automations = (Array.isArray(src.automations) ? src.automations : []).map((au) => {
-    const trigger = au.trigger && typeof au.trigger === 'object' ? { ...au.trigger } : { event: 'created' };
-    if (trigger.fieldId && fieldIdMap[trigger.fieldId]) trigger.fieldId = fieldIdMap[trigger.fieldId];
-    const actions = (Array.isArray(au.actions) ? au.actions : []).map((ac) => {
-      const next = { ...ac };
-      if (next.fieldId && fieldIdMap[next.fieldId]) next.fieldId = fieldIdMap[next.fieldId];
-      return next;
-    });
-    return { id: wbUid(), name: au.name || 'Automation', enabled: au.enabled !== false, trigger, actions };
-  });
-  // Keep the app name unique within the workspace.
-  let name = String(src.name || 'Imported app').trim() || 'Imported app';
-  if (workspace.apps.some((a) => a.name === name)) { let n = 2; while (workspace.apps.some((a) => a.name === `${name} (${n})`)) n += 1; name = `${name} (${n})`; }
-  const app = {
-    id: wbUid(),
-    name,
-    description: String(src.description || ''),
-    type: String(src.type || ''),
-    icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0],
-    color: src.color || WB_PALETTE[1],
-    fields, items, automations,
-  };
+  // Structure only — never copy the source file's records (they belong to whoever
+  // built the app, and would show up as another account's data here).
+  const app = wbBuildInstalledApp(workspace, src, false);
   workspace.apps.push(app);
-  wbLogActivity(workspace, { icon: 'ti-package-import', color: '#16a34a', text: `Installed app <b>${h(name)}</b> (${fields.length} fields · ${items.length} records · ${automations.length} automations)` });
+  wbLogActivity(workspace, { icon: 'ti-package-import', color: '#16a34a', text: `Installed app <b>${h(app.name)}</b> (${app.fields.length} fields · ${app.automations.length} automations)` });
   wbSave(companyId);
-  showToast(`Installed "${name}".`, 'local', 'Workspaces');
+  showToast(`Installed "${app.name}" — fields & automations copied (no records).`, 'local', 'Workspaces');
   navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
+}
+// Every app across every workspace loaded in this session (fallback for local /
+// demo sessions where the system-wide RPC isn't available).
+function wbAllSystemApps() {
+  const out = [];
+  Object.keys(state.workspaceBuilderDocs || {}).forEach((cid) => {
+    const doc = state.workspaceBuilderDocs[cid];
+    (doc?.workspaces || []).forEach((ws) => {
+      (ws.apps || []).forEach((app) => { if (app.shared) out.push({ companyId: cid, companyLabel: companyName(cid) || cid, workspaceName: ws.name || 'Workspace', app }); });
+    });
+  });
+  return out;
+}
+// Load the SYSTEM-WIDE app library (every account's apps, structure only) via the
+// SECURITY DEFINER RPC. Falls back to locally-loaded docs off a live session.
+async function wbLoadAppLibrary() {
+  state.wbAppLibraryLoading = true;
+  try {
+    const client = createSupabaseClient();
+    if (isLiveSupabaseSession() && client) {
+      const { data, error } = await client.rpc('list_workspace_app_library');
+      if (!error && Array.isArray(data)) {
+        state.wbAppLibrary = data.map((e) => ({ companyId: e.company_id, companyLabel: e.company_name || e.company_id, workspaceName: e.workspace_name || 'Workspace', app: e.app })).filter((e) => e.app && Array.isArray(e.app.fields));
+      } else { if (error) console.warn('App library RPC failed', error); state.wbAppLibrary = wbAllSystemApps(); }
+    } else {
+      state.wbAppLibrary = wbAllSystemApps();
+    }
+  } catch (err) { console.warn('App library load failed', err); state.wbAppLibrary = wbAllSystemApps(); }
+  state.wbAppLibraryLoading = false;
+  if (state.builderModal?.kind === 'app-chooser') render();
+}
+// Install an app from the library into the current workspace — structure only
+// (fields + automations), never the source records.
+function wbInstallLibraryApp(companyId, workspaceId, appId) {
+  if (!wbGuard()) return;
+  const { workspace } = wbFind(companyId, workspaceId);
+  if (!workspace) return;
+  const entry = (state.wbAppLibrary || []).find((e) => e.app && e.app.id === appId);
+  if (!entry) { showToast('That app is no longer available.', 'local', 'Workspaces'); return; }
+  const app = wbBuildInstalledApp(workspace, clone(entry.app), false);
+  workspace.apps.push(app);
+  wbLogActivity(workspace, { icon: 'ti-package-import', color: '#16a34a', text: `Installed app <b>${h(app.name)}</b> from the library (${app.fields.length} fields · ${app.automations.length} automations)` });
+  state.builderModal = null;
+  wbSave(companyId);
+  showToast(`Installed "${app.name}" — fields & automations copied (no records).`, 'local', 'Workspaces');
+  navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
+}
+function openWbAppChooser(companyId, workspaceId) {
+  if (!wbGuard()) return;
+  openWbModal({ kind: 'app-chooser', companyId, workspaceId, step: 'choose', q: '' });
 }
 
 // ---- Automations (rules engine + display) -----------------------------------
@@ -10691,13 +10822,13 @@ function openWbFieldModal(companyId, workspaceId, appId, fieldId, fieldType) {
   }
   openWbModal({ kind: 'field', companyId, workspaceId, appId, editId: fieldId || '', fieldType: type, draft });
 }
-function openWbItemModal(companyId, workspaceId, appId, itemId, mode) {
+function openWbItemModal(companyId, workspaceId, appId, itemId, mode, opts) {
   const { app } = wbFind(companyId, workspaceId, appId);
   const item = itemId ? app.items.find((i) => i.id === itemId) : null;
   // Existing records open read-only ("view"); a new record or an explicit edit
   // opens the editable form. The comment thread shows in both modes.
   const resolved = mode || (itemId ? 'view' : 'edit');
-  openWbModal({ kind: 'item', companyId, workspaceId, appId, editId: itemId || '', mode: resolved, draft: { values: item ? { ...item.values } : {} } });
+  openWbModal({ kind: 'item', companyId, workspaceId, appId, editId: itemId || '', mode: resolved, focusComment: !!(opts && opts.focusComment), draft: { values: item ? { ...item.values } : {} } });
 }
 function openWbAutoModal(companyId, workspaceId, appId, autoId) {
   const { app } = wbFind(companyId, workspaceId, appId);
@@ -10811,6 +10942,67 @@ function renderWorkspaceBuilderModal() {
       <div class="wb-field"><label>Color</label><div class="wb-swatches">${WB_PALETTE.map((color) => `<button class="wb-swatch ${color === m.draft.color ? 'sel' : ''}" data-wb-pick-color="${color}" style="background:${color}"></button>`).join('')}</div></div></div>
       <div class="wb-field"><label>${editing ? 'Members' : 'Invite members'} <span class="wb-opt">(who collaborates here)</span></label><div class="wb-member-pick">${wbMembers(m.companyId).map((member) => `<button class="wb-member-opt ${m.draft.members.includes(member.id) ? 'on' : ''}" data-wb-toggle-member="${h(member.id)}">${wbAvatar(member, 30)}<div class="wb-mo-info"><b>${h(member.name)}</b><span>${h(member.role)} · ${h(member.email)}</span></div><span class="wb-ck"><i class="ti ti-check"></i></span></button>`).join('') || '<div class="wb-sub">No company members found.</div>'}</div></div>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-check"></i>${editing ? 'Save changes' : 'Create workspace'}</button>`);
+  }
+  if (m.kind === 'app-chooser') {
+    if (m.step === 'detail') {
+      const entry = (state.wbAppLibrary || []).find((e) => e.app && e.app.id === m.detailAppId);
+      if (!entry) { m.step = 'library'; }
+      else {
+        const a = entry.app;
+        const fieldsHtml = (a.fields || []).map((f) => {
+          const meta = WB_FIELD_TYPES[f.type] || { label: f.type, icon: 'ti-square', color: '#6b7280' };
+          let extra = '';
+          if ((f.type === 'category' || f.type === 'status') && f.config && f.config.options) extra = ` · ${f.config.options.length} options`;
+          else if (f.type === 'calculation' && f.config && f.config.formula) extra = ` · ${h(f.config.formula)}`;
+          else if (f.type === 'relationship') extra = ' · linked record';
+          return `<div class="wb-info-row"><span class="wb-info-ic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-info-label">${h(f.label)}${f.required ? '<span class="wb-req">*</span>' : ''}${f.hidden ? ' <span class="wb-hidden-tag"><i class="ti ti-eye-off"></i>Hidden</span>' : ''}</span><span class="wb-info-type">${h(meta.label)}${extra}</span></div>`;
+        }).join('') || '<div class="wb-sub">No fields.</div>';
+        const autoHtml = (a.automations || []).length ? a.automations.map((au) => `<div class="wb-info-auto"><i class="ti ti-bolt"></i><b>${h(au.name || 'Automation')}</b>${au.enabled === false ? ' <span class="wb-sub">· off</span>' : ''}</div>`).join('') : '<div class="wb-sub">No automations.</div>';
+        return wbModalShell('Add app', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:${h(a.color || '#0891b2')}"><i class="ti ${h(a.icon || 'ti-apps')}"></i></div><h3>${h(a.name)}</h3>`,
+          `<div class="wb-info-head">
+            <div class="wb-info-source"><i class="ti ti-building"></i>${h(entry.companyLabel)} · ${h(entry.workspaceName)}${a.type ? ` · ${h(a.type)}` : ''}</div>
+            ${a.description ? `<p class="wb-info-desc">${h(a.description)}</p>` : ''}
+          </div>
+          <h4 class="wb-info-title"><i class="ti ti-forms"></i>Fields <span>${(a.fields || []).length}</span></h4>
+          <div class="wb-info-fields">${fieldsHtml}</div>
+          <h4 class="wb-info-title"><i class="ti ti-bolt"></i>Automations <span>${(a.automations || []).length}</span></h4>
+          <div class="wb-info-autos">${autoHtml}</div>
+          <div class="wb-sub" style="margin-top:14px">Installing copies these fields &amp; automations into your workspace. Records are not copied.</div>`,
+          `<button class="btn" type="button" data-wb-detail-back><i class="ti ti-arrow-left"></i>Back</button><button class="btn" data-action="wb-modal-close">Close</button><button class="btn btn-primary" type="button" data-wb-lib-install data-app-id="${h(a.id)}"><i class="ti ti-download"></i>Install app</button>`);
+      }
+    }
+    if (m.step === 'library') {
+      const loading = state.wbAppLibrary === undefined || state.wbAppLibraryLoading;
+      const q = (m.q || '').trim().toLowerCase();
+      const all = state.wbAppLibrary || [];
+      const apps = q ? all.filter((e) => `${e.app.name} ${e.app.description || ''} ${e.app.type || ''} ${e.companyLabel} ${e.workspaceName}`.toLowerCase().includes(q)) : all;
+      const cards = loading
+        ? '<div class="wb-sub" style="padding:24px;text-align:center"><i class="ti ti-loader"></i> Loading apps…</div>'
+        : (apps.map((e) => {
+          const meta = { icon: e.app.icon || WB_APP_ICONS[0], color: e.app.color || WB_PALETTE[1] };
+          return `<div class="wb-lib-card">
+            <div class="wb-lib-ic" style="background:${h(meta.color)}"><i class="ti ${h(meta.icon)}"></i></div>
+            <div class="wb-lib-body">
+              <b>${h(e.app.name)}</b>
+              <div class="wb-lib-meta"><i class="ti ti-forms"></i>${(e.app.fields || []).length} fields · <i class="ti ti-bolt"></i>${(e.app.automations || []).length} automations · <i class="ti ti-building"></i>${h(e.companyLabel)}</div>
+            </div>
+            <div class="wb-lib-actions"><button class="btn btn-sm" type="button" data-wb-lib-info data-app-id="${h(e.app.id)}"><i class="ti ti-info-circle"></i>More info</button><button class="btn btn-sm btn-primary" type="button" data-wb-lib-install data-app-id="${h(e.app.id)}"><i class="ti ti-download"></i>Install</button></div>
+          </div>`;
+        }).join('') || `<div class="wb-empty wb-empty-inline"><i class="ti ti-package"></i><h3>No apps yet</h3><p>${q ? 'No shared apps match your search.' : 'No apps have been shared to the market yet. Share one from an app\'s Settings.'}</p></div>`);
+      return wbModalShell('Add app', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:#0891b2"><i class="ti ti-building-store"></i></div><h3>Quest App Market</h3>`,
+        `<div class="wb-sub" style="margin-bottom:12px">Install apps shared by anyone on Quest HQ. Installing copies its <b>fields and automations</b> into this workspace — records are not copied.</div>
+         <div class="wb-search-box" style="max-width:none;margin-bottom:14px"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-lib-search value="${h(m.q || '')}" placeholder="Search the app market…"></div>
+         <div class="wb-lib-grid" id="wbLibGrid">${cards}</div>`,
+        `<button class="btn" type="button" data-wb-chooser-back><i class="ti ti-arrow-left"></i>Back</button><button class="btn" data-action="wb-modal-close">Close</button>`);
+    }
+    const opt = (key, icon, color, title, desc) => `<button class="wb-chooser-opt" type="button" data-wb-choose="${key}"><span class="wb-chooser-ic" style="background:${color}"><i class="ti ${icon}"></i></span><span class="wb-chooser-text"><b>${h(title)}</b><small>${h(desc)}</small></span><i class="ti ti-chevron-right wb-chooser-arrow"></i></button>`;
+    return wbModalShell('Add app', '', `<div class="wb-modal-ic" style="background:#e0552d"><i class="ti ti-apps"></i></div><h3>Add an app</h3>`,
+      `<div class="wb-chooser">
+        ${opt('create', 'ti-pencil-plus', '#e0552d', 'Create your own app', 'Start from a blank canvas and design fields, reports and automations.')}
+        ${opt('file', 'ti-file-import', '#16a34a', 'Install from a file', 'Upload a .questapp.json you downloaded to recreate that app here.')}
+        ${opt('library', 'ti-building-store', '#0891b2', 'Quest App Market', 'Browse apps shared by anyone on Quest HQ and copy one into this workspace.')}
+      </div>`,
+      `<button class="btn" data-action="wb-modal-close">Cancel</button>`);
   }
   if (m.kind === 'app') {
     return wbModalShell('Add app', '', `<div class="wb-modal-ic" style="background:${h(m.draft.color)}"><i class="ti ${h(m.draft.icon)}"></i></div><h3>Add app</h3>`,
@@ -11373,7 +11565,7 @@ function wbSubmitModal() {
       // Return to the read-only view instead of closing, so the record stays open.
       state.builderModal = { ...m, mode: 'view', draft: { values: { ...values } } };
     } else {
-      const item = { id: wbUid(), values, createdAt: nowStamp, updatedAt: nowStamp, lastActivityAt: nowStamp }; app.items.unshift(item);
+      const item = { id: wbUid(), values, createdAt: nowStamp, createdBy: activeSession().profile?.id || '', updatedAt: nowStamp, lastActivityAt: nowStamp }; app.items.unshift(item);
       wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Added <b>${h(wbItemTitle(app, item))}</b> to ${h(app.name)}` });
       wbNotifyItem(companyId, workspace, app, item, `New ${app.name.replace(/s$/, '')}: ${wbItemTitle(app, item)}`, `${actorName()} added ${wbItemTitle(app, item)} to ${app.name}`);
       wbRunAutomations(companyId, workspace, app, item, 'created', null);
@@ -11455,9 +11647,15 @@ function wbConfirmDelete() {
   const { workspace, app } = wbFind(companyId, c.workspaceId, c.appId);
   if (c.op === 'del-app') { workspace.apps = workspace.apps.filter((a) => a.id !== c.appId); state.builderModal = null; wbSave(companyId); showToast('App deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
   if (c.op === 'del-field') { app.fields = app.fields.filter((f) => f.id !== c.fieldId); app.items.forEach((it) => { delete it.values[c.fieldId]; }); }
-  else if (c.op === 'del-item') { app.items = app.items.filter((i) => i.id !== c.itemId); }
-  else if (c.op === 'del-items') { const kill = new Set(c.itemIds || []); app.items = app.items.filter((i) => !kill.has(i.id)); wbItemsUI(app.id).sel.clear(); }
-  else if (c.op === 'del-auto') { app.automations = app.automations.filter((a) => a.id !== c.autoId); }
+  else if (c.op === 'del-item') {
+    const gone = app.items.find((i) => i.id === c.itemId);
+    if (gone) { const title = wbItemTitle(app, gone); wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted <b>${h(title)}</b> from ${h(app.name)}` }); wbNotifyItem(companyId, workspace, app, gone, `Deleted: ${title}`, `${actorName()} deleted ${title} from ${app.name}`); }
+    app.items = app.items.filter((i) => i.id !== c.itemId);
+  } else if (c.op === 'del-items') {
+    const kill = new Set(c.itemIds || []); const n = app.items.filter((i) => kill.has(i.id)).length;
+    app.items = app.items.filter((i) => !kill.has(i.id)); wbItemsUI(app.id).sel.clear();
+    if (n) { wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted <b>${n}</b> record${n === 1 ? '' : 's'} from ${h(app.name)}` }); wbNotifyWorkspace(companyId, workspace, app, `${n} record${n === 1 ? '' : 's'} deleted`, `${actorName()} deleted ${n} record${n === 1 ? '' : 's'} from ${app.name}`); }
+  } else if (c.op === 'del-auto') { app.automations = app.automations.filter((a) => a.id !== c.autoId); }
   state.builderModal = null; wbSave(companyId); showToast('Deleted.', 'local', 'Workspaces'); render();
 }
 
@@ -11481,9 +11679,10 @@ function mountWorkspaceBuilder() {
   const bind = (selector, handler, eventName = 'onclick') => document.querySelectorAll(selector).forEach((el) => { el[eventName] = handler.bind(null, el); });
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp, tab: 'items' }));
-    bind('[data-new-app]', () => openWbAppModal(companyId, workspaceId));
+    bind('[data-new-app]', () => openWbAppChooser(companyId, workspaceId));
     bind('[data-wb-install-app]', () => wbInstallAppPrompt(companyId, workspaceId));
     bind('[data-wb-download-app]', () => wbDownloadApp(companyId, workspaceId, appId));
+    bind('[data-wb-share-app]', () => { if (!wbGuard()) return; const { app } = wbFind(companyId, workspaceId, appId); if (!app) return; app.shared = !app.shared; wbSave(companyId); showToast(app.shared ? `"${app.name}" is now shared to the Quest App Market.` : `"${app.name}" removed from the Quest App Market.`, 'local', 'Workspaces'); render(); });
     bind('[data-wb-delete-workspace]', () => { const ws = wbCompanyWorkspace(companyId); if (ws) openWbDeleteWorkspace(companyId, ws); });
     bind('[data-tab]', (el) => nav({ app_id: appId, tab: el.dataset.tab }));
     bind('[data-add-field]', () => nav({ app_id: appId, tab: 'fields' }));
@@ -11494,6 +11693,8 @@ function mountWorkspaceBuilder() {
     bind('[data-add-item]', () => openWbItemModal(companyId, workspaceId, appId, ''));
     bind('[data-edit-item]', (el, e) => { e.stopPropagation(); openWbItemModal(companyId, workspaceId, appId, el.dataset.editItem, 'edit'); });
     bind('[data-del-item]', (el, e) => { e.stopPropagation(); openWbConfirm(companyId, 'del-item', 'This record will be permanently removed.', { workspaceId, appId, itemId: el.dataset.delItem }); });
+    // Card comment button: open the record's detail view focused on the comment box.
+    bind('[data-wb-open-comments]', (el, e) => { e.stopPropagation(); openWbItemModal(companyId, workspaceId, appId, el.dataset.wbOpenComments, 'view', { focusComment: true }); });
     // Click an item anywhere to open its detail/edit view — except on interactive
     // bits (phone/email/location links, toggles, file buttons, the select checkbox,
     // and the row action buttons), which keep their own behavior.
@@ -11602,6 +11803,23 @@ function wbMountModal() {
   const confirmBtn = overlay.querySelector('[data-wb-confirm]'); if (confirmBtn) confirmBtn.onclick = () => wbConfirmDelete();
   const delWsBtn = overlay.querySelector('[data-wb-delete-ws-confirm]'); if (delWsBtn) delWsBtn.onclick = () => wbConfirmDeleteWorkspace();
   const delAppBtn = overlay.querySelector('[data-wb-delete-app-confirm]'); if (delAppBtn) delAppBtn.onclick = () => wbConfirmDeleteApp();
+  // Add-app chooser: three paths + the available-apps library.
+  overlay.querySelectorAll('[data-wb-choose]').forEach((b) => { b.onclick = () => {
+    const choice = b.dataset.wbChoose; const cid = m.companyId; const wid = m.workspaceId;
+    if (choice === 'create') { openWbAppModal(cid, wid); }
+    else if (choice === 'file') { state.builderModal = null; render(); wbInstallAppPrompt(cid, wid); }
+    else if (choice === 'library') { m.step = 'library'; state.wbAppLibrary = undefined; render(); wbLoadAppLibrary(); }
+  }; });
+  const chooserBack = overlay.querySelector('[data-wb-chooser-back]'); if (chooserBack) chooserBack.onclick = () => { m.step = 'choose'; render(); };
+  overlay.querySelectorAll('[data-wb-lib-info]').forEach((b) => { b.onclick = () => { m.step = 'detail'; m.detailAppId = b.dataset.appId; render(); }; });
+  const detailBack = overlay.querySelector('[data-wb-detail-back]'); if (detailBack) detailBack.onclick = () => { m.step = 'library'; render(); };
+  overlay.querySelectorAll('[data-wb-lib-install]').forEach((b) => { b.onclick = () => wbInstallLibraryApp(m.companyId, m.workspaceId, b.dataset.appId); });
+  const libSearch = overlay.querySelector('[data-wb-lib-search]');
+  if (libSearch) libSearch.oninput = () => {
+    m.q = libSearch.value;
+    const q = libSearch.value.trim().toLowerCase();
+    overlay.querySelectorAll('#wbLibGrid .wb-lib-card').forEach((card) => { card.hidden = !!q && !card.textContent.toLowerCase().includes(q); });
+  };
   // Item detail modal: view/edit toggle, file previews, and the comment box work
   // in both modes; the field-input wiring only runs when actually editing.
   if (m.kind === 'item') {
@@ -11612,6 +11830,11 @@ function wbMountModal() {
     overlay.querySelectorAll('[data-wb-view-file]').forEach((b) => { b.onclick = () => openWbFilePreview(b.dataset.fileUrl, b.dataset.fileName); });
     const addComment = overlay.querySelector('[data-wb-add-comment]');
     if (addComment) addComment.onclick = () => wbAddItemComment();
+    overlay.querySelectorAll('[data-wb-comment-edit]').forEach((b) => { b.onclick = () => { state.builderModal.editingCommentId = b.dataset.wbCommentEdit; wbKeepModalScroll(); render(); }; });
+    overlay.querySelectorAll('[data-wb-comment-cancel]').forEach((b) => { b.onclick = () => { state.builderModal.editingCommentId = null; wbKeepModalScroll(); render(); }; });
+    overlay.querySelectorAll('[data-wb-comment-save]').forEach((b) => { b.onclick = () => wbSaveEditedComment(b.dataset.wbCommentSave); });
+    overlay.querySelectorAll('[data-wb-comment-del]').forEach((b) => { b.onclick = () => wbDeleteItemComment(b.dataset.wbCommentDel); });
+    if (m.focusComment) { const ci = overlay.querySelector('#wbCommentInput'); if (ci) { ci.focus(); ci.scrollIntoView({ block: 'center' }); } m.focusComment = false; }
     if (m.mode !== 'view') {
       const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
       const recompute = () => {
@@ -11641,6 +11864,15 @@ function wbMountModal() {
   // background re-render re-runs this while the user is already typing in the modal.
   const af = overlay.querySelector('[autofocus]');
   if (af && !overlay.contains(document.activeElement)) af.focus();
+  // Restore the modal body scroll after a comment add/edit/delete re-render so the
+  // view doesn't jump back to the top.
+  if (m.restoreScroll != null) { const body = overlay.querySelector('.wb-modal-body'); if (body) body.scrollTop = m.restoreScroll; m.restoreScroll = null; }
+}
+// Capture the item modal's scroll position before a comment-driven re-render.
+function wbKeepModalScroll() {
+  const m = state.builderModal;
+  const body = document.querySelector('.wb-modal-overlay .wb-modal-body');
+  if (m && body) m.restoreScroll = body.scrollTop;
 }
 
 function renderSettingsPage(route, companyId) {
@@ -19786,6 +20018,7 @@ function onPipeDrop(event) {
 }
 
 async function signOut() {
+  try { teardownGlobalRealtime(); } catch { /* ignore */ }
   if (isLiveSupabaseSession()) {
     const client = createSupabaseClient();
     if (CONFIG.questAuthEnabled && client?.auth) await client.auth.signOut();
@@ -19793,6 +20026,7 @@ async function signOut() {
   localStorage.removeItem(SESSION_KEY);
   state.session = null;
   state.dataLoaded = false;
+  state.everLoaded = false;
   navigate('/login', { replace: true });
 }
 
@@ -29342,14 +29576,60 @@ function subscribeToMessageRealtime(companyId, conversationId) {
       state.messageRealtimeRetry = setTimeout(refreshFromRealtime, 1500);
       return;
     }
-    state.dataLoaded = false;
-    render();
+    refreshDataInBackground();
   };
   state.messageRealtimeChannel = client
     .channel(`quest-messages-${conversationId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, refreshFromRealtime)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'message_attachments', filter: `conversation_id=eq.${conversationId}` }, refreshFromRealtime)
     .subscribe();
+}
+
+// Live-update the whole app: one schema-wide subscription reloads the company's
+// data whenever anything the user can see changes on the server. RLS ensures a
+// user only receives events for rows they're allowed to read. The reload is
+// debounced (to batch bursts) and deferred while the user is mid-edit or has a
+// modal open, so it never yanks the DOM out from under them.
+const WB_REALTIME_IGNORE_TABLES = new Set(['messages', 'message_attachments', 'message_reads', 'audit_events']);
+// Re-fetch the session's data in the BACKGROUND — without flipping dataLoaded,
+// so the full "Loading workspace data…" screen never flashes on a live update.
+async function refreshDataInBackground() {
+  if (state.backgroundRefreshing || state.dataLoading) return;
+  state.backgroundRefreshing = true;
+  try { await loadSupabaseData(); } catch (err) { console.warn('Background refresh failed', err); }
+  state.backgroundRefreshing = false;
+  persistAll();
+  render();
+}
+function subscribeToGlobalRealtime() {
+  const client = createSupabaseClient();
+  if (state.session?.auth !== 'supabase' || !client?.channel) return;
+  if (state.globalRealtimeChannel) return; // already subscribed for this session
+  const refresh = () => {
+    // Defer while the user is mid-edit / has a modal open so we never disrupt them.
+    if (anEditableIsFocused() || state.builderModal || state.modal || state.recycleModal || state.dataLoading || state.backgroundRefreshing) {
+      clearTimeout(state.globalRealtimeRetry);
+      state.globalRealtimeRetry = setTimeout(refresh, 1500);
+      return;
+    }
+    refreshDataInBackground();
+  };
+  const onChange = (payload) => {
+    if (payload && payload.table && WB_REALTIME_IGNORE_TABLES.has(payload.table)) return;
+    clearTimeout(state.globalRealtimeDebounce);
+    state.globalRealtimeDebounce = setTimeout(refresh, 700);
+  };
+  state.globalRealtimeChannel = client
+    .channel('quest-global-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public' }, onChange)
+    .subscribe();
+}
+function teardownGlobalRealtime() {
+  const client = createSupabaseClient();
+  if (state.globalRealtimeChannel && client?.removeChannel) client.removeChannel(state.globalRealtimeChannel);
+  state.globalRealtimeChannel = null;
+  clearTimeout(state.globalRealtimeDebounce);
+  clearTimeout(state.globalRealtimeRetry);
 }
 
 function runMessageScenario(companyId) {

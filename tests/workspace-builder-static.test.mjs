@@ -9,7 +9,7 @@ const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') 
 
 test('workspace builder is integrated as a current app plugin, not an old standalone clone', () => {
   assert.match(source, /id: 'workspace_builder'/);
-  assert.match(source, /label: 'Workspace Builder'/);
+  assert.match(source, /label: 'Workspace App Builder'/);
   assert.match(source, /module_ids: \['workspaces'\]/);
   assert.match(source, /permissions: \['workspaces.view', 'workspaces.manage'\]/);
   assert.match(source, /id: 'workspaces'[\s\S]*label: 'Workspaces'[\s\S]*permission: 'workspaces.view'/);
@@ -47,7 +47,7 @@ test('workspace builder supports working no-code workspace app flows inside a co
   assert.match(source, /function openWbWorkspaceModal\(companyId, editId\)/);
   assert.match(source, /function openWbAppModal\(companyId, workspaceId\)/);
   assert.match(source, /function openWbFieldModal\(companyId, workspaceId, appId, fieldId, fieldType\)/);
-  assert.match(source, /function openWbItemModal\(companyId, workspaceId, appId, itemId, mode\)/);
+  assert.match(source, /function openWbItemModal\(companyId, workspaceId, appId, itemId, mode, opts\)/);
   assert.match(source, /function openWbAutoModal\(companyId, workspaceId, appId, autoId\)/);
   assert.match(source, /function wbMountDnD\(companyId, workspaceId, appId\)/);
   assert.match(source, /function revealPluginModulesInNavigation\(plugin\)/);
