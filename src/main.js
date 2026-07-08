@@ -20077,17 +20077,15 @@ async function saveProfile(formNode) {
       showToast('Profile upload needs Supabase to be available.', 'local', 'Profile');
       return;
     }
-    const result = await client
-      .from('profiles')
-      .update({ full_name: next.full_name, avatar_url: next.avatar_url })
-      .eq('id', current.id)
-      .select()
-      .single();
+    // Update via a SECURITY DEFINER RPC keyed on auth.uid() so the strict
+    // profiles WITH CHECK (which pins role/email/etc.) can never block a user
+    // from changing their own display name or avatar.
+    const result = await client.rpc('update_own_profile', { p_full_name: next.full_name, p_avatar_url: next.avatar_url });
     if (result.error) {
       showToast(result.error.message || 'Profile save failed.', 'local', 'Profile');
       return;
     }
-    next = normalizeProfile(result.data, next);
+    next = normalizeProfile(Array.isArray(result.data) ? result.data[0] : result.data, next);
     if (client.auth?.updateUser) {
       await client.auth.updateUser({ data: { full_name: next.full_name, avatar_url: next.avatar_url } });
     }
