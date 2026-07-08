@@ -10736,10 +10736,28 @@ function wbViewAutomations(companyId, workspace, app) {
     <div class="wb-ai"><i class="ti ti-bolt"></i></div>
     <div class="wb-am"><b>${h(au.name)}</b><div class="wb-rule">When ${wbTriggerText(companyId, app, au.trigger)} <i class="ti ti-arrow-right wb-rule-arrow"></i> ${au.actions.map((ac) => wbActionText(companyId, app, ac)).join(' ')}</div></div>
     ${canManage ? `<label class="wb-switch" title="Enable/disable"><input type="checkbox" ${au.enabled ? 'checked' : ''} data-toggle-auto="${h(au.id)}"><span class="wb-slider"></span></label>
-    <button class="wb-icon-btn" data-edit-auto="${h(au.id)}"><i class="ti ti-adjustments"></i></button>
-    <button class="wb-icon-btn danger" data-del-auto="${h(au.id)}"><i class="ti ti-trash"></i></button>` : `<span class="wb-sub">${au.enabled ? 'Enabled' : 'Disabled'}</span>`}
+    <button class="wb-icon-btn" data-dupe-auto="${h(au.id)}" title="Duplicate"><i class="ti ti-copy"></i></button>
+    <button class="wb-icon-btn" data-edit-auto="${h(au.id)}" title="Configure"><i class="ti ti-adjustments"></i></button>
+    <button class="wb-icon-btn danger" data-del-auto="${h(au.id)}" title="Delete"><i class="ti ti-trash"></i></button>` : `<span class="wb-sub">${au.enabled ? 'Enabled' : 'Disabled'}</span>`}
   </div>`).join('');
   return banner + `<div class="wb-auto-list">${rows}</div>`;
+}
+// A "Set field value" that starts with an operator does math on the current value
+// (a trailing % makes the operand a percentage of it); anything else is a literal.
+//   -10%  → current − 10% of current      +20  → current + 20
+//   *2    → current × 2                    /2   → current ÷ 2
+function wbComputeSetValue(currentValue, rawValue) {
+  const s = String(rawValue == null ? '' : rawValue).trim();
+  const m = /^([+\-*/])\s*([0-9]*\.?[0-9]+)\s*(%?)$/.exec(s);
+  if (!m) return rawValue; // plain value → set literally
+  const op = m[1]; const num = parseFloat(m[2]); const pct = m[3] === '%';
+  const cur = Number(currentValue) || 0;
+  let result;
+  if (op === '+') result = pct ? cur + (cur * num) / 100 : cur + num;
+  else if (op === '-') result = pct ? cur - (cur * num) / 100 : cur - num;
+  else if (op === '*') result = pct ? (cur * num) / 100 : cur * num;
+  else result = pct ? cur / (num / 100 || 1) : cur / (num || 1);
+  return Math.round(result * 100) / 100;
 }
 function wbRunAutomations(companyId, workspace, app, item, event, prev) {
   const fired = [];
@@ -10785,8 +10803,13 @@ function wbRunAutomations(companyId, workspace, app, item, event, prev) {
     }
     if (!fire) return;
     (au.actions || []).forEach((ac) => {
-      if ((ac.type === 'set_field' || ac.type === 'assign') && ac.fieldId) item.values[ac.fieldId] = ac.value;
-      else if (ac.type === 'notify') wbLogActivity(workspace, { icon: 'ti-bell', color: '#7c3aed', text: h(ac.message || `Notification from "${au.name}"`) });
+      if ((ac.type === 'set_field' || ac.type === 'assign') && ac.fieldId) {
+        const field = app.fields.find((f) => f.id === ac.fieldId);
+        const numeric = field && ['number', 'money', 'duration', 'progress'].includes(field.type);
+        // On a numeric field, a value that starts with an operator (+ - * /) does
+        // math on the current value instead of overwriting it (e.g. "-10%").
+        item.values[ac.fieldId] = (ac.type === 'set_field' && numeric) ? wbComputeSetValue(item.values[ac.fieldId], ac.value) : ac.value;
+      } else if (ac.type === 'notify') wbLogActivity(workspace, { icon: 'ti-bell', color: '#7c3aed', text: h(ac.message || `Notification from "${au.name}"`) });
     });
     fired.push(au.name);
     wbLogActivity(workspace, { icon: 'ti-bolt', color: '#7c3aed', text: `⚡ <b>${h(au.name)}</b> ran on <b>${h(wbItemTitle(app, item))}</b>` });
@@ -10842,6 +10865,26 @@ function openWbAutoModal(companyId, workspaceId, appId, autoId) {
   const existing = autoId ? (app.automations || []).find((a) => a.id === autoId) : null;
   const draft = existing ? JSON.parse(JSON.stringify(existing)) : { id: wbUid(), name: '', enabled: true, trigger: { event: 'created' }, actions: [{ type: 'notify', message: '' }] };
   openWbModal({ kind: 'automation', companyId, workspaceId, appId, editId: autoId || '', draft });
+}
+// Duplicate an automation with a fresh id and a "(copy)" / "(copy N)" name.
+function wbDuplicateAutomation(companyId, workspaceId, appId, autoId) {
+  if (!wbGuard()) return;
+  const { app } = wbFind(companyId, workspaceId, appId);
+  const src = (app.automations || []).find((a) => a.id === autoId);
+  if (!src) return;
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.id = wbUid();
+  const base = String(src.name || 'Automation').replace(/\s*\(copy(?:\s*\d+)?\)\s*$/i, '').trim() || 'Automation';
+  const names = new Set((app.automations || []).map((a) => a.name));
+  let name = `${base} (copy)`;
+  let n = 2;
+  while (names.has(name)) { name = `${base} (copy ${n})`; n += 1; }
+  copy.name = name;
+  const idx = app.automations.findIndex((a) => a.id === autoId);
+  app.automations.splice(idx >= 0 ? idx + 1 : app.automations.length, 0, copy);
+  wbSave(companyId);
+  showToast(`Duplicated → "${name}".`, 'local', 'Workspaces');
+  render();
 }
 function openWbConfirm(companyId, op, message, ids) { openWbModal({ kind: 'confirm', companyId, confirm: { op, message, ...ids } }); }
 // Tabler icon for a file kind (from fileTypeKind), used for the compact file
@@ -11140,7 +11183,8 @@ function wbActionCardsUI(companyId, draft, app) {
       if (field && (field.type === 'status' || field.type === 'category')) valInput = `<select class="wb-input" data-wb-acval="${i}"><option value="">— value —</option>${(field.config.options || []).map((o) => `<option value="${h(o.id)}" ${ac.value === o.id ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</select>`;
       else if (field && field.type === 'checkbox') valInput = `<select class="wb-input" data-wb-acval="${i}"><option value="true" ${ac.value === true ? 'selected' : ''}>Yes</option><option value="false" ${ac.value === false ? 'selected' : ''}>No</option></select>`;
       else valInput = `<input class="wb-input" data-wb-acval="${i}" value="${h(ac.value ?? '')}" placeholder="Value to set">`;
-      cfg = `<select class="wb-input" data-wb-acfield="${i}">${setable.map((x) => `<option value="${h(x.id)}" ${x.id === fid ? 'selected' : ''}>${h(x.label)}</option>`).join('')}</select>${valInput}`;
+      const numericHint = field && ['number', 'money', 'duration', 'progress'].includes(field.type) ? '<div class="wb-sub" style="margin-top:4px">Tip: start with <b>+ − × ÷</b> to do math on the current value — e.g. <code>-10%</code>, <code>+20</code>, <code>*2</code>. A plain number sets it exactly.</div>' : '';
+      cfg = `<select class="wb-input" data-wb-acfield="${i}">${setable.map((x) => `<option value="${h(x.id)}" ${x.id === fid ? 'selected' : ''}>${h(x.label)}</option>`).join('')}</select>${valInput}${numericHint}`;
     } else if (ac.type === 'assign') {
       const userFields = app.fields.filter((f) => f.type === 'user');
       const members = wbMembers(companyId);
@@ -11746,6 +11790,7 @@ function mountWorkspaceBuilder() {
     bind('[data-del-app]', () => { const { app } = wbFind(companyId, workspaceId, appId); if (app) openWbDeleteApp(companyId, workspaceId, app); });
     bind('[data-add-auto]', () => openWbAutoModal(companyId, workspaceId, appId, ''));
     bind('[data-edit-auto]', (el) => openWbAutoModal(companyId, workspaceId, appId, el.dataset.editAuto));
+    bind('[data-dupe-auto]', (el) => wbDuplicateAutomation(companyId, workspaceId, appId, el.dataset.dupeAuto));
     bind('[data-del-auto]', (el) => openWbConfirm(companyId, 'del-auto', 'This rule will stop running.', { workspaceId, appId, autoId: el.dataset.delAuto }));
     bind('[data-toggle-auto]', (el) => { const { app } = wbFind(companyId, workspaceId, appId); const au = app.automations.find((x) => x.id === el.dataset.toggleAuto); if (au) { au.enabled = el.checked; wbSave(companyId); render(); } }, 'onchange');
     document.querySelectorAll('#wbSetIcons .wb-emoji-opt').forEach((b) => { b.onclick = () => { document.querySelectorAll('#wbSetIcons .wb-emoji-opt').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); }; });
