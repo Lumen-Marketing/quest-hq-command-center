@@ -10212,11 +10212,18 @@ function wbSaveEditedComment(commentId) {
   wbKeepModalScroll();
   render();
 }
-// Notify the workspace's members, the item's creator, and any member assigned on
+// The audience for workspace notifications: the workspace's explicit member list
+// if it has one, otherwise every active member of the company (a workspace with
+// no member list is shared with the whole company).
+function wbNotifyAudience(companyId, workspace) {
+  if (workspace && Array.isArray(workspace.members) && workspace.members.length) return [...workspace.members];
+  return wbMembers(companyId).map((mem) => mem.id);
+}
+// Notify the workspace audience, the item's creator, and any member assigned on
 // the item (via a user field) of an item event. Fire-and-forget; not the actor.
 function wbNotifyItem(companyId, workspace, app, item, title, body) {
   try {
-    const recipients = [...(workspace.members || [])];
+    const recipients = wbNotifyAudience(companyId, workspace);
     if (item.createdBy) recipients.push(item.createdBy);
     (app.fields || []).filter((f) => f.type === 'user').forEach((f) => { const v = item.values[f.id]; if (v) recipients.push(v); });
     if (!recipients.length) return;
@@ -10224,11 +10231,11 @@ function wbNotifyItem(companyId, workspace, app, item, title, body) {
     notifyEvent({ companyId, recipients, type: 'workspace', title, body, href, sourceType: 'workspace_item', sourceId: item.id, excludeActor: true }).catch(() => { /* ignore */ });
   } catch { /* ignore */ }
 }
-// Notify all workspace members of an app-level event (e.g. bulk delete) — no
+// Notify the workspace audience of an app-level event (e.g. bulk delete) — no
 // per-item assignee targeting. Fire-and-forget; the actor isn't notified.
 function wbNotifyWorkspace(companyId, workspace, app, title, body) {
   try {
-    const recipients = [...(workspace.members || [])];
+    const recipients = wbNotifyAudience(companyId, workspace);
     if (!recipients.length) return;
     const href = companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId);
     notifyEvent({ companyId, recipients, type: 'workspace', title, body, href, sourceType: 'workspace_app', sourceId: app.id, excludeActor: true }).catch(() => { /* ignore */ });
