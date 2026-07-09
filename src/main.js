@@ -5058,6 +5058,9 @@ function dashboardWidgetRegistry(companyId, ctx) {
 // saved layout keeps pointing at the right app; a removed app just drops out.
 function dashboardAppWidgets(companyId) {
   const out = {};
+  // Only companies running the Workspace App Builder have apps to surface — skip
+  // the state fetch entirely for everyone else so the dashboard stays lean.
+  if (!isModuleInstalled('workspaces', companyId)) return out;
   ensureWorkspaceBuilderLoaded(companyId);
   const doc = wbDoc(companyId);
   if (!doc) return out;
@@ -5178,7 +5181,7 @@ function dashboardAppMultiEligible(app) {
 
 function dashboardAppMultiConfig(companyId, appId) {
   const saved = state.dashboardAppWidgets?.[companyId]?.[`multi:${appId}`];
-  return { fields: [], ...(saved || {}) };
+  return { fields: [], touched: false, ...(saved || {}) };
 }
 
 function saveDashboardAppMultiConfig(companyId, appId, cfg) {
@@ -5195,6 +5198,9 @@ function dashboardAppResolvedMultiFields(app, cfg) {
   const eligible = dashboardAppMultiEligible(app);
   const eligibleIds = eligible.map((f) => f.id);
   const chosen = (cfg.fields || []).filter((id) => eligibleIds.includes(id));
+  // Once the user has edited the selection, respect it verbatim — including an
+  // empty set. Only fall back to defaults when they've never touched it.
+  if (cfg.touched) return chosen;
   if (chosen.length) return chosen;
   const cats = eligible.filter((f) => f.type === 'status' || f.type === 'category').map((f) => f.id);
   const nums = eligible.filter((f) => f.type !== 'status' && f.type !== 'category').map((f) => f.id);
@@ -18306,7 +18312,7 @@ function handleAction(event, node) {
     if (found && fieldId) {
       const current = dashboardAppResolvedMultiFields(found.app, dashboardAppMultiConfig(activeCompanyId(), appId));
       const next = current.includes(fieldId) ? current.filter((x) => x !== fieldId) : [...current, fieldId];
-      saveDashboardAppMultiConfig(activeCompanyId(), appId, { fields: next });
+      saveDashboardAppMultiConfig(activeCompanyId(), appId, { fields: next, touched: true });
     }
     render();
     return;
