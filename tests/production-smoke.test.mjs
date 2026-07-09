@@ -4,9 +4,18 @@ import test from 'node:test';
 import {
   DEFAULT_PRODUCTION_URL,
   extractAssetUrls,
+  parseSmokeArgs,
   validateAppShell,
   validateLegacyRedirect,
 } from '../scripts/production-smoke-lib.mjs';
+
+test('smoke CLI accepts an explicit deployment and commit marker', () => {
+  assert.deepEqual(parseSmokeArgs(['--base-url', 'https://preview.example', '--expect-sha', 'abc123', '--companies', 'lumen,roofing']), {
+    baseUrl: 'https://preview.example',
+    expectedSha: 'abc123',
+    companies: 'lumen,roofing',
+  });
+});
 
 test('production smoke defaults to the current gamma production domain', () => {
   assert.equal(DEFAULT_PRODUCTION_URL, 'https://quest-hq-command-center-gamma.vercel.app');

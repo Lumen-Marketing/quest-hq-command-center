@@ -3,13 +3,15 @@ import {
   buildProductionRoutes,
   checkWithRetry,
   extractAssetUrls,
+  parseSmokeArgs,
   validateAppShell,
   validateLegacyRedirect,
 } from './production-smoke-lib.mjs';
 
-const baseUrl = process.env.QUEST_HQ_PROD_URL || DEFAULT_PRODUCTION_URL;
-const expectedSha = String(process.env.QUEST_HQ_EXPECTED_SHA || '').trim();
-const companies = String(process.env.QUEST_HQ_COMPANIES || 'lumen').split(',').map((company) => company.trim()).filter(Boolean);
+const cli = parseSmokeArgs(process.argv.slice(2));
+const baseUrl = cli.baseUrl || process.env.QUEST_HQ_PROD_URL || DEFAULT_PRODUCTION_URL;
+const expectedSha = String(cli.expectedSha || process.env.QUEST_HQ_EXPECTED_SHA || '').trim();
+const companies = String(cli.companies || process.env.QUEST_HQ_COMPANIES || 'lumen').split(',').map((company) => company.trim()).filter(Boolean);
 const routes = buildProductionRoutes(companies);
 const rootResult = await checkWithRetry(new URL('/', baseUrl).toString());
 

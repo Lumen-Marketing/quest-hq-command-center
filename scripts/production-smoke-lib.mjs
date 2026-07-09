@@ -1,5 +1,16 @@
 export const DEFAULT_PRODUCTION_URL = 'https://quest-hq-command-center-gamma.vercel.app';
 
+export function parseSmokeArgs(argv = []) {
+  const values = {};
+  for (let index = 0; index < argv.length; index += 1) {
+    const key = argv[index];
+    if (key === '--base-url' && argv[index + 1]) values.baseUrl = argv[++index];
+    else if (key === '--expect-sha' && argv[index + 1]) values.expectedSha = argv[++index];
+    else if (key === '--companies' && argv[index + 1]) values.companies = argv[++index];
+  }
+  return values;
+}
+
 export const DEFAULT_COMPANIES = ['lumen'];
 
 export const MODULE_ROUTES = [
