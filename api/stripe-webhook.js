@@ -1,25 +1,37 @@
 import crypto from 'node:crypto';
+import { setApiHeaders } from './_lib/http-security.js';
 
 const env = (key) => process.env[key] || '';
 
 async function readRawBody(request) {
   const chunks = [];
-  for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  let size = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > 1024 * 1024) throw new Error('Webhook body is too large');
+    chunks.push(buffer);
+  }
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function verifyStripeSignature(rawBody, header) {
+export function verifyStripeSignature(rawBody, header, { nowMs = Date.now(), toleranceSeconds = 300 } = {}) {
   const secret = env('STRIPE_WEBHOOK_SECRET');
   if (!secret) throw new Error('Missing STRIPE_WEBHOOK_SECRET');
-  const parts = Object.fromEntries(String(header || '').split(',').map((part) => part.split('=')));
-  const timestamp = parts.t;
-  const expected = parts.v1;
-  if (!timestamp || !expected) throw new Error('Invalid Stripe signature header');
+  const parts = String(header || '').split(',').map((part) => part.trim().split('=')).filter(([key, value]) => key && value);
+  const timestamp = parts.find(([key]) => key === 't')?.[1];
+  const signatures = parts.filter(([key]) => key === 'v1').map(([, value]) => value);
+  if (!timestamp || !signatures.length || !/^\d+$/.test(timestamp)) throw new Error('Invalid Stripe signature header');
+  if (Math.abs(Math.floor(nowMs / 1000) - Number(timestamp)) > toleranceSeconds) throw new Error('Stripe signature timestamp is outside tolerance');
   const signedPayload = `${timestamp}.${rawBody}`;
   const actual = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
-  const actualBuffer = Buffer.from(actual);
-  const expectedBuffer = Buffer.from(expected);
-  if (actualBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(actualBuffer, expectedBuffer)) {
+  const actualBuffer = Buffer.from(actual, 'hex');
+  const valid = signatures.some((signature) => {
+    if (!/^[0-9a-f]{64}$/i.test(signature)) return false;
+    const expectedBuffer = Buffer.from(signature, 'hex');
+    return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+  });
+  if (!valid) {
     throw new Error('Invalid Stripe signature');
   }
 }
@@ -68,6 +80,7 @@ async function syncSubscriptionFromStripe(object) {
 }
 
 export default async function handler(request, response) {
+  setApiHeaders(response);
   if (request.method !== 'POST') {
     response.statusCode = 405;
     response.end('Method not allowed');

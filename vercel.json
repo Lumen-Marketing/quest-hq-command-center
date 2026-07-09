@@ -2,6 +2,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "crons": [
+    {
+      "path": "/api/recycle-bin-purge",
+      "schedule": "20 3 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",

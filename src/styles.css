@@ -5674,6 +5674,61 @@ textarea:focus {
   min-height: 42px;
 }
 
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.password-field button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.password-field button:hover,
+.password-field button:focus-visible {
+  background: var(--app-bg);
+  color: var(--text);
+}
+
+.password-requirements {
+  margin: -4px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.auth-text-action {
+  justify-self: end;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.auth-text-action:hover,
+.auth-text-action:focus-visible {
+  text-decoration: underline;
+}
+
 .auth-form-compact .btn-primary {
   min-height: 44px;
 }
@@ -7599,6 +7654,14 @@ input[type="file"]::file-selector-button:active {
 .form-public-card .designed-form-header {
   border-left: 4px solid var(--form-accent, var(--brand));
   padding-left: 14px;
+}
+
+.form-honeypot {
+  position: fixed !important;
+  left: -10000px !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
 }
 
 .analytics-workspace {

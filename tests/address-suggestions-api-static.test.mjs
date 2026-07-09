@@ -11,7 +11,8 @@ test('address suggestions API supports Google Places with an open search fallbac
   assert.match(apiSource, /https:\/\/places\.googleapis\.com\/v1\/places:autocomplete/);
   assert.match(apiSource, /X-Goog-FieldMask/);
   assert.match(apiSource, /https:\/\/nominatim\.openstreetmap\.org\/search/);
-  assert.match(apiSource, /suggestions: \[\.\.\.unique\.values\(\)\]\.slice\(0, 8\)/);
+  assert.match(apiSource, /const result = \[\.\.\.unique\.values\(\)\]\.slice\(0, 8\)/);
+  assert.match(apiSource, /suggestionCache\.set\(cacheKey/);
 });
 
 test('crm address inputs use the custom autocomplete endpoint instead of native datalist only', () => {

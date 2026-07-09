@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { errorResponse, readJsonBody, requireAllowedOrigin, setApiHeaders } from './_lib/http-security.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
 
 const FORM_FILE_BUCKET = 'quest-form-response-files';
 
@@ -22,14 +24,6 @@ function serverClient() {
   });
 }
 
-async function readJson(req) {
-  if (req.body && typeof req.body === 'object') return req.body;
-  if (typeof req.body === 'string') return JSON.parse(req.body || '{}');
-  let raw = '';
-  for await (const chunk of req) raw += chunk;
-  return JSON.parse(raw || '{}');
-}
-
 async function supabaseGet(path) {
   const response = await fetch(`${baseUrl()}/rest/v1/${path}`, {
     headers: supabaseHeaders({ Accept: 'application/json' }),
@@ -47,12 +41,20 @@ function containsObjectPath(value, objectPath) {
 }
 
 export default async function handler(req, res) {
+  setApiHeaders(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
   if (!baseUrl() || !serviceKey()) return res.status(500).json({ error: 'Public form files are not configured.' });
 
   try {
-    const body = await readJson(req);
+    if (!enforceRateLimit(req, res, { namespace: 'public-form-file-url', limit: 60, windowMs: 10 * 60 * 1000 })) return;
+    requireAllowedOrigin(req);
+    const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    if (!token) return res.status(401).json({ error: 'Authentication required.' });
+    const client = serverClient();
+    const authenticated = await client.auth.getUser(token);
+    if (authenticated.error || !authenticated.data?.user?.id) return res.status(401).json({ error: 'Authentication required.' });
+    const body = await readJsonBody(req, { maxBytes: 16 * 1024 });
     const responseId = String(body.response_id || '').trim();
     const formId = String(body.form_id || '').trim();
     const bucketId = String(body.bucket_id || FORM_FILE_BUCKET).trim();
@@ -61,11 +63,22 @@ export default async function handler(req, res) {
     if (!responseId || !formId || !objectPath) return res.status(400).json({ error: 'Missing file reference.' });
     if (bucketId !== FORM_FILE_BUCKET) return res.status(400).json({ error: 'Unsupported file bucket.' });
 
-    const rows = await supabaseGet(`form_responses?id=eq.${encodeURIComponent(responseId)}&form_id=eq.${encodeURIComponent(formId)}&select=id,form_id,answers`);
+    const rows = await supabaseGet(`form_responses?id=eq.${encodeURIComponent(responseId)}&form_id=eq.${encodeURIComponent(formId)}&select=id,form_id,company_id,answers`);
     const response = rows[0];
-    if (!response || !containsObjectPath(response.answers, objectPath)) return res.status(404).json({ error: 'File reference not found.' });
+    const expectedPrefix = response ? `${response.company_id}/${response.form_id}/` : '';
+    if (!response || !objectPath.startsWith(expectedPrefix) || objectPath.includes('..') || !containsObjectPath(response.answers, objectPath)) {
+      return res.status(404).json({ error: 'File reference not found.' });
+    }
+    const membership = await client
+      .from('company_memberships')
+      .select('id')
+      .eq('company_id', response.company_id)
+      .eq('profile_id', authenticated.data.user.id)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (membership.error || !membership.data) return res.status(403).json({ error: 'Company access required.' });
 
-    const { data, error } = await serverClient()
+    const { data, error } = await client
       .storage
       .from(FORM_FILE_BUCKET)
       .createSignedUrl(objectPath, 60 * 60, { download: fileName });
@@ -73,6 +86,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ signed_url: data?.signedUrl || '' });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Could not open form file.' });
+    return errorResponse(res, error, 'Could not open form file.');
   }
 }

@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-const smokeScript = readFileSync(new URL('../scripts/production-smoke.mjs', import.meta.url), 'utf8');
+const smokeScript = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import.meta.url), 'utf8');
 const dashboardRepOptionsBody = source.slice(source.indexOf('function dashboardRepOptions(companyId)'), source.indexOf('function dashboardOwnerKey'));
 
 test('dashboard replaces home as the canonical core workspace route', () => {

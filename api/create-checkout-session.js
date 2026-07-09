@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { appendQuery, readJsonBody, requireAllowedOrigin, safeReturnUrl, setApiHeaders } from './_lib/http-security.js';
 
 const json = (response, status, payload) => {
   response.statusCode = status;
@@ -34,14 +35,12 @@ async function getUserFromBearer(request) {
   return response.json();
 }
 
-async function readJson(request) {
-  const chunks = [];
-  for await (const chunk of request) chunks.push(chunk);
-  if (!chunks.length) return {};
-  return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+export function checkoutIdempotencyKey({ companyId, userId, priceId, requestId }) {
+  return crypto.createHash('sha256').update(`${companyId}:${userId}:${priceId}:${requestId}`).digest('hex');
 }
 
 export default async function handler(request, response) {
+  setApiHeaders(response);
   if (request.method !== 'POST') return json(response, 405, { error: 'Method not allowed' });
   if (!env('STRIPE_SECRET_KEY') || !env('STRIPE_PRICE_ID') || !env('SUPABASE_SERVICE_ROLE_KEY')) {
     return json(response, 501, { error: 'Billing is not configured yet.' });
@@ -50,39 +49,46 @@ export default async function handler(request, response) {
   const user = await getUserFromBearer(request);
   if (!user?.id) return json(response, 401, { error: 'Authentication required.' });
 
-  const body = await readJson(request).catch(() => ({}));
-  const companyId = String(body.company_id || '').trim();
-  const returnUrl = String(body.return_url || request.headers.origin || 'https://quest-hq-command-center.vercel.app');
-  if (!companyId) return json(response, 400, { error: 'company_id is required.' });
+  try {
+    requireAllowedOrigin(request);
+    const body = await readJsonBody(request, { maxBytes: 16 * 1024 });
+    const companyId = String(body.company_id || '').trim();
+    const requestId = String(body.request_id || request.headers['x-idempotency-key'] || '').trim();
+    const returnUrl = safeReturnUrl(body.return_url, request);
+    if (!companyId) return json(response, 400, { error: 'company_id is required.' });
+    if (!/^[A-Za-z0-9_-]{8,120}$/.test(requestId)) return json(response, 400, { error: 'A stable request_id is required.' });
 
-  const membershipResponse = await supabaseFetch(`/rest/v1/company_memberships?company_id=eq.${encodeURIComponent(companyId)}&profile_id=eq.${encodeURIComponent(user.id)}&status=eq.active&select=role`);
-  const memberships = membershipResponse.ok ? await membershipResponse.json() : [];
-  const allowed = memberships.some((item) => ['owner', 'admin', 'developer', 'construction_supervisor'].includes(String(item.role || '').toLowerCase()));
-  if (!allowed) return json(response, 403, { error: 'Owner/Admin billing permission required.' });
+    const membershipResponse = await supabaseFetch(`/rest/v1/company_memberships?company_id=eq.${encodeURIComponent(companyId)}&profile_id=eq.${encodeURIComponent(user.id)}&status=eq.active&select=role`);
+    const memberships = membershipResponse.ok ? await membershipResponse.json() : [];
+    const allowed = memberships.some((item) => ['owner', 'admin', 'developer', 'construction_supervisor'].includes(String(item.role || '').toLowerCase()));
+    if (!allowed) return json(response, 403, { error: 'Owner/Admin billing permission required.' });
 
-  const idempotencyKey = crypto.createHash('sha256').update(`${companyId}:${user.id}:${Date.now()}`).digest('hex');
-  const params = new URLSearchParams();
-  params.set('mode', 'subscription');
-  params.set('line_items[0][price]', env('STRIPE_PRICE_ID'));
-  params.set('line_items[0][quantity]', '1');
-  params.set('success_url', `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}billing=success`);
-  params.set('cancel_url', `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}billing=cancel`);
-  params.set('customer_email', user.email || '');
-  params.set('metadata[company_id]', companyId);
-  params.set('metadata[profile_id]', user.id);
-  params.set('subscription_data[metadata][company_id]', companyId);
-  params.set('subscription_data[metadata][profile_id]', user.id);
+    const idempotencyKey = checkoutIdempotencyKey({ companyId, userId: user.id, priceId: env('STRIPE_PRICE_ID'), requestId });
+    const params = new URLSearchParams();
+    params.set('mode', 'subscription');
+    params.set('line_items[0][price]', env('STRIPE_PRICE_ID'));
+    params.set('line_items[0][quantity]', '1');
+    params.set('success_url', appendQuery(returnUrl, 'billing', 'success'));
+    params.set('cancel_url', appendQuery(returnUrl, 'billing', 'cancel'));
+    params.set('customer_email', user.email || '');
+    params.set('metadata[company_id]', companyId);
+    params.set('metadata[profile_id]', user.id);
+    params.set('subscription_data[metadata][company_id]', companyId);
+    params.set('subscription_data[metadata][profile_id]', user.id);
 
-  const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env('STRIPE_SECRET_KEY')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Idempotency-Key': idempotencyKey,
-    },
-    body: params,
-  });
-  const payload = await stripeResponse.json();
-  if (!stripeResponse.ok) return json(response, stripeResponse.status, { error: payload.error?.message || 'Stripe checkout failed.' });
-  return json(response, 200, { url: payload.url });
+    const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env('STRIPE_SECRET_KEY')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: params,
+    });
+    const payload = await stripeResponse.json();
+    if (!stripeResponse.ok) return json(response, stripeResponse.status, { error: payload.error?.message || 'Stripe checkout failed.' });
+    return json(response, 200, { url: payload.url });
+  } catch (error) {
+    return json(response, Number(error?.statusCode) || 500, { error: Number(error?.statusCode) < 500 ? error.message : 'Could not start billing.' });
+  }
 }

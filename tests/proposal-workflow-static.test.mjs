@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202607020930_proposal_documents.sql', import.meta.url), 'utf8');
-const smoke = readFileSync(new URL('../scripts/production-smoke.mjs', import.meta.url), 'utf8');
+const smoke = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import.meta.url), 'utf8');
 
 assert.match(main, /const PROPOSAL_CACHE_KEY = 'quest-hq-proposal-cache-v1'/);
 assert.match(main, /id: 'proposals'.*label: 'Proposals'/s);
