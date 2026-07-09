@@ -130,6 +130,7 @@ const RECYCLE_BIN_TYPES = {
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
 const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
 const DASHBOARD_ROLE_VIEW_CACHE_KEY = 'quest-hq-dashboard-role-views-v1';
+const DASHBOARD_APP_WIDGET_CACHE_KEY = 'quest-hq-dashboard-app-widgets-v1';
 const SIDEBAR_SCROLL_KEY = 'quest-hq-sidebar-scroll';
 const LAUNCH_HIDE_FUTURE_MODULES = true;
 const LAUNCH_HIDE_UNREADY_DASHBOARD_WIDGETS = true;
@@ -768,7 +769,7 @@ const CRM_ADDRESS_SUGGESTIONS = [
   'Tucson, AZ',
 ];
 
-const DASHBOARD_WIDGET_GROUPS = ['Value drivers', 'Growth', 'Capacity', 'People', 'Cash flow', 'Strategy', 'EOS', 'Sales', 'Operations', 'Finance', 'Reputation'];
+const DASHBOARD_WIDGET_GROUPS = ['Workspace apps', 'Value drivers', 'Growth', 'Capacity', 'People', 'Cash flow', 'Strategy', 'EOS', 'Sales', 'Operations', 'Finance', 'Reputation'];
 const DASHBOARD_ROLE_VIEWS = [
   ['exec', 'Executive'],
   ['sales', 'Sales'],
@@ -2167,6 +2168,7 @@ const state = {
   dashboardTrayOpen: false,
   dashboardLayouts: readJson(DASHBOARD_LAYOUT_CACHE_KEY, {}),
   dashboardRoleViews: readJson(DASHBOARD_ROLE_VIEW_CACHE_KEY, []),
+  dashboardAppWidgets: readJson(DASHBOARD_APP_WIDGET_CACHE_KEY, {}),
   workspaceIconDrafts: {},
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
   sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
@@ -2539,6 +2541,7 @@ function render() {
   queueMicrotask(mountLocationPicker);
   queueMicrotask(mountWorkspaceBuilder);
   queueMicrotask(mountFileViewer);
+  queueMicrotask(mountDashboardWidgetDnD);
 }
 
 function openNativeTimePicker(input) {
@@ -5045,7 +5048,179 @@ function dashboardWidgetRegistry(companyId, ctx) {
     eosComponents: dashboardNeedsDataWidget('EOS components checkup', 'EOS', 'Needs EOS checkup survey.'),
     coreValues: dashboardNeedsDataWidget('Core values', 'EOS', 'Needs core values settings.'),
   };
+  Object.assign(widgets, dashboardAppWidgets(companyId));
   return widgets;
+}
+
+// Surface each Workspace-builder app as an addable dashboard widget so users can
+// pin a live summary of any custom app (records, status mix, latest items) onto
+// their dashboard via "Add widget". Widget IDs are stable (`app:<appId>`) so a
+// saved layout keeps pointing at the right app; a removed app just drops out.
+function dashboardAppWidgets(companyId) {
+  const out = {};
+  ensureWorkspaceBuilderLoaded(companyId);
+  const doc = wbDoc(companyId);
+  if (!doc) return out;
+  doc.workspaces.forEach((workspace) => {
+    (workspace.apps || []).forEach((app) => {
+      out[`app:${app.id}`] = {
+        title: app.name || 'Untitled app',
+        group: 'Workspace apps',
+        configurable: true,
+        appId: app.id,
+        sub: app.description || `${app.type ? `${app.type} · ` : ''}${app.items.length} record${app.items.length === 1 ? '' : 's'}`,
+        render: () => {
+          const openHref = appHref(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
+          const cfg = dashboardAppWidgetConfig(companyId, app.id);
+          const body = dashboardAppWidgetBody(app, dashboardAppResolvedReport(app, cfg));
+          return `
+            <div class="dash-app-widget">
+              <div class="dash-app-head">
+                <span class="dash-app-ic" style="background:${h(app.color || '#e0552d')}"><i class="ti ${h(app.icon || 'ti-apps')}"></i></span>
+                <div class="dash-app-figs"><b>${h(String(app.items.length))}</b><span>record${app.items.length === 1 ? '' : 's'} · ${h(String(app.fields.length))} field${app.fields.length === 1 ? '' : 's'}</span></div>
+                <a class="btn btn-sm dash-app-open" href="${openHref}" data-router>Open<i class="ti ti-arrow-right"></i></a>
+              </div>
+              ${body}
+            </div>`;
+        },
+      };
+      out[`app-multi:${app.id}`] = {
+        title: `${app.name || 'Untitled app'} — fields`,
+        group: 'Workspace apps',
+        configurable: true,
+        multi: true,
+        appId: app.id,
+        span: true,
+        sub: 'Several field reports side by side.',
+        render: () => {
+          const openHref = appHref(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
+          const cfg = dashboardAppMultiConfig(companyId, app.id);
+          const body = dashboardAppMultiBody(app, dashboardAppResolvedMultiFields(app, cfg));
+          return `
+            <div class="dash-app-widget">
+              <div class="dash-app-head">
+                <span class="dash-app-ic" style="background:${h(app.color || '#e0552d')}"><i class="ti ${h(app.icon || 'ti-apps')}"></i></span>
+                <div class="dash-app-figs"><b>${h(String(app.items.length))}</b><span>record${app.items.length === 1 ? '' : 's'} · ${h(String(app.fields.length))} field${app.fields.length === 1 ? '' : 's'}</span></div>
+                <a class="btn btn-sm dash-app-open" href="${openHref}" data-router>Open<i class="ti ti-arrow-right"></i></a>
+              </div>
+              ${body}
+            </div>`;
+        },
+      };
+    });
+  });
+  return out;
+}
+
+// The reports an app widget can display: recent records, a count breakdown by
+// any status/category field, or a numeric total of any number-like field.
+function dashboardAppReportOptions(app) {
+  const opts = [{ id: 'recent', label: 'Recent records', hint: 'The latest items added' }];
+  (app.fields || []).forEach((f) => {
+    if (f.type === 'status' || f.type === 'category') opts.push({ id: `group:${f.id}`, label: `Breakdown by ${f.label}`, hint: 'Record count per option' });
+  });
+  (app.fields || []).forEach((f) => {
+    if (['number', 'money', 'progress', 'duration', 'calculation'].includes(f.type)) opts.push({ id: `sum:${f.id}`, label: `Total ${f.label}`, hint: 'Sum across all records' });
+  });
+  return opts;
+}
+
+// Resolve the stored report choice, falling back to a sensible auto pick (first
+// status/category breakdown, else recent records) when unset or now-invalid.
+function dashboardAppResolvedReport(app, cfg) {
+  const opts = dashboardAppReportOptions(app);
+  if (cfg.report && cfg.report !== 'auto' && opts.some((o) => o.id === cfg.report)) return cfg.report;
+  const firstGroup = opts.find((o) => o.id.startsWith('group:'));
+  return firstGroup ? firstGroup.id : 'recent';
+}
+
+function dashboardAppWidgetConfig(companyId, appId) {
+  const saved = state.dashboardAppWidgets?.[companyId]?.[appId];
+  return { report: 'auto', ...(saved || {}) };
+}
+
+function saveDashboardAppWidgetConfig(companyId, appId, cfg) {
+  state.dashboardAppWidgets = {
+    ...(state.dashboardAppWidgets || {}),
+    [companyId]: { ...(state.dashboardAppWidgets?.[companyId] || {}), [appId]: cfg },
+  };
+  writeJson(DASHBOARD_APP_WIDGET_CACHE_KEY, state.dashboardAppWidgets);
+}
+
+function dashboardAppWidgetBody(app, reportId) {
+  if (!app.items.length) return dashboardEmptyNote('No records yet.');
+  if (reportId.startsWith('group:')) {
+    const f = app.fields.find((x) => x.id === reportId.slice(6));
+    if (f) {
+      const optLabel = (id) => (f.config.options || []).find((o) => o.id === id)?.label || 'Unset';
+      return renderDashboardHorizontalBars(dashboardGroupCounts(app.items, (item) => optLabel(item.values[f.id])).slice(0, 6));
+    }
+  }
+  if (reportId.startsWith('sum:')) {
+    const f = app.fields.find((x) => x.id === reportId.slice(4));
+    if (f) {
+      const numVal = (item) => {
+        if (f.type === 'calculation') { const r = wbCalcRaw(app, f, item.values); return Number.isFinite(r) ? r : 0; }
+        return Number(item.values[f.id]) || 0;
+      };
+      const total = app.items.reduce((sum, item) => sum + numVal(item), 0);
+      const display = f.type === 'money' ? money(total) : total.toLocaleString();
+      return `<div class="dash-big-metric"><strong>${h(String(display))}</strong><span>Total ${h(f.label)} across ${app.items.length} record${app.items.length === 1 ? '' : 's'}</span></div>`;
+    }
+  }
+  return `<div class="dash-mini-list">${app.items.slice(-5).reverse().map((item) => `<div><b>${h(String(wbItemTitle(app, item)))}</b><span>${h(wbTimeAgo(item.updatedAt || item.createdAt || '') || '')}</span></div>`).join('')}</div>`;
+}
+
+// Multi-field variant: fields that can be reported on the "— fields" widget.
+function dashboardAppMultiEligible(app) {
+  return (app.fields || []).filter((f) => ['status', 'category', 'number', 'money', 'progress', 'duration', 'calculation'].includes(f.type));
+}
+
+function dashboardAppMultiConfig(companyId, appId) {
+  const saved = state.dashboardAppWidgets?.[companyId]?.[`multi:${appId}`];
+  return { fields: [], ...(saved || {}) };
+}
+
+function saveDashboardAppMultiConfig(companyId, appId, cfg) {
+  state.dashboardAppWidgets = {
+    ...(state.dashboardAppWidgets || {}),
+    [companyId]: { ...(state.dashboardAppWidgets?.[companyId] || {}), [`multi:${appId}`]: cfg },
+  };
+  writeJson(DASHBOARD_APP_WIDGET_CACHE_KEY, state.dashboardAppWidgets);
+}
+
+// Chosen fields, filtered to still-valid ones; defaults to the first couple of
+// breakdown fields plus the first couple of numeric fields when nothing is set.
+function dashboardAppResolvedMultiFields(app, cfg) {
+  const eligible = dashboardAppMultiEligible(app);
+  const eligibleIds = eligible.map((f) => f.id);
+  const chosen = (cfg.fields || []).filter((id) => eligibleIds.includes(id));
+  if (chosen.length) return chosen;
+  const cats = eligible.filter((f) => f.type === 'status' || f.type === 'category').map((f) => f.id);
+  const nums = eligible.filter((f) => f.type !== 'status' && f.type !== 'category').map((f) => f.id);
+  return [...cats.slice(0, 2), ...nums.slice(0, 2)];
+}
+
+function dashboardAppMultiBody(app, fieldIds) {
+  if (!app.items.length) return dashboardEmptyNote('No records yet.');
+  if (!fieldIds.length) return dashboardAppWidgetBody(app, 'recent');
+  const blocks = fieldIds.map((id) => {
+    const f = app.fields.find((x) => x.id === id);
+    if (!f) return '';
+    if (f.type === 'status' || f.type === 'category') {
+      const optLabel = (v) => (f.config.options || []).find((o) => o.id === v)?.label || 'Unset';
+      const bars = renderDashboardHorizontalBars(dashboardGroupCounts(app.items, (item) => optLabel(item.values[f.id])).slice(0, 4));
+      return `<div class="dash-app-field"><div class="daf-label">${h(f.label)}</div>${bars}</div>`;
+    }
+    const numVal = (item) => {
+      if (f.type === 'calculation') { const r = wbCalcRaw(app, f, item.values); return Number.isFinite(r) ? r : 0; }
+      return Number(item.values[f.id]) || 0;
+    };
+    const total = app.items.reduce((sum, item) => sum + numVal(item), 0);
+    const display = f.type === 'money' ? money(total) : total.toLocaleString();
+    return `<div class="dash-app-field daf-metric"><div class="daf-label">${h(f.label)}</div><b>${h(String(display))}</b></div>`;
+  }).join('');
+  return `<div class="dash-app-fields">${blocks}</div>`;
 }
 
 function dashboardWidgetLayout(companyId, role = state.dashboardRole) {
@@ -5085,14 +5260,58 @@ function saveDashboardWidgetLayout(companyId, role, widgetIds) {
   writeJson(DASHBOARD_LAYOUT_CACHE_KEY, state.dashboardLayouts);
 }
 
+// Move widget `fromId` to sit next to `toId` in the active layout, then persist.
+// Dropping onto a card ahead lands after it; onto a card behind, before it — the
+// natural drag-reorder feel. Layout is saved immediately (Done just exits edit).
+function dashboardReorderWidget(fromId, toId) {
+  if (!fromId || !toId || fromId === toId) return;
+  const companyId = activeCompanyId();
+  const role = state.dashboardRole || 'exec';
+  const layout = dashboardWidgetLayout(companyId, role).slice();
+  const from = layout.indexOf(fromId);
+  const to = layout.indexOf(toId);
+  if (from < 0 || to < 0) return;
+  const [moved] = layout.splice(from, 1);
+  const target = layout.indexOf(toId);
+  const insertAt = from < to ? target + 1 : target;
+  layout.splice(insertAt, 0, moved);
+  saveDashboardWidgetLayout(companyId, role, layout);
+  render();
+}
+
+// Enable drag-to-reorder on dashboard widget cards while customizing. Re-bound
+// after every render; the whole card is the drag handle (grip is just a cue).
+function mountDashboardWidgetDnD() {
+  if (!state.dashboardCustomize) return;
+  const grid = document.querySelector('.dash-widget-grid.editing');
+  if (!grid) return;
+  let dragId = null;
+  grid.querySelectorAll('.dash-widget-card').forEach((card) => {
+    card.ondragstart = (e) => {
+      dragId = card.dataset.widgetId;
+      card.classList.add('dragging');
+      if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch { /* ignore */ } }
+    };
+    card.ondragend = () => { dragId = null; card.classList.remove('dragging'); grid.querySelectorAll('.dash-widget-card').forEach((c) => c.classList.remove('drop-target')); };
+    card.ondragover = (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; if (card.dataset.widgetId !== dragId) card.classList.add('drop-target'); };
+    card.ondragleave = () => card.classList.remove('drop-target');
+    card.ondrop = (e) => {
+      e.preventDefault(); e.stopPropagation(); card.classList.remove('drop-target');
+      const from = dragId || (e.dataTransfer ? e.dataTransfer.getData('text/plain') : '');
+      dashboardReorderWidget(from, card.dataset.widgetId);
+    };
+  });
+}
+
 function renderDashboardWidgetCard(widget, id, index, total) {
   if (!widget) return '';
   return `
-    <article class="panel dash-widget-card ${widget.span ? 'span2' : ''}" data-widget-id="${h(id)}">
+    <article class="panel dash-widget-card ${widget.span ? 'span2' : ''}" data-widget-id="${h(id)}" ${state.dashboardCustomize ? 'draggable="true"' : ''}>
       <div class="dash-widget-head">
-        <div><h2>${h(widget.title)}</h2>${widget.sub ? `<p>${h(widget.sub)}</p>` : ''}</div>
+        <div class="dash-widget-title">${state.dashboardCustomize ? '<span class="dash-widget-grip" title="Drag to reorder" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>' : ''}<div><h2>${h(widget.title)}</h2>${widget.sub ? `<p>${h(widget.sub)}</p>` : ''}</div></div>
         ${state.dashboardCustomize ? `
           <div class="dash-widget-tools">
+            ${widget.configurable ? `<button type="button" data-action="dashboard-config-widget" data-widget-id="${h(id)}" title="Choose report" aria-label="Choose report for ${h(widget.title)}"><i class="ti ti-adjustments"></i></button>` : ''}
             <button type="button" data-action="dashboard-move-widget" data-widget-id="${h(id)}" data-direction="-1" ${index <= 0 ? 'disabled' : ''} title="Move left" aria-label="Move ${h(widget.title)} left"><i class="ti ti-arrow-left"></i></button>
             <button type="button" data-action="dashboard-move-widget" data-widget-id="${h(id)}" data-direction="1" ${index >= total - 1 ? 'disabled' : ''} title="Move right" aria-label="Move ${h(widget.title)} right"><i class="ti ti-arrow-right"></i></button>
             <button type="button" data-action="dashboard-remove-widget" data-widget-id="${h(id)}" title="Remove" aria-label="Remove ${h(widget.title)}"><i class="ti ti-x"></i></button>
@@ -5150,6 +5369,76 @@ function renderDashboardViewManagerModal(companyId) {
       }).join('')}
     </div>
   `, 'dashboard-view-modal');
+}
+
+function dashboardFindApp(companyId, appId) {
+  const doc = wbDoc(companyId);
+  if (!doc) return null;
+  for (const workspace of doc.workspaces) {
+    const app = (workspace.apps || []).find((a) => a.id === appId);
+    if (app) return { workspace, app };
+  }
+  return null;
+}
+
+// Lets the user choose which report an app widget renders (recent records, a
+// breakdown by a status/category field, or a numeric total) with a live preview.
+function renderDashboardAppWidgetConfigModal(companyId) {
+  const appId = state.dashboardConfigAppId || '';
+  const found = dashboardFindApp(companyId, appId);
+  if (!found) {
+    return renderModalShell('Widget report', 'App unavailable', `
+      <p class="wb-sub">This app is no longer available.</p>
+      <div class="modal-actions"><button class="btn" type="button" data-action="close-modal">Close</button></div>
+    `, 'dashboard-app-widget-modal');
+  }
+  const { app } = found;
+  if (state.dashboardConfigMulti) {
+    const cfg = dashboardAppMultiConfig(companyId, appId);
+    const selected = dashboardAppResolvedMultiFields(app, cfg);
+    const eligible = dashboardAppMultiEligible(app);
+    const picker = eligible.length ? `
+      <div class="dash-report-picker">
+        ${eligible.map((f) => {
+          const on = selected.includes(f.id);
+          const kind = (f.type === 'status' || f.type === 'category') ? 'Breakdown by option' : 'Sum across records';
+          return `
+            <button type="button" class="dash-report-opt dash-report-check ${on ? 'active' : ''}" data-action="dashboard-app-widget-field" data-widget-app="${h(appId)}" data-field="${h(f.id)}">
+              <span class="dro-check"><i class="ti ti-check"></i></span>
+              <span class="dro-text"><b>${h(f.label)}</b><small>${h(kind)}</small></span>
+            </button>`;
+        }).join('')}
+      </div>` : '<p class="wb-sub">This app has no status, category, or numeric fields to report on yet.</p>';
+    return renderModalShell('Widget fields', `${app.name} — fields`, `
+      <div class="dash-modal-summary">
+        <div><b>Which fields should this widget show?</b><span>Pick any number — each appears as its own mini report on the ${h(app.name)} card.</span></div>
+      </div>
+      ${picker}
+      <div class="dash-report-preview">
+        <div class="dro-preview-label">Live preview</div>
+        <article class="panel dash-widget-card"><div class="dash-widget-body">${app.items.length ? dashboardAppMultiBody(app, selected) : dashboardEmptyNote('No records yet — add records to see these reports.')}</div></article>
+      </div>
+    `, 'dashboard-app-widget-modal');
+  }
+  const cfg = dashboardAppWidgetConfig(companyId, appId);
+  const current = dashboardAppResolvedReport(app, cfg);
+  const options = dashboardAppReportOptions(app);
+  return renderModalShell('Widget report', `${app.name} widget`, `
+    <div class="dash-modal-summary">
+      <div><b>What should this widget show?</b><span>Pick the report displayed on the ${h(app.name)} dashboard card.</span></div>
+    </div>
+    <div class="dash-report-picker">
+      ${options.map((o) => `
+        <button type="button" class="dash-report-opt ${o.id === current ? 'active' : ''}" data-action="dashboard-app-widget-report" data-widget-app="${h(appId)}" data-report="${h(o.id)}">
+          <span class="dro-check"><i class="ti ti-check"></i></span>
+          <span class="dro-text"><b>${h(o.label)}</b><small>${h(o.hint)}</small></span>
+        </button>`).join('')}
+    </div>
+    <div class="dash-report-preview">
+      <div class="dro-preview-label">Live preview</div>
+      <article class="panel dash-widget-card"><div class="dash-widget-body">${app.items.length ? dashboardAppWidgetBody(app, current) : dashboardEmptyNote('No records yet — add records to see this report.')}</div></article>
+    </div>
+  `, 'dashboard-app-widget-modal');
 }
 
 function renderDashboardWidgetTray(registry, layout) {
@@ -9616,8 +9905,35 @@ function normalizeWorkspaceBuilderDoc(doc) {
 }
 
 const WB_PALETTE = ['#e0552d', '#2563eb', '#7c3aed', '#0d9488', '#16a34a', '#d97706', '#db2777', '#0891b2', '#dc2626', '#4f46e5'];
+// Preset swatches plus a trailing custom-color picker. `selected` may be any hex
+// string; if it isn't one of the presets the custom swatch shows it as active.
+function wbColorSwatches(selected) {
+  const current = selected || WB_PALETTE[0];
+  const isCustom = !WB_PALETTE.includes(current);
+  const presets = WB_PALETTE.map((color) => `<button type="button" class="wb-swatch ${color === current ? 'sel' : ''}" data-wb-pick-color="${color}" style="background:${color}"></button>`).join('');
+  const custom = `<label class="wb-swatch wb-swatch-custom ${isCustom ? 'sel' : ''}" title="Custom color"${isCustom ? ` style="background:${h(current)}"` : ''}><input type="color" data-wb-custom-color value="${h(isCustom ? current : '#000000')}" aria-label="Choose a custom color"><i class="ti ${isCustom ? 'ti-check' : 'ti-plus'}"></i></label>`;
+  return `<div class="wb-swatches">${presets}${custom}</div>`;
+}
 const WB_WS_ICONS = ['ti-rocket', 'ti-speakerphone', 'ti-tools', 'ti-headset', 'ti-home-2', 'ti-building-store', 'ti-hammer', 'ti-users-group', 'ti-chart-bar', 'ti-cash', 'ti-package', 'ti-palette'];
-const WB_APP_ICONS = ['ti-address-book', 'ti-checklist', 'ti-folder', 'ti-calendar-event', 'ti-receipt', 'ti-bug', 'ti-shopping-cart', 'ti-id-badge', 'ti-truck', 'ti-file-description', 'ti-phone', 'ti-flask'];
+const WB_APP_ICONS = [
+  'ti-address-book', 'ti-checklist', 'ti-folder', 'ti-calendar-event', 'ti-receipt', 'ti-bug',
+  'ti-shopping-cart', 'ti-id-badge', 'ti-truck', 'ti-file-description', 'ti-phone', 'ti-flask',
+  'ti-briefcase', 'ti-building', 'ti-building-store', 'ti-building-factory', 'ti-home', 'ti-users',
+  'ti-user', 'ti-users-group', 'ti-mail', 'ti-message', 'ti-message-circle', 'ti-clipboard-list',
+  'ti-clipboard-check', 'ti-notes', 'ti-note', 'ti-book', 'ti-bookmark', 'ti-tag', 'ti-tags',
+  'ti-star', 'ti-heart', 'ti-flag', 'ti-map-pin', 'ti-map', 'ti-world', 'ti-package', 'ti-box',
+  'ti-packages', 'ti-gift', 'ti-credit-card', 'ti-cash', 'ti-coin', 'ti-wallet', 'ti-chart-bar',
+  'ti-chart-line', 'ti-chart-pie', 'ti-report', 'ti-file', 'ti-file-text', 'ti-files', 'ti-photo',
+  'ti-camera', 'ti-video', 'ti-music', 'ti-headphones', 'ti-microphone', 'ti-bell', 'ti-alarm',
+  'ti-clock', 'ti-calendar', 'ti-calendar-stats', 'ti-settings', 'ti-tool', 'ti-tools', 'ti-adjustments',
+  'ti-hammer', 'ti-rocket', 'ti-plane', 'ti-car', 'ti-bike', 'ti-ship', 'ti-leaf', 'ti-plant',
+  'ti-tree', 'ti-paw', 'ti-heartbeat', 'ti-stethoscope', 'ti-pill', 'ti-first-aid-kit', 'ti-shield',
+  'ti-lock', 'ti-key', 'ti-cloud', 'ti-database', 'ti-server', 'ti-device-laptop',
+  'ti-device-desktop', 'ti-device-mobile', 'ti-printer', 'ti-cpu', 'ti-code', 'ti-terminal',
+  'ti-bulb', 'ti-atom', 'ti-microscope', 'ti-school', 'ti-certificate', 'ti-award', 'ti-trophy',
+  'ti-target', 'ti-compass', 'ti-anchor', 'ti-brush', 'ti-palette', 'ti-pencil', 'ti-scissors',
+  'ti-ruler', 'ti-calculator', 'ti-coffee', 'ti-cup', 'ti-ticket', 'ti-basket', 'ti-shopping-bag',
+];
 const WB_FIELD_TYPES = {
   text: { label: 'Text', icon: 'ti-letter-case', color: '#2563eb', desc: 'Single line of text' },
   textarea: { label: 'Text Area', icon: 'ti-align-left', color: '#2563eb', desc: 'Long multi-line text' },
@@ -10348,6 +10664,7 @@ function wbViewBuilder(companyId, workspace, app) {
 
 function wbViewAppSettings(companyId, workspace, app) {
   const canManage = can('workspaces.manage', companyId);
+  const isCustomColor = !WB_PALETTE.includes(app.color);
   return `<div class="wb-settings card">
     <h3 class="wb-settings-title">App settings</h3>
     <div class="wb-field"><label>App name</label><input class="wb-input" id="wbSetName" value="${h(app.name)}" ${canManage ? '' : 'disabled'}></div>
@@ -10355,7 +10672,7 @@ function wbViewAppSettings(companyId, workspace, app) {
     <div class="wb-field"><label>Type</label><input class="wb-input" id="wbSetType" value="${h(app.type || '')}" placeholder="e.g. Contacts, Tasks, Projects" ${canManage ? '' : 'disabled'}></div>
     <div class="wb-field"><label>Icon &amp; color</label>
       <div class="wb-emoji-pick" id="wbSetIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${app.icon === icon ? 'sel' : ''}" data-icon="${icon}"><i class="ti ${icon}"></i></button>`).join('')}</div>
-      <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}</div>
+      <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}<label class="wb-swatch wb-swatch-custom ${isCustomColor ? 'sel' : ''}" data-color="${h(app.color)}" title="Custom color"${isCustomColor ? ` style="background:${h(app.color)}"` : ''}><input type="color" id="wbSetCustomColor" value="${h(isCustomColor ? app.color : '#000000')}" aria-label="Custom color" ${canManage ? '' : 'disabled'}><i class="ti ${isCustomColor ? 'ti-check' : 'ti-plus'}"></i></label></div>
     </div>
     <div class="wb-field"><label>Portability</label>
       <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — including all fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'} and ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'} — to back it up or install it into another workspace.</div>
@@ -10989,7 +11306,7 @@ function renderWorkspaceBuilderModal() {
       `<div class="wb-field"><label>Workspace name</label><input class="wb-input" id="wbWsName" value="${h(m.draft.name ?? editing?.name ?? '')}" placeholder="e.g. Marketing, Field Operations" autofocus></div>
       <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbWsDesc" placeholder="What is this workspace for?">${h(m.draft.description ?? editing?.description ?? '')}</textarea></div>
       <div class="wb-row2"><div class="wb-field"><label>Icon</label><div class="wb-emoji-pick">${WB_WS_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" data-wb-pick-icon="${icon}"><i class="ti ${icon}"></i></button>`).join('')}</div></div>
-      <div class="wb-field"><label>Color</label><div class="wb-swatches">${WB_PALETTE.map((color) => `<button class="wb-swatch ${color === m.draft.color ? 'sel' : ''}" data-wb-pick-color="${color}" style="background:${color}"></button>`).join('')}</div></div></div>
+      <div class="wb-field"><label>Color</label>${wbColorSwatches(m.draft.color)}</div></div>
       <div class="wb-field"><label>${editing ? 'Members' : 'Invite members'} <span class="wb-opt">(who collaborates here)</span></label><div class="wb-member-pick">${wbMembers(m.companyId).map((member) => `<button class="wb-member-opt ${m.draft.members.includes(member.id) ? 'on' : ''}" data-wb-toggle-member="${h(member.id)}">${wbAvatar(member, 30)}<div class="wb-mo-info"><b>${h(member.name)}</b><span>${h(member.role)} · ${h(member.email)}</span></div><span class="wb-ck"><i class="ti ti-check"></i></span></button>`).join('') || '<div class="wb-sub">No company members found.</div>'}</div></div>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-check"></i>${editing ? 'Save changes' : 'Create workspace'}</button>`);
   }
@@ -11059,8 +11376,11 @@ function renderWorkspaceBuilderModal() {
       `<div class="wb-field"><label>App name</label><input class="wb-input" id="wbApName" value="${h(m.draft.name || '')}" placeholder="e.g. Leads, Projects, Inspections" autofocus></div>
       <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbApDesc" placeholder="What does this app track?">${h(m.draft.description || '')}</textarea></div>
       <div class="wb-field"><label>App type <span class="wb-opt">(optional)</span></label><select class="wb-input" id="wbApType"><option value="">— Select a type —</option>${['Contacts', 'Tasks', 'Projects', 'Records', 'Inventory', 'Documents', 'Calendar', 'Tickets', 'Invoices', 'Custom'].map((t) => `<option ${m.draft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-      <div class="wb-row2"><div class="wb-field"><label>Icon</label><div class="wb-emoji-pick">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" data-wb-pick-icon="${icon}"><i class="ti ${icon}"></i></button>`).join('')}</div></div>
-      <div class="wb-field"><label>Color</label><div class="wb-swatches">${WB_PALETTE.map((color) => `<button class="wb-swatch ${color === m.draft.color ? 'sel' : ''}" data-wb-pick-color="${color}" style="background:${color}"></button>`).join('')}</div></div></div>`,
+      <div class="wb-field"><label>Icon</label>
+        <div class="wb-search-box wb-icon-search"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-icon-search value="${h(m.iconQuery || '')}" placeholder="Search icons…"></div>
+        <div class="wb-emoji-pick wb-icon-grid" id="wbAppIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" data-wb-pick-icon="${icon}" data-icon-name="${h(icon.replace('ti-', '').replace(/-/g, ' '))}"><i class="ti ${icon}"></i></button>`).join('')}</div>
+      </div>
+      <div class="wb-field"><label>Color</label>${wbColorSwatches(m.draft.color)}</div>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-plus"></i>Create app</button>`);
   }
   if (m.kind === 'field') {
@@ -11795,6 +12115,17 @@ function mountWorkspaceBuilder() {
     bind('[data-toggle-auto]', (el) => { const { app } = wbFind(companyId, workspaceId, appId); const au = app.automations.find((x) => x.id === el.dataset.toggleAuto); if (au) { au.enabled = el.checked; wbSave(companyId); render(); } }, 'onchange');
     document.querySelectorAll('#wbSetIcons .wb-emoji-opt').forEach((b) => { b.onclick = () => { document.querySelectorAll('#wbSetIcons .wb-emoji-opt').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); }; });
     document.querySelectorAll('#wbSetColors .wb-swatch').forEach((b) => { b.onclick = () => { document.querySelectorAll('#wbSetColors .wb-swatch').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); }; });
+    // The custom swatch carries data-color (read on save); update it and reselect
+    // when a color is chosen from the native picker.
+    const setCustom = document.querySelector('#wbSetCustomColor');
+    if (setCustom) setCustom.onchange = () => {
+      const label = setCustom.closest('.wb-swatch');
+      label.dataset.color = setCustom.value;
+      label.style.background = setCustom.value;
+      document.querySelectorAll('#wbSetColors .wb-swatch').forEach((x) => x.classList.remove('sel'));
+      label.classList.add('sel');
+      const ic = label.querySelector('i'); if (ic) ic.className = 'ti ti-check';
+    };
     wbMountDnD(companyId, workspaceId, appId);
   }
   if (state.builderModal) wbMountModal();
@@ -11837,6 +12168,10 @@ function wbMountModal() {
   if (!m || !overlay) return;
   overlay.querySelectorAll('[data-wb-pick-icon]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); m.draft.icon = b.dataset.wbPickIcon; render(); }; });
   overlay.querySelectorAll('[data-wb-pick-color]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); m.draft.color = b.dataset.wbPickColor; render(); }; });
+  const customColor = overlay.querySelector('[data-wb-custom-color]');
+  // Commit on change (fires when the native picker closes) so mid-drag re-renders
+  // don't tear down the open color popup.
+  if (customColor) customColor.onchange = () => { wbCollectModalDraft(); m.draft.color = customColor.value; render(); };
   overlay.querySelectorAll('[data-wb-toggle-member]').forEach((b) => { b.onclick = () => {
     const id = b.dataset.wbToggleMember;
     if (m.kind === 'members') { const ws = wbFind(m.companyId, m.workspaceId).workspace; ws.members = ws.members.includes(id) ? ws.members.filter((x) => x !== id) : [...ws.members, id]; wbSave(m.companyId); render(); }
@@ -11872,6 +12207,15 @@ function wbMountModal() {
     const q = libSearch.value.trim().toLowerCase();
     overlay.querySelectorAll('#wbLibGrid .wb-lib-card').forEach((card) => { card.hidden = !!q && !card.textContent.toLowerCase().includes(q); });
   };
+  const iconSearch = overlay.querySelector('[data-wb-icon-search]');
+  if (iconSearch) {
+    const filterIcons = (val) => {
+      const q = (val || '').trim().toLowerCase();
+      overlay.querySelectorAll('#wbAppIcons [data-wb-pick-icon]').forEach((b) => { b.hidden = !!q && !(b.dataset.iconName || '').includes(q); });
+    };
+    iconSearch.oninput = () => { m.iconQuery = iconSearch.value; filterIcons(iconSearch.value); };
+    filterIcons(m.iconQuery);
+  }
   // Item detail modal: view/edit toggle, file previews, and the comment box work
   // in both modes; the field-input wiring only runs when actually editing.
   if (m.kind === 'item') {
@@ -15606,14 +15950,15 @@ function renderCalendarPage(route, companyId) {
 function renderCalendarMonth(companyId, items) {
   const days = calendarMonthDays(state.calendarCursorDate);
   const currentMonth = new Date(`${state.calendarCursorDate}T00:00:00`).getMonth();
+  const canManage = can('calendar.manage', companyId);
   return `
     <div class="calendar-grid calendar-month-grid">
       ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => `<div class="calendar-weekday">${day}</div>`).join('')}
       ${days.map((day) => {
         const dayItems = calendarItemsForDate(items, day.key);
         return `
-          <div class="calendar-day ${day.month === currentMonth ? '' : 'muted'} ${day.key === isoDate(0) ? 'today' : ''}">
-            <div class="calendar-day-head"><b>${day.label}</b><span>${dayItems.length || ''}</span></div>
+          <div class="calendar-day ${day.month === currentMonth ? '' : 'muted'} ${day.key === isoDate(0) ? 'today' : ''} ${canManage ? 'is-addable' : ''}" ${canManage ? `data-action="calendar-add-event" data-date="${h(day.key)}" title="Add event on ${h(day.key)}"` : ''}>
+            <div class="calendar-day-head"><b>${day.label}</b><span>${dayItems.length || ''}</span>${canManage ? `<button class="calendar-add-btn" type="button" data-action="calendar-add-event" data-date="${h(day.key)}" title="Add event" aria-label="Add event on ${h(day.key)}"><i class="ti ti-plus"></i></button>` : ''}</div>
             ${dayItems.slice(0, 3).map(renderCalendarPill).join('')}
             ${dayItems.length > 3 ? `<small class="calendar-more">+${dayItems.length - 3} more</small>` : ''}
           </div>
@@ -15625,13 +15970,14 @@ function renderCalendarMonth(companyId, items) {
 
 function renderCalendarWeek(companyId, items) {
   const days = calendarWeekDays(state.calendarCursorDate);
+  const canManage = can('calendar.manage', companyId);
   return `
     <div class="calendar-grid calendar-week-grid">
       ${days.map((day) => {
         const dayItems = calendarItemsForDate(items, day.key);
         return `
-          <div class="calendar-day ${day.key === isoDate(0) ? 'today' : ''}">
-            <div class="calendar-day-head"><b>${h(day.name)}</b><span>${h(day.shortDate)}</span></div>
+          <div class="calendar-day ${day.key === isoDate(0) ? 'today' : ''} ${canManage ? 'is-addable' : ''}" ${canManage ? `data-action="calendar-add-event" data-date="${h(day.key)}" title="Add event on ${h(day.key)}"` : ''}>
+            <div class="calendar-day-head"><b>${h(day.name)}</b><span>${h(day.shortDate)}</span>${canManage ? `<button class="calendar-add-btn" type="button" data-action="calendar-add-event" data-date="${h(day.key)}" title="Add event" aria-label="Add event on ${h(day.key)}"><i class="ti ti-plus"></i></button>` : ''}</div>
             ${dayItems.map(renderCalendarPill).join('') || '<small class="calendar-empty-day">Open</small>'}
           </div>
         `;
@@ -16283,6 +16629,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'workspace-icon') return renderWorkspaceIconModal(activeCompanyId());
   if (state.modal === 'dashboard-widget-library') return renderDashboardWidgetLibraryModal(activeCompanyId());
   if (state.modal === 'dashboard-view-manager') return renderDashboardViewManagerModal(activeCompanyId());
+  if (state.modal === 'dashboard-app-widget-config') return renderDashboardAppWidgetConfigModal(activeCompanyId());
   if (state.modal === 'dashboard-activity') return renderDashboardActivityModal(activeCompanyId());
   if (state.modal === 'workday-next-step') return renderWorkdayNextStepModal();
   if (state.modal === 'file-upload') return renderFileUploadModal();
@@ -17460,7 +17807,7 @@ function renderCalendarEventDetailModal(companyId) {
 }
 
 function renderCalendarEventFormModal(companyId, event) {
-  const next = event || blankCalendarEvent(companyId);
+  const next = event || blankCalendarEvent(companyId, state.calendarPrefillDate || '');
   const jobValue = next.linked_type === 'job' ? next.linked_id : '';
   return renderModalShell('Calendar', event ? 'Edit event' : 'New event', `
     <form class="calendar-form" data-calendar-event-form>
@@ -17931,6 +18278,36 @@ function handleAction(event, node) {
     const id = node.dataset.widgetId || '';
     const role = state.dashboardRole || 'exec';
     saveDashboardWidgetLayout(activeCompanyId(), role, dashboardWidgetLayout(activeCompanyId(), role).filter((item) => item !== id));
+    render();
+    return;
+  }
+  if (action === 'dashboard-config-widget') {
+    event.preventDefault();
+    const id = node.dataset.widgetId || '';
+    state.dashboardConfigMulti = id.startsWith('app-multi:');
+    state.dashboardConfigAppId = id.replace(/^app-multi:/, '').replace(/^app:/, '');
+    state.modal = 'dashboard-app-widget-config';
+    render();
+    return;
+  }
+  if (action === 'dashboard-app-widget-report') {
+    event.preventDefault();
+    const appId = node.dataset.widgetApp || state.dashboardConfigAppId || '';
+    const report = node.dataset.report || 'auto';
+    if (appId) saveDashboardAppWidgetConfig(activeCompanyId(), appId, { report });
+    render();
+    return;
+  }
+  if (action === 'dashboard-app-widget-field') {
+    event.preventDefault();
+    const appId = node.dataset.widgetApp || state.dashboardConfigAppId || '';
+    const fieldId = node.dataset.field || '';
+    const found = appId ? dashboardFindApp(activeCompanyId(), appId) : null;
+    if (found && fieldId) {
+      const current = dashboardAppResolvedMultiFields(found.app, dashboardAppMultiConfig(activeCompanyId(), appId));
+      const next = current.includes(fieldId) ? current.filter((x) => x !== fieldId) : [...current, fieldId];
+      saveDashboardAppMultiConfig(activeCompanyId(), appId, { fields: next });
+    }
     render();
     return;
   }
@@ -18692,6 +19069,19 @@ function handleAction(event, node) {
       return;
     }
     state.selectedCalendarEventId = '';
+    state.calendarPrefillDate = '';
+    state.modal = 'calendar-event-new';
+    render();
+    return;
+  }
+  if (action === 'calendar-add-event') {
+    event.preventDefault();
+    if (!can('calendar.manage', activeCompanyId())) {
+      showToast('Your role can view the calendar but cannot create company events.', 'local', 'Calendar');
+      return;
+    }
+    state.selectedCalendarEventId = '';
+    state.calendarPrefillDate = node.dataset.date || '';
     state.modal = 'calendar-event-new';
     render();
     return;
@@ -28861,9 +29251,16 @@ function blankFinanceVendor(companyId = activeCompanyId()) {
   });
 }
 
-function blankCalendarEvent(companyId = activeCompanyId()) {
-  const start = new Date();
-  start.setHours(start.getHours() + 1, 0, 0, 0);
+function blankCalendarEvent(companyId = activeCompanyId(), prefillDate = '') {
+  let start;
+  if (prefillDate) {
+    // Clicked a calendar date: default to a 9–10am slot on that day.
+    start = new Date(`${prefillDate}T09:00:00`);
+    if (Number.isNaN(start.getTime())) { start = new Date(); start.setHours(start.getHours() + 1, 0, 0, 0); }
+  } else {
+    start = new Date();
+    start.setHours(start.getHours() + 1, 0, 0, 0);
+  }
   const end = new Date(start);
   end.setHours(start.getHours() + 1);
   return normalizeCalendarEvent({
