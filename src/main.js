@@ -3172,13 +3172,19 @@ async function loadSupabaseData() {
   if (!workspaceBackupsResult.error) state.workspaceBackups = (workspaceBackupsResult.data || []).map(normalizeWorkspaceBackup);
   if (!recycleBinResult.error) state.recycleBinItems = (recycleBinResult.data || []).map(normalizeRecycleBinItem);
   if (!workspaceBuilderResult.error) {
+    // Don't let a background refresh clobber optimistic edits whose save is still
+    // in flight (or landed in the last few seconds) — keep the local doc for those.
+    const holdLocalWb = (state.wbPendingSaves || 0) > 0 || (Date.now() - (state.wbLastLocalEditAt || 0) < 4000);
+    const prevDocs = state.workspaceBuilderDocs || {};
     state.workspaceBuilderDocs = {};
     state.workspaceBuilderLive = {};
     (workspaceBuilderResult.data || []).forEach((row) => {
       const companyId = canonicalCompanyId(row.company_id);
-      state.workspaceBuilderDocs[companyId] = normalizeWorkspaceBuilderDoc(row.doc);
+      state.workspaceBuilderDocs[companyId] = holdLocalWb && prevDocs[companyId] ? prevDocs[companyId] : normalizeWorkspaceBuilderDoc(row.doc);
       state.workspaceBuilderLive[companyId] = true;
     });
+    // Preserve any local-only docs (unsaved companies) that the server didn't return.
+    if (holdLocalWb) Object.keys(prevDocs).forEach((cid) => { if (!state.workspaceBuilderDocs[cid]) state.workspaceBuilderDocs[cid] = prevDocs[cid]; });
   }
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
 
@@ -10041,6 +10047,7 @@ function normalizeWorkspaceBuilderDoc(doc) {
         icon: app.icon || WB_APP_ICONS[0],
         color: app.color || ws.color || WB_PALETTE[1],
         shared: !!app.shared,
+        ...(Array.isArray(app.cardFields) ? { cardFields: app.cardFields.filter((id) => typeof id === 'string') } : {}),
         fields: Array.isArray(app.fields) ? app.fields.map((field) => ({ id: field.id || wbUid(), label: field.label || 'Field', type: WB_FIELD_TYPES[field.type] ? field.type : 'text', required: !!field.required, hidden: !!field.hidden, config: field.config && typeof field.config === 'object' ? field.config : {} })) : [],
         items: Array.isArray(app.items) ? app.items.map((item) => { const createdAt = item.createdAt || new Date().toISOString().slice(0, 10); return { id: item.id || wbUid(), values: item.values && typeof item.values === 'object' ? item.values : {}, createdAt, createdBy: item.createdBy || '', updatedAt: item.updatedAt || createdAt, lastActivityAt: item.lastActivityAt || item.updatedAt || createdAt, comments: Array.isArray(item.comments) ? item.comments : [] }; }) : [],
         automations: Array.isArray(app.automations) ? app.automations.map((auto) => ({ id: auto.id || wbUid(), name: auto.name || 'Automation', enabled: auto.enabled !== false, trigger: auto.trigger && typeof auto.trigger === 'object' ? auto.trigger : { event: 'created' }, actions: Array.isArray(auto.actions) ? auto.actions : [] })) : [],
@@ -10097,9 +10104,10 @@ const WB_FIELD_TYPES = {
   location: { label: 'Location', icon: 'ti-map-pin', color: '#dc2626', desc: 'Address or place' },
   duration: { label: 'Duration', icon: 'ti-clock-hour-4', color: '#0d9488', desc: 'Length of time (hrs / mins)' },
   progress: { label: 'Progress', icon: 'ti-progress', color: '#7c3aed', desc: 'Percent complete (0–100%)' },
+  checklist: { label: 'Checklist', icon: 'ti-list-check', color: '#16a34a', desc: 'Checkable steps with live progress' },
   image: { label: 'Image', icon: 'ti-photo', color: '#0891b2', desc: 'Circular picture, like an avatar' },
 };
-const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'date', 'category', 'status', 'user', 'relationship', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'checkbox'];
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'user', 'relationship', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'checkbox'];
 // Comparison operators for numeric (number/money) automation triggers:
 // [operator, dropdown label, symbol for the human-readable rule summary].
 const WB_TRIG_OPS = [['==', 'equals', '='], ['!=', 'not equal', '≠'], ['>', 'greater than', '>'], ['<', 'less than', '<'], ['>=', 'at least', '≥'], ['<=', 'at most', '≤']];
@@ -10160,8 +10168,17 @@ async function saveWorkspaceBuilderDoc(companyId) {
   if (!isReadOnlyDemo()) writeJson(workspaceBuilderStorageKey(companyId), doc);
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
-    const { error } = await client.from('workspace_builder_state').upsert({ company_id: key, doc, updated_by: activeSession()?.profile?.id || null });
-    if (error) showToast(error.message || 'Workspace save failed.', 'local', 'Workspaces');
+    // Mark this doc as being written so a background realtime refresh can't
+    // overwrite our in-memory edits with a not-yet-committed server copy.
+    state.wbPendingSaves = (state.wbPendingSaves || 0) + 1;
+    state.wbLastLocalEditAt = Date.now();
+    try {
+      const { error } = await client.from('workspace_builder_state').upsert({ company_id: key, doc, updated_by: activeSession()?.profile?.id || null });
+      if (error) showToast(error.message || 'Workspace save failed.', 'local', 'Workspaces');
+    } finally {
+      state.wbPendingSaves = Math.max(0, (state.wbPendingSaves || 1) - 1);
+      state.wbLastLocalEditAt = Date.now();
+    }
   }
 }
 function wbFind(companyId, workspaceId, appId = '') {
@@ -10279,15 +10296,111 @@ function wbViewApp(route, companyId, workspace, app) {
       <a class="btn" href="${appHref(companyPath('workspaces', {}, companyId))}" data-router><i class="ti ti-arrow-left"></i>Workspaces</a>
       ${headBtn}
     </div>
+    ${wbAppSwitcher(companyId, workspace, app)}
     <div class="wb-tabs">
       ${tabs.map((item) => `<a class="wb-tab ${tab === item ? 'active' : ''}" href="${tabPath(item)}" data-router>${tabLabel[item]}</a>`).join('')}
     </div>
     ${body}`;
 }
 
-function wbItemTitle(app, item) {
-  const field = app.fields.find((x) => ['text', 'email'].includes(x.type)) || app.fields[0];
-  return field ? (item.values[field.id] || 'Untitled') : 'Untitled';
+// A compact icon-only strip of the workspace's other apps, so you can jump
+// straight to another app without going back to the Workspaces menu.
+function wbAppSwitcher(companyId, workspace, app) {
+  const apps = (workspace && workspace.apps) || [];
+  if (apps.length < 2 && !can('workspaces.manage', companyId)) return '';
+  const btns = apps.map((a) => {
+    const active = a.id === app.id;
+    const href = appHref(companyPath('workspaces', { app_id: a.id, tab: 'items' }, companyId));
+    return `<a class="wb-appswitch-btn ${active ? 'active' : ''}" href="${href}" data-router title="${h(a.name)}" aria-label="${h(a.name)}" aria-current="${active ? 'page' : 'false'}"><span class="wb-appswitch-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}"></i></span></a>`;
+  }).join('');
+  const addBtn = can('workspaces.manage', companyId)
+    ? `<button class="wb-appswitch-add" type="button" data-new-app title="Add app" aria-label="Add app"><i class="ti ti-plus"></i></button>`
+    : '';
+  return `<div class="wb-appswitch" role="tablist" aria-label="Switch app">${btns}${addBtn}</div>`;
+}
+// Locate the workspace + company that own an app (apps live inside company docs)
+// so a title can resolve member names, linked records, etc.
+function wbLocateApp(app) {
+  const docs = state.workspaceBuilderDocs || {};
+  for (const companyId of Object.keys(docs)) {
+    const doc = docs[companyId];
+    for (const workspace of (doc?.workspaces || [])) {
+      if ((workspace.apps || []).some((a) => a.id === app.id)) return { companyId, workspace };
+    }
+  }
+  return { companyId: activeCompanyId(), workspace: null };
+}
+// A flat (non-recursive) name for an item — the first field, in order, that
+// yields a plain label. Resolves member names, dropdown labels, etc.; only
+// relationship links are skipped (to avoid title recursion) so a raw record id
+// can never leak. Kept consistent with wbItemTitle for everything but links.
+function wbSimpleTitle(app, item) {
+  const fields = app.fields || [];
+  const values = item.values || {};
+  for (const x of fields) {
+    const raw = values[x.id];
+    if (raw == null || raw === '' || (Array.isArray(raw) && !raw.length)) continue;
+    switch (x.type) {
+      case 'text': case 'email': case 'phone': case 'location': case 'number': case 'date':
+        if (typeof raw !== 'object') return String(raw).trim();
+        break;
+      case 'money': return `${x.config.currency || '$'}${raw}`;
+      case 'status': case 'category': { const o = (x.config.options || []).find((o2) => o2.id === raw); if (o) return String(o.label); break; }
+      case 'user': { const loc = wbLocateApp(app); const m = wbMemberById(loc.companyId, raw); if (m && m.name) return String(m.name); break; }
+      default: break; // relationship / file / image / checklist / progress / checkbox / calculation
+    }
+  }
+  return '';
+}
+// A field's value rendered as a human-readable name, or '' when the field can't
+// name a record (empty, or a checklist/progress/toggle/file/calculation). For a
+// relationship field it resolves through the LINKED field's own display setting
+// (so "Assign to" reads like it does everywhere else), guarded by `depth` so a
+// cycle of linked apps can't recurse forever.
+function wbNameValue(app, field, item, depth = 0) {
+  const raw = item && item.values ? item.values[field.id] : undefined;
+  if (raw === undefined || raw === null || raw === '' || (Array.isArray(raw) && !raw.length)) return '';
+  switch (field.type) {
+    case 'checklist': case 'progress': case 'checkbox': case 'file': case 'image': case 'duration': case 'calculation': return '';
+    case 'category': case 'status': { const o = (field.config.options || []).find((x) => x.id === raw); return o ? String(o.label) : ''; }
+    case 'user': { const loc = wbLocateApp(app); const m = wbMemberById(loc.companyId, raw); return m ? String(m.name) : ''; }
+    case 'relationship': {
+      const loc = wbLocateApp(app);
+      const ta = loc.workspace && loc.workspace.apps.find((x) => x.id === field.config.targetApp);
+      if (!ta) return '';
+      const ids = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(raw) ? raw : [raw]);
+      return ids.map((id) => {
+        const it = ta.items.find((i) => i.id === id);
+        if (!it) return '';
+        // Shallow: honor the linked field's own Show-field. Deep: flat name only.
+        return depth >= 2 ? wbSimpleTitle(ta, it) : wbRelLabel(ta, it, field.config.displayField, depth + 1);
+      }).filter(Boolean).join(', ');
+    }
+    case 'money': return `${field.config.currency || '$'}${raw}`;
+    case 'number': return `${raw}${field.config.unit ? ` ${field.config.unit}` : ''}`;
+    default: return (typeof raw === 'object') ? '' : String(raw).trim();
+  }
+}
+// The field that names an item — the first field with a readable value, so a card
+// is titled by its first field rather than an internal id.
+function wbTitleField(app, item) {
+  const fields = app.fields || [];
+  for (const f of fields) { if (wbNameValue(app, f, item)) return f; }
+  return fields[0] || null;
+}
+function wbItemTitle(app, item, depth = 0) {
+  const fields = app.fields || [];
+  for (const f of fields) { const v = wbNameValue(app, f, item, depth); if (v) return v; }
+  return 'Untitled';
+}
+// Label for a linked (relationship) item: the chosen display field's value if
+// the relationship field specifies one, otherwise the linked item's name.
+function wbRelLabel(targetApp, item, displayFieldId, depth = 0) {
+  if (displayFieldId) {
+    const f = (targetApp.fields || []).find((x) => x.id === displayFieldId);
+    if (f) { const v = wbNameValue(targetApp, f, item, depth); if (v) return v; }
+  }
+  return wbItemTitle(targetApp, item, depth);
 }
 // Raw numeric result of a calculation field's formula, or null (no/blank result)
 // or NaN (invalid formula / eval error). Used both for display and for numeric
@@ -10296,8 +10409,11 @@ function wbCalcRaw(app, field, values) {
   const formula = field.config.formula;
   if (!formula) return null;
   const expr = formula.replace(/\{([^}]+)\}/g, (match, name) => {
-    const target = app.fields.find((x) => x.label.toLowerCase() === name.trim().toLowerCase() && ['number', 'money', 'calculation', 'duration', 'progress'].includes(x.type));
-    const value = target ? Number(values[target.id] || 0) : 0;
+    const target = app.fields.find((x) => x.label.toLowerCase() === name.trim().toLowerCase() && ['number', 'money', 'calculation', 'duration', 'progress', 'checklist'].includes(x.type));
+    if (!target) return 0;
+    // A checklist contributes its completion percentage (0–100) so it can drive a
+    // Progress or Calculation field — e.g. {Steps} straight into a progress %.
+    const value = target.type === 'checklist' ? wbChecklistStats(values[target.id], target).pct : Number(values[target.id] || 0);
     return Number.isNaN(value) ? 0 : value;
   });
   if (!/^[-+*/(). 0-9]+$/.test(expr)) return NaN;
@@ -10308,6 +10424,85 @@ function wbComputeCalc(app, field, values) {
   const r = wbCalcRaw(app, field, values);
   if (Number.isNaN(r)) return '⚠';
   return r === null ? '—' : r.toLocaleString();
+}
+// The percentage a Progress field should auto-fill to from its configured source,
+// or null when it's Manual. Source forms:
+//   '<checklistFieldId>'          — a checklist in this app
+//   'link:<relFieldId>:<fieldId>' — a progress/checklist field on the linked record(s)
+// For a multi-link relationship the linked records' percentages are averaged.
+function wbProgressFillPct(app, field, values, workspace) {
+  const src = field.config && field.config.source;
+  if (!src) return null;
+  values = values || {};
+  if (String(src).startsWith('link:')) {
+    const [, relId, linkedFieldId] = String(src).split(':');
+    const relField = (app.fields || []).find((f) => f.id === relId && f.type === 'relationship');
+    if (!relField) return null;
+    const ws = workspace || wbLocateApp(app).workspace;
+    const ta = ws && (ws.apps || []).find((a) => a.id === relField.config.targetApp);
+    if (!ta) return null;
+    const linkedField = (ta.fields || []).find((f) => f.id === linkedFieldId);
+    if (!linkedField) return null;
+    const raw = relField.config.fixedItem || values[relId];
+    const ids = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    const pcts = ids.map((id) => {
+      const it = ta.items.find((x) => x.id === id);
+      if (!it) return null;
+      if (linkedField.type === 'checklist') return wbChecklistStats(it.values[linkedFieldId], linkedField).pct;
+      if (linkedField.type === 'progress') return Math.max(0, Math.min(100, Math.round(Number(it.values[linkedFieldId]) || 0)));
+      return null;
+    }).filter((v) => v != null);
+    if (!pcts.length) return 0;
+    return Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+  }
+  const cl = (app.fields || []).find((f) => f.id === src && f.type === 'checklist');
+  if (cl) return wbChecklistStats(values[src], cl).pct;
+  return null;
+}
+// --- Progress field appearance --------------------------------------------
+const WB_PROGRESS_DISPLAYS = [['bar', 'Linear bar'], ['ring', 'Circular ring'], ['segments', 'Segmented bar']];
+const WB_PROGRESS_STOPS_DEFAULT = [
+  { upto: 0, color: '#ffffff' },
+  { upto: 20, color: '#dc2626' },
+  { upto: 40, color: '#eab308' },
+  { upto: 80, color: '#e0552d' },
+  { upto: 100, color: '#16a34a' },
+];
+// The fill color for a progress value — a single color, or the first color-stop
+// whose threshold covers the percentage (lowest matching stop wins).
+function wbProgressColor(field, pct) {
+  const cfg = field.config || {};
+  const base = cfg.color || WB_FIELD_TYPES.progress.color;
+  if (cfg.colorMode === 'scale') {
+    const stops = (Array.isArray(cfg.stops) && cfg.stops.length ? cfg.stops : WB_PROGRESS_STOPS_DEFAULT)
+      .filter((s) => s && s.color).slice().sort((a, b) => Number(a.upto) - Number(b.upto));
+    if (!stops.length) return base;
+    const hit = stops.find((s) => pct <= Number(s.upto));
+    return (hit || stops[stops.length - 1]).color;
+  }
+  return base;
+}
+function wbProgressDisplay(field) {
+  const d = field.config && field.config.display;
+  return WB_PROGRESS_DISPLAYS.some(([v]) => v === d) ? d : 'bar';
+}
+// Read-only progress visual in the chosen style (bar / ring / segments).
+function wbProgressDisplayHtml(field, pct) {
+  const p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+  const color = wbProgressColor(field, p);
+  const display = wbProgressDisplay(field);
+  if (display === 'ring') {
+    const r = 15; const circ = 2 * Math.PI * r; const off = circ * (1 - p / 100);
+    return `<div class="wb-prog wb-prog-ring" title="${p}%"><svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><circle class="wb-ring-bg" cx="20" cy="20" r="${r}" fill="none" stroke-width="4"></circle><circle class="wb-ring-fg" cx="20" cy="20" r="${r}" fill="none" stroke="${h(color)}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 20 20)"></circle></svg><span class="wb-prog-num wb-ring-num">${p}%</span></div>`;
+  }
+  if (display === 'segments') {
+    const segs = 10; const filled = Math.round(p / 10);
+    return `<div class="wb-prog wb-prog-seg" title="${p}%"><span class="wb-seg-track">${Array.from({ length: segs }, (_, i) => `<span class="wb-seg${i < filled ? ' on' : ''}"${i < filled ? ` style="background:${h(color)}"` : ''}></span>`).join('')}</span><span class="wb-prog-num">${p}%</span></div>`;
+  }
+  return `<div class="wb-prog" title="${p}%"><span class="wb-prog-track"><span class="wb-prog-fill" style="width:${p}%;background:${h(color)}"></span></span><span class="wb-prog-num">${p}%</span></div>`;
+}
+function wbProgStopRow(s) {
+  return `<div class="wb-stop-item"><span class="wb-stop-lead">≤</span><input type="number" min="0" max="100" class="wb-input wb-stop-upto" value="${h(String(s.upto ?? 100))}" style="max-width:84px"><span class="wb-sub">%</span><input type="color" class="wb-stop-color" value="${h(s.color || '#16a34a')}"><button class="wb-icon-btn danger" data-wb-del-stop type="button" aria-label="Remove stop"><i class="ti ti-x"></i></button></div>`;
 }
 function wbFmtVal(ctx, field, value) {
   // Checkbox renders as an inline toggle (even when unset) so managers can flip
@@ -10324,7 +10519,14 @@ function wbFmtVal(ctx, field, value) {
   const meta = WB_FIELD_TYPES[field.type];
   if (field.type === 'calculation') return `<b style="color:${meta.color}">${h(wbComputeCalc(ctx.app, field, ctx.values || {}))}</b>`;
   // Progress always shows its bar (0% included), so it renders before the empty guard.
-  if (field.type === 'progress') { const p = Math.max(0, Math.min(100, Math.round(Number(value) || 0))); return `<div class="wb-prog" title="${p}%"><span class="wb-prog-track"><span class="wb-prog-fill" style="width:${p}%;background:${meta.color}"></span></span><span class="wb-prog-num">${p}%</span></div>`; }
+  if (field.type === 'progress') {
+    const fill = ctx.app ? wbProgressFillPct(ctx.app, field, ctx.values || {}, ctx.workspace) : null;
+    const p = fill != null ? fill : Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+    return wbProgressDisplayHtml(field, p);
+  }
+  // Checklist shows a compact progress bar with the checked ratio (renders before
+  // the empty guard so an all-unchecked list still shows 0/N rather than a dash).
+  if (field.type === 'checklist') { const s = wbChecklistStats(value, field); if (!s.total) return '<span class="wb-cell-empty">—</span>'; return `<div class="wb-prog wb-cl-mini" title="${s.done}/${s.total} done"><span class="wb-prog-track"><span class="wb-prog-fill" style="width:${s.pct}%;background:${meta.color}"></span></span><span class="wb-prog-num">${s.done}/${s.total}</span></div>`; }
   if (value === undefined || value === null || value === '' || (Array.isArray(value) && !value.length)) return '<span class="wb-cell-empty">—</span>';
   switch (field.type) {
     case 'status': { const o = (field.config.options || []).find((x) => x.id === value); return o ? `<span class="wb-status-pill" style="background:${o.color}1f;color:${o.color}"><span class="wb-dot" style="background:${o.color}"></span>${h(o.label)}</span>` : '<span class="wb-cell-empty">—</span>'; }
@@ -10336,7 +10538,7 @@ function wbFmtVal(ctx, field, value) {
     case 'phone': return h(formatPhoneNumber(value));
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
     case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; const kind = fileTypeKind({ file_name: fv.name }); return fv.url ? `<button type="button" class="wb-file-icon-btn" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="${h(fv.name)}" aria-label="Open ${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></button>` : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`; }
-    case 'relationship': { const ta = ctx.workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return h(value); const arr = Array.isArray(value) ? value : [value]; return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbItemTitle(ta, it) : '?')}</span>`; }).join(' '); }
+    case 'relationship': { const ta = ctx.workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return h(value); const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbRelLabel(ta, it, field.config.displayField) : '?')}</span>`; }).join(' '); }
     case 'location': return `<a class="wb-loc" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(value))}" target="_blank" rel="noreferrer" title="Open in Google Maps"><i class="ti ti-map-pin"></i>${h(value)}</a>`;
     case 'duration': return h(wbFmtDuration(value));
     case 'image': { const fv = wbFileValue(value); return fv && fv.url ? `<img class="wb-img-avatar" src="${h(fv.url)}" alt="${h(fv.name || 'image')}" loading="lazy">` : '<span class="wb-cell-empty">—</span>'; }
@@ -10360,7 +10562,7 @@ const WB_SORT_PRESETS = [
 ];
 function wbItemsUI(appId) {
   state.wbUI = state.wbUI || {};
-  return state.wbUI[appId] || (state.wbUI[appId] = { q: '', sort: null, filters: [], sel: new Set(), view: 'table', order: 'created_desc' });
+  return state.wbUI[appId] || (state.wbUI[appId] = { q: '', sort: null, filters: [], sel: new Set(), view: 'table', order: 'created_desc', expanded: new Set(), cardConfigOpen: false });
 }
 // Preset sorts operate on item metadata (timestamps / title), independent of the
 // column-header field sort. createdAt/updatedAt/lastActivityAt fall back to each
@@ -10403,16 +10605,20 @@ function wbFilterOps(kind) {
 // Plain-text (no HTML) rendering of a value, used for search and text sort/filter.
 function wbPlainVal(companyId, workspace, app, field, value, values) {
   if (field.type === 'calculation') { const r = wbCalcRaw(app, field, values || {}); return (r === null || Number.isNaN(r)) ? '' : String(r); }
+  // A linked/checklist-driven progress derives its value from its source even
+  // when it has no stored value, so compute it before the empty-value guard.
+  if (field.type === 'progress' && field.config && field.config.source) { const pct = wbProgressFillPct(app, field, values || {}, workspace); if (pct != null) return `${pct}%`; }
   if (value === undefined || value === null || value === '') return field.type === 'checkbox' ? 'no' : '';
   switch (field.type) {
     case 'status': case 'category': { const o = (field.config.options || []).find((x) => x.id === value); return o ? o.label : String(value); }
     case 'user': { const m = wbMemberById(companyId, value); return m ? m.name : ''; }
-    case 'relationship': { const ta = workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return ''; const arr = Array.isArray(value) ? value : [value]; return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return it ? wbItemTitle(ta, it) : ''; }).join(' '); }
+    case 'relationship': { const ta = workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return ''; const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return it ? wbRelLabel(ta, it, field.config.displayField) : ''; }).join(' '); }
     case 'file': case 'image': { const fv = wbFileValue(value); return fv ? (fv.name || '') : ''; }
     case 'money': return `${field.config.currency || '$'}${value}`;
     case 'number': return `${value}${field.config.unit ? ` ${field.config.unit}` : ''}`;
     case 'duration': return wbFmtDuration(value);
-    case 'progress': return `${value}%`;
+    case 'progress': { const src = field.config && field.config.source ? app.fields.find((x) => x.id === field.config.source && x.type === 'checklist') : null; return src ? `${wbChecklistStats((values || {})[src.id], src).pct}%` : `${value}%`; }
+    case 'checklist': { const s = wbChecklistStats(value, field); return s.total ? `${s.done}/${s.total} (${s.pct}%): ${s.items.map((i) => `${i.done ? '[x]' : '[ ]'} ${i.label}`).join('; ')}` : ''; }
     case 'checkbox': return (value === true || value === 'true' || value === 1) ? 'yes' : 'no';
     default: return String(value);
   }
@@ -10508,11 +10714,12 @@ function wbFilterRow(companyId, app, flt, i) {
   const valCtrl = needsValue ? wbFilterValueControl(companyId, app, field, kind, flt, i) : '';
   return `<div class="wb-filter-row">${fieldSel}${opSel}${valCtrl}<button class="wb-icon-btn danger" type="button" data-wb-del-filter data-idx="${i}" title="Remove filter"><i class="ti ti-x"></i></button></div>`;
 }
-function wbItemsToolbar(companyId, app, ui) {
+function wbItemsToolbar(companyId, app, ui, canManage = false) {
   const filterRows = ui.filters.map((flt, i) => wbFilterRow(companyId, app, flt, i)).join('');
   const colSort = ui.sort && ui.sort.fieldId;
   const viewSwitch = `<div class="wb-view-switch" role="group" aria-label="View">${WB_VIEW_MODES.map(([v, label, icon]) => `<button class="wb-view-btn ${ui.view === v ? 'active' : ''}" type="button" data-wb-set-view="${v}" title="${h(label)} view" aria-pressed="${ui.view === v}"><i class="ti ${icon}"></i><span>${h(label)}</span></button>`).join('')}</div>`;
   const sortSelect = `<label class="wb-sort-picker"><i class="ti ti-arrows-sort"></i><select class="wb-input" data-wb-sort-preset title="Sort records">${colSort ? '<option value="" selected>Custom (column)</option>' : ''}${WB_SORT_PRESETS.map(([k, label]) => `<option value="${k}" ${!colSort && ui.order === k ? 'selected' : ''}>${h(label)}</option>`).join('')}</select></label>`;
+  const cardConfigBtn = (ui.view === 'card' && canManage) ? `<button class="btn btn-sm ${ui.cardConfigOpen ? 'btn-primary' : ''}" type="button" data-wb-card-config><i class="ti ti-layout-cards"></i>Card fields</button>` : '';
   return `
     <div class="wb-items-toolbar">
       <div class="wb-search-box"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-search-input value="${h(ui.q || '')}" placeholder="Search ${h(app.name)}…"></div>
@@ -10520,7 +10727,9 @@ function wbItemsToolbar(companyId, app, ui) {
       ${viewSwitch}
       <button class="btn btn-sm" type="button" data-wb-add-filter><i class="ti ti-filter"></i>Add filter</button>
       ${ui.filters.length ? `<button class="btn btn-sm" type="button" data-wb-clear-filters><i class="ti ti-filter-off"></i>Clear filters</button>` : ''}
+      ${cardConfigBtn}
     </div>
+    ${ui.view === 'card' && canManage && ui.cardConfigOpen ? wbCardConfigPanel(app) : ''}
     ${ui.filters.length ? `<div class="wb-filter-rows">${filterRows}</div>` : ''}`;
 }
 function wbViewItems(companyId, workspace, app) {
@@ -10535,7 +10744,7 @@ function wbViewItems(companyId, workspace, app) {
   const cols = visibleCols.length ? visibleCols : app.fields;
   // Drop any selected ids that no longer exist (e.g. deleted since selection).
   if (ui.sel.size) { const live = new Set(app.items.map((i) => i.id)); ui.sel.forEach((id) => { if (!live.has(id)) ui.sel.delete(id); }); }
-  const toolbar = wbItemsToolbar(companyId, app, ui);
+  const toolbar = wbItemsToolbar(companyId, app, ui, canManage);
   // Filter, then sort. A column-header sort (ui.sort) wins; otherwise the toolbar
   // preset (ui.order) orders by created/edited/activity/title.
   let rows = ui.filters.length ? app.items.filter((it) => ui.filters.every((flt) => wbEvalFilter(companyId, workspace, app, it, flt))) : app.items.slice();
@@ -10746,15 +10955,67 @@ function wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectabl
   }).join('');
   return `<div class="wb-tbl-wrap"><table class="wb-table" id="wbItemsTable"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
+// The fields shown on cards: the app's saved card selection, or the visible
+// columns by default. Order always follows the app's field order.
+function wbCardFields(app, cols) {
+  if (Array.isArray(app.cardFields) && app.cardFields.length) {
+    const set = new Set(app.cardFields);
+    const picked = app.fields.filter((f) => set.has(f.id));
+    if (picked.length) return picked;
+  }
+  return cols;
+}
+// One card field row. Checklists expand to a checkable list, manual progress
+// bars are draggable, and Yes/No toggles flip inline — all without opening the
+// record. Everything else renders read-only via wbFmtVal.
+function wbCardFieldHtml(ctx, field, ui) {
+  const { app, item, canManage } = ctx;
+  const val = item.values[field.id];
+  if (field.type === 'checklist') {
+    const s = wbChecklistStats(val, field);
+    const meta = WB_FIELD_TYPES.checklist;
+    const key = `${item.id}:${field.id}`;
+    const open = ui.expanded && ui.expanded.has(key);
+    const summary = `<button type="button" class="wb-card-cl-summary" data-wb-card-expand="${h(key)}" aria-expanded="${open ? 'true' : 'false'}" title="${open ? 'Hide' : 'Show'} steps">
+      <span class="wb-prog wb-cl-mini"><span class="wb-prog-track"><span class="wb-prog-fill" style="width:${s.pct}%;background:${meta.color}"></span></span><span class="wb-prog-num">${s.done}/${s.total}</span></span>
+      <i class="ti ti-chevron-${open ? 'up' : 'down'} wb-cl-caret"></i>
+    </button>`;
+    let panel = '';
+    if (open) {
+      const list = s.items.map((it) => `<li class="wb-cl-item ${it.done ? 'done' : ''}">
+        <button type="button" class="wb-cl-check" ${canManage ? `data-wb-cl-card="toggle:${h(item.id)}:${h(field.id)}:${h(it.id)}"` : 'disabled'} role="checkbox" aria-checked="${it.done ? 'true' : 'false'}"><i class="ti ti-check"></i></button>
+        <span class="wb-cl-label">${h(it.label)}</span>
+        ${canManage ? `<button type="button" class="wb-cl-del" data-wb-cl-card="remove:${h(item.id)}:${h(field.id)}:${h(it.id)}" title="Remove step"><i class="ti ti-x"></i></button>` : ''}
+      </li>`).join('');
+      panel = `<div class="wb-card-cl-panel"><ul class="wb-cl-list">${list || '<li class="wb-cl-empty">No steps yet — open the record to add some.</li>'}</ul></div>`;
+    }
+    return `<div class="wb-ic-row"><span class="wb-ic-label">${h(field.label)}</span><span class="wb-ic-val">${summary}</span></div>${panel}`;
+  }
+  if (field.type === 'progress' && canManage && !(field.config && field.config.source)) {
+    const p = Math.max(0, Math.min(100, Math.round(Number(val) || 0)));
+    const pColor = wbProgressColor(field, p);
+    return `<div class="wb-ic-row"><span class="wb-ic-label">${h(field.label)}</span><span class="wb-ic-val wb-card-prog"><input type="range" min="0" max="100" value="${p}" data-wb-card-progress="${h(item.id)}:${h(field.id)}" title="Drag to set ${h(field.label)}" style="accent-color:${h(pColor)}"><span class="wb-prog-num" data-wb-card-prog-out>${p}%</span></span></div>`;
+  }
+  return `<div class="wb-ic-row"><span class="wb-ic-label">${h(field.label)}</span><span class="wb-ic-val">${wbFmtVal(ctx, field, val)}</span></div>`;
+}
+function wbCardConfigPanel(app) {
+  const selected = new Set(Array.isArray(app.cardFields) && app.cardFields.length ? app.cardFields : app.fields.filter((f) => !f.hidden).map((f) => f.id));
+  return `<div class="wb-card-config">
+    <div class="wb-card-config-head"><b>Show on cards</b><span class="wb-sub">Pick which fields appear on each card. Checklists, Yes/No toggles, and manual progress bars are editable right on the card.</span></div>
+    <div class="wb-card-config-grid">${app.fields.map((f) => `<label class="wb-card-config-opt"><input type="checkbox" data-wb-card-field="${h(f.id)}" ${selected.has(f.id) ? 'checked' : ''}><i class="ti ${h(WB_FIELD_TYPES[f.type]?.icon || 'ti-square')}"></i><span>${h(f.label)}</span></label>`).join('')}</div>
+  </div>`;
+}
 function wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canManage) {
-  const titleField = app.fields.find((f) => ['text', 'email'].includes(f.type)) || app.fields[0];
+  const cardFields = wbCardFields(app, cols);
   const cards = rows.map((item) => {
     const ctx = { companyId, workspace, app, values: item.values, item, canManage };
     const pill = wbItemBadgePill(app, item);
-    const fieldRows = cols.filter((f) => f.id !== titleField.id).slice(0, 6).map((field) => `<div class="wb-ic-row"><span class="wb-ic-label">${h(field.label)}</span><span class="wb-ic-val">${wbFmtVal(ctx, field, item.values[field.id])}</span></div>`).join('');
+    // Don't repeat the field used as the card's name in the body rows.
+    const titleField = wbTitleField(app, item);
+    const fieldRows = cardFields.filter((f) => f.id !== (titleField && titleField.id)).slice(0, 8).map((field) => wbCardFieldHtml(ctx, field, ui)).join('');
     const cCount = (item.comments || []).length;
     return `<div class="wb-item-card ${ui.sel.has(item.id) ? 'sel' : ''}" data-item="${h(item.id)}" data-search="${h(wbItemSearchAttr(companyId, workspace, app, cols, item))}">
-      <div class="wb-ic-head">${selectable ? wbItemCheckbox(item, ui, selectable) : ''}<b class="wb-ic-title">${h(wbItemTitle(app, item))}</b>${pill ? `<span class="wb-status-pill" style="background:${pill.color}1f;color:${pill.color}"><span class="wb-dot" style="background:${pill.color}"></span>${h(pill.label)}</span>` : ''}<div class="wb-spacer"></div>${wbItemActions(item, canManage)}</div>
+      <div class="wb-ic-head">${selectable ? wbItemCheckbox(item, ui, selectable) : ''}<div class="wb-ic-titlewrap"><b class="wb-ic-title">${h(wbItemTitle(app, item))}</b>${pill ? `<span class="wb-status-pill" style="background:${pill.color}1f;color:${pill.color}"><span class="wb-dot" style="background:${pill.color}"></span>${h(pill.label)}</span>` : ''}</div><div class="wb-spacer"></div>${wbItemActions(item, canManage)}</div>
       <div class="wb-ic-fields">${fieldRows || '<div class="wb-sub">No other fields</div>'}</div>
       <div class="wb-ic-foot"><button class="wb-card-comment ${cCount ? 'has' : ''}" type="button" data-wb-open-comments="${h(item.id)}" title="${cCount ? `${cCount} comment${cCount === 1 ? '' : 's'} — click to add` : 'Add a comment'}"><i class="ti ti-message-circle"></i><span>${cCount}</span></button></div>
     </div>`;
@@ -11399,6 +11660,50 @@ function wbToggleItemCheckbox(companyId, workspaceId, appId, itemId, fieldId) {
   wbSave(companyId);
   render();
 }
+// Keep any progress fields that are linked to this checklist in sync with its
+// checked ratio (used after an inline checklist edit on a card).
+function wbSyncLinkedProgress(app, item, checklistFieldId) {
+  const field = app.fields.find((f) => f.id === checklistFieldId);
+  if (!field) return;
+  app.fields.filter((f) => f.type === 'progress' && f.config && f.config.source === checklistFieldId)
+    .forEach((pf) => { item.values[pf.id] = wbChecklistStats(item.values[checklistFieldId], field).pct; });
+}
+// Toggle / remove a checklist step straight from a card (no modal). Persists,
+// re-syncs linked progress, and runs update automations like any field edit.
+function wbEditChecklistStepInline(companyId, workspaceId, appId, itemId, fieldId, stepId, mode) {
+  if (!can('workspaces.manage', companyId)) return;
+  const { workspace, app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const item = app.items.find((i) => i.id === itemId);
+  const field = app.fields.find((f) => f.id === fieldId);
+  if (!item || !field || field.type !== 'checklist') return;
+  let items = wbChecklistValue(item.values[fieldId], field);
+  if (mode === 'remove') items = items.filter((s) => s.id !== stepId);
+  else { const step = items.find((s) => s.id === stepId); if (!step) return; step.done = !step.done; }
+  const prev = { ...item.values };
+  item.values = { ...item.values, [fieldId]: items };
+  wbSyncLinkedProgress(app, item, fieldId);
+  const stamp = new Date().toISOString(); item.updatedAt = stamp; item.lastActivityAt = stamp;
+  wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
+  wbSave(companyId);
+  render();
+}
+// Set a manual Progress field value straight from a card slider.
+function wbSetItemProgressInline(companyId, workspaceId, appId, itemId, fieldId, value) {
+  if (!can('workspaces.manage', companyId)) return;
+  const { workspace, app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const item = app.items.find((i) => i.id === itemId);
+  const field = app.fields.find((f) => f.id === fieldId);
+  if (!item || !field || field.type !== 'progress') return;
+  const p = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  const prev = { ...item.values };
+  item.values = { ...item.values, [fieldId]: p };
+  const stamp = new Date().toISOString(); item.updatedAt = stamp; item.lastActivityAt = stamp;
+  wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
+  wbSave(companyId);
+  render();
+}
 function openWbDeleteWorkspace(companyId, workspace) {
   if (!wbGuard()) return;
   openWbModal({ kind: 'delete-workspace', companyId, workspaceId: workspace.id, workspaceName: workspace.name, error: '' });
@@ -11607,16 +11912,56 @@ function wbFieldConfigUI(fd, app) {
   }
   if (t === 'relationship') {
     const apps = wbFind(state.builderModal.companyId, state.builderModal.workspaceId).workspace.apps;
-    return `<div class="wb-field"><label>Linked app</label><select class="wb-input" id="wbRelTarget"><option value="">— Select app to link —</option>${apps.map((ap) => `<option value="${h(ap.id)}" ${fd.config.targetApp === ap.id ? 'selected' : ''}>${h(ap.name)}</option>`).join('')}</select><div class="wb-sub">Items in this app can reference items from the linked app.</div></div>
-      <div class="wb-check-row"><label class="wb-switch"><input type="checkbox" id="wbRelMulti" ${fd.config.multiple ? 'checked' : ''}><span class="wb-slider"></span></label><div><b>Allow multiple links</b></div></div>`;
+    const targetApp = apps.find((ap) => ap.id === fd.config.targetApp);
+    const displayFields = targetApp ? targetApp.fields : [];
+    return `<div class="wb-field"><label>Linked app</label><select class="wb-input" id="wbRelTarget" data-wb-rel-refresh><option value="">— Select app to link —</option>${apps.map((ap) => `<option value="${h(ap.id)}" ${fd.config.targetApp === ap.id ? 'selected' : ''}>${h(ap.name)}</option>`).join('')}</select><div class="wb-sub">Items in this app can reference items from the linked app.</div></div>
+      ${targetApp ? `<div class="wb-field"><label>Show field <span class="wb-opt">(what to display from the linked item)</span></label><select class="wb-input" id="wbRelDisplay"><option value="">Item name (default)</option>${displayFields.map((f) => `<option value="${h(f.id)}" ${fd.config.displayField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select><div class="wb-sub">Pick a field from <b>${h(targetApp.name)}</b> to show instead of the item's name.</div></div>` : ''}
+      ${targetApp ? `<div class="wb-field"><label>Identify by <span class="wb-opt">(how records are labeled when choosing)</span></label><select class="wb-input" id="wbRelIdentify" data-wb-rel-refresh><option value="">Item name (default)</option>${displayFields.map((f) => `<option value="${h(f.id)}" ${fd.config.identifyField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select><div class="wb-sub">Labels each <b>${h(targetApp.name)}</b> record in the pickers below so you can tell them apart — e.g. by <b>Project Name</b> instead of the shown field.</div></div>` : ''}
+      ${targetApp ? `<div class="wb-field"><label>Specific record <span class="wb-opt">(optional — pin one record)</span></label><select class="wb-input" id="wbRelFixed" data-wb-rel-refresh><option value="">Let each item choose</option>${targetApp.items.map((it) => `<option value="${h(it.id)}" ${fd.config.fixedItem === it.id ? 'selected' : ''}>${h(wbRelLabel(targetApp, it, fd.config.identifyField))}</option>`).join('')}</select><div class="wb-sub">Pin every item to one <b>${h(targetApp.name)}</b> record. Leave unset to let each item choose.</div></div>` : ''}
+      <div class="wb-check-row"><label class="wb-switch"><input type="checkbox" id="wbRelMulti" ${fd.config.multiple ? 'checked' : ''} ${fd.config.fixedItem ? 'disabled' : ''}><span class="wb-slider"></span></label><div><b>Allow multiple links</b>${fd.config.fixedItem ? '<div class="wb-sub">Disabled while a specific record is pinned.</div>' : ''}</div></div>`;
   }
   if (t === 'calculation') {
-    const numFields = app.fields.filter((f) => ['number', 'money', 'calculation', 'duration', 'progress'].includes(f.type));
-    return `<div class="wb-field"><label>Formula</label><input class="wb-input" id="wbCalcFormula" value="${h(fd.config.formula || '')}" placeholder="e.g. {Quantity} * {Unit Price}"><div class="wb-sub">Reference number/money fields by name in {curly braces}. Operators: + - * / ( )</div>${numFields.length ? `<div class="wb-calc-chips">${numFields.map((f) => `<button class="wb-tag wb-calc-chip" data-wb-insert="{${h(f.label)}}">${h(f.label)}</button>`).join('')}</div>` : '<div class="wb-sub" style="color:var(--warning,#d97706)">Add Number or Money fields first to reference them.</div>'}</div>`;
+    const numFields = app.fields.filter((f) => ['number', 'money', 'calculation', 'duration', 'progress', 'checklist'].includes(f.type));
+    return `<div class="wb-field"><label>Formula</label><input class="wb-input" id="wbCalcFormula" value="${h(fd.config.formula || '')}" placeholder="e.g. {Quantity} * {Unit Price}"><div class="wb-sub">Reference number, money, progress, or checklist fields by name in {curly braces} — a checklist contributes its % complete. Operators: + - * / ( )</div>${numFields.length ? `<div class="wb-calc-chips">${numFields.map((f) => `<button class="wb-tag wb-calc-chip" data-wb-insert="{${h(f.label)}}">${h(f.label)}</button>`).join('')}</div>` : '<div class="wb-sub" style="color:var(--warning,#d97706)">Add Number or Money fields first to reference them.</div>'}</div>`;
   }
   if (t === 'money') return `<div class="wb-field"><label>Currency symbol</label><input class="wb-input" id="wbCurSym" value="${h(fd.config.currency || '$')}" maxlength="3" style="max-width:120px"></div>`;
   if (t === 'number') return `<div class="wb-field"><label>Unit / suffix <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbNumUnit" value="${h(fd.config.unit || '')}" placeholder="e.g. sq ft, hrs" style="max-width:200px"></div>`;
   if (t === 'text' || t === 'textarea') return `<div class="wb-field"><label>Placeholder <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbPhText" value="${h(fd.config.placeholder || '')}" placeholder="Hint shown in the input"></div>`;
+  if (t === 'checklist') { const steps = Array.isArray(fd.config.steps) ? fd.config.steps.join('\n') : (fd.config.steps || ''); return `<div class="wb-field"><label>Default steps <span class="wb-opt">(optional, one per line)</span></label><textarea class="wb-input" id="wbClSteps" placeholder="Site inspection&#10;Material order&#10;Install&#10;Final walkthrough">${h(steps)}</textarea><div class="wb-sub">Every new item starts with these steps (all unchecked). Users can add or remove steps per item. Link its % complete into a Progress or Calculation field by referencing <code>{${h(fd.label || 'Checklist')}}</code>.</div></div>`; }
+  if (t === 'progress') {
+    const cfg = fd.config || {};
+    const wsApps = wbFind(state.builderModal.companyId, state.builderModal.workspaceId).workspace.apps;
+    const checklists = app.fields.filter((f) => f.type === 'checklist');
+    // Sources on a linked record (progress or checklist reached via a relationship field).
+    const linkOpts = [];
+    app.fields.filter((f) => f.type === 'relationship' && f.config.targetApp).forEach((rf) => {
+      const ta = wsApps.find((a) => a.id === rf.config.targetApp);
+      if (!ta) return;
+      ta.fields.filter((lf) => lf.type === 'checklist' || lf.type === 'progress').forEach((lf) => {
+        linkOpts.push({ value: `link:${rf.id}:${lf.id}`, label: `${rf.label} → ${lf.label}` });
+      });
+    });
+    const display = ['bar', 'ring', 'segments'].includes(cfg.display) ? cfg.display : 'bar';
+    const mode = cfg.colorMode === 'scale' ? 'scale' : 'single';
+    const stops = Array.isArray(cfg.stops) && cfg.stops.length ? cfg.stops : WB_PROGRESS_STOPS_DEFAULT;
+    const previewPct = 65;
+    const colorBlock = mode === 'single'
+      ? `<div class="wb-field"><label>Bar color</label><input type="color" class="wb-stop-color" id="wbProgColor" value="${h(cfg.color || WB_FIELD_TYPES.progress.color)}"></div>`
+      : `<div class="wb-field"><label>Color stops <span class="wb-opt">(value ≤ % uses that color)</span></label>
+          <div class="wb-prog-stops" id="wbProgStops">${stops.map((s) => wbProgStopRow(s)).join('')}</div>
+          <button class="btn btn-sm" data-wb-add-stop type="button"><i class="ti ti-plus"></i>Add color stop</button>
+          <div class="wb-sub">The lowest stop whose % is ≥ the value wins. Example: 0→white, 20→red, 40→yellow, 80→orange, 100→green.</div></div>`;
+    return `
+      <div class="wb-field"><label>Fill from</label><select class="wb-input" id="wbProgSource">
+        <option value="">Manual (drag the slider)</option>
+        ${checklists.length ? `<optgroup label="This app">${checklists.map((f) => `<option value="${h(f.id)}" ${cfg.source === f.id ? 'selected' : ''}>Checklist: ${h(f.label)}</option>`).join('')}</optgroup>` : ''}
+        ${linkOpts.length ? `<optgroup label="Linked record">${linkOpts.map((o) => `<option value="${h(o.value)}" ${cfg.source === o.value ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</optgroup>` : ''}
+      </select><div class="wb-sub">Auto-fill from a checklist in this app, or from a linked record's progress/checklist (via a Relationship field). Multiple links are averaged.</div></div>
+      <div class="wb-field"><label>Display style</label><select class="wb-input" id="wbProgDisplay" data-wb-prog-refresh>${WB_PROGRESS_DISPLAYS.map(([v, l]) => `<option value="${v}" ${display === v ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></div>
+      <div class="wb-field"><label>Color</label><select class="wb-input" id="wbProgColorMode" data-wb-prog-refresh><option value="single" ${mode === 'single' ? 'selected' : ''}>Single color</option><option value="scale" ${mode === 'scale' ? 'selected' : ''}>Change by percentage</option></select></div>
+      ${colorBlock}
+      <div class="wb-field"><label>Preview <span class="wb-opt">at ${previewPct}%</span></label><div class="wb-prog-preview" id="wbProgPreview">${wbProgressDisplayHtml(fd, previewPct)}</div></div>`;
+  }
   return '<div class="wb-sub">No extra configuration needed for this field type.</div>';
 }
 function wbOptRow(o) {
@@ -11644,7 +11989,7 @@ function wbTrigCfgUI(draft, app) {
   } else if (field.type === 'relationship') {
     const ws = wbFind(state.builderModal?.companyId, state.builderModal?.workspaceId).workspace;
     const ta = ws?.apps.find((x) => x.id === field.config.targetApp);
-    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${(ta?.items || []).map((it) => opt(it.id, wbItemTitle(ta, it))).join('')}</select>`;
+    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${(ta?.items || []).map((it) => opt(it.id, wbRelLabel(ta, it, field.config.identifyField || field.config.displayField))).join('')}</select>`;
   } else if (['number', 'money', 'calculation', 'duration', 'progress'].includes(field.type)) {
     // Numeric fields (including calculation results, durations in minutes, and
     // progress %) compare by operator so the rule can fire on a range,
@@ -11703,8 +12048,16 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
     case 'relationship': {
       const ta = wbFind(companyId, workspaceId).workspace.apps.find((x) => x.id === f.config.targetApp);
       if (!ta) { input = '<div class="wb-sub" style="color:var(--warning,#d97706)">No linked app configured.</div>'; break; }
+      // A pinned record: every item links to the same record — show it read-only.
+      if (f.config.fixedItem) {
+        const fixed = ta.items.find((it) => it.id === f.config.fixedItem);
+        input = `<input type="hidden" data-f="${h(f.id)}" value="${h(f.config.fixedItem)}"><div class="wb-rel-fixed"><span class="wb-tag wb-rel"><i class="ti ti-pin"></i>${h(fixed ? wbRelLabel(ta, fixed, f.config.displayField) : 'Pinned record missing')}</span><span class="wb-sub">Pinned to <b>${h(ta.name)}</b></span></div>`;
+        break;
+      }
       const cur = Array.isArray(val) ? val : (val ? [val] : []);
-      input = `<select class="wb-input" data-f="${h(f.id)}" ${f.config.multiple ? 'multiple style="min-height:96px"' : ''}>${f.config.multiple ? '' : '<option value="">— None —</option>'}${ta.items.map((it) => `<option value="${h(it.id)}" ${cur.includes(it.id) ? 'selected' : ''}>${h(wbItemTitle(ta, it))}</option>`).join('')}</select><div class="wb-sub">Linked to <b>${h(ta.name)}</b>${f.config.multiple ? ' · hold Ctrl/Cmd to select multiple' : ''}</div>`; break;
+      // Options are labeled by the "Identify by" field so records are easy to
+      // pick apart; cells still display the "Show field" value.
+      input = `<select class="wb-input" data-f="${h(f.id)}" ${f.config.multiple ? 'multiple style="min-height:96px"' : ''}>${f.config.multiple ? '' : '<option value="">— None —</option>'}${ta.items.map((it) => `<option value="${h(it.id)}" ${cur.includes(it.id) ? 'selected' : ''}>${h(wbRelLabel(ta, it, f.config.identifyField))}</option>`).join('')}</select><div class="wb-sub">Linked to <b>${h(ta.name)}</b>${f.config.multiple ? ' · hold Ctrl/Cmd to select multiple' : ''}</div>`; break;
     }
     case 'file': input = `
       <div class="wb-file-field" data-wb-file>
@@ -11733,7 +12086,29 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
     }
     case 'progress': {
       const p = Math.max(0, Math.min(100, Math.round(Number(val) || 0)));
-      input = `<div class="wb-inline wb-progress-edit" data-wb-progress><input type="range" min="0" max="100" step="1" data-f="${h(f.id)}" value="${p}" style="flex:1"><output data-wb-prog-out class="wb-prog-num" style="min-width:48px;text-align:right">${p}%</output></div>`; break;
+      const pColor = wbProgressColor(f, p);
+      if (f.config && f.config.source) {
+        // Linked to a checklist — read-only styled bar that recompute() keeps in sync.
+        input = `<div class="wb-inline wb-progress-linked" data-wb-progress-linked>
+          <span data-wb-prog-display style="flex:1">${wbProgressDisplayHtml(f, p)}</span>
+          <input type="hidden" data-f="${h(f.id)}" value="${p}">
+          <span class="wb-sub" style="flex:none"><i class="ti ti-link"></i> from checklist</span>
+        </div>`;
+      } else {
+        input = `<div class="wb-inline wb-progress-edit" data-wb-progress><input type="range" min="0" max="100" step="1" data-f="${h(f.id)}" value="${p}" style="flex:1;accent-color:${h(pColor)}"><output data-wb-prog-out class="wb-prog-num" style="min-width:48px;text-align:right">${p}%</output></div>`;
+      }
+      break;
+    }
+    case 'checklist': {
+      const items = wbChecklistValue(val, f);
+      input = `<div class="wb-checklist" data-wb-checklist data-color="${h(meta.color)}">
+        <input type="hidden" data-f="${h(f.id)}" value="${h(JSON.stringify(items))}">
+        <div class="wb-cl-body">${wbChecklistBodyHtml(items, meta.color)}</div>
+        <div class="wb-cl-add">
+          <input class="wb-input" data-wb-cl-input placeholder="Add a step and press Enter">
+          <button type="button" class="btn wb-cl-addbtn" data-wb-cl-add><i class="ti ti-plus"></i>Add</button>
+        </div>
+      </div>`; break;
     }
     case 'image': input = `
       <div class="wb-file-field wb-image-field" data-wb-file data-wb-image>
@@ -11768,6 +12143,48 @@ function wbFileValue(val) {
   return { name: name || 'Attached file', url: isUrl ? s : '' };
 }
 function wbFileDisplay(val) { return wbFileValue(val)?.name || ''; }
+
+// --- Checklist field -------------------------------------------------------
+// A checklist value is an array of { id, label, done }. Parse whatever is
+// stored (array or JSON string), and seed from the field's default steps when
+// an item has no value yet.
+function wbChecklistValue(val, field) {
+  let arr = [];
+  if (Array.isArray(val)) arr = val;
+  else if (typeof val === 'string' && val.trim().startsWith('[')) { try { arr = JSON.parse(val); } catch { arr = []; } }
+  if (!arr.length && field && field.config && field.config.steps) {
+    const defs = Array.isArray(field.config.steps) ? field.config.steps : String(field.config.steps).split('\n');
+    arr = defs.map((s) => String(s).trim()).filter(Boolean).map((label) => ({ id: wbUid(), label, done: false }));
+  }
+  return (Array.isArray(arr) ? arr : []).map((it) => ({ id: it.id || wbUid(), label: String(it.label || ''), done: !!it.done }));
+}
+function wbChecklistStats(val, field) {
+  const items = wbChecklistValue(val, field);
+  const total = items.length;
+  const done = items.filter((i) => i.done).length;
+  return { items, total, done, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+// The interactive body (progress header + step rows) — re-rendered in place as
+// the user checks, adds, or removes steps, so the add-input keeps its focus.
+function wbChecklistBodyHtml(items, color = '#16a34a') {
+  const total = items.length;
+  const done = items.filter((i) => i.done).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const rows = items.map((it) => `
+    <li class="wb-cl-item ${it.done ? 'done' : ''}" data-cid="${h(it.id)}">
+      <button type="button" class="wb-cl-check" data-wb-cl-toggle="${h(it.id)}" role="checkbox" aria-checked="${it.done ? 'true' : 'false'}" title="Toggle step"><i class="ti ti-check"></i></button>
+      <span class="wb-cl-label">${h(it.label)}</span>
+      <button type="button" class="wb-cl-del" data-wb-cl-del="${h(it.id)}" title="Remove step" aria-label="Remove step"><i class="ti ti-x"></i></button>
+    </li>`).join('');
+  return `
+    <div class="wb-cl-head">
+      <span class="wb-cl-title">Checklist</span>
+      <span class="wb-cl-count">${done}/${total}</span>
+      <span class="wb-cl-track"><span class="wb-cl-fill" style="width:${pct}%;background:${h(color)}"></span></span>
+    </div>
+    <ul class="wb-cl-list">${rows || '<li class="wb-cl-empty">No steps yet — add one below.</li>'}</ul>`;
+}
+
 // Humanize a duration stored as total minutes -> "2h 30m" / "45m" / "3h".
 function wbFmtDuration(mins) {
   const total = Math.max(0, Math.round(Number(mins) || 0));
@@ -12003,11 +12420,50 @@ function wbMountProgressFields(overlay) {
     sync();
   });
 }
+// Checklist fields: check/uncheck, add, and remove steps. State lives in the
+// hidden [data-f] input as JSON; every change re-renders the body in place and
+// fires an input event so the item form's recompute captures the new value.
+function wbMountChecklistFields(overlay) {
+  overlay.querySelectorAll('[data-wb-checklist]').forEach((zone) => {
+    if (zone.dataset.bound) return;
+    zone.dataset.bound = '1';
+    const hidden = zone.querySelector('input[data-f]');
+    const body = zone.querySelector('.wb-cl-body');
+    const addInput = zone.querySelector('[data-wb-cl-input]');
+    const addBtn = zone.querySelector('[data-wb-cl-add]');
+    const color = zone.dataset.color || '#16a34a';
+    if (!hidden || !body) return;
+    const read = () => { try { const a = JSON.parse(hidden.value || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } };
+    const write = (items) => {
+      hidden.value = JSON.stringify(items);
+      body.innerHTML = wbChecklistBodyHtml(items, color);
+      hidden.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    body.addEventListener('click', (e) => {
+      const toggle = e.target.closest('[data-wb-cl-toggle]');
+      const del = e.target.closest('[data-wb-cl-del]');
+      if (toggle) { const items = read(); const it = items.find((x) => x.id === toggle.dataset.wbClToggle); if (it) it.done = !it.done; write(items); }
+      else if (del) { write(read().filter((x) => x.id !== del.dataset.wbClDel)); }
+    });
+    const addStep = () => {
+      const label = (addInput?.value || '').trim();
+      if (!label) return;
+      const items = read();
+      items.push({ id: wbUid(), label, done: false });
+      addInput.value = '';
+      write(items);
+      addInput.focus();
+    };
+    if (addBtn) addBtn.addEventListener('click', addStep);
+    if (addInput) addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addStep(); } });
+  });
+}
 
 function wbReadFieldInput(f) {
   const el = document.querySelector(`[data-f="${f.id}"]`);
   if (!el) return f.type === 'calculation' ? undefined : '';
   if (f.type === 'checkbox') return el.checked;
+  if (f.type === 'checklist') { try { return JSON.parse(el.value || '[]'); } catch { return []; } }
   if (f.type === 'number' || f.type === 'money' || f.type === 'duration' || f.type === 'progress') return el.value === '' ? '' : Number(el.value);
   if (f.type === 'relationship' && f.config.multiple) return [...el.selectedOptions].map((o) => o.value);
   // Match the contacts form: normalize phone numbers on save.
@@ -12028,11 +12484,32 @@ function wbCollectModalDraft() {
     m.draft.required = !!checked('wbFReq');
     const t = m.draft.type; m.draft.config = m.draft.config || {};
     if (t === 'category' || t === 'status') m.draft.config.options = [...document.querySelectorAll('.wb-opt-item')].map((r) => ({ id: r.dataset.oid, label: r.querySelector('.wb-opt-label').value.trim() || 'Untitled', color: r.querySelector('.wb-dot-pick').value })).filter((o) => o.label);
-    if (t === 'relationship') { m.draft.config.targetApp = val('wbRelTarget') || ''; m.draft.config.multiple = !!checked('wbRelMulti'); }
+    if (t === 'relationship') {
+      const prevTarget = m.draft.config.targetApp;
+      m.draft.config.targetApp = val('wbRelTarget') || '';
+      m.draft.config.multiple = !!checked('wbRelMulti');
+      const disp = document.getElementById('wbRelDisplay');
+      if (disp) m.draft.config.displayField = disp.value || '';
+      const ident = document.getElementById('wbRelIdentify');
+      if (ident) m.draft.config.identifyField = ident.value || '';
+      const fixed = document.getElementById('wbRelFixed');
+      if (fixed) m.draft.config.fixedItem = fixed.value || '';
+      // A different linked app invalidates the old field / pinned-record choices.
+      if (prevTarget !== m.draft.config.targetApp) { m.draft.config.displayField = ''; m.draft.config.identifyField = ''; m.draft.config.fixedItem = ''; }
+    }
     if (t === 'calculation') m.draft.config.formula = (val('wbCalcFormula') || '').trim();
     if (t === 'money') m.draft.config.currency = (val('wbCurSym') || '').trim() || '$';
     if (t === 'number') m.draft.config.unit = (val('wbNumUnit') || '').trim();
     if (t === 'text' || t === 'textarea') m.draft.config.placeholder = (val('wbPhText') || '').trim();
+    if (t === 'checklist') m.draft.config.steps = (val('wbClSteps') || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    if (t === 'progress') {
+      m.draft.config.source = val('wbProgSource') || '';
+      const disp = document.getElementById('wbProgDisplay'); if (disp) m.draft.config.display = disp.value;
+      const cm = document.getElementById('wbProgColorMode'); if (cm) m.draft.config.colorMode = cm.value;
+      const sc = document.getElementById('wbProgColor'); if (sc) m.draft.config.color = sc.value;
+      const stopsEl = document.getElementById('wbProgStops');
+      if (stopsEl) m.draft.config.stops = [...stopsEl.querySelectorAll('.wb-stop-item')].map((r) => ({ upto: Math.max(0, Math.min(100, parseInt(r.querySelector('.wb-stop-upto').value, 10) || 0)), color: r.querySelector('.wb-stop-color').value }));
+    }
   } else if (m.kind === 'automation') {
     if (val('wbAuName') !== undefined) m.draft.name = val('wbAuName');
     const tf = document.querySelector('[data-wb-trig-field]'); if (tf) m.draft.trigger.fieldId = tf.value;
@@ -12273,6 +12750,27 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-view-file]', (el, e) => { e.stopPropagation(); openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
     // Checkbox cells toggle inline without opening the item.
     bind('[data-wb-toggle-check]', (el, e) => { e.stopPropagation(); wbToggleItemCheckbox(companyId, workspaceId, appId, el.dataset.itemId, el.dataset.fieldId); });
+    // Card customization: toggle the panel, and pick which fields show on cards.
+    bind('[data-wb-card-config]', (el, e) => { e.stopPropagation(); const ui = wbItemsUI(appId); ui.cardConfigOpen = !ui.cardConfigOpen; render(); });
+    bind('[data-wb-card-field]', (el, e) => {
+      e.stopPropagation();
+      const { app } = wbFind(companyId, workspaceId, appId); if (!app) return;
+      const base = Array.isArray(app.cardFields) && app.cardFields.length ? app.cardFields.slice() : app.fields.filter((f) => !f.hidden).map((f) => f.id);
+      const set = new Set(base);
+      if (el.checked) set.add(el.dataset.wbCardField); else set.delete(el.dataset.wbCardField);
+      app.cardFields = app.fields.filter((f) => set.has(f.id)).map((f) => f.id); // keep field order
+      wbSave(companyId); render();
+    }, 'onchange');
+    // Card checklist: expand/collapse and check/remove steps inline.
+    bind('[data-wb-card-expand]', (el, e) => { e.stopPropagation(); const ui = wbItemsUI(appId); ui.expanded = ui.expanded || new Set(); const k = el.dataset.wbCardExpand; if (ui.expanded.has(k)) ui.expanded.delete(k); else ui.expanded.add(k); render(); });
+    bind('[data-wb-cl-card]', (el, e) => { e.stopPropagation(); const [mode, itemId, fieldId, stepId] = String(el.dataset.wbClCard).split(':'); wbEditChecklistStepInline(companyId, workspaceId, appId, itemId, fieldId, stepId, mode); });
+    // Card manual-progress slider: preview live, persist on release.
+    document.querySelectorAll('[data-wb-card-progress]').forEach((el) => {
+      const out = el.parentElement ? el.parentElement.querySelector('[data-wb-card-prog-out]') : null;
+      el.addEventListener('input', (e) => { e.stopPropagation(); if (out) out.textContent = `${el.value}%`; });
+      el.addEventListener('change', (e) => { e.stopPropagation(); const [itemId, fieldId] = String(el.dataset.wbCardProgress).split(':'); wbSetItemProgressInline(companyId, workspaceId, appId, itemId, fieldId, el.value); });
+      el.addEventListener('click', (e) => e.stopPropagation());
+    });
     bind('[data-save-app]', () => wbSaveAppSettings(companyId, workspaceId, appId));
     bind('[data-del-app]', () => { const { app } = wbFind(companyId, workspaceId, appId); if (app) openWbDeleteApp(companyId, workspaceId, app); });
     bind('[data-add-auto]', () => openWbAutoModal(companyId, workspaceId, appId, ''));
@@ -12346,6 +12844,15 @@ function wbMountModal() {
   }; });
   overlay.querySelectorAll('[data-wb-add-option]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); m.draft.config.options = m.draft.config.options || []; m.draft.config.options.push({ id: wbUid(), label: '', color: WB_PALETTE[m.draft.config.options.length % WB_PALETTE.length] }); render(); }; });
   overlay.querySelectorAll('[data-wb-del-option]').forEach((b) => { b.onclick = () => { if ((m.draft.config.options || []).length <= 1) { showToast('Keep at least one option.', 'local', 'Workspaces'); return; } wbCollectModalDraft(); const oid = b.closest('.wb-opt-item').dataset.oid; m.draft.config.options = m.draft.config.options.filter((o) => o.id !== oid); render(); }; });
+  // Progress field appearance: display/color-mode selects re-render; stops add/remove; live preview on color edits.
+  overlay.querySelectorAll('[data-wb-prog-refresh]').forEach((s) => { s.onchange = () => { wbCollectModalDraft(); render(); }; });
+  // Relationship: changing the linked app re-renders so its fields fill the "Show field" picker.
+  overlay.querySelectorAll('[data-wb-rel-refresh]').forEach((s) => { s.onchange = () => { wbCollectModalDraft(); render(); }; });
+  const wbAddStop = overlay.querySelector('[data-wb-add-stop]');
+  if (wbAddStop) wbAddStop.onclick = () => { wbCollectModalDraft(); const cur = (m.draft.config.stops && m.draft.config.stops.length) ? m.draft.config.stops : WB_PROGRESS_STOPS_DEFAULT.slice(); m.draft.config.stops = cur.concat({ upto: 100, color: '#16a34a' }); render(); };
+  overlay.querySelectorAll('[data-wb-del-stop]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); const row = b.closest('.wb-stop-item'); const idx = [...row.parentElement.children].indexOf(row); m.draft.config.stops = (m.draft.config.stops || []).filter((_, i) => i !== idx); render(); }; });
+  const progPreview = overlay.querySelector('#wbProgPreview');
+  if (progPreview) overlay.querySelectorAll('#wbProgColor, #wbProgStops .wb-stop-color, #wbProgStops .wb-stop-upto').forEach((el) => { el.addEventListener('input', () => { wbCollectModalDraft(); progPreview.innerHTML = wbProgressDisplayHtml(m.draft, 65); }); });
   overlay.querySelectorAll('[data-wb-insert]').forEach((b) => { b.onclick = () => { const inp = document.getElementById('wbCalcFormula'); if (inp) { inp.value += (inp.value && !inp.value.endsWith(' ') ? ' ' : '') + b.dataset.wbInsert; inp.focus(); } }; });
   const ev = overlay.querySelector('[data-wb-auto-event]'); if (ev) ev.onchange = () => { wbCollectModalDraft(); m.draft.trigger = { event: ev.value }; render(); };
   const tf = overlay.querySelector('[data-wb-trig-field]'); if (tf) tf.onchange = () => { wbCollectModalDraft(); m.draft.trigger.value = ''; render(); };
@@ -12402,6 +12909,18 @@ function wbMountModal() {
       const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
       const recompute = () => {
         const vals = {}; app.fields.forEach((f) => { if (f.type !== 'calculation') vals[f.id] = wbReadFieldInput(f); });
+        // Progress fields linked to a checklist derive their % from the checked
+        // ratio and update their read-only bar live (e.g. 3/6 → 50%).
+        app.fields.filter((f) => f.type === 'progress' && f.config && f.config.source).forEach((f) => {
+          const pct = wbProgressFillPct(app, f, vals, wbLocateApp(app).workspace);
+          if (pct == null) return;
+          vals[f.id] = pct;
+          const hidden = document.querySelector(`[data-f="${f.id}"]`);
+          if (hidden) hidden.value = String(pct);
+          const zone = hidden ? hidden.closest('[data-wb-progress-linked]') : null;
+          const disp = zone ? zone.querySelector('[data-wb-prog-display]') : null;
+          if (disp) disp.innerHTML = wbProgressDisplayHtml(f, pct);
+        });
         // Persist every keystroke into the draft so no render() (a toast, its
         // auto-dismiss, a background sync, a file upload) can clear the form.
         m.draft.values = { ...(m.draft.values || {}), ...vals };
@@ -12412,6 +12931,7 @@ function wbMountModal() {
       wbMountFileFields(overlay);
       wbMountDurationFields(overlay);
       wbMountProgressFields(overlay);
+      wbMountChecklistFields(overlay);
       recompute();
     }
   } else if (['workspace', 'app', 'field', 'automation'].includes(m.kind)) {
