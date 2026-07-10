@@ -1,0 +1,118 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-07-09T00:00:00.000Z",
+  "app": {
+    "name": "Content Pipeline",
+    "description": "Plan, produce, and publish marketing content — from idea to live — with a production checklist and progress on every piece.",
+    "type": "Tasks",
+    "icon": "ti-pencil",
+    "color": "#7c3aed",
+    "fields": [
+      { "id": "f1", "label": "Title", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "Working headline" } },
+      { "id": "f2", "label": "Type", "type": "category", "required": false, "hidden": false, "config": { "options": [
+        { "id": "c1", "label": "Blog", "color": "#2563eb" },
+        { "id": "c2", "label": "Video", "color": "#dc2626" },
+        { "id": "c3", "label": "Social", "color": "#0891b2" },
+        { "id": "c4", "label": "Email", "color": "#d97706" },
+        { "id": "c5", "label": "Case Study", "color": "#16a34a" }
+      ] } },
+      { "id": "f3", "label": "Status", "type": "status", "required": false, "hidden": false, "config": { "options": [
+        { "id": "s1", "label": "Idea", "color": "#6b7280" },
+        { "id": "s2", "label": "Drafting", "color": "#d97706" },
+        { "id": "s3", "label": "Review", "color": "#7c3aed" },
+        { "id": "s4", "label": "Scheduled", "color": "#2563eb" },
+        { "id": "s5", "label": "Published", "color": "#16a34a" }
+      ] } },
+      { "id": "f4", "label": "Production Checklist", "type": "checklist", "required": false, "hidden": false, "config": { "steps": ["Outline approved", "First draft", "Edit pass", "Visuals ready", "SEO check", "Final review", "Schedule"] } },
+      { "id": "f5", "label": "Completion", "type": "progress", "required": false, "hidden": false, "config": { "source": "f4", "display": "segments", "colorMode": "scale", "stops": [
+        { "upto": 0, "color": "#e5e7eb" },
+        { "upto": 40, "color": "#dc2626" },
+        { "upto": 80, "color": "#d97706" },
+        { "upto": 100, "color": "#16a34a" }
+      ] } },
+      { "id": "f6", "label": "Priority", "type": "category", "required": false, "hidden": false, "config": { "options": [
+        { "id": "p1", "label": "Low", "color": "#6b7280" },
+        { "id": "p2", "label": "Medium", "color": "#d97706" },
+        { "id": "p3", "label": "High", "color": "#dc2626" }
+      ] } },
+      { "id": "f7", "label": "Word Count", "type": "number", "required": false, "hidden": false, "config": { "unit": "words" } },
+      { "id": "f8", "label": "Author", "type": "text", "required": false, "hidden": false, "config": { "placeholder": "Writer / owner" } },
+      { "id": "f9", "label": "Publish Date", "type": "date", "required": false, "hidden": false, "config": {} },
+      { "id": "f10", "label": "Brief", "type": "textarea", "required": false, "hidden": true, "config": { "placeholder": "Angle, audience, keywords, CTA" } }
+    ],
+    "items": [
+      { "id": "i1", "values": {
+        "f1": "How agencies scale onboarding without chaos",
+        "f2": "c1",
+        "f3": "s3",
+        "f4": [
+          { "id": "k1", "label": "Outline approved", "done": true },
+          { "id": "k2", "label": "First draft", "done": true },
+          { "id": "k3", "label": "Edit pass", "done": true },
+          { "id": "k4", "label": "Visuals ready", "done": false },
+          { "id": "k5", "label": "SEO check", "done": false },
+          { "id": "k6", "label": "Final review", "done": false },
+          { "id": "k7", "label": "Schedule", "done": false }
+        ],
+        "f5": 43,
+        "f6": "p3",
+        "f7": 1450,
+        "f8": "Roman",
+        "f9": "2026-07-18",
+        "f10": "Target: agency owners. Keyword: client onboarding software."
+      } },
+      { "id": "i2", "values": {
+        "f1": "60-sec explainer: what is Quest HQ?",
+        "f2": "c2",
+        "f3": "s2",
+        "f4": [
+          { "id": "k1", "label": "Outline approved", "done": true },
+          { "id": "k2", "label": "First draft", "done": true },
+          { "id": "k3", "label": "Edit pass", "done": false },
+          { "id": "k4", "label": "Visuals ready", "done": false },
+          { "id": "k5", "label": "SEO check", "done": false },
+          { "id": "k6", "label": "Final review", "done": false },
+          { "id": "k7", "label": "Schedule", "done": false }
+        ],
+        "f5": 29,
+        "f6": "p2",
+        "f7": 220,
+        "f8": "Alfred",
+        "f9": "2026-07-25",
+        "f10": "Script-driven. Keep under 60 seconds. End with signup CTA."
+      } },
+      { "id": "i3", "values": {
+        "f1": "Case study: Alpen Foods cut launch time 40%",
+        "f2": "c5",
+        "f3": "s5",
+        "f4": [
+          { "id": "k1", "label": "Outline approved", "done": true },
+          { "id": "k2", "label": "First draft", "done": true },
+          { "id": "k3", "label": "Edit pass", "done": true },
+          { "id": "k4", "label": "Visuals ready", "done": true },
+          { "id": "k5", "label": "SEO check", "done": true },
+          { "id": "k6", "label": "Final review", "done": true },
+          { "id": "k7", "label": "Schedule", "done": true }
+        ],
+        "f5": 100,
+        "f6": "p2",
+        "f7": 980,
+        "f8": "Roman",
+        "f9": "2026-06-30",
+        "f10": "Published on blog + LinkedIn. Repurpose into email."
+      } }
+    ],
+    "automations": [
+      { "id": "a1", "name": "Auto-schedule when production is done", "enabled": true,
+        "trigger": { "event": "field_is", "fieldId": "f5", "op": ">=", "value": 100 },
+        "actions": [
+          { "type": "set_field", "fieldId": "f3", "value": "s4" },
+          { "type": "notify", "message": "Production complete — ready to schedule." }
+        ] },
+      { "id": "a2", "name": "Announce published content", "enabled": true,
+        "trigger": { "event": "field_is", "fieldId": "f3", "value": "s5" },
+        "actions": [ { "type": "notify", "message": "Content published — share it with the team." } ] }
+    ]
+  }
+}

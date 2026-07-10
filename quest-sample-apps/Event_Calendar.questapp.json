@@ -1,0 +1,160 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-07-09T00:00:00.000Z",
+  "app": {
+    "name": "Event Calendar",
+    "description": "Plan and run events — meetings, webinars, launches — with prep checklists, readiness progress, times, venues, and budgets in one place.",
+    "type": "Calendar",
+    "icon": "ti-calendar-event",
+    "color": "#0d9488",
+    "fields": [
+      { "id": "f1", "label": "Event Name", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "What's happening?" } },
+      { "id": "f2", "label": "Type", "type": "category", "required": false, "hidden": false, "config": { "options": [
+        { "id": "c1", "label": "Meeting", "color": "#2563eb" },
+        { "id": "c2", "label": "Webinar", "color": "#7c3aed" },
+        { "id": "c3", "label": "Deadline", "color": "#dc2626" },
+        { "id": "c4", "label": "Social", "color": "#e0552d" },
+        { "id": "c5", "label": "Launch", "color": "#16a34a" },
+        { "id": "c6", "label": "Holiday", "color": "#0891b2" }
+      ] } },
+      { "id": "f3", "label": "Status", "type": "status", "required": false, "hidden": false, "config": { "options": [
+        { "id": "s1", "label": "Planned", "color": "#6b7280" },
+        { "id": "s2", "label": "Confirmed", "color": "#2563eb" },
+        { "id": "s3", "label": "In Progress", "color": "#d97706" },
+        { "id": "s4", "label": "Done", "color": "#16a34a" },
+        { "id": "s5", "label": "Cancelled", "color": "#dc2626" }
+      ] } },
+      { "id": "f4", "label": "Date", "type": "date", "required": false, "hidden": false, "config": {} },
+      { "id": "f5", "label": "Start Time", "type": "text", "required": false, "hidden": false, "config": { "placeholder": "e.g. 2:00 PM" } },
+      { "id": "f6", "label": "Duration", "type": "duration", "required": false, "hidden": false, "config": {} },
+      { "id": "f7", "label": "Location", "type": "location", "required": false, "hidden": false, "config": {} },
+      { "id": "f8", "label": "Host", "type": "text", "required": false, "hidden": false, "config": { "placeholder": "Owner / organizer" } },
+      { "id": "f9", "label": "Prep Checklist", "type": "checklist", "required": false, "hidden": false, "config": { "steps": ["Book venue / room", "Send invites", "Confirm speakers", "Prepare materials", "Tech check", "Reminder sent"] } },
+      { "id": "f10", "label": "Readiness", "type": "progress", "required": false, "hidden": false, "config": { "source": "f9", "display": "ring", "colorMode": "scale", "stops": [
+        { "upto": 0, "color": "#ffffff" },
+        { "upto": 33, "color": "#dc2626" },
+        { "upto": 66, "color": "#d97706" },
+        { "upto": 99, "color": "#2563eb" },
+        { "upto": 100, "color": "#16a34a" }
+      ] } },
+      { "id": "f11", "label": "Expected Attendees", "type": "number", "required": false, "hidden": false, "config": { "unit": "people" } },
+      { "id": "f12", "label": "Budget", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } },
+      { "id": "f13", "label": "Contact / RSVP", "type": "email", "required": false, "hidden": false, "config": {} },
+      { "id": "f14", "label": "Notes", "type": "textarea", "required": false, "hidden": true, "config": { "placeholder": "Agenda, links, logistics" } },
+      { "id": "f15", "label": "All-day", "type": "checkbox", "required": false, "hidden": false, "config": {} }
+    ],
+    "items": [
+      { "id": "i1", "values": {
+        "f1": "Quest HQ Product Webinar",
+        "f2": "c2",
+        "f3": "s1",
+        "f4": "2026-07-22",
+        "f5": "2:00 PM",
+        "f6": 60,
+        "f7": "Online (Zoom)",
+        "f8": "Roman",
+        "f9": [
+          { "id": "k1", "label": "Book venue / room", "done": true },
+          { "id": "k2", "label": "Send invites", "done": true },
+          { "id": "k3", "label": "Confirm speakers", "done": true },
+          { "id": "k4", "label": "Prepare materials", "done": false },
+          { "id": "k5", "label": "Tech check", "done": false },
+          { "id": "k6", "label": "Reminder sent", "done": false }
+        ],
+        "f10": 50,
+        "f11": 120,
+        "f12": 400,
+        "f13": "events@lumenmarketingusa.com",
+        "f14": "Demo the Workspace App Builder + Q&A.",
+        "f15": false
+      } },
+      { "id": "i2", "values": {
+        "f1": "Weekly Team Standup",
+        "f2": "c1",
+        "f3": "s2",
+        "f4": "2026-07-13",
+        "f5": "9:30 AM",
+        "f6": 30,
+        "f7": "Office — Room 2",
+        "f8": "Alfred",
+        "f9": [
+          { "id": "k1", "label": "Book venue / room", "done": true },
+          { "id": "k2", "label": "Send invites", "done": true },
+          { "id": "k3", "label": "Confirm speakers", "done": true },
+          { "id": "k4", "label": "Prepare materials", "done": true },
+          { "id": "k5", "label": "Tech check", "done": true },
+          { "id": "k6", "label": "Reminder sent", "done": true }
+        ],
+        "f10": 100,
+        "f11": 8,
+        "f12": 0,
+        "f13": "team@lumenmarketingusa.com",
+        "f14": "Recurring. Review sprint board.",
+        "f15": false
+      } },
+      { "id": "i3", "values": {
+        "f1": "Nova Fitness Site Launch",
+        "f2": "c5",
+        "f3": "s3",
+        "f4": "2026-08-15",
+        "f5": "10:00 AM",
+        "f6": 120,
+        "f7": "Client HQ + livestream",
+        "f8": "Roman",
+        "f9": [
+          { "id": "k1", "label": "Book venue / room", "done": true },
+          { "id": "k2", "label": "Send invites", "done": true },
+          { "id": "k3", "label": "Confirm speakers", "done": false },
+          { "id": "k4", "label": "Prepare materials", "done": false },
+          { "id": "k5", "label": "Tech check", "done": false },
+          { "id": "k6", "label": "Reminder sent", "done": false }
+        ],
+        "f10": 33,
+        "f11": 50,
+        "f12": 2500,
+        "f13": "owner@novafitness.co",
+        "f14": "Coordinate go-live with dev team.",
+        "f15": false
+      } },
+      { "id": "i4", "values": {
+        "f1": "Company Anniversary Party",
+        "f2": "c4",
+        "f3": "s1",
+        "f4": "2026-09-05",
+        "f5": "6:00 PM",
+        "f6": 240,
+        "f7": "Rooftop Venue, Downtown",
+        "f8": "Kristine",
+        "f9": [
+          { "id": "k1", "label": "Book venue / room", "done": true },
+          { "id": "k2", "label": "Send invites", "done": false },
+          { "id": "k3", "label": "Confirm speakers", "done": false },
+          { "id": "k4", "label": "Prepare materials", "done": false },
+          { "id": "k5", "label": "Tech check", "done": false },
+          { "id": "k6", "label": "Reminder sent", "done": false }
+        ],
+        "f10": 17,
+        "f11": 40,
+        "f12": 3000,
+        "f13": "events@lumenmarketingusa.com",
+        "f14": "Catering + AV to confirm.",
+        "f15": true
+      } }
+    ],
+    "automations": [
+      { "id": "a1", "name": "Confirm event when prep is done", "enabled": true,
+        "trigger": { "event": "field_is", "fieldId": "f10", "op": ">=", "value": 100 },
+        "actions": [
+          { "type": "set_field", "fieldId": "f3", "value": "s2" },
+          { "type": "notify", "message": "Event fully prepped — marked Confirmed." }
+        ] },
+      { "id": "a2", "name": "Wrap-up reminder", "enabled": true,
+        "trigger": { "event": "field_is", "fieldId": "f3", "value": "s4" },
+        "actions": [ { "type": "notify", "message": "Event done — log takeaways and follow-ups." } ] },
+      { "id": "a3", "name": "Log new events", "enabled": true,
+        "trigger": { "event": "created" },
+        "actions": [ { "type": "notify", "message": "New event added to the calendar." } ] }
+    ]
+  }
+}

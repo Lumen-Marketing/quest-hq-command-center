@@ -20277,7 +20277,7 @@ button {
 
 /* Card view */
 .wb-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
-.wb-item-card { border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.wb-item-card { min-width: 0; border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .wb-item-card.sel { border-color: var(--orange, #e0552d); box-shadow: 0 0 0 2px var(--ring, rgba(224, 85, 45, .22)); }
 .wb-ic-head { display: flex; align-items: flex-start; gap: 8px; }
 .wb-ic-titlewrap { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
@@ -20286,8 +20286,8 @@ button {
 .wb-ic-head .wb-status-pill { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wb-ic-head .wb-item-check { margin-top: 2px; }
 .wb-ic-head .wb-row-acts, .wb-ic-head .wb-icon-btn { flex: none; }
-.wb-ic-fields { display: grid; gap: 6px; }
-.wb-ic-row { display: flex; justify-content: space-between; gap: 10px; font-size: .84rem; border-top: 1px dashed var(--border, #e2d5bf); padding-top: 6px; }
+.wb-ic-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.wb-ic-row { display: flex; justify-content: space-between; gap: 10px; min-width: 0; font-size: .84rem; border-top: 1px dashed var(--border, #e2d5bf); padding-top: 6px; }
 .wb-ic-row:first-child { border-top: 0; padding-top: 0; }
 .wb-ic-label { color: var(--text-muted, #72695d); font-weight: 600; flex: none; }
 .wb-ic-val { text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -20567,6 +20567,21 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .wb-progress-linked .wb-sub { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .wb-rel-fixed { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
 .wb-rel-fixed .wb-tag.wb-rel { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Link / URL field — a block that truncates with an ellipsis (no flex quirks). */
+.wb-url-cell { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; color: var(--info, #2563eb); text-decoration: none; }
+.wb-url-cell:hover { text-decoration: underline; }
+.wb-url-cell i { margin-right: 5px; vertical-align: -1px; }
+.wb-url-ctrl { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
+.wb-url-link { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; color: var(--info, #2563eb); font-weight: 600; text-decoration: none; word-break: break-all; }
+.wb-url-link:hover { text-decoration: underline; }
+.wb-url-link i { flex: none; }
+.wb-url-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.wb-url-actions .btn { display: inline-flex; align-items: center; gap: 5px; }
+.wb-url-actions [data-wb-url-qr].active { border-color: var(--orange, #e0552d); color: var(--orange, #e0552d); }
+.wb-url-qr { display: flex; flex-direction: column; gap: 6px; align-items: center; padding: 12px; border: 1px solid var(--border, #e2d5bf); border-radius: 12px; background: #fff; }
+.wb-url-qr img { display: block; width: 180px; height: 180px; }
+.wb-url-qr .wb-sub { text-align: center; }
 
 /* Inline-editable card fields */
 .wb-card-cl-summary { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border, #e2d5bf); background: var(--surface-2, #f6efe4); border-radius: 999px; padding: 3px 10px 3px 6px; cursor: pointer; font: inherit; }

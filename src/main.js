@@ -10097,6 +10097,7 @@ const WB_FIELD_TYPES = {
   file: { label: 'File Attachment', icon: 'ti-paperclip', color: '#6b7280', desc: 'Attach documents' },
   user: { label: 'User Assignment', icon: 'ti-user', color: '#e0552d', desc: 'Assign workspace members' },
   email: { label: 'Email', icon: 'ti-mail', color: '#2563eb', desc: 'Email address' },
+  url: { label: 'Link / URL', icon: 'ti-world-www', color: '#2563eb', desc: 'A web link — open, copy, or QR it' },
   phone: { label: 'Phone Number', icon: 'ti-phone', color: '#16a34a', desc: 'Phone number' },
   money: { label: 'Money', icon: 'ti-currency-dollar', color: '#16a34a', desc: 'Currency amount' },
   calculation: { label: 'Calculation', icon: 'ti-math-function', color: '#7c3aed', desc: 'Formula over number fields' },
@@ -10107,7 +10108,7 @@ const WB_FIELD_TYPES = {
   checklist: { label: 'Checklist', icon: 'ti-list-check', color: '#16a34a', desc: 'Checkable steps with live progress' },
   image: { label: 'Image', icon: 'ti-photo', color: '#0891b2', desc: 'Circular picture, like an avatar' },
 };
-const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'user', 'relationship', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'checkbox'];
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'user', 'relationship', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'checkbox'];
 // Comparison operators for numeric (number/money) automation triggers:
 // [operator, dropdown label, symbol for the human-readable rule summary].
 const WB_TRIG_OPS = [['==', 'equals', '='], ['!=', 'not equal', '≠'], ['>', 'greater than', '>'], ['<', 'less than', '<'], ['>=', 'at least', '≥'], ['<=', 'at most', '≤']];
@@ -10341,7 +10342,7 @@ function wbSimpleTitle(app, item) {
     const raw = values[x.id];
     if (raw == null || raw === '' || (Array.isArray(raw) && !raw.length)) continue;
     switch (x.type) {
-      case 'text': case 'email': case 'phone': case 'location': case 'number': case 'date':
+      case 'text': case 'email': case 'phone': case 'location': case 'url': case 'number': case 'date':
         if (typeof raw !== 'object') return String(raw).trim();
         break;
       case 'money': return `${x.config.currency || '$'}${raw}`;
@@ -10504,6 +10505,39 @@ function wbProgressDisplayHtml(field, pct) {
 function wbProgStopRow(s) {
   return `<div class="wb-stop-item"><span class="wb-stop-lead">≤</span><input type="number" min="0" max="100" class="wb-input wb-stop-upto" value="${h(String(s.upto ?? 100))}" style="max-width:84px"><span class="wb-sub">%</span><input type="color" class="wb-stop-color" value="${h(s.color || '#16a34a')}"><button class="wb-icon-btn danger" data-wb-del-stop type="button" aria-label="Remove stop"><i class="ti ti-x"></i></button></div>`;
 }
+// --- Link / URL field ------------------------------------------------------
+// A safe, openable href from whatever the user typed (adds https:// if missing).
+function wbUrlHref(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  if (/^(https?:|mailto:|tel:)/i.test(s)) return s;
+  return `https://${s}`;
+}
+// A compact label for a link — the host + path, trimmed of scheme and "www.".
+function wbUrlLabel(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  let label = s.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+  if (label.length > 42) label = `${label.slice(0, 42)}…`;
+  return label;
+}
+// The rich control shown when viewing a record: the link plus Copy, Open, and a
+// toggleable QR code. Used in the item view (read-only) rows.
+function wbUrlControl(value) {
+  const s = String(value || '').trim();
+  if (!s) return '<span class="wb-cell-empty">—</span>';
+  const href = wbUrlHref(s);
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data=${encodeURIComponent(href)}`;
+  return `<div class="wb-url-ctrl">
+    <a class="wb-url-link" href="${h(href)}" target="_blank" rel="noopener noreferrer" title="${h(href)}"><i class="ti ti-world-www"></i><span>${h(wbUrlLabel(s))}</span></a>
+    <div class="wb-url-actions">
+      <button type="button" class="btn btn-sm" data-wb-url-copy="${h(href)}"><i class="ti ti-copy"></i>Copy</button>
+      <a class="btn btn-sm" href="${h(href)}" target="_blank" rel="noopener noreferrer"><i class="ti ti-external-link"></i>Open</a>
+      <button type="button" class="btn btn-sm" data-wb-url-qr aria-expanded="false"><i class="ti ti-qrcode"></i>QR</button>
+    </div>
+    <div class="wb-url-qr" hidden><img loading="lazy" width="180" height="180" alt="QR code linking to ${h(wbUrlLabel(s))}" src="${h(qr)}"><span class="wb-sub">Scan to open the link.</span></div>
+  </div>`;
+}
 function wbFmtVal(ctx, field, value) {
   // Checkbox renders as an inline toggle (even when unset) so managers can flip
   // it straight from the table — handled before the empty-value guard below.
@@ -10535,6 +10569,7 @@ function wbFmtVal(ctx, field, value) {
     case 'money': return `<b>${h(field.config.currency || '$')}${Number(value).toLocaleString()}</b>`;
     case 'number': return `${Number(value).toLocaleString()}${field.config.unit ? ` ${h(field.config.unit)}` : ''}`;
     case 'email': return `<a href="mailto:${h(value)}" style="color:var(--info,#2563eb)">${h(value)}</a>`;
+    case 'url': { const href = wbUrlHref(value); return `<a class="wb-url-cell" href="${h(href)}" target="_blank" rel="noopener noreferrer" title="${h(href)}"><i class="ti ti-world-www"></i><span class="wb-url-cell-txt">${h(wbUrlLabel(value))}</span></a>`; }
     case 'phone': return h(formatPhoneNumber(value));
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
     case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; const kind = fileTypeKind({ file_name: fv.name }); return fv.url ? `<button type="button" class="wb-file-icon-btn" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="${h(fv.name)}" aria-label="Open ${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></button>` : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`; }
@@ -11368,6 +11403,13 @@ function wbBuildInstalledApp(workspace, src, includeItems) {
     fieldIdMap[f.id] = id;
     return { id, label: String(f.label || 'Field'), type: WB_FIELD_TYPES[f.type] ? f.type : 'text', required: !!f.required, hidden: !!f.hidden, config: f.config && typeof f.config === 'object' ? clone(f.config) : {} };
   });
+  // Remap same-app field references inside config now that all ids exist — e.g. a
+  // Progress field that fills from a Checklist in this app (config.source).
+  fields.forEach((f) => {
+    if (f.type === 'progress' && f.config && typeof f.config.source === 'string' && fieldIdMap[f.config.source]) {
+      f.config.source = fieldIdMap[f.config.source];
+    }
+  });
   const stamp = new Date().toISOString();
   const items = includeItems ? (Array.isArray(src.items) ? src.items : []).map((it) => {
     const values = {};
@@ -11391,13 +11433,13 @@ function wbInstallAppFromJson(companyId, workspaceId, text) {
   if (!src || !Array.isArray(src.fields)) { showToast('That doesn\'t look like a Quest HQ app file.', 'local', 'Workspaces'); return; }
   const { workspace } = wbFind(companyId, workspaceId);
   if (!workspace) return;
-  // Structure only — never copy the source file's records (they belong to whoever
-  // built the app, and would show up as another account's data here).
-  const app = wbBuildInstalledApp(workspace, src, false);
+  // A file the user uploaded is their own backup/template, so bring its records
+  // in too (restore-style). The shared app library stays structure-only.
+  const app = wbBuildInstalledApp(workspace, src, true);
   workspace.apps.push(app);
-  wbLogActivity(workspace, { icon: 'ti-package-import', color: '#16a34a', text: `Installed app <b>${h(app.name)}</b> (${app.fields.length} fields · ${app.automations.length} automations)` });
+  wbLogActivity(workspace, { icon: 'ti-package-import', color: '#16a34a', text: `Installed app <b>${h(app.name)}</b> (${app.fields.length} fields · ${app.items.length} records · ${app.automations.length} automations)` });
   wbSave(companyId);
-  showToast(`Installed "${app.name}" — fields & automations copied (no records).`, 'local', 'Workspaces');
+  showToast(`Installed "${app.name}" — ${app.fields.length} fields · ${app.items.length} records · ${app.automations.length} automations.`, 'local', 'Workspaces');
   navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
 }
 // Every app across every workspace loaded in this session (fallback for local /
@@ -11875,7 +11917,7 @@ function renderWorkspaceBuilderModal() {
     // View mode: read-only field list + comment thread. Edit only on request.
     if (m.mode === 'view' && item) {
       const ctx = { companyId: m.companyId, workspace, app, values: item.values, item: null, canManage: false };
-      const rows = app.fields.length ? app.fields.map((f) => `<div class="wb-view-row"><span class="wb-view-label">${h(f.label)}</span><span class="wb-view-val">${wbFmtVal(ctx, f, item.values[f.id])}</span></div>`).join('') : '<div class="wb-sub">This app has no fields yet.</div>';
+      const rows = app.fields.length ? app.fields.map((f) => `<div class="wb-view-row"><span class="wb-view-label">${h(f.label)}</span><span class="wb-view-val">${f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(ctx, f, item.values[f.id])}</span></div>`).join('') : '<div class="wb-sub">This app has no fields yet.</div>';
       return wbModalShell('Item', 'wb-modal-wide', header,
         `<div class="wb-view-fields">${rows}</div>${meta}${comments}`,
         `<button class="btn" data-action="wb-modal-close">Close</button>${canManage ? '<button class="btn btn-primary" data-wb-item-edit><i class="ti ti-pencil"></i>Edit</button>' : ''}`);
@@ -11926,7 +11968,7 @@ function wbFieldConfigUI(fd, app) {
   }
   if (t === 'money') return `<div class="wb-field"><label>Currency symbol</label><input class="wb-input" id="wbCurSym" value="${h(fd.config.currency || '$')}" maxlength="3" style="max-width:120px"></div>`;
   if (t === 'number') return `<div class="wb-field"><label>Unit / suffix <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbNumUnit" value="${h(fd.config.unit || '')}" placeholder="e.g. sq ft, hrs" style="max-width:200px"></div>`;
-  if (t === 'text' || t === 'textarea') return `<div class="wb-field"><label>Placeholder <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbPhText" value="${h(fd.config.placeholder || '')}" placeholder="Hint shown in the input"></div>`;
+  if (t === 'text' || t === 'textarea' || t === 'url') return `<div class="wb-field"><label>Placeholder <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbPhText" value="${h(fd.config.placeholder || '')}" placeholder="${t === 'url' ? 'https://…' : 'Hint shown in the input'}"></div>`;
   if (t === 'checklist') { const steps = Array.isArray(fd.config.steps) ? fd.config.steps.join('\n') : (fd.config.steps || ''); return `<div class="wb-field"><label>Default steps <span class="wb-opt">(optional, one per line)</span></label><textarea class="wb-input" id="wbClSteps" placeholder="Site inspection&#10;Material order&#10;Install&#10;Final walkthrough">${h(steps)}</textarea><div class="wb-sub">Every new item starts with these steps (all unchecked). Users can add or remove steps per item. Link its % complete into a Progress or Calculation field by referencing <code>{${h(fd.label || 'Checklist')}}</code>.</div></div>`; }
   if (t === 'progress') {
     const cfg = fd.config || {};
@@ -12035,6 +12077,7 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
     case 'text': input = `<input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="${h(f.config.placeholder || '')}">`; break;
     case 'textarea': input = `<textarea class="wb-input" data-f="${h(f.id)}" placeholder="${h(f.config.placeholder || '')}">${h(val || '')}</textarea>`; break;
     case 'email': input = `<input type="email" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="name@email.com">`; break;
+    case 'url': input = `<input type="url" inputmode="url" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="${h(f.config.placeholder || 'https://…')}">`; break;
     case 'phone': input = `<input type="tel" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="555 123 4567" inputmode="tel" autocomplete="tel" data-phone-format>`; break;
     case 'number': input = `<div class="wb-inline"><input type="text" inputmode="numeric" class="wb-input" data-f="${h(f.id)}" data-digits-only value="${h(val ?? '')}" style="max-width:200px">${f.config.unit ? `<span class="wb-sub">${h(f.config.unit)}</span>` : ''}</div>`; break;
     case 'money': input = `<div class="wb-inline"><span class="wb-cur">${h(f.config.currency || '$')}</span><input type="number" step="0.01" class="wb-input" data-f="${h(f.id)}" value="${h(val ?? '')}" style="max-width:220px"></div>`; break;
@@ -12500,7 +12543,7 @@ function wbCollectModalDraft() {
     if (t === 'calculation') m.draft.config.formula = (val('wbCalcFormula') || '').trim();
     if (t === 'money') m.draft.config.currency = (val('wbCurSym') || '').trim() || '$';
     if (t === 'number') m.draft.config.unit = (val('wbNumUnit') || '').trim();
-    if (t === 'text' || t === 'textarea') m.draft.config.placeholder = (val('wbPhText') || '').trim();
+    if (t === 'text' || t === 'textarea' || t === 'url') m.draft.config.placeholder = (val('wbPhText') || '').trim();
     if (t === 'checklist') m.draft.config.steps = (val('wbClSteps') || '').split('\n').map((s) => s.trim()).filter(Boolean);
     if (t === 'progress') {
       m.draft.config.source = val('wbProgSource') || '';
@@ -12913,6 +12956,18 @@ function wbMountModal() {
     const viewBtn = overlay.querySelector('[data-wb-item-view]');
     if (viewBtn) viewBtn.onclick = () => { const mm = state.builderModal; const found = wbFind(mm.companyId, mm.workspaceId, mm.appId); const it = found.app?.items.find((i) => i.id === mm.editId); mm.draft = { values: it ? { ...it.values } : {} }; mm.mode = 'view'; render(); };
     overlay.querySelectorAll('[data-wb-view-file]').forEach((b) => { b.onclick = () => openWbFilePreview(b.dataset.fileUrl, b.dataset.fileName); });
+    // Link/URL field controls: copy to clipboard, and toggle the QR code.
+    overlay.querySelectorAll('[data-wb-url-copy]').forEach((b) => { b.onclick = async () => {
+      const url = b.dataset.wbUrlCopy || '';
+      try { await navigator.clipboard.writeText(url); showToast('Link copied to clipboard.', 'local', 'Workspaces'); }
+      catch { showToast('Could not copy — select and copy manually.', 'local', 'Workspaces'); }
+    }; });
+    overlay.querySelectorAll('[data-wb-url-qr]').forEach((b) => { b.onclick = () => {
+      const box = b.closest('.wb-url-ctrl')?.querySelector('.wb-url-qr');
+      if (!box) return;
+      const show = box.hidden; box.hidden = !show; b.setAttribute('aria-expanded', show ? 'true' : 'false');
+      b.classList.toggle('active', show);
+    }; });
     const addComment = overlay.querySelector('[data-wb-add-comment]');
     if (addComment) addComment.onclick = () => { wbAddItemComment().catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); };
     overlay.querySelectorAll('[data-wb-comment-edit]').forEach((b) => { b.onclick = () => { state.builderModal.editingCommentId = b.dataset.wbCommentEdit; wbKeepModalScroll(); render(); }; });

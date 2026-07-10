@@ -1,0 +1,118 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-07-09T00:00:00.000Z",
+  "app": {
+    "name": "Applicant Tracker",
+    "description": "Run your hiring pipeline end to end — candidates, interview checklist, ratings, and stage — so nobody falls through the cracks.",
+    "type": "Records",
+    "icon": "ti-users",
+    "color": "#0891b2",
+    "fields": [
+      { "id": "f1", "label": "Candidate", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "Full name" } },
+      { "id": "f2", "label": "Role", "type": "category", "required": false, "hidden": false, "config": { "options": [
+        { "id": "c1", "label": "Developer", "color": "#2563eb" },
+        { "id": "c2", "label": "Designer", "color": "#7c3aed" },
+        { "id": "c3", "label": "Marketer", "color": "#e0552d" },
+        { "id": "c4", "label": "Sales", "color": "#16a34a" },
+        { "id": "c5", "label": "Operations", "color": "#0891b2" }
+      ] } },
+      { "id": "f3", "label": "Stage", "type": "status", "required": false, "hidden": false, "config": { "options": [
+        { "id": "s1", "label": "Applied", "color": "#6b7280" },
+        { "id": "s2", "label": "Screening", "color": "#d97706" },
+        { "id": "s3", "label": "Interview", "color": "#2563eb" },
+        { "id": "s4", "label": "Offer", "color": "#7c3aed" },
+        { "id": "s5", "label": "Hired", "color": "#16a34a" },
+        { "id": "s6", "label": "Rejected", "color": "#dc2626" }
+      ] } },
+      { "id": "f4", "label": "Interview Checklist", "type": "checklist", "required": false, "hidden": false, "config": { "steps": ["Phone screen", "Technical round", "Culture fit", "References checked", "Offer sent"] } },
+      { "id": "f5", "label": "Pipeline Progress", "type": "progress", "required": false, "hidden": false, "config": { "source": "f4", "display": "bar", "colorMode": "single", "color": "#0891b2" } },
+      { "id": "f6", "label": "Rating", "type": "number", "required": false, "hidden": false, "config": { "unit": "/ 5" } },
+      { "id": "f7", "label": "Expected Salary", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } },
+      { "id": "f8", "label": "Email", "type": "email", "required": false, "hidden": false, "config": {} },
+      { "id": "f9", "label": "Phone", "type": "phone", "required": false, "hidden": false, "config": {} },
+      { "id": "f10", "label": "Applied On", "type": "date", "required": false, "hidden": false, "config": {} },
+      { "id": "f11", "label": "Notes", "type": "textarea", "required": false, "hidden": true, "config": { "placeholder": "Strengths, concerns, next step" } },
+      { "id": "f12", "label": "Hired", "type": "checkbox", "required": false, "hidden": false, "config": {} }
+    ],
+    "items": [
+      { "id": "i1", "values": {
+        "f1": "Maria Santos",
+        "f2": "c1",
+        "f3": "s3",
+        "f4": [
+          { "id": "k1", "label": "Phone screen", "done": true },
+          { "id": "k2", "label": "Technical round", "done": true },
+          { "id": "k3", "label": "Culture fit", "done": false },
+          { "id": "k4", "label": "References checked", "done": false },
+          { "id": "k5", "label": "Offer sent", "done": false }
+        ],
+        "f5": 40,
+        "f6": 4,
+        "f7": 95000,
+        "f8": "maria.santos@example.com",
+        "f9": "+1 206 555 0110",
+        "f10": "2026-06-28",
+        "f11": "Strong React + Node. Great technical round.",
+        "f12": false
+      } },
+      { "id": "i2", "values": {
+        "f1": "David Chen",
+        "f2": "c2",
+        "f3": "s5",
+        "f4": [
+          { "id": "k1", "label": "Phone screen", "done": true },
+          { "id": "k2", "label": "Technical round", "done": true },
+          { "id": "k3", "label": "Culture fit", "done": true },
+          { "id": "k4", "label": "References checked", "done": true },
+          { "id": "k5", "label": "Offer sent", "done": true }
+        ],
+        "f5": 100,
+        "f6": 5,
+        "f7": 88000,
+        "f8": "d.chen@example.com",
+        "f9": "+1 415 555 0177",
+        "f10": "2026-05-30",
+        "f11": "Exceptional portfolio. Accepted offer, starts Aug 1.",
+        "f12": true
+      } },
+      { "id": "i3", "values": {
+        "f1": "Priya Nair",
+        "f2": "c3",
+        "f3": "s2",
+        "f4": [
+          { "id": "k1", "label": "Phone screen", "done": true },
+          { "id": "k2", "label": "Technical round", "done": false },
+          { "id": "k3", "label": "Culture fit", "done": false },
+          { "id": "k4", "label": "References checked", "done": false },
+          { "id": "k5", "label": "Offer sent", "done": false }
+        ],
+        "f5": 20,
+        "f6": 3,
+        "f7": 62000,
+        "f8": "priya.nair@example.com",
+        "f9": "+63 917 555 0188",
+        "f10": "2026-07-04",
+        "f11": "Good growth-marketing background. Schedule technical.",
+        "f12": false
+      } }
+    ],
+    "automations": [
+      { "id": "a1", "name": "Move to Offer when interviews done", "enabled": true,
+        "trigger": { "event": "field_is", "fieldId": "f5", "op": ">=", "value": 100 },
+        "actions": [
+          { "type": "set_field", "fieldId": "f3", "value": "s4" },
+          { "type": "notify", "message": "Interview loop complete — time to make an offer." }
+        ] },
+      { "id": "a2", "name": "Flag a hire", "enabled": true,
+        "trigger": { "event": "field_is", "fieldId": "f3", "value": "s5" },
+        "actions": [
+          { "type": "set_field", "fieldId": "f12", "value": true },
+          { "type": "notify", "message": "Candidate hired — start onboarding!" }
+        ] },
+      { "id": "a3", "name": "Log new applicants", "enabled": true,
+        "trigger": { "event": "created" },
+        "actions": [ { "type": "notify", "message": "New applicant added to the pipeline." } ] }
+    ]
+  }
+}

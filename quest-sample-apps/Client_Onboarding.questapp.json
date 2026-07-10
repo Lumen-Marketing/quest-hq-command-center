@@ -1,0 +1,123 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-07-09T00:00:00.000Z",
+  "app": {
+    "name": "Client Onboarding",
+    "description": "Track every new client from kickoff to launch — steps, progress, contract value, and key dates in one place.",
+    "type": "Projects",
+    "icon": "ti-rocket",
+    "color": "#e0552d",
+    "fields": [
+      { "id": "f1", "label": "Client Name", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "Company or client name" } },
+      { "id": "f2", "label": "Package", "type": "category", "required": false, "hidden": false, "config": { "options": [
+        { "id": "c1", "label": "Starter", "color": "#2563eb" },
+        { "id": "c2", "label": "Growth", "color": "#7c3aed" },
+        { "id": "c3", "label": "Enterprise", "color": "#16a34a" }
+      ] } },
+      { "id": "f3", "label": "Stage", "type": "status", "required": false, "hidden": false, "config": { "options": [
+        { "id": "s1", "label": "Kickoff", "color": "#6b7280" },
+        { "id": "s2", "label": "Contract", "color": "#d97706" },
+        { "id": "s3", "label": "Assets", "color": "#2563eb" },
+        { "id": "s4", "label": "Build", "color": "#7c3aed" },
+        { "id": "s5", "label": "Launch", "color": "#0891b2" },
+        { "id": "s6", "label": "Done", "color": "#16a34a" }
+      ] } },
+      { "id": "f4", "label": "Onboarding Steps", "type": "checklist", "required": false, "hidden": false, "config": { "steps": ["Kickoff call", "Sign contract", "Collect brand assets", "Set up accounts", "Build deliverables", "Client review", "Go live"] } },
+      { "id": "f5", "label": "Progress", "type": "progress", "required": false, "hidden": false, "config": { "source": "f4", "display": "ring", "colorMode": "scale", "stops": [
+        { "upto": 0, "color": "#ffffff" },
+        { "upto": 30, "color": "#dc2626" },
+        { "upto": 70, "color": "#d97706" },
+        { "upto": 99, "color": "#2563eb" },
+        { "upto": 100, "color": "#16a34a" }
+      ] } },
+      { "id": "f6", "label": "Contract Value", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } },
+      { "id": "f7", "label": "Start Date", "type": "date", "required": false, "hidden": false, "config": {} },
+      { "id": "f8", "label": "Target Launch", "type": "date", "required": false, "hidden": false, "config": {} },
+      { "id": "f9", "label": "Contact Email", "type": "email", "required": false, "hidden": false, "config": {} },
+      { "id": "f10", "label": "Phone", "type": "phone", "required": false, "hidden": false, "config": {} },
+      { "id": "f11", "label": "Notes", "type": "textarea", "required": false, "hidden": true, "config": { "placeholder": "Context, risks, key contacts" } },
+      { "id": "f12", "label": "Onboarded", "type": "checkbox", "required": false, "hidden": false, "config": {} }
+    ],
+    "items": [
+      { "id": "i1", "values": {
+        "f1": "Vertex Wallet",
+        "f2": "c2",
+        "f3": "s4",
+        "f4": [
+          { "id": "k1", "label": "Kickoff call", "done": true },
+          { "id": "k2", "label": "Sign contract", "done": true },
+          { "id": "k3", "label": "Collect brand assets", "done": true },
+          { "id": "k4", "label": "Set up accounts", "done": true },
+          { "id": "k5", "label": "Build deliverables", "done": false },
+          { "id": "k6", "label": "Client review", "done": false },
+          { "id": "k7", "label": "Go live", "done": false }
+        ],
+        "f5": 57,
+        "f6": 24000,
+        "f7": "2026-06-15",
+        "f8": "2026-08-01",
+        "f9": "design-ops@vertexwallet.io",
+        "f10": "+1 415 555 0142",
+        "f11": "Fintech client — needs SOC2-friendly asset handling.",
+        "f12": false
+      } },
+      { "id": "i2", "values": {
+        "f1": "Alpen Foods",
+        "f2": "c3",
+        "f3": "s6",
+        "f4": [
+          { "id": "k1", "label": "Kickoff call", "done": true },
+          { "id": "k2", "label": "Sign contract", "done": true },
+          { "id": "k3", "label": "Collect brand assets", "done": true },
+          { "id": "k4", "label": "Set up accounts", "done": true },
+          { "id": "k5", "label": "Build deliverables", "done": true },
+          { "id": "k6", "label": "Client review", "done": true },
+          { "id": "k7", "label": "Go live", "done": true }
+        ],
+        "f5": 100,
+        "f6": 68000,
+        "f7": "2026-04-02",
+        "f8": "2026-05-20",
+        "f9": "marketing@alpenfoods.com",
+        "f10": "+1 312 555 0199",
+        "f11": "Enterprise retainer. Renewal review in Q4.",
+        "f12": true
+      } },
+      { "id": "i3", "values": {
+        "f1": "Nova Fitness",
+        "f2": "c1",
+        "f3": "s2",
+        "f4": [
+          { "id": "k1", "label": "Kickoff call", "done": true },
+          { "id": "k2", "label": "Sign contract", "done": false },
+          { "id": "k3", "label": "Collect brand assets", "done": false },
+          { "id": "k4", "label": "Set up accounts", "done": false },
+          { "id": "k5", "label": "Build deliverables", "done": false },
+          { "id": "k6", "label": "Client review", "done": false },
+          { "id": "k7", "label": "Go live", "done": false }
+        ],
+        "f5": 14,
+        "f6": 4500,
+        "f7": "2026-07-06",
+        "f8": "2026-08-15",
+        "f9": "owner@novafitness.co",
+        "f10": "+63 917 555 0123",
+        "f11": "Starter package. Waiting on signed contract.",
+        "f12": false
+      } }
+    ],
+    "automations": [
+      { "id": "a1", "name": "Mark onboarded at 100%", "enabled": true,
+        "trigger": { "event": "field_is", "fieldId": "f5", "op": ">=", "value": 100 },
+        "actions": [
+          { "type": "set_field", "fieldId": "f3", "value": "s6" },
+          { "type": "set_field", "fieldId": "f12", "value": true },
+          { "type": "notify", "message": "Client fully onboarded — nice work!" }
+        ] },
+      { "id": "a2", "name": "Welcome a new client", "enabled": true,
+        "trigger": { "event": "created" },
+        "actions": [ { "type": "notify", "message": "New client onboarding started." } ] }
+    ]
+  }
+}
