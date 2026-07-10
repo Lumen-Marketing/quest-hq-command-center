@@ -10244,7 +10244,7 @@ function wbViewCompanyHome(companyId, workspace) {
   return `
     <div class="wb-page-head">
       <div>
-        <div class="wb-title"><i class="ti ti-layout-grid-add"></i>Workspaces</div>
+        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>Workspaces</h1>
         <div class="wb-sub">Build customizable, no-code dashboards for ${h(companyName(companyId) || 'this company')}.</div>
       </div>
       <div class="wb-spacer"></div>
@@ -10289,7 +10289,7 @@ function wbViewApp(route, companyId, workspace, app) {
   return `
     <div class="wb-page-head">
       <div>
-        <div class="wb-title"><span class="wb-title-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></span>${h(app.name)}</div>
+        <h1 class="wb-title"><span class="wb-title-ic" style="background:${h(app.color)}" aria-hidden="true"><i class="ti ${h(app.icon)}"></i></span>${h(app.name)}</h1>
         <div class="wb-sub">${h(app.description || '')}</div>
       </div>
       <div class="wb-spacer"></div>
@@ -10983,7 +10983,7 @@ function wbCardFieldHtml(ctx, field, ui) {
     let panel = '';
     if (open) {
       const list = s.items.map((it) => `<li class="wb-cl-item ${it.done ? 'done' : ''}">
-        <button type="button" class="wb-cl-check" ${canManage ? `data-wb-cl-card="toggle:${h(item.id)}:${h(field.id)}:${h(it.id)}"` : 'disabled'} role="checkbox" aria-checked="${it.done ? 'true' : 'false'}"><i class="ti ti-check"></i></button>
+        <button type="button" class="wb-cl-check" ${canManage ? `data-wb-cl-card="toggle:${h(item.id)}:${h(field.id)}:${h(it.id)}"` : 'disabled'} role="checkbox" aria-checked="${it.done ? 'true' : 'false'}" aria-label="${h(it.label || 'Step')}"><i class="ti ti-check"></i></button>
         <span class="wb-cl-label">${h(it.label)}</span>
         ${canManage ? `<button type="button" class="wb-cl-del" data-wb-cl-card="remove:${h(item.id)}:${h(field.id)}:${h(it.id)}" title="Remove step"><i class="ti ti-x"></i></button>` : ''}
       </li>`).join('');
@@ -12095,7 +12095,7 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
           <span class="wb-sub" style="flex:none"><i class="ti ti-link"></i> from checklist</span>
         </div>`;
       } else {
-        input = `<div class="wb-inline wb-progress-edit" data-wb-progress><input type="range" min="0" max="100" step="1" data-f="${h(f.id)}" value="${p}" style="flex:1;accent-color:${h(pColor)}"><output data-wb-prog-out class="wb-prog-num" style="min-width:48px;text-align:right">${p}%</output></div>`;
+        input = `<div class="wb-inline wb-progress-edit" data-wb-progress><input type="range" min="0" max="100" step="1" data-f="${h(f.id)}" value="${p}" aria-label="${h(f.label)} percent" style="flex:1;accent-color:${h(pColor)}"><output data-wb-prog-out class="wb-prog-num" style="min-width:48px;text-align:right">${p}%</output></div>`;
       }
       break;
     }
@@ -12172,7 +12172,7 @@ function wbChecklistBodyHtml(items, color = '#16a34a') {
   const pct = total ? Math.round((done / total) * 100) : 0;
   const rows = items.map((it) => `
     <li class="wb-cl-item ${it.done ? 'done' : ''}" data-cid="${h(it.id)}">
-      <button type="button" class="wb-cl-check" data-wb-cl-toggle="${h(it.id)}" role="checkbox" aria-checked="${it.done ? 'true' : 'false'}" title="Toggle step"><i class="ti ti-check"></i></button>
+      <button type="button" class="wb-cl-check" data-wb-cl-toggle="${h(it.id)}" role="checkbox" aria-checked="${it.done ? 'true' : 'false'}" aria-label="${h(it.label || 'Step')}" title="Toggle step"><i class="ti ti-check"></i></button>
       <span class="wb-cl-label">${h(it.label)}</span>
       <button type="button" class="wb-cl-del" data-wb-cl-del="${h(it.id)}" title="Remove step" aria-label="Remove step"><i class="ti ti-x"></i></button>
     </li>`).join('');
@@ -12522,6 +12522,21 @@ function wbCollectModalDraft() {
   }
 }
 
+// After a validation error, move the user to the offending field: scroll it into
+// view, focus its input, and flash an error highlight. Runs after showToast's
+// re-render, so it's queued for the fresh DOM.
+function wbFocusInvalidField(fieldId) {
+  requestAnimationFrame(() => {
+    const marker = document.querySelector(`#wbItemForm [data-f="${(window.CSS && CSS.escape) ? CSS.escape(fieldId) : fieldId}"]`);
+    const wrap = marker ? marker.closest('.wb-field') : null;
+    if (!wrap) return;
+    wrap.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const focusable = wrap.querySelector('input:not([type="hidden"]), select, textarea');
+    if (focusable) focusable.focus();
+    wrap.classList.add('wb-field-invalid');
+    setTimeout(() => wrap.classList.remove('wb-field-invalid'), 2200);
+  });
+}
 function wbSubmitModal() {
   const m = state.builderModal;
   if (!m) return;
@@ -12563,13 +12578,13 @@ function wbSubmitModal() {
   if (m.kind === 'item') {
     const { workspace, app } = wbFind(companyId, m.workspaceId, m.appId);
     const values = {}; let missing = null;
-    app.fields.forEach((f) => { const v = wbReadFieldInput(f); values[f.id] = v; if (f.required && (v === '' || v == null || (Array.isArray(v) && !v.length))) missing = missing || f.label; });
+    app.fields.forEach((f) => { const v = wbReadFieldInput(f); values[f.id] = v; if (f.required && (v === '' || v == null || (Array.isArray(v) && !v.length))) missing = missing || f; });
     // Keep the user's input on any validation error (render() from showToast would
     // otherwise repaint the form from an empty draft and clear the fields).
-    if (missing) { m.draft.values = values; showToast(`"${missing}" is required.`, 'local', 'Workspaces'); return; }
+    if (missing) { m.draft.values = values; showToast(`"${missing.label}" is required.`, 'local', 'Workspaces'); wbFocusInvalidField(missing.id); return; }
     let badEmail = null;
-    app.fields.forEach((f) => { if (f.type === 'email') { const v = String(values[f.id] || '').trim(); if (v && !isValidEmail(v)) badEmail = badEmail || f.label; } });
-    if (badEmail) { m.draft.values = values; showToast(`"${badEmail}" must be a valid email address, e.g. name@company.com.`, 'local', 'Workspaces'); return; }
+    app.fields.forEach((f) => { if (f.type === 'email') { const v = String(values[f.id] || '').trim(); if (v && !isValidEmail(v)) badEmail = badEmail || f; } });
+    if (badEmail) { m.draft.values = values; showToast(`"${badEmail.label}" must be a valid email address, e.g. name@company.com.`, 'local', 'Workspaces'); wbFocusInvalidField(badEmail.id); return; }
     const nowStamp = new Date().toISOString();
     if (m.editId) {
       const item = app.items.find((i) => i.id === m.editId); const prev = { ...item.values }; item.values = values;
@@ -18804,7 +18819,37 @@ function renderFormActionsModal(companyId, form) {
 // aren't natively operable by keyboard. Activate them on Enter/Space so lists
 // like the contacts table are usable without a mouse. Native controls
 // (button/a/input) already handle their own keys and are skipped.
+// The currently open modal overlay, if any (builder modals or generic modals).
+function activeModalOverlay() {
+  return document.querySelector('.wb-modal-overlay') || document.querySelector('.modal-overlay');
+}
+// Dismiss the topmost open modal (builder modal wins if both somehow exist).
+function dismissTopModal() {
+  if (state.builderModal) { closeWbModal(); return true; }
+  if (state.modal) { closeActiveModal(); return true; }
+  return false;
+}
+// Keep Tab focus inside the open modal so keyboard users can't tab into the
+// page behind it; wraps at both ends and pulls stray focus back in.
+function trapModalFocus(event) {
+  const overlay = activeModalOverlay();
+  if (!overlay) return;
+  const sel = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  const nodes = [...overlay.querySelectorAll(sel)].filter((el) => !el.hidden && (el.offsetWidth + el.offsetHeight) > 0);
+  if (!nodes.length) return;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  const active = document.activeElement;
+  if (!overlay.contains(active)) { event.preventDefault(); first.focus(); return; }
+  if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
+}
 function onDocumentKeydown(event) {
+  // Modal keyboard support: Esc dismisses, Tab is trapped within the modal.
+  if ((state.builderModal || state.modal) && activeModalOverlay()) {
+    if (event.key === 'Escape') { if (dismissTopModal()) event.preventDefault(); return; }
+    if (event.key === 'Tab') { trapModalFocus(event); return; }
+  }
   if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
   const el = event.target;
   if (!el || typeof el.closest !== 'function') return;

@@ -18765,7 +18765,7 @@ button {
   display: grid;
   place-items: center;
   margin-top: 1px;
-  color: #98a2b3;
+  color: var(--muted, #6b7280);
   font-size: 18px;
   cursor: grab;
   flex: none;
@@ -19122,7 +19122,7 @@ button {
   font-weight: 800;
   letter-spacing: .04em;
   text-transform: uppercase;
-  color: #98a2b3;
+  color: var(--muted, #6b7280);
   margin-bottom: 8px;
 }
 
@@ -19152,7 +19152,7 @@ button {
   font-weight: 800;
   letter-spacing: .02em;
   text-transform: uppercase;
-  color: #98a2b3;
+  color: var(--muted, #6b7280);
   margin-bottom: 8px;
 }
 
@@ -20092,7 +20092,7 @@ button {
 .wb-page { display: block; }
 .wb-page-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
 .wb-spacer { flex: 1; }
-.wb-title { font-size: 1.6rem; font-weight: 900; letter-spacing: -.01em; display: flex; align-items: center; gap: 12px; color: var(--text, #17130f); }
+.wb-title { margin: 0; font-size: 1.6rem; font-weight: 900; letter-spacing: -.01em; display: flex; align-items: center; gap: 12px; color: var(--text, #17130f); }
 .wb-title > i { color: #e0552d; }
 .wb-title-ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; color: #fff; font-size: 20px; flex: none; }
 .wb-sub { color: var(--text-muted, #72695d); font-size: .92rem; margin-top: 3px; }
@@ -20142,6 +20142,49 @@ button {
 .wb-appswitch-btn.active .wb-appswitch-ic { box-shadow: 0 0 0 2px var(--surface, #fffaf0) inset; }
 .wb-appswitch-add { flex: none; width: 40px; height: 40px; border-radius: 11px; border: 1.5px dashed var(--border-strong, #cdb595); background: transparent; color: var(--text-muted, #72695d); cursor: pointer; display: grid; place-items: center; font-size: 18px; }
 .wb-appswitch-add:hover { border-color: var(--orange, #e0552d); color: var(--orange, #e0552d); }
+
+/* A11y: visible keyboard-focus ring on interactive controls that lacked one.
+   Only shows for keyboard users (:focus-visible), never on mouse click. */
+.btn:focus-visible,
+.icon-button:focus-visible,
+.wb-icon-btn:focus-visible,
+.wb-tab:focus-visible,
+.wb-view-btn:focus-visible,
+.wb-appswitch-btn:focus-visible,
+.wb-appswitch-add:focus-visible,
+.wb-emoji-opt:focus-visible,
+.wb-swatch:focus-visible,
+.wb-cl-check:focus-visible,
+.wb-cl-del:focus-visible,
+.wb-card-cl-summary:focus-visible,
+.wb-check-toggle:focus-visible,
+.dash-report-opt:focus-visible,
+.dash-widget-tools button:focus-visible,
+.wb-calc-chip:focus-visible {
+  outline: 2px solid var(--orange, #e0552d);
+  outline-offset: 2px;
+}
+
+/* A11y: on touch devices, grow the builder's small icon controls toward the
+   44px comfortable-tap target — without bloating the dense mouse-driven desktop UI. */
+@media (pointer: coarse) {
+  .wb-icon-btn { width: 40px; height: 40px; }
+  .wb-cl-check { width: 28px; height: 28px; }
+  .wb-cl-del { width: 36px; height: 36px; opacity: 1; }
+  .wb-appswitch-add { width: 44px; height: 44px; }
+  .wb-view-btn { min-height: 40px; }
+  .dash-widget-tools button { width: 36px; height: 36px; }
+}
+
+/* A11y: honor the OS "reduce motion" setting across the whole app. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 .wb-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border, #e2d5bf); margin-bottom: 20px; flex-wrap: wrap; }
 .wb-tab { padding: 10px 14px; font-weight: 700; font-size: .9rem; color: var(--text-muted, #72695d); border-bottom: 2px solid transparent; margin-bottom: -1px; text-decoration: none; }
 .wb-tab b { opacity: .55; font-weight: 700; }
@@ -20421,6 +20464,14 @@ button.wb-file:hover { color: var(--orange); text-decoration: underline; }
 .wb-settings-title { font-weight: 800; margin-bottom: 16px; }
 .wb-settings-actions { display: flex; gap: 10px; margin-top: 8px; }
 .wb-field { margin-bottom: 14px; }
+/* Flash on a field that failed validation, after the save is blocked. */
+.wb-field-invalid > label { color: #dc2626; }
+.wb-field-invalid .wb-input,
+.wb-field-invalid input:not([type="hidden"]),
+.wb-field-invalid select,
+.wb-field-invalid textarea,
+.wb-field-invalid .wb-checklist,
+.wb-field-invalid .wb-emoji-pick { border-color: #dc2626 !important; box-shadow: 0 0 0 3px rgba(220, 38, 38, .18); }
 .wb-field > label { display: block; font-weight: 700; font-size: .84rem; margin-bottom: 6px; color: var(--text-2, #473f34); }
 .wb-opt { color: var(--text-muted, #72695d); font-weight: 500; text-transform: none; font-size: .78rem; }
 .wb-input { width: 100%; border: 1px solid var(--border-strong, #d3c1a7); border-radius: 10px; padding: 10px 12px; font: inherit; background: var(--surface); color: var(--text, #17130f); }
@@ -21746,3 +21797,23 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   border-radius: inherit;
   object-fit: cover;
 }
+
+/* ============================================================================
+   Accessibility — contrast fixes (appended last so they win cleanly).
+   Muted text below failed WCAG AA on light surfaces. Each is set to a passing
+   value per theme: darker gray in light mode, lighter gray on dark surfaces.
+   ============================================================================ */
+.side-label,
+.side-label-chevron,
+.side-sub-ct { color: #5c6675; }              /* ~5.8:1 on the light sidebar */
+@media (prefers-color-scheme: dark) {
+  .side-label,
+  .side-label-chevron,
+  .side-sub-ct { color: #aab4c2; }            /* light-on-dark sidebar */
+}
+:root[data-theme="light"] .side-label,
+:root[data-theme="light"] .side-label-chevron,
+:root[data-theme="light"] .side-sub-ct { color: #5c6675; }
+:root[data-theme="dark"] .side-label,
+:root[data-theme="dark"] .side-label-chevron,
+:root[data-theme="dark"] .side-sub-ct { color: #aab4c2; }
