@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { clientIp, readJsonBody, safeReturnUrl } from '../api/_lib/http-security.js';
 import { consumeRateLimit, rateLimitWindowCount, resetRateLimits } from '../api/_lib/rate-limit.js';
 import { checkoutIdempotencyKey } from '../api/create-checkout-session.js';
-import { verifyStripeSignature } from '../api/stripe-webhook.js';
+import { normalizeStripeSubscriptionStatus, verifyStripeSignature } from '../api/stripe-webhook.js';
+
+const stripeWebhookSource = readFileSync(new URL('../api/stripe-webhook.js', import.meta.url), 'utf8');
 
 test('bounded JSON parsing rejects oversized pre-parsed and string bodies', async () => {
   await assert.rejects(() => readJsonBody({ body: { value: 'x'.repeat(100) } }, { maxBytes: 32 }), (error) => error.statusCode === 413);
@@ -55,4 +58,19 @@ test('Stripe verification accepts any valid v1 signature and rejects stale times
   const signature = crypto.createHmac('sha256', process.env.STRIPE_WEBHOOK_SECRET).update(`${nowSeconds}.${body}`).digest('hex');
   assert.doesNotThrow(() => verifyStripeSignature(body, `t=${nowSeconds},v1=bad,v1=${signature}`, { nowMs: nowSeconds * 1000 }));
   assert.throws(() => verifyStripeSignature(body, `t=${nowSeconds - 301},v1=${signature}`, { nowMs: nowSeconds * 1000 }), /timestamp/i);
+});
+
+test('Stripe subscription states map to the database access model', () => {
+  assert.equal(normalizeStripeSubscriptionStatus('trialing'), 'trialing');
+  assert.equal(normalizeStripeSubscriptionStatus('active'), 'active');
+  assert.equal(normalizeStripeSubscriptionStatus('past_due'), 'past_due');
+  assert.equal(normalizeStripeSubscriptionStatus('canceled'), 'canceled');
+  assert.equal(normalizeStripeSubscriptionStatus('unpaid'), 'suspended');
+  assert.equal(normalizeStripeSubscriptionStatus('incomplete_expired'), 'suspended');
+  assert.equal(normalizeStripeSubscriptionStatus('paused'), 'suspended');
+  assert.equal(normalizeStripeSubscriptionStatus('unexpected'), 'incomplete');
+});
+
+test('checkout completion retries when Stripe cannot resolve its subscription', () => {
+  assert.match(stripeWebhookSource, /object\.object !== 'subscription'[\s\S]*!subscription[\s\S]*throw new Error/);
 });

@@ -5,7 +5,7 @@ import opsCommandHeroUrl from './assets/quest-hq-ops-command-hero.png';
 import questLogoMarkUrl from './assets/quest-hq-logo-mark.png';
 import { requireOk, settleObserved } from './lib/result.js';
 import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordRequirements } from './auth/password-policy.js';
-import { createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh } from './data/realtime-policy.js';
+import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh } from './data/realtime-policy.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -125,15 +125,15 @@ const ACCENT_OPTIONS = [
   ['slate', 'Command Slate', '#475569'],
 ];
 const RECYCLE_BIN_TYPES = {
-  contact: { type: 'contact', label: 'Contact', table: 'contacts', stateKey: 'contacts', permission: 'crm.view', normalize: normalizeContact, title: (record) => record.name || 'Contact', redirect: (companyId) => companyPath('contacts', {}, companyId) },
-  account: { type: 'account', label: 'Account', table: 'accounts', stateKey: 'accounts', permission: 'crm.view', normalize: normalizeAccount, title: (record) => record.name || 'Account', redirect: (companyId) => companyPath('crm', {}, companyId) },
-  deal: { type: 'deal', label: 'Quote', table: 'deals', stateKey: 'deals', permission: 'crm.view', normalize: normalizeDeal, title: (record) => record.name || 'Quote', redirect: (companyId) => companyPath('deals', {}, companyId) },
+  contact: { type: 'contact', label: 'Contact', table: 'contacts', stateKey: 'contacts', permission: 'crm.manage', normalize: normalizeContact, title: (record) => record.name || 'Contact', redirect: (companyId) => companyPath('contacts', {}, companyId) },
+  account: { type: 'account', label: 'Account', table: 'accounts', stateKey: 'accounts', permission: 'crm.manage', normalize: normalizeAccount, title: (record) => record.name || 'Account', redirect: (companyId) => companyPath('crm', {}, companyId) },
+  deal: { type: 'deal', label: 'Quote', table: 'deals', stateKey: 'deals', permission: 'crm.manage', normalize: normalizeDeal, title: (record) => record.name || 'Quote', redirect: (companyId) => companyPath('deals', {}, companyId) },
   job: { type: 'job', label: 'Job', table: 'jobs', stateKey: 'jobs', permission: 'jobs.manage', normalize: normalizeJob, title: (record) => record.name || record.client_name || 'Job', redirect: (companyId) => companyPath('jobs', { tab: 'list' }, companyId) },
   task: { type: 'task', label: 'Task', table: 'tasks', stateKey: 'tasks', permission: 'tasks.manage', normalize: normalizeTask, title: (record) => record.title || record.name || 'Task', redirect: (companyId) => companyPath('tasks', {}, companyId) },
   file: { type: 'file', label: 'File', table: 'job_files', stateKey: 'files', permission: 'files.manage', normalize: normalizeFile, title: (record) => record.file_name || 'File', redirect: (companyId) => companyPath('files', {}, companyId) },
   form: { type: 'form', label: 'Form', table: 'forms', stateKey: 'forms', permission: 'forms.manage', normalize: normalizeForm, title: (record) => record.title || 'Form', redirect: (companyId) => companyPath('forms', {}, companyId) },
   form_response: { type: 'form_response', label: 'Form response', table: 'form_responses', stateKey: 'formResponses', permission: 'forms.manage', normalize: normalizeFormResponse, title: (record) => `${formById(record.form_id)?.title || 'Form'} response`, redirect: (companyId) => companyPath('forms', { tab: 'responses' }, companyId) },
-  proposal: { type: 'proposal', label: 'Proposal', table: 'proposal_documents', stateKey: 'proposals', permission: 'crm.view', normalize: normalizeProposal, title: (record) => record.title || record.proposal_no || 'Proposal', redirect: (companyId) => companyPath('proposals', {}, companyId) },
+  proposal: { type: 'proposal', label: 'Proposal', table: 'proposal_documents', stateKey: 'proposals', permission: 'crm.manage', normalize: normalizeProposal, title: (record) => record.title || record.proposal_no || 'Proposal', redirect: (companyId) => companyPath('proposals', {}, companyId) },
   client_portal: { type: 'client_portal', label: 'Client portal', table: 'client_portals', stateKey: 'clientPortals', permission: 'client_portals.manage', normalize: normalizeClientPortal, title: (record) => record.title || 'Client portal', redirect: (companyId) => companyPath('client-portals', {}, companyId) },
   pricebook_vendor: { type: 'pricebook_vendor', label: 'Price book vendor', table: 'pricebook_vendors', stateKey: 'pricebookVendors', permission: 'price_book.manage', normalize: normalizePricebookVendor, title: (record) => record.name || 'Vendor', redirect: (companyId) => companyPath('price-book', {}, companyId) },
   pricebook_material: { type: 'pricebook_material', label: 'Price book material', table: 'pricebook_materials', stateKey: 'pricebookMaterials', permission: 'price_book.manage', normalize: normalizePricebookMaterial, title: (record) => record.name || 'Material', redirect: (companyId) => companyPath('price-book', {}, companyId) },
@@ -143,7 +143,7 @@ const RECYCLE_BIN_TYPES = {
   finance_expense: { type: 'finance_expense', label: 'Expense', table: 'finance_expenses', stateKey: 'financeExpenses', permission: 'finance.manage', normalize: normalizeFinanceExpense, title: (record) => record.category || 'Expense', redirect: (companyId) => companyPath('finance', {}, companyId) },
   finance_vendor: { type: 'finance_vendor', label: 'Finance vendor', table: 'finance_vendors', stateKey: 'financeVendors', permission: 'finance.manage', normalize: normalizeFinanceVendor, title: (record) => record.name || 'Vendor', redirect: (companyId) => companyPath('finance', {}, companyId) },
   calendar_event: { type: 'calendar_event', label: 'Calendar event', table: 'calendar_events', stateKey: 'calendarEvents', permission: 'calendar.manage', normalize: normalizeCalendarEvent, title: (record) => record.title || 'Calendar event', redirect: (companyId) => companyPath('calendar', {}, companyId) },
-  activity: { type: 'activity', label: 'Activity', table: 'activities', stateKey: 'activities', permission: 'crm.view', normalize: normalizeActivity, title: (record) => record.subject || 'Activity', redirect: (companyId) => companyPath('dashboard', { activity: '1' }, companyId) },
+  activity: { type: 'activity', label: 'Activity', table: 'activities', stateKey: 'activities', permission: 'crm.manage', normalize: normalizeActivity, title: (record) => record.subject || 'Activity', redirect: (companyId) => companyPath('dashboard', { activity: '1' }, companyId) },
 };
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
 const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
@@ -364,7 +364,7 @@ const ROLE_PERMISSIONS = {
   developer: ['*'],
   admin: ['*'],
   owner: ['*'],
-  manager: ['jobs.view', 'jobs.manage', 'tasks.view', 'tasks.manage', 'files.view', 'files.manage', 'forms.view', 'forms.manage', 'crm.view', 'underwriter.view', 'underwriter.manage', 'finance.view', 'price_book.view', 'price_book.manage', 'team.view', 'clock.manage', 'approvals.manage', 'approvals.view', 'calendar.view', 'calendar.manage', 'calendar.view_team', 'users.view', 'settings.view', 'billing.view', 'roles.view', 'messages.view', 'messages.send', 'messages.create_group', 'messages.manage_groups', 'messages.attach_files', 'client_portals.view', 'client_portals.manage', 'workspaces.view', 'workspaces.manage'],
+  manager: ['jobs.view', 'jobs.manage', 'tasks.view', 'tasks.manage', 'files.view', 'files.manage', 'forms.view', 'forms.manage', 'crm.view', 'crm.manage', 'underwriter.view', 'underwriter.manage', 'finance.view', 'price_book.view', 'price_book.manage', 'team.view', 'clock.manage', 'approvals.manage', 'approvals.view', 'calendar.view', 'calendar.manage', 'calendar.view_team', 'users.view', 'settings.view', 'billing.view', 'roles.view', 'messages.view', 'messages.send', 'messages.create_group', 'messages.manage_groups', 'messages.attach_files', 'client_portals.view', 'client_portals.manage', 'workspaces.view', 'workspaces.manage'],
   member: ['jobs.view', 'tasks.view', 'tasks.manage', 'files.view', 'forms.view', 'time.track', 'approvals.view', 'calendar.view', 'users.view', 'messages.view', 'messages.send', 'messages.attach_files'],
 };
 
@@ -382,6 +382,7 @@ const PERMISSION_KEYS = [
   ['client_portals.view', 'View client portal'],
   ['client_portals.manage', 'Create/edit client portal'],
   ['crm.view', 'View CRM'],
+  ['crm.manage', 'Delete CRM records'],
   ['underwriter.view', 'View underwriter'],
   ['underwriter.manage', 'Manage underwriter'],
   ['finance.view', 'View finance'],
@@ -7550,8 +7551,19 @@ function beginAddressInlineEdit(span, value, companyId, commitValue, picker = {}
   });
 }
 
+function activeTaskCreatorId(companyId = activeCompanyId()) {
+  const profile = activeSession()?.profile || {};
+  return String(profile.member_id || companyMembers(companyId).find((member) => member.profile_id === profile.id)?.id || '');
+}
+
 async function createContactTask(contactId, taskInput) {
   const companyId = activeCompanyId();
+  if (!requirePermission('tasks.manage', companyId, 'Your role cannot create tasks.', 'Tasks')) return false;
+  const creatorId = activeTaskCreatorId(companyId);
+  if (!creatorId) {
+    showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
+    return false;
+  }
   const clean = typeof taskInput === 'object'
     ? {
       title: String(taskInput.title || '').trim(),
@@ -7568,29 +7580,38 @@ async function createContactTask(contactId, taskInput) {
     title: clean.title,
     description: clean.description,
     contact_id: contactId,
-    creator_id: activeSession().profile.member_id || companyMembers(companyId)[0]?.id || 'abraham',
+    creator_id: creatorId,
     status: 'todo',
     due: clean.due,
     due_time: clean.due_time,
     priority: clean.priority,
     urgency: clean.priority,
   });
-  upsertTask(payload);
-  render();
   const client = createSupabaseClient();
-  if (client) {
-    try {
-      const result = await client.from('tasks').insert(taskPayload(payload)).select().single();
-      if (!result.error && result.data) { upsertTask(normalizeTask(result.data)); render(); }
-    } catch (error) { console.warn('Contact task sync failed', error); }
+  let savedTask = payload;
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').insert(taskPayload(payload)).select().single());
+    if (result.error) {
+      notifySyncFailure(result.error, 'Task create');
+      return false;
+    }
+    if (!result.data) {
+      notifySyncFailure(new Error('Task insert returned no record.'), 'Task create');
+      return false;
+    }
+    savedTask = normalizeTask(result.data);
   }
+  upsertTask(savedTask);
+  render();
+  return savedTask;
 }
 
 async function logContactActivity(contactId, type, subject, body = '') {
   const contact = contactById(contactId);
   if (!contact) return;
-  await logActivity({ type, subject, body, related_type: 'contact', related_id: contactId, account_id: contact.account_id });
+  const activity = await logActivity({ type, subject, body, related_type: 'contact', related_id: contactId, account_id: contact.account_id });
   render();
+  return activity;
 }
 
 function contactQuickCreate(contactId, kind) {
@@ -7634,15 +7655,12 @@ async function ensureCrmSiteForContact(contact) {
     notes: contact.notes,
   });
   site.updated_at = new Date().toISOString();
-  upsertCrmSite(site);
   const row = emptyToNull(supabaseRow(site, SITE_COLS), ['contact_id', 'account_id']);
   const { ok, data } = await supabaseWrite('crm_sites', row);
-  if (ok && data) {
-    const liveSite = normalizeCrmSite(data);
-    upsertCrmSite(liveSite);
-    return liveSite;
-  }
-  return site;
+  if (!ok) return false;
+  const savedSite = data ? normalizeCrmSite(data) : site;
+  upsertCrmSite(savedSite);
+  return savedSite;
 }
 
 async function convertContactToQuote(contactId) {
@@ -7651,6 +7669,7 @@ async function convertContactToQuote(contactId) {
   const companyId = contact.company_id;
   if (!requirePermission('crm.view', companyId, 'Your role cannot create quotes.', 'Quotes')) return;
   const site = await ensureCrmSiteForContact(contact);
+  if (site === false) return false;
   const deal = normalizeDeal({
     id: `deal-${crypto.randomUUID()}`,
     company_id: companyId,
@@ -7804,16 +7823,23 @@ function jobSupabaseRow(job) {
 
 async function persistJob(job, label = 'Job saved locally') {
   const payload = normalizeJob({ ...job, updated_at: new Date().toISOString() });
+  const previous = jobById(payload.id);
   upsertJob(payload);
-  state.sync = { label, mode: 'local' };
+  state.sync = isLiveSupabaseSession() ? { label: 'Saving job…', mode: 'loading' } : { label, mode: 'local' };
   render();
   const { ok, data } = await supabaseWrite('jobs', jobSupabaseRow(payload));
-  if (ok && data) {
-    upsertJob(normalizeJob(data));
-    state.sync = { label: 'Quest Supabase live', mode: 'live' };
+  if (!ok) {
+    if (previous) upsertJob(previous);
+    else state.jobs = state.jobs.filter((item) => item.id !== payload.id);
+    state.sync = { label: 'Job save failed', mode: 'local' };
     render();
+    return false;
   }
-  return payload;
+  const savedJob = data ? normalizeJob(data) : payload;
+  upsertJob(savedJob);
+  state.sync = { label: isLiveSupabaseSession() ? 'Quest Supabase live' : label, mode: isLiveSupabaseSession() ? 'live' : 'local' };
+  render();
+  return savedJob;
 }
 
 async function setJobStage(jobId, stage) {
@@ -7821,8 +7847,9 @@ async function setJobStage(jobId, stage) {
   if (!job || !jobStageNames().includes(stage)) return;
   if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot update jobs.', 'Jobs')) return;
   if (job.stage === stage) { render(); return; }
-  await persistJob({ ...job, stage }, 'Job stage saved locally');
+  if (!await persistJob({ ...job, stage }, 'Job stage saved locally')) return false;
   await logJobActivity(job.id, 'stage_change', `Stage -> ${stage}`);
+  return true;
 }
 
 function markJobNextStage(jobId) {
@@ -7836,8 +7863,9 @@ function markJobNextStage(jobId) {
 async function logJobActivity(jobId, type, subject, body = '') {
   const job = jobById(jobId);
   if (!job) return;
-  await logActivity({ type, subject, body, related_type: 'job', related_id: jobId, account_id: job.account_id });
+  const activity = await logActivity({ type, subject, body, related_type: 'job', related_id: jobId, account_id: job.account_id });
   render();
+  return activity;
 }
 
 async function createJobTask(jobId, title) {
@@ -7845,7 +7873,7 @@ async function createJobTask(jobId, title) {
   const clean = String(title || '').trim();
   if (!job || !clean) return;
   if (!requirePermission('tasks.manage', job.company_id, 'Your role cannot create tasks.', 'Tasks')) return;
-  const creatorId = activeSession().profile.member_id || activeSession().profile.id;
+  const creatorId = activeTaskCreatorId(job.company_id);
   if (!creatorId) {
     showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
     return false;
@@ -17480,16 +17508,16 @@ async function saveBuiltEstimate(form) {
   const body = estimateActivityBody(draft, totals);
   if (type === 'contact') {
     const contact = contactById(id);
-    await persistContact({ ...contact, value: quoteTotal, roof_system: ROOF_ESTIMATE_SYSTEMS[draft.primary]?.label || draft.primary });
+    if (!await persistContact({ ...contact, value: quoteTotal, roof_system: ROOF_ESTIMATE_SYSTEMS[draft.primary]?.label || draft.primary })) return false;
     await logContactActivity(id, 'system', `Estimate saved - ${money(quoteTotal)}`, body);
   } else if (type === 'deal') {
     const deal = dealById(id);
     const estimateStage = dealStageNames().find((stage) => /estimate|proposal/i.test(stage));
-    await persistDeal({ ...deal, value: quoteTotal, stage: estimateStage || deal.stage }, 'Estimate saved to quote.');
+    if (!await persistDeal({ ...deal, value: quoteTotal, stage: estimateStage || deal.stage }, 'Estimate saved to quote.')) return false;
     await logDealActivity(id, 'system', `Estimate saved - ${money(quoteTotal)}`, body);
   } else if (type === 'job') {
     const job = jobById(id);
-    await persistJob({ ...job, estimate_total: quoteTotal }, 'Estimate saved to job.');
+    if (!await persistJob({ ...job, estimate_total: quoteTotal }, 'Estimate saved to job.')) return false;
     await logJobActivity(id, 'system', `Estimate saved - ${money(quoteTotal)}`, body);
   }
   state.modal = '';
@@ -17888,18 +17916,19 @@ async function saveBuiltProposal(form) {
   const body = proposalActivityBody(draft);
   const existing = proposalId ? proposalById(proposalId) : null;
   const savedProposal = await persistProposal(proposalRecordFromDraft(ctx, draft, existing), existing ? 'Proposal updated.' : 'Proposal saved.');
+  if (!savedProposal) return false;
   if (type === 'contact') {
     const contact = contactById(id);
-    await persistContact({ ...contact, value: total });
+    if (!await persistContact({ ...contact, value: total })) return false;
     await logContactActivity(id, 'email', `${existing ? 'Proposal updated' : 'Proposal prepared'} - ${money(total)}`, `${body}\n\nProposal ID: ${savedProposal.id}`);
   } else if (type === 'deal') {
     const deal = dealById(id);
     const proposalStage = dealStageNames().find((stage) => /estimate|proposal/i.test(stage));
-    await persistDeal({ ...deal, value: total, stage: proposalStage || deal.stage }, 'Proposal saved to quote.');
+    if (!await persistDeal({ ...deal, value: total, stage: proposalStage || deal.stage }, 'Proposal saved to quote.')) return false;
     await logDealActivity(id, 'email', `${existing ? 'Proposal updated' : 'Proposal prepared'} - ${money(total)}`, `${body}\n\nProposal ID: ${savedProposal.id}`);
   } else if (type === 'job') {
     const job = jobById(id);
-    await persistJob({ ...job, estimate_total: total }, 'Proposal saved to job.');
+    if (!await persistJob({ ...job, estimate_total: total }, 'Proposal saved to job.')) return false;
     await logJobActivity(id, 'email', `${existing ? 'Proposal updated' : 'Proposal prepared'} - ${money(total)}`, `${body}\n\nProposal ID: ${savedProposal.id}`);
   }
   state.modal = '';
@@ -17945,6 +17974,7 @@ async function duplicateProposal(proposalId) {
     updated_at: new Date().toISOString(),
   });
   const saved = await persistProposal(copy, 'Proposal duplicated.');
+  if (!saved) return false;
   await logActivity({ type: 'system', subject: 'Proposal reused', body: `Copied from ${source.proposal_no || source.id}`, related_type: saved.related_type, related_id: saved.related_id });
   state.selectedProposalId = saved.id;
   navigate(companyPath('proposals', { proposal_id: saved.id }, saved.company_id));
@@ -17961,6 +17991,7 @@ async function setProposalStatus(proposalId, status, label = 'Proposal status sa
   if (status === 'Accepted' && !proposal.accepted_at) updates.accepted_at = now;
   if (status === 'Declined' && !proposal.declined_at) updates.declined_at = now;
   const saved = await persistProposal({ ...proposal, ...updates }, label);
+  if (!saved) return false;
   await logActivity({ type: 'system', subject: `Proposal ${status}`, body: `${saved.proposal_no || saved.title} is now ${status}.`, related_type: saved.related_type, related_id: saved.related_id });
   state.selectedProposalId = saved.id;
   render();
@@ -22806,15 +22837,19 @@ async function saveJob(form) {
   const client = createSupabaseClient();
 
   if (client) {
-    const result = existing
-      ? await client.from('jobs').update(payload).eq('id', payload.id).select().single()
-      : await client.from('jobs').insert(payload).select().single();
+    const result = await safeSupabaseQuery(existing
+      ? client.from('jobs').update(payload).eq('id', payload.id).select().single()
+      : client.from('jobs').insert(payload).select().single());
     if (!result.error && result.data) {
       upsertJob(normalizeJob(result.data));
       state.sync = { label: 'Quest Supabase live', mode: 'live' };
       state.modal = '';
       navigate(companyPath('jobs', { tab: 'profile', job_id: result.data.id }, payload.company_id), { replace: true });
-      return;
+      return true;
+    }
+    if (isLiveSupabaseSession()) {
+      notifySyncFailure(result.error || new Error('Job save returned no record.'), 'Job save');
+      return false;
     }
     state.sync = { label: 'Saved locally', mode: 'local' };
   }
@@ -22822,6 +22857,7 @@ async function saveJob(form) {
   upsertJob(payload);
   state.modal = '';
   navigate(companyPath('jobs', { tab: 'profile', job_id: payload.id }, payload.company_id), { replace: true });
+  return true;
 }
 
 async function deleteJob(id) {
@@ -22835,11 +22871,16 @@ async function saveTask(form) {
   const companyId = activeCompanyId();
   if (!requirePermission('tasks.manage', companyId, 'Your role can view tasks but cannot create or edit them.', 'Tasks')) return;
   const formData = Object.fromEntries(new FormData(form).entries());
+  const creatorId = activeTaskCreatorId(companyId);
+  if (!creatorId) {
+    showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
+    return false;
+  }
   const payload = normalizeTask({
     ...formData,
     id: String(formData.id || '').trim() || `task-${crypto.randomUUID()}`,
     company_id: companyId,
-    creator_id: activeSession().profile.member_id || companyMembers(companyId)[0]?.id || 'abraham',
+    creator_id: creatorId,
     urgency: formData.priority || 'medium',
     watchers: [],
     subtasks: [],
@@ -22853,9 +22894,9 @@ async function saveTask(form) {
   const returnContactId = String(formData.return_contact_id || '').trim();
   if (client) {
     const savePayload = taskPayload(payload);
-    const result = existing
-      ? await client.from('tasks').update(savePayload).eq('id', payload.id).select().single()
-      : await client.from('tasks').insert(savePayload).select().single();
+    const result = await safeSupabaseQuery(existing
+      ? client.from('tasks').update(savePayload).eq('id', payload.id).select().single()
+      : client.from('tasks').insert(savePayload).select().single());
     if (!result.error && result.data) {
       const savedTask = normalizeTask(result.data);
       upsertTask(savedTask);
@@ -22864,10 +22905,14 @@ async function saveTask(form) {
       state.modal = '';
       if (returnContactId) {
         navigate(companyPath('contacts', { contact_id: returnContactId }, companyId), { replace: true });
-        return;
+        return true;
       }
       navigate(companyPath('tasks', { ...(payload.project_id ? { job_id: payload.project_id } : {}), task_id: payload.id }, companyId), { replace: true });
-      return;
+      return true;
+    }
+    if (isLiveSupabaseSession()) {
+      notifySyncFailure(result.error || new Error('Task save returned no record.'), 'Task save');
+      return false;
     }
     state.sync = { label: 'Task saved locally', mode: 'local' };
   }
@@ -22877,9 +22922,10 @@ async function saveTask(form) {
   state.modal = '';
   if (returnContactId) {
     navigate(companyPath('contacts', { contact_id: returnContactId }, companyId), { replace: true });
-    return;
+    return true;
   }
   navigate(companyPath('tasks', { ...(payload.project_id ? { job_id: payload.project_id } : {}), task_id: payload.id }, companyId), { replace: true });
+  return true;
 }
 
 async function deleteTask(id, options = {}) {
@@ -22963,7 +23009,7 @@ async function saveFileRecord(form) {
       if (uploaded) await client.storage.from('quest-job-files').remove([objectPath]);
       // Live session but the DB record failed to persist — don't keep a phantom
       // local-only row; report it as failed so the user knows to retry.
-      if (live && item) { failed += 1; lastError = result.error; continue; }
+      if (live) { failed += 1; lastError = result.error || new Error('File record insert returned no record.'); continue; }
     }
     upsertFile(payload);
   }
@@ -26551,21 +26597,23 @@ async function createWorkspaceBackup(companyId = activeCompanyId(), kind = 'manu
     created_at: now,
     updated_at: now,
   });
-  state.workspaceBackups = [backup].concat((state.workspaceBackups || []).filter((item) => item.id !== backup.id));
+  let savedBackup = backup;
+  if (isLiveSupabaseSession()) {
+    const { ok, data } = await supabaseWrite('workspace_backups', backup);
+    if (!ok) return false;
+    if (data) savedBackup = normalizeWorkspaceBackup(data);
+  }
+  state.workspaceBackups = [savedBackup].concat((state.workspaceBackups || []).filter((item) => item.id !== savedBackup.id));
   state.backupSettings = {
     ...(state.backupSettings || {}),
     [companyId]: { ...backupSettingsForCompany(companyId), last_backup_at: now },
   };
   writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
   writeJson(WORKSPACE_BACKUP_SETTINGS_KEY, state.backupSettings);
-  if (isLiveSupabaseSession()) {
-    const { ok, data } = await supabaseWrite('workspace_backups', backup);
-    if (ok && data) state.workspaceBackups = [normalizeWorkspaceBackup(data)].concat(state.workspaceBackups.filter((item) => item.id !== backup.id));
-    await refreshPlatformBackupCopies();
-  }
+  if (isLiveSupabaseSession()) await refreshPlatformBackupCopies();
   showToast('Backup snapshot created.', 'saved', 'Backups');
   render();
-  return backup;
+  return savedBackup;
 }
 
 async function downloadBackupZip(backup) {
@@ -26614,9 +26662,14 @@ async function importWorkspaceBackupFile(file) {
     created_at: now,
     updated_at: now,
   });
-  state.workspaceBackups = [backup].concat((state.workspaceBackups || []).filter((item) => item.id !== backup.id));
+  let savedBackup = backup;
+  if (isLiveSupabaseSession()) {
+    const { ok, data } = await supabaseWrite('workspace_backups', backup);
+    if (!ok) return false;
+    if (data) savedBackup = normalizeWorkspaceBackup(data);
+  }
+  state.workspaceBackups = [savedBackup].concat((state.workspaceBackups || []).filter((item) => item.id !== savedBackup.id));
   writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
-  if (isLiveSupabaseSession()) await supabaseWrite('workspace_backups', backup);
   showToast('Backup imported. Restore it when you are ready.', 'saved', 'Backups');
   render();
 }
@@ -26741,15 +26794,19 @@ async function persistWorkspaceBackupPayloadToSupabase(payload) {
 
 async function markWorkspaceBackupDeleted(backupId) {
   const now = new Date().toISOString();
-  state.workspaceBackups = (state.workspaceBackups || []).map((backup) => (
-    backup.id === backupId ? normalizeWorkspaceBackup({ ...backup, status: 'deleted', deleted_at: now, deleted_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null, updated_at: now }) : backup
-  ));
-  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  const existing = workspaceBackupById(backupId);
+  if (!existing) return false;
+  let updated = normalizeWorkspaceBackup({ ...existing, status: 'deleted', deleted_at: now, deleted_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null, updated_at: now });
   if (isLiveSupabaseSession()) {
-    await supabaseWrite('workspace_backups', state.workspaceBackups.find((backup) => backup.id === backupId));
-    await refreshPlatformBackupCopies();
+    const { ok, data } = await supabaseWrite('workspace_backups', updated);
+    if (!ok) return false;
+    if (data) updated = normalizeWorkspaceBackup(data);
   }
+  state.workspaceBackups = (state.workspaceBackups || []).map((backup) => (backup.id === backupId ? updated : backup));
+  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  if (isLiveSupabaseSession()) await refreshPlatformBackupCopies();
   render();
+  return true;
 }
 
 async function refreshPlatformBackupCopies() {
@@ -26798,12 +26855,12 @@ function supabaseRow(payload, allowed) {
 
 // Tell the user when a write/delete failed to reach the server. Only surfaced
 // on a live Supabase session — in local/demo mode, local-only persistence is
-// the expected behavior, not a failure. Prevents the "shows Saved but the
-// server rejected it" silent-data-loss trap.
+// the expected behavior, not a failure. Never describe ephemeral UI state as
+// safely stored when the server rejected it.
 function notifySyncFailure(error, action = 'Save') {
   if (!isLiveSupabaseSession()) return;
   const detail = error?.message || error?.details || '';
-  showToast(detail ? `${detail} — changes are stored only on this device.` : 'Changes could not be saved to the server and are only stored on this device.', 'error', `${action} failed`);
+  showToast(detail ? `${detail} — changes were not saved.` : 'Changes could not be saved. Review the current screen and try again.', 'error', `${action} failed`);
 }
 
 async function supabaseWrite(table, row, { onConflict = 'id' } = {}) {
@@ -27051,11 +27108,14 @@ async function saveAccount(form) {
   payload.id = payload.id || `account-${crypto.randomUUID()}`;
   payload.updated_at = new Date().toISOString();
   const { ok, data } = await supabaseWrite('accounts', supabaseRow(payload, ACCOUNT_COLS));
-  upsertAccount(ok && data ? normalizeAccount(data) : payload);
-  state.selectedAccountId = payload.id;
+  if (!ok) return false;
+  const savedAccount = data ? normalizeAccount(data) : payload;
+  upsertAccount(savedAccount);
+  state.selectedAccountId = savedAccount.id;
   state.modal = '';
   showToast(`${payload.name} saved.`, ok ? 'live' : 'local', 'Accounts');
   render();
+  return true;
 }
 
 async function deleteAccount(id) {
@@ -27074,14 +27134,17 @@ async function saveDeal(form) {
   const previous = dealById(payload.id);
   const row = emptyToNull(supabaseRow(payload, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']);
   const { ok, data } = await supabaseWrite('deals', row);
-  upsertDeal(ok && data ? normalizeDeal(data) : payload);
+  if (!ok) return false;
+  const savedDeal = data ? normalizeDeal(data) : payload;
+  upsertDeal(savedDeal);
   if (previous && previous.stage !== payload.stage) {
-    logActivity({ type: 'stage_change', subject: `Stage -> ${payload.stage}`, related_type: 'deal', related_id: payload.id, account_id: payload.account_id });
+    await logActivity({ type: 'stage_change', subject: `Stage -> ${payload.stage}`, related_type: 'deal', related_id: payload.id, account_id: payload.account_id });
   }
-  state.selectedDealId = payload.id;
+  state.selectedDealId = savedDeal.id;
   state.modal = '';
   showToast(`${payload.name} saved.`, ok ? 'live' : 'local', 'Quotes');
   render();
+  return true;
 }
 
 async function persistDeal(deal, label = 'Quote saved.') {
@@ -27091,10 +27154,12 @@ async function persistDeal(deal, label = 'Quote saved.') {
   else if (payload.status !== 'open' && !/^won|^lost/i.test(payload.stage)) payload.status = 'open';
   const row = emptyToNull(supabaseRow(payload, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']);
   const { ok, data } = await supabaseWrite('deals', row);
-  upsertDeal(ok && data ? normalizeDeal(data) : payload);
+  if (!ok) return false;
+  const savedDeal = data ? normalizeDeal(data) : payload;
+  upsertDeal(savedDeal);
   showToast(label, ok ? 'live' : 'local', 'Quotes');
   render();
-  return payload;
+  return savedDeal;
 }
 
 function normalizeDealLineItems(raw) {
@@ -27233,16 +27298,19 @@ async function persistProposal(proposal, label = 'Proposal saved.') {
   const payload = normalizeProposal({ ...proposal, updated_at: new Date().toISOString() });
   const row = emptyToNull(supabaseRow(payload, PROPOSAL_COLS), ['contact_id', 'deal_id', 'job_id', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at']);
   const { ok, data } = await supabaseWrite('proposal_documents', row);
-  upsertProposal(ok && data ? normalizeProposal(data) : payload);
+  if (!ok) return false;
+  const savedProposal = data ? normalizeProposal(data) : payload;
+  upsertProposal(savedProposal);
   showToast(label, ok ? 'live' : 'local', 'Proposals');
-  return ok && data ? normalizeProposal(data) : payload;
+  return savedProposal;
 }
 
 async function setDealStage(dealId, stage) {
   const deal = dealById(dealId);
   if (!deal || !stage || deal.stage === stage) return;
-  await persistDeal({ ...deal, stage }, 'Quote stage saved.');
+  if (!await persistDeal({ ...deal, stage }, 'Quote stage saved.')) return false;
   await logActivity({ type: 'stage_change', subject: `Stage -> ${stage}`, related_type: 'deal', related_id: dealId, account_id: deal.account_id });
+  return true;
 }
 
 function markDealNextStage(dealId) {
@@ -27287,31 +27355,46 @@ async function createDealTask(dealId, title) {
   const deal = dealById(dealId);
   const clean = String(title || '').trim();
   if (!deal || !clean) return;
+  if (!requirePermission('tasks.manage', deal.company_id, 'Your role cannot create tasks.', 'Tasks')) return false;
+  const creatorId = activeTaskCreatorId(deal.company_id);
+  if (!creatorId) {
+    showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
+    return false;
+  }
   const payload = normalizeTask({
     id: `task-${crypto.randomUUID()}`,
     company_id: deal.company_id,
     title: clean,
     contact_id: deal.primary_contact_id,
-    creator_id: activeSession().profile.member_id || companyMembers(deal.company_id)[0]?.id || 'abraham',
+    creator_id: creatorId,
     status: 'todo',
     due: isoDate(1),
   });
-  upsertTask(payload);
-  render();
   const client = createSupabaseClient();
-  if (client) {
-    try {
-      const result = await client.from('tasks').insert(taskPayload(payload)).select().single();
-      if (!result.error && result.data) { upsertTask(normalizeTask(result.data)); render(); }
-    } catch (error) { console.warn('Quote task sync failed', error); }
+  let savedTask = payload;
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').insert(taskPayload(payload)).select().single());
+    if (result.error) {
+      notifySyncFailure(result.error, 'Task create');
+      return false;
+    }
+    if (!result.data) {
+      notifySyncFailure(new Error('Task insert returned no record.'), 'Task create');
+      return false;
+    }
+    savedTask = normalizeTask(result.data);
   }
+  upsertTask(savedTask);
+  render();
+  return savedTask;
 }
 
 async function logDealActivity(dealId, type, subject, body = '') {
   const deal = dealById(dealId);
   if (!deal) return;
-  await logActivity({ type, subject, body, related_type: 'deal', related_id: dealId, account_id: deal.account_id });
+  const activity = await logActivity({ type, subject, body, related_type: 'deal', related_id: dealId, account_id: deal.account_id });
   render();
+  return activity;
 }
 
 async function createDealProposal(dealId) {
@@ -27390,22 +27473,24 @@ async function logActivity(input) {
   payload.updated_at = new Date().toISOString();
   const row = emptyToNull(supabaseRow(payload, ACTIVITY_COLS), ['account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at']);
   const { ok, data } = await supabaseWrite('activities', row);
-  upsertActivity(ok && data ? normalizeActivity(data) : payload);
+  if (!ok) return false;
+  const savedActivity = data ? normalizeActivity(data) : payload;
+  upsertActivity(savedActivity);
   // Stamp last_activity_at on a related contact.
   if (contactId) {
     const contact = contactById(contactId);
     if (contact) {
       const updated = { ...contact, last_activity_at: payload.completed_at || payload.created_at, updated_at: new Date().toISOString() };
-      upsertContact(updated);
-      supabaseWrite('contacts', emptyToNull(supabaseRow(updated, CONTACT_COLS), ['account_id']));
+      const contactResult = await supabaseWrite('contacts', emptyToNull(supabaseRow(updated, CONTACT_COLS), ['account_id']));
+      if (contactResult.ok) upsertContact(contactResult.data ? normalizeContact(contactResult.data) : updated);
     }
   }
-  return payload;
+  return savedActivity;
 }
 
 async function saveActivityForm(form) {
   const formData = Object.fromEntries(new FormData(form).entries());
-  await logActivity({
+  const activity = await logActivity({
     type: formData.type,
     subject: formData.subject,
     body: formData.body,
@@ -27413,9 +27498,11 @@ async function saveActivityForm(form) {
     related_id: formData.related_id,
     account_id: formData.account_id,
   });
+  if (!activity) return false;
   state.modal = '';
-  showToast('Activity logged.', 'local', 'CRM');
+  showToast('Activity logged.', isLiveSupabaseSession() ? 'live' : 'local', 'CRM');
   render();
+  return true;
 }
 
 async function deleteActivity(id) {
@@ -27429,6 +27516,7 @@ async function convertDealToJob(dealId) {
   if (!deal) return;
   const companyId = deal.company_id;
   if (!requirePermission('jobs.manage', companyId, 'Your role cannot create jobs.', 'Jobs')) return;
+  if (!requirePermission('crm.view', companyId, 'Your role cannot update this quote.', 'Quotes')) return;
   const account = accountById(deal.account_id);
   const contact = contactById(deal.primary_contact_id);
   const site = crmSiteById(deal.site_id);
@@ -27450,20 +27538,41 @@ async function convertDealToJob(dealId) {
   });
   job.id = crypto.randomUUID();
   job.updated_at = new Date().toISOString();
-  const jobRow = jobSupabaseRow(job);
-  const { ok, data } = await supabaseWrite('jobs', jobRow);
-  upsertJob(ok && data ? normalizeJob(data) : job);
-  // mark the deal won + link the job
   const wonStage = dealStageNames().find((name) => /win|won/i.test(name)) || deal.stage;
   const updatedDeal = normalizeDeal({ ...deal, status: 'won', stage: wonStage, job_id: job.id, updated_at: new Date().toISOString() });
-  const dealRes = await supabaseWrite('deals', emptyToNull(supabaseRow(updatedDeal, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']));
-  upsertDeal(updatedDeal);
-  logActivity({ type: 'system', subject: 'Quote converted -> Job created', body: deal.name, related_type: 'deal', related_id: deal.id, account_id: deal.account_id });
-  state.selectedJobId = job.id;
+  let savedJob = job;
+  let savedDeal = updatedDeal;
+  let conversionCreated = true;
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession()) {
+    if (!client) {
+      notifySyncFailure(new Error('Supabase client is unavailable.'), 'Quote conversion');
+      return false;
+    }
+    const result = await safeSupabaseQuery(client.rpc('convert_deal_to_job', {
+      p_job: jobSupabaseRow(job),
+      p_deal: emptyToNull(supabaseRow(updatedDeal, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']),
+    }));
+    if (result.error) {
+      notifySyncFailure(result.error, 'Quote conversion');
+      return false;
+    }
+    if (!result.data?.job || !result.data?.deal) {
+      notifySyncFailure(new Error('Quote conversion returned an incomplete result.'), 'Quote conversion');
+      return false;
+    }
+    savedJob = normalizeJob(result.data?.job);
+    savedDeal = normalizeDeal(result.data?.deal);
+    conversionCreated = result.data?.created !== false;
+  }
+  upsertJob(savedJob);
+  upsertDeal(savedDeal);
+  if (conversionCreated) await logActivity({ type: 'system', subject: 'Quote converted -> Job created', body: deal.name, related_type: 'deal', related_id: deal.id, account_id: deal.account_id });
+  state.selectedJobId = savedJob.id;
   state.modal = '';
-  const live = ok && dealRes.ok;
-  showToast('Quote converted to job.', live ? 'live' : 'local', 'Quotes');
-  navigate(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId));
+  showToast('Quote converted to job.', isLiveSupabaseSession() ? 'live' : 'local', 'Quotes');
+  navigate(companyPath('jobs', { tab: 'profile', job_id: savedJob.id }, companyId));
+  return true;
 }
 
 function crmAccounts(companyId = activeCompanyId()) {
@@ -28515,8 +28624,10 @@ async function mountLocationPicker() {
 async function persistCrmSite(site) {
   const payload = normalizeCrmSite({ ...site, updated_at: new Date().toISOString() });
   const { ok, data } = await supabaseWrite('crm_sites', emptyToNull(supabaseRow(payload, SITE_COLS), ['contact_id', 'account_id']));
-  upsertCrmSite(ok && data ? normalizeCrmSite(data) : payload);
-  return ok && data ? normalizeCrmSite(data) : payload;
+  if (!ok) return false;
+  const savedSite = data ? normalizeCrmSite(data) : payload;
+  upsertCrmSite(savedSite);
+  return savedSite;
 }
 
 async function saveLocationPicker() {
@@ -28536,23 +28647,23 @@ async function saveLocationPicker() {
   } else if (picker.kind === 'contact') {
     const contact = contactById(picker.id);
     if (contact) {
-      await persistContact({ ...contact, location: address });
+      if (!await persistContact({ ...contact, location: address })) return false;
       const site = crmSitesForContact(contact.id)[0] || normalizeCrmSite({ id: `site-${crypto.randomUUID()}`, company_id: contact.company_id, contact_id: contact.id, account_id: contact.account_id, label: 'Primary site' });
-      await persistCrmSite({ ...site, address, notes: [site.notes, pinNote].filter(Boolean).join('\n') });
+      if (!await persistCrmSite({ ...site, address, notes: [site.notes, pinNote].filter(Boolean).join('\n') })) return false;
     }
   } else if (picker.kind === 'deal') {
     const deal = dealById(picker.id);
     if (deal) {
       const site = crmSiteById(deal.site_id) || normalizeCrmSite({ id: `site-${crypto.randomUUID()}`, company_id: deal.company_id, contact_id: deal.primary_contact_id, account_id: deal.account_id, label: 'Quote site' });
       const savedSite = await persistCrmSite({ ...site, address, notes: [site.notes, pinNote].filter(Boolean).join('\n') });
-      await persistDeal({ ...deal, site_id: savedSite.id }, 'Quote location saved.');
+      if (!savedSite || !await persistDeal({ ...deal, site_id: savedSite.id }, 'Quote location saved.')) return false;
     }
   } else if (picker.kind === 'job') {
     const job = jobById(picker.id);
     if (job) {
       const site = crmSiteById(job.site_id) || normalizeCrmSite({ id: `site-${crypto.randomUUID()}`, company_id: job.company_id, contact_id: job.contact_id, account_id: job.account_id, label: 'Job site' });
       const savedSite = await persistCrmSite({ ...site, address, notes: [site.notes, pinNote].filter(Boolean).join('\n') });
-      await persistJob({ ...job, site_address: address, site_id: savedSite.id }, 'Job location saved.');
+      if (!savedSite || !await persistJob({ ...job, site_address: address, site_id: savedSite.id }, 'Job location saved.')) return false;
     }
   }
   state.modal = '';
@@ -28979,8 +29090,8 @@ function normalizeTask(input) {
     label: input.label || null,
     bid_status: input.bid_status || null,
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
-    creator_id: String(input.creator_id || 'abraham'),
-    assignee_id: String(input.assignee_id || input.creator_id || 'abraham'),
+    creator_id: String(input.creator_id || ''),
+    assignee_id: String(input.assignee_id || input.creator_id || ''),
     project_id: String(input.project_id || ''),
     contact_id: String(input.contact_id || ''),
     due: String(input.due || isoDate(1)).slice(0, 10),
@@ -29625,13 +29736,14 @@ function blankJob(companyId = activeCompanyId()) {
 }
 
 function blankTask(companyId = activeCompanyId(), jobId = '') {
+  const creatorId = activeTaskCreatorId(companyId);
   return normalizeTask({
     id: '',
     title: '',
     company_id: companyId,
     project_id: jobId,
-    assignee_id: companyMembers(companyId)[0]?.id || 'abraham',
-    creator_id: activeSession().profile.member_id || 'abraham',
+    assignee_id: creatorId || companyMembers(companyId)[0]?.id || '',
+    creator_id: creatorId,
     due: isoDate(1),
     priority: 'medium',
     status: 'todo',
@@ -30667,7 +30779,9 @@ function subscribeToGlobalRealtime() {
   const subscriptionKey = `${state.session?.user?.id || ''}:${companyIds.join(',')}`;
   if (state.globalRealtimeChannel && state.globalRealtimeKey === subscriptionKey) return;
   if (state.globalRealtimeChannel) teardownGlobalRealtime();
-  const refreshWhenSafe = (domains) => {
+  const deferredDomains = createDeferredDomainAccumulator();
+  const refreshWhenSafe = (domains = []) => {
+    deferredDomains.add(domains);
     if (shouldDeferRealtimeRefresh({
       editableFocused: anEditableIsFocused(),
       builderModal: state.builderModal,
@@ -30680,7 +30794,8 @@ function subscribeToGlobalRealtime() {
       state.globalRealtimeRetry = setTimeout(() => refreshWhenSafe(domains), 1500);
       return;
     }
-    refreshRealtimeDomains(domains).catch((error) => console.warn('Realtime refresh failed', error));
+    const pendingDomains = deferredDomains.drain();
+    refreshRealtimeDomains(pendingDomains).catch((error) => console.warn('Realtime refresh failed', error));
   };
   state.globalRealtimeBatcher = createRealtimeBatcher({ onFlush: refreshWhenSafe, delay: 700 });
   let channel = client.channel(`quest-global-realtime-${state.session?.user?.id || 'session'}`);
@@ -32281,7 +32396,7 @@ async function createContactFromFormResponse(responseId) {
     notes: `Created from ${summary.form?.title || 'form'} response.\n${summary.notes}`.trim(),
     value: 0,
   });
-  await persistContact(contact);
+  if (!await persistContact(contact)) return false;
   await logActivity({ type: 'form', subject: `Form response converted to contact`, body: summary.notes, related_type: 'contact', related_id: contact.id, contact_id: contact.id, company_id: response.company_id });
   navigate(companyPath('contacts', { contact_id: contact.id }, response.company_id));
 }
@@ -32307,7 +32422,7 @@ async function createJobFromFormResponse(responseId) {
     owner_name: actorName(),
     updated_at: new Date().toISOString(),
   });
-  await persistJob(job, 'Job created from form');
+  if (!await persistJob(job, 'Job created from form')) return false;
   await logActivity({ type: 'form', subject: `Form response converted to job`, body: summary.notes, related_type: 'job', related_id: job.id, job_id: job.id, company_id: response.company_id });
   navigate(companyPath('jobs', { tab: 'profile', job_id: job.id }, response.company_id));
 }
@@ -32316,6 +32431,11 @@ async function createTaskFromFormResponse(responseId) {
   const response = responseById(responseId);
   if (!response) return showToast('Response not found.', 'local', 'Forms');
   if (!requirePermission('tasks.manage', response.company_id, 'Your role cannot create tasks.', 'Forms')) return;
+  const creatorId = activeTaskCreatorId(response.company_id);
+  if (!creatorId) {
+    showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
+    return false;
+  }
   const summary = responseSummary(response);
   const task = normalizeTask({
     ...blankTask(response.company_id),
@@ -32327,15 +32447,27 @@ async function createTaskFromFormResponse(responseId) {
     priority: 'medium',
     type: 'admin',
     status: 'todo',
+    creator_id: creatorId,
+    assignee_id: creatorId,
   });
-  upsertTask(task);
   const client = createSupabaseClient();
-  if (client) {
-    const result = await client.from('tasks').insert(taskPayload(task)).select().single();
-    if (!result.error && result.data) upsertTask(normalizeTask(result.data));
+  let savedTask = task;
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').insert(taskPayload(task)).select().single());
+    if (result.error) {
+      notifySyncFailure(result.error, 'Task create');
+      return false;
+    }
+    if (!result.data) {
+      notifySyncFailure(new Error('Task insert returned no record.'), 'Task create');
+      return false;
+    }
+    savedTask = normalizeTask(result.data);
   }
+  upsertTask(savedTask);
   showToast('Task created from form response.', 'saved', 'Forms');
-  navigate(companyPath('tasks', { task_id: task.id }, response.company_id));
+  navigate(companyPath('tasks', { task_id: savedTask.id }, response.company_id));
+  return savedTask;
 }
 
 function downloadText(filename, text, type = 'text/plain') {

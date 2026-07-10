@@ -29,6 +29,9 @@ test('stored form files render as previews or downloadable links in response det
   assert.match(urlApi, /createSignedUrl/);
   assert.match(urlApi, /form_responses/);
   assert.match(urlApi, /containsObjectPath/);
+  assert.match(urlApi, /supabaseGetAsUser\([^,]+,\s*token\)/);
+  assert.match(urlApi, /Authorization:\s*`Bearer \$\{token\}`/);
+  assert.doesNotMatch(urlApi, /from\('company_memberships'\)/);
 
   assert.match(source, /function ensureFormResponseFileUrls\(response\)/);
   assert.match(source, /\/api\/public-form-file-url/);

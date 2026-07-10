@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createRealtimeBatcher,
+  createDeferredDomainAccumulator,
   realtimeDomainForTable,
   realtimeSubscriptions,
   shouldAcceptRealtimePayload,
@@ -50,4 +51,12 @@ test('batcher coalesces burst domains into one flush', () => {
   batcher.push('crm');
   scheduled();
   assert.deepEqual(calls, [['crm', 'operations']]);
+});
+
+test('deferred domain accumulator preserves domains across retry batches', () => {
+  const pending = createDeferredDomainAccumulator();
+  pending.add(['crm']);
+  pending.add(['operations', 'crm']);
+  assert.deepEqual(pending.drain(), ['crm', 'operations']);
+  assert.deepEqual(pending.drain(), []);
 });

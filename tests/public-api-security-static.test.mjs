@@ -34,7 +34,9 @@ test('public form uploads restrict content types and signed URL paths', () => {
   assert.match(fileUrl, /expectedPrefix/);
   assert.match(fileUrl, /response\.company_id/);
   assert.match(fileUrl, /auth\.getUser/);
-  assert.match(fileUrl, /company_memberships/);
+  assert.match(fileUrl, /supabaseGetAsUser/);
+  assert.match(fileUrl, /form_responses RLS enforces active/);
+  assert.match(fileUrl, /Authorization: `Bearer \$\{token\}`/);
   assert.match(app, /Authorization: `Bearer \$\{activeSession\(\)\.access_token\}`/);
 });
 

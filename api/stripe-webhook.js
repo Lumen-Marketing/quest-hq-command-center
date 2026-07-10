@@ -36,8 +36,8 @@ export function verifyStripeSignature(rawBody, header, { nowMs = Date.now(), tol
   }
 }
 
-async function supabaseUpsert(table, row) {
-  const url = `${env('SUPABASE_URL') || env('VITE_SUPABASE_URL')}/rest/v1/${table}`;
+async function supabaseRpc(name, body) {
+  const url = `${env('SUPABASE_URL') || env('VITE_SUPABASE_URL')}/rest/v1/rpc/${name}`;
   const serviceKey = env('SUPABASE_SERVICE_ROLE_KEY');
   const response = await fetch(url, {
     method: 'POST',
@@ -45,11 +45,17 @@ async function supabaseUpsert(table, row) {
       apikey: serviceKey,
       Authorization: `Bearer ${serviceKey}`,
       'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates',
     },
-    body: JSON.stringify(row),
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await response.text());
+}
+
+export function normalizeStripeSubscriptionStatus(status) {
+  const value = String(status || '').toLowerCase();
+  if (['trialing', 'active', 'past_due', 'canceled', 'incomplete'].includes(value)) return value;
+  if (['unpaid', 'incomplete_expired', 'paused'].includes(value)) return 'suspended';
+  return 'incomplete';
 }
 
 async function fetchStripeSubscription(subscriptionId) {
@@ -61,21 +67,27 @@ async function fetchStripeSubscription(subscriptionId) {
   return response.json();
 }
 
-async function syncSubscriptionFromStripe(object) {
-  const subscription = object.object === 'subscription' ? object : await fetchStripeSubscription(object.subscription);
+async function syncSubscriptionFromStripe(object, event) {
+  const subscriptionId = object.object === 'subscription' ? object.id : object.subscription;
+  // Prefer Stripe's current object so delayed webhook delivery cannot regress
+  // the row. Deleted subscriptions can no longer be fetched, so retain the
+  // signed event object as the authoritative fallback for that event.
+  const current = await fetchStripeSubscription(subscriptionId);
+  if (object.object !== 'subscription' && (!subscriptionId || !current)) {
+    throw new Error('Stripe subscription could not be resolved; retry the webhook.');
+  }
+  const subscription = current || (object.object === 'subscription' ? object : null);
   const companyId = object.metadata?.company_id || subscription?.metadata?.company_id;
   if (!companyId) return;
-  await supabaseUpsert('company_subscriptions', {
-    company_id: companyId,
-    stripe_customer_id: String(object.customer || subscription?.customer || ''),
-    stripe_subscription_id: String(subscription?.id || object.subscription || ''),
-    status: String(subscription?.status || object.status || 'incomplete'),
-    plan_code: 'quest_company_300',
-    amount_cents: 30000,
-    currency: 'usd',
-    current_period_end: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
-    trial_ends_at: subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
-    updated_at: new Date().toISOString(),
+  await supabaseRpc('apply_stripe_subscription_event', {
+    p_event_id: String(event.id || ''),
+    p_event_created_at: new Date(Number(event.created || 0) * 1000).toISOString(),
+    p_company_id: String(companyId),
+    p_customer_id: String(object.customer || subscription?.customer || ''),
+    p_subscription_id: String(subscription?.id || subscriptionId || ''),
+    p_status: normalizeStripeSubscriptionStatus(subscription?.status || object.status),
+    p_current_period_end: subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+    p_trial_ends_at: subscription?.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
   });
 }
 
@@ -96,7 +108,7 @@ export default async function handler(request, response) {
       'customer.subscription.updated',
       'customer.subscription.deleted',
     ].includes(event.type)) {
-      await syncSubscriptionFromStripe(event.data.object);
+      await syncSubscriptionFromStripe(event.data.object, event);
     }
     response.statusCode = 200;
     response.setHeader('Content-Type', 'application/json');

@@ -23,6 +23,10 @@ test('recycle bin snapshots are admin-only and mutations are atomic RPCs', () =>
   assert.match(migration, /create or replace function public\.recycle_restore_item/i);
   assert.match(migration, /create or replace function public\.recycle_permanently_delete_item/i);
   assert.match(migration, /create unique index if not exists recycle_bin_items_one_active_source_idx/i);
+  assert.match(migration, /revoke delete on table public\.%I from authenticated/i);
+  assert.match(migration, /when 'contact' then jsonb_build_object\('table', 'contacts', 'permission', 'crm\.manage'/i);
+  assert.match(migration, /when 'proposal' then jsonb_build_object\('table', 'proposal_documents', 'permission', 'crm\.manage'/i);
+  assert.match(migration, /insert into public\.role_permissions[\s\S]*from public\.roles[\s\S]*join public\.role_permissions[\s\S]*r\.is_system[\s\S]*lower\(r\.name\) = 'manager'/i);
 });
 
 test('role and pipeline replacements are transactional RPCs', () => {
@@ -30,6 +34,10 @@ test('role and pipeline replacements are transactional RPCs', () => {
   assert.match(migration, /create or replace function public\.delete_company_role/i);
   assert.match(migration, /create or replace function public\.replace_pipeline_stages/i);
   assert.match(migration, /jsonb_array_elements\(p_stages\)/i);
+  assert.match(migration, /pipeline stage is still in use/i);
+  assert.match(migration, /create or replace function public\.convert_deal_to_job/i);
+  assert.match(migration, /from public\.deals[\s\S]*for update/i);
+  assert.match(migration, /v_deal\.job_id is not null/i);
 });
 
 test('expired recycle rows have a bounded purge path and realtime uses the live price table', () => {
@@ -40,4 +48,19 @@ test('expired recycle rows have a bounded purge path and realtime uses the live 
   assert.match(migration, /workspace_backups/i);
   assert.doesNotMatch(migration, /alter publication[^;]*add table public\.pricebook_prices\b/i);
   assert.doesNotMatch(migration, /alter publication[^;]*add table public\.sites\b/i);
+});
+
+test('Stripe subscription events are nullable-trial, ordered, and idempotent', () => {
+  assert.match(migration, /alter column trial_ends_at drop not null/i);
+  assert.match(migration, /stripe_event_id text/i);
+  assert.match(migration, /stripe_event_created_at timestamptz/i);
+  assert.match(migration, /create or replace function public\.apply_stripe_subscription_event/i);
+  assert.match(migration, /company_subscriptions\.stripe_event_created_at\s+is null/i);
+  assert.match(migration, /cs\.status = 'trialing'[\s\S]*cs\.trial_ends_at > now\(\)/i);
+});
+
+test('pg_cron setup is optional and guarded by extension availability', () => {
+  assert.match(migration, /pg_available_extensions[\s\S]*name = 'pg_cron'/i);
+  assert.match(migration, /to_regnamespace\('cron'\)/i);
+  assert.doesNotMatch(migration, /^create extension if not exists pg_cron/gim);
 });

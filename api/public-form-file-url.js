@@ -24,9 +24,13 @@ function serverClient() {
   });
 }
 
-async function supabaseGet(path) {
+async function supabaseGetAsUser(path, token) {
   const response = await fetch(`${baseUrl()}/rest/v1/${path}`, {
-    headers: supabaseHeaders({ Accept: 'application/json' }),
+    headers: {
+      apikey: serviceKey(),
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+    },
   });
   const data = await response.json().catch(() => []);
   if (!response.ok) throw new Error(Array.isArray(data) ? 'Supabase request failed.' : data.message || 'Supabase request failed.');
@@ -63,21 +67,14 @@ export default async function handler(req, res) {
     if (!responseId || !formId || !objectPath) return res.status(400).json({ error: 'Missing file reference.' });
     if (bucketId !== FORM_FILE_BUCKET) return res.status(400).json({ error: 'Unsupported file bucket.' });
 
-    const rows = await supabaseGet(`form_responses?id=eq.${encodeURIComponent(responseId)}&form_id=eq.${encodeURIComponent(formId)}&select=id,form_id,company_id,answers`);
+    // Query with the caller JWT so form_responses RLS enforces active
+    // membership and forms.view before any service-role signed URL is minted.
+    const rows = await supabaseGetAsUser(`form_responses?id=eq.${encodeURIComponent(responseId)}&form_id=eq.${encodeURIComponent(formId)}&select=id,form_id,company_id,answers`, token);
     const response = rows[0];
     const expectedPrefix = response ? `${response.company_id}/${response.form_id}/` : '';
     if (!response || !objectPath.startsWith(expectedPrefix) || objectPath.includes('..') || !containsObjectPath(response.answers, objectPath)) {
       return res.status(404).json({ error: 'File reference not found.' });
     }
-    const membership = await client
-      .from('company_memberships')
-      .select('id')
-      .eq('company_id', response.company_id)
-      .eq('profile_id', authenticated.data.user.id)
-      .eq('status', 'active')
-      .maybeSingle();
-    if (membership.error || !membership.data) return res.status(403).json({ error: 'Company access required.' });
-
     const { data, error } = await client
       .storage
       .from(FORM_FILE_BUCKET)

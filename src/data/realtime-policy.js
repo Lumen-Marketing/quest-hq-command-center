@@ -110,3 +110,17 @@ export function createRealtimeBatcher({ onFlush, delay = 700, schedule = setTime
     },
   };
 }
+
+export function createDeferredDomainAccumulator() {
+  const pending = new Set();
+  return {
+    add(domains = []) {
+      domains.filter(Boolean).forEach((domain) => pending.add(domain));
+    },
+    drain() {
+      const domains = [...pending];
+      pending.clear();
+      return domains;
+    },
+  };
+}

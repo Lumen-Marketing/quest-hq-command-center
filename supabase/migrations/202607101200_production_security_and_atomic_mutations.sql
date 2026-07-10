@@ -100,6 +100,100 @@ create policy "company members read wo counters" on public.wo_counters
 revoke insert, update, delete on public.wo_counters from authenticated;
 grant select on public.wo_counters to authenticated;
 
+-- Stripe webhooks may represent subscriptions without a trial. Persist the
+-- signed event identity and ordering timestamp so retries are idempotent and
+-- delayed events cannot overwrite newer billing state.
+alter table public.company_subscriptions
+  alter column trial_ends_at drop not null,
+  add column if not exists stripe_event_id text,
+  add column if not exists stripe_event_created_at timestamptz;
+
+create unique index if not exists company_subscriptions_stripe_event_id_idx
+  on public.company_subscriptions(stripe_event_id)
+  where stripe_event_id is not null;
+
+create or replace function app_private.subscription_allows_access(target_company_id text)
+returns boolean
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select coalesce((
+    select
+      (cs.status = 'trialing' and cs.trial_ends_at is not null and cs.trial_ends_at > now())
+      or cs.status in ('active', 'past_due', 'grace')
+      or (cs.grace_ends_at is not null and cs.grace_ends_at > now())
+    from public.company_subscriptions cs
+    where cs.company_id = target_company_id
+  ), true);
+$$;
+
+revoke all on function app_private.subscription_allows_access(text) from public, anon;
+grant execute on function app_private.subscription_allows_access(text) to authenticated;
+
+create or replace function public.apply_stripe_subscription_event(
+  p_event_id text,
+  p_event_created_at timestamptz,
+  p_company_id text,
+  p_customer_id text,
+  p_subscription_id text,
+  p_status text,
+  p_current_period_end timestamptz,
+  p_trial_ends_at timestamptz
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+set statement_timeout = '15s'
+as $$
+declare
+  v_role text := coalesce((select auth.role()), current_setting('request.jwt.claim.role', true), '');
+  v_applied boolean;
+begin
+  if session_user <> 'postgres' and v_role <> 'service_role' then
+    raise exception 'service role required';
+  end if;
+  if nullif(btrim(p_event_id), '') is null or p_event_created_at is null or nullif(btrim(p_company_id), '') is null then
+    raise exception 'invalid Stripe subscription event';
+  end if;
+  if p_status is null or p_status not in ('trialing', 'active', 'past_due', 'grace', 'suspended', 'canceled', 'incomplete') then
+    raise exception 'invalid subscription status';
+  end if;
+
+  insert into public.company_subscriptions as company_subscriptions (
+    company_id, stripe_customer_id, stripe_subscription_id, status,
+    plan_code, amount_cents, currency, current_period_end, trial_ends_at,
+    stripe_event_id, stripe_event_created_at, updated_at
+  ) values (
+    p_company_id, nullif(p_customer_id, ''), nullif(p_subscription_id, ''), p_status,
+    'quest_company_300', 30000, 'usd', p_current_period_end, p_trial_ends_at,
+    p_event_id, p_event_created_at, now()
+  )
+  on conflict (company_id) do update
+    set stripe_customer_id = coalesce(excluded.stripe_customer_id, company_subscriptions.stripe_customer_id),
+        stripe_subscription_id = coalesce(excluded.stripe_subscription_id, company_subscriptions.stripe_subscription_id),
+        status = excluded.status,
+        plan_code = excluded.plan_code,
+        amount_cents = excluded.amount_cents,
+        currency = excluded.currency,
+        current_period_end = excluded.current_period_end,
+        trial_ends_at = excluded.trial_ends_at,
+        stripe_event_id = excluded.stripe_event_id,
+        stripe_event_created_at = excluded.stripe_event_created_at,
+        updated_at = now()
+  where company_subscriptions.stripe_event_created_at is null
+     or company_subscriptions.stripe_event_created_at <= excluded.stripe_event_created_at
+  returning true into v_applied;
+
+  return coalesce(v_applied, false);
+end;
+$$;
+
+revoke execute on function public.apply_stripe_subscription_event(text, timestamptz, text, text, text, text, timestamptz, timestamptz) from public, anon, authenticated;
+grant execute on function public.apply_stripe_subscription_event(text, timestamptz, text, text, text, text, timestamptz, timestamptz) to service_role;
+
 create or replace function public.list_workspace_app_library()
 returns jsonb
 language sql
@@ -140,6 +234,40 @@ drop policy if exists "members create recycle bin items" on public.recycle_bin_i
 revoke insert, update, delete on public.recycle_bin_items from authenticated;
 grant select on public.recycle_bin_items to authenticated;
 
+-- Source rows may only be deleted through the recycle RPCs. Existing DELETE
+-- policies remain harmless once the table privilege is removed.
+do $$
+declare
+  v_table text;
+begin
+  foreach v_table in array array[
+    'contacts','accounts','deals','jobs','tasks','job_files','forms','form_responses',
+    'proposal_documents','client_portals','pricebook_vendors','pricebook_materials',
+    'pricebook_vendor_prices','finance_invoices','finance_payments','finance_expenses',
+    'finance_vendors','calendar_events','activities'
+  ] loop
+    if exists (
+      select 1 from information_schema.tables
+      where table_schema = 'public' and table_name = v_table
+    ) then
+      execute format('revoke delete on table public.%I from authenticated', v_table);
+    end if;
+  end loop;
+end;
+$$;
+
+-- Preserve existing CRM managers while separating destructive access from the
+-- read-only crm.view capability for all future role edits.
+insert into public.role_permissions(role_id, permission_key, effect)
+select r.id, 'crm.manage', 'allow'
+from public.roles r
+join public.role_permissions rp on rp.role_id = r.id
+where r.is_system
+  and lower(r.name) = 'manager'
+  and rp.permission_key = 'crm.view'
+  and rp.effect = 'allow'
+on conflict (role_id, permission_key) do nothing;
+
 create unique index if not exists recycle_bin_items_one_active_source_idx
   on public.recycle_bin_items(company_id, source_table, source_id)
   where status = 'active';
@@ -156,15 +284,15 @@ immutable
 set search_path = ''
 as $$
   select case p_type
-    when 'contact' then jsonb_build_object('table', 'contacts', 'permission', 'crm.view', 'updated_at', true)
-    when 'account' then jsonb_build_object('table', 'accounts', 'permission', 'crm.view', 'updated_at', true)
-    when 'deal' then jsonb_build_object('table', 'deals', 'permission', 'crm.view', 'updated_at', true)
+    when 'contact' then jsonb_build_object('table', 'contacts', 'permission', 'crm.manage', 'updated_at', true)
+    when 'account' then jsonb_build_object('table', 'accounts', 'permission', 'crm.manage', 'updated_at', true)
+    when 'deal' then jsonb_build_object('table', 'deals', 'permission', 'crm.manage', 'updated_at', true)
     when 'job' then jsonb_build_object('table', 'jobs', 'permission', 'jobs.manage', 'updated_at', true)
     when 'task' then jsonb_build_object('table', 'tasks', 'permission', 'tasks.manage', 'updated_at', true)
     when 'file' then jsonb_build_object('table', 'job_files', 'permission', 'files.manage', 'updated_at', true)
     when 'form' then jsonb_build_object('table', 'forms', 'permission', 'forms.manage', 'updated_at', true)
     when 'form_response' then jsonb_build_object('table', 'form_responses', 'permission', 'forms.manage', 'updated_at', false)
-    when 'proposal' then jsonb_build_object('table', 'proposal_documents', 'permission', 'crm.view', 'updated_at', true)
+    when 'proposal' then jsonb_build_object('table', 'proposal_documents', 'permission', 'crm.manage', 'updated_at', true)
     when 'client_portal' then jsonb_build_object('table', 'client_portals', 'permission', 'client_portals.manage', 'updated_at', true)
     when 'pricebook_vendor' then jsonb_build_object('table', 'pricebook_vendors', 'permission', 'price_book.manage', 'updated_at', true)
     when 'pricebook_material' then jsonb_build_object('table', 'pricebook_materials', 'permission', 'price_book.manage', 'updated_at', true)
@@ -174,7 +302,7 @@ as $$
     when 'finance_expense' then jsonb_build_object('table', 'finance_expenses', 'permission', 'finance.manage', 'updated_at', true)
     when 'finance_vendor' then jsonb_build_object('table', 'finance_vendors', 'permission', 'finance.manage', 'updated_at', true)
     when 'calendar_event' then jsonb_build_object('table', 'calendar_events', 'permission', 'calendar.manage', 'updated_at', true)
-    when 'activity' then jsonb_build_object('table', 'activities', 'permission', 'crm.view', 'updated_at', true)
+    when 'activity' then jsonb_build_object('table', 'activities', 'permission', 'crm.manage', 'updated_at', true)
     else null
   end;
 $$;
@@ -429,6 +557,87 @@ $$;
 revoke execute on function public.delete_company_role(uuid) from public, anon;
 grant execute on function public.delete_company_role(uuid) to authenticated;
 
+-- Quote conversion is a single idempotent transaction: the deal row is locked,
+-- an already-linked job is returned on retry, and the job insert plus deal link
+-- either both commit or both roll back.
+create or replace function public.convert_deal_to_job(p_job jsonb, p_deal jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+set statement_timeout = '15s'
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_company text := nullif(btrim(p_job->>'company_id'), '');
+  v_deal_id text := nullif(btrim(p_deal->>'id'), '');
+  v_job public.jobs;
+  v_deal public.deals;
+begin
+  if v_uid is null then raise exception 'not authenticated'; end if;
+  if v_company is null or v_deal_id is null then raise exception 'invalid quote conversion'; end if;
+  if nullif(btrim(p_deal->>'company_id'), '') is distinct from v_company then raise exception 'company mismatch'; end if;
+  if nullif(btrim(p_job->>'deal_id'), '') is distinct from v_deal_id then raise exception 'quote link mismatch'; end if;
+  if not app_private.has_company_permission(v_company, 'jobs.manage')
+     or not app_private.has_company_permission(v_company, 'crm.view') then
+    raise exception 'not permitted to convert this quote';
+  end if;
+
+  select * into v_deal
+  from public.deals
+  where id = v_deal_id and company_id = v_company and deleted_at is null
+  for update;
+  if v_deal.id is null then raise exception 'quote not found'; end if;
+
+  if v_deal.job_id is not null then
+    select * into v_job from public.jobs where id = v_deal.job_id and company_id = v_company;
+    if v_job.id is null then raise exception 'linked job is unavailable'; end if;
+    return jsonb_build_object('job', to_jsonb(v_job), 'deal', to_jsonb(v_deal), 'created', false);
+  end if;
+
+  insert into public.jobs (
+    id, company_id, name, client_name, contact_name, site_address, job_type,
+    stage, priority, owner_name, scope, notes, estimate_total, invoice_total,
+    account_id, contact_id, deal_id, site_id, updated_at
+  ) values (
+    (p_job->>'id')::uuid,
+    v_company,
+    nullif(btrim(p_job->>'name'), ''),
+    nullif(p_job->>'client_name', ''),
+    nullif(p_job->>'contact_name', ''),
+    nullif(p_job->>'site_address', ''),
+    coalesce(nullif(p_job->>'job_type', ''), 'Roofing'),
+    coalesce(nullif(p_job->>'stage', ''), 'Lead'),
+    coalesce(nullif(p_job->>'priority', ''), 'Medium'),
+    nullif(p_job->>'owner_name', ''),
+    nullif(p_job->>'scope', ''),
+    nullif(p_job->>'notes', ''),
+    coalesce((p_job->>'estimate_total')::numeric, 0),
+    coalesce((p_job->>'invoice_total')::numeric, 0),
+    nullif(p_job->>'account_id', ''),
+    nullif(p_job->>'contact_id', ''),
+    v_deal_id,
+    nullif(p_job->>'site_id', ''),
+    coalesce((p_job->>'updated_at')::timestamptz, now())
+  )
+  returning * into v_job;
+
+  update public.deals
+     set status = 'won',
+         stage = coalesce(nullif(p_deal->>'stage', ''), stage),
+         job_id = v_job.id,
+         updated_at = now()
+   where id = v_deal_id and company_id = v_company
+   returning * into v_deal;
+
+  if v_deal.id is null then raise exception 'quote link failed'; end if;
+  return jsonb_build_object('job', to_jsonb(v_job), 'deal', to_jsonb(v_deal), 'created', true);
+end;
+$$;
+
+revoke execute on function public.convert_deal_to_job(jsonb, jsonb) from public, anon;
+grant execute on function public.convert_deal_to_job(jsonb, jsonb) to authenticated;
+
 create or replace function public.replace_pipeline_stages(
   p_company_id text,
   p_kind text,
@@ -443,6 +652,7 @@ as $$
 declare
   v_count integer;
   v_unique integer;
+  v_in_use integer;
   v_table text;
   v_old text;
   v_new text;
@@ -456,6 +666,38 @@ begin
   select count(distinct lower(btrim(stage->>'name'))) into v_unique from jsonb_array_elements(p_stages) stage where nullif(btrim(stage->>'name'), '') is not null;
   if v_unique <> v_count then raise exception 'pipeline stage names must be non-empty and unique'; end if;
 
+  v_table := case p_kind when 'contacts' then 'contacts' when 'deals' then 'deals' else 'jobs' end;
+  for v_old, v_new in select key, value from jsonb_each_text(coalesce(p_rename_map, '{}'::jsonb))
+  loop
+    if nullif(btrim(v_old), '') is not null and (
+      nullif(btrim(v_new), '') is null
+      or not exists (
+        select 1 from jsonb_array_elements(p_stages) stage
+        where lower(btrim(stage->>'name')) = lower(btrim(v_new))
+      )
+    ) then
+      raise exception 'pipeline rename destination is invalid';
+    end if;
+  end loop;
+
+  for v_old in
+    select existing.name
+    from public.pipeline_stages existing
+    where existing.company_id = p_company_id
+      and existing.kind = p_kind
+      and not exists (
+        select 1 from jsonb_array_elements(p_stages) stage
+        where lower(btrim(stage->>'name')) = lower(btrim(existing.name))
+      )
+      and nullif(btrim(coalesce(p_rename_map->>existing.name, '')), '') is null
+  loop
+    execute format('select count(*) from public.%I where company_id = $1 and stage = $2', v_table)
+      into v_in_use using p_company_id, v_old;
+    if v_in_use > 0 then
+      raise exception 'pipeline stage is still in use: %', v_old;
+    end if;
+  end loop;
+
   delete from public.pipeline_stages where company_id = p_company_id and kind = p_kind;
   insert into public.pipeline_stages(company_id, kind, name, color, position)
   select p_company_id, p_kind, left(btrim(stage->>'name'), 100),
@@ -463,7 +705,6 @@ begin
          ordinality - 1
   from jsonb_array_elements(p_stages) with ordinality as rows(stage, ordinality);
 
-  v_table := case p_kind when 'contacts' then 'contacts' when 'deals' then 'deals' else 'jobs' end;
   for v_old, v_new in select key, value from jsonb_each_text(coalesce(p_rename_map, '{}'::jsonb))
   loop
     if nullif(btrim(v_old), '') is not null and nullif(btrim(v_new), '') is not null then
@@ -552,25 +793,41 @@ begin
 end;
 $$;
 
--- Schedule bounded database cleanup. File rows whose storage object still
--- exists are intentionally skipped until the authenticated Vercel cron removes
--- the object first.
-create extension if not exists pg_cron with schema pg_catalog;
-grant usage on schema cron to postgres;
-grant all privileges on all tables in schema cron to postgres;
+-- Schedule bounded database cleanup when pg_cron is available. File rows whose
+-- storage object still exists are intentionally skipped until the authenticated
+-- Vercel cron removes the object first.
+do $$
+begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
+    begin
+      execute 'create extension if not exists pg_cron with schema pg_catalog';
+    exception when others then
+      raise notice 'pg_cron is unavailable: %', sqlerrm;
+    end;
+  end if;
+end;
+$$;
 
 do $$
 declare
   v_job_id bigint;
 begin
-  for v_job_id in select jobid from cron.job where jobname = 'quest-hq-recycle-bin-purge'
-  loop
-    perform cron.unschedule(v_job_id);
-  end loop;
-  perform cron.schedule(
-    'quest-hq-recycle-bin-purge',
-    '15 3 * * *',
-    'select public.purge_expired_recycle_bin(200);'
-  );
+  if to_regnamespace('cron') is not null then
+    execute 'grant usage on schema cron to postgres';
+    execute 'grant all privileges on all tables in schema cron to postgres';
+    for v_job_id in execute 'select jobid from cron.job where jobname = ''quest-hq-recycle-bin-purge'''
+    loop
+      execute format('select cron.unschedule(%s)', v_job_id);
+    end loop;
+    execute $schedule$
+      select cron.schedule(
+        'quest-hq-recycle-bin-purge',
+        '15 3 * * *',
+        'select public.purge_expired_recycle_bin(200);'
+      )
+    $schedule$;
+  end if;
+exception when others then
+  raise notice 'pg_cron schedule was skipped: %', sqlerrm;
 end;
 $$;
