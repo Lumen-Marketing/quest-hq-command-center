@@ -1,99 +1,76 @@
-import https from 'node:https';
+import {
+  DEFAULT_PRODUCTION_URL,
+  buildProductionRoutes,
+  checkWithRetry,
+  extractAssetUrls,
+  parseSmokeArgs,
+  validateAppShell,
+  validateLegacyRedirect,
+} from './production-smoke-lib.mjs';
 
-const baseUrl = process.env.QUEST_HQ_PROD_URL || 'https://quest-hq-command-center.vercel.app';
-const companies = String(process.env.QUEST_HQ_COMPANIES || 'lumen')
-  .split(',')
-  .map((company) => company.trim())
-  .filter(Boolean);
-const modules = [
-  'dashboard',
-  'workday',
-  'jobs',
-  'tasks',
-  'files',
-  'client-portals',
-  'workspaces',
-  'forms',
-  'analytics',
-  'crm',
-  'proposals',
-  'underwriter',
-  'finance',
-  'messages',
-  'calendar',
-  'users',
-  'settings',
-  'time',
-  'approvals',
-  'clock',
-  'team-chart',
-];
-const legacy = [
-  '/',
-  '/login',
-  '/crm.html',
-  '/crm',
-  '/underwriter.html',
-  '/underwriter',
-  '/finance.html',
-  '/finance',
-  '/messages.html',
-  '/messages',
-  '/calendar.html',
-  '/calendar',
-  '/files.html',
-  '/forms.html',
-  '/jobs.html',
-];
+const cli = parseSmokeArgs(process.argv.slice(2));
+const baseUrl = cli.baseUrl || process.env.QUEST_HQ_PROD_URL || DEFAULT_PRODUCTION_URL;
+const expectedSha = String(cli.expectedSha || process.env.QUEST_HQ_EXPECTED_SHA || '').trim();
+const companies = String(cli.companies || process.env.QUEST_HQ_COMPANIES || 'lumen').split(',').map((company) => company.trim()).filter(Boolean);
+const routes = buildProductionRoutes(companies);
+const rootResult = await checkWithRetry(new URL('/', baseUrl).toString());
 
-const routes = legacy.concat(companies.flatMap((company) => modules.map((module) => `/company/${company}/${module}`)));
+if (!rootResult.ok) {
+  console.error(`FAIL ${rootResult.status || rootResult.error || 'unknown'} application shell`);
+  process.exitCode = 1;
+} else {
+  const shell = validateAppShell(rootResult.body);
+  if (!shell.ok) {
+    console.error(`FAIL ${rootResult.status} application shell: ${shell.reason}`);
+    process.exitCode = 1;
+  }
+}
+
+const assetUrls = rootResult.ok ? extractAssetUrls(rootResult.body, rootResult.url || baseUrl) : [];
+const assetResults = await Promise.all(assetUrls.map(async (url) => ({ url, ...(await checkWithRetry(url, 1)) })));
+for (const result of assetResults) {
+  console.log(`${result.ok ? 'PASS' : 'FAIL'} ${result.status || result.error || 'unknown'} ${new URL(result.url).pathname}`);
+  if (!result.ok) process.exitCode = 1;
+}
+
+if (expectedSha) {
+  const jsBodies = assetResults.filter((result) => result.ok && new URL(result.url).pathname.endsWith('.js')).map((result) => result.body);
+  if (!jsBodies.some((body) => body.includes(expectedSha))) {
+    console.error(`FAIL deployed assets do not contain expected commit ${expectedSha}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`PASS deployed commit ${expectedSha}`);
+  }
+}
+
+const expectedEntryAssets = assetUrls.map((url) => new URL(url).pathname);
 const results = [];
-
 for (const route of routes) {
   const url = new URL(route, baseUrl).toString();
   const result = await checkWithRetry(url, 2);
-  results.push({ route, ...result });
-  const label = result.ok ? 'PASS' : 'FAIL';
-  console.log(`${label} ${result.status || result.error || 'unknown'} ${route}`);
+  let ok = result.ok && result.contentType.includes('text/html');
+  let error = result.error;
+  let isLegacyRedirect = false;
+  if (ok) {
+    const shell = validateAppShell(result.body);
+    ok = shell.ok;
+    error = shell.reason;
+    if (!ok && route.endsWith('.html')) {
+      const legacyRedirect = validateLegacyRedirect(result.body);
+      ok = legacyRedirect.ok;
+      error = legacyRedirect.reason;
+      isLegacyRedirect = legacyRedirect.ok;
+    }
+  }
+  if (ok && !isLegacyRedirect) {
+    const routeAssets = extractAssetUrls(result.body, result.url || url).map((asset) => new URL(asset).pathname);
+    ok = expectedEntryAssets.every((asset) => routeAssets.includes(asset));
+    if (!ok) error = 'route returned a different application build';
+  }
+  results.push({ route, ...result, ok, error });
+  console.log(`${ok ? 'PASS' : 'FAIL'} ${result.status || error || 'unknown'} ${route}${ok ? '' : ` (${error || 'invalid response'})`}`);
 }
 
 const failed = results.filter((result) => !result.ok);
-console.log(`\n${results.length - failed.length}/${results.length} production routes passed.`);
-if (failed.length) {
-  process.exitCode = 1;
-}
-
-async function checkWithRetry(url, retries) {
-  let last;
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    last = await requestHead(url);
-    if (last.ok) return last;
-    await delay(250 * (attempt + 1));
-  }
-  return last;
-}
-
-function requestHead(url) {
-  return new Promise((resolve) => {
-    const request = https.request(url, { method: 'GET', timeout: 8000 }, (response) => {
-      response.resume();
-      const status = response.statusCode || 0;
-      if (status >= 300 && status < 400 && response.headers.location) {
-        requestHead(new URL(response.headers.location, url).toString()).then(resolve);
-        return;
-      }
-      resolve({ ok: status >= 200 && status < 400, status });
-    });
-    request.on('timeout', () => {
-      request.destroy(new Error('timeout'));
-    });
-    request.on('error', (error) => {
-      resolve({ ok: false, error: error.message || error.code || 'request failed' });
-    });
-    request.end();
-  });
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+console.log(`\n${results.length - failed.length}/${results.length} production routes passed with ${assetResults.filter((result) => result.ok).length}/${assetResults.length} entry assets available.`);
+if (failed.length) process.exitCode = 1;

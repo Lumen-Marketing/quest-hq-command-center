@@ -1,3 +1,9 @@
+import { setApiHeaders } from './_lib/http-security.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
+
+const suggestionCache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 const json = (response, status, payload) => {
   response.statusCode = status;
   response.setHeader('Content-Type', 'application/json');
@@ -68,10 +74,17 @@ async function openStreetMapSuggestions(query) {
 }
 
 export default async function handler(request, response) {
+  setApiHeaders(response, { cacheControl: 's-maxage=300, stale-while-revalidate=86400' });
   if (request.method !== 'GET') return json(response, 405, { error: 'Method not allowed' });
+  if (!enforceRateLimit(request, response, { namespace: 'address-suggestions', limit: 60, windowMs: 60 * 1000 })) return;
   const url = new URL(request.url, `https://${request.headers.host || 'quest-hq.local'}`);
   const query = cleanQuery(url.searchParams.get('q'));
   if (query.length < 3) return json(response, 200, { suggestions: [] });
+
+  const cacheKey = query.toLowerCase();
+  const cached = suggestionCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return json(response, 200, { suggestions: cached.suggestions });
+  if (cached) suggestionCache.delete(cacheKey);
 
   const suggestions = await googleSuggestions(query).catch(() => []);
   const fallback = suggestions.length ? [] : await openStreetMapSuggestions(query).catch(() => []);
@@ -79,5 +92,8 @@ export default async function handler(request, response) {
   [...suggestions, ...fallback].forEach((item) => {
     if (!unique.has(item.value.toLowerCase())) unique.set(item.value.toLowerCase(), item);
   });
-  return json(response, 200, { suggestions: [...unique.values()].slice(0, 8) });
+  const result = [...unique.values()].slice(0, 8);
+  suggestionCache.set(cacheKey, { suggestions: result, expiresAt: Date.now() + CACHE_TTL_MS });
+  if (suggestionCache.size > 500) suggestionCache.delete(suggestionCache.keys().next().value);
+  return json(response, 200, { suggestions: result });
 }

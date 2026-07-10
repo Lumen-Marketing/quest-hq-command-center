@@ -1,3 +1,6 @@
+import { setApiHeaders } from './_lib/http-security.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
+
 const env = (name) => process.env[name] || '';
 const baseUrl = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
 const serviceKey = () => env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY');
@@ -22,9 +25,11 @@ async function supabaseGet(path) {
 }
 
 export default async function handler(req, res) {
+  setApiHeaders(res, { cacheControl: 'private, no-store' });
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed.' });
   if (!baseUrl() || !serviceKey()) return res.status(500).json({ error: 'Public forms are not configured.' });
+  if (!enforceRateLimit(req, res, { namespace: 'public-form-open', limit: 120, windowMs: 10 * 60 * 1000 })) return;
 
   const formId = String(req.query?.form_id || '').trim();
   if (!formId) return res.status(400).json({ error: 'Missing form id.' });

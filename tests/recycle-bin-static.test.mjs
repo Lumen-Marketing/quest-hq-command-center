@@ -7,6 +7,7 @@ const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8
 const migrations = readdirSync(new URL('../supabase/migrations/', import.meta.url));
 const recycleMigrationName = migrations.find((name) => /recycle_bin_safe_delete/.test(name));
 const recycleMigration = recycleMigrationName ? readFileSync(new URL(`../supabase/migrations/${recycleMigrationName}`, import.meta.url), 'utf8') : '';
+const hardeningMigration = readFileSync(new URL('../supabase/migrations/202607101200_production_security_and_atomic_mutations.sql', import.meta.url), 'utf8');
 
 test('settings exposes a recycle bin for 30 day safe deletes', () => {
   assert.match(source, /const RECYCLE_BIN_RETENTION_DAYS = 30;/);
@@ -45,10 +46,11 @@ test('recycle helpers soft delete restore and permanently delete from recycle bi
   assert.match(source, /file: \{[\s\S]*table: 'job_files'[\s\S]*stateKey: 'files'/);
   assert.match(source, /function buildRecycleBinItem\(record, config\)/);
   assert.match(source, /async function recycleDeleteRecord\(config\)/);
-  assert.match(source, /await softDeleteRecycleSource\(typeConfig, record, item\)/);
+  assert.match(source, /client\.rpc\('recycle_move_item', \{ p_item: row \}\)/);
   assert.match(source, /async function restoreRecycleBinItem\(itemId\)/);
-  assert.match(source, /async function permanentlyDeleteRecycleBinItem\(itemId\)/);
-  assert.match(source, /client\.from\('recycle_bin_items'\)\.delete\(\)\.eq\('id', item\.id\)/);
+  assert.match(source, /client\.rpc\('recycle_restore_item', \{ p_item_id: item\.id \}\)/);
+  assert.match(source, /async function permanentlyDeleteRecycleBinItem\(itemId, options = \{\}\)/);
+  assert.match(source, /client\.rpc\('recycle_permanently_delete_item', \{ p_item_id: item\.id \}\)/);
   assert.match(source, /Delete forever/);
   assert.match(source, /This permanently deletes the original record and cannot be undone/);
 });
@@ -60,7 +62,15 @@ test('normal file deletes keep storage bytes until permanent delete', () => {
   const deleteFileEnd = source.indexOf('function upsertJob(job)', deleteFileStart);
   const deleteFileBody = source.slice(deleteFileStart, deleteFileEnd);
   assert.doesNotMatch(deleteFileBody, /storage\.from\('quest-job-files'\)\.remove/);
-  assert.match(source, /async function permanentlyDeleteRecycleBinItem\(itemId\)[\s\S]*storage\.from\('quest-job-files'\)\.remove\(\[snapshot\.object_path\]\)/);
+  assert.match(source, /async function permanentlyDeleteRecycleBinItem\(itemId, options = \{\}\)[\s\S]*const storageResult = await client\.storage\.from\('quest-job-files'\)\.remove\(\[snapshot\.object_path\]\)/);
+  assert.match(source, /if \(storageResult\.error\)[\s\S]*return;/);
+});
+
+test('expired recycle items can be cleared in bulk with explicit confirmation', () => {
+  assert.match(source, /data-action="open-empty-expired-recycle-bin"/);
+  assert.match(source, /function renderRecycleEmptyExpiredModal\(\)/);
+  assert.match(source, /async function emptyExpiredRecycleBin\(\)/);
+  assert.match(source, /type="text"[\s\S]*name="confirmation"[\s\S]*DELETE EXPIRED/);
 });
 
 test('supabase migration creates an RLS protected recycle bin ledger', () => {
@@ -75,4 +85,6 @@ test('supabase migration creates an RLS protected recycle bin ledger', () => {
   assert.match(recycleMigration, /alter table public\.contacts add column if not exists deleted_at timestamptz/);
   assert.match(recycleMigration, /alter table public\.proposal_documents add column if not exists deleted_at timestamptz/);
   assert.match(recycleMigration, /alter table public\.job_files add column if not exists deleted_by uuid/);
+  assert.match(hardeningMigration, /drop policy if exists "members read recycle bin"/);
+  assert.match(hardeningMigration, /create or replace function public\.recycle_move_item/);
 });

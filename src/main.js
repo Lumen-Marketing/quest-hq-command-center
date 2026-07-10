@@ -1,10 +1,28 @@
 import './styles.css';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import opsCommandHeroUrl from './assets/quest-hq-ops-command-hero.png';
 import questLogoMarkUrl from './assets/quest-hq-logo-mark.png';
+import { requireOk, settleObserved } from './lib/result.js';
+import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordRequirements } from './auth/password-policy.js';
+import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh } from './data/realtime-policy.js';
+
+globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
+
+let leaflet = null;
+let leafletPromise = null;
+async function loadLeaflet() {
+  if (!leafletPromise) {
+    leafletPromise = Promise.all([
+      import('leaflet'),
+      import('leaflet/dist/leaflet.css'),
+    ]).then(([module]) => {
+      leaflet = module.default || module;
+      return leaflet;
+    });
+  }
+  return leafletPromise;
+}
 
 const CONFIG = {
   buildId: 'Quest HQ Company Workspace v1',
@@ -107,15 +125,15 @@ const ACCENT_OPTIONS = [
   ['slate', 'Command Slate', '#475569'],
 ];
 const RECYCLE_BIN_TYPES = {
-  contact: { type: 'contact', label: 'Contact', table: 'contacts', stateKey: 'contacts', permission: 'crm.view', normalize: normalizeContact, title: (record) => record.name || 'Contact', redirect: (companyId) => companyPath('contacts', {}, companyId) },
-  account: { type: 'account', label: 'Account', table: 'accounts', stateKey: 'accounts', permission: 'crm.view', normalize: normalizeAccount, title: (record) => record.name || 'Account', redirect: (companyId) => companyPath('crm', {}, companyId) },
-  deal: { type: 'deal', label: 'Quote', table: 'deals', stateKey: 'deals', permission: 'crm.view', normalize: normalizeDeal, title: (record) => record.name || 'Quote', redirect: (companyId) => companyPath('deals', {}, companyId) },
+  contact: { type: 'contact', label: 'Contact', table: 'contacts', stateKey: 'contacts', permission: 'crm.manage', normalize: normalizeContact, title: (record) => record.name || 'Contact', redirect: (companyId) => companyPath('contacts', {}, companyId) },
+  account: { type: 'account', label: 'Account', table: 'accounts', stateKey: 'accounts', permission: 'crm.manage', normalize: normalizeAccount, title: (record) => record.name || 'Account', redirect: (companyId) => companyPath('crm', {}, companyId) },
+  deal: { type: 'deal', label: 'Quote', table: 'deals', stateKey: 'deals', permission: 'crm.manage', normalize: normalizeDeal, title: (record) => record.name || 'Quote', redirect: (companyId) => companyPath('deals', {}, companyId) },
   job: { type: 'job', label: 'Job', table: 'jobs', stateKey: 'jobs', permission: 'jobs.manage', normalize: normalizeJob, title: (record) => record.name || record.client_name || 'Job', redirect: (companyId) => companyPath('jobs', { tab: 'list' }, companyId) },
   task: { type: 'task', label: 'Task', table: 'tasks', stateKey: 'tasks', permission: 'tasks.manage', normalize: normalizeTask, title: (record) => record.title || record.name || 'Task', redirect: (companyId) => companyPath('tasks', {}, companyId) },
   file: { type: 'file', label: 'File', table: 'job_files', stateKey: 'files', permission: 'files.manage', normalize: normalizeFile, title: (record) => record.file_name || 'File', redirect: (companyId) => companyPath('files', {}, companyId) },
   form: { type: 'form', label: 'Form', table: 'forms', stateKey: 'forms', permission: 'forms.manage', normalize: normalizeForm, title: (record) => record.title || 'Form', redirect: (companyId) => companyPath('forms', {}, companyId) },
   form_response: { type: 'form_response', label: 'Form response', table: 'form_responses', stateKey: 'formResponses', permission: 'forms.manage', normalize: normalizeFormResponse, title: (record) => `${formById(record.form_id)?.title || 'Form'} response`, redirect: (companyId) => companyPath('forms', { tab: 'responses' }, companyId) },
-  proposal: { type: 'proposal', label: 'Proposal', table: 'proposal_documents', stateKey: 'proposals', permission: 'crm.view', normalize: normalizeProposal, title: (record) => record.title || record.proposal_no || 'Proposal', redirect: (companyId) => companyPath('proposals', {}, companyId) },
+  proposal: { type: 'proposal', label: 'Proposal', table: 'proposal_documents', stateKey: 'proposals', permission: 'crm.manage', normalize: normalizeProposal, title: (record) => record.title || record.proposal_no || 'Proposal', redirect: (companyId) => companyPath('proposals', {}, companyId) },
   client_portal: { type: 'client_portal', label: 'Client portal', table: 'client_portals', stateKey: 'clientPortals', permission: 'client_portals.manage', normalize: normalizeClientPortal, title: (record) => record.title || 'Client portal', redirect: (companyId) => companyPath('client-portals', {}, companyId) },
   pricebook_vendor: { type: 'pricebook_vendor', label: 'Price book vendor', table: 'pricebook_vendors', stateKey: 'pricebookVendors', permission: 'price_book.manage', normalize: normalizePricebookVendor, title: (record) => record.name || 'Vendor', redirect: (companyId) => companyPath('price-book', {}, companyId) },
   pricebook_material: { type: 'pricebook_material', label: 'Price book material', table: 'pricebook_materials', stateKey: 'pricebookMaterials', permission: 'price_book.manage', normalize: normalizePricebookMaterial, title: (record) => record.name || 'Material', redirect: (companyId) => companyPath('price-book', {}, companyId) },
@@ -125,7 +143,7 @@ const RECYCLE_BIN_TYPES = {
   finance_expense: { type: 'finance_expense', label: 'Expense', table: 'finance_expenses', stateKey: 'financeExpenses', permission: 'finance.manage', normalize: normalizeFinanceExpense, title: (record) => record.category || 'Expense', redirect: (companyId) => companyPath('finance', {}, companyId) },
   finance_vendor: { type: 'finance_vendor', label: 'Finance vendor', table: 'finance_vendors', stateKey: 'financeVendors', permission: 'finance.manage', normalize: normalizeFinanceVendor, title: (record) => record.name || 'Vendor', redirect: (companyId) => companyPath('finance', {}, companyId) },
   calendar_event: { type: 'calendar_event', label: 'Calendar event', table: 'calendar_events', stateKey: 'calendarEvents', permission: 'calendar.manage', normalize: normalizeCalendarEvent, title: (record) => record.title || 'Calendar event', redirect: (companyId) => companyPath('calendar', {}, companyId) },
-  activity: { type: 'activity', label: 'Activity', table: 'activities', stateKey: 'activities', permission: 'crm.view', normalize: normalizeActivity, title: (record) => record.subject || 'Activity', redirect: (companyId) => companyPath('dashboard', { activity: '1' }, companyId) },
+  activity: { type: 'activity', label: 'Activity', table: 'activities', stateKey: 'activities', permission: 'crm.manage', normalize: normalizeActivity, title: (record) => record.subject || 'Activity', redirect: (companyId) => companyPath('dashboard', { activity: '1' }, companyId) },
 };
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
 const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
@@ -346,7 +364,7 @@ const ROLE_PERMISSIONS = {
   developer: ['*'],
   admin: ['*'],
   owner: ['*'],
-  manager: ['jobs.view', 'jobs.manage', 'tasks.view', 'tasks.manage', 'files.view', 'files.manage', 'forms.view', 'forms.manage', 'crm.view', 'underwriter.view', 'underwriter.manage', 'finance.view', 'price_book.view', 'price_book.manage', 'team.view', 'clock.manage', 'approvals.manage', 'approvals.view', 'calendar.view', 'calendar.manage', 'calendar.view_team', 'users.view', 'settings.view', 'billing.view', 'roles.view', 'messages.view', 'messages.send', 'messages.create_group', 'messages.manage_groups', 'messages.attach_files', 'client_portals.view', 'client_portals.manage', 'workspaces.view', 'workspaces.manage'],
+  manager: ['jobs.view', 'jobs.manage', 'tasks.view', 'tasks.manage', 'files.view', 'files.manage', 'forms.view', 'forms.manage', 'crm.view', 'crm.manage', 'underwriter.view', 'underwriter.manage', 'finance.view', 'price_book.view', 'price_book.manage', 'team.view', 'clock.manage', 'approvals.manage', 'approvals.view', 'calendar.view', 'calendar.manage', 'calendar.view_team', 'users.view', 'settings.view', 'billing.view', 'roles.view', 'messages.view', 'messages.send', 'messages.create_group', 'messages.manage_groups', 'messages.attach_files', 'client_portals.view', 'client_portals.manage', 'workspaces.view', 'workspaces.manage'],
   member: ['jobs.view', 'tasks.view', 'tasks.manage', 'files.view', 'forms.view', 'time.track', 'approvals.view', 'calendar.view', 'users.view', 'messages.view', 'messages.send', 'messages.attach_files'],
 };
 
@@ -364,6 +382,7 @@ const PERMISSION_KEYS = [
   ['client_portals.view', 'View client portal'],
   ['client_portals.manage', 'Create/edit client portal'],
   ['crm.view', 'View CRM'],
+  ['crm.manage', 'Delete CRM records'],
   ['underwriter.view', 'View underwriter'],
   ['underwriter.manage', 'Manage underwriter'],
   ['finance.view', 'View finance'],
@@ -2075,6 +2094,7 @@ const state = {
   profileDraft: readJson(PROFILE_KEY, null),
   authReady: !CONFIG.questAuthEnabled,
   authMode: 'signin',
+  authBusy: false,
   jobs: activeRows(readSeededList(JOB_CACHE_KEY, jobsFallback)).map(normalizeJob),
   contacts: activeRows(readSeededList(CONTACT_CACHE_KEY, contactsFallback)).map(normalizeContact),
   accounts: activeRows(readSeededList(ACCOUNT_CACHE_KEY, accountsFallback)).map(normalizeAccount),
@@ -2108,6 +2128,7 @@ const state = {
   clientPortalEvents: readSeededList(CLIENT_PORTAL_EVENT_CACHE_KEY, []).map(normalizeClientPortalEvent),
   clientPortalPublic: readJson(CLIENT_PORTAL_SESSION_KEY, null),
   publicForm: null,
+  checkoutRequestId: '',
   clientPortalAnnotate: null,
   clientPortalTool: 'pan',
   clientPortalColor: '#E8611A',
@@ -2144,6 +2165,8 @@ const state = {
   recycleDeleteCtx: null,
   selectedRecycleItemId: '',
   recycleFilters: { type: 'all', status: 'active' },
+  stageDeleteCtx: null,
+  roleDeleteCtx: null,
   workspaceBuilderDocs: {},
   workspaceBuilderLive: {},
   workspaceBuilderLoading: '',
@@ -2368,10 +2391,20 @@ async function initializeAuth() {
   try {
     const { data } = await client.auth.getSession();
     await setSupabaseSession(data?.session || null);
-    client.auth.onAuthStateChange((_event, session) => {
-      setSupabaseSession(session || null).finally(() => {
-        render();
-      });
+    client.auth.onAuthStateChange((event, session) => {
+      setTimeout(() => {
+        if (event === 'PASSWORD_RECOVERY') {
+          state.authMode = 'recovery';
+          state.authBusy = false;
+          state.loginError = '';
+          state.authMessage = 'Choose a new password for your account.';
+          setSupabaseSession(session || null).finally(() => navigate('/?auth=recovery', { replace: true }));
+          return;
+        }
+        setSupabaseSession(session || null).finally(() => {
+          render();
+        });
+      }, 0);
     });
   } catch (error) {
     state.loginError = error.message || 'Unable to initialize Supabase auth.';
@@ -2535,10 +2568,10 @@ function render() {
   queueMicrotask(restoreSidebarScroll);
   queueMicrotask(bindTimePickerInputs);
   queueMicrotask(bindGoogleAddressInputs);
-  queueMicrotask(initContactAddressForm);
+  queueMicrotask(() => initContactAddressForm().catch((error) => console.warn('Contact map failed', error)));
   queueMicrotask(mountPriceBookVendorModal);
   queueMicrotask(mountPriceBookImport);
-  queueMicrotask(mountLocationPicker);
+  queueMicrotask(() => mountLocationPicker().catch((error) => console.warn('Location picker map failed', error)));
   queueMicrotask(mountWorkspaceBuilder);
   queueMicrotask(mountFileViewer);
   queueMicrotask(mountDashboardWidgetDnD);
@@ -7518,8 +7551,19 @@ function beginAddressInlineEdit(span, value, companyId, commitValue, picker = {}
   });
 }
 
+function activeTaskCreatorId(companyId = activeCompanyId()) {
+  const profile = activeSession()?.profile || {};
+  return String(profile.member_id || companyMembers(companyId).find((member) => member.profile_id === profile.id)?.id || '');
+}
+
 async function createContactTask(contactId, taskInput) {
   const companyId = activeCompanyId();
+  if (!requirePermission('tasks.manage', companyId, 'Your role cannot create tasks.', 'Tasks')) return false;
+  const creatorId = activeTaskCreatorId(companyId);
+  if (!creatorId) {
+    showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
+    return false;
+  }
   const clean = typeof taskInput === 'object'
     ? {
       title: String(taskInput.title || '').trim(),
@@ -7536,29 +7580,38 @@ async function createContactTask(contactId, taskInput) {
     title: clean.title,
     description: clean.description,
     contact_id: contactId,
-    creator_id: activeSession().profile.member_id || companyMembers(companyId)[0]?.id || 'abraham',
+    creator_id: creatorId,
     status: 'todo',
     due: clean.due,
     due_time: clean.due_time,
     priority: clean.priority,
     urgency: clean.priority,
   });
-  upsertTask(payload);
-  render();
   const client = createSupabaseClient();
-  if (client) {
-    try {
-      const result = await client.from('tasks').insert(taskPayload(payload)).select().single();
-      if (!result.error && result.data) { upsertTask(normalizeTask(result.data)); render(); }
-    } catch (error) { console.warn('Contact task sync failed', error); }
+  let savedTask = payload;
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').insert(taskPayload(payload)).select().single());
+    if (result.error) {
+      notifySyncFailure(result.error, 'Task create');
+      return false;
+    }
+    if (!result.data) {
+      notifySyncFailure(new Error('Task insert returned no record.'), 'Task create');
+      return false;
+    }
+    savedTask = normalizeTask(result.data);
   }
+  upsertTask(savedTask);
+  render();
+  return savedTask;
 }
 
 async function logContactActivity(contactId, type, subject, body = '') {
   const contact = contactById(contactId);
   if (!contact) return;
-  await logActivity({ type, subject, body, related_type: 'contact', related_id: contactId, account_id: contact.account_id });
+  const activity = await logActivity({ type, subject, body, related_type: 'contact', related_id: contactId, account_id: contact.account_id });
   render();
+  return activity;
 }
 
 function contactQuickCreate(contactId, kind) {
@@ -7602,15 +7655,12 @@ async function ensureCrmSiteForContact(contact) {
     notes: contact.notes,
   });
   site.updated_at = new Date().toISOString();
-  upsertCrmSite(site);
   const row = emptyToNull(supabaseRow(site, SITE_COLS), ['contact_id', 'account_id']);
   const { ok, data } = await supabaseWrite('crm_sites', row);
-  if (ok && data) {
-    const liveSite = normalizeCrmSite(data);
-    upsertCrmSite(liveSite);
-    return liveSite;
-  }
-  return site;
+  if (!ok) return false;
+  const savedSite = data ? normalizeCrmSite(data) : site;
+  upsertCrmSite(savedSite);
+  return savedSite;
 }
 
 async function convertContactToQuote(contactId) {
@@ -7619,6 +7669,7 @@ async function convertContactToQuote(contactId) {
   const companyId = contact.company_id;
   if (!requirePermission('crm.view', companyId, 'Your role cannot create quotes.', 'Quotes')) return;
   const site = await ensureCrmSiteForContact(contact);
+  if (site === false) return false;
   const deal = normalizeDeal({
     id: `deal-${crypto.randomUUID()}`,
     company_id: companyId,
@@ -7635,13 +7686,18 @@ async function convertContactToQuote(contactId) {
   });
   deal.updated_at = new Date().toISOString();
   const row = emptyToNull(supabaseRow(deal, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']);
-  const { ok, data } = await supabaseWrite('deals', row);
-  upsertDeal(ok && data ? normalizeDeal(data) : deal);
+  const { ok, data, error } = await supabaseWrite('deals', row);
+  if (!ok) {
+    if (error) notifySyncFailure(error, 'Quote conversion');
+    return false;
+  }
+  const savedDeal = normalizeDeal(data || deal);
+  upsertDeal(savedDeal);
   await logActivity({ type: 'system', subject: 'Contact graduated -> Quote created', body: deal.name, related_type: 'contact', related_id: contact.id, account_id: contact.account_id });
-  state.selectedDealId = deal.id;
-  showToast('Contact graduated to quote.', ok ? 'live' : 'local', 'Contacts');
-  navigate(companyPath('deals', { tab: 'profile', deal_id: deal.id }, companyId));
-  return;
+  state.selectedDealId = savedDeal.id;
+  showToast('Contact graduated to quote.', isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+  navigate(companyPath('deals', { tab: 'profile', deal_id: savedDeal.id }, companyId));
+  return true;
 }
 function tasksForContact(contactId) {
   return companyTasks().filter((task) => task.contact_id === contactId)
@@ -7679,36 +7735,49 @@ function renderSfTaskRow(task, options = {}) {
 }
 
 async function persistContact(contact) {
+  const previous = contactById(contact.id);
   const payload = { ...contact, updated_at: new Date().toISOString() };
   upsertContact(payload);
   render();
   const client = createSupabaseClient();
-  if (client) {
+  if (client && isLiveSupabaseSession()) {
     try {
       const record = emptyToNull(supabaseRow(payload, CONTACT_COLS), ['account_id']);
       const result = await client.from('contacts').upsert(record).select().single();
-      if (!result.error && result.data) {
-        upsertContact(normalizeContact(result.data));
+      if (result.error) {
+        if (previous) upsertContact(previous);
+        else state.contacts = state.contacts.filter((item) => item.id !== payload.id);
+        notifySyncFailure(result.error, 'Contact save');
         render();
+        return false;
       }
+      if (result.data) upsertContact(normalizeContact(result.data));
+      render();
     } catch (error) {
       console.warn('Contact update sync failed', error);
+      if (previous) upsertContact(previous);
+      else state.contacts = state.contacts.filter((item) => item.id !== payload.id);
+      notifySyncFailure(error, 'Contact save');
+      render();
+      return false;
     }
   }
+  return true;
 }
 
 async function setContactStage(contactId, stage) {
   const contact = contactById(contactId);
   if (!contact || !stage || contact.stage === stage) return;
-  await persistContact({ ...contact, stage });
+  if (!await persistContact({ ...contact, stage })) return false;
   await logActivity({ type: 'stage_change', subject: `Stage -> ${stage}`, related_type: 'contact', related_id: contactId, account_id: contact.account_id });
   render();
+  return true;
 }
 
-function setContactTemperature(contactId, temp) {
+async function setContactTemperature(contactId, temp) {
   const contact = contactById(contactId);
   if (!contact || contact.temperature === temp) return;
-  persistContact({ ...contact, temperature: resolveTemperature(temp) });
+  return persistContact({ ...contact, temperature: resolveTemperature(temp) });
 }
 
 function addContactTask(form) {
@@ -7729,9 +7798,23 @@ async function toggleContactTask(taskId) {
   upsertTask({ ...task, status, updated_at: new Date().toISOString() });
   render();
   const client = createSupabaseClient();
-  if (client) {
-    try { await client.from('tasks').update({ status }).eq('id', taskId); } catch (error) { console.warn('Task toggle sync failed', error); }
+  if (client && isLiveSupabaseSession()) {
+    try {
+      const result = await client.from('tasks').update({ status }).eq('id', taskId);
+      if (result.error) {
+        upsertTask(task);
+        notifySyncFailure(result.error, 'Task update');
+        render();
+        return false;
+      }
+    } catch (error) {
+      upsertTask(task);
+      notifySyncFailure(error, 'Task update');
+      render();
+      return false;
+    }
   }
+  return true;
 }
 
 function jobSupabaseRow(job) {
@@ -7740,16 +7823,23 @@ function jobSupabaseRow(job) {
 
 async function persistJob(job, label = 'Job saved locally') {
   const payload = normalizeJob({ ...job, updated_at: new Date().toISOString() });
+  const previous = jobById(payload.id);
   upsertJob(payload);
-  state.sync = { label, mode: 'local' };
+  state.sync = isLiveSupabaseSession() ? { label: 'Saving job…', mode: 'loading' } : { label, mode: 'local' };
   render();
   const { ok, data } = await supabaseWrite('jobs', jobSupabaseRow(payload));
-  if (ok && data) {
-    upsertJob(normalizeJob(data));
-    state.sync = { label: 'Quest Supabase live', mode: 'live' };
+  if (!ok) {
+    if (previous) upsertJob(previous);
+    else state.jobs = state.jobs.filter((item) => item.id !== payload.id);
+    state.sync = { label: 'Job save failed', mode: 'local' };
     render();
+    return false;
   }
-  return payload;
+  const savedJob = data ? normalizeJob(data) : payload;
+  upsertJob(savedJob);
+  state.sync = { label: isLiveSupabaseSession() ? 'Quest Supabase live' : label, mode: isLiveSupabaseSession() ? 'live' : 'local' };
+  render();
+  return savedJob;
 }
 
 async function setJobStage(jobId, stage) {
@@ -7757,8 +7847,9 @@ async function setJobStage(jobId, stage) {
   if (!job || !jobStageNames().includes(stage)) return;
   if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot update jobs.', 'Jobs')) return;
   if (job.stage === stage) { render(); return; }
-  await persistJob({ ...job, stage }, 'Job stage saved locally');
+  if (!await persistJob({ ...job, stage }, 'Job stage saved locally')) return false;
   await logJobActivity(job.id, 'stage_change', `Stage -> ${stage}`);
+  return true;
 }
 
 function markJobNextStage(jobId) {
@@ -7772,8 +7863,9 @@ function markJobNextStage(jobId) {
 async function logJobActivity(jobId, type, subject, body = '') {
   const job = jobById(jobId);
   if (!job) return;
-  await logActivity({ type, subject, body, related_type: 'job', related_id: jobId, account_id: job.account_id });
+  const activity = await logActivity({ type, subject, body, related_type: 'job', related_id: jobId, account_id: job.account_id });
   render();
+  return activity;
 }
 
 async function createJobTask(jobId, title) {
@@ -7781,6 +7873,12 @@ async function createJobTask(jobId, title) {
   const clean = String(title || '').trim();
   if (!job || !clean) return;
   if (!requirePermission('tasks.manage', job.company_id, 'Your role cannot create tasks.', 'Tasks')) return;
+  const creatorId = activeTaskCreatorId(job.company_id);
+  if (!creatorId) {
+    showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
+    return false;
+  }
+  const previousTasks = state.tasks.slice();
   const payload = normalizeTask({
     id: `task-${crypto.randomUUID()}`,
     company_id: job.company_id,
@@ -7790,17 +7888,29 @@ async function createJobTask(jobId, title) {
     status: 'todo',
     priority: job.priority === 'Urgent' ? 'urgent' : 'medium',
     due: isoDate(1),
-    creator_id: activeSession().profile.member_id || companyMembers(job.company_id)[0]?.id || 'abraham',
+    creator_id: creatorId,
   });
   upsertTask(payload);
   render();
   const client = createSupabaseClient();
-  if (client) {
+  if (client && isLiveSupabaseSession()) {
     try {
       const result = await client.from('tasks').insert(taskPayload(payload)).select().single();
-      if (!result.error && result.data) { upsertTask(normalizeTask(result.data)); render(); }
-    } catch (error) { console.warn('Job task sync failed', error); }
+      if (result.error) {
+        state.tasks = previousTasks;
+        notifySyncFailure(result.error, 'Task create');
+        render();
+        return false;
+      }
+      if (result.data) { upsertTask(normalizeTask(result.data)); render(); }
+    } catch (error) {
+      state.tasks = previousTasks;
+      notifySyncFailure(error, 'Task create');
+      render();
+      return false;
+    }
   }
+  return true;
 }
 
 function jobQuickCreate(jobId, kind) {
@@ -8211,15 +8321,15 @@ function qcSyncAddressHidden() {
 
 function qcInitMap() {
   const container = qcEl('qc-contact-map');
-  if (!container || typeof L === 'undefined') return false;
+  if (!container || !leaflet) return false;
   if (qcContactMap) {
     try { qcContactMap.remove(); } catch (_) { /* detached */ }
     qcContactMap = null;
     qcContactMarker = null;
     qcContactCircle = null;
   }
-  qcContactMap = L.map(container, { zoomControl: true }).setView([39.5, -98.35], 4);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  qcContactMap = leaflet.map(container, { zoomControl: true }).setView([39.5, -98.35], 4);
+  leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors',
   }).addTo(qcContactMap);
@@ -8231,7 +8341,7 @@ function qcInitMap() {
 function qcPlacePin(lat, lng, { reverse = false, center = false, accuracy = null } = {}) {
   if (!qcContactMap) return;
   if (!qcContactMarker) {
-    qcContactMarker = L.marker([lat, lng], { draggable: true }).addTo(qcContactMap);
+    qcContactMarker = leaflet.marker([lat, lng], { draggable: true }).addTo(qcContactMap);
     qcContactMarker.on('dragend', () => {
       const p = qcContactMarker.getLatLng();
       qcPlacePin(p.lat, p.lng, { reverse: true });
@@ -8243,7 +8353,7 @@ function qcPlacePin(lat, lng, { reverse = false, center = false, accuracy = null
     qcContactMap.removeLayer(qcContactCircle);
     qcContactCircle = null;
   }
-  if (accuracy) qcContactCircle = L.circle([lat, lng], { radius: accuracy, color: '#ea580c', weight: 1, fillOpacity: 0.08 }).addTo(qcContactMap);
+  if (accuracy) qcContactCircle = leaflet.circle([lat, lng], { radius: accuracy, color: '#ea580c', weight: 1, fillOpacity: 0.08 }).addTo(qcContactMap);
   if (center) qcContactMap.setView([lat, lng], 17);
   const latEl = qcEl('qc-lat');
   const lngEl = qcEl('qc-lng');
@@ -8352,7 +8462,7 @@ function qcDegradeAddress() {
   qcToggleBrgy('text');
 }
 
-function initContactAddressForm() {
+async function initContactAddressForm() {
   const form = document.querySelector('[data-contact-address-form]');
   if (!form || form.dataset.qcReady === '1') return;
   form.dataset.qcReady = '1';
@@ -8394,6 +8504,7 @@ function initContactAddressForm() {
       el.addEventListener('change', qcSyncAddressHidden);
     }
   });
+  await loadLeaflet().catch(() => null);
   const hasMap = qcInitMap();
   if (!hasMap) {
     const mapEl = qcEl('qc-contact-map');
@@ -8714,27 +8825,63 @@ function persistStagesForKind(kind) {
   else persistJobStages();
 }
 
-function addPipelineStage(kind) {
+async function addPipelineStage(kind) {
   captureStageFormInto(kind);
   const list = stageListForKind(kind);
   const color = STAGE_COLOR_PALETTE[list.length % STAGE_COLOR_PALETTE.length];
-  list.push({ name: `New stage ${list.length + 1}`, color });
+  const next = list.concat({ name: `New stage ${list.length + 1}`, color });
+  if (!await syncPipelineStagesToSupabase(kind, {}, next)) return false;
+  if (kind === 'contacts') CONTACT_STAGES = next;
+  else if (kind === 'deals') DEAL_STAGES = next;
+  else JOB_STAGES = next;
   persistStagesForKind(kind);
-  syncPipelineStagesToSupabase(kind);
   render();
+  return true;
 }
 
-function deletePipelineStage(kind, index) {
+function openPipelineStageDeleteModal(kind, index) {
   captureStageFormInto(kind);
   const list = stageListForKind(kind);
   if (list.length <= 1) {
     showToast('Keep at least one stage in the pipeline.', 'local', 'Stages');
     return;
   }
-  if (Number.isInteger(index) && index >= 0 && index < list.length) list.splice(index, 1);
-  persistStagesForKind(kind);
-  syncPipelineStagesToSupabase(kind);
+  if (!Number.isInteger(index) || index < 0 || index >= list.length) return;
+  state.stageDeleteCtx = { kind, index, name: list[index].name };
+  state.modal = 'stage-delete';
   render();
+}
+
+function renderPipelineStageDeleteModal() {
+  const ctx = state.stageDeleteCtx;
+  if (!ctx) return renderModalShell('Stages', 'Delete stage', emptyState('Stage not found.'));
+  return renderModalShell('Stages', 'Delete pipeline stage', `
+    <div class="compact-tool-form">
+      <div class="file-policy-note danger">
+        <strong>${h(ctx.name)}</strong>
+        <span>This removes the pipeline column. Reassign records in this stage before continuing.</span>
+      </div>
+      <div class="form-actions">
+        <button class="btn danger" type="button" data-action="confirm-pipeline-stage-delete"><i class="ti ti-trash"></i>Delete stage</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </div>
+  `, 'task-modal');
+}
+
+async function deletePipelineStage(kind, index) {
+  const list = stageListForKind(kind);
+  if (list.length <= 1 || !Number.isInteger(index) || index < 0 || index >= list.length) return false;
+  const next = list.filter((_, itemIndex) => itemIndex !== index);
+  if (!await syncPipelineStagesToSupabase(kind, {}, next)) return false;
+  if (kind === 'contacts') CONTACT_STAGES = next;
+  else if (kind === 'deals') DEAL_STAGES = next;
+  else JOB_STAGES = next;
+  persistStagesForKind(kind);
+  state.stageDeleteCtx = null;
+  state.modal = '';
+  render();
+  return true;
 }
 
 // Reflect the active company's Supabase pipeline stages into the in-memory
@@ -8759,31 +8906,40 @@ function applyPipelineStagesForCompany(companyId) {
   if (state.stageFilterDeals !== 'all' && !dealStageNames().includes(state.stageFilterDeals)) state.stageFilterDeals = 'all';
 }
 
-// Replace the active company's stage set for a kind in Supabase (delete + insert).
-async function syncPipelineStagesToSupabase(kind) {
+// Replace the active company's stages and rename affected records in one transaction.
+async function syncPipelineStagesToSupabase(kind, renameMap = {}, overrideStages = null) {
   const client = createSupabaseClient();
-  if (!client) return;
+  if (!client || !isLiveSupabaseSession()) return true;
   const companyId = activeCompanyId();
-  const list = stageListForKind(kind);
-  const rows = list.map((stage, index) => ({ company_id: companyId, kind, name: stage.name, color: stage.color, position: index }));
-  try {
-    await client.from('pipeline_stages').delete().eq('company_id', companyId).eq('kind', kind);
-    if (rows.length) await client.from('pipeline_stages').insert(rows);
-    state.pipelineStages = (Array.isArray(state.pipelineStages) ? state.pipelineStages : [])
-      .filter((row) => !(row.company_id === companyId && row.kind === kind))
-      .concat(rows);
-  } catch (error) {
-    console.warn('Pipeline stage sync failed', error);
+  const list = overrideStages || stageListForKind(kind);
+  const stages = list.map((stage) => ({ name: stage.name, color: stage.color }));
+  const result = await client.rpc('replace_pipeline_stages', {
+    p_company_id: companyId,
+    p_kind: kind,
+    p_stages: stages,
+    p_rename_map: renameMap,
+  });
+  if (result.error) {
+    notifySyncFailure(result.error, 'Pipeline stage sync');
+    return false;
   }
+  const rows = Array.isArray(result.data)
+    ? result.data
+    : stages.map((stage, index) => ({ ...stage, company_id: companyId, kind, position: index }));
+  state.pipelineStages = (Array.isArray(state.pipelineStages) ? state.pipelineStages : [])
+    .filter((row) => !(row.company_id === companyId && row.kind === kind))
+    .concat(rows);
+  return true;
 }
 
-function saveStageEdits(form) {
+async function saveStageEdits(form) {
   const kind = ['contacts', 'deals'].includes(form.dataset.kind) ? form.dataset.kind : 'jobs';
   const { stages, renameMap } = parseStageForm(form);
   if (!stages.length) {
     showToast('Add at least one stage before saving.', 'local', 'Stages');
     return;
   }
+  if (!await syncPipelineStagesToSupabase(kind, renameMap, stages)) return false;
   const validNames = new Set(stages.map((stage) => stage.name));
   const fallback = stages[0].name;
   if (kind === 'contacts') {
@@ -8814,27 +8970,10 @@ function saveStageEdits(form) {
     writeJson(JOB_CACHE_KEY, state.jobs);
     if (state.stageFilter !== 'all' && !validNames.has(state.stageFilter)) state.stageFilter = 'all';
   }
-  syncPipelineStagesToSupabase(kind);
-  syncStageRenamesToSupabase(kind, renameMap);
   state.modal = '';
-  showToast('Pipeline stages updated.', 'local', 'Stages');
+  showToast('Pipeline stages updated.', isLiveSupabaseSession() ? 'live' : 'local', 'Stages');
   render();
-}
-
-// Best-effort: carry stage renames onto the existing records in Supabase so
-// jobs/contacts/deals keep their place after a stage is renamed.
-async function syncStageRenamesToSupabase(kind, renameMap) {
-  const client = createSupabaseClient();
-  if (!client || !renameMap || !Object.keys(renameMap).length) return;
-  const companyId = activeCompanyId();
-  const table = kind === 'contacts' ? 'contacts' : kind === 'deals' ? 'deals' : 'jobs';
-  for (const [oldName, newName] of Object.entries(renameMap)) {
-    try {
-      await client.from(table).update({ stage: newName }).eq('company_id', companyId).eq('stage', oldName);
-    } catch (error) {
-      console.warn('Stage rename sync failed', error);
-    }
-  }
+  return true;
 }
 
 function renderJobsPage(route, companyId) {
@@ -10460,7 +10599,7 @@ function wbItemCommentsHtml(companyId, item) {
       <div class="wb-comment-add"><textarea class="wb-input" id="wbCommentInput" rows="2" placeholder="Add a comment…"></textarea><button class="btn btn-primary btn-sm" type="button" data-wb-add-comment><i class="ti ti-send"></i>Comment</button></div>
     </div>`;
 }
-function wbAddItemComment() {
+async function wbAddItemComment() {
   const m = state.builderModal;
   if (!m || m.kind !== 'item' || !m.editId) return;
   const input = document.getElementById('wbCommentInput');
@@ -10472,38 +10611,58 @@ function wbAddItemComment() {
   const prof = activeSession().profile || {};
   const comment = { id: wbUid(), author: prof.full_name || prof.email || 'User', authorId: prof.id || '', text, ts: new Date().toISOString() };
   item.comments = Array.isArray(item.comments) ? item.comments : [];
+  const previousComments = item.comments.slice();
   item.comments.push(comment);
   item.lastActivityAt = new Date().toISOString();
-  wbNotifyItem(m.companyId, workspace, app, item, `New comment on ${wbItemTitle(app, item)}`, `${actorName()}: ${text.length > 90 ? `${text.slice(0, 90)}…` : text}`);
   // View-only members can comment, but can't save the whole workspace doc (RLS is
   // manage-gated). Persist just their comment through the SECURITY DEFINER RPC.
   const viewerOnly = isLiveSupabaseSession() && !can('workspaces.manage', m.companyId);
   if (viewerOnly) {
     const client = createSupabaseClient();
-    if (client) {
-      client.rpc('wb_add_item_comment', { p_company_id: canonicalCompanyId(m.companyId), p_workspace_id: m.workspaceId, p_app_id: m.appId, p_item_id: m.editId, p_comment: comment })
-        .then(({ error }) => { if (error) { console.warn('Comment save failed', error); showToast('Could not save your comment — try again.', 'error', 'Workspaces'); } });
+    const result = client
+      ? await client.rpc('wb_add_item_comment', { p_company_id: canonicalCompanyId(m.companyId), p_workspace_id: m.workspaceId, p_app_id: m.appId, p_item_id: m.editId, p_comment: comment })
+      : { data: null, error: new Error('Supabase is unavailable') };
+    if (result.error) {
+      item.comments = item.comments.filter((entry) => entry.id !== comment.id);
+      if (!item.comments.length && previousComments.length) item.comments = previousComments;
+      console.warn('Comment save failed', result.error);
+      showToast('Could not save your comment. Try again.', 'error', 'Workspaces');
+      render();
+      return false;
     }
   } else {
     wbLogActivity(workspace, { icon: 'ti-message-circle', color: '#2563eb', text: `Commented on <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
     wbSave(m.companyId);
   }
+  wbNotifyItem(m.companyId, workspace, app, item, `New comment on ${wbItemTitle(app, item)}`, `${actorName()}: ${text.length > 90 ? `${text.slice(0, 90)}…` : text}`);
   wbKeepModalScroll();
   render();
+  return true;
 }
 // Persist an edit/delete of one's own comment. Managers save the whole doc;
 // view-only authors go through the authorship-checked RPC (RLS is manage-gated).
-function wbPersistCommentChange(m, action, commentId, text) {
+async function wbPersistCommentChange(m, action, commentId, text, previousComments) {
   const viewerOnly = isLiveSupabaseSession() && !can('workspaces.manage', m.companyId);
   if (viewerOnly) {
     const client = createSupabaseClient();
-    if (client) client.rpc('wb_modify_item_comment', { p_company_id: canonicalCompanyId(m.companyId), p_workspace_id: m.workspaceId, p_app_id: m.appId, p_item_id: m.editId, p_comment_id: commentId, p_action: action, p_text: text || '' })
-      .then(({ error }) => { if (error) { console.warn('Comment change failed', error); showToast('Could not save the change — try again.', 'error', 'Workspaces'); } });
+    const result = client
+      ? await client.rpc('wb_modify_item_comment', { p_company_id: canonicalCompanyId(m.companyId), p_workspace_id: m.workspaceId, p_app_id: m.appId, p_item_id: m.editId, p_comment_id: commentId, p_action: action, p_text: text || '' })
+      : { data: null, error: new Error('Supabase is unavailable') };
+    if (result.error) {
+      const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
+      const item = app.items.find((entry) => entry.id === m.editId);
+      if (item && previousComments) item.comments = previousComments;
+      console.warn('Comment change failed', result.error);
+      showToast('Could not save the change. Try again.', 'error', 'Workspaces');
+      render();
+      return false;
+    }
   } else {
     wbSave(m.companyId);
   }
+  return true;
 }
-function wbDeleteItemComment(commentId) {
+async function wbDeleteItemComment(commentId) {
   const m = state.builderModal;
   if (!m || m.kind !== 'item' || !m.editId) return;
   const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
@@ -10511,13 +10670,14 @@ function wbDeleteItemComment(commentId) {
   const c = item && Array.isArray(item.comments) ? item.comments.find((x) => x.id === commentId) : null;
   if (!c) return;
   if (c.authorId !== (activeSession().profile?.id || '')) { showToast('You can only delete your own comments.', 'local', 'Workspaces'); return; }
+  const previousComments = item.comments.map((comment) => ({ ...comment }));
   item.comments = item.comments.filter((x) => x.id !== commentId);
   if (m.editingCommentId === commentId) m.editingCommentId = null;
-  wbPersistCommentChange(m, 'delete', commentId, '');
+  await wbPersistCommentChange(m, 'delete', commentId, '', previousComments);
   wbKeepModalScroll();
   render();
 }
-function wbSaveEditedComment(commentId) {
+async function wbSaveEditedComment(commentId) {
   const m = state.builderModal;
   if (!m || m.kind !== 'item' || !m.editId) return;
   const ta = document.getElementById(`wbEditComment-${commentId}`);
@@ -10528,9 +10688,10 @@ function wbSaveEditedComment(commentId) {
   const c = item && Array.isArray(item.comments) ? item.comments.find((x) => x.id === commentId) : null;
   if (!c) return;
   if (c.authorId !== (activeSession().profile?.id || '')) { showToast('You can only edit your own comments.', 'local', 'Workspaces'); return; }
+  const previousComments = item.comments.map((comment) => ({ ...comment }));
   c.text = text; c.editedAt = new Date().toISOString();
   m.editingCommentId = null;
-  wbPersistCommentChange(m, 'edit', commentId, text);
+  await wbPersistCommentChange(m, 'edit', commentId, text, previousComments);
   wbKeepModalScroll();
   render();
 }
@@ -12231,11 +12392,11 @@ function wbMountModal() {
     if (viewBtn) viewBtn.onclick = () => { const mm = state.builderModal; const found = wbFind(mm.companyId, mm.workspaceId, mm.appId); const it = found.app?.items.find((i) => i.id === mm.editId); mm.draft = { values: it ? { ...it.values } : {} }; mm.mode = 'view'; render(); };
     overlay.querySelectorAll('[data-wb-view-file]').forEach((b) => { b.onclick = () => openWbFilePreview(b.dataset.fileUrl, b.dataset.fileName); });
     const addComment = overlay.querySelector('[data-wb-add-comment]');
-    if (addComment) addComment.onclick = () => wbAddItemComment();
+    if (addComment) addComment.onclick = () => { wbAddItemComment().catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); };
     overlay.querySelectorAll('[data-wb-comment-edit]').forEach((b) => { b.onclick = () => { state.builderModal.editingCommentId = b.dataset.wbCommentEdit; wbKeepModalScroll(); render(); }; });
     overlay.querySelectorAll('[data-wb-comment-cancel]').forEach((b) => { b.onclick = () => { state.builderModal.editingCommentId = null; wbKeepModalScroll(); render(); }; });
-    overlay.querySelectorAll('[data-wb-comment-save]').forEach((b) => { b.onclick = () => wbSaveEditedComment(b.dataset.wbCommentSave); });
-    overlay.querySelectorAll('[data-wb-comment-del]').forEach((b) => { b.onclick = () => wbDeleteItemComment(b.dataset.wbCommentDel); });
+    overlay.querySelectorAll('[data-wb-comment-save]').forEach((b) => { b.onclick = () => { wbSaveEditedComment(b.dataset.wbCommentSave).catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); }; });
+    overlay.querySelectorAll('[data-wb-comment-del]').forEach((b) => { b.onclick = () => { wbDeleteItemComment(b.dataset.wbCommentDel).catch((error) => showToast(error.message || 'Comment delete failed.', 'error', 'Workspaces')); }; });
     if (m.focusComment) { const ci = overlay.querySelector('#wbCommentInput'); if (ci) { ci.focus(); ci.scrollIntoView({ block: 'center' }); } m.focusComment = false; }
     if (m.mode !== 'view') {
       const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
@@ -12430,6 +12591,7 @@ function renderRecycleBinSettings(companyId) {
     ['Expiring soon', String(items.filter((item) => recycleDaysLeft(item) >= 0 && recycleDaysLeft(item) <= 7).length)],
     ['Expired', String(items.filter((item) => recycleDaysLeft(item) < 0).length)],
   ];
+  const expiredCount = items.filter((item) => recycleDaysLeft(item) < 0).length;
   return `
     <article class="panel span-3 recycle-bin-panel">
       <div class="section-head">
@@ -12452,6 +12614,9 @@ function renderRecycleBinSettings(companyId) {
             ['all', 'All'],
           ].map(([value, label]) => `<option value="${value}" ${filters.status === value ? 'selected' : ''}>${label}</option>`).join('')}
         </select></label>
+        <button class="btn danger" type="button" data-action="open-empty-expired-recycle-bin" ${expiredCount ? '' : 'disabled'}>
+          <i class="ti ti-trash-x"></i>Empty expired items${expiredCount ? ` (${expiredCount})` : ''}
+        </button>
       </div>
       <div class="recycle-list">
         ${filtered.map(renderRecycleBinRow).join('') || emptyState('Recycle Bin is empty. Deleted items will appear here.')}
@@ -12474,7 +12639,7 @@ function renderRecycleBinRow(item) {
       </div>
       <b class="status-pill ${statusClass}">${h(dayLabel)}</b>
       <div class="recycle-actions">
-        <button class="btn" type="button" data-action="restore-recycle-item" data-recycle-id="${h(item.id)}"><i class="ti ti-restore"></i>Restore</button>
+        <button class="btn" type="button" data-action="restore-recycle-item" data-recycle-id="${h(item.id)}" ${days < 0 ? 'disabled title="Restore window expired"' : ''}><i class="ti ti-restore"></i>Restore</button>
         <button class="btn danger" type="button" data-action="open-permanent-delete-recycle-item" data-recycle-id="${h(item.id)}"><i class="ti ti-trash"></i>Delete forever</button>
       </div>
     </article>
@@ -13813,6 +13978,38 @@ function renderRoleFormModal(companyId, role = null) {
   `, 'finance-modal');
 }
 
+function openRoleDeleteModal(roleId) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('roles.manage', companyId, 'Your role cannot manage roles.', 'Roles')) return;
+  const role = roleById(companyId, roleId);
+  if (!role) return showToast('That role is no longer available.', 'error', 'Roles');
+  if (role.is_system) return showToast('System roles cannot be deleted.', 'local', 'Roles');
+  const assignedCount = state.roleAssignments.filter((item) => item.company_id === companyId && item.role_id === role.id).length;
+  if (assignedCount) {
+    return showToast(`Reassign the ${assignedCount} member${assignedCount === 1 ? '' : 's'} using "${role.name}" before deleting it.`, 'local', 'Roles');
+  }
+  state.roleDeleteCtx = { roleId: role.id, name: role.name };
+  state.modal = 'role-delete';
+  render();
+}
+
+function renderRoleDeleteModal() {
+  const ctx = state.roleDeleteCtx;
+  if (!ctx) return renderModalShell('Roles', 'Delete role', emptyState('Role not found.'));
+  return renderModalShell('Roles', 'Delete role', `
+    <div class="compact-tool-form">
+      <div class="file-policy-note danger">
+        <strong>${h(ctx.name)}</strong>
+        <span>This permanently deletes the role and its permission rules. It cannot be undone.</span>
+      </div>
+      <div class="form-actions">
+        <button class="btn danger" type="button" data-action="confirm-role-delete"><i class="ti ti-trash"></i>Delete role</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </div>
+  `, 'task-modal');
+}
+
 function renderInviteFormModal(companyId) {
   const roles = companyRoles(companyId).filter((role) => role.name.toLowerCase() !== 'owner');
   const options = [['', 'Member']].concat(roles.map((role) => [role.id, role.name]));
@@ -14178,6 +14375,7 @@ function renderPublicFormPage(route) {
           <h1>${h(form.title)}</h1>
           <p>${h(form.description || 'Complete this form and send it to the workspace team.')}</p>
         </div>
+        <label class="form-honeypot" aria-hidden="true"><span>Website</span><input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
         ${form.collect_email ? `<label><span>Email</span><input name="submitter_email" type="email" placeholder="name@example.com" /></label>` : ''}
         ${form.questions.map((question) => renderPreviewQuestion(question)).join('') || emptyState('This form has no questions yet.')}
         ${current?.error ? `<div class="form-message error">${h(current.error)}</div>` : ''}
@@ -14192,13 +14390,14 @@ function renderPublicFormPage(route) {
 async function ensurePublicFormOpen(formId) {
   if (!formId) throw new Error('Missing form link.');
   if (state.publicForm?.formId === formId && (state.publicForm.form || state.publicForm.error || state.publicForm.loading)) return state.publicForm;
+  const openedAt = new Date().toISOString();
   const local = formById(formId);
   if (local && local.status === 'Published') {
-    state.publicForm = { formId, form: local, company: companyById(local.company_id) || { name: companyName(local.company_id) } };
+    state.publicForm = { formId, form: local, company: companyById(local.company_id) || { name: companyName(local.company_id) }, openedAt };
     render();
     return state.publicForm;
   }
-  state.publicForm = { formId, loading: true };
+  state.publicForm = { formId, loading: true, openedAt };
   render();
   const response = await fetch('/api/public-form-open?form_id=' + encodeURIComponent(formId));
   const payload = await response.json().catch(() => ({}));
@@ -14207,6 +14406,7 @@ async function ensurePublicFormOpen(formId) {
     formId,
     form: normalizeForm(payload.form || {}),
     company: payload.company || {},
+    openedAt,
   };
   render();
   return state.publicForm;
@@ -14226,6 +14426,8 @@ async function submitPublicFormResponse(formEl) {
       submitter_email: String(data.get('submitter_email') || ''),
       submitted_by: String(data.get('submitter_email') || 'Public respondent'),
       answers,
+      website: String(data.get('website') || ''),
+      started_at: state.publicForm.openedAt,
     }),
   });
   const payload = await response.json().catch(() => ({}));
@@ -16407,7 +16609,7 @@ function renderAuthModal(returnUrl, inviteToken, authEnabled) {
 function normalizeAuthMode(value, inviteToken = '') {
   const mode = String(value || '').toLowerCase().trim();
   if (inviteToken && !mode) return 'register';
-  if (['signin', 'register', 'invite', 'request'].includes(mode)) return mode;
+  if (['signin', 'register', 'invite', 'request', 'forgot', 'recovery'].includes(mode)) return mode;
   if (mode === 'business') return 'register';
   if (mode === 'worker') return inviteToken ? 'register' : 'invite';
   return '';
@@ -16415,6 +16617,7 @@ function normalizeAuthMode(value, inviteToken = '') {
 
 function renderAuthLanePicker(inviteToken = '') {
   const active = state.authMode;
+  if (['forgot', 'recovery'].includes(active)) return '';
   const options = inviteToken
     ? [
       ['signin', 'Sign in'],
@@ -16432,6 +16635,26 @@ function renderAuthLanePicker(inviteToken = '') {
       `).join('')}
     </nav>
   `;
+}
+
+function renderPasswordField({ name = 'password', label = 'Password', autocomplete = 'current-password', confirm = false } = {}) {
+  const inputName = confirm ? 'password_confirm' : name;
+  return `
+    <label>${h(label)}
+      <span class="password-field">
+        <input name="${h(inputName)}" type="password" autocomplete="${h(autocomplete)}" minlength="${PASSWORD_MIN_LENGTH}" required />
+        <button type="button" data-action="toggle-password" aria-label="Show password" title="Show password"><i class="ti ti-eye"></i></button>
+      </span>
+    </label>
+  `;
+}
+
+function renderPasswordRequirements() {
+  return `<ul class="password-requirements">${passwordRequirements().map((item) => `<li>${h(item)}</li>`).join('')}</ul>`;
+}
+
+function authSubmitButton(label, busyLabel = 'Working...') {
+  return `<button class="btn btn-primary full" type="submit" ${state.authBusy ? 'disabled aria-busy="true"' : ''}>${h(state.authBusy ? busyLabel : label)}</button>`;
 }
 
 function renderDemoModeLauncher(returnUrl) {
@@ -16452,6 +16675,35 @@ function renderDemoModeLauncher(returnUrl) {
 
 function renderSupabaseAuthForm(returnUrl) {
   const inviteToken = String(state.route?.params?.get('invite') || '').trim();
+  if (state.authMode === 'forgot') {
+    return `
+      <form class="auth-form-compact" data-auth-forgot-form>
+        <div class="auth-form-title">
+          <strong>Reset your password</strong>
+          <span>We will email a secure reset link if the account exists.</span>
+        </div>
+        <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+        ${authSubmitButton('Send reset link', 'Sending reset link...')}
+        ${authStatusMessage('The message is the same whether or not that email has an account.')}
+        <button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="signin">Back to sign in</button>
+      </form>
+    `;
+  }
+  if (state.authMode === 'recovery') {
+    return `
+      <form class="auth-form-compact" data-auth-update-password-form>
+        <div class="auth-form-title">
+          <strong>Choose a new password</strong>
+          <span>Your recovery link has been verified.</span>
+        </div>
+        ${renderPasswordField({ label: 'New password', autocomplete: 'new-password' })}
+        ${renderPasswordField({ label: 'Confirm new password', autocomplete: 'new-password', confirm: true })}
+        ${renderPasswordRequirements()}
+        ${authSubmitButton('Update password', 'Updating password...')}
+        ${authStatusMessage('Use a password you have not used for this account before.')}
+      </form>
+    `;
+  }
   if (state.authMode === 'register') {
     return `
       <form class="auth-form-compact" data-auth-register-form>
@@ -16461,11 +16713,12 @@ function renderSupabaseAuthForm(returnUrl) {
         </div>
         <label>${inviteToken ? 'Display name / username' : 'Full name'}<input name="full_name" autocomplete="name" required /></label>
         <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-        <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required /></label>
+        ${renderPasswordField({ autocomplete: 'new-password' })}
+        ${renderPasswordRequirements()}
         ${inviteToken ? '' : `<label>Company workspace<input name="company_name" placeholder="Example Roofing LLC" required /></label>${workspacePresetSelect()}`}
         <input type="hidden" name="invite_token" value="${h(inviteToken)}" />
         <input type="hidden" name="return_url" value="${h(returnUrl)}" />
-        <button class="btn btn-primary full" type="submit">${inviteToken ? 'Create account and join' : 'Create secure workspace'}</button>
+        ${authSubmitButton(inviteToken ? 'Create account and join' : 'Create secure workspace', 'Creating account...')}
         ${authStatusMessage(inviteToken ? 'Workers cannot create access without a valid invite code.' : 'You become Owner, then Quest approves billing/access before the workspace opens.')}
         ${inviteToken ? '<button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="signin">I already have an account</button>' : ''}
       </form>
@@ -16493,11 +16746,11 @@ function renderSupabaseAuthForm(returnUrl) {
           <span>This is for existing accounts only. New workers should use an admin invite.</span>
         </div>
         <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-        <label>Password<input name="password" type="password" autocomplete="current-password" minlength="8" required /></label>
+        ${renderPasswordField()}
         <label>Company ID<input name="company_id" placeholder="company-workspace-id" required /></label>
         <label>Message<input name="message" placeholder="Tell the admin why you need access" /></label>
         <input type="hidden" name="return_url" value="${h(returnUrl)}" />
-        <button class="btn btn-primary full" type="submit">Request company access</button>
+        ${authSubmitButton('Request company access', 'Requesting access...')}
         ${authStatusMessage('Requests stay pending until a company Owner/Admin approves them.')}
       </form>
     `;
@@ -16509,10 +16762,11 @@ function renderSupabaseAuthForm(returnUrl) {
         <span>${inviteToken ? 'Use the invited email account.' : 'Use your company account.'}</span>
       </div>
       <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-      <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+      ${renderPasswordField()}
       <input type="hidden" name="invite_token" value="${h(inviteToken)}" />
       <input type="hidden" name="return_url" value="${h(returnUrl)}" />
-      <button class="btn btn-primary full" type="submit">${inviteToken ? 'Sign in and join' : 'Sign in'}</button>
+      ${authSubmitButton(inviteToken ? 'Sign in and join' : 'Sign in', 'Signing in...')}
+      ${inviteToken ? '' : '<button class="auth-text-action" type="button" data-action="set-auth-mode" data-auth-mode="forgot">Forgot password?</button>'}
       ${authStatusMessage(inviteToken ? 'If you do not have an account yet, create an invited worker account.' : 'Business owners and workers use the same sign in after access is created.')}
       ${inviteToken ? '<button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="register">Create invited account</button>' : ''}
     </form>
@@ -16667,10 +16921,12 @@ function renderActiveModal(route, session) {
   if (state.modal === 'workspace-backup-restore') return renderWorkspaceBackupRestoreModal();
   if (state.modal === 'recycle-delete') return renderRecycleDeleteModal();
   if (state.modal === 'recycle-permanent-delete') return renderRecyclePermanentDeleteModal();
+  if (state.modal === 'recycle-empty-expired') return renderRecycleEmptyExpiredModal();
   if (state.modal === 'platform-backup-delete') return renderPlatformBackupDeleteModal(state.selectedPlatformBackupCopyId);
   if (state.modal === 'stages-jobs') return renderStageManagerModal('jobs');
   if (state.modal === 'stages-contacts') return renderStageManagerModal('contacts');
   if (state.modal === 'stages-deals') return renderStageManagerModal('deals');
+  if (state.modal === 'stage-delete') return renderPipelineStageDeleteModal();
   if (state.modal === 'finance-invoice-new') return renderFinanceInvoiceFormModal(activeCompanyId(), null);
   if (state.modal === 'finance-invoice-edit') return renderFinanceInvoiceFormModal(activeCompanyId(), financeInvoiceById(state.selectedFinanceInvoiceId));
   if (state.modal === 'finance-payment-new') return renderFinancePaymentFormModal(activeCompanyId(), state.selectedFinanceInvoiceId);
@@ -16680,6 +16936,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'finance-vendor-edit') return renderFinanceVendorFormModal(activeCompanyId(), financeVendorById(state.selectedFinanceVendorId));
   if (state.modal === 'role-new') return renderRoleFormModal(activeCompanyId());
   if (state.modal === 'role-edit') return renderRoleFormModal(activeCompanyId(), roleById(activeCompanyId(), state.selectedRoleId));
+  if (state.modal === 'role-delete') return renderRoleDeleteModal();
   if (state.modal === 'invite-new') return renderInviteFormModal(activeCompanyId());
   if (state.modal === 'message-group-new') return renderMessageGroupModal(activeCompanyId());
   if (state.modal === 'message-workspace-members') return renderMessageWorkspaceMembersModal(activeCompanyId());
@@ -16831,6 +17088,52 @@ function renderRecyclePermanentDeleteModal() {
       </div>
     </div>
   `, 'task-modal');
+}
+
+function openEmptyExpiredRecycleBin() {
+  const expired = recycleBinItemsForCompany(activeCompanyId()).filter((item) => recycleDaysLeft(item) < 0);
+  if (!expired.length) return showToast('There are no expired items to delete.', 'local', 'Recycle Bin');
+  state.modal = 'recycle-empty-expired';
+  render();
+}
+
+function renderRecycleEmptyExpiredModal() {
+  const expired = recycleBinItemsForCompany(activeCompanyId()).filter((item) => recycleDaysLeft(item) < 0);
+  return renderModalShell('Recycle Bin', 'Empty expired items', `
+    <form class="compact-tool-form" data-recycle-empty-expired-form>
+      <div class="file-policy-note danger">
+        <strong>Permanently delete ${expired.length} expired item${expired.length === 1 ? '' : 's'}</strong>
+        <span>Records and file bytes are removed permanently. This cannot be undone.</span>
+      </div>
+      <label>
+        <span>Type DELETE EXPIRED to continue</span>
+        <input type="text" name="confirmation" autocomplete="off" placeholder="DELETE EXPIRED" />
+      </label>
+      <div class="form-actions">
+        <button class="btn danger" type="button" data-action="confirm-empty-expired-recycle-bin"><i class="ti ti-trash-x"></i>Delete expired items</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+
+async function emptyExpiredRecycleBin() {
+  const form = document.querySelector('[data-recycle-empty-expired-form]');
+  const confirmation = String(new FormData(form || undefined).get('confirmation') || '').trim();
+  if (confirmation !== 'DELETE EXPIRED') {
+    showToast('Type DELETE EXPIRED exactly to continue.', 'error', 'Recycle Bin');
+    return false;
+  }
+  const expired = recycleBinItemsForCompany(activeCompanyId()).filter((item) => recycleDaysLeft(item) < 0);
+  let deleted = 0;
+  for (const item of expired) {
+    if (await permanentlyDeleteRecycleBinItem(item.id, { silent: true, renderAfter: false })) deleted += 1;
+  }
+  state.modal = '';
+  state.selectedRecycleItemId = '';
+  showToast(`${deleted} expired item${deleted === 1 ? '' : 's'} permanently deleted.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
+  render();
+  return deleted === expired.length;
 }
 
 function openDeleteCompanyWorkspace() {
@@ -17205,16 +17508,16 @@ async function saveBuiltEstimate(form) {
   const body = estimateActivityBody(draft, totals);
   if (type === 'contact') {
     const contact = contactById(id);
-    await persistContact({ ...contact, value: quoteTotal, roof_system: ROOF_ESTIMATE_SYSTEMS[draft.primary]?.label || draft.primary });
+    if (!await persistContact({ ...contact, value: quoteTotal, roof_system: ROOF_ESTIMATE_SYSTEMS[draft.primary]?.label || draft.primary })) return false;
     await logContactActivity(id, 'system', `Estimate saved - ${money(quoteTotal)}`, body);
   } else if (type === 'deal') {
     const deal = dealById(id);
     const estimateStage = dealStageNames().find((stage) => /estimate|proposal/i.test(stage));
-    await persistDeal({ ...deal, value: quoteTotal, stage: estimateStage || deal.stage }, 'Estimate saved to quote.');
+    if (!await persistDeal({ ...deal, value: quoteTotal, stage: estimateStage || deal.stage }, 'Estimate saved to quote.')) return false;
     await logDealActivity(id, 'system', `Estimate saved - ${money(quoteTotal)}`, body);
   } else if (type === 'job') {
     const job = jobById(id);
-    await persistJob({ ...job, estimate_total: quoteTotal }, 'Estimate saved to job.');
+    if (!await persistJob({ ...job, estimate_total: quoteTotal }, 'Estimate saved to job.')) return false;
     await logJobActivity(id, 'system', `Estimate saved - ${money(quoteTotal)}`, body);
   }
   state.modal = '';
@@ -17613,18 +17916,19 @@ async function saveBuiltProposal(form) {
   const body = proposalActivityBody(draft);
   const existing = proposalId ? proposalById(proposalId) : null;
   const savedProposal = await persistProposal(proposalRecordFromDraft(ctx, draft, existing), existing ? 'Proposal updated.' : 'Proposal saved.');
+  if (!savedProposal) return false;
   if (type === 'contact') {
     const contact = contactById(id);
-    await persistContact({ ...contact, value: total });
+    if (!await persistContact({ ...contact, value: total })) return false;
     await logContactActivity(id, 'email', `${existing ? 'Proposal updated' : 'Proposal prepared'} - ${money(total)}`, `${body}\n\nProposal ID: ${savedProposal.id}`);
   } else if (type === 'deal') {
     const deal = dealById(id);
     const proposalStage = dealStageNames().find((stage) => /estimate|proposal/i.test(stage));
-    await persistDeal({ ...deal, value: total, stage: proposalStage || deal.stage }, 'Proposal saved to quote.');
+    if (!await persistDeal({ ...deal, value: total, stage: proposalStage || deal.stage }, 'Proposal saved to quote.')) return false;
     await logDealActivity(id, 'email', `${existing ? 'Proposal updated' : 'Proposal prepared'} - ${money(total)}`, `${body}\n\nProposal ID: ${savedProposal.id}`);
   } else if (type === 'job') {
     const job = jobById(id);
-    await persistJob({ ...job, estimate_total: total }, 'Proposal saved to job.');
+    if (!await persistJob({ ...job, estimate_total: total }, 'Proposal saved to job.')) return false;
     await logJobActivity(id, 'email', `${existing ? 'Proposal updated' : 'Proposal prepared'} - ${money(total)}`, `${body}\n\nProposal ID: ${savedProposal.id}`);
   }
   state.modal = '';
@@ -17670,6 +17974,7 @@ async function duplicateProposal(proposalId) {
     updated_at: new Date().toISOString(),
   });
   const saved = await persistProposal(copy, 'Proposal duplicated.');
+  if (!saved) return false;
   await logActivity({ type: 'system', subject: 'Proposal reused', body: `Copied from ${source.proposal_no || source.id}`, related_type: saved.related_type, related_id: saved.related_id });
   state.selectedProposalId = saved.id;
   navigate(companyPath('proposals', { proposal_id: saved.id }, saved.company_id));
@@ -17686,6 +17991,7 @@ async function setProposalStatus(proposalId, status, label = 'Proposal status sa
   if (status === 'Accepted' && !proposal.accepted_at) updates.accepted_at = now;
   if (status === 'Declined' && !proposal.declined_at) updates.declined_at = now;
   const saved = await persistProposal({ ...proposal, ...updates }, label);
+  if (!saved) return false;
   await logActivity({ type: 'system', subject: `Proposal ${status}`, body: `${saved.proposal_no || saved.title} is now ${status}.`, related_type: saved.related_type, related_id: saved.related_id });
   state.selectedProposalId = saved.id;
   render();
@@ -18151,6 +18457,16 @@ function handleAction(event, node) {
   if (action === 'confirm-permanent-delete-recycle-item') {
     event.preventDefault();
     permanentlyDeleteRecycleBinItem(node.dataset.recycleId || state.selectedRecycleItemId).catch((error) => showToast(error.message || 'Permanent delete failed.', 'error', 'Recycle Bin'));
+    return;
+  }
+  if (action === 'open-empty-expired-recycle-bin') {
+    event.preventDefault();
+    openEmptyExpiredRecycleBin();
+    return;
+  }
+  if (action === 'confirm-empty-expired-recycle-bin') {
+    event.preventDefault();
+    emptyExpiredRecycleBin().catch((error) => showToast(error.message || 'Expired item cleanup failed.', 'error', 'Recycle Bin'));
     return;
   }
   if (action === 'platform-backup-mark-deleted') {
@@ -18803,6 +19119,7 @@ function handleAction(event, node) {
     event.preventDefault();
     const mode = normalizeAuthMode(node.dataset.authMode || 'signin') || 'signin';
     state.authMode = mode;
+    state.authBusy = false;
     state.loginError = '';
     state.authMessage = '';
     navigate(`/?auth=${encodeURIComponent(mode)}`);
@@ -18812,13 +19129,28 @@ function handleAction(event, node) {
     event.preventDefault();
     state.loginError = '';
     state.authMessage = '';
+    state.authBusy = false;
     navigate('/');
+    return;
+  }
+  if (action === 'toggle-password') {
+    event.preventDefault();
+    const field = node.closest('.password-field');
+    const input = field?.querySelector('input');
+    if (!input) return;
+    const reveal = input.type === 'password';
+    input.type = reveal ? 'text' : 'password';
+    node.setAttribute('aria-label', reveal ? 'Hide password' : 'Show password');
+    node.setAttribute('title', reveal ? 'Hide password' : 'Show password');
+    node.innerHTML = `<i class="ti ${reveal ? 'ti-eye-off' : 'ti-eye'}"></i>`;
+    input.focus();
     return;
   }
   if (action === 'set-auth-mode') {
     event.preventDefault();
-    const nextMode = ['signin', 'register', 'invite', 'request'].includes(node.dataset.authMode) ? node.dataset.authMode : 'signin';
+    const nextMode = ['signin', 'register', 'invite', 'request', 'forgot', 'recovery'].includes(node.dataset.authMode) ? node.dataset.authMode : 'signin';
     state.authMode = nextMode;
+    state.authBusy = false;
     state.loginError = '';
     state.authMessage = '';
     if (state.route?.name === 'home' || state.route?.name === 'login') {
@@ -18892,7 +19224,12 @@ function handleAction(event, node) {
   }
   if (action === 'delete-role') {
     event.preventDefault();
-    deleteRole(node.dataset.roleId).catch((error) => {
+    openRoleDeleteModal(node.dataset.roleId || '');
+    return;
+  }
+  if (action === 'confirm-role-delete') {
+    event.preventDefault();
+    deleteRole(state.roleDeleteCtx?.roleId || '').catch((error) => {
       state.sync = { label: error?.message || 'Role delete failed', mode: 'local' };
       render();
     });
@@ -19437,7 +19774,8 @@ function handleAction(event, node) {
   }
   if (action === 'set-contact-temp') {
     event.preventDefault();
-    setContactTemperature(node.dataset.contactId, node.dataset.temp);
+    setContactTemperature(node.dataset.contactId, node.dataset.temp)
+      .catch((error) => showToast(error.message || 'Contact update failed.', 'error', 'Contacts'));
     return;
   }
   if (action === 'toggle-contact-task') {
@@ -19582,12 +19920,19 @@ function handleAction(event, node) {
   }
   if (action === 'add-stage') {
     event.preventDefault();
-    addPipelineStage(['contacts', 'deals'].includes(node.dataset.module) ? node.dataset.module : 'jobs');
+    addPipelineStage(['contacts', 'deals'].includes(node.dataset.module) ? node.dataset.module : 'jobs')
+      .catch((error) => showToast(error.message || 'Could not add pipeline stage.', 'error', 'Stages'));
     return;
   }
   if (action === 'delete-stage') {
     event.preventDefault();
-    deletePipelineStage(['contacts', 'deals'].includes(node.dataset.module) ? node.dataset.module : 'jobs', Number(node.dataset.index));
+    openPipelineStageDeleteModal(['contacts', 'deals'].includes(node.dataset.module) ? node.dataset.module : 'jobs', Number(node.dataset.index));
+    return;
+  }
+  if (action === 'confirm-pipeline-stage-delete') {
+    event.preventDefault();
+    const ctx = state.stageDeleteCtx;
+    if (ctx) deletePipelineStage(ctx.kind, ctx.index).catch((error) => showToast(error.message || 'Could not delete pipeline stage.', 'error', 'Stages'));
     return;
   }
   if (action === 'open-forms-tools') {
@@ -20008,13 +20353,25 @@ function onDocumentSubmit(event) {
 
   if (event.target.matches('[data-auth-sign-in-form]')) {
     event.preventDefault();
-    signInWithSupabase(event.target);
+    signInWithSupabase(event.target).catch(handleAuthFailure);
+    return;
+  }
+
+  if (event.target.matches('[data-auth-forgot-form]')) {
+    event.preventDefault();
+    requestPasswordReset(event.target).catch(handleAuthFailure);
+    return;
+  }
+
+  if (event.target.matches('[data-auth-update-password-form]')) {
+    event.preventDefault();
+    updateRecoveredPassword(event.target).catch(handleAuthFailure);
     return;
   }
 
   if (event.target.matches('[data-auth-register-form]')) {
     event.preventDefault();
-    registerWorkspace(event.target);
+    registerWorkspace(event.target).catch(handleAuthFailure);
     return;
   }
 
@@ -20253,7 +20610,7 @@ function onDocumentSubmit(event) {
 
   if (event.target.matches('[data-stage-form]')) {
     event.preventDefault();
-    saveStageEdits(event.target);
+    saveStageEdits(event.target).catch((error) => showToast(error.message || 'Pipeline stage save failed.', 'error', 'Stages'));
     return;
   }
 
@@ -20718,6 +21075,64 @@ function dataUrlToFile(dataUrl, fileName) {
   return new File([bytes], fileName, { type: mime });
 }
 
+function handleAuthFailure(error) {
+  state.authBusy = false;
+  state.loginError = error?.message || 'Account request failed. Please try again.';
+  state.authMessage = '';
+  render();
+}
+
+async function requestPasswordReset(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const email = String(form.email || '').trim();
+  const client = createSupabaseClient();
+  if (!client?.auth || !email) throw new Error('Enter the email for your Quest HQ account.');
+  state.authBusy = true;
+  state.loginError = '';
+  state.authMessage = 'Sending reset link...';
+  render();
+  const redirectTo = `${window.location.origin}${appHref('/?auth=recovery')}`;
+  const result = await client.auth.resetPasswordForEmail(email, { redirectTo });
+  state.authBusy = false;
+  if (result.error) {
+    state.loginError = 'Password reset is temporarily unavailable. Please try again shortly.';
+    state.authMessage = '';
+  } else {
+    state.loginError = '';
+    state.authMessage = 'If an account exists for that email, a password reset link is on its way.';
+  }
+  render();
+}
+
+async function updateRecoveredPassword(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const password = String(form.password || '');
+  const confirmation = String(form.password_confirm || '');
+  const policy = passwordPolicy(password);
+  if (!policy.valid) throw new Error(policy.issues[0]);
+  if (password !== confirmation) throw new Error('The passwords do not match.');
+  const client = createSupabaseClient();
+  if (!client?.auth) throw new Error('Password recovery is unavailable in this session.');
+  state.authBusy = true;
+  state.loginError = '';
+  state.authMessage = 'Updating password...';
+  render();
+  const result = await client.auth.updateUser({ password });
+  if (result.error) {
+    state.authBusy = false;
+    state.loginError = result.error.message || 'Could not update your password.';
+    state.authMessage = '';
+    render();
+    return;
+  }
+  await client.auth.signOut({ scope: 'global' });
+  state.authBusy = false;
+  state.authMode = 'signin';
+  state.loginError = '';
+  state.authMessage = 'Password updated. Sign in with your new password.';
+  navigate('/?auth=signin', { replace: true });
+}
+
 async function signInWithSupabase(formNode) {
   const form = Object.fromEntries(new FormData(formNode).entries());
   const client = createSupabaseClient();
@@ -20726,6 +21141,7 @@ async function signInWithSupabase(formNode) {
     render();
     return;
   }
+  state.authBusy = true;
   state.loginError = '';
   state.authMessage = 'Signing in...';
   render();
@@ -20734,12 +21150,14 @@ async function signInWithSupabase(formNode) {
     password: String(form.password || ''),
   });
   if (result.error) {
+    state.authBusy = false;
     state.loginError = result.error.message || 'Unable to sign in.';
     state.authMessage = '';
     render();
     return;
   }
   await setSupabaseSession(result.data.session);
+  state.authBusy = false;
   if (form.invite_token) {
     await acceptCompanyInvite(form.invite_token, form.return_url);
     return;
@@ -20834,6 +21252,14 @@ async function registerWorkspace(formNode) {
     render();
     return;
   }
+  const policy = passwordPolicy(password);
+  if (!policy.valid) {
+    state.loginError = policy.issues[0];
+    state.authMessage = '';
+    render();
+    return;
+  }
+  state.authBusy = true;
   state.loginError = '';
   state.authMessage = inviteToken ? 'Creating account and accepting invite...' : 'Creating secure workspace...';
   render();
@@ -20843,6 +21269,7 @@ async function registerWorkspace(formNode) {
     options: { data: { full_name: fullName } },
   });
   if (signUp.error) {
+    state.authBusy = false;
     const duplicateAccount = /already|registered|exists/i.test(signUp.error.message || '');
     state.loginError = duplicateAccount && inviteToken
       ? 'That email already has a Quest HQ account. Sign in with the invited email to accept this invite.'
@@ -20856,6 +21283,7 @@ async function registerWorkspace(formNode) {
   if (!session) {
     const signIn = await client.auth.signInWithPassword({ email, password });
     if (signIn.error) {
+      state.authBusy = false;
       state.loginError = 'Account created. Please sign in to finish workspace setup.';
       state.authMode = 'signin';
       state.authMessage = '';
@@ -20865,6 +21293,7 @@ async function registerWorkspace(formNode) {
     session = signIn.data.session;
   }
   await setSupabaseSession(session);
+  state.authBusy = false;
   if (inviteToken) {
     await acceptCompanyInvite(inviteToken, form.return_url);
     return;
@@ -21174,11 +21603,13 @@ async function requestCompanyAccess(formNode) {
   const email = String(form.email || '').trim();
   const password = String(form.password || '');
   const companyId = canonicalCompanyId(form.company_id || '');
+  state.authBusy = true;
   state.loginError = '';
   state.authMessage = 'Submitting access request...';
   render();
   const signIn = await client.auth.signInWithPassword({ email, password });
   if (signIn.error) {
+    state.authBusy = false;
     state.loginError = signIn.error.message || 'Sign in first to request access.';
     state.authMessage = '';
     render();
@@ -21190,12 +21621,14 @@ async function requestCompanyAccess(formNode) {
     request_message: String(form.message || '').trim() || null,
   });
   if (request.error) {
+    state.authBusy = false;
     state.loginError = request.error.message || 'Unable to request access.';
     state.authMessage = '';
     render();
     return;
   }
   state.authMessage = 'Access request sent. An Owner/Admin must approve it.';
+  state.authBusy = false;
   state.loginError = '';
   state.authMode = 'signin';
   render();
@@ -21212,6 +21645,7 @@ async function startCheckout() {
   state.sync = { label: 'Opening billing...', mode: 'loading' };
   render();
   try {
+    state.checkoutRequestId ||= crypto.randomUUID();
     const response = await fetch('/api/create-checkout-session', {
       method: 'POST',
       headers: {
@@ -21220,6 +21654,7 @@ async function startCheckout() {
       },
       body: JSON.stringify({
         company_id: companyId,
+        request_id: state.checkoutRequestId,
         return_url: `${window.location.origin}${appHref(companyPath('settings', { tab: 'billing' }, companyId))}`,
       }),
     });
@@ -21367,18 +21802,13 @@ async function saveRole(formNode) {
   };
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
-    const roleResult = existing
-      ? await client.from('roles').update({ name: role.name, color: role.color, priority: role.priority }).eq('id', role.id).select().single()
-      : await client.from('roles').insert(role).select().single();
-    if (roleResult.error) {
-      state.sync = { label: roleResult.error.message || 'Role save failed', mode: 'local' };
+    const result = await client.rpc('save_company_role', { p_role: role, p_permissions: permissions });
+    if (result.error) {
+      state.sync = { label: result.error.message || 'Role save failed', mode: 'local' };
       render();
       return;
     }
-    const savedRole = normalizeRole(roleResult.data);
-    if (existing) await client.from('role_permissions').delete().eq('role_id', savedRole.id);
-    const rows = permissions.map((permission_key) => ({ role_id: savedRole.id, permission_key, effect: 'allow' }));
-    if (rows.length) await client.from('role_permissions').insert(rows);
+    const savedRole = normalizeRole(result.data);
     upsertRoleInState(savedRole);
     replacePermissionsInState(savedRole.id, permissions);
     state.sync = { label: existing ? 'Role updated' : 'Role saved', mode: 'live' };
@@ -21412,8 +21842,7 @@ async function deleteRole(roleId) {
   const client = createSupabaseClient();
   const live = isLiveSupabaseSession() && client;
   if (live) {
-    await client.from('role_permissions').delete().eq('role_id', role.id);
-    const result = await client.from('roles').delete().eq('id', role.id);
+    const result = await client.rpc('delete_company_role', { p_role_id: role.id });
     if (result.error) {
       state.sync = { label: result.error.message || 'Role delete failed', mode: 'local' };
       render();
@@ -21424,6 +21853,8 @@ async function deleteRole(roleId) {
   state.rolePermissions = state.rolePermissions.filter((item) => item.role_id !== role.id);
   if (state.rolePreview?.role_id === role.id) state.rolePreview = null;
   if (state.selectedRoleId === role.id) state.selectedRoleId = '';
+  state.roleDeleteCtx = null;
+  state.modal = '';
   state.sync = { label: live ? 'Role deleted' : 'Role deleted locally', mode: live ? 'live' : 'local' };
   render();
 }
@@ -22406,15 +22837,19 @@ async function saveJob(form) {
   const client = createSupabaseClient();
 
   if (client) {
-    const result = existing
-      ? await client.from('jobs').update(payload).eq('id', payload.id).select().single()
-      : await client.from('jobs').insert(payload).select().single();
+    const result = await safeSupabaseQuery(existing
+      ? client.from('jobs').update(payload).eq('id', payload.id).select().single()
+      : client.from('jobs').insert(payload).select().single());
     if (!result.error && result.data) {
       upsertJob(normalizeJob(result.data));
       state.sync = { label: 'Quest Supabase live', mode: 'live' };
       state.modal = '';
       navigate(companyPath('jobs', { tab: 'profile', job_id: result.data.id }, payload.company_id), { replace: true });
-      return;
+      return true;
+    }
+    if (isLiveSupabaseSession()) {
+      notifySyncFailure(result.error || new Error('Job save returned no record.'), 'Job save');
+      return false;
     }
     state.sync = { label: 'Saved locally', mode: 'local' };
   }
@@ -22422,6 +22857,7 @@ async function saveJob(form) {
   upsertJob(payload);
   state.modal = '';
   navigate(companyPath('jobs', { tab: 'profile', job_id: payload.id }, payload.company_id), { replace: true });
+  return true;
 }
 
 async function deleteJob(id) {
@@ -22435,11 +22871,16 @@ async function saveTask(form) {
   const companyId = activeCompanyId();
   if (!requirePermission('tasks.manage', companyId, 'Your role can view tasks but cannot create or edit them.', 'Tasks')) return;
   const formData = Object.fromEntries(new FormData(form).entries());
+  const creatorId = activeTaskCreatorId(companyId);
+  if (!creatorId) {
+    showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
+    return false;
+  }
   const payload = normalizeTask({
     ...formData,
     id: String(formData.id || '').trim() || `task-${crypto.randomUUID()}`,
     company_id: companyId,
-    creator_id: activeSession().profile.member_id || companyMembers(companyId)[0]?.id || 'abraham',
+    creator_id: creatorId,
     urgency: formData.priority || 'medium',
     watchers: [],
     subtasks: [],
@@ -22453,9 +22894,9 @@ async function saveTask(form) {
   const returnContactId = String(formData.return_contact_id || '').trim();
   if (client) {
     const savePayload = taskPayload(payload);
-    const result = existing
-      ? await client.from('tasks').update(savePayload).eq('id', payload.id).select().single()
-      : await client.from('tasks').insert(savePayload).select().single();
+    const result = await safeSupabaseQuery(existing
+      ? client.from('tasks').update(savePayload).eq('id', payload.id).select().single()
+      : client.from('tasks').insert(savePayload).select().single());
     if (!result.error && result.data) {
       const savedTask = normalizeTask(result.data);
       upsertTask(savedTask);
@@ -22464,10 +22905,14 @@ async function saveTask(form) {
       state.modal = '';
       if (returnContactId) {
         navigate(companyPath('contacts', { contact_id: returnContactId }, companyId), { replace: true });
-        return;
+        return true;
       }
       navigate(companyPath('tasks', { ...(payload.project_id ? { job_id: payload.project_id } : {}), task_id: payload.id }, companyId), { replace: true });
-      return;
+      return true;
+    }
+    if (isLiveSupabaseSession()) {
+      notifySyncFailure(result.error || new Error('Task save returned no record.'), 'Task save');
+      return false;
     }
     state.sync = { label: 'Task saved locally', mode: 'local' };
   }
@@ -22477,9 +22922,10 @@ async function saveTask(form) {
   state.modal = '';
   if (returnContactId) {
     navigate(companyPath('contacts', { contact_id: returnContactId }, companyId), { replace: true });
-    return;
+    return true;
   }
   navigate(companyPath('tasks', { ...(payload.project_id ? { job_id: payload.project_id } : {}), task_id: payload.id }, companyId), { replace: true });
+  return true;
 }
 
 async function deleteTask(id, options = {}) {
@@ -22563,7 +23009,7 @@ async function saveFileRecord(form) {
       if (uploaded) await client.storage.from('quest-job-files').remove([objectPath]);
       // Live session but the DB record failed to persist — don't keep a phantom
       // local-only row; report it as failed so the user knows to retry.
-      if (live && item) { failed += 1; lastError = result.error; continue; }
+      if (live) { failed += 1; lastError = result.error || new Error('File record insert returned no record.'); continue; }
     }
     upsertFile(payload);
   }
@@ -24400,15 +24846,39 @@ async function performFilesTransfer() {
   for (const id of ids) {
     const file = state.files.find((f) => f.id === id);
     if (!file) continue;
+    let nextFile;
+    let copiedObjectPath = '';
     if (isCopy) {
-      const copy = normalizeFile({ ...file, id: `file-${crypto.randomUUID()}`, folder: target, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-      if (client) { try { await client.from('job_files').insert(filePayload(copy)); } catch (error) { console.warn('File copy failed', error); } }
-      upsertFile(copy);
+      const copyId = `file-${crypto.randomUUID()}`;
+      copiedObjectPath = file.object_path
+        ? `${file.object_path.slice(0, Math.max(0, file.object_path.lastIndexOf('/') + 1))}${copyId}-${slugify(file.file_name)}`
+        : '';
+      if (client && isLiveSupabaseSession() && file.object_path) {
+        const storageResult = await client.storage.from(file.bucket_id || 'quest-job-files').copy(file.object_path, copiedObjectPath);
+        if (storageResult.error) {
+          notifySyncFailure(storageResult.error, 'File copy');
+          continue;
+        }
+      }
+      nextFile = normalizeFile({ ...file, id: copyId, folder: target, object_path: copiedObjectPath, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
     } else {
-      const moved = { ...file, folder: target, updated_at: new Date().toISOString() };
-      if (client) { try { await client.from('job_files').update({ folder: target, updated_at: moved.updated_at }).eq('id', id); } catch (error) { console.warn('File move failed', error); } }
-      upsertFile(moved);
+      nextFile = normalizeFile({ ...file, folder: target, updated_at: new Date().toISOString() });
     }
+    const result = isCopy
+      ? (client && isLiveSupabaseSession() ? await client.from('job_files').insert(filePayload(nextFile)).select().single() : { data: null, error: null })
+      : (client && isLiveSupabaseSession() ? await client.from('job_files').update({ folder: target, updated_at: nextFile.updated_at }).eq('id', id).select().single() : { data: null, error: null });
+    if (result.error) {
+      if (copiedObjectPath) {
+        await settleObserved(
+          client.storage.from(file.bucket_id || 'quest-job-files').remove([copiedObjectPath]),
+          (cleanupError) => console.warn('Copied file cleanup failed', cleanupError),
+        );
+      }
+      notifySyncFailure(result.error, isCopy ? 'File copy' : 'File move');
+      continue;
+    }
+    const savedFile = requireOk(result, isCopy ? 'File copy failed' : 'File move failed');
+    upsertFile(savedFile ? normalizeFile(savedFile) : nextFile);
     count += 1;
   }
   state.selectedFileIds = [];
@@ -26127,21 +26597,23 @@ async function createWorkspaceBackup(companyId = activeCompanyId(), kind = 'manu
     created_at: now,
     updated_at: now,
   });
-  state.workspaceBackups = [backup].concat((state.workspaceBackups || []).filter((item) => item.id !== backup.id));
+  let savedBackup = backup;
+  if (isLiveSupabaseSession()) {
+    const { ok, data } = await supabaseWrite('workspace_backups', backup);
+    if (!ok) return false;
+    if (data) savedBackup = normalizeWorkspaceBackup(data);
+  }
+  state.workspaceBackups = [savedBackup].concat((state.workspaceBackups || []).filter((item) => item.id !== savedBackup.id));
   state.backupSettings = {
     ...(state.backupSettings || {}),
     [companyId]: { ...backupSettingsForCompany(companyId), last_backup_at: now },
   };
   writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
   writeJson(WORKSPACE_BACKUP_SETTINGS_KEY, state.backupSettings);
-  if (isLiveSupabaseSession()) {
-    const { ok, data } = await supabaseWrite('workspace_backups', backup);
-    if (ok && data) state.workspaceBackups = [normalizeWorkspaceBackup(data)].concat(state.workspaceBackups.filter((item) => item.id !== backup.id));
-    await refreshPlatformBackupCopies();
-  }
+  if (isLiveSupabaseSession()) await refreshPlatformBackupCopies();
   showToast('Backup snapshot created.', 'saved', 'Backups');
   render();
-  return backup;
+  return savedBackup;
 }
 
 async function downloadBackupZip(backup) {
@@ -26190,9 +26662,14 @@ async function importWorkspaceBackupFile(file) {
     created_at: now,
     updated_at: now,
   });
-  state.workspaceBackups = [backup].concat((state.workspaceBackups || []).filter((item) => item.id !== backup.id));
+  let savedBackup = backup;
+  if (isLiveSupabaseSession()) {
+    const { ok, data } = await supabaseWrite('workspace_backups', backup);
+    if (!ok) return false;
+    if (data) savedBackup = normalizeWorkspaceBackup(data);
+  }
+  state.workspaceBackups = [savedBackup].concat((state.workspaceBackups || []).filter((item) => item.id !== savedBackup.id));
   writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
-  if (isLiveSupabaseSession()) await supabaseWrite('workspace_backups', backup);
   showToast('Backup imported. Restore it when you are ready.', 'saved', 'Backups');
   render();
 }
@@ -26317,15 +26794,19 @@ async function persistWorkspaceBackupPayloadToSupabase(payload) {
 
 async function markWorkspaceBackupDeleted(backupId) {
   const now = new Date().toISOString();
-  state.workspaceBackups = (state.workspaceBackups || []).map((backup) => (
-    backup.id === backupId ? normalizeWorkspaceBackup({ ...backup, status: 'deleted', deleted_at: now, deleted_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null, updated_at: now }) : backup
-  ));
-  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  const existing = workspaceBackupById(backupId);
+  if (!existing) return false;
+  let updated = normalizeWorkspaceBackup({ ...existing, status: 'deleted', deleted_at: now, deleted_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null, updated_at: now });
   if (isLiveSupabaseSession()) {
-    await supabaseWrite('workspace_backups', state.workspaceBackups.find((backup) => backup.id === backupId));
-    await refreshPlatformBackupCopies();
+    const { ok, data } = await supabaseWrite('workspace_backups', updated);
+    if (!ok) return false;
+    if (data) updated = normalizeWorkspaceBackup(data);
   }
+  state.workspaceBackups = (state.workspaceBackups || []).map((backup) => (backup.id === backupId ? updated : backup));
+  writeJson(WORKSPACE_BACKUP_CACHE_KEY, state.workspaceBackups);
+  if (isLiveSupabaseSession()) await refreshPlatformBackupCopies();
   render();
+  return true;
 }
 
 async function refreshPlatformBackupCopies() {
@@ -26374,15 +26855,16 @@ function supabaseRow(payload, allowed) {
 
 // Tell the user when a write/delete failed to reach the server. Only surfaced
 // on a live Supabase session — in local/demo mode, local-only persistence is
-// the expected behavior, not a failure. Prevents the "shows Saved but the
-// server rejected it" silent-data-loss trap.
+// the expected behavior, not a failure. Never describe ephemeral UI state as
+// safely stored when the server rejected it.
 function notifySyncFailure(error, action = 'Save') {
   if (!isLiveSupabaseSession()) return;
   const detail = error?.message || error?.details || '';
-  showToast(detail ? `${detail} — changes are stored only on this device.` : 'Changes could not be saved to the server and are only stored on this device.', 'error', `${action} failed`);
+  showToast(detail ? `${detail} — changes were not saved.` : 'Changes could not be saved. Review the current screen and try again.', 'error', `${action} failed`);
 }
 
 async function supabaseWrite(table, row, { onConflict = 'id' } = {}) {
+  if (!isLiveSupabaseSession()) return { ok: true, data: null, error: null };
   const client = createSupabaseClient();
   if (!client) return { ok: false, data: null, error: null };
   try {
@@ -26519,10 +27001,18 @@ async function recycleDeleteRecord(config) {
   if (!typeConfig || !record) return false;
   if (typeConfig.permission && !requirePermission(typeConfig.permission, record.company_id, `Your role cannot delete this ${typeConfig.label.toLowerCase()}.`, typeConfig.label)) return false;
   const item = buildRecycleBinItem(record, config);
-  const inserted = await insertRecycleBinItem(item);
-  if (!inserted.ok) return false;
-  const deleted = await softDeleteRecycleSource(typeConfig, record, item);
-  if (!deleted.ok) return false;
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const row = supabaseRow(item, RECYCLE_BIN_COLS);
+    const result = await client.rpc('recycle_move_item', { p_item: row });
+    if (result.error) {
+      notifySyncFailure(result.error, 'Delete');
+      return false;
+    }
+    upsertRecycleBinItemLocal(normalizeRecycleBinItem(result.data || item));
+  } else {
+    upsertRecycleBinItemLocal(item);
+  }
   removeRecycleSourceLocal(typeConfig, record.id);
   persistAll();
   state.modal = '';
@@ -26562,21 +27052,19 @@ async function restoreRecycleBinItem(itemId) {
   const now = new Date().toISOString();
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
-    const restorePatch = { deleted_at: null, deleted_by: null };
-    if (typeConfig.type !== 'form_response') restorePatch.updated_at = now;
-    const restored = await client.from(typeConfig.table).update(restorePatch).eq('id', item.source_id);
-    if (restored.error) { notifySyncFailure(restored.error, 'Restore'); return; }
-    const marked = await client.from('recycle_bin_items').update({ status: 'restored', restored_at: now, restored_by: recycleActorId(), updated_at: now }).eq('id', item.id);
-    if (marked.error) notifySyncFailure(marked.error, 'Recycle bin');
+    const result = await client.rpc('recycle_restore_item', { p_item_id: item.id });
+    if (result.error) { notifySyncFailure(result.error, 'Restore'); return false; }
+    if (result.data) Object.assign(item, normalizeRecycleBinItem(result.data));
   }
   restoreRecycleSourceLocal(typeConfig, item.snapshot);
   state.recycleBinItems = state.recycleBinItems.map((row) => (row.id === item.id ? normalizeRecycleBinItem({ ...row, status: 'restored', restored_at: now, restored_by: recycleActorId(), updated_at: now }) : row));
   persistAll();
   showToast(`${typeConfig.label} restored.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
   render();
+  return true;
 }
 
-async function permanentlyDeleteRecycleBinItem(itemId) {
+async function permanentlyDeleteRecycleBinItem(itemId, options = {}) {
   const item = recycleItemById(itemId);
   const typeConfig = recycleTypeConfig(item?.source_type);
   if (!item || !typeConfig) return;
@@ -26584,18 +27072,20 @@ async function permanentlyDeleteRecycleBinItem(itemId) {
   const snapshot = item.snapshot || {};
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
-    if (typeConfig.type === 'file' && snapshot.object_path) await client.storage.from('quest-job-files').remove([snapshot.object_path]);
-    const sourceResult = await client.from(typeConfig.table).delete().eq('id', item.source_id);
-    if (sourceResult.error) { notifySyncFailure(sourceResult.error, 'Permanent delete'); return; }
-    const binResult = await client.from('recycle_bin_items').delete().eq('id', item.id);
-    if (binResult.error) { notifySyncFailure(binResult.error, 'Recycle bin'); return; }
+    if (typeConfig.type === 'file' && snapshot.object_path) {
+      const storageResult = await client.storage.from('quest-job-files').remove([snapshot.object_path]);
+      if (storageResult.error) { notifySyncFailure(storageResult.error, 'Permanent delete'); return false; }
+    }
+    const result = await client.rpc('recycle_permanently_delete_item', { p_item_id: item.id });
+    if (result.error) { notifySyncFailure(result.error, 'Permanent delete'); return false; }
   }
   state.recycleBinItems = (state.recycleBinItems || []).filter((row) => row.id !== item.id);
   persistAll();
   state.modal = '';
   state.selectedRecycleItemId = '';
-  showToast(`${typeConfig.label} permanently deleted.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
-  render();
+  if (!options.silent) showToast(`${typeConfig.label} permanently deleted.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
+  if (options.renderAfter !== false) render();
+  return true;
 }
 
 const ACCOUNT_COLS = ['id', 'company_id', 'name', 'type', 'industry', 'website', 'phone', 'email', 'address', 'owner_name', 'status', 'notes', 'updated_at'];
@@ -26618,11 +27108,14 @@ async function saveAccount(form) {
   payload.id = payload.id || `account-${crypto.randomUUID()}`;
   payload.updated_at = new Date().toISOString();
   const { ok, data } = await supabaseWrite('accounts', supabaseRow(payload, ACCOUNT_COLS));
-  upsertAccount(ok && data ? normalizeAccount(data) : payload);
-  state.selectedAccountId = payload.id;
+  if (!ok) return false;
+  const savedAccount = data ? normalizeAccount(data) : payload;
+  upsertAccount(savedAccount);
+  state.selectedAccountId = savedAccount.id;
   state.modal = '';
   showToast(`${payload.name} saved.`, ok ? 'live' : 'local', 'Accounts');
   render();
+  return true;
 }
 
 async function deleteAccount(id) {
@@ -26641,14 +27134,17 @@ async function saveDeal(form) {
   const previous = dealById(payload.id);
   const row = emptyToNull(supabaseRow(payload, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']);
   const { ok, data } = await supabaseWrite('deals', row);
-  upsertDeal(ok && data ? normalizeDeal(data) : payload);
+  if (!ok) return false;
+  const savedDeal = data ? normalizeDeal(data) : payload;
+  upsertDeal(savedDeal);
   if (previous && previous.stage !== payload.stage) {
-    logActivity({ type: 'stage_change', subject: `Stage -> ${payload.stage}`, related_type: 'deal', related_id: payload.id, account_id: payload.account_id });
+    await logActivity({ type: 'stage_change', subject: `Stage -> ${payload.stage}`, related_type: 'deal', related_id: payload.id, account_id: payload.account_id });
   }
-  state.selectedDealId = payload.id;
+  state.selectedDealId = savedDeal.id;
   state.modal = '';
   showToast(`${payload.name} saved.`, ok ? 'live' : 'local', 'Quotes');
   render();
+  return true;
 }
 
 async function persistDeal(deal, label = 'Quote saved.') {
@@ -26658,10 +27154,12 @@ async function persistDeal(deal, label = 'Quote saved.') {
   else if (payload.status !== 'open' && !/^won|^lost/i.test(payload.stage)) payload.status = 'open';
   const row = emptyToNull(supabaseRow(payload, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']);
   const { ok, data } = await supabaseWrite('deals', row);
-  upsertDeal(ok && data ? normalizeDeal(data) : payload);
+  if (!ok) return false;
+  const savedDeal = data ? normalizeDeal(data) : payload;
+  upsertDeal(savedDeal);
   showToast(label, ok ? 'live' : 'local', 'Quotes');
   render();
-  return payload;
+  return savedDeal;
 }
 
 function normalizeDealLineItems(raw) {
@@ -26800,16 +27298,19 @@ async function persistProposal(proposal, label = 'Proposal saved.') {
   const payload = normalizeProposal({ ...proposal, updated_at: new Date().toISOString() });
   const row = emptyToNull(supabaseRow(payload, PROPOSAL_COLS), ['contact_id', 'deal_id', 'job_id', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at']);
   const { ok, data } = await supabaseWrite('proposal_documents', row);
-  upsertProposal(ok && data ? normalizeProposal(data) : payload);
+  if (!ok) return false;
+  const savedProposal = data ? normalizeProposal(data) : payload;
+  upsertProposal(savedProposal);
   showToast(label, ok ? 'live' : 'local', 'Proposals');
-  return ok && data ? normalizeProposal(data) : payload;
+  return savedProposal;
 }
 
 async function setDealStage(dealId, stage) {
   const deal = dealById(dealId);
   if (!deal || !stage || deal.stage === stage) return;
-  await persistDeal({ ...deal, stage }, 'Quote stage saved.');
+  if (!await persistDeal({ ...deal, stage }, 'Quote stage saved.')) return false;
   await logActivity({ type: 'stage_change', subject: `Stage -> ${stage}`, related_type: 'deal', related_id: dealId, account_id: deal.account_id });
+  return true;
 }
 
 function markDealNextStage(dealId) {
@@ -26854,31 +27355,46 @@ async function createDealTask(dealId, title) {
   const deal = dealById(dealId);
   const clean = String(title || '').trim();
   if (!deal || !clean) return;
+  if (!requirePermission('tasks.manage', deal.company_id, 'Your role cannot create tasks.', 'Tasks')) return false;
+  const creatorId = activeTaskCreatorId(deal.company_id);
+  if (!creatorId) {
+    showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
+    return false;
+  }
   const payload = normalizeTask({
     id: `task-${crypto.randomUUID()}`,
     company_id: deal.company_id,
     title: clean,
     contact_id: deal.primary_contact_id,
-    creator_id: activeSession().profile.member_id || companyMembers(deal.company_id)[0]?.id || 'abraham',
+    creator_id: creatorId,
     status: 'todo',
     due: isoDate(1),
   });
-  upsertTask(payload);
-  render();
   const client = createSupabaseClient();
-  if (client) {
-    try {
-      const result = await client.from('tasks').insert(taskPayload(payload)).select().single();
-      if (!result.error && result.data) { upsertTask(normalizeTask(result.data)); render(); }
-    } catch (error) { console.warn('Quote task sync failed', error); }
+  let savedTask = payload;
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').insert(taskPayload(payload)).select().single());
+    if (result.error) {
+      notifySyncFailure(result.error, 'Task create');
+      return false;
+    }
+    if (!result.data) {
+      notifySyncFailure(new Error('Task insert returned no record.'), 'Task create');
+      return false;
+    }
+    savedTask = normalizeTask(result.data);
   }
+  upsertTask(savedTask);
+  render();
+  return savedTask;
 }
 
 async function logDealActivity(dealId, type, subject, body = '') {
   const deal = dealById(dealId);
   if (!deal) return;
-  await logActivity({ type, subject, body, related_type: 'deal', related_id: dealId, account_id: deal.account_id });
+  const activity = await logActivity({ type, subject, body, related_type: 'deal', related_id: dealId, account_id: deal.account_id });
   render();
+  return activity;
 }
 
 async function createDealProposal(dealId) {
@@ -26957,22 +27473,24 @@ async function logActivity(input) {
   payload.updated_at = new Date().toISOString();
   const row = emptyToNull(supabaseRow(payload, ACTIVITY_COLS), ['account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at']);
   const { ok, data } = await supabaseWrite('activities', row);
-  upsertActivity(ok && data ? normalizeActivity(data) : payload);
+  if (!ok) return false;
+  const savedActivity = data ? normalizeActivity(data) : payload;
+  upsertActivity(savedActivity);
   // Stamp last_activity_at on a related contact.
   if (contactId) {
     const contact = contactById(contactId);
     if (contact) {
       const updated = { ...contact, last_activity_at: payload.completed_at || payload.created_at, updated_at: new Date().toISOString() };
-      upsertContact(updated);
-      supabaseWrite('contacts', emptyToNull(supabaseRow(updated, CONTACT_COLS), ['account_id']));
+      const contactResult = await supabaseWrite('contacts', emptyToNull(supabaseRow(updated, CONTACT_COLS), ['account_id']));
+      if (contactResult.ok) upsertContact(contactResult.data ? normalizeContact(contactResult.data) : updated);
     }
   }
-  return payload;
+  return savedActivity;
 }
 
 async function saveActivityForm(form) {
   const formData = Object.fromEntries(new FormData(form).entries());
-  await logActivity({
+  const activity = await logActivity({
     type: formData.type,
     subject: formData.subject,
     body: formData.body,
@@ -26980,9 +27498,11 @@ async function saveActivityForm(form) {
     related_id: formData.related_id,
     account_id: formData.account_id,
   });
+  if (!activity) return false;
   state.modal = '';
-  showToast('Activity logged.', 'local', 'CRM');
+  showToast('Activity logged.', isLiveSupabaseSession() ? 'live' : 'local', 'CRM');
   render();
+  return true;
 }
 
 async function deleteActivity(id) {
@@ -26996,6 +27516,7 @@ async function convertDealToJob(dealId) {
   if (!deal) return;
   const companyId = deal.company_id;
   if (!requirePermission('jobs.manage', companyId, 'Your role cannot create jobs.', 'Jobs')) return;
+  if (!requirePermission('crm.view', companyId, 'Your role cannot update this quote.', 'Quotes')) return;
   const account = accountById(deal.account_id);
   const contact = contactById(deal.primary_contact_id);
   const site = crmSiteById(deal.site_id);
@@ -27017,20 +27538,41 @@ async function convertDealToJob(dealId) {
   });
   job.id = crypto.randomUUID();
   job.updated_at = new Date().toISOString();
-  const jobRow = jobSupabaseRow(job);
-  const { ok, data } = await supabaseWrite('jobs', jobRow);
-  upsertJob(ok && data ? normalizeJob(data) : job);
-  // mark the deal won + link the job
   const wonStage = dealStageNames().find((name) => /win|won/i.test(name)) || deal.stage;
   const updatedDeal = normalizeDeal({ ...deal, status: 'won', stage: wonStage, job_id: job.id, updated_at: new Date().toISOString() });
-  const dealRes = await supabaseWrite('deals', emptyToNull(supabaseRow(updatedDeal, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']));
-  upsertDeal(updatedDeal);
-  logActivity({ type: 'system', subject: 'Quote converted -> Job created', body: deal.name, related_type: 'deal', related_id: deal.id, account_id: deal.account_id });
-  state.selectedJobId = job.id;
+  let savedJob = job;
+  let savedDeal = updatedDeal;
+  let conversionCreated = true;
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession()) {
+    if (!client) {
+      notifySyncFailure(new Error('Supabase client is unavailable.'), 'Quote conversion');
+      return false;
+    }
+    const result = await safeSupabaseQuery(client.rpc('convert_deal_to_job', {
+      p_job: jobSupabaseRow(job),
+      p_deal: emptyToNull(supabaseRow(updatedDeal, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']),
+    }));
+    if (result.error) {
+      notifySyncFailure(result.error, 'Quote conversion');
+      return false;
+    }
+    if (!result.data?.job || !result.data?.deal) {
+      notifySyncFailure(new Error('Quote conversion returned an incomplete result.'), 'Quote conversion');
+      return false;
+    }
+    savedJob = normalizeJob(result.data?.job);
+    savedDeal = normalizeDeal(result.data?.deal);
+    conversionCreated = result.data?.created !== false;
+  }
+  upsertJob(savedJob);
+  upsertDeal(savedDeal);
+  if (conversionCreated) await logActivity({ type: 'system', subject: 'Quote converted -> Job created', body: deal.name, related_type: 'deal', related_id: deal.id, account_id: deal.account_id });
+  state.selectedJobId = savedJob.id;
   state.modal = '';
-  const live = ok && dealRes.ok;
-  showToast('Quote converted to job.', live ? 'live' : 'local', 'Quotes');
-  navigate(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId));
+  showToast('Quote converted to job.', isLiveSupabaseSession() ? 'live' : 'local', 'Quotes');
+  navigate(companyPath('jobs', { tab: 'profile', job_id: savedJob.id }, companyId));
+  return true;
 }
 
 function crmAccounts(companyId = activeCompanyId()) {
@@ -28037,20 +28579,25 @@ function useCurrentLocationForPicker() {
   );
 }
 
-function mountLocationPicker() {
+async function mountLocationPicker() {
   const mapNode = document.querySelector('[data-location-map]');
   if (!mapNode || mapNode.dataset.bound) return;
   mapNode.dataset.bound = '1';
+  const mapLibrary = await loadLeaflet().catch(() => null);
+  if (!mapLibrary || !document.body.contains(mapNode)) {
+    setLocationPickerStatus('Map unavailable. Enter the address manually.');
+    return;
+  }
   const lat = Number(mapNode.dataset.lat || 33.4484);
   const lng = Number(mapNode.dataset.lng || -112.0740);
-  locationPickerMap = L.map(mapNode, { zoomControl: true }).setView([lat, lng], 14);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  locationPickerMap = mapLibrary.map(mapNode, { zoomControl: true }).setView([lat, lng], 14);
+  mapLibrary.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap',
   }).addTo(locationPickerMap);
-  locationPickerMarker = L.marker([lat, lng], {
+  locationPickerMarker = mapLibrary.marker([lat, lng], {
     draggable: true,
-    icon: L.divIcon({ className: 'quest-map-pin', html: '<i class="ti ti-map-pin-filled"></i>', iconSize: [34, 34], iconAnchor: [17, 34] }),
+    icon: mapLibrary.divIcon({ className: 'quest-map-pin', html: '<i class="ti ti-map-pin-filled"></i>', iconSize: [34, 34], iconAnchor: [17, 34] }),
   }).addTo(locationPickerMap);
   const sync = (reverse = false) => {
     const pos = locationPickerMarker.getLatLng();
@@ -28077,8 +28624,10 @@ function mountLocationPicker() {
 async function persistCrmSite(site) {
   const payload = normalizeCrmSite({ ...site, updated_at: new Date().toISOString() });
   const { ok, data } = await supabaseWrite('crm_sites', emptyToNull(supabaseRow(payload, SITE_COLS), ['contact_id', 'account_id']));
-  upsertCrmSite(ok && data ? normalizeCrmSite(data) : payload);
-  return ok && data ? normalizeCrmSite(data) : payload;
+  if (!ok) return false;
+  const savedSite = data ? normalizeCrmSite(data) : payload;
+  upsertCrmSite(savedSite);
+  return savedSite;
 }
 
 async function saveLocationPicker() {
@@ -28098,23 +28647,23 @@ async function saveLocationPicker() {
   } else if (picker.kind === 'contact') {
     const contact = contactById(picker.id);
     if (contact) {
-      await persistContact({ ...contact, location: address });
+      if (!await persistContact({ ...contact, location: address })) return false;
       const site = crmSitesForContact(contact.id)[0] || normalizeCrmSite({ id: `site-${crypto.randomUUID()}`, company_id: contact.company_id, contact_id: contact.id, account_id: contact.account_id, label: 'Primary site' });
-      await persistCrmSite({ ...site, address, notes: [site.notes, pinNote].filter(Boolean).join('\n') });
+      if (!await persistCrmSite({ ...site, address, notes: [site.notes, pinNote].filter(Boolean).join('\n') })) return false;
     }
   } else if (picker.kind === 'deal') {
     const deal = dealById(picker.id);
     if (deal) {
       const site = crmSiteById(deal.site_id) || normalizeCrmSite({ id: `site-${crypto.randomUUID()}`, company_id: deal.company_id, contact_id: deal.primary_contact_id, account_id: deal.account_id, label: 'Quote site' });
       const savedSite = await persistCrmSite({ ...site, address, notes: [site.notes, pinNote].filter(Boolean).join('\n') });
-      await persistDeal({ ...deal, site_id: savedSite.id }, 'Quote location saved.');
+      if (!savedSite || !await persistDeal({ ...deal, site_id: savedSite.id }, 'Quote location saved.')) return false;
     }
   } else if (picker.kind === 'job') {
     const job = jobById(picker.id);
     if (job) {
       const site = crmSiteById(job.site_id) || normalizeCrmSite({ id: `site-${crypto.randomUUID()}`, company_id: job.company_id, contact_id: job.contact_id, account_id: job.account_id, label: 'Job site' });
       const savedSite = await persistCrmSite({ ...site, address, notes: [site.notes, pinNote].filter(Boolean).join('\n') });
-      await persistJob({ ...job, site_address: address, site_id: savedSite.id }, 'Job location saved.');
+      if (!savedSite || !await persistJob({ ...job, site_address: address, site_id: savedSite.id }, 'Job location saved.')) return false;
     }
   }
   state.modal = '';
@@ -28541,8 +29090,8 @@ function normalizeTask(input) {
     label: input.label || null,
     bid_status: input.bid_status || null,
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
-    creator_id: String(input.creator_id || 'abraham'),
-    assignee_id: String(input.assignee_id || input.creator_id || 'abraham'),
+    creator_id: String(input.creator_id || ''),
+    assignee_id: String(input.assignee_id || input.creator_id || ''),
     project_id: String(input.project_id || ''),
     contact_id: String(input.contact_id || ''),
     due: String(input.due || isoDate(1)).slice(0, 10),
@@ -29187,13 +29736,14 @@ function blankJob(companyId = activeCompanyId()) {
 }
 
 function blankTask(companyId = activeCompanyId(), jobId = '') {
+  const creatorId = activeTaskCreatorId(companyId);
   return normalizeTask({
     id: '',
     title: '',
     company_id: companyId,
     project_id: jobId,
-    assignee_id: companyMembers(companyId)[0]?.id || 'abraham',
-    creator_id: activeSession().profile.member_id || 'abraham',
+    assignee_id: creatorId || companyMembers(companyId)[0]?.id || '',
+    creator_id: creatorId,
     due: isoDate(1),
     priority: 'medium',
     status: 'todo',
@@ -29879,7 +30429,11 @@ function markConversationRead(conversationId, sync = true) {
   persistMessages();
   if (sync && isLiveSupabaseSession()) {
     const client = createSupabaseClient();
-    if (client) client.from('message_reads').upsert(messageReadPayload(read), { onConflict: 'conversation_id,profile_id' });
+    if (client) settleObserved(
+      client.from('message_reads').upsert(messageReadPayload(read), { onConflict: 'conversation_id,profile_id' }),
+      (error) => console.warn('Message read sync failed', error),
+      'Message read sync failed',
+    );
   }
 }
 
@@ -30029,7 +30583,7 @@ function subscribeToMessageRealtime(companyId, conversationId) {
       state.messageRealtimeRetry = setTimeout(refreshFromRealtime, 1500);
       return;
     }
-    refreshDataInBackground();
+    refreshRealtimeDomains(['messages']).catch((error) => console.warn('Message refresh failed', error));
   };
   state.messageRealtimeChannel = client
     .channel(`quest-messages-${conversationId}`)
@@ -30038,50 +30592,234 @@ function subscribeToMessageRealtime(companyId, conversationId) {
     .subscribe();
 }
 
-// Live-update the whole app: one schema-wide subscription reloads the company's
-// data whenever anything the user can see changes on the server. RLS ensures a
-// user only receives events for rows they're allowed to read. The reload is
-// debounced (to batch bursts) and deferred while the user is mid-edit or has a
-// modal open, so it never yanks the DOM out from under them.
-const WB_REALTIME_IGNORE_TABLES = new Set(['messages', 'message_attachments', 'message_reads', 'audit_events']);
-// Re-fetch the session's data in the BACKGROUND — without flipping dataLoaded,
-// so the full "Loading workspace data…" screen never flashes on a live update.
-async function refreshDataInBackground() {
+async function loadRealtimeDomain(client, domain) {
+  if (domain === 'operations') {
+    const [jobs, tasks, calendar] = await Promise.all([
+      client.from('jobs').select('*').order('updated_at', { ascending: false }),
+      client.from('tasks').select('*').order('updated_at', { ascending: false }),
+      client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
+    ]);
+    if (!jobs.error) state.jobs = activeRows(jobs.data || []).map(normalizeJob);
+    if (!tasks.error) state.tasks = activeRows(tasks.data || []).map(normalizeTask);
+    if (!calendar.error) state.calendarEvents = activeRows(calendar.data || []).map(normalizeCalendarEvent);
+    return;
+  }
+  if (domain === 'crm') {
+    const [contacts, stages, accounts, deals, sites, proposals, activities] = await Promise.all([
+      client.from('contacts').select('*').order('updated_at', { ascending: false }),
+      client.from('pipeline_stages').select('*').order('position', { ascending: true }),
+      client.from('accounts').select('*').order('name', { ascending: true }),
+      client.from('deals').select('*').order('updated_at', { ascending: false }),
+      safeSupabaseQuery(client.from('crm_sites').select('*').order('updated_at', { ascending: false })),
+      safeSupabaseQuery(client.from('proposal_documents').select('*').order('updated_at', { ascending: false })),
+      client.from('activities').select('*').order('created_at', { ascending: false }).limit(500),
+    ]);
+    if (!contacts.error) state.contacts = activeRows(contacts.data || []).map(normalizeContact);
+    if (!stages.error) { state.pipelineStages = stages.data || []; applyPipelineStagesForCompany(activeCompanyId()); }
+    if (!accounts.error) state.accounts = activeRows(accounts.data || []).map(normalizeAccount);
+    if (!deals.error) state.deals = activeRows(deals.data || []).map(normalizeDeal);
+    if (!sites.error) state.sites = (sites.data || []).map(normalizeCrmSite);
+    if (!proposals.error) state.proposals = activeRows(proposals.data || []).map(normalizeProposal);
+    if (!activities.error) state.activities = activeRows(activities.data || []).map(normalizeActivity);
+    return;
+  }
+  if (domain === 'files') {
+    const result = await client.from('job_files').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+    if (!result.error) { state.files = (result.data || []).map(normalizeFile); wbReconstructAppDriveFolders(); }
+    return;
+  }
+  if (domain === 'forms') {
+    const [forms, responses] = await Promise.all([
+      client.from('forms').select('*').order('updated_at', { ascending: false }),
+      client.from('form_responses').select('*').order('created_at', { ascending: false }).limit(500),
+    ]);
+    if (!forms.error) state.forms = activeRows(forms.data || []).map(normalizeForm);
+    if (!responses.error) state.formResponses = activeRows(responses.data || []).map(normalizeFormResponse);
+    return;
+  }
+  if (domain === 'finance') {
+    const [invoices, payments, expenses, vendors] = await Promise.all([
+      client.from('finance_invoices').select('*').order('updated_at', { ascending: false }),
+      client.from('finance_payments').select('*').order('received_at', { ascending: false }),
+      client.from('finance_expenses').select('*').order('spent_at', { ascending: false }),
+      client.from('finance_vendors').select('*').order('name', { ascending: true }),
+    ]);
+    if (!invoices.error) state.financeInvoices = activeRows(invoices.data || []).map(normalizeFinanceInvoice);
+    if (!payments.error) state.financePayments = activeRows(payments.data || []).map(normalizeFinancePayment);
+    if (!expenses.error) state.financeExpenses = activeRows(expenses.data || []).map(normalizeFinanceExpense);
+    if (!vendors.error) state.financeVendors = activeRows(vendors.data || []).map(normalizeFinanceVendor);
+    return;
+  }
+  return loadSecondaryRealtimeDomain(client, domain);
+}
+
+async function loadSecondaryRealtimeDomain(client, domain) {
+  if (domain === 'portals') {
+    const [portals, documents, annotations, events] = await Promise.all([
+      safeSupabaseQuery(client.from('client_portals').select('*').order('updated_at', { ascending: false })),
+      safeSupabaseQuery(client.from('client_portal_documents').select('*').order('created_at', { ascending: false })),
+      safeSupabaseQuery(client.from('client_portal_annotations').select('*').order('created_at', { ascending: true })),
+      safeSupabaseQuery(client.from('client_portal_events').select('*').order('created_at', { ascending: false }).limit(500)),
+    ]);
+    if (!portals.error) state.clientPortals = activeRows(portals.data || []).map(normalizeClientPortal);
+    if (!documents.error) state.clientPortalDocuments = activeRows(documents.data || []).map(normalizeClientPortalDocument);
+    if (!annotations.error) state.clientPortalAnnotations = (annotations.data || []).map(normalizeClientPortalAnnotation);
+    if (!events.error) state.clientPortalEvents = (events.data || []).map(normalizeClientPortalEvent);
+    return;
+  }
+  if (domain === 'pricebook') {
+    const [vendors, materials, prices] = await Promise.all([
+      safeSupabaseQuery(client.from('pricebook_vendors').select('*').order('name', { ascending: true })),
+      safeSupabaseQuery(client.from('pricebook_materials').select('*').order('name', { ascending: true })),
+      safeSupabaseQuery(client.from('pricebook_vendor_prices').select('*').order('updated_at', { ascending: false })),
+    ]);
+    if (!vendors.error) state.pricebookVendors = activeRows(vendors.data || []).map(normalizePricebookVendor);
+    if (!materials.error) state.pricebookMaterials = activeRows(materials.data || []).map(normalizePricebookMaterial);
+    if (!prices.error) state.pricebookPrices = activeRows(prices.data || []).map(normalizePricebookPrice);
+    return;
+  }
+  if (domain === 'notifications') {
+    const result = await client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200);
+    if (!result.error) state.notifications = (result.data || []).map(normalizeNotification);
+    return;
+  }
+  if (domain === 'recycle') {
+    const result = await safeSupabaseQuery(client.from('recycle_bin_items').select('*').order('deleted_at', { ascending: false }));
+    if (!result.error) state.recycleBinItems = (result.data || []).map(normalizeRecycleBinItem);
+    return;
+  }
+  if (domain === 'workspace') {
+    const [backups, builder] = await Promise.all([
+      safeSupabaseQuery(client.from('workspace_backups').select('*').order('created_at', { ascending: false })),
+      safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
+    ]);
+    if (!backups.error) state.workspaceBackups = (backups.data || []).map(normalizeWorkspaceBackup);
+    if (!builder.error) {
+      state.workspaceBuilderDocs = {};
+      state.workspaceBuilderLive = {};
+      (builder.data || []).forEach((row) => {
+        const companyId = canonicalCompanyId(row.company_id);
+        state.workspaceBuilderDocs[companyId] = normalizeWorkspaceBuilderDoc(row.doc);
+        state.workspaceBuilderLive[companyId] = true;
+      });
+    }
+    return;
+  }
+  return loadIdentityRealtimeDomain(client, domain);
+}
+
+async function loadIdentityRealtimeDomain(client, domain) {
+  if (domain === 'messages') {
+    const [conversations, access, messages, attachments, reads] = await Promise.all([
+      client.from('message_conversations').select('*').order('last_message_at', { ascending: false }),
+      client.from('message_conversation_access').select('*'),
+      client.from('messages').select('*').order('created_at', { ascending: true }).limit(500),
+      client.from('message_attachments').select('*').order('created_at', { ascending: true }).limit(500),
+      client.from('message_reads').select('*'),
+    ]);
+    if (!conversations.error) state.messageConversations = (conversations.data || []).map(normalizeMessageConversation);
+    if (!access.error) state.messageAccess = (access.data || []).map(normalizeMessageAccess);
+    if (!messages.error) state.messages = (messages.data || []).map(normalizeMessage);
+    if (!attachments.error) state.messageAttachments = (attachments.data || []).map(normalizeMessageAttachment);
+    if (!reads.error) state.messageReads = (reads.data || []).map(normalizeMessageRead);
+    return;
+  }
+  if (domain === 'access') {
+    const [companies, team, memberships, profiles, subscriptions, roles, permissions, assignments, acl, fields, invites, requests, plugins] = await Promise.all([
+      client.from('companies').select('*').order('name', { ascending: true }),
+      client.from('team_members').select('*').order('name', { ascending: true }),
+      client.from('company_memberships').select('*'),
+      client.from('profiles').select('*'),
+      client.from('company_subscriptions').select('*'),
+      client.from('roles').select('*').order('priority', { ascending: false }),
+      client.from('role_permissions').select('*'),
+      client.from('user_role_assignments').select('*'),
+      client.from('resource_acl').select('*'),
+      client.from('field_permissions').select('*'),
+      client.from('company_invites').select('*').order('created_at', { ascending: false }),
+      client.from('company_join_requests').select('*').order('created_at', { ascending: false }),
+      safeSupabaseQuery(client.from('company_plugins').select('*')),
+    ]);
+    if (!companies.error) state.companies = (companies.data || []).map(normalizeCompany);
+    if (!team.error) state.teamMembers = (team.data || []).map(normalizeTeamMember);
+    if (!memberships.error) state.memberships = (memberships.data || []).map(normalizeMembership);
+    if (!profiles.error) state.profiles = (profiles.data || []).map((profile) => normalizeProfile(profile));
+    if (!subscriptions.error) state.subscriptions = (subscriptions.data || []).map(normalizeSubscription);
+    if (!roles.error) state.roles = (roles.data || []).map(normalizeRole);
+    if (!permissions.error) state.rolePermissions = (permissions.data || []).map(normalizeRolePermission);
+    if (!assignments.error) state.roleAssignments = (assignments.data || []).map(normalizeRoleAssignment);
+    if (!acl.error) state.resourceAcl = (acl.data || []).map(normalizeResourceAcl);
+    if (!fields.error) state.fieldPermissions = (fields.data || []).map(normalizeFieldPermission);
+    if (!invites.error) state.companyInvites = (invites.data || []).map(normalizeCompanyInvite);
+    if (!requests.error) state.joinRequests = (requests.data || []).map(normalizeJoinRequest);
+    if (!plugins.error) { state.companyPlugins = (plugins.data || []).map(normalizeCompanyPlugin); state.pluginLoadFailed = false; }
+  }
+}
+
+async function refreshRealtimeDomains(domains) {
   if (state.backgroundRefreshing || state.dataLoading) return;
+  const client = createSupabaseClient();
+  const unique = [...new Set((domains || []).filter(Boolean))];
+  if (!client || !unique.length) return;
   state.backgroundRefreshing = true;
-  try { await loadSupabaseData(); } catch (err) { console.warn('Background refresh failed', err); }
+  const results = await Promise.allSettled(unique.map((domain) => loadRealtimeDomain(client, domain)));
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') console.warn(`${unique[index]} realtime refresh failed`, result.reason);
+  });
   state.backgroundRefreshing = false;
   persistAll();
   render();
+  if (unique.includes('access')) queueMicrotask(() => subscribeToGlobalRealtime());
 }
+
 function subscribeToGlobalRealtime() {
   const client = createSupabaseClient();
   if (state.session?.auth !== 'supabase' || !client?.channel) return;
-  if (state.globalRealtimeChannel) return; // already subscribed for this session
-  const refresh = () => {
-    // Defer while the user is mid-edit / has a modal open so we never disrupt them.
-    if (anEditableIsFocused() || state.builderModal || state.modal || state.recycleModal || state.dataLoading || state.backgroundRefreshing) {
+  const companyIds = [...allowedCompanyIds()].sort();
+  const subscriptionKey = `${state.session?.user?.id || ''}:${companyIds.join(',')}`;
+  if (state.globalRealtimeChannel && state.globalRealtimeKey === subscriptionKey) return;
+  if (state.globalRealtimeChannel) teardownGlobalRealtime();
+  const deferredDomains = createDeferredDomainAccumulator();
+  const refreshWhenSafe = (domains = []) => {
+    deferredDomains.add(domains);
+    if (shouldDeferRealtimeRefresh({
+      editableFocused: anEditableIsFocused(),
+      builderModal: state.builderModal,
+      modal: state.modal,
+      recycleModal: state.recycleModal,
+      dataLoading: state.dataLoading,
+      backgroundRefreshing: state.backgroundRefreshing,
+    })) {
       clearTimeout(state.globalRealtimeRetry);
-      state.globalRealtimeRetry = setTimeout(refresh, 1500);
+      state.globalRealtimeRetry = setTimeout(() => refreshWhenSafe(domains), 1500);
       return;
     }
-    refreshDataInBackground();
+    const pendingDomains = deferredDomains.drain();
+    refreshRealtimeDomains(pendingDomains).catch((error) => console.warn('Realtime refresh failed', error));
   };
-  const onChange = (payload) => {
-    if (payload && payload.table && WB_REALTIME_IGNORE_TABLES.has(payload.table)) return;
-    clearTimeout(state.globalRealtimeDebounce);
-    state.globalRealtimeDebounce = setTimeout(refresh, 700);
-  };
-  state.globalRealtimeChannel = client
-    .channel('quest-global-realtime')
-    .on('postgres_changes', { event: '*', schema: 'public' }, onChange)
-    .subscribe();
+  state.globalRealtimeBatcher = createRealtimeBatcher({ onFlush: refreshWhenSafe, delay: 700 });
+  let channel = client.channel(`quest-global-realtime-${state.session?.user?.id || 'session'}`);
+  realtimeSubscriptions(companyIds).forEach((subscription) => {
+    channel = channel.on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: subscription.table,
+      ...(subscription.filter ? { filter: subscription.filter } : {}),
+    }, (payload) => {
+      if (shouldAcceptRealtimePayload(payload, companyIds)) state.globalRealtimeBatcher?.push(subscription.domain);
+    });
+  });
+  state.globalRealtimeKey = subscriptionKey;
+  state.globalRealtimeChannel = channel.subscribe();
 }
+
 function teardownGlobalRealtime() {
   const client = createSupabaseClient();
   if (state.globalRealtimeChannel && client?.removeChannel) client.removeChannel(state.globalRealtimeChannel);
   state.globalRealtimeChannel = null;
-  clearTimeout(state.globalRealtimeDebounce);
+  state.globalRealtimeKey = '';
+  state.globalRealtimeBatcher?.cancel();
+  state.globalRealtimeBatcher = null;
   clearTimeout(state.globalRealtimeRetry);
 }
 
@@ -30363,6 +31101,7 @@ function conversationNotificationRecipients(conversation) {
 async function markAllNotificationsRead(companyId = activeCompanyId()) {
   const now = new Date().toISOString();
   const profileId = activeSession().profile.id;
+  const previous = state.notifications;
   const ids = state.notifications
     .filter((item) => item.company_id === companyId && item.recipient_profile_id === profileId && !item.read_at)
     .map((item) => item.id);
@@ -30376,14 +31115,25 @@ async function markAllNotificationsRead(companyId = activeCompanyId()) {
   render();
   if (isLiveSupabaseSession()) {
     const client = createSupabaseClient();
-    if (client) await client.from('notifications').update({ read_at: now }).in('id', ids).eq('recipient_profile_id', profileId);
+    if (client) {
+      const result = await client.from('notifications').update({ read_at: now }).in('id', ids).eq('recipient_profile_id', profileId);
+      if (result.error) {
+        state.notifications = previous;
+        persistNotifications();
+        notifySyncFailure(result.error, 'Notification update');
+        render();
+        return false;
+      }
+    }
   }
+  return true;
 }
 
 async function openNotification(notificationId) {
   const notification = state.notifications.find((item) => item.id === notificationId);
   if (!notification) return;
   const now = new Date().toISOString();
+  const previous = state.notifications;
   state.notifications = state.notifications.map((item) => (
     item.id === notification.id ? { ...item, read_at: item.read_at || now } : item
   ));
@@ -30392,7 +31142,15 @@ async function openNotification(notificationId) {
   render();
   if (isLiveSupabaseSession() && !notification.read_at) {
     const client = createSupabaseClient();
-    if (client) await client.from('notifications').update({ read_at: now }).eq('id', notification.id).eq('recipient_profile_id', activeSession().profile.id);
+    if (client) {
+      const result = await client.from('notifications').update({ read_at: now }).eq('id', notification.id).eq('recipient_profile_id', activeSession().profile.id);
+      if (result.error) {
+        state.notifications = previous;
+        persistNotifications();
+        notifySyncFailure(result.error, 'Notification update');
+        render();
+      }
+    }
   }
   if (notification.href) navigate(notification.href);
 }
@@ -31051,7 +31809,10 @@ function ensureFormResponseFileUrls(response) {
     try {
       const result = await fetch('/api/public-form-file-url', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(activeSession().access_token ? { Authorization: `Bearer ${activeSession().access_token}` } : {}),
+        },
         body: JSON.stringify({
           response_id: response.id,
           form_id: response.form_id,
@@ -31635,7 +32396,7 @@ async function createContactFromFormResponse(responseId) {
     notes: `Created from ${summary.form?.title || 'form'} response.\n${summary.notes}`.trim(),
     value: 0,
   });
-  await persistContact(contact);
+  if (!await persistContact(contact)) return false;
   await logActivity({ type: 'form', subject: `Form response converted to contact`, body: summary.notes, related_type: 'contact', related_id: contact.id, contact_id: contact.id, company_id: response.company_id });
   navigate(companyPath('contacts', { contact_id: contact.id }, response.company_id));
 }
@@ -31661,7 +32422,7 @@ async function createJobFromFormResponse(responseId) {
     owner_name: actorName(),
     updated_at: new Date().toISOString(),
   });
-  await persistJob(job, 'Job created from form');
+  if (!await persistJob(job, 'Job created from form')) return false;
   await logActivity({ type: 'form', subject: `Form response converted to job`, body: summary.notes, related_type: 'job', related_id: job.id, job_id: job.id, company_id: response.company_id });
   navigate(companyPath('jobs', { tab: 'profile', job_id: job.id }, response.company_id));
 }
@@ -31670,6 +32431,11 @@ async function createTaskFromFormResponse(responseId) {
   const response = responseById(responseId);
   if (!response) return showToast('Response not found.', 'local', 'Forms');
   if (!requirePermission('tasks.manage', response.company_id, 'Your role cannot create tasks.', 'Forms')) return;
+  const creatorId = activeTaskCreatorId(response.company_id);
+  if (!creatorId) {
+    showToast('Your signed-in profile is missing a task creator ID.', 'error', 'Tasks');
+    return false;
+  }
   const summary = responseSummary(response);
   const task = normalizeTask({
     ...blankTask(response.company_id),
@@ -31681,15 +32447,27 @@ async function createTaskFromFormResponse(responseId) {
     priority: 'medium',
     type: 'admin',
     status: 'todo',
+    creator_id: creatorId,
+    assignee_id: creatorId,
   });
-  upsertTask(task);
   const client = createSupabaseClient();
-  if (client) {
-    const result = await client.from('tasks').insert(taskPayload(task)).select().single();
-    if (!result.error && result.data) upsertTask(normalizeTask(result.data));
+  let savedTask = task;
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').insert(taskPayload(task)).select().single());
+    if (result.error) {
+      notifySyncFailure(result.error, 'Task create');
+      return false;
+    }
+    if (!result.data) {
+      notifySyncFailure(new Error('Task insert returned no record.'), 'Task create');
+      return false;
+    }
+    savedTask = normalizeTask(result.data);
   }
+  upsertTask(savedTask);
   showToast('Task created from form response.', 'saved', 'Forms');
-  navigate(companyPath('tasks', { task_id: task.id }, response.company_id));
+  navigate(companyPath('tasks', { task_id: savedTask.id }, response.company_id));
+  return savedTask;
 }
 
 function downloadText(filename, text, type = 'text/plain') {

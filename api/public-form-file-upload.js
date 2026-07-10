@@ -1,8 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
+import { errorResponse, readJsonBody, requireAllowedOrigin, setApiHeaders } from './_lib/http-security.js';
+import { enforceRateLimit } from './_lib/rate-limit.js';
 
 const FORM_FILE_BUCKET = 'quest-form-response-files';
 const FORM_FILE_MAX_BYTES = 15 * 1024 * 1024;
+const ALLOWED_PUBLIC_FORM_FILE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
 
 const env = (name) => process.env[name] || '';
 const baseUrl = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
@@ -22,14 +36,6 @@ function serverClient() {
   return createClient(baseUrl(), serviceKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-}
-
-async function readJson(req) {
-  if (req.body && typeof req.body === 'object') return req.body;
-  if (typeof req.body === 'string') return JSON.parse(req.body || '{}');
-  let raw = '';
-  for await (const chunk of req) raw += chunk;
-  return JSON.parse(raw || '{}');
 }
 
 async function supabaseGet(path) {
@@ -64,19 +70,23 @@ async function ensureFormFileBucket(client) {
 }
 
 export default async function handler(req, res) {
+  setApiHeaders(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
   if (!baseUrl() || !serviceKey()) return res.status(500).json({ error: 'Public form files are not configured.' });
 
   try {
-    const body = await readJson(req);
+    if (!enforceRateLimit(req, res, { namespace: 'public-form-file-upload', limit: 20, windowMs: 10 * 60 * 1000 })) return;
+    requireAllowedOrigin(req);
+    const body = await readJsonBody(req, { maxBytes: 16 * 1024 });
     const formId = String(body.form_id || '').trim();
     const questionId = String(body.question_id || '').trim();
     const fileName = safeFileName(body.file_name);
-    const fileType = String(body.file_type || 'application/octet-stream').slice(0, 120);
+    const fileType = String(body.file_type || '').toLowerCase().trim().slice(0, 120);
     const fileSize = Number(body.file_size || 0) || 0;
     if (!formId || !questionId) return res.status(400).json({ error: 'Missing form or question.' });
     if (fileSize <= 0 || fileSize > FORM_FILE_MAX_BYTES) return res.status(413).json({ error: 'File is too large for this form.' });
+    if (!ALLOWED_PUBLIC_FORM_FILE_TYPES.has(fileType)) return res.status(415).json({ error: 'Unsupported file type.' });
 
     const forms = await supabaseGet(`forms?id=eq.${encodeURIComponent(formId)}&status=eq.Published&select=id,company_id,status,questions`);
     const form = forms[0];
@@ -102,6 +112,6 @@ export default async function handler(req, res) {
       file_size: fileSize,
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Could not prepare file upload.' });
+    return errorResponse(res, error, 'Could not prepare file upload.');
   }
 }

@@ -73,7 +73,8 @@ test('contact locations support google maps autocomplete and pin links', () => {
   assert.match(source, /function qcLoadBarangays\(preselect\)/);
   assert.match(source, /function qcInitMap\(\)/);
   assert.match(source, /function qcReverseGeocode\(lat, lng\)/);
-  assert.match(source, /queueMicrotask\(initContactAddressForm\)/);
+  assert.match(source, /queueMicrotask\(\(\) => initContactAddressForm\(\)\.catch/);
+  assert.match(source, /import\('leaflet'\)/);
   assert.match(jobEditorSource, /renderAddressLookupField\('Site address', 'site_address', edit\.site_address/);
   assert.match(accountEditorSource, /renderAddressLookupField\('Address', 'address', edit\.address/);
   assert.match(source, /beginAddressInlineEdit\(span, contact\.location, contact\.company_id/);
