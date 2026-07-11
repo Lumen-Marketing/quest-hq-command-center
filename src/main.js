@@ -6,6 +6,7 @@ import questLogoMarkUrl from './assets/quest-hq-logo-mark.png';
 import { requireOk, settleObserved } from './lib/result.js';
 import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordRequirements } from './auth/password-policy.js';
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh } from './data/realtime-policy.js';
+import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -4623,7 +4624,7 @@ async function importPricebookRows(form) {
   if (!vendorId) return showToast('Choose a vendor first.', 'local', 'Price Book');
   let text = String(data.get('csv') || '').trim();
   const file = pbImportFile || form.elements.file?.files?.[0];
-  if (file) text = String(await file.text().catch(() => text)).trim();
+  if (file) { if (!(await guardUpload(file, 'csv', 'Price Book'))) return; text = String(await file.text().catch(() => text)).trim(); }
   if (!text) return showToast('Paste CSV rows or choose a CSV file.', 'local', 'Price Book');
   const delimiter = (text.split(/\r?\n/)[0] || '').includes('\t') ? '\t' : ',';
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -7150,6 +7151,7 @@ function importContactsFromFile() {
   input.addEventListener('change', async () => {
     const file = input.files && input.files[0];
     if (!file) return;
+    if (!(await guardUpload(file, 'csv', 'Contacts'))) return;
     let text = '';
     try { text = await file.text(); } catch { showToast('Could not read that file.', 'local', 'Contacts'); return; }
     const parsed = parseContactsCsv(text);
@@ -9804,7 +9806,7 @@ function renderFileUploadModal() {
           </div>
           <label class="span-2">
             <span>Files</span>
-            <input name="files" type="file" multiple />
+            <input name="files" type="file" multiple accept="${acceptAttr('document')}" />
           </label>
           ${field('Metadata-only file name', 'file_name', '')}
           ${selectField('Folder', 'folder', folder, driveFolderOptions(companyId))}
@@ -10039,6 +10041,8 @@ function normalizeWorkspaceBuilderDoc(doc) {
       members: Array.isArray(ws.members) ? ws.members.map(String) : [],
       createdAt: ws.createdAt || new Date().toISOString().slice(0, 10),
       activity: Array.isArray(ws.activity) ? ws.activity : [],
+      feed: Array.isArray(ws.feed) ? ws.feed.map(normalizeFeedPost) : [],
+      tiles: Array.isArray(ws.tiles) ? ws.tiles.map(normalizeWorkspaceTile) : null,
       apps: Array.isArray(ws.apps) ? ws.apps.map((app) => ({
         id: app.id || wbUid(),
         name: app.name || 'Untitled app',
@@ -10054,6 +10058,42 @@ function normalizeWorkspaceBuilderDoc(doc) {
       })) : [],
     })),
   };
+}
+
+// A single workspace activity-feed post. Types: 'post' (text), 'file', 'link',
+// 'question' (poll). `likes` is a list of member ids; `comments` mirror the
+// item-comment shape; `task` links to a real task created from the post.
+function normalizeFeedPost(p) {
+  const post = p && typeof p === 'object' ? p : {};
+  const type = ['post', 'file', 'link', 'question'].includes(post.type) ? post.type : 'post';
+  return {
+    id: post.id || wbUid(),
+    type,
+    authorId: post.authorId || '',
+    author: post.author || 'User',
+    ts: post.ts || new Date().toISOString(),
+    editedAt: post.editedAt || '',
+    text: typeof post.text === 'string' ? post.text : '',
+    attachments: Array.isArray(post.attachments) ? post.attachments : [],
+    link: post.link && typeof post.link === 'object' ? { url: post.link.url || '', title: post.link.title || '', desc: post.link.desc || '' } : null,
+    poll: post.poll && typeof post.poll === 'object' && Array.isArray(post.poll.options)
+      ? { options: post.poll.options.map((o) => ({ id: (o && o.id) || wbUid(), label: (o && o.label) || '', votes: Array.isArray(o && o.votes) ? o.votes.map(String) : [] })) }
+      : null,
+    likes: Array.isArray(post.likes) ? post.likes.map(String) : [],
+    comments: Array.isArray(post.comments) ? post.comments : [],
+    task: post.task && typeof post.task === 'object' ? { id: post.task.id || '', title: post.task.title || '', assigneeId: post.task.assigneeId || '', dueDate: post.task.dueDate || '' } : null,
+  };
+}
+
+// A dashboard sidebar tile. Types: apps, app (dynamic records), report (pinned
+// chart), tasks, calendar, contacts, text, image, links. `config` is per-type.
+const WB_TILE_TYPES = ['apps', 'app', 'report', 'tasks', 'calendar', 'contacts', 'text', 'image', 'links'];
+function normalizeWorkspaceTile(t) {
+  const tile = t && typeof t === 'object' ? t : {};
+  const type = WB_TILE_TYPES.includes(tile.type) ? tile.type : 'text';
+  const config = tile.config && typeof tile.config === 'object' ? tile.config : {};
+  if (type === 'links' && !Array.isArray(config.links)) config.links = [];
+  return { id: tile.id || wbUid(), type, config };
 }
 
 const WB_PALETTE = ['#e0552d', '#2563eb', '#7c3aed', '#0d9488', '#16a34a', '#d97706', '#db2777', '#0891b2', '#dc2626', '#4f46e5'];
@@ -10225,45 +10265,574 @@ function renderWorkspaceBuilderPage(route, companyId) {
   return `<section class="tool-page wb-page">${wbViewCompanyHome(companyId, workspace)}</section>`;
 }
 
-// Landing for the company's workspace: the apps live directly here.
+// Landing for the company's workspace: a Podio-style dashboard with an activity
+// feed (main column) and widget tiles (side column). Apps are reached through
+// the persistent app-switcher header rather than a grid on this page.
 function wbViewCompanyHome(companyId, workspace) {
-  const canManage = can('workspaces.manage', companyId);
-  const appCards = workspace.apps.map((app) => `
-    <button class="wb-card wb-app-card" data-open-app="${h(app.id)}">
-      <div class="wb-app-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></div>
-      <div class="wb-app-body">
-        <h4>${h(app.name)}</h4>
-        <div class="wb-app-desc">${h(app.description || 'No description')}</div>
-        <div class="wb-app-stat"><i class="ti ti-list-details"></i>${app.items.length} items · ${app.fields.length} fields${app.type ? ` · ${h(app.type)}` : ''}</div>
-      </div>
-    </button>`).join('');
-  const appsBlock = workspace.apps.length
-    ? `<div class="wb-grid">${appCards}${canManage ? `<button class="wb-new-card wb-app-new" data-new-app><i class="ti ti-plus"></i><b>Add App</b></button>` : ''}</div>`
-    : (canManage
-      ? `<button class="wb-new-card wb-new-hero" data-new-app><i class="ti ti-circle-plus"></i><b>New App</b><span>Start from a blank canvas</span></button>`
-      : `<div class="wb-empty"><i class="ti ti-apps"></i><h3>No apps yet</h3><p>Apps are custom tables with fields, records, reports, and automations.</p></div>`);
   return `
+    ${wbWorkspaceHeader(companyId, workspace, null)}
     <div class="wb-page-head">
       <div>
         <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>Workspaces</h1>
         <div class="wb-sub">Build customizable, no-code dashboards for ${h(companyName(companyId) || 'this company')}.</div>
       </div>
       <div class="wb-spacer"></div>
-      ${canManage ? `<button class="btn" data-wb-install-app><i class="ti ti-package-import"></i>Install app</button>` : ''}
-      ${canManage ? `<button class="btn btn-primary" data-new-app><i class="ti ti-plus"></i>Add app</button>` : ''}
     </div>
-    ${appsBlock}
-    ${wbActivityCard(workspace)}`;
+    <div class="wb-dash">
+      <main class="wb-dash-main">
+        ${wbFeedColumn(companyId, workspace)}
+      </main>
+      <aside class="wb-dash-side">
+        ${wbHomeSidebar(companyId, workspace)}
+      </aside>
+    </div>`;
 }
 
-function wbActivityCard(workspace) {
-  const acts = (workspace.activity || []).slice(0, 8);
-  if (!acts.length) return '';
+// The activity feed (main dashboard column): a publisher hub (managers) above a
+// unified stream that interleaves member posts with system activity events.
+function wbFeedColumn(companyId, workspace) {
+  const canManage = can('workspaces.manage', companyId);
+  const composer = canManage ? wbComposer(companyId) : '';
+  return `<div class="wb-feed-wrap">${composer}${wbFeedStream(companyId, workspace)}</div>`;
+}
+
+// The Podio-style publisher: a text box plus mode tabs (Post / File / Link /
+// Question) and an optional "create task" affordance. Inputs are uncontrolled
+// and read on share; mode switching toggles CSS (no re-render, so text is kept).
+function wbComposer(companyId) {
+  const members = wbMembers(companyId);
+  const assignOpts = members.map((m) => `<option value="${h(m.id)}">${h(m.name)}</option>`).join('');
   return `
-    <h3 class="wb-section-title wb-with-icon"><i class="ti ti-history"></i>Recent activity</h3>
-    <div class="wb-activity">
-      ${acts.map((ev) => `<div class="wb-act-item"><span class="wb-act-ic" style="background:${h(ev.color || '#6b7280')}"><i class="ti ${h(ev.icon || 'ti-point')}"></i></span><div><div class="wb-act-text">${ev.text}</div><div class="wb-act-time">${wbTimeAgo(ev.ts)}</div></div></div>`).join('')}
+  <div class="wb-composer" data-wb-composer data-mode="post">
+    <div class="wb-composer-modes" role="tablist" aria-label="Post type">
+      <button type="button" class="wb-cmode active" data-wb-compose-mode="post"><i class="ti ti-message-2" aria-hidden="true"></i>Post</button>
+      <button type="button" class="wb-cmode" data-wb-compose-mode="file"><i class="ti ti-paperclip" aria-hidden="true"></i>File</button>
+      <button type="button" class="wb-cmode" data-wb-compose-mode="link"><i class="ti ti-link" aria-hidden="true"></i>Link</button>
+      <button type="button" class="wb-cmode" data-wb-compose-mode="question"><i class="ti ti-help-circle" aria-hidden="true"></i>Question</button>
+    </div>
+    <textarea class="wb-input wb-composer-text" data-wb-compose-text rows="2" placeholder="Share something. Use @ to mention individuals."></textarea>
+    <div class="wb-composer-extra wb-extra-link">
+      <input class="wb-input" data-wb-compose-link-url type="url" placeholder="https://example.com" autocomplete="off">
+      <input class="wb-input" data-wb-compose-link-title type="text" placeholder="Link title (optional)">
+    </div>
+    <div class="wb-composer-extra wb-extra-file">
+      <label class="wb-file-drop"><input type="file" data-wb-compose-file multiple hidden accept="${acceptAttr('document')}"><i class="ti ti-upload" aria-hidden="true"></i><span data-wb-compose-file-label>Choose files to attach</span></label>
+    </div>
+    <div class="wb-composer-extra wb-extra-question">
+      <div class="wb-poll-opts" data-wb-poll-opts>
+        <input class="wb-input" data-wb-poll-opt type="text" placeholder="Option 1">
+        <input class="wb-input" data-wb-poll-opt type="text" placeholder="Option 2">
+      </div>
+      <button type="button" class="btn btn-sm" data-wb-poll-add><i class="ti ti-plus" aria-hidden="true"></i>Add option</button>
+    </div>
+    <div class="wb-composer-foot">
+      <label class="wb-compose-task-toggle"><input type="checkbox" data-wb-compose-task><i class="ti ti-circle-check" aria-hidden="true"></i>Create task</label>
+      <div class="wb-compose-task-fields" data-wb-compose-task-fields hidden>
+        <select class="wb-input" data-wb-compose-task-assignee><option value="">Assign to…</option>${assignOpts}</select>
+        <input class="wb-input" data-wb-compose-task-due type="date" aria-label="Task due date">
+      </div>
+      <div class="wb-spacer"></div>
+      <button type="button" class="btn btn-primary" data-wb-compose-share><i class="ti ti-send" aria-hidden="true"></i>Share</button>
+    </div>
+  </div>`;
+}
+
+// Merge member posts (rich) and system activity (compact rows) into one stream,
+// newest first, so the dashboard reads like Podio's activity feed.
+function wbFeedStream(companyId, workspace) {
+  const posts = (workspace.feed || []).map((p) => ({ kind: 'post', ts: p.ts, data: p }));
+  const acts = (workspace.activity || []).map((a) => ({ kind: 'act', ts: a.ts, data: a }));
+  const stream = posts.concat(acts).sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60);
+  if (!stream.length) {
+    return `<section class="wb-feed"><div class="wb-feed-empty"><i class="ti ti-activity" aria-hidden="true"></i><p>Nothing here yet. Share an update or create an app to get things moving.</p></div></section>`;
+  }
+  const rows = stream.map((entry) => entry.kind === 'post'
+    ? wbFeedPost(companyId, workspace, entry.data)
+    : `<div class="wb-feed-card wb-feed-sys">${wbActivityRow(entry.data)}</div>`).join('');
+  return `<section class="wb-feed-stream">${rows}</section>`;
+}
+
+function wbActivityRow(ev) {
+  return `<div class="wb-act-item"><span class="wb-act-ic" style="background:${h(ev.color || '#6b7280')}"><i class="ti ${h(ev.icon || 'ti-point')}"></i></span><div><div class="wb-act-text">${ev.text}</div><div class="wb-act-time">${wbTimeAgo(ev.ts)}</div></div></div>`;
+}
+
+// Turn free text into safe HTML: escape, highlight @mentions of known members,
+// linkify bare URLs, and preserve line breaks.
+function wbFeedText(companyId, text) {
+  const names = new Set(wbMembers(companyId).map((m) => (m.name || '').toLowerCase()).filter(Boolean));
+  let out = h(String(text || ''));
+  out = out.replace(/https?:\/\/[^\s<]+/g, (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
+  out = out.replace(/@([A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*)?)/g, (full, name) => (names.has(name.toLowerCase()) ? `<span class="wb-mention">@${name}</span>` : full));
+  return out.replace(/\n/g, '<br>');
+}
+
+// One rich post in the feed: header, body (varies by type), a task chip, a
+// like/comment action bar, and the comment thread.
+function wbFeedPost(companyId, workspace, post) {
+  const member = post.authorId ? wbMemberById(companyId, post.authorId) : null;
+  const live = member && member.name && member.name !== 'Unknown' ? member : null;
+  const name = live ? live.name : (post.author || 'User');
+  const avatar = wbAvatar(live || { name, color: '#6b7280' }, 34);
+  const myId = activeSession().profile?.id || '';
+  const mine = !!post.authorId && post.authorId === myId;
+  const canManage = can('workspaces.manage', companyId);
+  const liked = myId && post.likes.includes(myId);
+  const body = wbFeedPostBody(companyId, post);
+  const taskChip = post.task && post.task.title
+    ? `<div class="wb-post-task"><i class="ti ti-circle-check" aria-hidden="true"></i><span>${h(post.task.title)}</span>${post.task.assigneeId ? `<em>· ${h(wbMemberById(companyId, post.task.assigneeId).name)}</em>` : ''}${post.task.dueDate ? `<em>· due ${h(post.task.dueDate)}</em>` : ''}</div>`
+    : '';
+  const acts = (mine || canManage)
+    ? `<span class="wb-post-menu"><button class="wb-post-act" type="button" data-wb-post-del="${h(post.id)}" title="Delete post"><i class="ti ti-trash" aria-hidden="true"></i></button></span>`
+    : '';
+  return `
+    <article class="wb-feed-card wb-post" data-wb-post="${h(post.id)}">
+      <div class="wb-post-head">
+        ${avatar}
+        <div class="wb-post-by"><b>${h(name)}</b><span>${wbTimeAgo(post.ts)}${post.editedAt ? ' · edited' : ''}</span></div>
+        ${acts}
+      </div>
+      <div class="wb-post-body">${body}</div>
+      ${taskChip}
+      <div class="wb-post-bar">
+        <button class="wb-post-like ${liked ? 'on' : ''}" type="button" data-wb-post-like="${h(post.id)}"><i class="ti ti-heart${liked ? '-filled' : ''}" aria-hidden="true"></i>${post.likes.length || ''} Like</button>
+        <button class="wb-post-cmt-btn" type="button" data-wb-post-comment-toggle="${h(post.id)}"><i class="ti ti-message-circle" aria-hidden="true"></i>${post.comments.length || ''} Comment</button>
+      </div>
+      ${wbPostComments(companyId, post)}
+    </article>`;
+}
+
+function wbFeedPostBody(companyId, post) {
+  const text = post.text ? `<div class="wb-post-text">${wbFeedText(companyId, post.text)}</div>` : '';
+  if (post.type === 'link' && post.link && post.link.url) {
+    const label = post.link.title || post.link.url;
+    return `${text}<a class="wb-post-link" href="${h(post.link.url)}" target="_blank" rel="noopener noreferrer"><i class="ti ti-world-www" aria-hidden="true"></i><span><b>${h(label)}</b><em>${h(post.link.url)}</em></span></a>`;
+  }
+  if (post.type === 'file' && post.attachments.length) {
+    const files = post.attachments.map((f) => `<a class="wb-post-file" href="${h(f.url || '#')}" target="_blank" rel="noopener noreferrer"><i class="ti ti-file" aria-hidden="true"></i><span>${h(f.name || 'File')}</span></a>`).join('');
+    return `${text}<div class="wb-post-files">${files}</div>`;
+  }
+  if (post.type === 'question' && post.poll) {
+    const myId = activeSession().profile?.id || '';
+    const total = post.poll.options.reduce((n, o) => n + o.votes.length, 0);
+    const opts = post.poll.options.map((o) => {
+      const pct = total ? Math.round((o.votes.length / total) * 100) : 0;
+      const voted = myId && o.votes.includes(myId);
+      return `<button class="wb-poll-opt ${voted ? 'voted' : ''}" type="button" data-wb-poll-vote="${h(post.id)}:${h(o.id)}"><span class="wb-poll-fill" style="width:${pct}%"></span><span class="wb-poll-label"><i class="ti ti-${voted ? 'circle-check-filled' : 'circle'}" aria-hidden="true"></i>${h(o.label)}</span><span class="wb-poll-pct">${pct}%</span></button>`;
+    }).join('');
+    return `${text}<div class="wb-poll">${opts}<div class="wb-poll-total">${total} vote${total === 1 ? '' : 's'}</div></div>`;
+  }
+  return text;
+}
+
+// Comment thread under a post. Collapsed unless it has comments or was toggled
+// open. All members can comment (persisted with the whole doc for managers).
+function wbPostComments(companyId, post) {
+  const open = (state.wbFeedOpen && state.wbFeedOpen[post.id]) || post.comments.length;
+  if (!open) return '';
+  const myId = activeSession().profile?.id || '';
+  const list = post.comments.map((c) => {
+    const member = c.authorId ? wbMemberById(companyId, c.authorId) : null;
+    const live = member && member.name && member.name !== 'Unknown' ? member : null;
+    const cname = live ? live.name : (c.author || 'User');
+    const ccolor = live ? live.color : '#6b7280';
+    const mine = !!c.authorId && c.authorId === myId;
+    const del = mine ? `<button class="wb-comment-act danger" type="button" data-wb-post-cmt-del="${h(post.id)}:${h(c.id)}" title="Delete"><i class="ti ti-trash" aria-hidden="true"></i></button>` : '';
+    return `<div class="wb-comment"><span class="wb-avatar" style="width:26px;height:26px;background:${h(ccolor)}" title="${h(cname)}">${h(wbInitials(cname))}</span><div class="wb-comment-body"><div class="wb-comment-head"><b>${h(cname)}</b><span>${h(wbTimeAgo(c.ts))}</span>${del}</div><div class="wb-comment-text">${wbFeedText(companyId, c.text)}</div></div></div>`;
+  }).join('');
+  return `<div class="wb-post-comments">${list}<div class="wb-comment-add"><input class="wb-input" data-wb-post-cmt-input="${h(post.id)}" placeholder="Write a comment…"><button class="btn btn-sm btn-primary" type="button" data-wb-post-cmt-add="${h(post.id)}"><i class="ti ti-send" aria-hidden="true"></i></button></div></div>`;
+}
+
+// Right-column widget tiles — a configurable, workspace-scoped sidebar. Owners
+// can add, configure, reorder, and remove tiles; the layout persists in the
+// workspace doc. A workspace that has never been customized shows a sensible
+// default (Apps + newest app).
+function wbSidebarTiles(workspace) {
+  if (Array.isArray(workspace.tiles)) return workspace.tiles;
+  const defaults = [{ id: wbUid(), type: 'apps', config: {} }];
+  const firstApp = (workspace.apps || [])[0];
+  if (firstApp) defaults.push({ id: wbUid(), type: 'app', config: { appId: firstApp.id } });
+  return defaults;
+}
+
+function wbHomeSidebar(companyId, workspace) {
+  const canManage = can('workspaces.manage', companyId);
+  const manageMode = canManage && state.wbTileManage;
+  const tiles = wbSidebarTiles(workspace);
+  const controls = canManage ? `
+    <div class="wb-side-controls">
+      <button class="btn btn-sm ${manageMode ? 'btn-primary' : ''}" type="button" data-wb-tile-manage>${manageMode ? '<i class="ti ti-check"></i>Done' : '<i class="ti ti-adjustments"></i>Customize'}</button>
+      ${manageMode ? `<button class="btn btn-sm" type="button" data-wb-tile-add><i class="ti ti-plus"></i>Add tile</button>` : ''}
+    </div>` : '';
+  const body = tiles.map((tile, i) => wbRenderTile(companyId, workspace, tile, i, tiles.length, manageMode)).join('')
+    || `<div class="wb-tile"><div class="wb-tile-empty">No tiles. Click <b>Customize → Add tile</b>.</div></div>`;
+  return `${controls}<div class="wb-tile-grid" data-wb-tile-grid>${body}</div>`;
+}
+
+// Masonry pack: size each tile to a row-span of its own content height so short
+// tiles don't leave a gap under a taller neighbor. Re-run after render/resize.
+function wbLayoutTiles() {
+  const grid = document.querySelector('[data-wb-tile-grid]');
+  if (!grid) return;
+  const styles = getComputedStyle(grid);
+  // Single-column layouts (narrow screens) need no packing.
+  if ((styles.gridTemplateColumns.split(' ').length) < 2) { grid.querySelectorAll('.wb-tile').forEach((t) => { t.style.gridRowEnd = ''; }); return; }
+  const rowH = 8, gap = 14;
+  grid.querySelectorAll('.wb-tile').forEach((tile) => {
+    tile.style.gridRowEnd = '';
+    const height = tile.getBoundingClientRect().height;
+    tile.style.gridRowEnd = `span ${Math.max(1, Math.ceil((height + gap) / rowH))}`;
+  });
+}
+
+// Per-tile display metadata (default title + icon + whether it has a config UI).
+function wbTileMeta(companyId, workspace, tile) {
+  switch (tile.type) {
+    case 'apps': return { title: 'Apps', icon: 'ti-apps', config: false };
+    case 'app': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId); return { title: a ? a.name : 'App', icon: a ? a.icon : 'ti-layout-grid', config: true, app: a }; }
+    case 'report': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId); return { title: a ? `${a.name} · Report` : 'Report', icon: 'ti-chart-bar', config: true, app: a }; }
+    case 'tasks': return { title: 'Workspace tasks', icon: 'ti-checklist', config: false };
+    case 'calendar': return { title: 'Calendar', icon: 'ti-calendar', config: false };
+    case 'contacts': return { title: 'Contacts', icon: 'ti-address-book', config: false };
+    case 'text': return { title: tile.config.title || 'Note', icon: 'ti-align-left', config: true };
+    case 'image': return { title: tile.config.caption || 'Image', icon: 'ti-photo', config: true };
+    case 'links': return { title: tile.config.title || 'Links', icon: 'ti-link', config: true };
+    default: return { title: 'Tile', icon: 'ti-square', config: false };
+  }
+}
+
+function wbRenderTile(companyId, workspace, tile, i, total, manageMode) {
+  const meta = wbTileMeta(companyId, workspace, tile);
+  const ctrls = manageMode
+    ? `<span class="wb-tile-mng">
+        <button class="wb-tile-mbtn" type="button" data-wb-tile-up="${h(tile.id)}" ${i === 0 ? 'disabled' : ''} title="Move up" aria-label="Move up"><i class="ti ti-chevron-up"></i></button>
+        <button class="wb-tile-mbtn" type="button" data-wb-tile-down="${h(tile.id)}" ${i === total - 1 ? 'disabled' : ''} title="Move down" aria-label="Move down"><i class="ti ti-chevron-down"></i></button>
+        ${meta.config ? `<button class="wb-tile-mbtn" type="button" data-wb-tile-config="${h(tile.id)}" title="Configure" aria-label="Configure"><i class="ti ti-settings"></i></button>` : ''}
+        <button class="wb-tile-mbtn danger" type="button" data-wb-tile-remove="${h(tile.id)}" title="Remove" aria-label="Remove"><i class="ti ti-x"></i></button>
+      </span>`
+    : wbTileHeadExtra(companyId, workspace, tile, meta);
+  const body = wbTileBody(companyId, workspace, tile, meta);
+  const grip = manageMode ? `<span class="wb-tile-grip" title="Drag to reorder" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>` : '';
+  return `<section class="wb-tile${manageMode ? ' wb-tile-draggable' : ''}" data-wb-tile="${h(tile.id)}"${manageMode ? ' draggable="true"' : ''}><div class="wb-tile-head"><span>${grip}<i class="ti ${h(meta.icon)}" aria-hidden="true"></i>${h(meta.title)}</span>${ctrls}</div><div class="wb-tile-body">${body}</div></section>`;
+}
+
+// The non-manage-mode header action (a quick "+" where it makes sense).
+function wbTileHeadExtra(companyId, workspace, tile, meta) {
+  const canManage = can('workspaces.manage', companyId);
+  if (tile.type === 'apps' && canManage) return `<button class="wb-tile-add" type="button" data-new-app title="Add app" aria-label="Add app"><i class="ti ti-plus"></i></button>`;
+  if (tile.type === 'app' && meta.app && canManage) return `<button class="wb-tile-add" type="button" data-wb-tile-addrec="${h(tile.id)}" title="Add record" aria-label="Add record"><i class="ti ti-plus"></i></button>`;
+  if (tile.type === 'tasks') return `<span class="wb-tile-head-acts">${can('tasks.manage', companyId) ? `<button class="wb-tile-add" type="button" data-wb-taskadd-toggle title="Add task" aria-label="Add task"><i class="ti ti-plus"></i></button>` : ''}<a class="wb-tile-add" href="${appHref(companyPath('tasks', {}, companyId))}" data-router title="Open tasks" aria-label="Open tasks"><i class="ti ti-arrow-up-right"></i></a></span>`;
+  if (tile.type === 'calendar' && can('calendar.manage', companyId)) return `<button class="wb-tile-add" type="button" data-action="open-calendar-event-form" title="Add event" aria-label="Add event"><i class="ti ti-plus"></i></button>`;
+  if (tile.type === 'contacts') return `<span class="wb-tile-head-acts">${can('contacts.manage', companyId) ? `<button class="wb-tile-add" type="button" data-wb-contactadd-toggle title="Add contact" aria-label="Add contact"><i class="ti ti-plus"></i></button>` : ''}<a class="wb-tile-add" href="${appHref(companyPath('contacts', {}, companyId))}" data-router title="Open contacts" aria-label="Open contacts"><i class="ti ti-arrow-up-right"></i></a></span>`;
+  return '';
+}
+
+function wbTileBody(companyId, workspace, tile, meta) {
+  switch (tile.type) {
+    case 'apps': return wbTileApps(companyId, workspace);
+    case 'app': return wbTileApp(companyId, workspace, tile, meta);
+    case 'report': return wbTileReport(companyId, workspace, tile, meta);
+    case 'tasks': return wbTileTasks(companyId);
+    case 'calendar': return wbTileCalendar(companyId);
+    case 'contacts': return wbTileContacts(companyId);
+    case 'text': return wbTileText(tile);
+    case 'image': return wbTileImage(tile);
+    case 'links': return wbTileLinks(tile);
+    default: return `<div class="wb-tile-empty">Unknown tile.</div>`;
+  }
+}
+
+function wbTileApps(companyId, workspace) {
+  const apps = workspace.apps || [];
+  if (!apps.length) return `<div class="wb-tile-empty">No apps yet.</div>`;
+  return `<div class="wb-tile-rows">${apps.map((app) => `
+    <button class="wb-tile-row" data-open-app="${h(app.id)}">
+      <span class="wb-tile-row-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></span>
+      <span class="wb-tile-row-main"><b>${h(app.name)}</b><span>${app.items.length} items · ${app.fields.length} fields</span></span>
+      <i class="ti ti-chevron-right wb-tile-row-go" aria-hidden="true"></i>
+    </button>`).join('')}</div>`;
+}
+
+function wbTileApp(companyId, workspace, tile, meta) {
+  const app = meta.app;
+  if (!app) return `<div class="wb-tile-empty">No app selected. ${can('workspaces.manage', companyId) ? 'Configure this tile to pick one.' : ''}</div>`;
+  if (!app.items.length) return `<div class="wb-tile-empty">No records yet.</div>`;
+  const perPage = 5;
+  const page = Math.max(0, (state.wbTilePage && state.wbTilePage[tile.id]) || 0);
+  const ordered = app.items.slice().sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+  const pages = Math.max(1, Math.ceil(ordered.length / perPage));
+  const clamped = Math.min(page, pages - 1);
+  const rows = ordered.slice(clamped * perPage, clamped * perPage + perPage).map((item) => `
+    <button class="wb-tile-rec" data-wb-tile-openrec="${h(tile.id)}:${h(item.id)}">
+      <b>${h(String(wbItemTitle(app, item)))}</b>
+      <span>${h(wbTimeAgo(item.updatedAt || item.createdAt || '') || '')}</span>
+    </button>`).join('');
+  const pager = pages > 1 ? `
+    <div class="wb-tile-pager">
+      <button class="wb-tile-mbtn" type="button" data-wb-tile-page="${h(tile.id)}:${clamped - 1}" ${clamped === 0 ? 'disabled' : ''} aria-label="Previous"><i class="ti ti-chevron-left"></i></button>
+      <span>${clamped + 1} / ${pages}</span>
+      <button class="wb-tile-mbtn" type="button" data-wb-tile-page="${h(tile.id)}:${clamped + 1}" ${clamped >= pages - 1 ? 'disabled' : ''} aria-label="Next"><i class="ti ti-chevron-right"></i></button>
+    </div>` : '';
+  return `<div class="wb-tile-recs">${rows}</div>${pager}
+    <div class="wb-tile-foot"><a class="wb-tile-link" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'items' }, companyId))}" data-router>Open ${h(app.name)} <i class="ti ti-arrow-up-right"></i></a></div>`;
+}
+
+function wbTileReport(companyId, workspace, tile, meta) {
+  const app = meta.app;
+  if (!app) return `<div class="wb-tile-empty">No app selected. ${can('workspaces.manage', companyId) ? 'Configure this tile.' : ''}</div>`;
+  const reportId = tile.config.reportId || 'recent';
+  return `<div class="wb-tile-report">${dashboardAppWidgetBody(app, reportId)}</div>
+    <div class="wb-tile-foot"><a class="wb-tile-link" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'reports' }, companyId))}" data-router>Open reports <i class="ti ti-arrow-up-right"></i></a></div>`;
+}
+
+function wbTileTasks(companyId) {
+  const canManage = can('tasks.manage', companyId);
+  const all = companyTasks(companyId).slice().sort((a, b) => {
+    const ad = a.status === 'done', bd = b.status === 'done';
+    if (ad !== bd) return ad ? 1 : -1; // open tasks first
+    return String(a.due || '9999-12-31').localeCompare(String(b.due || '9999-12-31'));
+  });
+  const addForm = (canManage && state.wbTaskAddOpen) ? wbTileTaskAddForm(companyId) : '';
+  if (!all.length) return `${addForm}<div class="wb-tile-empty">No tasks yet.${canManage ? ' Tap + to add one.' : ''}</div>`;
+  const rows = all.slice(0, 6).map((t) => {
+    const done = t.status === 'done';
+    const meta = [t.due ? `Due ${h(t.due)}` : '', t.assignee_id ? h(memberName(t.assignee_id)) : ''].filter(Boolean).join(' · ');
+    return `<div class="wb-tile-task ${done ? 'done' : ''}">
+      <button class="wb-tile-task-check" type="button" data-wb-tile-task-toggle="${h(t.id)}" title="${done ? 'Mark not done' : 'Mark done'}" aria-label="Toggle done"><i class="ti ti-${done ? 'circle-check-filled' : 'circle'}"></i></button>
+      <a class="wb-tile-task-main" href="${appHref(companyPath('tasks', { task_id: t.id }, companyId))}" data-router>
+        <b>${h(t.title || 'Untitled task')}</b>
+        ${meta ? `<span>${meta}</span>` : ''}
+      </a>
     </div>`;
+  }).join('');
+  const more = all.length > 6 ? `<div class="wb-tile-foot"><a class="wb-tile-link" href="${appHref(companyPath('tasks', {}, companyId))}" data-router>View all ${all.length} <i class="ti ti-arrow-up-right"></i></a></div>` : '';
+  return `${addForm}<div class="wb-tile-tasks">${rows}</div>${more}`;
+}
+
+// Inline "add task" form shown at the top of the Workspace tasks tile so a task
+// can be created without leaving the dashboard.
+function wbTileTaskAddForm(companyId) {
+  const members = wbMembers(companyId);
+  return `<div class="wb-tile-taskadd">
+    <input class="wb-input" data-wb-taskadd-title placeholder="New task title…" autofocus>
+    <div class="wb-tile-taskadd-row">
+      <select class="wb-input" data-wb-taskadd-assignee aria-label="Assign to"><option value="">Assign to…</option>${members.map((m) => `<option value="${h(m.id)}">${h(m.name)}</option>`).join('')}</select>
+      <input class="wb-input" data-wb-taskadd-due type="date" aria-label="Due date">
+    </div>
+    <div class="wb-tile-taskadd-acts">
+      <button class="btn btn-sm" type="button" data-wb-taskadd-cancel>Cancel</button>
+      <button class="btn btn-sm btn-primary" type="button" data-wb-taskadd-save><i class="ti ti-plus"></i>Add task</button>
+    </div>
+  </div>`;
+}
+
+function wbTileCalendar(companyId) {
+  const items = calendarItems(companyId) || [];
+  const canManage = can('calendar.manage', companyId);
+  const eventsByDay = {};
+  items.forEach((it) => { if (it.dateKey) (eventsByDay[it.dateKey] = eventsByDay[it.dateKey] || []).push(it); });
+  const cursor = wbCalCursor();
+  const monthLabel = new Date(cursor.year, cursor.month, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const today = isoDate(0);
+  const upcoming = items.filter((it) => (it.dateKey || '') >= today).sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey))).slice(0, 4);
+  const list = upcoming.length ? `<div class="wb-tile-cals">${upcoming.map((it) => `
+    <div class="wb-tile-cal">
+      <span class="wb-tile-cal-date"><b>${h(wbCalDay(it.dateKey))}</b><em>${h(wbCalMon(it.dateKey))}</em></span>
+      <span class="wb-tile-cal-main"><b>${h(it.title || it.label || 'Event')}</b><span>${h(titleCase(it.type || it.source || ''))}</span></span>
+    </div>`).join('')}</div>` : `<div class="wb-tile-empty wb-minical-empty">No upcoming events.</div>`;
+  return `
+    <div class="wb-minical">
+      <div class="wb-minical-head">
+        <button class="wb-tile-mbtn" type="button" data-wb-cal-nav="-1" aria-label="Previous month"><i class="ti ti-chevron-left"></i></button>
+        <b>${h(monthLabel)}</b>
+        <button class="wb-tile-mbtn" type="button" data-wb-cal-nav="1" aria-label="Next month"><i class="ti ti-chevron-right"></i></button>
+      </div>
+      ${wbMiniCalendarGrid(cursor, eventsByDay, canManage)}
+    </div>
+    ${list}`;
+}
+
+// Which month the mini calendar shows (defaults to the current month).
+function wbCalCursor() {
+  if (state.wbCalMonth && /^\d{4}-\d{2}$/.test(state.wbCalMonth)) { const [y, m] = state.wbCalMonth.split('-').map(Number); return { year: y, month: m - 1 }; }
+  const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth() };
+}
+
+// A 7-column month grid. Days with events get a dot; today is ringed. When the
+// viewer can manage the calendar, each day is a button that opens the add-event
+// form prefilled with that date (via the global `calendar-add-event` action).
+function wbMiniCalendarGrid(cursor, eventsByDay, canManage) {
+  const startDow = new Date(cursor.year, cursor.month, 1).getDay();
+  const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
+  const todayKey = isoDate(0);
+  const dows = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => `<span class="wb-minical-dow">${d}</span>`).join('');
+  const cells = [];
+  for (let i = 0; i < startDow; i += 1) cells.push('<span class="wb-minical-cell empty" aria-hidden="true"></span>');
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const key = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const count = (eventsByDay[key] || []).length;
+    const cls = `wb-minical-cell${key === todayKey ? ' today' : ''}${count ? ' has' : ''}`;
+    const dot = count ? '<span class="wb-minical-dot"></span>' : '';
+    if (canManage) {
+      const label = count ? `${count} event${count === 1 ? '' : 's'} — add another` : 'Add event';
+      cells.push(`<button class="${cls}" type="button" data-action="calendar-add-event" data-date="${key}" title="${h(label)}" aria-label="${h(`${key}: ${label}`)}">${day}${dot}</button>`);
+    } else {
+      cells.push(`<span class="${cls}" title="${count ? `${count} event${count === 1 ? '' : 's'}` : ''}">${day}${dot}</span>`);
+    }
+  }
+  return `<div class="wb-minical-dows">${dows}</div><div class="wb-minical-grid">${cells.join('')}</div>`;
+}
+
+function wbCalDay(dateKey) { const d = new Date(`${dateKey}T00:00:00`); return Number.isNaN(d.getTime()) ? '' : String(d.getDate()); }
+function wbCalMon(dateKey) { const d = new Date(`${dateKey}T00:00:00`); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-US', { month: 'short' }); }
+
+function wbTileContacts(companyId) {
+  const addForm = (can('contacts.manage', companyId) && state.wbContactAddOpen) ? wbTileContactAddForm() : '';
+  const contacts = (companyContacts(companyId) || []).slice(0, 6);
+  if (!contacts.length) return `${addForm}<div class="wb-tile-empty">No contacts yet.</div>`;
+  const rows = contacts.map((c) => {
+    const name = c.name || c.full_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || 'Contact';
+    return `<a class="wb-tile-row" href="${appHref(companyPath('contacts', { contact_id: c.id }, companyId))}" data-router>
+      <span class="wb-tile-row-ic" style="background:${h(wbColorFor(c.id))}">${h(wbInitials(name))}</span>
+      <span class="wb-tile-row-main"><b>${h(name)}</b><span>${h(c.email || c.phone || c.company || '')}</span></span>
+    </a>`;
+  }).join('');
+  return `${addForm}<div class="wb-tile-rows">${rows}</div>`;
+}
+
+// Inline "add contact" form shown at the top of the Contacts tile so a contact
+// can be created without leaving the dashboard.
+function wbTileContactAddForm() {
+  return `<div class="wb-tile-taskadd">
+    <input class="wb-input" data-wb-contactadd-name placeholder="Full name…" autofocus>
+    <div class="wb-tile-taskadd-row">
+      <input class="wb-input" data-wb-contactadd-email type="email" placeholder="Email">
+      <input class="wb-input" data-wb-contactadd-phone type="tel" placeholder="Phone">
+    </div>
+    <div class="wb-tile-taskadd-acts">
+      <button class="btn btn-sm" type="button" data-wb-contactadd-cancel>Cancel</button>
+      <button class="btn btn-sm btn-primary" type="button" data-wb-contactadd-save><i class="ti ti-plus"></i>Add contact</button>
+    </div>
+  </div>`;
+}
+async function wbTileAddContact(companyId) {
+  if (!requirePermission('contacts.manage', companyId, 'Your role cannot add contacts.', 'Contacts')) return;
+  const name = (document.querySelector('[data-wb-contactadd-name]')?.value || '').trim();
+  const email = (document.querySelector('[data-wb-contactadd-email]')?.value || '').trim();
+  const phone = (document.querySelector('[data-wb-contactadd-phone]')?.value || '').trim();
+  if (!name && !email) { showToast('Enter a name or email.', 'local', 'Contacts'); return; }
+  await persistContact(normalizeContact({ id: `contact-${crypto.randomUUID()}`, company_id: companyId, name: name || email, email, phone, stage: contactStageNames()[0], value: 0 }));
+  state.wbContactAddOpen = false;
+  showToast('Contact added.', isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+  render();
+}
+
+function wbTileText(tile) {
+  const body = tile.config.body || '';
+  if (!body) return `<div class="wb-tile-empty">Empty note. Configure to add text.</div>`;
+  return `<div class="wb-tile-text">${h(body).replace(/\n/g, '<br>')}</div>`;
+}
+
+function wbTileImage(tile) {
+  const cfg = tile.config || {};
+  const src = cfg.objectPath ? wbTileImageSignedUrl(tile) : (cfg.url || '');
+  if (!src) return cfg.objectPath ? `<div class="wb-tile-empty">Loading image…</div>` : `<div class="wb-tile-empty">No image. Configure to add one.</div>`;
+  return `<button class="wb-tile-img" type="button" data-wb-tile-lightbox="${h(src)}|${h(cfg.caption || 'Image')}"><img src="${h(src)}" alt="${h(cfg.caption || '')}" loading="lazy"></button>${cfg.caption ? `<div class="wb-tile-cap">${h(cfg.caption)}</div>` : ''}`;
+}
+
+// Mint (and cache for the session) a signed URL for a Storage-backed tile image.
+// Mirrors ensureFileSignedUrl: object_path persists, the signed URL is re-minted
+// per load, so it can never expire on the dashboard.
+function wbTileImageSignedUrl(tile) {
+  if (tile._imgUrl) return tile._imgUrl;
+  if (tile._imgTried) return '';
+  tile._imgTried = true;
+  const client = createSupabaseClient();
+  if (!client) return '';
+  client.storage.from(tile.config.bucket || 'quest-job-files').createSignedUrl(tile.config.objectPath, 3600)
+    .then(({ data, error }) => { if (!error && data?.signedUrl) { tile._imgUrl = data.signedUrl; render(); } })
+    .catch((err) => console.warn('Tile image sign failed', err));
+  return '';
+}
+
+// Upload a tile image to Storage (live) so large files are supported; fall back
+// to a small inline data URL only in local/demo. Returns the stored reference.
+async function wbUploadTileImage(companyId, file) {
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession();
+  if (client) {
+    try {
+      const path = `${canonicalCompanyId(companyId)}/workspace-tiles/${crypto.randomUUID()}-${slugify(file.name)}`;
+      const up = await client.storage.from('quest-job-files').upload(path, file, { cacheControl: '3600', contentType: contentTypeFor(file) });
+      if (!up.error) {
+        const signed = await client.storage.from('quest-job-files').createSignedUrl(path, 3600);
+        return { objectPath: path, bucket: 'quest-job-files', previewUrl: signed.data?.signedUrl || '' };
+      }
+      if (live) { showToast(up.error.message || 'Image upload failed.', 'error', 'Workspaces'); return null; }
+    } catch (error) {
+      console.warn('Tile image upload failed', error);
+      if (live) { showToast('Image upload failed — please try again.', 'error', 'Workspaces'); return null; }
+    }
+  }
+  if (file.size <= 2 * 1024 * 1024) { const dataUrl = await wbReadFileAsDataUrl(file); if (dataUrl) return { dataUrl }; }
+  showToast('This image is too large to store locally — connect Supabase or use a smaller file.', 'error', 'Workspaces');
+  return null;
+}
+
+function wbTileLinks(tile) {
+  const links = (tile.config.links || []).filter((l) => l && l.url);
+  if (!links.length) return `<div class="wb-tile-empty">No links. Configure to pin URLs.</div>`;
+  return `<div class="wb-tile-links">${links.map((l) => `<a class="wb-tile-linkrow" href="${h(l.url)}" target="_blank" rel="noopener noreferrer"><i class="ti ti-external-link" aria-hidden="true"></i><span>${h(l.label || l.url)}</span></a>`).join('')}</div>`;
+}
+
+// Persistent app-switcher header shown on the dashboard AND inside every app, so
+// the layout stays consistent when toggling between Activity and an app.
+// Persistent top app bar. Instead of a scroll slider, it shows one page of app
+// tabs that fit the width (measured in wbMountTopbar) and reveals ‹ › paging
+// buttons only when there are more apps than fit. Activity is pinned left, Add
+// app pinned right.
+function wbWorkspaceHeader(companyId, workspace, activeAppId) {
+  const apps = (workspace && workspace.apps) || [];
+  const perPage = Math.max(1, state.wbTopbarPerPage || 6);
+  let page = Math.max(0, state.wbTopbarPage || 0);
+  const pageCount = Math.max(1, Math.ceil(apps.length / perPage));
+  // Keep the open app visible: jump to its page if it's off the current one.
+  if (activeAppId) {
+    const idx = apps.findIndex((a) => a.id === activeAppId);
+    if (idx >= 0 && (idx < page * perPage || idx >= page * perPage + perPage)) page = Math.floor(idx / perPage);
+  }
+  page = Math.min(page, pageCount - 1);
+  state.wbTopbarPage = page;
+  const pageApps = apps.slice(page * perPage, page * perPage + perPage);
+  const homeHref = appHref(companyPath('workspaces', {}, companyId));
+  const homeActive = !activeAppId;
+  const homeTab = `<a class="wb-topbar-tab wb-topbar-home ${homeActive ? 'active' : ''}" href="${homeHref}" data-router aria-current="${homeActive ? 'page' : 'false'}"><span class="wb-topbar-ic wb-topbar-ic-home"><i class="ti ti-activity" aria-hidden="true"></i></span><span class="wb-topbar-label">Activity</span></a>`;
+  const appTabs = pageApps.map((a) => {
+    const active = a.id === activeAppId;
+    const href = appHref(companyPath('workspaces', { app_id: a.id, tab: 'items' }, companyId));
+    return `<a class="wb-topbar-tab ${active ? 'active' : ''}" href="${href}" data-router title="${h(a.name)}" aria-current="${active ? 'page' : 'false'}"><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i></span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
+  }).join('');
+  const prev = `<button class="wb-topbar-arrow" type="button" data-wb-topbar-page="${page - 1}" ${page === 0 ? 'disabled' : ''} title="Previous apps" aria-label="Previous apps"><i class="ti ti-chevron-left"></i></button>`;
+  const next = `<button class="wb-topbar-arrow" type="button" data-wb-topbar-page="${page + 1}" ${page >= pageCount - 1 ? 'disabled' : ''} title="More apps" aria-label="More apps"><i class="ti ti-chevron-right"></i></button>`;
+  const nav = pageCount > 1 ? `<div class="wb-topbar-nav">${prev}${next}</div>` : '';
+  const addBtn = can('workspaces.manage', companyId)
+    ? `<button class="wb-topbar-add" type="button" data-new-app title="Add app" aria-label="Add app"><i class="ti ti-plus" aria-hidden="true"></i><span>Add app</span></button>`
+    : '';
+  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps">${homeTab}<div class="wb-topbar-apps" data-wb-topbar-apps>${appTabs}</div><div class="wb-topbar-spacer"></div>${nav}${addBtn}</nav>`;
+}
+
+// Measure how many fixed-width app tabs fit the bar and adjust the page size,
+// re-rendering once when it changes. Reserves room for Activity, Add app, and
+// the paging buttons so toggling arrows on/off can't oscillate.
+function wbMountTopbar() {
+  const nav = document.querySelector('[data-wb-topbar]');
+  if (!nav || !nav.clientWidth) return;
+  const home = nav.querySelector('.wb-topbar-home');
+  const add = nav.querySelector('.wb-topbar-add');
+  const TAB_W = 90; // fixed app-tab width (84) + gap (6)
+  const reserve = (home ? home.offsetWidth : 0) + (add ? add.offsetWidth : 0) + 80 /* paging */ + 32 /* gaps */;
+  const perPage = Math.max(1, Math.floor((nav.clientWidth - reserve) / TAB_W));
+  if (perPage !== state.wbTopbarPerPage) { state.wbTopbarPerPage = perPage; render(); }
 }
 
 function wbViewApp(route, companyId, workspace, app) {
@@ -10288,37 +10857,434 @@ function wbViewApp(route, companyId, workspace, app) {
   else if (tab === 'automations') body = wbViewAutomations(companyId, workspace, app);
   else body = wbViewAppSettings(companyId, workspace, app);
   return `
+    ${wbWorkspaceHeader(companyId, workspace, app.id)}
     <div class="wb-page-head">
       <div>
         <h1 class="wb-title"><span class="wb-title-ic" style="background:${h(app.color)}" aria-hidden="true"><i class="ti ${h(app.icon)}"></i></span>${h(app.name)}</h1>
         <div class="wb-sub">${h(app.description || '')}</div>
       </div>
       <div class="wb-spacer"></div>
-      <a class="btn" href="${appHref(companyPath('workspaces', {}, companyId))}" data-router><i class="ti ti-arrow-left"></i>Workspaces</a>
       ${headBtn}
     </div>
-    ${wbAppSwitcher(companyId, workspace, app)}
     <div class="wb-tabs">
       ${tabs.map((item) => `<a class="wb-tab ${tab === item ? 'active' : ''}" href="${tabPath(item)}" data-router>${tabLabel[item]}</a>`).join('')}
     </div>
     ${body}`;
 }
 
-// A compact icon-only strip of the workspace's other apps, so you can jump
-// straight to another app without going back to the Workspaces menu.
-function wbAppSwitcher(companyId, workspace, app) {
-  const apps = (workspace && workspace.apps) || [];
-  if (apps.length < 2 && !can('workspaces.manage', companyId)) return '';
-  const btns = apps.map((a) => {
-    const active = a.id === app.id;
-    const href = appHref(companyPath('workspaces', { app_id: a.id, tab: 'items' }, companyId));
-    return `<a class="wb-appswitch-btn ${active ? 'active' : ''}" href="${href}" data-router title="${h(a.name)}" aria-label="${h(a.name)}" aria-current="${active ? 'page' : 'false'}"><span class="wb-appswitch-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}"></i></span></a>`;
-  }).join('');
-  const addBtn = can('workspaces.manage', companyId)
-    ? `<button class="wb-appswitch-add" type="button" data-new-app title="Add app" aria-label="Add app"><i class="ti ti-plus"></i></button>`
-    : '';
-  return `<div class="wb-appswitch" role="tablist" aria-label="Switch app">${btns}${addBtn}</div>`;
+// ── Workspace activity feed: publisher actions ─────────────────────────────
+function wbComposeState() { state.wbCompose = state.wbCompose || { files: [] }; return state.wbCompose; }
+function wbFeedOpenMap() { state.wbFeedOpen = state.wbFeedOpen || {}; return state.wbFeedOpen; }
+
+// Fan a feed post out to the workspace audience (+ anyone @mentioned in it).
+function wbNotifyFeed(companyId, workspace, post) {
+  const audience = wbNotifyAudience(companyId, workspace);
+  const mentioned = post.text ? mentionedProfileIds(post.text, companyId) : [];
+  const recipients = [...new Set([...audience, ...mentioned])];
+  if (!recipients.length) return;
+  const kind = { file: 'shared a file', link: 'shared a link', question: 'asked a question' }[post.type] || 'posted an update';
+  const snippet = (post.text || post.link?.title || post.link?.url || '').slice(0, 90);
+  notifyEvent({
+    companyId, recipients, type: 'workspace',
+    title: `${actorName()} ${kind}`,
+    body: snippet || `${actorName()} ${kind} in the workspace`,
+    href: appHref(companyPath('workspaces', {}, companyId)),
+    sourceType: 'workspace_feed', sourceId: post.id, excludeActor: true,
+  });
 }
+
+// Central client-side upload guard — runs the shared 3-layer check (extension +
+// MIME + magic bytes). Returns true when the file is safe to proceed; otherwise
+// surfaces the reason and returns false. Every file input routes through this.
+async function guardUpload(file, policyKey, title = 'Upload') {
+  const result = await validateUpload(file, policyKey);
+  if (!result.ok) { showToast(result.reason, 'error', title); return false; }
+  return true;
+}
+
+// Upload feed attachments to the shared file bucket (live) or embed a small data
+// URL (local/demo), mirroring the workspace file-field upload contract.
+async function wbUploadFeedFiles(companyId, files) {
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession();
+  const out = [];
+  for (const file of files) {
+    if (!(await guardUpload(file, 'document', 'Workspaces'))) continue;
+    let url = '';
+    let objectPath = '';
+    if (client) {
+      try {
+        const path = `${canonicalCompanyId(companyId)}/workspace-feed/${crypto.randomUUID()}-${slugify(file.name)}`;
+        const up = await client.storage.from('quest-job-files').upload(path, file, { cacheControl: '3600', contentType: contentTypeFor(file) });
+        if (!up.error) {
+          objectPath = path;
+          const signed = await client.storage.from('quest-job-files').createSignedUrl(path, 604800);
+          if (signed.data?.signedUrl) url = signed.data.signedUrl;
+        }
+      } catch (error) { console.warn('Feed file upload failed', error); }
+    }
+    if (live && !objectPath) { showToast(`"${file.name}" could not be uploaded.`, 'error', 'Workspaces'); continue; }
+    if (!url && !live && file.size <= 2 * 1024 * 1024) url = await wbReadFileAsDataUrl(file);
+    if (!url && !objectPath) { showToast(`"${file.name}" is too large to attach — link it by URL instead.`, 'error', 'Workspaces'); continue; }
+    out.push({ name: file.name, url, objectPath, bucket: 'quest-job-files', size: file.size, mime: contentTypeFor(file) });
+  }
+  return out;
+}
+
+// File a workspace activity-feed attachment into Company Drive under a folder
+// named after the workspace (Workspaces / <workspace name>), so files posted to
+// the feed are organized and findable in the Files module.
+function wbMirrorFeedFileToDrive(attachment, companyId, workspaceName) {
+  try {
+    if (!attachment || (!attachment.objectPath && !attachment.url)) return '';
+    const wsName = String(workspaceName || 'Workspace').trim() || 'Workspace';
+    const root = wbFindOrCreateDriveFolder(companyId, 'Workspaces', 'home');
+    const wsFolder = wbFindOrCreateDriveFolder(companyId, wsName, root.id);
+    const payload = normalizeFile({
+      id: `file-${crypto.randomUUID()}`,
+      company_id: companyId,
+      job_id: '',
+      folder: wsFolder.id,
+      file_name: attachment.name,
+      mime_type: attachment.mime || 'application/octet-stream',
+      size_bytes: attachment.size || 0,
+      category: wsName,
+      notes: `Posted to workspace feed "${wsName}".`,
+      uploaded_by_label: activeSession().profile.full_name || 'Quest HQ',
+      bucket_id: attachment.bucket || 'quest-job-files',
+      object_path: attachment.objectPath || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    upsertFile(payload);
+    const client = createSupabaseClient();
+    if (client && attachment.objectPath) {
+      client.from('job_files').insert(filePayload(payload)).then((r) => { if (r.error) console.warn('Feed drive mirror insert failed', r.error); }).catch((e) => console.warn('Feed drive mirror insert failed', e));
+    }
+    persistAll();
+    return `Workspaces / ${wsName}`;
+  } catch (error) { console.warn('Feed drive mirror failed', error); return ''; }
+}
+
+// Create a real, assignable task from a post (shows up under "My tasks").
+async function wbCreateTaskFromPost(companyId, { title, assigneeId, due, body }) {
+  if (!requirePermission('tasks.manage', companyId, 'Your role cannot create tasks.', 'Workspaces')) return null;
+  const creatorId = activeTaskCreatorId(companyId);
+  if (!creatorId) { showToast('Your profile is missing a task creator ID.', 'error', 'Tasks'); return null; }
+  const task = normalizeTask({
+    ...blankTask(companyId),
+    id: `task-${crypto.randomUUID()}`,
+    company_id: companyId,
+    title: String(title || 'Follow-up from workspace post').slice(0, 140),
+    description: body || '',
+    creator_id: creatorId,
+    assignee_id: assigneeId || creatorId,
+    ...(due ? { due } : {}),
+  });
+  const client = createSupabaseClient();
+  let saved = task;
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').insert(taskPayload(task)).select().single());
+    if (result.error || !result.data) { notifySyncFailure(result.error || new Error('Task insert returned no record.'), 'Task create'); return null; }
+    saved = normalizeTask(result.data);
+  }
+  upsertTask(saved);
+  notifyTaskChange(saved);
+  return saved;
+}
+
+// Read the composer, build a post (Post / File / Link / Question), optionally
+// spawn a task, persist to the workspace doc, and notify the audience.
+async function wbComposerShare(companyId) {
+  if (!can('workspaces.manage', companyId)) { showToast('You do not have permission to post here.', 'local', 'Workspaces'); return; }
+  const root = document.querySelector('[data-wb-composer]');
+  if (!root) return;
+  const mode = root.dataset.mode || 'post';
+  const text = (root.querySelector('[data-wb-compose-text]')?.value || '').trim();
+  const prof = activeSession().profile || {};
+  const post = normalizeFeedPost({ type: mode, authorId: prof.id || '', author: prof.full_name || prof.email || 'User', ts: new Date().toISOString(), text });
+  if (mode === 'link') {
+    const url = (root.querySelector('[data-wb-compose-link-url]')?.value || '').trim();
+    if (!url) { showToast('Add a link URL to share.', 'local', 'Workspaces'); return; }
+    post.link = { url, title: (root.querySelector('[data-wb-compose-link-title]')?.value || '').trim(), desc: '' };
+  } else if (mode === 'question') {
+    const opts = [...root.querySelectorAll('[data-wb-poll-opt]')].map((i) => i.value.trim()).filter(Boolean);
+    if (!text) { showToast('Ask your question in the text box.', 'local', 'Workspaces'); return; }
+    if (opts.length < 2) { showToast('A question needs at least two options.', 'local', 'Workspaces'); return; }
+    post.poll = { options: opts.map((label) => ({ id: wbUid(), label, votes: [] })) };
+  } else if (mode === 'file') {
+    post.attachments = wbComposeState().files.slice();
+    if (!post.attachments.length) { showToast('Choose a file to attach first.', 'local', 'Workspaces'); return; }
+  } else if (!text) { showToast('Write something to share.', 'local', 'Workspaces'); return; }
+  const taskToggle = root.querySelector('[data-wb-compose-task]');
+  if (taskToggle && taskToggle.checked && can('tasks.manage', companyId)) {
+    const assigneeId = root.querySelector('[data-wb-compose-task-assignee]')?.value || '';
+    const due = root.querySelector('[data-wb-compose-task-due]')?.value || '';
+    const saved = await wbCreateTaskFromPost(companyId, { title: text || post.link?.title || 'Follow-up from workspace post', assigneeId, due, body: text });
+    if (saved) post.task = { id: saved.id, title: saved.title, assigneeId: saved.assignee_id, dueDate: saved.due };
+  }
+  const workspace = wbCompanyWorkspace(companyId);
+  workspace.feed = workspace.feed || [];
+  workspace.feed.unshift(post);
+  if (workspace.feed.length > 200) workspace.feed.length = 200;
+  // File posted attachments into Company Drive under a workspace-named folder.
+  if (post.type === 'file') post.attachments.forEach((att) => wbMirrorFeedFileToDrive(att, companyId, workspace.name));
+  wbComposeState().files = [];
+  wbSave(companyId);
+  wbNotifyFeed(companyId, workspace, post);
+  showToast('Shared to the workspace.', isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
+  render();
+}
+
+function wbFeedFindPost(companyId, postId) {
+  const workspace = wbCompanyWorkspace(companyId);
+  const post = workspace ? (workspace.feed || []).find((p) => p.id === postId) : null;
+  return { workspace, post };
+}
+
+function wbToggleFeedLike(companyId, postId) {
+  const myId = activeSession().profile?.id || '';
+  if (!myId) return;
+  const { post } = wbFeedFindPost(companyId, postId);
+  if (!post) return;
+  post.likes = post.likes.includes(myId) ? post.likes.filter((id) => id !== myId) : [...post.likes, myId];
+  wbSave(companyId);
+  render();
+}
+
+function wbVoteFeedPoll(companyId, postId, optionId) {
+  const myId = activeSession().profile?.id || '';
+  if (!myId) return;
+  const { post } = wbFeedFindPost(companyId, postId);
+  if (!post || !post.poll) return;
+  const already = post.poll.options.some((o) => o.id === optionId && o.votes.includes(myId));
+  post.poll.options.forEach((o) => { o.votes = o.votes.filter((id) => id !== myId); });
+  if (!already) { const opt = post.poll.options.find((o) => o.id === optionId); if (opt) opt.votes.push(myId); }
+  wbSave(companyId);
+  render();
+}
+
+function wbAddFeedComment(companyId, postId) {
+  const input = document.querySelector(`[data-wb-post-cmt-input="${cssEscapeAttr(postId)}"]`);
+  const text = (input?.value || '').trim();
+  if (!text) return;
+  const { post } = wbFeedFindPost(companyId, postId);
+  if (!post) return;
+  const prof = activeSession().profile || {};
+  post.comments.push({ id: wbUid(), author: prof.full_name || prof.email || 'User', authorId: prof.id || '', text, ts: new Date().toISOString() });
+  wbFeedOpenMap()[postId] = true;
+  wbSave(companyId);
+  render();
+}
+
+function wbDeleteFeedComment(companyId, postId, commentId) {
+  const myId = activeSession().profile?.id || '';
+  const { post } = wbFeedFindPost(companyId, postId);
+  if (!post) return;
+  const c = post.comments.find((x) => x.id === commentId);
+  if (!c) return;
+  if (c.authorId !== myId) { showToast('You can only delete your own comments.', 'local', 'Workspaces'); return; }
+  post.comments = post.comments.filter((x) => x.id !== commentId);
+  wbSave(companyId);
+  render();
+}
+
+function wbDeleteFeedPost(companyId, postId) {
+  const myId = activeSession().profile?.id || '';
+  const { workspace, post } = wbFeedFindPost(companyId, postId);
+  if (!workspace || !post) return;
+  if (post.authorId !== myId && !can('workspaces.manage', companyId)) { showToast('You can only delete your own posts.', 'local', 'Workspaces'); return; }
+  workspace.feed = workspace.feed.filter((p) => p.id !== postId);
+  wbSave(companyId);
+  showToast('Post removed.', 'local', 'Workspaces');
+  render();
+}
+
+// Escape a value for use inside an attribute selector (post ids are safe wb-*,
+// but keep the lookup robust).
+function cssEscapeAttr(value) { return String(value).replace(/["\\]/g, '\\$&'); }
+
+// Wire the composer's local interactions directly (no full re-render) so typed
+// text, focus, and the chosen mode survive while composing.
+function wbMountComposer(companyId) {
+  const root = document.querySelector('[data-wb-composer]');
+  if (!root) return;
+  wbComposeState().files = []; // fresh composer starts with no pending attachments
+  root.querySelectorAll('[data-wb-compose-mode]').forEach((btn) => {
+    btn.onclick = () => {
+      root.dataset.mode = btn.dataset.wbComposeMode;
+      root.querySelectorAll('[data-wb-compose-mode]').forEach((b) => b.classList.toggle('active', b === btn));
+    };
+  });
+  const taskToggle = root.querySelector('[data-wb-compose-task]');
+  const taskFields = root.querySelector('[data-wb-compose-task-fields]');
+  if (taskToggle && taskFields) taskToggle.onchange = () => { taskFields.hidden = !taskToggle.checked; };
+  const pollAdd = root.querySelector('[data-wb-poll-add]');
+  if (pollAdd) pollAdd.onclick = () => {
+    const wrap = root.querySelector('[data-wb-poll-opts]');
+    if (!wrap) return;
+    const input = document.createElement('input');
+    input.className = 'wb-input';
+    input.setAttribute('data-wb-poll-opt', '');
+    input.type = 'text';
+    input.placeholder = `Option ${wrap.querySelectorAll('[data-wb-poll-opt]').length + 1}`;
+    wrap.appendChild(input);
+    input.focus();
+  };
+  const fileInput = root.querySelector('[data-wb-compose-file]');
+  if (fileInput) fileInput.onchange = () => wbComposerPickFiles(fileInput, companyId);
+}
+
+async function wbComposerPickFiles(input, companyId) {
+  const files = [...(input.files || [])];
+  if (!files.length) return;
+  const label = document.querySelector('[data-wb-compose-file-label]');
+  if (label) label.textContent = `Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`;
+  const uploaded = await wbUploadFeedFiles(companyId, files);
+  const st = wbComposeState();
+  st.files = st.files.concat(uploaded);
+  if (label) label.textContent = st.files.length ? `${st.files.length} file${st.files.length === 1 ? '' : 's'} attached` : 'Choose files to attach';
+  input.value = '';
+}
+
+// ── Workspace sidebar tiles: management ────────────────────────────────────
+// Materialize the default tile set into the doc the first time an owner edits,
+// so subsequent add/reorder/remove operate on a concrete array.
+function wbEnsureTiles(companyId) {
+  const workspace = wbCompanyWorkspace(companyId);
+  if (!workspace) return null;
+  if (!Array.isArray(workspace.tiles)) workspace.tiles = wbSidebarTiles(workspace).map((t) => ({ ...t }));
+  return workspace;
+}
+function wbAddTile(companyId, type) {
+  const workspace = wbEnsureTiles(companyId);
+  if (!workspace) return;
+  const tile = normalizeWorkspaceTile({ type, config: {} });
+  workspace.tiles.push(tile);
+  wbSave(companyId);
+  state.builderModal = null;
+  if (['app', 'report', 'text', 'image', 'links'].includes(type)) { openWbTileConfig(companyId, tile.id); return; }
+  render();
+}
+function wbRemoveTile(companyId, tileId) {
+  const workspace = wbEnsureTiles(companyId);
+  if (!workspace) return;
+  workspace.tiles = workspace.tiles.filter((t) => t.id !== tileId);
+  wbSave(companyId);
+  render();
+}
+function wbMoveTile(companyId, tileId, dir) {
+  const workspace = wbEnsureTiles(companyId);
+  if (!workspace) return;
+  const i = workspace.tiles.findIndex((t) => t.id === tileId);
+  const j = i + (dir === 'up' ? -1 : 1);
+  if (i < 0 || j < 0 || j >= workspace.tiles.length) return;
+  const [moved] = workspace.tiles.splice(i, 1);
+  workspace.tiles.splice(j, 0, moved);
+  wbSave(companyId);
+  render();
+}
+async function wbTileToggleTask(companyId, taskId) {
+  const task = companyTasks(companyId).find((t) => t.id === taskId);
+  if (!task) return;
+  if (!requirePermission('tasks.manage', companyId, 'Your role cannot update tasks.', 'Tasks')) return;
+  const updated = normalizeTask({ ...task, status: task.status === 'done' ? 'todo' : 'done' });
+  const client = createSupabaseClient();
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').update(taskPayload(updated)).eq('id', updated.id));
+    if (result.error) { notifySyncFailure(result.error, 'Task update'); return; }
+  }
+  upsertTask(updated);
+  notifyTaskChange(updated, task);
+  render();
+}
+// Create a task from the tile's inline add form (stays on the dashboard).
+async function wbTileAddTask(companyId) {
+  const title = (document.querySelector('[data-wb-taskadd-title]')?.value || '').trim();
+  if (!title) { showToast('Enter a task title.', 'local', 'Tasks'); return; }
+  const assigneeId = document.querySelector('[data-wb-taskadd-assignee]')?.value || '';
+  const due = document.querySelector('[data-wb-taskadd-due]')?.value || '';
+  const saved = await wbCreateTaskFromPost(companyId, { title, assigneeId, due, body: '' });
+  if (saved) { state.wbTaskAddOpen = false; showToast('Task added.', isLiveSupabaseSession() ? 'live' : 'local', 'Tasks'); render(); }
+}
+// Drag-and-drop reorder for sidebar tiles (Customize mode). Mirrors the field-row
+// DnD: drop a dragged tile onto another to move it into that position.
+function wbMountTileDnD(companyId) {
+  let dragId = null;
+  document.querySelectorAll('.wb-dash-side [data-wb-tile][draggable="true"]').forEach((el) => {
+    el.ondragstart = (e) => { dragId = el.dataset.wbTile; el.classList.add('dragging'); if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch { /* ignore */ } } };
+    el.ondragend = () => { dragId = null; el.classList.remove('dragging'); document.querySelectorAll('.wb-tile-drop').forEach((t) => t.classList.remove('wb-tile-drop')); };
+    el.ondragover = (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; if (el.dataset.wbTile !== dragId) el.classList.add('wb-tile-drop'); };
+    el.ondragleave = () => el.classList.remove('wb-tile-drop');
+    el.ondrop = (e) => {
+      e.preventDefault(); el.classList.remove('wb-tile-drop');
+      const targetId = el.dataset.wbTile;
+      if (!dragId || dragId === targetId) return;
+      const workspace = wbEnsureTiles(companyId);
+      if (!workspace) return;
+      const from = workspace.tiles.findIndex((t) => t.id === dragId);
+      const to = workspace.tiles.findIndex((t) => t.id === targetId);
+      if (from < 0 || to < 0) return;
+      const [moved] = workspace.tiles.splice(from, 1);
+      workspace.tiles.splice(to, 0, moved);
+      wbSave(companyId);
+      render();
+    };
+  });
+}
+function openWbTileAdd(companyId) { openWbModal({ kind: 'tile-add', companyId }); }
+function openWbTileConfig(companyId, tileId) {
+  const workspace = wbEnsureTiles(companyId);
+  const tile = workspace ? workspace.tiles.find((t) => t.id === tileId) : null;
+  if (!tile) return;
+  openWbModal({ kind: 'tile-config', companyId, tileId, draft: JSON.parse(JSON.stringify(tile.config || {})) });
+}
+// Save the tile-config form. Reads DOM inputs by tile type, writes config, saves.
+function wbSaveTileConfig(companyId) {
+  const m = state.builderModal;
+  if (!m || m.kind !== 'tile-config') return;
+  const workspace = wbEnsureTiles(companyId);
+  const tile = workspace ? workspace.tiles.find((t) => t.id === m.tileId) : null;
+  if (!tile) return;
+  const val = (sel) => (document.querySelector(sel)?.value || '').trim();
+  if (tile.type === 'app') { tile.config.appId = val('[data-wb-tilecfg-app]'); }
+  else if (tile.type === 'report') { tile.config.appId = val('[data-wb-tilecfg-app]'); tile.config.reportId = val('[data-wb-tilecfg-report]') || 'recent'; }
+  else if (tile.type === 'text') { tile.config.title = val('[data-wb-tilecfg-title]'); tile.config.body = document.querySelector('[data-wb-tilecfg-body]')?.value || ''; }
+  else if (tile.type === 'image') {
+    if (m.draft.objectPath) {
+      tile.config.objectPath = m.draft.objectPath;
+      tile.config.bucket = m.draft.bucket || 'quest-job-files';
+      tile.config.url = '';
+    } else {
+      tile.config.objectPath = '';
+      tile.config.bucket = '';
+      tile.config.url = String(m.draft.url || '').startsWith('data:') ? m.draft.url : (val('[data-wb-tilecfg-url]') || '');
+    }
+    tile.config.caption = val('[data-wb-tilecfg-caption]');
+    delete tile._imgUrl; delete tile._imgTried; // force the signed URL to re-mint
+  }
+  else if (tile.type === 'links') {
+    tile.config.title = val('[data-wb-tilecfg-title]');
+    tile.config.links = [...document.querySelectorAll('[data-wb-tilecfg-linkrow]')].map((row) => ({
+      label: (row.querySelector('[data-wb-tilecfg-link-label]')?.value || '').trim(),
+      url: (row.querySelector('[data-wb-tilecfg-link-url]')?.value || '').trim(),
+    })).filter((l) => l.url);
+  }
+  state.builderModal = null;
+  wbSave(companyId);
+  showToast('Tile updated.', 'local', 'Workspaces');
+  render();
+}
+// Report options a given app can drive (matches dashboardAppWidgetBody).
+function wbAppReportOptions(app) {
+  const opts = [['recent', 'Latest records']];
+  (app.fields || []).forEach((f) => {
+    if (f.type === 'status' || f.type === 'category') opts.push([`group:${f.id}`, `Breakdown · ${f.label}`]);
+    if (['number', 'money', 'calculation'].includes(f.type)) opts.push([`sum:${f.id}`, `Total · ${f.label}`]);
+  });
+  return opts;
+}
+
 // Locate the workspace + company that own an app (apps live inside company docs)
 // so a title can resolve member names, linked records, etc.
 function wbLocateApp(app) {
@@ -11322,6 +12288,7 @@ function wbImportCsvPrompt(companyId, workspaceId, appId) {
   input.onchange = async () => {
     const file = input.files && input.files[0];
     if (!file) return;
+    if (!(await guardUpload(file, 'csv', 'Workspaces'))) return;
     let text = '';
     try { text = await file.text(); } catch { showToast('Could not read that file.', 'local', 'Workspaces'); return; }
     wbImportCsvText(companyId, workspaceId, appId, text);
@@ -11939,7 +12906,70 @@ function renderWorkspaceBuilderModal() {
       <div class="wb-field"><label>Then… (actions)</label><div class="wb-action-builder">${wbActionCardsUI(m.companyId, m.draft, app)}</div><button class="btn btn-sm" data-wb-auto-add-action><i class="ti ti-plus"></i>Add action</button></div>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-check"></i>${m.editId ? 'Save automation' : 'Create automation'}</button>`);
   }
+  if (m.kind === 'tile-add') {
+    const catalog = [
+      ['app', 'ti-layout-grid', 'App records', 'Latest records from an app, paginated'],
+      ['report', 'ti-chart-bar', 'Report / Chart', 'A pinned summary chart from an app'],
+      ['tasks', 'ti-checklist', 'Workspace tasks', 'Open tasks across the workspace'],
+      ['calendar', 'ti-calendar', 'Calendar', 'Upcoming events and due dates'],
+      ['contacts', 'ti-address-book', 'Contacts', 'Directory of company contacts'],
+      ['apps', 'ti-apps', 'Apps list', 'Quick links to every app'],
+      ['text', 'ti-align-left', 'Text / Banner', 'A custom note or greeting'],
+      ['image', 'ti-photo', 'Image', 'A logo or graphic (opens in a lightbox)'],
+      ['links', 'ti-link', 'Links', 'Pinned bookmarks and URLs'],
+    ];
+    return wbModalShell('Add tile', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:#e0552d"><i class="ti ti-layout-board-split"></i></div><h3>Add a dashboard tile</h3>`,
+      `<div class="wb-tile-catalog">${catalog.map(([type, icon, title, desc]) => `<button class="wb-tile-cat" type="button" data-wb-tile-pick="${h(type)}"><span class="wb-tile-cat-ic"><i class="ti ${icon}"></i></span><span class="wb-tile-cat-main"><b>${h(title)}</b><span>${h(desc)}</span></span></button>`).join('')}</div>`,
+      `<button class="btn" data-action="wb-modal-close">Cancel</button>`);
+  }
+  if (m.kind === 'tile-config') {
+    const workspace = wbCompanyWorkspace(m.companyId);
+    const tile = workspace ? (workspace.tiles || []).find((t) => t.id === m.tileId) : null;
+    if (!tile) return '';
+    const apps = workspace.apps || [];
+    const appSelect = (selected) => `<select class="wb-input" data-wb-tilecfg-app>${apps.length ? apps.map((a) => `<option value="${h(a.id)}" ${a.id === selected ? 'selected' : ''}>${h(a.name)}</option>`).join('') : '<option value="">No apps yet</option>'}</select>`;
+    let form = '';
+    if (tile.type === 'app') form = `<div class="wb-field"><label>Show records from</label>${appSelect(m.draft.appId)}</div>`;
+    else if (tile.type === 'report') {
+      const app = apps.find((a) => a.id === (m.draft.appId || apps[0]?.id));
+      const reportOpts = app ? wbAppReportOptions(app) : [];
+      form = `<div class="wb-field"><label>App</label>${appSelect(m.draft.appId || apps[0]?.id)}</div>
+        <div class="wb-field"><label>Report</label><select class="wb-input" data-wb-tilecfg-report>${reportOpts.map(([id, label]) => `<option value="${h(id)}" ${id === m.draft.reportId ? 'selected' : ''}>${h(label)}</option>`).join('')}</select><div class="wb-sub">Change the app and reopen to see its reports.</div></div>`;
+    } else if (tile.type === 'text') form = `<div class="wb-field"><label>Title <span class="wb-opt">(optional)</span></label><input class="wb-input" data-wb-tilecfg-title value="${h(m.draft.title || '')}" placeholder="e.g. Welcome"></div><div class="wb-field"><label>Text</label><textarea class="wb-input" data-wb-tilecfg-body rows="5" placeholder="Write a note, greeting, or announcement…">${h(m.draft.body || '')}</textarea></div>`;
+    else if (tile.type === 'image') {
+      const uploaded = !!m.draft.objectPath || String(m.draft.url || '').startsWith('data:');
+      const previewSrc = m.draft._preview || (String(m.draft.url || '').startsWith('data:') ? m.draft.url : '');
+      const preview = previewSrc
+        ? `<div class="wb-tilecfg-preview"><img src="${h(previewSrc)}" alt="Image preview"></div>`
+        : (uploaded ? `<div class="wb-tilecfg-uploaded"><i class="ti ti-photo-check"></i>Image uploaded</div>` : '');
+      form = `
+        <div class="wb-field"><label>Upload an image</label>
+          <label class="wb-file-drop"><input type="file" hidden accept="${acceptAttr('tileimage')}" data-wb-tilecfg-image><i class="ti ti-photo-up" aria-hidden="true"></i><span>${uploaded ? 'Replace image' : 'Choose an image file (PNG, JPG, WebP, GIF · up to 25 MB)'}</span></label>
+        </div>
+        ${preview}
+        ${uploaded
+          ? `<button type="button" class="btn btn-sm" data-wb-tilecfg-image-clear><i class="ti ti-x"></i>Remove uploaded image</button>`
+          : `<div class="wb-field"><label>…or paste an image URL <span class="wb-opt">(optional)</span></label><input class="wb-input" data-wb-tilecfg-url type="url" value="${h(m.draft.url || '')}" placeholder="https://…/logo.png"></div>`}
+        <div class="wb-field"><label>Caption <span class="wb-opt">(optional)</span></label><input class="wb-input" data-wb-tilecfg-caption value="${h(m.draft.caption || '')}" placeholder="Shown under the image"></div>`;
+    }
+    else if (tile.type === 'links') {
+      const links = (m.draft.links && m.draft.links.length) ? m.draft.links : [{ label: '', url: '' }];
+      form = `<div class="wb-field"><label>Title <span class="wb-opt">(optional)</span></label><input class="wb-input" data-wb-tilecfg-title value="${h(m.draft.title || '')}" placeholder="e.g. Resources"></div>
+        <div class="wb-field"><label>Links</label><div data-wb-tilecfg-links>${links.map((l) => wbTileLinkRow(l)).join('')}</div><button class="btn btn-sm" type="button" data-wb-tilecfg-addlink><i class="ti ti-plus"></i>Add link</button></div>`;
+    }
+    return wbModalShell('Configure tile', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:#e0552d"><i class="ti ti-settings"></i></div><h3>Configure tile</h3>`,
+      form || '<div class="wb-sub">This tile has no options.</div>',
+      `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" type="button" data-wb-tile-save><i class="ti ti-check"></i>Save tile</button>`);
+  }
   return '';
+}
+
+function wbTileLinkRow(link) {
+  return `<div class="wb-tilecfg-linkrow" data-wb-tilecfg-linkrow>
+    <input class="wb-input" data-wb-tilecfg-link-label value="${h(link.label || '')}" placeholder="Label">
+    <input class="wb-input" data-wb-tilecfg-link-url type="url" value="${h(link.url || '')}" placeholder="https://…">
+    <button class="wb-tile-mbtn danger" type="button" data-wb-tilecfg-dellink title="Remove"><i class="ti ti-x"></i></button>
+  </div>`;
 }
 function wbModalShell(eyebrow, extraClass, head, body, foot) {
   // Generic modal format: explicit "Close" button (no 'X' icon) and no
@@ -12105,7 +13135,7 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
     case 'file': input = `
       <div class="wb-file-field" data-wb-file>
         <input type="hidden" data-f="${h(f.id)}" value="${h(typeof val === 'object' ? JSON.stringify(val) : (val || ''))}" />
-        <input type="file" hidden data-wb-file-input />
+        <input type="file" hidden accept="${acceptAttr('document')}" data-wb-file-input />
         <button type="button" class="wb-file-drop" data-wb-file-open>
           <i class="ti ti-cloud-upload" data-wb-file-ico></i>
           <span class="wb-file-label" data-wb-file-label></span>
@@ -12156,7 +13186,7 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
     case 'image': input = `
       <div class="wb-file-field wb-image-field" data-wb-file data-wb-image>
         <input type="hidden" data-f="${h(f.id)}" value="${h(typeof val === 'object' ? JSON.stringify(val) : (val || ''))}" />
-        <input type="file" hidden accept="image/*" data-wb-file-input />
+        <input type="file" hidden accept="${acceptAttr('image')}" data-wb-file-input />
         <button type="button" class="wb-image-drop" data-wb-file-open>
           <span class="wb-img-preview" data-wb-img-preview><i class="ti ti-photo" data-wb-file-ico></i></span>
           <span class="wb-file-label" data-wb-file-label></span>
@@ -12277,17 +13307,28 @@ function wbFindOrCreateDriveFolder(companyId, name, parentKey) {
 // no longer exists back into its reconstructed field folder.
 function wbReconstructAppDriveFolders() {
   const rx = /workspace app "(.+?)"(?: · field "(.+?)")?/;
+  const feedRx = /workspace feed "(.+?)"/;
   const existingIds = new Set((state.driveFolders || []).map((f) => f.id));
   (state.files || []).forEach((file) => {
     const mm = rx.exec(file.notes || '');
-    if (!mm) return;
-    const appName = (mm[1] || '').trim();
-    if (!appName) return;
-    const fieldName = (mm[2] || 'Attached files').trim();
-    const appRoot = wbFindOrCreateDriveFolder(file.company_id, 'App', 'home');
-    const appFolder = wbFindOrCreateDriveFolder(file.company_id, appName, appRoot.id);
-    const leaf = wbFindOrCreateDriveFolder(file.company_id, fieldName, appFolder.id);
-    if (!existingIds.has(file.folder) && file.folder !== leaf.id) file.folder = leaf.id;
+    if (mm) {
+      const appName = (mm[1] || '').trim();
+      if (!appName) return;
+      const fieldName = (mm[2] || 'Attached files').trim();
+      const appRoot = wbFindOrCreateDriveFolder(file.company_id, 'App', 'home');
+      const appFolder = wbFindOrCreateDriveFolder(file.company_id, appName, appRoot.id);
+      const leaf = wbFindOrCreateDriveFolder(file.company_id, fieldName, appFolder.id);
+      if (!existingIds.has(file.folder) && file.folder !== leaf.id) file.folder = leaf.id;
+      return;
+    }
+    // Files posted to a workspace activity feed rebuild under Workspaces / <name>.
+    const fm = feedRx.exec(file.notes || '');
+    if (!fm) return;
+    const wsName = (fm[1] || '').trim();
+    if (!wsName) return;
+    const root = wbFindOrCreateDriveFolder(file.company_id, 'Workspaces', 'home');
+    const wsFolder = wbFindOrCreateDriveFolder(file.company_id, wsName, root.id);
+    if (!existingIds.has(file.folder) && file.folder !== wsFolder.id) file.folder = wsFolder.id;
   });
 }
 // Mirror a workspace-app file upload into Company Drive, filed under a nested
@@ -12370,6 +13411,7 @@ function wbMountFileFields(overlay) {
     };
     const upload = async (file) => {
       if (!file) return;
+      if (!(await guardUpload(file, isImage ? 'image' : 'document', 'Workspaces'))) return;
       openBtn.disabled = true;
       progress.hidden = false;
       bar.style.width = '20%';
@@ -12382,7 +13424,7 @@ function wbMountFileFields(overlay) {
       if (client) {
         try {
           const path = `${canonicalCompanyId(companyId)}/workspace/${crypto.randomUUID()}-${slugify(file.name)}`;
-          const up = await client.storage.from('quest-job-files').upload(path, file, { cacheControl: '3600', contentType: file.type || 'application/octet-stream' });
+          const up = await client.storage.from('quest-job-files').upload(path, file, { cacheControl: '3600', contentType: contentTypeFor(file) });
           bar.style.width = '70%';
           if (!up.error) {
             objectPath = path;
@@ -12704,8 +13746,13 @@ async function wbConfirmDeleteApp() {
     if (error) { m.error = 'Incorrect password.'; render(); return; }
   }
   const companyId = m.companyId;
-  const { workspace } = wbFind(companyId, m.workspaceId, m.appId);
-  if (workspace) workspace.apps = workspace.apps.filter((a) => a.id !== m.appId);
+  const { workspace, app } = wbFind(companyId, m.workspaceId, m.appId);
+  const appName = (app && app.name) || m.appName || 'app';
+  if (workspace) {
+    wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted app <b>${h(appName)}</b>` });
+    if (app) wbNotifyWorkspace(companyId, workspace, app, `App deleted: ${appName}`, `${actorName()} deleted the ${appName} app.`);
+    workspace.apps = workspace.apps.filter((a) => a.id !== m.appId);
+  }
   state.builderModal = null;
   wbSave(companyId);
   showToast('App deleted.', isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
@@ -12718,7 +13765,7 @@ function wbConfirmDelete() {
   const c = m.confirm; const companyId = m.companyId; const doc = wbDoc(companyId);
   if (c.op === 'del-ws') { doc.workspaces = doc.workspaces.filter((w) => w.id !== c.workspaceId); state.builderModal = null; wbSave(companyId); showToast('Workspace deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
   const { workspace, app } = wbFind(companyId, c.workspaceId, c.appId);
-  if (c.op === 'del-app') { workspace.apps = workspace.apps.filter((a) => a.id !== c.appId); state.builderModal = null; wbSave(companyId); showToast('App deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
+  if (c.op === 'del-app') { if (workspace && app) { wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted app <b>${h(app.name)}</b>` }); wbNotifyWorkspace(companyId, workspace, app, `App deleted: ${app.name}`, `${actorName()} deleted the ${app.name} app.`); } workspace.apps = workspace.apps.filter((a) => a.id !== c.appId); state.builderModal = null; wbSave(companyId); showToast('App deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
   if (c.op === 'del-field') { app.fields = app.fields.filter((f) => f.id !== c.fieldId); app.items.forEach((it) => { delete it.values[c.fieldId]; }); }
   else if (c.op === 'del-item') {
     const gone = app.items.find((i) => i.id === c.itemId);
@@ -12750,9 +13797,48 @@ function mountWorkspaceBuilder() {
   const workspaceId = wbCompanyWorkspace(companyId)?.id || '';
   const nav = (next) => navigate(companyPath('workspaces', next, companyId));
   const bind = (selector, handler, eventName = 'onclick') => document.querySelectorAll(selector).forEach((el) => { el[eventName] = handler.bind(null, el); });
+  // The top app bar is on both the dashboard and app views; size it to fit.
+  if (state.route?.section === 'workspaces') wbMountTopbar();
+  if (!state.wbTopbarResizeBound) { state.wbTopbarResizeBound = true; window.addEventListener('resize', () => { if (state.route?.section === 'workspaces') { wbMountTopbar(); wbLayoutTiles(); } }); }
   if (state.route?.section === 'workspaces' && !state.builderModal) {
+    bind('[data-wb-topbar-page]', (el) => { state.wbTopbarPage = +el.dataset.wbTopbarPage; render(); });
     bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp, tab: 'items' }));
     bind('[data-new-app]', () => openWbAppChooser(companyId, workspaceId));
+    // Workspace activity feed (dashboard home): publisher + posts.
+    wbMountComposer(companyId);
+    bind('[data-wb-compose-share]', () => wbComposerShare(companyId));
+    bind('[data-wb-post-like]', (el) => wbToggleFeedLike(companyId, el.dataset.wbPostLike));
+    bind('[data-wb-post-del]', (el) => wbDeleteFeedPost(companyId, el.dataset.wbPostDel));
+    bind('[data-wb-post-comment-toggle]', (el) => { const id = el.dataset.wbPostCommentToggle; const map = wbFeedOpenMap(); map[id] = !map[id]; render(); });
+    bind('[data-wb-post-cmt-add]', (el) => wbAddFeedComment(companyId, el.dataset.wbPostCmtAdd));
+    bind('[data-wb-post-cmt-del]', (el) => { const [pid, cid] = el.dataset.wbPostCmtDel.split(':'); wbDeleteFeedComment(companyId, pid, cid); });
+    bind('[data-wb-poll-vote]', (el) => { const [pid, oid] = el.dataset.wbPollVote.split(':'); wbVoteFeedPoll(companyId, pid, oid); });
+    document.querySelectorAll('[data-wb-post-cmt-input]').forEach((el) => { el.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); wbAddFeedComment(companyId, el.dataset.wbPostCmtInput); } }; });
+    // Sidebar widget tiles: customize toggle, add/reorder/config/remove, and per-tile actions.
+    bind('[data-wb-tile-manage]', () => { state.wbTileManage = !state.wbTileManage; render(); });
+    wbMountTileDnD(companyId);
+    wbLayoutTiles();
+    // Images load async and change tile height — re-pack once they're ready.
+    document.querySelectorAll('[data-wb-tile-grid] .wb-tile-img img').forEach((img) => { if (!img.complete) img.onload = () => wbLayoutTiles(); });
+    // Web fonts can shift heights after first paint — re-pack once, when ready.
+    if (!state.wbFontsPacked && document.fonts && document.fonts.ready) { state.wbFontsPacked = true; document.fonts.ready.then(() => wbLayoutTiles()); }
+    bind('[data-wb-tile-add]', () => openWbTileAdd(companyId));
+    bind('[data-wb-tile-up]', (el) => wbMoveTile(companyId, el.dataset.wbTileUp, 'up'));
+    bind('[data-wb-tile-down]', (el) => wbMoveTile(companyId, el.dataset.wbTileDown, 'down'));
+    bind('[data-wb-tile-config]', (el) => openWbTileConfig(companyId, el.dataset.wbTileConfig));
+    bind('[data-wb-tile-remove]', (el) => wbRemoveTile(companyId, el.dataset.wbTileRemove));
+    bind('[data-wb-tile-page]', (el) => { const [tid, p] = el.dataset.wbTilePage.split(':'); state.wbTilePage = state.wbTilePage || {}; state.wbTilePage[tid] = +p; render(); });
+    bind('[data-wb-tile-addrec]', (el) => { const t = wbCompanyWorkspace(companyId)?.tiles?.find((x) => x.id === el.dataset.wbTileAddrec); if (t?.config?.appId) openWbItemModal(companyId, workspaceId, t.config.appId, ''); });
+    bind('[data-wb-tile-openrec]', (el) => { const [tid, rid] = el.dataset.wbTileOpenrec.split(':'); const t = wbCompanyWorkspace(companyId)?.tiles?.find((x) => x.id === tid); if (t?.config?.appId) openWbItemModal(companyId, workspaceId, t.config.appId, rid); });
+    bind('[data-wb-tile-task-toggle]', (el) => wbTileToggleTask(companyId, el.dataset.wbTileTaskToggle));
+    bind('[data-wb-taskadd-toggle]', () => { state.wbTaskAddOpen = true; render(); });
+    bind('[data-wb-taskadd-cancel]', () => { state.wbTaskAddOpen = false; render(); });
+    bind('[data-wb-taskadd-save]', () => wbTileAddTask(companyId));
+    bind('[data-wb-contactadd-toggle]', () => { state.wbContactAddOpen = true; render(); });
+    bind('[data-wb-contactadd-cancel]', () => { state.wbContactAddOpen = false; render(); });
+    bind('[data-wb-contactadd-save]', () => wbTileAddContact(companyId));
+    bind('[data-wb-tile-lightbox]', (el) => { const [url, name] = el.dataset.wbTileLightbox.split('|'); openWbFilePreview(url, name); });
+    bind('[data-wb-cal-nav]', (el) => { const c = wbCalCursor(); const d = new Date(c.year, c.month + Number(el.dataset.wbCalNav), 1); state.wbCalMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; render(); });
     bind('[data-wb-install-app]', () => wbInstallAppPrompt(companyId, workspaceId));
     bind('[data-wb-download-app]', () => wbDownloadApp(companyId, workspaceId, appId));
     bind('[data-wb-share-app]', () => { if (!wbGuard()) return; const { app } = wbFind(companyId, workspaceId, appId); if (!app) return; app.shared = !app.shared; wbSave(companyId); showToast(app.shared ? `"${app.name}" is now shared to the Quest App Market.` : `"${app.name}" removed from the Quest App Market.`, 'local', 'Workspaces'); render(); });
@@ -12919,6 +14005,36 @@ function wbMountModal() {
   overlay.querySelectorAll('[data-wb-acdel]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); m.draft.actions.splice(+b.dataset.wbAcdel, 1); render(); }; });
   const addAct = overlay.querySelector('[data-wb-auto-add-action]'); if (addAct) addAct.onclick = () => { wbCollectModalDraft(); m.draft.actions.push({ type: 'notify', message: '' }); render(); };
   const submit = overlay.querySelector('[data-wb-submit]'); if (submit) submit.onclick = () => wbSubmitModal();
+  // Sidebar tile modals: pick a type, configure, save, and edit link rows.
+  overlay.querySelectorAll('[data-wb-tile-pick]').forEach((b) => { b.onclick = () => wbAddTile(m.companyId, b.dataset.wbTilePick); });
+  const tileSave = overlay.querySelector('[data-wb-tile-save]'); if (tileSave) tileSave.onclick = () => wbSaveTileConfig(m.companyId);
+  const tileApp = overlay.querySelector('[data-wb-tilecfg-app]'); if (tileApp && m.kind === 'tile-config') tileApp.onchange = () => { m.draft.appId = tileApp.value; m.draft.reportId = ''; render(); };
+  const addLink = overlay.querySelector('[data-wb-tilecfg-addlink]'); if (addLink) addLink.onclick = () => { const wrap = overlay.querySelector('[data-wb-tilecfg-links]'); if (wrap) wrap.insertAdjacentHTML('beforeend', wbTileLinkRow({ label: '', url: '' })); };
+  overlay.querySelectorAll('[data-wb-tilecfg-dellink]').forEach((b) => { b.onclick = () => { const row = b.closest('[data-wb-tilecfg-linkrow]'); if (row) row.remove(); }; });
+  // Image tile: upload a real image file (validated), embedded as a data URL so
+  // it persists with the dashboard. A URL remains an optional alternative.
+  const tileImg = overlay.querySelector('[data-wb-tilecfg-image]');
+  if (tileImg) tileImg.onchange = async () => {
+    const file = tileImg.files && tileImg.files[0];
+    if (!file) return;
+    if (!(await guardUpload(file, 'tileimage', 'Workspaces'))) { tileImg.value = ''; return; }
+    m.draft.caption = overlay.querySelector('[data-wb-tilecfg-caption]')?.value || m.draft.caption || '';
+    const label = overlay.querySelector('[data-wb-tilecfg-image] + i + span, .wb-file-drop span');
+    if (label) label.textContent = 'Uploading…';
+    const uploaded = await wbUploadTileImage(m.companyId, file);
+    if (!uploaded) { tileImg.value = ''; render(); return; }
+    m.draft.objectPath = uploaded.objectPath || '';
+    m.draft.bucket = uploaded.bucket || '';
+    m.draft.url = uploaded.dataUrl || '';
+    m.draft._preview = uploaded.previewUrl || uploaded.dataUrl || '';
+    render();
+  };
+  const tileImgClear = overlay.querySelector('[data-wb-tilecfg-image-clear]');
+  if (tileImgClear) tileImgClear.onclick = () => {
+    m.draft.caption = overlay.querySelector('[data-wb-tilecfg-caption]')?.value || m.draft.caption || '';
+    m.draft.objectPath = ''; m.draft.bucket = ''; m.draft.url = ''; m.draft._preview = '';
+    render();
+  };
   const confirmBtn = overlay.querySelector('[data-wb-confirm]'); if (confirmBtn) confirmBtn.onclick = () => wbConfirmDelete();
   const delWsBtn = overlay.querySelector('[data-wb-delete-ws-confirm]'); if (delWsBtn) delWsBtn.onclick = () => wbConfirmDeleteWorkspace();
   const delAppBtn = overlay.querySelector('[data-wb-delete-app-confirm]'); if (delAppBtn) delAppBtn.onclick = () => wbConfirmDeleteApp();
@@ -16098,7 +17214,7 @@ function renderMessageComposer(conversation) {
     <form class="message-composer" data-message-form data-conversation-id="${h(conversation.id)}">
       <label class="icon-button message-attach-button" title="Attach file">
         <i class="ti ti-paperclip"></i>
-        <input name="attachments" type="file" multiple ${can('messages.attach_files', conversation.company_id) ? '' : 'disabled'} />
+        <input name="attachments" type="file" multiple accept="${acceptAttr('document')}" ${can('messages.attach_files', conversation.company_id) ? '' : 'disabled'} />
       </label>
       <input name="body" placeholder="Message ${h(conversation.title)}" autocomplete="off" />
       <button class="icon-button btn-primary" type="submit" title="Send"><i class="ti ti-send"></i></button>
@@ -21527,8 +22643,8 @@ async function prepareProfileAvatarCrop(formNode) {
   const hidden = formNode.querySelector('[data-profile-cropped-avatar]');
   if (hidden) hidden.value = '';
   if (!file) return;
-  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-  if (!allowed.includes(file.type)) throw new Error('Use a PNG, JPG, or WebP image for your profile picture.');
+  const check = await validateUpload(file, 'image');
+  if (!check.ok) throw new Error(check.reason);
   if (file.size > 2 * 1024 * 1024) throw new Error('Profile pictures must be 2 MB or smaller.');
   const dataUrl = await fileToDataUrl(file);
   if (!dataUrl) throw new Error('Could not read that image file.');
@@ -21640,11 +22756,8 @@ function cancelProfileAvatarCrop(formNode) {
 }
 
 async function saveProfileAvatar(file) {
-  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-  if (!allowed.includes(file.type)) {
-    showToast('Use a PNG, JPG, or WebP image for your profile picture.', 'local', 'Profile');
-    return { ok: false, url: '' };
-  }
+  const check = await validateUpload(file, 'image');
+  if (!check.ok) { showToast(check.reason, 'error', 'Profile'); return { ok: false, url: '' }; }
   if (file.size > 2 * 1024 * 1024) {
     showToast('Profile pictures must be 2 MB or smaller.', 'local', 'Profile');
     return { ok: false, url: '' };
@@ -21663,7 +22776,7 @@ async function saveProfileAvatar(file) {
   const objectPath = `${profileId}/avatar-${Date.now()}.${ext}`;
   const upload = await client.storage
     .from('avatars')
-    .upload(objectPath, file, { cacheControl: '3600', upsert: true, contentType: file.type });
+    .upload(objectPath, file, { cacheControl: '3600', upsert: true, contentType: contentTypeFor(file) });
   if (upload.error) {
     showToast(upload.error.message || 'Profile picture upload failed.', 'local', 'Profile');
     return { ok: false, url: '' };
@@ -22913,6 +24026,7 @@ async function sendMessage(form) {
     showToast('Your role cannot attach files.', 'local', 'Messages');
     return;
   }
+  for (const file of files) { if (!(await guardUpload(file, 'document', 'Messages'))) return; }
   await createMessageRecord(conversation, body, files);
   form.reset();
   render();
@@ -23032,7 +24146,7 @@ async function saveMessageAttachments(message, files) {
     if (isLiveSupabaseSession() && client) {
       const upload = await client.storage
         .from('quest-message-attachments')
-        .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || 'application/octet-stream' });
+        .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: contentTypeFor(file) });
       if (upload.error) {
         showToast(upload.error.message || 'Attachment upload failed.', 'local', 'Messages');
         continue;
@@ -23589,13 +24703,14 @@ async function saveFileRecord(form) {
     setProgress();
     const fileId = crypto.randomUUID();
     const fileName = item?.name || metadataName;
+    if (item && !(await guardUpload(item, 'document', 'Files'))) { failed += 1; continue; }
     const folder = String(fields.folder || 'shared');
     const objectPath = `${companyId}/${fields.job_id ? `jobs/${fields.job_id}` : folder}/${fileId}-${slugify(fileName)}`;
     let uploaded = false;
     if (client && item) {
       const storageResult = await client.storage
         .from('quest-job-files')
-        .upload(objectPath, item, { cacheControl: '3600', upsert: false, contentType: item.type || 'application/octet-stream' });
+        .upload(objectPath, item, { cacheControl: '3600', upsert: false, contentType: contentTypeFor(item) });
       uploaded = !storageResult.error;
       if (storageResult.error) lastError = storageResult.error;
     }
@@ -23742,13 +24857,14 @@ async function saveClientPortalDocuments(form) {
   for (const file of files) {
     done += 1;
     setProgress();
+    if (!(await guardUpload(file, 'document', 'Client Portal'))) continue;
     const id = crypto.randomUUID();
     const objectPath = `${companyId}/portals/${portal.id}/${id}-${slugify(file.name || 'plan-set')}`;
     let uploaded = false;
     if (isLiveSupabaseSession() && client) {
       const upload = await client.storage
         .from('quest-client-portal-documents')
-        .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || 'application/octet-stream' });
+        .upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: contentTypeFor(file) });
       if (upload.error) {
         showToast(upload.error.message || 'Plan upload failed.', 'local', 'Client Portal');
         continue;
@@ -27258,6 +28374,8 @@ async function downloadBackupZip(backup) {
 
 async function importWorkspaceBackupFile(file) {
   if (!file) return;
+  const check = await validateUpload(file, 'backup');
+  if (!check.ok) throw new Error(check.reason);
   const JSZip = await loadJsZip();
   const zip = await JSZip.loadAsync(file);
   const entry = zip.file('quest-backup.json');
@@ -28778,8 +29896,8 @@ async function prepareWorkspaceIconUpload(file) {
     return;
   }
   if (!file) return;
-  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-  if (!allowed.includes(file.type)) throw new Error('Use a PNG, JPG, or WebP workspace icon.');
+  const check = await validateUpload(file, 'image');
+  if (!check.ok) throw new Error(check.reason);
   if (file.size > 2 * 1024 * 1024) throw new Error('Workspace icon uploads must be 2 MB or smaller.');
   const dataUrl = await fileToDataUrl(file);
   const image = await loadImage(dataUrl);
@@ -32913,6 +34031,8 @@ async function saveFormResponse(formEl) {
 }
 
 async function uploadPublicFormFile(form, question, file) {
+  const check = await validateUpload(file, 'formfile');
+  if (!check.ok) throw new Error(check.reason);
   const response = await fetch('/api/public-form-file-upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -32920,7 +34040,7 @@ async function uploadPublicFormFile(form, question, file) {
       form_id: form.id,
       question_id: question.id,
       file_name: file.name,
-      file_type: file.type,
+      file_type: contentTypeFor(file),
       file_size: file.size,
     }),
   });
@@ -32932,7 +34052,7 @@ async function uploadPublicFormFile(form, question, file) {
     .storage
     .from(payload.bucket_id)
     .uploadToSignedUrl(payload.object_path, payload.token, file, {
-      contentType: file.type || 'application/octet-stream',
+      contentType: contentTypeFor(file),
     });
   if (upload.error) throw upload.error;
   return formFileAnswerMeta(file, '', {

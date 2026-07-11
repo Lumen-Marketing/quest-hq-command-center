@@ -5,6 +5,8 @@ import { enforceRateLimit } from './_lib/rate-limit.js';
 
 const FORM_FILE_BUCKET = 'quest-form-response-files';
 const FORM_FILE_MAX_BYTES = 15 * 1024 * 1024;
+// Kept in lockstep with the client `formfile` policy (src/security/upload-policy.js).
+// ZIP-based office formats are intentionally excluded ("drop anything ZIP").
 const ALLOWED_PUBLIC_FORM_FILE_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -12,11 +14,22 @@ const ALLOWED_PUBLIC_FORM_FILE_TYPES = new Set([
   'application/pdf',
   'text/plain',
   'text/csv',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
+const ALLOWED_PUBLIC_FORM_FILE_EXTS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'csv']);
+const DANGEROUS_UPLOAD_EXTS = new Set([
+  'exe', 'bat', 'cmd', 'com', 'msi', 'scr', 'pif', 'sh', 'bash', 'ps1', 'vbs', 'js', 'mjs',
+  'jse', 'wsf', 'jar', 'app', 'apk', 'dmg', 'deb', 'rpm', 'html', 'htm', 'xhtml', 'svg',
+  'php', 'phtml', 'asp', 'aspx', 'jsp', 'py', 'rb', 'pl', 'dll', 'so', 'bin', 'lnk', 'reg',
+  'hta', 'cpl', 'zip',
+]);
+function uploadFileExtension(name) {
+  const clean = String(name || '').toLowerCase();
+  const dot = clean.lastIndexOf('.');
+  return dot >= 0 ? clean.slice(dot + 1) : '';
+}
+function hasDangerousUploadExtension(name) {
+  return String(name || '').toLowerCase().split('.').slice(1).some((part) => DANGEROUS_UPLOAD_EXTS.has(part.trim()));
+}
 
 const env = (name) => process.env[name] || '';
 const baseUrl = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
@@ -86,6 +99,8 @@ export default async function handler(req, res) {
     const fileSize = Number(body.file_size || 0) || 0;
     if (!formId || !questionId) return res.status(400).json({ error: 'Missing form or question.' });
     if (fileSize <= 0 || fileSize > FORM_FILE_MAX_BYTES) return res.status(413).json({ error: 'File is too large for this form.' });
+    if (hasDangerousUploadExtension(body.file_name)) return res.status(415).json({ error: 'That file type is blocked for security reasons.' });
+    if (!ALLOWED_PUBLIC_FORM_FILE_EXTS.has(uploadFileExtension(fileName))) return res.status(415).json({ error: 'Unsupported file extension.' });
     if (!ALLOWED_PUBLIC_FORM_FILE_TYPES.has(fileType)) return res.status(415).json({ error: 'Unsupported file type.' });
 
     const forms = await supabaseGet(`forms?id=eq.${encodeURIComponent(formId)}&status=eq.Published&select=id,company_id,status,questions`);

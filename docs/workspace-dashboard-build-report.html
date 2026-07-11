@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quest HQ — Workspace Dashboard &amp; Upload Security · Build Report</title>
+</head>
+<body>
+<style>
+  :root{
+    --bg:#f6f2ec; --surface:#ffffff; --surface-2:#efe9df; --ink:#1b1712; --muted:#6d6357;
+    --border:#e6ddce; --hair:#efe8dc;
+    --accent:#e0552d; --accent-2:#f0883e; --accent-soft:rgba(224,85,45,.10);
+    --good:#2f8f5b; --good-bg:rgba(47,143,91,.12); --good-bd:rgba(47,143,91,.35);
+    --warn:#b07514; --warn-bg:rgba(176,117,20,.13); --warn-bd:rgba(176,117,20,.38);
+    --shadow:0 1px 2px rgba(27,23,18,.05),0 8px 24px rgba(27,23,18,.06);
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,"Cascadia Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#131009; --surface:#1d1912; --surface-2:#262018; --ink:#f4eee3; --muted:#a99d8b;
+      --border:#332c21; --hair:#2a2419;
+      --accent:#f0883e; --accent-2:#f2a15f; --accent-soft:rgba(240,136,62,.13);
+      --good:#5ccb8d; --good-bg:rgba(92,203,141,.14); --good-bd:rgba(92,203,141,.32);
+      --warn:#e0a544; --warn-bg:rgba(224,165,68,.14); --warn-bd:rgba(224,165,68,.34);
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f2ec; --surface:#ffffff; --surface-2:#efe9df; --ink:#1b1712; --muted:#6d6357;
+    --border:#e6ddce; --hair:#efe8dc; --accent:#e0552d; --accent-2:#f0883e; --accent-soft:rgba(224,85,45,.10);
+    --good:#2f8f5b; --good-bg:rgba(47,143,91,.12); --good-bd:rgba(47,143,91,.35);
+    --warn:#b07514; --warn-bg:rgba(176,117,20,.13); --warn-bd:rgba(176,117,20,.38);
+    --shadow:0 1px 2px rgba(27,23,18,.05),0 8px 24px rgba(27,23,18,.06);
+  }
+  :root[data-theme="dark"]{
+    --bg:#131009; --surface:#1d1912; --surface-2:#262018; --ink:#f4eee3; --muted:#a99d8b;
+    --border:#332c21; --hair:#2a2419; --accent:#f0883e; --accent-2:#f2a15f; --accent-soft:rgba(240,136,62,.13);
+    --good:#5ccb8d; --good-bg:rgba(92,203,141,.14); --good-bd:rgba(92,203,141,.32);
+    --warn:#e0a544; --warn-bg:rgba(224,165,68,.14); --warn-bd:rgba(224,165,68,.34);
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.62;font-size:16px;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:960px;margin:0 auto;padding:clamp(20px,5vw,64px) clamp(18px,5vw,40px) 80px;}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);
+    padding:.08em .38em;border-radius:5px;border:1px solid var(--hair)}
+
+  /* Masthead */
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);font-weight:600;margin:0 0 14px}
+  h1{font-size:clamp(2rem,5.4vw,3.15rem);line-height:1.04;letter-spacing:-.025em;font-weight:850;
+    margin:0;text-wrap:balance;background:linear-gradient(100deg,var(--ink),var(--ink) 55%,var(--accent));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{font-size:1.12rem;color:var(--muted);max-width:60ch;margin:16px 0 20px;text-wrap:pretty}
+  .meta{font-family:var(--mono);font-size:.8rem;color:var(--muted);display:flex;gap:10px 18px;
+    flex-wrap:wrap;align-items:center;padding-bottom:26px;border-bottom:1px solid var(--border)}
+  .meta .dot{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px var(--good-bg)}
+
+  /* Stat strip */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+    background:var(--border);border:1px solid var(--border);border-radius:14px;overflow:hidden;
+    margin:26px 0 8px;box-shadow:var(--shadow)}
+  .stat{background:var(--surface);padding:18px 20px;display:flex;flex-direction:column;gap:3px}
+  .stat b{font-family:var(--mono);font-size:1.9rem;font-weight:680;letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums;line-height:1}
+  .stat span{font-size:.82rem;color:var(--muted)}
+  .stat em{font-style:normal;color:var(--good);font-weight:640}
+
+  /* Sections */
+  section{margin-top:52px}
+  .sect-head{display:flex;align-items:baseline;gap:12px;margin-bottom:22px}
+  .sect-head h2{font-size:1.5rem;letter-spacing:-.02em;font-weight:800;margin:0}
+  .sect-num{font-family:var(--mono);font-size:.82rem;color:var(--accent);font-weight:600;
+    padding-top:.35em}
+  .sect-sub{color:var(--muted);margin:-8px 0 22px;max-width:64ch}
+
+  /* Phase cards */
+  .phases{display:flex;flex-direction:column;gap:14px}
+  .phase{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:20px 22px 20px 24px;box-shadow:var(--shadow);overflow:hidden}
+  .phase::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+    background:linear-gradient(var(--accent),var(--accent-2))}
+  .phase-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+  .phase-n{font-family:var(--mono);font-size:.78rem;font-weight:600;color:var(--accent);
+    background:var(--accent-soft);padding:3px 9px;border-radius:6px}
+  .phase h3{margin:0;font-size:1.12rem;font-weight:750;letter-spacing:-.01em}
+  .phase p{margin:0;color:var(--muted);font-size:.95rem}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .tag{font-size:.76rem;font-family:var(--mono);color:var(--ink);background:var(--surface-2);
+    border:1px solid var(--hair);padding:3px 9px;border-radius:999px}
+
+  /* Changelog */
+  .log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+  .log li{display:flex;gap:14px;padding:15px 2px;border-bottom:1px solid var(--hair)}
+  .log li:last-child{border-bottom:0}
+  .log .mk{flex:none;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;
+    background:var(--good-bg);color:var(--good);border:1px solid var(--good-bd);
+    font-family:var(--mono);font-weight:700;font-size:.8rem;margin-top:2px}
+  .log .txt b{font-weight:680}
+  .log .txt span{display:block;color:var(--muted);font-size:.9rem;margin-top:2px}
+
+  /* Security panel */
+  .sec{background:
+    linear-gradient(180deg,var(--accent-soft),transparent 40%),var(--surface);
+    border:1px solid var(--accent);border-radius:18px;padding:clamp(22px,4vw,34px);box-shadow:var(--shadow)}
+  .sec .kicker{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:.74rem;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:6px}
+  .sec h2{margin:0 0 6px;font-size:1.55rem;letter-spacing:-.02em}
+  .sec .quote{color:var(--muted);font-style:italic;margin:0 0 22px}
+  .layers{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:22px}
+  .layer{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px 16px}
+  .layer .ln{font-family:var(--mono);font-size:.72rem;color:var(--accent);font-weight:600;margin-bottom:6px}
+  .layer h4{margin:0 0 5px;font-size:.98rem;font-weight:720}
+  .layer p{margin:0;font-size:.86rem;color:var(--muted)}
+  .attack{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--bg);
+    border:1px dashed var(--accent);border-radius:12px;padding:14px 18px;font-family:var(--mono);font-size:.86rem}
+  .attack .bad{color:var(--muted);text-decoration:line-through}
+  .attack .arrow{color:var(--accent)}
+  .attack .blocked{color:var(--good);font-weight:640;display:inline-flex;align-items:center;gap:6px}
+  .sec-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:22px}
+  .sec-item h4{margin:0 0 4px;font-size:.92rem;font-weight:720;display:flex;align-items:center;gap:7px}
+  .sec-item p{margin:0;font-size:.87rem;color:var(--muted)}
+  .sec-item .b{font-family:var(--mono);color:var(--accent);font-size:.8rem}
+
+  /* Verify + action */
+  .callout{display:flex;gap:16px;align-items:flex-start;border-radius:14px;padding:20px 22px;margin-top:16px}
+  .callout.good{background:var(--good-bg);border:1px solid var(--good-bd)}
+  .callout.warn{background:var(--warn-bg);border:1px solid var(--warn-bd)}
+  .callout .ic{flex:none;font-size:1.3rem;line-height:1}
+  .callout h3{margin:0 0 4px;font-size:1.02rem;font-weight:740}
+  .callout p{margin:0;color:var(--ink);font-size:.92rem;opacity:.85}
+  .callout.warn code{background:rgba(0,0,0,.06)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{font-family:var(--mono);font-size:.76rem;padding:3px 10px;border-radius:999px;
+    background:var(--surface);border:1px solid var(--border);font-variant-numeric:tabular-nums}
+  .chip.ok{color:var(--good);border-color:var(--good-bd);background:var(--good-bg)}
+
+  footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--border);
+    font-family:var(--mono);font-size:.76rem;color:var(--muted);display:flex;justify-content:space-between;
+    gap:14px;flex-wrap:wrap}
+
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Quest HQ Command Center — Build report</p>
+    <h1>Workspace Dashboard &amp; Upload Security</h1>
+    <p class="lede">A Podio-style workspace dashboard — built from spec across three phases — plus a full three-layer defense that hardens every file-upload path in the app.</p>
+    <div class="meta">
+      <span class="dot" aria-hidden="true"></span>
+      <span>July 11, 2026</span><span>Branch <code>main</code> · local</span><span>Verified: tests + build green</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><b>221</b><span>tests passing <em>+7 today</em></span></div>
+      <div class="stat"><b>3</b><span>dashboard phases shipped</span></div>
+      <div class="stat"><b>9</b><span>configurable tile types</span></div>
+      <div class="stat"><b>11</b><span>upload paths secured</span></div>
+      <div class="stat"><b>3</b><span>layers of upload defense</span></div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="sect-head"><span class="sect-num">01</span><h2>The Workspace Dashboard</h2></div>
+      <p class="sect-sub">The Workspaces landing was rebuilt from an apps grid into an interactive, Podio-style dashboard — feed in the centre, configurable tiles on the side, a persistent app switcher on top. Delivered in three sequenced phases.</p>
+      <div class="phases">
+        <article class="phase">
+          <div class="phase-top"><span class="phase-n">Phase 1</span><h3>Dashboard shell</h3></div>
+          <p>Two-column layout with a persistent app-switcher header that stays consistent between the Activity view and every app — no jarring when you toggle around.</p>
+          <div class="tags"><span class="tag">two-column layout</span><span class="tag">app-switcher header</span><span class="tag">uniform across views</span></div>
+        </article>
+        <article class="phase">
+          <div class="phase-top"><span class="phase-n">Phase 2</span><h3>Activity feed &amp; publisher hub</h3></div>
+          <p>A real feed with a publisher: <b>Post · File · Link · Question</b>. Likes, comments, @-mentions, and in-feed task creation that spawns a genuine assignable task in “My tasks”. Member posts and system activity interleave into one stream.</p>
+          <div class="tags"><span class="tag">post / file / link / poll</span><span class="tag">likes + comments</span><span class="tag">@mentions</span><span class="tag">in-feed tasks</span></div>
+        </article>
+        <article class="phase">
+          <div class="phase-top"><span class="phase-n">Phase 3</span><h3>Configurable tile sidebar</h3></div>
+          <p>Nine tile types — App records, Reports, Tasks, Calendar, Contacts, Apps, Text, Image, Links — with a Customize mode to add, configure, reorder, drag, and remove. Layout persists per workspace and packs as a gap-free masonry.</p>
+          <div class="tags"><span class="tag">9 tile types</span><span class="tag">drag reorder</span><span class="tag">masonry pack</span><span class="tag">per-workspace layout</span></div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="sect-head"><span class="sect-num">02</span><h2>Refinements shipped today</h2></div>
+      <p class="sect-sub">Iterative polish on the dashboard, driven feature-by-feature.</p>
+      <ul class="log">
+        <li><span class="mk">✓</span><div class="txt"><b>Calendar tile → mini month calendar</b><span>Event days highlighted with dots, today ringed, click a day to add an event on that date — no trip to the Calendar menu.</span></div></li>
+        <li><span class="mk">✓</span><div class="txt"><b>Workspace tasks tile fixed + inline add</b><span>Now mirrors “My tasks” (completed shown struck-through), the checkbox toggles done both ways, and a header “+” adds a task inline.</span></div></li>
+        <li><span class="mk">✓</span><div class="txt"><b>Contacts tile — inline add contact</b><span>Header “+” creates a contact (name / email / phone) straight from the dashboard via the same path the Contacts section uses.</span></div></li>
+        <li><span class="mk">✓</span><div class="txt"><b>Image tile — real file upload</b><span>Upload up to 25&nbsp;MB to Supabase Storage with per-session re-signed URLs (no expiry); URL is now optional; small inline fallback for local/demo.</span></div></li>
+        <li><span class="mk">✓</span><div class="txt"><b>App bar — paginated, vertical, uniform</b><span>Replaced the scroll slider with a fit-to-width bar and ‹ › paging; tabs are icon-over-label; the switcher sits in the same spot on every view.</span></div></li>
+        <li><span class="mk">✓</span><div class="txt"><b>Files posted to the feed get filed away</b><span>Attachments land in the Files module under <code>Workspaces / &lt;workspace name&gt;</code>, and the folder rebuilds on reload.</span></div></li>
+        <li><span class="mk">✓</span><div class="txt"><b>App deletion is now logged</b><span>Deleting an app drops a red-trash entry into the activity feed and notifies the workspace — no more silent removals.</span></div></li>
+      </ul>
+    </section>
+
+    <section>
+      <div class="sec">
+        <div class="kicker">🛡️ Abe’s nightmare — solved</div>
+        <h2>File-upload security hardening</h2>
+        <p class="quote">“What if someone uploads a malicious file?” — every upload path in the app now answers that, in three layers.</p>
+
+        <div class="layers">
+          <div class="layer"><div class="ln">Layer 1 · Frontend</div><h4>The <code>accept</code> filter</h4><p>The picker only offers allowed types. A nicety — easily bypassed with DevTools, so never trusted alone.</p></div>
+          <div class="layer"><div class="ln">Layer 2 · Surface check</div><h4>Extension + MIME</h4><p>Extension and MIME must agree. Dangerous and double extensions (<code>invoice.pdf.exe</code>) are dropped instantly.</p></div>
+          <div class="layer"><div class="ln">Layer 3 · The truth</div><h4>Magic bytes</h4><p>Read the real bytes and confirm the signature. The binary never lies — a renamed file is caught here.</p></div>
+        </div>
+
+        <div class="attack">
+          <span class="bad">malware.zip → photo.jpg</span>
+          <span class="arrow">→</span>
+          <span class="blocked">⛔ blocked by the magic-byte check</span>
+        </div>
+
+        <div class="sec-grid">
+          <div class="sec-item"><h4>One shared policy</h4><p>A single <span class="b">upload-policy.js</span> module — per-context allowlists, size caps, filename sanitization — wired into all <b>11</b> upload entry points.</p></div>
+          <div class="sec-item"><h4>Server backstop</h4><p>The API endpoint validates extension + MIME + size; uploads declare a canonical Content-Type so bucket rules actually bite.</p></div>
+          <div class="sec-item"><h4>Bucket lock-down</h4><p>A migration sets <span class="b">allowed_mime_types</span> + <span class="b">file_size_limit</span> per bucket, makes doc buckets private, with folder-scoped RLS ready to enable.</p></div>
+          <div class="sec-item"><h4>Proven by tests</h4><p>Seven new regression tests, including the exact renamed-malware case, lock the behavior in.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sect-head"><span class="sect-num">03</span><h2>Verification &amp; next step</h2></div>
+      <div class="callout good">
+        <span class="ic" aria-hidden="true">✅</span>
+        <div>
+          <h3>Everything is green</h3>
+          <p>Full test suite passes, production build succeeds, and the bundle-budget check is within limits — checked after every change.</p>
+          <div class="chips"><span class="chip ok">tests 221 / 221</span><span class="chip ok">build ✓</span><span class="chip ok">bundle budget ✓</span></div>
+        </div>
+      </div>
+      <div class="callout warn">
+        <span class="ic" aria-hidden="true">⚠️</span>
+        <div>
+          <h3>One manual step for you</h3>
+          <p>The security backstop needs the storage migration deployed to production — <code>202607111000_harden_file_upload_buckets.sql</code>. Until then, the client + API layers are live but the bucket-level rules aren’t. Deployment stays in your hands (no auto-deploy).</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Quest HQ Command Center · Workspace Dashboard &amp; Upload Security</span>
+    <span>Report generated July 11, 2026</span>
+  </footer>
+</div>
+</body>
+</html>
