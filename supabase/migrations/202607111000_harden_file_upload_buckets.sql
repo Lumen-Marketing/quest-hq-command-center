@@ -14,6 +14,7 @@
 -- it never lands in Storage — so no bucket allows application/zip.
 
 -- Document buckets: PDF, images, and plain text/CSV. 25 MB.
+-- (quest-finance-attachments holds invoices/receipts — same document policy.)
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values
   ('quest-job-files', 'quest-job-files', false, 26214400,
@@ -21,6 +22,8 @@ values
   ('quest-message-attachments', 'quest-message-attachments', false, 26214400,
     array['application/pdf','image/png','image/jpeg','image/webp','image/gif','text/plain','text/csv']),
   ('quest-client-portal-documents', 'quest-client-portal-documents', false, 26214400,
+    array['application/pdf','image/png','image/jpeg','image/webp','image/gif','text/plain','text/csv']),
+  ('quest-finance-attachments', 'quest-finance-attachments', false, 26214400,
     array['application/pdf','image/png','image/jpeg','image/webp','image/gif','text/plain','text/csv'])
 on conflict (id) do update
 set public = excluded.public,
