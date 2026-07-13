@@ -22,8 +22,8 @@ test('production guardian checks main and maintains one recoverable incident', (
     source,
     /^concurrency:[\t ]*\r?\n {2}group:[\t ]*production-guardian[\t ]*\r?\n {2}queue:[\t ]*max[\t ]*\r?\n {2}cancel-in-progress:[\t ]*false$/m,
   );
-  assert.match(source, /uses:\s*actions\/checkout@v4[\s\S]*?with:\s*\n\s+ref:\s*main/);
-  assert.match(source, /uses:\s*actions\/setup-node@v4[\s\S]*?node-version:\s*22/);
+  assert.match(source, /uses:\s*actions\/checkout@v5[\s\S]*?with:\s*\n\s+ref:\s*main/);
+  assert.match(source, /uses:\s*actions\/setup-node@v5[\s\S]*?node-version:\s*22/);
   assert.match(source, /run:\s*npm ci\b/);
   assert.match(source, /id:\s*revision[\s\S]*?git rev-parse HEAD[\s\S]*?GITHUB_OUTPUT/);
   assert.match(source, /id:\s*smoke[\s\S]*?continue-on-error:\s*true/);
