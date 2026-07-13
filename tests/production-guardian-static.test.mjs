@@ -32,7 +32,7 @@ test('production guardian checks main and maintains one recoverable incident', (
     /npm run smoke:prod -- --base-url https:\/\/quest-hq-command-center-gamma\.vercel\.app --expect-sha "\$\{\{ steps\.revision\.outputs\.sha \}\}"/,
   );
 
-  assert.equal(source.match(/uses:\s*actions\/github-script@v7/g)?.length, 2);
+  assert.equal(source.match(/uses:\s*actions\/github-script@v8/g)?.length, 2);
   assert.equal(
     source.match(/\[Production Guardian\] Quest HQ production smoke check failing/g)?.length,
     2,

@@ -39,7 +39,7 @@ Expected: FAIL because `.github/workflows/production-guardian.yml` does not exis
 
 - [ ] **Step 3: Add the minimal workflow**
 
-Create `.github/workflows/production-guardian.yml` with `schedule` and `workflow_dispatch` triggers. Use `actions/checkout@v5`, `actions/setup-node@v5`, `npm ci`, the existing smoke command, and `actions/github-script@v7` for the idempotent failure/recovery issue lifecycle.
+Create `.github/workflows/production-guardian.yml` with `schedule` and `workflow_dispatch` triggers. Use `actions/checkout@v5`, `actions/setup-node@v5`, `npm ci`, the existing smoke command, and `actions/github-script@v8` for the idempotent failure/recovery issue lifecycle.
 
 - [ ] **Step 4: Run the focused test and verify it passes**
 

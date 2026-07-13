@@ -45,7 +45,7 @@ jobs:
 
       - name: Open or update failure incident
         if: steps.smoke.outcome == 'failure'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const title = '[Production Guardian] Quest HQ production smoke check failing';
@@ -84,7 +84,7 @@ jobs:
 
       - name: Close recovered incident
         if: always() && steps.smoke.outcome == 'success'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const title = '[Production Guardian] Quest HQ production smoke check failing';
