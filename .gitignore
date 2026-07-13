@@ -55,3 +55,9 @@ desktop.ini
 
 # Vercel local metadata
 .vercel/
+
+# Local env files — may hold Vercel OIDC tokens / Supabase keys.
+# .env.example is intentionally tracked and must stay committed.
+.env
+.env.local
+.env*.local
