@@ -49,34 +49,19 @@ set file_size_limit = excluded.file_size_limit,
     allowed_mime_types = excluded.allowed_mime_types;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- OPTIONAL — company-folder-scoped write RLS (review before enabling).
+-- Write-path RLS is ALREADY company- and permission-scoped. Do not "simplify" it
+-- to a plain membership check — that would be a downgrade.
 --
--- Today the insert policies on these buckets allow any authenticated user to
--- write anywhere in the bucket. The block below restricts writes so a user can
--- only upload into a folder whose first path segment is a company they are an
--- ACTIVE member of (uploads use `<company_id>/...` object paths).
+-- Verified against pg_policies: every INSERT policy on storage.objects already
+-- gates on the company in the object's first path segment AND on a specific
+-- permission (and, for some buckets, an active subscription). For example:
 --
--- Before enabling, confirm that EVERY client upload path's first segment equals
--- the exact `company_memberships.company_id` value (some code paths use
--- canonicalCompanyId()); otherwise legitimate uploads will start returning
--- "row-level security" errors. Enable one bucket at a time and test an upload.
+--   bucket_id = 'quest-job-files'
+--     AND app_private.is_company_member(split_part(name, '/', 1))
+--     AND app_private.has_company_permission(split_part(name, '/', 1), 'files.manage')
 --
--- create or replace function public.storage_company_folder_ok(object_name text)
--- returns boolean language sql stable as $$
---   select split_part(object_name, '/', 1) in (
---     select company_id from public.company_memberships
---     where profile_id = auth.uid() and status = 'active'
---   );
--- $$;
---
--- do $$
--- declare b text;
--- begin
---   foreach b in array array['quest-job-files','quest-message-attachments','quest-client-portal-documents'] loop
---     execute format('drop policy if exists %I on storage.objects', 'company_scoped_insert_' || b);
---     execute format(
---       'create policy %I on storage.objects for insert to authenticated ' ||
---       'with check (bucket_id = %L and public.storage_company_folder_ok(name))',
---       'company_scoped_insert_' || b, b);
---   end loop;
--- end $$;
+-- A membership-only check (`company_id in (select ... from company_memberships)`)
+-- would DROP the has_company_permission and subscription_allows_access gates and
+-- let any member of a company write to any bucket folder for that company,
+-- regardless of role. This bucket allowlist is the file-type backstop only; the
+-- tenant/permission boundary lives in those policies. Leave them alone.
