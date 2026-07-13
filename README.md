@@ -9,46 +9,34 @@ The key product boundary is intentional:
 - TaskManagement remains the work execution module for tasks, assignments, statuses, time tracking, and task notifications.
 - The shared integration contract is `job.id -> task.project_id`.
 
-## Local Setup
+## Working and Deployment
 
 Requirements:
 
 - Node.js 20 or newer is recommended for Vite 7.
 - npm, included with Node.js.
 
-Install dependencies:
+This project deploys directly through GitHub and Vercel. Do not start local development or preview servers. Install dependencies and run deterministic checks:
 
-```bash
+```text
 npm install
+npm run check
 ```
 
-Start the local app when local verification is explicitly needed:
+After CI passes, merge to `main`, confirm Vercel deployed the merged SHA, and verify production:
 
-```bash
-npm run dev
-```
-
-Vite serves on `http://127.0.0.1:5173` by default unless that port is already in use.
-
-Create a production build:
-
-```bash
-npm run build
-```
-
-Preview the production build locally:
-
-```bash
-npm run preview
+```text
+npm run smoke:prod -- --base-url https://quest-hq-command-center-gamma.vercel.app --expect-sha <main-sha>
 ```
 
 ## Scripts
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Starts Vite locally on `127.0.0.1`. |
 | `npm run build` | Creates the Vercel production bundle in `dist/` and copies the TaskManagement runtime plus legacy redirects. |
-| `npm run preview` | Serves the production bundle locally for a smoke test. |
+| `npm test` | Runs the server-free Node test suite. |
+| `npm run ai:check` | Validates the canonical `.ai/` project brain and database map. |
+| `npm run check` | Runs tests, project-brain validation, and the production build. |
 | `npm run smoke:prod` | Checks the live production routes configured in `scripts/production-smoke.mjs`. |
 
 ## Environment Variables

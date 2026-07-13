@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-13T21:28:30.100Z",
+  "generated_from_commit": "a69f417c045541717acd738f56ed3a841dc3ec7b",
+  "canonical_entrypoint": ".ai/README.md",
+  "repository": {
+    "github": "Lumen-Marketing/quest-hq-command-center",
+    "default_branch": "main",
+    "main_commit_at_capture": "ba034eb30aa57b28823d28c18f61ee4d275833f2",
+    "latest_migration": "202607111000_harden_file_upload_buckets.sql"
+  },
+  "live": {
+    "supabase_verified_at": "2026-07-13T21:28:30.100Z",
+    "supabase_project_ref": "rqundirizvojpzhljtdn",
+    "supabase_status": "ACTIVE_HEALTHY",
+    "supabase_postgres_version": "17.6.1.127",
+    "supabase_latest_migration": {
+      "version": "20260711051011",
+      "name": "harden_finance_attachments_bucket"
+    },
+    "vercel_verified_at": "2026-07-13T21:28:30.100Z",
+    "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
+    "vercel_production_url": "https://quest-hq-command-center-gamma.vercel.app",
+    "vercel_deployment_id": "dpl_EmvhdT9HzmYgCJ1FhmVnCaBA1uqW",
+    "vercel_deployment_state": "READY",
+    "vercel_deployed_commit": "ba034eb30aa57b28823d28c18f61ee4d275833f2",
+    "github_verified_at": "2026-07-13T21:28:30.100Z",
+    "github_production_guardian_run": "https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29278127459"
+  },
+  "refresh_commands": {
+    "validate": "npm run ai:check",
+    "full_check": "npm run check",
+    "production_smoke": "npm run smoke:prod -- --base-url https://quest-hq-command-center-gamma.vercel.app --expect-sha <main-sha>"
+  }
+}
+
