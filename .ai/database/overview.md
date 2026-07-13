@@ -1,0 +1,42 @@
+# Database overview
+
+The live Supabase public schema was captured 2026-07-13T21:28:30.100Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
+
+## At a glance
+
+- 53 public tables
+- 674 public columns
+- 151 foreign-key relationships
+- 168 RLS policies
+- 53 public functions
+- 40 trigger events
+- 6 storage buckets
+- 1 database cron job
+- 67 live migration-ledger entries
+
+## Domain map
+
+| Domain | Principal tables |
+| --- | --- |
+| Identity and tenancy | profiles, companies, company_memberships, company_subscriptions, company_invites, company_join_requests |
+| Authorization and audit | roles, role_permissions, user_role_assignments, resource_acl, field_permissions, audit_events |
+| CRM and sales | contacts, accounts, crm_sites, pipeline_stages, deals, activities, proposal_documents |
+| Jobs and execution | jobs, job_activity, tasks, time_entries, active_timers, notifications |
+| Files and recovery | job_files, recycle_bin_items, workspace_backups, workspace_backup_copies |
+| Messaging and calendar | message_conversations, message_conversation_access, messages, message_attachments, message_reads, calendar_events |
+| Client/public flows | clients, client_portals, client_portal_documents, client_portal_annotations, client_portal_events, forms, form_responses |
+| Finance and price book | finance_vendors, finance_invoices, finance_payments, finance_expenses, pricebook_vendors, pricebook_materials, pricebook_vendor_prices |
+| Workspace configuration | company_plugins, workspace_builder_state, wo_counters |
+
+## How to use this map
+
+- [schema.md](schema.md) lists tables, columns, primary keys, and RLS flags.
+- [relationships.md](relationships.md) lists every public foreign key.
+- [functions.md](functions.md) catalogs public routines and triggers.
+- [security.md](security.md) summarizes RLS and policy coverage.
+- [storage.md](storage.md) catalogs buckets, extensions, and scheduled work.
+- [introspection.sql](introspection.sql) contains safe read-only queries for a manual refresh.
+- [snapshot.json](snapshot.json) is the structured source used by validators and future agents.
+
+Before changing the database, inspect the relevant SQL under [supabase/migrations](../../supabase/migrations) and verify the live state. A catalog snapshot explains shape, not business semantics or complete policy expressions.
+
