@@ -3676,7 +3676,7 @@ function shellTemplate(route, workspace) {
             ${svgIcon('q-search')}
             <input data-global-search value="${h(state.query)}" placeholder="Search this company" />
           </label>
-          <button class="btn command-trigger" type="button" data-action="command-open" title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette"><i class="ti ti-command" aria-hidden="true"></i><kbd>K</kbd></button>
+          <button class="btn command-trigger" type="button" data-action="command-open" title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette"><i class="ti ti-command" aria-hidden="true"></i></button>
           <button class="btn" type="button" data-action="refresh-data" title="Refresh workspace data" aria-label="Refresh workspace data"><i class="ti ti-refresh"></i></button>
           ${renderNotificationCenter(companyId)}
           <div class="account-menu ${state.accountMenuOpen ? 'open' : ''}">
