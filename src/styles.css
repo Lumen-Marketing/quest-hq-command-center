@@ -22054,10 +22054,21 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 :root[data-theme="dark"] .side-sub-ct { color: #aab4c2; }
 
 /* ── Command palette (⌘K) ──────────────────────────────────────────────────── */
-.command-trigger { display: inline-flex; align-items: center; gap: 6px; }
+/* `.topbar .btn` forces a fixed 38px icon square; this trigger needs to be an
+   auto-width pill so the ⌘ glyph and the K badge sit inline. Selector is scoped
+   to .topbar to out-specify that rule. */
+.topbar .btn.command-trigger {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+}
+.command-trigger .ti { font-size: 16px; }
 .command-trigger kbd {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1;
   padding: 2px 5px;
   border: 1px solid var(--border);
@@ -22065,7 +22076,10 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   color: var(--ink-2);
   background: var(--bg);
 }
-@media (max-width: 720px) { .command-trigger kbd { display: none; } }
+@media (max-width: 720px) {
+  .topbar .btn.command-trigger { width: 38px; padding: 0; justify-content: center; }
+  .command-trigger kbd { display: none; }
+}
 
 .command-overlay {
   align-items: flex-start;
