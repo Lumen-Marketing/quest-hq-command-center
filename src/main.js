@@ -4473,7 +4473,10 @@ async function stampPricebookVendorSynced(vendorId, live, client, now) {
   const vendor = state.pricebookVendors.find((item) => item.id === vendorId);
   if (!vendor) return;
   state.pricebookVendors = [{ ...vendor, last_synced_at: now, updated_at: now }, ...state.pricebookVendors.filter((item) => item.id !== vendorId)];
-  if (live) await client.from('pricebook_vendors').update({ last_synced_at: now, updated_at: now }).eq('id', vendorId);
+  if (live) {
+    const syncStamp = await client.from('pricebook_vendors').update({ last_synced_at: now, updated_at: now }).eq('id', vendorId);
+    if (syncStamp.error) console.warn('Could not stamp price book vendor last_synced_at.', syncStamp.error);
+  }
 }
 async function savePricebookVendor(form) {
   const companyId = activeCompanyId();
@@ -22563,9 +22566,16 @@ function onDocumentSubmit(event) {
 
   if (event.target.matches('[data-cp-reply-form]')) {
     event.preventDefault();
-    const input = event.target.elements.text;
+    const form = event.target;
+    const input = form.elements.text;
     const text = String(input?.value || '');
-    if (text.trim()) cpAddThreadReply(event.target.dataset.annotationId, text).catch((error) => showToast(error.message || 'Reply failed.', 'local', 'Client Portal'));
+    if (!text.trim()) return;
+    const replyButton = form.querySelector('[type="submit"]');
+    if (replyButton?.disabled) return; // a reply is already sending
+    if (replyButton) replyButton.disabled = true;
+    cpAddThreadReply(form.dataset.annotationId, text)
+      .catch((error) => showToast(error.message || 'Reply failed.', 'local', 'Client Portal'))
+      .finally(() => { if (replyButton?.isConnected) replyButton.disabled = false; });
     return;
   }
 
@@ -24212,10 +24222,21 @@ async function sendMessage(form) {
     showToast('Your role cannot attach files.', 'local', 'Messages');
     return;
   }
-  for (const file of files) { if (!(await guardUpload(file, 'document', 'Messages'))) return; }
-  await createMessageRecord(conversation, body, files);
-  form.reset();
-  render();
+  // Lock the submit button for the duration of the (possibly slow) upload + write
+  // so a second tap or Enter can't fire a duplicate send. A successful send
+  // re-renders, replacing the button; the finally only re-enables on the paths
+  // that leave the current DOM in place.
+  const submitButton = form.querySelector('[type="submit"]');
+  if (submitButton?.disabled) return;
+  if (submitButton) { submitButton.disabled = true; submitButton.setAttribute('aria-busy', 'true'); }
+  try {
+    for (const file of files) { if (!(await guardUpload(file, 'document', 'Messages'))) return; }
+    await createMessageRecord(conversation, body, files);
+    form.reset();
+    render();
+  } finally {
+    if (submitButton?.isConnected) { submitButton.disabled = false; submitButton.removeAttribute('aria-busy'); }
+  }
 }
 
 async function saveCalendarEvent(form) {
@@ -24313,7 +24334,8 @@ async function createMessageRecord(conversation, body, files) {
   const updatedConversation = { ...conversation, last_message_at: savedMessage.created_at, updated_at: savedMessage.created_at };
   state.messageConversations = state.messageConversations.map((item) => (item.id === conversation.id ? updatedConversation : item));
   if (isLiveSupabaseSession() && client) {
-    await client.from('message_conversations').update({ last_message_at: savedMessage.created_at, updated_at: savedMessage.created_at }).eq('id', conversation.id);
+    const lastMessageBump = await client.from('message_conversations').update({ last_message_at: savedMessage.created_at, updated_at: savedMessage.created_at }).eq('id', conversation.id);
+    if (lastMessageBump.error) console.warn('Could not bump conversation last_message_at; list ordering may lag until the next sync.', lastMessageBump.error);
   }
   markConversationRead(conversation.id, false);
   notifyMessageEvents(updatedConversation, savedMessage, attachments);
@@ -24380,7 +24402,11 @@ async function persistConversation(conversation, accessRows, update = false) {
       showToast(conversationResult.error.message || 'Conversation save failed.', 'local', 'Messages');
       return false;
     }
-    await client.from('message_conversation_access').delete().eq('conversation_id', conversation.id);
+    const accessReset = await client.from('message_conversation_access').delete().eq('conversation_id', conversation.id);
+    if (accessReset.error) {
+      showToast(accessReset.error.message || 'Could not reset conversation access.', 'local', 'Messages');
+      return false;
+    }
     if (accessRows.length) {
       const accessResult = await client.from('message_conversation_access').insert(accessRows.map(messageAccessPayload));
       if (accessResult.error) {
