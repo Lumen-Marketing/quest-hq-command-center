@@ -822,7 +822,7 @@ const PRIVATE_PLUGIN_ACCESS = {
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
   { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
-  { id: 'underwriter', label: 'Underwriter', summary: 'Qualification, scope, pricing, and handoff readiness queue.', icon: 'ti-clipboard-search', module_ids: ['underwriter'], permissions: ['underwriter.view', 'underwriter.manage'], recommendedWith: ['crm_2'] },
+  { id: 'underwriter', label: 'Underwriter', summary: 'Qualification, scope, pricing, and handoff readiness queue.', icon: 'ti-clipboard-check', module_ids: ['underwriter'], permissions: ['underwriter.view', 'underwriter.manage'], recommendedWith: ['crm_2'] },
   { id: 'files', label: 'Files', summary: 'Shared files, job folders, and document storage.', icon: 'ti-folder', module_ids: ['files'], permissions: ['files.view', 'files.manage'] },
   { id: 'client_portal', label: 'Client Portal', summary: 'Password-protected plan links, markups, comments, and client review.', icon: 'ti-world-upload', module_ids: ['client-portals'], permissions: ['client_portals.view', 'client_portals.manage'], recommendedWith: ['files'] },
   { id: 'workspace_builder', label: 'Workspace App Builder', summary: 'No-code workspaces, custom apps, fields, items, reports, and automations.', icon: 'ti-layout-grid-add', module_ids: ['workspaces'], permissions: ['workspaces.view', 'workspaces.manage'] },
@@ -968,7 +968,7 @@ const MODULE_REGISTRY = [
   { id: 'contacts', group: 'Quest CRM', label: 'Contacts', icon: 'ti-id-badge-2', symbol: 'q-symbol-crm', status: 'live', permission: 'crm.view' },
   { id: 'deals', group: 'Quest CRM', label: 'Quotes', icon: 'ti-briefcase', symbol: 'q-symbol-jobs', status: 'live', permission: 'crm.view' },
   { id: 'proposals', group: 'Quest CRM', label: 'Proposals', icon: 'ti-file-dollar', symbol: 'q-symbol-files', status: 'live', permission: 'crm.view' },
-  { id: 'underwriter', group: 'Workspace', label: 'Underwriter', icon: 'ti-clipboard-search', symbol: 'q-symbol-crm', status: 'live', permission: 'underwriter.view' },
+  { id: 'underwriter', group: 'Workspace', label: 'Underwriter', icon: 'ti-clipboard-check', symbol: 'q-symbol-crm', status: 'live', permission: 'underwriter.view' },
   { id: 'tickets', group: 'Workspace', label: 'Tickets', icon: 'ti-ticket', symbol: 'q-symbol-tickets', status: 'planned' },
   { id: 'finance', group: 'Workspace', label: 'Finance', icon: 'ti-receipt-dollar', symbol: 'q-symbol-finance', status: 'live', permission: 'finance.view' },
   { id: 'knowledge', group: 'Workspace', label: 'Knowledge Base', icon: 'ti-books', symbol: 'q-symbol-knowledge', status: 'planned' },
@@ -6858,7 +6858,7 @@ function renderUnderwriterPage(route, companyId) {
         <article class="panel home-health-panel">
           <div class="section-head"><div><h2>Guidance</h2><p>${h(activeStage === 'all' ? 'Default underwriting guidance.' : underwriterStageByKey(activeStage).name)}</p></div></div>
           <div class="home-health-list">
-            <div class="good"><i class="ti ti-clipboard-search"></i><span>${h(guide.title)}</span></div>
+            <div class="good"><i class="ti ti-clipboard-check"></i><span>${h(guide.title)}</span></div>
             ${guide.lines.map((line) => `<div><i class="ti ti-point"></i><span>${h(line)}</span></div>`).join('')}
           </div>
         </article>
@@ -14758,7 +14758,7 @@ function renderClientPortalAnnotate(mode) {
           <div class="cp-stage" data-cp-stage>
             ${doc ? `<div class="cp-frame" data-cp-frame><div class="cp-loading">Loading plan…</div></div>` : `
               <div class="cp-empty-stage">
-                <div class="cp-ei"><i class="ti ti-draw"></i></div>
+                <div class="cp-ei"><i class="ti ti-file-pencil"></i></div>
                 <h2>No plan documents</h2>
                 <p>${mode === 'owner' ? 'Upload a plan set to start reviewing and annotating.' : 'Your project team has not shared a plan yet.'}</p>
               </div>`}
@@ -18226,7 +18226,7 @@ function renderLandingPage(forceAuthModal = false) {
             ${[
               ['ti-shield-check', 'RLS', 'Data boundaries'],
               ['ti-lock', 'Private', 'Storage buckets'],
-              ['ti-database-lock', 'RLS', 'Row-level security'],
+              ['ti-lock-check', 'RLS', 'Row-level security'],
               ['ti-world-upload', 'Portal', 'Hashed links'],
               ['ti-clipboard-list', 'Audit', 'Action trail'],
               ['ti-key', 'Roles', 'Permission gates'],
