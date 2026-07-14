@@ -6995,7 +6995,7 @@ function renderContactTable(companyId) {
         ${renderContactFilterBar(companyId)}
         <label class="contact-list-search">
           <i class="ti ti-search"></i>
-          <input type="search" data-contact-search value="${h(state.contactQuery)}" placeholder="Search this list..." />
+          <input type="search" data-contact-search value="${h(state.contactQuery)}" placeholder="Search this list..." aria-label="Search this list" />
         </label>
         <div class="contact-list-tools">
           <button class="icon-btn ${state.contactBoardView === 'table' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="contacts" data-view="table" title="Table view"><i class="ti ti-table"></i></button>
@@ -28574,7 +28574,12 @@ async function importWorkspaceBackupFile(file) {
   const zip = await JSZip.loadAsync(file);
   const entry = zip.file('quest-backup.json');
   if (!entry) throw new Error('This zip does not contain quest-backup.json.');
-  const payload = JSON.parse(await entry.async('string'));
+  let payload;
+  try {
+    payload = JSON.parse(await entry.async('string'));
+  } catch {
+    throw new Error('The quest-backup.json file inside this zip is not valid JSON.');
+  }
   validateWorkspaceBackupPayload(payload);
   const now = new Date().toISOString();
   const profile = activeSession()?.profile || {};
