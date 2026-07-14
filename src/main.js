@@ -20091,14 +20091,84 @@ function commandPaletteQuickActions() {
   return actions;
 }
 
-function commandPaletteCommands() {
+// Record groups are capped per-group so a broad query ("a") can't flood the
+// list with hundreds of contacts.
+const COMMAND_RECORD_GROUPS = new Set(['Contacts', 'Jobs', 'Quotes', 'Proposals']);
+const COMMAND_RECORDS_PER_GROUP = 6;
+
+function commandPaletteRecords() {
+  const companyId = activeCompanyId();
+  const records = [];
+  if (can('crm.view', companyId)) {
+    for (const contact of companyContacts(companyId)) {
+      records.push({
+        id: `contact-${contact.id}`, group: 'Contacts', icon: 'ti-user',
+        label: contact.name || 'Unnamed contact',
+        hint: contact.stage || contact.owner_name || '',
+        keywords: `${contact.email || ''} ${contact.phone || ''} ${contact.location || ''} contact`,
+        section: 'contacts', params: { contact_id: contact.id },
+      });
+    }
+    for (const deal of companyDeals(companyId)) {
+      records.push({
+        id: `deal-${deal.id}`, group: 'Quotes', icon: 'ti-briefcase',
+        label: deal.name || 'Quote',
+        hint: deal.stage || deal.owner_name || '',
+        keywords: `${deal.owner_name || ''} quote deal estimate`,
+        section: 'deals', params: { tab: 'profile', deal_id: deal.id },
+      });
+    }
+    for (const proposal of companyProposals(companyId)) {
+      records.push({
+        id: `proposal-${proposal.id}`, group: 'Proposals', icon: 'ti-file-dollar',
+        label: proposal.title || proposal.proposal_no || 'Proposal',
+        hint: proposal.proposal_no || '',
+        keywords: 'proposal document',
+        section: 'proposals', params: { proposal_id: proposal.id },
+      });
+    }
+  }
+  if (can('jobs.view', companyId)) {
+    for (const job of companyJobs(companyId)) {
+      const client = job.client_name || '';
+      records.push({
+        id: `job-${job.id}`, group: 'Jobs', icon: 'ti-hammer',
+        label: job.name || client || 'Job',
+        hint: client && client !== job.name ? client : (job.status || ''),
+        keywords: `${client} job`,
+        section: 'jobs', params: { tab: 'profile', job_id: job.id },
+      });
+    }
+  }
+  return records;
+}
+
+function commandPaletteCommands(query) {
   const companyId = activeCompanyId();
   const modules = MODULE_REGISTRY.filter((module) => canViewModule(module, companyId));
   const allowed = new Set(allowedCompanyIds());
   const companies = state.companies
     .filter((company) => allowed.has(company.id))
     .map((company) => ({ id: company.id, name: companyName(company.id) }));
-  return buildCommandIndex({ modules, companies, actions: commandPaletteQuickActions(), activeCompanyId: companyId });
+  // Records only join the index once the user is actually searching — no point
+  // listing every contact in the empty menu.
+  const records = query && query.trim() ? commandPaletteRecords() : [];
+  return buildCommandIndex({ modules, companies, actions: commandPaletteQuickActions(), records, activeCompanyId: companyId });
+}
+
+function commandPaletteResultsFor(query) {
+  const ranked = filterCommands(commandPaletteCommands(query), query);
+  const perGroup = new Map();
+  const capped = [];
+  for (const command of ranked) {
+    if (COMMAND_RECORD_GROUPS.has(command.group)) {
+      const shown = perGroup.get(command.group) || 0;
+      if (shown >= COMMAND_RECORDS_PER_GROUP) continue;
+      perGroup.set(command.group, shown + 1);
+    }
+    capped.push(command);
+  }
+  return capped;
 }
 
 function commandPaletteKeydown(event) {
@@ -20122,6 +20192,8 @@ function runCommand(command) {
   closeCommandPalette(); // resets state and re-renders, removing the overlay
   if (run.kind === 'navigate') {
     navigate(companyPath(run.section, {}, activeCompanyId()));
+  } else if (run.kind === 'record') {
+    navigate(companyPath(run.section, run.params, activeCompanyId()));
   } else if (run.kind === 'company') {
     if (!run.noop) setActiveCompany(run.companyId);
   } else if (run.kind === 'action') {
@@ -20156,7 +20228,7 @@ function renderCommandResultItems() {
 }
 
 function refreshCommandPaletteResults() {
-  commandResults = filterCommands(commandPaletteCommands(), state.commandPalette.query);
+  commandResults = commandPaletteResultsFor(state.commandPalette.query);
   if (state.commandPalette.index >= commandResults.length) {
     state.commandPalette.index = Math.max(0, commandResults.length - 1);
   }
@@ -20171,7 +20243,7 @@ function refreshCommandPaletteResults() {
 
 function renderCommandPalette() {
   if (!state.commandPalette.open) return '';
-  commandResults = filterCommands(commandPaletteCommands(), state.commandPalette.query);
+  commandResults = commandPaletteResultsFor(state.commandPalette.query);
   if (state.commandPalette.index >= commandResults.length) state.commandPalette.index = 0;
   const activeId = commandResults.length ? `command-item-${state.commandPalette.index}` : '';
   return `
@@ -20182,7 +20254,7 @@ function renderCommandPalette() {
           <input type="text" class="command-input" data-command-input role="combobox"
             aria-expanded="true" aria-controls="command-results" aria-autocomplete="list"
             aria-activedescendant="${activeId}" aria-label="Search commands"
-            placeholder="Search modules, workspaces, actions…" value="${h(state.commandPalette.query)}"
+            placeholder="Search contacts, jobs, modules, actions…" value="${h(state.commandPalette.query)}"
             autocomplete="off" autocapitalize="off" spellcheck="false" />
           <kbd class="command-kbd">Esc</kbd>
         </div>

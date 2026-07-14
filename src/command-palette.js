@@ -19,7 +19,7 @@
  * Callers pass ONLY the modules/companies/actions the current user may use —
  * this function does no access control of its own.
  */
-export function buildCommandIndex({ modules = [], companies = [], actions = [], activeCompanyId = '' } = {}) {
+export function buildCommandIndex({ modules = [], companies = [], actions = [], records = [], activeCompanyId = '' } = {}) {
   const commands = [];
 
   for (const module of modules) {
@@ -57,6 +57,21 @@ export function buildCommandIndex({ modules = [], companies = [], actions = [], 
       icon: action.icon || 'ti-bolt',
       keywords: action.keywords || '',
       run: { kind: 'action', action: action.action, data: action.data || {} },
+    });
+  }
+
+  // Records (contacts, jobs, quotes, proposals). The caller decides which group
+  // each falls under and precomputes the route section+params, so this module
+  // stays free of any routing knowledge.
+  for (const record of records) {
+    commands.push({
+      id: `rec:${record.id}`,
+      group: record.group,
+      label: record.label,
+      hint: record.hint || '',
+      icon: record.icon || 'ti-file',
+      keywords: record.keywords || '',
+      run: { kind: 'record', section: record.section, params: record.params || {} },
     });
   }
 

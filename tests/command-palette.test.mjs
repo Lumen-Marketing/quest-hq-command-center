@@ -32,6 +32,26 @@ test('buildCommandIndex fans the sources into one flat, tagged list', () => {
   assert.deepEqual(contactAction.run, { kind: 'action', action: 'quick-add', data: { type: 'contact' } });
 });
 
+test('records become jump-to-record commands with a route descriptor', () => {
+  const records = [
+    { id: 'c9', group: 'Contacts', label: 'Maria Gonzalez', hint: 'Encanto Homes', icon: 'ti-user',
+      keywords: 'maria@example.com 602-555-0100', section: 'contacts', params: { contact_id: 'c9' } },
+    { id: 'j4', group: 'Jobs', label: 'Re-roof — Maria Gonzalez', icon: 'ti-hammer',
+      section: 'jobs', params: { tab: 'profile', job_id: 'j4' } },
+  ];
+  const cmds = buildCommandIndex({ records });
+  assert.equal(cmds.length, 2);
+  const contact = cmds.find((c) => c.id === 'rec:c9');
+  assert.equal(contact.group, 'Contacts');
+  assert.deepEqual(contact.run, { kind: 'record', section: 'contacts', params: { contact_id: 'c9' } });
+
+  // A record is findable by data that lives only in its keywords (email/phone).
+  const byEmail = filterCommands(cmds, 'maria@example');
+  assert.equal(byEmail[0].id, 'rec:c9');
+  const byPhone = filterCommands(cmds, '602-555');
+  assert.equal(byPhone[0].id, 'rec:c9');
+});
+
 test('the active company is tagged so the caller can no-op it', () => {
   const cmds = buildCommandIndex({ companies: COMPANIES, activeCompanyId: 'lumen' });
   const active = cmds.find((c) => c.id === 'co:lumen');
