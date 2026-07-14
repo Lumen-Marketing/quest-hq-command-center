@@ -1,3 +1,4 @@
+import './tabler-icons.css';
 import './styles.css';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
