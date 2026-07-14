@@ -5,7 +5,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import opsCommandHeroUrl from './assets/quest-hq-ops-command-hero.png';
 import questLogoMarkUrl from './assets/quest-hq-logo-mark.png';
 import { requireOk, settleObserved } from './lib/result.js';
-import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordRequirements } from './auth/password-policy.js';
+import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequirements } from './auth/password-policy.js';
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 
@@ -22842,7 +22842,7 @@ async function updateRecoveredPassword(formNode) {
   const form = Object.fromEntries(new FormData(formNode).entries());
   const password = String(form.password || '');
   const confirmation = String(form.password_confirm || '');
-  const policy = passwordPolicy(password);
+  const policy = await passwordPolicyAsync(password);
   if (!policy.valid) throw new Error(policy.issues[0]);
   if (password !== confirmation) throw new Error('The passwords do not match.');
   const client = createSupabaseClient();
@@ -22986,9 +22986,22 @@ async function registerWorkspace(formNode) {
     render();
     return;
   }
+  // Local rules first so they fail instantly; only then pay for the network round-trip.
   const policy = passwordPolicy(password);
   if (!policy.valid) {
     state.loginError = policy.issues[0];
+    state.authMessage = '';
+    render();
+    return;
+  }
+  state.authBusy = true;
+  state.loginError = '';
+  state.authMessage = 'Checking password against known breaches...';
+  render();
+  const breachCheck = await passwordPolicyAsync(password);
+  if (!breachCheck.valid) {
+    state.authBusy = false;
+    state.loginError = breachCheck.issues[0];
     state.authMessage = '';
     render();
     return;
