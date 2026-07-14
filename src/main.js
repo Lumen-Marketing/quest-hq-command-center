@@ -8,6 +8,7 @@ import { requireOk, settleObserved } from './lib/result.js';
 import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequirements } from './auth/password-policy.js';
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
+import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -2299,10 +2300,12 @@ const state = {
   workspaceMenuOpen: false,
   mobileMenuOpen: false,
   rolePreview: null,
+  commandPalette: { open: false, query: '', index: 0 },
 };
 
 const app = document.getElementById('app');
 let supabaseClientCache = null;
+let commandResults = [];
 let addressSuggestionRequestSeq = 0;
 let pipeDrag = null;
 let locationPickerMap = null;
@@ -2566,7 +2569,7 @@ function render() {
     return;
   }
   document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Quest HQ`;
-  app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route));
+  app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette();
   queueMicrotask(restoreSidebarScroll);
   queueMicrotask(bindTimePickerInputs);
   queueMicrotask(bindGoogleAddressInputs);
@@ -3673,7 +3676,8 @@ function shellTemplate(route, workspace) {
             ${svgIcon('q-search')}
             <input data-global-search value="${h(state.query)}" placeholder="Search this company" />
           </label>
-          <button class="btn" type="button" data-action="refresh-data" title="Refresh workspace data"><i class="ti ti-refresh"></i></button>
+          <button class="btn command-trigger" type="button" data-action="command-open" title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette"><i class="ti ti-command" aria-hidden="true"></i><kbd>⌘K</kbd></button>
+          <button class="btn" type="button" data-action="refresh-data" title="Refresh workspace data" aria-label="Refresh workspace data"><i class="ti ti-refresh"></i></button>
           ${renderNotificationCenter(companyId)}
           <div class="account-menu ${state.accountMenuOpen ? 'open' : ''}">
             <button class="avatar-button" type="button" data-action="toggle-account-menu" aria-label="Open account menu" aria-expanded="${state.accountMenuOpen ? 'true' : 'false'}">
@@ -20017,6 +20021,15 @@ function trapModalFocus(event) {
   else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
 }
 function onDocumentKeydown(event) {
+  // Command palette: Cmd/Ctrl-K toggles it from anywhere; while open it owns the
+  // keyboard (arrows, Enter, Escape) — checked before the modal handling below.
+  if ((event.key === 'k' || event.key === 'K') && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {
+    event.preventDefault();
+    toggleCommandPalette();
+    return;
+  }
+  if (state.commandPalette.open && commandPaletteKeydown(event)) return;
+
   // Modal keyboard support: Esc dismisses, Tab is trapped within the modal.
   if ((state.builderModal || state.modal) && activeModalOverlay()) {
     if (event.key === 'Escape') { if (dismissTopModal()) event.preventDefault(); return; }
@@ -20031,6 +20044,150 @@ function onDocumentKeydown(event) {
   if (!action || action !== el) return;
   event.preventDefault();
   handleAction(event, action);
+}
+
+// ── Command palette (⌘K) ─────────────────────────────────────────────────────
+// Pure indexing/matching lives in ./command-palette.js; this owns the overlay,
+// keyboard, and turning a chosen command into real navigation. `commandResults`
+// mirrors the currently-shown, ranked list so keyboard selection and click can
+// resolve an index to a command without recomputing.
+
+function toggleCommandPalette() {
+  if (state.commandPalette.open) closeCommandPalette();
+  else openCommandPalette();
+}
+
+function openCommandPalette() {
+  // Only meaningful inside a company workspace — there is nothing to jump to on
+  // the landing or auth screens.
+  if (!state.route || state.route.name !== 'company') return;
+  state.commandPalette = { open: true, query: '', index: 0 };
+  render();
+  queueMicrotask(() => {
+    const input = document.querySelector('[data-command-input]');
+    if (input) input.focus();
+  });
+}
+
+function closeCommandPalette() {
+  if (!state.commandPalette.open) return;
+  state.commandPalette = { open: false, query: '', index: 0 };
+  render();
+}
+
+function commandPaletteQuickActions() {
+  const actions = [
+    { id: 'refresh', label: 'Refresh workspace data', icon: 'ti-refresh', keywords: 'reload sync update', action: 'refresh-data' },
+  ];
+  if (resolveThemeMode() === 'dark') {
+    actions.push({ id: 'theme-light', label: 'Switch to light theme', icon: 'ti-sun', keywords: 'appearance mode display', action: 'set-theme', data: { theme: 'light' } });
+  } else {
+    actions.push({ id: 'theme-dark', label: 'Switch to dark theme', icon: 'ti-moon', keywords: 'appearance mode display', action: 'set-theme', data: { theme: 'dark' } });
+  }
+  actions.push({ id: 'signout', label: 'Sign out', icon: 'ti-logout', keywords: 'log out exit leave', action: 'sign-out' });
+  return actions;
+}
+
+function commandPaletteCommands() {
+  const companyId = activeCompanyId();
+  const modules = MODULE_REGISTRY.filter((module) => canViewModule(module, companyId));
+  const allowed = new Set(allowedCompanyIds());
+  const companies = state.companies
+    .filter((company) => allowed.has(company.id))
+    .map((company) => ({ id: company.id, name: companyName(company.id) }));
+  return buildCommandIndex({ modules, companies, actions: commandPaletteQuickActions(), activeCompanyId: companyId });
+}
+
+function commandPaletteKeydown(event) {
+  if (event.key === 'Escape') { event.preventDefault(); closeCommandPalette(); return true; }
+  if (event.key === 'ArrowDown') { event.preventDefault(); moveCommandSelection(1); return true; }
+  if (event.key === 'ArrowUp') { event.preventDefault(); moveCommandSelection(-1); return true; }
+  if (event.key === 'Enter') { event.preventDefault(); runCommand(commandResults[state.commandPalette.index]); return true; }
+  return false; // any other key falls through to the search input
+}
+
+function moveCommandSelection(delta) {
+  const count = commandResults.length;
+  if (!count) return;
+  state.commandPalette.index = (state.commandPalette.index + delta + count) % count;
+  refreshCommandPaletteResults();
+}
+
+function runCommand(command) {
+  if (!command) return;
+  const run = command.run;
+  closeCommandPalette(); // resets state and re-renders, removing the overlay
+  if (run.kind === 'navigate') {
+    navigate(companyPath(run.section, {}, activeCompanyId()));
+  } else if (run.kind === 'company') {
+    if (!run.noop) setActiveCompany(run.companyId);
+  } else if (run.kind === 'action') {
+    // Reuse the existing action pipeline by synthesizing the node it expects.
+    const node = document.createElement('button');
+    node.dataset.action = run.action;
+    for (const [key, value] of Object.entries(run.data || {})) node.dataset[key] = value;
+    handleAction({ preventDefault() {}, target: node }, node);
+  }
+}
+
+function renderCommandResultItems() {
+  if (!commandResults.length) {
+    return `<div class="command-empty">No matches for "${h(state.commandPalette.query)}"</div>`;
+  }
+  let index = -1;
+  return groupCommands(commandResults).map((group) => `
+    <div class="command-group" role="group" aria-label="${h(group.group)}">
+      <div class="command-group-label">${h(group.group)}</div>
+      ${group.items.map((command) => {
+        index += 1;
+        const active = index === state.commandPalette.index;
+        return `<button type="button" class="command-item${active ? ' active' : ''}" role="option"
+          id="command-item-${index}" aria-selected="${active ? 'true' : 'false'}"
+          data-action="command-run" data-cmd-index="${index}">
+          <i class="ti ${h(command.icon)}" aria-hidden="true"></i>
+          <span class="command-item-label">${h(command.label)}</span>
+          ${command.hint ? `<span class="command-item-hint">${h(command.hint)}</span>` : ''}
+        </button>`;
+      }).join('')}
+    </div>`).join('');
+}
+
+function refreshCommandPaletteResults() {
+  commandResults = filterCommands(commandPaletteCommands(), state.commandPalette.query);
+  if (state.commandPalette.index >= commandResults.length) {
+    state.commandPalette.index = Math.max(0, commandResults.length - 1);
+  }
+  const container = document.getElementById('command-results');
+  if (!container) return;
+  container.innerHTML = renderCommandResultItems();
+  const input = document.querySelector('[data-command-input]');
+  const activeItem = container.querySelector('.command-item.active');
+  if (input) input.setAttribute('aria-activedescendant', activeItem ? activeItem.id : '');
+  if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
+}
+
+function renderCommandPalette() {
+  if (!state.commandPalette.open) return '';
+  commandResults = filterCommands(commandPaletteCommands(), state.commandPalette.query);
+  if (state.commandPalette.index >= commandResults.length) state.commandPalette.index = 0;
+  const activeId = commandResults.length ? `command-item-${state.commandPalette.index}` : '';
+  return `
+    <div class="modal-overlay command-overlay" data-action="command-backdrop">
+      <div class="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
+        <div class="command-search">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input type="text" class="command-input" data-command-input role="combobox"
+            aria-expanded="true" aria-controls="command-results" aria-autocomplete="list"
+            aria-activedescendant="${activeId}" aria-label="Search commands"
+            placeholder="Search modules, workspaces, actions…" value="${h(state.commandPalette.query)}"
+            autocomplete="off" autocapitalize="off" spellcheck="false" />
+          <kbd class="command-kbd">Esc</kbd>
+        </div>
+        <div class="command-results" id="command-results" role="listbox" aria-label="Commands">
+          ${renderCommandResultItems()}
+        </div>
+      </div>
+    </div>`;
 }
 
 function onDocumentClick(event) {
@@ -20145,6 +20302,21 @@ function handleAction(event, node) {
     // not, so clicking outside the modal never closes it.
     event.preventDefault();
     closeWbModal();
+    return;
+  }
+  if (action === 'command-open') {
+    event.preventDefault();
+    openCommandPalette();
+    return;
+  }
+  if (action === 'command-backdrop') {
+    // Close only when the backdrop itself is clicked, never a click inside the panel.
+    if (event.target?.classList?.contains('command-overlay')) closeCommandPalette();
+    return;
+  }
+  if (action === 'command-run') {
+    event.preventDefault();
+    runCommand(commandResults[Number(node.dataset.cmdIndex)]);
     return;
   }
   if (action === 'refresh-data') {
@@ -24272,6 +24444,14 @@ function onDocumentInput(event) {
     const cleaned = event.target.value.replace(/[^0-9+\-]/g, '');
     const formatted = formatPhoneNumber(cleaned);
     if (formatted !== event.target.value) event.target.value = formatted;
+    return;
+  }
+  if (event.target.matches('[data-command-input]')) {
+    // Update results in place without a full re-render, so the field keeps focus
+    // and the caret position through every keystroke.
+    state.commandPalette.query = event.target.value;
+    state.commandPalette.index = 0;
+    refreshCommandPaletteResults();
     return;
   }
   if (event.target.matches('[data-job-type-input]')) {
@@ -29687,6 +29867,10 @@ function isMutableAction(action = '') {
   const safeActions = new Set([
     'refresh-data',
     'wb-modal-close',
+    'command-open',
+    'command-close',
+    'command-backdrop',
+    'command-run',
     'sign-out',
     'toggle-account-menu',
     'toggle-notifications',
