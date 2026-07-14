@@ -13042,7 +13042,7 @@ function wbFieldConfigUI(fd, app) {
   return '<div class="wb-sub">No extra configuration needed for this field type.</div>';
 }
 function wbOptRow(o) {
-  return `<div class="wb-opt-item" data-oid="${h(o.id)}"><input type="color" class="wb-dot-pick" value="${h(o.color || '#2563eb')}"><input class="wb-input wb-opt-label" value="${h(o.label)}" placeholder="Option label"><button class="wb-icon-btn danger" data-wb-del-option type="button"><i class="ti ti-x"></i></button></div>`;
+  return `<div class="wb-opt-item" data-oid="${h(o.id)}"><input type="color" class="wb-dot-pick" value="${h(o.color || '#2563eb')}"><input class="wb-input wb-opt-label" value="${h(o.label)}" placeholder="Option label"><button class="wb-icon-btn danger" data-wb-del-option type="button" aria-label="Remove option"><i class="ti ti-x"></i></button></div>`;
 }
 function wbTrigCfgUI(draft, app) {
   if (draft.trigger.event !== 'field_is') return '';
@@ -14825,9 +14825,9 @@ function renderClientPortalToolbar(doc) {
         ${doc.scale || cpProjectScale() ? `<button class="cp-scale-chip" type="button" data-action="cp-recalibrate" title="Recalibrate the project ruler scale"><i class="ti ti-ruler-measure"></i>Scale set</button>` : ''}
         ${pages > 1 ? `
           <div class="cp-zoom-ctl">
-            <button type="button" data-action="cp-page" data-page="prev"><i class="ti ti-chevron-left"></i></button>
+            <button type="button" data-action="cp-page" data-page="prev" aria-label="Previous page"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
             <span>${annotate.page + 1} / ${pages}</span>
-            <button type="button" data-action="cp-page" data-page="next"><i class="ti ti-chevron-right"></i></button>
+            <button type="button" data-action="cp-page" data-page="next" aria-label="Next page"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
           </div>` : ''}
         <div class="cp-zoom-ctl">
           <button type="button" data-action="cp-zoom" data-dir="out" title="Zoom out">&minus;</button>
@@ -14910,7 +14910,7 @@ function renderClientPortalAnnoCard(annotation) {
       </div>` : ''}
       <form class="cp-reply" data-cp-reply-form data-annotation-id="${h(annotation.id)}">
         <input name="text" placeholder="Reply…" autocomplete="off" />
-        <button class="btn btn-mini" type="submit"><i class="ti ti-send"></i></button>
+        <button class="btn btn-mini" type="submit" aria-label="Send reply"><i class="ti ti-send" aria-hidden="true"></i></button>
       </form>
     </div>
   `;
@@ -15963,10 +15963,10 @@ function renderQuestionCard(question, index) {
         <span>${index + 1}</span>
         <select data-question-field="type">${typeOptions}</select>
         <div class="question-actions">
-          <button type="button" data-action="move-question" data-direction="-1" data-question-id="${h(question.id)}"><i class="ti ti-arrow-up"></i></button>
-          <button type="button" data-action="move-question" data-direction="1" data-question-id="${h(question.id)}"><i class="ti ti-arrow-down"></i></button>
-          <button type="button" data-action="duplicate-question" data-question-id="${h(question.id)}"><i class="ti ti-copy"></i></button>
-          <button type="button" data-action="delete-question" data-question-id="${h(question.id)}"><i class="ti ti-trash"></i></button>
+          <button type="button" data-action="move-question" data-direction="-1" data-question-id="${h(question.id)}" aria-label="Move question up"><i class="ti ti-arrow-up" aria-hidden="true"></i></button>
+          <button type="button" data-action="move-question" data-direction="1" data-question-id="${h(question.id)}" aria-label="Move question down"><i class="ti ti-arrow-down" aria-hidden="true"></i></button>
+          <button type="button" data-action="duplicate-question" data-question-id="${h(question.id)}" aria-label="Duplicate question"><i class="ti ti-copy" aria-hidden="true"></i></button>
+          <button type="button" data-action="delete-question" data-question-id="${h(question.id)}" aria-label="Delete question"><i class="ti ti-trash" aria-hidden="true"></i></button>
         </div>
       </div>
       <label><span>Question</span><input data-question-field="label" value="${h(question.label)}" /></label>
@@ -15978,7 +15978,7 @@ function renderQuestionCard(question, index) {
             <label>
               <span>Option ${optionIndex + 1}</span>
               <input data-question-option="${optionIndex}" value="${h(option)}" />
-              <button type="button" data-action="remove-question-option" data-question-id="${h(question.id)}" data-option-index="${optionIndex}"><i class="ti ti-x"></i></button>
+              <button type="button" data-action="remove-question-option" data-question-id="${h(question.id)}" data-option-index="${optionIndex}" aria-label="Remove option"><i class="ti ti-x"></i></button>
             </label>
           `).join('')}
           <button class="btn" type="button" data-action="add-question-option" data-question-id="${h(question.id)}"><i class="ti ti-plus"></i>Add option</button>
@@ -17195,7 +17195,7 @@ function renderMessageBubble(message) {
         <div class="message-meta">
           <strong>${h(sender.full_name || sender.email || profileName(message.sender_profile_id))}</strong>
           <span>${timeAgo(message.created_at)}</span>
-          ${(own && can('messages.delete_own', message.company_id)) || can('messages.delete_any', message.company_id) ? `<button type="button" data-action="delete-message" data-message-id="${h(message.id)}"><i class="ti ti-trash"></i></button>` : ''}
+          ${(own && can('messages.delete_own', message.company_id)) || can('messages.delete_any', message.company_id) ? `<button type="button" data-action="delete-message" data-message-id="${h(message.id)}" aria-label="Delete message"><i class="ti ti-trash"></i></button>` : ''}
         </div>
         ${message.body ? `<p>${linkifyMentions(message.body)}</p>` : ''}
         ${attachments.length ? `<div class="message-attachments">${attachments.map(renderMessageAttachment).join('')}</div>` : ''}
@@ -17842,9 +17842,9 @@ function renderCalendarPage(route, companyId) {
       </section>
       <section class="calendar-nav">
         <div>
-          <button class="btn" type="button" data-action="calendar-prev"><i class="ti ti-chevron-left"></i></button>
+          <button class="btn" type="button" data-action="calendar-prev" aria-label="Previous month"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
           <button class="btn" type="button" data-action="calendar-today">Today</button>
-          <button class="btn" type="button" data-action="calendar-next"><i class="ti ti-chevron-right"></i></button>
+          <button class="btn" type="button" data-action="calendar-next" aria-label="Next month"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
         </div>
         <strong>${h(calendarRangeLabel())}</strong>
       </section>
