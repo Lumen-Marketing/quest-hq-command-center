@@ -27,8 +27,10 @@ assert.match(main, /data-action="copy-proposal-link"/);
 assert.match(main, /data-action="export-proposal"/);
 assert.match(main, /data-action="duplicate-proposal"/);
 assert.match(main, /data-proposal-public-form/);
-assert.match(main, /rpc\('public_proposal_by_token'/);
-assert.match(main, /rpc\('accept_public_proposal'/);
+// The public proposal flow now goes through rate-limited server endpoints; the
+// direct anon RPC calls were removed (see public-proposal-invite-api.test.mjs).
+assert.match(main, /\/api\/public-proposal-open/);
+assert.match(main, /\/api\/public-proposal-respond/);
 
 assert.ok(styles.includes('.proposal-workspace'));
 assert.ok(styles.includes('.proposal-public-shell'));

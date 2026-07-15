@@ -16575,15 +16575,23 @@ async function ensureProposalPublicOpen(token) {
   const cleanToken = String(token || '').trim();
   if (!cleanToken) throw new Error('Missing proposal link.');
   if (state.proposalPublic?.token === cleanToken && state.proposalPublic.proposal) return;
-  const client = createSupabaseClient();
-  if (client) {
-    const result = await client.rpc('public_proposal_by_token', { proposal_token: cleanToken });
-    if (!result.error) {
-      state.proposalPublic = { token: cleanToken, proposal: normalizeProposal(result.data || {}) };
+  // Anonymous browsers reach the proposal through a rate-limited server endpoint
+  // (direct anon RPC is revoked). Falls back to local state if the request fails.
+  try {
+    const response = await fetch('/api/public-proposal-open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proposal_token: cleanToken }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.proposal) {
+      state.proposalPublic = { token: cleanToken, proposal: normalizeProposal(payload.proposal) };
       render();
       return;
     }
-    console.warn('Public proposal RPC failed, falling back to local state:', result.error.message || result.error);
+    console.warn('Public proposal fetch failed, falling back to local state:', payload.error || response.status);
+  } catch (error) {
+    console.warn('Public proposal fetch error, falling back to local state:', error?.message || error);
   }
   const local = state.proposals.find((proposal) => proposal.public_token === cleanToken);
   if (local) {
@@ -16606,22 +16614,25 @@ async function submitPublicProposalDecision(form) {
   const signerName = String(data.signer_name || '').trim();
   const signerEmail = String(data.signer_email || '').trim();
   if (!token || !signerName) throw new Error('Name is required to respond.');
-  const client = createSupabaseClient();
-  if (client) {
-    const result = await client.rpc('accept_public_proposal', {
-      proposal_token: token,
-      signer_name: signerName,
-      signer_email: signerEmail,
-      decision,
+  // Accept/decline goes through a rate-limited server endpoint (direct anon RPC
+  // is revoked). Falls back to local state if the request fails.
+  try {
+    const response = await fetch('/api/public-proposal-respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proposal_token: token, signer_name: signerName, signer_email: signerEmail, decision }),
     });
-    if (!result.error) {
-      const updated = normalizeProposal(result.data || {});
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.proposal) {
+      const updated = normalizeProposal(payload.proposal);
       upsertProposal(updated);
       state.proposalPublic = { token, proposal: updated };
       render();
       return;
     }
-    console.warn('Public proposal response RPC failed, falling back to local state:', result.error.message || result.error);
+    console.warn('Public proposal response failed, falling back to local state:', payload.error || response.status);
+  } catch (error) {
+    console.warn('Public proposal response error, falling back to local state:', error?.message || error);
   }
   const local = state.proposals.find((proposal) => proposal.public_token === token);
   if (local) {
@@ -23388,11 +23399,22 @@ async function submitInviteCode(formNode) {
 
 async function lookupInviteCode(inviteCode) {
   const token = String(inviteCode || '').trim();
-  const client = createSupabaseClient();
-  if (!token || !client) return null;
-  const result = await safeSupabaseQuery(client.rpc('lookup_company_invite', { invite_token: token }));
-  if (result.error) return null;
-  const row = Array.isArray(result.data) ? result.data[0] : result.data;
+  if (!token) return null;
+  // Invite lookup goes through a rate-limited server endpoint (direct anon RPC
+  // is revoked) so tokens can't be enumerated.
+  let row = null;
+  try {
+    const response = await fetch('/api/public-invite-lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invite_token: token }),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json().catch(() => ({}));
+    row = payload.invite;
+  } catch {
+    return null;
+  }
   if (!row) return { missing: true };
   return {
     token,
