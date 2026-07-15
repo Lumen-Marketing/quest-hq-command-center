@@ -20336,10 +20336,38 @@ function renderCommandBackHeader(label) {
 }
 
 function renderCommandAnswer(topic) {
+  const g = topic.guide;
+  if (!g) {
+    return `
+      ${renderCommandBackHeader(topic.title)}
+      <div class="command-answer"><p>${h(topic.answer)}</p></div>`;
+  }
+
+  const fields = g.fields ? `
+    <h4 class="command-guide-h">Field types</h4>
+    <dl class="command-guide-fields">
+      ${g.fields.map((f) => `<div><dt>${h(f.name)}</dt><dd>${h(f.desc)}</dd></div>`).join('')}
+    </dl>` : '';
+
+  const automations = g.automations ? `
+    <h4 class="command-guide-h">Examples</h4>
+    <p class="command-guide-lead">${h(g.automations.intro)}</p>
+    <ul class="command-guide-rules">
+      ${g.automations.rules.map((r) => `<li>${h(r)}</li>`).join('')}
+    </ul>` : '';
+
+  const tip = g.tip ? `<div class="command-guide-tip"><i class="ti ti-bulb" aria-hidden="true"></i><span>${h(g.tip)}</span></div>` : '';
+
   return `
     ${renderCommandBackHeader(topic.title)}
-    <div class="command-answer">
-      <p>${h(topic.answer)}</p>
+    <div class="command-answer command-guide">
+      <p class="command-guide-lead">${h(g.intro)}</p>
+      <ol class="command-guide-steps">
+        ${g.steps.map((s) => `<li>${h(s)}</li>`).join('')}
+      </ol>
+      ${fields}
+      ${automations}
+      ${tip}
     </div>`;
 }
 

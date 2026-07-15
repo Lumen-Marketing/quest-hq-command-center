@@ -23,8 +23,8 @@ test('finds topics by natural phrasing (title or keywords)', () => {
 test('matches on keywords the title does not contain', () => {
   // "estimate" is only in the quotes topic's keywords, not its title.
   assert.equal(searchHelp('estimate')[0].id, 'quotes');
-  // "no-code" only appears in the workspaces keywords.
-  assert.equal(searchHelp('no-code app')[0].id, 'workspaces');
+  // "no-code" only appears in the create-app keywords, not its title.
+  assert.equal(searchHelp('no-code app')[0].id, 'create-app');
 });
 
 test('an empty query returns every topic in listed order', () => {
@@ -35,4 +35,24 @@ test('an empty query returns every topic in listed order', () => {
 
 test('a nonsense query returns nothing rather than everything', () => {
   assert.deepEqual(searchHelp('zzzqqq'), []);
+});
+
+test('detailed how-to topics are findable by natural phrasing', () => {
+  assert.equal(searchHelp('how do i create a workspace')[0].id, 'create-workspace');
+  assert.equal(searchHelp('how to create an app')[0].id, 'create-app');
+  assert.equal(searchHelp('how does automation work')[0].id, 'app-automations');
+});
+
+test('rich guides carry structured step-by-step content', () => {
+  const byId = Object.fromEntries(HELP_TOPICS.map((t) => [t.id, t]));
+
+  for (const id of ['create-workspace', 'create-app', 'app-automations']) {
+    const g = byId[id].guide;
+    assert.ok(g, `${id} should have a guide`);
+    assert.ok(g.intro && g.intro.length > 20, `${id} guide needs an intro`);
+    assert.ok(Array.isArray(g.steps) && g.steps.length >= 3, `${id} guide needs steps`);
+  }
+  // create-app explains each field type; automations topic lists example rules.
+  assert.ok(byId['create-app'].guide.fields.length >= 8);
+  assert.ok(byId['app-automations'].guide.automations.rules.length >= 2);
 });
