@@ -9,7 +9,7 @@ import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequi
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
-import { parseTaskInstruction } from './assistant/task-parser.js';
+import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
 import { searchHelp, HELP_TOPICS } from './assistant/help-index.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
@@ -20226,6 +20226,24 @@ function commandPaletteKeydown(event) {
   return false; // any other key falls through to the search input
 }
 
+function commandPaletteMembers(companyId = activeCompanyId()) {
+  return companyAccessUsers(companyId)
+    .filter((user) => user.status === 'active')
+    .map((user) => ({ id: user.profile_id || user.member_id, name: user.name }))
+    .filter((user) => user.id && user.name);
+}
+
+// Parse the instruction, then resolve the spoken assignee to a member and try to
+// auto-link a contact named in the text. Both are best guesses the confirm card
+// lets the user change or clear.
+function buildCommandTaskDraft(query) {
+  const draft = parseTaskInstruction(query, new Date());
+  const companyId = activeCompanyId();
+  draft.assignee_id = draft.assignee ? matchPerson(draft.assignee, commandPaletteMembers(companyId)) : '';
+  draft.contact_id = matchContactInText(draft.raw, companyContacts(companyId).map((c) => ({ id: c.id, name: c.name })));
+  return draft;
+}
+
 function commandPaletteBack() {
   state.commandPalette.answer = null;
   state.commandPalette.taskDraft = null;
@@ -20276,7 +20294,7 @@ function runCommand(command) {
     return;
   }
   if (run.kind === 'create-task') {
-    state.commandPalette.taskDraft = parseTaskInstruction(run.query, new Date());
+    state.commandPalette.taskDraft = buildCommandTaskDraft(run.query);
     render();
     queueMicrotask(() => {
       const el = document.querySelector('[data-command-task-title]');
@@ -20384,6 +20402,29 @@ function renderCommandAnswer(topic) {
 
 function renderCommandTaskForm(draft) {
   const URGENCIES = ['low', 'medium', 'high', 'urgent', 'critical'];
+  const members = commandPaletteMembers();
+  const assignee = `
+    <label class="command-field">
+      <span>Assignee</span>
+      <select name="assignee_id">
+        <option value="">Unassigned</option>
+        ${members.map((m) => `<option value="${h(m.id)}" ${m.id === draft.assignee_id ? 'selected' : ''}>${h(m.name)}</option>`).join('')}
+      </select>
+    </label>`;
+
+  // Auto-linked contact appears only when one was matched; a hidden field carries
+  // it into saveTask, and the chip can be cleared.
+  const linkedContact = draft.contact_id ? `
+    <div class="command-field">
+      <span>Linked contact</span>
+      <div class="command-linked-chip">
+        <i class="ti ti-user" aria-hidden="true"></i>
+        <span>${h(contactById(draft.contact_id)?.name || 'Contact')}</span>
+        <button type="button" class="command-chip-clear" data-action="command-clear-contact" aria-label="Unlink contact"><i class="ti ti-x" aria-hidden="true"></i></button>
+      </div>
+      <input type="hidden" name="contact_id" value="${h(draft.contact_id)}" />
+    </div>` : '';
+
   return `
     ${renderCommandBackHeader('Create task')}
     <form class="command-task-form" data-command-task-form>
@@ -20407,6 +20448,8 @@ function renderCommandTaskForm(draft) {
           </select>
         </label>
       </div>
+      ${assignee}
+      ${linkedContact}
       <div class="command-task-actions">
         <button type="button" class="btn" data-action="command-back">Cancel</button>
         <button type="submit" class="btn btn-primary"><i class="ti ti-plus" aria-hidden="true"></i>Create task</button>
@@ -20581,6 +20624,12 @@ function handleAction(event, node) {
   if (action === 'command-back') {
     event.preventDefault();
     commandPaletteBack();
+    return;
+  }
+  if (action === 'command-clear-contact') {
+    event.preventDefault();
+    if (state.commandPalette.taskDraft) state.commandPalette.taskDraft.contact_id = '';
+    render();
     return;
   }
   if (action === 'refresh-data') {
@@ -24767,6 +24816,7 @@ function onDocumentInput(event) {
     draft.due = form.elements.due?.value ?? draft.due;
     draft.due_time = form.elements.due_time?.value ?? draft.due_time;
     draft.urgency = form.elements.priority?.value ?? draft.urgency;
+    draft.assignee_id = form.elements.assignee_id?.value ?? draft.assignee_id;
     return;
   }
   if (event.target.matches('[data-job-type-input]')) {
@@ -30192,6 +30242,7 @@ function isMutableAction(action = '') {
     'command-backdrop',
     'command-run',
     'command-back',
+    'command-clear-contact',
     'sign-out',
     'toggle-account-menu',
     'toggle-notifications',

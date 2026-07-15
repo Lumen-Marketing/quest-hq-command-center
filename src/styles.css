@@ -22276,3 +22276,31 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 @media (max-width: 560px) {
   .command-guide-fields > div { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* Command palette — task confirm: linked-contact chip */
+.command-linked-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-size: 13.5px;
+  color: var(--ink);
+  align-self: flex-start;
+}
+.command-linked-chip .ti { color: var(--blue); font-size: 15px; }
+.command-chip-clear {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.command-chip-clear:hover { background: var(--surface); color: var(--ink); }
+.command-chip-clear .ti { color: inherit; font-size: 13px; }

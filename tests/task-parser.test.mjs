@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseTaskInstruction } from '../src/assistant/task-parser.js';
+import { parseTaskInstruction, matchPerson, matchContactInText } from '../src/assistant/task-parser.js';
 
 // Fixed reference: Wednesday, 15 July 2026, 09:00 local. All relative-date
 // expectations below are computed from this anchor.
@@ -72,14 +72,56 @@ test('composes date + time + urgency + title from one instruction', () => {
   assert.equal(r.due, '2026-07-16');
   assert.equal(r.due_time, '14:00');
   assert.equal(r.urgency, 'urgent');
-  assert.deepEqual(r.found, { date: true, time: true, urgency: true });
+  assert.deepEqual(r.found, { date: true, time: true, urgency: true, assignee: false });
 });
 
 test('reports which fields were explicit vs defaulted', () => {
   const r = parse('call the roofer');
   assert.equal(r.due, '');
   assert.equal(r.due_time, '');
-  assert.deepEqual(r.found, { date: false, time: false, urgency: false });
+  assert.deepEqual(r.found, { date: false, time: false, urgency: false, assignee: false });
+});
+
+test('extracts an explicit assignee and strips it from the title', () => {
+  const a = parse('fix the ridge vent, assign to Mike');
+  assert.equal(a.assignee, 'Mike');
+  assert.equal(a.found.assignee, true);
+  assert.match(a.title, /Fix the ridge vent/);
+  assert.ok(!/assign/i.test(a.title));
+
+  const b = parse('assigned to Sarah Lee: call the supplier tomorrow');
+  assert.equal(b.assignee, 'Sarah Lee');
+  assert.equal(b.due, '2026-07-16');
+
+  // A plain "to <name>" is NOT an assignee — it stays in the title.
+  const c = parse('send the estimate to the Petersons');
+  assert.equal(c.assignee, '');
+  assert.match(c.title, /to the Petersons/);
+});
+
+test('matchPerson resolves a spoken name to a member id', () => {
+  const people = [
+    { id: 'u1', name: 'Mike Delgado' },
+    { id: 'u2', name: 'Sarah Lee' },
+    { id: 'u3', name: 'Ana Ruiz' },
+  ];
+  assert.equal(matchPerson('Mike', people), 'u1');       // first name
+  assert.equal(matchPerson('Sarah Lee', people), 'u2');  // full name
+  assert.equal(matchPerson('ana', people), 'u3');        // case-insensitive
+  assert.equal(matchPerson('Nobody', people), '');       // no confident match
+});
+
+test('matchContactInText links a contact named in the instruction', () => {
+  const contacts = [
+    { id: 'c1', name: 'Bob Henderson' },
+    { id: 'c2', name: 'Encanto Homes' },
+    { id: 'c3', name: 'Bob Call' },
+  ];
+  // "Hendersons" contains the token "henderson".
+  assert.equal(matchContactInText('call the Hendersons about the estimate', contacts), 'c1');
+  // A contact named "Bob Call" must NOT hijack the verb "call".
+  assert.equal(matchContactInText('call the client back', contacts), '');
+  assert.equal(matchContactInText('follow up with Encanto Homes', contacts), 'c2');
 });
 
 test('an internal "to" (send X to Y) is preserved, not stripped as a prefix', () => {

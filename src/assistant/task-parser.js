@@ -145,6 +145,55 @@ function extractUrgency(text) {
   return null;
 }
 
+// "assign to Mike", "assigned to Sarah Lee" -> the name to resolve to a member.
+// Requires the explicit "assign(ed) to" phrasing to avoid grabbing the "to" in
+// "send the estimate to the Petersons".
+function extractAssignee(text) {
+  const m = text.match(/\bassign(?:ed)?\s+to\s+@?([a-z][a-z.'’-]*(?:\s+[a-z][a-z.'’-]*)?)/i);
+  if (m) return { name: m[1].trim(), match: m[0] };
+  return null;
+}
+
+/**
+ * Resolve a spoken name to a person id. `people` is [{ id, name }].
+ * Tries exact full-name, then first-name, then a prefix match. Returns '' if no
+ * confident match — the caller leaves the assignee unset rather than guessing.
+ */
+export function matchPerson(query, people) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q || !Array.isArray(people)) return '';
+  const named = people.filter((p) => p && p.name);
+  const exact = named.find((p) => p.name.toLowerCase() === q);
+  if (exact) return exact.id;
+  const firstName = named.find((p) => p.name.toLowerCase().split(/\s+/)[0] === q);
+  if (firstName) return firstName.id;
+  const prefix = named.find((p) => p.name.toLowerCase().startsWith(q) || q.startsWith(p.name.toLowerCase().split(/\s+/)[0]));
+  return prefix ? prefix.id : '';
+}
+
+/**
+ * Find a contact whose name appears in the instruction text. `contacts` is
+ * [{ id, name }]. Matches on the longest name token of >= 5 chars that appears
+ * (so "call the Hendersons" links "Bob Henderson", but a contact named "Bob Call"
+ * won't hijack "call the client"). Returns '' when nothing confident matches.
+ */
+export function matchContactInText(text, contacts) {
+  const haystack = ` ${String(text || '').toLowerCase()} `;
+  let bestId = '';
+  let bestLen = 0;
+  for (const contact of contacts || []) {
+    const name = String(contact?.name || '').trim().toLowerCase();
+    if (!name) continue;
+    for (const token of name.split(/\s+/)) {
+      if (token.length >= 5 && token.length > bestLen && haystack.includes(token)) {
+        bestId = contact.id;
+        bestLen = token.length;
+      }
+    }
+  }
+  return bestId;
+}
+
 function cleanTitle(text) {
   let t = text;
   for (const re of COMMAND_PREFIXES) t = t.replace(re, '');
@@ -178,6 +227,9 @@ export function parseTaskInstruction(instruction, now) {
   const urgency = extractUrgency(working);
   if (urgency) strip(urgency.match);
 
+  const assignee = extractAssignee(working);
+  if (assignee) strip(assignee.match);
+
   const time = extractTime(working);
   if (time) strip(time.match);
 
@@ -193,7 +245,8 @@ export function parseTaskInstruction(instruction, now) {
     due: date ? date.iso : '',
     due_time: time ? time.time : '',
     urgency: urgency ? urgency.urgency : 'medium',
-    found: { date: !!date, time: !!time, urgency: !!urgency },
+    assignee: assignee ? assignee.name : '',
+    found: { date: !!date, time: !!time, urgency: !!urgency, assignee: !!assignee },
     raw,
   };
 }
