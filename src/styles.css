@@ -22148,3 +22148,63 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   color: var(--ink-2);
   font-size: 14px;
 }
+
+/* Command palette — assistant sub-views (guide answer + task confirm) */
+.command-subhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+}
+.command-back {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--ink-2);
+  cursor: pointer;
+  flex: none;
+}
+.command-back:hover { background: var(--surface); color: var(--ink); }
+.command-answer { padding: 16px; }
+.command-answer p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.command-task-form { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.command-field { display: flex; flex-direction: column; gap: 5px; }
+.command-field > span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.command-field input,
+.command-field select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 9px 10px;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  width: 100%;
+}
+.command-field input:focus,
+.command-field select:focus { outline: none; border-color: var(--blue); }
+.command-field-row { display: flex; gap: 10px; }
+.command-field-row .command-field { flex: 1; min-width: 0; }
+.command-task-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+@media (max-width: 560px) {
+  .command-field-row { flex-direction: column; }
+}

@@ -9,6 +9,8 @@ import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequi
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
+import { parseTaskInstruction } from './assistant/task-parser.js';
+import { searchHelp, HELP_TOPICS } from './assistant/help-index.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -2300,7 +2302,7 @@ const state = {
   workspaceMenuOpen: false,
   mobileMenuOpen: false,
   rolePreview: null,
-  commandPalette: { open: false, query: '', index: 0 },
+  commandPalette: { open: false, query: '', index: 0, answer: null, taskDraft: null },
 };
 
 const app = document.getElementById('app');
@@ -20064,7 +20066,7 @@ function openCommandPalette() {
   // Only meaningful inside a company workspace — there is nothing to jump to on
   // the landing or auth screens.
   if (!state.route || state.route.name !== 'company') return;
-  state.commandPalette = { open: true, query: '', index: 0 };
+  state.commandPalette = { open: true, query: '', index: 0, answer: null, taskDraft: null };
   render();
   queueMicrotask(() => {
     const input = document.querySelector('[data-command-input]');
@@ -20074,7 +20076,7 @@ function openCommandPalette() {
 
 function closeCommandPalette() {
   if (!state.commandPalette.open) return;
-  state.commandPalette = { open: false, query: '', index: 0 };
+  state.commandPalette = { open: false, query: '', index: 0, answer: null, taskDraft: null };
   render();
 }
 
@@ -20168,15 +20170,80 @@ function commandPaletteResultsFor(query) {
     }
     capped.push(command);
   }
-  return capped;
+  return [...capped, ...commandAssistantResults(query)];
+}
+
+// The free assistant's two contributions to the results list: guide answers
+// (searchHelp) and a "create task from this" action (rule-based parser). Both
+// appear only once the user is typing, after the module/record results.
+function commandAssistantResults(query) {
+  const q = query.trim();
+  if (!q) return [];
+  const extras = [];
+
+  for (const topic of searchHelp(q).slice(0, 3)) {
+    extras.push({
+      id: `help:${topic.id}`, group: 'Guide', icon: 'ti-help-circle',
+      label: topic.title, hint: '', run: { kind: 'help', topicId: topic.id },
+    });
+  }
+
+  if (can('tasks.manage', activeCompanyId())) {
+    const draft = parseTaskInstruction(q, new Date());
+    const hint = [draft.found.date ? draft.due : '', draft.found.time ? draft.due_time : '']
+      .filter(Boolean).join(' ');
+    extras.push({
+      id: 'create-task', group: 'Create', icon: 'ti-plus',
+      label: `Create task: ${draft.title}`, hint, run: { kind: 'create-task', query: q },
+    });
+  }
+  return extras;
 }
 
 function commandPaletteKeydown(event) {
+  // In a sub-view (a guide answer or the task-confirm form), Escape steps back to
+  // the search rather than closing the whole palette. The arrow/Enter list nav is
+  // suspended so the user can type and tab through the task form normally.
+  if (state.commandPalette.answer || state.commandPalette.taskDraft) {
+    if (event.key === 'Escape') { event.preventDefault(); commandPaletteBack(); return true; }
+    return false;
+  }
   if (event.key === 'Escape') { event.preventDefault(); closeCommandPalette(); return true; }
   if (event.key === 'ArrowDown') { event.preventDefault(); moveCommandSelection(1); return true; }
   if (event.key === 'ArrowUp') { event.preventDefault(); moveCommandSelection(-1); return true; }
   if (event.key === 'Enter') { event.preventDefault(); runCommand(commandResults[state.commandPalette.index]); return true; }
   return false; // any other key falls through to the search input
+}
+
+function commandPaletteBack() {
+  state.commandPalette.answer = null;
+  state.commandPalette.taskDraft = null;
+  render();
+  queueMicrotask(() => {
+    const input = document.querySelector('[data-command-input]');
+    if (input) input.focus();
+  });
+}
+
+async function submitCommandTask(form) {
+  // Reuse the app's full task-save path — permission check, creator id, insert,
+  // optimistic state, navigate, toast. saveTask reads the form's FormData at its
+  // start (before any await), so the form is still mounted when we call it even
+  // though we've marked the palette closed. On success saveTask navigates+renders,
+  // which removes the overlay; on failure it toasts and we reopen the form.
+  state.commandPalette = { open: false, query: '', index: 0, answer: null, taskDraft: null };
+  const ok = await saveTask(form);
+  if (ok === false) {
+    state.commandPalette.open = true;
+    state.commandPalette.taskDraft = {
+      title: form.elements.title?.value || '',
+      due: form.elements.due?.value || '',
+      due_time: form.elements.due_time?.value || '',
+      urgency: form.elements.priority?.value || 'medium',
+      found: { date: false, time: false, urgency: false },
+    };
+    render();
+  }
 }
 
 function moveCommandSelection(delta) {
@@ -20189,6 +20256,24 @@ function moveCommandSelection(delta) {
 function runCommand(command) {
   if (!command) return;
   const run = command.run;
+
+  // These two stay inside the palette (they swap its body), so handle them
+  // before the close below.
+  if (run.kind === 'help') {
+    state.commandPalette.answer = HELP_TOPICS.find((t) => t.id === run.topicId) || null;
+    render();
+    return;
+  }
+  if (run.kind === 'create-task') {
+    state.commandPalette.taskDraft = parseTaskInstruction(run.query, new Date());
+    render();
+    queueMicrotask(() => {
+      const el = document.querySelector('[data-command-task-title]');
+      if (el) { el.focus(); el.select(); }
+    });
+    return;
+  }
+
   closeCommandPalette(); // resets state and re-renders, removing the overlay
   if (run.kind === 'navigate') {
     navigate(companyPath(run.section, {}, activeCompanyId()));
@@ -20241,26 +20326,86 @@ function refreshCommandPaletteResults() {
   if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
 }
 
+function renderCommandBackHeader(label) {
+  return `<div class="command-subhead">
+    <button type="button" class="command-back" data-action="command-back" aria-label="Back to search">
+      <i class="ti ti-arrow-left" aria-hidden="true"></i>
+    </button>
+    <span>${h(label)}</span>
+  </div>`;
+}
+
+function renderCommandAnswer(topic) {
+  return `
+    ${renderCommandBackHeader(topic.title)}
+    <div class="command-answer">
+      <p>${h(topic.answer)}</p>
+    </div>`;
+}
+
+function renderCommandTaskForm(draft) {
+  const URGENCIES = ['low', 'medium', 'high', 'urgent', 'critical'];
+  return `
+    ${renderCommandBackHeader('Create task')}
+    <form class="command-task-form" data-command-task-form>
+      <label class="command-field">
+        <span>Task</span>
+        <input type="text" name="title" data-command-task-title value="${h(draft.title)}" required autocomplete="off" />
+      </label>
+      <div class="command-field-row">
+        <label class="command-field">
+          <span>Due date</span>
+          <input type="date" name="due" value="${h(draft.due)}" />
+        </label>
+        <label class="command-field">
+          <span>Time</span>
+          <input type="time" name="due_time" value="${h(draft.due_time)}" />
+        </label>
+        <label class="command-field">
+          <span>Urgency</span>
+          <select name="priority">
+            ${URGENCIES.map((u) => `<option value="${u}" ${u === draft.urgency ? 'selected' : ''}>${u.charAt(0).toUpperCase() + u.slice(1)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <div class="command-task-actions">
+        <button type="button" class="btn" data-action="command-back">Cancel</button>
+        <button type="submit" class="btn btn-primary"><i class="ti ti-plus" aria-hidden="true"></i>Create task</button>
+      </div>
+    </form>`;
+}
+
 function renderCommandPalette() {
   if (!state.commandPalette.open) return '';
-  commandResults = commandPaletteResultsFor(state.commandPalette.query);
-  if (state.commandPalette.index >= commandResults.length) state.commandPalette.index = 0;
-  const activeId = commandResults.length ? `command-item-${state.commandPalette.index}` : '';
-  return `
-    <div class="modal-overlay command-overlay" data-action="command-backdrop">
-      <div class="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
+
+  let body;
+  if (state.commandPalette.answer) {
+    body = renderCommandAnswer(state.commandPalette.answer);
+  } else if (state.commandPalette.taskDraft) {
+    body = renderCommandTaskForm(state.commandPalette.taskDraft);
+  } else {
+    commandResults = commandPaletteResultsFor(state.commandPalette.query);
+    if (state.commandPalette.index >= commandResults.length) state.commandPalette.index = 0;
+    const activeId = commandResults.length ? `command-item-${state.commandPalette.index}` : '';
+    body = `
         <div class="command-search">
           <i class="ti ti-search" aria-hidden="true"></i>
           <input type="text" class="command-input" data-command-input role="combobox"
             aria-expanded="true" aria-controls="command-results" aria-autocomplete="list"
             aria-activedescendant="${activeId}" aria-label="Search commands"
-            placeholder="Search contacts, jobs, modules, actions…" value="${h(state.commandPalette.query)}"
+            placeholder="Search, ask how to…, or type a task" value="${h(state.commandPalette.query)}"
             autocomplete="off" autocapitalize="off" spellcheck="false" />
           <kbd class="command-kbd">Esc</kbd>
         </div>
         <div class="command-results" id="command-results" role="listbox" aria-label="Commands">
           ${renderCommandResultItems()}
-        </div>
+        </div>`;
+  }
+
+  return `
+    <div class="modal-overlay command-overlay" data-action="command-backdrop">
+      <div class="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
+        ${body}
       </div>
     </div>`;
 }
@@ -20392,6 +20537,11 @@ function handleAction(event, node) {
   if (action === 'command-run') {
     event.preventDefault();
     runCommand(commandResults[Number(node.dataset.cmdIndex)]);
+    return;
+  }
+  if (action === 'command-back') {
+    event.preventDefault();
+    commandPaletteBack();
     return;
   }
   if (action === 'refresh-data') {
@@ -22307,6 +22457,12 @@ function onDocumentSubmit(event) {
   if (isReadOnlyDemo() && isMutableFormSubmit(event.target)) {
     event.preventDefault();
     requireMutableWorkspace();
+    return;
+  }
+
+  if (event.target.matches('[data-command-task-form]')) {
+    event.preventDefault();
+    submitCommandTask(event.target);
     return;
   }
 
@@ -24550,6 +24706,17 @@ function onDocumentInput(event) {
     state.commandPalette.query = event.target.value;
     state.commandPalette.index = 0;
     refreshCommandPaletteResults();
+    return;
+  }
+  if (state.commandPalette.taskDraft && event.target.closest('[data-command-task-form]')) {
+    // Mirror edits into the draft so a background re-render (realtime sync) can't
+    // wipe what the user typed before they hit Create.
+    const form = event.target.closest('[data-command-task-form]');
+    const draft = state.commandPalette.taskDraft;
+    draft.title = form.elements.title?.value ?? draft.title;
+    draft.due = form.elements.due?.value ?? draft.due;
+    draft.due_time = form.elements.due_time?.value ?? draft.due_time;
+    draft.urgency = form.elements.priority?.value ?? draft.urgency;
     return;
   }
   if (event.target.matches('[data-job-type-input]')) {
@@ -29974,6 +30141,7 @@ function isMutableAction(action = '') {
     'command-close',
     'command-backdrop',
     'command-run',
+    'command-back',
     'sign-out',
     'toggle-account-menu',
     'toggle-notifications',
