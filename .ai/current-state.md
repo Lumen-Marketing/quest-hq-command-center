@@ -36,7 +36,7 @@ The repository filename history and Supabase's applied migration versions are no
 
 ## Feature state
 
-Production includes categorized job-card photo upload and durable underwriting cases. The Underwriter workspace uses a compact four-metric summary so its calculator begins higher on the page. The live data layer also supports a tenant-safe direct link from tasks to deals; tasks supply the shared "What's next" source across the board, table, and list views for Contacts, Quotes/Deals, and Jobs. Application startup is deferred until top-level module state is initialized so cached direct links can render safely.
+The current implementation includes categorized job-card photo upload and durable underwriting cases. The Underwriter workspace uses a compact four-metric summary so its calculator begins higher on the page. The application shell uses a compact Quest command rail with sidebar search, My work and Company scopes, nested pipeline stages, and direct profile/settings access while preserving module permission gates. The live data layer also supports a tenant-safe direct link from tasks to deals; tasks supply the shared "What's next" source across the board, table, and list views for Contacts, Quotes/Deals, and Jobs. Application startup is deferred until top-level module state is initialized so cached direct links can render safely.
 
 The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Settings, plugins, and Workspace App Builder.
 
