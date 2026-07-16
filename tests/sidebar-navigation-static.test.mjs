@@ -7,7 +7,7 @@ const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8
 
 test('desktop navigation adopts the compact Quest command rail', () => {
   assert.match(source, /<aside class="deck quest-nav-v2" aria-label="Quest navigation">/);
-  assert.match(source, /class="deck-global-search"[\s\S]*?data-global-search[\s\S]*?placeholder="Search or jump to/);
+  assert.match(source, /class="deck-global-search"[\s\S]*?data-action="command-open"[\s\S]*?<span>Search or jump to/);
   assert.match(source, /class="sidebar-scope-toggle"[\s\S]*?data-sidebar-scope="my-work"[\s\S]*?data-sidebar-scope="company"/);
   assert.match(styles, /\.quest-app\s*\{[\s\S]*?--sidebar-width:\s*264px/);
   assert.match(styles, /\.quest-nav-v2\s*\{[\s\S]*?background:\s*var\(--surface\)/);
