@@ -1,6 +1,6 @@
 # Public schema catalog
 
-Captured 2026-07-13T21:28:30.100Z from the live Supabase catalog. This page is generated for fast reading; [snapshot.json](snapshot.json) is the precise machine-readable source.
+Captured 2026-07-16T19:21:04.447Z from the live Supabase catalog. This page is generated for fast reading; [snapshot.json](snapshot.json) is the precise machine-readable source.
 
 Nullable columns end in ?. Arrays and database-specific types use the live Postgres type name.
 
@@ -178,6 +178,12 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 - Primary key: id
 - Columns: `id` uuid; `company_id` text; `client_id` uuid?; `client_name` text?; `name` text; `contact_name` text?; `site_address` text?; `job_type` text; `stage` text; `priority` text; `owner_name` text?; `scope` text?; `start_date` date?; `due_date` date?; `estimate_total` numeric; `invoice_total` numeric; `task_count` integer; `file_count` integer; `notes` text?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `account_id` text?; `deal_id` text?; `contact_id` text?; `site_id` text?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
 
+## public.knowledge_articles
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id` text; `company_id` text; `title` text; `body` text; `category` text; `creator_id` text?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+
 ## public.message_attachments
 
 - RLS: enabled
@@ -242,7 +248,7 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` uuid; `email` text; `full_name` text?; `approved` boolean; `role` text; `email_verified` boolean; `member_id` text?; `supervisor_id` text?; `company_ids` _text; `avatar_url` text?; `onboarded` boolean; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+- Columns: `id` uuid; `email` text; `full_name` text?; `approved` boolean; `role` text; `email_verified` boolean; `member_id` text?; `supervisor_id` text?; `company_ids` ARRAY; `avatar_url` text?; `onboarded` boolean; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
 
 ## public.proposal_documents
 
@@ -278,13 +284,13 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `title` text; `description` text; `type` text; `label` text?; `bid_status` text?; `company_id` text; `creator_id` text; `assignee_id` text; `project_id` text?; `due` date; `due_time` text?; `reminder_at` text?; `priority` text; `urgency` text; `status` text; `watchers` jsonb; `subtasks` jsonb; `activity` jsonb; `cleared_at` timestamp with time zone?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `contact_id` text?; `assignee_ids` _text; `wo_number` integer?; `reminder_offset` text?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
+- Columns: `id` text; `title` text; `description` text; `type` text; `label` text?; `bid_status` text?; `company_id` text; `creator_id` text; `assignee_id` text; `project_id` text?; `due` date; `due_time` text?; `reminder_at` text?; `priority` text; `urgency` text; `status` text; `watchers` jsonb; `subtasks` jsonb; `activity` jsonb; `cleared_at` timestamp with time zone?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `contact_id` text?; `assignee_ids` ARRAY; `wo_number` integer?; `reminder_offset` text?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
 
 ## public.team_members
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `name` text; `full_name` text; `email` text; `color` text; `avatar_url` text?; `active` boolean; `company_ids` _text; `created_at` timestamp with time zone
+- Columns: `id` text; `name` text; `full_name` text; `email` text; `color` text; `avatar_url` text?; `active` boolean; `company_ids` ARRAY; `created_at` timestamp with time zone
 
 ## public.time_entries
 
@@ -292,11 +298,23 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 - Primary key: id
 - Columns: `id` text; `user_id` text; `task_id` text; `start_at` timestamp with time zone; `end_at` timestamp with time zone; `duration_ms` bigint; `note` text; `created_at` timestamp with time zone
 
+## public.underwriting_cases
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id` uuid; `company_id` text; `contact_id` text; `contract_price` numeric; `material_cost` numeric; `labor_cost` numeric; `permit_cost` numeric; `disposal_cost` numeric; `other_cost` numeric; `overhead_percent` numeric; `commission_percent` numeric; `contingency_percent` numeric; `target_margin_percent` numeric; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+
 ## public.user_role_assignments
 
 - RLS: enabled
 - Primary key: company_id, profile_id, role_id
 - Columns: `company_id` text; `profile_id` uuid; `role_id` uuid; `assigned_by` uuid?; `created_at` timestamp with time zone
+
+## public.v_pricebook_material_best
+
+- RLS: disabled
+- Primary key: —
+- Columns: `company_id` text?; `material_id` uuid?; `vendor_id` uuid?; `unit_cost` numeric?; `updated_at` timestamp with time zone?
 
 ## public.wo_counters
 

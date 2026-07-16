@@ -14,6 +14,7 @@ import { searchHelp, HELP_TOPICS } from './assistant/help-index.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
+import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -1230,6 +1231,7 @@ const CALENDAR_EVENT_TYPES = ['Company event', 'Job visit / inspection', 'Estima
 const CALENDAR_FILTER_TYPES = ['Task due', 'Invoice due', 'Approval', 'Time'].concat(CALENDAR_EVENT_TYPES);
 const FILE_ICON_ASSET_BASE = 'https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons/';
 const FILE_CATEGORIES = ['All categories', 'Shared', 'Jobs', 'Forms', 'Photos', 'Permits', 'Contracts', 'Archive'];
+const JOB_PHOTO_CATEGORIES = ['Before', 'Inspection', 'Damage', 'Progress', 'After', 'Other'];
 const DRIVE_FOLDERS = [
   ['jobs', 'Jobs', 'Job-linked folders and deliverables', 'ti-folders'],
   ['shared', 'Shared', 'Company-wide files', 'ti-folder-share'],
@@ -2111,6 +2113,7 @@ const state = {
   pipelineStages: [],
   tasks: activeRows(readSeededList(TASK_CACHE_KEY, tasksFallback)).map(normalizeTask),
   files: activeRows(readSeededList(FILE_CACHE_KEY, filesFallback)).map(normalizeFile),
+  underwritingCases: [],
   driveFolders: readSeededList(DRIVE_FOLDER_CACHE_KEY, []).map(normalizeDriveFolder),
   forms: activeRows(readSeededList(FORM_CACHE_KEY, formsFallback)).map(normalizeForm),
   formResponses: activeRows(readSeededList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback)).map(normalizeFormResponse),
@@ -2239,6 +2242,10 @@ const state = {
   selectedJobId: '',
   selectedTaskId: '',
   selectedFileId: '',
+  jobPhotoJobId: '',
+  jobPhotoCategory: 'All',
+  underwritingContactId: '',
+  underwritingDraft: null,
   selectedFormId: '',
   selectedFormResponseId: '',
   selectedClientPortalId: '',
@@ -3009,6 +3016,7 @@ async function loadSupabaseData() {
     financeExpensesResult,
     financeVendorsResult,
     contactsResult,
+    underwritingCasesResult,
     pipelineStagesResult,
     accountsResult,
     dealsResult,
@@ -3058,6 +3066,7 @@ async function loadSupabaseData() {
     client.from('finance_expenses').select('*').order('spent_at', { ascending: false }),
     client.from('finance_vendors').select('*').order('name', { ascending: true }),
     client.from('contacts').select('*').order('updated_at', { ascending: false }),
+    safeSupabaseQuery(client.from('underwriting_cases').select('*').order('updated_at', { ascending: false })),
     client.from('pipeline_stages').select('*').order('position', { ascending: true }),
     client.from('accounts').select('*').order('name', { ascending: true }),
     client.from('deals').select('*').order('updated_at', { ascending: false }),
@@ -3144,6 +3153,10 @@ async function loadSupabaseData() {
   if (!financeVendorsResult.error) state.financeVendors = activeRows(financeVendorsResult.data || []).map(normalizeFinanceVendor);
   if (!contactsResult.error) {
     state.contacts = activeRows(contactsResult.data || []).map(normalizeContact);
+    liveTables += 1;
+  }
+  if (!underwritingCasesResult.error) {
+    state.underwritingCases = (underwritingCasesResult.data || []).map(normalizeUnderwritingCase);
     liveTables += 1;
   }
   if (!pipelineStagesResult.error) {
@@ -7038,6 +7051,83 @@ const CRM2_UNDERWRITER_GUIDANCE = {
   won: { title: 'Won - convert to a job.', lines: ['Schedule production.', 'Order materials.', 'Confirm scope before handoff.'] },
 };
 
+function underwritingCaseForContact(contactId, companyId = activeCompanyId()) {
+  return state.underwritingCases.find((item) => item.company_id === companyId && item.contact_id === contactId) || null;
+}
+
+function underwritingInputFromCase(item, contact) {
+  return normalizeUnderwritingInput({
+    contractPrice: item?.contract_price ?? contact?.value ?? 0,
+    materialCost: item?.material_cost ?? 0,
+    laborCost: item?.labor_cost ?? 0,
+    permitCost: item?.permit_cost ?? 0,
+    disposalCost: item?.disposal_cost ?? 0,
+    otherCost: item?.other_cost ?? 0,
+    overheadPercent: item?.overhead_percent ?? 10,
+    commissionPercent: item?.commission_percent ?? 5,
+    contingencyPercent: item?.contingency_percent ?? 2,
+    targetMarginPercent: item?.target_margin_percent ?? 30,
+  });
+}
+
+function underwritingDraftForContact(contact, companyId) {
+  if (!contact) return null;
+  if (state.underwritingDraft?.contactId === contact.id && state.underwritingDraft?.companyId === companyId) {
+    return state.underwritingDraft;
+  }
+  const saved = underwritingCaseForContact(contact.id, companyId);
+  state.underwritingDraft = {
+    companyId,
+    contactId: contact.id,
+    ...underwritingInputFromCase(saved, contact),
+    notes: saved?.notes || '',
+  };
+  return state.underwritingDraft;
+}
+
+function underwritingNumberField(label, name, value, suffix = '$') {
+  return `
+    <label class="underwriting-field">
+      <span>${h(label)}</span>
+      <div class="underwriting-input-wrap ${suffix === '%' ? 'percent' : ''}">
+        ${suffix === '$' ? '<b>$</b>' : ''}
+        <input name="${h(name)}" type="number" min="0" max="${suffix === '%' ? '100' : '999999999'}" step="0.01" value="${h(String(value))}" data-underwriting-field inputmode="decimal" />
+        ${suffix === '%' ? '<b>%</b>' : ''}
+      </div>
+    </label>
+  `;
+}
+
+function underwritingDecisionCopy(decision) {
+  if (decision === 'approve') return ['Ready to price', 'Margin meets the target with room in direct costs.'];
+  if (decision === 'review') return ['Review the scope', 'Margin is within three points of target. Tighten costs or price before approval.'];
+  if (decision === 'decline') return ['Reprice before approval', 'The current scope misses the target margin by more than three points.'];
+  return ['Enter a contract price', 'Add revenue and costs to calculate a decision.'];
+}
+
+function renderUnderwritingResults(result) {
+  const [title, detail] = underwritingDecisionCopy(result.decision);
+  const headroomLabel = result.directCostHeadroom >= 0 ? 'Direct cost headroom' : 'Direct cost overage';
+  return `
+    <div class="underwriting-decision ${h(result.decision)}">
+      <span><i class="ti ti-shield-check"></i>${h(title)}</span>
+      <p>${h(detail)}</p>
+    </div>
+    <div class="underwriting-result-grid">
+      <div><span>Gross profit</span><strong>${money(result.grossProfit)}</strong></div>
+      <div><span>Gross margin</span><strong>${h(result.grossMarginPercent.toFixed(2))}%</strong></div>
+      <div><span>Total cost</span><strong>${money(result.totalCost)}</strong></div>
+      <div><span>Break-even price</span><strong>${money(result.breakEvenPrice)}</strong></div>
+    </div>
+    <div class="underwriting-cost-stack">
+      <div><span>Direct costs</span><strong>${money(result.directCost)}</strong></div>
+      <div><span>Overhead, commission, contingency</span><strong>${money(result.percentageCost)}</strong></div>
+      <div class="${result.directCostHeadroom < 0 ? 'negative' : ''}"><span>${h(headroomLabel)}</span><strong>${money(Math.abs(result.directCostHeadroom))}</strong></div>
+      <div><span>Max direct cost at target</span><strong>${money(result.maxDirectCost)}</strong></div>
+    </div>
+  `;
+}
+
 function renderUnderwriterPage(route, companyId) {
   const requestedStage = route.params.get('stage') || 'all';
   const stageKeys = new Set(CRM2_UNDERWRITER_STAGES.map((stage) => stage.key));
@@ -7050,6 +7140,11 @@ function renderUnderwriterPage(route, companyId) {
   const estimates = contacts.filter((contact) => ['estimate', 'negotiating'].includes(contact.underwriter_stage.key));
   const canManageUnderwriter = can('underwriter.manage', companyId);
   const guide = activeStage === 'all' ? CRM2_UNDERWRITER_GUIDANCE.underwriting : CRM2_UNDERWRITER_GUIDANCE[activeStage];
+  const requestedContactId = route.params.get('contact_id') || state.underwritingContactId;
+  const selectedContact = contacts.find((contact) => contact.id === requestedContactId) || underwriting[0] || contacts[0] || null;
+  state.underwritingContactId = selectedContact?.id || '';
+  const draft = underwritingDraftForContact(selectedContact, companyId);
+  const calculation = calculateUnderwriting(draft || {});
   return `
     <section class="tool-page underwriter-page">
       ${workspaceHeader('Underwriter', 'Quest CRM workspace for qualification, scope, pricing, and quote handoff readiness.', `
@@ -7070,6 +7165,37 @@ function renderUnderwriterPage(route, companyId) {
             return `<a class="pipe-chip ${activeStage === stage.key ? 'on' : ''}" href="${appHref(companyPath('underwriter', { stage: stage.key }, companyId))}" data-router>${pipelineDot(stage.color)}${h(stage.name)}<b>${h(String(count))}</b></a>`;
           }).join('')}
         </div>
+      </section>
+      <section class="panel underwriting-calculator">
+        <div class="section-head">
+          <div><h2>Underwriting calculator</h2><p>Price the scope, protect the margin, and save one current case per contact.</p></div>
+          ${selectedContact && underwritingCaseForContact(selectedContact.id, companyId) ? '<span class="underwriting-saved"><i class="ti ti-check"></i>Saved case</span>' : ''}
+        </div>
+        ${selectedContact ? `
+          <form data-underwriting-form>
+            <div class="underwriting-form-side">
+              <label class="underwriting-field span-2"><span>Contact</span><select name="contact_id" data-underwriting-contact>
+                ${contacts.map((contact) => `<option value="${h(contact.id)}" ${contact.id === selectedContact.id ? 'selected' : ''}>${h(contact.name)} - ${h(contact.pay_type || 'Retail')}</option>`).join('')}
+              </select></label>
+              ${underwritingNumberField('Contract price', 'contractPrice', draft.contractPrice)}
+              ${underwritingNumberField('Target margin', 'targetMarginPercent', draft.targetMarginPercent, '%')}
+              ${underwritingNumberField('Material', 'materialCost', draft.materialCost)}
+              ${underwritingNumberField('Labor', 'laborCost', draft.laborCost)}
+              ${underwritingNumberField('Permits and fees', 'permitCost', draft.permitCost)}
+              ${underwritingNumberField('Disposal', 'disposalCost', draft.disposalCost)}
+              ${underwritingNumberField('Other direct cost', 'otherCost', draft.otherCost)}
+              ${underwritingNumberField('Overhead', 'overheadPercent', draft.overheadPercent, '%')}
+              ${underwritingNumberField('Commission', 'commissionPercent', draft.commissionPercent, '%')}
+              ${underwritingNumberField('Contingency', 'contingencyPercent', draft.contingencyPercent, '%')}
+              <label class="underwriting-field span-2"><span>Decision notes</span><textarea name="notes" rows="3" data-underwriting-field placeholder="Scope risks, exclusions, or pricing decision">${h(draft.notes || '')}</textarea></label>
+              <div class="form-actions span-2">
+                <button class="btn btn-primary" type="submit" ${canManageUnderwriter ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save underwriting</button>
+                <span class="form-note">Percent costs are calculated from contract price.</span>
+              </div>
+            </div>
+            <aside class="underwriting-results" data-underwriting-results aria-live="polite">${renderUnderwritingResults(calculation)}</aside>
+          </form>
+        ` : emptyState('Add a contact to start an underwriting case.')}
       </section>
       <section class="home-dashboard-grid">
         <article class="panel home-activity-panel">
@@ -9372,6 +9498,7 @@ function renderJobRecord(companyId, job) {
   };
   const headerActions = [
     ['New Task', 'ti-checkbox'],
+    ...(can('files.view', companyId) ? [['Photos', 'ti-camera']] : []),
     ['Log a Call', 'ti-phone'],
     ['New Estimate', 'ti-calculator'],
     ['Proposal', 'ti-file-text'],
@@ -9382,6 +9509,7 @@ function renderJobRecord(companyId, job) {
   const activityTabs = [['Note', 'ti-note'], ['New Task', 'ti-checkbox'], ['New Event', 'ti-calendar'], ['Log a Call', 'ti-phone']];
   const quickTiles = [
     ['Task', 'ti-checkbox'],
+    ...(can('files.view', companyId) ? [['Photos', 'ti-camera']] : []),
     ['Estimate', 'ti-calculator'],
     ['Proposal', 'ti-file-text'],
     ...(can('files.view', companyId) ? [['Files', 'ti-folder']] : []),
@@ -9405,7 +9533,9 @@ function renderJobRecord(companyId, job) {
         <div class="sf-actions">
           ${headerActions.map(([label, ico]) => label === 'Edit'
             ? `<button class="sf-btn" type="button" data-action="open-job-form" data-mode="edit" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`
-            : `<button class="sf-btn" type="button" data-action="job-quick" data-kind="${h(label)}" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
+            : label === 'Photos'
+              ? `<button class="sf-btn" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`
+              : `<button class="sf-btn" type="button" data-action="job-quick" data-kind="${h(label)}" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
         </div>
       </div>
 
@@ -9463,7 +9593,9 @@ function renderJobRecord(companyId, job) {
 
         <div class="sf-col">
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-bolt"></i>Quick Create</div>
-            <div class="sf-quick-grid">${quickTiles.map(([label, ico]) => `<button class="sf-quick-tile" type="button" data-action="job-quick" data-kind="${h(label)}" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i><span>${h(label)}</span></button>`).join('')}</div>
+            <div class="sf-quick-grid">${quickTiles.map(([label, ico]) => label === 'Photos'
+              ? `<button class="sf-quick-tile" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i><span>${h(label)}</span></button>`
+              : `<button class="sf-quick-tile" type="button" data-action="job-quick" data-kind="${h(label)}" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i><span>${h(label)}</span></button>`).join('')}</div>
           </div>
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-apps"></i>Linked Workspace</div>
             <div class="sf-quick-grid">
@@ -10050,6 +10182,72 @@ function renderFileUploadModal() {
             <span>${h(companyId)}/${h(jobId ? `jobs/${jobId}` : folder)}</span>
           </div>
         </form>
+      </div>
+    </div>
+  `;
+}
+
+function jobPhotosFor(jobId, companyId = activeCompanyId()) {
+  return state.files
+    .filter((file) => file.company_id === companyId && file.job_id === jobId && fileTypeKind(file) === 'image')
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+}
+
+function renderJobPhotosModal(companyId, job) {
+  if (!job || job.company_id !== companyId) return renderModalShell('Job photos', 'Job unavailable', emptyState('This job is no longer available.'));
+  const canManagePhotos = can('files.manage', companyId);
+  const allPhotos = jobPhotosFor(job.id, companyId);
+  const filter = state.jobPhotoCategory || 'All';
+  const photos = filter === 'All' ? allPhotos : allPhotos.filter((file) => file.category === filter);
+  ensureFileThumbnails(photos);
+  return `
+    <div class="modal-overlay">
+      <div class="modal-panel job-photos-modal" role="dialog" aria-modal="true" aria-labelledby="job-photos-title">
+        <div class="modal-head">
+          <div><div class="eyebrow">${h(job.name)}</div><h2 id="job-photos-title">Job photos</h2><p>${h(job.site_address || job.client_name || companyName(companyId))}</p></div>
+          <button class="btn" type="button" data-action="close-modal">Close</button>
+        </div>
+        <div class="job-photos-shell">
+          <form class="job-photo-uploader" data-job-photo-form>
+            <fieldset class="job-photo-upload-fields" ${canManagePhotos ? '' : 'disabled'}>
+            <input type="hidden" name="job_id" value="${h(job.id)}" />
+            <div class="job-photo-drop span-2">
+              <label class="job-photo-capture">
+                <i class="ti ti-camera"></i><span><strong>Take a photo</strong><small>Opens the rear camera on supported phones.</small></span>
+                <input name="camera" type="file" accept="${acceptAttr('image')}" capture="environment" />
+              </label>
+              <label class="job-photo-capture">
+                <i class="ti ti-photo"></i><span><strong>Add from device</strong><small>Select several job photos at once.</small></span>
+                <input name="photos" type="file" multiple accept="${acceptAttr('image')}" />
+              </label>
+            </div>
+            ${selectField('Photo type', 'category', 'Inspection', JOB_PHOTO_CATEGORIES.map((item) => [item, item]))}
+            ${field('Caption', 'notes', '', false, 'text')}
+            <div class="form-actions span-2">
+              <button class="btn btn-primary" type="submit" data-job-photo-submit ${canManagePhotos ? '' : 'disabled'}><i class="ti ti-cloud-upload"></i>Upload photos</button>
+              <span class="form-note">${canManagePhotos ? 'Images stay inside this job and the company workspace.' : 'Your role has view-only access to job photos.'}</span>
+            </div>
+            <div class="upload-progress span-2" data-job-photo-progress hidden><div class="upload-progress-bar" data-job-photo-bar></div></div>
+            </fieldset>
+          </form>
+          <section class="job-photo-library">
+            <div class="job-photo-library-head">
+              <div><strong>${allPhotos.length} photo${allPhotos.length === 1 ? '' : 's'}</strong><span>Before, damage, progress, and closeout evidence.</span></div>
+              <a class="btn btn-compact" href="${appHref(companyPath('files', { folder: 'jobs', job_id: job.id }, companyId))}" data-router><i class="ti ti-folder"></i>Open drive</a>
+            </div>
+            <div class="job-photo-filters" role="group" aria-label="Photo type">
+              ${['All', ...JOB_PHOTO_CATEGORIES].map((item) => `<button class="${filter === item ? 'active' : ''}" type="button" data-action="set-job-photo-filter" data-category="${h(item)}">${h(item)}</button>`).join('')}
+            </div>
+            <div class="job-photo-gallery">
+              ${photos.map((file) => `
+                <button type="button" class="job-photo-card" data-action="select-file" data-file-id="${h(file.id)}">
+                  <span class="job-photo-image">${fileThumb(file)}</span>
+                  <span><strong>${h(file.category || 'Photo')}</strong><small>${h(file.notes || file.file_name)}</small></span>
+                </button>
+              `).join('') || `<div class="job-photo-empty"><i class="ti ti-camera"></i><strong>No ${filter === 'All' ? '' : h(filter.toLowerCase() + ' ')}photos yet</strong><span>Capture the first photo without leaving this job.</span></div>`}
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   `;
@@ -18835,6 +19033,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'dashboard-activity') return renderDashboardActivityModal(activeCompanyId());
   if (state.modal === 'workday-next-step') return renderWorkdayNextStepModal();
   if (state.modal === 'file-upload') return renderFileUploadModal();
+  if (state.modal === 'job-photos') return renderJobPhotosModal(activeCompanyId(), jobById(state.jobPhotoJobId));
   if (state.modal === 'client-portal-form') return renderClientPortalFormModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
   if (state.modal === 'client-portal-document') return renderClientPortalDocumentModal(activeCompanyId(), clientPortalById(state.selectedClientPortalId));
   if (state.modal === 'folder-new') return renderNewFolderModal();
@@ -22079,6 +22278,22 @@ function handleAction(event, node) {
     managePlatformCompany(node.dataset.companyId, node.dataset.platformAction);
     return;
   }
+  if (action === 'open-job-photos') {
+    event.preventDefault();
+    const job = jobById(node.dataset.jobId || state.selectedJobId);
+    if (!job || !requirePermission('files.view', job.company_id, 'Your role cannot view job photos.', 'Job photos')) return;
+    state.jobPhotoJobId = job.id;
+    state.jobPhotoCategory = 'All';
+    state.modal = 'job-photos';
+    render();
+    return;
+  }
+  if (action === 'set-job-photo-filter') {
+    event.preventDefault();
+    state.jobPhotoCategory = ['All', ...JOB_PHOTO_CATEGORIES].includes(node.dataset.category) ? node.dataset.category : 'All';
+    render();
+    return;
+  }
   if (action === 'open-file-upload') {
     event.preventDefault();
     if (!requirePermission('files.manage', activeCompanyId(), 'Your role can view files but cannot upload.', 'Files')) return;
@@ -23226,6 +23441,12 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-underwriting-form]')) {
+    event.preventDefault();
+    saveUnderwritingCase(event.target);
+    return;
+  }
+
   if (event.target.matches('[data-new-form-form]')) {
     event.preventDefault();
     createFormFromModal(event.target).catch((error) => showToast(error.message || 'Form create failed.', 'local', 'Forms'));
@@ -23235,6 +23456,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-file-form]')) {
     event.preventDefault();
     saveFileRecord(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-job-photo-form]')) {
+    event.preventDefault();
+    saveJobPhotos(event.target);
     return;
   }
 
@@ -25170,6 +25397,10 @@ async function openMessageAttachment(attachmentId) {
 }
 
 function onDocumentInput(event) {
+  if (event.target.matches('[data-underwriting-field]')) {
+    syncUnderwritingForm(event.target.closest('[data-underwriting-form]'));
+    return;
+  }
   if (event.target.matches('[data-phone-format]')) {
     // Only digits, '+' and '-' are allowed; strip anything else, then format.
     const cleaned = event.target.value.replace(/[^0-9+\-]/g, '');
@@ -25333,6 +25564,12 @@ function onDocumentInput(event) {
 }
 
 function onDocumentChange(event) {
+  if (event.target.matches('[data-underwriting-contact]')) {
+    state.underwritingContactId = event.target.value || '';
+    state.underwritingDraft = null;
+    render();
+    return;
+  }
   // Auto-format contact form text fields on blur/commit so the entry the user
   // sees matches exactly what gets stored (name casing, email case, zip, etc.).
   const cf = event.target;
@@ -25620,6 +25857,173 @@ async function deleteTask(id, options = {}) {
   const companyId = activeCompanyId();
   if (!requirePermission('tasks.manage', companyId, 'Your role cannot delete tasks.', 'Tasks')) return;
   await recycleDeleteRecord({ type: 'task', id, options });
+}
+
+function underwritingInputFromForm(form) {
+  const fields = Object.fromEntries(new FormData(form).entries());
+  return {
+    contactId: String(fields.contact_id || ''),
+    ...normalizeUnderwritingInput(fields),
+    notes: String(fields.notes || '').trim(),
+  };
+}
+
+function syncUnderwritingForm(form) {
+  if (!form) return;
+  const input = underwritingInputFromForm(form);
+  state.underwritingContactId = input.contactId;
+  state.underwritingDraft = { companyId: activeCompanyId(), ...input };
+  const results = form.querySelector('[data-underwriting-results]');
+  if (results) results.innerHTML = renderUnderwritingResults(calculateUnderwriting(input));
+}
+
+async function saveUnderwritingCase(form) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('underwriter.manage', companyId, 'Your role can view underwriting but cannot save cases.', 'Underwriter')) return false;
+  const input = underwritingInputFromForm(form);
+  const contact = companyContacts(companyId).find((item) => item.id === input.contactId);
+  if (!contact) {
+    showToast('Choose a contact before saving.', 'error', 'Underwriter');
+    return false;
+  }
+  const existing = underwritingCaseForContact(contact.id, companyId);
+  const item = normalizeUnderwritingCase({
+    ...(existing || {}),
+    company_id: companyId,
+    contact_id: contact.id,
+    contract_price: input.contractPrice,
+    material_cost: input.materialCost,
+    labor_cost: input.laborCost,
+    permit_cost: input.permitCost,
+    disposal_cost: input.disposalCost,
+    other_cost: input.otherCost,
+    overhead_percent: input.overheadPercent,
+    commission_percent: input.commissionPercent,
+    contingency_percent: input.contingencyPercent,
+    target_margin_percent: input.targetMarginPercent,
+    notes: input.notes,
+    created_by: existing?.created_by || (isUuid(activeSession().profile.id) ? activeSession().profile.id : null),
+    updated_at: new Date().toISOString(),
+  });
+  const client = createSupabaseClient();
+  let saved = item;
+  if (isLiveSupabaseSession() && client) {
+    const result = await client.from('underwriting_cases').upsert(underwritingCasePayload(item), { onConflict: 'company_id,contact_id' }).select().single();
+    if (result.error || !result.data) {
+      notifySyncFailure(result.error || new Error('Underwriting save returned no record.'), 'Underwriter');
+      return false;
+    }
+    saved = normalizeUnderwritingCase(result.data);
+  }
+  state.underwritingCases = [saved, ...state.underwritingCases.filter((entry) => !(entry.company_id === companyId && entry.contact_id === contact.id))];
+  state.underwritingDraft = { companyId, ...input };
+  showToast(`Underwriting saved for ${contact.name}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Underwriter');
+  render();
+  return true;
+}
+
+async function saveJobPhotos(form) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('files.manage', companyId, 'Your role can view job photos but cannot upload them.', 'Job photos')) return false;
+  const fields = Object.fromEntries(new FormData(form).entries());
+  const job = jobById(String(fields.job_id || ''));
+  if (!job || job.company_id !== companyId) {
+    showToast('This job is unavailable in the active workspace.', 'error', 'Job photos');
+    return false;
+  }
+  const files = [
+    ...Array.from(form.elements.camera?.files || []),
+    ...Array.from(form.elements.photos?.files || []),
+  ];
+  if (!files.length) {
+    showToast('Take a photo or choose images to upload.', 'error', 'Job photos');
+    return false;
+  }
+  const submit = form.querySelector('[data-job-photo-submit]');
+  const progress = form.querySelector('[data-job-photo-progress]');
+  const bar = form.querySelector('[data-job-photo-bar]');
+  if (submit) { submit.disabled = true; submit.innerHTML = '<span class="btn-spinner"></span>Uploading...'; }
+  if (progress) progress.hidden = false;
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession();
+  let savedCount = 0;
+  let failedCount = 0;
+  let lastError = null;
+
+  for (let index = 0; index < files.length; index += 1) {
+    const item = files[index];
+    if (bar) bar.style.width = `${Math.max(6, Math.round(((index + 1) / files.length) * 100))}%`;
+    if (!(await guardUpload(item, 'image', 'Job photos'))) { failedCount += 1; continue; }
+    const fileId = crypto.randomUUID();
+    const objectPath = `${companyId}/jobs/${job.id}/photos/${fileId}-${slugify(item.name)}`;
+    let uploaded = false;
+    if (live && client) {
+      const storage = await client.storage.from('quest-job-files').upload(objectPath, item, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: contentTypeFor(item),
+      });
+      if (storage.error) {
+        failedCount += 1;
+        lastError = storage.error;
+        continue;
+      }
+      uploaded = true;
+    }
+    const payload = normalizeFile({
+      id: fileId,
+      company_id: companyId,
+      job_id: job.id,
+      folder: 'photos',
+      file_name: item.name,
+      mime_type: item.type || contentTypeFor(item),
+      size_bytes: item.size,
+      category: JOB_PHOTO_CATEGORIES.includes(fields.category) ? fields.category : 'Inspection',
+      notes: String(fields.notes || '').trim(),
+      uploaded_by_label: activeSession().profile.full_name || activeSession().profile.email || 'Quest HQ',
+      bucket_id: 'quest-job-files',
+      object_path: uploaded ? objectPath : '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    let saved = payload;
+    if (live && client) {
+      const result = await client.from('job_files').insert(filePayload(payload)).select().single();
+      if (result.error || !result.data) {
+        failedCount += 1;
+        lastError = result.error || new Error('Photo record insert returned no record.');
+        await client.storage.from('quest-job-files').remove([objectPath]);
+        continue;
+      }
+      saved = normalizeFile(result.data);
+    }
+    upsertFile(saved);
+    savedCount += 1;
+  }
+
+  if (!savedCount) {
+    if (submit) { submit.disabled = false; submit.innerHTML = '<i class="ti ti-cloud-upload"></i>Upload photos'; }
+    if (progress) progress.hidden = true;
+    showToast(lastError?.message || 'No photos were uploaded. Check the images and try again.', 'error', 'Job photos');
+    return false;
+  }
+  notifyLocalEvent(
+    'file.added',
+    savedCount === 1 ? 'Job photo added' : 'Job photos added',
+    `${actorName()} added ${savedCount} photo${savedCount === 1 ? '' : 's'} to ${job.name}.`,
+    companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId),
+    'file',
+    job.id,
+    companyId,
+  );
+  showToast(
+    failedCount ? `Uploaded ${savedCount} of ${files.length} photos. ${failedCount} failed.` : `Added ${savedCount} photo${savedCount === 1 ? '' : 's'} to ${job.name}.`,
+    failedCount ? 'error' : (live ? 'live' : 'local'),
+    'Job photos',
+  );
+  state.jobPhotoCategory = 'All';
+  render();
+  return true;
 }
 
 async function saveFileRecord(form) {
@@ -31466,6 +31870,10 @@ function fileCountForJob(jobId) {
   return state.files.filter((file) => file.job_id === jobId).length;
 }
 
+function photoCountForJob(jobId) {
+  return state.files.filter((file) => file.job_id === jobId && fileTypeKind(file) === 'image').length;
+}
+
 function canonicalCompanyId(id) {
   return {
     'quest-roofing': 'roofing',
@@ -31810,6 +32218,28 @@ function normalizeTask(input) {
     cleared_at: input.cleared_at || null,
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || new Date().toISOString(),
+  };
+}
+
+function normalizeUnderwritingCase(input = {}) {
+  return {
+    id: String(input.id || crypto.randomUUID()),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    contact_id: String(input.contact_id || ''),
+    contract_price: number(input.contract_price),
+    material_cost: number(input.material_cost),
+    labor_cost: number(input.labor_cost),
+    permit_cost: number(input.permit_cost),
+    disposal_cost: number(input.disposal_cost),
+    other_cost: number(input.other_cost),
+    overhead_percent: number(input.overhead_percent ?? 10),
+    commission_percent: number(input.commission_percent ?? 5),
+    contingency_percent: number(input.contingency_percent ?? 2),
+    target_margin_percent: number(input.target_margin_percent ?? 30),
+    notes: String(input.notes || ''),
+    created_by: input.created_by || null,
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
   };
 }
 
@@ -32582,6 +33012,25 @@ function filePayload(file) {
   };
 }
 
+function underwritingCasePayload(item) {
+  return {
+    company_id: item.company_id,
+    contact_id: item.contact_id,
+    contract_price: item.contract_price,
+    material_cost: item.material_cost,
+    labor_cost: item.labor_cost,
+    permit_cost: item.permit_cost,
+    disposal_cost: item.disposal_cost,
+    other_cost: item.other_cost,
+    overhead_percent: item.overhead_percent,
+    commission_percent: item.commission_percent,
+    contingency_percent: item.contingency_percent,
+    target_margin_percent: item.target_margin_percent,
+    notes: item.notes,
+    created_by: item.created_by || null,
+  };
+}
+
 function formPayload(form) {
   return {
     id: form.id,
@@ -32801,12 +33250,17 @@ function taskQueueRow(task) {
 
 function jobCard(job) {
   return `
-    <button class="job-card priority-${h(job.priority.toLowerCase())} ${job.id === state.selectedJobId ? 'active' : ''}" type="button" draggable="true" data-drag-kind="job" data-drag-id="${h(job.id)}" data-select-job="${h(job.id)}">
-      <strong>${h(job.name)}</strong>
-      <span>${h(job.client_name || 'No client')}</span>
-      <small>${h(companyName(job.company_id))} - ${h(job.owner_name || 'Unassigned')}</small>
-      <em>${h(taskCountForJob(job.id))} tasks</em>
-    </button>
+    <article class="job-card priority-${h(job.priority.toLowerCase())} ${job.id === state.selectedJobId ? 'active' : ''}" draggable="true" data-drag-kind="job" data-drag-id="${h(job.id)}">
+      <button class="job-card-main" type="button" data-select-job="${h(job.id)}">
+        <strong>${h(job.name)}</strong>
+        <span>${h(job.client_name || 'No client')}</span>
+        <small>${h(companyName(job.company_id))} - ${h(job.owner_name || 'Unassigned')}</small>
+      </button>
+      <div class="job-card-foot">
+        <em>${h(taskCountForJob(job.id))} tasks</em>
+        ${can('files.view', job.company_id) ? `<button class="job-card-photo" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}" aria-label="Open photos for ${h(job.name)}"><i class="ti ti-camera"></i><span>${h(photoCountForJob(job.id))}</span></button>` : ''}
+      </div>
+    </article>
   `;
 }
 
@@ -34256,7 +34710,10 @@ async function ensureFileThumbnails(files) {
         (data || []).forEach((row, i) => { if (row && row.signedUrl && !row.error && list[i]) { list[i].signed_url = row.signedUrl; changed = true; } });
       } catch (error) { console.warn('Thumbnail fetch failed', error); }
     }
-    if (changed) updateWorkspaceOnly();
+    if (changed) {
+      if (state.modal === 'job-photos') render();
+      else updateWorkspaceOnly();
+    }
   }
   // Render first-page thumbnails for PDFs (a few at a time to stay smooth).
   files.filter((f) => fileTypeKind(f) === 'pdf' && f.signed_url && !f.thumb_url && !f._pdfThumbTried).slice(0, 3).forEach((f) => ensurePdfThumbnail(f));

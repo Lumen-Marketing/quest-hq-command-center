@@ -1,6 +1,6 @@
 # Database security map
 
-Captured 2026-07-13T21:28:30.100Z. All 53 public tables currently report Row Level Security enabled. Policy expressions are intentionally omitted; inspect migrations or the live catalog before changing authorization.
+Captured 2026-07-16T19:21:04.447Z. All 55 public base tables report Row Level Security enabled; `v_pricebook_material_best` is a view and does not use table RLS. Policy expressions are intentionally omitted; inspect migrations or the live catalog before changing authorization.
 
 ## Coverage
 
@@ -35,6 +35,7 @@ Captured 2026-07-13T21:28:30.100Z. All 53 public tables currently report Row Lev
 | job_activity | enabled | 1 | ALL |
 | job_files | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | jobs | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| knowledge_articles | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | message_attachments | enabled | 2 | INSERT, SELECT |
 | message_conversation_access | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | message_conversations | enabled | 3 | INSERT, SELECT, UPDATE |
@@ -54,7 +55,9 @@ Captured 2026-07-13T21:28:30.100Z. All 53 public tables currently report Row Lev
 | tasks | enabled | 5 | DELETE, INSERT, SELECT, UPDATE |
 | team_members | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | time_entries | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| underwriting_cases | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | user_role_assignments | enabled | 2 | ALL, SELECT |
+| v_pricebook_material_best | disabled | 0 | — |
 | wo_counters | enabled | 1 | SELECT |
 | workspace_backup_copies | enabled | 2 | ALL, SELECT |
 | workspace_backups | enabled | 2 | ALL, SELECT |
@@ -154,6 +157,10 @@ Captured 2026-07-13T21:28:30.100Z. All 53 public tables currently report Row Lev
 | jobs | subscription members insert jobs | authenticated | INSERT | PERMISSIVE |
 | jobs | subscription members read jobs | authenticated | SELECT | PERMISSIVE |
 | jobs | subscription members update jobs | authenticated | UPDATE | PERMISSIVE |
+| knowledge_articles | managers create company knowledge | authenticated | INSERT | PERMISSIVE |
+| knowledge_articles | managers delete company knowledge | authenticated | DELETE | PERMISSIVE |
+| knowledge_articles | managers update company knowledge | authenticated | UPDATE | PERMISSIVE |
+| knowledge_articles | members read company knowledge | authenticated | SELECT | PERMISSIVE |
 | message_attachments | message attachments insert allowed | authenticated | INSERT | PERMISSIVE |
 | message_attachments | message attachments select conversation access | authenticated | SELECT | PERMISSIVE |
 | message_conversation_access | message access delete managers | authenticated | DELETE | PERMISSIVE |
@@ -222,6 +229,10 @@ Captured 2026-07-13T21:28:30.100Z. All 53 public tables currently report Row Lev
 | time_entries | role users can insert time_entries | authenticated | INSERT | PERMISSIVE |
 | time_entries | role users can read time_entries | authenticated | SELECT | PERMISSIVE |
 | time_entries | role users can update time_entries | authenticated | UPDATE | PERMISSIVE |
+| underwriting_cases | subscription members delete underwriting cases | authenticated | DELETE | PERMISSIVE |
+| underwriting_cases | subscription members insert underwriting cases | authenticated | INSERT | PERMISSIVE |
+| underwriting_cases | subscription members read underwriting cases | authenticated | SELECT | PERMISSIVE |
+| underwriting_cases | subscription members update underwriting cases | authenticated | UPDATE | PERMISSIVE |
 | user_role_assignments | admins manage role assignments | authenticated | ALL | PERMISSIVE |
 | user_role_assignments | members read role assignments | authenticated | SELECT | PERMISSIVE |
 | wo_counters | company members read wo counters | authenticated | SELECT | PERMISSIVE |
@@ -232,5 +243,3 @@ Captured 2026-07-13T21:28:30.100Z. All 53 public tables currently report Row Lev
 | workspace_builder_state | managers insert workspace builder | authenticated | INSERT | PERMISSIVE |
 | workspace_builder_state | managers update workspace builder | authenticated | UPDATE | PERMISSIVE |
 | workspace_builder_state | members read workspace builder | authenticated | SELECT | PERMISSIVE |
-
-Security-sensitive changes require checking [relationships.md](relationships.md), [functions.md](functions.md), the corresponding SQL migration, and the live Supabase state. Never infer tenant safety from a policy name alone.

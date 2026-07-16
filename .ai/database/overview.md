@@ -1,18 +1,18 @@
 # Database overview
 
-The live Supabase public schema was captured 2026-07-13T21:28:30.100Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
+The live Supabase public schema was captured 2026-07-16T19:21:04.447Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
 
 ## At a glance
 
-- 53 public tables
-- 674 public columns
-- 151 foreign-key relationships
-- 168 RLS policies
+- 56 public relations (55 base tables and 1 view)
+- 704 public columns
+- 155 foreign-key relationships
+- 176 RLS policies
 - 53 public functions
-- 40 trigger events
+- 41 trigger events
 - 6 storage buckets
 - 1 database cron job
-- 67 live migration-ledger entries
+- 71 live migration-ledger entries
 
 ## Domain map
 
@@ -20,12 +20,12 @@ The live Supabase public schema was captured 2026-07-13T21:28:30.100Z. The [mach
 | --- | --- |
 | Identity and tenancy | profiles, companies, company_memberships, company_subscriptions, company_invites, company_join_requests |
 | Authorization and audit | roles, role_permissions, user_role_assignments, resource_acl, field_permissions, audit_events |
-| CRM and sales | contacts, accounts, crm_sites, pipeline_stages, deals, activities, proposal_documents |
+| CRM and sales | contacts, accounts, crm_sites, pipeline_stages, deals, activities, proposal_documents, underwriting_cases |
 | Jobs and execution | jobs, job_activity, tasks, time_entries, active_timers, notifications |
-| Files and recovery | job_files, recycle_bin_items, workspace_backups, workspace_backup_copies |
+| Files, knowledge, and recovery | job_files, knowledge_articles, recycle_bin_items, workspace_backups, workspace_backup_copies |
 | Messaging and calendar | message_conversations, message_conversation_access, messages, message_attachments, message_reads, calendar_events |
 | Client/public flows | clients, client_portals, client_portal_documents, client_portal_annotations, client_portal_events, forms, form_responses |
-| Finance and price book | finance_vendors, finance_invoices, finance_payments, finance_expenses, pricebook_vendors, pricebook_materials, pricebook_vendor_prices |
+| Finance and price book | finance_vendors, finance_invoices, finance_payments, finance_expenses, pricebook_vendors, pricebook_materials, pricebook_vendor_prices, v_pricebook_material_best |
 | Workspace configuration | company_plugins, workspace_builder_state, wo_counters |
 
 ## How to use this map
