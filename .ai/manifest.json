@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-13T21:28:30.100Z",
+  "generated_at": "2026-07-16T19:21:04.447Z",
   "generated_from_commit": "a69f417c045541717acd738f56ed3a841dc3ec7b",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
     "main_commit_at_capture": "ba034eb30aa57b28823d28c18f61ee4d275833f2",
-    "latest_migration": "202607151500_knowledge_base.sql"
+    "latest_migration": "202607171230_underwriting_case_indexes.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-07-13T21:28:30.100Z",
+    "supabase_verified_at": "2026-07-16T19:21:04.447Z",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260711051011",
-      "name": "harden_finance_attachments_bucket"
+      "version": "20260716191945",
+      "name": "underwriting_case_indexes"
     },
     "vercel_verified_at": "2026-07-13T21:28:30.100Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",

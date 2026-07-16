@@ -1,13 +1,13 @@
 # Functions and triggers
 
-Live public-schema routines captured 2026-07-13T21:28:30.100Z. Execute flags describe role grants visible in the catalog; application authorization must still be enforced by the routine and RLS.
+Live public-schema routines captured 2026-07-16T19:21:04.447Z. Execute flags describe role grants visible in the catalog; application authorization must still be enforced by the routine and RLS.
 
 ## Functions
 
 | Function | Arguments | Returns | Security definer | Volatility | Execute roles |
 | --- | --- | --- | --- | --- | --- |
 | accept_company_invite | invite_token text | text | yes | volatile | authenticated, service_role |
-| accept_public_proposal | proposal_token text, signer_name text, signer_email text, decision text | jsonb | yes | volatile | anon, authenticated, service_role |
+| accept_public_proposal | proposal_token text, signer_name text, signer_email text, decision text | jsonb | yes | volatile | service_role |
 | apply_company_plugin_preset | target_company_id text, preset_code text | text[] | yes | volatile | authenticated, service_role |
 | apply_stripe_subscription_event | p_event_id text, p_event_created_at timestamp with time zone, p_company_id text, p_customer_id text, p_subscription_id text, p_status text, p_current_period_end timestamp with time zone, p_trial_ends_at timestamp with time zone | boolean | yes | volatile | service_role |
 | assign_wo_number | company text | integer | yes | volatile | authenticated, service_role |
@@ -29,14 +29,14 @@ Live public-schema routines captured 2026-07-13T21:28:30.100Z. Execute flags des
 | list_platform_company_members | target_company_id text | TABLE(company_id text, profile_id uuid, member_id text, full_name text, email text, role text, role_label text, role_id uuid, status text, created_at timestamp with time zone, updated_at timestamp with time zone, disabled_at timestamp with time zone, left_at timestamp with time zone, last_active_at timestamp with time zone) | yes | volatile | authenticated, service_role |
 | list_workspace_app_library | — | jsonb | yes | volatile | authenticated, service_role |
 | list_workspace_reviews | — | TABLE(company_id text, company_name text, status text, plan_code text, amount_cents integer, currency text, owner_profile_id uuid, owner_name text, owner_email text, trial_ends_at timestamp with time zone, current_period_end timestamp with time zone, grace_ends_at timestamp with time zone, created_at timestamp with time zone, updated_at timestamp with time zone) | yes | volatile | authenticated, service_role |
-| lookup_company_invite | invite_token text | TABLE(company_id text, company_name text, email text, status text, expires_at timestamp with time zone) | yes | volatile | anon, authenticated, service_role |
+| lookup_company_invite | invite_token text | TABLE(company_id text, company_name text, email text, status text, expires_at timestamp with time zone) | yes | volatile | service_role |
 | manage_platform_company | target_company_id text, platform_action text, review_note text | text | yes | volatile | authenticated, service_role |
 | mark_platform_backup_copy_deleted | copy_id text | text | yes | volatile | authenticated, service_role |
 | message_touch_conversation | — | trigger | yes | volatile | service_role |
 | mirror_workspace_backup_copy | — | trigger | yes | volatile | service_role |
 | permanently_delete_platform_backup_copy | copy_id text | text | yes | volatile | authenticated, service_role |
 | promote_company_owner | target_company_id text, target_profile_id uuid | company_memberships | no | volatile | authenticated, service_role |
-| public_proposal_by_token | proposal_token text | jsonb | yes | volatile | anon, authenticated, service_role |
+| public_proposal_by_token | proposal_token text | jsonb | yes | volatile | service_role |
 | purge_expired_recycle_bin | p_limit integer | integer | yes | volatile | service_role |
 | quest_confirm_email_before_insert | — | trigger | yes | volatile | service_role |
 | recycle_move_item | p_item jsonb | recycle_bin_items | yes | volatile | authenticated, service_role |
@@ -101,6 +101,7 @@ Live public-schema routines captured 2026-07-13T21:28:30.100Z. Execute flags des
 | resource_acl | resource_acl_set_updated_at | BEFORE | UPDATE | ROW |
 | roles | roles_set_updated_at | BEFORE | UPDATE | ROW |
 | tasks | set_tasks_updated_at | BEFORE | UPDATE | ROW |
+| underwriting_cases | underwriting_cases_set_updated_at | BEFORE | UPDATE | ROW |
 | workspace_backups | trg_mirror_workspace_backup_copy | AFTER | INSERT | ROW |
 | workspace_backups | trg_mirror_workspace_backup_copy | AFTER | UPDATE | ROW |
 | workspace_builder_state | workspace_builder_state_set_updated_at | BEFORE | UPDATE | ROW |

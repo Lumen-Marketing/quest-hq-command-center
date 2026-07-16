@@ -1,6 +1,6 @@
 # Relationship map
 
-Foreign keys captured from the live public schema on 2026-07-13T21:28:30.100Z. Relationships are directional from the referencing column to the referenced column.
+Foreign keys captured from the live public schema on 2026-07-16T19:21:04.447Z. Relationships are directional from the referencing column to the referenced column.
 
 | From | To | Constraint | Update | Delete |
 | --- | --- | --- | --- | --- |
@@ -99,6 +99,7 @@ Foreign keys captured from the live public schema on 2026-07-13T21:28:30.100Z. R
 | jobs.deal_id | deals.id | jobs_deal_id_fkey | NO ACTION | SET NULL |
 | jobs.deleted_by | profiles.id | jobs_deleted_by_fkey | NO ACTION | SET NULL |
 | jobs.site_id | crm_sites.id | jobs_site_id_fkey | NO ACTION | SET NULL |
+| knowledge_articles.company_id | companies.id | knowledge_articles_company_id_fkey | NO ACTION | CASCADE |
 | message_attachments.company_id | companies.id | message_attachments_company_id_fkey | NO ACTION | CASCADE |
 | message_attachments.conversation_id | message_conversations.id | message_attachments_conversation_id_fkey | NO ACTION | CASCADE |
 | message_attachments.message_id | messages.id | message_attachments_message_id_fkey | NO ACTION | CASCADE |
@@ -142,6 +143,9 @@ Foreign keys captured from the live public schema on 2026-07-13T21:28:30.100Z. R
 | tasks.deleted_by | profiles.id | tasks_deleted_by_fkey | NO ACTION | SET NULL |
 | time_entries.task_id | tasks.id | time_entries_task_id_fkey | NO ACTION | CASCADE |
 | time_entries.user_id | team_members.id | time_entries_user_id_fkey | NO ACTION | RESTRICT |
+| underwriting_cases.company_id | companies.id | underwriting_cases_company_id_fkey | NO ACTION | CASCADE |
+| underwriting_cases.contact_id | contacts.id | underwriting_cases_contact_id_fkey | NO ACTION | CASCADE |
+| underwriting_cases.created_by | profiles.id | underwriting_cases_created_by_fkey | NO ACTION | SET NULL |
 | user_role_assignments.assigned_by | profiles.id | user_role_assignments_assigned_by_fkey | NO ACTION | SET NULL |
 | user_role_assignments.company_id | companies.id | user_role_assignments_company_id_fkey | NO ACTION | CASCADE |
 | user_role_assignments.profile_id | profiles.id | user_role_assignments_profile_id_fkey | NO ACTION | CASCADE |
@@ -155,5 +159,3 @@ Foreign keys captured from the live public schema on 2026-07-13T21:28:30.100Z. R
 | workspace_backups.deleted_by | profiles.id | workspace_backups_deleted_by_fkey | NO ACTION | SET NULL |
 | workspace_builder_state.company_id | companies.id | workspace_builder_state_company_id_fkey | NO ACTION | CASCADE |
 | workspace_builder_state.updated_by | profiles.id | workspace_builder_state_updated_by_fkey | NO ACTION | SET NULL |
-
-For exact structured data, use [snapshot.json](snapshot.json).

@@ -1,6 +1,6 @@
 # Storage, extensions, and scheduled work
 
-Live catalog metadata captured 2026-07-13T21:28:30.100Z. Object names, paths, owners, and contents are deliberately excluded.
+Live catalog metadata captured 2026-07-16T19:21:04.447Z. Object names, paths, owners, and contents are deliberately excluded.
 
 ## Storage buckets
 

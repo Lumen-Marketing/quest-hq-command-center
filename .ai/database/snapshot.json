@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "captured_at": "2026-07-13T21:28:30.100Z",
+  "captured_at": "2026-07-16T19:21:04.447Z",
   "scope": "Catalog metadata only. Contains no production table rows, auth user records, object paths, or credentials.",
   "source": {
     "project_ref": "rqundirizvojpzhljtdn",
@@ -3568,6 +3568,80 @@
       "rls_enabled": true
     },
     {
+      "name": "knowledge_articles",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "title",
+          "default": "'Untitled article'::text",
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "body",
+          "default": "''::text",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "category",
+          "default": "'General'::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "creator_id",
+          "default": null,
+          "nullable": true,
+          "position": 6,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
       "name": "message_attachments",
       "schema": "public",
       "columns": [
@@ -5504,6 +5578,152 @@
       "rls_enabled": true
     },
     {
+      "name": "underwriting_cases",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "contact_id",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "contract_price",
+          "default": "0",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "material_cost",
+          "default": "0",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "labor_cost",
+          "default": "0",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "permit_cost",
+          "default": "0",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "disposal_cost",
+          "default": "0",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "other_cost",
+          "default": "0",
+          "nullable": false,
+          "position": 9,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "overhead_percent",
+          "default": "10",
+          "nullable": false,
+          "position": 10,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "commission_percent",
+          "default": "5",
+          "nullable": false,
+          "position": 11,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "contingency_percent",
+          "default": "2",
+          "nullable": false,
+          "position": 12,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "target_margin_percent",
+          "default": "30",
+          "nullable": false,
+          "position": 13,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "notes",
+          "default": "''::text",
+          "nullable": false,
+          "position": 14,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "created_by",
+          "default": null,
+          "nullable": true,
+          "position": 15,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 16,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 17,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
       "name": "user_role_assignments",
       "schema": "public",
       "columns": [
@@ -5554,6 +5774,54 @@
         "role_id"
       ],
       "rls_enabled": true
+    },
+    {
+      "name": "v_pricebook_material_best",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": true,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "material_id",
+          "default": null,
+          "nullable": true,
+          "position": 2,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "vendor_id",
+          "default": null,
+          "nullable": true,
+          "position": 3,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "unit_cost",
+          "default": null,
+          "nullable": true,
+          "position": 4,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "updated_at",
+          "default": null,
+          "nullable": true,
+          "position": 5,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [],
+      "rls_enabled": false
     },
     {
       "name": "wo_counters",
@@ -6797,6 +7065,15 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "knowledge_articles_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "knowledge_articles",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "message_attachments_company_id_fkey",
       "to_table": "companies",
       "to_column": "id",
@@ -7181,6 +7458,33 @@
       "from_table": "time_entries",
       "delete_rule": "RESTRICT",
       "from_column": "user_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "underwriting_cases_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "underwriting_cases",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "underwriting_cases_contact_id_fkey",
+      "to_table": "contacts",
+      "to_column": "id",
+      "from_table": "underwriting_cases",
+      "delete_rule": "CASCADE",
+      "from_column": "contact_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "underwriting_cases_created_by_fkey",
+      "to_table": "profiles",
+      "to_column": "id",
+      "from_table": "underwriting_cases",
+      "delete_rule": "SET NULL",
+      "from_column": "created_by",
       "update_rule": "NO ACTION"
     },
     {
@@ -8113,6 +8417,42 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "managers create company knowledge",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "knowledge_articles",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "managers delete company knowledge",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "knowledge_articles",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "managers update company knowledge",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "knowledge_articles",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "members read company knowledge",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "knowledge_articles",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "message attachments insert allowed",
       "roles": [
         "authenticated"
@@ -8725,6 +9065,42 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "subscription members delete underwriting cases",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "underwriting_cases",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "subscription members insert underwriting cases",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "underwriting_cases",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "subscription members read underwriting cases",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "underwriting_cases",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "subscription members update underwriting cases",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "underwriting_cases",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "admins manage role assignments",
       "roles": [
         "authenticated"
@@ -8831,10 +9207,10 @@
       "returns": "jsonb",
       "arguments": "proposal_token text, signer_name text, signer_email text, decision text",
       "volatility": "volatile",
-      "anon_execute": true,
+      "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
-      "authenticated_execute": true
+      "authenticated_execute": false
     },
     {
       "name": "apply_company_plugin_preset",
@@ -9051,10 +9427,10 @@
       "returns": "TABLE(company_id text, company_name text, email text, status text, expires_at timestamp with time zone)",
       "arguments": "invite_token text",
       "volatility": "volatile",
-      "anon_execute": true,
+      "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
-      "authenticated_execute": true
+      "authenticated_execute": false
     },
     {
       "name": "manage_platform_company",
@@ -9121,10 +9497,10 @@
       "returns": "jsonb",
       "arguments": "proposal_token text",
       "volatility": "volatile",
-      "anon_execute": true,
+      "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
-      "authenticated_execute": true
+      "authenticated_execute": false
     },
     {
       "name": "purge_expired_recycle_bin",
@@ -9608,6 +9984,13 @@
       "orientation": "ROW"
     },
     {
+      "name": "underwriting_cases_set_updated_at",
+      "event": "UPDATE",
+      "table": "underwriting_cases",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
       "name": "trg_mirror_workspace_backup_copy",
       "event": "INSERT",
       "table": "workspace_backups",
@@ -9745,9 +10128,9 @@
   "cron_jobs": [
     {
       "name": "quest-hq-recycle-bin-purge",
+      "schedule": "15 3 * * *",
       "active": true,
-      "database": "postgres",
-      "schedule": "15 3 * * *"
+      "database": "postgres"
     }
   ],
   "migrations": [
@@ -10018,6 +10401,22 @@
     {
       "version": "20260711051011",
       "name": "harden_finance_attachments_bucket"
+    },
+    {
+      "version": "20260716021701",
+      "name": "knowledge_base"
+    },
+    {
+      "version": "20260716025935",
+      "name": "revoke_anon_public_rpc_execute"
+    },
+    {
+      "version": "20260716191825",
+      "name": "underwriting_cases"
+    },
+    {
+      "version": "20260716191945",
+      "name": "underwriting_case_indexes"
     }
   ]
 }

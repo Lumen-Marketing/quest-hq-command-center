@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-13T21:28:30.100Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-16T19:21:04.447Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -15,8 +15,8 @@ Captured 2026-07-13T21:28:30.100Z. This is a point-in-time operational snapshot,
 
 ## Repository health
 
-- Baseline before this project-brain change: 222 tests passed.
-- This change adds seven project-brain validation tests; the expected suite is 229 tests.
+- Current branch regression suite: 317 tests passed.
+- The production build and bundle-budget check pass without a local application server.
 - CI runs npm run check on pushes and pull requests.
 - Build output is checked against a bundle budget and copies TaskManagement plus legacy SPA assets.
 - Production smoke can assert that the deployed HTML revision matches main.
@@ -27,18 +27,20 @@ Captured 2026-07-13T21:28:30.100Z. This is a point-in-time operational snapshot,
 - Status: ACTIVE_HEALTHY
 - Region: us-west-1
 - Postgres: 17.6.1.127, engine 17
-- Public catalog: 53 tables, 151 foreign-key links, 168 policies, 53 functions, and 40 triggers.
+- Public catalog: 56 relations, 155 foreign-key links, 176 policies, 53 functions, and 41 triggers.
 - Storage: 6 buckets cataloged without object data.
-- Latest repository migration: 202607111000_harden_file_upload_buckets.sql
-- Latest live ledger entry: 20260711051011 harden_finance_attachments_bucket
+- Latest repository migration: 202607171230_underwriting_case_indexes.sql
+- Latest live ledger entry: 20260716191945 underwriting_case_indexes
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.
 
 ## Feature state
 
-The live implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Time, Approvals, Clock, Settings, plugins, and Workspace App Builder.
+The live data layer now includes tenant-scoped underwriting cases. The release branch adds categorized camera/library photo upload directly on job cards and a saved underwriting margin calculator with approval, review, and reprice outcomes.
 
-Future navigation entries currently include Tickets, Knowledge, Automations, Templates, and Team Workload. Verify code and product direction before treating a planned page as complete.
+The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Settings, plugins, and Workspace App Builder.
+
+Future navigation entries currently include Tickets, Automations, and Templates. Verify code and product direction before treating a planned page as complete.
 
 ## Freshness
 
