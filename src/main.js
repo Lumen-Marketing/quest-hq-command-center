@@ -1001,6 +1001,11 @@ const NAV_GROUPS = [
   { label: 'Future', ids: ['tickets', 'automations', 'templates'] },
 ];
 
+const SIDEBAR_SCOPE_GROUPS = {
+  'my-work': new Set(['Work', 'Quest CRM', 'Communication']),
+  company: new Set(['Estimating', 'Review', 'Control', 'Future']),
+};
+
 const LEGACY_ROUTE_SECTIONS = {
   '/admin.html': 'settings',
   '/automations.html': 'automations',
@@ -2205,6 +2210,8 @@ const state = {
   workspaceIconDrafts: {},
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
   sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
+  sidebarScope: 'my-work',
+  sidebarScopeRoute: '',
   collapsedNavGroups: new Set(readJson(NAV_GROUP_COLLAPSED_KEY, [])),
   expandedNav: new Set(readJson(NAV_EXPANDED_KEY, ['contacts', 'jobs', 'deals'])),
   jobBoardView: localStorage.getItem(JOB_BOARD_VIEW_KEY) || 'board',
@@ -3694,7 +3701,7 @@ function shellTemplate(route, workspace) {
           </div>
         </div>
         <div class="topbar-right">
-          <label class="global-search">
+          <label class="global-search topbar-global-search">
             ${svgIcon('q-search')}
             <input data-global-search value="${h(state.query)}" placeholder="Search this company" />
           </label>
@@ -3726,7 +3733,7 @@ function shellTemplate(route, workspace) {
       ${renderReadOnlyDemoBanner()}
       ${renderRolePreviewBanner(companyId)}
       <div class="app-body">
-        <aside class="deck" aria-label="Quest navigation">
+        <aside class="deck quest-nav-v2" aria-label="Quest navigation">
           ${renderDeck(route)}
         </aside>
         <main class="work-surface" id="workspace" tabindex="-1">
@@ -3924,12 +3931,13 @@ function renderDeck(route) {
   const companyId = activeCompanyId();
   const session = activeSession();
   const modulesById = new Map(MODULE_REGISTRY.map((module) => [module.id, module]));
+  const groups = sidebarGroupsForScope(route);
   return `
     <div class="deck-brand">
       <a class="logo logo-image-mark" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Quest HQ dashboard">
         ${questLogoImage()}
       </a>
-      <span><strong>Quest HQ</strong><small>Command Center</small></span>
+      <span><strong>Quest</strong><small>command center</small></span>
       <button class="deck-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}" aria-expanded="${state.sidebarCollapsed ? 'false' : 'true'}">
         <i class="ti ${state.sidebarCollapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-left-collapse'}"></i>
       </button>
@@ -3937,8 +3945,18 @@ function renderDeck(route) {
     <div class="company-card">
       ${renderCompanySwitch(companyId, 'deck-company-select')}
     </div>
+    <div class="deck-nav-tools">
+      <label class="deck-global-search">
+        ${svgIcon('q-search')}
+        <input data-global-search value="${h(state.query)}" placeholder="Search or jump toâ€¦" aria-label="Search or jump to" />
+      </label>
+      <div class="sidebar-scope-toggle" role="group" aria-label="Navigation scope">
+        <button class="${state.sidebarScope === 'my-work' ? 'active' : ''}" type="button" data-action="set-sidebar-scope" data-sidebar-scope="my-work" aria-pressed="${state.sidebarScope === 'my-work' ? 'true' : 'false'}">My work</button>
+        <button class="${state.sidebarScope === 'company' ? 'active' : ''}" type="button" data-action="set-sidebar-scope" data-sidebar-scope="company" aria-pressed="${state.sidebarScope === 'company' ? 'true' : 'false'}">Company</button>
+      </div>
+    </div>
     <div class="deck-scroll">
-      ${NAV_GROUPS.map((group) => {
+      ${groups.map((group) => {
         const items = group.ids
           .map((id) => modulesById.get(id))
           .filter((module) => module && canViewModule(module, companyId))
@@ -3951,13 +3969,28 @@ function renderDeck(route) {
       }).join('')}
     </div>
     <div class="deck-footer">
-      <button class="deck-user-card" type="button" data-action="open-profile">
-        ${renderAvatar(session.profile, 'avatar small')}
-        <span><strong>${h(session.profile.full_name)}</strong><small>${h(roleForCompany(companyId))}</small></span>
-        <i class="ti ti-dots-vertical"></i>
-      </button>
+      <div class="deck-footer-row">
+        <button class="deck-user-card" type="button" data-action="open-profile">
+          ${renderAvatar(session.profile, 'avatar small')}
+          <span><strong>${h(session.profile.full_name)}</strong><small>${h(roleForCompany(companyId))}</small></span>
+        </button>
+        <a class="deck-settings-link" href="${appHref(companyPath('settings', {}, companyId))}" data-router aria-label="Settings" title="Settings">
+          ${svgIcon('q-symbol-settings')}
+        </a>
+      </div>
     </div>
   `;
+}
+
+function sidebarGroupsForScope(route) {
+  const routeKey = `${route?.name || ''}:${route?.section || ''}`;
+  if (state.sidebarScopeRoute !== routeKey) {
+    const activeGroup = NAV_GROUPS.find((group) => group.ids.includes(route?.section));
+    state.sidebarScope = SIDEBAR_SCOPE_GROUPS.company.has(activeGroup?.label) ? 'company' : 'my-work';
+    state.sidebarScopeRoute = routeKey;
+  }
+  const allowedGroups = SIDEBAR_SCOPE_GROUPS[state.sidebarScope] || SIDEBAR_SCOPE_GROUPS['my-work'];
+  return NAV_GROUPS.filter((group) => allowedGroups.has(group.label));
 }
 
 function navGroup(label, items) {
@@ -21764,6 +21797,12 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'set-sidebar-scope') {
+    event.preventDefault();
+    state.sidebarScope = node.dataset.sidebarScope === 'company' ? 'company' : 'my-work';
+    render();
+    return;
+  }
   if (action === 'toggle-nav-group') {
     event.preventDefault();
     const group = node.dataset.group;
@@ -31215,6 +31254,7 @@ function isMutableAction(action = '') {
     'select-workspace',
     'toggle-mobile-menu',
     'toggle-sidebar',
+    'set-sidebar-scope',
     'toggle-nav-group',
     'toggle-nav-expand',
     'open-docked-activity',

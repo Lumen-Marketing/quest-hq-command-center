@@ -40,6 +40,10 @@ Direct job-card photo capture writes image bytes to the existing private `quest-
 
 Calculator drafts are stored in `underwriting_cases` with one current case per company/contact. Browser-only persistence was rejected because underwriting decisions need to survive devices and be visible to other authorized team members.
 
+## Sidebar scopes organize navigation without bypassing access rules
+
+The desktop command rail separates daily modules into My work and administrative/tooling modules into Company. Both scopes are derived from the existing module registry, installed-plugin checks, and permission gates; the mobile More sheet continues to expose the complete allowed module set.
+
 ## No sensitive project-brain content
 
 The project brain records catalog metadata, architecture, decisions, and state—not credentials, user identities, row payloads, storage objects, or private operational content.
