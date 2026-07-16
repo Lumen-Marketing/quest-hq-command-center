@@ -36,7 +36,7 @@ The repository filename history and Supabase's applied migration versions are no
 
 ## Feature state
 
-Production includes categorized job-card photo upload and durable underwriting cases. The live data layer also now supports a tenant-safe direct link from tasks to deals; the current release branch uses tasks as the shared "What's next" source on Contacts, Quotes/Deals, and Jobs funnel cards.
+Production includes categorized job-card photo upload and durable underwriting cases. The live data layer also now supports a tenant-safe direct link from tasks to deals; the current release branch uses tasks as the shared "What's next" source across the board, table, and list views for Contacts, Quotes/Deals, and Jobs.
 
 The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Settings, plugins, and Workspace App Builder.
 

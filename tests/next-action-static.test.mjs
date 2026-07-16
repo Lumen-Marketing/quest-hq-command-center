@@ -20,6 +20,20 @@ test('all three funnel cards render the shared What\'s next field', () => {
   assert.doesNotMatch(submitSource, /action === 'open-pipeline-next-action'/, 'click actions must not leak into the form-submit dispatcher');
 });
 
+test('all three funnel table and list views render an actionable What\'s next field', () => {
+  const contactTable = source.slice(source.indexOf('function renderContactTable('), source.indexOf('function selectedContactRows('));
+  const jobList = source.slice(source.indexOf('function renderJobList('), source.indexOf('function renderJobProfile('));
+  const dealRow = source.slice(source.indexOf('function dealRow('), source.indexOf('function dealKpiRow('));
+
+  assert.match(contactTable, /renderPipelineNextAction\('contact', contact, \{ compact: true \}\)/);
+  assert.match(jobList, /renderPipelineNextAction\('job', job, \{ compact: true \}\)/);
+  assert.match(dealRow, /renderPipelineNextAction\('deal', deal, \{ compact: true \}\)/);
+  assert.match(source, /data-action="open-pipeline-task"/, 'an existing next action must remain clickable inside a clickable table row');
+  assert.match(handleActionSource, /action === 'open-pipeline-task'/);
+  assert.match(handleActionSource, /action === 'open-job'/, 'the keyboard-accessible job row must be handled by delegated click actions');
+  assert.doesNotMatch(submitSource, /action === 'open-job'/, 'job row click actions must not leak into the form-submit dispatcher');
+});
+
 test('the next-action task composer captures assignment and scheduling', () => {
   assert.match(source, /<span>Assigned to<\/span>[\s\S]*name="assignee_id"/);
   assert.match(source, /function companyTaskAssignees[\s\S]*profile\?\.member_id/, 'task assignees must use the team-member IDs required by the task foreign key');
