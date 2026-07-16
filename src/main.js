@@ -2319,6 +2319,9 @@ const state = {
 const app = document.getElementById('app');
 let supabaseClientCache = null;
 let commandResults = [];
+const COMMAND_RECENTS_KEY = 'quest.command.recents';
+const COMMAND_RECENTS_MAX = 8;
+let lastRecentKey = '';
 let addressSuggestionRequestSeq = 0;
 let pipeDrag = null;
 let locationPickerMap = null;
@@ -20704,10 +20707,6 @@ function commandPaletteCommands(query) {
 
 // Recently-visited modules and records, per company, so an empty ⌘K is useful
 // before the user types. Captured from the route on every distinct view.
-const COMMAND_RECENTS_KEY = 'quest.command.recents';
-const COMMAND_RECENTS_MAX = 8;
-let lastRecentKey = '';
-
 function commandRecents(companyId = activeCompanyId()) {
   const list = readJson(`${COMMAND_RECENTS_KEY}.${companyId}`, []);
   return Array.isArray(list) ? list : [];

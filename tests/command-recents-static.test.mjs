@@ -4,6 +4,15 @@ import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 
+test('recent-route state initializes before the app can render a cached deep link', () => {
+  const initIndex = main.indexOf('init();');
+  const keyIndex = main.indexOf("const COMMAND_RECENTS_KEY = 'quest.command.recents';");
+  const lastKeyIndex = main.indexOf("let lastRecentKey = '';");
+
+  assert.ok(keyIndex > -1 && keyIndex < initIndex, 'the recents storage key must exist before the first render');
+  assert.ok(lastKeyIndex > -1 && lastKeyIndex < initIndex, 'the recents dedupe state must exist before the first render');
+});
+
 test('the route is tracked into recents on every rendered company view', () => {
   assert.match(main, /trackRouteForRecents\(state\.route\);/);
   assert.match(main, /function trackRouteForRecents\(route\)/);
