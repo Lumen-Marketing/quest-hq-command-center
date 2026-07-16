@@ -31,6 +31,13 @@ test('underwriter page renders a persisted decision calculator', () => {
   assert.match(css, /\.underwriting-decision/);
 });
 
+test('underwriter summary metrics stay compact above the calculator', () => {
+  assert.match(source, /<section class="metric-grid underwriter-summary">/);
+  assert.match(css, /\.underwriter-summary \.metric\s*\{[\s\S]*?min-height:\s*64px/);
+  assert.match(css, /\.underwriter-summary \.metric-symbol\s*\{[\s\S]*?position:\s*static/);
+  assert.match(css, /\.underwriter-page \.underwriter-summary\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,/);
+});
+
 test('underwriting case table is tenant scoped and permission protected', () => {
   assert.match(migration, /create table if not exists public\.underwriting_cases/);
   assert.match(migration, /unique \(company_id, contact_id\)/);

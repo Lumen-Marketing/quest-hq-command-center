@@ -2326,7 +2326,6 @@ let addressSuggestionRequestSeq = 0;
 let pipeDrag = null;
 let locationPickerMap = null;
 let locationPickerMarker = null;
-init();
 
 function init() {
   normalizeLegacyLocation();
@@ -7155,7 +7154,7 @@ function renderUnderwriterPage(route, companyId) {
         ${can('crm.view', companyId) ? `<a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Open contacts</a>` : ''}
         ${canManageUnderwriter && can('crm.view', companyId) ? `<button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>` : ''}
       `)}
-      <section class="metric-grid">
+      <section class="metric-grid underwriter-summary">
         ${metricCard('Underwriting', underwriting.length)}
         ${metricCard('Estimate queue', estimates.length)}
         ${metricCard('Pipeline value', money(sum(visible, 'value')))}
@@ -36115,3 +36114,5 @@ function h(value) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+init();

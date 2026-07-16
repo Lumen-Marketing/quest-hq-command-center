@@ -17795,6 +17795,46 @@ textarea:focus {
   margin: 14px 0;
 }
 
+.underwriter-summary {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.underwriter-summary .metric {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  grid-template-rows: auto auto;
+  align-content: center;
+  column-gap: 10px;
+  padding: 9px 11px;
+}
+
+.underwriter-summary .metric-symbol {
+  position: static;
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+  justify-self: end;
+  width: 19px;
+  height: 19px;
+}
+
+.underwriter-summary .metric span {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.underwriter-summary .metric strong {
+  grid-column: 1;
+  grid-row: 2;
+  margin-top: 2px;
+  font-size: 18px;
+  line-height: 1.05;
+}
+
 .underwriting-calculator > .section-head {
   align-items: flex-start;
 }
@@ -18197,6 +18237,10 @@ textarea:focus {
 .job-photo-empty span { font-size: 11px; }
 
 @media (max-width: 900px) {
+  .underwriter-page .underwriter-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .underwriting-calculator form,
   .job-photos-shell {
     grid-template-columns: 1fr;
