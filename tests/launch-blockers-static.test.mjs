@@ -57,6 +57,16 @@ test('dashboard nav badge helpers do not read underwriter stages before initiali
   assert.ok(stagesIndex < badgeIndex, 'underwriter stages must be initialized before badge counts render');
 });
 
+test('the first render starts only after all top-level module state initializes', () => {
+  const initIndex = source.indexOf('init();');
+  const declarations = [...source.matchAll(/^(?:const|let|var)\s+/gm)];
+  const lastDeclarationIndex = declarations.at(-1)?.index ?? -1;
+
+  assert.ok(initIndex > -1, 'app init is called');
+  assert.ok(lastDeclarationIndex > -1, 'top-level module state exists');
+  assert.ok(initIndex > lastDeclarationIndex, 'init must run after every top-level declaration to keep cached deep links out of the temporal dead zone');
+});
+
 test('dashboard rep filter hides internal placeholder account ids', () => {
   assert.match(source, /function dashboardRepDisplayName\s*\(/);
   assert.match(source, /function isInternalDashboardRepName\s*\(/);
