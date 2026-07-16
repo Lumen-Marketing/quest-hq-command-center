@@ -2572,6 +2572,7 @@ function render() {
     return;
   }
   document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Quest HQ`;
+  trackRouteForRecents(state.route);
   app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette();
   queueMicrotask(restoreSidebarScroll);
   queueMicrotask(bindTimePickerInputs);
@@ -20170,6 +20171,52 @@ function commandPaletteCommands(query) {
   return buildCommandIndex({ modules, companies, actions: commandPaletteQuickActions(), records, activeCompanyId: companyId });
 }
 
+// Recently-visited modules and records, per company, so an empty ⌘K is useful
+// before the user types. Captured from the route on every distinct view.
+const COMMAND_RECENTS_KEY = 'quest.command.recents';
+const COMMAND_RECENTS_MAX = 8;
+let lastRecentKey = '';
+
+function commandRecents(companyId = activeCompanyId()) {
+  const list = readJson(`${COMMAND_RECENTS_KEY}.${companyId}`, []);
+  return Array.isArray(list) ? list : [];
+}
+
+function recordCommandRecent(companyId, entry) {
+  const list = commandRecents(companyId).filter((item) => item && item.key !== entry.key);
+  list.unshift(entry);
+  writeJson(`${COMMAND_RECENTS_KEY}.${companyId}`, list.slice(0, COMMAND_RECENTS_MAX));
+}
+
+function trackRouteForRecents(route) {
+  if (!route || route.name !== 'company' || !route.params) return;
+  const companyId = route.companyId;
+  const RECORD_SPECS = [
+    ['contact_id', 'contacts', (id) => contactById(id)?.name, 'ti-user', (id) => ({ contact_id: id })],
+    ['job_id', 'jobs', (id) => jobById(id)?.name, 'ti-hammer', (id) => ({ tab: 'profile', job_id: id })],
+    ['deal_id', 'deals', (id) => dealById(id)?.name, 'ti-briefcase', (id) => ({ tab: 'profile', deal_id: id })],
+    ['proposal_id', 'proposals', (id) => proposalById(id)?.title || proposalById(id)?.proposal_no, 'ti-file-dollar', (id) => ({ proposal_id: id })],
+  ];
+
+  let entry = null;
+  for (const [param, section, labelFn, icon, paramsFn] of RECORD_SPECS) {
+    const id = route.params.get(param);
+    if (!id) continue;
+    const label = labelFn(id);
+    if (label) entry = { key: `rec:${param}:${id}`, group: 'Recent', label, hint: '', icon, run: { kind: 'record', section, params: paramsFn(id) } };
+    break;
+  }
+  if (!entry) {
+    const module = MODULE_REGISTRY.find((m) => m.id === route.section);
+    if (module && canViewModule(module, companyId)) {
+      entry = { key: `nav:${route.section}`, group: 'Recent', label: module.label, hint: module.group || '', icon: module.icon, run: { kind: 'navigate', section: route.section } };
+    }
+  }
+  if (!entry || entry.key === lastRecentKey) return;
+  lastRecentKey = entry.key;
+  recordCommandRecent(companyId, entry);
+}
+
 function commandPaletteResultsFor(query) {
   const ranked = filterCommands(commandPaletteCommands(query), query);
   const perGroup = new Map();
@@ -20182,7 +20229,10 @@ function commandPaletteResultsFor(query) {
     }
     capped.push(command);
   }
-  return [...capped, ...commandAssistantResults(query)];
+  const results = [...capped, ...commandAssistantResults(query)];
+  // On an empty query, lead with recents.
+  if (!query.trim()) return [...commandRecents(activeCompanyId()), ...results];
+  return results;
 }
 
 // The free assistant's two contributions to the results list: guide answers
