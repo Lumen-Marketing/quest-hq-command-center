@@ -13,6 +13,7 @@ import { parseTaskInstruction, matchPerson, matchContactInText } from './assista
 import { searchHelp, HELP_TOPICS } from './assistant/help-index.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
+import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -840,7 +841,6 @@ const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'approvals', label: 'Approvals', summary: 'Review queues for handoffs, forms, and access.', icon: 'ti-user-check', module_ids: ['approvals'], permissions: ['approvals.view', 'approvals.manage'] },
   { id: 'reporting', label: 'Reporting', summary: 'Analytics and team chart views.', icon: 'ti-chart-bar', module_ids: ['analytics', 'team-chart'], permissions: ['team.view'] },
   { id: 'tickets', label: 'Tickets', summary: 'Future service and issue tracking module.', icon: 'ti-ticket', module_ids: ['tickets'], permissions: [], comingSoon: true },
-  { id: 'knowledge', label: 'Knowledge Base', summary: 'Future company knowledge and SOP library.', icon: 'ti-books', module_ids: ['knowledge'], permissions: [], comingSoon: true },
   { id: 'automations', label: 'Automations', summary: 'Future no-code workflow automations.', icon: 'ti-automation', module_ids: ['automations'], permissions: [], comingSoon: true },
   { id: 'templates', label: 'Templates', summary: 'Future reusable workspace templates.', icon: 'ti-template', module_ids: ['templates'], permissions: [], comingSoon: true },
 ];
@@ -975,7 +975,7 @@ const MODULE_REGISTRY = [
   { id: 'underwriter', group: 'Workspace', label: 'Underwriter', icon: 'ti-clipboard-check', symbol: 'q-symbol-crm', status: 'live', permission: 'underwriter.view' },
   { id: 'tickets', group: 'Workspace', label: 'Tickets', icon: 'ti-ticket', symbol: 'q-symbol-tickets', status: 'planned' },
   { id: 'finance', group: 'Workspace', label: 'Finance', icon: 'ti-receipt-dollar', symbol: 'q-symbol-finance', status: 'live', permission: 'finance.view' },
-  { id: 'knowledge', group: 'Workspace', label: 'Knowledge Base', icon: 'ti-books', symbol: 'q-symbol-knowledge', status: 'planned' },
+  { id: 'knowledge', group: 'Workspace', label: 'Knowledge Base', icon: 'ti-books', symbol: 'q-symbol-knowledge', status: 'live', permission: 'files.view' },
   { id: 'automations', group: 'Workspace', label: 'Automations', icon: 'ti-automation', symbol: 'q-symbol-automations', status: 'planned' },
   { id: 'templates', group: 'Workspace', label: 'Templates', icon: 'ti-template', symbol: 'q-symbol-templates', status: 'planned' },
   { id: 'users', group: 'Company', label: 'Users', icon: 'ti-users', symbol: 'q-symbol-users', status: 'live', permission: 'users.view' },
@@ -993,10 +993,10 @@ const NAV_GROUPS = [
   { label: 'Work', ids: ['dashboard', 'tasks', 'workspaces', 'underwriter'] },
   { label: 'Quest CRM', ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'] },
   { label: 'Communication', ids: ['messages', 'calendar'] },
-  { label: 'Estimating', ids: ['price-book', 'finance', 'files', 'forms', 'client-portals'] },
+  { label: 'Estimating', ids: ['price-book', 'finance', 'files', 'forms', 'client-portals', 'knowledge'] },
   { label: 'Review', ids: ['analytics', 'users', 'team-chart', 'time', 'approvals', 'clock', 'team-workload'] },
   { label: 'Control', ids: ['settings'] },
-  { label: 'Future', ids: ['tickets', 'knowledge', 'automations', 'templates'] },
+  { label: 'Future', ids: ['tickets', 'automations', 'templates'] },
 ];
 
 const LEGACY_ROUTE_SECTIONS = {
@@ -2304,6 +2304,8 @@ const state = {
   mobileMenuOpen: false,
   rolePreview: null,
   commandPalette: { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null },
+  knowledgeArticles: [],
+  knowledgeUi: { query: '', selectedId: '', editingId: null, creating: false },
 };
 
 const app = document.getElementById('app');
@@ -4202,6 +4204,7 @@ function renderWorkspace(route) {
   if (route.section === 'team-chart') return renderTeamChartPage(companyId);
   if (route.section === 'time' || route.section === 'calendar' || route.section === 'approvals' || route.section === 'clock') return renderOperationsPage(route, companyId);
   if (route.section === 'team-workload') return renderTeamWorkloadPage(companyId);
+  if (route.section === 'knowledge') return renderKnowledgePage(route, companyId);
   return renderPlannedPage(route.section);
 }
 
@@ -4240,6 +4243,177 @@ function renderTeamWorkloadPage(companyId) {
         <div class="tw-stat"><b>${wl.rows.length}</b><span>People</span></div>
       </div>
       ${wl.rows.length ? `<div class="tw-board panel">${rows}</div>` : emptyState('No active team members to show workload for.')}
+    </section>`;
+}
+
+// ── Knowledge Base ───────────────────────────────────────────────────────────
+// Loaded on demand per company (kept out of the main data-load Promise.all).
+const knowledgeLoadedCompanies = new Set();
+
+function normalizeKnowledgeArticle(input) {
+  const now = new Date().toISOString();
+  return {
+    id: String(input.id || `kb-${crypto.randomUUID()}`),
+    company_id: String(input.company_id || ''),
+    title: String(input.title || 'Untitled article').trim() || 'Untitled article',
+    body: String(input.body || ''),
+    category: String(input.category || 'General').trim() || 'General',
+    creator_id: input.creator_id || null,
+    created_at: input.created_at || now,
+    updated_at: input.updated_at || now,
+  };
+}
+
+function knowledgeArticlePayload(a) {
+  return { id: a.id, company_id: a.company_id, title: a.title, body: a.body, category: a.category, creator_id: a.creator_id, created_at: a.created_at, updated_at: a.updated_at };
+}
+
+function companyKnowledgeArticles(companyId = activeCompanyId()) {
+  return state.knowledgeArticles.filter((a) => a.company_id === companyId);
+}
+function knowledgeById(id) { return state.knowledgeArticles.find((a) => a.id === id) || null; }
+function upsertKnowledgeArticle(article) {
+  state.knowledgeArticles = [article, ...state.knowledgeArticles.filter((a) => a.id !== article.id)];
+}
+
+async function loadKnowledgeArticles(companyId) {
+  if (knowledgeLoadedCompanies.has(companyId)) return;
+  const client = createSupabaseClient();
+  if (!client) { knowledgeLoadedCompanies.add(companyId); return; }
+  const result = await client.from('knowledge_articles').select('*').eq('company_id', companyId).order('updated_at', { ascending: false });
+  knowledgeLoadedCompanies.add(companyId);
+  if (!result.error) {
+    const others = state.knowledgeArticles.filter((a) => a.company_id !== companyId);
+    state.knowledgeArticles = [...(result.data || []).map(normalizeKnowledgeArticle), ...others];
+    render();
+  }
+}
+
+async function saveKnowledgeArticle(form) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('files.manage', companyId, 'Your role cannot manage the knowledge base.', 'Knowledge Base')) return;
+  const data = Object.fromEntries(new FormData(form).entries());
+  const title = String(data.title || '').trim();
+  if (!title) { showToast('A title is required.', 'local', 'Knowledge Base'); return; }
+  const existing = data.id ? knowledgeById(data.id) : null;
+  const article = normalizeKnowledgeArticle({
+    id: data.id || undefined,
+    company_id: companyId,
+    title,
+    body: String(data.body || ''),
+    category: String(data.category || 'General'),
+    creator_id: existing?.creator_id || activeSession()?.profile?.id || null,
+    created_at: existing?.created_at,
+    updated_at: new Date().toISOString(),
+  });
+  upsertKnowledgeArticle(article);
+  state.knowledgeUi.creating = false;
+  state.knowledgeUi.editingId = null;
+  state.knowledgeUi.selectedId = article.id;
+  render();
+  try {
+    if (isLiveSupabaseSession()) {
+      const client = createSupabaseClient();
+      const result = await client.from('knowledge_articles').upsert(knowledgeArticlePayload(article), { onConflict: 'id' }).select().single();
+      if (result.error) throw new Error(result.error.message || 'Article save failed.');
+      upsertKnowledgeArticle(normalizeKnowledgeArticle(result.data));
+      state.sync = { label: 'Quest Supabase live', mode: 'live' };
+      render();
+    }
+    showToast(`${article.title} saved.`, isLiveSupabaseSession() ? 'live' : 'local', 'Knowledge Base');
+  } catch (error) {
+    showToast(error.message || 'Could not save the article to the server.', 'error', 'Knowledge Base');
+  }
+}
+
+async function deleteKnowledgeArticle(id) {
+  const article = knowledgeById(id);
+  if (!article) return;
+  const companyId = article.company_id;
+  if (!requirePermission('files.manage', companyId, 'Your role cannot delete knowledge articles.', 'Knowledge Base')) return;
+  state.knowledgeArticles = state.knowledgeArticles.filter((a) => a.id !== id);
+  if (state.knowledgeUi.selectedId === id) state.knowledgeUi.selectedId = '';
+  if (state.knowledgeUi.editingId === id) state.knowledgeUi.editingId = null;
+  render();
+  if (isLiveSupabaseSession()) {
+    const client = createSupabaseClient();
+    const result = await client.from('knowledge_articles').delete().eq('id', id).eq('company_id', companyId);
+    if (result.error) { showToast(result.error.message || 'Delete failed on the server.', 'error', 'Knowledge Base'); return; }
+  }
+  showToast('Article deleted.', 'local', 'Knowledge Base');
+}
+
+function renderKnowledgeArticleForm(companyId, article) {
+  const a = article || { id: '', title: '', category: 'General', body: '' };
+  return `
+    <form class="kb-editor panel" data-knowledge-form>
+      ${a.id ? `<input type="hidden" name="id" value="${h(a.id)}" />` : ''}
+      <div class="kb-editor-row">
+        <label class="kb-field kb-field-grow"><span>Title</span><input type="text" name="title" value="${h(a.title)}" required autocomplete="off" placeholder="e.g. Roof inspection SOP" /></label>
+        <label class="kb-field"><span>Category</span><input type="text" name="category" value="${h(a.category || 'General')}" autocomplete="off" list="kb-cat-list" /></label>
+      </div>
+      <datalist id="kb-cat-list">${knowledgeCategories(companyKnowledgeArticles(companyId)).map((c) => `<option value="${h(c.name)}"></option>`).join('')}</datalist>
+      <label class="kb-field"><span>Content</span><textarea name="body" rows="14" placeholder="Write the article…">${h(a.body)}</textarea></label>
+      <div class="kb-editor-actions">
+        <button type="button" class="btn" data-action="kb-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary"><i class="ti ti-check" aria-hidden="true"></i>Save article</button>
+      </div>
+    </form>`;
+}
+
+function renderKnowledgePage(route, companyId) {
+  if (!knowledgeLoadedCompanies.has(companyId)) queueMicrotask(() => loadKnowledgeArticles(companyId).catch(() => {}));
+  const canManage = can('files.manage', companyId);
+  const all = companyKnowledgeArticles(companyId);
+  const ui = state.knowledgeUi;
+  const filtered = filterKnowledgeArticles(all, ui.query);
+  const activeId = ui.selectedId && filtered.some((a) => a.id === ui.selectedId) ? ui.selectedId : (filtered[0] && filtered[0].id) || '';
+
+  let detail;
+  if (canManage && (ui.creating || ui.editingId)) {
+    detail = renderKnowledgeArticleForm(companyId, ui.editingId ? knowledgeById(ui.editingId) : null);
+  } else {
+    const selected = knowledgeById(activeId);
+    if (selected) {
+      detail = `
+        <article class="kb-article panel">
+          <div class="kb-article-head">
+            <div>
+              <span class="kb-cat-tag">${h(selected.category)}</span>
+              <h2>${h(selected.title)}</h2>
+              <p class="kb-meta">Updated ${h(formatDate(selected.updated_at))}</p>
+            </div>
+            ${canManage ? `<div class="kb-article-acts">
+              <button class="btn" type="button" data-action="kb-edit" data-id="${h(selected.id)}"><i class="ti ti-pencil" aria-hidden="true"></i>Edit</button>
+              <button class="btn danger" type="button" data-action="kb-delete" data-id="${h(selected.id)}" aria-label="Delete article"><i class="ti ti-trash" aria-hidden="true"></i></button>
+            </div>` : ''}
+          </div>
+          <div class="kb-body">${h(selected.body).replace(/\n/g, '<br>') || '<span class="muted">No content yet.</span>'}</div>
+        </article>`;
+    } else {
+      detail = `<div class="kb-empty panel">${all.length ? 'No articles match your search.' : ('No articles yet.' + (canManage ? ' Create the first one with “New article”.' : ' Check back soon.'))}</div>`;
+    }
+  }
+
+  const list = filtered.map((a) => `
+    <button type="button" class="kb-list-item${a.id === activeId && !ui.creating && !ui.editingId ? ' active' : ''}" data-action="kb-select" data-id="${h(a.id)}">
+      <span class="kb-list-title">${h(a.title)}</span>
+      <span class="kb-list-cat">${h(a.category)}</span>
+    </button>`).join('') || `<div class="kb-list-empty">${all.length ? 'No matches' : 'No articles yet'}</div>`;
+
+  return `
+    <section class="kb-page">
+      <div class="kb-head">
+        <div><h1>Knowledge Base</h1><p class="muted">Company SOPs, processes and reference articles.</p></div>
+        ${canManage ? `<button class="btn btn-primary" type="button" data-action="kb-new"><i class="ti ti-plus" aria-hidden="true"></i>New article</button>` : ''}
+      </div>
+      <div class="kb-grid">
+        <aside class="kb-sidebar">
+          <div class="kb-search"><i class="ti ti-search" aria-hidden="true"></i><input type="search" data-knowledge-search value="${h(ui.query)}" placeholder="Search articles…" aria-label="Search knowledge base" /></div>
+          <div class="kb-list">${list}</div>
+        </aside>
+        <div class="kb-detail">${detail}</div>
+      </div>
     </section>`;
 }
 
@@ -20794,6 +20968,36 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'kb-new') {
+    event.preventDefault();
+    state.knowledgeUi.creating = true; state.knowledgeUi.editingId = null;
+    render();
+    return;
+  }
+  if (action === 'kb-edit') {
+    event.preventDefault();
+    state.knowledgeUi.editingId = node.dataset.id; state.knowledgeUi.creating = false;
+    render();
+    return;
+  }
+  if (action === 'kb-cancel') {
+    event.preventDefault();
+    state.knowledgeUi.creating = false; state.knowledgeUi.editingId = null;
+    render();
+    return;
+  }
+  if (action === 'kb-select') {
+    event.preventDefault();
+    state.knowledgeUi.selectedId = node.dataset.id;
+    state.knowledgeUi.creating = false; state.knowledgeUi.editingId = null;
+    render();
+    return;
+  }
+  if (action === 'kb-delete') {
+    event.preventDefault();
+    if (confirm('Delete this article? This cannot be undone.')) deleteKnowledgeArticle(node.dataset.id);
+    return;
+  }
   if (action === 'refresh-data') {
     event.preventDefault();
     state.dataLoaded = false;
@@ -22719,6 +22923,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-command-contact-form]')) {
     event.preventDefault();
     submitCommandContact(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-knowledge-form]')) {
+    event.preventDefault();
+    saveKnowledgeArticle(event.target);
     return;
   }
 
@@ -25050,6 +25260,14 @@ function onDocumentInput(event) {
     const pos = event.target.selectionStart;
     updateWorkspaceOnly();
     const next = document.querySelector('[data-contact-search]');
+    if (next) { next.focus(); try { next.setSelectionRange(pos, pos); } catch { /* noop */ } }
+    return;
+  }
+  if (event.target.matches('[data-knowledge-search]')) {
+    state.knowledgeUi.query = event.target.value;
+    const pos = event.target.selectionStart;
+    updateWorkspaceOnly();
+    const next = document.querySelector('[data-knowledge-search]');
     if (next) { next.focus(); try { next.setSelectionRange(pos, pos); } catch { /* noop */ } }
     return;
   }
@@ -30419,6 +30637,8 @@ function isMutableAction(action = '') {
     'command-run',
     'command-back',
     'command-clear-contact',
+    'kb-select',
+    'kb-cancel',
     'sign-out',
     'toggle-account-menu',
     'toggle-notifications',
