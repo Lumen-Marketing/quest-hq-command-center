@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "captured_at": "2026-07-16T19:21:04.447Z",
+  "captured_at": "2026-07-16T19:52:01.513Z",
   "scope": "Catalog metadata only. Contains no production table rows, auth user records, object paths, or credentials.",
   "source": {
     "project_ref": "rqundirizvojpzhljtdn",
@@ -5414,6 +5414,14 @@
           "position": 28,
           "udt_name": "uuid",
           "data_type": "uuid"
+        },
+        {
+          "name": "deal_id",
+          "default": null,
+          "nullable": true,
+          "position": 29,
+          "udt_name": "text",
+          "data_type": "text"
         }
       ],
       "primary_key": [
@@ -7308,6 +7316,15 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "profiles_id_fkey",
+      "to_table": "users",
+      "to_column": "id",
+      "from_table": "profiles",
+      "delete_rule": "CASCADE",
+      "from_column": "id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "profiles_member_id_fkey",
       "to_table": "team_members",
       "to_column": "id",
@@ -7413,6 +7430,24 @@
       "from_table": "tasks",
       "delete_rule": "RESTRICT",
       "from_column": "assignee_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "tasks_company_deal_id_fkey",
+      "to_table": "deals",
+      "to_column": "company_id",
+      "from_table": "tasks",
+      "delete_rule": "NO ACTION",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "tasks_company_deal_id_fkey",
+      "to_table": "deals",
+      "to_column": "id",
+      "from_table": "tasks",
+      "delete_rule": "NO ACTION",
+      "from_column": "deal_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -10417,7 +10452,10 @@
     {
       "version": "20260716191945",
       "name": "underwriting_case_indexes"
+    },
+    {
+      "version": "20260716194836",
+      "name": "task_deal_next_actions"
     }
   ]
 }
-

@@ -1,21 +1,21 @@
 # Current state
 
-Captured 2026-07-16T19:21:04.447Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-16T19:53:04.024Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
 - Production URL: https://quest-hq-command-center-gamma.vercel.app
 - Vercel project: prj_0MxrYyGIo61QgLNW2M74fvTxlMRV
-- Current ready production deployment: dpl_EmvhdT9HzmYgCJ1FhmVnCaBA1uqW
-- Deployed branch/commit: main at ba034eb30aa57b28823d28c18f61ee4d275833f2
-- GitHub default branch at capture: ba034eb30aa57b28823d28c18f61ee4d275833f2
+- Current ready production deployment: dpl_Dcaoo5V1XjiinYpB7UNKnwj9NNRR
+- Deployed branch/commit: main at 3a7597b40166e3de3f59908cab7c1029e53a4314
+- GitHub default branch at capture: 3a7597b40166e3de3f59908cab7c1029e53a4314
 - Production Guardian: scheduled every six hours and available by manual dispatch.
-- Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29278127459
+- Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459
 - Last full production smoke context: 36 of 36 routes and 3 of 3 critical assets passed with no runtime errors.
 
 ## Repository health
 
-- Current branch regression suite: 317 tests passed.
+- Current branch regression suite: 324 tests passed.
 - The production build and bundle-budget check pass without a local application server.
 - CI runs npm run check on pushes and pull requests.
 - Build output is checked against a bundle budget and copies TaskManagement plus legacy SPA assets.
@@ -27,16 +27,16 @@ Captured 2026-07-16T19:21:04.447Z. This is a point-in-time operational snapshot,
 - Status: ACTIVE_HEALTHY
 - Region: us-west-1
 - Postgres: 17.6.1.127, engine 17
-- Public catalog: 56 relations, 155 foreign-key links, 176 policies, 53 functions, and 41 triggers.
+- Public catalog: 56 relations, 157 foreign-key constraints, 176 policies, 53 functions, and 41 triggers.
 - Storage: 6 buckets cataloged without object data.
-- Latest repository migration: 202607171230_underwriting_case_indexes.sql
-- Latest live ledger entry: 20260716191945 underwriting_case_indexes
+- Latest repository migration: 202607171500_task_deal_next_actions.sql
+- Latest live ledger entry: 20260716194836 task_deal_next_actions
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.
 
 ## Feature state
 
-The live data layer now includes tenant-scoped underwriting cases. The release branch adds categorized camera/library photo upload directly on job cards and a saved underwriting margin calculator with approval, review, and reprice outcomes.
+Production includes categorized job-card photo upload and durable underwriting cases. The live data layer also now supports a tenant-safe direct link from tasks to deals; the current release branch uses tasks as the shared "What's next" source on Contacts, Quotes/Deals, and Jobs funnel cards.
 
 The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Settings, plugins, and Workspace App Builder.
 

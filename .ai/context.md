@@ -6,20 +6,20 @@ Quest HQ Command Center is Lumen's multi-tenant operating system for roofing com
 
 Quest HQ owns the company shell, authentication flow, memberships, subscription gating, roles and permissions, CRM records, job containers, files, forms, finance, messaging, calendar, client portals, reporting, settings, and custom workspace apps.
 
-TaskManagement remains the vendored work-execution engine. The stable integration contract is jobs.id to tasks.project_id. Do not create a second independent task model inside Quest HQ.
+TaskManagement remains the vendored work-execution engine. Quest HQ links those tasks to jobs through `project_id`, contacts through `contact_id`, and quotes/deals through tenant-scoped `deal_id`. Do not create a second independent task or next-step model inside Quest HQ.
 
 ## Live product areas
 
 | Group | Modules |
 | --- | --- |
-| Work | Dashboard, Tasks, Workspace App Builder, Underwriter |
+| Work | Dashboard, Tasks, Workspace App Builder, Underwriter, Knowledge |
 | Quest CRM | Workday, Contacts, Quotes/Deals, Proposals, Jobs |
 | Communication | Messages, Calendar |
 | Estimating and delivery | Price Book, Finance, Files, Forms, Client Portals |
-| Review and workforce | Analytics, Users, Team Chart, Time, Approvals, Clock |
+| Review and workforce | Analytics, Users, Team Chart, Team Workload, Time, Approvals, Clock |
 | Control | Company, roles, access, billing, plugins, and workspace settings |
 
-Tickets, knowledge, automations, templates, and team workload appear as future/planned areas. Confirm current implementation status in [current-state.md](current-state.md) before building against them.
+Tickets, Automations, and Templates appear as future/planned areas. Confirm current implementation status in [current-state.md](current-state.md) before building against them.
 
 ## Users and tenancy
 
@@ -37,7 +37,7 @@ Tickets, knowledge, automations, templates, and team workload appear as future/p
 - Site: the physical service/property location.
 - Deal or Quote: a sales opportunity that can become a job.
 - Job: the operational container for roofing work.
-- Task: work execution linked to a job through project_id.
+- Task: work execution that also supplies the shared "What's next" value for linked Contacts, Quotes/Deals, and Jobs.
 - Workspace: a tenant company; Workspace App Builder also means the configurable custom-app module inside that tenant.
 - Plugin: a company-level module entitlement; disabling a plugin preserves its data.
 

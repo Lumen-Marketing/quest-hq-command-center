@@ -1,6 +1,6 @@
 # Functions and triggers
 
-Live public-schema routines captured 2026-07-16T19:21:04.447Z. Execute flags describe role grants visible in the catalog; application authorization must still be enforced by the routine and RLS.
+Live public-schema routines captured 2026-07-16T19:52:01.513Z. Execute flags describe role grants visible in the catalog; application authorization must still be enforced by the routine and RLS.
 
 ## Functions
 

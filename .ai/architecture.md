@@ -38,6 +38,7 @@ The SPA supports:
 | Browser application and module renderers | [src/main.js](../src/main.js) |
 | Global interface styling | [src/styles.css](../src/styles.css) |
 | Underwriting calculation rules | [src/underwriting/calculator.js](../src/underwriting/calculator.js) |
+| Funnel next-action selection and record matching | [src/crm/next-action.js](../src/crm/next-action.js) |
 | Password, upload, realtime policy helpers | [src](../src) |
 | Serverless API handlers | [api](../api) |
 | Database history and authorization | [Supabase migrations](../supabase/migrations) |
@@ -54,6 +55,7 @@ The SPA supports:
 - Database mutations preserve the repository migration history.
 - Public-token endpoints expose the minimum required record fields.
 - TaskManagement owns task execution behavior; Quest HQ owns the surrounding business context.
+- Funnel "What's next" fields select from open tasks: contacts through `contact_id`, quotes/deals through tenant-scoped `deal_id`, and jobs through `project_id`.
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-company, per-contact records protected by Underwriter permissions and RLS.
 

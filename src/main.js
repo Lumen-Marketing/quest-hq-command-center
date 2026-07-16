@@ -15,6 +15,7 @@ import { parseContactInstruction, looksLikeContactInstruction } from './assistan
 import { computeTeamWorkload } from './data/team-workload.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
 import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
+import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -7595,11 +7596,14 @@ function renderContactBoard(companyId) {
 
 function contactCard(contact) {
   return `
-    <button class="pipe-card ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" draggable="true" data-drag-kind="contact" data-drag-id="${h(contact.id)}" data-action="open-contact" data-contact-id="${h(contact.id)}">
-      <strong>${h(contact.name)}</strong>
-      <span>${h(contact.location || contact.phone || contact.email || 'No details')}</span>
-      <em>${contact.value ? money(contact.value) : '?'}</em>
-    </button>
+    <article class="pipe-card ${contact.id === state.selectedContactId ? 'active' : ''}" draggable="true" data-drag-kind="contact" data-drag-id="${h(contact.id)}">
+      <button class="pipe-card-main" type="button" data-action="open-contact" data-contact-id="${h(contact.id)}">
+        <strong>${h(contact.name)}</strong>
+        <span>${h(contact.location || contact.phone || contact.email || 'No details')}</span>
+        <em>${contact.value ? money(contact.value) : '—'}</em>
+      </button>
+      ${renderPipelineNextAction('contact', contact)}
+    </article>
   `;
 }
 
@@ -7915,6 +7919,37 @@ function activeTaskCreatorId(companyId = activeCompanyId()) {
   return String(profile.member_id || companyMembers(companyId).find((member) => member.profile_id === profile.id)?.id || '');
 }
 
+function companyTaskAssignees(companyId = activeCompanyId()) {
+  if (state.session?.auth !== 'supabase') return companyMembers(companyId);
+  return state.memberships
+    .filter((membership) => membership.company_id === companyId && membership.status === 'active')
+    .map((membership) => {
+      const profile = profileById(membership.profile_id);
+      const id = String(profile?.member_id || membership.member_id || '');
+      const member = state.teamMembers.find((item) => item.id === id);
+      return {
+        id,
+        profile_id: String(membership.profile_id || ''),
+        member_id: id,
+        name: profile?.full_name || member?.full_name || member?.name || profile?.email || id,
+        full_name: profile?.full_name || member?.full_name || member?.name || profile?.email || id,
+        email: profile?.email || member?.email || '',
+      };
+    })
+    .filter((member) => member.id);
+}
+
+function taskAssigneeId(value, companyId = activeCompanyId()) {
+  const needle = String(value || '').trim().toLowerCase();
+  if (!needle) return '';
+  const assignee = companyTaskAssignees(companyId).find((member) => (
+    [member.id, member.profile_id, member.member_id, member.name, member.full_name, member.email]
+      .filter(Boolean)
+      .some((candidate) => String(candidate).trim().toLowerCase() === needle)
+  ));
+  return assignee?.id || '';
+}
+
 async function createContactTask(contactId, taskInput) {
   const companyId = activeCompanyId();
   if (!requirePermission('tasks.manage', companyId, 'Your role cannot create tasks.', 'Tasks')) return false;
@@ -7930,8 +7965,9 @@ async function createContactTask(contactId, taskInput) {
       due: String(taskInput.due || isoDate(1)).slice(0, 10),
       due_time: String(taskInput.due_time || '').trim(),
       priority: String(taskInput.priority || 'medium').toLowerCase(),
+      assignee_id: String(taskInput.assignee_id || '').trim(),
     }
-    : { title: String(taskInput || '').trim(), description: '', due: isoDate(1), due_time: '', priority: 'medium' };
+    : { title: String(taskInput || '').trim(), description: '', due: isoDate(1), due_time: '', priority: 'medium', assignee_id: '' };
   if (!clean.title) return;
   const payload = normalizeTask({
     id: `task-${crypto.randomUUID()}`,
@@ -7940,6 +7976,7 @@ async function createContactTask(contactId, taskInput) {
     description: clean.description,
     contact_id: contactId,
     creator_id: creatorId,
+    assignee_id: clean.assignee_id || creatorId,
     status: 'todo',
     due: clean.due,
     due_time: clean.due_time,
@@ -8059,15 +8096,68 @@ async function convertContactToQuote(contactId) {
   return true;
 }
 function tasksForContact(contactId) {
-  return companyTasks().filter((task) => task.contact_id === contactId)
+  return companyTasks().filter((task) => taskMatchesRecord(task, { kind: 'contact', id: contactId }))
     .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || String(a.due).localeCompare(String(b.due)));
 }
 
 function tasksForDeal(deal) {
   if (!deal) return [];
+  const activeDealsForContact = deal.primary_contact_id
+    ? companyDeals(deal.company_id).filter((item) => item.status === 'open' && item.primary_contact_id === deal.primary_contact_id)
+    : [];
   return companyTasks(deal.company_id)
-    .filter((task) => task.contact_id === deal.primary_contact_id || task.account_id === deal.account_id)
+    .filter((task) => taskMatchesRecord(task, {
+      kind: 'deal',
+      id: deal.id,
+      contactId: deal.primary_contact_id,
+      allowLegacyContactMatch: activeDealsForContact.length === 1,
+    }))
     .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || String(a.due).localeCompare(String(b.due)));
+}
+
+function tasksForJobNextAction(job) {
+  if (!job) return [];
+  return companyTasks(job.company_id).filter((task) => taskMatchesRecord(task, { kind: 'job', id: job.id }));
+}
+
+function nextActionForRecord(kind, record) {
+  if (!record) return null;
+  if (kind === 'contact') return selectNextAction(tasksForContact(record.id));
+  if (kind === 'deal') return selectNextAction(tasksForDeal(record));
+  if (kind === 'job') return selectNextAction(tasksForJobNextAction(record));
+  return null;
+}
+
+function renderPipelineNextAction(kind, record) {
+  if (!record || (!can('tasks.view', record.company_id) && !can('tasks.manage', record.company_id))) return '';
+  const task = nextActionForRecord(kind, record);
+  if (task) {
+    const overdue = task.due && daysUntil(task.due) < 0;
+    const owner = memberName(task.assignee_id) || 'Unassigned';
+    const due = task.due ? `${overdue ? 'Overdue' : 'Due'} ${formatDate(task.due)}` : 'No due date';
+    return `
+      <button class="pipeline-next-action ${overdue ? 'overdue' : ''}" type="button" data-select-task="${h(task.id)}" aria-label="Open next action ${h(task.title)}">
+        <span class="pipeline-next-label"><i class="ti ti-route"></i>What's next</span>
+        <strong>${h(task.title)}</strong>
+        <small>${h(owner)} · ${h(due)}</small>
+      </button>
+    `;
+  }
+  if (!can('tasks.manage', record.company_id)) {
+    return `
+      <div class="pipeline-next-action empty readonly">
+        <span class="pipeline-next-label"><i class="ti ti-route"></i>What's next</span>
+        <strong>No next action</strong>
+      </div>
+    `;
+  }
+  return `
+    <button class="pipeline-next-action empty" type="button" data-action="open-pipeline-next-action" data-related-type="${h(kind)}" data-related-id="${h(record.id)}" aria-label="Add next action">
+      <span class="pipeline-next-label"><i class="ti ti-plus"></i>What's next</span>
+      <strong>Add next action</strong>
+      <small>Assign someone and set a due date</small>
+    </button>
+  `;
 }
 
 function renderSfTaskRow(task, options = {}) {
@@ -8227,10 +8317,26 @@ async function logJobActivity(jobId, type, subject, body = '') {
   return activity;
 }
 
-async function createJobTask(jobId, title) {
+async function createJobTask(jobId, taskInput) {
   const job = jobById(jobId);
-  const clean = String(title || '').trim();
-  if (!job || !clean) return;
+  const clean = typeof taskInput === 'object'
+    ? {
+      title: String(taskInput.title || '').trim(),
+      description: String(taskInput.description || taskInput.details || '').trim(),
+      due: String(taskInput.due || isoDate(1)).slice(0, 10),
+      due_time: String(taskInput.due_time || '').trim(),
+      priority: String(taskInput.priority || (job?.priority === 'Urgent' ? 'urgent' : 'medium')).toLowerCase(),
+      assignee_id: String(taskInput.assignee_id || '').trim(),
+    }
+    : {
+      title: String(taskInput || '').trim(),
+      description: '',
+      due: isoDate(1),
+      due_time: '',
+      priority: job?.priority === 'Urgent' ? 'urgent' : 'medium',
+      assignee_id: '',
+    };
+  if (!job || !clean.title) return;
   if (!requirePermission('tasks.manage', job.company_id, 'Your role cannot create tasks.', 'Tasks')) return;
   const creatorId = activeTaskCreatorId(job.company_id);
   if (!creatorId) {
@@ -8242,12 +8348,16 @@ async function createJobTask(jobId, title) {
     id: `task-${crypto.randomUUID()}`,
     company_id: job.company_id,
     project_id: job.id,
-    title: clean,
+    title: clean.title,
+    description: clean.description,
     type: 'lead',
     status: 'todo',
-    priority: job.priority === 'Urgent' ? 'urgent' : 'medium',
-    due: isoDate(1),
+    priority: clean.priority,
+    urgency: clean.priority,
+    due: clean.due,
+    due_time: clean.due_time,
     creator_id: creatorId,
+    assignee_id: clean.assignee_id || creatorId,
   });
   upsertTask(payload);
   render();
@@ -9784,6 +9894,7 @@ function renderTaskForm(companyId, job, task) {
     <form class="task-form" data-task-form>
       <input type="hidden" name="id" value="${h(task ? edit.id : '')}" />
       <input type="hidden" name="contact_id" value="${h(edit.contact_id || state.route?.params?.get('return_contact_id') || '')}" />
+      <input type="hidden" name="deal_id" value="${h(edit.deal_id || '')}" />
       <input type="hidden" name="return_contact_id" value="${h(state.route?.params?.get('return_contact_id') || '')}" />
       <div class="section-head">
         <div><h2>${task ? 'Edit task' : 'New task'}</h2><p>Writes company_id and optional project_id directly to Quest tasks.</p></div>
@@ -9793,7 +9904,7 @@ function renderTaskForm(companyId, job, task) {
       ${selectField('Status', 'status', edit.status, TASK_STATUSES.map((item) => [item, statusLabel(item)]))}
       ${selectField('Priority', 'priority', edit.priority, TASK_PRIORITIES.map((item) => [item, titleCase(item)]))}
       ${selectField('Type', 'type', edit.type, TASK_TYPES.map((item) => [item, taskTypeLabel(item)]))}
-      ${selectField('Assignee', 'assignee_id', edit.assignee_id, companyMembers(companyId).map((item) => [item.id, memberName(item.id)]))}
+      ${selectField('Assignee', 'assignee_id', edit.assignee_id, companyTaskAssignees(companyId).map((item) => [item.id, item.name]))}
       ${field('Due date', 'due', edit.due || isoDate(1), true, 'date')}
       ${field('Due time', 'due_time', edit.due_time || '', false, 'time')}
       ${textareaField('Description', 'description', edit.description)}
@@ -17090,11 +17201,14 @@ function renderDealBoard(companyId) {
 
 function dealCard(deal) {
   return `
-    <button class="pipe-card ${deal.id === state.selectedDealId ? 'active' : ''}" type="button" draggable="true" data-drag-kind="deal" data-drag-id="${h(deal.id)}" data-action="open-deal" data-deal-id="${h(deal.id)}">
-      <strong>${h(deal.name)}</strong>
-      <span>${h(accountName(deal.account_id) || 'No account')}</span>
-      <em>${money(deal.value)}${deal.probability ? ` ? ${deal.probability}%` : ''}</em>
-    </button>`;
+    <article class="pipe-card ${deal.id === state.selectedDealId ? 'active' : ''}" draggable="true" data-drag-kind="deal" data-drag-id="${h(deal.id)}">
+      <button class="pipe-card-main" type="button" data-action="open-deal" data-deal-id="${h(deal.id)}">
+        <strong>${h(deal.name)}</strong>
+        <span>${h(accountName(deal.account_id) || 'No account')}</span>
+        <em>${money(deal.value)}${deal.probability ? ` · ${deal.probability}%` : ''}</em>
+      </button>
+      ${renderPipelineNextAction('deal', deal)}
+    </article>`;
 }
 
 function renderDealTable(companyId) {
@@ -21674,6 +21788,11 @@ function handleAction(event, node) {
     openDockedActivityComposer(node.dataset.relatedType, node.dataset.relatedId, node.dataset.kind || node.dataset.tab);
     return;
   }
+  if (action === 'open-pipeline-next-action') {
+    event.preventDefault();
+    openDockedActivityComposer(node.dataset.relatedType, node.dataset.relatedId, 'New Task');
+    return;
+  }
   if (action === 'set-workday-mode') {
     event.preventDefault();
     state.workdayMode = node.dataset.mode === 'manager' ? 'manager' : 'queue';
@@ -23440,7 +23559,6 @@ function onDocumentSubmit(event) {
     saveTask(event.target);
     return;
   }
-
   if (event.target.matches('[data-underwriting-form]')) {
     event.preventDefault();
     saveUnderwritingCase(event.target);
@@ -29327,12 +29445,22 @@ function renderDockedActivityFields(composer, record, config) {
     `;
   }
   if (config.type === 'task') {
+    const companyId = record.company_id || activeCompanyId();
+    const recordOwnerId = workdayRecordOwnerId(record, companyId);
+    const assigneeId = taskAssigneeId(recordOwnerId, companyId) || activeTaskCreatorId(companyId);
+    const members = companyTaskAssignees(companyId);
     return `
       <label class="activity-dock-field">
         <span>Subject</span>
         <input name="subject" value="${h(subject)}" aria-label="Subject" />
       </label>
       <div class="activity-dock-grid">
+        <label class="activity-dock-field">
+          <span>Assigned to</span>
+          <select name="assignee_id" aria-label="Assigned to">
+            ${members.map((member) => `<option value="${h(member.id)}" ${member.id === assigneeId ? 'selected' : ''}>${h(memberName(member.id))}</option>`).join('')}
+          </select>
+        </label>
         <label class="activity-dock-field">
           <span>Due date</span>
           <input name="due_date" type="date" value="${h(isoDate(1))}" aria-label="Due date" />
@@ -29344,9 +29472,9 @@ function renderDockedActivityFields(composer, record, config) {
         <label class="activity-dock-field">
           <span>Priority</span>
           <select name="priority" aria-label="Priority">
-            <option>Normal</option>
-            <option>High</option>
-            <option>Low</option>
+            <option value="medium">Normal</option>
+            <option value="high">High</option>
+            <option value="low">Low</option>
           </select>
         </label>
       </div>
@@ -29468,21 +29596,30 @@ async function submitDockedActivityComposer(form) {
   const config = ACTIVITY_COMPOSER_CONFIG[composer.kind] || ACTIVITY_COMPOSER_CONFIG.Note;
   const subject = String(formData.subject || config.subject).trim() || config.subject;
   const body = serializeDockedActivityBody(composer, formData);
-  state.dockedActivityComposers = state.dockedActivityComposers.filter((item) => item.id !== composerId);
 
   if (config.type === 'task') {
-    if (composer.related_type === 'contact') await createContactTask(composer.related_id, {
+    const taskInput = {
       title: subject,
       description: formData.task_notes,
       due: formData.due_date,
       due_time: formData.due_time,
       priority: formData.priority,
-    });
-    if (composer.related_type === 'job') await createJobTask(composer.related_id, subject);
-    if (composer.related_type === 'deal') await createDealTask(composer.related_id, subject);
+      assignee_id: formData.assignee_id,
+    };
+    const savedTask = composer.related_type === 'contact'
+      ? await createContactTask(composer.related_id, taskInput)
+      : composer.related_type === 'job'
+        ? await createJobTask(composer.related_id, taskInput)
+        : composer.related_type === 'deal'
+          ? await createDealTask(composer.related_id, taskInput)
+          : false;
+    if (!savedTask) return;
+    state.dockedActivityComposers = state.dockedActivityComposers.filter((item) => item.id !== composerId);
+    render();
     return;
   }
 
+  state.dockedActivityComposers = state.dockedActivityComposers.filter((item) => item.id !== composerId);
   if (composer.related_type === 'contact') await logContactActivity(composer.related_id, config.type, subject, body);
   if (composer.related_type === 'job') await logJobActivity(composer.related_id, config.type, subject, body);
   if (composer.related_type === 'deal') await logDealActivity(composer.related_id, config.type, subject, body);
@@ -30451,10 +30588,19 @@ function beginDealInlineEdit(span) {
   });
 }
 
-async function createDealTask(dealId, title) {
+async function createDealTask(dealId, taskInput) {
   const deal = dealById(dealId);
-  const clean = String(title || '').trim();
-  if (!deal || !clean) return;
+  const clean = typeof taskInput === 'object'
+    ? {
+      title: String(taskInput.title || '').trim(),
+      description: String(taskInput.description || taskInput.details || '').trim(),
+      due: String(taskInput.due || isoDate(1)).slice(0, 10),
+      due_time: String(taskInput.due_time || '').trim(),
+      priority: String(taskInput.priority || 'medium').toLowerCase(),
+      assignee_id: String(taskInput.assignee_id || '').trim(),
+    }
+    : { title: String(taskInput || '').trim(), description: '', due: isoDate(1), due_time: '', priority: 'medium', assignee_id: '' };
+  if (!deal || !clean.title) return;
   if (!requirePermission('tasks.manage', deal.company_id, 'Your role cannot create tasks.', 'Tasks')) return false;
   const creatorId = activeTaskCreatorId(deal.company_id);
   if (!creatorId) {
@@ -30464,11 +30610,17 @@ async function createDealTask(dealId, title) {
   const payload = normalizeTask({
     id: `task-${crypto.randomUUID()}`,
     company_id: deal.company_id,
-    title: clean,
+    title: clean.title,
+    description: clean.description,
     contact_id: deal.primary_contact_id,
+    deal_id: deal.id,
     creator_id: creatorId,
+    assignee_id: clean.assignee_id || creatorId,
     status: 'todo',
-    due: isoDate(1),
+    due: clean.due,
+    due_time: clean.due_time,
+    priority: clean.priority,
+    urgency: clean.priority,
   });
   const client = createSupabaseClient();
   let savedTask = payload;
@@ -32206,6 +32358,7 @@ function normalizeTask(input) {
     assignee_id: String(input.assignee_id || input.creator_id || ''),
     project_id: String(input.project_id || ''),
     contact_id: String(input.contact_id || ''),
+    deal_id: String(input.deal_id || ''),
     due: String(input.due || isoDate(1)).slice(0, 10),
     due_time: input.due_time || null,
     reminder_at: input.reminder_at || null,
@@ -32876,7 +33029,7 @@ function blankTask(companyId = activeCompanyId(), jobId = '') {
     title: '',
     company_id: companyId,
     project_id: jobId,
-    assignee_id: creatorId || companyMembers(companyId)[0]?.id || '',
+    assignee_id: creatorId || companyTaskAssignees(companyId)[0]?.id || '',
     creator_id: creatorId,
     due: isoDate(1),
     priority: 'medium',
@@ -32983,6 +33136,7 @@ function taskPayload(task) {
     assignee_id: task.assignee_id,
     project_id: task.project_id || null,
     contact_id: task.contact_id || null,
+    deal_id: task.deal_id || null,
     due: task.due,
     due_time: task.due_time,
     reminder_at: task.reminder_at,
@@ -33256,6 +33410,7 @@ function jobCard(job) {
         <span>${h(job.client_name || 'No client')}</span>
         <small>${h(companyName(job.company_id))} - ${h(job.owner_name || 'Unassigned')}</small>
       </button>
+      ${renderPipelineNextAction('job', job)}
       <div class="job-card-foot">
         <em>${h(taskCountForJob(job.id))} tasks</em>
         ${can('files.view', job.company_id) ? `<button class="job-card-photo" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}" aria-label="Open photos for ${h(job.name)}"><i class="ti ti-camera"></i><span>${h(photoCountForJob(job.id))}</span></button>` : ''}
