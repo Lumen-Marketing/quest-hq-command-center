@@ -11,6 +11,7 @@ import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-po
 import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
 import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
 import { searchHelp, HELP_TOPICS } from './assistant/help-index.js';
+import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -2302,7 +2303,7 @@ const state = {
   workspaceMenuOpen: false,
   mobileMenuOpen: false,
   rolePreview: null,
-  commandPalette: { open: false, query: '', index: 0, answer: null, taskDraft: null },
+  commandPalette: { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null },
 };
 
 const app = document.getElementById('app');
@@ -20077,7 +20078,7 @@ function openCommandPalette() {
   // Only meaningful inside a company workspace — there is nothing to jump to on
   // the landing or auth screens.
   if (!state.route || state.route.name !== 'company') return;
-  state.commandPalette = { open: true, query: '', index: 0, answer: null, taskDraft: null };
+  state.commandPalette = { open: true, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null };
   render();
   queueMicrotask(() => {
     const input = document.querySelector('[data-command-input]');
@@ -20087,7 +20088,7 @@ function openCommandPalette() {
 
 function closeCommandPalette() {
   if (!state.commandPalette.open) return;
-  state.commandPalette = { open: false, query: '', index: 0, answer: null, taskDraft: null };
+  state.commandPalette = { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null };
   render();
 }
 
@@ -20199,7 +20200,16 @@ function commandAssistantResults(query) {
     });
   }
 
-  if (can('tasks.manage', activeCompanyId())) {
+  const companyId = activeCompanyId();
+  // An explicit "add contact ..." offers contact creation; anything else offers a task.
+  if (looksLikeContactInstruction(q) && can('contacts.manage', companyId)) {
+    const contact = parseContactInstruction(q);
+    extras.push({
+      id: 'create-contact', group: 'Create', icon: 'ti-user-plus',
+      label: `Create contact: ${contact.name}`, hint: contact.email || contact.phone || '',
+      run: { kind: 'create-contact', query: q },
+    });
+  } else if (can('tasks.manage', companyId)) {
     const draft = parseTaskInstruction(q, new Date());
     const hint = [draft.found.date ? draft.due : '', draft.found.time ? draft.due_time : '']
       .filter(Boolean).join(' ');
@@ -20215,7 +20225,7 @@ function commandPaletteKeydown(event) {
   // In a sub-view (a guide answer or the task-confirm form), Escape steps back to
   // the search rather than closing the whole palette. The arrow/Enter list nav is
   // suspended so the user can type and tab through the task form normally.
-  if (state.commandPalette.answer || state.commandPalette.taskDraft) {
+  if (state.commandPalette.answer || state.commandPalette.taskDraft || state.commandPalette.contactDraft) {
     if (event.key === 'Escape') { event.preventDefault(); commandPaletteBack(); return true; }
     return false;
   }
@@ -20247,6 +20257,7 @@ function buildCommandTaskDraft(query) {
 function commandPaletteBack() {
   state.commandPalette.answer = null;
   state.commandPalette.taskDraft = null;
+  state.commandPalette.contactDraft = null;
   render();
   queueMicrotask(() => {
     const input = document.querySelector('[data-command-input]');
@@ -20260,7 +20271,7 @@ async function submitCommandTask(form) {
   // start (before any await), so the form is still mounted when we call it even
   // though we've marked the palette closed. On success saveTask navigates+renders,
   // which removes the overlay; on failure it toasts and we reopen the form.
-  state.commandPalette = { open: false, query: '', index: 0, answer: null, taskDraft: null };
+  state.commandPalette = { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null };
   const ok = await saveTask(form);
   if (ok === false) {
     state.commandPalette.open = true;
@@ -20271,6 +20282,29 @@ async function submitCommandTask(form) {
       urgency: form.elements.priority?.value || 'medium',
       found: { date: false, time: false, urgency: false },
     };
+    render();
+  }
+}
+
+async function submitCommandContact(form) {
+  // Reuse the app's contact-save path. saveContact reads the form synchronously at
+  // its start, so it's still mounted when we call it even though we've marked the
+  // palette closed. It renders on success; on a live-write failure it toasts and
+  // leaves state untouched, so we detect that and reopen the form for a retry.
+  const prevSelected = state.selectedContactId;
+  const retry = {
+    name: form.elements.name?.value || '',
+    email: form.elements.email?.value || '',
+    phone: form.elements.phone?.value || '',
+    found: { email: false, phone: false },
+  };
+  state.commandPalette = { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null };
+  await saveContact(form);
+  if (state.selectedContactId !== prevSelected) {
+    navigate(companyPath('contacts', { contact_id: state.selectedContactId }, activeCompanyId()));
+  } else {
+    state.commandPalette.open = true;
+    state.commandPalette.contactDraft = retry;
     render();
   }
 }
@@ -20298,6 +20332,15 @@ function runCommand(command) {
     render();
     queueMicrotask(() => {
       const el = document.querySelector('[data-command-task-title]');
+      if (el) { el.focus(); el.select(); }
+    });
+    return;
+  }
+  if (run.kind === 'create-contact') {
+    state.commandPalette.contactDraft = parseContactInstruction(run.query);
+    render();
+    queueMicrotask(() => {
+      const el = document.querySelector('[data-command-contact-name]');
       if (el) { el.focus(); el.select(); }
     });
     return;
@@ -20457,6 +20500,34 @@ function renderCommandTaskForm(draft) {
     </form>`;
 }
 
+function renderCommandContactForm(draft) {
+  const stage = contactStageNames()[0] || '';
+  return `
+    ${renderCommandBackHeader('Create contact')}
+    <form class="command-task-form" data-command-contact-form>
+      <input type="hidden" name="company_id" value="${h(activeCompanyId())}" />
+      <input type="hidden" name="stage" value="${h(stage)}" />
+      <label class="command-field">
+        <span>Name</span>
+        <input type="text" name="name" data-command-contact-name value="${h(draft.name)}" required autocomplete="off" />
+      </label>
+      <div class="command-field-row">
+        <label class="command-field">
+          <span>Email</span>
+          <input type="email" name="email" value="${h(draft.email)}" autocomplete="off" />
+        </label>
+        <label class="command-field">
+          <span>Phone</span>
+          <input type="tel" name="phone" value="${h(draft.phone)}" autocomplete="off" />
+        </label>
+      </div>
+      <div class="command-task-actions">
+        <button type="button" class="btn" data-action="command-back">Cancel</button>
+        <button type="submit" class="btn btn-primary"><i class="ti ti-user-plus" aria-hidden="true"></i>Create contact</button>
+      </div>
+    </form>`;
+}
+
 function renderCommandPalette() {
   if (!state.commandPalette.open) return '';
 
@@ -20465,6 +20536,8 @@ function renderCommandPalette() {
     body = renderCommandAnswer(state.commandPalette.answer);
   } else if (state.commandPalette.taskDraft) {
     body = renderCommandTaskForm(state.commandPalette.taskDraft);
+  } else if (state.commandPalette.contactDraft) {
+    body = renderCommandContactForm(state.commandPalette.contactDraft);
   } else {
     commandResults = commandPaletteResultsFor(state.commandPalette.query);
     if (state.commandPalette.index >= commandResults.length) state.commandPalette.index = 0;
@@ -20475,7 +20548,7 @@ function renderCommandPalette() {
           <input type="text" class="command-input" data-command-input role="combobox"
             aria-expanded="true" aria-controls="command-results" aria-autocomplete="list"
             aria-activedescendant="${activeId}" aria-label="Search commands"
-            placeholder="Search, ask how to…, or type a task" value="${h(state.commandPalette.query)}"
+            placeholder="Search, ask how to…, or type a task or contact" value="${h(state.commandPalette.query)}"
             autocomplete="off" autocapitalize="off" spellcheck="false" />
           <kbd class="command-kbd">Esc</kbd>
         </div>
@@ -22551,6 +22624,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-command-task-form]')) {
     event.preventDefault();
     submitCommandTask(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-command-contact-form]')) {
+    event.preventDefault();
+    submitCommandContact(event.target);
     return;
   }
 
@@ -24817,6 +24896,14 @@ function onDocumentInput(event) {
     draft.due_time = form.elements.due_time?.value ?? draft.due_time;
     draft.urgency = form.elements.priority?.value ?? draft.urgency;
     draft.assignee_id = form.elements.assignee_id?.value ?? draft.assignee_id;
+    return;
+  }
+  if (state.commandPalette.contactDraft && event.target.closest('[data-command-contact-form]')) {
+    const form = event.target.closest('[data-command-contact-form]');
+    const draft = state.commandPalette.contactDraft;
+    draft.name = form.elements.name?.value ?? draft.name;
+    draft.email = form.elements.email?.value ?? draft.email;
+    draft.phone = form.elements.phone?.value ?? draft.phone;
     return;
   }
   if (event.target.matches('[data-job-type-input]')) {
