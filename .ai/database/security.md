@@ -1,6 +1,6 @@
 # Database security map
 
-Captured 2026-07-16T19:21:04.447Z. All 55 public base tables report Row Level Security enabled; `v_pricebook_material_best` is a view and does not use table RLS. Policy expressions are intentionally omitted; inspect migrations or the live catalog before changing authorization.
+Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Security enabled; `v_pricebook_material_best` is a view and does not use table RLS. Policy expressions are intentionally omitted; inspect migrations or the live catalog before changing authorization.
 
 ## Coverage
 

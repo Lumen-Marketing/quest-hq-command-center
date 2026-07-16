@@ -1,6 +1,6 @@
 # Relationship map
 
-Foreign keys captured from the live public schema on 2026-07-16T19:21:04.447Z. Relationships are directional from the referencing column to the referenced column.
+Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. Relationships are directional from the referencing column to the referenced column. Composite relationships have one row per paired column.
 
 | From | To | Constraint | Update | Delete |
 | --- | --- | --- | --- | --- |
@@ -126,6 +126,7 @@ Foreign keys captured from the live public schema on 2026-07-16T19:21:04.447Z. R
 | pricebook_vendor_prices.vendor_id | pricebook_vendors.id | pricebook_vendor_prices_vendor_id_fkey | NO ACTION | CASCADE |
 | pricebook_vendors.company_id | companies.id | pricebook_vendors_company_id_fkey | NO ACTION | CASCADE |
 | pricebook_vendors.deleted_by | profiles.id | pricebook_vendors_deleted_by_fkey | NO ACTION | SET NULL |
+| profiles.id | users.id | profiles_id_fkey | NO ACTION | CASCADE |
 | profiles.member_id | team_members.id | profiles_member_id_fkey | NO ACTION | NO ACTION |
 | profiles.supervisor_id | team_members.id | profiles_supervisor_id_fkey | NO ACTION | NO ACTION |
 | proposal_documents.company_id | companies.id | proposal_documents_company_id_fkey | NO ACTION | CASCADE |
@@ -138,6 +139,8 @@ Foreign keys captured from the live public schema on 2026-07-16T19:21:04.447Z. R
 | roles.company_id | companies.id | roles_company_id_fkey | NO ACTION | CASCADE |
 | roles.created_by | profiles.id | roles_created_by_fkey | NO ACTION | SET NULL |
 | tasks.assignee_id | team_members.id | tasks_assignee_id_fkey | NO ACTION | RESTRICT |
+| tasks.company_id | deals.company_id | tasks_company_deal_id_fkey | NO ACTION | NO ACTION |
+| tasks.deal_id | deals.id | tasks_company_deal_id_fkey | NO ACTION | NO ACTION |
 | tasks.company_id | companies.id | tasks_company_id_fkey | NO ACTION | RESTRICT |
 | tasks.creator_id | team_members.id | tasks_creator_id_fkey | NO ACTION | RESTRICT |
 | tasks.deleted_by | profiles.id | tasks_deleted_by_fkey | NO ACTION | SET NULL |

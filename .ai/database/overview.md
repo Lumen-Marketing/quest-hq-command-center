@@ -1,18 +1,18 @@
 # Database overview
 
-The live Supabase public schema was captured 2026-07-16T19:21:04.447Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
+The live Supabase public schema was captured 2026-07-16T19:52:01.513Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
 
 ## At a glance
 
 - 56 public relations (55 base tables and 1 view)
-- 704 public columns
-- 155 foreign-key relationships
+- 705 public columns
+- 157 foreign-key constraints (158 column links because one relationship is composite)
 - 176 RLS policies
 - 53 public functions
 - 41 trigger events
 - 6 storage buckets
 - 1 database cron job
-- 71 live migration-ledger entries
+- 72 live migration-ledger entries
 
 ## Domain map
 

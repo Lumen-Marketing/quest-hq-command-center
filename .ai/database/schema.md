@@ -1,6 +1,6 @@
 # Public schema catalog
 
-Captured 2026-07-16T19:21:04.447Z from the live Supabase catalog. This page is generated for fast reading; [snapshot.json](snapshot.json) is the precise machine-readable source.
+Captured 2026-07-16T19:52:01.513Z from the live Supabase catalog. This page is generated for fast reading; [snapshot.json](snapshot.json) is the precise machine-readable source.
 
 Nullable columns end in ?. Arrays and database-specific types use the live Postgres type name.
 
@@ -284,7 +284,7 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `title` text; `description` text; `type` text; `label` text?; `bid_status` text?; `company_id` text; `creator_id` text; `assignee_id` text; `project_id` text?; `due` date; `due_time` text?; `reminder_at` text?; `priority` text; `urgency` text; `status` text; `watchers` jsonb; `subtasks` jsonb; `activity` jsonb; `cleared_at` timestamp with time zone?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `contact_id` text?; `assignee_ids` ARRAY; `wo_number` integer?; `reminder_offset` text?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
+- Columns: `id` text; `title` text; `description` text; `type` text; `label` text?; `bid_status` text?; `company_id` text; `creator_id` text; `assignee_id` text; `project_id` text?; `due` date; `due_time` text?; `reminder_at` text?; `priority` text; `urgency` text; `status` text; `watchers` jsonb; `subtasks` jsonb; `activity` jsonb; `cleared_at` timestamp with time zone?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `contact_id` text?; `assignee_ids` ARRAY; `wo_number` integer?; `reminder_offset` text?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?; `deal_id` text?
 
 ## public.team_members
 
@@ -339,4 +339,3 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 - RLS: enabled
 - Primary key: company_id
 - Columns: `company_id` text; `doc` jsonb; `updated_by` uuid?; `updated_at` timestamp with time zone; `created_at` timestamp with time zone
-
