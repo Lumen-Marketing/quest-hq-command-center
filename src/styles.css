@@ -3024,8 +3024,18 @@ textarea:focus {
 .table-head,
 .jobs-table .table-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1.4fr) 120px 110px 150px 80px 110px;
+  grid-template-columns: minmax(220px, 1.3fr) minmax(210px, 1fr) 100px 110px 120px 100px 110px;
   gap: 12px;
+}
+
+.jobs-table,
+.deals-table {
+  overflow-x: auto;
+}
+
+.jobs-table .table-head,
+.jobs-table .table-row {
+  min-width: 1000px;
 }
 
 .table-head {
@@ -17232,6 +17242,12 @@ textarea:focus {
   cursor: pointer;
 }
 
+.pipeline-next-action.compact {
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+}
+
 .job-card > .pipeline-next-action {
   width: 100%;
   margin: 2px 0 0;
@@ -17678,10 +17694,13 @@ textarea:focus {
 .contacts-table .table-head,
 .contacts-table .table-row {
   display: grid;
-  grid-template-columns: 34px minmax(190px, 1.25fr) minmax(140px, .95fr) minmax(110px, .75fr) 130px minmax(170px, 1fr) minmax(135px, .85fr) 34px;
+  grid-template-columns: 34px minmax(180px, 1.2fr) minmax(200px, 1fr) minmax(120px, .8fr) minmax(100px, .7fr) 120px minmax(160px, 1fr) minmax(120px, .8fr) 34px;
   gap: 10px;
   align-items: center;
+  min-width: 1160px;
 }
+
+.contacts-table { overflow-x: auto; }
 
 /* Multi-select: the checkbox cell toggles selection; clicks never open the row. */
 .contacts-table .table-row { cursor: pointer; }
@@ -18316,9 +18335,13 @@ textarea:focus {
   .contacts-table .table-row {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-auto-rows: auto;
+    min-width: 0;
   }
   .contacts-table .table-row span:nth-child(n+3) {
     display: none;
+  }
+  .contacts-table .table-row > .pipeline-next-action {
+    grid-column: 1 / -1;
   }
   .underwriter-table .table-head {
     display: none;
@@ -18425,10 +18448,14 @@ textarea:focus {
 .deals-table .table-head,
 .deals-table .table-row {
   display: grid;
-  grid-template-columns: minmax(200px, 1.5fr) 150px 90px 110px 140px 110px;
+  grid-template-columns: minmax(200px, 1.35fr) minmax(210px, 1fr) 130px 90px 110px 130px 110px;
   gap: 12px;
   align-items: center;
+  min-width: 1020px;
 }
+
+.jobs-table .table-row,
+.deals-table .table-row { cursor: pointer; }
 
 .crm-detail-grid {
   display: grid;

@@ -7355,6 +7355,7 @@ function renderContactTable(companyId) {
         <div class="table-head">
           <span class="select-cell" data-action="toggle-contact-select-all"><input type="checkbox" ${allSelected ? 'checked' : ''} tabindex="-1" aria-label="Select all contacts" /></span>
           <span>${headerSort('Name', 'name')}</span>
+          <span>What's next</span>
           <span>${headerSort('Account Name', 'owner')}</span>
           <span>${headerSort('Title', 'stage')}</span>
           <span>Phone</span>
@@ -7366,6 +7367,7 @@ function renderContactTable(companyId) {
           <div class="table-row ${selected.has(contact.id) ? 'selected ' : ''}${contact.id === state.selectedContactId ? 'active' : ''}" role="button" tabindex="0" data-action="open-contact" data-contact-id="${h(contact.id)}">
             <span class="select-cell" data-action="toggle-contact-select" data-contact-id="${h(contact.id)}"><input type="checkbox" ${selected.has(contact.id) ? 'checked' : ''} tabindex="-1" aria-label="Select ${h(contact.name)}" /></span>
             <span class="cell-lead">${pipelineDot(contactStageColor(contact.stage))}<span><strong>${h(contact.name)}</strong><small>${h(contact.stage || 'No stage')}</small></span></span>
+            ${renderPipelineNextAction('contact', contact, { compact: true })}
             <span>${contact.account_id ? h(accountName(contact.account_id) || '-') : '<span class="muted-dash">-</span>'}</span>
             <span>${contact.title ? h(contact.title) : '<span class="muted-dash">-</span>'}</span>
             <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">-</span>'}</span>
@@ -8128,15 +8130,16 @@ function nextActionForRecord(kind, record) {
   return null;
 }
 
-function renderPipelineNextAction(kind, record) {
+function renderPipelineNextAction(kind, record, options = {}) {
   if (!record || (!can('tasks.view', record.company_id) && !can('tasks.manage', record.company_id))) return '';
+  const compactClass = options.compact ? ' compact' : '';
   const task = nextActionForRecord(kind, record);
   if (task) {
     const overdue = task.due && daysUntil(task.due) < 0;
     const owner = memberName(task.assignee_id) || 'Unassigned';
     const due = task.due ? `${overdue ? 'Overdue' : 'Due'} ${formatDate(task.due)}` : 'No due date';
     return `
-      <button class="pipeline-next-action ${overdue ? 'overdue' : ''}" type="button" data-select-task="${h(task.id)}" aria-label="Open next action ${h(task.title)}">
+      <button class="pipeline-next-action${compactClass} ${overdue ? 'overdue' : ''}" type="button" data-action="open-pipeline-task" data-task-id="${h(task.id)}" aria-label="Open next action ${h(task.title)}">
         <span class="pipeline-next-label"><i class="ti ti-route"></i>What's next</span>
         <strong>${h(task.title)}</strong>
         <small>${h(owner)} · ${h(due)}</small>
@@ -8145,14 +8148,14 @@ function renderPipelineNextAction(kind, record) {
   }
   if (!can('tasks.manage', record.company_id)) {
     return `
-      <div class="pipeline-next-action empty readonly">
+      <div class="pipeline-next-action${compactClass} empty readonly">
         <span class="pipeline-next-label"><i class="ti ti-route"></i>What's next</span>
         <strong>No next action</strong>
       </div>
     `;
   }
   return `
-    <button class="pipeline-next-action empty" type="button" data-action="open-pipeline-next-action" data-related-type="${h(kind)}" data-related-id="${h(record.id)}" aria-label="Add next action">
+    <button class="pipeline-next-action${compactClass} empty" type="button" data-action="open-pipeline-next-action" data-related-type="${h(kind)}" data-related-id="${h(record.id)}" aria-label="Add next action">
       <span class="pipeline-next-label"><i class="ti ti-plus"></i>What's next</span>
       <strong>Add next action</strong>
       <small>Assign someone and set a due date</small>
@@ -9505,16 +9508,17 @@ function renderJobList(companyId) {
     <section class="panel">
       <div class="section-head"><div><h2>Jobs</h2><p>${rows.length} visible job${rows.length === 1 ? '' : 's'}</p></div></div>
       <div class="data-table jobs-table">
-        <div class="table-head"><span>Job</span><span>Type</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Value</span></div>
+        <div class="table-head"><span>Job</span><span>What's next</span><span>Type</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Value</span></div>
         ${rows.map((job) => `
-          <button class="table-row ${job.id === state.selectedJobId ? 'active' : ''}" type="button" data-select-job="${h(job.id)}">
+          <div class="table-row ${job.id === state.selectedJobId ? 'active' : ''}" role="button" tabindex="0" data-action="open-job" data-job-id="${h(job.id)}">
             <span class="cell-lead">${pipelineDot(pipelineStageColor('jobs', resolvePipelineStage('jobs', job.stage, companyId), companyId))}<span><strong>${h(job.name)}</strong><small>${h(job.client_name || 'No client')} - ${h(job.site_address || 'No address')}</small></span></span>
+            ${renderPipelineNextAction('job', job, { compact: true })}
             <span>${h(job.job_type || '—')}</span>
             <span>${stageTagPipe('jobs', job.stage, companyId)}</span>
             <span>${priorityPill(job.priority)}</span>
             <span>${h(job.owner_name || 'Unassigned')}</span>
             <span>${money(job.estimate_total)}</span>
-          </button>
+          </div>
         `).join('') || emptyState('No jobs match this view.')}
       </div>
     </section>
@@ -16888,14 +16892,15 @@ function renderAccountEditor(companyId, account) {
 // ---- Deals (pipeline) -----------------------------------------------------
 function dealRow(deal, companyId = activeCompanyId()) {
   return `
-    <button class="table-row ${deal.id === state.selectedDealId ? 'active' : ''}" type="button" data-action="open-deal" data-deal-id="${h(deal.id)}">
+    <div class="table-row ${deal.id === state.selectedDealId ? 'active' : ''}" role="button" tabindex="0" data-action="open-deal" data-deal-id="${h(deal.id)}">
       <span class="cell-lead">${pipelineDot(pipelineStageColor('deals', resolvePipelineStage('deals', deal.stage, companyId), companyId))}<span><strong>${h(deal.name)}</strong><small>${h(accountName(deal.account_id) || 'No account')}</small></span></span>
+      ${renderPipelineNextAction('deal', deal, { compact: true })}
       <span>${stageTagPipe('deals', deal.stage, companyId)}</span>
       <span>${dealStatusPill(deal.status)}</span>
       <span class="cell-mono">${money(deal.value)}</span>
       <span>${h(deal.owner_name || 'Unassigned')}</span>
       <span>${deal.close_date ? formatDate(deal.close_date) : '<span class="muted-dash">—</span>'}</span>
-    </button>`;
+    </div>`;
 }
 
 function dealKpiRow(companyId) {
@@ -17217,7 +17222,7 @@ function renderDealTable(companyId) {
     <section class="panel">
       <div class="section-head"><div><h2>Quotes</h2><p>${rows.length} visible</p></div></div>
       <div class="data-table deals-table">
-        <div class="table-head"><span>Quote</span><span>Stage</span><span>Status</span><span>Value</span><span>Owner</span><span>Close</span></div>
+        <div class="table-head"><span>Quote</span><span>What's next</span><span>Stage</span><span>Status</span><span>Value</span><span>Owner</span><span>Close</span></div>
         ${rows.map((deal) => dealRow(deal, companyId)).join('') || emptyState('No quotes match this view.')}
       </div>
     </section>`;
@@ -21793,6 +21798,11 @@ function handleAction(event, node) {
     openDockedActivityComposer(node.dataset.relatedType, node.dataset.relatedId, 'New Task');
     return;
   }
+  if (action === 'open-pipeline-task') {
+    event.preventDefault();
+    setSelectedTask(node.dataset.taskId);
+    return;
+  }
   if (action === 'set-workday-mode') {
     event.preventDefault();
     state.workdayMode = node.dataset.mode === 'manager' ? 'manager' : 'queue';
@@ -22544,6 +22554,11 @@ function handleAction(event, node) {
     event.preventDefault();
     state.selectedDealId = node.dataset.dealId || '';
     navigate(companyPath('deals', { deal_id: node.dataset.dealId }, activeCompanyId()));
+    return;
+  }
+  if (action === 'open-job') {
+    event.preventDefault();
+    setSelectedJob(node.dataset.jobId);
     return;
   }
   if (action === 'set-deal-stage') {
