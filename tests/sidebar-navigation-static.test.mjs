@@ -34,3 +34,9 @@ test('mobile keeps the topbar search while the desktop rail owns desktop search'
   assert.match(styles, /@media \(min-width:\s*901px\)\s*\{[\s\S]*?\.topbar-global-search\s*\{\s*display:\s*none/);
   assert.match(styles, /@media \(max-width:\s*900px\)\s*\{[\s\S]*?\.topbar-global-search\s*\{\s*display:/);
 });
+
+test('collapsed command rail keeps icon-only rows and a flexible scroll region', () => {
+  assert.match(styles, /\.sidebar-collapsed \.quest-nav-v2\s*\{[\s\S]*?grid-template-rows:\s*auto auto minmax\(0, 1fr\) auto/);
+  assert.match(styles, /\.sidebar-collapsed \.quest-nav-v2 \.deck-brand\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.match(styles, /\.sidebar-collapsed \.quest-nav-v2 \.side-item\s*\{[\s\S]*?grid-template-columns:\s*1fr[\s\S]*?padding-inline:\s*0/);
+});

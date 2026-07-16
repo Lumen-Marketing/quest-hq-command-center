@@ -23428,7 +23428,13 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 
 .sidebar-collapsed .quest-nav-v2 {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   padding-inline: 9px;
+}
+
+.sidebar-collapsed .quest-nav-v2 .deck-brand {
+  grid-template-columns: 1fr;
+  justify-items: center;
 }
 
 .sidebar-collapsed .quest-nav-v2 .deck-nav-tools,
@@ -23447,6 +23453,9 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 
 .sidebar-collapsed .quest-nav-v2 .side-item {
   min-height: 36px;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding-inline: 0;
 }
 
 @media (min-width: 901px) {

@@ -3949,7 +3949,7 @@ function renderDeck(route) {
       <button class="deck-global-search" type="button" data-action="command-open" aria-label="Search or jump to">
         ${svgIcon('q-search')}
         <span>Search or jump to&hellip;</span>
-        <kbd>Ctrl K</kbd>
+        <kbd>Ctrl / Cmd K</kbd>
       </button>
       <div class="sidebar-scope-toggle" role="group" aria-label="Navigation scope">
         <button class="${state.sidebarScope === 'my-work' ? 'active' : ''}" type="button" data-action="set-sidebar-scope" data-sidebar-scope="my-work" aria-pressed="${state.sidebarScope === 'my-work' ? 'true' : 'false'}">My work</button>
