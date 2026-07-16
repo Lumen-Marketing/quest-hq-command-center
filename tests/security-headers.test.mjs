@@ -38,6 +38,27 @@ test('CSP ships in Report-Only until proven safe, not enforcing', () => {
   assert.ok(!headers.has('Content-Security-Policy'), 'CSP should not enforce until the report-only pass is clean');
 });
 
+test('CSP violations are reported to a real endpoint, not just the console', () => {
+  const csp = headerMap().get('Content-Security-Policy-Report-Only') || '';
+  assert.match(csp, /report-uri \/api\/csp-report/);
+  // The endpoint exists and is rate-limited (violations arrive in bursts).
+  const report = readFileSync(new URL('../api/csp-report.js', import.meta.url), 'utf8');
+  assert.match(report, /enforceRateLimit/);
+  assert.match(report, /csp-report/);
+});
+
+// Documents what the bundle scan found: promoting to a STRICT `script-src 'self'`
+// would break PDF viewing (pdf.js WebAssembly) and ZIP backups (jszip new Function).
+// An enforcing policy must therefore add 'wasm-unsafe-eval' (for pdf) and decide on
+// jszip's eval before flipping — see the deploy notes. This test is a reminder, not
+// a live assertion, so it can't silently rot into a false "safe to enforce".
+test('enforcing the CSP requires wasm/eval allowances (known blockers)', () => {
+  const csp = headerMap().get('Content-Security-Policy-Report-Only') || '';
+  // While still Report-Only, script-src stays strict so violations are actually reported.
+  assert.match(csp, /script-src 'self'(;|\s)/);
+  assert.ok(!/unsafe-eval/.test(csp), 'no eval allowances while report-only — we want the violations reported');
+});
+
 test('the CSP allows every origin the app actually uses', () => {
   const csp = headerMap().get('Content-Security-Policy-Report-Only') || '';
   // script has NO unsafe-inline (the build emits no inline scripts) — the real win.
