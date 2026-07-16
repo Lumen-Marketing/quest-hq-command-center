@@ -22304,3 +22304,52 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 .command-chip-clear:hover { background: var(--surface); color: var(--ink); }
 .command-chip-clear .ti { color: inherit; font-size: 13px; }
+
+/* Team workload board */
+.tw-page { display: flex; flex-direction: column; gap: 18px; }
+.tw-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.tw-head h1 { font-size: 22px; font-weight: 750; letter-spacing: -.015em; }
+.tw-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+.tw-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.tw-stat b { font-size: 24px; font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.tw-stat span { font-size: 12px; color: var(--ink-2); }
+.tw-stat.warn b { color: var(--amber); }
+.tw-board { display: flex; flex-direction: column; padding: 4px 0; }
+.tw-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.2fr) minmax(80px, 3fr) minmax(120px, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.tw-row:last-child { border-bottom: none; }
+.tw-name { font-weight: 650; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tw-bar { height: 10px; border-radius: 6px; background: var(--bg); overflow: hidden; }
+.tw-bar-fill { display: block; height: 100%; border-radius: 6px; background: var(--blue); min-width: 0; }
+.tw-row.overloaded .tw-bar-fill { background: var(--amber); }
+.tw-count { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+.tw-count b { color: var(--ink); font-weight: 700; }
+.tw-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 100px;
+}
+.tw-badge.over { background: var(--amber); color: #201400; }
+.tw-badge.due { background: var(--danger, #dc2626); color: #fff; }
+@media (max-width: 620px) {
+  .tw-row { grid-template-columns: 1fr; gap: 8px; }
+  .tw-count { text-align: left; }
+}

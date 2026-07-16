@@ -12,6 +12,7 @@ import { buildCommandIndex, filterCommands, groupCommands } from './command-pale
 import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
 import { searchHelp, HELP_TOPICS } from './assistant/help-index.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
+import { computeTeamWorkload } from './data/team-workload.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -842,7 +843,6 @@ const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'knowledge', label: 'Knowledge Base', summary: 'Future company knowledge and SOP library.', icon: 'ti-books', module_ids: ['knowledge'], permissions: [], comingSoon: true },
   { id: 'automations', label: 'Automations', summary: 'Future no-code workflow automations.', icon: 'ti-automation', module_ids: ['automations'], permissions: [], comingSoon: true },
   { id: 'templates', label: 'Templates', summary: 'Future reusable workspace templates.', icon: 'ti-template', module_ids: ['templates'], permissions: [], comingSoon: true },
-  { id: 'team_workload', label: 'Team workload', summary: 'Future workload planning board.', icon: 'ti-users', module_ids: ['team-workload'], permissions: [], comingSoon: true },
 ];
 const WORKSPACE_PLUGIN_PRESETS = {
   roofing: ['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting'],
@@ -985,7 +985,7 @@ const MODULE_REGISTRY = [
   { id: 'time', group: 'Operations', label: 'My time', icon: 'ti-clock', symbol: 'q-symbol-time', status: 'live', permission: 'time.track' },
   { id: 'calendar', group: 'Operations', label: 'Calendar', icon: 'ti-calendar', symbol: 'q-symbol-calendar', status: 'live', permission: 'calendar.view' },
   { id: 'approvals', group: 'Operations', label: 'Approvals', icon: 'ti-user-check', symbol: 'q-symbol-approvals', status: 'live', permission: 'approvals.view' },
-  { id: 'team-workload', group: 'Operations', label: 'Team workload', icon: 'ti-users', symbol: 'q-symbol-team-workload', status: 'planned' },
+  { id: 'team-workload', group: 'Operations', label: 'Team workload', icon: 'ti-users', symbol: 'q-symbol-team-workload', status: 'live', permission: 'tasks.view' },
   { id: 'clock', group: 'Operations', label: 'Clock dashboard', icon: 'ti-clock-hour-4', symbol: 'q-symbol-clock', status: 'live', permission: 'clock.manage' },
 ];
 
@@ -994,9 +994,9 @@ const NAV_GROUPS = [
   { label: 'Quest CRM', ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'] },
   { label: 'Communication', ids: ['messages', 'calendar'] },
   { label: 'Estimating', ids: ['price-book', 'finance', 'files', 'forms', 'client-portals'] },
-  { label: 'Review', ids: ['analytics', 'users', 'team-chart', 'time', 'approvals', 'clock'] },
+  { label: 'Review', ids: ['analytics', 'users', 'team-chart', 'time', 'approvals', 'clock', 'team-workload'] },
   { label: 'Control', ids: ['settings'] },
-  { label: 'Future', ids: ['tickets', 'knowledge', 'automations', 'templates', 'team-workload'] },
+  { label: 'Future', ids: ['tickets', 'knowledge', 'automations', 'templates'] },
 ];
 
 const LEGACY_ROUTE_SECTIONS = {
@@ -4201,7 +4201,46 @@ function renderWorkspace(route) {
   if (route.section === 'messages') return renderMessagesPage(route, companyId);
   if (route.section === 'team-chart') return renderTeamChartPage(companyId);
   if (route.section === 'time' || route.section === 'calendar' || route.section === 'approvals' || route.section === 'clock') return renderOperationsPage(route, companyId);
+  if (route.section === 'team-workload') return renderTeamWorkloadPage(companyId);
   return renderPlannedPage(route.section);
+}
+
+function renderTeamWorkloadPage(companyId) {
+  const members = companyAccessUsers(companyId)
+    .filter((user) => user.status === 'active')
+    .map((user) => ({ id: user.profile_id || user.member_id, name: user.name }))
+    .filter((user) => user.id && user.name);
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const wl = computeTeamWorkload({ members, tasks: companyTasks(companyId), todayIso });
+
+  const rows = wl.rows.map((r) => {
+    const pct = wl.maxOpen ? Math.max(r.open ? 6 : 0, Math.round((r.open / wl.maxOpen) * 100)) : 0;
+    return `
+      <div class="tw-row${r.overloaded ? ' overloaded' : ''}">
+        <div class="tw-name">${h(r.name)}${r.overloaded ? '<span class="tw-badge over">Overloaded</span>' : ''}</div>
+        <div class="tw-bar"><span class="tw-bar-fill" style="width:${pct}%"></span></div>
+        <div class="tw-count"><b>${r.open}</b> open${r.overdue ? ` <span class="tw-badge due">${r.overdue} overdue</span>` : ''}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <section class="tw-page">
+      <div class="tw-head">
+        <div>
+          <h1>Team workload</h1>
+          <p class="muted">Open tasks per person right now — busiest first.</p>
+        </div>
+        <a class="btn" href="${appHref(companyPath('tasks', {}, companyId))}" data-router><i class="ti ti-list-check" aria-hidden="true"></i>Open tasks</a>
+      </div>
+      <div class="tw-stats">
+        <div class="tw-stat"><b>${wl.totalOpen}</b><span>Open tasks</span></div>
+        <div class="tw-stat ${wl.totalOverdue ? 'warn' : ''}"><b>${wl.totalOverdue}</b><span>Overdue</span></div>
+        <div class="tw-stat ${wl.unassignedOpen ? 'warn' : ''}"><b>${wl.unassignedOpen}</b><span>Unassigned</span></div>
+        <div class="tw-stat"><b>${wl.rows.length}</b><span>People</span></div>
+      </div>
+      ${wl.rows.length ? `<div class="tw-board panel">${rows}</div>` : emptyState('No active team members to show workload for.')}
+    </section>`;
 }
 
 const PB_STALE_DAYS = 45;
