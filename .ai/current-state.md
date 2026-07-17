@@ -6,9 +6,9 @@ Captured 2026-07-16T19:53:04.024Z. This is a point-in-time operational snapshot,
 
 - Production URL: https://quest-hq-command-center-gamma.vercel.app
 - Vercel project: prj_0MxrYyGIo61QgLNW2M74fvTxlMRV
-- Current ready production deployment: dpl_Dcaoo5V1XjiinYpB7UNKnwj9NNRR
-- Deployed branch/commit: main at 3a7597b40166e3de3f59908cab7c1029e53a4314
-- GitHub default branch at capture: 3a7597b40166e3de3f59908cab7c1029e53a4314
+- Current ready production deployment: dpl_CjVRXSEfv5wK2SXj1yiAsQJ4EXcJ
+- Deployed branch/commit: main at 040edb3a076b08cc885b2b9329495fd5f5052835
+- GitHub default branch at capture: 040edb3a076b08cc885b2b9329495fd5f5052835
 - Production Guardian: scheduled every six hours and available by manual dispatch.
 - Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459
 - Last full production smoke context: 36 of 36 routes and 3 of 3 critical assets passed with no runtime errors.
@@ -41,6 +41,8 @@ The current implementation includes categorized job-card photo upload and durabl
 The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Settings, plugins, and Workspace App Builder.
 
 Future navigation entries currently include Tickets, Automations, and Templates. Verify code and product direction before treating a planned page as complete.
+
+The web app is installable. A manifest, maskable icon set, and service worker let Android Chrome install it to the home screen on phones and tablets, running standalone from `/command`. The worker is scoped narrowly on purpose: navigations are network-first, only content-hashed build assets are cached, and the API and all cross-origin traffic are never cached. There is no native Android package; a Play Store listing would mean wrapping this PWA in a Trusted Web Activity.
 
 ## Freshness
 

@@ -1,0 +1,35 @@
+{
+  "id": "/",
+  "name": "Quest HQ Command Center",
+  "short_name": "Quest HQ",
+  "description": "Company operations workspace: jobs, CRM, quotes, files, forms, approvals and billing.",
+  "start_url": "/command",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#e8ebef",
+  "background_color": "#e8ebef",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

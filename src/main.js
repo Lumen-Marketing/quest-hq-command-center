@@ -36161,3 +36161,14 @@ function h(value) {
 }
 
 init();
+
+// Installability (Android home screen, standalone window) needs a registered
+// worker. Production only -- a worker in front of the dev server caches things
+// nobody asked it to. Failure here is never fatal: the app runs fine without it.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((error) => {
+      console.warn('Service worker registration failed', error);
+    });
+  });
+}
