@@ -54,6 +54,7 @@ test('underwriter uses the approved technical ledger hierarchy', () => {
   assert.match(css, /\.underwriter-ledger \.underwriting-results-head\s*\{/);
   assert.match(css, /\.underwriter-ledger-queue\s*\{/);
   assert.match(css, /\.underwriter-topbar-action\s*\{/);
+  assert.match(css, /\.topbar \.underwriter-topbar-action\s*\{[\s\S]*?width:\s*auto/);
 });
 
 test('underwriting case table is tenant scoped and permission protected', () => {

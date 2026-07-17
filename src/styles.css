@@ -23724,9 +23724,13 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   }
 }
 
-.underwriter-topbar-action {
+.topbar .underwriter-topbar-action {
+  width: auto;
+  min-width: max-content;
   min-height: 36px;
   padding-inline: 14px;
   border-radius: 8px;
+  display: inline-flex;
+  gap: 7px;
   white-space: nowrap;
 }
