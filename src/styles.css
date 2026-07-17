@@ -23459,12 +23459,12 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 
 .quest-nav-v2 .side-group + .side-group {
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .quest-nav-v2 .side-label {
-  margin: 0 0 4px;
-  padding: 3px 9px;
+  margin: 0 0 2px;
+  padding: 2px 9px;
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -23484,7 +23484,7 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 
 .quest-nav-v2 .side-item {
-  min-height: 34px;
+  min-height: 30px;
   grid-template-columns: 20px minmax(0, 1fr) auto;
   column-gap: 9px;
   border: 0;
@@ -23566,12 +23566,12 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 
 .quest-nav-v2 .side-sub {
   gap: 0;
-  margin: 1px 0 5px 18px;
+  margin: 1px 0 3px 18px;
   padding-left: 8px;
 }
 
 .quest-nav-v2 .side-sub-link {
-  min-height: 26px;
+  min-height: 22px;
   gap: 8px;
   border-radius: 6px;
   color: var(--ink-2);
@@ -23722,4 +23722,11 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
     min-width: 44px;
     min-height: 44px;
   }
+}
+
+.underwriter-topbar-action {
+  min-height: 36px;
+  padding-inline: 14px;
+  border-radius: 8px;
+  white-space: nowrap;
 }

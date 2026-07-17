@@ -30,7 +30,8 @@ test('desktop navigation adopts the compact Quest command rail', () => {
   assert.match(source, /class="sidebar-scope-toggle"[\s\S]*?data-sidebar-scope="my-work"[\s\S]*?data-sidebar-scope="company"/);
   assert.match(styles, /\.quest-app\s*\{[\s\S]*?--sidebar-width:\s*264px/);
   assert.match(styles, /\.quest-nav-v2\s*\{[\s\S]*?background:\s*#fff/);
-  assert.match(styles, /\.quest-nav-v2 \.side-item\s*\{[\s\S]*?min-height:\s*34px[\s\S]*?border-radius:\s*8px/);
+  assert.match(styles, /\.quest-nav-v2 \.side-item\s*\{[\s\S]*?min-height:\s*30px[\s\S]*?border-radius:\s*8px/);
+  assert.match(styles, /\.quest-nav-v2 \.side-sub-link\s*\{[\s\S]*?min-height:\s*22px/);
 });
 
 test('sidebar scope is interactive without weakening module permissions', () => {

@@ -42,7 +42,10 @@ test('underwriter uses the approved technical ledger hierarchy', () => {
   assert.match(source, /<section class="tool-page underwriter-page underwriter-ledger">/);
   assert.match(source, /<section class="panel underwriting-calculator underwriter-workbench">/);
   assert.match(source, /type="submit" form="underwriting-form"[\s\S]*?>[\s\S]*?Save decision<\/button>/);
+  assert.match(source, /route\.name === 'company' && route\.section === 'underwriter' && companyContacts\(companyId\)\.length/);
+  assert.match(source, /class="btn btn-primary underwriter-topbar-action"/);
   assert.match(source, /<form id="underwriting-form" data-underwriting-form>/);
+  assert.match(source, /<textarea name="notes" rows="1"/);
   assert.match(source, /class="underwriting-results-head"[\s\S]*?<h3>Decision summary<\/h3>[\s\S]*?<div data-underwriting-results aria-live="polite">/);
   assert.match(source, /<section class="panel underwriter-ledger-queue">[\s\S]*?<h2>Estimate queue<\/h2>/);
   assert.doesNotMatch(source, /const guide =/);
@@ -50,6 +53,7 @@ test('underwriter uses the approved technical ledger hierarchy', () => {
   assert.match(css, /\.underwriter-ledger \.underwriter-workbench form\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(300px, 340px\)/);
   assert.match(css, /\.underwriter-ledger \.underwriting-results-head\s*\{/);
   assert.match(css, /\.underwriter-ledger-queue\s*\{/);
+  assert.match(css, /\.underwriter-topbar-action\s*\{/);
 });
 
 test('underwriting case table is tenant scoped and permission protected', () => {

@@ -3723,6 +3723,7 @@ function shellTemplate(route, workspace) {
           <button class="btn command-trigger" type="button" data-action="command-open" title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette"><i class="ti ti-command" aria-hidden="true"></i></button>
           <button class="btn" type="button" data-action="refresh-data" title="Refresh workspace data" aria-label="Refresh workspace data"><i class="ti ti-refresh"></i></button>
           ${renderNotificationCenter(companyId)}
+          ${route.name === 'company' && route.section === 'underwriter' && companyContacts(companyId).length ? `<button class="btn btn-primary underwriter-topbar-action" type="submit" form="underwriting-form" ${can('underwriter.manage', companyId) ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save decision</button>` : ''}
           <div class="account-menu ${state.accountMenuOpen ? 'open' : ''}">
             <button class="avatar-button" type="button" data-action="toggle-account-menu" aria-label="Open account menu" aria-expanded="${state.accountMenuOpen ? 'true' : 'false'}">
               ${renderAvatar(session.profile, 'avatar')}
@@ -7194,7 +7195,6 @@ function renderUnderwriterPage(route, companyId) {
   const visible = activeStage === 'all' ? contacts : contacts.filter((contact) => contact.underwriter_stage.key === activeStage);
   const underwriting = contacts.filter((contact) => contact.underwriter_stage.key === 'underwriting');
   const estimates = contacts.filter((contact) => ['estimate', 'negotiating'].includes(contact.underwriter_stage.key));
-  const canManageUnderwriter = can('underwriter.manage', companyId);
   const requestedContactId = route.params.get('contact_id') || state.underwritingContactId;
   const selectedContact = contacts.find((contact) => contact.id === requestedContactId) || underwriting[0] || contacts[0] || null;
   state.underwritingContactId = selectedContact?.id || '';
@@ -7202,11 +7202,6 @@ function renderUnderwriterPage(route, companyId) {
   const calculation = calculateUnderwriting(draft || {});
   return `
     <section class="tool-page underwriter-page underwriter-ledger">
-      ${workspaceHeader('Estimator', 'Price the scope, protect the margin, and move each contact toward a confident decision.', `
-        ${can('crm.view', companyId) ? `<a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Open contacts</a>` : ''}
-        ${canManageUnderwriter && can('crm.view', companyId) ? `<button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>` : ''}
-        ${selectedContact ? `<button class="btn btn-primary" type="submit" form="underwriting-form" ${canManageUnderwriter ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save decision</button>` : ''}
-      `)}
       <section class="metric-grid underwriter-summary">
         ${metricCard('Underwriting', underwriting.length)}
         ${metricCard('Estimate queue', estimates.length)}
@@ -7243,7 +7238,7 @@ function renderUnderwriterPage(route, companyId) {
               ${underwritingNumberField('Overhead', 'overheadPercent', draft.overheadPercent, '%')}
               ${underwritingNumberField('Commission', 'commissionPercent', draft.commissionPercent, '%')}
               ${underwritingNumberField('Contingency', 'contingencyPercent', draft.contingencyPercent, '%')}
-              <label class="underwriting-field span-2"><span>Decision notes</span><textarea name="notes" rows="3" data-underwriting-field placeholder="Scope risks, exclusions, or pricing decision">${h(draft.notes || '')}</textarea></label>
+              <label class="underwriting-field span-2"><span>Decision notes</span><textarea name="notes" rows="1" data-underwriting-field placeholder="Scope risks, exclusions, or pricing decision">${h(draft.notes || '')}</textarea></label>
               <div class="form-actions span-2">
                 <span class="form-note">Percent costs are calculated from contract price.</span>
               </div>
