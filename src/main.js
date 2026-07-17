@@ -4449,7 +4449,9 @@ function renderKnowledgePage(route, companyId) {
     <button type="button" class="kb-list-item${a.id === activeId && !ui.creating && !ui.editingId ? ' active' : ''}" data-action="kb-select" data-id="${h(a.id)}">
       <span class="kb-list-title">${h(a.title)}</span>
       <span class="kb-list-cat">${h(a.category)}</span>
-    </button>`).join('') || `<div class="kb-list-empty">${all.length ? 'No matches' : 'No articles yet'}</div>`;
+    </button>`).join('');
+  // The detail panel already states why the list is empty, so the sidebar stays quiet
+  // rather than repeating it next to itself.
 
   return `
     <section class="kb-page">
@@ -28983,7 +28985,9 @@ function companyAccessUsers(companyId = activeCompanyId()) {
       byId.set(id, {
         profile_id: membership.profile_id,
         member_id: membership.member_id,
-        name: profile?.full_name || member?.full_name || profile?.email || member?.name || id || 'User',
+        // Never surface a raw account id as a person's name — real accounts fall back
+        // to their email above, so this only catches identities with no profile at all.
+        name: profile?.full_name || member?.full_name || profile?.email || member?.name || titleCase(id) || 'User',
         email: profile?.email || member?.email || '',
         avatar_url: profile?.avatar_url || member?.avatar_url || '',
         role: membership.role,

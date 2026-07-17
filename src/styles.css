@@ -23031,7 +23031,7 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .kb-list-item.active{border-color:var(--blue);background:var(--accent-soft);}
 .kb-list-title{font-weight:650;font-size:14px;color:var(--ink);}
 .kb-list-cat{font-family:var(--font-mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);}
-.kb-list-empty,.kb-empty{color:var(--ink-2);font-size:14px;padding:16px;text-align:center;}
+.kb-empty{color:var(--ink-2);font-size:14px;padding:16px;text-align:center;}
 .kb-detail{min-width:0;}
 .kb-article{padding:22px 24px;}
 .kb-article-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:16px;}
