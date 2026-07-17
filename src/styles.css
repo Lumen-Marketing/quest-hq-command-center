@@ -21055,6 +21055,18 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
   .wb-appswitch-add { width: 44px; height: 44px; }
   .wb-view-btn { min-height: 40px; }
   .dash-widget-tools button { width: 36px; height: 36px; }
+
+  /* The contacts list, same bargain. The view toggles carry no base size rule at
+     all, so they render at their 32x26 content box. The row checkbox is not the
+     thing you tap -- it is pointer-events:none and the cell around it takes the
+     hit -- so the cell is what has to grow; sizing the 15px box would look
+     better and change nothing. */
+  .contact-list-tools .icon-btn { width: 44px; height: 44px; }
+  .contacts-table .select-cell { min-height: 44px; }
+  .contact-filter-select { height: 44px; }
+  .contact-list-search { min-height: 44px; }
+  .contact-list-search input { min-height: 44px; }
+  .contact-list-actions .btn-compact { min-height: 44px; }
 }
 
 /* A11y: honor the OS "reduce motion" setting across the whole app. */
@@ -23467,5 +23479,37 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 @media (max-width: 900px) {
   .topbar-global-search {
     display: flex;
+  }
+}
+
+/* Mobile topbar, settled in one place.
+   Five rule-sets (720/760/900/560/620px) overlap on .topbar-right and disagree:
+   the 720px one places each child explicitly but is dead, because a later
+   display:grid beats its display:contents (media queries carry no specificity,
+   so source order decides). The surviving grid has three columns and no rule for
+   .command-trigger, so four auto-placed buttons spilled the avatar onto a second
+   row and stretched it across a 1fr column -- a 105px header with a hole in it.
+   A single flex row holds all four comfortably at 390px. Last block in the file
+   on purpose: it has to outrank the five above it. */
+@media (max-width: 720px) {
+  .topbar-right {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  /* The brand is hidden at this width, so the command button takes the left. */
+  .topbar-right > .command-trigger {
+    margin-right: auto;
+  }
+
+  /* Were 38x36; 44px is the Apple HIG minimum for a touch target. */
+  .topbar-right > .btn,
+  .topbar-right .avatar-button,
+  .topbar-right .notification-button {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
