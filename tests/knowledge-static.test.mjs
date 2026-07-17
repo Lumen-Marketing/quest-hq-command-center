@@ -9,7 +9,7 @@ test('knowledge is a live module wired to its page, not a planned stub', () => {
   assert.match(main, /id: 'knowledge', group: 'Workspace'[^}]*status: 'live'[^}]*permission: 'files\.view'/);
   assert.match(main, /route\.section === 'knowledge'\) return renderKnowledgePage/);
   // Moved out of the Future nav group.
-  assert.match(main, /label: 'Future', ids: \['tickets', 'automations', 'templates'\]/);
+  assert.match(main, /label: 'Workspace', ids: \['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'\]/);
 });
 
 test('CRUD goes through Supabase, gated by files.manage', () => {

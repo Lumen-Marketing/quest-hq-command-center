@@ -44,6 +44,14 @@ Calculator drafts are stored in `underwriting_cases` with one current case per c
 
 The desktop command rail separates daily modules into My work and administrative/tooling modules into Company. Both scopes are derived from the existing module registry, installed-plugin checks, and permission gates; the mobile More sheet continues to expose the complete allowed module set.
 
+## Job Center navigation uses stakeholder language at the presentation layer
+
+The desktop rail groups daily work as Work, Pipeline, Production, Tools, Review, and Build, with user-facing aliases such as Home, Inbox, Estimator, Reports, People, and Meetings. Internal module IDs, registry labels, routes, plugin entitlements, and permission names remain unchanged so the information-architecture redesign does not fork authorization or data behavior. The rail and dense estimator screens use IBM Plex Sans for interface copy and IBM Plex Mono for labels and numeric data.
+
+## Underwriter is a decision workbench, not a guidance dashboard
+
+The Underwriter keeps its existing calculator, tenant-scoped saved cases, stage filtering, and queue data, but presents them as one Technical Ledger workbench: metrics and stage chips first, estimator inputs beside a decision summary, then a full-width estimate queue. The separate generic Guidance card was removed because it competed with the primary pricing decision and duplicated context already expressed by the calculator results.
+
 ## Android ships as an installable PWA, not a native wrapper
 
 Installability comes from a manifest, icons, and a service worker, so the app installs to an Android home screen on phone and tablet and runs standalone. A Capacitor shell was rejected for now: the app makes thirteen relative `/api/...` calls that resolve against the page origin, and a native webview origin (`capacitor://localhost`) would break every one of them, while the CSP delivered as Vercel headers would have to move into a meta tag and Supabase auth redirects would need custom-scheme or App Links handling. The PWA keeps the real origin, so those calls and headers work unchanged. If a Play Store listing is wanted, the next step is a Trusted Web Activity wrapping this same PWA, which also keeps the origin — Capacitor is only worth its cost for genuine native needs such as camera or FCM push.

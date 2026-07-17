@@ -12,11 +12,12 @@ TaskManagement remains the vendored work-execution engine. Quest HQ links those 
 
 | Group | Modules |
 | --- | --- |
-| Work | Dashboard, Tasks, Workspace App Builder, Underwriter, Knowledge |
-| Quest CRM | Workday, Contacts, Quotes/Deals, Proposals, Jobs |
-| Communication | Messages, Calendar |
-| Estimating and delivery | Price Book, Finance, Files, Forms, Client Portals |
-| Review and workforce | Analytics, Users, Team Chart, Team Workload, Time, Approvals, Clock |
+| Work | Home/Dashboard, My Tasks, Inbox/Messages |
+| Pipeline and production | Contacts with live stages, Jobs with live stages |
+| Tools | Estimator/Underwriter, Proposals |
+| Review and build | Reports/Analytics, People/Users, Meetings/Calendar, Templates, Automations |
+| Company workspace | Workspace App Builder, Workday, Quotes/Deals, Files, Forms, Client Portals, Knowledge |
+| Company operations | Price Book, Finance, Team Chart, Team Workload, Time, Approvals, Clock |
 | Control | Company, roles, access, billing, plugins, and workspace settings |
 
 Tickets, Automations, and Templates appear as future/planned areas. Confirm current implementation status in [current-state.md](current-state.md) before building against them.
