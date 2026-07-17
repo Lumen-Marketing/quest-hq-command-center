@@ -23597,6 +23597,13 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   font-weight: 600;
 }
 
+.quest-nav-v2 .side-sub-divider {
+  display: block;
+  height: 1px;
+  margin: 4px 8px 4px 2px;
+  background: var(--border);
+}
+
 .quest-nav-v2 .deck-footer {
   padding-top: 10px;
 }

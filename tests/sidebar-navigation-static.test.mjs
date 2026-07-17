@@ -24,6 +24,21 @@ test('navigation follows the approved job center information architecture', () =
   assert.match(source, /navigationLabel\(module\.id, module\.label\)/);
 });
 
+test('contacts navigation renders the standalone sales lifecycle instead of legacy contact stages', () => {
+  assert.match(source, /const QUEST_SALES_LIFECYCLE_STAGES = \[[\s\S]*?name: 'Prospects'[\s\S]*?name: 'Leads'[\s\S]*?name: 'Underwriting'[\s\S]*?name: 'Estimate sent'[\s\S]*?name: 'Negotiating'[\s\S]*?name: 'Contract out'[\s\S]*?name: 'Won → Jobs'[\s\S]*?name: 'Follow-up'[\s\S]*?name: 'Lost'/);
+  assert.match(source, /if \(module\.id === 'contacts'\) return navItemSalesLifecycle\(route, module, companyId\)/);
+  assert.match(source, /function navItemSalesLifecycle\(route, module, companyId\)/);
+  assert.match(source, /companyPath\('contacts', \{ lifecycle: stage\.key \}, companyId\)/);
+  assert.match(source, /function salesLifecycleStageForContact\(contact, companyId/);
+  assert.match(source, /state\.contactLifecycleFilter !== 'all'[\s\S]*?salesLifecycleStageForContact\(contact, companyId\)\.key !== state\.contactLifecycleFilter/);
+
+  const lifecycleNavStart = source.indexOf('function navItemSalesLifecycle');
+  const lifecycleNavEnd = source.indexOf('function navItemPipeline', lifecycleNavStart);
+  const lifecycleNav = source.slice(lifecycleNavStart, lifecycleNavEnd);
+  assert.ok(lifecycleNavStart > -1 && lifecycleNavEnd > lifecycleNavStart);
+  assert.doesNotMatch(lifecycleNav, /All contacts/);
+});
+
 test('desktop navigation adopts the compact Quest command rail', () => {
   assert.match(source, /<aside class="deck quest-nav-v2" aria-label="Quest navigation">/);
   assert.match(source, /class="deck-global-search"[\s\S]*?data-action="command-open"[\s\S]*?<span>Search or jump to/);
@@ -40,7 +55,8 @@ test('sidebar scope is interactive without weakening module permissions', () => 
   assert.match(source, /data-action="set-sidebar-scope"/);
   assert.match(source, /if \(action === 'set-sidebar-scope'\)/);
   assert.match(source, /\.filter\(\(module\) => module && canViewModule\(module, companyId\)\)/);
-  assert.match(source, /if \(module\.id === 'jobs' \|\| module\.id === 'contacts' \|\| module\.id === 'deals'\) return navItemPipeline/);
+  assert.match(source, /if \(module\.id === 'contacts'\) return navItemSalesLifecycle/);
+  assert.match(source, /if \(module\.id === 'jobs' \|\| module\.id === 'deals'\) return navItemPipeline/);
 });
 
 test('settings remains directly reachable from the compact profile footer', () => {

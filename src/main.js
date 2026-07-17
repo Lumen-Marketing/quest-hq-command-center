@@ -163,15 +163,18 @@ const SIDEBAR_SCROLL_KEY = 'quest-hq-sidebar-scroll';
 const LAUNCH_HIDE_FUTURE_MODULES = true;
 const LAUNCH_HIDE_UNREADY_DASHBOARD_WIDGETS = true;
 const ESTIMATE_TAX_RATE = 0.085;
-const CRM2_UNDERWRITER_STAGES = [
-  { key: 'prospect', name: 'Prospect', color: '#9AA0A8' },
-  { key: 'lead', name: 'Lead', color: '#378ADD' },
-  { key: 'nurturing', name: 'Nurturing', color: '#2F9E8F' },
+const QUEST_SALES_LIFECYCLE_STAGES = [
+  { key: 'prospects', name: 'Prospects', color: '#9AA0A8' },
+  { key: 'leads', name: 'Leads', color: '#378ADD' },
   { key: 'underwriting', name: 'Underwriting', color: '#BA7517' },
-  { key: 'estimate', name: 'Estimate Sent', color: '#378ADD' },
+  { key: 'estimate', name: 'Estimate sent', color: '#378ADD' },
   { key: 'negotiating', name: 'Negotiating', color: '#BA7517' },
-  { key: 'won', name: 'Won', color: '#639922' },
+  { key: 'contract', name: 'Contract out', color: '#7F77DD' },
+  { key: 'won', name: 'Won → Jobs', color: '#639922' },
+  { key: 'followup', name: 'Follow-up', color: '#C4C7CC' },
+  { key: 'lost', name: 'Lost', color: '#E24B4A' },
 ];
+const CRM2_UNDERWRITER_STAGES = QUEST_SALES_LIFECYCLE_STAGES;
 const ROOF_ESTIMATE_SYSTEM_ORDER = ['shingle', 'tile', 'foam', 'metal'];
 const ROOF_ESTIMATE_SYSTEMS = {
   shingle: {
@@ -2233,6 +2236,7 @@ const state = {
   contactBoardView: localStorage.getItem(CONTACT_BOARD_VIEW_KEY) || 'table',
   dealBoardView: localStorage.getItem(DEAL_BOARD_VIEW_KEY) || 'board',
   contactStageFilter: 'all',
+  contactLifecycleFilter: 'all',
   contactQuery: '',
   contactSort: 'name',
   contactFilters: { ...CONTACT_FILTER_DEFAULTS },
@@ -3980,7 +3984,8 @@ function renderDeck(route) {
           .map((module) => {
             const navLabel = navigationLabel(module.id, module.label);
             if (module.status === 'planned') return plannedNavItem(module.symbol, navLabel);
-            if (module.id === 'jobs' || module.id === 'contacts' || module.id === 'deals') return navItemPipeline(route, module, companyId);
+            if (module.id === 'contacts') return navItemSalesLifecycle(route, module, companyId);
+            if (module.id === 'jobs' || module.id === 'deals') return navItemPipeline(route, module, companyId);
             return navItem(route, companyPath(module.id, {}, companyId), module.symbol, navLabel, moduleBadgeCount(module.id, companyId));
           });
         return navGroup(group.label, items);
@@ -4044,6 +4049,77 @@ function pipelineStageCounts(kind, companyId = activeCompanyId()) {
     counts[stage] = (counts[stage] || 0) + 1;
   });
   return counts;
+}
+
+function salesLifecycleStageForContact(contact, companyId = contact?.company_id || activeCompanyId()) {
+  const linkedDeals = companyDeals(companyId)
+    .filter((deal) => deal.primary_contact_id === contact?.id || (contact?.account_id && deal.account_id === contact.account_id))
+    .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
+  const deal = linkedDeals[0];
+  const dealSignal = `${deal?.status || ''} ${deal?.stage || ''}`.toLowerCase();
+  if (dealSignal.includes('lost')) return underwriterStageByKey('lost');
+  if (dealSignal.includes('won')) return underwriterStageByKey('won');
+  if (/contract|waiting|sign/.test(dealSignal)) return underwriterStageByKey('contract');
+  if (dealSignal.includes('negotiat')) return underwriterStageByKey('negotiating');
+  if (/estimate|proposal/.test(dealSignal)) return underwriterStageByKey('estimate');
+  if (dealSignal.includes('underwrit')) return underwriterStageByKey('underwriting');
+
+  const contactSignal = String(contact?.stage || '').toLowerCase();
+  if (contactSignal.includes('lost')) return underwriterStageByKey('lost');
+  if (contactSignal.includes('won')) return underwriterStageByKey('won');
+  if (/contract|waiting|sign/.test(contactSignal)) return underwriterStageByKey('contract');
+  if (contactSignal.includes('negotiat')) return underwriterStageByKey('negotiating');
+  if (/estimate|proposal/.test(contactSignal)) return underwriterStageByKey('estimate');
+  if (contactSignal.includes('underwrit')) return underwriterStageByKey('underwriting');
+  if (/follow|nurtur/.test(contactSignal)) return underwriterStageByKey('followup');
+  if (contactSignal.includes('prospect')) return underwriterStageByKey('prospects');
+  return underwriterStageByKey('leads');
+}
+
+function salesLifecycleStageCounts(companyId = activeCompanyId()) {
+  const counts = Object.fromEntries(QUEST_SALES_LIFECYCLE_STAGES.map((stage) => [stage.key, 0]));
+  companyContacts(companyId).forEach((contact) => {
+    const key = salesLifecycleStageForContact(contact, companyId).key;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+}
+
+function navItemSalesLifecycle(route, module, companyId) {
+  const kind = module.id;
+  const navLabel = navigationLabel(module.id, module.label);
+  const path = companyPath(kind, {}, companyId);
+  const active = isActiveNav(route, path);
+  const expanded = state.expandedNav.has(kind);
+  const count = moduleBadgeCount(kind, companyId);
+  const activeLifecycle = route.name === 'company' && route.section === 'contacts' ? route.params.get('lifecycle') || '' : '';
+  const counts = salesLifecycleStageCounts(companyId);
+  return `
+    <div class="side-pipe sales-lifecycle-nav ${expanded ? 'expanded' : ''}">
+      <div class="side-pipe-head">
+        <a class="side-item ${active ? 'active' : ''}" href="${appHref(path)}" data-router data-action="pipeline-open" data-module="${kind}" title="${h(navLabel)}" aria-label="${h(navLabel)}" aria-current="${active ? 'page' : 'false'}">
+          ${svgIcon(module.symbol)}
+          <span>${h(navLabel)}</span>
+          ${count !== '' ? `<b>${h(String(count))}</b>` : ''}
+        </a>
+        <button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(navLabel)} stages">
+          <i class="ti ti-chevron-down" aria-hidden="true"></i>
+        </button>
+      </div>
+      ${expanded ? `
+        <div class="side-sub">
+          ${QUEST_SALES_LIFECYCLE_STAGES.map((stage, index) => `
+            ${index === 7 ? '<span class="side-sub-divider" aria-hidden="true"></span>' : ''}
+            <a class="side-sub-link ${activeLifecycle === stage.key ? 'active' : ''}" href="${appHref(companyPath('contacts', { lifecycle: stage.key }, companyId))}" data-router aria-current="${activeLifecycle === stage.key ? 'page' : 'false'}">
+              <span class="side-sub-dot" style="background:${h(stage.color)}"></span>
+              <span class="side-sub-name">${h(stage.name)}</span>
+              <span class="side-sub-ct">${h(String(counts[stage.key] || 0))}</span>
+            </a>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
 }
 
 function navItemPipeline(route, module, companyId) {
@@ -7186,7 +7262,9 @@ function renderUnderwritingResults(result) {
 }
 
 function renderUnderwriterPage(route, companyId) {
-  const requestedStage = route.params.get('stage') || 'all';
+  const requestedStageAliases = { prospect: 'prospects', lead: 'leads', nurturing: 'followup' };
+  const requestedStageRaw = route.params.get('stage') || 'all';
+  const requestedStage = requestedStageAliases[requestedStageRaw] || requestedStageRaw;
   const stageKeys = new Set(CRM2_UNDERWRITER_STAGES.map((stage) => stage.key));
   const activeStage = stageKeys.has(requestedStage) ? requestedStage : 'all';
   const contacts = companyContacts(companyId)
@@ -7285,14 +7363,7 @@ function underwriterStageTag(stage) {
 }
 
 function underwriterStageForContact(contact) {
-  const stage = String(contact.stage || '').toLowerCase();
-  if (stage.includes('prospect')) return underwriterStageByKey('prospect');
-  if (stage.includes('nurtur')) return underwriterStageByKey('nurturing');
-  if (stage.includes('underwrit')) return underwriterStageByKey('underwriting');
-  if (stage.includes('estimate') || stage.includes('proposal')) return underwriterStageByKey('estimate');
-  if (stage.includes('negotiat')) return underwriterStageByKey('negotiating');
-  if (stage.includes('won')) return underwriterStageByKey('won');
-  return underwriterStageByKey('lead');
+  return salesLifecycleStageForContact(contact, contact?.company_id || activeCompanyId());
 }
 
 // ---- Pipeline (stages) shared building blocks -----------------------------
@@ -7337,6 +7408,11 @@ function renderContactsPage(route, companyId) {
     const contact = contactById(contactId);
     if (contact && contact.company_id === companyId) return renderContactRecord(companyId, contact);
   }
+  const lifecycleParam = route.params.get('lifecycle') || '';
+  const lifecycleAliases = { prospect: 'prospects', lead: 'leads', nurturing: 'followup' };
+  const lifecycleKey = lifecycleAliases[lifecycleParam] || lifecycleParam;
+  state.contactLifecycleFilter = QUEST_SALES_LIFECYCLE_STAGES.some((stage) => stage.key === lifecycleKey) ? lifecycleKey : 'all';
+  if (state.contactLifecycleFilter !== 'all') state.contactStageFilter = 'all';
   const stageParam = route.params.get('stage');
   if (stageParam) state.contactStageFilter = contactStageNames().includes(stageParam) ? stageParam : 'all';
   if (state.contactBoardView === 'table') return renderContactTable(companyId);
@@ -7353,7 +7429,8 @@ function renderContactsPage(route, companyId) {
 function renderContactTable(companyId) {
   const rows = sortedContacts(filteredContacts(companyId));
   const sort = CONTACT_SORT_OPTIONS.find((option) => option.id === state.contactSort) || CONTACT_SORT_OPTIONS[0];
-  const listLabel = state.contactStageFilter === 'all' ? 'All Contacts' : `${state.contactStageFilter} Contacts`;
+  const lifecycleStage = QUEST_SALES_LIFECYCLE_STAGES.find((stage) => stage.key === state.contactLifecycleFilter);
+  const listLabel = lifecycleStage?.name || (state.contactStageFilter === 'all' ? 'All Contacts' : `${state.contactStageFilter} Contacts`);
   const lastUpdated = rows[0]?.updated_at ? timeAgo(rows[0].updated_at) : 'no recent updates';
   const selected = new Set((state.selectedContactIds || []).filter((id) => rows.some((r) => r.id === id)));
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
@@ -29181,6 +29258,7 @@ function filteredContacts(companyId = activeCompanyId(), ignoreStage = false) {
   const q = state.contactQuery.trim().toLowerCase();
   const filters = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}) };
   return companyContacts(companyId).filter((contact) => {
+    if (state.contactLifecycleFilter !== 'all' && salesLifecycleStageForContact(contact, companyId).key !== state.contactLifecycleFilter) return false;
     if (!ignoreStage && state.contactStageFilter !== 'all' && resolvePipelineStage('contacts', contact.stage, companyId) !== state.contactStageFilter) return false;
     if (filters.temperature !== 'all' && String(contact.temperature || '') !== filters.temperature) return false;
     if (filters.job_type !== 'all' && contactFilterJobType(contact) !== filters.job_type) return false;
@@ -29238,7 +29316,10 @@ function isPipelineDetailRoute(route, kind) {
 function setPipelineStage(kind, stage, forceNav) {
   if (!['contacts', 'jobs', 'deals'].includes(kind)) return;
   const nextStage = stage || 'all';
-  if (kind === 'contacts') state.contactStageFilter = nextStage;
+  if (kind === 'contacts') {
+    state.contactStageFilter = nextStage;
+    state.contactLifecycleFilter = 'all';
+  }
   else if (kind === 'deals') state.stageFilterDeals = nextStage;
   else state.stageFilter = nextStage;
   const nextPath = companyPath(kind, pipelineStageRouteParams(nextStage), activeCompanyId());

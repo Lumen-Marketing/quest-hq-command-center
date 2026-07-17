@@ -47,7 +47,7 @@ test('invite modal explains link-code invite flow without implying email deliver
 });
 
 test('dashboard nav badge helpers do not read underwriter stages before initialization', () => {
-  const stagesIndex = source.indexOf('const CRM2_UNDERWRITER_STAGES = [');
+  const stagesIndex = source.indexOf('const QUEST_SALES_LIFECYCLE_STAGES = [');
   const initIndex = source.indexOf('init();');
   const badgeIndex = source.indexOf('function moduleBadgeCount(');
   assert.ok(stagesIndex > -1, 'underwriter stages are defined');
