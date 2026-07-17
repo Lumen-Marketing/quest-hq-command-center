@@ -991,20 +991,35 @@ const MODULE_REGISTRY = [
   { id: 'clock', group: 'Operations', label: 'Clock dashboard', icon: 'ti-clock-hour-4', symbol: 'q-symbol-clock', status: 'live', permission: 'clock.manage' },
 ];
 
+const NAVIGATION_LABELS = {
+  dashboard: 'Home',
+  messages: 'Inbox',
+  underwriter: 'Estimator',
+  analytics: 'Reports',
+  users: 'People',
+  calendar: 'Meetings',
+};
+
 const NAV_GROUPS = [
-  { label: 'Work', ids: ['dashboard', 'tasks', 'workspaces', 'underwriter'] },
-  { label: 'Quest CRM', ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'] },
-  { label: 'Communication', ids: ['messages', 'calendar'] },
-  { label: 'Estimating', ids: ['price-book', 'finance', 'files', 'forms', 'client-portals', 'knowledge'] },
-  { label: 'Review', ids: ['analytics', 'users', 'team-chart', 'time', 'approvals', 'clock', 'team-workload'] },
-  { label: 'Control', ids: ['settings'] },
-  { label: 'Future', ids: ['tickets', 'automations', 'templates'] },
+  { label: 'Work', ids: ['dashboard', 'tasks', 'messages'] },
+  { label: 'Pipeline', ids: ['contacts'] },
+  { label: 'Production', ids: ['jobs'] },
+  { label: 'Tools', ids: ['underwriter', 'proposals'] },
+  { label: 'Review', ids: ['analytics', 'users', 'calendar'] },
+  { label: 'Build', ids: ['templates', 'automations'] },
+  { label: 'Workspace', ids: ['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'] },
+  { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload'] },
+  { label: 'Control', ids: ['settings', 'tickets'] },
 ];
 
 const SIDEBAR_SCOPE_GROUPS = {
-  'my-work': new Set(['Work', 'Quest CRM', 'Communication']),
-  company: new Set(['Estimating', 'Review', 'Control', 'Future']),
+  'my-work': new Set(['Work', 'Pipeline', 'Production', 'Tools', 'Review', 'Build']),
+  company: new Set(['Workspace', 'Operations', 'Control']),
 };
+
+function navigationLabel(moduleId, fallbackLabel) {
+  return NAVIGATION_LABELS[moduleId] || fallbackLabel;
+}
 
 const LEGACY_ROUTE_SECTIONS = {
   '/admin.html': 'settings',
@@ -3804,7 +3819,7 @@ function renderMobileMoreSheet(route, companyId) {
         return `
           <a class="more-sheet-item ${active ? 'active' : ''}" href="${appHref(path)}" data-router>
             ${svgIcon(module.symbol)}
-            <span>${h(module.label)}</span>
+            <span>${h(navigationLabel(module.id, module.label))}</span>
             ${count !== '' ? `<b>${h(String(count))}</b>` : ''}
           </a>
         `;
@@ -3962,9 +3977,10 @@ function renderDeck(route) {
           .map((id) => modulesById.get(id))
           .filter((module) => module && canViewModule(module, companyId))
           .map((module) => {
-            if (module.status === 'planned') return plannedNavItem(module.symbol, module.label);
+            const navLabel = navigationLabel(module.id, module.label);
+            if (module.status === 'planned') return plannedNavItem(module.symbol, navLabel);
             if (module.id === 'jobs' || module.id === 'contacts' || module.id === 'deals') return navItemPipeline(route, module, companyId);
-            return navItem(route, companyPath(module.id, {}, companyId), module.symbol, module.label, moduleBadgeCount(module.id, companyId));
+            return navItem(route, companyPath(module.id, {}, companyId), module.symbol, navLabel, moduleBadgeCount(module.id, companyId));
           });
         return navGroup(group.label, items);
       }).join('')}
@@ -4031,6 +4047,7 @@ function pipelineStageCounts(kind, companyId = activeCompanyId()) {
 
 function navItemPipeline(route, module, companyId) {
   const kind = module.id;
+  const navLabel = navigationLabel(module.id, module.label);
   const path = companyPath(kind, {}, companyId);
   const active = isActiveNav(route, path);
   const expanded = state.expandedNav.has(kind);
@@ -4042,12 +4059,12 @@ function navItemPipeline(route, module, companyId) {
   return `
     <div class="side-pipe ${expanded ? 'expanded' : ''}">
       <div class="side-pipe-head">
-        <a class="side-item ${active ? 'active' : ''}" href="${appHref(path)}" data-router data-action="pipeline-open" data-module="${kind}" title="${h(module.label)}" aria-label="${h(module.label)}" aria-current="${active ? 'page' : 'false'}">
+        <a class="side-item ${active ? 'active' : ''}" href="${appHref(path)}" data-router data-action="pipeline-open" data-module="${kind}" title="${h(navLabel)}" aria-label="${h(navLabel)}" aria-current="${active ? 'page' : 'false'}">
           ${svgIcon(module.symbol)}
-          <span>${h(module.label)}</span>
+          <span>${h(navLabel)}</span>
           ${count !== '' ? `<b>${h(String(count))}</b>` : ''}
         </a>
-        <button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(module.label)} stages">
+        <button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(navLabel)} stages">
           <i class="ti ti-chevron-down" aria-hidden="true"></i>
         </button>
       </div>
@@ -4055,7 +4072,7 @@ function navItemPipeline(route, module, companyId) {
         <div class="side-sub">
           <button class="side-sub-link ${onSection && filter === 'all' ? 'active' : ''}" type="button" data-action="pipeline-stage" data-module="${kind}" data-stage="all" aria-current="${onSection && filter === 'all' ? 'page' : 'false'}">
             <span class="side-sub-dot all"></span>
-            <span class="side-sub-name">All ${h(module.label.toLowerCase())}</span>
+            <span class="side-sub-name">All ${h(navLabel.toLowerCase())}</span>
             <span class="side-sub-ct">${h(String(count || 0))}</span>
           </button>
           ${stages.map((stage) => `

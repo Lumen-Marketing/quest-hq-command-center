@@ -11,7 +11,9 @@ test('crm navigation uses contacts quotes and production funnels', () => {
   assert.match(source, /\{ id: 'deals', group: 'Quest CRM', label: 'Quotes'/);
   assert.match(source, /\{ id: 'proposals', group: 'Quest CRM', label: 'Proposals'/);
   assert.match(source, /\{ id: 'jobs', group: 'Quest CRM', label: 'Jobs'/);
-  assert.match(source, /\{ label: 'Quest CRM', ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\] \}/);
+  assert.match(source, /\{ label: 'Pipeline', ids: \['contacts'\] \}/);
+  assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
+  assert.match(source, /\{ label: 'Tools', ids: \['underwriter', 'proposals'\] \}/);
 });
 
 test('contact and quote funnels match the provided crm model', () => {
@@ -326,8 +328,9 @@ test('account record tabs use contacts and quotes language', () => {
   assert.match(source, /\['deals', 'Quotes', deals\.length\]/);
 });
 
-test('messages remains a visible communication section', () => {
+test('messages remains visible as the job center inbox', () => {
   assert.match(source, /\{ id: 'messages', group: 'Communication', label: 'Messages'/);
-  assert.match(source, /\{ label: 'Communication', ids: \['messages', 'calendar'\] \}/);
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
+  assert.match(source, /messages:\s*'Inbox'/);
   assert.doesNotMatch(source, /\{ id: 'messages', group: 'Company', label: 'Inbox'/);
 });

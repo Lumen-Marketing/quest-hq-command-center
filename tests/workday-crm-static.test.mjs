@@ -9,8 +9,8 @@ const smoke = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import
 test('Quest CRM exposes a Workday route for the daily action queue', () => {
   assert.match(source, /\{ id: 'workday', group: 'Quest CRM', label: 'Workday'/);
   assert.match(source, /module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
-  assert.match(source, /\{ label: 'Quest CRM', ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\] \}/);
-  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'workspaces', 'underwriter'\] \}/);
+  assert.match(source, /\{ label: 'Workspace', ids: \['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'\] \}/);
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
   assert.match(source, /if \(route\.section === 'workday'\) return renderWorkdayPage\(companyId\);/);
 });
 
