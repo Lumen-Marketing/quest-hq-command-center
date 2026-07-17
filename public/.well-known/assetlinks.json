@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.questroofing.hq",
+      "sha256_cert_fingerprints": [
+        "5C:C7:B4:36:FC:E7:BE:C4:36:66:ED:E0:66:40:F9:E1:FF:A5:1C:B7:90:78:24:DE:1D:DE:42:3E:A6:3C:7E:0C"
+      ]
+    }
+  }
+]

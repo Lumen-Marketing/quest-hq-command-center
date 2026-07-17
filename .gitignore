@@ -61,3 +61,6 @@ desktop.ini
 .env
 .env.local
 .env*.local
+
+# TWA / Android APK build (contains signing keystore — never commit)
+twa/
