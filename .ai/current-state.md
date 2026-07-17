@@ -6,16 +6,16 @@ Captured 2026-07-18. This is a point-in-time operational snapshot, not a substit
 
 - Production URL: https://quest-hq-command-center-gamma.vercel.app
 - Vercel project: prj_0MxrYyGIo61QgLNW2M74fvTxlMRV
-- Current ready production deployment: dpl_6GuPFGyFLSYyxsw83g3KaCm4HbC1
-- Deployed branch/commit: main at 906b03d827ee0e633e20fb59c276a3e8029ef218
-- GitHub default branch at capture: 906b03d827ee0e633e20fb59c276a3e8029ef218
+- Current ready production deployment: dpl_FiH4yFuPbZEd67NTT38X8QZWH2Ac
+- Deployed branch/commit: main at 6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec
+- GitHub default branch at capture: 6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec
 - Production Guardian: scheduled every six hours and available by manual dispatch.
 - Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459
-- Last full production smoke context: 36 of 36 routes and 3 of 3 critical assets passed for `906b03d827ee0e633e20fb59c276a3e8029ef218`, with no browser-console or Vercel runtime errors.
+- Last full production smoke context: 36 of 36 routes and 3 of 3 critical assets passed for `6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec`, with no browser-console or Vercel runtime errors.
 
 ## Repository health
 
-- Current branch regression suite: 343 tests passed.
+- Current branch regression suite: 344 tests passed.
 - The production build and bundle-budget check pass without a local application server.
 - CI runs npm run check on pushes and pull requests.
 - Build output is checked against a bundle budget and copies TaskManagement plus legacy SPA assets.
@@ -36,7 +36,7 @@ The repository filename history and Supabase's applied migration versions are no
 
 ## Feature state
 
-The current implementation includes categorized job-card photo upload and durable underwriting cases. The Underwriter workspace now follows the approved Technical Ledger hierarchy: compact metrics and stage filters, a dense two-column estimator workbench with a dedicated decision summary, and a full-width estimate queue. Its primary action is Save decision and the calculator's existing persistence, permissions, and live recalculation remain intact. The application shell uses a 264px white Quest command rail with IBM Plex Sans and IBM Plex Mono, sidebar search, My work and Company scopes, stakeholder-approved Work/Pipeline/Production/Tools/Review/Build groups, live nested pipeline stages, and direct profile/settings access while preserving module permission gates. The live data layer also supports a tenant-safe direct link from tasks to deals; tasks supply the shared "What's next" source across the board, table, and list views for Contacts, Quotes/Deals, and Jobs. Application startup is deferred until top-level module state is initialized so cached direct links can render safely.
+The current implementation includes categorized job-card photo upload and durable underwriting cases. The Underwriter workspace follows the approved Technical Ledger hierarchy: compact metrics and stage filters, a dense two-column estimator workbench with a dedicated decision summary, and a full-width estimate queue. Its primary action is Save decision and the calculator's existing persistence, permissions, and live recalculation remain intact. The application shell uses a 264px white Quest command rail with IBM Plex Sans and IBM Plex Mono, sidebar search, My work and Company scopes, stakeholder-approved Work/Pipeline/Production/Tools/Review/Build groups, and direct profile/settings access while preserving module permission gates. The Contacts rail now follows the standalone nine-step sales lifecycle from Prospects through Lost, uses linked deal state for live counts, and routes each stage to a lifecycle-filtered Contacts view. The live data layer also supports a tenant-safe direct link from tasks to deals; tasks supply the shared "What's next" source across the board, table, and list views for Contacts, Quotes/Deals, and Jobs. Application startup is deferred until top-level module state is initialized so cached direct links can render safely.
 
 The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Settings, plugins, and Workspace App Builder.
 
