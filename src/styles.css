@@ -1059,6 +1059,216 @@ button { cursor: pointer; }
   }
 }
 
+/* Underwriter Technical Ledger - approved dense estimator hierarchy. */
+.underwriter-ledger {
+  display: grid;
+  gap: 12px;
+}
+
+.underwriter-ledger .workspace-head-actions-only {
+  margin-bottom: 0;
+}
+
+.underwriter-ledger .underwriter-summary {
+  margin-bottom: 0;
+}
+
+.underwriter-ledger .underwriter-summary .metric,
+.underwriter-ledger .underwriter-workbench,
+.underwriter-ledger-queue {
+  border-color: #d7dce3;
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.underwriter-ledger .pipe-toolbar {
+  padding: 0;
+}
+
+.underwriter-ledger .pipe-chips {
+  gap: 8px;
+}
+
+.underwriter-ledger .pipe-chip {
+  min-height: 30px;
+  padding-inline: 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.underwriter-ledger .pipe-chip.on {
+  border-color: rgba(237, 78, 13, .45);
+  background: rgba(237, 78, 13, .08);
+  color: var(--orange);
+}
+
+.underwriter-ledger .underwriter-workbench {
+  margin: 0;
+  padding: 18px 20px;
+}
+
+.underwriter-ledger .underwriter-workbench > .section-head {
+  margin-bottom: 14px;
+}
+
+.underwriter-ledger .underwriter-workbench > .section-head h2 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+}
+
+.underwriter-ledger .underwriter-workbench form {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  gap: 26px;
+}
+
+.underwriter-ledger .underwriting-form-side {
+  gap: 11px 20px;
+}
+
+.underwriter-ledger .underwriting-field {
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.underwriter-ledger .underwriting-input-wrap input,
+.underwriter-ledger .underwriting-results strong,
+.underwriter-ledger-queue .table-row > span:last-child {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.underwriter-ledger .underwriting-field > select,
+.underwriter-ledger .underwriting-field > textarea,
+.underwriter-ledger .underwriting-input-wrap {
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.underwriter-ledger .underwriting-field > textarea {
+  min-height: 42px;
+}
+
+.underwriter-ledger .underwriting-results {
+  top: 72px;
+  gap: 16px;
+  padding-left: 26px;
+}
+
+.underwriter-ledger .underwriting-results-head {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.underwriter-ledger .underwriting-results-head h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.underwriter-ledger .underwriting-results-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.underwriter-ledger .underwriting-results-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.underwriter-ledger .underwriting-results-icon .symbol-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.underwriter-ledger [data-underwriting-results] {
+  display: grid;
+  gap: 14px;
+}
+
+.underwriter-ledger .underwriting-decision {
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 7px;
+  background: var(--surface-2);
+  padding: 12px 13px;
+}
+
+.underwriter-ledger .underwriting-result-grid strong {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.underwriter-ledger .underwriting-cost-stack {
+  gap: 10px;
+}
+
+.underwriter-ledger-queue {
+  min-width: 0;
+  padding: 14px 0 0;
+  overflow: hidden;
+}
+
+.underwriter-ledger-queue > .section-head {
+  margin: 0;
+  padding: 0 16px 10px;
+}
+
+.underwriter-ledger-queue > .section-head h2 {
+  font-size: 14px;
+}
+
+.underwriter-ledger-queue .underwriter-table {
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.underwriter-ledger-queue .underwriter-table .table-head {
+  background: var(--surface-2);
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.underwriter-ledger-queue .underwriter-table .table-row {
+  min-height: 44px;
+}
+
+@media (max-width: 1180px) {
+  .underwriter-ledger .underwriter-workbench form {
+    grid-template-columns: 1fr;
+  }
+
+  .underwriter-ledger .underwriting-results {
+    position: static;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding: 20px 0 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .underwriter-ledger .underwriting-form-side {
+    grid-template-columns: 1fr;
+  }
+
+  .underwriter-ledger .underwriting-form-side .span-2 {
+    grid-column: auto;
+  }
+}
+
 .price-book-page {
   display: grid;
   gap: 16px;

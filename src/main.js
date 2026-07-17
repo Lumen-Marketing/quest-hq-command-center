@@ -7195,17 +7195,17 @@ function renderUnderwriterPage(route, companyId) {
   const underwriting = contacts.filter((contact) => contact.underwriter_stage.key === 'underwriting');
   const estimates = contacts.filter((contact) => ['estimate', 'negotiating'].includes(contact.underwriter_stage.key));
   const canManageUnderwriter = can('underwriter.manage', companyId);
-  const guide = activeStage === 'all' ? CRM2_UNDERWRITER_GUIDANCE.underwriting : CRM2_UNDERWRITER_GUIDANCE[activeStage];
   const requestedContactId = route.params.get('contact_id') || state.underwritingContactId;
   const selectedContact = contacts.find((contact) => contact.id === requestedContactId) || underwriting[0] || contacts[0] || null;
   state.underwritingContactId = selectedContact?.id || '';
   const draft = underwritingDraftForContact(selectedContact, companyId);
   const calculation = calculateUnderwriting(draft || {});
   return `
-    <section class="tool-page underwriter-page">
-      ${workspaceHeader('Underwriter', 'Quest CRM workspace for qualification, scope, pricing, and quote handoff readiness.', `
+    <section class="tool-page underwriter-page underwriter-ledger">
+      ${workspaceHeader('Estimator', 'Price the scope, protect the margin, and move each contact toward a confident decision.', `
         ${can('crm.view', companyId) ? `<a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Open contacts</a>` : ''}
         ${canManageUnderwriter && can('crm.view', companyId) ? `<button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>` : ''}
+        ${selectedContact ? `<button class="btn btn-primary" type="submit" form="underwriting-form" ${canManageUnderwriter ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save decision</button>` : ''}
       `)}
       <section class="metric-grid underwriter-summary">
         ${metricCard('Underwriting', underwriting.length)}
@@ -7222,13 +7222,13 @@ function renderUnderwriterPage(route, companyId) {
           }).join('')}
         </div>
       </section>
-      <section class="panel underwriting-calculator">
+      <section class="panel underwriting-calculator underwriter-workbench">
         <div class="section-head">
           <div><h2>Underwriting calculator</h2><p>Price the scope, protect the margin, and save one current case per contact.</p></div>
           ${selectedContact && underwritingCaseForContact(selectedContact.id, companyId) ? '<span class="underwriting-saved"><i class="ti ti-check"></i>Saved case</span>' : ''}
         </div>
         ${selectedContact ? `
-          <form data-underwriting-form>
+          <form id="underwriting-form" data-underwriting-form>
             <div class="underwriting-form-side">
               <label class="underwriting-field span-2"><span>Contact</span><select name="contact_id" data-underwriting-contact>
                 ${contacts.map((contact) => `<option value="${h(contact.id)}" ${contact.id === selectedContact.id ? 'selected' : ''}>${h(contact.name)} - ${h(contact.pay_type || 'Retail')}</option>`).join('')}
@@ -7245,29 +7245,25 @@ function renderUnderwriterPage(route, companyId) {
               ${underwritingNumberField('Contingency', 'contingencyPercent', draft.contingencyPercent, '%')}
               <label class="underwriting-field span-2"><span>Decision notes</span><textarea name="notes" rows="3" data-underwriting-field placeholder="Scope risks, exclusions, or pricing decision">${h(draft.notes || '')}</textarea></label>
               <div class="form-actions span-2">
-                <button class="btn btn-primary" type="submit" ${canManageUnderwriter ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save underwriting</button>
                 <span class="form-note">Percent costs are calculated from contract price.</span>
               </div>
             </div>
-            <aside class="underwriting-results" data-underwriting-results aria-live="polite">${renderUnderwritingResults(calculation)}</aside>
+            <aside class="underwriting-results">
+              <div class="underwriting-results-head">
+                <span class="underwriting-results-icon">${svgIcon('q-symbol-crm')}</span>
+                <div><h3>Decision summary</h3><p>Review profitability outcomes before saving your decision.</p></div>
+              </div>
+              <div data-underwriting-results aria-live="polite">${renderUnderwritingResults(calculation)}</div>
+            </aside>
           </form>
         ` : emptyState('Add a contact to start an underwriting case.')}
       </section>
-      <section class="home-dashboard-grid">
-        <article class="panel home-activity-panel">
-          <div class="section-head"><div><h2>Underwriter queue</h2><p>${visible.length} contact${visible.length === 1 ? '' : 's'} in this Quest CRM view.</p></div></div>
-          <div class="data-table underwriter-table">
-            <div class="table-head"><span>Contact</span><span>Stage</span><span>Owner</span><span>Pay type</span><span>Value</span></div>
-            ${visible.map(renderUnderwriterQueueRow).join('') || emptyState('No contacts match this underwriter stage.')}
-          </div>
-        </article>
-        <article class="panel home-health-panel">
-          <div class="section-head"><div><h2>Guidance</h2><p>${h(activeStage === 'all' ? 'Default underwriting guidance.' : underwriterStageByKey(activeStage).name)}</p></div></div>
-          <div class="home-health-list">
-            <div class="good"><i class="ti ti-clipboard-check"></i><span>${h(guide.title)}</span></div>
-            ${guide.lines.map((line) => `<div><i class="ti ti-point"></i><span>${h(line)}</span></div>`).join('')}
-          </div>
-        </article>
+      <section class="panel underwriter-ledger-queue">
+        <div class="section-head"><div><h2>Estimate queue</h2><p>${visible.length} contact${visible.length === 1 ? '' : 's'} in this Quest CRM view.</p></div></div>
+        <div class="data-table underwriter-table">
+          <div class="table-head"><span>Contact</span><span>Stage</span><span>Owner</span><span>Pay type</span><span>Value</span></div>
+          ${visible.map(renderUnderwriterQueueRow).join('') || emptyState('No contacts match this underwriter stage.')}
+        </div>
       </section>
     </section>
   `;
