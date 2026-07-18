@@ -23794,3 +23794,21 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   .automation-when, .automation-then-row { grid-template-columns: 1fr; }
   .automation-card { flex-direction: column; align-items: stretch; }
 }
+
+/* Contact duplicate finder */
+.dedupe-list { display: grid; gap: 14px; max-height: 60vh; overflow-y: auto; }
+.dedupe-group { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--surface); }
+.dedupe-group.weak { border-color: #e0b34d; background: #fffaf0; }
+.dedupe-group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.dedupe-reason { font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+.dedupe-weak-tag { font-size: 11px; font-weight: 700; color: #9a6a00; }
+.dedupe-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; cursor: pointer; }
+.dedupe-row:hover { background: var(--surface-2); }
+.dedupe-row input[type="radio"] { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--orange); }
+.dedupe-keep-hint { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); width: 30px; }
+.dedupe-row input[type="radio"]:checked ~ .dedupe-keep-hint { color: var(--orange); font-weight: 700; }
+.dedupe-contact { display: flex; flex-direction: column; min-width: 0; }
+.dedupe-contact strong { font-size: 14px; }
+.dedupe-meta { font-size: 12px; color: var(--ink-2); }
+.dedupe-group-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.dedupe-empty { padding: 8px 0 16px; }

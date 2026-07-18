@@ -16,6 +16,7 @@ import { computeTeamWorkload } from './data/team-workload.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
 import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDueDate } from './data/recurrence.js';
 import { collectAutomationActions, buildTaskFromAction, describeAutomation, AUTOMATION_OBJECTS } from './data/automations.js';
+import { findDuplicateGroups, mergeContactFields } from './data/dedupe.js';
 import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
 import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
 
@@ -1365,6 +1366,10 @@ const contactsFallback = [
   { id: 'contact-8', company_id: 'roofing', name: 'Brad Lundstrom', phone: '602-577-9523', email: 'lundstromdesign@gmail.com', location: '3200 W Wander Ln', stage: 'Nurturing', value: 53200, owner_name: 'Abraham Flores' },
   { id: 'contact-9', company_id: 'roofing', name: 'Rosa Cruz-Blanch', phone: '787-549-0942', email: 'rcruz@natlbtr.com', location: 'W Encanto Blvd', stage: 'Leads', value: 61000, owner_name: 'Maya Rosales' },
   { id: 'contact-10', company_id: 'drafting', name: 'Horizon HVAC', phone: '480-555-0199', email: 'plans@horizonhvac.com', location: 'Chandler, AZ', stage: 'Nurturing', value: 4200, owner_name: 'Noah Park', account_id: 'account-3', title: 'Facilities lead' },
+  // A deliberate duplicate of April Reyes (contact-3): same phone in a different
+  // format, plus an email she is missing -- so "Find duplicates" has a strong
+  // match to show and the merge visibly fills a blank field.
+  { id: 'contact-11', company_id: 'roofing', name: 'April Reyes', phone: '(480) 277-1540', email: 'april.reyes@gmail.com', location: '451 E 10th Ave, Mesa', stage: 'Leads', value: 0, owner_name: 'Andre Lee' },
 ];
 
 const accountsFallback = [
@@ -7574,6 +7579,7 @@ function renderContactTable(companyId) {
         <div class="contact-list-actions">
           ${selCount ? `<span class="contact-sel-count">${selCount} selected</span><button class="btn btn-compact" type="button" data-action="contacts-clear-selection"><i class="ti ti-x"></i>Clear</button>` : ''}
           <button class="btn btn-compact" type="button" data-action="contacts-import"><i class="ti ti-upload"></i>Import</button>
+          <button class="btn btn-compact" type="button" data-action="contacts-dedupe"><i class="ti ti-git-merge"></i>Find duplicates</button>
           <button class="btn btn-compact" type="button" data-action="contacts-campaign"><i class="ti ti-speakerphone"></i>Add to Campaign</button>
           <button class="btn btn-compact danger" type="button" data-action="contacts-delete"><i class="ti ti-trash"></i>Delete</button>
           <button class="btn btn-compact" type="button" data-action="contacts-email"><i class="ti ti-mail"></i>Send Email</button>
@@ -7658,6 +7664,89 @@ function openContactBulkModal(kind) {
   state.modal = 'contact-bulk';
   render();
   queueMicrotask(() => document.getElementById('contactBulkInput')?.focus());
+}
+
+const CONTACT_MERGE_FIELDS = ['name', 'phone', 'email', 'location', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'account_id', 'owner_name', 'value'];
+
+function renderContactsDedupeModal() {
+  const companyId = activeCompanyId();
+  const groups = findDuplicateGroups(companyContacts(companyId).map((c) => ({ id: c.id, name: c.name, email: c.email, phone: c.phone })));
+  if (!groups.length) {
+    return renderModalShell('Contacts', 'Find duplicates',
+      `<div class="dedupe-empty">${emptyState('No likely duplicates found. Contacts are matched by email, phone, and name.')}</div>
+       <div class="modal-actions"><button class="btn" type="button" data-action="close-modal">Close</button></div>`, '');
+  }
+  const byId = new Map(companyContacts(companyId).map((c) => [c.id, c]));
+  const cards = groups.map((group, gi) => {
+    const rows = group.ids.map((id, i) => {
+      const c = byId.get(id) || {};
+      return `
+        <label class="dedupe-row">
+          <input type="radio" name="survivor-${gi}" value="${h(id)}" ${i === 0 ? 'checked' : ''} />
+          <span class="dedupe-keep-hint">keep</span>
+          <span class="dedupe-contact">
+            <strong>${h(c.name || 'Unnamed')}</strong>
+            <span class="dedupe-meta">${[c.email, c.phone, c.stage].filter(Boolean).map((x) => h(x)).join(' · ') || 'No details'}</span>
+          </span>
+        </label>`;
+    }).join('');
+    return `
+      <form class="dedupe-group ${group.strong ? '' : 'weak'}" data-dedupe-form data-group="${gi}" data-ids="${h(group.ids.join(','))}">
+        <div class="dedupe-group-head">
+          <span class="dedupe-reason">${h(group.contacts.length)} possible duplicates · matched by ${h(group.reasons.join(', '))}</span>
+          ${group.strong ? '' : '<span class="dedupe-weak-tag">name only — review carefully</span>'}
+        </div>
+        ${rows}
+        <div class="dedupe-group-actions">
+          <button class="btn btn-compact btn-primary" type="submit"><i class="ti ti-git-merge"></i>Merge these ${h(group.ids.length)}</button>
+        </div>
+      </form>`;
+  }).join('');
+  return renderModalShell('Contacts', `${groups.length} duplicate group${groups.length === 1 ? '' : 's'}`,
+    `<p class="modal-lead">Pick the record to keep in each group; the others merge into it (filling any blank fields) and their quotes, tasks, and activity move over.</p>
+     <div class="dedupe-list">${cards}</div>
+     <div class="modal-actions"><button class="btn" type="button" data-action="close-modal">Done</button></div>`, '');
+}
+
+// Merge duplicates into the survivor: fill the survivor's blank fields, move
+// every foreign reference (deals, tasks, activities) onto it, then recycle the
+// duplicates. Reference moves go through the live client when signed in.
+async function mergeContacts(survivorId, duplicateIds) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('contacts.manage', companyId, 'Your role cannot merge contacts.', 'Contacts')) return;
+  const survivor = contactById(survivorId);
+  const dups = duplicateIds.map((id) => contactById(id)).filter((c) => c && c.id !== survivorId);
+  if (!survivor || !dups.length) return;
+
+  // 1. Fill blank survivor fields from the duplicates.
+  const merged = normalizeContact(mergeContactFields(survivor, dups, CONTACT_MERGE_FIELDS));
+  await persistContact(merged);
+
+  const client = createSupabaseClient();
+  const live = client && isLiveSupabaseSession();
+  const dupIds = new Set(dups.map((d) => d.id));
+
+  // 2. Move foreign references onto the survivor (local state + live DB).
+  for (const deal of state.deals.filter((d) => dupIds.has(d.primary_contact_id))) {
+    upsertDeal({ ...deal, primary_contact_id: survivorId });
+    if (live) await safeSupabaseQuery(client.from('deals').update({ primary_contact_id: survivorId }).eq('id', deal.id));
+  }
+  for (const task of state.tasks.filter((t) => dupIds.has(t.contact_id))) {
+    upsertTask({ ...task, contact_id: survivorId });
+    if (live) await safeSupabaseQuery(client.from('tasks').update({ contact_id: survivorId }).eq('id', task.id));
+  }
+  for (const activity of state.activities.filter((a) => a.related_type === 'contact' && dupIds.has(a.related_id))) {
+    upsertActivity({ ...activity, related_id: survivorId });
+    if (live) await safeSupabaseQuery(client.from('activities').update({ related_id: survivorId }).eq('id', activity.id));
+  }
+
+  // 3. Recycle the now-empty duplicates.
+  for (const dup of dups) {
+    await recycleDeleteRecord({ type: 'contact', id: dup.id, options: { silent: true } });
+  }
+
+  showToast(`Merged ${dups.length} duplicate${dups.length === 1 ? '' : 's'} into ${merged.name}.`, live ? 'live' : 'local', 'Contacts');
+  render();
 }
 
 function renderContactBulkModal() {
@@ -19553,6 +19642,7 @@ function renderWorkspaceIconModal(companyId) {
 function renderActiveModal(route, session) {
   if (state.builderModal) return renderWorkspaceBuilderModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
+  if (state.modal === 'contacts-dedupe') return renderContactsDedupeModal();
   if (state.modal === 'task-delete') return renderTaskDeleteModal();
   if (state.modal === 'files-delete') return renderFilesDeleteModal();
   if (state.modal === 'files-transfer') return renderFilesTransferModal();
@@ -23166,6 +23256,12 @@ function handleAction(event, node) {
     importContactsFromFile();
     return;
   }
+  if (action === 'contacts-dedupe') {
+    event.preventDefault();
+    state.modal = 'contacts-dedupe';
+    render();
+    return;
+  }
   if (action === 'set-contact-stage') {
     event.preventDefault();
     setContactStage(node.dataset.contactId, node.dataset.stage);
@@ -23746,6 +23842,14 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-automation-form]')) {
     event.preventDefault();
     saveAutomation(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-dedupe-form]')) {
+    event.preventDefault();
+    const ids = String(event.target.dataset.ids || '').split(',').filter(Boolean);
+    const survivorId = new FormData(event.target).get(`survivor-${event.target.dataset.group}`);
+    if (survivorId && ids.length > 1) mergeContacts(String(survivorId), ids.filter((id) => id !== survivorId));
     return;
   }
 
@@ -30741,6 +30845,9 @@ async function recycleDeleteRecord(config) {
   }
   removeRecycleSourceLocal(typeConfig, record.id);
   persistAll();
+  // Silent mode (used by batch callers like contact merge): don't toast, don't
+  // close the current modal, and don't redirect/render -- the caller drives the UI.
+  if (config.options?.silent) return true;
   state.modal = '';
   state.recycleDeleteCtx = null;
   showToast(`${typeConfig.label} moved to Recycle Bin.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');

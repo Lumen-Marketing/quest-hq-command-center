@@ -91,6 +91,19 @@ permission: no privilege escalation, and the task silently isn't created if the
 user cannot create tasks. This is distinct from App Builder automations, which
 act on workspace-app items rather than CRM records.
 
+## Contact duplicates are detected purely and merged by reassigning references
+
+"Find duplicates" on the Contacts page groups likely-duplicate contacts with a
+pure engine (src/data/dedupe.js, 9 tests): union-find over shared email, shared
+phone (by last 10 digits), or normalized full name. Email/phone groups are
+"strong"; a name-only group is flagged weak so the user reviews before merging.
+Merging keeps a chosen survivor, fills only its BLANK fields from the others
+(first non-empty wins), moves every foreign reference (deals.primary_contact_id,
+tasks.contact_id, contact activities) onto the survivor, then recycles the
+duplicates via recycleDeleteRecord in a new silent mode (no per-item toast,
+modal-close, or redirect, so batch callers drive the UI). No migration -- it
+reuses existing tables.
+
 ## No sensitive project-brain content
 
 The project brain records catalog metadata, architecture, decisions, and state—not credentials, user identities, row payloads, storage objects, or private operational content.
