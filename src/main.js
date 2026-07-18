@@ -2368,7 +2368,7 @@ const state = {
   rolePreview: null,
   commandPalette: { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null },
   knowledgeArticles: [],
-  automations: [],
+  automations: readSeededList(AUTOMATION_CACHE_KEY, automationsFallback).map(normalizeAutomation),
   knowledgeUi: { query: '', selectedId: '', editingId: null, creating: false },
   automationUi: { editingId: null, creating: false },
 };
