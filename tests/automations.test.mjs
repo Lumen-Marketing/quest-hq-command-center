@@ -86,7 +86,7 @@ test('template tokens are substituted, unknowns collapse to empty', () => {
 });
 
 test('describe reads as a sentence for the list UI', () => {
-  assert.equal(describeAutomation(rule()), 'When a deal reaches "Won", create task "Kick off ".');
+  assert.equal(describeAutomation(rule()), 'When a deal reaches "Won", create task "Kick off {{name}}".');
   assert.match(describeAutomation(rule({ trigger: { object: 'task', event: 'completed' } })), /When a task is completed/);
 });
 

@@ -125,7 +125,9 @@ export function describeAutomation(rule) {
   else if (t.event === 'stage_is') when += ` reaches "${t.value}"`;
   else if (t.event === 'status_is') when += ` becomes "${t.value}"`;
   const acts = (rule.actions || []).map((a) => (
-    a.type === 'create_task' ? `create task "${fillTemplate(a.title, {})}"` : a.type === 'notify' ? 'send a notification' : a.type
+    // Show the title template literally (tokens intact) -- it reads better than a
+    // filled-with-blanks preview, and the real task fills {{name}} at run time.
+    a.type === 'create_task' ? `create task "${a.title || ''}"` : a.type === 'notify' ? 'send a notification' : a.type
   ));
   return acts.length ? `${when}, ${acts.join(' and ')}.` : `${when}.`;
 }
