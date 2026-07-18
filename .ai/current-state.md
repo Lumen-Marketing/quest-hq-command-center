@@ -7,8 +7,8 @@ Captured 2026-07-18. This is a point-in-time operational snapshot, not a substit
 - Production URL: https://quest-hq-command-center-gamma.vercel.app
 - Vercel project: prj_0MxrYyGIo61QgLNW2M74fvTxlMRV
 - Current ready production deployment: dpl_FiH4yFuPbZEd67NTT38X8QZWH2Ac
-- Deployed branch/commit: main at 6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec
-- GitHub default branch at capture: 6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec
+- Deployed branch/commit: main at fd6e1cb02e4a766dc48e21413879b274c93f5991 (recurring tasks, automations, contact dedupe shipped; task_recurrence + automations migrations applied live)
+- GitHub default branch at capture: fd6e1cb02e4a766dc48e21413879b274c93f5991
 - Production Guardian: scheduled every six hours and available by manual dispatch.
 - Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459
 - Last full production smoke context: 36 of 36 routes and 3 of 3 critical assets passed for `6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec`, with no browser-console or Vercel runtime errors.
