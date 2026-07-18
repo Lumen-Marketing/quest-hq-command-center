@@ -23767,3 +23767,30 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   font-weight: 600;
 }
 .task-repeat-badge .ti { font-size: 13px; }
+
+/* Automations module */
+.automation-list { display: grid; gap: 12px; }
+.automation-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 16px 18px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.automation-card.disabled { opacity: .6; }
+.automation-card-head { display: flex; align-items: center; gap: 8px; }
+.automation-off {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px;
+}
+.automation-desc { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
+.automation-card-acts { display: flex; gap: 6px; flex: 0 0 auto; }
+.automation-editor { padding: 20px 22px; max-width: 640px; }
+.automation-form { display: grid; gap: 14px; }
+.automation-when, .automation-then-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: end; }
+.automation-then { display: grid; gap: 12px; padding: 14px; background: var(--surface-2); border-radius: 10px; }
+.automation-when-label, .automation-then-label { font-weight: 700; color: var(--ink); }
+.automation-hint { font-size: 12px; margin: 0; }
+.automation-hint code { background: var(--surface-3); padding: 1px 5px; border-radius: 4px; font-family: var(--font-mono); }
+@media (max-width: 640px) {
+  .automation-when, .automation-then-row { grid-template-columns: 1fr; }
+  .automation-card { flex-direction: column; align-items: stretch; }
+}

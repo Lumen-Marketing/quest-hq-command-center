@@ -74,6 +74,23 @@ also understands cadence phrases ("every 6 months", "every friday") and
 pre-fills the Repeat control. reminder_at, previously stored but unused, is now
 carried forward with the series by the same day gap.
 
+## Company automations are trigger → action rules on CRM objects
+
+The Automations module (previously a planned stub) runs company-scoped rules
+when a CRM record changes: "when a deal reaches Won, create a kickoff task".
+The matching engine is pure (src/data/automations.js, 13 tests) and mirrors the
+App Builder automation engine's key property -- a state trigger fires on the
+TRANSITION into the target (after matches, before did not), so it runs once on
+entry, never on every save. Rules live in a company-scoped `automations` table:
+any member may read them (every client evaluates them locally when a record
+mutates), but managing them is gated on settings.manage. Rules run from the
+single choke points -- persistDeal, setContactStage, task completion -- so they
+fire regardless of which UI drove the change. Automation-created tasks go
+through the normal task path as the acting user, subject to their tasks.manage
+permission: no privilege escalation, and the task silently isn't created if the
+user cannot create tasks. This is distinct from App Builder automations, which
+act on workspace-app items rather than CRM records.
+
 ## No sensitive project-brain content
 
 The project brain records catalog metadata, architecture, decisions, and state—not credentials, user identities, row payloads, storage objects, or private operational content.

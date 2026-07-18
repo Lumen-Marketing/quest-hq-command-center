@@ -15,6 +15,7 @@ import { parseContactInstruction, looksLikeContactInstruction } from './assistan
 import { computeTeamWorkload } from './data/team-workload.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
 import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDueDate } from './data/recurrence.js';
+import { collectAutomationActions, buildTaskFromAction, describeAutomation, AUTOMATION_OBJECTS } from './data/automations.js';
 import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
 import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
 
@@ -101,6 +102,7 @@ const CONTACT_BOARD_VIEW_KEY = 'quest-hq-contact-board-view';
 const THEME_KEY = 'quest-theme';
 const ACCENT_KEY = 'quest-accent';
 const NOTIFICATION_CACHE_KEY = 'quest-hq-notification-cache-v1';
+const AUTOMATION_CACHE_KEY = 'quest-hq-automation-cache-v1';
 const MESSAGE_CONVERSATION_CACHE_KEY = 'quest-hq-message-conversation-cache-v1';
 const MESSAGE_ACCESS_CACHE_KEY = 'quest-hq-message-access-cache-v1';
 const MESSAGE_CACHE_KEY = 'quest-hq-message-cache-v1';
@@ -982,7 +984,7 @@ const MODULE_REGISTRY = [
   { id: 'tickets', group: 'Workspace', label: 'Tickets', icon: 'ti-ticket', symbol: 'q-symbol-tickets', status: 'planned' },
   { id: 'finance', group: 'Workspace', label: 'Finance', icon: 'ti-receipt-dollar', symbol: 'q-symbol-finance', status: 'live', permission: 'finance.view' },
   { id: 'knowledge', group: 'Workspace', label: 'Knowledge Base', icon: 'ti-books', symbol: 'q-symbol-knowledge', status: 'live', permission: 'files.view' },
-  { id: 'automations', group: 'Workspace', label: 'Automations', icon: 'ti-automation', symbol: 'q-symbol-automations', status: 'planned' },
+  { id: 'automations', group: 'Workspace', label: 'Automations', icon: 'ti-automation', symbol: 'q-symbol-automations', status: 'live', permission: 'settings.view' },
   { id: 'templates', group: 'Workspace', label: 'Templates', icon: 'ti-template', symbol: 'q-symbol-templates', status: 'planned' },
   { id: 'users', group: 'Company', label: 'Users', icon: 'ti-users', symbol: 'q-symbol-users', status: 'live', permission: 'users.view' },
   { id: 'messages', group: 'Communication', label: 'Messages', icon: 'ti-messages', symbol: 'q-symbol-messages', status: 'live', permission: 'messages.view' },
@@ -1395,6 +1397,28 @@ const membershipsFallback = [
   { company_id: 'roofing', profile_id: 'basic-quest-user', role: 'developer', status: 'active' },
   { company_id: 'drafting', profile_id: 'basic-quest-user', role: 'developer', status: 'active' },
   { company_id: 'lumen', profile_id: 'basic-quest-user', role: 'developer', status: 'active' },
+];
+
+// Demo automations so the read-only workspace shows the feature working.
+const automationsFallback = [
+  {
+    id: 'auto-roofing-won',
+    company_id: 'roofing',
+    name: 'Kick off won deals',
+    enabled: true,
+    trigger: { object: 'deal', event: 'stage_is', value: 'Won' },
+    actions: [{ type: 'create_task', title: 'Schedule build & order materials for {{name}}', due_offset_days: 2, priority: 'high' }],
+    creator_id: 'abraham',
+  },
+  {
+    id: 'auto-roofing-lead',
+    company_id: 'roofing',
+    name: 'Follow up new leads',
+    enabled: true,
+    trigger: { object: 'contact', event: 'stage_is', value: 'Leads' },
+    actions: [{ type: 'create_task', title: 'Call {{name}} to qualify the lead', due_offset_days: 1, priority: 'medium' }],
+    creator_id: 'abraham',
+  },
 ];
 
 const tasksFallback = [
@@ -2340,7 +2364,9 @@ const state = {
   rolePreview: null,
   commandPalette: { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null },
   knowledgeArticles: [],
+  automations: [],
   knowledgeUi: { query: '', selectedId: '', editingId: null, creating: false },
+  automationUi: { editingId: null, creating: false },
 };
 
 const app = document.getElementById('app');
@@ -3242,6 +3268,12 @@ async function loadSupabaseData() {
   }
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
 
+  // Automations load in their own query (not the aligned batch above) and through
+  // safeSupabaseQuery, so a workspace whose automations migration hasn't been
+  // applied yet simply gets an empty set instead of breaking the whole load.
+  const automationsResult = await safeSupabaseQuery(client.from('automations').select('*'));
+  if (!automationsResult.error) state.automations = (automationsResult.data || []).map(normalizeAutomation);
+
   if (state.platformAdmin) {
     const [platformCompaniesResult, platformMembersResult, platformBackupCopiesResult] = await Promise.all([
       safeSupabaseQuery(client.rpc('list_platform_companies')),
@@ -3458,6 +3490,7 @@ function resetDemoWorkspaceData() {
   state.pricebookVendors = activeRows(readDemoList(PRICEBOOK_VENDOR_CACHE_KEY, [])).map(normalizePricebookVendor);
   state.pricebookMaterials = activeRows(readDemoList(PRICEBOOK_MATERIAL_CACHE_KEY, [])).map(normalizePricebookMaterial);
   state.pricebookPrices = activeRows(readDemoList(PRICEBOOK_PRICE_CACHE_KEY, [])).map(normalizePricebookPrice);
+  state.automations = readDemoList(AUTOMATION_CACHE_KEY, automationsFallback).map(normalizeAutomation);
   state.notifications = readDemoList(NOTIFICATION_CACHE_KEY, notificationsFallback).map(normalizeNotification);
   state.messageConversations = readDemoList(MESSAGE_CONVERSATION_CACHE_KEY, messageConversationsFallback).map(normalizeMessageConversation);
   state.messageAccess = readDemoList(MESSAGE_ACCESS_CACHE_KEY, messageAccessFallback).map(normalizeMessageAccess);
@@ -4350,6 +4383,7 @@ function renderWorkspace(route) {
   if (route.section === 'time' || route.section === 'calendar' || route.section === 'approvals' || route.section === 'clock') return renderOperationsPage(route, companyId);
   if (route.section === 'team-workload') return renderTeamWorkloadPage(companyId);
   if (route.section === 'knowledge') return renderKnowledgePage(route, companyId);
+  if (route.section === 'automations') return renderAutomationsPage(route, companyId);
   return renderPlannedPage(route.section);
 }
 
@@ -4486,6 +4520,91 @@ async function deleteKnowledgeArticle(id) {
     if (result.error) { showToast(result.error.message || 'Delete failed on the server.', 'error', 'Knowledge Base'); return; }
   }
   showToast('Article deleted.', 'local', 'Knowledge Base');
+}
+
+function automationById(id) { return state.automations.find((a) => a.id === id) || null; }
+function upsertAutomation(rule) {
+  state.automations = [rule, ...state.automations.filter((a) => a.id !== rule.id)];
+}
+
+async function saveAutomation(form) {
+  const companyId = activeCompanyId();
+  if (!requirePermission('settings.manage', companyId, 'Your role cannot manage automations.', 'Automations')) return;
+  const data = Object.fromEntries(new FormData(form).entries());
+  const name = String(data.name || '').trim();
+  const taskTitle = String(data.task_title || '').trim();
+  if (!name) { showToast('Give the automation a name.', 'local', 'Automations'); return; }
+  if (!taskTitle) { showToast('The task title is required.', 'local', 'Automations'); return; }
+  const event = String(data.event || 'stage_is');
+  const needsTarget = event === 'stage_is' || event === 'status_is';
+  if (needsTarget && !String(data.value || '').trim()) {
+    showToast('Enter the target stage or status for this trigger.', 'local', 'Automations');
+    return;
+  }
+  const existing = data.id ? automationById(data.id) : null;
+  const rule = normalizeAutomation({
+    id: data.id || undefined,
+    company_id: companyId,
+    name,
+    enabled: existing ? existing.enabled : true,
+    trigger: { object: String(data.object || 'deal'), event, value: needsTarget ? String(data.value || '').trim() : '' },
+    actions: [{
+      type: 'create_task',
+      title: taskTitle,
+      due_offset_days: Math.max(0, Math.min(365, Number(data.due_offset_days) || 0)),
+      priority: TASK_PRIORITIES.includes(String(data.priority)) ? String(data.priority) : 'medium',
+    }],
+    creator_id: existing?.creator_id || activeSession()?.profile?.id || null,
+    created_at: existing?.created_at,
+    updated_at: new Date().toISOString(),
+  });
+  upsertAutomation(rule);
+  state.automationUi = { creating: false, editingId: null };
+  render();
+  try {
+    if (isLiveSupabaseSession()) {
+      const client = createSupabaseClient();
+      const result = await client.from('automations').upsert(automationPayload(rule), { onConflict: 'id' }).select().single();
+      if (result.error) throw new Error(result.error.message || 'Automation save failed.');
+      upsertAutomation(normalizeAutomation(result.data));
+      render();
+    }
+    showToast(`Automation "${rule.name}" saved.`, isLiveSupabaseSession() ? 'live' : 'local', 'Automations');
+  } catch (error) {
+    showToast(error.message || 'Could not save the automation to the server.', 'error', 'Automations');
+  }
+}
+
+async function toggleAutomation(id) {
+  const rule = automationById(id);
+  if (!rule) return;
+  const companyId = rule.company_id;
+  if (!requirePermission('settings.manage', companyId, 'Your role cannot manage automations.', 'Automations')) return;
+  const updated = { ...rule, enabled: !rule.enabled, updated_at: new Date().toISOString() };
+  upsertAutomation(updated);
+  render();
+  if (isLiveSupabaseSession()) {
+    const client = createSupabaseClient();
+    const result = await client.from('automations').update({ enabled: updated.enabled, updated_at: updated.updated_at }).eq('id', id).eq('company_id', companyId);
+    if (result.error) { upsertAutomation(rule); render(); showToast(result.error.message || 'Update failed on the server.', 'error', 'Automations'); return; }
+  }
+  showToast(`Automation ${updated.enabled ? 'enabled' : 'disabled'}.`, 'local', 'Automations');
+}
+
+async function deleteAutomation(id) {
+  const rule = automationById(id);
+  if (!rule) return;
+  const companyId = rule.company_id;
+  if (!requirePermission('settings.manage', companyId, 'Your role cannot delete automations.', 'Automations')) return;
+  state.automations = state.automations.filter((a) => a.id !== id);
+  if (state.automationUi.editingId === id) state.automationUi = { creating: false, editingId: null };
+  render();
+  if (isLiveSupabaseSession()) {
+    const client = createSupabaseClient();
+    const result = await client.from('automations').delete().eq('id', id).eq('company_id', companyId);
+    if (result.error) { showToast(result.error.message || 'Delete failed on the server.', 'error', 'Automations'); return; }
+  }
+  showToast('Automation deleted.', 'local', 'Automations');
 }
 
 function renderKnowledgeArticleForm(companyId, article) {
@@ -8394,9 +8513,11 @@ async function persistContact(contact) {
 async function setContactStage(contactId, stage) {
   const contact = contactById(contactId);
   if (!contact || !stage || contact.stage === stage) return;
+  const before = { ...contact };
   if (!await persistContact({ ...contact, stage })) return false;
   await logActivity({ type: 'stage_change', subject: `Stage -> ${stage}`, related_type: 'contact', related_id: contactId, account_id: contact.account_id });
   render();
+  await runCompanyAutomations('contact', before, { ...contact, stage }, contact.company_id);
   return true;
 }
 
@@ -8446,6 +8567,7 @@ async function toggleContactTask(taskId) {
     const next = await spawnNextRecurrence({ ...task, status: 'done' });
     if (next) { showToast(`Next up ${formatDate(next.due)}: ${next.title}`, 'local', 'Recurring'); render(); }
   }
+  if (completing) await runCompanyAutomations('task', task, { ...task, status: 'done' }, task.company_id);
   return true;
 }
 
@@ -10070,6 +10192,88 @@ function renderTaskDeleteModal() {
       <button class="btn danger" type="button" data-action="task-delete-confirm"><i class="ti ti-trash"></i>Delete task</button>
     </div>`;
   return renderModalShell('Task', 'Delete task', content, '');
+}
+
+const AUTOMATION_OBJECT_LABELS = [['deal', 'Deal / quote'], ['contact', 'Contact'], ['task', 'Task'], ['job', 'Job']];
+const AUTOMATION_EVENT_LABELS = [
+  ['stage_is', 'reaches a stage'],
+  ['status_is', 'changes to a status'],
+  ['completed', 'is completed'],
+  ['created', 'is created'],
+];
+
+function renderAutomationsPage(route, companyId) {
+  const canManage = can('settings.manage', companyId);
+  const rules = companyAutomations(companyId);
+  const ui = state.automationUi;
+  const editing = ui.creating || ui.editingId
+    ? (ui.editingId ? rules.find((r) => r.id === ui.editingId) : null)
+    : null;
+
+  if (ui.creating || ui.editingId) {
+    return `
+      <section class="tool-page automations-page">
+        ${workspaceHeader('Automations', 'Trigger → action rules that run when your CRM records change.', '')}
+        <section class="panel automation-editor">
+          ${renderAutomationEditor(companyId, editing)}
+        </section>
+      </section>`;
+  }
+
+  const list = rules.length ? rules.map((rule) => `
+    <div class="automation-card ${rule.enabled ? '' : 'disabled'}">
+      <div class="automation-card-main">
+        <div class="automation-card-head">
+          <strong>${h(rule.name)}</strong>
+          ${rule.enabled ? '' : '<span class="automation-off">Off</span>'}
+        </div>
+        <p class="automation-desc">${h(describeAutomation(rule))}</p>
+      </div>
+      ${canManage ? `<div class="automation-card-acts">
+        <button class="btn btn-compact" type="button" data-action="automation-toggle" data-id="${h(rule.id)}">${rule.enabled ? 'Disable' : 'Enable'}</button>
+        <button class="btn btn-compact" type="button" data-action="automation-edit" data-id="${h(rule.id)}"><i class="ti ti-pencil"></i>Edit</button>
+        <button class="btn btn-compact danger" type="button" data-action="automation-delete" data-id="${h(rule.id)}" aria-label="Delete automation"><i class="ti ti-trash"></i></button>
+      </div>` : ''}
+    </div>`).join('') : emptyState('No automations yet. Create one to auto-create tasks when deals, contacts, or jobs change.');
+
+  return `
+    <section class="tool-page automations-page">
+      ${workspaceHeader('Automations', 'Trigger → action rules that run when your CRM records change.',
+        canManage ? '<button class="btn btn-primary" type="button" data-action="automation-new"><i class="ti ti-plus"></i>New automation</button>' : '')}
+      <section class="automation-list">${list}</section>
+    </section>`;
+}
+
+// Inline create/edit form. A rule = one trigger + one create_task action (the
+// highest-value shape); the engine supports more, but the editor stays focused.
+function renderAutomationEditor(companyId, rule) {
+  const t = rule?.trigger || { object: 'deal', event: 'stage_is', value: '' };
+  const action = (rule?.actions || []).find((a) => a.type === 'create_task') || { title: '', due_offset_days: 2, priority: 'medium' };
+  return `
+    <form class="automation-form" data-automation-form>
+      <input type="hidden" name="id" value="${h(rule?.id || '')}" />
+      ${field('Automation name', 'name', rule?.name || '', true)}
+      <div class="automation-when">
+        <span class="automation-when-label">When a</span>
+        ${selectField('Record', 'object', t.object, AUTOMATION_OBJECT_LABELS)}
+        ${selectField('Event', 'event', t.event, AUTOMATION_EVENT_LABELS)}
+        ${field('Target stage / status', 'value', t.value || '', false, 'text', '', 'placeholder="e.g. Won"')}
+      </div>
+      <p class="automation-hint muted">Leave the target blank for “is created” / “is completed”. A stage trigger fires once, when the record enters that stage.</p>
+      <div class="automation-then">
+        <span class="automation-then-label">Then create a task</span>
+        ${field('Task title', 'task_title', action.title || '', true, 'text', '', 'placeholder="Kick off {{name}}"')}
+        <div class="automation-then-row">
+          ${field('Due in (days)', 'due_offset_days', String(action.due_offset_days ?? 2), false, 'number', '', 'min="0" max="365"')}
+          ${selectField('Priority', 'priority', action.priority || 'medium', TASK_PRIORITIES.map((p) => [p, titleCase(p)]))}
+        </div>
+      </div>
+      <p class="automation-hint muted">Use <code>{{name}}</code> in the title to insert the record’s name.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i class="ti ti-check"></i>${rule ? 'Save automation' : 'Create automation'}</button>
+        <button class="btn" type="button" data-action="automation-cancel">Cancel</button>
+      </div>
+    </form>`;
 }
 
 // A compact "repeats" chip for a task row. Empty string when the task is one-off.
@@ -21529,6 +21733,34 @@ function handleAction(event, node) {
     if (confirm('Delete this article? This cannot be undone.')) deleteKnowledgeArticle(node.dataset.id);
     return;
   }
+  if (action === 'automation-new') {
+    event.preventDefault();
+    state.automationUi = { creating: true, editingId: null };
+    render();
+    return;
+  }
+  if (action === 'automation-edit') {
+    event.preventDefault();
+    state.automationUi = { creating: false, editingId: node.dataset.id };
+    render();
+    return;
+  }
+  if (action === 'automation-cancel') {
+    event.preventDefault();
+    state.automationUi = { creating: false, editingId: null };
+    render();
+    return;
+  }
+  if (action === 'automation-toggle') {
+    event.preventDefault();
+    toggleAutomation(node.dataset.id);
+    return;
+  }
+  if (action === 'automation-delete') {
+    event.preventDefault();
+    if (confirm('Delete this automation? This cannot be undone.')) deleteAutomation(node.dataset.id);
+    return;
+  }
   if (action === 'refresh-data') {
     event.preventDefault();
     state.dataLoaded = false;
@@ -23508,6 +23740,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-knowledge-form]')) {
     event.preventDefault();
     saveKnowledgeArticle(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-automation-form]')) {
+    event.preventDefault();
+    saveAutomation(event.target);
     return;
   }
 
@@ -30636,6 +30874,7 @@ async function saveDeal(form) {
 }
 
 async function persistDeal(deal, label = 'Quote saved.') {
+  const before = dealById(deal.id) ? { ...dealById(deal.id) } : null;
   const payload = normalizeDeal({ ...deal, updated_at: new Date().toISOString() });
   if (/^won/i.test(payload.stage)) payload.status = 'won';
   else if (/^lost/i.test(payload.stage)) payload.status = 'lost';
@@ -30647,6 +30886,10 @@ async function persistDeal(deal, label = 'Quote saved.') {
   upsertDeal(savedDeal);
   showToast(label, ok ? 'live' : 'local', 'Quotes');
   render();
+  // persistDeal is the single choke point for every deal save, so the engine's
+  // transition check (stage entered target, wasn't before) makes this the one
+  // place to run deal automations regardless of which UI moved the stage.
+  await runCompanyAutomations('deal', before, savedDeal, savedDeal.company_id);
   return savedDeal;
 }
 
@@ -32627,6 +32870,113 @@ function normalizeTask(input) {
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || new Date().toISOString(),
   };
+}
+
+function normalizeAutomation(input = {}) {
+  const trigger = input.trigger && typeof input.trigger === 'object' ? input.trigger : {};
+  return {
+    id: String(input.id || crypto.randomUUID()),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    name: String(input.name || 'Automation').trim() || 'Automation',
+    enabled: input.enabled !== false,
+    trigger: {
+      object: AUTOMATION_OBJECTS.includes(trigger.object) ? trigger.object : 'deal',
+      event: String(trigger.event || 'stage_is'),
+      value: trigger.value != null ? String(trigger.value) : '',
+    },
+    actions: Array.isArray(input.actions) ? input.actions : [],
+    creator_id: String(input.creator_id || ''),
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || new Date().toISOString(),
+  };
+}
+
+function automationPayload(a) {
+  return {
+    id: a.id,
+    company_id: a.company_id,
+    name: a.name,
+    enabled: a.enabled,
+    trigger: a.trigger,
+    actions: a.actions,
+    creator_id: a.creator_id || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function companyAutomations(companyId = activeCompanyId()) {
+  return state.automations.filter((a) => a.company_id === companyId);
+}
+
+// Creates a task an automation asked for, as the acting user, subject to their
+// permissions -- no privilege escalation. Silent (returns null) when the user
+// cannot create tasks or the insert fails, since automations run in the
+// background of some other action.
+async function createAutomationTask(companyId, fields) {
+  if (!can('tasks.manage', companyId)) return null;
+  const creatorId = activeTaskCreatorId(companyId);
+  if (!creatorId) return null;
+  const payload = normalizeTask({
+    id: `task-${crypto.randomUUID()}`,
+    company_id: companyId,
+    title: fields.title,
+    contact_id: fields.contact_id || '',
+    creator_id: creatorId,
+    assignee_id: fields.assignee_id || creatorId,
+    status: 'todo',
+    due: fields.due,
+    priority: fields.priority,
+    urgency: fields.priority,
+  });
+  const client = createSupabaseClient();
+  let saved = payload;
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').insert(taskPayload(payload)).select().single());
+    if (result.error) return null;
+    if (result.data) saved = normalizeTask(result.data);
+  }
+  upsertTask(saved);
+  return saved;
+}
+
+// Runs company automations for a CRM change. `before` is null on create. Pure
+// matching lives in data/automations.js; this executes the resulting actions.
+async function runCompanyAutomations(object, before, after, companyId = activeCompanyId()) {
+  if (!after) return;
+  const rules = companyAutomations(companyId).filter((a) => a.enabled);
+  if (!rules.length) return;
+  const matched = collectAutomationActions(rules, { object, event: before ? 'updated' : 'created', before, after });
+  if (!matched.length) return;
+  const today = isoDate(0);
+  // Carry the natural contact link so an automation task attaches to the record.
+  const record = {
+    ...after,
+    __contact_id: after.contact_id || after.primary_contact_id || (object === 'contact' ? after.id : ''),
+  };
+  const created = [];
+  for (const { rule, action } of matched) {
+    if (action.type === 'create_task') {
+      const fields = buildTaskFromAction(action, record, today);
+      if (!fields) continue;
+      const saved = await createAutomationTask(companyId, fields);
+      if (saved) created.push(saved.title);
+    } else if (action.type === 'notify') {
+      showToast(fillTemplateSafe(action.message, record) || `Automation: ${rule.name}`, 'local', 'Automations');
+    }
+  }
+  if (created.length) {
+    showToast(`Automation created ${created.length === 1 ? 'a task' : `${created.length} tasks`}: ${created.join(', ')}`, 'local', 'Automations');
+    render();
+  }
+}
+
+// Local {{token}} fill so notify messages can reference the record (mirrors the
+// engine's fillTemplate without importing it for one call site).
+function fillTemplateSafe(text, record) {
+  return String(text || '').replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_, k) => {
+    const v = record ? record[k] : '';
+    return v == null ? '' : String(v);
+  });
 }
 
 function normalizeUnderwritingCase(input = {}) {
