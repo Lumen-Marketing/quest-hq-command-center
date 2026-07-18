@@ -20279,7 +20279,10 @@ button {
 .mobile-tabbar button.active { color: var(--orange); background: var(--accent-soft); }
 
 .mobile-more { display: none; }
-@media (max-width: 760px) {
+/* Must match the tab bar's breakpoint (980px, set at the end of this file), not
+   760px -- otherwise in 761-980px the "More" button toggles open but the sheet
+   stays display:none, so Settings and the secondary nav are unreachable. */
+@media (max-width: 980px) {
   .mobile-more.open { display: block; }
   .mobile-more-backdrop {
     position: fixed;
