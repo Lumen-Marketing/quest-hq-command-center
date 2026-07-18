@@ -23741,3 +23741,16 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   gap: 7px;
   white-space: nowrap;
 }
+
+/* Navigation dead zone fix.
+   The sidebar (.deck) only appears above 980px and the bottom tab bar only at
+   or below 760px, so 761-980px -- phone landscape and small tablets -- had no
+   navigation at all. About twenty overlapping .deck / .mobile-tabbar rules from
+   successive redesigns disagree across this range, so settle it here, last in
+   the file where source order wins: below the desktop sidebar breakpoint the
+   bottom tab bar IS the navigation, and the work surface leaves room for it. */
+@media (max-width: 980px) {
+  .deck { display: none; }
+  .mobile-tabbar { display: grid; }
+  .work-surface { padding-bottom: 98px; }
+}

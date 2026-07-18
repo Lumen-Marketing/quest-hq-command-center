@@ -21734,10 +21734,21 @@ function handleAction(event, node) {
   }
   if (action === 'cp-open-document-page') {
     event.preventDefault();
-    // Open the plan in its own full-screen review window (no dashboard chrome) so the
-    // drafting team can review the client's edits in full.
+    // Open the plan for review with no dashboard chrome. The fs=1 route already
+    // renders chrome-less, so a new browser tab is only a nicety on desktop.
+    // In an installed app (TWA / standalone PWA) there are no tabs, so
+    // window.open('_blank') silently fails or bounces to an external browser and
+    // the review never appears -- there, navigate in place instead.
     const reviewPath = companyPath('client-portals', { portal_id: node.dataset.portalId, document_id: node.dataset.documentId, annotate: '1', fs: '1' }, activeCompanyId());
-    window.open(appHref(reviewPath), '_blank', 'noopener');
+    const installed = window.matchMedia('(display-mode: standalone)').matches
+      || window.matchMedia('(display-mode: fullscreen)').matches
+      || window.navigator.standalone === true;
+    if (installed) {
+      navigate(reviewPath);
+    } else {
+      const win = window.open(appHref(reviewPath), '_blank', 'noopener');
+      if (!win) navigate(reviewPath); // popup blocked -> fall back to in-place
+    }
     return;
   }
   if (action === 'cp-back') {
