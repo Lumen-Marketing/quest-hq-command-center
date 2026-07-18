@@ -60,6 +60,20 @@ Installability comes from a manifest, icons, and a service worker, so the app in
 
 Navigations are network-first with the cached shell as an offline-only fallback, so a deploy is never shadowed by the cache. Only content-hashed `/assets/` files are cache-first, which is safe because a changed file is a changed URL. The API, and every cross-origin request, is not cached at all: storing authenticated responses in the Cache API would leave one user's data on the device for the next session, which is a privacy bug rather than a performance win.
 
+## Recurring tasks roll forward on completion
+
+A task can carry a recurrence rule (stored in tasks.recurrence as a compact
+string like weekly:2 or monthly:3; null = one-off). When such a task is
+completed via the normal gestures -- the row checkbox or a dashboard tile --
+the app clones it forward to its next occurrence (data/recurrence.js does the
+pure date math, anchoring each next date to the previous due date so the
+weekday/day-of-month is preserved and month-ends clamp). Completing by setting
+Status=done in the edit form intentionally does not spawn, to avoid double
+navigation on that path; the checkbox is the primary gesture. The command bar
+also understands cadence phrases ("every 6 months", "every friday") and
+pre-fills the Repeat control. reminder_at, previously stored but unused, is now
+carried forward with the series by the same day gap.
+
 ## No sensitive project-brain content
 
 The project brain records catalog metadata, architecture, decisions, and state—not credentials, user identities, row payloads, storage objects, or private operational content.

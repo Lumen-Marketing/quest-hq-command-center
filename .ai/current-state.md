@@ -29,7 +29,7 @@ Captured 2026-07-18. This is a point-in-time operational snapshot, not a substit
 - Postgres: 17.6.1.127, engine 17
 - Public catalog: 56 relations, 157 foreign-key constraints, 176 policies, 53 functions, and 41 triggers.
 - Storage: 6 buckets cataloged without object data.
-- Latest repository migration: 202607171500_task_deal_next_actions.sql
+- Latest repository migration: 202607181000_task_recurrence.sql
 - Latest live ledger entry: 20260716194836 task_deal_next_actions
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.
@@ -42,7 +42,9 @@ The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposal
 
 Future navigation entries currently include Tickets, Automations, and Templates. Verify code and product direction before treating a planned page as complete.
 
-The web app is installable. A manifest, maskable icon set, and service worker let Android Chrome install it to the home screen on phones and tablets, running standalone from `/command`. The worker is scoped narrowly on purpose: navigations are network-first, only content-hashed build assets are cached, and the API and all cross-origin traffic are never cached. There is no native Android package; a Play Store listing would mean wrapping this PWA in a Trusted Web Activity.
+The web app is installable. A manifest, maskable icon set, and service worker let Android Chrome install it to the home screen on phones and tablets, running standalone from `/command`. The worker is scoped narrowly on purpose: navigations are network-first, only content-hashed build assets are cached, and the API and all cross-origin traffic are never cached. A signed Trusted Web Activity APK/AAB (package com.questroofing.hq) wraps this PWA for sideload/Play Store; the build workspace and signing keystore live in the git-ignored twa/ folder.
+
+Tasks support recurrence: a task with a rule in tasks.recurrence rolls forward to its next occurrence when completed via the checkbox or a dashboard tile. Rules and date math live in src/data/recurrence.js; the command bar parses cadence phrases into the Repeat control.
 
 ## Freshness
 

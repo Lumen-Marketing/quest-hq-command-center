@@ -12,6 +12,8 @@
 // catches any mis-parse. Fields map 1:1 onto the app's task model:
 //   urgency ∈ critical|urgent|high|medium|low   due = YYYY-MM-DD   due_time = HH:MM|""
 
+import { recurrenceFromText, serializeRecurrence } from '../data/recurrence.js';
+
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 // Priority phrases → urgency. Longer/more-specific phrases first so "high priority"
@@ -230,11 +232,24 @@ export function parseTaskInstruction(instruction, now) {
   const assignee = extractAssignee(working);
   if (assignee) strip(assignee.match);
 
+  // Recurrence before the date, so "every friday" is read as a repeat rule
+  // rather than a one-off next-Friday date.
+  const recur = recurrenceFromText(working);
+  if (recur) strip(recur.match);
+
   const time = extractTime(working);
   if (time) strip(time.match);
 
   const date = extractDate(working, now);
   if (date) strip(date.match);
+
+  // A weekday rule ("every friday") with no explicit date seeds its first due
+  // date to the next occurrence of that weekday.
+  let due = date ? date.iso : '';
+  if (!due && recur && Number.isInteger(recur.rule.weekday)) {
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    due = toISODate(addDays(today, (recur.rule.weekday - today.getDay() + 7) % 7));
+  }
 
   // If stripping metadata leaves nothing, the instruction was date/time/urgency
   // only — "New task" is more honest than echoing the leftover date word.
@@ -242,11 +257,12 @@ export function parseTaskInstruction(instruction, now) {
 
   return {
     title,
-    due: date ? date.iso : '',
+    due,
     due_time: time ? time.time : '',
     urgency: urgency ? urgency.urgency : 'medium',
     assignee: assignee ? assignee.name : '',
-    found: { date: !!date, time: !!time, urgency: !!urgency, assignee: !!assignee },
+    recurrence: recur ? serializeRecurrence(recur.rule) : '',
+    found: { date: !!date, time: !!time, urgency: !!urgency, assignee: !!assignee, recurrence: !!recur },
     raw,
   };
 }

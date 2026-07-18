@@ -143,7 +143,6 @@
 .ti-device-mobile:before{content:"\ea8a"}
 .ti-device-mobile-filled:before{content:"\fa39"}
 .ti-dots:before{content:"\ea95"}
-.ti-dots-vertical:before{content:"\ea94"}
 .ti-download:before{content:"\ea96"}
 .ti-edit:before{content:"\ea98"}
 .ti-external-link:before{content:"\ea99"}
@@ -287,6 +286,7 @@
 .ti-receipt-dollar:before{content:"\fd67"}
 .ti-recycle:before{content:"\eb9b"}
 .ti-refresh:before{content:"\eb13"}
+.ti-repeat:before{content:"\eb72"}
 .ti-report:before{content:"\eece"}
 .ti-report-analytics:before{content:"\eecb"}
 .ti-restore:before{content:"\fafd"}

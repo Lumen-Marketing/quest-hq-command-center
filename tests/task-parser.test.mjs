@@ -72,14 +72,33 @@ test('composes date + time + urgency + title from one instruction', () => {
   assert.equal(r.due, '2026-07-16');
   assert.equal(r.due_time, '14:00');
   assert.equal(r.urgency, 'urgent');
-  assert.deepEqual(r.found, { date: true, time: true, urgency: true, assignee: false });
+  assert.deepEqual(r.found, { date: true, time: true, urgency: true, assignee: false, recurrence: false });
 });
 
 test('reports which fields were explicit vs defaulted', () => {
   const r = parse('call the roofer');
   assert.equal(r.due, '');
   assert.equal(r.due_time, '');
-  assert.deepEqual(r.found, { date: false, time: false, urgency: false, assignee: false });
+  assert.deepEqual(r.found, { date: false, time: false, urgency: false, assignee: false, recurrence: false });
+});
+
+test('captures a recurrence rule and strips it from the title', () => {
+  const r = parse('inspect the Henderson roof every 6 months');
+  assert.equal(r.recurrence, 'monthly:6');
+  assert.equal(r.found.recurrence, true);
+  assert.match(r.title, /Inspect the Henderson roof/);
+  assert.doesNotMatch(r.title, /every|month/i);
+});
+
+test('a weekday recurrence seeds the first due date to that weekday', () => {
+  // NOW is 2026-07-15 (a Wednesday); the next Friday is 2026-07-17.
+  const r = parse('site check every friday');
+  assert.equal(r.recurrence, 'weekly:1:5');
+  assert.equal(r.due, '2026-07-17');
+});
+
+test('a one-off task has no recurrence', () => {
+  assert.equal(parse('call the roofer tomorrow').recurrence, '');
 });
 
 test('extracts an explicit assignee and strips it from the title', () => {

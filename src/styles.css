@@ -23757,3 +23757,13 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   .mobile-tabbar { display: grid; }
   .work-surface { padding-bottom: 98px; }
 }
+
+/* Recurring-task chip in task rows. */
+.task-repeat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--info, #2563eb);
+  font-weight: 600;
+}
+.task-repeat-badge .ti { font-size: 13px; }

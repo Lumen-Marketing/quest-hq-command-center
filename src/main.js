@@ -14,6 +14,7 @@ import { searchHelp, HELP_TOPICS } from './assistant/help-index.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
+import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDueDate } from './data/recurrence.js';
 import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
 import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
 
@@ -8127,6 +8128,55 @@ async function createContactTask(contactId, taskInput) {
   return savedTask;
 }
 
+// When a task carrying a recurrence rule is completed, clone it forward so the
+// series continues. Pure date math lives in data/recurrence.js; this only
+// reshapes and persists the next occurrence. Returns the new task, or null when
+// there is no rule, no permission, or the insert fails.
+async function spawnNextRecurrence(task) {
+  const rule = deserializeRecurrence(task && task.recurrence);
+  if (!rule) return null;
+  const companyId = task.company_id || activeCompanyId();
+  if (!can('tasks.manage', companyId)) return null; // never create on behalf of a role that cannot
+  const anchor = String(task.due || '').slice(0, 10) || isoDate(0);
+  const nextDue = nextDueDate(rule, anchor);
+  if (!nextDue) return null;
+
+  // Carry a reminder forward by the same gap, so a "remind me 2 days before"
+  // stays 2 days before the new due date.
+  let reminderAt = null;
+  if (task.reminder_at) {
+    const shiftDays = Math.round((Date.parse(`${nextDue}T00:00:00Z`) - Date.parse(`${anchor}T00:00:00Z`)) / 86400000);
+    const shifted = new Date(Date.parse(task.reminder_at) + shiftDays * 86400000);
+    if (!Number.isNaN(shifted.getTime())) reminderAt = shifted.toISOString();
+  }
+
+  const next = normalizeTask({
+    ...task,
+    id: `task-${crypto.randomUUID()}`,
+    company_id: companyId,
+    creator_id: activeTaskCreatorId(companyId) || task.creator_id,
+    status: 'todo',
+    due: nextDue,
+    recurrence: task.recurrence,
+    reminder_at: reminderAt,
+    subtasks: Array.isArray(task.subtasks) ? task.subtasks.map((s) => ({ ...s, done: false })) : [],
+    activity: [],
+    completed_at: null,
+    cleared_at: null,
+    updated_at: new Date().toISOString(),
+  });
+
+  const client = createSupabaseClient();
+  let saved = next;
+  if (client && isLiveSupabaseSession()) {
+    const result = await safeSupabaseQuery(client.from('tasks').insert(taskPayload(next)).select().single());
+    if (result.error) { notifySyncFailure(result.error, 'Recurring task'); return null; }
+    if (result.data) saved = normalizeTask(result.data);
+  }
+  upsertTask(saved);
+  return saved;
+}
+
 async function logContactActivity(contactId, type, subject, body = '') {
   const contact = contactById(contactId);
   if (!contact) return;
@@ -8300,6 +8350,7 @@ function renderSfTaskRow(task, options = {}) {
           ${task.due ? `<span><i class="ti ti-calendar"></i>${h(formatDate(task.due))}</span>` : ''}
           ${task.due_time ? `<span><i class="ti ti-clock"></i>${h(formatTime(task.due_time))}</span>` : ''}
           <span>${h(titleCase(task.priority))}</span>
+          ${recurrenceBadge(task.recurrence)}
         </span>
         ${task.description ? `<span class="sf-task-details">${h(task.description)}</span>` : ''}
       </span>
@@ -8370,6 +8421,7 @@ async function toggleContactTask(taskId) {
   const task = taskById(taskId);
   if (!task) return;
   const status = task.status === 'done' ? 'todo' : 'done';
+  const completing = status === 'done';
   upsertTask({ ...task, status, updated_at: new Date().toISOString() });
   render();
   const client = createSupabaseClient();
@@ -8388,6 +8440,11 @@ async function toggleContactTask(taskId) {
       render();
       return false;
     }
+  }
+  // Completing a recurring task rolls the series forward to its next occurrence.
+  if (completing && task.recurrence) {
+    const next = await spawnNextRecurrence({ ...task, status: 'done' });
+    if (next) { showToast(`Next up ${formatDate(next.due)}: ${next.title}`, 'local', 'Recurring'); render(); }
   }
   return true;
 }
@@ -10015,6 +10072,31 @@ function renderTaskDeleteModal() {
   return renderModalShell('Task', 'Delete task', content, '');
 }
 
+// A compact "repeats" chip for a task row. Empty string when the task is one-off.
+function recurrenceBadge(recurrence) {
+  const label = describeRecurrence(recurrence);
+  if (!label) return '';
+  return `<span class="task-repeat-badge" title="${h(label)}"><i class="ti ti-repeat" aria-hidden="true"></i>${h(label)}</span>`;
+}
+
+// Options for the task "Repeat" dropdown. Includes the task's current rule even
+// when it's an uncommon one (e.g. a weekday variant from the command bar), so
+// editing a task never silently drops its recurrence.
+function recurrenceSelectOptions(current) {
+  const base = [
+    ['', 'Does not repeat'],
+    ['daily:1', 'Every day'],
+    ['weekly:1', 'Every week'],
+    ['weekly:2', 'Every 2 weeks'],
+    ['monthly:1', 'Every month'],
+    ['monthly:3', 'Every 3 months'],
+    ['yearly:1', 'Every year'],
+  ];
+  const cur = current ? serializeRecurrence(deserializeRecurrence(current)) : '';
+  if (cur && !base.some(([value]) => value === cur)) base.push([cur, describeRecurrence(cur)]);
+  return base;
+}
+
 function renderTaskForm(companyId, job, task) {
   const edit = task || blankTask(companyId, job?.id || '');
   return `
@@ -10034,6 +10116,7 @@ function renderTaskForm(companyId, job, task) {
       ${selectField('Assignee', 'assignee_id', edit.assignee_id, companyTaskAssignees(companyId).map((item) => [item.id, item.name]))}
       ${field('Due date', 'due', edit.due || isoDate(1), true, 'date')}
       ${field('Due time', 'due_time', edit.due_time || '', false, 'time')}
+      ${selectField('Repeat', 'recurrence', edit.recurrence || '', recurrenceSelectOptions(edit.recurrence))}
       ${textareaField('Description', 'description', edit.description)}
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">Save task</button>
@@ -11857,6 +11940,10 @@ async function wbTileToggleTask(companyId, taskId) {
   }
   upsertTask(updated);
   notifyTaskChange(updated, task);
+  if (updated.status === 'done' && task.recurrence) {
+    const next = await spawnNextRecurrence({ ...task, status: 'done' });
+    if (next) showToast(`Next up ${formatDate(next.due)}: ${next.title}`, 'local', 'Recurring');
+  }
   render();
 }
 // Create a task from the tile's inline add form (stays on the dashboard).
@@ -20980,6 +21067,7 @@ async function submitCommandTask(form) {
       due: form.elements.due?.value || '',
       due_time: form.elements.due_time?.value || '',
       urgency: form.elements.priority?.value || 'medium',
+      recurrence: form.elements.recurrence?.value || '',
       found: { date: false, time: false, urgency: false },
     };
     render();
@@ -21191,6 +21279,12 @@ function renderCommandTaskForm(draft) {
           </select>
         </label>
       </div>
+      <label class="command-field">
+        <span>Repeat</span>
+        <select name="recurrence">
+          ${recurrenceSelectOptions(draft.recurrence).map(([value, label]) => `<option value="${h(value)}" ${value === (draft.recurrence || '') ? 'selected' : ''}>${h(label)}</option>`).join('')}
+        </select>
+      </label>
       ${assignee}
       ${linkedContact}
       <div class="command-task-actions">
@@ -32520,6 +32614,9 @@ function normalizeTask(input) {
     due: String(input.due || isoDate(1)).slice(0, 10),
     due_time: input.due_time || null,
     reminder_at: input.reminder_at || null,
+    // Normalize through the rule parser so only a valid rule persists; anything
+    // else (empty, garbage) becomes null = one-off.
+    recurrence: (() => { const r = deserializeRecurrence(input.recurrence); return r ? serializeRecurrence(r) : null; })(),
     priority,
     urgency: TASK_PRIORITIES.includes(String(input.urgency || '').toLowerCase()) ? String(input.urgency).toLowerCase() : priority,
     status,
@@ -33298,6 +33395,7 @@ function taskPayload(task) {
     due: task.due,
     due_time: task.due_time,
     reminder_at: task.reminder_at,
+    recurrence: task.recurrence || null,
     priority: task.priority,
     urgency: task.urgency,
     status: task.status,
