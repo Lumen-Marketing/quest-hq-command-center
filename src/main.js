@@ -827,7 +827,7 @@ const DASHBOARD_WIDGET_DEFAULTS = {
   eos: ['rocks', 'scorecard', 'oneYearPlan', 'l10pulse', 'issues', 'todos', 'peopleAnalyzer', 'eosComponents', 'coreValues'],
 };
 
-const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings']);
+const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings', 'automations']);
 const PRIVATE_PLUGIN_ACCESS = {
   crm_2: {
     label: 'Quest CRM',
@@ -850,7 +850,6 @@ const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'approvals', label: 'Approvals', summary: 'Review queues for handoffs, forms, and access.', icon: 'ti-user-check', module_ids: ['approvals'], permissions: ['approvals.view', 'approvals.manage'] },
   { id: 'reporting', label: 'Reporting', summary: 'Analytics and team chart views.', icon: 'ti-chart-bar', module_ids: ['analytics', 'team-chart'], permissions: ['team.view'] },
   { id: 'tickets', label: 'Tickets', summary: 'Future service and issue tracking module.', icon: 'ti-ticket', module_ids: ['tickets'], permissions: [], comingSoon: true },
-  { id: 'automations', label: 'Automations', summary: 'Future no-code workflow automations.', icon: 'ti-automation', module_ids: ['automations'], permissions: [], comingSoon: true },
   { id: 'templates', label: 'Templates', summary: 'Future reusable workspace templates.', icon: 'ti-template', module_ids: ['templates'], permissions: [], comingSoon: true },
 ];
 const WORKSPACE_PLUGIN_PRESETS = {

@@ -8,7 +8,7 @@ const smokeScript = readFileSync(new URL('../scripts/production-smoke-lib.mjs', 
 const dashboardRepOptionsBody = source.slice(source.indexOf('function dashboardRepOptions(companyId)'), source.indexOf('function dashboardOwnerKey'));
 
 test('dashboard replaces home as the canonical core workspace route', () => {
-  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'tasks', 'users', 'settings'\]\);/);
+  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'tasks', 'users', 'settings', 'automations'\]\);/);
   assert.match(source, /\{ id: 'dashboard', group: 'Workspace', label: 'Dashboard'/);
   assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
   assert.match(source, /\{ label: 'Pipeline', ids: \['contacts'\] \}/);

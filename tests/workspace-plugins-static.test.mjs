@@ -28,7 +28,7 @@ const pluginAmbiguityMigration = pluginAmbiguityMigrationName
 const crm2RegistryEntry = source.match(/\{ id: 'crm_2'[^}]+\}/)?.[0] || '';
 
 test('plugin registry maps every non-core route to a workspace plugin', () => {
-  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'tasks', 'users', 'settings'\]\);/);
+  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'tasks', 'users', 'settings', 'automations'\]\);/);
   assert.match(source, /const WORKSPACE_PLUGIN_REGISTRY = \[/);
   assert.match(source, /id: 'crm'[\s\S]*module_ids: \['crm', 'contacts', 'deals'\]/);
   assert.match(source, /id: 'crm_2'[\s\S]*module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
