@@ -109,6 +109,36 @@ function addReason(map, id, reason) {
 }
 
 /**
+ * Split incoming rows (e.g. from a CSV) into ones to import versus ones already
+ * present, matching existing contacts by email or phone. Also dedupes within the
+ * incoming batch, so a file that lists the same person twice imports them once.
+ * Keeps import from re-creating the duplicates the finder would then clean up.
+ * @returns {{ toImport: object[], duplicates: object[] }}
+ */
+export function partitionImport(incoming, existing) {
+  const emails = new Set();
+  const phones = new Set();
+  for (const c of Array.isArray(existing) ? existing : []) {
+    const e = normalizeEmail(c && c.email); if (e) emails.add(e);
+    const p = normalizePhone(c && c.phone); if (p) phones.add(p);
+  }
+  const toImport = [];
+  const duplicates = [];
+  for (const row of Array.isArray(incoming) ? incoming : []) {
+    const e = normalizeEmail(row && row.email);
+    const p = normalizePhone(row && row.phone);
+    if ((e && emails.has(e)) || (p && phones.has(p))) {
+      duplicates.push(row);
+    } else {
+      toImport.push(row);
+      if (e) emails.add(e); // guard against repeats later in the same file
+      if (p) phones.add(p);
+    }
+  }
+  return { toImport, duplicates };
+}
+
+/**
  * Merge duplicate records into a survivor: keep the survivor's values, fill only
  * its BLANK fields from the others (first non-empty wins). Pure -- returns the
  * merged field object; the caller persists it and reassigns foreign links.

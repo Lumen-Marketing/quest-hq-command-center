@@ -16,7 +16,7 @@ import { computeTeamWorkload } from './data/team-workload.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
 import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDueDate } from './data/recurrence.js';
 import { collectAutomationActions, buildTaskFromAction, describeAutomation, AUTOMATION_OBJECTS } from './data/automations.js';
-import { findDuplicateGroups, mergeContactFields } from './data/dedupe.js';
+import { findDuplicateGroups, mergeContactFields, partitionImport } from './data/dedupe.js';
 import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
 import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
 
@@ -7842,10 +7842,14 @@ function importContactsFromFile() {
     const parsed = parseContactsCsv(text);
     if (!parsed.length) { showToast('No contacts found. Use a CSV with a header row (Name, Email, Phone).', 'local', 'Contacts'); return; }
     const companyId = activeCompanyId();
-    for (const c of parsed) {
+    // Skip rows that match a contact already here (by email/phone), and collapse
+    // repeats within the file, so import doesn't manufacture duplicates.
+    const { toImport, duplicates } = partitionImport(parsed, companyContacts(companyId));
+    for (const c of toImport) {
       await persistContact(normalizeContact({ id: `contact-${crypto.randomUUID()}`, company_id: companyId, name: c.name, email: c.email, phone: c.phone, title: c.title, stage: contactStageNames()[0], value: 0 }));
     }
-    showToast(`Imported ${parsed.length} contact${parsed.length === 1 ? '' : 's'}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+    const skipped = duplicates.length ? `, skipped ${duplicates.length} already in your contacts` : '';
+    showToast(`Imported ${toImport.length} contact${toImport.length === 1 ? '' : 's'}${skipped}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
   });
   input.click();
 }

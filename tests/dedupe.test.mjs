@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   normalizeEmail, normalizePhone, normalizeName,
-  findDuplicateGroups, mergeContactFields,
+  findDuplicateGroups, mergeContactFields, partitionImport,
 } from '../src/data/dedupe.js';
 
 test('phone normalizes to the last 10 digits, or empty when too short', () => {
@@ -80,6 +80,40 @@ test('strong groups sort before weak ones', () => {
   assert.equal(groups.length, 2);
   assert.equal(groups[0].strong, true); // email group first
   assert.equal(groups[1].strong, false);
+});
+
+test('partitionImport skips rows already present by email or phone', () => {
+  const existing = [
+    { id: '1', name: 'Bob H', email: 'bob@x.com', phone: '602-555-0198' },
+    { id: '2', name: 'Ann', email: 'ann@x.com', phone: '' },
+  ];
+  const incoming = [
+    { name: 'Bob Henderson', email: 'BOB@x.com', phone: '' },        // dup by email
+    { name: 'Someone', email: '', phone: '(602) 555-0198' },          // dup by phone
+    { name: 'New Person', email: 'new@x.com', phone: '480-111-2222' }, // new
+  ];
+  const { toImport, duplicates } = partitionImport(incoming, existing);
+  assert.deepEqual(toImport.map((r) => r.name), ['New Person']);
+  assert.equal(duplicates.length, 2);
+});
+
+test('partitionImport dedupes within the incoming batch itself', () => {
+  const { toImport, duplicates } = partitionImport([
+    { name: 'A', email: 'same@x.com', phone: '' },
+    { name: 'A again', email: 'same@x.com', phone: '' },
+    { name: 'B', email: 'b@x.com', phone: '' },
+  ], []);
+  assert.deepEqual(toImport.map((r) => r.name), ['A', 'B']);
+  assert.equal(duplicates.length, 1);
+});
+
+test('partitionImport imports rows with no email/phone (nothing to match on)', () => {
+  const { toImport, duplicates } = partitionImport([
+    { name: 'No Contact Info', email: '', phone: '' },
+    { name: 'Also None', email: '', phone: '' },
+  ], [{ id: '1', name: 'X', email: 'x@x.com', phone: '111-222-3333' }]);
+  assert.equal(toImport.length, 2); // can't be judged duplicates, so they come in
+  assert.equal(duplicates.length, 0);
 });
 
 test('mergeContactFields fills only blank survivor fields, first non-empty wins', () => {
