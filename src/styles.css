@@ -23471,6 +23471,80 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   min-width: 0;
 }
 
+.company-account-header {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 42px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 7px 8px;
+}
+
+.company-account-header > .workspace-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+.company-account-copy,
+.company-account-copy strong,
+.company-account-copy small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-account-copy strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.company-account-copy small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.company-account-switcher {
+  position: relative;
+  display: grid;
+  width: 24px;
+  height: 28px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.company-account-switcher:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.company-account-switcher select {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.company-account-switcher i {
+  font-size: 15px;
+  pointer-events: none;
+}
+
 .workspace-rail-head {
   display: flex;
   align-items: center;
@@ -23499,6 +23573,12 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .workspace-rail-list {
   display: grid;
   gap: 2px;
+}
+
+.workspace-rail-empty {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .workspace-rail-item {
@@ -23619,12 +23699,21 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 
 .sidebar-collapsed .workspace-rail-head,
+.sidebar-collapsed .company-account-copy,
+.sidebar-collapsed .company-account-switcher,
 .sidebar-collapsed .workspace-rail-item:not(.active),
 .sidebar-collapsed .workspace-rail-copy,
 .sidebar-collapsed .workspace-rail-check,
 .sidebar-collapsed .workspace-rail-more,
 .sidebar-collapsed .workspace-rail-actions {
   display: none;
+}
+
+.sidebar-collapsed .company-account-header {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 3px 8px;
 }
 
 .sidebar-collapsed .workspace-rail-item.active {

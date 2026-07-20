@@ -3754,25 +3754,44 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
   const deckMode = extraClass.split(' ').includes('deck-company-select');
   const className = ['company-switch', extraClass, companies.length <= 1 ? 'single-company' : ''].filter(Boolean).join(' ');
   if (deckMode && interactive) {
-    const visibleCompanies = state.workspaceMenuOpen ? menuCompanies : menuCompanies.slice(0, WORKSPACE_RAIL_VISIBLE_LIMIT);
-    const hasMore = menuCompanies.length > WORKSPACE_RAIL_VISIBLE_LIMIT;
+    const workspaces = allowedOperationalWorkspaces(current.id);
+    const currentWorkspaceId = activeWorkspaceId();
+    const visibleWorkspaces = state.workspaceMenuOpen ? workspaces : workspaces.slice(0, WORKSPACE_RAIL_VISIBLE_LIMIT);
+    const hasMore = workspaces.length > WORKSPACE_RAIL_VISIBLE_LIMIT;
+    const canManageWorkspaces = canManageOperationalWorkspaces(current.id);
     return `
-      <section class="workspace-rail workspace-menu ${state.workspaceMenuOpen ? 'open' : ''}" aria-label="Workspaces">
+      <section class="workspace-rail workspace-menu ${state.workspaceMenuOpen ? 'open' : ''}" aria-label="${h(companyLabel(current))} workspaces">
+        <div class="company-account-header" data-company-account-id="${h(current.id)}">
+          ${workspaceIconMarkup(current, 'company-account-icon')}
+          <span class="company-account-copy">
+            <strong>${h(companyLabel(current))}</strong>
+            <small>Company account</small>
+          </span>
+          ${companies.length > 1 ? `
+            <label class="company-account-switcher" title="Switch company account">
+              <span class="sr-only">Switch company account</span>
+              <select data-company-switch aria-label="Active company account">
+                ${menuCompanies.map((company) => `<option value="${h(company.id)}" ${company.id === current.id ? 'selected' : ''}>${h(companyLabel(company))}</option>`).join('')}
+              </select>
+              <i class="ti ti-selector" aria-hidden="true"></i>
+            </label>
+          ` : ''}
+        </div>
         <div class="workspace-rail-head">
           <strong>Workspaces</strong>
-          <span>${companies.length}</span>
+          <span>${workspaces.length}</span>
         </div>
         <div class="workspace-rail-list">
-          ${visibleCompanies.map((company) => `
-            <button class="workspace-rail-item ${company.id === companyId ? 'active' : ''}" type="button" data-action="select-workspace" data-company-id="${h(company.id)}" aria-label="Open ${h(companyLabel(company))} workspace" aria-current="${company.id === companyId ? 'true' : 'false'}">
-              ${workspaceIconMarkup(company)}
+          ${visibleWorkspaces.map((workspace) => `
+            <button class="workspace-rail-item ${workspace.id === currentWorkspaceId ? 'active' : ''}" type="button" data-action="select-workspace" data-workspace-id="${h(workspace.id)}" aria-label="Open ${h(workspace.name)} workspace" aria-current="${workspace.id === currentWorkspaceId ? 'true' : 'false'}">
+              ${workspaceIconMarkup(workspace)}
               <span class="workspace-rail-copy">
-                <strong>${h(companyLabel(company))}</strong>
-                <small>${h(roleForCompany(company.id))}</small>
+                <strong>${h(workspace.name)}</strong>
+                <small>${h(workspaceRoleLabel(workspace.id))}</small>
               </span>
               <i class="ti ti-check workspace-rail-check" aria-hidden="true"></i>
             </button>
-          `).join('')}
+          `).join('') || '<div class="workspace-rail-empty">No workspace assigned</div>'}
         </div>
         ${hasMore ? `
           <button class="workspace-rail-more" type="button" data-action="toggle-workspace-menu" aria-expanded="${state.workspaceMenuOpen ? 'true' : 'false'}">
@@ -3780,10 +3799,12 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
             <span>${state.workspaceMenuOpen ? 'Show fewer' : 'More workspaces'}</span>
           </button>
         ` : ''}
-        <div class="workspace-rail-actions">
-          <a href="${appHref(companyPath('settings', { tab: 'company', focus: 'create-workspace' }, companyId))}" data-router><i class="ti ti-plus" aria-hidden="true"></i>Create workspace</a>
-          <a href="${appHref(companyPath('settings', { tab: 'company' }, companyId))}" data-router><i class="ti ti-settings" aria-hidden="true"></i>Manage workspaces</a>
-        </div>
+        ${canManageWorkspaces ? `
+          <div class="workspace-rail-actions">
+            <a href="${appHref(companyPath('settings', { tab: 'company', focus: 'create-operational-workspace' }, current.id))}" data-router><i class="ti ti-plus" aria-hidden="true"></i>Create workspace</a>
+            <a href="${appHref(companyPath('settings', { tab: 'company' }, current.id))}" data-router><i class="ti ti-settings" aria-hidden="true"></i>Manage workspaces</a>
+          </div>
+        ` : ''}
       </section>
     `;
   }
@@ -22361,7 +22382,7 @@ function handleAction(event, node) {
   if (action === 'select-workspace') {
     event.preventDefault();
     state.workspaceMenuOpen = false;
-    setActiveCompany(node.dataset.companyId || defaultCompanyId());
+    setActiveWorkspace(node.dataset.workspaceId);
     return;
   }
   if (action === 'toggle-mobile-menu') {
@@ -32808,6 +32829,25 @@ function activeWorkspaceId() {
 function activeWorkspace() {
   const id = activeWorkspaceId();
   return state.operationalWorkspaces.find((workspace) => workspace.id === id) || null;
+}
+
+function workspaceRoleLabel(workspaceId) {
+  const workspace = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
+  if (!workspace) return 'No access';
+  const companyRole = companyRoleForWorkspaceAccess(workspace.company_id);
+  if (['owner', 'admin', 'developer'].includes(companyRole)) return `${titleCase(companyRole)} access`;
+  const membership = state.workspaceMemberships.find((item) => (
+    item.workspace_id === workspace.id
+    && item.profile_id === activeSession().profile.id
+    && item.status === 'active'
+  ));
+  const role = state.roles.find((item) => item.id === membership?.role_id && item.company_id === workspace.company_id);
+  return role?.name || 'Member';
+}
+
+function canManageOperationalWorkspaces(companyId = activeCompanyId()) {
+  const role = companyRoleForWorkspaceAccess(companyId);
+  return ['owner', 'admin', 'developer'].includes(role) || can('settings.manage', companyId);
 }
 
 function defaultOperationalWorkspaceId(companyId = activeCompanyId()) {
