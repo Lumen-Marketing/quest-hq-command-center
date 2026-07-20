@@ -43,6 +43,7 @@ supabase/.temp/
 # Local assistant/session notes
 .claude/
 handoff.md
+.worktrees/
 
 # Editor and OS files
 .DS_Store
