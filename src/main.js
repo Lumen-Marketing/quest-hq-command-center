@@ -863,6 +863,7 @@ const WORKSPACE_PLUGIN_PRESET_LABELS = {
   generic: 'Generic services',
 };
 const WORKSPACE_SELF_CREATE_LIMIT = 3;
+const WORKSPACE_RAIL_VISIBLE_LIMIT = 6;
 const WORKSPACE_ICON_UPLOAD_MAX_BYTES = 220 * 1024;
 const WORKSPACE_ICON_OPTIONS = [
   { key: 'home', icon: 'ti-home-filled', label: 'Home' },
@@ -3699,34 +3700,45 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
   const interactive = options.interactive !== false;
   const deckMode = extraClass.split(' ').includes('deck-company-select');
   const className = ['company-switch', extraClass, companies.length <= 1 ? 'single-company' : ''].filter(Boolean).join(' ');
+  if (deckMode && interactive) {
+    const visibleCompanies = state.workspaceMenuOpen ? menuCompanies : menuCompanies.slice(0, WORKSPACE_RAIL_VISIBLE_LIMIT);
+    const hasMore = menuCompanies.length > WORKSPACE_RAIL_VISIBLE_LIMIT;
+    return `
+      <section class="workspace-rail workspace-menu ${state.workspaceMenuOpen ? 'open' : ''}" aria-label="Workspaces">
+        <div class="workspace-rail-head">
+          <strong>Workspaces</strong>
+          <span>${companies.length}</span>
+        </div>
+        <div class="workspace-rail-list">
+          ${visibleCompanies.map((company) => `
+            <button class="workspace-rail-item ${company.id === companyId ? 'active' : ''}" type="button" data-action="select-workspace" data-company-id="${h(company.id)}" aria-label="Open ${h(companyLabel(company))} workspace" aria-current="${company.id === companyId ? 'true' : 'false'}">
+              ${workspaceIconMarkup(company)}
+              <span class="workspace-rail-copy">
+                <strong>${h(companyLabel(company))}</strong>
+                <small>${h(roleForCompany(company.id))}</small>
+              </span>
+              <i class="ti ti-check workspace-rail-check" aria-hidden="true"></i>
+            </button>
+          `).join('')}
+        </div>
+        ${hasMore ? `
+          <button class="workspace-rail-more" type="button" data-action="toggle-workspace-menu" aria-expanded="${state.workspaceMenuOpen ? 'true' : 'false'}">
+            <i class="ti ti-chevron-down" aria-hidden="true"></i>
+            <span>${state.workspaceMenuOpen ? 'Show fewer' : 'More workspaces'}</span>
+          </button>
+        ` : ''}
+        <div class="workspace-rail-actions">
+          <a href="${appHref(companyPath('settings', { tab: 'company', focus: 'create-workspace' }, companyId))}" data-router><i class="ti ti-plus" aria-hidden="true"></i>Create workspace</a>
+          <a href="${appHref(companyPath('settings', { tab: 'company' }, companyId))}" data-router><i class="ti ti-settings" aria-hidden="true"></i>Manage workspaces</a>
+        </div>
+      </section>
+    `;
+  }
   if (companies.length <= 1 || !interactive) {
     return `
       <div class="${h(className)}" aria-label="Active company">
         ${workspaceIconMarkup(current)}
         <span class="company-switch-copy"><strong>${h(companyLabel(current))}</strong>${deckMode ? `<small>${h(roleForCompany(companyId))} workspace</small>` : ''}</span>
-      </div>
-    `;
-  }
-  if (deckMode) {
-    return `
-      <div class="${h(className)} workspace-menu ${state.workspaceMenuOpen ? 'open' : ''}">
-        <button class="workspace-menu-trigger" type="button" data-action="toggle-workspace-menu" aria-label="Switch workspace" aria-expanded="${state.workspaceMenuOpen ? 'true' : 'false'}">
-          ${workspaceIconMarkup(current)}
-          <span class="company-switch-copy">
-            <strong>${h(companyLabel(current))}</strong>
-            <small>${h(roleForCompany(companyId))} workspace</small>
-          </span>
-          <i class="ti ti-chevron-down"></i>
-        </button>
-        <div class="workspace-menu-popover">
-          ${menuCompanies.map((company) => `
-            <button class="workspace-menu-option ${company.id === companyId ? 'active' : ''}" type="button" data-action="select-workspace" data-company-id="${h(company.id)}">
-              ${workspaceIconMarkup(company)}
-              <span><strong>${h(companyLabel(company))}</strong><small>${h(roleForCompany(company.id))} workspace</small></span>
-              ${company.id === companyId ? '<i class="ti ti-check"></i>' : ''}
-            </button>
-          `).join('')}
-        </div>
       </div>
     `;
   }
@@ -16203,7 +16215,7 @@ function renderWorkspaceSettings(companyId) {
     </article>
     <article class="panel">
       <div class="section-head"><div><h2>Create another workspace</h2><p>${h(isQuestDeveloper() ? 'Platform owners can create unlimited workspaces.' : workspaceLimitMessage())}</p></div></div>
-      <form class="workspace-create-mini" data-company-create-form>
+      <form class="workspace-create-mini" id="create-workspace" data-company-create-form>
         <label>Workspace name<input name="company_name" placeholder="New company workspace" required ${canCreate ? '' : 'disabled'} /></label>
         ${workspacePresetSelect()}
         ${workspaceIconSelect()}

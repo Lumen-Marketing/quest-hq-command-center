@@ -8,6 +8,10 @@ The canonical context lives in .ai rather than a vendor-specific instruction fil
 
 The operating workflow does not use local servers. Tests and builds may run locally, but behavior is accepted against the directly deployed Vercel environment after merge.
 
+## Workspace membership is visible navigation context
+
+The desktop command rail renders every company allowed by the signed-in profile's active memberships as a workspace row. The active row is persistent rather than hidden behind a single-company dropdown. Workspace switching continues through `setActiveCompany()` so route preservation, scoped UI reset, and company-specific pipeline stage application remain centralized. Workspace creation and identity management remain on the Company settings surface.
+
 ## Supabase is production data truth
 
 Repository migrations explain intended history; the live Supabase catalog determines the current production shape. Database documentation is a metadata-only snapshot and must be refreshed after database changes.
