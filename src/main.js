@@ -2575,6 +2575,7 @@ function render() {
   queueMicrotask(mountWorkspaceBuilder);
   queueMicrotask(mountFileViewer);
   queueMicrotask(mountDashboardWidgetDnD);
+  queueMicrotask(mountContactSmsThread);
 }
 
 function openNativeTimePicker(input) {
@@ -7279,7 +7280,7 @@ function renderContactRecord(companyId, contact) {
     </div>
   `;
 
-  const workspaceTabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Activity', 'ti-activity']];
+  const workspaceTabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Messages', 'ti-message'], ['Activity', 'ti-activity']];
   const quickTiles = [['Task', 'ti-checkbox'], ['Meeting', 'ti-calendar'], ['Estimate', 'ti-calculator'], ['Proposal', 'ti-file-text'], ['Email', 'ti-mail'], ['Call Log', 'ti-phone']];
 
   return `
@@ -7366,7 +7367,30 @@ function renderContactRecord(companyId, contact) {
 }
 
 function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed) {
-  const tabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Activity', 'ti-activity']];
+  const tabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Messages', 'ti-message'], ['Activity', 'ti-activity']];
+  const tabBar = `<div class="sf-activity-tabs">${tabs.map(([label, ico]) => `<button class="sf-activity-tab ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}</div>`;
+
+  if (activeWorkspaceTab === 'Messages') {
+    const textable = smsNormalize(contact.phone);
+    const disabled = textable ? '' : 'disabled';
+    const hint = textable
+      ? `Texting ${h(contact.phone)}`
+      : 'Add a valid mobile number to this contact before texting.';
+    return `
+      <div class="sf-card sf-workspace-card">
+        ${tabBar}
+        <div class="sf-sms-thread" data-sms-thread data-contact-id="${h(contact.id)}">
+          <div class="sf-sms-loading">Loading messages…</div>
+        </div>
+        <form class="sf-sms-composer" data-sms-form data-contact-id="${h(contact.id)}" autocomplete="off">
+          <input name="body" placeholder="Type a text message…" ${disabled} autocomplete="off" />
+          <button type="submit" ${disabled} title="Send text" aria-label="Send text"><i class="ti ti-send"></i></button>
+        </form>
+        <div class="sf-sms-hint">${hint}</div>
+      </div>
+    `;
+  }
+
   const noteItems = filteredActivitiesFor('contact', contact.id).filter((activity) => activity.type === 'note');
   const emailItems = filteredActivitiesFor('contact', contact.id).filter((activity) => activity.type === 'email');
   const panelFeed = activeWorkspaceTab === 'Notes' ? noteItems : activeWorkspaceTab === 'Email' ? emailItems : feed;
@@ -7410,6 +7434,90 @@ function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, fee
       </div>
     </div>
   `;
+}
+
+// --- Contact SMS (SMSblast) -------------------------------------------------
+// Client mirror of api/_lib/phone.js toE164 — the UI only needs to know whether
+// a number is textable and to display the thread.
+function smsNormalize(raw) {
+  const str = String(raw ?? '').trim();
+  if (!str) return null;
+  const digits = str.replace(/\D/g, '');
+  if (!digits) return null;
+  if (str.startsWith('+')) return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  return null;
+}
+
+function renderSmsBubbles(rows) {
+  if (!rows.length) return '<div class="sf-sms-empty">No messages yet. Say hello 👋</div>';
+  return rows.map((m) => {
+    const side = m.direction === 'outbound' ? 'out' : 'in';
+    const status = m.status === 'failed' ? ' <span class="sf-sms-failed">· failed</span>' : '';
+    const when = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+    return `<div class="sf-sms-bubble ${side}"><div class="sf-sms-text">${h(m.body || '')}</div>`
+      + `<div class="sf-sms-meta">${h(when)}${status}</div></div>`;
+  }).join('');
+}
+
+async function loadContactSmsThread(contactId) {
+  const selector = (window.CSS && CSS.escape) ? CSS.escape(contactId) : contactId;
+  const container = document.querySelector(`[data-sms-thread][data-contact-id="${selector}"]`);
+  if (!container) return;
+  try {
+    const client = createSupabaseClient();
+    const { data, error } = await client
+      .from('sms_messages')
+      .select('id,direction,body,status,created_at')
+      .eq('contact_id', contactId)
+      .order('created_at', { ascending: true })
+      .limit(200);
+    if (error) throw error;
+    container.innerHTML = renderSmsBubbles(data || []);
+    container.scrollTop = container.scrollHeight;
+  } catch (error) {
+    container.innerHTML = '<div class="sf-sms-empty">Could not load messages.</div>';
+  }
+}
+
+function mountContactSmsThread() {
+  const container = document.querySelector('[data-sms-thread]');
+  if (!container) return;
+  loadContactSmsThread(container.getAttribute('data-contact-id'));
+}
+
+async function sendContactSms(contactId, text) {
+  const session = activeSession();
+  const response = await fetch('/api/sms-send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify({ contact_id: contactId, body: text }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Text could not be sent.');
+  return payload.message;
+}
+
+async function submitContactSms(form) {
+  const contactId = form.getAttribute('data-contact-id');
+  const input = form.querySelector('input[name="body"]');
+  const text = (input?.value || '').trim();
+  if (!text) return;
+  input.disabled = true;
+  try {
+    await sendContactSms(contactId, text);
+    input.value = '';
+    await loadContactSmsThread(contactId);
+  } catch (error) {
+    showToast(error.message || 'Text could not be sent.', 'local', 'Messages');
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
 }
 
 function sfFeedItem(a) {
@@ -21117,6 +21225,12 @@ function onDocumentSubmit(event) {
     saveWorkdayNextStep(event.target).catch((error) => {
       showToast(error.message || 'Could not save next step.', 'local', 'Workday');
     });
+    return;
+  }
+
+  if (event.target.matches('[data-sms-form]')) {
+    event.preventDefault();
+    submitContactSms(event.target);
     return;
   }
 
