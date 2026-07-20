@@ -218,6 +218,23 @@ create index if not exists proposal_documents_workspace_idx on public.proposal_d
 
 -- Private membership helpers avoid RLS recursion. They are safe to call from
 -- policies because they only answer questions about the current auth.uid().
+create or replace function app_private.is_company_admin(target_company_id text)
+returns boolean
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select (select auth.uid()) is not null and exists (
+    select 1
+    from public.company_memberships cm
+    where cm.company_id = target_company_id
+      and cm.profile_id = (select auth.uid())
+      and cm.status = 'active'
+      and cm.role in ('owner', 'admin', 'developer')
+  );
+$$;
+
 create or replace function app_private.is_workspace_admin(target_workspace_id uuid)
 returns boolean
 language sql
@@ -232,7 +249,7 @@ as $$
     where w.id = target_workspace_id
       and cm.profile_id = (select auth.uid())
       and cm.status = 'active'
-      and cm.role in ('owner', 'admin', 'developer', 'construction_supervisor')
+      and cm.role in ('owner', 'admin', 'developer')
   );
 $$;
 
@@ -255,7 +272,7 @@ as $$
     where w.id = target_workspace_id
       and w.status = 'active'
       and (
-        cm.role in ('owner', 'admin', 'developer', 'construction_supervisor')
+        cm.role in ('owner', 'admin', 'developer')
         or wm.profile_id is not null
       )
   );
@@ -902,6 +919,55 @@ begin
 end;
 $$;
 
+create or replace function public.update_operational_workspace(
+  target_workspace_id uuid,
+  workspace_name text,
+  workspace_description text,
+  icon_key text,
+  next_status text
+)
+returns public.workspaces
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  clean_name text := btrim(coalesce(workspace_name, ''));
+  clean_description text := left(btrim(coalesce(workspace_description, '')), 500);
+  clean_icon text := left(regexp_replace(lower(btrim(coalesce(icon_key, 'home'))), '[^a-z0-9-]+', '-', 'g'), 40);
+  clean_status text := lower(btrim(coalesce(next_status, 'active')));
+  saved public.workspaces%rowtype;
+begin
+  if (select auth.uid()) is null then raise exception 'Authentication required'; end if;
+  if not app_private.is_workspace_admin(target_workspace_id) then raise exception 'Workspace admin access required'; end if;
+  if clean_name = '' then raise exception 'Workspace name is required'; end if;
+  if clean_status not in ('active', 'archived') then raise exception 'Unsupported workspace status'; end if;
+
+  select * into saved
+  from public.workspaces w
+  where w.id = target_workspace_id
+  for update;
+  if saved.id is null then raise exception 'Workspace not found'; end if;
+  if saved.is_default and clean_status = 'archived' then raise exception 'Default workspace cannot be archived'; end if;
+
+  update public.workspaces w
+  set name = left(clean_name, 120),
+      description = clean_description,
+      icon_key = coalesce(nullif(clean_icon, ''), 'home'),
+      status = clean_status,
+      updated_at = now()
+  where w.id = target_workspace_id
+  returning * into saved;
+
+  insert into public.audit_events (company_id, actor_profile_id, event_type, target_type, target_id, details)
+  values (
+    saved.company_id, (select auth.uid()), 'workspace.updated', 'workspace', saved.id::text,
+    jsonb_build_object('workspace_id', saved.id, 'name', saved.name, 'status', saved.status)
+  );
+  return saved;
+end;
+$$;
+
 create or replace function public.set_workspace_member(
   target_workspace_id uuid,
   target_profile_id uuid,
@@ -1155,12 +1221,14 @@ end;
 $$;
 
 revoke all on function public.create_operational_workspace(text, text, text, text) from public, anon;
+revoke all on function public.update_operational_workspace(uuid, text, text, text, text) from public, anon;
 revoke all on function public.set_workspace_member(uuid, uuid, uuid, text) from public, anon;
 revoke all on function public.set_workspace_plugin(uuid, text, text) from public, anon;
 revoke all on function public.apply_workspace_plugin_preset(uuid, text) from public, anon;
 revoke all on function public.replace_workspace_pipeline_stages(uuid, text, jsonb, jsonb) from public, anon;
 revoke all on function public.replace_pipeline_stages(text, text, jsonb, jsonb) from public, anon;
 grant execute on function public.create_operational_workspace(text, text, text, text) to authenticated;
+grant execute on function public.update_operational_workspace(uuid, text, text, text, text) to authenticated;
 grant execute on function public.set_workspace_member(uuid, uuid, uuid, text) to authenticated;
 grant execute on function public.set_workspace_plugin(uuid, text, text) to authenticated;
 grant execute on function public.apply_workspace_plugin_preset(uuid, text) to authenticated;

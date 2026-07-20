@@ -4613,6 +4613,67 @@ textarea:focus {
   gap: 10px;
 }
 
+.operational-workspace-form textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.operational-workspace-directory {
+  display: grid;
+  gap: 7px;
+}
+
+.operational-workspace-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink-2);
+  padding: 7px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.operational-workspace-row:hover,
+.operational-workspace-row.active {
+  border-color: rgba(244, 93, 34, .35);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.operational-workspace-row.muted {
+  opacity: .62;
+}
+
+.operational-workspace-row .workspace-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.operational-workspace-row span,
+.operational-workspace-row strong,
+.operational-workspace-row small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operational-workspace-row strong {
+  font-size: 13px;
+}
+
+.operational-workspace-row small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .plugin-preset-row {
   display: flex;
   flex-wrap: wrap;
@@ -5170,6 +5231,59 @@ textarea:focus {
 
 .access-role-form select {
   min-width: 0;
+}
+
+.workspace-access-grid {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  margin-top: 3px;
+  border-top: 1px solid var(--border);
+  padding-top: 9px;
+}
+
+.workspace-access-grid > strong {
+  color: var(--ink-2);
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.workspace-access-assignment {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) minmax(120px, 170px);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border-radius: 7px;
+  background: var(--surface);
+  padding: 6px 8px;
+}
+
+.workspace-access-assignment span,
+.workspace-access-assignment b,
+.workspace-access-assignment small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-access-assignment b {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.workspace-access-assignment small {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.workspace-access-assignment select {
+  min-width: 0;
+  height: 32px;
 }
 
 .access-request-row > div:last-child,
@@ -11754,6 +11868,14 @@ button.side-item {
     display: grid;
     grid-template-columns: 1fr;
     justify-content: stretch;
+  }
+
+  .workspace-access-assignment {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .workspace-access-assignment select {
+    grid-column: 2;
   }
 
   .drive-compact-controls select,

@@ -10988,6 +10988,7 @@ function renderUsersPage(route, companyId) {
               <strong>${h(userDisplayName(user))}</strong>
               <span>${h(userDisplayMeta(user))}</span>
               <small>${h(user.role_label)} / ${h(titleCase(user.status))}</small>
+              <small>${h(workspaceAccessSummaryForUser(companyId, user))}</small>
             </div>
           </article>
         `).join('') || emptyState('No users assigned to this company yet.')}
@@ -11033,9 +11034,11 @@ function renderUsersPage(route, companyId) {
 
 function renderUserAccessRow(companyId, user, canManageUsers) {
   const roles = companyRoles(companyId);
+  const workspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
   const selectedRoleId = user.role_id || roleIdForName(companyId, user.role) || roles[0]?.id || '';
   const isProtectedOwner = user.profile_id && isLastActiveOwner(companyId, user.profile_id);
   const canEditUser = canManageUsers && user.profile_id && !isProtectedOwner;
+  const implicitWorkspaceAccess = ['owner', 'admin', 'developer'].includes(String(user.role || '').toLowerCase());
   return `
     <article class="access-user-row ${user.status !== 'active' ? 'muted' : ''}">
       ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
@@ -11053,7 +11056,26 @@ function renderUserAccessRow(companyId, user, canManageUsers) {
         <select name="membership_status" ${canEditUser ? '' : 'disabled'}>
           ${['active', 'pending', 'disabled', 'left'].map((status) => `<option value="${h(status)}" ${status === user.status ? 'selected' : ''}>${h(titleCase(status))}</option>`).join('')}
         </select>
-        <button class="btn" type="submit" ${canEditUser ? '' : 'disabled'}>Save</button>
+        <div class="workspace-access-grid">
+          <strong>Workspace assignments</strong>
+          ${workspaces.map((workspace) => {
+            const membership = workspaceMembershipForProfile(workspace.id, user.profile_id);
+            const enabled = implicitWorkspaceAccess || membership?.status === 'active';
+            const workspaceRoleId = membership?.role_id || selectedRoleId;
+            const assignmentEditable = canEditUser && !implicitWorkspaceAccess;
+            return `
+              <label class="workspace-access-assignment" data-workspace-assignment>
+                <input type="checkbox" name="workspace_ids" value="${h(workspace.id)}" ${enabled ? 'checked' : ''} ${assignmentEditable ? '' : 'disabled'} />
+                ${implicitWorkspaceAccess && enabled ? `<input type="hidden" name="workspace_ids" value="${h(workspace.id)}" />` : ''}
+                <span><b>${h(workspace.name)}</b><small>${h(implicitWorkspaceAccess ? 'Inherited from company role' : workspace.is_default ? 'Default workspace' : 'Explicit assignment')}</small></span>
+                <select name="workspace_role:${h(workspace.id)}" aria-label="${h(workspace.name)} role" ${assignmentEditable ? '' : 'disabled'}>
+                  ${roles.map((role) => `<option value="${h(role.id)}" ${role.id === workspaceRoleId ? 'selected' : ''}>${h(role.name)}</option>`).join('')}
+                </select>
+              </label>
+            `;
+          }).join('') || '<span class="form-note">No active workspaces are available.</span>'}
+        </div>
+        <button class="btn" type="submit" ${canEditUser ? '' : 'disabled'}>Save role &amp; workspaces</button>
       </form>
     </article>
   `;
@@ -11111,6 +11133,20 @@ function userDisplayMeta(user) {
   if (email && !isOpaqueUserId(email)) return email;
   const id = String(user.profile_id || user.member_id || '').trim();
   return id ? `ID ${shortUserId(id)}` : 'No email on profile';
+}
+
+function workspaceAccessSummaryForUser(companyId, user) {
+  const role = String(user.role || '').toLowerCase();
+  const companyWorkspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
+  if (['owner', 'admin', 'developer'].includes(role)) return `All ${companyWorkspaces.length} workspaces (inherited)`;
+  const profileId = String(user.profile_id || '');
+  const assignedIds = new Set(state.workspaceMemberships
+    .filter((membership) => membership.profile_id === profileId && membership.status === 'active')
+    .map((membership) => membership.workspace_id));
+  const assigned = companyWorkspaces.filter((workspace) => assignedIds.has(workspace.id));
+  if (!assigned.length) return 'No workspace assigned';
+  if (assigned.length <= 2) return assigned.map((workspace) => workspace.name).join(', ');
+  return `${assigned.length} workspaces`;
 }
 
 function renderTeamChartPage(companyId) {
@@ -16254,53 +16290,89 @@ function renderClientPortalMarkModal() {
 function renderWorkspaceSettings(companyId) {
   const company = companyById(companyId) || normalizeCompany({ id: companyId });
   const iconDraft = workspaceIconDraft(companyId);
-  const canManage = can('settings.manage', companyId) || ['owner', 'admin'].includes(String(membershipForProfile(companyId, activeSession().profile.id)?.role || '').toLowerCase()) || isQuestDeveloper();
-  const canCreate = canCreateAnotherWorkspace();
+  const canManage = canManageOperationalWorkspaces(companyId);
+  const workspace = activeWorkspace();
+  const companyWorkspaces = state.operationalWorkspaces
+    .filter((item) => item.company_id === companyId)
+    .sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name));
   const connectionMode = state.sync.mode === 'live' ? 'live' : state.sync.mode === 'loading' ? 'loading' : 'local';
   const connectionLabel = connectionMode === 'live' ? 'Live database' : connectionMode === 'loading' ? 'Checking connection' : 'Local fallback';
   const connectionDescription = connectionMode === 'live'
-    ? 'Workspace changes are saving to the live company database.'
+    ? 'Company and workspace changes are saving to the live database.'
     : connectionMode === 'loading'
       ? 'Quest HQ is checking the workspace data connection.'
-      : 'This workspace is using local fallback data. Changes may not persist for the team.';
+      : 'This company account is using local fallback data. Changes may not persist for the team.';
   return `
     <article class="panel span-2">
-      <div class="section-head"><div><h2>Workspace identity</h2><p>Rename this workspace and choose the icon your team sees in navigation.</p></div></div>
+      <div class="section-head"><div><h2>Company account</h2><p>The customer, billing, and security boundary above every operational workspace.</p></div></div>
       <form class="workspace-settings-form" data-workspace-settings-form>
         <input type="hidden" name="company_id" value="${h(companyId)}" />
         <input type="hidden" name="icon_key" value="${h(iconDraft.icon_key)}" />
         <input type="hidden" name="icon_image" value="${h(iconDraft.icon_image)}" />
-        ${field('Workspace name', 'workspace_name', companyName(companyId), true, 'text', 'workspace-name-field')}
+        ${field('Company name', 'workspace_name', companyName(companyId), true, 'text', 'workspace-name-field')}
         <div class="workspace-icon-section">
-          <span>Workspace icon</span>
+          <span>Company logo</span>
           <div class="workspace-icon-current">
             ${workspaceIconMarkup({ ...company, icon_key: iconDraft.icon_key, icon_image: iconDraft.icon_image }, 'large')}
             <div>
               <strong>${h(iconDraft.icon_image ? 'Uploaded icon' : workspaceIconOption(iconDraft.icon_key).label)}</strong>
-              <small>${h(iconDraft.icon_image ? 'Custom image for this workspace.' : 'Built-in icon from the Quest library.')}</small>
+              <small>${h(iconDraft.icon_image ? 'Custom image for this company account.' : 'Built-in icon from the Quest library.')}</small>
             </div>
             <button class="btn" type="button" data-action="open-workspace-icon-modal" ${canManage ? '' : 'disabled'}><i class="ti ti-photo-edit"></i>Change icon</button>
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save workspace</button>
+          <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save company</button>
         </div>
       </form>
     </article>
     <article class="panel">
-      <div class="section-head"><div><h2>Create another workspace</h2><p>${h(isQuestDeveloper() ? 'Platform owners can create unlimited workspaces.' : workspaceLimitMessage())}</p></div></div>
-      <form class="workspace-create-mini" id="create-workspace" data-company-create-form>
-        <label>Workspace name<input name="company_name" placeholder="New company workspace" required ${canCreate ? '' : 'disabled'} /></label>
+      <div class="section-head"><div><h2>Current workspace</h2><p>Configure this operational area without changing the company account.</p></div></div>
+      ${workspace ? `
+        <form class="workspace-settings-form operational-workspace-form" data-operational-workspace-settings-form>
+          <input type="hidden" name="workspace_id" value="${h(workspace.id)}" />
+          ${field('Workspace name', 'workspace_name', workspace.name, true, 'text')}
+          <label>Description<textarea name="workspace_description" rows="3" placeholder="What this team handles">${h(workspace.description)}</textarea></label>
+          ${workspaceIconSelect(workspace.icon_key)}
+          <label>Status
+            <select name="workspace_status" ${canManage ? '' : 'disabled'}>
+              <option value="active" ${workspace.status === 'active' ? 'selected' : ''}>Active</option>
+              <option value="archived" ${workspace.status === 'archived' ? 'selected' : ''} ${workspace.is_default ? 'disabled' : ''}>Archived</option>
+            </select>
+          </label>
+          ${workspace.is_default ? '<p class="form-note">Default workspace cannot be archived.</p>' : ''}
+          <button class="btn btn-primary full" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save workspace</button>
+        </form>
+      ` : emptyState('No operational workspace is assigned to your user.')}
+    </article>
+    <article class="panel" id="create-operational-workspace">
+      <div class="section-head"><div><h2>Create workspace</h2><p>Add a configurable operational area inside ${h(companyName(companyId))}.</p></div></div>
+      <form class="workspace-create-mini" data-operational-workspace-create-form>
+        <input type="hidden" name="company_id" value="${h(companyId)}" />
+        <label>Workspace name<input name="workspace_name" placeholder="Sales, Underwriting, Production..." required ${canManage ? '' : 'disabled'} /></label>
         ${workspacePresetSelect()}
         ${workspaceIconSelect()}
-        <button class="btn btn-primary full" type="submit" ${canCreate ? '' : 'disabled'}><i class="ti ti-plus"></i>Create workspace</button>
+        <button class="btn btn-primary full" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-plus"></i>Create workspace</button>
       </form>
     </article>
+    <article class="panel span-2">
+      <div class="section-head"><div><h2>Workspace directory</h2><p>${companyWorkspaces.length} operational workspace${companyWorkspaces.length === 1 ? '' : 's'} under this company account.</p></div></div>
+      <div class="operational-workspace-directory">
+        ${companyWorkspaces.map((item) => `
+          <button class="operational-workspace-row ${item.id === activeWorkspaceId() ? 'active' : ''} ${item.status === 'archived' ? 'muted' : ''}" type="button" data-action="select-workspace" data-workspace-id="${h(item.id)}" ${item.status === 'archived' ? 'disabled' : ''}>
+            ${workspaceIconMarkup(item)}
+            <span><strong>${h(item.name)}</strong><small>${h(item.is_default ? 'Default workspace' : titleCase(item.status))} / ${h(workspaceMemberCount(item.id))} assigned</small></span>
+            ${item.id === activeWorkspaceId() ? '<i class="ti ti-check"></i>' : '<i class="ti ti-chevron-right"></i>'}
+          </button>
+        `).join('') || emptyState('No workspaces have been created.')}
+      </div>
+    </article>
     <article class="panel">
-      <div class="section-head"><div><h2>Workspace data</h2><p>Setup, data, and plugins are isolated by workspace.</p></div></div>
+      <div class="section-head"><div><h2>Workspace data</h2><p>Pipeline records, stages, members, and plugins are isolated here.</p></div></div>
       ${contractRows([
-        ['Workspace ID', companyId],
-        ['Owned workspaces', isQuestDeveloper() ? 'Unlimited' : `${ownedWorkspaceCount()} / ${WORKSPACE_SELF_CREATE_LIMIT}`],
+        ['Company ID', companyId],
+        ['Workspace ID', workspace?.id || 'Not assigned'],
+        ['Workspace role', workspace ? workspaceRoleLabel(workspace.id) : 'No access'],
         ['Visible jobs', companyJobs(companyId).length],
         ['Installed plugins', availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length],
       ])}
@@ -16316,22 +16388,12 @@ function renderWorkspaceSettings(companyId) {
         <p>${h(connectionDescription)}</p>
       </div>
       ${contractRows([
-        ['Workspace', companyName(companyId)],
+        ['Company account', companyName(companyId)],
+        ['Workspace', workspace?.name || 'Not assigned'],
         ['Current status', state.sync.label],
         ['Storage mode', connectionMode === 'live' ? 'Quest cloud database' : connectionMode === 'loading' ? 'Checking' : 'This browser only'],
       ])}
     </article>
-    ${(canManage || !isLiveSupabaseSession()) ? `
-    <article class="panel danger-zone">
-      <div class="section-head"><div><h2>Danger zone</h2><p>Irreversible actions for this workspace.</p></div></div>
-      <div class="danger-row">
-        <div>
-          <b>Delete this workspace</b>
-          <span>Permanently removes <b>${h(companyName(companyId) || companyId)}</b> and everything in it — jobs, contacts, quotes, files, finance, plugins, and members. This cannot be undone.</span>
-        </div>
-        <button class="btn danger" type="button" data-action="open-delete-company"><i class="ti ti-trash"></i>Delete workspace</button>
-      </div>
-    </article>` : ''}
   `;
 }
 
@@ -24030,6 +24092,22 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-operational-workspace-create-form]')) {
+    event.preventDefault();
+    createOperationalWorkspace(event.target).catch((error) => {
+      showToast(error.message || 'Workspace creation failed.', 'local', 'Workspaces');
+    });
+    return;
+  }
+
+  if (event.target.matches('[data-operational-workspace-settings-form]')) {
+    event.preventDefault();
+    saveOperationalWorkspaceSettings(event.target).catch((error) => {
+      showToast(error.message || 'Workspace update failed.', 'local', 'Workspaces');
+    });
+    return;
+  }
+
   if (event.target.matches('[data-platform-workspace-create-form]')) {
     event.preventDefault();
     createPlatformWorkspace(event.target).catch((error) => {
@@ -25000,6 +25078,127 @@ async function createWorkspaceForCurrentUser(formNode) {
   navigate(companyPath('settings', { tab: 'billing' }, state.activeCompanyId), { replace: true });
 }
 
+async function createOperationalWorkspace(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const companyId = canonicalCompanyId(form.company_id || activeCompanyId());
+  if (!canManageOperationalWorkspaces(companyId)) {
+    showToast('Workspace admin access is required.', 'local', 'Workspaces');
+    return;
+  }
+  const workspaceName = String(form.workspace_name || '').trim();
+  const presetCode = WORKSPACE_PLUGIN_PRESETS[form.preset_code] ? form.preset_code : 'generic';
+  const iconKey = workspaceIconOption(form.icon_key).key;
+  if (!workspaceName) {
+    showToast('Workspace name is required.', 'local', 'Workspaces');
+    return;
+  }
+
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession() && client;
+  let saved;
+  if (live) {
+    const result = await safeSupabaseQuery(client.rpc('create_operational_workspace', {
+      target_company_id: companyId,
+      workspace_name: workspaceName,
+      preset_code: presetCode,
+      icon_key: iconKey,
+    }));
+    if (result.error) {
+      showToast(result.error.message || 'Workspace creation failed.', 'local', 'Workspaces');
+      return;
+    }
+    const workspaceId = String(result.data || '');
+    const rowResult = await safeSupabaseQuery(client.from('workspaces').select('*').eq('id', workspaceId).maybeSingle());
+    saved = normalizeOperationalWorkspace(rowResult.data || {
+      id: workspaceId,
+      company_id: companyId,
+      name: workspaceName,
+      slug: workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace',
+      icon_key: iconKey,
+      status: 'active',
+    });
+  } else {
+    saved = normalizeOperationalWorkspace({
+      id: crypto.randomUUID(),
+      company_id: companyId,
+      name: workspaceName,
+      slug: workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace',
+      icon_key: iconKey,
+      color: companyColor(companyId),
+      status: 'active',
+      created_by: activeSession().profile.id,
+      created_at: new Date().toISOString(),
+    });
+    state.workspaceMemberships = mergeWorkspaceMemberships(state.workspaceMemberships.concat(normalizeWorkspaceMembership({
+      workspace_id: saved.id,
+      profile_id: activeSession().profile.id,
+      role_id: state.roleAssignments.find((assignment) => assignment.company_id === companyId && assignment.profile_id === activeSession().profile.id)?.role_id || '',
+      status: 'active',
+      assigned_by: activeSession().profile.id,
+    })));
+  }
+  state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.concat(saved));
+  state.activeCompanyId = companyId;
+  state.activeWorkspaceId = saved.id;
+  localStorage.setItem(COMPANY_KEY, companyId);
+  localStorage.setItem(ACTIVE_WORKSPACE_KEY, saved.id);
+  showToast(`${saved.name} workspace created.`, live ? 'live' : 'local', 'Workspaces');
+  navigate(companyPath('settings', { tab: 'company', workspace: saved.id }, companyId));
+}
+
+async function saveOperationalWorkspaceSettings(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const workspaceId = String(form.workspace_id || '').trim();
+  const workspace = state.operationalWorkspaces.find((item) => item.id === workspaceId);
+  if (!workspace || workspace.company_id !== activeCompanyId()) {
+    showToast('Workspace not found.', 'local', 'Workspaces');
+    return;
+  }
+  if (!canManageOperationalWorkspaces(workspace.company_id)) {
+    showToast('Workspace admin access is required.', 'local', 'Workspaces');
+    return;
+  }
+  const workspaceName = String(form.workspace_name || '').trim();
+  const workspaceDescription = String(form.workspace_description || '').trim();
+  const iconKey = workspaceIconOption(form.icon_key).key;
+  const status = String(form.workspace_status || 'active') === 'archived' ? 'archived' : 'active';
+  if (!workspaceName) {
+    showToast('Workspace name is required.', 'local', 'Workspaces');
+    return;
+  }
+  if (workspace.is_default && status === 'archived') {
+    showToast('Default workspace cannot be archived.', 'local', 'Workspaces');
+    return;
+  }
+
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession() && client;
+  let saved;
+  if (live) {
+    const result = await safeSupabaseQuery(client.rpc('update_operational_workspace', {
+      target_workspace_id: workspace.id,
+      workspace_name: workspaceName,
+      workspace_description: workspaceDescription,
+      icon_key: iconKey,
+      next_status: status,
+    }));
+    if (result.error) {
+      showToast(result.error.message || 'Workspace update failed.', 'local', 'Workspaces');
+      return;
+    }
+    saved = normalizeOperationalWorkspace(result.data || { ...workspace, name: workspaceName, description: workspaceDescription, icon_key: iconKey, status });
+  } else {
+    saved = normalizeOperationalWorkspace({ ...workspace, name: workspaceName, description: workspaceDescription, icon_key: iconKey, status, updated_at: new Date().toISOString() });
+  }
+  state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.filter((item) => item.id !== saved.id).concat(saved));
+  if (saved.status === 'archived' && state.activeWorkspaceId === saved.id) {
+    state.activeWorkspaceId = defaultOperationalWorkspaceId(saved.company_id);
+    localStorage.setItem(ACTIVE_WORKSPACE_KEY, state.activeWorkspaceId);
+  }
+  showToast('Workspace settings saved.', live ? 'live' : 'local', 'Workspaces');
+  navigate(companyPath('settings', { tab: 'company' }, saved.company_id), { replace: true });
+}
+
 async function createPlatformWorkspace(formNode) {
   if (!isQuestDeveloper()) {
     showToast('Platform owner access is required to create workspaces for others.', 'local', 'Master panel');
@@ -25659,6 +25858,8 @@ async function saveUserAccess(formNode) {
   const profileId = String(data.get('profile_id') || '').trim();
   const roleId = String(data.get('role_id') || '').trim();
   const status = ['active', 'pending', 'disabled', 'left'].includes(String(data.get('membership_status'))) ? String(data.get('membership_status')) : 'active';
+  const selectedWorkspaceIds = new Set(data.getAll('workspace_ids').map((value) => String(value || '')));
+  const companyWorkspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
   const role = roleById(companyId, roleId);
   if (!profileId || !role) {
     state.sync = { label: 'Select a user and role', mode: 'local' };
@@ -25708,6 +25909,38 @@ async function saveUserAccess(formNode) {
     upsertMembership(membership);
     replaceRoleAssignment(assignment);
     state.sync = { label: 'User access saved locally', mode: 'local' };
+  }
+
+  const inheritedWorkspaceAccess = ['owner', 'admin', 'developer'].includes(String(membership.role || '').toLowerCase());
+  for (const workspace of companyWorkspaces) {
+    const enabled = status === 'active' && (inheritedWorkspaceAccess || selectedWorkspaceIds.has(workspace.id));
+    const requestedWorkspaceRoleId = String(data.get(`workspace_role:${workspace.id}`) || role.id || '');
+    const workspaceRole = roleById(companyId, requestedWorkspaceRoleId) || role;
+    const workspaceMembership = normalizeWorkspaceMembership({
+      workspace_id: workspace.id,
+      profile_id: profileId,
+      role_id: workspaceRole?.id || '',
+      status: enabled ? 'active' : 'disabled',
+      assigned_by: activeSession().profile.id,
+      updated_at: new Date().toISOString(),
+    });
+    if (isLiveSupabaseSession() && client) {
+      const result = await safeSupabaseQuery(client.rpc('set_workspace_member', {
+        target_workspace_id: workspace.id,
+        target_profile_id: profileId,
+        target_role_id: isUuid(workspaceMembership.role_id) ? workspaceMembership.role_id : null,
+        next_status: enabled ? 'active' : 'disabled',
+      }));
+      if (result.error) {
+        state.sync = { label: result.error.message || 'Workspace assignment failed', mode: 'local' };
+        showToast(result.error.message || 'Workspace assignment failed.', 'local', 'Users');
+        render();
+        return;
+      }
+      upsertWorkspaceMembership(normalizeWorkspaceMembership(result.data || workspaceMembership));
+    } else {
+      upsertWorkspaceMembership(workspaceMembership);
+    }
   }
 
   notifyLocalEvent('access.role', 'User access updated', `${actorName()} set ${profileName(profileId)} to ${role.name} / ${titleCase(status)}.`, companyPath('settings', { tab: 'access' }, companyId), 'membership', profileId, companyId, [profileId].concat(usersWithAnyPermission(companyId, ['users.manage', 'settings.manage'])));
@@ -28851,6 +29084,16 @@ function upsertMembership(membership) {
   persistAll();
 }
 
+function upsertWorkspaceMembership(membership) {
+  const normalized = normalizeWorkspaceMembership(membership);
+  const index = state.workspaceMemberships.findIndex((item) => (
+    item.workspace_id === normalized.workspace_id
+    && item.profile_id === normalized.profile_id
+  ));
+  if (index >= 0) state.workspaceMemberships[index] = normalized;
+  else state.workspaceMemberships.unshift(normalized);
+}
+
 function replaceRoleAssignment(assignment) {
   state.roleAssignments = state.roleAssignments.filter((item) => item.company_id !== assignment.company_id || item.profile_id !== assignment.profile_id);
   if (assignment.role_id) state.roleAssignments.unshift(assignment);
@@ -31875,8 +32118,6 @@ function can(permission, companyId = activeCompanyId()) {
   const profile = activeSession().profile;
   if (state.session?.auth === 'supabase') {
     const membership = membershipForProfile(companyId, profile.id);
-    const trustedProfileCompany = (profile.company_ids || []).map(canonicalCompanyId).includes(canonicalCompanyId(companyId));
-    if (!membership && trustedProfileCompany && ['owner', 'admin', 'developer'].includes(String(profile.role || '').toLowerCase())) return true;
     if (!membership || membership.status !== 'active') return false;
     if (['owner', 'developer'].includes(String(membership.role).toLowerCase())) return true;
     const assignedRoleIds = state.roleAssignments
@@ -32843,6 +33084,20 @@ function workspaceRoleLabel(workspaceId) {
   ));
   const role = state.roles.find((item) => item.id === membership?.role_id && item.company_id === workspace.company_id);
   return role?.name || 'Member';
+}
+
+function workspaceMembershipForProfile(workspaceId, profileId) {
+  return state.workspaceMemberships.find((membership) => (
+    membership.workspace_id === String(workspaceId || '')
+    && membership.profile_id === String(profileId || '')
+  )) || null;
+}
+
+function workspaceMemberCount(workspaceId) {
+  return state.workspaceMemberships.filter((membership) => (
+    membership.workspace_id === String(workspaceId || '')
+    && membership.status === 'active'
+  )).length;
 }
 
 function canManageOperationalWorkspaces(companyId = activeCompanyId()) {

@@ -146,7 +146,8 @@ test('workspace switcher lives in the sidebar workspace card, not the top nav', 
   assert.match(source, /data-action="toggle-workspace-menu"/);
   assert.match(source, /data-action="select-workspace"/);
   assert.match(source, /workspace-rail-item/);
-  assert.match(source, /workspaceIconMarkup\(company\)/);
+  assert.match(source, /workspaceIconMarkup\(current, 'company-account-icon'\)/);
+  assert.match(source, /workspaceIconMarkup\(workspace\)/);
   assert.doesNotMatch(source, /<select data-company-switch aria-label="Active company">\s*\$\{companies\.map\(.*deckMode/s);
 });
 
