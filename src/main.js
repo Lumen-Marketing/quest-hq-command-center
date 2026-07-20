@@ -11325,7 +11325,7 @@ function wbViewCompanyHome(companyId, workspace) {
     ${wbWorkspaceHeader(companyId, workspace, null)}
     <div class="wb-page-head">
       <div>
-        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>Workspaces</h1>
+        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>${h(workspace.name || companyName(companyId) || 'Workspace')}</h1>
         <div class="wb-sub">Build customizable, no-code dashboards for ${h(companyName(companyId) || 'this company')}.</div>
       </div>
       <div class="wb-spacer"></div>
