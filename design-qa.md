@@ -1,45 +1,51 @@
-# Design QA — Quest HQ Standalone Navbar
+# Workspace Sidebar Design QA
 
-## Evidence
+- Source visual truth: `C:/Users/MYPC~1/AppData/Local/Temp/codex-clipboard-d6ef5a24-56ad-47a1-b6a8-13910496183e.png`
+- Implementation screenshot: `C:/Users/My PC/Desktop/Lumen/quest-hq-command-center/design-qa-live-workspace-sidebar.png`
+- Focused sidebar screenshot: `C:/Users/My PC/Desktop/Lumen/quest-hq-command-center/design-qa-live-workspace-sidebar-crop.png`
+- Implementation URL: `https://quest-hq-command-center-gamma.vercel.app/company/roofing/deals`
+- Viewport: 1280 x 720 at DPR 1
+- State: public read-only demo, Company navigation scope, Quotes board, one accessible workspace
 
-- Stakeholder source screenshot: `docs/design/quest-hq-navbar-standalone-source.png`
-- Stakeholder standalone specification: `C:/Users/My PC/Downloads/navigation bar  (1).docx`
-- Initial production mismatch: `docs/design/quest-hq-navbar-current-afe4b73.png`
-- Production implementation: `docs/design/quest-hq-navbar-production-6699c9f.jpg`
-- Focused side-by-side comparison: `docs/design/quest-hq-navbar-focused-comparison-6699c9f.jpg`
-- Viewport: 1488 × 1058, production URL, light theme, public read-only Roofing workspace, Underwriter route.
+## Full-view comparison evidence
+
+The production capture preserves the Command Center's existing 260px navigation rail and adds the workspace context above search and the My work/Company scope switch. The active workspace is visibly highlighted and does not compete with the module pipeline navigation below it. No persistent controls are clipped at the tested viewport.
+
+## Focused comparison evidence
+
+The focused reference and production sidebar were opened together. The production block matches the reference's important hierarchy: a compact workspace list, an active-row treatment, and adjacent create/manage actions. A focused comparison was required because the reference is a narrow sidebar crop and the workspace typography/actions are too small to judge reliably in the full-page capture.
+
+## Required fidelity surfaces
+
+- Fonts and typography: IBM Plex Sans/Mono remain consistent with the Command Center design system. Workspace names use a compact 12px/600 weight and supporting roles use 9.5px, matching the source's dense sidebar character without introducing a foreign typeface.
+- Spacing and layout rhythm: rows, icons, highlight, and actions fit the established 260px rail. The block adds clear separation before search without pushing the profile footer or hiding navigation controls.
+- Colors and visual tokens: the active row uses Quest's warm orange treatment instead of copying the source's blue-gray selection color. This is an intentional brand-system adaptation; secondary workspace actions use the source-like teal cue with sufficient contrast.
+- Image quality and asset fidelity: the existing Quest logo and saved workspace icon system are used. No raster placeholders, emoji, CSS drawings, or improvised brand assets were introduced.
+- Copy and content: `Workspaces`, `Create workspace`, and `Manage workspaces` are direct and match the intended task. The current demo shows one membership-scoped workspace; authenticated accounts with multiple memberships render additional rows from the same component.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain within the approved visible-workspace-navigation scope.
+
+- [P3] Parent account grouping is not represented.
+  - Location: workspace rail header.
+  - Evidence: the source includes a parent organization/account label above workspace rows; the current production data model treats each `companies` row as the workspace and has no separate organization record.
+  - Impact: the visual cannot yet group several customer workspaces under a separately named parent account.
+  - Follow-up: add the organization/account layer as a separate architecture milestone, then replace the generic `Workspaces` heading with organization identity and grouped workspace lists.
+
+## Interaction verification
+
+- `Create workspace` navigated to `/company/roofing/settings?tab=company&focus=create-workspace` and the existing creation form was present.
+- `Manage workspaces` navigated to `/company/roofing/settings?tab=company` and the workspace identity form was present.
+- Workspace rows use the existing `select-workspace` action; automated tests pin the active state, company id, list expansion, and switch behavior.
+- Browser console errors checked after the production interactions: none.
 
 ## Comparison history
 
-1. The initial production capture still used the legacy customizable Contacts stages: All contacts, Prospects, Leads, and Nurturing.
-2. The standalone source defines a distinct sales lifecycle: Prospects, Leads, Underwriting, Estimate sent, Negotiating, Contract out, Won → Jobs, Follow-up, and Lost, with a divider before the off-ramp stages.
-3. Production commit `6699c9f` adds that exact lifecycle to the sidebar, removes the injected All contacts row, connects every row to a lifecycle-filtered Contacts route, and uses live counts derived from contacts and their linked deals.
+- Initial implementation comparison: no P0/P1/P2 findings. No visual fix iteration was required.
 
-## Visual review
+## Follow-up polish
 
-- Typography: existing Quest UI fonts, weights, and compact uppercase group labels are preserved. Passed.
-- Navigation hierarchy: Work, Pipeline, Contacts, and the complete nine-stage lifecycle match the standalone reference. Passed.
-- Spacing: nested stage indentation, row rhythm, divider, and count alignment remain compact and readable. Passed.
-- Color: lifecycle dots preserve the reference's gray, blue, amber, violet, green, and red stage coding. Passed.
-- Assets: the existing Quest logo and production icon library are used; no placeholder or fabricated visible assets. Passed.
-- Copy: Prospects, Leads, Underwriting, Estimate sent, Negotiating, Contract out, Won → Jobs, Follow-up, and Lost match the stakeholder source. Passed.
+- Add organization identity and grouping only after the parent organization model exists; do not fake it with hardcoded customer names.
 
-## Interaction review
-
-- The Underwriting sidebar link changed the production route to `/company/roofing/contacts?lifecycle=underwriting`.
-- The Contacts screen rendered the Underwriting heading, `0 items`, and `Filtered by Underwriting`, confirming functional filtering.
-- The Underwriter stage chips use the same nine-stage lifecycle and live counts.
-- Browser console warnings/errors: none observed during the final production flow.
-- Vercel runtime errors in the final one-hour verification window: none.
-- Production smoke: 36/36 routes and 3/3 critical assets passed for `6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec`.
-
-## Remaining severity
-
-- P0: none.
-- P1: none.
-- P2: none.
-- P3: the production shell shows live counts and the active Estimator route, while the stakeholder crop shows Home selected and illustrative counts.
-
-## Final result
-
-passed
+final result: passed
