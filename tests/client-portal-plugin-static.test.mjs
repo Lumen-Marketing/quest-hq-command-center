@@ -143,20 +143,26 @@ test('client portal migration creates tables, RLS, bucket, grants, and plugin al
   assert.match(portalMigration, /grant select, insert, update on public\.client_portals/);
 });
 
-test('client portal Vercel APIs exist and do not expose raw token or password fields', () => {
+test('client portal Vercel APIs run through the shared endpoint module and hide the admin scaffolding', () => {
   const apiDir = new URL('../api/', import.meta.url);
   for (const name of ['client-portal-open.js', 'client-portal-document-url.js', 'client-portal-document-file.js', 'client-portal-annotations.js', 'client-portal-document-status.js', 'client-portal-export-event.js']) {
     assert.ok(existsSync(new URL(name, apiDir)), `${name} should exist`);
     const api = readFileSync(new URL(name, apiDir), 'utf8');
-    assert.match(api, /SUPABASE_SERVICE_ROLE_KEY/);
-    assert.match(api, /function isSupabaseSecretKey/);
-    assert.match(api, /function supabaseHeaders/);
-    assert.match(api, /isSupabaseSecretKey\(\) \? \{\} : \{ Authorization: `Bearer \$\{serviceKey\(\)\}` \}/);
-    assert.match(api, /sha256/);
+    // Each handler is now defined through the deep endpoint module; the admin
+    // key/header scaffolding lives in _lib and must not be re-declared per file.
+    assert.match(api, /defineEndpoint/);
+    assert.doesNotMatch(api, /function isSupabaseSecretKey/);
+    assert.doesNotMatch(api, /function supabaseHeaders/);
+    assert.doesNotMatch(api, /SUPABASE_SERVICE_ROLE_KEY/);
     assert.doesNotMatch(api, /select=token/);
     assert.doesNotMatch(api, /select=password/);
   }
+  // Guest read/write handlers verify a portal session; open mints one.
+  for (const name of ['client-portal-document-url.js', 'client-portal-document-file.js', 'client-portal-annotations.js', 'client-portal-document-status.js', 'client-portal-export-event.js']) {
+    assert.match(readFileSync(new URL(name, apiDir), 'utf8'), /auth: 'portal-session'/);
+  }
   const openApi = readFileSync(new URL('client-portal-open.js', apiDir), 'utf8');
+  assert.match(openApi, /signPortalSession/);
   assert.match(openApi, /is_current=eq\.true/);
   assert.match(openApi, /version_group_id,version_number,is_current,review_status,scale,scale_unit/);
   const annotationsApi = readFileSync(new URL('client-portal-annotations.js', apiDir), 'utf8');
@@ -168,7 +174,21 @@ test('client portal Vercel APIs exist and do not expose raw token or password fi
   assert.match(statusApi, /portal_id=eq\.\$\{encodeURIComponent\(session\.portal_id\)\}/);
   const documentUrlApi = readFileSync(new URL('client-portal-document-url.js', apiDir), 'utf8');
   assert.match(documentUrlApi, /function absoluteStorageUrl\s*\(/);
-  assert.match(documentUrlApi, /\$\{baseUrl\(\)\}\/storage\/v1\$\{cleanPath\}/);
+  assert.match(documentUrlApi, /\/storage\/v1\$\{cleanPath\}/);
+});
+
+test('shared api/_lib seam owns the admin key/header logic and portal session crypto', () => {
+  const libDir = new URL('../api/_lib/', import.meta.url);
+  const admin = readFileSync(new URL('supabase-admin.js', libDir), 'utf8');
+  assert.match(admin, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(admin, /function isSupabaseSecretKey/);
+  assert.match(admin, /function supabaseHeaders/);
+  assert.match(admin, /isSupabaseSecretKey\(\) \? \{\} : \{ Authorization: `Bearer \$\{supabaseServiceKey\(\)\}` \}/);
+  const portalSession = readFileSync(new URL('portal-session.js', libDir), 'utf8');
+  assert.match(portalSession, /export function signPortalSession/);
+  assert.match(portalSession, /export function verifyPortalSession/);
+  assert.match(portalSession, /createHmac\('sha256'/);
+  assert.match(portalSession, /timingSafeEqual/);
 });
 
 test('client portal document review and scale fields are tracked in migrations', () => {

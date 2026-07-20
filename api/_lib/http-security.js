@@ -3,10 +3,13 @@ import { isIP } from 'node:net';
 export const DEFAULT_APP_ORIGIN = 'https://quest-hq-command-center-gamma.vercel.app';
 
 export class HttpError extends Error {
-  constructor(statusCode, message) {
+  // `body` carries extra response fields to merge alongside `{ error }`
+  // (e.g. { password_required: true }); optional and backward-compatible.
+  constructor(statusCode, message, body = null) {
     super(message);
     this.name = 'HttpError';
     this.statusCode = statusCode;
+    this.body = body;
   }
 }
 
