@@ -57,6 +57,11 @@ test('workspace administration is atomic and server-authorized', () => {
   assert.match(sql, /Default workspace cannot be archived/i);
 });
 
+test('workspace creation uses valid PostgreSQL trim syntax for generated slugs', () => {
+  assert.match(sql, /clean_slug := trim\(both '-' from regexp_replace/i);
+  assert.doesNotMatch(sql, /btrim\(both/i);
+});
+
 test('workspace-scoped pipeline policies check membership and updates have WITH CHECK', () => {
   for (const table of ['accounts', 'contacts', 'crm_sites', 'deals', 'activities', 'jobs', 'tasks', 'pipeline_stages', 'underwriting_cases', 'job_files', 'proposal_documents']) {
     assert.match(sql, new RegExp(`create policy "${table} workspace read"[\\s\\S]*app_private\\.is_workspace_member\\(workspace_id\\)`, 'i'));

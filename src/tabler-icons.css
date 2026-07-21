@@ -226,7 +226,6 @@
 .ti-lock-check:before{content:"\f926"}
 .ti-lock-dollar:before{content:"\f929"}
 .ti-lock-filled:before{content:"\fe15"}
-.ti-lock-open:before{content:"\eae1"}
 .ti-login:before{content:"\eba7"}
 .ti-logout:before{content:"\eba8"}
 .ti-mail:before{content:"\eae5"}
@@ -301,6 +300,7 @@
 .ti-scissors:before{content:"\eb1b"}
 .ti-search:before{content:"\eb1c"}
 .ti-select:before{content:"\ec9e"}
+.ti-selector:before{content:"\eb1d"}
 .ti-send:before{content:"\eb1e"}
 .ti-server:before{content:"\eb1f"}
 .ti-settings:before{content:"\eb20"}

@@ -831,7 +831,7 @@ begin
   if not app_private.is_company_admin(target_company_id) then raise exception 'Workspace admin access required'; end if;
   if clean_name = '' then raise exception 'Workspace name is required'; end if;
 
-  clean_slug := btrim(both '-' from regexp_replace(lower(clean_name), '[^a-z0-9]+', '-', 'g'));
+  clean_slug := trim(both '-' from regexp_replace(lower(clean_name), '[^a-z0-9]+', '-', 'g'));
   if clean_slug = '' then clean_slug := 'workspace'; end if;
   while exists (select 1 from public.workspaces w where w.company_id = target_company_id and w.slug = clean_slug) loop
     clean_slug := left(clean_slug, 48) || '-' || lower(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
