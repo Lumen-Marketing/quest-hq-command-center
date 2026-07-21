@@ -2543,6 +2543,7 @@ async function fetchSupabaseProfile(user) {
 }
 
 function render() {
+  wbInvalidateAppIndex(); // rebuild the builder app-index fresh for this render
   state.route = getRoute();
 
   if (CONFIG.questAuthEnabled && !state.authReady) {
@@ -12344,14 +12345,8 @@ function wbAppReportOptions(app) {
 // Locate the workspace + company that own an app (apps live inside company docs)
 // so a title can resolve member names, linked records, etc.
 function wbLocateApp(app) {
-  const docs = state.workspaceBuilderDocs || {};
-  for (const companyId of Object.keys(docs)) {
-    const doc = docs[companyId];
-    for (const workspace of (doc?.workspaces || [])) {
-      if ((workspace.apps || []).some((a) => a.id === app.id)) return { companyId, workspace };
-    }
-  }
-  return { companyId: activeCompanyId(), workspace: null };
+  const entry = app && wbAppIndex().get(app.id);
+  return entry ? { companyId: entry.companyId, workspace: entry.workspace } : { companyId: activeCompanyId(), workspace: null };
 }
 // A flat (non-recursive) name for an item — the first field, in order, that
 // yields a plain label. Resolves member names, dropdown labels, etc.; only
@@ -12380,23 +12375,41 @@ function wbSimpleTitle(app, item) {
 // relationship field it resolves through the LINKED field's own display setting
 // (so "Assign to" reads like it does everywhere else), guarded by `depth` so a
 // cycle of linked apps can't recurse forever.
-// Resolve an app id to its app object within ONE company's builder doc (any of
-// that company's workspaces). App ids are unique within a company doc.
+// Per-render index of every builder app: appId -> { companyId, workspace, app }.
+// The relationship resolvers below run once per rendered cell; scanning every
+// company's doc on each call is O(cells x apps). Build the map once and reuse it.
+// render() clears it at the top and a render never mutates docs, so it can't go
+// stale -- these resolvers only run while producing HTML. wbSave clears it too,
+// covering any resolver call between a builder edit and the next render.
+let wbAppIndexCache = null;
+function wbInvalidateAppIndex() { wbAppIndexCache = null; }
+function wbAppIndex() {
+  if (wbAppIndexCache) return wbAppIndexCache;
+  const idx = new Map();
+  const docs = state.workspaceBuilderDocs || {};
+  for (const companyId of Object.keys(docs)) {
+    for (const workspace of (docs[companyId]?.workspaces || [])) {
+      for (const app of (workspace.apps || [])) idx.set(app.id, { companyId, workspace, app });
+    }
+  }
+  wbAppIndexCache = idx;
+  return idx;
+}
+
+// Resolve an app id within ONE company's builder doc (app ids are globally unique,
+// so the index entry's company must match the one asked for -- this keeps a
+// relationship strictly within the requested company).
 function wbTargetApp(companyId, targetAppId) {
   if (!targetAppId) return null;
-  const doc = wbDoc(companyId);
-  for (const ws of (doc?.workspaces || [])) {
-    const app = (ws.apps || []).find((a) => a.id === targetAppId);
-    if (app) return app;
-  }
-  return null;
+  const entry = wbAppIndex().get(targetAppId);
+  return entry && entry.companyId === canonicalCompanyId(companyId) ? entry.app : null;
 }
 
 // {workspace, app} for every app in a company, for the relationship app-picker.
 function wbCompanyApps(companyId) {
-  const doc = wbDoc(companyId);
+  const cid = canonicalCompanyId(companyId);
   const out = [];
-  for (const ws of (doc?.workspaces || [])) for (const app of (ws.apps || [])) out.push({ workspace: ws, app });
+  for (const entry of wbAppIndex().values()) if (entry.companyId === cid) out.push({ workspace: entry.workspace, app: entry.app });
   return out;
 }
 
@@ -13680,7 +13693,7 @@ function wbCtx() {
   const params = state.route?.params;
   return wbFind(companyId, params?.get('workspace_id') || '', params?.get('app_id') || '');
 }
-function wbSave(companyId) { saveWorkspaceBuilderDoc(companyId).catch(() => null); }
+function wbSave(companyId) { wbInvalidateAppIndex(); saveWorkspaceBuilderDoc(companyId).catch(() => null); }
 function wbGuard() { return requirePermission('workspaces.manage', activeCompanyId(), 'Your role cannot manage workspaces.', 'Workspaces'); }
 
 /* ---- Modal launchers (set state.builderModal, then render) ------------------ */
