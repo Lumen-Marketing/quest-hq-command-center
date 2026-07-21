@@ -40,7 +40,7 @@ App.TimeView = class TimeView {
         const day0 = new Date(); day0.setHours(0, 0, 0, 0);
         el.textContent = App.utils.formatDuration(this.timeModel.sessionTotalForUserTask(uid, at.taskId, day0.getTime()));
       } else {
-        el.textContent = App.utils.formatDuration(Date.now() - at.startedAt);
+        el.textContent = App.utils.formatDuration(Math.min(Date.now() - at.startedAt, App.MAX_SHIFT_MS));
       }
     });
   }
@@ -72,11 +72,11 @@ App.TimeView = class TimeView {
 
     const rows = myEntries.map(e => {
       const t = this.taskModel.find(e.taskId);
-      const company = t ? App.COMPANIES[t.company] : null;
+      const company = t ? App.directory.company(t.company) : null;
       return `
         <tr>
           <td>${t ? App.utils.escapeHtml(t.title) : '<em>unknown task</em>'}</td>
-          <td>${company ? `<span class="pill ${company.pill}">${company.label}</span>` : '—'}</td>
+          <td>${company ? `<span class="pill ${company.pill}">${App.utils.escapeHtml(company.label)}</span>` : '—'}</td>
           <td class="mono">${App.utils.formatInstant(e.start, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}</td>
           <td class="mono">${App.utils.formatHours(e.durationMs)}</td>
         </tr>
@@ -154,12 +154,12 @@ App.TimeView = class TimeView {
     const active = this.timeModel.allActive().filter(timer => inTeam(timer.userId));
 
     const liveRows = active.map(timer => {
-      const p = App.PEOPLE[timer.userId] || App.utils.unknownPerson(timer.userId);
+      const p = App.directory.person(timer.userId) || App.utils.unknownPerson(timer.userId);
       // Prefer the loaded task; fall back to the label snapshotted on the timer
       // at clock-in so a task the viewer can't load still shows its name.
       const t = this.taskModel.find(timer.taskId);
       const title = t ? t.title : timer.taskTitle;
-      const company = App.COMPANIES[t ? t.company : timer.taskCompany];
+      const company = App.directory.company(t ? t.company : timer.taskCompany);
       return `
         <tr class="live">
           <td>
@@ -168,8 +168,8 @@ App.TimeView = class TimeView {
             </span>
           </td>
           <td>${title ? App.utils.escapeHtml(title) : '—'}</td>
-          <td>${company ? `<span class="pill ${company.pill}">${company.label}</span>` : '—'}</td>
-          <td class="mono" data-live-timer="${timer.userId}">${App.utils.formatDuration(Date.now() - timer.startedAt)}</td>
+          <td>${company ? `<span class="pill ${company.pill}">${App.utils.escapeHtml(company.label)}</span>` : '—'}</td>
+          <td class="mono" data-live-timer="${timer.userId}">${App.utils.formatDuration(Math.min(Date.now() - timer.startedAt, App.MAX_SHIFT_MS))}</td>
           <td><span style="display:inline-flex; align-items:center; gap:4px; color:var(--green-ink); font-size:11px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--green);"></span>Live</span></td>
         </tr>
       `;
@@ -207,7 +207,7 @@ App.TimeView = class TimeView {
         <div class="time-section">
           <div class="time-section-title">Active right now</div>
           ${active.length ? `
-            <table class="time-table">
+            <table class="time-table time-live-table">
               <thead><tr><th>Person</th><th>Task</th><th>Project</th><th>Elapsed</th><th></th></tr></thead>
               <tbody>${liveRows}</tbody>
             </table>

@@ -20,7 +20,7 @@ App.ApprovalView = class ApprovalView {
     return (App.PROFILES || [])
       .filter(p => p.member_id && p.member_id !== excludeMemberId && overseeing.includes(p.role))
       .map(p => {
-        const person = App.PEOPLE[p.member_id];
+        const person = App.directory.person(p.member_id);
         return { id: p.member_id, name: (person && person.full) || p.full_name || p.email || p.member_id };
       });
   }
@@ -37,14 +37,17 @@ App.ApprovalView = class ApprovalView {
         <div class="time-section">
           <div class="approval-head">
             <div class="time-section-title">User approvals</div>
-            <button class="btn btn-sm" data-action="refresh-profiles"><i class="ti ti-refresh"></i>Refresh</button>
+            <div class="approval-head-actions">
+              <button class="btn btn-sm btn-primary" data-action="add-person"><i class="ti ti-user-plus"></i>Add person</button>
+              <button class="btn btn-sm" data-action="refresh-profiles"><i class="ti ti-refresh"></i>Refresh</button>
+            </div>
           </div>
           <div class="approval-scroll">
             <table class="time-table approval-table">
               <thead>
-                <tr><th>Person</th><th>Role</th><th>Company</th><th>Reports to</th><th>Status</th><th>Email</th><th></th></tr>
+                <tr><th>Person</th><th>Role</th><th>Position</th><th>Company</th><th>Reports to</th><th>Status</th><th>Email</th><th></th></tr>
               </thead>
-              <tbody>${rows || '<tr><td colspan="7">No accounts found.</td></tr>'}</tbody>
+              <tbody>${rows || '<tr><td colspan="8">No accounts found.</td></tr>'}</tbody>
             </table>
           </div>
         </div>
@@ -56,7 +59,7 @@ App.ApprovalView = class ApprovalView {
   renderRow(profile) {
     // You can't delete your own account — hide the button and RLS blocks it too.
     const isSelf = !!(App.currentAuthUser && App.currentAuthUser.id === profile.id);
-    const person = App.PEOPLE[profile.member_id] || {
+    const person = App.directory.person(profile.member_id) || {
       name: profile.full_name || profile.email || 'Member',
       full: profile.full_name || profile.email || 'Member',
       email: profile.email || '',
@@ -72,14 +75,17 @@ App.ApprovalView = class ApprovalView {
       roleEntries.unshift([profile.role, { label: `${retiredLabels[profile.role] || profile.role} (retired)` }]);
     }
     const roles = roleEntries.map(([id, role]) =>
-      `<option value="${id}" ${profile.role === id ? 'selected' : ''}>${role.label}</option>`
+      `<option value="${App.utils.escapeHtml(id)}" ${profile.role === id ? 'selected' : ''}>${App.utils.escapeHtml(role.label)}</option>`
     ).join('');
     const supervisorOpts = ['<option value="">— None —</option>']
       .concat(this.supervisorOptions(profile.member_id).map(s =>
         `<option value="${s.id}" ${profile.supervisor_id === s.id ? 'selected' : ''}>${App.utils.escapeHtml(s.name)}</option>`
       )).join('');
     const companyIds = Array.isArray(profile.company_ids) ? profile.company_ids : [];
-    const companyChecks = Object.values(App.COMPANIES).map(c => `
+    // 'overall' (c.all) is NOT a tickable company: it's granted automatically to
+    // anyone in 2+ real companies by the profiles_sync_overall trigger
+    // (migration 068). Showing a checkbox would just get overridden on save.
+    const companyChecks = Object.values(App.COMPANIES).filter(c => !c.all).map(c => `
       <label class="company-chk">
         <input type="checkbox" value="${App.utils.escapeHtml(c.id)}" ${companyIds.includes(c.id) ? 'checked' : ''} />
         <span>${App.utils.escapeHtml(c.label)}</span>
@@ -87,23 +93,24 @@ App.ApprovalView = class ApprovalView {
     `).join('');
     return `
       <tr data-profile-id="${profile.id}" data-member-id="${profile.member_id || ''}" data-person-name="${App.utils.escapeHtml(person.full)}">
-        <td>
+        <td data-label="Person">
           <span style="display:inline-flex;align-items:center;gap:8px;">
             ${App.utils.avatarHtml(person)}
             <span style="font-size:12px;">${App.utils.escapeHtml(person.full)}</span>
           </span>
         </td>
-        <td><select data-field="role">${roles}</select></td>
-        <td><div class="company-multi" data-field="companies">${companyChecks}</div></td>
-        <td><select data-field="supervisor">${supervisorOpts}</select></td>
-        <td>
+        <td data-label="Role"><select data-field="role">${roles}</select></td>
+        <td data-label="Position"><input type="text" class="approval-position-input" data-field="position" value="${App.utils.escapeHtml(profile.position || '')}" placeholder="e.g. Drafting Lead" maxlength="80" /></td>
+        <td data-label="Company"><div class="company-multi" data-field="companies">${companyChecks}</div></td>
+        <td data-label="Reports to"><select data-field="supervisor">${supervisorOpts}</select></td>
+        <td data-label="Status">
           <label class="approval-toggle">
             <input type="checkbox" data-field="approved" ${profile.approved ? 'checked' : ''} />
             <span>${profile.approved ? 'Approved' : 'Pending'}</span>
           </label>
         </td>
-        <td>${App.utils.escapeHtml(profile.email || '')}</td>
-        <td>
+        <td data-label="Email"><span class="approval-email">${App.utils.escapeHtml(profile.email || '')}</span></td>
+        <td class="approval-actions-cell">
           <div class="approval-actions">
             <button class="btn btn-sm btn-primary" data-action="save-access">Save</button>
             ${isSelf ? '' : `<button class="btn btn-sm btn-danger" data-action="delete-user" title="Remove this user's access"><i class="ti ti-trash"></i></button>`}
@@ -114,6 +121,9 @@ App.ApprovalView = class ApprovalView {
   }
 
   bind() {
+    const addBtn = this.wrap.querySelector('[data-action="add-person"]');
+    if (addBtn) addBtn.addEventListener('click', () => this.openAddPerson());
+
     const refreshBtn = this.wrap.querySelector('[data-action="refresh-profiles"]');
     if (refreshBtn) refreshBtn.addEventListener('click', () => this.reloadAndRender(refreshBtn));
 
@@ -132,13 +142,18 @@ App.ApprovalView = class ApprovalView {
         const role = row.querySelector('[data-field="role"]').value;
         const approved = row.querySelector('[data-field="approved"]').checked;
         const supervisorId = row.querySelector('[data-field="supervisor"]').value || null;
+        const position = (row.querySelector('[data-field="position"]').value || '').trim() || null;
         const companyIds = Array.from(
           row.querySelectorAll('[data-field="companies"] input[type="checkbox"]:checked')
         ).map(el => el.value);
         button.disabled = true;
         button.textContent = 'Saving';
         try {
-          await this.dataStore.updateProfileAccess(profileId, { role, approved, supervisorId, companyIds });
+          await this.dataStore.updateProfileAccess(profileId, { role, approved, supervisorId, companyIds, position });
+          // Mirror position into App.PEOPLE immediately so the picker reflects it
+          // without waiting for a full data reload (team_members trigger runs async).
+          const memberId = row.dataset.memberId;
+          if (memberId && App.PEOPLE && App.directory.person(memberId)) App.directory.person(memberId).position = position;
           this.controller.toastView.show({ title: 'Access updated', sub: approved ? 'Account approved' : 'Account set to pending' });
           // Reload from the server so the table reflects the saved state without a manual refresh.
           await this.reloadAndRender();
@@ -175,6 +190,86 @@ App.ApprovalView = class ApprovalView {
         }
       });
     });
+  }
+
+  openAddPerson() {
+    if (this._addModal) return;
+    const roles = Object.entries(App.ROLES)
+      .map(([id, r]) => `<option value="${App.utils.escapeHtml(id)}" ${id === 'worker' ? 'selected' : ''}>${App.utils.escapeHtml(r.label)}</option>`)
+      .join('');
+    // 'overall' is auto-granted at 2+ companies (migration 068) — not tickable.
+    const companies = Object.values(App.COMPANIES).filter(c => !c.all).map(c => `
+      <label class="company-chk">
+        <input type="checkbox" value="${App.utils.escapeHtml(c.id)}" />
+        <span>${App.utils.escapeHtml(c.label)}</span>
+      </label>`).join('');
+    const supervisors = ['<option value="">— None —</option>']
+      .concat(this.supervisorOptions(null).map(s => `<option value="${App.utils.escapeHtml(s.id)}">${App.utils.escapeHtml(s.name)}</option>`))
+      .join('');
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop';
+    modal.id = 'addPersonModal';
+    modal.innerHTML = `
+      <div class="modal" data-stop>
+        <div class="modal-head">
+          <div class="modal-title">Add person</div>
+          <button class="icon-btn" data-action="close" aria-label="Close"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="field"><label class="field-label" for="ap-name">Full name</label>
+            <input type="text" id="ap-name" placeholder="First Last" maxlength="80" /></div>
+          <div class="field" style="margin-top:12px;"><label class="field-label" for="ap-email">Email</label>
+            <input type="email" id="ap-email" placeholder="name@company.com" maxlength="254" /></div>
+          <div class="field" style="margin-top:12px;"><label class="field-label" for="ap-role">Role</label>
+            <select id="ap-role">${roles}</select></div>
+          <div class="field" style="margin-top:12px;"><label class="field-label">Company</label>
+            <div class="company-multi" id="ap-companies">${companies}</div></div>
+          <div class="field" style="margin-top:12px;"><label class="field-label" for="ap-supervisor">Reports to</label>
+            <select id="ap-supervisor">${supervisors}</select></div>
+          <div class="ap-result hidden" id="ap-result"></div>
+          <div class="modal-actions">
+            <button class="btn" data-action="close">Cancel</button>
+            <button class="btn btn-primary" data-action="submit">Create account</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    this._addModal = modal;
+
+    const close = () => { modal.remove(); this._addModal = null; };
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    modal.querySelectorAll('[data-action="close"]').forEach(el => el.addEventListener('click', close));
+    modal.querySelector('[data-action="submit"]').addEventListener('click', () => this.submitAddPerson(modal, close));
+    setTimeout(() => { const n = modal.querySelector('#ap-name'); if (n) n.focus(); }, 50);
+  }
+
+  async submitAddPerson(modal, close) {
+    const name = modal.querySelector('#ap-name').value.trim();
+    const email = modal.querySelector('#ap-email').value.trim();
+    const role = modal.querySelector('#ap-role').value;
+    const supervisorId = modal.querySelector('#ap-supervisor').value || null;
+    const companyIds = Array.from(modal.querySelectorAll('#ap-companies input[type="checkbox"]:checked')).map(el => el.value);
+    const result = modal.querySelector('#ap-result');
+
+    if (!name) { result.className = 'ap-result error'; result.textContent = 'Enter a full name.'; return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { result.className = 'ap-result error'; result.textContent = 'Enter a valid email.'; return; }
+
+    const btn = modal.querySelector('[data-action="submit"]');
+    btn.disabled = true; btn.textContent = 'Creating…';
+    try {
+      const res = await this.dataStore.createUser({ fullName: name, email, role, companyIds, supervisorId });
+      this.controller.toastView.show({
+        title: 'Person added',
+        sub: res.emailSent ? 'Account created and emailed.' : 'Account created — email could not be sent.',
+      });
+      close();
+      await this.reloadAndRender();
+    } catch (err) {
+      result.className = 'ap-result error';
+      result.textContent = (err && err.message) || 'Could not add the person.';
+      btn.disabled = false; btn.textContent = 'Create account';
+    }
   }
 
   async reloadAndRender(btn) {

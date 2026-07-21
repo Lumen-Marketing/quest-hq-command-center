@@ -1,8 +1,58 @@
 window.App = window.App || {};
 
 App.utils = {
+  /* Make a non-button element behave like a button for keyboard / AT users:
+     role=button, focusable, and Enter/Space activate it. Pass a handler to run
+     directly, or omit it to synthesize a click (so an existing delegated click
+     handler fires). Optional label sets aria-label. */
+  makeActivatable(el, handler, label) {
+    if (!el) return;
+    el.setAttribute('role', 'button');
+    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+    if (label) el.setAttribute('aria-label', label);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        if (handler) handler(e); else el.click();
+      }
+    });
+  },
+
   initials(name) {
     return String(name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  },
+
+  /* Uppercase a free-text field value on save. The user types normally; this is
+     applied at the save seams (createTask, updateTaskDetails, updateTaskField for
+     title/description, addTaskComment, createProject) so task/project titles,
+     descriptions, subtasks and notes are stored ALL CAPS. Non-strings pass
+     through untouched (null/undefined stay as-is), and it's idempotent — safe to
+     apply to an already-uppercased value (e.g. a duplicated task). */
+  upper(v) {
+    return typeof v === 'string' ? v.toUpperCase() : v;
+  },
+
+  /* Trap Tab focus inside `container` (so it can't escape into the page behind a
+     modal) and restore focus to whatever was focused before, when released.
+     Returns a release() function to call on close. */
+  trapFocus(container) {
+    const prev = document.activeElement;
+    const sel = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const focusable = () => [...container.querySelectorAll(sel)]
+      .filter(el => el.offsetWidth || el.offsetHeight || el === document.activeElement);
+    const onKey = (e) => {
+      if (e.key !== 'Tab') return;
+      const f = focusable();
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    container.addEventListener('keydown', onKey);
+    return function release() {
+      container.removeEventListener('keydown', onKey);
+      if (prev && typeof prev.focus === 'function') prev.focus();
+    };
   },
 
   /* Returns a self-contained <span class="avatar-xs ..."> element for
@@ -23,7 +73,7 @@ App.utils = {
       return `<span class="${cls}" style="background:transparent; padding:0;"><img src="${App.utils.escapeHtml(person.avatar_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" /></span>`;
     }
     const bg = person.color ? App.utils.safeColor(person.color) : 'var(--ink-3)';
-    return `<span class="${cls}" style="background:${bg};">${App.utils.initials(person.full || person.name || '')}</span>`;
+    return `<span class="${cls}" style="background:${bg};">${App.utils.escapeHtml(App.utils.initials(person.full || person.name || ''))}</span>`;
   },
 
   /* A minimal stand-in for someone who has tracked time but isn't in
@@ -52,7 +102,7 @@ App.utils = {
     const rosterIds = new Set(roster.map(p => p.id));
     const orphans = [...activityIds]
       .filter(id => !rosterIds.has(id))
-      .map(id => App.PEOPLE[id] || App.utils.unknownPerson(id));
+      .map(id => App.directory.person(id) || App.utils.unknownPerson(id));
     return [...roster, ...orphans];
   },
 
@@ -134,9 +184,37 @@ App.utils = {
      multi-company "drop the filter" option) — it means no company filter, so
      return the full active roster rather than intersecting on a literal '*'
      that no profile's company_ids ever contains. */
+  /* Does `companyId` (a scope/filter) select this task? '*' or empty means
+     no company filter. A real company also matches Overall tasks (they span
+     every company). When the scope IS 'overall', only Overall tasks match. */
+  taskInCompany(task, companyId) {
+    if (!companyId || companyId === '*') return true;
+    const c = task && task.company;
+    return c === companyId || c === 'overall';
+  },
+
+  /* Every assignee on a task, in order — index 0 is the accountable lead and is
+     also mirrored into the single `assignee` field (migration 060). Rows written
+     before 060 carry only `assignee`, so fall back to it. */
+  taskAssignees(task) {
+    if (!task) return [];
+    if (Array.isArray(task.assigneeIds) && task.assigneeIds.length) return task.assigneeIds;
+    return task.assignee ? [task.assignee] : [];
+  },
+
+  /* Is this person assigned to the task AT ALL (lead or not)? Every list, scope
+     and filter must ask THIS, not `task.assignee === id` — the latter sees only
+     the lead, which hid co-assigned tasks from the people they were assigned to
+     even though RLS (060) let them read and open the row. */
+  isAssignee(task, userId) {
+    if (!task || !userId) return false;
+    return this.taskAssignees(task).includes(userId);
+  },
+
   peopleInCompany(companyId, includeIds) {
     const base = this.activePeople(includeIds);
-    if (!companyId || companyId === '*') return base;
+    // 'overall' spans all companies → full roster, same as the '*' no-filter path.
+    if (!companyId || companyId === '*' || companyId === 'overall') return base;
     const profiles = App.PROFILES || [];
     // Managers have the full profiles list → scope by profiles.company_ids.
     // Workers don't → scope by the company_ids now mirrored onto the roster
@@ -157,13 +235,85 @@ App.utils = {
     return list.length ? list : base;
   },
 
+  /* Offset (ms) of a timezone from UTC at a given instant — recomputed per
+     instant so daylight-saving is handled. Returns (zone-wall-clock-as-UTC −
+     actual-UTC). */
+  zoneOffsetMs(ms, tz) {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    const p = {};
+    dtf.formatToParts(new Date(ms)).forEach(part => { p[part.type] = part.value; });
+    const hour = p.hour === '24' ? 0 : Number(p.hour);
+    const asUTC = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), hour, Number(p.minute), Number(p.second));
+    return asUTC - ms;
+  },
+
+  /* Convert an HQ wall-clock (App.HQ_TIMEZONE) Y/M/D H:M into a real epoch ms,
+     so a due/reminder time means the same instant for every viewer regardless of
+     their device zone. One pass is exact for a fixed-offset zone (Arizona, −7);
+     correct for DST zones except within the ~1h that straddles a switch. Falls
+     back to local wall-clock if the zone id is somehow invalid. */
+  hqWallClockToMs(y, m, d, hh = 0, mm = 0) {
+    const guess = Date.UTC(y, m - 1, d, hh, mm);
+    try {
+      return guess - App.utils.zoneOffsetMs(guess, App.HQ_TIMEZONE);
+    } catch (e) {
+      return new Date(y, m - 1, d, hh, mm).getTime();
+    }
+  },
+
+  /* The CURRENT calendar date in the HQ zone (App.HQ_TIMEZONE), so Today /
+     Tomorrow / Overdue / due-today are judged on HQ (Phoenix) time for EVERY
+     user — not the device's local date. ±offset days are applied with UTC math
+     so the shift can't drift across a local-zone boundary. Falls back to the
+     device-local date if Intl rejects the zone id. */
   todayISO(offset = 0) {
-    const d = new Date();
-    d.setDate(d.getDate() + offset);
+    let y, m, d;
+    try {
+      const p = {};
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: App.HQ_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(new Date()).forEach(part => { p[part.type] = part.value; });
+      y = Number(p.year); m = Number(p.month); d = Number(p.day);
+    } catch (e) {
+      const local = new Date();
+      y = local.getFullYear(); m = local.getMonth() + 1; d = local.getDate();
+    }
+    const shifted = new Date(Date.UTC(y, m - 1, d + offset));
+    const mm = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(shifted.getUTCDate()).padStart(2, '0');
+    return `${shifted.getUTCFullYear()}-${mm}-${dd}`;
+  },
+
+  // Format a Date object as a local YYYY-MM-DD string (NOT UTC — matches
+  // todayISO so calendar day math lines up with how due dates are stored).
+  toISODate(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
+  },
+
+  // Format a real instant (ISO timestamp string or Date) as the HQ-timezone
+  // YYYY-MM-DD, matching todayISO so "completed today" / cycle-time day math
+  // lines up with how due dates are stored. completed_at is a timestamptz, so we
+  // must reduce it to a calendar day in the shared HQ zone, not the viewer's.
+  hqDateOf(instant) {
+    if (!instant) return '';
+    const d = instant instanceof Date ? instant : new Date(instant);
+    if (isNaN(d.getTime())) return '';
+    try {
+      const p = {};
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: App.HQ_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(d).forEach(part => { p[part.type] = part.value; });
+      return `${p.year}-${p.month}-${p.day}`;
+    } catch (e) {
+      return App.utils.toISODate(d);
+    }
   },
 
   formatDuration(ms) {
@@ -200,6 +350,40 @@ App.utils = {
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
+  },
+
+  /* Build the meta line for an inbox notification: the category label plus a
+     live relative time computed from the row's created_at. Older notifications
+     baked the time directly into `meta` (e.g. "Task update · just now"), which
+     froze every row at "just now" forever — strip that legacy suffix so the
+     real timeAgo value wins. Non-time suffixes (e.g. "Reminder · High") are
+     kept. Falls back to "just now" when no timestamp is available. */
+  notifMeta(meta, createdAt) {
+    const base = String(meta == null ? '' : meta)
+      .replace(/\s*·\s*just now\s*$/i, '')
+      .trim();
+    const rel = this.timeAgo(createdAt) || 'just now';
+    return base ? `${base} · ${rel}` : rel;
+  },
+
+  /* Map a check-in notification's stored `meta` to its call-to-action, or null
+     when the notification isn't a check-in. The `checkins` edge function writes
+     meta as `Check-in · <subject>`; we read the subject back and resolve the
+     per-mode label + deep-link route. `route === null` means "no route — act on
+     the notification's own task" (stalled mode carries the task id).
+
+     ⚠️ The subject strings MUST stay in lockstep with MODE_SUBJECT in
+     supabase/functions/checkins/lib/content.mjs. That module is Deno-only, so
+     there is no shared import — a wording change there is a change here too. */
+  checkinCta(meta) {
+    const m = String(meta == null ? '' : meta).match(/^Check-in\s+·\s+(.+?)\s*$/);
+    if (!m) return null;
+    const BY_SUBJECT = {
+      'Your morning check-in':      { mode: 'morning', label: "Set today's focus",   route: '#/tasks/execution' },
+      'Your end-of-day check-in':   { mode: 'eod',     label: 'Review today',        route: '#/tasks' },
+      'Tasks that have gone quiet': { mode: 'stalled', label: 'Review stalled tasks', route: null },
+    };
+    return BY_SUBJECT[m[1]] || null;
   },
 
   /* Format a true point-in-time (a real instant: clock-in moment, time-entry
@@ -317,5 +501,48 @@ App.utils = {
 
   uid(prefix = '') {
     return prefix + Date.now() + Math.random().toString(36).slice(2, 6);
+  },
+
+  // Stable-ish text id for a new project folder: slug of the name + a short
+  // random suffix so two "Mesa ADU" folders don't collide.
+  slugId(name) {
+    const base = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'folder';
+    return `${base}-${Math.random().toString(36).slice(2, 7)}`;
+  },
+
+  /* ---------- CSV export helpers ---------- */
+  // One CSV field. Quotes when the value contains a comma/quote/newline, and is
+  // injection-safe: a value starting with = + - @ (or a control char) gets a
+  // leading apostrophe so Excel/Sheets treat it as text, not a formula.
+  csvCell(val) {
+    let s = (val === null || val === undefined) ? '' : String(val);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    if (/[",\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  },
+
+  // rows: array of arrays → CSV string (CRLF line breaks for Excel).
+  toCsv(rows) {
+    return rows.map(r => r.map(c => App.utils.csvCell(c)).join(',')).join('\r\n');
+  },
+
+  // Trigger a client-side file download. Prepends a UTF-8 BOM so Excel reads
+  // accented characters correctly.
+  downloadFile(filename, content, mime = 'text/csv;charset=utf-8') {
+    const blob = new Blob(['﻿' + content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+
+  /* Stable string key for memo caches: JSON-safe values plus Sets (serialized
+     as sorted arrays so membership, not insertion order, defines equality). */
+  fingerprint(value) {
+    return JSON.stringify(value, (k, v) => (v instanceof Set ? [...v].sort() : v));
   },
 };

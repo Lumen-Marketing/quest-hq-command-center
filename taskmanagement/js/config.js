@@ -46,6 +46,11 @@ App.commandCenterProfileUrl = App.commandCenterIntegration.hosted
   ? `${window.location.origin}${commandCenterBasePath}command?account=profile`
   : '';
 
+// Capture whether we landed on a password-recovery link BEFORE creating the
+// Supabase client below — with detectSessionInUrl on, the client consumes and
+// strips `#...&type=recovery` from the URL, so a later read would miss it.
+App.isRecoveryLanding = /[#&]type=recovery\b/.test(window.location.hash || '');
+
 App.defaultSupabaseConfig = {
   supabaseUrl: 'https://lpzotcznihwyyudxycmd.supabase.co',
   supabaseAnonKey: 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07',

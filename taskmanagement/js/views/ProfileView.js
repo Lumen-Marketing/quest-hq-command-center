@@ -66,20 +66,29 @@ App.ProfileView = class ProfileView {
             <input type="text" id="pf-name" value="${App.utils.escapeHtml(currentName)}" placeholder="Your name" maxlength="80" />
           </div>
 
-          <div class="field" style="margin-top:18px;">
-            <label class="field-label" for="pf-current-password">Current password</label>
-            <input type="password" id="pf-current-password" placeholder="Required only to change your password" autocomplete="current-password" maxlength="128" />
+          <div class="field" style="margin-top:12px;">
+            <label class="field-label" for="pf-position">Job title / position <span class="field-optional">Optional</span></label>
+            <input type="text" id="pf-position" value="${App.utils.escapeHtml(profile.position || '')}" placeholder="e.g. Drafting Lead" maxlength="80" />
           </div>
 
-          <div class="field" style="margin-top:12px;">
-            <label class="field-label" for="pf-password">New password</label>
-            <input type="password" id="pf-password" placeholder="Leave blank to keep current" autocomplete="new-password" maxlength="128" />
-            <div class="profile-hint">At least 8 characters, with upper- and lowercase letters, a number, and a special character.</div>
-          </div>
+          <button type="button" class="btn-link pf-pw-toggle" id="pf-pw-toggle" style="margin-top:14px;font-size:13px;">Change password</button>
 
-          <div class="field" style="margin-top:12px;">
-            <label class="field-label" for="pf-password-confirm">Confirm new password</label>
-            <input type="password" id="pf-password-confirm" placeholder="Re-enter new password" autocomplete="new-password" maxlength="128" />
+          <div id="pf-pw-section" style="display:none;">
+            <div class="field" style="margin-top:14px;">
+              <label class="field-label" for="pf-current-password">Current password</label>
+              <input type="password" id="pf-current-password" placeholder="Required to change your password" autocomplete="current-password" maxlength="128" />
+            </div>
+
+            <div class="field" style="margin-top:12px;">
+              <label class="field-label" for="pf-password">New password</label>
+              <input type="password" id="pf-password" placeholder="At least 8 characters" autocomplete="new-password" maxlength="128" />
+              <div class="profile-hint">Upper- and lowercase letters, a number, and a special character.</div>
+            </div>
+
+            <div class="field" style="margin-top:12px;">
+              <label class="field-label" for="pf-password-confirm">Confirm new password</label>
+              <input type="password" id="pf-password-confirm" placeholder="Re-enter new password" autocomplete="new-password" maxlength="128" />
+            </div>
           </div>
 
           <div class="modal-actions">
@@ -145,6 +154,26 @@ App.ProfileView = class ProfileView {
       }
     });
 
+    const pwToggle = document.getElementById('pf-pw-toggle');
+    const pwSection = document.getElementById('pf-pw-section');
+    if (pwToggle && pwSection) {
+      pwToggle.addEventListener('click', () => {
+        const open = pwSection.style.display !== 'none';
+        pwSection.style.display = open ? 'none' : 'block';
+        pwToggle.textContent = open ? 'Change password' : 'Cancel password change';
+        if (!open) {
+          setTimeout(() => {
+            const first = document.getElementById('pf-current-password');
+            if (first) first.focus();
+          }, 0);
+        } else {
+          document.getElementById('pf-current-password').value = '';
+          document.getElementById('pf-password').value = '';
+          document.getElementById('pf-password-confirm').value = '';
+        }
+      });
+    }
+
     // Name change updates the initials preview when no photo is showing.
     document.getElementById('pf-name').addEventListener('input', () => {
       if (!this.pendingFile && (this.removePending || !this._currentAvatarUrl())) {
@@ -207,7 +236,8 @@ App.ProfileView = class ProfileView {
         avatarChanged = true;
       }
 
-      await this._saveProfile(nameRaw, avatarUrl, avatarChanged);
+      const positionRaw = (document.getElementById('pf-position').value || '').trim();
+      await this._saveProfile(nameRaw, positionRaw, avatarUrl, avatarChanged);
 
       // Update the auth credential last. Verify the CURRENT password first
       // (Supabase's updateUser would otherwise let anyone on an unlocked session
@@ -308,12 +338,12 @@ App.ProfileView = class ProfileView {
     });
   }
 
-  async _saveProfile(fullName, avatarUrl, avatarChanged) {
+  async _saveProfile(fullName, position, avatarUrl, avatarChanged) {
     const profile = App.currentProfile;
     const memberId = profile && profile.member_id;
     const firstName = fullName.split(/\s+/)[0] || fullName;
 
-    const profileUpdate = { full_name: fullName };
+    const profileUpdate = { full_name: fullName, position: position || null };
     if (avatarChanged) profileUpdate.avatar_url = avatarUrl;
 
     const profileRes = await App.supabase
@@ -323,12 +353,12 @@ App.ProfileView = class ProfileView {
     if (profileRes.error) throw profileRes.error;
 
     if (memberId) {
-      const memberUpdate = { name: firstName, full_name: fullName };
+      const memberUpdate = { name: firstName, full_name: fullName, position: position || null };
       if (avatarChanged) memberUpdate.avatar_url = avatarUrl;
 
       // Best-effort: only managers can write team_members (RLS). For everyone
       // else this is rejected — that's fine, the profile is the source of truth
-      // and the UI overlays profile name/avatar onto the roster anyway.
+      // and the trigger (migration 065) syncs position automatically.
       const memberRes = await App.supabase
         .from('team_members')
         .update(memberUpdate)
@@ -345,10 +375,11 @@ App.ProfileView = class ProfileView {
     }
 
     App.currentProfile = Object.assign({}, profile, profileUpdate);
-    if (memberId && App.PEOPLE && App.PEOPLE[memberId]) {
-      App.PEOPLE[memberId].name = firstName;
-      App.PEOPLE[memberId].full = fullName;
-      if (avatarChanged) App.PEOPLE[memberId].avatar_url = avatarUrl;
+    if (memberId && App.PEOPLE && App.directory.person(memberId)) {
+      App.directory.person(memberId).name = firstName;
+      App.directory.person(memberId).full = fullName;
+      App.directory.person(memberId).position = position || null;
+      if (avatarChanged) App.directory.person(memberId).avatar_url = avatarUrl;
     }
 
     this._repaintTopbarAvatar(fullName, avatarChanged ? avatarUrl : (App.currentProfile.avatar_url || null));

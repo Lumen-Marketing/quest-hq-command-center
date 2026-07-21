@@ -14,6 +14,8 @@ Upstream layout: the app lives at the **repo root** (no subfolder).
 | Host-bar markup `#commandCenterHostBar` / `#commandCenterProjectLabel` / `#commandCenterReturnLink` in `app.html` | Re-add to new `app.html`, plus `<script src="js/command-center-host.js">` after `config.js` |
 | `js/views/NewTaskModalView.js` (CC-only) | **Drop** — upstream replaced it with `js/views/NewTaskPageView.js` |
 | No `login.html` vendored | Keep policy: CC owns login (upstream login = `index.html` + `login.css` + `js/login-fx.js`, not vendored) |
+| `App.authEnabled === false` demo-session block in `js/auth-guard.js` (discovered during refresh — was an inline CC edit, not a separate file) | Re-applied into upstream `auth-guard.js` after `await App.configReady` |
+| Host-bar CSS (was inlined in old `taskmanagement.css`) | Extracted to new CC-only file `css/command-center-host.css`, linked from `app.html` |
 
 ## B. Upstream changes vs snapshot
 

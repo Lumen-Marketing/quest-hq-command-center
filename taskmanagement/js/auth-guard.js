@@ -9,6 +9,9 @@ App.authReady = (async function () {
 
   if (App.configReady) await App.configReady;
 
+  // CC integration layer: App.authEnabled === false boots a seeded demo
+  // session with no Supabase at all (Phase 1 of the absorption plan; Phase 2
+  // flips authEnabled and this block becomes dead until removed).
   if (App.authEnabled === false) {
     App.previewMode = true;
     App.authDisabled = true;
@@ -78,6 +81,9 @@ App.authReady = (async function () {
     App.signOut = function () { window.location.href = window.location.pathname; };
     return;
   }
+
+  // Wait for runtime config (env.json -> Supabase client) before any auth call.
+  if (App.configReady) await App.configReady;
 
   if (!App.supabase || !App.supabase.auth) {
     const detail = App.supabaseLoadError || 'Check Supabase configuration.';

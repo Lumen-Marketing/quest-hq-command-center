@@ -24,6 +24,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         save: async () => ({ conflicts: [] }),
         loadProfiles: async () => App.PROFILES || [],
         loadNotifications: async () => [],
+        // Comments live in-memory in preview/offline mode (no Supabase table).
+        loadComments: async (taskId) => (App._previewComments && App._previewComments[taskId]) || [],
+        loadRecentComments: async (limit = 40) => Object.values(App._previewComments || {})
+          .flat()
+          .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+          .slice(0, limit),
+        addComment: async (taskId, { body, mentions }) => {
+          App._previewComments = App._previewComments || {};
+          const list = App._previewComments[taskId] || (App._previewComments[taskId] = []);
+          const c = {
+            id: App.utils.uid('c'), taskId, authorId: App.CURRENT_USER,
+            body: String(body || ''), mentions: Array.isArray(mentions) ? mentions : [],
+            createdAt: new Date().toISOString(),
+          };
+          list.push(c);
+          return c;
+        },
         updateProfileAccess: async (id, updates) => {
           const p = (App.PROFILES || []).find(pr => pr.id === id);
           if (p) {
@@ -36,9 +53,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         },
         sendNotifications: async () => {},
         sendEmail: async () => ({ ok: false, skipped: true }),
+        getBriefing: async () => ({ ok: false, error: 'AI briefing is not available in preview mode.' }),
+        getWeeklyDigest: async () => ({ ok: false, error: 'AI digest is not available in preview mode.' }),
+        projectRollup: async () => ({ ok: false, error: 'AI project rollup is not available in preview mode.' }),
+        draftTask: async () => ({ ok: false, error: 'AI drafting is not available in preview mode.' }),
+        chat: async () => ({ ok: false, error: 'AI chat is not available in preview mode.' }),
         deleteProfile: async (id) => {
           App.PROFILES = (App.PROFILES || []).filter(pr => pr.id !== id);
           return { emailFreed: true };
+        },
+        createUser: async () => {
+          throw new Error('Adding people is not available in preview/offline mode.');
         },
       }
     : new App.SupabaseDataStore({
@@ -81,14 +106,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (mineCfg && !App.currentProfile.company_ids) {
       App.currentProfile.company_ids = Array.isArray(mineCfg.company_ids) ? mineCfg.company_ids : [];
     }
+    // Preview/offline: no Supabase — build the taxonomy from the constants.
+    App.taxonomy.hydrate(null);
   } else {
     try {
       const saved = await dataStore.load();
       if (saved.people && Object.keys(saved.people).length) App.PEOPLE = saved.people;
       App.PROFILES = saved.profiles || [];
+      App.projects = saved.projects || {};
       taskModel.hydrate(saved.tasks);
       timeModel.hydrate(saved.timeEntries, saved.activeTimers);
       notifModel.hydrate(saved.notifications);
+      // Per-company task taxonomy (types/statuses/labels). Falls back to the
+      // hardcoded constants if the DB returned nothing.
+      App.taxonomy.hydrate(saved.taxonomy);
     } catch (err) {
       console.error('[app] Supabase load failed', err);
       renderFatalDataError(err);
@@ -118,8 +149,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentUser: App.CURRENT_USER,
     dataStore,
   });
-  const embeddedInJobCenter = !!(App.commandCenterIntegration && App.commandCenterIntegration.embedded);
-  document.body.classList.toggle('task-only-embed', embeddedInJobCenter);
 
   // Resolve the user's accessible companies + active company before any view
   // renders, so the first paint is already company-scoped.
@@ -134,9 +163,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   App.dataStore = dataStore;
 
   const toastView = new App.ToastView('toastContainer');
-  const newTaskModal = new App.NewTaskModalView({ controller, currentUser: App.CURRENT_USER });
-  const profileView = embeddedInJobCenter ? null : new App.ProfileView({ controller });
-  controller.attachViews({ toastView, newTaskModal, profileView });
+  const newTaskPage = new App.NewTaskPageView({ controller, currentUser: App.CURRENT_USER });
+  const profileView = new App.ProfileView({ controller });
+  const reportProblemView = new App.ReportProblemView({ controller, dataStore });
+  const newFolderView = new App.NewFolderView();
+  const textPromptView = new App.TextPromptView();
+  const chatDrawerView = new App.ChatDrawerView({ controller, dataStore });
+  controller.attachViews({ toastView, newTaskPage, profileView, reportProblemView, newFolderView, textPromptView, chatDrawerView });
 
   // Last-resort handlers: any error that escaped its own try/catch ends up
   // here as a clean toast instead of an unhandled rejection in the console.
@@ -157,16 +190,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('error', (e) => surfaceUnhandled(e.error || e.message));
   window.addEventListener('unhandledrejection', (e) => surfaceUnhandled(e.reason));
 
-  if (!embeddedInJobCenter) new App.TopbarView({ timeModel, notifModel, controller, currentUser: App.CURRENT_USER });
+  new App.TopbarView({ timeModel, notifModel, controller, currentUser: App.CURRENT_USER });
   new App.SidebarView({ taskModel, timeModel, controller, currentUser: App.CURRENT_USER });
+  new App.BottomNavView({ controller });
   new App.TaskListView({ taskModel, timeModel, controller, currentUser: App.CURRENT_USER });
   new App.TaskDetailView({ taskModel, timeModel, controller, currentUser: App.CURRENT_USER });
+  App.projectPicker = new App.ProjectPickerView({ controller });
+  App.projectsView = new App.ProjectsView({ controller, taskModel });
   new App.FilterBarView({ controller });
+  new App.BulkActionsView({ controller });
   new App.ResizeHandleView({ controller });
   new App.ToolbarMenuView({ controller });
-  if (!embeddedInJobCenter) new App.UiScaleView();
+  App.uiScale = new App.UiScaleView();
   new App.ProgressWidgetView({ taskModel, currentUser: App.CURRENT_USER });
   new App.UpNextWidgetView({ taskModel, timeModel, controller, currentUser: App.CURRENT_USER });
+  new App.FocusWidgetView({ taskModel, timeModel, controller, currentUser: App.CURRENT_USER });
 
   // Reminder engine — scans tasks every minute, synthesizes in-app
   // notifications when a due-date threshold is crossed (keyed by priority).
@@ -177,12 +215,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   reminderEngine.start();
   App.reminderEngine = reminderEngine;
-  if (!embeddedInJobCenter) {
-    new App.TimeView({ taskModel, timeModel, controller, currentUser: App.CURRENT_USER });
-    new App.ApprovalView({ controller, dataStore });
-    new App.ClockDashboardView({ taskModel, timeModel, controller });
-    new App.HierarchyView({ controller });
-  }
+  new App.TimeView({ taskModel, timeModel, controller, currentUser: App.CURRENT_USER });
+  new App.HomeView({ controller });
+  new App.ReportsView({ controller });
+  new App.WallboardView({ controller });
+  new App.ApprovalView({ controller, dataStore });
+  new App.ClockDashboardView({ taskModel, timeModel, controller });
+  new App.HierarchyView({ controller });
+  new App.TaskSetupAdminView({ controller });
+  new App.CheckinSettingsView({ controller });
+  new App.PermissionsAdminView({ controller });
+  new App.ReportsAdminView({ controller, dataStore });
 
   applyRoleChrome(controller);
 
@@ -200,76 +243,115 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Otherwise, restore the view/layout the user left off on last session.
   if (App.previewMode) {
     const pv = new URLSearchParams(window.location.search).get('view');
-    if (pv && !embeddedInJobCenter) controller.setView(pv);
+    if (pv) controller.setView(pv);
   } else {
-    if (!embeddedInJobCenter) controller.restoreUiState();
+    controller.restoreUiState();
   }
 
-  let persistTimer = null;
+  // Real browser history: back/forward walks the user's path, #/… deep links
+  // restore on refresh. Must run after restoreUiState so a deep link wins.
+  controller.initHistory();
+
+  // Data + views are ready and the last view is restored — fade out the boot loader.
+  if (App.hideAppLoader) App.hideAppLoader();
+
+  // Watch for a new deploy (env.json `release` change) and reload the tab when
+  // one lands, holding off while the user is mid-edit so input isn't lost.
+  if (App.UpdateWatcher) App.UpdateWatcher.start();
+
   // Delta save: only the tasks/time-entries that actually changed are written,
   // via upserts (never delete-and-reinsert). Conflicts (a newer server version)
   // are reconciled by taking the server's copy.
-  const doSave = async () => {
-    // Coalesce any pending debounce: whether we got here from the timer or from a
-    // direct controller.saveNow() call, drop the outstanding timeout so the same
-    // dirty set can't be saved twice. Returns whether the write succeeded so
-    // callers (createTask) can decide what to do next.
-    window.clearTimeout(persistTimer);
-    const dirtyTasks = taskModel.takeDirty();
-    const unsavedEntries = timeModel.takeUnsavedEntries();
-    try {
-      const result = await dataStore.save({
-        tasks: dirtyTasks,
-        timeEntries: unsavedEntries,
-        activeTimers: timeModel.activeTimers,
-        notifications: notifModel.all(),
-      });
+  //
+  // The scheduling machinery (350ms debounce, single-flight coalescing, and the
+  // saveNow generation barrier) lives in PersistenceEngine — see that file for
+  // the invariants. app.js only supplies the app-specific pieces: what a
+  // snapshot contains, how conflicts reconcile, and how failures re-flag.
+  const engine = new App.PersistenceEngine({
+    debounceMs: 350,
+    // Snapshot-and-clear: takeDirty()/takeUnsavedEntries() clear the dirty sets
+    // synchronously, so edits made DURING the awaited write re-dirty the models
+    // and ride the coalesced follow-up run. Notifications: upsert only the rows
+    // that actually changed (dirty ids) so a save doesn't clobber read/meta/html
+    // state another device may have updated.
+    takeSnapshot: () => ({
+      tasks: taskModel.takeDirty(),
+      timeEntries: timeModel.takeUnsavedEntries(),
+      activeTimers: timeModel.activeTimers,
+      notifications: notifModel.takeDirty(),
+    }),
+    write: (snapshot) => dataStore.save(snapshot),
+    onSuccess: (result) => {
       if (result && result.conflicts && result.conflicts.length) {
-        result.conflicts.forEach(t => taskModel.applyServer(t));
+        // Conflict reconciliation (fix #4). The datastore returns a FIELD-MERGED
+        // task: server row as base with local edits re-applied. We apply it AND
+        // keep it dirty so the coalesced retry re-saves it — this time the known
+        // version is the server's latest, so the lock passes (it converges, no
+        // infinite conflict loop). applyServer() alone would clear the dirty
+        // flag and drop the local edits, so we use applyServerKeepDirty().
+        result.conflicts.forEach(t => {
+          if (t && t._conflictMerged) {
+            delete t._conflictMerged;
+            taskModel.applyServerKeepDirty(t);
+          } else {
+            taskModel.applyServer(t);
+          }
+        });
         if (controller.toastView) {
           controller.toastView.show({
             title: 'Task updated elsewhere',
-            sub: `Refreshed ${result.conflicts.length} task${result.conflicts.length > 1 ? 's' : ''} to the latest version.`,
+            sub: `Merged ${result.conflicts.length} task${result.conflicts.length > 1 ? 's' : ''} with the latest version.`,
           });
         }
       }
-      return true;
-    } catch (err) {
+    },
+    onFailure: (err, snapshot) => {
       console.error('[app] Supabase save failed', err, 'cause:', err && err.cause);
       // Re-flag the changes so the next save retries them instead of losing them.
-      taskModel.markDirty(dirtyTasks.map(t => t.id));
-      timeModel.markUnsavedEntries(unsavedEntries.map(e => e.id));
+      taskModel.markDirty(snapshot.tasks.map(t => t.id));
+      timeModel.markUnsavedEntries(snapshot.timeEntries.map(e => e.id));
+      notifModel.markDirty(snapshot.notifications.map(n => n.id));
       if (controller.toastView) {
-        // Include the underlying Supabase message in the toast — the wrapper's
-        // friendly text alone hides the diagnosis (RLS, constraint, network).
-        const friendly = (err && err.message) || 'Save failed';
-        const cause = err && err.cause && err.cause.message;
-        controller.toastView.show({
-          title: 'Supabase save failed',
-          sub: cause ? `${friendly} — ${cause}` : friendly,
-        });
+        // Reassure first (the changes are re-flagged above and WILL retry), then
+        // include the underlying Supabase message so the cause (RLS, constraint,
+        // network) isn't hidden behind friendly text.
+        let failToast;
+        if (!navigator.onLine) {
+          failToast = controller.toastView.show({
+            title: "You're offline",
+            sub: 'Your changes are kept and will sync automatically when you reconnect.',
+          });
+        } else {
+          const friendly = (err && err.message) || 'Save failed';
+          const cause = err && err.cause && err.cause.message;
+          failToast = controller.toastView.show({
+            title: "Couldn't save — your changes are kept",
+            sub: `Retrying shortly. ${cause ? `${friendly} — ${cause}` : friendly}`,
+          });
+        }
+        // Shake the toast so a failed/offline save is impossible to miss.
+        if (App.Motion) App.Motion.shake(failToast);
       }
-      return false;
-    }
-  };
-  const persist = () => {
-    window.clearTimeout(persistTimer);
-    persistTimer = window.setTimeout(doSave, 350);
-  };
-  App.EventBus.on('tasks:changed', persist);
-  App.EventBus.on('time:changed', persist);
-  App.EventBus.on('notifs:changed', persist);
+    },
+  });
+
+  App.EventBus.on('tasks:changed', () => engine.schedule());
+  App.EventBus.on('time:changed', () => engine.schedule());
+  App.EventBus.on('notifs:changed', () => engine.schedule());
 
   // Let the controller force an immediate, awaitable save. createTask uses this to
   // persist a new task BEFORE it notifies the assignee — a worker's permission to
   // insert that notification (migration 040) requires the task row to already exist.
-  controller.saveNow = doSave;
+  // saveNow's generation barrier resolves only once a save that snapshotted the
+  // just-created task has actually completed (not merely the save that happened
+  // to be in flight when saveNow was called).
+  controller.saveNow = () => engine.saveNow();
 
   // Network resilience: show an offline banner while disconnected and flush any
   // queued changes the moment we're back online. Dirty tasks/entries are
-  // re-flagged by doSave's catch above when a save fails mid-outage, so this
-  // reconnect flush picks them up rather than losing them.
-  new App.ConnectionView({ toastView, onReconnect: doSave });
+  // re-flagged by the engine's onFailure above when a save fails mid-outage, so
+  // this reconnect flush picks them up rather than losing them.
+  new App.ConnectionView({ toastView, onReconnect: () => engine.flush() });
 
   // Close the current user's timer if it's been running past the max shift.
   // Runs on boot AND on a recurring interval so a timer that crosses 12h while
@@ -291,7 +373,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // page load doesn't dump a wall of toasts for older unread items.
   if (!App.previewMode && App.can('tasks.view')) {
     const seenNotifIds = new Set(notifModel.all().map(n => n.id));
+    // Surface a *persistent* sync outage once (not every 30s tick) so the user
+    // knows their list may be stale; announce recovery once it clears. A single
+    // transient blip stays silent.
+    let pollFailStreak = 0;
+    let pollWarned = false;
     setInterval(async () => {
+      let ok = true;
       // Tasks have no realtime subscription, so re-pull them here too: a task
       // created/edited by someone else won't appear until the next poll
       // otherwise. Merged non-destructively so unsaved local edits survive.
@@ -300,11 +388,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           const freshTasks = await dataStore.loadTasks(taskModel.dirtyIds());
           taskModel.mergeServer(freshTasks);
         }
-      } catch (e) { /* transient poll error — ignore, retry next tick */ }
+      } catch (e) { ok = false; console.warn('[app] task poll failed', e); }
       try {
         const fresh = await dataStore.loadNotifications();
         const arrivals = fresh.filter(n => !seenNotifIds.has(n.id) && !n.read);
-        notifModel.hydrate(fresh);
+        // Non-destructive merge (NOT hydrate): keeps just-created local rows that
+        // haven't saved yet and preserves read-state set on this device, while
+        // pulling in notifications created elsewhere. Mirrors the task poll above.
+        notifModel.merge(fresh);
         fresh.forEach(n => seenNotifIds.add(n.id));
         App.EventBus.emit('notifs:refreshed');
         arrivals.slice(0, 3).forEach(n => {
@@ -319,14 +410,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             sub: 'Open the bell icon to see them all.',
           });
         }
-      } catch (e) { /* transient poll error — ignore */ }
+      } catch (e) { ok = false; console.warn('[app] notification poll failed', e); }
+
+      if (ok) {
+        if (pollWarned) toastView.show({ title: 'Back in sync', sub: 'Reconnected to the server.' });
+        pollFailStreak = 0;
+        pollWarned = false;
+      } else if (++pollFailStreak >= 3 && !pollWarned) {
+        pollWarned = true;
+        toastView.show({ title: 'Sync paused', sub: "Can't reach the server. Your work is safe; still retrying every 30s." });
+      }
     }, 30000);
   }
 
   // Interactive onboarding tour — role-aware, auto-shown once per NEW account.
   // Existing users skip it (migration 014 backfills them as onboarded), and
   // anyone can replay it via the avatar menu (see TopbarView).
-  App.tour = embeddedInJobCenter ? null : new App.TourView();
+  App.tour = new App.TourView();
   // Per-user localStorage key — fallback for when migration 015 hasn't been
   // run yet so the DB column doesn't exist. Survives reloads on this device
   // even if the Supabase write fails.
@@ -355,36 +455,140 @@ document.addEventListener('DOMContentLoaded', async () => {
       return !(data && data.onboarded);
     } catch (e) { return false; } // no onboarded column yet → don't nag
   };
-  App.startTour = () => App.tour && App.tour.start({ onFinish: markOnboarded });
+  App.startTour = () => App.tour.start({ onFinish: markOnboarded });
 
   const forceTour = new URLSearchParams(window.location.search).get('tour') === '1';
-  if (!embeddedInJobCenter) {
-    window.setTimeout(async () => {
-      if (forceTour || await shouldAutoStartTour()) App.startTour();
-    }, 600);
-  }
+  window.setTimeout(async () => {
+    if (forceTour || await shouldAutoStartTour()) App.startTour();
+  }, 600);
 
   document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-    if (e.key === 'n' || e.key === 'N') {
-      if (document.getElementById('newTaskModal')) return;
+    // '?' opens the shortcuts cheat-sheet from anywhere (even out of a field is
+    // handled below); Escape always closes any open overlay/menu/detail.
+    if (e.key === 'Escape') {
+      if (App.closeShortcutsHelp && App.closeShortcutsHelp()) { e.preventDefault(); return; }
+      controller.handleEscape();
+      return;
+    }
+    const typing = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' ||
+                   e.target.tagName === 'SELECT' || e.target.isContentEditable;
+    // '/' focuses search — the one shortcut we want even while not typing.
+    if (e.key === '/' && !typing) {
+      const search = document.getElementById('searchInput');
+      if (search) { e.preventDefault(); search.focus(); search.select(); }
+      return;
+    }
+    if (typing) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    if (e.key === '?') {
+      e.preventDefault();
+      if (App.toggleShortcutsHelp) App.toggleShortcutsHelp();
+    } else if (e.key === 'n' || e.key === 'N') {
+      if (controller.uiState.creatingTask) return;
       if (!App.can('tasks.write')) return;
       e.preventDefault();
-      controller.openNewTaskModal();
+      controller.openNewTaskPage();
     } else if (e.key === 't' || e.key === 'T') {
-      if (embeddedInJobCenter) return;
       e.preventDefault();
       controller.toggleGlobalClock();
-    } else if (e.key === 'Escape') {
-      controller.handleEscape();
+    } else if (e.key === 'j') {
+      e.preventDefault();
+      controller.selectAdjacentTask(1);
+    } else if (e.key === 'k') {
+      e.preventDefault();
+      controller.selectAdjacentTask(-1);
+    } else if (e.key === 'ArrowRight') {
+      // Right/Left step to the next/prev task, but only while a task detail is
+      // open (so arrow keys aren't hijacked on the list or elsewhere).
+      if (!controller.uiState.selectedTaskId) return;
+      e.preventDefault();
+      controller.selectAdjacentTask(1);
+    } else if (e.key === 'ArrowLeft') {
+      if (!controller.uiState.selectedTaskId) return;
+      e.preventDefault();
+      controller.selectAdjacentTask(-1);
+    } else if (e.key === 'c' || e.key === 'C') {
+      if (controller.uiState.selectedTaskId && App.can('tasks.write')) {
+        e.preventDefault();
+        controller.completeTask(controller.uiState.selectedTaskId);
+      }
+    } else if (e.key === 'x' || e.key === 'X') {
+      // Toggle the focused task into/out of a bulk selection.
+      const id = controller.uiState.selectedTaskId;
+      if (id == null) return;
+      e.preventDefault();
+      if (!controller.uiState.bulkMode) controller.enterBulkMode(id);
+      else controller.toggleBulkSelect(id);
     }
   });
 
+  // ---- Floating quick-add button (mobile) ----
+  const fab = document.getElementById('fab');
+  if (fab) {
+    fab.addEventListener('click', () => controller.openNewTaskPage());
+    App.syncFab = () => fab.classList.toggle('hidden', !App.can('tasks.write'));
+    App.syncFab();
+  }
+
+  // ---- Keyboard shortcuts help overlay (desktop) ----
+  App.toggleShortcutsHelp = () => {
+    if (document.getElementById('shortcutsOverlay')) { App.closeShortcutsHelp(); return; }
+    const rows = [
+      ['New task', 'N'], ['Focus search', '/'], ['Next task', 'J'], ['Previous task', 'K'],
+      ['Complete selected', 'C'], ['Select (bulk)', 'X'], ['Clock in / out', 'T'],
+      ['Close / cancel', 'Esc'], ['This help', '?'],
+    ];
+    const overlay = document.createElement('div');
+    overlay.id = 'shortcutsOverlay';
+    overlay.className = 'shortcuts-overlay';
+    overlay.innerHTML = `
+      <div class="shortcuts-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+        <h2><i class="ti ti-keyboard"></i> Keyboard shortcuts</h2>
+        ${rows.map(([label, key]) => `<div class="shortcuts-row"><span>${label}</span><kbd>${key}</kbd></div>`).join('')}
+      </div>`;
+    overlay.addEventListener('click', (ev) => { if (ev.target === overlay) App.closeShortcutsHelp(); });
+    document.body.appendChild(overlay);
+  };
+  App.closeShortcutsHelp = () => {
+    const o = document.getElementById('shortcutsOverlay');
+    if (o) { o.remove(); return true; }
+    return false;
+  };
+
   setInterval(() => App.EventBus.emit('clock:tick'), 1000);
 
+  // ---- Durable save on exit (fix #2) ----
+  // beforeunload can't reliably await an async fetch — the page tears down and
+  // the in-flight request is abandoned. The reliable trigger is the
+  // `visibilitychange -> hidden` transition: it fires on tab switch, app
+  // backgrounding, and (on mobile, where beforeunload often never fires) just
+  // before the page is frozen/discarded, and the browser keeps the tab alive
+  // long enough for an awaited fetch to complete. We flush there as the PRIMARY
+  // durable path. beforeunload stays as a best-effort secondary for the
+  // desktop close/reload case.
+  //
+  // We deliberately do NOT use navigator.sendBeacon / keepalive fetch here:
+  // constructing a correct PostgREST write by hand (REST URL, anon key, the live
+  // session auth token, snake_case row mapping, AND the optimistic-lock
+  // `updated_at` predicate) duplicates fragile logic that lives in
+  // SupabaseDataStore, and a beacon can't read back the lock result to reconcile
+  // conflicts. The visibilitychange flush — which reuses the normal awaited save
+  // path — is the robust fix; beacon would trade correctness for marginal
+  // coverage of the hard-kill case.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      engine.cancelPending();
+      // Awaited internally by the single-flight lock; the hidden tab stays alive
+      // long enough for this to land. flush() coalesces with any in-flight save.
+      engine.flush().catch(err => console.warn('[app] visibility flush save failed', err));
+    }
+  });
   window.addEventListener('beforeunload', () => {
-    if (persistTimer) window.clearTimeout(persistTimer);
-    doSave().catch(err => console.warn('[app] final Supabase save failed', err));
+    engine.cancelPending();
+    // Best-effort only — the fetch may be cut short by the unload. The
+    // visibilitychange handler above is the durable path.
+    engine.flush().catch(err => console.warn('[app] final Supabase save failed', err));
   });
 });
 
@@ -428,6 +632,7 @@ function applyRoleChrome(controller) {
   if (newTaskBtn) newTaskBtn.classList.toggle('hidden', !App.can('tasks.write'));
   if (filterBtn) filterBtn.classList.toggle('hidden', !App.can('tasks.view'));
   if (quickAdd) quickAdd.classList.toggle('hidden', !App.can('tasks.write'));
+  if (App.syncFab) App.syncFab();
   // Workers use a fixed Time | Task layout, so the table/timeline/kanban switcher is hidden.
   if (layoutSwitcher) layoutSwitcher.classList.toggle('hidden', isWorker || !App.can('tasks.view'));
 
@@ -437,6 +642,8 @@ function applyRoleChrome(controller) {
 }
 
 function renderRoleGate() {
+  // This replaces document.body below (removing #appLoader); stop the ticker first.
+  if (App.LoaderView) App.LoaderView.stop();
   const profile = App.currentProfile || {};
   const roleLabel = (App.ROLES[profile.role] || { label: 'Member' }).label;
   document.body.innerHTML = `
@@ -444,21 +651,27 @@ function renderRoleGate() {
       <div style="max-width:520px;background:#131315;border:1px solid #2A2A2E;border-radius:10px;padding:24px;box-shadow:0 24px 48px rgba(0,0,0,.5);">
         <div style="font-family:'Instrument Serif',serif;font-size:30px;margin-bottom:8px;">Access pending</div>
         <div style="color:#B8B2A4;line-height:1.5;">Your account is currently <strong>${App.utils.escapeHtml(roleLabel)}</strong>. An admin or construction supervisor needs to assign your role before you can use Quest HQ.</div>
-        <button onclick="App.signOut()" style="margin-top:18px;padding:10px 14px;border:0;border-radius:6px;background:#E8A03A;color:#1A1208;font-weight:700;cursor:pointer;">Sign out</button>
+        <button id="roleGateSignOut" style="margin-top:18px;padding:10px 14px;border:0;border-radius:6px;background:#E8A03A;color:#1A1208;font-weight:700;cursor:pointer;">Sign out</button>
       </div>
     </div>
   `;
+  const signOutBtn = document.getElementById('roleGateSignOut');
+  if (signOutBtn) signOutBtn.addEventListener('click', () => App.signOut());
 }
 
 function renderFatalDataError(err) {
+  // This replaces document.body below (removing #appLoader); stop the ticker first.
+  if (App.LoaderView) App.LoaderView.stop();
   const message = App.utils.escapeHtml((err && err.message) || 'Unable to load Quest HQ data from Supabase.');
   document.body.innerHTML = `
     <div style="min-height:100vh;display:grid;place-items:center;background:#F6F1E8;color:#23180D;font-family:Inter,system-ui,sans-serif;padding:24px;">
       <div style="max-width:520px;background:#FFF9EF;border:1px solid #E2D3BC;border-radius:8px;padding:22px;box-shadow:0 16px 40px rgba(46,31,17,.12);">
         <div style="font-weight:800;font-size:18px;margin-bottom:8px;">Supabase data unavailable</div>
         <div style="font-size:14px;line-height:1.5;color:#6E5B45;">${message}</div>
-        <button onclick="window.location.reload()" style="margin-top:16px;padding:10px 14px;border:0;border-radius:6px;background:#8D3F1F;color:white;font-weight:700;cursor:pointer;">Retry</button>
+        <button id="fatalRetry" style="margin-top:16px;padding:10px 14px;border:0;border-radius:6px;background:#8D3F1F;color:white;font-weight:700;cursor:pointer;">Retry</button>
       </div>
     </div>
   `;
+  const retryBtn = document.getElementById('fatalRetry');
+  if (retryBtn) retryBtn.addEventListener('click', () => window.location.reload());
 }

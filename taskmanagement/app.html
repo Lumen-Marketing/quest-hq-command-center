@@ -2,29 +2,50 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Quest HQ — Task Manager</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<!-- PWA manifest removed: installable-app identity belongs to the Command Center host, not this module. -->
+<meta name="theme-color" content="#FBFAF8">
+<!-- apple-touch-icon removed with the PWA layer (icons/ not vendored). -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Quest HQ">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="vendor/tabler-icons/tabler-icons.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/tabler-icons/tabler-icons-subset.css">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="taskmanagement.css">
-<script>
-  // Apply persisted theme before first paint to avoid flash.
-  (function () {
-    try {
-      var t = localStorage.getItem('questhq:theme');
-      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-      else document.documentElement.setAttribute('data-theme', 'light');
-    } catch (e) {
-      document.documentElement.setAttribute('data-theme', 'light');
-    }
-  })();
-</script>
+<link rel="stylesheet" href="css/command-center-host.css">
+<link rel="stylesheet" href="css/taskdetail.css">
+<link rel="stylesheet" href="css/newtask.css">
+<link rel="stylesheet" href="css/tasks.css">
+<link rel="stylesheet" href="css/mobile.css">
+<script src="js/theme-boot.js"></script>
 </head>
-<body>
+<body class="ui-command-center">
+<!-- Boot loading screen (FaultyTerminal port). The static brand frame below paints
+     at first paint (pure CSS); LoaderView.js (deferred, like every script except
+     theme-boot) swaps in the animated WebGL terminal post-parse, and app.js fades
+     the whole thing out once data has loaded. No external dependency — LoaderView
+     falls back to a static wash when WebGL is unavailable. -->
+<div id="appLoader" aria-hidden="true">
+  <!-- Static first frame: identical to LoaderView's brand block so the loader
+       is visible from first paint, before ANY script runs. LoaderView.build()
+       replaces this wholesale with the animated terminal version once the deferred
+       scripts execute. -->
+  <section class="ldr-intro">
+    <div class="ldr-brand">
+      <div class="ldr-logo"><i class="ti ti-bolt"></i></div>
+      <div class="ldr-name">Quest HQ</div>
+      <div class="ldr-dots"><span></span><span></span><span></span></div>
+    </div>
+  </section>
+</div>
+<script defer src="js/views/LoaderView.js"></script>
+
 <!-- Accessibility: lets keyboard / screen-reader users jump straight past the
      top bar and sidebar into the task list. Visually hidden until focused. -->
 <a href="#mainPane" class="skip-link">Skip to main content</a>
@@ -41,10 +62,23 @@
   <!-- TOP BAR -->
   <div class="topbar">
     <div class="topbar-left">
-      <div class="logo"><i class="ti ti-bolt"></i></div>
-      <div>
-        <div class="brand-name">Quest HQ</div>
-        <div class="brand-sub">Roofing · Drafting · Lumen</div>
+      <!-- Brand mark doubles as the mobile nav-drawer toggle (SidebarView). -->
+      <button class="tb-logo logo" id="brandLogo" aria-label="Toggle navigation"><i class="ti ti-bolt"></i></button>
+      <!-- Primary section nav (Home · Tasks · Projects · Team ▾ · Reports),
+           painted + role-gated by TopbarView.renderPrimaryNav. -->
+      <nav class="primary-nav" id="primaryNav" aria-label="Primary"></nav>
+
+      <!-- Command Center host bar (CC integration layer): shown only when mounted
+           at /taskmanagement/ inside Quest HQ. Painted by js/command-center-host.js. -->
+      <div class="command-center-host-bar hidden" id="commandCenterHostBar">
+        <div>
+          <strong>TaskManagement execution</strong>
+          <span id="commandCenterProjectLabel">All task work</span>
+        </div>
+        <a id="commandCenterReturnLink" href="../jobs">
+          <i class="ti ti-arrow-left"></i>
+          Return to Command Center
+        </a>
       </div>
     </div>
     <div class="topbar-right">
@@ -53,18 +87,25 @@
         <input type="text" id="searchInput" aria-label="Search tasks, people, projects" placeholder="Search tasks, people, projects" />
       </div>
 
-      <!-- Developer-only "view as role" switcher -->
-      <div id="viewAsSwitcher" class="viewas-switcher hidden"></div>
+      <!-- Workspace / company switcher. Painted by TopbarView.renderCompanySwitcher;
+           shown only when >1 workspace. -->
+      <div id="companySwitcher" class="company-switcher hidden"></div>
 
-      <!-- Clock-in / Clock-out widget -->
-      <div id="clockWidget" class="clock-widget" title="Clock in / out">
-        <i class="ti ti-player-play-filled"></i>
+      <!-- Clock in / out (moved from the sidebar footer). -->
+      <button type="button" id="clockWidget" class="clock-widget" aria-label="Clock in / out" title="Clock in / out">
+        <i class="ti ti-player-play-filled" aria-hidden="true"></i>
         <span id="clockLabel">Clock in</span>
         <span id="clockTimer" class="clock-timer hidden">00:00:00</span>
+      </button>
+
+      <!-- Wallboard sits with the notification bell on the right. My time moved
+           into the account menu; the task quick-filters live under "Tasks ▾". -->
+      <div class="tb-views" id="tbViews" aria-label="Quick views">
+        <button type="button" class="tb-icon" data-view="wallboard" title="Wallboard" aria-label="Wallboard"><i class="ti ti-device-tv"></i></button>
       </div>
 
-      <button class="icon-btn" id="scaleBtn" aria-label="Display size" title="Display size">
-        <i class="ti ti-zoom-scan"></i>
+      <button type="button" class="icon-btn" id="chatBtn" aria-label="Ask your tasks" title="Ask your tasks">
+        <i class="ti ti-sparkles"></i>
       </button>
 
       <div style="position: relative;">
@@ -81,48 +122,26 @@
         </div>
       </div>
 
-      <div class="command-center-host-bar hidden" id="commandCenterHostBar">
-        <div>
-          <strong>TaskManagement execution</strong>
-          <span id="commandCenterProjectLabel">All task work</span>
+      <!-- Account chip (avatar + name). The chip opens the account menu, which
+           also holds Display size + the developer "View as" switcher. -->
+      <div class="userchip" id="userChip">
+        <button type="button" class="avatar" id="userAvatar" aria-label="Account menu" aria-haspopup="menu" aria-expanded="false" style="background: var(--amber); color: var(--color-accent-ink);">AM</button>
+        <div class="uc-meta">
+          <div class="uc-name">Abraham M.</div>
+          <div class="uc-role">Owner · Admin</div>
         </div>
-        <a id="commandCenterReturnLink" href="../jobs">
-          <i class="ti ti-arrow-left"></i>
-          Return to Command Center
-        </a>
+        <i class="ti ti-chevron-down uc-gear" aria-hidden="true"></i>
       </div>
-
-      <div class="avatar" id="userAvatar" title="Account" style="background: var(--amber); color: var(--color-accent-ink);">AM</div>
     </div>
   </div>
 
-  <!-- LEFT SIDEBAR -->
-  <nav class="deck" aria-label="Primary">
+  <!-- MOBILE NAV DRAWER — the desktop layout has no sidebar; on phones this
+       slide-in holds the full navigation (SidebarView.renderMobileNav). Hidden
+       on desktop via CSS. -->
+  <nav class="deck drawer" aria-label="Navigation">
     <div class="sidebar">
-      <button class="side-minimize-btn" id="sideMinimizeBtn" title="Collapse sidebar" aria-label="Collapse sidebar">
-        <i class="ti ti-layout-sidebar-left-collapse"></i>
-      </button>
-
-      <div class="side-group grp-views">
-        <div class="side-label">Workspace</div>
-        <div class="side-item active" data-view="all" title="All"><i class="ti ti-list-check"></i><span class="side-item-label">All</span><span class="side-count" id="cnt-all">0</span></div>
-        <div class="side-item" data-view="mine" title="Mine"><i class="ti ti-user"></i><span class="side-item-label">Mine</span><span class="side-count" id="cnt-mine">0</span></div>
-        <div class="side-item" data-view="hot" title="Urgent"><i class="ti ti-bolt" style="color: var(--u-urgent);"></i><span class="side-item-label">Urgent</span><span class="side-count" id="cnt-hot" style="color: var(--u-urgent);">0</span></div>
-        <div class="side-item" data-view="today" title="Today"><i class="ti ti-flame" style="color: var(--rust);"></i><span class="side-item-label">Today</span><span class="side-count danger-text" id="cnt-today">0</span></div>
-        <div class="side-item" data-view="overdue" title="Overdue"><i class="ti ti-alert-triangle"></i><span class="side-item-label">Overdue</span><span class="side-count" id="cnt-overdue">0</span></div>
-        <div class="side-item" data-view="watching" title="Watching"><i class="ti ti-eye"></i><span class="side-item-label">Watching</span><span class="side-count" id="cnt-watching">0</span></div>
-      </div>
-
-      <div id="sideExtraGroups">
-        <!-- Skeleton for the dynamic sidebar sections (Company / Time / Org /
-             Admin) while the app boots. Replaced by SidebarView.renderExtraGroups. -->
-        <div class="side-skeleton" aria-hidden="true">
-          <span class="sk sk-side-label"></span>
-          <span class="sk sk-side-item"></span>
-          <span class="sk sk-side-item"></span>
-          <span class="sk sk-side-label"></span>
-          <span class="sk sk-side-item"></span>
-        </div>
+      <div class="side-scroll">
+        <div id="railMobileNav" class="rail-mobile-nav"></div>
       </div>
     </div>
   </nav>
@@ -131,23 +150,47 @@
   <main class="main" id="mainPane" tabindex="-1" aria-label="Tasks">
     <div class="list-pane" id="listPane">
 
-      <div class="work-toolbar">
-        <div class="work-toolbar-spacer"></div>
-        <button class="btn" id="viewBtn"><i class="ti ti-table"></i>View: Table</button>
-        <button class="btn" id="filterBtn"><i class="ti ti-filter"></i>Filter</button>
-        <button class="btn" id="sortBtn"><i class="ti ti-arrows-sort"></i>Sort</button>
-        <button class="btn" id="groupBtn"><i class="ti ti-layout-rows"></i>Group by</button>
-        <button class="btn btn-primary" id="newTaskBtn"><i class="ti ti-plus"></i>New task</button>
-      </div>
-
+      <!-- The old work-toolbar row is gone: its View / overflow / create actions
+           now live inside the header card (see .head-card-actions below), and
+           Filter / Sort / Group by live in the Controls widget (#controlsWidget).
+           The secondary buttons (Views/Select/Clear done/Export) stay in the DOM
+           but hidden, reached through the "⋯ More" menu (ToolbarMenuView). -->
       <div class="page-head">
-        <div class="page-title-block">
-          <div class="page-eyebrow" id="pageEyebrow">This week</div>
-          <h1 class="page-title" id="pageTitle">All tasks</h1>
+        <!-- Slim header card: the section name + the scope toggle. Replaces the
+             plain "This week / All tasks" heading. (#pageEyebrow is kept hidden
+             so TaskListView can still write to it without breaking.) -->
+        <div class="head-card">
+          <span class="page-eyebrow" id="pageEyebrow" hidden>This week</span>
+          <h1 class="page-title head-card-title" id="pageTitle">All tasks</h1>
+          <div class="seg" id="scopeSeg" role="tablist" aria-label="Task scope">
+            <button type="button" data-scope="mine" title="My work"><i class="ti ti-user"></i><span class="seg-label">My work</span></button>
+            <button type="button" data-scope="all" title="Company"><i class="ti ti-users-group"></i><span class="seg-label">Company</span></button>
+          </div>
+          <!-- View / overflow / create actions, moved here from the work-toolbar.
+               Same IDs, so ToolbarMenuView + TaskListView handlers stay wired. -->
+          <div class="head-card-actions">
+            <button class="btn" id="viewBtn"><i class="ti ti-table"></i>View: Table</button>
+            <button class="btn tb-secondary" id="viewsBtn"><i class="ti ti-bookmarks"></i>Views</button>
+            <button class="btn tb-secondary" id="selectBtn"><i class="ti ti-checkbox"></i>Select</button>
+            <button class="btn tb-secondary" id="clearDoneBtn" title="Clear done tasks (deleted in 30 days)" hidden><i class="ti ti-eraser"></i>Clear done</button>
+            <button class="btn tb-secondary" id="exportBtn"><i class="ti ti-download"></i>Export</button>
+            <button class="btn btn-more" id="moreBtn" aria-label="More actions" title="More"><i class="ti ti-dots"></i></button>
+            <button class="btn btn-primary" id="newTaskBtn"><i class="ti ti-plus"></i>New task</button>
+          </div>
         </div>
         <div class="page-head-widgets">
           <div class="up-next-mount" id="upNextWidget"></div>
+          <div class="focus-widget-mount" id="focusWidget"></div>
           <div class="progress-widget-mount" id="progressWidget"></div>
+          <!-- Controls widget — the Filter/Sort/Group by buttons relocated from
+               the work-toolbar. Same button nodes/IDs, so handlers stay wired. -->
+          <div class="controls-widget-mount" id="controlsWidget">
+            <div class="controls-card">
+              <button class="btn" id="filterBtn"><i class="ti ti-filter"></i>Filter</button>
+              <button class="btn" id="sortBtn"><i class="ti ti-arrows-sort"></i>Sort</button>
+              <button class="btn" id="groupBtn"><i class="ti ti-layout-rows"></i>Group by</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -157,13 +200,12 @@
         <div class="list-header">
           <span></span>
           <span>Task</span>
-          <span>Type</span>
-          <span>Label</span>
-          <span>Assignee</span>
-          <span>Priority</span>
-          <span>Status</span>
-          <span>Due</span>
-          <span>Description</span>
+          <button type="button" class="col-filter" data-filter-col="statuses" aria-haspopup="listbox" aria-expanded="false">Status <i class="ti ti-chevron-down"></i></button>
+          <button type="button" class="col-filter" data-filter-col="priorities" aria-haspopup="listbox" aria-expanded="false">Priority <i class="ti ti-chevron-down"></i></button>
+          <button type="button" class="col-filter" data-filter-col="types" aria-haspopup="listbox" aria-expanded="false">Type <i class="ti ti-chevron-down"></i></button>
+          <button type="button" class="col-filter" data-filter-col="companies" aria-haspopup="listbox" aria-expanded="false">Label <i class="ti ti-chevron-down"></i></button>
+          <button type="button" class="col-filter" data-filter-col="assignees" aria-haspopup="listbox" aria-expanded="false">Assignee <i class="ti ti-chevron-down"></i></button>
+          <button type="button" class="col-filter" data-filter-col="due" aria-haspopup="listbox" aria-expanded="false">Due <i class="ti ti-chevron-down"></i></button>
           <span></span>
         </div>
 
@@ -186,6 +228,21 @@
       <div id="timeViewWrap" class="hidden"></div>
     </div>
 
+    <!-- Full-page redesigned surfaces (HomeView / ReportsView render into these) -->
+    <section id="homeWrap" class="qhq-page hidden" aria-label="Home"></section>
+    <section id="reportsWrap" class="qhq-page hidden" aria-label="Reports"></section>
+    <section id="projectsWrap" class="qhq-page hidden" aria-label="Projects"></section>
+    <section id="wallboardWrap" class="qhq-page hidden" aria-label="Wallboard"></section>
+
+    <!-- Full-page task detail. Clicking a task row relocates #detailPane into
+         this surface (instead of a centered modal) so the details read as their
+         own page, with the topbar + sidebar kept in place — like Home/Reports. -->
+    <section id="taskDetailWrap" class="qhq-page detail-page hidden" aria-label="Task details"></section>
+
+    <!-- Full-page New task form. Replaces the old centered modal; rendered by
+         NewTaskPageView and driven by controller.uiState.creatingTask. -->
+    <section id="newTaskWrap" class="qhq-page detail-page hidden" aria-label="New task"></section>
+
     <!-- Drag-resize handle (only visible when the detail pane is open) -->
     <div class="resize-handle hidden" id="resizeHandle" aria-hidden="true"></div>
 
@@ -193,6 +250,21 @@
     <aside class="detail hidden" id="detailPane" aria-label="Task details"></aside>
   </main>
 </div>
+
+<!-- Floating quick-add button — legacy. Retired on phones (≤720px) in favour of
+     the bottom-nav center ⊕; still present for any non-phone edge use. -->
+<button type="button" id="fab" class="fab hidden" aria-label="New task" title="New task">
+  <i class="ti ti-plus"></i>
+</button>
+
+<!-- Phone-only bottom tab bar (Instagram-style): Home · Tasks · ⊕ · Projects ·
+     Profile. Painted + wired by BottomNavView; CSS-hidden above 720px. The
+     center ⊕ is the only New-Task entry point on phones. -->
+<nav id="bottomNav" aria-label="Primary (mobile)"></nav>
+
+<!-- Bulk-select action bar (BulkActionsView mounts here). Fixed to the bottom,
+     shown only while bulk-select mode is on. -->
+<div id="bulkBar" class="bulk-bar hidden" role="toolbar" aria-label="Bulk actions"></div>
 
 <!-- aria-live so screen readers announce toasts (saves, errors, offline) as
      they appear without the user having to find them. -->
@@ -203,51 +275,95 @@
      Each file attaches to the global `App` namespace. -->
 
 <!-- Supabase SDK + auth guard (must run before app bootstrap) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/EventBus.js"></script>
-<script src="js/config.js"></script>
-<script src="js/command-center-host.js"></script>
-<script src="js/errors.js"></script>
-<script src="js/auth-guard.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script defer src="js/EventBus.js"></script>
+<script defer src="js/config.js"></script>
+<script defer src="js/command-center-host.js"></script>
+<script defer src="js/errors.js"></script>
+<script defer src="js/auth-guard.js"></script>
 
 <!-- Foundation -->
-<script src="js/constants.js"></script>
-<script src="js/utils.js"></script>
-<script src="js/validate.js"></script>
-<script src="js/observability.js"></script>
+<script defer src="js/constants.js"></script>
+<script defer src="js/taxonomy.js"></script>
+<script defer src="js/directory.js"></script>
+<script defer src="js/UiStatePolicy.js"></script>
+<script defer src="js/utils.js"></script>
+<script defer src="js/utils/motion.js"></script>
+<script defer src="js/ui/Menu.js"></script>
+<script defer src="js/validate.js"></script>
+<script defer src="js/observability.js"></script>
 
 <!-- Models -->
-<script src="js/models/TaskModel.js"></script>
-<script src="js/models/TimeModel.js"></script>
-<script src="js/models/NotificationModel.js"></script>
-<script src="js/services/SupabaseDataStore.js"></script>
-<script src="js/services/ReminderEngine.js"></script>
+<script defer src="js/models/TaskModel.js"></script>
+<script defer src="js/models/TimeModel.js"></script>
+<script defer src="js/models/NotificationModel.js"></script>
+<script defer src="js/services/SupabaseDataStore.js"></script>
+<script defer src="js/services/BriefingClient.js"></script>
+<script defer src="js/services/DigestClient.js"></script>
+<script defer src="js/services/TaskDraftClient.js"></script>
+<script defer src="js/services/VoiceCapture.js"></script>
+<script defer src="js/services/ChatClient.js"></script>
+<script defer src="js/services/RollupClient.js"></script>
+<script defer src="js/views/ChatDrawerView.js"></script>
+<script defer src="js/services/PersistenceEngine.js"></script>
+<script defer src="js/services/CsvExport.js"></script>
+<script defer src="js/services/ReminderEngine.js"></script>
 
 <!-- Views -->
-<script src="js/views/ToastView.js"></script>
-<script src="js/views/ConnectionView.js"></script>
-<script src="js/views/TopbarView.js"></script>
-<script src="js/views/SidebarView.js"></script>
-<script src="js/views/TaskListView.js"></script>
-<script src="js/views/TaskDetailView.js"></script>
-<script src="js/views/TimeView.js"></script>
-<script src="js/views/ApprovalView.js"></script>
-<script src="js/views/ClockDashboardView.js"></script>
-<script src="js/views/HierarchyView.js"></script>
-<script src="js/views/TourView.js"></script>
-<script src="js/views/NewTaskModalView.js"></script>
-<script src="js/views/ProfileView.js"></script>
-<script src="js/views/FilterBarView.js"></script>
-<script src="js/views/ResizeHandleView.js"></script>
-<script src="js/views/ToolbarMenuView.js"></script>
-<script src="js/views/UiScaleView.js"></script>
-<script src="js/views/ProgressWidgetView.js"></script>
-<script src="js/views/UpNextWidgetView.js"></script>
+<script defer src="js/views/ToastView.js"></script>
+<script defer src="js/views/ConnectionView.js"></script>
+<script defer src="js/views/BulkActionsView.js"></script>
+<script defer src="js/views/dragOrder.js"></script>
+<script defer src="js/views/TopbarView.js"></script>
+<script defer src="js/views/SidebarView.js"></script>
+<script defer src="js/views/BottomNavView.js"></script>
+<script defer src="js/views/ProjectPickerView.js"></script>
+<script defer src="js/views/DateTimePickerView.js"></script>
+<script defer src="js/views/tasklist/TableLayout.js"></script>
+<script defer src="js/views/tasklist/KanbanLayout.js"></script>
+<script defer src="js/views/tasklist/CardsLayout.js"></script>
+<script defer src="js/views/tasklist/CalendarLayout.js"></script>
+<script defer src="js/views/tasklist/WatchingLayout.js"></script>
+<script defer src="js/views/tasklist/ExecutionLayout.js"></script>
+<script defer src="js/views/TaskListView.js"></script>
+<script defer src="js/views/TaskDetailView.js"></script>
+<script defer src="js/views/ProjectsView.js"></script>
+<script defer src="js/views/TimeView.js"></script>
+<script defer src="js/views/ApprovalView.js"></script>
+<script defer src="js/views/ClockDashboardView.js"></script>
+<script defer src="js/views/HierarchyView.js"></script>
+<script defer src="js/views/TaskSetupAdminView.js"></script>
+<script defer src="js/views/CheckinSettingsView.js"></script>
+<script defer src="js/views/PermissionsAdminView.js"></script>
+<script defer src="js/views/ReportsAdminView.js"></script>
+<script defer src="js/TourSteps.js"></script>
+<script defer src="js/views/TourView.js"></script>
+<script defer src="js/views/newtask/tokenParser.js"></script>
+<script defer src="js/views/newtask/WorkOrderRail.js"></script>
+<script defer src="js/views/NewTaskPageView.js"></script>
+<script defer src="js/views/ProfileView.js"></script>
+<script defer src="js/views/ReportProblemView.js"></script>
+<script defer src="js/views/NewFolderView.js"></script>
+<script defer src="js/views/TextPromptView.js"></script>
+<script defer src="js/views/FilterBarView.js"></script>
+<script defer src="js/views/ResizeHandleView.js"></script>
+<script defer src="js/views/ToolbarMenuView.js"></script>
+<script defer src="js/views/UiScaleView.js"></script>
+<script defer src="js/views/ProgressWidgetView.js"></script>
+<script defer src="js/views/UpNextWidgetView.js"></script>
+<script defer src="js/views/FocusWidgetView.js"></script>
+<script defer src="js/views/HomeView.js"></script>
+<script defer src="js/views/ReportsView.js"></script>
+<script defer src="js/views/WallboardView.js"></script>
 
 <!-- Controllers -->
-<script src="js/controllers/AppController.js"></script>
+<script defer src="js/controllers/AppController.js"></script>
+
+<!-- PWA freshness: reload an open tab when a new deploy is live -->
+<script defer src="js/views/UpdateWatcher.js"></script>
 
 <!-- Bootstrap -->
-<script src="js/app.js"></script>
+<script defer src="js/app.js"></script>
+<!-- register-sw.js removed: no service worker inside the Command Center origin. -->
 </body>
 </html>

@@ -1,5 +1,15 @@
 window.App = window.App || {};
 
+// Section titles shown in the redesigned topbar, keyed by controller view.
+const TITLES = {
+  all: 'All tasks', mine: 'My tasks', hot: 'Urgent', today: 'Today',
+  overdue: 'Overdue', watching: 'Watching',
+  'time:mine': 'My time', 'time:resource': 'Team workload',
+  'team:hierarchy': 'Team chart', approvals: 'Approvals', 'admin:clock': 'Clock dashboard',
+  'admin:task-setup': 'Task setup', 'admin:reports': 'Problem reports',
+  home: 'Home', reports: 'Reports',
+};
+
 App.TopbarView = class TopbarView {
   constructor({ timeModel, notifModel, controller, currentUser }) {
     this.timeModel = timeModel;
@@ -21,45 +31,235 @@ App.TopbarView = class TopbarView {
     this.searchInput = document.getElementById('searchInput');
     this.viewAsSwitcher = document.getElementById('viewAsSwitcher');
     this.avatar = document.getElementById('userAvatar');
-    this.userMenu = null;
+
+    this.tbTitle = document.getElementById('tbTitle');
+    this.scopeSeg = document.getElementById('scopeSeg');
+    this.primaryNav = document.getElementById('primaryNav');
+    this.tbViews = document.getElementById('tbViews');
+    this.companySwitcher = document.getElementById('companySwitcher');
+    this.userChip = document.getElementById('userChip');
 
     this.bindEvents();
+    this.bindTopbarViews();
     this.subscribe();
     this.render();
+    this.paintAccountChip();
+    App.EventBus.on('profile:changed', () => this.paintAccountChip());
+  }
+
+  /* The deck account chip (.uc-name / .uc-role) ships as static
+     "Abraham M. / Owner · Admin" demo placeholders in app.html that nothing
+     updated — so every signed-in user showed up as Abraham. Bind it to the
+     real profile. (The avatar is already painted from profile.avatar_url.) */
+  paintAccountChip() {
+    const profile = App.currentProfile || {};
+    const person = App.directory.person(this.currentUser) || {};
+    const name = profile.full_name || person.full || person.name || 'Member';
+    const roleLabel = (App.ROLES[profile.role] || { label: profile.role || 'Member' }).label;
+    const nameEl = document.querySelector('.userchip .uc-name');
+    const roleEl = document.querySelector('.userchip .uc-role');
+    if (nameEl) nameEl.textContent = name;
+    if (roleEl) roleEl.textContent = roleLabel;
   }
 
   bindEvents() {
     this.clockWidget.addEventListener('click', () => this.controller.toggleGlobalClock());
 
-    if (this.avatar) {
-      this.avatar.addEventListener('click', (e) => {
+    // The whole account chip (avatar + name) opens the menu, not just the avatar.
+    // Dismissal (click-away / Esc / focus return) is App.Menu's job now.
+    const chipTrigger = this.userChip || this.avatar;
+    if (chipTrigger) {
+      chipTrigger.addEventListener('click', (e) => {
         e.stopPropagation();
         this.toggleUserMenu();
       });
-      document.addEventListener('click', (e) => {
-        if (this.userMenu && !this.userMenu.contains(e.target) && e.target !== this.avatar) {
-          this.closeUserMenu();
-        }
-      });
     }
 
+    // Notification panel: an inline sibling in the topbar markup, so it stays a
+    // .hidden toggle rather than an App.Menu — but its document dismiss/Escape
+    // listeners are now added per-open and removed on close (the old bindings
+    // were attached once and lived forever).
+    this.notifBtn.setAttribute('aria-haspopup', 'menu');
+    this.notifBtn.setAttribute('aria-expanded', 'false');
+    let notifOnDoc = null, notifOnKey = null;
+    const closeNotif = (refocus) => {
+      this.notifPanel.classList.add('hidden');
+      this.notifBtn.setAttribute('aria-expanded', 'false');
+      if (notifOnDoc) { document.removeEventListener('click', notifOnDoc); notifOnDoc = null; }
+      if (notifOnKey) { document.removeEventListener('keydown', notifOnKey); notifOnKey = null; }
+      if (refocus) this.notifBtn.focus();
+    };
     this.notifBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.notifPanel.classList.toggle('hidden');
+      if (!this.notifPanel.classList.contains('hidden')) { closeNotif(false); return; }
+      this.notifPanel.classList.remove('hidden');
+      this.notifBtn.setAttribute('aria-expanded', 'true');
+      const first = this.notifList.querySelector('.notif-item');
+      if (first) first.focus();
+      notifOnDoc = (e2) => {
+        if (this.notifPanel.contains(e2.target) || this.notifBtn.contains(e2.target)) return;
+        closeNotif(false);
+      };
+      notifOnKey = (e2) => { if (e2.key === 'Escape') closeNotif(true); };
+      setTimeout(() => {
+        document.addEventListener('click', notifOnDoc);
+        document.addEventListener('keydown', notifOnKey);
+      }, 0);
     });
     this.markAllReadBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.controller.markAllNotifsRead();
     });
-    document.addEventListener('click', (e) => {
-      if (!this.notifPanel.contains(e.target) && !this.notifBtn.contains(e.target)) {
-        this.notifPanel.classList.add('hidden');
-      }
-    });
 
     this.searchInput.addEventListener('input', (e) => {
       this.controller.setSearchQuery(e.target.value);
     });
+
+    // Scope segment: "My work" / "Company" narrow the CURRENT task view in
+    // place (Urgent stays Urgent, just mine) instead of navigating to the
+    // old Mine / All views.
+    if (this.scopeSeg) {
+      this.scopeSeg.querySelectorAll('button[data-scope]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.controller.setScope(btn.dataset.scope);
+        });
+      });
+    }
+
+    const chatBtn = document.getElementById('chatBtn');
+    if (chatBtn) chatBtn.addEventListener('click', (e) => { e.stopPropagation(); this.controller.toggleChat(); });
+  }
+
+  // The redesigned topbar shows the active section's title and a Mine/Company
+  // scope segment. Both reflect the current view (no new routing concepts).
+  renderTopbarTitleAndScope() {
+    if (this.tbTitle) this.tbTitle.textContent = TITLES[this.controller.uiState.view] || 'Quest HQ';
+    if (!this.scopeSeg) return;
+    // The scope toggle now lives in the task page-head, which is only rendered on
+    // task-list views — so it appears exactly when there are tasks to scope and
+    // never has to be hidden mid-session. Here we just reflect the active scope
+    // (its own uiState field — it no longer tracks the view).
+    const scope = this.controller.uiState.scope || 'all';
+    this.scopeSeg.querySelectorAll('button[data-scope]').forEach(btn => {
+      btn.classList.toggle('on', btn.dataset.scope === scope);
+    });
+  }
+
+  /* ---------- Primary section nav (top bar) ---------- */
+
+  // Role-gated section list. Leaf items navigate; "Team" is a dropdown of the
+  // supervisory/admin views. Mirrors the gates the sidebar used before.
+  _navModel() {
+    const canView = (v) => this.controller.canView(v);
+    const teamItems = [];
+    if (App.can('time.team'))   teamItems.push({ view: 'time:resource', label: 'Team workload', icon: 'ti-users' });
+    if (App.can('team.view'))   teamItems.push({ view: 'team:hierarchy', label: 'Team chart',    icon: 'ti-sitemap' });
+    if (App.can('roles.manage'))teamItems.push({ view: 'approvals',      label: 'Approvals',      icon: 'ti-user-check' });
+    if (App.can('clock.admin')) teamItems.push({ view: 'admin:clock',    label: 'Clock dashboard',icon: 'ti-clock-play' });
+    if (App.can('bug-reports.manage')) teamItems.push({ view: 'admin:reports', label: 'Problem reports', icon: 'ti-bug' });
+
+    const items = [];
+    if (canView('home')) items.push({ key: 'home', label: 'Home', view: 'home' });
+    if (App.can('tasks.view')) {
+      // "Tasks" is a dropdown: the full list plus the quick-filters, each with
+      // its live count (counts are published by SidebarView.renderCounts).
+      const vc = App.viewCounts || {};
+      const taskItems = [
+        { view: 'all',      label: 'All tasks', icon: 'ti-list-check' },
+        { view: 'hot',      label: 'Urgent',    icon: 'ti-bolt',           count: vc.hot },
+        { view: 'today',    label: 'Today',     icon: 'ti-flame',          count: vc.today },
+        { view: 'overdue',  label: 'Overdue',   icon: 'ti-alert-triangle', count: vc.overdue },
+        { view: 'watching', label: 'Watching',  icon: 'ti-eye',            count: vc.watching },
+      ].filter(it => canView(it.view));
+      items.push({ key: 'tasks', label: 'Tasks', dropdown: taskItems, matches: ['all', 'mine', 'hot', 'today', 'overdue', 'watching'] });
+    }
+    if (canView('projects')) items.push({ key: 'projects', label: 'Projects', view: 'projects' });
+    if (teamItems.length) items.push({ key: 'team', label: 'Team', dropdown: teamItems, matches: teamItems.map(t => t.view) });
+    if (App.can('reports.view')) items.push({ key: 'reports', label: 'Reports', view: 'reports' });
+    return items;
+  }
+
+  renderPrimaryNav() {
+    const mount = this.primaryNav;
+    if (!mount) return;
+    const items = this._navModel();
+    const view = this.controller.uiState.view;
+    const isActive = (it) => it.view === view || (it.matches && it.matches.includes(view));
+    mount.innerHTML = items.map(it => {
+      const active = isActive(it) ? ' active' : '';
+      const caret = it.dropdown ? '<i class="ti ti-chevron-down pnav-caret" aria-hidden="true"></i>' : '';
+      return `<button type="button" class="pnav-item${active}" data-nav="${App.utils.escapeHtml(it.key)}"${it.view ? ` data-view="${App.utils.escapeHtml(it.view)}"` : ''}>${App.utils.escapeHtml(it.label)}${caret}</button>`;
+    }).join('');
+    mount.querySelectorAll('.pnav-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        // Re-read the model at click time so dropdown counts are current.
+        const item = this._navModel().find(i => i.key === btn.dataset.nav);
+        if (!item) return;
+        if (item.dropdown) { e.stopPropagation(); this._toggleTeamMenu(btn, item.dropdown); }
+        else this.controller.setView(item.view);
+      });
+    });
+  }
+
+  _toggleTeamMenu(anchor, subItems) {
+    if (this._teamMenuHandle) { this._teamMenuHandle.close('api'); return; }
+    this._teamMenuHandle = App.Menu.open({
+      anchor,
+      className: 'pnav-menu',
+      onClose: () => { this._teamMenuHandle = null; anchor.classList.remove('open'); },
+      build: (menu, h) => {
+        menu.innerHTML = subItems.map(it => {
+          const count = (it.count != null && it.count > 0)
+            ? `<span class="pnav-menu-count">${App.utils.escapeHtml(String(it.count))}</span>` : '';
+          return `<button type="button" class="pnav-menu-item" role="menuitem" data-view="${App.utils.escapeHtml(it.view)}"><i class="ti ${it.icon}"></i><span class="pnav-menu-label">${App.utils.escapeHtml(it.label)}</span>${count}</button>`;
+        }).join('');
+        menu.querySelectorAll('.pnav-menu-item').forEach(mi => {
+          mi.addEventListener('click', () => { h.close('api'); this.controller.setView(mi.dataset.view); });
+        });
+      },
+    });
+    anchor.classList.add('open');
+  }
+
+  /* ---------- Top-bar quick-view icons (filters + My time + Wallboard) ---------- */
+
+  bindTopbarViews() {
+    if (!this.tbViews) return;
+    this.tbViews.querySelectorAll('.tb-icon[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => this.controller.setView(btn.dataset.view));
+    });
+  }
+
+  // Gate each icon by permission and reflect the active view. Rebuilt on
+  // view/role change (icons are static markup, only classes change).
+  renderTopbarViews() {
+    if (!this.tbViews) return;
+    const view = this.controller.uiState.view;
+    this.tbViews.querySelectorAll('.tb-icon[data-view]').forEach(btn => {
+      btn.classList.toggle('hidden', !this.controller.canView(btn.dataset.view));
+      btn.classList.toggle('active', btn.dataset.view === view);
+    });
+  }
+
+  /* ---------- Workspace / company switcher ---------- */
+
+  renderCompanySwitcher() {
+    const mount = this.companySwitcher;
+    if (!mount) return;
+    const companies = (this.controller.uiState.companies || []);
+    if (companies.length <= 1) { mount.classList.add('hidden'); mount.innerHTML = ''; return; }
+    const cur = this.controller.uiState.currentCompany;
+    mount.classList.remove('hidden');
+    mount.innerHTML = `
+      <i class="ti ti-building" aria-hidden="true"></i>
+      <select id="companySelect" aria-label="Workspace">
+        ${companies.map(id => {
+          const label = id === '*' ? 'All companies' : (App.directory.company(id) || { label: id }).label;
+          return `<option value="${App.utils.escapeHtml(id)}" ${id === cur ? 'selected' : ''}>${App.utils.escapeHtml(label)}</option>`;
+        }).join('')}
+      </select>`;
+    mount.querySelector('#companySelect').addEventListener('change', (e) => this.controller.setCompany(e.target.value));
   }
 
   subscribe() {
@@ -68,13 +268,19 @@ App.TopbarView = class TopbarView {
     App.EventBus.on('notifs:changed', () => this.renderNotifs());
     App.EventBus.on('notifs:refreshed', () => this.renderNotifs());
     App.EventBus.on('clock:tick', () => this.tickLive());
-    App.EventBus.on('role:changed', () => this.renderViewAsSwitcher());
+    App.EventBus.on('role:changed', () => { this.renderPrimaryNav(); this.renderTopbarViews(); this.renderCompanySwitcher(); });
+    App.EventBus.on('view:changed', () => { if (this._teamMenuHandle) this._teamMenuHandle.close('api'); this.renderTopbarTitleAndScope(); this.renderPrimaryNav(); this.renderTopbarViews(); });
+    App.EventBus.on('scope:changed', () => this.renderTopbarTitleAndScope());
+    App.EventBus.on('company:changed', () => this.renderCompanySwitcher());
   }
 
   render() {
     this.renderClockWidget();
     this.renderNotifs();
-    this.renderViewAsSwitcher();
+    this.renderPrimaryNav();
+    this.renderTopbarViews();
+    this.renderCompanySwitcher();
+    this.renderTopbarTitleAndScope();
   }
 
   // Developer-only: preview the app as another role. Shown only to real
@@ -112,18 +318,27 @@ App.TopbarView = class TopbarView {
 
   renderClockWidget() {
     const active = this.timeModel.activeFor(this.currentUser);
+    // The .running class swap below is the state signal for clock in/out — no
+    // pulse. renderClockWidget also runs every live tick, and a pulse-per-toggle
+    // read as intrusive when juggling timers.
     if (active) {
       const task = this.controller.getTask(active.taskId);
+      // Running state shows only the timer — the task title lives on the tooltip
+      // (and in the Up-next card) so the pill keeps a fixed width and the topbar
+      // never reflows when you clock in/out.
       this.clockWidget.classList.add('running');
-      this.clockLabel.textContent = task ? (task.title.slice(0, 18) + (task.title.length > 18 ? '…' : '')) : 'Tracking';
+      this.clockLabel.classList.add('hidden');
       this.clockTimer.classList.remove('hidden');
       this.clockTimer.textContent = App.utils.formatDuration(this._liveShiftMs(active));
       this.clockIcon.className = 'ti ti-player-stop-filled';
+      this.clockWidget.title = task ? `Tracking: ${task.title} — tap to clock out` : 'Tap to clock out';
     } else {
       this.clockWidget.classList.remove('running');
+      this.clockLabel.classList.remove('hidden');
       this.clockLabel.textContent = 'Clock in';
       this.clockTimer.classList.add('hidden');
       this.clockIcon.className = 'ti ti-player-play-filled';
+      this.clockWidget.title = 'Clock in / out';
     }
   }
 
@@ -154,95 +369,198 @@ App.TopbarView = class TopbarView {
       this.notifList.innerHTML = `<div class="notif-empty">You're all caught up.</div>`;
       return;
     }
-    this.notifList.innerHTML = all.map(n => `
-      <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${App.utils.escapeHtml(n.id)}" data-task-id="${App.utils.escapeHtml(n.taskId || '')}">
-        <div class="notif-meta">${App.utils.escapeHtml(n.meta)}</div>
+    this.notifList.innerHTML = all.map(n => {
+      // Check-in notifications carry a deep-link CTA the client renders itself —
+      // the notification HTML can't (sanitizeNotificationHtml strips links).
+      const cta = App.utils.checkinCta(n.meta);
+      const ctaLine = cta
+        ? `<div class="notif-cta">${App.utils.escapeHtml(cta.label)} <span class="notif-cta-arrow" aria-hidden="true">→</span></div>`
+        : '';
+      return `
+      <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${App.utils.escapeHtml(n.id)}" data-task-id="${App.utils.escapeHtml(n.taskId || '')}" data-cta-route="${cta && cta.route ? '1' : ''}">
+        <div class="notif-meta">${App.utils.escapeHtml(App.utils.notifMeta(n.meta, n.createdAt))}</div>
         <div class="notif-text">${App.utils.sanitizeNotificationHtml(n.html)}</div>
-      </div>
-    `).join('');
+        ${ctaLine}
+      </div>`;
+    }).join('');
 
     this.notifList.querySelectorAll('.notif-item').forEach(item => {
+      App.utils.makeActivatable(item);
       item.addEventListener('click', () => {
         const notifId = item.dataset.notifId;
         const taskId = item.dataset.taskId;
         this.notifPanel.classList.add('hidden');
-        this.controller.openNotification(notifId, taskId);
+        this.notifBtn.setAttribute('aria-expanded', 'false');
+        // Routed check-in CTAs deep-link; everything else (incl. stalled, which
+        // has a task but no route) opens the linked task as before.
+        if (item.dataset.ctaRoute) this.controller.openCheckin(notifId);
+        else this.controller.openNotification(notifId, taskId);
       });
     });
   }
 
   toggleUserMenu() {
-    if (this.userMenu) { this.closeUserMenu(); return; }
-    const person = App.PEOPLE[this.currentUser] || {};
+    if (this._userMenuHandle) { this._userMenuHandle.close('api'); return; }
+    const person = App.directory.person(this.currentUser) || {};
     const profile = App.currentProfile || {};
     const currentName = person.full || profile.full_name || person.name || '';
     const roleLabel = (App.ROLES[profile.role] || { label: profile.role || 'Member' }).label;
-    const hostedByCommandCenter = !!(App.commandCenterIntegration && App.commandCenterIntegration.hosted);
 
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
 
-    const menu = document.createElement('div');
-    menu.className = 'user-menu';
-    menu.innerHTML = `
-      <div class="user-menu-head">
-        <div class="user-menu-name">${App.utils.escapeHtml(currentName)}</div>
-        <div class="user-menu-meta">${App.utils.escapeHtml(profile.email || '')} · ${App.utils.escapeHtml(roleLabel)}</div>
-      </div>
+    // Developer-only "View as" role preview, relocated here from the top bar.
+    const isDev = App.realRole() === 'developer';
+    const viewAsHtml = isDev ? `
       <div class="user-menu-section">
-        <div class="field-label" style="margin-bottom:6px;">Theme</div>
-        <div class="theme-toggle" role="tablist">
-          <button class="theme-opt ${currentTheme === 'dark' ? 'active' : ''}" data-theme-set="dark"><i class="ti ti-moon"></i>Dark</button>
-          <button class="theme-opt ${currentTheme === 'light' ? 'active' : ''}" data-theme-set="light"><i class="ti ti-sun"></i>Light</button>
-        </div>
-      </div>
-      <div class="user-menu-item" data-action="${hostedByCommandCenter ? 'quest-profile' : 'edit-profile'}"><i class="ti ti-user-edit"></i>${hostedByCommandCenter ? 'Quest profile' : 'Edit profile'}</div>
-      <div class="user-menu-item" data-action="show-tour"><i class="ti ti-help"></i>Show tour again</div>
-      <div class="user-menu-item" data-action="sign-out"><i class="ti ti-logout"></i>Sign out</div>
-    `;
-    document.body.appendChild(menu);
+        <div class="field-label" style="margin-bottom:6px;">View as</div>
+        <select id="menuViewAs" class="user-menu-select" aria-label="Preview as role">
+          ${[['developer', 'Developer (you)'], ['admin', 'Admin'], ['supervisor', 'Supervisor'], ['worker', 'Worker']]
+            .map(([v, l]) => `<option value="${v}" ${(App.viewAsRole || 'developer') === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>` : '';
 
-    const rect = this.avatar.getBoundingClientRect();
-    menu.style.position = 'fixed';
-    menu.style.top = (rect.bottom + 6) + 'px';
-    menu.style.right = (window.innerWidth - rect.right) + 'px';
+    // Workspace / company switcher, relocated here from the top bar. Only shown
+    // when the member belongs to more than one workspace.
+    const companies = this.controller.uiState.companies || [];
+    const curCompany = this.controller.uiState.currentCompany;
+    const workspaceHtml = companies.length > 1 ? `
+      <div class="user-menu-section">
+        <div class="field-label" style="margin-bottom:6px;">Workspace</div>
+        <select id="menuCompany" class="user-menu-select" aria-label="Workspace">
+          ${companies.map(id => {
+            const label = id === '*' ? 'All companies' : (App.directory.company(id) || { label: id }).label;
+            return `<option value="${App.utils.escapeHtml(id)}" ${id === curCompany ? 'selected' : ''}>${App.utils.escapeHtml(label)}</option>`;
+          }).join('')}
+        </select>
+      </div>` : '';
 
-    this.userMenu = menu;
+    // "My time" moved off the top bar into the account menu (gated by view perm).
+    const myTimeHtml = this.controller.canView('time:mine')
+      ? `<div class="user-menu-item" data-action="my-time"><i class="ti ti-clock"></i>My time</div>` : '';
 
-    const editProfile = menu.querySelector('[data-action="edit-profile"]');
-    if (editProfile) {
-      editProfile.addEventListener('click', () => {
-        this.closeUserMenu();
-        if (this.controller && this.controller.openProfile) this.controller.openProfile();
-      });
-    }
-    const questProfile = menu.querySelector('[data-action="quest-profile"]');
-    if (questProfile) {
-      questProfile.addEventListener('click', () => {
-        this.closeUserMenu();
-        window.location.href = App.commandCenterProfileUrl || '../command?account=profile';
-      });
-    }
-    menu.querySelector('[data-action="show-tour"]').addEventListener('click', () => {
-      this.closeUserMenu();
-      if (App.startTour) App.startTour();
+    // Roles & permissions reference matrix (admins/developers only).
+    const permsHtml = this.controller.canView('admin:permissions')
+      ? `<div class="user-menu-item" data-action="permissions"><i class="ti ti-key"></i>Roles &amp; permissions</div>` : '';
+
+    // The account chip lives in the top bar (top-right), so the menu drops
+    // right-aligned from it (App.Menu 'bottom-end') and never runs off-screen.
+    const anchor = this.userChip || this.avatar;
+    this._userMenuHandle = App.Menu.open({
+      anchor,
+      className: 'user-menu',
+      placement: 'bottom-end',
+      onClose: () => {
+        this._userMenuHandle = null;
+        if (this.avatar) this.avatar.setAttribute('aria-expanded', 'false');
+      },
+      build: (menu, h) => {
+        const close = () => h.close('api');
+        menu.innerHTML = `
+          <div class="user-menu-head">
+            <div class="user-menu-name">${App.utils.escapeHtml(currentName)}</div>
+            <div class="user-menu-meta">${App.utils.escapeHtml(profile.email || '')} · ${App.utils.escapeHtml(roleLabel)}</div>
+          </div>
+          <div class="user-menu-section">
+            <div class="field-label" style="margin-bottom:6px;">Theme</div>
+            <div class="theme-toggle" role="group" aria-label="Theme">
+              <button class="theme-opt ${currentTheme === 'dark' ? 'active' : ''}" data-theme-set="dark" aria-pressed="${currentTheme === 'dark'}"><i class="ti ti-moon"></i>Dark</button>
+              <button class="theme-opt ${currentTheme === 'light' ? 'active' : ''}" data-theme-set="light" aria-pressed="${currentTheme === 'light'}"><i class="ti ti-sun"></i>Light</button>
+            </div>
+          </div>
+          ${workspaceHtml}
+          ${viewAsHtml}
+          ${myTimeHtml}
+          ${permsHtml}
+          <div class="user-menu-item" data-action="scale"><i class="ti ti-zoom-scan"></i>Display size</div>
+          <div class="user-menu-item" data-action="edit-profile"><i class="ti ti-user-edit"></i>Edit profile</div>
+          <div class="user-menu-item" data-action="show-tour"><i class="ti ti-help"></i>Show tour again</div>
+          <div class="user-menu-item" data-action="report-problem"><i class="ti ti-bug"></i>Report a problem</div>
+          <div class="user-menu-item" data-action="sign-out"><i class="ti ti-logout"></i>Sign out</div>
+        `;
+
+        menu.querySelector('[data-action="edit-profile"]').addEventListener('click', () => {
+          close();
+          if (this.controller && this.controller.openProfile) this.controller.openProfile();
+        });
+        menu.querySelector('[data-action="show-tour"]').addEventListener('click', () => {
+          close();
+          if (App.startTour) App.startTour();
+        });
+        menu.querySelector('[data-action="report-problem"]').addEventListener('click', () => {
+          close();
+          if (this.controller && this.controller.openReportProblem) this.controller.openReportProblem();
+        });
+        menu.querySelector('[data-action="sign-out"]').addEventListener('click', () => {
+          close();
+          if (App.signOut) App.signOut();
+        });
+        // Display size: open the scale popover anchored to the account chip (the
+        // menu item is gone after close, so anchor to the persistent chip).
+        menu.querySelector('[data-action="scale"]').addEventListener('click', () => {
+          const anchorEl = this.userChip || this.avatar;
+          close();
+          if (App.uiScale) App.uiScale.openAt(anchorEl);
+        });
+        // Workspace / company switch.
+        const companySel = menu.querySelector('#menuCompany');
+        if (companySel) {
+          companySel.addEventListener('click', (e) => e.stopPropagation());
+          companySel.addEventListener('change', (e) => {
+            close();
+            this.controller.setCompany(e.target.value);
+          });
+        }
+        // "My time" navigates to the personal time view.
+        const myTimeItem = menu.querySelector('[data-action="my-time"]');
+        if (myTimeItem) myTimeItem.addEventListener('click', () => {
+          close();
+          this.controller.setView('time:mine');
+        });
+        // Roles & permissions matrix.
+        const permsItem = menu.querySelector('[data-action="permissions"]');
+        if (permsItem) permsItem.addEventListener('click', () => {
+          close();
+          this.controller.setView('admin:permissions');
+        });
+        // Developer "View as" role preview.
+        const viewAsSel = menu.querySelector('#menuViewAs');
+        if (viewAsSel) {
+          viewAsSel.addEventListener('click', (e) => e.stopPropagation());
+          viewAsSel.addEventListener('change', (e) => {
+            close();
+            this.controller.setViewAs(e.target.value);
+          });
+        }
+        menu.querySelectorAll('[data-theme-set]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const next = btn.dataset.themeSet;
+            document.documentElement.setAttribute('data-theme', next);
+            try { localStorage.setItem('questhq:theme', next); } catch (e) {}
+            // Sync the PWA / mobile chrome band to the chosen theme.
+            try {
+              const m = document.querySelector('meta[name="theme-color"]');
+              if (m) m.setAttribute('content', next === 'dark' ? '#08090A' : '#FBFAF8');
+            } catch (e) {}
+            menu.querySelectorAll('[data-theme-set]').forEach(b => {
+              const on = b === btn;
+              b.classList.toggle('active', on);
+              b.setAttribute('aria-pressed', String(on));
+            });
+          });
+        });
+
+        // Keyboard/AT: expose the menu + items and pull focus into it on open.
+        menu.querySelectorAll('.user-menu-item').forEach(it => {
+          it.setAttribute('role', 'menuitem');
+          it.setAttribute('tabindex', '0');
+          it.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); it.click(); }
+          });
+        });
+        if (this.avatar) this.avatar.setAttribute('aria-expanded', 'true');
+        const firstItem = menu.querySelector('.user-menu-item');
+        if (firstItem) firstItem.focus();
+      },
     });
-    menu.querySelector('[data-action="sign-out"]').addEventListener('click', () => {
-      this.closeUserMenu();
-      if (App.signOut) App.signOut();
-    });
-    menu.querySelectorAll('[data-theme-set]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const next = btn.dataset.themeSet;
-        document.documentElement.setAttribute('data-theme', next);
-        try { localStorage.setItem('questhq:theme', next); } catch (e) {}
-        menu.querySelectorAll('[data-theme-set]').forEach(b => b.classList.toggle('active', b === btn));
-      });
-    });
-  }
-
-  closeUserMenu() {
-    if (!this.userMenu) return;
-    this.userMenu.remove();
-    this.userMenu = null;
   }
 };
