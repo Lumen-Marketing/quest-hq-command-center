@@ -7397,7 +7397,7 @@ const CRM2_UNDERWRITER_GUIDANCE = {
 };
 
 function underwritingCaseForContact(contactId, companyId = activeCompanyId()) {
-  return state.underwritingCases.find((item) => item.company_id === companyId && item.contact_id === contactId) || null;
+  return state.underwritingCases.find((item) => recordVisibleInOperationalWorkspace(item, companyId) && item.contact_id === contactId) || null;
 }
 
 function underwritingInputFromCase(item, contact) {
@@ -8515,6 +8515,7 @@ async function ensureCrmSiteForContact(contact) {
   const site = normalizeCrmSite({
     id: `site-${crypto.randomUUID()}`,
     company_id: contact.company_id,
+    workspace_id: contact.workspace_id || activeWorkspaceId(),
     contact_id: contact.id,
     account_id: contact.account_id,
     label: 'Primary site',
@@ -8543,6 +8544,7 @@ async function convertContactToQuote(contactId) {
   const deal = normalizeDeal({
     id: `deal-${crypto.randomUUID()}`,
     company_id: companyId,
+    workspace_id: contact.workspace_id || activeWorkspaceId(),
     account_id: contact.account_id,
     primary_contact_id: contact.id,
     site_id: site?.id || '',
@@ -8661,7 +8663,11 @@ function renderSfTaskRow(task, options = {}) {
 
 async function persistContact(contact) {
   const previous = contactById(contact.id);
-  const payload = { ...contact, updated_at: new Date().toISOString() };
+  const payload = normalizeContact({
+    ...contact,
+    workspace_id: contact.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   upsertContact(payload);
   render();
   const client = createSupabaseClient();
@@ -8756,7 +8762,11 @@ function jobSupabaseRow(job) {
 }
 
 async function persistJob(job, label = 'Job saved locally') {
-  const payload = normalizeJob({ ...job, updated_at: new Date().toISOString() });
+  const payload = normalizeJob({
+    ...job,
+    workspace_id: job.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   const previous = jobById(payload.id);
   upsertJob(payload);
   state.sync = isLiveSupabaseSession() ? { label: 'Saving job…', mode: 'loading' } : { label, mode: 'local' };
@@ -9675,6 +9685,7 @@ async function saveContact(form) {
   if (!validation.ok) return;
   const payload = normalizeContact(validation.data);
   payload.id = payload.id || `contact-${crypto.randomUUID()}`;
+  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
   payload.updated_at = new Date().toISOString();
   const client = createSupabaseClient();
   if (client) {
@@ -9842,9 +9853,14 @@ async function deletePipelineStage(kind, index) {
 // JOB_STAGES / CONTACT_STAGES the rest of the UI reads from.
 function applyPipelineStagesForCompany(companyId) {
   if (!Array.isArray(state.pipelineStages) || !state.pipelineStages.length) return;
+  const workspaceId = workspaceIdForCompany(companyId);
   const forKind = (kind, fallback) => {
     const rows = state.pipelineStages
-      .filter((row) => row.company_id === companyId && row.kind === kind)
+      .filter((row) => (
+        row.company_id === companyId
+        && row.kind === kind
+        && recordBelongsToWorkspace(row, workspaceId, defaultOperationalWorkspaceId(companyId))
+      ))
       .slice()
       .sort((a, b) => (a.position || 0) - (b.position || 0))
       .map((row) => ({ name: String(row.name || '').trim(), color: /^#[0-9a-fA-F]{3,8}$/.test(String(row.color || '')) ? row.color : '#9aa0a8' }))
@@ -9860,15 +9876,20 @@ function applyPipelineStagesForCompany(companyId) {
   if (state.stageFilterDeals !== 'all' && !dealStageNames().includes(state.stageFilterDeals)) state.stageFilterDeals = 'all';
 }
 
-// Replace the active company's stages and rename affected records in one transaction.
+// Replace the active operational workspace's stages and rename only its records.
 async function syncPipelineStagesToSupabase(kind, renameMap = {}, overrideStages = null) {
   const client = createSupabaseClient();
   if (!client || !isLiveSupabaseSession()) return true;
   const companyId = activeCompanyId();
+  const workspaceId = workspaceIdForCompany(companyId);
+  if (!workspaceId) {
+    showToast('Choose a workspace before editing its pipeline.', 'error', 'Stages');
+    return false;
+  }
   const list = overrideStages || stageListForKind(kind);
   const stages = list.map((stage) => ({ name: stage.name, color: stage.color }));
-  const result = await client.rpc('replace_pipeline_stages', {
-    p_company_id: companyId,
+  const result = await client.rpc('replace_workspace_pipeline_stages', {
+    p_workspace_id: workspaceId,
     p_kind: kind,
     p_stages: stages,
     p_rename_map: renameMap,
@@ -9879,9 +9900,9 @@ async function syncPipelineStagesToSupabase(kind, renameMap = {}, overrideStages
   }
   const rows = Array.isArray(result.data)
     ? result.data
-    : stages.map((stage, index) => ({ ...stage, company_id: companyId, kind, position: index }));
+    : stages.map((stage, index) => ({ ...stage, company_id: companyId, workspace_id: workspaceId, kind, position: index }));
   state.pipelineStages = (Array.isArray(state.pipelineStages) ? state.pipelineStages : [])
-    .filter((row) => !(row.company_id === companyId && row.kind === kind))
+    .filter((row) => !(row.workspace_id === workspaceId && row.kind === kind))
     .concat(rows);
   return true;
 }
@@ -20423,6 +20444,7 @@ function normalizeProposal(input = {}) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     proposal_no: String(input.proposal_no || draft.proposalNo || '').trim(),
     title: String(input.title || draft.jobTitle || 'Proposal').trim(),
     status,
@@ -20459,7 +20481,7 @@ function proposalById(id) {
 
 function companyProposals(companyId = activeCompanyId()) {
   return state.proposals
-    .filter((proposal) => proposal.company_id === companyId)
+    .filter((proposal) => recordVisibleInOperationalWorkspace(proposal, companyId))
     .sort((a, b) => Date.parse(b.updated_at || 0) - Date.parse(a.updated_at || 0));
 }
 
@@ -20625,6 +20647,7 @@ function proposalRecordFromDraft(ctx, draft, existing = null) {
     ...(existing || {}),
     id: existing?.id || `proposal-${crypto.randomUUID()}`,
     company_id: ctx.company_id || existing?.company_id || activeCompanyId(),
+    workspace_id: existing?.workspace_id || activeWorkspaceId(),
     proposal_no: draft.proposalNo,
     title: draft.jobTitle || existing?.title || 'Proposal',
     status: existing?.status || 'Draft',
@@ -26795,6 +26818,7 @@ async function saveJob(form) {
   const payload = normalizeJob(validation.data);
   payload.id = payload.id || crypto.randomUUID();
   payload.company_id = payload.company_id || activeCompanyId();
+  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
   if (!requirePermission('jobs.manage', payload.company_id, 'Your role can view jobs but cannot create or edit them.', 'Jobs')) return;
   payload.estimate_total = Number(payload.estimate_total || 0);
   payload.invoice_total = Number(payload.invoice_total || 0);
@@ -26847,6 +26871,7 @@ async function saveTask(form) {
     ...formData,
     id: String(formData.id || '').trim() || `task-${crypto.randomUUID()}`,
     company_id: companyId,
+    workspace_id: activeWorkspaceId(),
     creator_id: creatorId,
     urgency: formData.priority || 'medium',
     watchers: [],
@@ -26933,6 +26958,7 @@ async function saveUnderwritingCase(form) {
   const item = normalizeUnderwritingCase({
     ...(existing || {}),
     company_id: companyId,
+    workspace_id: contact.workspace_id || activeWorkspaceId(),
     contact_id: contact.id,
     contract_price: input.contractPrice,
     material_cost: input.materialCost,
@@ -29050,25 +29076,28 @@ async function deleteFile(id) {
 }
 
 function upsertJob(job) {
-  const index = state.jobs.findIndex((item) => item.id === job.id);
-  if (index >= 0) state.jobs[index] = job;
-  else state.jobs.unshift(job);
-  state.selectedJobId = job.id;
+  const scoped = ensureRecordWorkspace(job);
+  const index = state.jobs.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.jobs[index] = scoped;
+  else state.jobs.unshift(scoped);
+  state.selectedJobId = scoped.id;
   persistAll();
 }
 
 function upsertTask(task) {
-  const index = state.tasks.findIndex((item) => item.id === task.id);
-  if (index >= 0) state.tasks[index] = task;
-  else state.tasks.unshift(task);
-  state.selectedTaskId = task.id;
+  const scoped = ensureRecordWorkspace(task);
+  const index = state.tasks.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.tasks[index] = scoped;
+  else state.tasks.unshift(scoped);
+  state.selectedTaskId = scoped.id;
   persistAll();
 }
 
 function upsertFile(file) {
-  const index = state.files.findIndex((item) => item.id === file.id);
-  if (index >= 0) state.files[index] = file;
-  else state.files.unshift(file);
+  const scoped = ensureRecordWorkspace(file);
+  const index = state.files.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.files[index] = scoped;
+  else state.files.unshift(scoped);
   persistAll();
 }
 
@@ -29451,19 +29480,19 @@ function selectedJob() {
 }
 
 function jobById(id) {
-  return state.jobs.find((job) => job.id === id) || null;
+  return state.jobs.find((job) => job.id === id && recordVisibleInOperationalWorkspace(job)) || null;
 }
 
 function taskById(id) {
-  return state.tasks.find((task) => task.id === id) || null;
+  return state.tasks.find((task) => task.id === id && recordVisibleInOperationalWorkspace(task)) || null;
 }
 
 function companyJobs(companyId = activeCompanyId()) {
-  return state.jobs.filter((job) => job.company_id === companyId);
+  return state.jobs.filter((job) => recordVisibleInOperationalWorkspace(job, companyId));
 }
 
 function companyTasks(companyId = activeCompanyId()) {
-  return state.tasks.filter((task) => task.company_id === companyId);
+  return state.tasks.filter((task) => recordVisibleInOperationalWorkspace(task, companyId));
 }
 
 function companyNotifications(companyId = activeCompanyId()) {
@@ -29847,7 +29876,7 @@ function calendarTypeIcon(type) {
 }
 
 function companyFiles(companyId = activeCompanyId()) {
-  return state.files.filter((file) => file.company_id === companyId);
+  return state.files.filter((file) => recordVisibleInOperationalWorkspace(file, companyId));
 }
 
 function companyDriveFolders(companyId = activeCompanyId()) {
@@ -30044,7 +30073,7 @@ function filteredJobs(companyId = activeCompanyId(), ignoreStage = false) {
 }
 
 function companyContacts(companyId = activeCompanyId()) {
-  return state.contacts.filter((contact) => contact.company_id === companyId);
+  return state.contacts.filter((contact) => recordVisibleInOperationalWorkspace(contact, companyId));
 }
 
 function contactFilterJobType(contact) {
@@ -30118,7 +30147,7 @@ function sortedContacts(contacts) {
 }
 
 function contactById(id) {
-  return state.contacts.find((contact) => contact.id === id) || null;
+  return state.contacts.find((contact) => contact.id === id && recordVisibleInOperationalWorkspace(contact)) || null;
 }
 
 function selectedContact() {
@@ -30130,9 +30159,10 @@ function persistContacts() {
 }
 
 function upsertContact(contact) {
-  const index = state.contacts.findIndex((item) => item.id === contact.id);
-  if (index >= 0) state.contacts[index] = contact;
-  else state.contacts.push(contact);
+  const scoped = ensureRecordWorkspace(contact);
+  const index = state.contacts.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.contacts[index] = scoped;
+  else state.contacts.push(scoped);
   persistContacts();
 }
 
@@ -30163,10 +30193,10 @@ function setPipelineStage(kind, stage, forceNav) {
 
 // ---- CRM getters + CRUD: accounts / deals / activities --------------------
 function companyAccounts(companyId = activeCompanyId()) {
-  return state.accounts.filter((account) => account.company_id === companyId);
+  return state.accounts.filter((account) => recordVisibleInOperationalWorkspace(account, companyId));
 }
 function accountById(id) {
-  return id ? state.accounts.find((account) => account.id === id) || null : null;
+  return id ? state.accounts.find((account) => account.id === id && recordVisibleInOperationalWorkspace(account)) || null : null;
 }
 function accountName(id) {
   return accountById(id)?.name || '';
@@ -30175,13 +30205,13 @@ function selectedAccount() {
   return accountById(state.selectedAccountId);
 }
 function companyCrmSites(companyId = activeCompanyId()) {
-  return state.sites.filter((site) => site.company_id === companyId);
+  return state.sites.filter((site) => recordVisibleInOperationalWorkspace(site, companyId));
 }
 function crmSiteById(id) {
-  return id ? state.sites.find((site) => site.id === id) || null : null;
+  return id ? state.sites.find((site) => site.id === id && recordVisibleInOperationalWorkspace(site)) || null : null;
 }
 function crmSitesForContact(contactId) {
-  return state.sites.filter((site) => site.contact_id === contactId);
+  return state.sites.filter((site) => site.contact_id === contactId && recordVisibleInOperationalWorkspace(site));
 }
 function filteredAccounts(companyId = activeCompanyId()) {
   const q = state.accountQuery.trim().toLowerCase();
@@ -30194,10 +30224,10 @@ function filteredAccounts(companyId = activeCompanyId()) {
 }
 
 function companyDeals(companyId = activeCompanyId()) {
-  return state.deals.filter((deal) => deal.company_id === companyId);
+  return state.deals.filter((deal) => recordVisibleInOperationalWorkspace(deal, companyId));
 }
 function dealById(id) {
-  return id ? state.deals.find((deal) => deal.id === id) || null : null;
+  return id ? state.deals.find((deal) => deal.id === id && recordVisibleInOperationalWorkspace(deal)) || null : null;
 }
 function selectedDeal() {
   return dealById(state.selectedDealId);
@@ -30212,17 +30242,17 @@ function filteredDeals(companyId = activeCompanyId(), ignoreStage = false) {
   });
 }
 function dealsForAccount(accountId) {
-  return state.deals.filter((deal) => deal.account_id === accountId);
+  return state.deals.filter((deal) => deal.account_id === accountId && recordVisibleInOperationalWorkspace(deal));
 }
 function contactsForAccount(accountId) {
-  return state.contacts.filter((contact) => contact.account_id === accountId);
+  return state.contacts.filter((contact) => contact.account_id === accountId && recordVisibleInOperationalWorkspace(contact));
 }
 function jobsForAccount(accountId) {
-  return state.jobs.filter((job) => job.account_id === accountId);
+  return state.jobs.filter((job) => job.account_id === accountId && recordVisibleInOperationalWorkspace(job));
 }
 
 function companyActivities(companyId = activeCompanyId()) {
-  return state.activities.filter((activity) => activity.company_id === companyId);
+  return state.activities.filter((activity) => recordVisibleInOperationalWorkspace(activity, companyId));
 }
 function relationThreadIds(relatedType, relatedId) {
   const ids = { account_id: '', contact_id: '', site_id: '', deal_id: '', job_id: '' };
@@ -30639,34 +30669,38 @@ function persistProposalsLocal() { writeJson(PROPOSAL_CACHE_KEY, state.proposals
 function persistActivities() { writeJson(ACTIVITY_CACHE_KEY, state.activities); }
 
 function upsertAccount(account) {
-  const index = state.accounts.findIndex((item) => item.id === account.id);
-  if (index >= 0) state.accounts[index] = account;
-  else state.accounts.push(account);
+  const scoped = ensureRecordWorkspace(account);
+  const index = state.accounts.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.accounts[index] = scoped;
+  else state.accounts.push(scoped);
   persistAccounts();
 }
 function upsertDeal(deal) {
-  const index = state.deals.findIndex((item) => item.id === deal.id);
-  if (index >= 0) state.deals[index] = deal;
-  else state.deals.push(deal);
+  const scoped = ensureRecordWorkspace(deal);
+  const index = state.deals.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.deals[index] = scoped;
+  else state.deals.push(scoped);
   persistDeals();
 }
 function upsertCrmSite(site) {
-  const index = state.sites.findIndex((item) => item.id === site.id);
-  if (index >= 0) state.sites[index] = site;
-  else state.sites.push(site);
+  const scoped = ensureRecordWorkspace(site);
+  const index = state.sites.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.sites[index] = scoped;
+  else state.sites.push(scoped);
   persistSites();
 }
 function upsertProposal(proposal) {
-  const normalized = normalizeProposal(proposal);
+  const normalized = ensureRecordWorkspace(normalizeProposal(proposal));
   const index = state.proposals.findIndex((item) => item.id === normalized.id);
   if (index >= 0) state.proposals[index] = normalized;
   else state.proposals.unshift(normalized);
   persistProposalsLocal();
 }
 function upsertActivity(activity) {
-  const index = state.activities.findIndex((item) => item.id === activity.id);
-  if (index >= 0) state.activities[index] = activity;
-  else state.activities.unshift(activity);
+  const scoped = ensureRecordWorkspace(activity);
+  const index = state.activities.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.activities[index] = scoped;
+  else state.activities.unshift(scoped);
   persistActivities();
 }
 
@@ -31309,13 +31343,13 @@ async function permanentlyDeleteRecycleBinItem(itemId, options = {}) {
   return true;
 }
 
-const ACCOUNT_COLS = ['id', 'company_id', 'name', 'type', 'industry', 'website', 'phone', 'email', 'address', 'owner_name', 'status', 'notes', 'updated_at'];
-const SITE_COLS = ['id', 'company_id', 'contact_id', 'account_id', 'label', 'address', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'notes', 'updated_at'];
-const DEAL_COLS = ['id', 'company_id', 'account_id', 'primary_contact_id', 'site_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'line_items', 'notes', 'updated_at'];
-const JOB_COLS = ['id', 'company_id', 'name', 'client_name', 'contact_name', 'site_address', 'job_type', 'stage', 'priority', 'owner_name', 'scope', 'notes', 'estimate_total', 'invoice_total', 'account_id', 'contact_id', 'deal_id', 'site_id', 'updated_at'];
-const PROPOSAL_COLS = ['id', 'company_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
-const ACTIVITY_COLS = ['id', 'company_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
-const CONTACT_COLS = ['id', 'company_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'last_activity_at', 'notes', 'country_code', 'country', 'province', 'city', 'barangay', 'street', 'block_no', 'zip', 'lat', 'lng', 'updated_at'];
+const ACCOUNT_COLS = ['id', 'company_id', 'workspace_id', 'name', 'type', 'industry', 'website', 'phone', 'email', 'address', 'owner_name', 'status', 'notes', 'updated_at'];
+const SITE_COLS = ['id', 'company_id', 'workspace_id', 'contact_id', 'account_id', 'label', 'address', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'notes', 'updated_at'];
+const DEAL_COLS = ['id', 'company_id', 'workspace_id', 'account_id', 'primary_contact_id', 'site_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'line_items', 'notes', 'updated_at'];
+const JOB_COLS = ['id', 'company_id', 'workspace_id', 'name', 'client_name', 'contact_name', 'site_address', 'job_type', 'stage', 'priority', 'owner_name', 'scope', 'notes', 'estimate_total', 'invoice_total', 'account_id', 'contact_id', 'deal_id', 'site_id', 'updated_at'];
+const PROPOSAL_COLS = ['id', 'company_id', 'workspace_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
+const ACTIVITY_COLS = ['id', 'company_id', 'workspace_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
+const CONTACT_COLS = ['id', 'company_id', 'workspace_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'last_activity_at', 'notes', 'country_code', 'country', 'province', 'city', 'barangay', 'street', 'block_no', 'zip', 'lat', 'lng', 'updated_at'];
 const CLIENT_PORTAL_DOCUMENT_COLS = ['id', 'company_id', 'portal_id', 'version_group_id', 'version_number', 'is_current', 'review_status', 'scale', 'scale_unit', 'bucket_id', 'object_path', 'file_name', 'mime_type', 'size_bytes', 'page_count', 'uploaded_by', 'created_at', 'updated_at'];
 const CLIENT_PORTAL_ANNOTATION_COLS = ['id', 'company_id', 'portal_id', 'document_id', 'page_number', 'guest_name', 'author_profile_id', 'annotation_type', 'payload', 'resolved_at', 'created_at', 'updated_at'];
 
@@ -31327,6 +31361,7 @@ function emptyToNull(row, keys) {
 async function saveAccount(form) {
   const payload = normalizeAccount(Object.fromEntries(new FormData(form).entries()));
   payload.id = payload.id || `account-${crypto.randomUUID()}`;
+  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
   payload.updated_at = new Date().toISOString();
   const { ok, data } = await supabaseWrite('accounts', supabaseRow(payload, ACCOUNT_COLS));
   if (!ok) return false;
@@ -31347,6 +31382,7 @@ async function deleteAccount(id) {
 async function saveDeal(form) {
   const payload = normalizeDeal(Object.fromEntries(new FormData(form).entries()));
   payload.id = payload.id || `deal-${crypto.randomUUID()}`;
+  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
   // Keep status in sync with terminal stage names so KPIs / badges stay correct.
   if (/^won/i.test(payload.stage)) payload.status = 'won';
   else if (/^lost/i.test(payload.stage)) payload.status = 'lost';
@@ -31370,7 +31406,11 @@ async function saveDeal(form) {
 
 async function persistDeal(deal, label = 'Quote saved.') {
   const before = dealById(deal.id) ? { ...dealById(deal.id) } : null;
-  const payload = normalizeDeal({ ...deal, updated_at: new Date().toISOString() });
+  const payload = normalizeDeal({
+    ...deal,
+    workspace_id: deal.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   if (/^won/i.test(payload.stage)) payload.status = 'won';
   else if (/^lost/i.test(payload.stage)) payload.status = 'lost';
   else if (payload.status !== 'open' && !/^won|^lost/i.test(payload.stage)) payload.status = 'open';
@@ -31521,7 +31561,11 @@ async function removeQuoteLineItem(dealId, lineId) {
 }
 
 async function persistProposal(proposal, label = 'Proposal saved.') {
-  const payload = normalizeProposal({ ...proposal, updated_at: new Date().toISOString() });
+  const payload = normalizeProposal({
+    ...proposal,
+    workspace_id: proposal.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   const row = emptyToNull(supabaseRow(payload, PROPOSAL_COLS), ['contact_id', 'deal_id', 'job_id', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at']);
   const { ok, data } = await supabaseWrite('proposal_documents', row);
   if (!ok) return false;
@@ -31703,6 +31747,7 @@ async function logActivity(input) {
     ...input,
     id: input.id || `activity-${crypto.randomUUID()}`,
     company_id: activeCompanyId(),
+    workspace_id: input.workspace_id || activeWorkspaceId(),
     account_id: accountId,
     contact_id: contactId,
     site_id: siteId,
@@ -31764,6 +31809,7 @@ async function convertDealToJob(dealId) {
   const job = normalizeJob({
     id: '',
     company_id: companyId,
+    workspace_id: deal.workspace_id || activeWorkspaceId(),
     name: deal.name,
     client_name: account?.name || '',
     contact_name: contact?.name || '',
@@ -32873,7 +32919,11 @@ async function mountLocationPicker() {
 }
 
 async function persistCrmSite(site) {
-  const payload = normalizeCrmSite({ ...site, updated_at: new Date().toISOString() });
+  const payload = normalizeCrmSite({
+    ...site,
+    workspace_id: site.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   const { ok, data } = await supabaseWrite('crm_sites', emptyToNull(supabaseRow(payload, SITE_COLS), ['contact_id', 'account_id']));
   if (!ok) return false;
   const savedSite = data ? normalizeCrmSite(data) : payload;
@@ -33127,7 +33177,26 @@ function canManageOperationalWorkspaces(companyId = activeCompanyId()) {
 }
 
 function defaultOperationalWorkspaceId(companyId = activeCompanyId()) {
-  return allowedOperationalWorkspaces(companyId).find((workspace) => workspace.is_default)?.id || '';
+  return state.operationalWorkspaces.find((workspace) => (
+    workspace.company_id === canonicalCompanyId(companyId)
+    && workspace.is_default
+    && workspace.status === 'active'
+  ))?.id || '';
+}
+
+function recordVisibleInOperationalWorkspace(record, companyId = activeCompanyId()) {
+  const canonicalCompany = canonicalCompanyId(companyId);
+  const workspaceId = workspaceIdForCompany(canonicalCompany);
+  return record?.company_id === canonicalCompany
+    && recordBelongsToWorkspace(record, workspaceId, defaultOperationalWorkspaceId(canonicalCompany));
+}
+
+function ensureRecordWorkspace(record) {
+  if (!record || record.workspace_id) return record;
+  return {
+    ...record,
+    workspace_id: workspaceIdForCompany(record.company_id || activeCompanyId()),
+  };
 }
 
 function mergeOperationalWorkspaces(rows) {
@@ -33270,6 +33339,7 @@ function normalizeJob(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     name: String(input.name || '').trim() || 'Untitled Job',
     client_name: String(input.client_name || '').trim(),
     contact_name: String(input.contact_name || '').trim(),
@@ -33392,6 +33462,7 @@ function normalizeContact(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     name: formatContactField('name', input.name) || 'Untitled contact',
     phone: formatContactField('phone', input.phone),
     email: formatContactField('email', input.email),
@@ -33428,6 +33499,7 @@ function normalizeCrmSite(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     contact_id: input.contact_id ? String(input.contact_id) : '',
     account_id: input.account_id ? String(input.account_id) : '',
     label: String(input.label || 'Primary site').trim() || 'Primary site',
@@ -33450,6 +33522,7 @@ function normalizeAccount(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     name: String(input.name || '').trim() || 'Untitled account',
     type: ACCOUNT_TYPES.includes(input.type) ? input.type : 'Customer',
     industry: String(input.industry || '').trim(),
@@ -33470,6 +33543,7 @@ function normalizeDeal(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     account_id: input.account_id ? String(input.account_id) : '',
     primary_contact_id: input.primary_contact_id ? String(input.primary_contact_id) : '',
     site_id: input.site_id ? String(input.site_id) : '',
@@ -33493,6 +33567,7 @@ function normalizeActivity(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     type: ACTIVITY_TYPES.includes(input.type) ? input.type : 'note',
     subject: String(input.subject || '').trim(),
     body: String(input.body || '').trim(),
@@ -33522,6 +33597,7 @@ function normalizeTask(input) {
     label: input.label || null,
     bid_status: input.bid_status || null,
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     creator_id: String(input.creator_id || ''),
     assignee_id: String(input.assignee_id || input.creator_id || ''),
     project_id: String(input.project_id || ''),
@@ -33656,6 +33732,7 @@ function normalizeUnderwritingCase(input = {}) {
   return {
     id: String(input.id || crypto.randomUUID()),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     contact_id: String(input.contact_id || ''),
     contract_price: number(input.contract_price),
     material_cost: number(input.material_cost),
@@ -33679,6 +33756,7 @@ function normalizeFile(input) {
   return {
     id: String(input.id || crypto.randomUUID()),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     job_id: String(input.job_id || ''),
     folder: String(input.folder || folderIdFromCategory(category)),
     file_name: String(input.file_name || input.name || 'Untitled file'),
@@ -34410,6 +34488,7 @@ function taskPayload(task) {
     label: task.label,
     bid_status: task.bid_status,
     company_id: task.company_id,
+    workspace_id: task.workspace_id || activeWorkspaceId(),
     creator_id: task.creator_id,
     assignee_id: task.assignee_id,
     project_id: task.project_id || null,
@@ -34432,6 +34511,7 @@ function taskPayload(task) {
 function filePayload(file) {
   return {
     company_id: file.company_id,
+    workspace_id: file.workspace_id || activeWorkspaceId(),
     job_id: file.job_id || null,
     bucket_id: file.bucket_id,
     object_path: file.object_path,
@@ -34448,6 +34528,7 @@ function filePayload(file) {
 function underwritingCasePayload(item) {
   return {
     company_id: item.company_id,
+    workspace_id: item.workspace_id || activeWorkspaceId(),
     contact_id: item.contact_id,
     contract_price: item.contract_price,
     material_cost: item.material_cost,

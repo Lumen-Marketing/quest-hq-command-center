@@ -5,7 +5,7 @@ import test from 'node:test';
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 
 test('pipeline replacement uses one atomic RPC and checks returned errors', () => {
-  assert.match(source, /client\.rpc\('replace_pipeline_stages', \{[\s\S]*p_rename_map: renameMap/);
+  assert.match(source, /client\.rpc\('replace_workspace_pipeline_stages', \{[\s\S]*p_workspace_id: workspaceId[\s\S]*p_rename_map: renameMap/);
   assert.match(source, /if \(result\.error\)[\s\S]*Pipeline stage sync/);
   assert.doesNotMatch(source, /from\('pipeline_stages'\)\.delete\(\)[\s\S]{0,300}from\('pipeline_stages'\)\.insert/);
 });
