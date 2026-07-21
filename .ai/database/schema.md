@@ -1,6 +1,6 @@
 # Public schema catalog
 
-Captured 2026-07-16T19:52:01.513Z from the live Supabase catalog. This page is generated for fast reading; [snapshot.json](snapshot.json) is the precise machine-readable source.
+Captured 2026-07-21T00:27:56.075Z from the live Supabase catalog. This page is generated for fast reading; [snapshot.json](snapshot.json) is the precise machine-readable source.
 
 Nullable columns end in ?. Arrays and database-specific types use the live Postgres type name.
 
@@ -8,7 +8,7 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `company_id` text; `name` text; `type` text; `industry` text; `website` text; `phone` text; `email` text; `address` text; `owner_name` text; `status` text; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
+- Columns: `id` text; `company_id` text; `name` text; `type` text; `industry` text; `website` text; `phone` text; `email` text; `address` text; `owner_name` text; `status` text; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `deleted_at` timestamp with time zone?; `deleted_by` uuid?; `workspace_id` uuid
 
 ## public.active_timers
 
@@ -20,13 +20,19 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `company_id` text; `type` text; `subject` text; `body` text; `related_type` text; `related_id` text; `account_id` text?; `due_at` timestamp with time zone?; `completed_at` timestamp with time zone?; `owner_name` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `contact_id` text?; `site_id` text?; `deal_id` text?; `job_id` uuid?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
+- Columns: `id` text; `company_id` text; `type` text; `subject` text; `body` text; `related_type` text; `related_id` text; `account_id` text?; `due_at` timestamp with time zone?; `completed_at` timestamp with time zone?; `owner_name` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `contact_id` text?; `site_id` text?; `deal_id` text?; `job_id` uuid?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?; `workspace_id` uuid
 
 ## public.audit_events
 
 - RLS: enabled
 - Primary key: id
 - Columns: `id` uuid; `company_id` text?; `actor_profile_id` uuid?; `event_type` text; `target_type` text?; `target_id` text?; `details` jsonb; `created_at` timestamp with time zone
+
+## public.automations
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id` text; `company_id` text; `name` text; `enabled` boolean; `trigger` jsonb; `actions` jsonb; `creator_id` text?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
 
 ## public.calendar_events
 
@@ -104,19 +110,19 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `company_id` text; `name` text; `phone` text; `email` text; `location` text; `stage` text; `value` numeric; `owner_name` text; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `account_id` text?; `title` text; `source` text; `last_activity_at` timestamp with time zone?; `temperature` text?; `pay_type` text; `roof_system` text; `country_code` text; `country` text; `province` text; `city` text; `barangay` text; `street` text; `block_no` text; `zip` text; `lat` text; `lng` text; `secondary_roof_system` text; `has_multiple_roof_systems` boolean; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
+- Columns: `id` text; `company_id` text; `name` text; `phone` text; `email` text; `location` text; `stage` text; `value` numeric; `owner_name` text; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `account_id` text?; `title` text; `source` text; `last_activity_at` timestamp with time zone?; `temperature` text?; `pay_type` text; `roof_system` text; `country_code` text; `country` text; `province` text; `city` text; `barangay` text; `street` text; `block_no` text; `zip` text; `lat` text; `lng` text; `secondary_roof_system` text; `has_multiple_roof_systems` boolean; `deleted_at` timestamp with time zone?; `deleted_by` uuid?; `workspace_id` uuid
 
 ## public.crm_sites
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `company_id` text; `contact_id` text?; `account_id` text?; `label` text; `address` text; `roof_system` text; `secondary_roof_system` text; `has_multiple_roof_systems` boolean; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+- Columns: `id` text; `company_id` text; `contact_id` text?; `account_id` text?; `label` text; `address` text; `roof_system` text; `secondary_roof_system` text; `has_multiple_roof_systems` boolean; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `workspace_id` uuid
 
 ## public.deals
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `company_id` text; `account_id` text?; `primary_contact_id` text?; `name` text; `stage` text; `status` text; `value` numeric; `probability` integer; `close_date` date?; `owner_name` text; `source` text; `job_id` uuid?; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `site_id` text?; `line_items` jsonb; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
+- Columns: `id` text; `company_id` text; `account_id` text?; `primary_contact_id` text?; `name` text; `stage` text; `status` text; `value` numeric; `probability` integer; `close_date` date?; `owner_name` text; `source` text; `job_id` uuid?; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `site_id` text?; `line_items` jsonb; `deleted_at` timestamp with time zone?; `deleted_by` uuid?; `workspace_id` uuid
 
 ## public.field_permissions
 
@@ -170,13 +176,13 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` uuid; `company_id` text; `job_id` uuid?; `bucket_id` text; `object_path` text; `file_name` text; `mime_type` text; `size_bytes` bigint; `category` text; `uploaded_by_label` text?; `notes` text?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `deleted_at` timestamp with time zone?; `folder` text; `deleted_by` uuid?
+- Columns: `id` uuid; `company_id` text; `job_id` uuid?; `bucket_id` text; `object_path` text; `file_name` text; `mime_type` text; `size_bytes` bigint; `category` text; `uploaded_by_label` text?; `notes` text?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `deleted_at` timestamp with time zone?; `folder` text; `deleted_by` uuid?; `workspace_id` uuid
 
 ## public.jobs
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` uuid; `company_id` text; `client_id` uuid?; `client_name` text?; `name` text; `contact_name` text?; `site_address` text?; `job_type` text; `stage` text; `priority` text; `owner_name` text?; `scope` text?; `start_date` date?; `due_date` date?; `estimate_total` numeric; `invoice_total` numeric; `task_count` integer; `file_count` integer; `notes` text?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `account_id` text?; `deal_id` text?; `contact_id` text?; `site_id` text?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
+- Columns: `id` uuid; `company_id` text; `client_id` uuid?; `client_name` text?; `name` text; `contact_name` text?; `site_address` text?; `job_type` text; `stage` text; `priority` text; `owner_name` text?; `scope` text?; `start_date` date?; `due_date` date?; `estimate_total` numeric; `invoice_total` numeric; `task_count` integer; `file_count` integer; `notes` text?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `account_id` text?; `deal_id` text?; `contact_id` text?; `site_id` text?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?; `workspace_id` uuid
 
 ## public.knowledge_articles
 
@@ -224,7 +230,7 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` uuid; `company_id` text; `kind` text; `name` text; `color` text; `position` integer; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+- Columns: `id` uuid; `company_id` text; `kind` text; `name` text; `color` text; `position` integer; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `workspace_id` uuid
 
 ## public.pricebook_materials
 
@@ -254,7 +260,7 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `company_id` text; `proposal_no` text; `title` text; `status` text; `related_type` text; `related_id` text; `contact_id` text?; `deal_id` text?; `job_id` text?; `client` jsonb; `draft` jsonb; `total` numeric; `public_token` text; `accepted_by` text; `accepted_email` text; `accepted_at` timestamp with time zone?; `declined_at` timestamp with time zone?; `viewed_at` timestamp with time zone?; `sent_at` timestamp with time zone?; `created_by` text; `created_by_label` text; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `deleted_at` timestamp with time zone?; `deleted_by` uuid?
+- Columns: `id` text; `company_id` text; `proposal_no` text; `title` text; `status` text; `related_type` text; `related_id` text; `contact_id` text?; `deal_id` text?; `job_id` text?; `client` jsonb; `draft` jsonb; `total` numeric; `public_token` text; `accepted_by` text; `accepted_email` text; `accepted_at` timestamp with time zone?; `declined_at` timestamp with time zone?; `viewed_at` timestamp with time zone?; `sent_at` timestamp with time zone?; `created_by` text; `created_by_label` text; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `deleted_at` timestamp with time zone?; `deleted_by` uuid?; `workspace_id` uuid
 
 ## public.recycle_bin_items
 
@@ -284,7 +290,7 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `title` text; `description` text; `type` text; `label` text?; `bid_status` text?; `company_id` text; `creator_id` text; `assignee_id` text; `project_id` text?; `due` date; `due_time` text?; `reminder_at` text?; `priority` text; `urgency` text; `status` text; `watchers` jsonb; `subtasks` jsonb; `activity` jsonb; `cleared_at` timestamp with time zone?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `contact_id` text?; `assignee_ids` ARRAY; `wo_number` integer?; `reminder_offset` text?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?; `deal_id` text?
+- Columns: `id` text; `title` text; `description` text; `type` text; `label` text?; `bid_status` text?; `company_id` text; `creator_id` text; `assignee_id` text; `project_id` text?; `due` date; `due_time` text?; `reminder_at` text?; `priority` text; `urgency` text; `status` text; `watchers` jsonb; `subtasks` jsonb; `activity` jsonb; `cleared_at` timestamp with time zone?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `contact_id` text?; `assignee_ids` ARRAY; `wo_number` integer?; `reminder_offset` text?; `deleted_at` timestamp with time zone?; `deleted_by` uuid?; `deal_id` text?; `recurrence` text?; `workspace_id` uuid
 
 ## public.team_members
 
@@ -302,7 +308,7 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` uuid; `company_id` text; `contact_id` text; `contract_price` numeric; `material_cost` numeric; `labor_cost` numeric; `permit_cost` numeric; `disposal_cost` numeric; `other_cost` numeric; `overhead_percent` numeric; `commission_percent` numeric; `contingency_percent` numeric; `target_margin_percent` numeric; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+- Columns: `id` uuid; `company_id` text; `contact_id` text; `contract_price` numeric; `material_cost` numeric; `labor_cost` numeric; `permit_cost` numeric; `disposal_cost` numeric; `other_cost` numeric; `overhead_percent` numeric; `commission_percent` numeric; `contingency_percent` numeric; `target_margin_percent` numeric; `notes` text; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone; `workspace_id` uuid
 
 ## public.user_role_assignments
 
@@ -339,3 +345,21 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 - RLS: enabled
 - Primary key: company_id
 - Columns: `company_id` text; `doc` jsonb; `updated_by` uuid?; `updated_at` timestamp with time zone; `created_at` timestamp with time zone
+
+## public.workspace_memberships
+
+- RLS: enabled
+- Primary key: workspace_id, profile_id
+- Columns: `workspace_id` uuid; `profile_id` uuid; `role_id` uuid?; `status` text; `assigned_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+
+## public.workspace_plugins
+
+- RLS: enabled
+- Primary key: workspace_id, plugin_id
+- Columns: `workspace_id` uuid; `plugin_id` text; `status` text; `config` jsonb; `installed_by` uuid?; `installed_at` timestamp with time zone?; `disabled_at` timestamp with time zone?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+
+## public.workspaces
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id` uuid; `company_id` text; `slug` text; `name` text; `description` text; `icon_key` text; `color` text; `status` text; `is_default` boolean; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone

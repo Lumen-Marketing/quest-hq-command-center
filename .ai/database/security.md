@@ -1,6 +1,8 @@
 # Database security map
 
-Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Security enabled; `v_pricebook_material_best` is a view and does not use table RLS. Policy expressions are intentionally omitted; inspect migrations or the live catalog before changing authorization.
+Captured 2026-07-21T00:27:56.075Z. All 59 public base tables report Row Level Security enabled; `v_pricebook_material_best` is a view and does not use table RLS. Policy expressions are intentionally omitted; inspect migrations or the live catalog before changing authorization.
+
+Operational workspace RPCs intentionally use `SECURITY DEFINER` with fixed search paths and explicit membership/permission checks. Public and anonymous execution is revoked; authenticated execution is required for the app. Supabase's generic authenticated-security-definer advisor warning is therefore expected for these reviewed entry points.
 
 ## Coverage
 
@@ -10,6 +12,7 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | active_timers | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | activities | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | audit_events | enabled | 2 | INSERT, SELECT |
+| automations | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | calendar_events | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | client_portal_annotations | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | client_portal_documents | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
@@ -52,7 +55,7 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | resource_acl | enabled | 2 | ALL, SELECT |
 | role_permissions | enabled | 2 | ALL, SELECT |
 | roles | enabled | 2 | ALL, SELECT |
-| tasks | enabled | 5 | DELETE, INSERT, SELECT, UPDATE |
+| tasks | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | team_members | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | time_entries | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | underwriting_cases | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
@@ -62,25 +65,32 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | workspace_backup_copies | enabled | 2 | ALL, SELECT |
 | workspace_backups | enabled | 2 | ALL, SELECT |
 | workspace_builder_state | enabled | 3 | INSERT, SELECT, UPDATE |
+| workspace_memberships | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| workspace_plugins | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| workspaces | enabled | 3 | INSERT, SELECT, UPDATE |
 
 ## Policy catalog
 
 | Table | Policy | Roles | Command | Mode |
 | --- | --- | --- | --- | --- |
-| accounts | accounts members delete | authenticated | DELETE | PERMISSIVE |
-| accounts | accounts members insert | authenticated | INSERT | PERMISSIVE |
-| accounts | accounts members read | authenticated | SELECT | PERMISSIVE |
-| accounts | accounts members update | authenticated | UPDATE | PERMISSIVE |
+| accounts | accounts workspace delete | authenticated | DELETE | PERMISSIVE |
+| accounts | accounts workspace insert | authenticated | INSERT | PERMISSIVE |
+| accounts | accounts workspace read | authenticated | SELECT | PERMISSIVE |
+| accounts | accounts workspace update | authenticated | UPDATE | PERMISSIVE |
 | active_timers | role users can delete active_timers | authenticated | DELETE | PERMISSIVE |
 | active_timers | role users can insert active_timers | authenticated | INSERT | PERMISSIVE |
 | active_timers | role users can read active_timers | authenticated | SELECT | PERMISSIVE |
 | active_timers | role users can update active_timers | authenticated | UPDATE | PERMISSIVE |
-| activities | activities members delete | authenticated | DELETE | PERMISSIVE |
-| activities | activities members insert | authenticated | INSERT | PERMISSIVE |
-| activities | activities members read | authenticated | SELECT | PERMISSIVE |
-| activities | activities members update | authenticated | UPDATE | PERMISSIVE |
+| activities | activities workspace delete | authenticated | DELETE | PERMISSIVE |
+| activities | activities workspace insert | authenticated | INSERT | PERMISSIVE |
+| activities | activities workspace read | authenticated | SELECT | PERMISSIVE |
+| activities | activities workspace update | authenticated | UPDATE | PERMISSIVE |
 | audit_events | admins insert audit events | authenticated | INSERT | PERMISSIVE |
 | audit_events | members read audit events | authenticated | SELECT | PERMISSIVE |
+| automations | admins create company automations | authenticated | INSERT | PERMISSIVE |
+| automations | admins delete company automations | authenticated | DELETE | PERMISSIVE |
+| automations | admins update company automations | authenticated | UPDATE | PERMISSIVE |
+| automations | members read company automations | authenticated | SELECT | PERMISSIVE |
 | calendar_events | calendar events delete by managers or creator | authenticated | DELETE | PERMISSIVE |
 | calendar_events | calendar events insert by managers | authenticated | INSERT | PERMISSIVE |
 | calendar_events | calendar events update by managers or creator | authenticated | UPDATE | PERMISSIVE |
@@ -110,18 +120,18 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | company_plugins | admins manage company plugins | authenticated | ALL | PERMISSIVE |
 | company_plugins | members read company plugins | authenticated | SELECT | PERMISSIVE |
 | company_subscriptions | members read subscriptions | authenticated | SELECT | PERMISSIVE |
-| contacts | contacts members delete | authenticated | DELETE | PERMISSIVE |
-| contacts | contacts members insert | authenticated | INSERT | PERMISSIVE |
-| contacts | contacts members read | authenticated | SELECT | PERMISSIVE |
-| contacts | contacts members update | authenticated | UPDATE | PERMISSIVE |
-| crm_sites | crm_sites members delete | authenticated | DELETE | PERMISSIVE |
-| crm_sites | crm_sites members insert | authenticated | INSERT | PERMISSIVE |
-| crm_sites | crm_sites members read | authenticated | SELECT | PERMISSIVE |
-| crm_sites | crm_sites members update | authenticated | UPDATE | PERMISSIVE |
-| deals | deals members delete | authenticated | DELETE | PERMISSIVE |
-| deals | deals members insert | authenticated | INSERT | PERMISSIVE |
-| deals | deals members read | authenticated | SELECT | PERMISSIVE |
-| deals | deals members update | authenticated | UPDATE | PERMISSIVE |
+| contacts | contacts workspace delete | authenticated | DELETE | PERMISSIVE |
+| contacts | contacts workspace insert | authenticated | INSERT | PERMISSIVE |
+| contacts | contacts workspace read | authenticated | SELECT | PERMISSIVE |
+| contacts | contacts workspace update | authenticated | UPDATE | PERMISSIVE |
+| crm_sites | crm_sites workspace delete | authenticated | DELETE | PERMISSIVE |
+| crm_sites | crm_sites workspace insert | authenticated | INSERT | PERMISSIVE |
+| crm_sites | crm_sites workspace read | authenticated | SELECT | PERMISSIVE |
+| crm_sites | crm_sites workspace update | authenticated | UPDATE | PERMISSIVE |
+| deals | deals workspace delete | authenticated | DELETE | PERMISSIVE |
+| deals | deals workspace insert | authenticated | INSERT | PERMISSIVE |
+| deals | deals workspace read | authenticated | SELECT | PERMISSIVE |
+| deals | deals workspace update | authenticated | UPDATE | PERMISSIVE |
 | field_permissions | admins manage field permissions | authenticated | ALL | PERMISSIVE |
 | field_permissions | members read field permissions | authenticated | SELECT | PERMISSIVE |
 | finance_expenses | finance_expenses_delete | authenticated | DELETE | PERMISSIVE |
@@ -149,14 +159,14 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | forms | managers update company forms | authenticated | UPDATE | PERMISSIVE |
 | forms | members read company forms | authenticated | SELECT | PERMISSIVE |
 | job_activity | members access job activity | authenticated | ALL | PERMISSIVE |
-| job_files | subscription members delete job files | authenticated | DELETE | PERMISSIVE |
-| job_files | subscription members insert job files | authenticated | INSERT | PERMISSIVE |
-| job_files | subscription members read job files | authenticated | SELECT | PERMISSIVE |
-| job_files | subscription members update job files | authenticated | UPDATE | PERMISSIVE |
-| jobs | subscription members delete jobs | authenticated | DELETE | PERMISSIVE |
-| jobs | subscription members insert jobs | authenticated | INSERT | PERMISSIVE |
-| jobs | subscription members read jobs | authenticated | SELECT | PERMISSIVE |
-| jobs | subscription members update jobs | authenticated | UPDATE | PERMISSIVE |
+| job_files | job_files workspace delete | authenticated | DELETE | PERMISSIVE |
+| job_files | job_files workspace insert | authenticated | INSERT | PERMISSIVE |
+| job_files | job_files workspace read | authenticated | SELECT | PERMISSIVE |
+| job_files | job_files workspace update | authenticated | UPDATE | PERMISSIVE |
+| jobs | jobs workspace delete | authenticated | DELETE | PERMISSIVE |
+| jobs | jobs workspace insert | authenticated | INSERT | PERMISSIVE |
+| jobs | jobs workspace read | authenticated | SELECT | PERMISSIVE |
+| jobs | jobs workspace update | authenticated | UPDATE | PERMISSIVE |
 | knowledge_articles | managers create company knowledge | authenticated | INSERT | PERMISSIVE |
 | knowledge_articles | managers delete company knowledge | authenticated | DELETE | PERMISSIVE |
 | knowledge_articles | managers update company knowledge | authenticated | UPDATE | PERMISSIVE |
@@ -184,10 +194,10 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | notifications | role users can insert notifications | authenticated | INSERT | PERMISSIVE |
 | notifications | role users can read notifications | authenticated | SELECT | PERMISSIVE |
 | notifications | role users can update notifications | authenticated | UPDATE | PERMISSIVE |
-| pipeline_stages | pipeline stages members delete | authenticated | DELETE | PERMISSIVE |
-| pipeline_stages | pipeline stages members insert | authenticated | INSERT | PERMISSIVE |
-| pipeline_stages | pipeline stages members read | authenticated | SELECT | PERMISSIVE |
-| pipeline_stages | pipeline stages members update | authenticated | UPDATE | PERMISSIVE |
+| pipeline_stages | pipeline_stages workspace delete | authenticated | DELETE | PERMISSIVE |
+| pipeline_stages | pipeline_stages workspace insert | authenticated | INSERT | PERMISSIVE |
+| pipeline_stages | pipeline_stages workspace read | authenticated | SELECT | PERMISSIVE |
+| pipeline_stages | pipeline_stages workspace update | authenticated | UPDATE | PERMISSIVE |
 | pricebook_materials | managers delete pricebook materials | authenticated | DELETE | PERMISSIVE |
 | pricebook_materials | managers insert pricebook materials | authenticated | INSERT | PERMISSIVE |
 | pricebook_materials | managers update pricebook materials | authenticated | UPDATE | PERMISSIVE |
@@ -205,10 +215,10 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | profiles | team viewers read profiles | authenticated | SELECT | PERMISSIVE |
 | profiles | users read own profile | authenticated | SELECT | PERMISSIVE |
 | profiles | users update own profile name | authenticated | UPDATE | PERMISSIVE |
-| proposal_documents | members create company proposals | authenticated | INSERT | PERMISSIVE |
-| proposal_documents | members delete company proposals | authenticated | DELETE | PERMISSIVE |
-| proposal_documents | members read company proposals | authenticated | SELECT | PERMISSIVE |
-| proposal_documents | members update company proposals | authenticated | UPDATE | PERMISSIVE |
+| proposal_documents | proposal_documents workspace delete | authenticated | DELETE | PERMISSIVE |
+| proposal_documents | proposal_documents workspace insert | authenticated | INSERT | PERMISSIVE |
+| proposal_documents | proposal_documents workspace read | authenticated | SELECT | PERMISSIVE |
+| proposal_documents | proposal_documents workspace update | authenticated | UPDATE | PERMISSIVE |
 | recycle_bin_items | admins manage recycle bin | authenticated | ALL | PERMISSIVE |
 | resource_acl | admins manage resource acl | authenticated | ALL | PERMISSIVE |
 | resource_acl | members read resource acl | authenticated | SELECT | PERMISSIVE |
@@ -216,11 +226,10 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | role_permissions | members read role permissions | authenticated | SELECT | PERMISSIVE |
 | roles | admins manage roles | authenticated | ALL | PERMISSIVE |
 | roles | members read roles | authenticated | SELECT | PERMISSIVE |
-| tasks | assignees can read tasks | authenticated | SELECT | PERMISSIVE |
-| tasks | role users can delete tasks | authenticated | DELETE | PERMISSIVE |
-| tasks | role users can insert tasks | authenticated | INSERT | PERMISSIVE |
-| tasks | role users can read tasks | authenticated | SELECT | PERMISSIVE |
-| tasks | role users can update tasks | authenticated | UPDATE | PERMISSIVE |
+| tasks | tasks workspace delete | authenticated | DELETE | PERMISSIVE |
+| tasks | tasks workspace insert | authenticated | INSERT | PERMISSIVE |
+| tasks | tasks workspace read | authenticated | SELECT | PERMISSIVE |
+| tasks | tasks workspace update | authenticated | UPDATE | PERMISSIVE |
 | team_members | managers can delete team_members | authenticated | DELETE | PERMISSIVE |
 | team_members | managers can insert team_members | authenticated | INSERT | PERMISSIVE |
 | team_members | managers can update team_members | authenticated | UPDATE | PERMISSIVE |
@@ -229,10 +238,10 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | time_entries | role users can insert time_entries | authenticated | INSERT | PERMISSIVE |
 | time_entries | role users can read time_entries | authenticated | SELECT | PERMISSIVE |
 | time_entries | role users can update time_entries | authenticated | UPDATE | PERMISSIVE |
-| underwriting_cases | subscription members delete underwriting cases | authenticated | DELETE | PERMISSIVE |
-| underwriting_cases | subscription members insert underwriting cases | authenticated | INSERT | PERMISSIVE |
-| underwriting_cases | subscription members read underwriting cases | authenticated | SELECT | PERMISSIVE |
-| underwriting_cases | subscription members update underwriting cases | authenticated | UPDATE | PERMISSIVE |
+| underwriting_cases | underwriting_cases workspace delete | authenticated | DELETE | PERMISSIVE |
+| underwriting_cases | underwriting_cases workspace insert | authenticated | INSERT | PERMISSIVE |
+| underwriting_cases | underwriting_cases workspace read | authenticated | SELECT | PERMISSIVE |
+| underwriting_cases | underwriting_cases workspace update | authenticated | UPDATE | PERMISSIVE |
 | user_role_assignments | admins manage role assignments | authenticated | ALL | PERMISSIVE |
 | user_role_assignments | members read role assignments | authenticated | SELECT | PERMISSIVE |
 | wo_counters | company members read wo counters | authenticated | SELECT | PERMISSIVE |
@@ -243,3 +252,14 @@ Captured 2026-07-16T19:52:01.513Z. All 55 public base tables report Row Level Se
 | workspace_builder_state | managers insert workspace builder | authenticated | INSERT | PERMISSIVE |
 | workspace_builder_state | managers update workspace builder | authenticated | UPDATE | PERMISSIVE |
 | workspace_builder_state | members read workspace builder | authenticated | SELECT | PERMISSIVE |
+| workspace_memberships | workspace admins delete memberships | authenticated | DELETE | PERMISSIVE |
+| workspace_memberships | workspace admins insert memberships | authenticated | INSERT | PERMISSIVE |
+| workspace_memberships | workspace admins update memberships | authenticated | UPDATE | PERMISSIVE |
+| workspace_memberships | workspace users read memberships | authenticated | SELECT | PERMISSIVE |
+| workspace_plugins | workspace admins delete plugins | authenticated | DELETE | PERMISSIVE |
+| workspace_plugins | workspace admins insert plugins | authenticated | INSERT | PERMISSIVE |
+| workspace_plugins | workspace admins update plugins | authenticated | UPDATE | PERMISSIVE |
+| workspace_plugins | workspace users read plugins | authenticated | SELECT | PERMISSIVE |
+| workspaces | company admins create workspaces | authenticated | INSERT | PERMISSIVE |
+| workspaces | workspace admins update workspaces | authenticated | UPDATE | PERMISSIVE |
+| workspaces | workspace users read workspaces | authenticated | SELECT | PERMISSIVE |

@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const workspaceMigration = readFileSync(new URL('../supabase/migrations/202607211200_company_operational_workspaces.sql', import.meta.url), 'utf8');
 const migrationDir = new URL('../supabase/migrations/', import.meta.url);
 const migrationFiles = readdirSync(migrationDir).filter((name) => name.endsWith('.sql')).sort();
 const pluginMigrationName = migrationFiles.find((name) => {
@@ -37,7 +38,7 @@ test('plugin registry maps every non-core route to a workspace plugin', () => {
   assert.match(source, /id: 'reporting'[\s\S]*module_ids: \['analytics', 'team-chart'\]/);
   assert.match(source, /\{ id: 'underwriter'[\s\S]*label: 'Underwriter'[\s\S]*permission: 'underwriter\.view'/);
   assert.match(source, /function pluginsForModule\(moduleId\)/);
-  assert.match(source, /function isModuleInstalled\(moduleId, companyId = activeCompanyId\(\)\)/);
+  assert.match(source, /function isModuleInstalled\(moduleId, companyId = activeCompanyId\(\), workspaceId = workspaceIdForCompany\(companyId\)\)/);
 });
 
 test('quest crm plugin contents match the contacts quotes jobs workspace', () => {
@@ -50,12 +51,10 @@ test('quest crm plugin contents match the contacts quotes jobs workspace', () =>
   assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
   assert.match(source, /\{ label: 'Tools', ids: \['underwriter', 'proposals'\] \}/);
   assert.match(source, /\{ label: 'Workspace', ids: \['workspaces', 'workday', 'deals'/);
-  assert.match(source, /const PRIVATE_PLUGIN_ACCESS = \{/);
-  assert.match(source, /password: 'LumenQuest@2026'/);
-  assert.match(source, /function renderPrivatePluginInstallModal\(\)/);
-  assert.match(source, /data-private-plugin-form/);
-  assert.match(source, /function submitPrivatePluginInstall\(form\)/);
-  assert.match(source, /pluginInstallNeedsPrivateAccess\(companyId, plugin\.id, nextStatus\)/);
+  assert.doesNotMatch(source, /PRIVATE_PLUGIN_ACCESS/);
+  assert.doesNotMatch(source, /LumenQuest@2026/);
+  assert.doesNotMatch(source, /data-private-plugin-form/);
+  assert.match(source, /companyPluginStatus\(companyId, pluginId\) === 'installed'/);
 });
 
 test('workspace presets install industry plugin bundles', () => {
@@ -81,11 +80,26 @@ test('navigation and routes are gated by installed plugins', () => {
 test('settings exposes plugin management and role permissions respect installed plugins', () => {
   assert.match(source, /companyPath\('settings', \{ tab: 'plugins' \}, companyId\), 'Plugins', 'plugins'/);
   assert.match(source, /function renderPluginsSettings\(companyId\)/);
-  assert.match(source, /data-action="set-company-plugin"/);
-  assert.match(source, /data-action="apply-plugin-preset"/);
+  assert.match(source, /data-action="set-workspace-plugin"/);
+  assert.match(source, /data-action="apply-workspace-plugin-preset"/);
   assert.match(source, /\['plugins\.view', 'View plugins'\]/);
   assert.match(source, /\['plugins\.manage', 'Install\/disable plugins'\]/);
   assert.match(source, /permissionAvailableForCompany\(key, companyId\)/);
+});
+
+test('workspace plugin activation is separate from company entitlement', () => {
+  assert.match(source, /function workspacePluginRows\(workspaceId = activeWorkspaceId\(\)\)/);
+  assert.match(source, /function workspacePluginStatus\(companyId, pluginId, workspaceId = workspaceIdForCompany\(companyId\)\)/);
+  assert.match(source, /resolveWorkspacePluginStatus\(\{/);
+  assert.match(source, /companyEntitled: companyPluginStatus\(companyId, pluginId\) === 'installed'/);
+  assert.match(source, /async function setWorkspacePlugin\(workspaceId, pluginId, status\)/);
+  assert.match(source, /client\.rpc\('set_workspace_plugin'/);
+  assert.match(source, /target_workspace_id: workspaceId/);
+  assert.match(source, /async function applyWorkspacePluginPreset\(workspaceId, presetCode\)/);
+  assert.match(source, /client\.rpc\('apply_workspace_plugin_preset'/);
+  assert.match(source, /upsertWorkspacePluginLocal\(workspaceId, plugin\.id, nextStatus\)/);
+  assert.match(workspaceMigration, /Company plugin entitlement required/);
+  assert.match(workspaceMigration, /set status = 'disabled', disabled_at = now\(\), updated_at = now\(\)/);
 });
 
 test('plugin migration creates tenant plugin records, RPCs, grants, RLS, and Lumen seed', () => {
@@ -113,7 +127,7 @@ test('quest crm and underwriter plugins are separate in the registry', () => {
 
 test('crm plugins are mutually exclusive and migrated separately from underwriter', () => {
   assert.match(source, /exclusiveGroup: 'crm'/);
-  assert.match(source, /function conflictingPluginIds\(companyId, pluginId, nextStatus\)/);
+  assert.match(source, /function conflictingPluginIds\(companyId, pluginId, nextStatus, workspaceId = workspaceIdForCompany\(companyId\)\)/);
   assert.match(source, /window\.confirm\(`Installing \$\{plugin\.label\} will disable \$\{conflictLabels\}\. Continue\?`\)/);
   assert.match(source, /upsertCompanyPluginLocal\(companyId, conflictId, 'disabled'\)/);
   assert.match(source, /function pluginPrerequisiteNote\(companyId, plugin\)/);

@@ -1,10 +1,10 @@
 # Product context
 
-Quest HQ Command Center is Lumen's multi-tenant operating system for roofing companies. It combines customer and job management, estimating, work execution, files, collaboration, finance, access control, and workspace administration in one company-scoped web app.
+Quest HQ Command Center is Lumen's multi-tenant operating system for roofing companies. It combines customer and job management, estimating, work execution, files, collaboration, finance, access control, and configurable operational workspaces inside each customer company account.
 
 ## Product boundary
 
-Quest HQ owns the company shell, authentication flow, memberships, subscription gating, roles and permissions, CRM records, job containers, files, forms, finance, messaging, calendar, client portals, reporting, settings, and custom workspace apps.
+Quest HQ owns the company shell, authentication flow, company and workspace memberships, subscription gating, roles and permissions, CRM records, job containers, files, forms, finance, messaging, calendar, client portals, reporting, settings, workspace plugins, and custom workspace apps.
 
 TaskManagement remains the vendored work-execution engine. Quest HQ links those tasks to jobs through `project_id`, contacts through `contact_id`, and quotes/deals through tenant-scoped `deal_id`. Do not create a second independent task or next-step model inside Quest HQ.
 
@@ -20,12 +20,14 @@ TaskManagement remains the vendored work-execution engine. Quest HQ links those 
 | Company operations | Price Book, Finance, Team Chart, Team Workload, Time, Approvals, Clock |
 | Control | Company, roles, access, billing, plugins, and workspace settings |
 
-Tickets, Automations, and Templates appear as future/planned areas. Confirm current implementation status in [current-state.md](current-state.md) before building against them.
+Tickets and Templates appear as future/planned areas. Confirm current implementation status in [current-state.md](current-state.md) before building against them.
 
 ## Users and tenancy
 
-- A company is the tenant boundary.
-- A profile represents the signed-in person; company_memberships grant company access.
+- A company is the customer account and top-level billing/security tenant.
+- A workspace is a configurable operational child of one company. Different teams or pipelines can use different apps, roles, plugins, and records without creating another customer account.
+- A profile represents the signed-in person; `company_memberships` grant company access and `workspace_memberships` grant regular workers access to specific child workspaces.
+- Company owners, admins, and developers inherit access to every active child workspace. Regular workers require explicit workspace assignments and can have a different role in each workspace.
 - Company subscription state gates paid workspace behavior.
 - Roles, permissions, resource ACLs, field permissions, membership status, and RLS all participate in authorization.
 - The public demo is bundled sample data and must remain read-only.
@@ -39,6 +41,8 @@ Tickets, Automations, and Templates appear as future/planned areas. Confirm curr
 - Deal or Quote: a sales opportunity that can become a job.
 - Job: the operational container for roofing work.
 - Task: work execution that also supplies the shared "What's next" value for linked Contacts, Quotes/Deals, and Jobs.
-- Workspace: a tenant company; Workspace App Builder also means the configurable custom-app module inside that tenant.
-- Plugin: a company-level module entitlement; disabling a plugin preserves its data.
+- Company account: the market customer, subscription, and outer security tenant.
+- Operational workspace: a configurable child environment for a team, pipeline, or role inside one company account.
+- Workspace App Builder: the configurable custom-app module available inside an operational workspace; it is not the tenancy object itself.
+- Plugin: a company-level entitlement with separate activation and configuration per operational workspace; disabling it preserves data.
 

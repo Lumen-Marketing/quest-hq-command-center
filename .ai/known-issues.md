@@ -12,11 +12,15 @@ Most product behavior is concentrated in src/main.js and most styling in src/sty
 
 ## Migration identifiers differ between repository and live ledger
 
-The latest repository migration is 202607111000_harden_file_upload_buckets.sql, while the latest live ledger entry is 20260711051011 harden_finance_attachments_bucket. This reflects applied/reconciled provider versions, including storage hardening. Always verify live objects and migration intent rather than comparing filenames alone.
+Supabase records provider-generated applied versions, so the repository filenames `202607211200_company_operational_workspaces.sql` and `202607211230_workspace_tenancy_advisor_hardening.sql` appear live as versions `20260721002147` and `20260721002417`. Always verify live objects and migration intent rather than comparing filename timestamps alone.
+
+## Supabase flags intentional authenticated security-definer RPCs
+
+The security advisor reports its generic warning for authenticated `SECURITY DEFINER` routines, including the operational-workspace management RPCs. Those reviewed routines require authenticated app access, use fixed search paths, revoke public/anonymous execution, and perform server-side company/workspace permission checks. Treat a change to those grants or checks as a security-sensitive migration; do not silence the advisor by removing the app's required authenticated execution.
 
 ## Planned navigation can look implemented
 
-Tickets, Knowledge, Automations, Templates, and Team Workload are present in future navigation but route to planned-page behavior. Product or AI work must not report these as shipped without confirming implementation.
+Tickets and Templates remain future navigation entries. Product or AI work must not report them as shipped without confirming implementation.
 
 ## Cron credential visibility is provider-scoped
 

@@ -1,12 +1,13 @@
 # Relationship map
 
-Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. Relationships are directional from the referencing column to the referenced column. Composite relationships have one row per paired column.
+Foreign keys captured from the live public schema on 2026-07-21T00:27:56.075Z. Relationships are directional from the referencing column to the referenced column. Composite relationships have one row per paired column.
 
 | From | To | Constraint | Update | Delete |
 | --- | --- | --- | --- | --- |
 | accounts.company_id | companies.id | accounts_company_id_fkey | NO ACTION | CASCADE |
 | accounts.created_by | profiles.id | accounts_created_by_fkey | NO ACTION | SET NULL |
 | accounts.deleted_by | profiles.id | accounts_deleted_by_fkey | NO ACTION | SET NULL |
+| accounts.workspace_id | workspaces.id | accounts_workspace_id_fkey | NO ACTION | RESTRICT |
 | active_timers.task_id | tasks.id | active_timers_task_id_fkey | NO ACTION | CASCADE |
 | active_timers.user_id | team_members.id | active_timers_user_id_fkey | NO ACTION | RESTRICT |
 | activities.account_id | accounts.id | activities_account_id_fkey | NO ACTION | SET NULL |
@@ -17,8 +18,10 @@ Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. R
 | activities.deleted_by | profiles.id | activities_deleted_by_fkey | NO ACTION | SET NULL |
 | activities.job_id | jobs.id | activities_job_id_fkey | NO ACTION | SET NULL |
 | activities.site_id | crm_sites.id | activities_site_id_fkey | NO ACTION | SET NULL |
+| activities.workspace_id | workspaces.id | activities_workspace_id_fkey | NO ACTION | RESTRICT |
 | audit_events.actor_profile_id | profiles.id | audit_events_actor_profile_id_fkey | NO ACTION | SET NULL |
 | audit_events.company_id | companies.id | audit_events_company_id_fkey | NO ACTION | CASCADE |
+| automations.company_id | companies.id | automations_company_id_fkey | NO ACTION | CASCADE |
 | calendar_events.company_id | companies.id | calendar_events_company_id_fkey | NO ACTION | CASCADE |
 | calendar_events.created_by | profiles.id | calendar_events_created_by_fkey | NO ACTION | SET NULL |
 | calendar_events.deleted_by | profiles.id | calendar_events_deleted_by_fkey | NO ACTION | SET NULL |
@@ -54,10 +57,12 @@ Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. R
 | contacts.company_id | companies.id | contacts_company_id_fkey | NO ACTION | CASCADE |
 | contacts.created_by | profiles.id | contacts_created_by_fkey | NO ACTION | SET NULL |
 | contacts.deleted_by | profiles.id | contacts_deleted_by_fkey | NO ACTION | SET NULL |
+| contacts.workspace_id | workspaces.id | contacts_workspace_id_fkey | NO ACTION | RESTRICT |
 | crm_sites.account_id | accounts.id | crm_sites_account_id_fkey | NO ACTION | SET NULL |
 | crm_sites.company_id | companies.id | crm_sites_company_id_fkey | NO ACTION | CASCADE |
 | crm_sites.contact_id | contacts.id | crm_sites_contact_id_fkey | NO ACTION | CASCADE |
 | crm_sites.created_by | profiles.id | crm_sites_created_by_fkey | NO ACTION | SET NULL |
+| crm_sites.workspace_id | workspaces.id | crm_sites_workspace_id_fkey | NO ACTION | RESTRICT |
 | deals.account_id | accounts.id | deals_account_id_fkey | NO ACTION | SET NULL |
 | deals.company_id | companies.id | deals_company_id_fkey | NO ACTION | CASCADE |
 | deals.created_by | profiles.id | deals_created_by_fkey | NO ACTION | SET NULL |
@@ -65,6 +70,7 @@ Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. R
 | deals.job_id | jobs.id | deals_job_id_fkey | NO ACTION | SET NULL |
 | deals.primary_contact_id | contacts.id | deals_primary_contact_id_fkey | NO ACTION | SET NULL |
 | deals.site_id | crm_sites.id | deals_site_id_fkey | NO ACTION | SET NULL |
+| deals.workspace_id | workspaces.id | deals_workspace_id_fkey | NO ACTION | RESTRICT |
 | field_permissions.company_id | companies.id | field_permissions_company_id_fkey | NO ACTION | CASCADE |
 | field_permissions.role_id | roles.id | field_permissions_role_id_fkey | NO ACTION | CASCADE |
 | finance_expenses.company_id | companies.id | finance_expenses_company_id_fkey | NO ACTION | CASCADE |
@@ -92,6 +98,7 @@ Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. R
 | job_files.company_id | companies.id | job_files_company_id_fkey | NO ACTION | RESTRICT |
 | job_files.deleted_by | profiles.id | job_files_deleted_by_fkey | NO ACTION | SET NULL |
 | job_files.job_id | jobs.id | job_files_job_id_fkey | NO ACTION | CASCADE |
+| job_files.workspace_id | workspaces.id | job_files_workspace_id_fkey | NO ACTION | RESTRICT |
 | jobs.account_id | accounts.id | jobs_account_id_fkey | NO ACTION | SET NULL |
 | jobs.client_id | clients.id | jobs_client_id_fkey | NO ACTION | SET NULL |
 | jobs.company_id | companies.id | jobs_company_id_fkey | NO ACTION | RESTRICT |
@@ -99,6 +106,7 @@ Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. R
 | jobs.deal_id | deals.id | jobs_deal_id_fkey | NO ACTION | SET NULL |
 | jobs.deleted_by | profiles.id | jobs_deleted_by_fkey | NO ACTION | SET NULL |
 | jobs.site_id | crm_sites.id | jobs_site_id_fkey | NO ACTION | SET NULL |
+| jobs.workspace_id | workspaces.id | jobs_workspace_id_fkey | NO ACTION | RESTRICT |
 | knowledge_articles.company_id | companies.id | knowledge_articles_company_id_fkey | NO ACTION | CASCADE |
 | message_attachments.company_id | companies.id | message_attachments_company_id_fkey | NO ACTION | CASCADE |
 | message_attachments.conversation_id | message_conversations.id | message_attachments_conversation_id_fkey | NO ACTION | CASCADE |
@@ -118,6 +126,7 @@ Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. R
 | notifications.recipient_profile_id | profiles.id | notifications_recipient_profile_id_fkey | NO ACTION | CASCADE |
 | notifications.task_id | tasks.id | notifications_task_id_fkey | NO ACTION | CASCADE |
 | pipeline_stages.company_id | companies.id | pipeline_stages_company_id_fkey | NO ACTION | CASCADE |
+| pipeline_stages.workspace_id | workspaces.id | pipeline_stages_workspace_id_fkey | NO ACTION | RESTRICT |
 | pricebook_materials.company_id | companies.id | pricebook_materials_company_id_fkey | NO ACTION | CASCADE |
 | pricebook_materials.deleted_by | profiles.id | pricebook_materials_deleted_by_fkey | NO ACTION | SET NULL |
 | pricebook_vendor_prices.company_id | companies.id | pricebook_vendor_prices_company_id_fkey | NO ACTION | CASCADE |
@@ -131,6 +140,7 @@ Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. R
 | profiles.supervisor_id | team_members.id | profiles_supervisor_id_fkey | NO ACTION | NO ACTION |
 | proposal_documents.company_id | companies.id | proposal_documents_company_id_fkey | NO ACTION | CASCADE |
 | proposal_documents.deleted_by | profiles.id | proposal_documents_deleted_by_fkey | NO ACTION | SET NULL |
+| proposal_documents.workspace_id | workspaces.id | proposal_documents_workspace_id_fkey | NO ACTION | RESTRICT |
 | recycle_bin_items.company_id | companies.id | recycle_bin_items_company_id_fkey | NO ACTION | CASCADE |
 | recycle_bin_items.deleted_by | profiles.id | recycle_bin_items_deleted_by_fkey | NO ACTION | SET NULL |
 | recycle_bin_items.restored_by | profiles.id | recycle_bin_items_restored_by_fkey | NO ACTION | SET NULL |
@@ -144,11 +154,13 @@ Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. R
 | tasks.company_id | companies.id | tasks_company_id_fkey | NO ACTION | RESTRICT |
 | tasks.creator_id | team_members.id | tasks_creator_id_fkey | NO ACTION | RESTRICT |
 | tasks.deleted_by | profiles.id | tasks_deleted_by_fkey | NO ACTION | SET NULL |
+| tasks.workspace_id | workspaces.id | tasks_workspace_id_fkey | NO ACTION | RESTRICT |
 | time_entries.task_id | tasks.id | time_entries_task_id_fkey | NO ACTION | CASCADE |
 | time_entries.user_id | team_members.id | time_entries_user_id_fkey | NO ACTION | RESTRICT |
 | underwriting_cases.company_id | companies.id | underwriting_cases_company_id_fkey | NO ACTION | CASCADE |
 | underwriting_cases.contact_id | contacts.id | underwriting_cases_contact_id_fkey | NO ACTION | CASCADE |
 | underwriting_cases.created_by | profiles.id | underwriting_cases_created_by_fkey | NO ACTION | SET NULL |
+| underwriting_cases.workspace_id | workspaces.id | underwriting_cases_workspace_id_fkey | NO ACTION | RESTRICT |
 | user_role_assignments.assigned_by | profiles.id | user_role_assignments_assigned_by_fkey | NO ACTION | SET NULL |
 | user_role_assignments.company_id | companies.id | user_role_assignments_company_id_fkey | NO ACTION | CASCADE |
 | user_role_assignments.profile_id | profiles.id | user_role_assignments_profile_id_fkey | NO ACTION | CASCADE |
@@ -162,3 +174,11 @@ Foreign keys captured from the live public schema on 2026-07-16T19:52:01.513Z. R
 | workspace_backups.deleted_by | profiles.id | workspace_backups_deleted_by_fkey | NO ACTION | SET NULL |
 | workspace_builder_state.company_id | companies.id | workspace_builder_state_company_id_fkey | NO ACTION | CASCADE |
 | workspace_builder_state.updated_by | profiles.id | workspace_builder_state_updated_by_fkey | NO ACTION | SET NULL |
+| workspace_memberships.assigned_by | profiles.id | workspace_memberships_assigned_by_fkey | NO ACTION | SET NULL |
+| workspace_memberships.profile_id | profiles.id | workspace_memberships_profile_id_fkey | NO ACTION | CASCADE |
+| workspace_memberships.role_id | roles.id | workspace_memberships_role_id_fkey | NO ACTION | SET NULL |
+| workspace_memberships.workspace_id | workspaces.id | workspace_memberships_workspace_id_fkey | NO ACTION | CASCADE |
+| workspace_plugins.installed_by | profiles.id | workspace_plugins_installed_by_fkey | NO ACTION | SET NULL |
+| workspace_plugins.workspace_id | workspaces.id | workspace_plugins_workspace_id_fkey | NO ACTION | CASCADE |
+| workspaces.company_id | companies.id | workspaces_company_id_fkey | NO ACTION | CASCADE |
+| workspaces.created_by | profiles.id | workspaces_created_by_fkey | NO ACTION | SET NULL |

@@ -14,14 +14,13 @@ This project deploys directly. Do not run npm run dev or npm run preview, and do
 
 ## Delivery path
 
-1. Make a scoped branch change.
+1. Make a scoped branch or isolated worktree change.
 2. Run npm run check.
-3. Push the branch and open a pull request.
-4. Merge to main after CI passes.
-5. Let Vercel's Git integration deploy main directly.
-6. Confirm the Vercel deployment is READY and points at the merged commit.
-7. Run the production smoke command against the deployed URL and expected main SHA.
-8. Confirm the scheduled Production Guardian remains healthy.
+3. Merge the verified change into main and push main to GitHub. A pull request may be used when review is requested, but is not required by the direct-delivery workflow.
+4. Let Vercel's Git integration deploy main directly.
+5. Confirm the Vercel deployment is READY and points at the merged commit.
+6. Run the production smoke command against the deployed URL and expected main SHA.
+7. Confirm the scheduled Production Guardian remains healthy.
 
 Relevant automation lives in [CI](../.github/workflows/ci.yml) and [Production Guardian](../.github/workflows/production-guardian.yml).
 
@@ -30,7 +29,7 @@ Relevant automation lives in [CI](../.github/workflows/ci.yml) and [Production G
 1. Inspect the relevant existing migrations and [database map](database/overview.md).
 2. Verify live metadata through the Supabase connection.
 3. Add a forward-only SQL file under [supabase/migrations](../supabase/migrations).
-4. Preserve RLS, company scope, grants, routines, triggers, storage policy, and rollback/reconciliation intent.
+4. Preserve RLS, company and operational-workspace scope, grants, routines, triggers, storage policy, and rollback/reconciliation intent.
 5. Apply through the Supabase migration workflow; do not paste DDL through an ordinary query path.
 6. Re-query the live catalog.
 7. Refresh database/snapshot.json, generated database pages, current-state.md, and manifest.json.

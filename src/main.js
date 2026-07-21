@@ -19,6 +19,12 @@ import { collectAutomationActions, buildTaskFromAction, describeAutomation, AUTO
 import { findDuplicateGroups, mergeContactFields, partitionImport } from './data/dedupe.js';
 import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
 import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
+import {
+  allowedWorkspaces as resolveAllowedWorkspaces,
+  workspaceForRoute,
+  recordBelongsToWorkspace,
+  workspacePluginStatus as resolveWorkspacePluginStatus,
+} from './workspaces/model.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -92,6 +98,7 @@ const PRICEBOOK_PRICE_CACHE_KEY = 'quest-hq-pricebook-prices-v1';
 const TIME_ENTRY_CACHE_KEY = 'quest-hq-time-entry-cache-v1';
 const ACTIVE_TIMER_KEY = 'quest-hq-active-timer-v1';
 const COMPANY_KEY = 'quest-hq-active-company';
+const ACTIVE_WORKSPACE_KEY = 'quest-hq-active-operational-workspace-v1';
 const PENDING_WORKSPACE_REVIEW_KEY = 'quest-hq-pending-workspace-review-v1';
 const TASK_VIEW_KEY = 'quest-hq-task-view';
 const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
@@ -828,12 +835,6 @@ const DASHBOARD_WIDGET_DEFAULTS = {
 };
 
 const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings', 'automations']);
-const PRIVATE_PLUGIN_ACCESS = {
-  crm_2: {
-    label: 'Quest CRM',
-    password: 'LumenQuest@2026',
-  },
-};
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
   { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
@@ -2243,9 +2244,10 @@ const state = {
   joinRequests: [],
   auditEvents: [],
   companyPlugins: [],
+  operationalWorkspaces: [],
+  workspaceMemberships: [],
+  workspacePlugins: [],
   pluginLoadFailed: false,
-  privatePluginInstall: null,
-  privatePluginError: '',
   companies: mergeCompanies(companiesFallback.map(normalizeCompany)),
   dashboardRole: 'exec',
   dashboardRange: 'week',
@@ -2257,6 +2259,7 @@ const state = {
   dashboardAppWidgets: readJson(DASHBOARD_APP_WIDGET_CACHE_KEY, {}),
   workspaceIconDrafts: {},
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
+  activeWorkspaceId: localStorage.getItem(ACTIVE_WORKSPACE_KEY) || '',
   sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
   sidebarScope: 'my-work',
   sidebarScopeRoute: '',
@@ -3085,6 +3088,9 @@ async function loadSupabaseData() {
     proposalsResult,
     activitiesResult,
     companyPluginsResult,
+    workspacesResult,
+    workspaceMembershipsResult,
+    workspacePluginsResult,
     clientPortalsResult,
     clientPortalDocumentsResult,
     clientPortalAnnotationsResult,
@@ -3135,6 +3141,9 @@ async function loadSupabaseData() {
     safeSupabaseQuery(client.from('proposal_documents').select('*').order('updated_at', { ascending: false })),
     client.from('activities').select('*').order('created_at', { ascending: false }).limit(500),
     safeSupabaseQuery(client.from('company_plugins').select('*')),
+    client.from('workspaces').select('*').order('name', { ascending: true }),
+    client.from('workspace_memberships').select('*'),
+    client.from('workspace_plugins').select('*'),
     safeSupabaseQuery(client.from('client_portals').select('*').order('updated_at', { ascending: false })),
     safeSupabaseQuery(client.from('client_portal_documents').select('*').order('created_at', { ascending: false })),
     safeSupabaseQuery(client.from('client_portal_annotations').select('*').order('created_at', { ascending: true })),
@@ -3247,6 +3256,15 @@ async function loadSupabaseData() {
   } else {
     state.pluginLoadFailed = true;
   }
+  if (!workspacesResult.error) {
+    state.operationalWorkspaces = (workspacesResult.data || []).map(normalizeOperationalWorkspace);
+  }
+  if (!workspaceMembershipsResult.error) {
+    state.workspaceMemberships = (workspaceMembershipsResult.data || []).map(normalizeWorkspaceMembership);
+  }
+  if (!workspacePluginsResult.error) {
+    state.workspacePlugins = (workspacePluginsResult.data || []).map(normalizeWorkspacePlugin);
+  }
   if (!clientPortalsResult.error) state.clientPortals = activeRows(clientPortalsResult.data || []).map(normalizeClientPortal);
   if (!clientPortalDocumentsResult.error) state.clientPortalDocuments = activeRows(clientPortalDocumentsResult.data || []).map(normalizeClientPortalDocument);
   if (!clientPortalAnnotationsResult.error) state.clientPortalAnnotations = (clientPortalAnnotationsResult.data || []).map(normalizeClientPortalAnnotation);
@@ -3356,16 +3374,28 @@ async function loadSupabaseBootstrapData() {
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
   const companyIds = compactUnique(state.memberships
     .filter((item) => item.profile_id === activeSession().profile.id && item.status === 'active')
-    .map((item) => item.company_id)
-    .concat(activeSession().profile.company_ids || []));
+    .map((item) => item.company_id));
   if (companyIds.length) {
-    const [companiesResult, subscriptionsResult, rolesResult, rolePermissionsResult, roleAssignmentsResult, companyPluginsResult] = await Promise.all([
+    const [
+      companiesResult,
+      subscriptionsResult,
+      rolesResult,
+      rolePermissionsResult,
+      roleAssignmentsResult,
+      companyPluginsResult,
+      workspacesResult,
+      workspaceMembershipsResult,
+      workspacePluginsResult,
+    ] = await Promise.all([
       safeSupabaseQuery(client.from('companies').select('*').in('id', companyIds)),
       safeSupabaseQuery(client.from('company_subscriptions').select('*').in('company_id', companyIds)),
       safeSupabaseQuery(client.from('roles').select('*').in('company_id', companyIds)),
       safeSupabaseQuery(client.from('role_permissions').select('*')),
       safeSupabaseQuery(client.from('user_role_assignments').select('*').in('company_id', companyIds)),
       safeSupabaseQuery(client.from('company_plugins').select('*').in('company_id', companyIds)),
+      safeSupabaseQuery(client.from('workspaces').select('*').in('company_id', companyIds)),
+      safeSupabaseQuery(client.from('workspace_memberships').select('*')),
+      safeSupabaseQuery(client.from('workspace_plugins').select('*')),
     ]);
     if (!companiesResult.error) state.companies = mergeCompanies(state.companies.concat((companiesResult.data || []).map(normalizeCompany)));
     if (!subscriptionsResult.error) state.subscriptions = mergeSubscriptions(state.subscriptions.concat((subscriptionsResult.data || []).map(normalizeSubscription)));
@@ -3377,6 +3407,15 @@ async function loadSupabaseBootstrapData() {
       state.pluginLoadFailed = false;
     } else {
       state.pluginLoadFailed = true;
+    }
+    if (!workspacesResult.error) {
+      state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.concat((workspacesResult.data || []).map(normalizeOperationalWorkspace)));
+    }
+    if (!workspaceMembershipsResult.error) {
+      state.workspaceMemberships = mergeWorkspaceMemberships(state.workspaceMemberships.concat((workspaceMembershipsResult.data || []).map(normalizeWorkspaceMembership)));
+    }
+    if (!workspacePluginsResult.error) {
+      state.workspacePlugins = mergeWorkspacePlugins(state.workspacePlugins.concat((workspacePluginsResult.data || []).map(normalizeWorkspacePlugin)));
     }
   }
   if (state.platformAdmin) {
@@ -3467,6 +3506,9 @@ function resetLiveWorkspaceData() {
   state.joinRequests = [];
   state.auditEvents = [];
   state.companyPlugins = [];
+  state.operationalWorkspaces = [];
+  state.workspaceMemberships = [];
+  state.workspacePlugins = [];
   state.pluginLoadFailed = false;
   state.companies = [];
   state.sync = { label: 'Loading secure workspace...', mode: 'loading' };
@@ -3527,6 +3569,9 @@ function resetDemoWorkspaceData() {
   state.joinRequests = [];
   state.auditEvents = [];
   state.companyPlugins = demoCompanyPluginRows();
+  state.operationalWorkspaces = demoOperationalWorkspaceRows();
+  state.workspaceMemberships = demoWorkspaceMembershipRows();
+  state.workspacePlugins = demoWorkspacePluginRows();
   state.pluginLoadFailed = false;
   state.companies = mergeCompanies(companiesFallback.map(normalizeCompany));
   state.sync = { label: isReadOnlyDemo() ? 'Read-only demo' : 'Demo mode', mode: 'local' };
@@ -3701,25 +3746,44 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
   const deckMode = extraClass.split(' ').includes('deck-company-select');
   const className = ['company-switch', extraClass, companies.length <= 1 ? 'single-company' : ''].filter(Boolean).join(' ');
   if (deckMode && interactive) {
-    const visibleCompanies = state.workspaceMenuOpen ? menuCompanies : menuCompanies.slice(0, WORKSPACE_RAIL_VISIBLE_LIMIT);
-    const hasMore = menuCompanies.length > WORKSPACE_RAIL_VISIBLE_LIMIT;
+    const workspaces = allowedOperationalWorkspaces(current.id);
+    const currentWorkspaceId = activeWorkspaceId();
+    const visibleWorkspaces = state.workspaceMenuOpen ? workspaces : workspaces.slice(0, WORKSPACE_RAIL_VISIBLE_LIMIT);
+    const hasMore = workspaces.length > WORKSPACE_RAIL_VISIBLE_LIMIT;
+    const canManageWorkspaces = canManageOperationalWorkspaces(current.id);
     return `
-      <section class="workspace-rail workspace-menu ${state.workspaceMenuOpen ? 'open' : ''}" aria-label="Workspaces">
+      <section class="workspace-rail workspace-menu ${state.workspaceMenuOpen ? 'open' : ''}" aria-label="${h(companyLabel(current))} workspaces">
+        <div class="company-account-header" data-company-account-id="${h(current.id)}">
+          ${workspaceIconMarkup(current, 'company-account-icon')}
+          <span class="company-account-copy">
+            <strong>${h(companyLabel(current))}</strong>
+            <small>Company account</small>
+          </span>
+          ${companies.length > 1 ? `
+            <label class="company-account-switcher" title="Switch company account">
+              <span class="sr-only">Switch company account</span>
+              <select data-company-switch aria-label="Active company account">
+                ${menuCompanies.map((company) => `<option value="${h(company.id)}" ${company.id === current.id ? 'selected' : ''}>${h(companyLabel(company))}</option>`).join('')}
+              </select>
+              <i class="ti ti-selector" aria-hidden="true"></i>
+            </label>
+          ` : ''}
+        </div>
         <div class="workspace-rail-head">
           <strong>Workspaces</strong>
-          <span>${companies.length}</span>
+          <span>${workspaces.length}</span>
         </div>
         <div class="workspace-rail-list">
-          ${visibleCompanies.map((company) => `
-            <button class="workspace-rail-item ${company.id === companyId ? 'active' : ''}" type="button" data-action="select-workspace" data-company-id="${h(company.id)}" aria-label="Open ${h(companyLabel(company))} workspace" aria-current="${company.id === companyId ? 'true' : 'false'}">
-              ${workspaceIconMarkup(company)}
+          ${visibleWorkspaces.map((workspace) => `
+            <button class="workspace-rail-item ${workspace.id === currentWorkspaceId ? 'active' : ''}" type="button" data-action="select-workspace" data-workspace-id="${h(workspace.id)}" aria-label="Open ${h(workspace.name)} workspace" aria-current="${workspace.id === currentWorkspaceId ? 'true' : 'false'}">
+              ${workspaceIconMarkup(workspace)}
               <span class="workspace-rail-copy">
-                <strong>${h(companyLabel(company))}</strong>
-                <small>${h(roleForCompany(company.id))}</small>
+                <strong>${h(workspace.name)}</strong>
+                <small>${h(workspaceRoleLabel(workspace.id))}</small>
               </span>
               <i class="ti ti-check workspace-rail-check" aria-hidden="true"></i>
             </button>
-          `).join('')}
+          `).join('') || '<div class="workspace-rail-empty">No workspace assigned</div>'}
         </div>
         ${hasMore ? `
           <button class="workspace-rail-more" type="button" data-action="toggle-workspace-menu" aria-expanded="${state.workspaceMenuOpen ? 'true' : 'false'}">
@@ -3727,10 +3791,12 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
             <span>${state.workspaceMenuOpen ? 'Show fewer' : 'More workspaces'}</span>
           </button>
         ` : ''}
-        <div class="workspace-rail-actions">
-          <a href="${appHref(companyPath('settings', { tab: 'company', focus: 'create-workspace' }, companyId))}" data-router><i class="ti ti-plus" aria-hidden="true"></i>Create workspace</a>
-          <a href="${appHref(companyPath('settings', { tab: 'company' }, companyId))}" data-router><i class="ti ti-settings" aria-hidden="true"></i>Manage workspaces</a>
-        </div>
+        ${canManageWorkspaces ? `
+          <div class="workspace-rail-actions">
+            <a href="${appHref(companyPath('settings', { tab: 'company', focus: 'create-operational-workspace' }, current.id))}" data-router><i class="ti ti-plus" aria-hidden="true"></i>Create workspace</a>
+            <a href="${appHref(companyPath('settings', { tab: 'company' }, current.id))}" data-router><i class="ti ti-settings" aria-hidden="true"></i>Manage workspaces</a>
+          </div>
+        ` : ''}
       </section>
     `;
   }
@@ -4229,14 +4295,6 @@ function pluginById(pluginId) {
   return WORKSPACE_PLUGIN_REGISTRY.find((plugin) => plugin.id === pluginId) || null;
 }
 
-function privatePluginAccess(pluginId) {
-  return PRIVATE_PLUGIN_ACCESS[pluginId] || null;
-}
-
-function pluginInstallNeedsPrivateAccess(companyId, pluginId, status) {
-  return status !== 'disabled' && !!privatePluginAccess(pluginId) && !isPluginInstalled(companyId, pluginId);
-}
-
 function availableWorkspacePlugins() {
   return WORKSPACE_PLUGIN_REGISTRY.filter((plugin) => !plugin.comingSoon);
 }
@@ -4270,20 +4328,37 @@ function companyPluginStatus(companyId, pluginId) {
   const plugin = pluginById(pluginId);
   if (!plugin) return 'available';
   if (plugin.comingSoon) return 'coming_soon';
-  if (state.session?.auth !== 'supabase' || isReadOnlyDemo() || state.pluginLoadFailed) return 'installed';
+  if (state.session?.auth !== 'supabase' || isReadOnlyDemo()) return 'installed';
+  if (state.pluginLoadFailed) return 'available';
   const row = companyPluginRows(companyId).find((item) => item.plugin_id === pluginId);
   return row?.status || 'available';
 }
 
-function isPluginInstalled(companyId, pluginId) {
-  return companyPluginStatus(companyId, pluginId) === 'installed';
+function workspacePluginRows(workspaceId = activeWorkspaceId()) {
+  return state.workspacePlugins.filter((row) => row.workspace_id === String(workspaceId || ''));
 }
 
-function isModuleInstalled(moduleId, companyId = activeCompanyId()) {
+function workspacePluginStatus(companyId, pluginId, workspaceId = workspaceIdForCompany(companyId)) {
+  const plugin = pluginById(pluginId);
+  if (!plugin) return 'available';
+  if (plugin.comingSoon) return 'coming_soon';
+  return resolveWorkspacePluginStatus({
+    workspaceId,
+    pluginId,
+    workspacePlugins: state.workspacePlugins,
+    companyEntitled: companyPluginStatus(companyId, pluginId) === 'installed',
+  });
+}
+
+function isPluginInstalled(companyId, pluginId, workspaceId = workspaceIdForCompany(companyId)) {
+  return workspacePluginStatus(companyId, pluginId, workspaceId) === 'installed';
+}
+
+function isModuleInstalled(moduleId, companyId = activeCompanyId(), workspaceId = workspaceIdForCompany(companyId)) {
   if (CORE_MODULE_IDS.has(moduleId)) return true;
   const plugins = pluginsForModule(moduleId);
   if (!plugins.length) return true;
-  return plugins.some((plugin) => isPluginInstalled(companyId, plugin.id));
+  return plugins.some((plugin) => isPluginInstalled(companyId, plugin.id, workspaceId));
 }
 
 function installedLiveModules(companyId) {
@@ -5245,19 +5320,20 @@ function renderSubscriptionBlockedPage(companyId) {
 function renderPluginBlockedPage(companyId, moduleMeta) {
   const plugins = pluginsForModule(moduleMeta?.id || '');
   const plugin = plugins[0] || null;
+  const workspaceId = activeWorkspaceId();
   const canManagePlugins = can('plugins.manage', companyId);
-  const installablePlugins = plugins.filter((item) => !item.comingSoon);
+  const installablePlugins = plugins.filter((item) => !item.comingSoon && companyPluginStatus(companyId, item.id) === 'installed');
   return `
     ${workspaceHeader(`${plugin?.label || moduleMeta?.label || 'Plugin'} not installed`, 'This workspace has not enabled the plugin required for this module.', `
       <a class="btn" href="${appHref(companyPath('settings', { tab: 'plugins' }, companyId))}" data-router><i class="ti ti-plug"></i>${canManagePlugins ? 'Manage plugins' : 'View plugins'}</a>
-      ${canManagePlugins ? installablePlugins.map((item) => `<button class="btn btn-primary" type="button" data-action="set-company-plugin" data-plugin-id="${h(item.id)}" data-status="installed"><i class="ti ti-download"></i>Install ${h(item.label)}</button>`).join('') : ''}
+      ${canManagePlugins ? installablePlugins.map((item) => `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(item.id)}" data-status="installed"><i class="ti ti-download"></i>Activate ${h(item.label)}</button>`).join('') : ''}
     `)}
     <section class="panel">
       ${contractRows([
         ['Company', companyName(companyId)],
         ['Requested module', moduleMeta?.label || moduleMeta?.id || 'Unknown'],
         ['Required plugin', plugins.length ? plugins.map((item) => item.label).join(' or ') : 'Unknown'],
-        ['Current status', plugins.length ? plugins.map((item) => `${item.label}: ${titleCase(companyPluginStatus(companyId, item.id).replace('_', ' '))}`).join(' / ') : 'Unavailable'],
+        ['Current status', plugins.length ? plugins.map((item) => `${item.label}: ${titleCase(workspacePluginStatus(companyId, item.id, workspaceId).replace('_', ' '))}`).join(' / ') : 'Unavailable'],
         ['Data policy', 'Existing plugin data is preserved while the plugin is disabled'],
       ])}
     </section>
@@ -7321,7 +7397,7 @@ const CRM2_UNDERWRITER_GUIDANCE = {
 };
 
 function underwritingCaseForContact(contactId, companyId = activeCompanyId()) {
-  return state.underwritingCases.find((item) => item.company_id === companyId && item.contact_id === contactId) || null;
+  return state.underwritingCases.find((item) => recordVisibleInOperationalWorkspace(item, companyId) && item.contact_id === contactId) || null;
 }
 
 function underwritingInputFromCase(item, contact) {
@@ -8439,6 +8515,7 @@ async function ensureCrmSiteForContact(contact) {
   const site = normalizeCrmSite({
     id: `site-${crypto.randomUUID()}`,
     company_id: contact.company_id,
+    workspace_id: contact.workspace_id || activeWorkspaceId(),
     contact_id: contact.id,
     account_id: contact.account_id,
     label: 'Primary site',
@@ -8467,6 +8544,7 @@ async function convertContactToQuote(contactId) {
   const deal = normalizeDeal({
     id: `deal-${crypto.randomUUID()}`,
     company_id: companyId,
+    workspace_id: contact.workspace_id || activeWorkspaceId(),
     account_id: contact.account_id,
     primary_contact_id: contact.id,
     site_id: site?.id || '',
@@ -8585,7 +8663,11 @@ function renderSfTaskRow(task, options = {}) {
 
 async function persistContact(contact) {
   const previous = contactById(contact.id);
-  const payload = { ...contact, updated_at: new Date().toISOString() };
+  const payload = normalizeContact({
+    ...contact,
+    workspace_id: contact.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   upsertContact(payload);
   render();
   const client = createSupabaseClient();
@@ -8680,7 +8762,11 @@ function jobSupabaseRow(job) {
 }
 
 async function persistJob(job, label = 'Job saved locally') {
-  const payload = normalizeJob({ ...job, updated_at: new Date().toISOString() });
+  const payload = normalizeJob({
+    ...job,
+    workspace_id: job.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   const previous = jobById(payload.id);
   upsertJob(payload);
   state.sync = isLiveSupabaseSession() ? { label: 'Saving job…', mode: 'loading' } : { label, mode: 'local' };
@@ -9599,6 +9685,7 @@ async function saveContact(form) {
   if (!validation.ok) return;
   const payload = normalizeContact(validation.data);
   payload.id = payload.id || `contact-${crypto.randomUUID()}`;
+  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
   payload.updated_at = new Date().toISOString();
   const client = createSupabaseClient();
   if (client) {
@@ -9766,9 +9853,14 @@ async function deletePipelineStage(kind, index) {
 // JOB_STAGES / CONTACT_STAGES the rest of the UI reads from.
 function applyPipelineStagesForCompany(companyId) {
   if (!Array.isArray(state.pipelineStages) || !state.pipelineStages.length) return;
+  const workspaceId = workspaceIdForCompany(companyId);
   const forKind = (kind, fallback) => {
     const rows = state.pipelineStages
-      .filter((row) => row.company_id === companyId && row.kind === kind)
+      .filter((row) => (
+        row.company_id === companyId
+        && row.kind === kind
+        && recordBelongsToWorkspace(row, workspaceId, defaultOperationalWorkspaceId(companyId))
+      ))
       .slice()
       .sort((a, b) => (a.position || 0) - (b.position || 0))
       .map((row) => ({ name: String(row.name || '').trim(), color: /^#[0-9a-fA-F]{3,8}$/.test(String(row.color || '')) ? row.color : '#9aa0a8' }))
@@ -9784,15 +9876,20 @@ function applyPipelineStagesForCompany(companyId) {
   if (state.stageFilterDeals !== 'all' && !dealStageNames().includes(state.stageFilterDeals)) state.stageFilterDeals = 'all';
 }
 
-// Replace the active company's stages and rename affected records in one transaction.
+// Replace the active operational workspace's stages and rename only its records.
 async function syncPipelineStagesToSupabase(kind, renameMap = {}, overrideStages = null) {
   const client = createSupabaseClient();
   if (!client || !isLiveSupabaseSession()) return true;
   const companyId = activeCompanyId();
+  const workspaceId = workspaceIdForCompany(companyId);
+  if (!workspaceId) {
+    showToast('Choose a workspace before editing its pipeline.', 'error', 'Stages');
+    return false;
+  }
   const list = overrideStages || stageListForKind(kind);
   const stages = list.map((stage) => ({ name: stage.name, color: stage.color }));
-  const result = await client.rpc('replace_pipeline_stages', {
-    p_company_id: companyId,
+  const result = await client.rpc('replace_workspace_pipeline_stages', {
+    p_workspace_id: workspaceId,
     p_kind: kind,
     p_stages: stages,
     p_rename_map: renameMap,
@@ -9803,9 +9900,9 @@ async function syncPipelineStagesToSupabase(kind, renameMap = {}, overrideStages
   }
   const rows = Array.isArray(result.data)
     ? result.data
-    : stages.map((stage, index) => ({ ...stage, company_id: companyId, kind, position: index }));
+    : stages.map((stage, index) => ({ ...stage, company_id: companyId, workspace_id: workspaceId, kind, position: index }));
   state.pipelineStages = (Array.isArray(state.pipelineStages) ? state.pipelineStages : [])
-    .filter((row) => !(row.company_id === companyId && row.kind === kind))
+    .filter((row) => !(row.workspace_id === workspaceId && row.kind === kind))
     .concat(rows);
   return true;
 }
@@ -10914,6 +11011,7 @@ function renderUsersPage(route, companyId) {
               <strong>${h(userDisplayName(user))}</strong>
               <span>${h(userDisplayMeta(user))}</span>
               <small>${h(user.role_label)} / ${h(titleCase(user.status))}</small>
+              <small>${h(workspaceAccessSummaryForUser(companyId, user))}</small>
             </div>
           </article>
         `).join('') || emptyState('No users assigned to this company yet.')}
@@ -10959,9 +11057,11 @@ function renderUsersPage(route, companyId) {
 
 function renderUserAccessRow(companyId, user, canManageUsers) {
   const roles = companyRoles(companyId);
+  const workspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
   const selectedRoleId = user.role_id || roleIdForName(companyId, user.role) || roles[0]?.id || '';
   const isProtectedOwner = user.profile_id && isLastActiveOwner(companyId, user.profile_id);
   const canEditUser = canManageUsers && user.profile_id && !isProtectedOwner;
+  const implicitWorkspaceAccess = ['owner', 'admin', 'developer'].includes(String(user.role || '').toLowerCase());
   return `
     <article class="access-user-row ${user.status !== 'active' ? 'muted' : ''}">
       ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
@@ -10979,7 +11079,26 @@ function renderUserAccessRow(companyId, user, canManageUsers) {
         <select name="membership_status" ${canEditUser ? '' : 'disabled'}>
           ${['active', 'pending', 'disabled', 'left'].map((status) => `<option value="${h(status)}" ${status === user.status ? 'selected' : ''}>${h(titleCase(status))}</option>`).join('')}
         </select>
-        <button class="btn" type="submit" ${canEditUser ? '' : 'disabled'}>Save</button>
+        <div class="workspace-access-grid">
+          <strong>Workspace assignments</strong>
+          ${workspaces.map((workspace) => {
+            const membership = workspaceMembershipForProfile(workspace.id, user.profile_id);
+            const enabled = implicitWorkspaceAccess || membership?.status === 'active';
+            const workspaceRoleId = membership?.role_id || selectedRoleId;
+            const assignmentEditable = canEditUser && !implicitWorkspaceAccess;
+            return `
+              <label class="workspace-access-assignment" data-workspace-assignment>
+                <input type="checkbox" name="workspace_ids" value="${h(workspace.id)}" ${enabled ? 'checked' : ''} ${assignmentEditable ? '' : 'disabled'} />
+                ${implicitWorkspaceAccess && enabled ? `<input type="hidden" name="workspace_ids" value="${h(workspace.id)}" />` : ''}
+                <span><b>${h(workspace.name)}</b><small>${h(implicitWorkspaceAccess ? 'Inherited from company role' : workspace.is_default ? 'Default workspace' : 'Explicit assignment')}</small></span>
+                <select name="workspace_role:${h(workspace.id)}" aria-label="${h(workspace.name)} role" ${assignmentEditable ? '' : 'disabled'}>
+                  ${roles.map((role) => `<option value="${h(role.id)}" ${role.id === workspaceRoleId ? 'selected' : ''}>${h(role.name)}</option>`).join('')}
+                </select>
+              </label>
+            `;
+          }).join('') || '<span class="form-note">No active workspaces are available.</span>'}
+        </div>
+        <button class="btn" type="submit" ${canEditUser ? '' : 'disabled'}>Save role &amp; workspaces</button>
       </form>
     </article>
   `;
@@ -11037,6 +11156,20 @@ function userDisplayMeta(user) {
   if (email && !isOpaqueUserId(email)) return email;
   const id = String(user.profile_id || user.member_id || '').trim();
   return id ? `ID ${shortUserId(id)}` : 'No email on profile';
+}
+
+function workspaceAccessSummaryForUser(companyId, user) {
+  const role = String(user.role || '').toLowerCase();
+  const companyWorkspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
+  if (['owner', 'admin', 'developer'].includes(role)) return `All ${companyWorkspaces.length} workspaces (inherited)`;
+  const profileId = String(user.profile_id || '');
+  const assignedIds = new Set(state.workspaceMemberships
+    .filter((membership) => membership.profile_id === profileId && membership.status === 'active')
+    .map((membership) => membership.workspace_id));
+  const assigned = companyWorkspaces.filter((workspace) => assignedIds.has(workspace.id));
+  if (!assigned.length) return 'No workspace assigned';
+  if (assigned.length <= 2) return assigned.map((workspace) => workspace.name).join(', ');
+  return `${assigned.length} workspaces`;
 }
 
 function renderTeamChartPage(companyId) {
@@ -11325,7 +11458,7 @@ function wbViewCompanyHome(companyId, workspace) {
     ${wbWorkspaceHeader(companyId, workspace, null)}
     <div class="wb-page-head">
       <div>
-        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>Workspaces</h1>
+        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>${h(workspace.name || companyName(companyId) || 'Workspace')}</h1>
         <div class="wb-sub">Build customizable, no-code dashboards for ${h(companyName(companyId) || 'this company')}.</div>
       </div>
       <div class="wb-spacer"></div>
@@ -12380,6 +12513,39 @@ function wbSimpleTitle(app, item) {
 // relationship field it resolves through the LINKED field's own display setting
 // (so "Assign to" reads like it does everywhere else), guarded by `depth` so a
 // cycle of linked apps can't recurse forever.
+// Resolve an app id to its app object within ONE company's builder doc (any of
+// that company's workspaces). App ids are unique within a company doc.
+function wbTargetApp(companyId, targetAppId) {
+  if (!targetAppId) return null;
+  const doc = wbDoc(companyId);
+  for (const ws of (doc?.workspaces || [])) {
+    const app = (ws.apps || []).find((a) => a.id === targetAppId);
+    if (app) return app;
+  }
+  return null;
+}
+
+// {workspace, app} for every app in a company, for the relationship app-picker.
+function wbCompanyApps(companyId) {
+  const doc = wbDoc(companyId);
+  const out = [];
+  for (const ws of (doc?.workspaces || [])) for (const app of (ws.apps || [])) out.push({ workspace: ws, app });
+  return out;
+}
+
+// The company holding a relationship's target app: an explicitly linked company
+// (config.targetCompany -- another workspace in the sidebar, i.e. another company
+// you belong to) or, by default, the field's own company. Cross-company builder
+// docs are only present for members (workspace_builder_state RLS gates the load),
+// so a viewer who is not a member of the linked company resolves to null here and
+// the field shows "no access" -- it can never render data the browser never held.
+function wbRelCompany(field, sourceCompanyId) {
+  return (field?.config?.targetCompany) || sourceCompanyId;
+}
+function wbRelTargetApp(field, sourceCompanyId) {
+  return wbTargetApp(wbRelCompany(field, sourceCompanyId), field?.config?.targetApp);
+}
+
 function wbNameValue(app, field, item, depth = 0) {
   const raw = item && item.values ? item.values[field.id] : undefined;
   if (raw === undefined || raw === null || raw === '' || (Array.isArray(raw) && !raw.length)) return '';
@@ -12389,7 +12555,7 @@ function wbNameValue(app, field, item, depth = 0) {
     case 'user': { const loc = wbLocateApp(app); const m = wbMemberById(loc.companyId, raw); return m ? String(m.name) : ''; }
     case 'relationship': {
       const loc = wbLocateApp(app);
-      const ta = loc.workspace && loc.workspace.apps.find((x) => x.id === field.config.targetApp);
+      const ta = wbRelTargetApp(field, loc.companyId);
       if (!ta) return '';
       const ids = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(raw) ? raw : [raw]);
       return ids.map((id) => {
@@ -12418,10 +12584,24 @@ function wbItemTitle(app, item, depth = 0) {
 }
 // Label for a linked (relationship) item: the chosen display field's value if
 // the relationship field specifies one, otherwise the linked item's name.
+// The label shown for a linked record. When a "Show field" is chosen, display its
+// ACTUAL value -- including value-style fields (progress %, checklist, duration,
+// calculation, yes/no) that read as data, not a name. wbNameValue intentionally
+// blanks those, so route them through wbPlainVal (which renders "75%", "2/3", …);
+// name-style fields (text, category, user, linked record) keep using wbNameValue.
+const WB_VALUE_DISPLAY_TYPES = new Set(['progress', 'checklist', 'duration', 'calculation', 'checkbox']);
 function wbRelLabel(targetApp, item, displayFieldId, depth = 0) {
   if (displayFieldId) {
     const f = (targetApp.fields || []).find((x) => x.id === displayFieldId);
-    if (f) { const v = wbNameValue(targetApp, f, item, depth); if (v) return v; }
+    if (f) {
+      if (WB_VALUE_DISPLAY_TYPES.has(f.type)) {
+        const loc = wbLocateApp(targetApp);
+        const plain = wbPlainVal(loc.companyId, loc.workspace, targetApp, f, item?.values?.[f.id] ?? '', item?.values || {});
+        if (plain && !/^\s*(undefined|null|NaN)/.test(plain)) return plain;
+      }
+      const v = wbNameValue(targetApp, f, item, depth);
+      if (v) return v;
+    }
   }
   return wbItemTitle(targetApp, item, depth);
 }
@@ -12461,8 +12641,7 @@ function wbProgressFillPct(app, field, values, workspace) {
     const [, relId, linkedFieldId] = String(src).split(':');
     const relField = (app.fields || []).find((f) => f.id === relId && f.type === 'relationship');
     if (!relField) return null;
-    const ws = workspace || wbLocateApp(app).workspace;
-    const ta = ws && (ws.apps || []).find((a) => a.id === relField.config.targetApp);
+    const ta = wbRelTargetApp(relField, wbLocateApp(app).companyId);
     if (!ta) return null;
     const linkedField = (ta.fields || []).find((f) => f.id === linkedFieldId);
     if (!linkedField) return null;
@@ -12595,7 +12774,7 @@ function wbFmtVal(ctx, field, value) {
     case 'phone': return h(formatPhoneNumber(value));
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
     case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; const kind = fileTypeKind({ file_name: fv.name }); return fv.url ? `<button type="button" class="wb-file-icon-btn" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="${h(fv.name)}" aria-label="Open ${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></button>` : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`; }
-    case 'relationship': { const ta = ctx.workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return h(value); const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbRelLabel(ta, it, field.config.displayField) : '?')}</span>`; }).join(' '); }
+    case 'relationship': { const ta = wbRelTargetApp(field, ctx.companyId); if (!ta) return field.config.targetCompany && !wbDoc(field.config.targetCompany) ? '<span class="wb-tag wb-rel wb-rel-locked"><i class="ti ti-lock" aria-hidden="true"></i>No access</span>' : h(value); const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbRelLabel(ta, it, field.config.displayField) : '?')}</span>`; }).join(' '); }
     case 'location': return `<a class="wb-loc" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(value))}" target="_blank" rel="noreferrer" title="Open in Google Maps"><i class="ti ti-map-pin"></i>${h(value)}</a>`;
     case 'duration': return h(wbFmtDuration(value));
     case 'image': { const fv = wbFileValue(value); return fv && fv.url ? `<img class="wb-img-avatar" src="${h(fv.url)}" alt="${h(fv.name || 'image')}" loading="lazy">` : '<span class="wb-cell-empty">—</span>'; }
@@ -12669,7 +12848,7 @@ function wbPlainVal(companyId, workspace, app, field, value, values) {
   switch (field.type) {
     case 'status': case 'category': { const o = (field.config.options || []).find((x) => x.id === value); return o ? o.label : String(value); }
     case 'user': { const m = wbMemberById(companyId, value); return m ? m.name : ''; }
-    case 'relationship': { const ta = workspace.apps.find((x) => x.id === field.config.targetApp); if (!ta) return ''; const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return it ? wbRelLabel(ta, it, field.config.displayField) : ''; }).join(' '); }
+    case 'relationship': { const ta = wbRelTargetApp(field, companyId); if (!ta) return field.config.targetCompany && !wbDoc(field.config.targetCompany) ? 'No access' : ''; const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return it ? wbRelLabel(ta, it, field.config.displayField) : ''; }).join(' '); }
     case 'file': case 'image': { const fv = wbFileValue(value); return fv ? (fv.name || '') : ''; }
     case 'money': return `${field.config.currency || '$'}${value}`;
     case 'number': return `${value}${field.config.unit ? ` ${field.config.unit}` : ''}`;
@@ -13133,7 +13312,7 @@ function wbViewBuilder(companyId, workspace, app) {
     const meta = WB_FIELD_TYPES[field.type];
     let extra = '';
     if ((field.type === 'category' || field.type === 'status') && field.config.options) extra = ` · ${field.config.options.length} options`;
-    if (field.type === 'relationship' && field.config.targetApp) { const ta = workspace.apps.find((x) => x.id === field.config.targetApp); extra = ta ? ` · → ${h(ta.name)}` : ' · (no target)'; }
+    if (field.type === 'relationship' && field.config.targetApp) { const ta = wbRelTargetApp(field, companyId); const wsName = field.config.targetCompany && field.config.targetCompany !== canonicalCompanyId(companyId) ? `${h(companyName(field.config.targetCompany) || 'workspace')} · ` : ''; extra = ta ? ` · → ${wsName}${h(ta.name)}` : ' · (no target)'; }
     if (field.type === 'calculation' && field.config.formula) extra = ` · ${h(field.config.formula)}`;
     return `<div class="wb-field-row ${field.hidden ? 'wb-field-hidden' : ''}" ${canManage ? 'draggable="true"' : ''} data-fid="${h(field.id)}">
       ${canManage ? '<span class="wb-grip"><i class="ti ti-grip-vertical"></i></span>' : ''}
@@ -14039,10 +14218,18 @@ function wbFieldConfigUI(fd, app) {
     return `<div class="wb-field"><label>Options</label><div class="wb-opt-list">${(fd.config.options || []).map((o) => wbOptRow(o)).join('')}</div><button class="btn btn-sm" data-wb-add-option><i class="ti ti-plus"></i>Add option</button></div>`;
   }
   if (t === 'relationship') {
-    const apps = wbFind(state.builderModal.companyId, state.builderModal.workspaceId).workspace.apps;
-    const targetApp = apps.find((ap) => ap.id === fd.config.targetApp);
+    const sourceCompany = canonicalCompanyId(state.builderModal.companyId);
+    // Workspaces you can link to = the companies whose App Builder data your
+    // account is allowed to load (workspace_builder_state RLS already gated this).
+    const linkableCompanies = Object.keys(state.workspaceBuilderDocs || {})
+      .map((cid) => ({ id: cid, name: cid === sourceCompany ? `${companyName(cid) || 'This workspace'} (this workspace)` : (companyName(cid) || cid) }))
+      .sort((a, b) => (a.id === sourceCompany ? -1 : b.id === sourceCompany ? 1 : a.name.localeCompare(b.name)));
+    const targetCompany = fd.config.targetCompany || sourceCompany;
+    const apps = wbCompanyApps(targetCompany).map((e) => e.app);
+    const targetApp = wbTargetApp(targetCompany, fd.config.targetApp);
     const displayFields = targetApp ? targetApp.fields : [];
-    return `<div class="wb-field"><label>Linked app</label><select class="wb-input" id="wbRelTarget" data-wb-rel-refresh><option value="">— Select app to link —</option>${apps.map((ap) => `<option value="${h(ap.id)}" ${fd.config.targetApp === ap.id ? 'selected' : ''}>${h(ap.name)}</option>`).join('')}</select><div class="wb-sub">Items in this app can reference items from the linked app.</div></div>
+    return `${linkableCompanies.length > 1 ? `<div class="wb-field"><label>Workspace <span class="wb-opt">(which workspace's app to link)</span></label><select class="wb-input" id="wbRelWorkspace" data-wb-rel-refresh>${linkableCompanies.map((c) => `<option value="${h(c.id)}" ${targetCompany === c.id ? 'selected' : ''}>${h(c.name)}</option>`).join('')}</select><div class="wb-sub">Pick a workspace you belong to. People who can't see that workspace will see “No access” here.</div></div>` : ''}
+      <div class="wb-field"><label>Linked app</label><select class="wb-input" id="wbRelTarget" data-wb-rel-refresh><option value="">— Select app to link —</option>${apps.map((ap) => `<option value="${h(ap.id)}" ${fd.config.targetApp === ap.id ? 'selected' : ''}>${h(ap.name)}</option>`).join('')}</select><div class="wb-sub">Items in this app can reference — and pull a field from — items in the linked app.</div></div>
       ${targetApp ? `<div class="wb-field"><label>Show field <span class="wb-opt">(what to display from the linked item)</span></label><select class="wb-input" id="wbRelDisplay"><option value="">Item name (default)</option>${displayFields.map((f) => `<option value="${h(f.id)}" ${fd.config.displayField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select><div class="wb-sub">Pick a field from <b>${h(targetApp.name)}</b> to show instead of the item's name.</div></div>` : ''}
       ${targetApp ? `<div class="wb-field"><label>Identify by <span class="wb-opt">(how records are labeled when choosing)</span></label><select class="wb-input" id="wbRelIdentify" data-wb-rel-refresh><option value="">Item name (default)</option>${displayFields.map((f) => `<option value="${h(f.id)}" ${fd.config.identifyField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select><div class="wb-sub">Labels each <b>${h(targetApp.name)}</b> record in the pickers below so you can tell them apart — e.g. by <b>Project Name</b> instead of the shown field.</div></div>` : ''}
       ${targetApp ? `<div class="wb-field"><label>Specific record <span class="wb-opt">(optional — pin one record)</span></label><select class="wb-input" id="wbRelFixed" data-wb-rel-refresh><option value="">Let each item choose</option>${targetApp.items.map((it) => `<option value="${h(it.id)}" ${fd.config.fixedItem === it.id ? 'selected' : ''}>${h(wbRelLabel(targetApp, it, fd.config.identifyField))}</option>`).join('')}</select><div class="wb-sub">Pin every item to one <b>${h(targetApp.name)}</b> record. Leave unset to let each item choose.</div></div>` : ''}
@@ -14058,12 +14245,11 @@ function wbFieldConfigUI(fd, app) {
   if (t === 'checklist') { const steps = Array.isArray(fd.config.steps) ? fd.config.steps.join('\n') : (fd.config.steps || ''); return `<div class="wb-field"><label>Default steps <span class="wb-opt">(optional, one per line)</span></label><textarea class="wb-input" id="wbClSteps" placeholder="Site inspection&#10;Material order&#10;Install&#10;Final walkthrough">${h(steps)}</textarea><div class="wb-sub">Every new item starts with these steps (all unchecked). Users can add or remove steps per item. Link its % complete into a Progress or Calculation field by referencing <code>{${h(fd.label || 'Checklist')}}</code>.</div></div>`; }
   if (t === 'progress') {
     const cfg = fd.config || {};
-    const wsApps = wbFind(state.builderModal.companyId, state.builderModal.workspaceId).workspace.apps;
     const checklists = app.fields.filter((f) => f.type === 'checklist');
     // Sources on a linked record (progress or checklist reached via a relationship field).
     const linkOpts = [];
     app.fields.filter((f) => f.type === 'relationship' && f.config.targetApp).forEach((rf) => {
-      const ta = wsApps.find((a) => a.id === rf.config.targetApp);
+      const ta = wbRelTargetApp(rf, state.builderModal.companyId);
       if (!ta) return;
       ta.fields.filter((lf) => lf.type === 'checklist' || lf.type === 'progress').forEach((lf) => {
         linkOpts.push({ value: `link:${rf.id}:${lf.id}`, label: `${rf.label} → ${lf.label}` });
@@ -14115,8 +14301,7 @@ function wbTrigCfgUI(draft, app) {
   } else if (field.type === 'user') {
     valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${wbMembers(state.builderModal?.companyId).map((mem) => opt(mem.id, mem.name)).join('')}</select>`;
   } else if (field.type === 'relationship') {
-    const ws = wbFind(state.builderModal?.companyId, state.builderModal?.workspaceId).workspace;
-    const ta = ws?.apps.find((x) => x.id === field.config.targetApp);
+    const ta = wbRelTargetApp(field, state.builderModal?.companyId);
     valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${(ta?.items || []).map((it) => opt(it.id, wbRelLabel(ta, it, field.config.identifyField || field.config.displayField))).join('')}</select>`;
   } else if (['number', 'money', 'calculation', 'duration', 'progress'].includes(field.type)) {
     // Numeric fields (including calculation results, durations in minutes, and
@@ -14175,8 +14360,8 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
       input = members.length ? `<select class="wb-input" data-f="${h(f.id)}"><option value="">— Unassigned —</option>${members.map((m) => `<option value="${h(m.id)}" ${val === m.id ? 'selected' : ''}>${h(m.name)}</option>`).join('')}</select>` : '<div class="wb-sub" style="color:var(--warning,#d97706)">No company members to assign.</div>'; break;
     }
     case 'relationship': {
-      const ta = wbFind(companyId, workspaceId).workspace.apps.find((x) => x.id === f.config.targetApp);
-      if (!ta) { input = '<div class="wb-sub" style="color:var(--warning,#d97706)">No linked app configured.</div>'; break; }
+      const ta = wbRelTargetApp(f, companyId);
+      if (!ta) { input = `<div class="wb-sub" style="color:var(--warning,#d97706)">${f.config.targetCompany && !wbDoc(f.config.targetCompany) ? 'Linked workspace not available to you.' : 'No linked app configured.'}</div>`; break; }
       // A pinned record: every item links to the same record — show it read-only.
       if (f.config.fixedItem) {
         const fixed = ta.items.find((it) => it.id === f.config.fixedItem);
@@ -14627,7 +14812,14 @@ function wbCollectModalDraft() {
     if (t === 'category' || t === 'status') m.draft.config.options = [...document.querySelectorAll('.wb-opt-item')].map((r) => ({ id: r.dataset.oid, label: r.querySelector('.wb-opt-label').value.trim() || 'Untitled', color: r.querySelector('.wb-dot-pick').value })).filter((o) => o.label);
     if (t === 'relationship') {
       const prevTarget = m.draft.config.targetApp;
-      m.draft.config.targetApp = val('wbRelTarget') || '';
+      const prevCompany = m.draft.config.targetCompany || canonicalCompanyId(state.builderModal.companyId);
+      // The linked workspace (another company you belong to, or your own).
+      const wsSel = document.getElementById('wbRelWorkspace');
+      if (wsSel) m.draft.config.targetCompany = wsSel.value || '';
+      // Switching workspaces means the old app no longer exists here; clear it so
+      // the app picker re-populates from the newly chosen workspace.
+      if (wsSel && wsSel.value !== prevCompany) m.draft.config.targetApp = '';
+      else m.draft.config.targetApp = val('wbRelTarget') || '';
       m.draft.config.multiple = !!checked('wbRelMulti');
       const disp = document.getElementById('wbRelDisplay');
       if (disp) m.draft.config.displayField = disp.value || '';
@@ -14635,7 +14827,7 @@ function wbCollectModalDraft() {
       if (ident) m.draft.config.identifyField = ident.value || '';
       const fixed = document.getElementById('wbRelFixed');
       if (fixed) m.draft.config.fixedItem = fixed.value || '';
-      // A different linked app invalidates the old field / pinned-record choices.
+      // A different linked app (or workspace) invalidates the old field / pin choices.
       if (prevTarget !== m.draft.config.targetApp) { m.draft.config.displayField = ''; m.draft.config.identifyField = ''; m.draft.config.fixedItem = ''; }
     }
     if (t === 'calculation') m.draft.config.formula = (val('wbCalcFormula') || '').trim();
@@ -16180,53 +16372,89 @@ function renderClientPortalMarkModal() {
 function renderWorkspaceSettings(companyId) {
   const company = companyById(companyId) || normalizeCompany({ id: companyId });
   const iconDraft = workspaceIconDraft(companyId);
-  const canManage = can('settings.manage', companyId) || ['owner', 'admin'].includes(String(membershipForProfile(companyId, activeSession().profile.id)?.role || '').toLowerCase()) || isQuestDeveloper();
-  const canCreate = canCreateAnotherWorkspace();
+  const canManage = canManageOperationalWorkspaces(companyId);
+  const workspace = activeWorkspace();
+  const companyWorkspaces = state.operationalWorkspaces
+    .filter((item) => item.company_id === companyId)
+    .sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name));
   const connectionMode = state.sync.mode === 'live' ? 'live' : state.sync.mode === 'loading' ? 'loading' : 'local';
   const connectionLabel = connectionMode === 'live' ? 'Live database' : connectionMode === 'loading' ? 'Checking connection' : 'Local fallback';
   const connectionDescription = connectionMode === 'live'
-    ? 'Workspace changes are saving to the live company database.'
+    ? 'Company and workspace changes are saving to the live database.'
     : connectionMode === 'loading'
       ? 'Quest HQ is checking the workspace data connection.'
-      : 'This workspace is using local fallback data. Changes may not persist for the team.';
+      : 'This company account is using local fallback data. Changes may not persist for the team.';
   return `
     <article class="panel span-2">
-      <div class="section-head"><div><h2>Workspace identity</h2><p>Rename this workspace and choose the icon your team sees in navigation.</p></div></div>
+      <div class="section-head"><div><h2>Company account</h2><p>The customer, billing, and security boundary above every operational workspace.</p></div></div>
       <form class="workspace-settings-form" data-workspace-settings-form>
         <input type="hidden" name="company_id" value="${h(companyId)}" />
         <input type="hidden" name="icon_key" value="${h(iconDraft.icon_key)}" />
         <input type="hidden" name="icon_image" value="${h(iconDraft.icon_image)}" />
-        ${field('Workspace name', 'workspace_name', companyName(companyId), true, 'text', 'workspace-name-field')}
+        ${field('Company name', 'workspace_name', companyName(companyId), true, 'text', 'workspace-name-field')}
         <div class="workspace-icon-section">
-          <span>Workspace icon</span>
+          <span>Company logo</span>
           <div class="workspace-icon-current">
             ${workspaceIconMarkup({ ...company, icon_key: iconDraft.icon_key, icon_image: iconDraft.icon_image }, 'large')}
             <div>
               <strong>${h(iconDraft.icon_image ? 'Uploaded icon' : workspaceIconOption(iconDraft.icon_key).label)}</strong>
-              <small>${h(iconDraft.icon_image ? 'Custom image for this workspace.' : 'Built-in icon from the Quest library.')}</small>
+              <small>${h(iconDraft.icon_image ? 'Custom image for this company account.' : 'Built-in icon from the Quest library.')}</small>
             </div>
             <button class="btn" type="button" data-action="open-workspace-icon-modal" ${canManage ? '' : 'disabled'}><i class="ti ti-photo-edit"></i>Change icon</button>
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save workspace</button>
+          <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save company</button>
         </div>
       </form>
     </article>
     <article class="panel">
-      <div class="section-head"><div><h2>Create another workspace</h2><p>${h(isQuestDeveloper() ? 'Platform owners can create unlimited workspaces.' : workspaceLimitMessage())}</p></div></div>
-      <form class="workspace-create-mini" id="create-workspace" data-company-create-form>
-        <label>Workspace name<input name="company_name" placeholder="New company workspace" required ${canCreate ? '' : 'disabled'} /></label>
+      <div class="section-head"><div><h2>Current workspace</h2><p>Configure this operational area without changing the company account.</p></div></div>
+      ${workspace ? `
+        <form class="workspace-settings-form operational-workspace-form" data-operational-workspace-settings-form>
+          <input type="hidden" name="workspace_id" value="${h(workspace.id)}" />
+          ${field('Workspace name', 'workspace_name', workspace.name, true, 'text')}
+          <label>Description<textarea name="workspace_description" rows="3" placeholder="What this team handles">${h(workspace.description)}</textarea></label>
+          ${workspaceIconSelect(workspace.icon_key)}
+          <label>Status
+            <select name="workspace_status" ${canManage ? '' : 'disabled'}>
+              <option value="active" ${workspace.status === 'active' ? 'selected' : ''}>Active</option>
+              <option value="archived" ${workspace.status === 'archived' ? 'selected' : ''} ${workspace.is_default ? 'disabled' : ''}>Archived</option>
+            </select>
+          </label>
+          ${workspace.is_default ? '<p class="form-note">Default workspace cannot be archived.</p>' : ''}
+          <button class="btn btn-primary full" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save workspace</button>
+        </form>
+      ` : emptyState('No operational workspace is assigned to your user.')}
+    </article>
+    <article class="panel" id="create-operational-workspace">
+      <div class="section-head"><div><h2>Create workspace</h2><p>Add a configurable operational area inside ${h(companyName(companyId))}.</p></div></div>
+      <form class="workspace-create-mini" data-operational-workspace-create-form>
+        <input type="hidden" name="company_id" value="${h(companyId)}" />
+        <label>Workspace name<input name="workspace_name" placeholder="Sales, Underwriting, Production..." required ${canManage ? '' : 'disabled'} /></label>
         ${workspacePresetSelect()}
         ${workspaceIconSelect()}
-        <button class="btn btn-primary full" type="submit" ${canCreate ? '' : 'disabled'}><i class="ti ti-plus"></i>Create workspace</button>
+        <button class="btn btn-primary full" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-plus"></i>Create workspace</button>
       </form>
     </article>
+    <article class="panel span-2">
+      <div class="section-head"><div><h2>Workspace directory</h2><p>${companyWorkspaces.length} operational workspace${companyWorkspaces.length === 1 ? '' : 's'} under this company account.</p></div></div>
+      <div class="operational-workspace-directory">
+        ${companyWorkspaces.map((item) => `
+          <button class="operational-workspace-row ${item.id === activeWorkspaceId() ? 'active' : ''} ${item.status === 'archived' ? 'muted' : ''}" type="button" data-action="select-workspace" data-workspace-id="${h(item.id)}" ${item.status === 'archived' ? 'disabled' : ''}>
+            ${workspaceIconMarkup(item)}
+            <span><strong>${h(item.name)}</strong><small>${h(item.is_default ? 'Default workspace' : titleCase(item.status))} / ${h(workspaceMemberCount(item.id))} assigned</small></span>
+            ${item.id === activeWorkspaceId() ? '<i class="ti ti-check"></i>' : '<i class="ti ti-chevron-right"></i>'}
+          </button>
+        `).join('') || emptyState('No workspaces have been created.')}
+      </div>
+    </article>
     <article class="panel">
-      <div class="section-head"><div><h2>Workspace data</h2><p>Setup, data, and plugins are isolated by workspace.</p></div></div>
+      <div class="section-head"><div><h2>Workspace data</h2><p>Pipeline records, stages, members, and plugins are isolated here.</p></div></div>
       ${contractRows([
-        ['Workspace ID', companyId],
-        ['Owned workspaces', isQuestDeveloper() ? 'Unlimited' : `${ownedWorkspaceCount()} / ${WORKSPACE_SELF_CREATE_LIMIT}`],
+        ['Company ID', companyId],
+        ['Workspace ID', workspace?.id || 'Not assigned'],
+        ['Workspace role', workspace ? workspaceRoleLabel(workspace.id) : 'No access'],
         ['Visible jobs', companyJobs(companyId).length],
         ['Installed plugins', availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length],
       ])}
@@ -16242,55 +16470,50 @@ function renderWorkspaceSettings(companyId) {
         <p>${h(connectionDescription)}</p>
       </div>
       ${contractRows([
-        ['Workspace', companyName(companyId)],
+        ['Company account', companyName(companyId)],
+        ['Workspace', workspace?.name || 'Not assigned'],
         ['Current status', state.sync.label],
         ['Storage mode', connectionMode === 'live' ? 'Quest cloud database' : connectionMode === 'loading' ? 'Checking' : 'This browser only'],
       ])}
     </article>
-    ${(canManage || !isLiveSupabaseSession()) ? `
-    <article class="panel danger-zone">
-      <div class="section-head"><div><h2>Danger zone</h2><p>Irreversible actions for this workspace.</p></div></div>
-      <div class="danger-row">
-        <div>
-          <b>Delete this workspace</b>
-          <span>Permanently removes <b>${h(companyName(companyId) || companyId)}</b> and everything in it — jobs, contacts, quotes, files, finance, plugins, and members. This cannot be undone.</span>
-        </div>
-        <button class="btn danger" type="button" data-action="open-delete-company"><i class="ti ti-trash"></i>Delete workspace</button>
-      </div>
-    </article>` : ''}
   `;
 }
 
 function renderPluginsSettings(companyId) {
+  const workspaceId = activeWorkspaceId();
+  const workspace = activeWorkspace();
   const canManagePlugins = can('plugins.manage', companyId);
-  const installedCount = availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length;
+  const installedCount = availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id, workspaceId)).length;
+  if (!workspace) return `<article class="panel span-3">${emptyState('No operational workspace is assigned to your user.')}</article>`;
   return `
     <article class="panel span-3 plugins-settings-panel">
       <div class="section-head">
-        <div><h2>Workspace plugins</h2><p>${installedCount} active plugin${installedCount === 1 ? '' : 's'} for ${h(companyName(companyId))}. Core work modules stay on for every company.</p></div>
+        <div><h2>${h(workspace.name)} plugins</h2><p>${installedCount} active plugin${installedCount === 1 ? '' : 's'} in this workspace. Company entitlements set what can be activated here.</p></div>
       </div>
       <div class="plugin-preset-row">
         ${Object.entries(WORKSPACE_PLUGIN_PRESETS).map(([presetCode, pluginIds]) => `
-          <button class="btn" type="button" data-action="apply-plugin-preset" data-preset-code="${h(presetCode)}" ${canManagePlugins ? '' : 'disabled'}>
+          <button class="btn" type="button" data-action="apply-workspace-plugin-preset" data-workspace-id="${h(workspaceId)}" data-preset-code="${h(presetCode)}" ${canManagePlugins ? '' : 'disabled'}>
             <i class="ti ti-layout-grid-add"></i>${h(WORKSPACE_PLUGIN_PRESET_LABELS[presetCode] || titleCase(presetCode))}
             <small>${pluginIds.length} plugins</small>
           </button>
         `).join('')}
       </div>
       <div class="plugin-card-grid">
-        ${WORKSPACE_PLUGIN_REGISTRY.map((plugin) => renderPluginCard(companyId, plugin, canManagePlugins)).join('')}
+        ${WORKSPACE_PLUGIN_REGISTRY.map((plugin) => renderPluginCard(companyId, workspaceId, plugin, canManagePlugins)).join('')}
       </div>
     </article>
   `;
 }
 
-function renderPluginCard(companyId, plugin, canManagePlugins) {
-  const status = companyPluginStatus(companyId, plugin.id);
+function renderPluginCard(companyId, workspaceId, plugin, canManagePlugins) {
+  const entitled = companyPluginStatus(companyId, plugin.id) === 'installed';
+  const status = workspacePluginStatus(companyId, plugin.id, workspaceId);
   plugin.status = status;
   if (LAUNCH_HIDE_FUTURE_MODULES && plugin.status === 'coming_soon') return '';
   const installed = status === 'installed';
   const disabled = status === 'disabled';
-  const available = status === 'available';
+  const available = status === 'available' && entitled;
+  const unavailable = status === 'available' && !entitled;
   const comingSoon = status === 'coming_soon';
   const prerequisiteNote = pluginPrerequisiteNote(companyId, plugin);
   const conflictIds = conflictingPluginIds(companyId, plugin.id, 'installed');
@@ -16299,75 +16522,32 @@ function renderPluginCard(companyId, plugin, canManagePlugins) {
     .map((moduleId) => MODULE_REGISTRY.find((module) => module.id === moduleId)?.label || titleCase(moduleId))
     .join(', ');
   return `
-    <article class="plugin-card ${installed ? 'installed' : disabled ? 'disabled' : comingSoon ? 'coming-soon' : 'available'}">
+    <article class="plugin-card ${installed ? 'installed' : disabled ? 'disabled' : comingSoon ? 'coming-soon' : unavailable ? 'unavailable' : 'available'}">
       <div class="plugin-card-icon"><i class="ti ${h(plugin.icon)}"></i></div>
       <div class="plugin-card-copy">
         <strong>${h(plugin.label)}</strong>
         <span>${h(plugin.summary)}</span>
         <small>${h(moduleLabels)}</small>
+        ${unavailable ? '<small class="plugin-card-note">Not included in this company account.</small>' : ''}
         ${prerequisiteNote ? `<small class="plugin-card-note">${h(prerequisiteNote)}</small>` : ''}
         ${conflictLabels && !installed ? `<small class="plugin-card-note warning">Installing ${h(plugin.label)} disables ${h(conflictLabels)}.</small>` : ''}
       </div>
-      <b class="status-pill ${installed ? 'active' : comingSoon ? 'muted' : disabled ? 'pending' : ''}">${h(pluginStatusLabel(status))}</b>
+      <b class="status-pill ${installed ? 'active' : comingSoon || unavailable ? 'muted' : disabled ? 'pending' : ''}">${h(unavailable ? 'Not entitled' : pluginStatusLabel(status))}</b>
       <div class="plugin-card-actions">
-        ${installed ? `<button class="btn" type="button" data-action="set-company-plugin" data-plugin-id="${h(plugin.id)}" data-status="disabled" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-power"></i>Disable</button>` : ''}
-        ${available || disabled ? `<button class="btn btn-primary" type="button" data-action="set-company-plugin" data-plugin-id="${h(plugin.id)}" data-status="installed" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-download"></i>${disabled ? 'Reinstall' : 'Install'}</button>` : ''}
+        ${installed ? `<button class="btn" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="disabled" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-power"></i>Disable</button>` : ''}
+        ${available || disabled ? `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="installed" ${canManagePlugins && entitled ? '' : 'disabled'}><i class="ti ti-download"></i>${disabled ? 'Re-enable' : 'Activate'}</button>` : ''}
+        ${unavailable ? '<button class="btn" type="button" disabled><i class="ti ti-lock"></i>Company entitlement required</button>' : ''}
         ${comingSoon ? '<button class="btn" type="button" disabled><i class="ti ti-clock"></i>Coming soon</button>' : ''}
       </div>
     </article>
   `;
 }
 
-function openPrivatePluginInstallModal(companyId, pluginId, status = 'installed', extra = {}) {
-  const plugin = pluginById(pluginId);
-  const access = privatePluginAccess(pluginId);
-  if (!plugin || !access) return false;
-  state.privatePluginInstall = {
-    companyId,
-    pluginId,
-    status: status === 'disabled' ? 'disabled' : 'installed',
-    presetCode: extra.presetCode || '',
-  };
-  state.privatePluginError = '';
-  state.modal = 'private-plugin-install';
-  render();
-  return true;
-}
-
-function renderPrivatePluginInstallModal() {
-  const pending = state.privatePluginInstall || {};
-  const plugin = pluginById(pending.pluginId);
-  const access = privatePluginAccess(pending.pluginId);
-  if (!plugin || !access) return renderModalShell('Plugins', 'Private plugin', emptyState('Choose a private plugin before continuing.'));
-  const preset = pending.presetCode ? WORKSPACE_PLUGIN_PRESET_LABELS[pending.presetCode] || titleCase(pending.presetCode) : '';
-  return renderModalShell('Plugins', `${access.label} access`, `
-    <form class="private-plugin-form" data-private-plugin-form>
-      <input type="hidden" name="company_id" value="${h(pending.companyId || activeCompanyId())}" />
-      <input type="hidden" name="plugin_id" value="${h(pending.pluginId)}" />
-      <input type="hidden" name="status" value="${h(pending.status || 'installed')}" />
-      <input type="hidden" name="preset_code" value="${h(pending.presetCode || '')}" />
-      <div class="private-plugin-card">
-        <i class="ti ti-lock"></i>
-        <div>
-          <strong>This is a private plugin.</strong>
-          <p>${preset ? `${h(preset)} includes ${h(access.label)}.` : `${h(access.label)} is built into this workspace as a private CRM plugin.`} Enter the plugin password to continue.</p>
-        </div>
-      </div>
-      <label><span>Password</span><input name="password" type="password" autocomplete="off" autofocus /></label>
-      ${state.privatePluginError ? `<p class="form-error">${h(state.privatePluginError)}</p>` : ''}
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit"><i class="ti ti-lock-open"></i>Unlock plugin</button>
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `, 'plugin-access-modal');
-}
-
-function conflictingPluginIds(companyId, pluginId, nextStatus) {
+function conflictingPluginIds(companyId, pluginId, nextStatus, workspaceId = workspaceIdForCompany(companyId)) {
   const plugin = pluginById(pluginId);
   if (nextStatus !== 'installed' || !plugin?.exclusiveGroup) return [];
   return availableWorkspacePlugins()
-    .filter((item) => item.id !== plugin.id && item.exclusiveGroup === plugin.exclusiveGroup && isPluginInstalled(companyId, item.id))
+    .filter((item) => item.id !== plugin.id && item.exclusiveGroup === plugin.exclusiveGroup && isPluginInstalled(companyId, item.id, workspaceId))
     .map((item) => item.id);
 }
 
@@ -19690,7 +19870,6 @@ function renderActiveModal(route, session) {
   if (state.modal === 'deal-edit') return renderDealFormModal(activeCompanyId(), selectedDeal());
   if (state.modal === 'estimate-builder') return renderEstimateBuilderModal(activeCompanyId());
   if (state.modal === 'proposal-builder') return renderProposalBuilderModal(activeCompanyId());
-  if (state.modal === 'private-plugin-install') return renderPrivatePluginInstallModal();
   if (state.modal === 'activity-new') return renderActivityFormModal(activeCompanyId());
   if (state.modal === 'activity-detail') return renderActivityDetailModal();
   if (state.modal === 'location-picker') return renderLocationPickerModal();
@@ -20324,6 +20503,7 @@ function normalizeProposal(input = {}) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     proposal_no: String(input.proposal_no || draft.proposalNo || '').trim(),
     title: String(input.title || draft.jobTitle || 'Proposal').trim(),
     status,
@@ -20360,7 +20540,7 @@ function proposalById(id) {
 
 function companyProposals(companyId = activeCompanyId()) {
   return state.proposals
-    .filter((proposal) => proposal.company_id === companyId)
+    .filter((proposal) => recordVisibleInOperationalWorkspace(proposal, companyId))
     .sort((a, b) => Date.parse(b.updated_at || 0) - Date.parse(a.updated_at || 0));
 }
 
@@ -20526,6 +20706,7 @@ function proposalRecordFromDraft(ctx, draft, existing = null) {
     ...(existing || {}),
     id: existing?.id || `proposal-${crypto.randomUUID()}`,
     company_id: ctx.company_id || existing?.company_id || activeCompanyId(),
+    workspace_id: existing?.workspace_id || activeWorkspaceId(),
     proposal_no: draft.proposalNo,
     title: draft.jobTitle || existing?.title || 'Proposal',
     status: existing?.status || 'Draft',
@@ -22308,7 +22489,7 @@ function handleAction(event, node) {
   if (action === 'select-workspace') {
     event.preventDefault();
     state.workspaceMenuOpen = false;
-    setActiveCompany(node.dataset.companyId || defaultCompanyId());
+    setActiveWorkspace(node.dataset.workspaceId);
     return;
   }
   if (action === 'toggle-mobile-menu') {
@@ -22753,12 +22934,24 @@ function handleAction(event, node) {
     });
     return;
   }
-  if (action === 'apply-plugin-preset') {
+  if (action === 'set-workspace-plugin') {
     event.preventDefault();
-    const targetCompanyId = canonicalCompanyId(node.dataset.companyId || activeCompanyId());
-    if (!isQuestDeveloper() && !requirePermission('plugins.manage', targetCompanyId, 'Your role cannot manage workspace plugins.', 'Plugins')) return;
-    applyCompanyPluginPreset(targetCompanyId, node.dataset.presetCode).catch((error) => {
+    const workspaceId = String(node.dataset.workspaceId || activeWorkspaceId());
+    if (!requirePermission('plugins.manage', activeCompanyId(), 'Your role cannot manage workspace plugins.', 'Plugins')) return;
+    setWorkspacePlugin(workspaceId, node.dataset.pluginId, node.dataset.status).catch((error) => {
+      state.sync = { label: error.message || 'Plugin update failed', mode: 'local' };
+      showToast(error.message || 'Plugin update failed.', 'local', 'Plugins');
+      render();
+    });
+    return;
+  }
+  if (action === 'apply-workspace-plugin-preset') {
+    event.preventDefault();
+    const workspaceId = String(node.dataset.workspaceId || activeWorkspaceId());
+    if (!requirePermission('plugins.manage', activeCompanyId(), 'Your role cannot manage workspace plugins.', 'Plugins')) return;
+    applyWorkspacePluginPreset(workspaceId, node.dataset.presetCode).catch((error) => {
       state.sync = { label: error.message || 'Plugin preset failed', mode: 'local' };
+      showToast(error.message || 'Plugin preset failed.', 'local', 'Plugins');
       render();
     });
     return;
@@ -23792,8 +23985,6 @@ function closeActiveModal() {
   state.formStartTab = 'blank';
   state.estimateContext = null;
   state.proposalContext = null;
-  state.privatePluginInstall = null;
-  state.privatePluginError = '';
   state.selectedFinanceInvoiceId = '';
   state.selectedFinanceExpenseId = '';
   state.selectedFinanceVendorId = '';
@@ -23952,6 +24143,22 @@ function onDocumentSubmit(event) {
       state.loginError = error.message || 'Workspace setup failed.';
       state.authMessage = '';
       render();
+    });
+    return;
+  }
+
+  if (event.target.matches('[data-operational-workspace-create-form]')) {
+    event.preventDefault();
+    createOperationalWorkspace(event.target).catch((error) => {
+      showToast(error.message || 'Workspace creation failed.', 'local', 'Workspaces');
+    });
+    return;
+  }
+
+  if (event.target.matches('[data-operational-workspace-settings-form]')) {
+    event.preventDefault();
+    saveOperationalWorkspaceSettings(event.target).catch((error) => {
+      showToast(error.message || 'Workspace update failed.', 'local', 'Workspaces');
     });
     return;
   }
@@ -24130,15 +24337,6 @@ function onDocumentSubmit(event) {
     event.preventDefault();
     submitPublicProposalDecision(event.target).catch((error) => {
       state.proposalPublic = { ...(state.proposalPublic || {}), error: error.message || 'Could not submit proposal response.' };
-      render();
-    });
-    return;
-  }
-
-  if (event.target.matches('[data-private-plugin-form]')) {
-    event.preventDefault();
-    submitPrivatePluginInstall(event.target).catch((error) => {
-      state.privatePluginError = error.message || 'Private plugin could not be unlocked.';
       render();
     });
     return;
@@ -24926,6 +25124,128 @@ async function createWorkspaceForCurrentUser(formNode) {
   navigate(companyPath('settings', { tab: 'billing' }, state.activeCompanyId), { replace: true });
 }
 
+async function createOperationalWorkspace(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const companyId = canonicalCompanyId(form.company_id || activeCompanyId());
+  if (!canManageOperationalWorkspaces(companyId)) {
+    showToast('Workspace admin access is required.', 'local', 'Workspaces');
+    return;
+  }
+  const workspaceName = String(form.workspace_name || '').trim();
+  const presetCode = WORKSPACE_PLUGIN_PRESETS[form.preset_code] ? form.preset_code : 'generic';
+  const iconKey = workspaceIconOption(form.icon_key).key;
+  if (!workspaceName) {
+    showToast('Workspace name is required.', 'local', 'Workspaces');
+    return;
+  }
+
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession() && client;
+  let saved;
+  if (live) {
+    const result = await safeSupabaseQuery(client.rpc('create_operational_workspace', {
+      target_company_id: companyId,
+      workspace_name: workspaceName,
+      preset_code: presetCode,
+      icon_key: iconKey,
+    }));
+    if (result.error) {
+      showToast(result.error.message || 'Workspace creation failed.', 'local', 'Workspaces');
+      return;
+    }
+    const workspaceId = String(result.data || '');
+    const rowResult = await safeSupabaseQuery(client.from('workspaces').select('*').eq('id', workspaceId).maybeSingle());
+    saved = normalizeOperationalWorkspace(rowResult.data || {
+      id: workspaceId,
+      company_id: companyId,
+      name: workspaceName,
+      slug: workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace',
+      icon_key: iconKey,
+      status: 'active',
+    });
+  } else {
+    saved = normalizeOperationalWorkspace({
+      id: crypto.randomUUID(),
+      company_id: companyId,
+      name: workspaceName,
+      slug: workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace',
+      icon_key: iconKey,
+      color: companyColor(companyId),
+      status: 'active',
+      created_by: activeSession().profile.id,
+      created_at: new Date().toISOString(),
+    });
+    state.workspaceMemberships = mergeWorkspaceMemberships(state.workspaceMemberships.concat(normalizeWorkspaceMembership({
+      workspace_id: saved.id,
+      profile_id: activeSession().profile.id,
+      role_id: state.roleAssignments.find((assignment) => assignment.company_id === companyId && assignment.profile_id === activeSession().profile.id)?.role_id || '',
+      status: 'active',
+      assigned_by: activeSession().profile.id,
+    })));
+  }
+  state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.concat(saved));
+  applyWorkspacePluginPresetLocal(saved.id, presetCode);
+  state.activeCompanyId = companyId;
+  state.activeWorkspaceId = saved.id;
+  localStorage.setItem(COMPANY_KEY, companyId);
+  localStorage.setItem(ACTIVE_WORKSPACE_KEY, saved.id);
+  showToast(`${saved.name} workspace created.`, live ? 'live' : 'local', 'Workspaces');
+  navigate(companyPath('settings', { tab: 'company', workspace: saved.id }, companyId));
+}
+
+async function saveOperationalWorkspaceSettings(formNode) {
+  const form = Object.fromEntries(new FormData(formNode).entries());
+  const workspaceId = String(form.workspace_id || '').trim();
+  const workspace = state.operationalWorkspaces.find((item) => item.id === workspaceId);
+  if (!workspace || workspace.company_id !== activeCompanyId()) {
+    showToast('Workspace not found.', 'local', 'Workspaces');
+    return;
+  }
+  if (!canManageOperationalWorkspaces(workspace.company_id)) {
+    showToast('Workspace admin access is required.', 'local', 'Workspaces');
+    return;
+  }
+  const workspaceName = String(form.workspace_name || '').trim();
+  const workspaceDescription = String(form.workspace_description || '').trim();
+  const iconKey = workspaceIconOption(form.icon_key).key;
+  const status = String(form.workspace_status || 'active') === 'archived' ? 'archived' : 'active';
+  if (!workspaceName) {
+    showToast('Workspace name is required.', 'local', 'Workspaces');
+    return;
+  }
+  if (workspace.is_default && status === 'archived') {
+    showToast('Default workspace cannot be archived.', 'local', 'Workspaces');
+    return;
+  }
+
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession() && client;
+  let saved;
+  if (live) {
+    const result = await safeSupabaseQuery(client.rpc('update_operational_workspace', {
+      target_workspace_id: workspace.id,
+      workspace_name: workspaceName,
+      workspace_description: workspaceDescription,
+      icon_key: iconKey,
+      next_status: status,
+    }));
+    if (result.error) {
+      showToast(result.error.message || 'Workspace update failed.', 'local', 'Workspaces');
+      return;
+    }
+    saved = normalizeOperationalWorkspace(result.data || { ...workspace, name: workspaceName, description: workspaceDescription, icon_key: iconKey, status });
+  } else {
+    saved = normalizeOperationalWorkspace({ ...workspace, name: workspaceName, description: workspaceDescription, icon_key: iconKey, status, updated_at: new Date().toISOString() });
+  }
+  state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.filter((item) => item.id !== saved.id).concat(saved));
+  if (saved.status === 'archived' && state.activeWorkspaceId === saved.id) {
+    state.activeWorkspaceId = defaultOperationalWorkspaceId(saved.company_id);
+    localStorage.setItem(ACTIVE_WORKSPACE_KEY, state.activeWorkspaceId);
+  }
+  showToast('Workspace settings saved.', live ? 'live' : 'local', 'Workspaces');
+  navigate(companyPath('settings', { tab: 'company' }, saved.company_id), { replace: true });
+}
+
 async function createPlatformWorkspace(formNode) {
   if (!isQuestDeveloper()) {
     showToast('Platform owner access is required to create workspaces for others.', 'local', 'Master panel');
@@ -25073,6 +25393,32 @@ function upsertCompanyPluginLocal(companyId, pluginId, status) {
     .concat(row));
 }
 
+function upsertWorkspacePluginLocal(workspaceId, pluginId, status) {
+  const row = normalizeWorkspacePlugin({
+    workspace_id: workspaceId,
+    plugin_id: pluginId,
+    status,
+    installed_by: status === 'installed' ? activeSession().profile.id : '',
+    installed_at: status === 'installed' ? new Date().toISOString() : '',
+    disabled_at: status === 'disabled' ? new Date().toISOString() : '',
+    updated_at: new Date().toISOString(),
+  });
+  state.workspacePlugins = mergeWorkspacePlugins(state.workspacePlugins
+    .filter((item) => !(item.workspace_id === row.workspace_id && item.plugin_id === row.plugin_id))
+    .concat(row));
+}
+
+function applyWorkspacePluginPresetLocal(workspaceId, presetCode) {
+  const workspace = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
+  if (!workspace) return;
+  const cleanPreset = WORKSPACE_PLUGIN_PRESETS[presetCode] ? presetCode : 'generic';
+  const desiredPluginIds = WORKSPACE_PLUGIN_PRESETS[cleanPreset];
+  availableWorkspacePlugins().forEach((plugin) => {
+    const entitled = companyPluginStatus(workspace.company_id, plugin.id) === 'installed';
+    upsertWorkspacePluginLocal(workspace.id, plugin.id, entitled && desiredPluginIds.includes(plugin.id) ? 'installed' : 'disabled');
+  });
+}
+
 function revealPluginModulesInNavigation(plugin) {
   if (!plugin?.module_ids?.length) return;
   const groupsToOpen = NAV_GROUPS
@@ -25086,43 +25432,74 @@ function revealPluginModulesInNavigation(plugin) {
   }
 }
 
-function privatePluginIdsForPreset(companyId, presetCode) {
-  const pluginIds = WORKSPACE_PLUGIN_PRESETS[presetCode] || [];
-  return pluginIds.filter((pluginId) => pluginInstallNeedsPrivateAccess(companyId, pluginId, 'installed'));
-}
-
-async function submitPrivatePluginInstall(form) {
-  const fields = Object.fromEntries(new FormData(form).entries());
-  const pluginId = String(fields.plugin_id || '');
-  const access = privatePluginAccess(pluginId);
-  if (!access) throw new Error('Private plugin access is not available.');
-  if (String(fields.password || '') !== access.password) {
-    state.privatePluginError = 'Incorrect plugin password.';
-    render();
-    return;
-  }
-  const companyId = canonicalCompanyId(fields.company_id || activeCompanyId());
-  const status = String(fields.status || 'installed');
-  const presetCode = String(fields.preset_code || '');
-  state.modal = '';
-  state.privatePluginInstall = null;
-  state.privatePluginError = '';
-  if (presetCode) {
-    await applyCompanyPluginPreset(companyId, presetCode, { privateAccessGranted: true });
-  } else {
-    await setCompanyPlugin(companyId, pluginId, status, { privateAccessGranted: true });
-  }
-}
-
-async function setCompanyPlugin(companyId, pluginId, status, options = {}) {
+async function setWorkspacePlugin(workspaceId, pluginId, status) {
+  const workspace = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
   const plugin = pluginById(pluginId);
   const nextStatus = status === 'disabled' ? 'disabled' : 'installed';
+  if (!workspace || workspace.status !== 'active') {
+    showToast('Choose an active workspace first.', 'local', 'Plugins');
+    return;
+  }
   if (!plugin || plugin.comingSoon) {
     showToast('That plugin is not available yet.', 'local', 'Plugins');
     return;
   }
-  if (pluginInstallNeedsPrivateAccess(companyId, plugin.id, nextStatus) && !options.privateAccessGranted) {
-    openPrivatePluginInstallModal(companyId, plugin.id, nextStatus);
+  if (nextStatus === 'installed' && companyPluginStatus(workspace.company_id, plugin.id) !== 'installed') {
+    showToast('This company account is not entitled to that plugin.', 'local', 'Plugins');
+    return;
+  }
+  const conflictIds = conflictingPluginIds(workspace.company_id, plugin.id, nextStatus, workspace.id);
+  if (conflictIds.length) {
+    const conflictLabels = conflictIds.map((conflictId) => pluginById(conflictId)?.label || conflictId).join(', ');
+    if (!window.confirm(`Installing ${plugin.label} will disable ${conflictLabels}. Continue?`)) return;
+  }
+  state.sync = { label: 'Updating workspace plugin...', mode: 'loading' };
+  render();
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await safeSupabaseQuery(client.rpc('set_workspace_plugin', {
+      target_workspace_id: workspaceId,
+      target_plugin_id: plugin.id,
+      next_status: nextStatus,
+    }));
+    if (result.error) throw new Error(result.error.message || 'Workspace plugin update failed.');
+  }
+  conflictIds.forEach((conflictId) => upsertWorkspacePluginLocal(workspace.id, conflictId, 'disabled'));
+  upsertWorkspacePluginLocal(workspaceId, plugin.id, nextStatus);
+  if (nextStatus === 'installed') revealPluginModulesInNavigation(plugin);
+  state.sync = { label: `${plugin.label} ${nextStatus === 'installed' ? 'activated' : 'disabled'}`, mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
+  showToast(`${plugin.label} ${nextStatus === 'installed' ? 'activated' : 'disabled'} in ${workspace.name}.`, state.session?.auth === 'supabase' ? 'live' : 'local', 'Plugins');
+  render();
+}
+
+async function applyWorkspacePluginPreset(workspaceId, presetCode) {
+  const workspace = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
+  if (!workspace || workspace.status !== 'active') {
+    showToast('Choose an active workspace first.', 'local', 'Plugins');
+    return;
+  }
+  const cleanPreset = WORKSPACE_PLUGIN_PRESETS[presetCode] ? presetCode : 'generic';
+  state.sync = { label: 'Applying workspace plugin preset...', mode: 'loading' };
+  render();
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await safeSupabaseQuery(client.rpc('apply_workspace_plugin_preset', {
+      target_workspace_id: workspaceId,
+      preset_code: cleanPreset,
+    }));
+    if (result.error) throw new Error(result.error.message || 'Workspace plugin preset failed.');
+  }
+  applyWorkspacePluginPresetLocal(workspace.id, cleanPreset);
+  state.sync = { label: `${WORKSPACE_PLUGIN_PRESET_LABELS[cleanPreset]} plugins applied to ${workspace.name}`, mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
+  showToast(`${WORKSPACE_PLUGIN_PRESET_LABELS[cleanPreset]} preset applied to ${workspace.name}.`, state.session?.auth === 'supabase' ? 'live' : 'local', 'Plugins');
+  render();
+}
+
+async function setCompanyPlugin(companyId, pluginId, status) {
+  const plugin = pluginById(pluginId);
+  const nextStatus = status === 'disabled' ? 'disabled' : 'installed';
+  if (!plugin || plugin.comingSoon) {
+    showToast('That plugin is not available yet.', 'local', 'Plugins');
     return;
   }
   const conflictIds = conflictingPluginIds(companyId, plugin.id, nextStatus);
@@ -25149,14 +25526,8 @@ async function setCompanyPlugin(companyId, pluginId, status, options = {}) {
   render();
 }
 
-async function applyCompanyPluginPreset(companyId, presetCode, options = {}) {
+async function applyCompanyPluginPreset(companyId, presetCode) {
   const cleanPreset = WORKSPACE_PLUGIN_PRESETS[presetCode] ? presetCode : 'generic';
-  const pluginIds = WORKSPACE_PLUGIN_PRESETS[cleanPreset];
-  const privatePluginIds = privatePluginIdsForPreset(companyId, cleanPreset);
-  if (privatePluginIds.length && !options.privateAccessGranted) {
-    openPrivatePluginInstallModal(companyId, privatePluginIds[0], 'installed', { presetCode: cleanPreset });
-    return;
-  }
   state.sync = { label: 'Applying plugin preset...', mode: 'loading' };
   render();
   const client = createSupabaseClient();
@@ -25585,6 +25956,8 @@ async function saveUserAccess(formNode) {
   const profileId = String(data.get('profile_id') || '').trim();
   const roleId = String(data.get('role_id') || '').trim();
   const status = ['active', 'pending', 'disabled', 'left'].includes(String(data.get('membership_status'))) ? String(data.get('membership_status')) : 'active';
+  const selectedWorkspaceIds = new Set(data.getAll('workspace_ids').map((value) => String(value || '')));
+  const companyWorkspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
   const role = roleById(companyId, roleId);
   if (!profileId || !role) {
     state.sync = { label: 'Select a user and role', mode: 'local' };
@@ -25634,6 +26007,38 @@ async function saveUserAccess(formNode) {
     upsertMembership(membership);
     replaceRoleAssignment(assignment);
     state.sync = { label: 'User access saved locally', mode: 'local' };
+  }
+
+  const inheritedWorkspaceAccess = ['owner', 'admin', 'developer'].includes(String(membership.role || '').toLowerCase());
+  for (const workspace of companyWorkspaces) {
+    const enabled = status === 'active' && (inheritedWorkspaceAccess || selectedWorkspaceIds.has(workspace.id));
+    const requestedWorkspaceRoleId = String(data.get(`workspace_role:${workspace.id}`) || role.id || '');
+    const workspaceRole = roleById(companyId, requestedWorkspaceRoleId) || role;
+    const workspaceMembership = normalizeWorkspaceMembership({
+      workspace_id: workspace.id,
+      profile_id: profileId,
+      role_id: workspaceRole?.id || '',
+      status: enabled ? 'active' : 'disabled',
+      assigned_by: activeSession().profile.id,
+      updated_at: new Date().toISOString(),
+    });
+    if (isLiveSupabaseSession() && client) {
+      const result = await safeSupabaseQuery(client.rpc('set_workspace_member', {
+        target_workspace_id: workspace.id,
+        target_profile_id: profileId,
+        target_role_id: isUuid(workspaceMembership.role_id) ? workspaceMembership.role_id : null,
+        next_status: enabled ? 'active' : 'disabled',
+      }));
+      if (result.error) {
+        state.sync = { label: result.error.message || 'Workspace assignment failed', mode: 'local' };
+        showToast(result.error.message || 'Workspace assignment failed.', 'local', 'Users');
+        render();
+        return;
+      }
+      upsertWorkspaceMembership(normalizeWorkspaceMembership(result.data || workspaceMembership));
+    } else {
+      upsertWorkspaceMembership(workspaceMembership);
+    }
   }
 
   notifyLocalEvent('access.role', 'User access updated', `${actorName()} set ${profileName(profileId)} to ${role.name} / ${titleCase(status)}.`, companyPath('settings', { tab: 'access' }, companyId), 'membership', profileId, companyId, [profileId].concat(usersWithAnyPermission(companyId, ['users.manage', 'settings.manage'])));
@@ -26472,6 +26877,7 @@ async function saveJob(form) {
   const payload = normalizeJob(validation.data);
   payload.id = payload.id || crypto.randomUUID();
   payload.company_id = payload.company_id || activeCompanyId();
+  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
   if (!requirePermission('jobs.manage', payload.company_id, 'Your role can view jobs but cannot create or edit them.', 'Jobs')) return;
   payload.estimate_total = Number(payload.estimate_total || 0);
   payload.invoice_total = Number(payload.invoice_total || 0);
@@ -26524,6 +26930,7 @@ async function saveTask(form) {
     ...formData,
     id: String(formData.id || '').trim() || `task-${crypto.randomUUID()}`,
     company_id: companyId,
+    workspace_id: activeWorkspaceId(),
     creator_id: creatorId,
     urgency: formData.priority || 'medium',
     watchers: [],
@@ -26610,6 +27017,7 @@ async function saveUnderwritingCase(form) {
   const item = normalizeUnderwritingCase({
     ...(existing || {}),
     company_id: companyId,
+    workspace_id: contact.workspace_id || activeWorkspaceId(),
     contact_id: contact.id,
     contract_price: input.contractPrice,
     material_cost: input.materialCost,
@@ -28727,25 +29135,28 @@ async function deleteFile(id) {
 }
 
 function upsertJob(job) {
-  const index = state.jobs.findIndex((item) => item.id === job.id);
-  if (index >= 0) state.jobs[index] = job;
-  else state.jobs.unshift(job);
-  state.selectedJobId = job.id;
+  const scoped = ensureRecordWorkspace(job);
+  const index = state.jobs.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.jobs[index] = scoped;
+  else state.jobs.unshift(scoped);
+  state.selectedJobId = scoped.id;
   persistAll();
 }
 
 function upsertTask(task) {
-  const index = state.tasks.findIndex((item) => item.id === task.id);
-  if (index >= 0) state.tasks[index] = task;
-  else state.tasks.unshift(task);
-  state.selectedTaskId = task.id;
+  const scoped = ensureRecordWorkspace(task);
+  const index = state.tasks.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.tasks[index] = scoped;
+  else state.tasks.unshift(scoped);
+  state.selectedTaskId = scoped.id;
   persistAll();
 }
 
 function upsertFile(file) {
-  const index = state.files.findIndex((item) => item.id === file.id);
-  if (index >= 0) state.files[index] = file;
-  else state.files.unshift(file);
+  const scoped = ensureRecordWorkspace(file);
+  const index = state.files.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.files[index] = scoped;
+  else state.files.unshift(scoped);
   persistAll();
 }
 
@@ -28775,6 +29186,16 @@ function upsertMembership(membership) {
   if (index >= 0) state.memberships[index] = membership;
   else state.memberships.unshift(membership);
   persistAll();
+}
+
+function upsertWorkspaceMembership(membership) {
+  const normalized = normalizeWorkspaceMembership(membership);
+  const index = state.workspaceMemberships.findIndex((item) => (
+    item.workspace_id === normalized.workspace_id
+    && item.profile_id === normalized.profile_id
+  ));
+  if (index >= 0) state.workspaceMemberships[index] = normalized;
+  else state.workspaceMemberships.unshift(normalized);
 }
 
 function replaceRoleAssignment(assignment) {
@@ -28949,11 +29370,17 @@ function safeReturnUrl(value) {
 }
 
 function companyPath(section = 'jobs', params = {}, companyId = activeCompanyId()) {
+  const canonicalCompany = canonicalCompanyId(companyId || defaultCompanyId());
+  const hasExplicitWorkspace = Object.prototype.hasOwnProperty.call(params || {}, 'workspace');
   const search = new URLSearchParams(params);
+  const workspaceId = hasExplicitWorkspace
+    ? String(params.workspace || '')
+    : workspaceIdForCompany(canonicalCompany);
+  if (workspaceId) search.set('workspace', workspaceId);
   for (const [key, value] of [...search.entries()]) {
     if (value === undefined || value === null || value === '') search.delete(key);
   }
-  return `/company/${encodeURIComponent(canonicalCompanyId(companyId || defaultCompanyId()))}/${section}${search.toString() ? `?${search.toString()}` : ''}`;
+  return `/company/${encodeURIComponent(canonicalCompany)}/${section}${search.toString() ? `?${search.toString()}` : ''}`;
 }
 
 function routeTitle(route) {
@@ -28988,6 +29415,18 @@ function reconcileCompany(route) {
   const allowed = allowedCompanyIds();
   state.activeCompanyId = allowed.includes(target) ? target : allowed[0] || defaultCompanyId();
   localStorage.setItem(COMPANY_KEY, state.activeCompanyId);
+  const workspace = workspaceForRoute({
+    companyId: state.activeCompanyId,
+    workspaceParam: route.params.get('workspace') || '',
+    storedWorkspaceId: state.activeWorkspaceId || localStorage.getItem(ACTIVE_WORKSPACE_KEY) || '',
+    workspaces: state.operationalWorkspaces,
+    memberships: state.workspaceMemberships,
+    profileId: activeSession().profile.id,
+    companyRole: companyRoleForWorkspaceAccess(state.activeCompanyId),
+  });
+  state.activeWorkspaceId = workspace?.id || '';
+  if (state.activeWorkspaceId) localStorage.setItem(ACTIVE_WORKSPACE_KEY, state.activeWorkspaceId);
+  else localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
   applyPipelineStagesForCompany(state.activeCompanyId);
 }
 
@@ -29009,11 +29448,33 @@ function setActiveCompany(companyId) {
   const next = allowed.includes(target) ? target : allowed[0] || defaultCompanyId();
   state.activeCompanyId = next;
   localStorage.setItem(COMPANY_KEY, next);
+  const workspace = workspaceForRoute({
+    companyId: next,
+    storedWorkspaceId: localStorage.getItem(ACTIVE_WORKSPACE_KEY) || '',
+    workspaces: state.operationalWorkspaces,
+    memberships: state.workspaceMemberships,
+    profileId: activeSession().profile.id,
+    companyRole: companyRoleForWorkspaceAccess(next),
+  });
+  state.activeWorkspaceId = workspace?.id || '';
+  if (state.activeWorkspaceId) localStorage.setItem(ACTIVE_WORKSPACE_KEY, state.activeWorkspaceId);
   applyPipelineStagesForCompany(next);
   resetScopedUiState();
   const route = state.route || getRoute();
   const section = route.name === 'company' ? route.section : 'jobs';
   navigate(companyPath(section, {}, next));
+}
+
+function setActiveWorkspace(workspaceId) {
+  const workspace = allowedOperationalWorkspaces().find((item) => item.id === String(workspaceId || ''));
+  if (!workspace) return;
+  state.activeWorkspaceId = workspace.id;
+  localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
+  applyPipelineStagesForCompany(workspace.company_id);
+  resetScopedUiState();
+  const route = state.route || getRoute();
+  const section = route.name === 'company' ? route.section : 'jobs';
+  navigate(companyPath(section, { workspace: workspace.id }, workspace.company_id));
 }
 
 function resetScopedUiState() {
@@ -29078,19 +29539,19 @@ function selectedJob() {
 }
 
 function jobById(id) {
-  return state.jobs.find((job) => job.id === id) || null;
+  return state.jobs.find((job) => job.id === id && recordVisibleInOperationalWorkspace(job)) || null;
 }
 
 function taskById(id) {
-  return state.tasks.find((task) => task.id === id) || null;
+  return state.tasks.find((task) => task.id === id && recordVisibleInOperationalWorkspace(task)) || null;
 }
 
 function companyJobs(companyId = activeCompanyId()) {
-  return state.jobs.filter((job) => job.company_id === companyId);
+  return state.jobs.filter((job) => recordVisibleInOperationalWorkspace(job, companyId));
 }
 
 function companyTasks(companyId = activeCompanyId()) {
-  return state.tasks.filter((task) => task.company_id === companyId);
+  return state.tasks.filter((task) => recordVisibleInOperationalWorkspace(task, companyId));
 }
 
 function companyNotifications(companyId = activeCompanyId()) {
@@ -29474,7 +29935,7 @@ function calendarTypeIcon(type) {
 }
 
 function companyFiles(companyId = activeCompanyId()) {
-  return state.files.filter((file) => file.company_id === companyId);
+  return state.files.filter((file) => recordVisibleInOperationalWorkspace(file, companyId));
 }
 
 function companyDriveFolders(companyId = activeCompanyId()) {
@@ -29671,7 +30132,7 @@ function filteredJobs(companyId = activeCompanyId(), ignoreStage = false) {
 }
 
 function companyContacts(companyId = activeCompanyId()) {
-  return state.contacts.filter((contact) => contact.company_id === companyId);
+  return state.contacts.filter((contact) => recordVisibleInOperationalWorkspace(contact, companyId));
 }
 
 function contactFilterJobType(contact) {
@@ -29745,7 +30206,7 @@ function sortedContacts(contacts) {
 }
 
 function contactById(id) {
-  return state.contacts.find((contact) => contact.id === id) || null;
+  return state.contacts.find((contact) => contact.id === id && recordVisibleInOperationalWorkspace(contact)) || null;
 }
 
 function selectedContact() {
@@ -29757,9 +30218,10 @@ function persistContacts() {
 }
 
 function upsertContact(contact) {
-  const index = state.contacts.findIndex((item) => item.id === contact.id);
-  if (index >= 0) state.contacts[index] = contact;
-  else state.contacts.push(contact);
+  const scoped = ensureRecordWorkspace(contact);
+  const index = state.contacts.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.contacts[index] = scoped;
+  else state.contacts.push(scoped);
   persistContacts();
 }
 
@@ -29790,10 +30252,10 @@ function setPipelineStage(kind, stage, forceNav) {
 
 // ---- CRM getters + CRUD: accounts / deals / activities --------------------
 function companyAccounts(companyId = activeCompanyId()) {
-  return state.accounts.filter((account) => account.company_id === companyId);
+  return state.accounts.filter((account) => recordVisibleInOperationalWorkspace(account, companyId));
 }
 function accountById(id) {
-  return id ? state.accounts.find((account) => account.id === id) || null : null;
+  return id ? state.accounts.find((account) => account.id === id && recordVisibleInOperationalWorkspace(account)) || null : null;
 }
 function accountName(id) {
   return accountById(id)?.name || '';
@@ -29802,13 +30264,13 @@ function selectedAccount() {
   return accountById(state.selectedAccountId);
 }
 function companyCrmSites(companyId = activeCompanyId()) {
-  return state.sites.filter((site) => site.company_id === companyId);
+  return state.sites.filter((site) => recordVisibleInOperationalWorkspace(site, companyId));
 }
 function crmSiteById(id) {
-  return id ? state.sites.find((site) => site.id === id) || null : null;
+  return id ? state.sites.find((site) => site.id === id && recordVisibleInOperationalWorkspace(site)) || null : null;
 }
 function crmSitesForContact(contactId) {
-  return state.sites.filter((site) => site.contact_id === contactId);
+  return state.sites.filter((site) => site.contact_id === contactId && recordVisibleInOperationalWorkspace(site));
 }
 function filteredAccounts(companyId = activeCompanyId()) {
   const q = state.accountQuery.trim().toLowerCase();
@@ -29821,10 +30283,10 @@ function filteredAccounts(companyId = activeCompanyId()) {
 }
 
 function companyDeals(companyId = activeCompanyId()) {
-  return state.deals.filter((deal) => deal.company_id === companyId);
+  return state.deals.filter((deal) => recordVisibleInOperationalWorkspace(deal, companyId));
 }
 function dealById(id) {
-  return id ? state.deals.find((deal) => deal.id === id) || null : null;
+  return id ? state.deals.find((deal) => deal.id === id && recordVisibleInOperationalWorkspace(deal)) || null : null;
 }
 function selectedDeal() {
   return dealById(state.selectedDealId);
@@ -29839,17 +30301,17 @@ function filteredDeals(companyId = activeCompanyId(), ignoreStage = false) {
   });
 }
 function dealsForAccount(accountId) {
-  return state.deals.filter((deal) => deal.account_id === accountId);
+  return state.deals.filter((deal) => deal.account_id === accountId && recordVisibleInOperationalWorkspace(deal));
 }
 function contactsForAccount(accountId) {
-  return state.contacts.filter((contact) => contact.account_id === accountId);
+  return state.contacts.filter((contact) => contact.account_id === accountId && recordVisibleInOperationalWorkspace(contact));
 }
 function jobsForAccount(accountId) {
-  return state.jobs.filter((job) => job.account_id === accountId);
+  return state.jobs.filter((job) => job.account_id === accountId && recordVisibleInOperationalWorkspace(job));
 }
 
 function companyActivities(companyId = activeCompanyId()) {
-  return state.activities.filter((activity) => activity.company_id === companyId);
+  return state.activities.filter((activity) => recordVisibleInOperationalWorkspace(activity, companyId));
 }
 function relationThreadIds(relatedType, relatedId) {
   const ids = { account_id: '', contact_id: '', site_id: '', deal_id: '', job_id: '' };
@@ -30266,34 +30728,38 @@ function persistProposalsLocal() { writeJson(PROPOSAL_CACHE_KEY, state.proposals
 function persistActivities() { writeJson(ACTIVITY_CACHE_KEY, state.activities); }
 
 function upsertAccount(account) {
-  const index = state.accounts.findIndex((item) => item.id === account.id);
-  if (index >= 0) state.accounts[index] = account;
-  else state.accounts.push(account);
+  const scoped = ensureRecordWorkspace(account);
+  const index = state.accounts.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.accounts[index] = scoped;
+  else state.accounts.push(scoped);
   persistAccounts();
 }
 function upsertDeal(deal) {
-  const index = state.deals.findIndex((item) => item.id === deal.id);
-  if (index >= 0) state.deals[index] = deal;
-  else state.deals.push(deal);
+  const scoped = ensureRecordWorkspace(deal);
+  const index = state.deals.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.deals[index] = scoped;
+  else state.deals.push(scoped);
   persistDeals();
 }
 function upsertCrmSite(site) {
-  const index = state.sites.findIndex((item) => item.id === site.id);
-  if (index >= 0) state.sites[index] = site;
-  else state.sites.push(site);
+  const scoped = ensureRecordWorkspace(site);
+  const index = state.sites.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.sites[index] = scoped;
+  else state.sites.push(scoped);
   persistSites();
 }
 function upsertProposal(proposal) {
-  const normalized = normalizeProposal(proposal);
+  const normalized = ensureRecordWorkspace(normalizeProposal(proposal));
   const index = state.proposals.findIndex((item) => item.id === normalized.id);
   if (index >= 0) state.proposals[index] = normalized;
   else state.proposals.unshift(normalized);
   persistProposalsLocal();
 }
 function upsertActivity(activity) {
-  const index = state.activities.findIndex((item) => item.id === activity.id);
-  if (index >= 0) state.activities[index] = activity;
-  else state.activities.unshift(activity);
+  const scoped = ensureRecordWorkspace(activity);
+  const index = state.activities.findIndex((item) => item.id === scoped.id);
+  if (index >= 0) state.activities[index] = scoped;
+  else state.activities.unshift(scoped);
   persistActivities();
 }
 
@@ -30936,13 +31402,13 @@ async function permanentlyDeleteRecycleBinItem(itemId, options = {}) {
   return true;
 }
 
-const ACCOUNT_COLS = ['id', 'company_id', 'name', 'type', 'industry', 'website', 'phone', 'email', 'address', 'owner_name', 'status', 'notes', 'updated_at'];
-const SITE_COLS = ['id', 'company_id', 'contact_id', 'account_id', 'label', 'address', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'notes', 'updated_at'];
-const DEAL_COLS = ['id', 'company_id', 'account_id', 'primary_contact_id', 'site_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'line_items', 'notes', 'updated_at'];
-const JOB_COLS = ['id', 'company_id', 'name', 'client_name', 'contact_name', 'site_address', 'job_type', 'stage', 'priority', 'owner_name', 'scope', 'notes', 'estimate_total', 'invoice_total', 'account_id', 'contact_id', 'deal_id', 'site_id', 'updated_at'];
-const PROPOSAL_COLS = ['id', 'company_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
-const ACTIVITY_COLS = ['id', 'company_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
-const CONTACT_COLS = ['id', 'company_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'last_activity_at', 'notes', 'country_code', 'country', 'province', 'city', 'barangay', 'street', 'block_no', 'zip', 'lat', 'lng', 'updated_at'];
+const ACCOUNT_COLS = ['id', 'company_id', 'workspace_id', 'name', 'type', 'industry', 'website', 'phone', 'email', 'address', 'owner_name', 'status', 'notes', 'updated_at'];
+const SITE_COLS = ['id', 'company_id', 'workspace_id', 'contact_id', 'account_id', 'label', 'address', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'notes', 'updated_at'];
+const DEAL_COLS = ['id', 'company_id', 'workspace_id', 'account_id', 'primary_contact_id', 'site_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'line_items', 'notes', 'updated_at'];
+const JOB_COLS = ['id', 'company_id', 'workspace_id', 'name', 'client_name', 'contact_name', 'site_address', 'job_type', 'stage', 'priority', 'owner_name', 'scope', 'notes', 'estimate_total', 'invoice_total', 'account_id', 'contact_id', 'deal_id', 'site_id', 'updated_at'];
+const PROPOSAL_COLS = ['id', 'company_id', 'workspace_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
+const ACTIVITY_COLS = ['id', 'company_id', 'workspace_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
+const CONTACT_COLS = ['id', 'company_id', 'workspace_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'last_activity_at', 'notes', 'country_code', 'country', 'province', 'city', 'barangay', 'street', 'block_no', 'zip', 'lat', 'lng', 'updated_at'];
 const CLIENT_PORTAL_DOCUMENT_COLS = ['id', 'company_id', 'portal_id', 'version_group_id', 'version_number', 'is_current', 'review_status', 'scale', 'scale_unit', 'bucket_id', 'object_path', 'file_name', 'mime_type', 'size_bytes', 'page_count', 'uploaded_by', 'created_at', 'updated_at'];
 const CLIENT_PORTAL_ANNOTATION_COLS = ['id', 'company_id', 'portal_id', 'document_id', 'page_number', 'guest_name', 'author_profile_id', 'annotation_type', 'payload', 'resolved_at', 'created_at', 'updated_at'];
 
@@ -30954,6 +31420,7 @@ function emptyToNull(row, keys) {
 async function saveAccount(form) {
   const payload = normalizeAccount(Object.fromEntries(new FormData(form).entries()));
   payload.id = payload.id || `account-${crypto.randomUUID()}`;
+  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
   payload.updated_at = new Date().toISOString();
   const { ok, data } = await supabaseWrite('accounts', supabaseRow(payload, ACCOUNT_COLS));
   if (!ok) return false;
@@ -30974,6 +31441,7 @@ async function deleteAccount(id) {
 async function saveDeal(form) {
   const payload = normalizeDeal(Object.fromEntries(new FormData(form).entries()));
   payload.id = payload.id || `deal-${crypto.randomUUID()}`;
+  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
   // Keep status in sync with terminal stage names so KPIs / badges stay correct.
   if (/^won/i.test(payload.stage)) payload.status = 'won';
   else if (/^lost/i.test(payload.stage)) payload.status = 'lost';
@@ -30997,7 +31465,11 @@ async function saveDeal(form) {
 
 async function persistDeal(deal, label = 'Quote saved.') {
   const before = dealById(deal.id) ? { ...dealById(deal.id) } : null;
-  const payload = normalizeDeal({ ...deal, updated_at: new Date().toISOString() });
+  const payload = normalizeDeal({
+    ...deal,
+    workspace_id: deal.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   if (/^won/i.test(payload.stage)) payload.status = 'won';
   else if (/^lost/i.test(payload.stage)) payload.status = 'lost';
   else if (payload.status !== 'open' && !/^won|^lost/i.test(payload.stage)) payload.status = 'open';
@@ -31148,7 +31620,11 @@ async function removeQuoteLineItem(dealId, lineId) {
 }
 
 async function persistProposal(proposal, label = 'Proposal saved.') {
-  const payload = normalizeProposal({ ...proposal, updated_at: new Date().toISOString() });
+  const payload = normalizeProposal({
+    ...proposal,
+    workspace_id: proposal.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   const row = emptyToNull(supabaseRow(payload, PROPOSAL_COLS), ['contact_id', 'deal_id', 'job_id', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at']);
   const { ok, data } = await supabaseWrite('proposal_documents', row);
   if (!ok) return false;
@@ -31330,6 +31806,7 @@ async function logActivity(input) {
     ...input,
     id: input.id || `activity-${crypto.randomUUID()}`,
     company_id: activeCompanyId(),
+    workspace_id: input.workspace_id || activeWorkspaceId(),
     account_id: accountId,
     contact_id: contactId,
     site_id: siteId,
@@ -31391,6 +31868,7 @@ async function convertDealToJob(dealId) {
   const job = normalizeJob({
     id: '',
     company_id: companyId,
+    workspace_id: deal.workspace_id || activeWorkspaceId(),
     name: deal.name,
     client_name: account?.name || '',
     contact_name: contact?.name || '',
@@ -31761,13 +32239,15 @@ function can(permission, companyId = activeCompanyId()) {
   const profile = activeSession().profile;
   if (state.session?.auth === 'supabase') {
     const membership = membershipForProfile(companyId, profile.id);
-    const trustedProfileCompany = (profile.company_ids || []).map(canonicalCompanyId).includes(canonicalCompanyId(companyId));
-    if (!membership && trustedProfileCompany && ['owner', 'admin', 'developer'].includes(String(profile.role || '').toLowerCase())) return true;
     if (!membership || membership.status !== 'active') return false;
-    if (['owner', 'developer'].includes(String(membership.role).toLowerCase())) return true;
-    const assignedRoleIds = state.roleAssignments
-      .filter((item) => item.company_id === companyId && item.profile_id === profile.id)
-      .map((item) => item.role_id);
+    if (['owner', 'admin', 'developer'].includes(String(membership.role).toLowerCase())) return true;
+    const workspaceMembership = workspaceMembershipForProfile(workspaceIdForCompany(companyId), profile.id);
+    if (!workspaceMembership || workspaceMembership.status !== 'active') return false;
+    const assignedRoleIds = workspaceMembership.role_id
+      ? [workspaceMembership.role_id]
+      : state.roleAssignments
+        .filter((item) => item.company_id === companyId && item.profile_id === profile.id)
+        .map((item) => item.role_id);
     const permissions = state.rolePermissions.filter((item) => assignedRoleIds.includes(item.role_id));
     if (permissions.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'deny')) return false;
     if (permissions.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'allow')) return true;
@@ -31897,7 +32377,8 @@ function isMutableAction(action = '') {
     'reset-message-demo',
     'manage-message-chat',
     'set-company-plugin',
-    'apply-plugin-preset',
+    'set-workspace-plugin',
+    'apply-workspace-plugin-preset',
     'select-workspace-icon',
     'start-checkout',
     'review-workspace',
@@ -31938,13 +32419,11 @@ function isMutableFormSubmit(formNode) {
 function allowedCompanyIds() {
   const profile = activeSession().profile;
   const allIds = state.companies.map((company) => company.id);
-  const fallbackIds = companiesFallback.map((company) => canonicalCompanyId(company.id));
   if (state.session?.auth === 'supabase') {
     const membershipIds = state.memberships
       .filter((item) => item.profile_id === profile.id && item.status === 'active')
       .map((item) => canonicalCompanyId(item.company_id));
-    const profileIds = Array.isArray(profile.company_ids) ? profile.company_ids.map(canonicalCompanyId) : [];
-    return compactUnique(membershipIds.concat(profileIds)).filter((id) => allIds.includes(id) || fallbackIds.includes(id));
+    return compactUnique(membershipIds).filter((id) => allIds.includes(id));
   }
   if (['developer', 'admin'].includes(profile.role)) return compactUnique(allIds.length ? allIds : companiesFallback.map((company) => canonicalCompanyId(company.id)));
   const membershipIds = state.memberships
@@ -32499,7 +32978,11 @@ async function mountLocationPicker() {
 }
 
 async function persistCrmSite(site) {
-  const payload = normalizeCrmSite({ ...site, updated_at: new Date().toISOString() });
+  const payload = normalizeCrmSite({
+    ...site,
+    workspace_id: site.workspace_id || activeWorkspaceId(),
+    updated_at: new Date().toISOString(),
+  });
   const { ok, data } = await supabaseWrite('crm_sites', emptyToNull(supabaseRow(payload, SITE_COLS), ['contact_id', 'account_id']));
   if (!ok) return false;
   const savedSite = data ? normalizeCrmSite(data) : payload;
@@ -32686,6 +33169,159 @@ function mergeCompanyPlugins(rows) {
   return Array.from(seen.values());
 }
 
+function companyRoleForWorkspaceAccess(companyId) {
+  const profile = activeSession().profile;
+  if (state.session?.auth !== 'supabase' && ['developer', 'admin'].includes(String(profile.role || '').toLowerCase())) {
+    return String(profile.role).toLowerCase();
+  }
+  return String(membershipForProfile(companyId, profile.id)?.role || 'member').toLowerCase();
+}
+
+function allowedOperationalWorkspaces(companyId = activeCompanyId()) {
+  return resolveAllowedWorkspaces({
+    companyId: canonicalCompanyId(companyId),
+    workspaces: state.operationalWorkspaces,
+    memberships: state.workspaceMemberships,
+    profileId: activeSession().profile.id,
+    companyRole: companyRoleForWorkspaceAccess(companyId),
+  });
+}
+
+function workspaceIdForCompany(companyId = activeCompanyId()) {
+  const allowed = allowedOperationalWorkspaces(companyId);
+  const current = allowed.find((workspace) => workspace.id === state.activeWorkspaceId);
+  return (current || allowed.find((workspace) => workspace.is_default) || allowed[0])?.id || '';
+}
+
+function activeWorkspaceId() {
+  return workspaceIdForCompany(activeCompanyId());
+}
+
+function activeWorkspace() {
+  const id = activeWorkspaceId();
+  return state.operationalWorkspaces.find((workspace) => workspace.id === id) || null;
+}
+
+function workspaceRoleLabel(workspaceId) {
+  const workspace = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
+  if (!workspace) return 'No access';
+  const companyRole = companyRoleForWorkspaceAccess(workspace.company_id);
+  if (['owner', 'admin', 'developer'].includes(companyRole)) return `${titleCase(companyRole)} access`;
+  const membership = state.workspaceMemberships.find((item) => (
+    item.workspace_id === workspace.id
+    && item.profile_id === activeSession().profile.id
+    && item.status === 'active'
+  ));
+  const role = state.roles.find((item) => item.id === membership?.role_id && item.company_id === workspace.company_id);
+  return role?.name || 'Member';
+}
+
+function workspaceMembershipForProfile(workspaceId, profileId) {
+  return state.workspaceMemberships.find((membership) => (
+    membership.workspace_id === String(workspaceId || '')
+    && membership.profile_id === String(profileId || '')
+  )) || null;
+}
+
+function workspaceMemberCount(workspaceId) {
+  return state.workspaceMemberships.filter((membership) => (
+    membership.workspace_id === String(workspaceId || '')
+    && membership.status === 'active'
+  )).length;
+}
+
+function canManageOperationalWorkspaces(companyId = activeCompanyId()) {
+  const role = companyRoleForWorkspaceAccess(companyId);
+  return ['owner', 'admin', 'developer'].includes(role) || can('settings.manage', companyId);
+}
+
+function defaultOperationalWorkspaceId(companyId = activeCompanyId()) {
+  return state.operationalWorkspaces.find((workspace) => (
+    workspace.company_id === canonicalCompanyId(companyId)
+    && workspace.is_default
+    && workspace.status === 'active'
+  ))?.id || '';
+}
+
+function recordVisibleInOperationalWorkspace(record, companyId = activeCompanyId()) {
+  const canonicalCompany = canonicalCompanyId(companyId);
+  const workspaceId = workspaceIdForCompany(canonicalCompany);
+  return record?.company_id === canonicalCompany
+    && recordBelongsToWorkspace(record, workspaceId, defaultOperationalWorkspaceId(canonicalCompany));
+}
+
+function ensureRecordWorkspace(record) {
+  if (!record || record.workspace_id) return record;
+  return {
+    ...record,
+    workspace_id: workspaceIdForCompany(record.company_id || activeCompanyId()),
+  };
+}
+
+function mergeOperationalWorkspaces(rows) {
+  const seen = new Map();
+  rows.map(normalizeOperationalWorkspace).forEach((workspace) => {
+    if (!workspace.id) return;
+    seen.set(workspace.id, { ...(seen.get(workspace.id) || {}), ...workspace });
+  });
+  return Array.from(seen.values());
+}
+
+function mergeWorkspaceMemberships(rows) {
+  const seen = new Map();
+  rows.map(normalizeWorkspaceMembership).forEach((membership) => {
+    if (!membership.workspace_id || !membership.profile_id) return;
+    const key = `${membership.workspace_id}:${membership.profile_id}`;
+    seen.set(key, { ...(seen.get(key) || {}), ...membership });
+  });
+  return Array.from(seen.values());
+}
+
+function mergeWorkspacePlugins(rows) {
+  const seen = new Map();
+  rows.map(normalizeWorkspacePlugin).forEach((plugin) => {
+    if (!plugin.workspace_id || !plugin.plugin_id) return;
+    const key = `${plugin.workspace_id}:${plugin.plugin_id}`;
+    seen.set(key, { ...(seen.get(key) || {}), ...plugin });
+  });
+  return Array.from(seen.values());
+}
+
+function demoWorkspaceId(companyId) {
+  return `demo-${canonicalCompanyId(companyId)}-main`;
+}
+
+function demoOperationalWorkspaceRows() {
+  return companiesFallback.map((company) => normalizeOperationalWorkspace({
+    id: demoWorkspaceId(company.id),
+    company_id: company.id,
+    slug: 'main',
+    name: 'Main',
+    description: 'Default demo workspace',
+    icon_key: company.icon_key || 'home',
+    color: company.color,
+    status: 'active',
+    is_default: true,
+  }));
+}
+
+function demoWorkspaceMembershipRows() {
+  return state.memberships
+    .filter((membership) => membership.status === 'active')
+    .map((membership) => normalizeWorkspaceMembership({
+      workspace_id: demoWorkspaceId(membership.company_id),
+      profile_id: membership.profile_id,
+      status: 'active',
+    }));
+}
+
+function demoWorkspacePluginRows() {
+  return demoCompanyPluginRows().map((plugin) => normalizeWorkspacePlugin({
+    ...plugin,
+    workspace_id: demoWorkspaceId(plugin.company_id),
+  }));
+}
+
 function normalizeCompany(input) {
   const id = canonicalCompanyId(input.id || '');
   return {
@@ -32715,10 +33351,54 @@ function normalizeCompanyPlugin(input) {
   };
 }
 
+function normalizeOperationalWorkspace(input) {
+  return {
+    id: String(input.id || '').trim(),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    slug: String(input.slug || 'main').trim().toLowerCase(),
+    name: String(input.name || 'Workspace').trim() || 'Workspace',
+    description: String(input.description || '').trim(),
+    icon_key: String(input.icon_key || 'home').trim() || 'home',
+    color: String(input.color || '#f0b23b'),
+    status: String(input.status || 'active').toLowerCase() === 'archived' ? 'archived' : 'active',
+    is_default: input.is_default === true,
+    created_by: String(input.created_by || ''),
+    created_at: input.created_at || '',
+    updated_at: input.updated_at || input.created_at || '',
+  };
+}
+
+function normalizeWorkspaceMembership(input) {
+  return {
+    workspace_id: String(input.workspace_id || ''),
+    profile_id: String(input.profile_id || ''),
+    role_id: String(input.role_id || ''),
+    status: String(input.status || 'active').toLowerCase() === 'disabled' ? 'disabled' : 'active',
+    assigned_by: String(input.assigned_by || ''),
+    created_at: input.created_at || '',
+    updated_at: input.updated_at || input.created_at || '',
+  };
+}
+
+function normalizeWorkspacePlugin(input) {
+  return {
+    workspace_id: String(input.workspace_id || ''),
+    plugin_id: String(input.plugin_id || input.id || '').trim(),
+    status: String(input.status || 'installed').toLowerCase() === 'disabled' ? 'disabled' : 'installed',
+    config: input.config && typeof input.config === 'object' ? input.config : {},
+    installed_by: String(input.installed_by || ''),
+    installed_at: input.installed_at || '',
+    disabled_at: input.disabled_at || '',
+    created_at: input.created_at || '',
+    updated_at: input.updated_at || input.created_at || '',
+  };
+}
+
 function normalizeJob(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     name: String(input.name || '').trim() || 'Untitled Job',
     client_name: String(input.client_name || '').trim(),
     contact_name: String(input.contact_name || '').trim(),
@@ -32841,6 +33521,7 @@ function normalizeContact(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     name: formatContactField('name', input.name) || 'Untitled contact',
     phone: formatContactField('phone', input.phone),
     email: formatContactField('email', input.email),
@@ -32877,6 +33558,7 @@ function normalizeCrmSite(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     contact_id: input.contact_id ? String(input.contact_id) : '',
     account_id: input.account_id ? String(input.account_id) : '',
     label: String(input.label || 'Primary site').trim() || 'Primary site',
@@ -32899,6 +33581,7 @@ function normalizeAccount(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     name: String(input.name || '').trim() || 'Untitled account',
     type: ACCOUNT_TYPES.includes(input.type) ? input.type : 'Customer',
     industry: String(input.industry || '').trim(),
@@ -32919,6 +33602,7 @@ function normalizeDeal(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     account_id: input.account_id ? String(input.account_id) : '',
     primary_contact_id: input.primary_contact_id ? String(input.primary_contact_id) : '',
     site_id: input.site_id ? String(input.site_id) : '',
@@ -32942,6 +33626,7 @@ function normalizeActivity(input) {
   return {
     id: String(input.id || ''),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     type: ACTIVITY_TYPES.includes(input.type) ? input.type : 'note',
     subject: String(input.subject || '').trim(),
     body: String(input.body || '').trim(),
@@ -32971,6 +33656,7 @@ function normalizeTask(input) {
     label: input.label || null,
     bid_status: input.bid_status || null,
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     creator_id: String(input.creator_id || ''),
     assignee_id: String(input.assignee_id || input.creator_id || ''),
     project_id: String(input.project_id || ''),
@@ -33105,6 +33791,7 @@ function normalizeUnderwritingCase(input = {}) {
   return {
     id: String(input.id || crypto.randomUUID()),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     contact_id: String(input.contact_id || ''),
     contract_price: number(input.contract_price),
     material_cost: number(input.material_cost),
@@ -33128,6 +33815,7 @@ function normalizeFile(input) {
   return {
     id: String(input.id || crypto.randomUUID()),
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    workspace_id: String(input.workspace_id || ''),
     job_id: String(input.job_id || ''),
     folder: String(input.folder || folderIdFromCategory(category)),
     file_name: String(input.file_name || input.name || 'Untitled file'),
@@ -33859,6 +34547,7 @@ function taskPayload(task) {
     label: task.label,
     bid_status: task.bid_status,
     company_id: task.company_id,
+    workspace_id: task.workspace_id || activeWorkspaceId(),
     creator_id: task.creator_id,
     assignee_id: task.assignee_id,
     project_id: task.project_id || null,
@@ -33881,6 +34570,7 @@ function taskPayload(task) {
 function filePayload(file) {
   return {
     company_id: file.company_id,
+    workspace_id: file.workspace_id || activeWorkspaceId(),
     job_id: file.job_id || null,
     bucket_id: file.bucket_id,
     object_path: file.object_path,
@@ -33897,6 +34587,7 @@ function filePayload(file) {
 function underwritingCasePayload(item) {
   return {
     company_id: item.company_id,
+    workspace_id: item.workspace_id || activeWorkspaceId(),
     contact_id: item.contact_id,
     contract_price: item.contract_price,
     material_cost: item.material_cost,
@@ -34766,7 +35457,24 @@ async function loadIdentityRealtimeDomain(client, domain) {
     return;
   }
   if (domain === 'access') {
-    const [companies, team, memberships, profiles, subscriptions, roles, permissions, assignments, acl, fields, invites, requests, plugins] = await Promise.all([
+    const [
+      companies,
+      team,
+      memberships,
+      profiles,
+      subscriptions,
+      roles,
+      permissions,
+      assignments,
+      acl,
+      fields,
+      invites,
+      requests,
+      plugins,
+      workspaces,
+      workspaceMemberships,
+      workspacePlugins,
+    ] = await Promise.all([
       client.from('companies').select('*').order('name', { ascending: true }),
       client.from('team_members').select('*').order('name', { ascending: true }),
       client.from('company_memberships').select('*'),
@@ -34780,6 +35488,9 @@ async function loadIdentityRealtimeDomain(client, domain) {
       client.from('company_invites').select('*').order('created_at', { ascending: false }),
       client.from('company_join_requests').select('*').order('created_at', { ascending: false }),
       safeSupabaseQuery(client.from('company_plugins').select('*')),
+      client.from('workspaces').select('*').order('name', { ascending: true }),
+      client.from('workspace_memberships').select('*'),
+      client.from('workspace_plugins').select('*'),
     ]);
     if (!companies.error) state.companies = (companies.data || []).map(normalizeCompany);
     if (!team.error) state.teamMembers = (team.data || []).map(normalizeTeamMember);
@@ -34794,6 +35505,9 @@ async function loadIdentityRealtimeDomain(client, domain) {
     if (!invites.error) state.companyInvites = (invites.data || []).map(normalizeCompanyInvite);
     if (!requests.error) state.joinRequests = (requests.data || []).map(normalizeJoinRequest);
     if (!plugins.error) { state.companyPlugins = (plugins.data || []).map(normalizeCompanyPlugin); state.pluginLoadFailed = false; }
+    if (!workspaces.error) state.operationalWorkspaces = (workspaces.data || []).map(normalizeOperationalWorkspace);
+    if (!workspaceMemberships.error) state.workspaceMemberships = (workspaceMemberships.data || []).map(normalizeWorkspaceMembership);
+    if (!workspacePlugins.error) state.workspacePlugins = (workspacePlugins.data || []).map(normalizeWorkspacePlugin);
   }
 }
 

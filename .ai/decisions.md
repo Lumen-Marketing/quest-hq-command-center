@@ -8,9 +8,13 @@ The canonical context lives in .ai rather than a vendor-specific instruction fil
 
 The operating workflow does not use local servers. Tests and builds may run locally, but behavior is accepted against the directly deployed Vercel environment after merge.
 
-## Workspace membership is visible navigation context
+## Company accounts contain configurable operational workspaces
 
-The desktop command rail renders every company allowed by the signed-in profile's active memberships as a workspace row. The active row is persistent rather than hidden behind a single-company dropdown. Workspace switching continues through `setActiveCompany()` so route preservation, scoped UI reset, and company-specific pipeline stage application remain centralized. Workspace creation and identity management remain on the Company settings surface.
+A company is the market customer, subscription, and outer security tenant. The desktop rail groups operational child workspaces under that company account. Workspace switching preserves the company route and carries the child workspace as a query parameter. Owners, admins, and developers inherit every active child workspace; regular workers require explicit workspace memberships and can receive a different role per workspace. Creating or archiving an operational workspace never creates or deletes the company account.
+
+## Plugin entitlement and activation are separate
+
+`company_plugins` records what a customer's plan is entitled to use. `workspace_plugins` records which entitled plugins are active and how they are configured in one operational workspace. This keeps the system customizable without hardcoding one pipeline or app layout for every market customer.
 
 ## Supabase is production data truth
 
@@ -18,7 +22,7 @@ Repository migrations explain intended history; the live Supabase catalog determ
 
 ## Tenant isolation is layered
 
-Company-scoped columns, memberships, role/permission tables, field/resource controls, RLS policies, server endpoint checks, and plugin/subscription gates are all part of access control. Removing one layer requires explicit security review.
+Company and workspace columns, both membership layers, role/permission tables, field/resource controls, RLS policies, server endpoint checks, and plugin/subscription gates are all part of access control. Removing one layer requires explicit security review.
 
 ## Atomic and recoverable mutations
 
@@ -107,6 +111,22 @@ tasks.contact_id, contact activities) onto the survivor, then recycles the
 duplicates via recycleDeleteRecord in a new silent mode (no per-item toast,
 modal-close, or redirect, so batch callers drive the UI). No migration -- it
 reuses existing tables.
+
+## Cross-workspace relationships are safe because the RLS-gated load is the guard
+
+A Relationship field may target an app in another workspace -- i.e. another
+company the user belongs to -- via config.targetCompany (default: the field's own
+company, so existing links are unchanged). This needs no RPC and no migration:
+the client already loads workspace_builder_state with no company filter, and that
+table's SELECT policy is is_company_member AND subscription_allows_access AND
+has_company_permission('workspaces.view'). So state.workspaceBuilderDocs only ever
+holds companies the viewer may see. Resolution (wbRelTargetApp -> wbTargetApp ->
+wbDoc(targetCompany)) reads only from those loaded docs, so a viewer who is not a
+member of the linked company has no doc for it, resolves to null, and the field
+shows "No access". The field can never render data the browser was not already
+permitted to load -- the tenant boundary is enforced at load time, not by the
+render code, so a missed UI guard degrades to a blank, never a leak. The config's
+Workspace picker only appears when more than one company doc is loaded.
 
 ## No sensitive project-brain content
 

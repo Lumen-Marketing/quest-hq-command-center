@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-21. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-21T00:27:56.075Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -27,16 +27,19 @@ Captured 2026-07-21. This is a point-in-time operational snapshot, not a substit
 - Status: ACTIVE_HEALTHY
 - Region: us-west-1
 - Postgres: 17.6.1.127, engine 17
-- Public catalog: 56 relations, 157 foreign-key constraints, 176 policies, 53 functions, and 41 triggers.
+- Public catalog: 60 relations, 178 foreign-key column links, 190 policies, 59 public functions, and 80 trigger events.
 - Storage: 6 buckets cataloged without object data.
-- Latest repository migration: 202607181100_automations.sql
-- Latest live ledger entry: 20260716194836 task_deal_next_actions
+- Latest repository migration: 202607211230_workspace_tenancy_advisor_hardening.sql
+- Latest live ledger entries: 20260721002147 company_operational_workspaces and 20260721002417 workspace_tenancy_advisor_hardening
+- Live tenancy verification: every one of the 3 company accounts has one active default operational workspace; all 11 workspace-owned pipeline tables have non-null workspace ids; zero company/workspace mismatches were found.
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.
 
 ## Feature state
 
-The current implementation includes categorized job-card photo upload and durable underwriting cases. The Underwriter workspace follows the approved Technical Ledger hierarchy: compact metrics and stage filters, a dense two-column estimator workbench with a dedicated decision summary, and a full-width estimate queue. Its primary action is Save decision and the calculator's existing persistence, permissions, and live recalculation remain intact. The application shell uses a 264px white Quest command rail with IBM Plex Sans and IBM Plex Mono, sidebar search, My work and Company scopes, stakeholder-approved Work/Pipeline/Production/Tools/Review/Build groups, and direct profile/settings access while preserving module permission gates. The command rail now exposes membership-scoped workspaces as a persistent list above the navigation scope toggle. The active workspace is highlighted, switching reuses `setActiveCompany()` so company-scoped pipeline stages and UI state are reapplied safely, and create/manage actions route to the existing Company settings controls. The Contacts rail follows the standalone nine-step sales lifecycle from Prospects through Lost, uses linked deal state for live counts, and routes each stage to a lifecycle-filtered Contacts view. The live data layer also supports a tenant-safe direct link from tasks to deals; tasks supply the shared "What's next" source across the board, table, and list views for Contacts, Quotes/Deals, and Jobs. Application startup is deferred until top-level module state is initialized so cached direct links can render safely.
+The current release candidate separates each customer company account from its configurable operational child workspaces. The command rail groups child workspaces under the company header, highlights the selected workspace, and preserves it in the route. Company settings can create, rename, describe, icon, archive, and manage those children; user access assigns regular workers and a role independently per workspace. Company owners, admins, and developers inherit all active child workspaces. Company plugin records are entitlements, while activation and configuration live per child workspace. Contacts, accounts, sites, quotes, activities, jobs, tasks, pipeline stages, underwriting cases, files, and proposals are isolated by `workspace_id`; record conversions preserve that identity and database constraints reject cross-workspace links.
+
+The Underwriter workspace follows the approved Technical Ledger hierarchy: compact metrics and stage filters, a dense two-column estimator workbench with a dedicated decision summary, and a full-width estimate queue. Its primary action is Save decision and the calculator's persistence, permissions, and live recalculation remain intact. The application shell uses a 264px white Quest command rail with IBM Plex Sans and IBM Plex Mono, sidebar search, My work and Company scopes, stakeholder-approved Work/Pipeline/Production/Tools/Review/Build groups, and direct profile/settings access while preserving module permission gates. The Contacts rail follows the standalone nine-step sales lifecycle from Prospects through Lost. Tasks remain the shared "What's next" source across Contacts, Quotes/Deals, and Jobs. Application startup is deferred until top-level module state is initialized so cached direct links render safely.
 
 The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Settings, plugins, and Workspace App Builder.
 
