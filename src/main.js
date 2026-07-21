@@ -809,6 +809,12 @@ const DASHBOARD_WIDGET_DEFAULTS = {
   eos: ['rocks', 'scorecard', 'oneYearPlan', 'l10pulse', 'issues', 'todos', 'peopleAnalyzer', 'eosComponents', 'coreValues'],
 };
 
+// Core modules are always visible, plugin rows notwithstanding. 'tasks' stays
+// core because the tasks module ships ON for every workspace (absorption plan,
+// locked decision 5) — gating it on company_plugins would only add a way for it
+// to disappear. Phase 3 still registers a 'tasks' plugin row per workspace, so
+// making it a paid add-on later is: drop 'tasks' from this set and add a
+// WORKSPACE_PLUGIN_REGISTRY entry with module_ids: ['tasks'].
 const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings']);
 const PRIVATE_PLUGIN_ACCESS = {
   crm_2: {
