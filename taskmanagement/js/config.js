@@ -1,5 +1,5 @@
 window.App = window.App || {};
-App.authEnabled = false;
+App.authEnabled = true;
 
 // Routes are derived from the URL and need no secrets, so they can be set
 // synchronously. Other modules read App.routes during script-load.
@@ -71,8 +71,15 @@ App.configReady = (async function loadRuntimeConfig() {
 
   const envUrl = `${App.basePath}env.json`;
   try {
+    // CC's Vercel SPA rewrite serves index.html (HTTP 200, text/html) for ANY
+    // missing path — including this env.json. So "res.ok" is not proof of JSON:
+    // parse defensively and fall back to the baked-in publishable config.
     const res = await fetch(envUrl, { cache: 'no-store', credentials: 'same-origin' });
-    const env = res.ok ? await res.json() : App.defaultSupabaseConfig;
+    let env = App.defaultSupabaseConfig;
+    if (res.ok) {
+      try { env = await res.json(); }
+      catch (parseError) { env = App.defaultSupabaseConfig; }
+    }
     const url = typeof env.supabaseUrl === 'string' ? env.supabaseUrl.trim() : '';
     const key = typeof env.supabaseAnonKey === 'string' ? env.supabaseAnonKey.trim() : '';
 
