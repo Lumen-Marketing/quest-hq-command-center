@@ -60,17 +60,20 @@ create trigger projects_set_updated_at
 before update on public.projects
 for each row execute function public.set_updated_at();
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'tasks_project_id_fkey' and conrelid = 'public.tasks'::regclass
-  ) then
-    alter table public.tasks
-      add constraint tasks_project_id_fkey
-      foreign key (project_id) references public.projects(id) on delete set null;
-  end if;
-end $$;
+-- DELIBERATELY NO FOREIGN KEY on tasks.project_id.
+--
+-- The two systems use this column for different things:
+--   * the standalone task app pointed it at its own `projects` folders
+--     (text ids like 'kn-4g6du')
+--   * Command Center points it at JOBS (jobs.id, a uuid) — this is the Job
+--     Center integration key, and what ?project_id=<job id> scopes the embedded
+--     task module by.
+--
+-- Command Center's meaning wins (that is the whole point of the absorption), so
+-- a FK to public.projects would reject every existing job-scoped task. Attempting
+-- it failed on live data with 23503 on 2026-07-22. The `projects` table below is
+-- still created because the task app queries it, but it stays empty unless the
+-- folders feature is later mapped onto jobs (open decision).
 
 alter table public.projects enable row level security;
 
