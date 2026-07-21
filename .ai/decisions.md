@@ -128,6 +128,29 @@ permitted to load -- the tenant boundary is enforced at load time, not by the
 render code, so a missed UI guard degrades to a blank, never a leak. The config's
 Workspace picker only appears when more than one company doc is loaded.
 
+## Social sign-on is unified and provider-gated
+
+The auth screen offers "Continue with Google/Apple" above the email form, on both
+the register and sign-in forms (hidden on invite-token flows). One provider button
+both registers a new user and signs in a returning one -- Supabase's
+signInWithOAuth resolves which. No new session plumbing: initializeAuth() already
+picks up the session on the redirect back. The redirect returns to "/", so the
+home route now routes an authenticated Supabase session into the app (workspace or
+the no-company screen) instead of rendering marketing -- without this an
+OAuth-authenticated user was parked on the landing page and thought signup failed.
+A brand-new OAuth user has an auth.users row but no company (email signup provisions
+one via the client-side create_company_workspace RPC, which OAuth skips), so they
+correctly land on renderNoCompanyAccess to create a workspace.
+
+Which buttons render is controlled by VITE_OAUTH_PROVIDERS (default google,apple).
+Google is live and configured in the Supabase dashboard. Apple is intentionally
+NOT shown in production: VITE_OAUTH_PROVIDERS is set to "google" on Vercel prod
+because Apple needs a paid Apple Developer account that is not yet enrolled, and an
+unconfigured provider button yields a raw "provider is not enabled" error. When
+Apple is enrolled and configured, set VITE_OAUTH_PROVIDERS back to "google,apple"
+and redeploy. Provider credentials live only in the Supabase dashboard, never in
+the repo.
+
 ## No sensitive project-brain content
 
 The project brain records catalog metadata, architecture, decisions, and state—not credentials, user identities, row payloads, storage objects, or private operational content.
