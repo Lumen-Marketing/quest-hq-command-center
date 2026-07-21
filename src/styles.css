@@ -9895,6 +9895,21 @@ button.side-item {
   min-height: 0;
 }
 
+/* Embedded task module (/taskmanagement/) shown inside the Tasks route. The
+   panel drops its own padding so the app fills the frame edge to edge. */
+.taskapp-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.taskapp-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 210px);
+  min-height: 520px;
+  border: 0;
+}
+
 .drive-shell-compact {
   display: block;
   min-height: 0;

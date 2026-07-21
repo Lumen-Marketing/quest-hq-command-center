@@ -80,7 +80,6 @@ const TIME_ENTRY_CACHE_KEY = 'quest-hq-time-entry-cache-v1';
 const ACTIVE_TIMER_KEY = 'quest-hq-active-timer-v1';
 const COMPANY_KEY = 'quest-hq-active-company';
 const PENDING_WORKSPACE_REVIEW_KEY = 'quest-hq-pending-workspace-review-v1';
-const TASK_VIEW_KEY = 'quest-hq-task-view';
 const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
 const SIDEBAR_COLLAPSED_KEY = 'quest-hq-sidebar-collapsed';
 const NAV_GROUP_COLLAPSED_KEY = 'quest-hq-nav-groups-collapsed';
@@ -2280,7 +2279,6 @@ const state = {
   pbMaterialVendorId: '',
   pbCostEditId: '',
   locationPicker: null,
-  taskView: localStorage.getItem(TASK_VIEW_KEY) || 'table',
   driveFolder: 'home',
   driveView: localStorage.getItem(DRIVE_VIEW_KEY) || 'list',
   sync: { label: 'Loading workspace...', mode: 'loading' },
@@ -9290,89 +9288,24 @@ function renderJobEditor(companyId, job) {
 
 function renderTasksPage(route, companyId) {
   const job = route.jobId ? jobById(route.jobId) : null;
-  const tasks = filteredTasks(companyId, job?.id);
+  // The vendored task module at /taskmanagement/ replaces the former native
+  // placeholder. It runs embedded: ?embed=1 makes it hide its own topbar
+  // (.embedded-in-job-center) so Command Center's chrome is the only chrome, and
+  // project_id scopes it to the job. The session is shared automatically — same
+  // origin, same Supabase project — so there is no second login.
+  const params = new URLSearchParams({ embed: '1' });
+  if (job) params.set('project_id', job.id);
+  params.set('return_url', window.location.href);
+  const src = `${window.location.origin}/taskmanagement/app.html?${params.toString()}`;
   return `
-    ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Native Quest task execution backed by the company task table.', `
+    ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Task execution, timers and reminders.', `
       <a class="btn" href="${appHref(companyPath('jobs', job ? { tab: 'profile', job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
-      <a class="btn btn-primary" href="${appHref(companyPath('tasks', { ...(job ? { job_id: job.id } : {}), new: '1' }, companyId))}" data-router><i class="ti ti-plus"></i>New task</a>
     `)}
-    ${renderTaskToolbar(companyId, job)}
     <section class="task-layout task-layout-flat">
-      <article class="panel task-main">
-        ${state.taskView === 'board' ? renderTaskBoard(companyId, tasks) : renderTaskTable(companyId, tasks)}
+      <article class="panel task-main taskapp-panel">
+        <iframe class="taskapp-frame" src="${h(src)}" title="Task management"></iframe>
       </article>
     </section>
-  `;
-}
-
-function renderTaskToolbar(companyId, job) {
-  const jobs = companyJobs(companyId);
-  return `
-    <section class="workspace-toolbar">
-      <label>
-        <span>Job</span>
-        <select data-task-job-filter>
-          <option value="">All jobs</option>
-          ${jobs.map((item) => `<option value="${h(item.id)}" ${job?.id === item.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}
-        </select>
-      </label>
-      <label>
-        <span>Status</span>
-        <select data-task-status-filter>
-          ${['all'].concat(TASK_STATUSES).map((status) => `<option value="${h(status)}" ${state.taskStatusFilter === status ? 'selected' : ''}>${h(status === 'all' ? 'All statuses' : statusLabel(status))}</option>`).join('')}
-        </select>
-      </label>
-      <label>
-        <span>Priority</span>
-        <select data-task-priority-filter>
-          ${['all'].concat(TASK_PRIORITIES).map((priority) => `<option value="${h(priority)}" ${state.taskPriorityFilter === priority ? 'selected' : ''}>${h(priority === 'all' ? 'All priorities' : titleCase(priority))}</option>`).join('')}
-        </select>
-      </label>
-      <div class="segmented" role="group" aria-label="Task view">
-        <button class="${state.taskView === 'table' ? 'active' : ''}" type="button" data-action="set-task-view" data-view="table"><i class="ti ti-table"></i>Table</button>
-        <button class="${state.taskView === 'board' ? 'active' : ''}" type="button" data-action="set-task-view" data-view="board"><i class="ti ti-layout-kanban"></i>Board</button>
-      </div>
-    </section>
-  `;
-}
-
-function renderTaskTable(companyId, tasks) {
-  return `
-    <div class="data-table task-table">
-      <div class="table-head"><span>Task</span><span>Job</span><span>Assignee</span><span>Priority</span><span>Status</span><span>Due</span></div>
-      ${tasks.map((task) => `
-        <button class="table-row ${task.id === state.selectedTaskId ? 'active' : ''}" type="button" data-select-task="${h(task.id)}">
-          <span><strong>${h(task.title)}</strong><small>${h(task.description || taskTypeLabel(task.type))}</small></span>
-          <span>${h(jobById(task.project_id)?.name || 'Company task')}</span>
-          <span>${h(memberName(task.assignee_id))}</span>
-          <span>${taskPriorityPill(task.priority)}</span>
-          <span>${taskStatusPill(task.status)}</span>
-          <span>${formatDate(task.due)}</span>
-        </button>
-      `).join('') || emptyState('No tasks match this workspace view.')}
-    </div>
-  `;
-}
-
-function renderTaskBoard(companyId, tasks) {
-  return `
-    <div class="task-board">
-      ${TASK_STATUSES.map((status) => {
-        const column = tasks.filter((task) => task.status === status);
-        return `
-          <section class="task-column">
-            <h2><span>${h(statusLabel(status))}</span><b>${column.length}</b></h2>
-            ${column.map((task) => `
-              <button class="task-card priority-${h(task.priority)}" type="button" data-select-task="${h(task.id)}">
-                <strong>${h(task.title)}</strong>
-                <span>${h(jobById(task.project_id)?.name || companyName(companyId))}</span>
-                <small>${h(memberName(task.assignee_id))} - ${formatDate(task.due)}</small>
-              </button>
-            `).join('') || `<div class="lane-empty">No tasks</div>`}
-          </section>
-        `;
-      }).join('')}
-    </div>
   `;
 }
 
@@ -20606,13 +20539,6 @@ function handleAction(event, node) {
     cancelProfileAvatarCrop(node.closest('[data-profile-form]'));
     return;
   }
-  if (action === 'set-task-view') {
-    event.preventDefault();
-    state.taskView = node.dataset.view === 'board' ? 'board' : 'table';
-    localStorage.setItem(TASK_VIEW_KEY, state.taskView);
-    render();
-    return;
-  }
   if (action === 'set-drive-view') {
     event.preventDefault();
     state.driveView = node.dataset.view === 'list' ? 'list' : 'grid';
@@ -28485,18 +28411,6 @@ function financeSummary(companyId = activeCompanyId()) {
     net: collected - expenseTotal,
     aging,
   };
-}
-
-function filteredTasks(companyId = activeCompanyId(), jobId = '') {
-  const q = state.query.trim().toLowerCase();
-  return companyTasks(companyId).filter((task) => {
-    if (jobId && task.project_id !== jobId) return false;
-    if (state.taskStatusFilter !== 'all' && task.status !== state.taskStatusFilter) return false;
-    if (state.taskPriorityFilter !== 'all' && task.priority !== state.taskPriorityFilter) return false;
-    if (!q) return true;
-    return [task.title, task.description, taskTypeLabel(task.type), memberName(task.assignee_id), jobById(task.project_id)?.name]
-      .some((value) => String(value || '').toLowerCase().includes(q));
-  });
 }
 
 function allowedCompanies() {
