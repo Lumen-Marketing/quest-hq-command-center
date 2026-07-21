@@ -373,7 +373,7 @@ as $$
     (select auth.uid()) is not null
     and app_private.workspace_permission_plugin_available(target_workspace_id, permission)
     and (
-      exists (select 1 from membership where company_role in ('owner', 'admin', 'developer', 'construction_supervisor'))
+      exists (select 1 from membership where company_role in ('owner', 'admin', 'developer'))
       or (
         exists (select 1 from membership)
         and exists (select 1 from workspace_access)
@@ -1040,7 +1040,7 @@ declare
   entitlement_config jsonb;
 begin
   if (select auth.uid()) is null then raise exception 'Authentication required'; end if;
-  if not app_private.is_workspace_admin(target_workspace_id) then raise exception 'Workspace admin access required'; end if;
+  if not app_private.has_workspace_permission(target_workspace_id, 'plugins.manage') then raise exception 'Workspace plugin manager access required'; end if;
   if clean_plugin = '' then raise exception 'Plugin is required'; end if;
   if clean_status not in ('installed', 'disabled') then raise exception 'Unsupported plugin status'; end if;
 
@@ -1050,6 +1050,15 @@ begin
   where cp.company_id = target_company_id and cp.plugin_id = clean_plugin and cp.status = 'installed';
   if clean_status = 'installed' and entitlement_config is null then
     raise exception 'Company plugin entitlement required';
+  end if;
+
+  if clean_status = 'installed' and clean_plugin in ('crm', 'crm_2') then
+    update public.workspace_plugins wp
+    set status = 'disabled', disabled_at = now(), updated_at = now()
+    where wp.workspace_id = target_workspace_id
+      and wp.plugin_id in ('crm', 'crm_2')
+      and wp.plugin_id <> clean_plugin
+      and wp.status = 'installed';
   end if;
 
   insert into public.workspace_plugins (
@@ -1093,7 +1102,7 @@ declare
   installed_plugins text[];
 begin
   if (select auth.uid()) is null then raise exception 'Authentication required'; end if;
-  if not app_private.is_workspace_admin(target_workspace_id) then raise exception 'Workspace admin access required'; end if;
+  if not app_private.has_workspace_permission(target_workspace_id, 'plugins.manage') then raise exception 'Workspace plugin manager access required'; end if;
   select w.company_id into target_company_id from public.workspaces w where w.id = target_workspace_id;
 
   update public.workspace_plugins wp

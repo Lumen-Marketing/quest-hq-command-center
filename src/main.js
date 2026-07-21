@@ -835,12 +835,6 @@ const DASHBOARD_WIDGET_DEFAULTS = {
 };
 
 const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings', 'automations']);
-const PRIVATE_PLUGIN_ACCESS = {
-  crm_2: {
-    label: 'Quest CRM',
-    password: 'LumenQuest@2026',
-  },
-};
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
   { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
@@ -2254,8 +2248,6 @@ const state = {
   workspaceMemberships: [],
   workspacePlugins: [],
   pluginLoadFailed: false,
-  privatePluginInstall: null,
-  privatePluginError: '',
   companies: mergeCompanies(companiesFallback.map(normalizeCompany)),
   dashboardRole: 'exec',
   dashboardRange: 'week',
@@ -4303,14 +4295,6 @@ function pluginById(pluginId) {
   return WORKSPACE_PLUGIN_REGISTRY.find((plugin) => plugin.id === pluginId) || null;
 }
 
-function privatePluginAccess(pluginId) {
-  return PRIVATE_PLUGIN_ACCESS[pluginId] || null;
-}
-
-function pluginInstallNeedsPrivateAccess(companyId, pluginId, status) {
-  return status !== 'disabled' && !!privatePluginAccess(pluginId) && !isPluginInstalled(companyId, pluginId);
-}
-
 function availableWorkspacePlugins() {
   return WORKSPACE_PLUGIN_REGISTRY.filter((plugin) => !plugin.comingSoon);
 }
@@ -4344,20 +4328,37 @@ function companyPluginStatus(companyId, pluginId) {
   const plugin = pluginById(pluginId);
   if (!plugin) return 'available';
   if (plugin.comingSoon) return 'coming_soon';
-  if (state.session?.auth !== 'supabase' || isReadOnlyDemo() || state.pluginLoadFailed) return 'installed';
+  if (state.session?.auth !== 'supabase' || isReadOnlyDemo()) return 'installed';
+  if (state.pluginLoadFailed) return 'available';
   const row = companyPluginRows(companyId).find((item) => item.plugin_id === pluginId);
   return row?.status || 'available';
 }
 
-function isPluginInstalled(companyId, pluginId) {
-  return companyPluginStatus(companyId, pluginId) === 'installed';
+function workspacePluginRows(workspaceId = activeWorkspaceId()) {
+  return state.workspacePlugins.filter((row) => row.workspace_id === String(workspaceId || ''));
 }
 
-function isModuleInstalled(moduleId, companyId = activeCompanyId()) {
+function workspacePluginStatus(companyId, pluginId, workspaceId = workspaceIdForCompany(companyId)) {
+  const plugin = pluginById(pluginId);
+  if (!plugin) return 'available';
+  if (plugin.comingSoon) return 'coming_soon';
+  return resolveWorkspacePluginStatus({
+    workspaceId,
+    pluginId,
+    workspacePlugins: state.workspacePlugins,
+    companyEntitled: companyPluginStatus(companyId, pluginId) === 'installed',
+  });
+}
+
+function isPluginInstalled(companyId, pluginId, workspaceId = workspaceIdForCompany(companyId)) {
+  return workspacePluginStatus(companyId, pluginId, workspaceId) === 'installed';
+}
+
+function isModuleInstalled(moduleId, companyId = activeCompanyId(), workspaceId = workspaceIdForCompany(companyId)) {
   if (CORE_MODULE_IDS.has(moduleId)) return true;
   const plugins = pluginsForModule(moduleId);
   if (!plugins.length) return true;
-  return plugins.some((plugin) => isPluginInstalled(companyId, plugin.id));
+  return plugins.some((plugin) => isPluginInstalled(companyId, plugin.id, workspaceId));
 }
 
 function installedLiveModules(companyId) {
@@ -5319,19 +5320,20 @@ function renderSubscriptionBlockedPage(companyId) {
 function renderPluginBlockedPage(companyId, moduleMeta) {
   const plugins = pluginsForModule(moduleMeta?.id || '');
   const plugin = plugins[0] || null;
+  const workspaceId = activeWorkspaceId();
   const canManagePlugins = can('plugins.manage', companyId);
-  const installablePlugins = plugins.filter((item) => !item.comingSoon);
+  const installablePlugins = plugins.filter((item) => !item.comingSoon && companyPluginStatus(companyId, item.id) === 'installed');
   return `
     ${workspaceHeader(`${plugin?.label || moduleMeta?.label || 'Plugin'} not installed`, 'This workspace has not enabled the plugin required for this module.', `
       <a class="btn" href="${appHref(companyPath('settings', { tab: 'plugins' }, companyId))}" data-router><i class="ti ti-plug"></i>${canManagePlugins ? 'Manage plugins' : 'View plugins'}</a>
-      ${canManagePlugins ? installablePlugins.map((item) => `<button class="btn btn-primary" type="button" data-action="set-company-plugin" data-plugin-id="${h(item.id)}" data-status="installed"><i class="ti ti-download"></i>Install ${h(item.label)}</button>`).join('') : ''}
+      ${canManagePlugins ? installablePlugins.map((item) => `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(item.id)}" data-status="installed"><i class="ti ti-download"></i>Activate ${h(item.label)}</button>`).join('') : ''}
     `)}
     <section class="panel">
       ${contractRows([
         ['Company', companyName(companyId)],
         ['Requested module', moduleMeta?.label || moduleMeta?.id || 'Unknown'],
         ['Required plugin', plugins.length ? plugins.map((item) => item.label).join(' or ') : 'Unknown'],
-        ['Current status', plugins.length ? plugins.map((item) => `${item.label}: ${titleCase(companyPluginStatus(companyId, item.id).replace('_', ' '))}`).join(' / ') : 'Unavailable'],
+        ['Current status', plugins.length ? plugins.map((item) => `${item.label}: ${titleCase(workspacePluginStatus(companyId, item.id, workspaceId).replace('_', ' '))}`).join(' / ') : 'Unavailable'],
         ['Data policy', 'Existing plugin data is preserved while the plugin is disabled'],
       ])}
     </section>
@@ -16398,35 +16400,40 @@ function renderWorkspaceSettings(companyId) {
 }
 
 function renderPluginsSettings(companyId) {
+  const workspaceId = activeWorkspaceId();
+  const workspace = activeWorkspace();
   const canManagePlugins = can('plugins.manage', companyId);
-  const installedCount = availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length;
+  const installedCount = availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id, workspaceId)).length;
+  if (!workspace) return `<article class="panel span-3">${emptyState('No operational workspace is assigned to your user.')}</article>`;
   return `
     <article class="panel span-3 plugins-settings-panel">
       <div class="section-head">
-        <div><h2>Workspace plugins</h2><p>${installedCount} active plugin${installedCount === 1 ? '' : 's'} for ${h(companyName(companyId))}. Core work modules stay on for every company.</p></div>
+        <div><h2>${h(workspace.name)} plugins</h2><p>${installedCount} active plugin${installedCount === 1 ? '' : 's'} in this workspace. Company entitlements set what can be activated here.</p></div>
       </div>
       <div class="plugin-preset-row">
         ${Object.entries(WORKSPACE_PLUGIN_PRESETS).map(([presetCode, pluginIds]) => `
-          <button class="btn" type="button" data-action="apply-plugin-preset" data-preset-code="${h(presetCode)}" ${canManagePlugins ? '' : 'disabled'}>
+          <button class="btn" type="button" data-action="apply-workspace-plugin-preset" data-workspace-id="${h(workspaceId)}" data-preset-code="${h(presetCode)}" ${canManagePlugins ? '' : 'disabled'}>
             <i class="ti ti-layout-grid-add"></i>${h(WORKSPACE_PLUGIN_PRESET_LABELS[presetCode] || titleCase(presetCode))}
             <small>${pluginIds.length} plugins</small>
           </button>
         `).join('')}
       </div>
       <div class="plugin-card-grid">
-        ${WORKSPACE_PLUGIN_REGISTRY.map((plugin) => renderPluginCard(companyId, plugin, canManagePlugins)).join('')}
+        ${WORKSPACE_PLUGIN_REGISTRY.map((plugin) => renderPluginCard(companyId, workspaceId, plugin, canManagePlugins)).join('')}
       </div>
     </article>
   `;
 }
 
-function renderPluginCard(companyId, plugin, canManagePlugins) {
-  const status = companyPluginStatus(companyId, plugin.id);
+function renderPluginCard(companyId, workspaceId, plugin, canManagePlugins) {
+  const entitled = companyPluginStatus(companyId, plugin.id) === 'installed';
+  const status = workspacePluginStatus(companyId, plugin.id, workspaceId);
   plugin.status = status;
   if (LAUNCH_HIDE_FUTURE_MODULES && plugin.status === 'coming_soon') return '';
   const installed = status === 'installed';
   const disabled = status === 'disabled';
-  const available = status === 'available';
+  const available = status === 'available' && entitled;
+  const unavailable = status === 'available' && !entitled;
   const comingSoon = status === 'coming_soon';
   const prerequisiteNote = pluginPrerequisiteNote(companyId, plugin);
   const conflictIds = conflictingPluginIds(companyId, plugin.id, 'installed');
@@ -16435,75 +16442,32 @@ function renderPluginCard(companyId, plugin, canManagePlugins) {
     .map((moduleId) => MODULE_REGISTRY.find((module) => module.id === moduleId)?.label || titleCase(moduleId))
     .join(', ');
   return `
-    <article class="plugin-card ${installed ? 'installed' : disabled ? 'disabled' : comingSoon ? 'coming-soon' : 'available'}">
+    <article class="plugin-card ${installed ? 'installed' : disabled ? 'disabled' : comingSoon ? 'coming-soon' : unavailable ? 'unavailable' : 'available'}">
       <div class="plugin-card-icon"><i class="ti ${h(plugin.icon)}"></i></div>
       <div class="plugin-card-copy">
         <strong>${h(plugin.label)}</strong>
         <span>${h(plugin.summary)}</span>
         <small>${h(moduleLabels)}</small>
+        ${unavailable ? '<small class="plugin-card-note">Not included in this company account.</small>' : ''}
         ${prerequisiteNote ? `<small class="plugin-card-note">${h(prerequisiteNote)}</small>` : ''}
         ${conflictLabels && !installed ? `<small class="plugin-card-note warning">Installing ${h(plugin.label)} disables ${h(conflictLabels)}.</small>` : ''}
       </div>
-      <b class="status-pill ${installed ? 'active' : comingSoon ? 'muted' : disabled ? 'pending' : ''}">${h(pluginStatusLabel(status))}</b>
+      <b class="status-pill ${installed ? 'active' : comingSoon || unavailable ? 'muted' : disabled ? 'pending' : ''}">${h(unavailable ? 'Not entitled' : pluginStatusLabel(status))}</b>
       <div class="plugin-card-actions">
-        ${installed ? `<button class="btn" type="button" data-action="set-company-plugin" data-plugin-id="${h(plugin.id)}" data-status="disabled" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-power"></i>Disable</button>` : ''}
-        ${available || disabled ? `<button class="btn btn-primary" type="button" data-action="set-company-plugin" data-plugin-id="${h(plugin.id)}" data-status="installed" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-download"></i>${disabled ? 'Reinstall' : 'Install'}</button>` : ''}
+        ${installed ? `<button class="btn" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="disabled" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-power"></i>Disable</button>` : ''}
+        ${available || disabled ? `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="installed" ${canManagePlugins && entitled ? '' : 'disabled'}><i class="ti ti-download"></i>${disabled ? 'Re-enable' : 'Activate'}</button>` : ''}
+        ${unavailable ? '<button class="btn" type="button" disabled><i class="ti ti-lock"></i>Company entitlement required</button>' : ''}
         ${comingSoon ? '<button class="btn" type="button" disabled><i class="ti ti-clock"></i>Coming soon</button>' : ''}
       </div>
     </article>
   `;
 }
 
-function openPrivatePluginInstallModal(companyId, pluginId, status = 'installed', extra = {}) {
-  const plugin = pluginById(pluginId);
-  const access = privatePluginAccess(pluginId);
-  if (!plugin || !access) return false;
-  state.privatePluginInstall = {
-    companyId,
-    pluginId,
-    status: status === 'disabled' ? 'disabled' : 'installed',
-    presetCode: extra.presetCode || '',
-  };
-  state.privatePluginError = '';
-  state.modal = 'private-plugin-install';
-  render();
-  return true;
-}
-
-function renderPrivatePluginInstallModal() {
-  const pending = state.privatePluginInstall || {};
-  const plugin = pluginById(pending.pluginId);
-  const access = privatePluginAccess(pending.pluginId);
-  if (!plugin || !access) return renderModalShell('Plugins', 'Private plugin', emptyState('Choose a private plugin before continuing.'));
-  const preset = pending.presetCode ? WORKSPACE_PLUGIN_PRESET_LABELS[pending.presetCode] || titleCase(pending.presetCode) : '';
-  return renderModalShell('Plugins', `${access.label} access`, `
-    <form class="private-plugin-form" data-private-plugin-form>
-      <input type="hidden" name="company_id" value="${h(pending.companyId || activeCompanyId())}" />
-      <input type="hidden" name="plugin_id" value="${h(pending.pluginId)}" />
-      <input type="hidden" name="status" value="${h(pending.status || 'installed')}" />
-      <input type="hidden" name="preset_code" value="${h(pending.presetCode || '')}" />
-      <div class="private-plugin-card">
-        <i class="ti ti-lock"></i>
-        <div>
-          <strong>This is a private plugin.</strong>
-          <p>${preset ? `${h(preset)} includes ${h(access.label)}.` : `${h(access.label)} is built into this workspace as a private CRM plugin.`} Enter the plugin password to continue.</p>
-        </div>
-      </div>
-      <label><span>Password</span><input name="password" type="password" autocomplete="off" autofocus /></label>
-      ${state.privatePluginError ? `<p class="form-error">${h(state.privatePluginError)}</p>` : ''}
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit"><i class="ti ti-lock-open"></i>Unlock plugin</button>
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `, 'plugin-access-modal');
-}
-
-function conflictingPluginIds(companyId, pluginId, nextStatus) {
+function conflictingPluginIds(companyId, pluginId, nextStatus, workspaceId = workspaceIdForCompany(companyId)) {
   const plugin = pluginById(pluginId);
   if (nextStatus !== 'installed' || !plugin?.exclusiveGroup) return [];
   return availableWorkspacePlugins()
-    .filter((item) => item.id !== plugin.id && item.exclusiveGroup === plugin.exclusiveGroup && isPluginInstalled(companyId, item.id))
+    .filter((item) => item.id !== plugin.id && item.exclusiveGroup === plugin.exclusiveGroup && isPluginInstalled(companyId, item.id, workspaceId))
     .map((item) => item.id);
 }
 
@@ -19826,7 +19790,6 @@ function renderActiveModal(route, session) {
   if (state.modal === 'deal-edit') return renderDealFormModal(activeCompanyId(), selectedDeal());
   if (state.modal === 'estimate-builder') return renderEstimateBuilderModal(activeCompanyId());
   if (state.modal === 'proposal-builder') return renderProposalBuilderModal(activeCompanyId());
-  if (state.modal === 'private-plugin-install') return renderPrivatePluginInstallModal();
   if (state.modal === 'activity-new') return renderActivityFormModal(activeCompanyId());
   if (state.modal === 'activity-detail') return renderActivityDetailModal();
   if (state.modal === 'location-picker') return renderLocationPickerModal();
@@ -22889,12 +22852,24 @@ function handleAction(event, node) {
     });
     return;
   }
-  if (action === 'apply-plugin-preset') {
+  if (action === 'set-workspace-plugin') {
     event.preventDefault();
-    const targetCompanyId = canonicalCompanyId(node.dataset.companyId || activeCompanyId());
-    if (!isQuestDeveloper() && !requirePermission('plugins.manage', targetCompanyId, 'Your role cannot manage workspace plugins.', 'Plugins')) return;
-    applyCompanyPluginPreset(targetCompanyId, node.dataset.presetCode).catch((error) => {
+    const workspaceId = String(node.dataset.workspaceId || activeWorkspaceId());
+    if (!requirePermission('plugins.manage', activeCompanyId(), 'Your role cannot manage workspace plugins.', 'Plugins')) return;
+    setWorkspacePlugin(workspaceId, node.dataset.pluginId, node.dataset.status).catch((error) => {
+      state.sync = { label: error.message || 'Plugin update failed', mode: 'local' };
+      showToast(error.message || 'Plugin update failed.', 'local', 'Plugins');
+      render();
+    });
+    return;
+  }
+  if (action === 'apply-workspace-plugin-preset') {
+    event.preventDefault();
+    const workspaceId = String(node.dataset.workspaceId || activeWorkspaceId());
+    if (!requirePermission('plugins.manage', activeCompanyId(), 'Your role cannot manage workspace plugins.', 'Plugins')) return;
+    applyWorkspacePluginPreset(workspaceId, node.dataset.presetCode).catch((error) => {
       state.sync = { label: error.message || 'Plugin preset failed', mode: 'local' };
+      showToast(error.message || 'Plugin preset failed.', 'local', 'Plugins');
       render();
     });
     return;
@@ -23928,8 +23903,6 @@ function closeActiveModal() {
   state.formStartTab = 'blank';
   state.estimateContext = null;
   state.proposalContext = null;
-  state.privatePluginInstall = null;
-  state.privatePluginError = '';
   state.selectedFinanceInvoiceId = '';
   state.selectedFinanceExpenseId = '';
   state.selectedFinanceVendorId = '';
@@ -24282,15 +24255,6 @@ function onDocumentSubmit(event) {
     event.preventDefault();
     submitPublicProposalDecision(event.target).catch((error) => {
       state.proposalPublic = { ...(state.proposalPublic || {}), error: error.message || 'Could not submit proposal response.' };
-      render();
-    });
-    return;
-  }
-
-  if (event.target.matches('[data-private-plugin-form]')) {
-    event.preventDefault();
-    submitPrivatePluginInstall(event.target).catch((error) => {
-      state.privatePluginError = error.message || 'Private plugin could not be unlocked.';
       render();
     });
     return;
@@ -25138,6 +25102,7 @@ async function createOperationalWorkspace(formNode) {
     })));
   }
   state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.concat(saved));
+  applyWorkspacePluginPresetLocal(saved.id, presetCode);
   state.activeCompanyId = companyId;
   state.activeWorkspaceId = saved.id;
   localStorage.setItem(COMPANY_KEY, companyId);
@@ -25346,6 +25311,32 @@ function upsertCompanyPluginLocal(companyId, pluginId, status) {
     .concat(row));
 }
 
+function upsertWorkspacePluginLocal(workspaceId, pluginId, status) {
+  const row = normalizeWorkspacePlugin({
+    workspace_id: workspaceId,
+    plugin_id: pluginId,
+    status,
+    installed_by: status === 'installed' ? activeSession().profile.id : '',
+    installed_at: status === 'installed' ? new Date().toISOString() : '',
+    disabled_at: status === 'disabled' ? new Date().toISOString() : '',
+    updated_at: new Date().toISOString(),
+  });
+  state.workspacePlugins = mergeWorkspacePlugins(state.workspacePlugins
+    .filter((item) => !(item.workspace_id === row.workspace_id && item.plugin_id === row.plugin_id))
+    .concat(row));
+}
+
+function applyWorkspacePluginPresetLocal(workspaceId, presetCode) {
+  const workspace = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
+  if (!workspace) return;
+  const cleanPreset = WORKSPACE_PLUGIN_PRESETS[presetCode] ? presetCode : 'generic';
+  const desiredPluginIds = WORKSPACE_PLUGIN_PRESETS[cleanPreset];
+  availableWorkspacePlugins().forEach((plugin) => {
+    const entitled = companyPluginStatus(workspace.company_id, plugin.id) === 'installed';
+    upsertWorkspacePluginLocal(workspace.id, plugin.id, entitled && desiredPluginIds.includes(plugin.id) ? 'installed' : 'disabled');
+  });
+}
+
 function revealPluginModulesInNavigation(plugin) {
   if (!plugin?.module_ids?.length) return;
   const groupsToOpen = NAV_GROUPS
@@ -25359,43 +25350,74 @@ function revealPluginModulesInNavigation(plugin) {
   }
 }
 
-function privatePluginIdsForPreset(companyId, presetCode) {
-  const pluginIds = WORKSPACE_PLUGIN_PRESETS[presetCode] || [];
-  return pluginIds.filter((pluginId) => pluginInstallNeedsPrivateAccess(companyId, pluginId, 'installed'));
-}
-
-async function submitPrivatePluginInstall(form) {
-  const fields = Object.fromEntries(new FormData(form).entries());
-  const pluginId = String(fields.plugin_id || '');
-  const access = privatePluginAccess(pluginId);
-  if (!access) throw new Error('Private plugin access is not available.');
-  if (String(fields.password || '') !== access.password) {
-    state.privatePluginError = 'Incorrect plugin password.';
-    render();
-    return;
-  }
-  const companyId = canonicalCompanyId(fields.company_id || activeCompanyId());
-  const status = String(fields.status || 'installed');
-  const presetCode = String(fields.preset_code || '');
-  state.modal = '';
-  state.privatePluginInstall = null;
-  state.privatePluginError = '';
-  if (presetCode) {
-    await applyCompanyPluginPreset(companyId, presetCode, { privateAccessGranted: true });
-  } else {
-    await setCompanyPlugin(companyId, pluginId, status, { privateAccessGranted: true });
-  }
-}
-
-async function setCompanyPlugin(companyId, pluginId, status, options = {}) {
+async function setWorkspacePlugin(workspaceId, pluginId, status) {
+  const workspace = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
   const plugin = pluginById(pluginId);
   const nextStatus = status === 'disabled' ? 'disabled' : 'installed';
+  if (!workspace || workspace.status !== 'active') {
+    showToast('Choose an active workspace first.', 'local', 'Plugins');
+    return;
+  }
   if (!plugin || plugin.comingSoon) {
     showToast('That plugin is not available yet.', 'local', 'Plugins');
     return;
   }
-  if (pluginInstallNeedsPrivateAccess(companyId, plugin.id, nextStatus) && !options.privateAccessGranted) {
-    openPrivatePluginInstallModal(companyId, plugin.id, nextStatus);
+  if (nextStatus === 'installed' && companyPluginStatus(workspace.company_id, plugin.id) !== 'installed') {
+    showToast('This company account is not entitled to that plugin.', 'local', 'Plugins');
+    return;
+  }
+  const conflictIds = conflictingPluginIds(workspace.company_id, plugin.id, nextStatus, workspace.id);
+  if (conflictIds.length) {
+    const conflictLabels = conflictIds.map((conflictId) => pluginById(conflictId)?.label || conflictId).join(', ');
+    if (!window.confirm(`Installing ${plugin.label} will disable ${conflictLabels}. Continue?`)) return;
+  }
+  state.sync = { label: 'Updating workspace plugin...', mode: 'loading' };
+  render();
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await safeSupabaseQuery(client.rpc('set_workspace_plugin', {
+      target_workspace_id: workspaceId,
+      target_plugin_id: plugin.id,
+      next_status: nextStatus,
+    }));
+    if (result.error) throw new Error(result.error.message || 'Workspace plugin update failed.');
+  }
+  conflictIds.forEach((conflictId) => upsertWorkspacePluginLocal(workspace.id, conflictId, 'disabled'));
+  upsertWorkspacePluginLocal(workspaceId, plugin.id, nextStatus);
+  if (nextStatus === 'installed') revealPluginModulesInNavigation(plugin);
+  state.sync = { label: `${plugin.label} ${nextStatus === 'installed' ? 'activated' : 'disabled'}`, mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
+  showToast(`${plugin.label} ${nextStatus === 'installed' ? 'activated' : 'disabled'} in ${workspace.name}.`, state.session?.auth === 'supabase' ? 'live' : 'local', 'Plugins');
+  render();
+}
+
+async function applyWorkspacePluginPreset(workspaceId, presetCode) {
+  const workspace = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
+  if (!workspace || workspace.status !== 'active') {
+    showToast('Choose an active workspace first.', 'local', 'Plugins');
+    return;
+  }
+  const cleanPreset = WORKSPACE_PLUGIN_PRESETS[presetCode] ? presetCode : 'generic';
+  state.sync = { label: 'Applying workspace plugin preset...', mode: 'loading' };
+  render();
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await safeSupabaseQuery(client.rpc('apply_workspace_plugin_preset', {
+      target_workspace_id: workspaceId,
+      preset_code: cleanPreset,
+    }));
+    if (result.error) throw new Error(result.error.message || 'Workspace plugin preset failed.');
+  }
+  applyWorkspacePluginPresetLocal(workspace.id, cleanPreset);
+  state.sync = { label: `${WORKSPACE_PLUGIN_PRESET_LABELS[cleanPreset]} plugins applied to ${workspace.name}`, mode: state.session?.auth === 'supabase' ? 'live' : 'local' };
+  showToast(`${WORKSPACE_PLUGIN_PRESET_LABELS[cleanPreset]} preset applied to ${workspace.name}.`, state.session?.auth === 'supabase' ? 'live' : 'local', 'Plugins');
+  render();
+}
+
+async function setCompanyPlugin(companyId, pluginId, status) {
+  const plugin = pluginById(pluginId);
+  const nextStatus = status === 'disabled' ? 'disabled' : 'installed';
+  if (!plugin || plugin.comingSoon) {
+    showToast('That plugin is not available yet.', 'local', 'Plugins');
     return;
   }
   const conflictIds = conflictingPluginIds(companyId, plugin.id, nextStatus);
@@ -25422,14 +25444,8 @@ async function setCompanyPlugin(companyId, pluginId, status, options = {}) {
   render();
 }
 
-async function applyCompanyPluginPreset(companyId, presetCode, options = {}) {
+async function applyCompanyPluginPreset(companyId, presetCode) {
   const cleanPreset = WORKSPACE_PLUGIN_PRESETS[presetCode] ? presetCode : 'generic';
-  const pluginIds = WORKSPACE_PLUGIN_PRESETS[cleanPreset];
-  const privatePluginIds = privatePluginIdsForPreset(companyId, cleanPreset);
-  if (privatePluginIds.length && !options.privateAccessGranted) {
-    openPrivatePluginInstallModal(companyId, privatePluginIds[0], 'installed', { presetCode: cleanPreset });
-    return;
-  }
   state.sync = { label: 'Applying plugin preset...', mode: 'loading' };
   render();
   const client = createSupabaseClient();
@@ -32119,10 +32135,14 @@ function can(permission, companyId = activeCompanyId()) {
   if (state.session?.auth === 'supabase') {
     const membership = membershipForProfile(companyId, profile.id);
     if (!membership || membership.status !== 'active') return false;
-    if (['owner', 'developer'].includes(String(membership.role).toLowerCase())) return true;
-    const assignedRoleIds = state.roleAssignments
-      .filter((item) => item.company_id === companyId && item.profile_id === profile.id)
-      .map((item) => item.role_id);
+    if (['owner', 'admin', 'developer'].includes(String(membership.role).toLowerCase())) return true;
+    const workspaceMembership = workspaceMembershipForProfile(workspaceIdForCompany(companyId), profile.id);
+    if (!workspaceMembership || workspaceMembership.status !== 'active') return false;
+    const assignedRoleIds = workspaceMembership.role_id
+      ? [workspaceMembership.role_id]
+      : state.roleAssignments
+        .filter((item) => item.company_id === companyId && item.profile_id === profile.id)
+        .map((item) => item.role_id);
     const permissions = state.rolePermissions.filter((item) => assignedRoleIds.includes(item.role_id));
     if (permissions.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'deny')) return false;
     if (permissions.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'allow')) return true;
@@ -32252,7 +32272,8 @@ function isMutableAction(action = '') {
     'reset-message-demo',
     'manage-message-chat',
     'set-company-plugin',
-    'apply-plugin-preset',
+    'set-workspace-plugin',
+    'apply-workspace-plugin-preset',
     'select-workspace-icon',
     'start-checkout',
     'review-workspace',
