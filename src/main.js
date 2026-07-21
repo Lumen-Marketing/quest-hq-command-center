@@ -9296,7 +9296,13 @@ function renderTasksPage(route, companyId) {
   const params = new URLSearchParams({ embed: '1' });
   if (job) params.set('project_id', job.id);
   params.set('return_url', window.location.href);
-  const src = `${window.location.origin}/taskmanagement/app.html?${params.toString()}`;
+  // Forward CC's deep-link params to the task app's own hash routes so every
+  // existing "open this task" link across Command Center keeps working:
+  //   ?task_id=X -> #/task/X      ?new=1 / ?edit=1 -> #/new
+  const taskId = route.params.get('task_id');
+  const wantsNew = route.params.get('new') === '1';
+  const hash = taskId ? `#/task/${encodeURIComponent(taskId)}` : (wantsNew ? '#/new' : '');
+  const src = `${window.location.origin}/taskmanagement/app.html?${params.toString()}${hash}`;
   return `
     ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Task execution, timers and reminders.', `
       <a class="btn" href="${appHref(companyPath('jobs', job ? { tab: 'profile', job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
@@ -9306,37 +9312,6 @@ function renderTasksPage(route, companyId) {
         <iframe class="taskapp-frame" src="${h(src)}" title="Task management"></iframe>
       </article>
     </section>
-  `;
-}
-
-function renderTaskDetail(companyId, task) {
-  if (!task) {
-    return `
-      <div class="section-head"><div><h2>Task detail</h2><p>Select a task or create the first one.</p></div></div>
-      ${emptyState('No task selected.')}
-    `;
-  }
-  return `
-    <div class="section-head">
-      <div><h2>${h(task.title)}</h2><p>${h(jobById(task.project_id)?.name || companyName(companyId))}</p></div>
-      <div class="detail-actions">
-        <a class="btn" href="${appHref(companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id, edit: '1' }, companyId))}" data-router>Edit</a>
-        <button class="btn danger" type="button" data-action="task-delete" data-task-id="${h(task.id)}"><i class="ti ti-trash"></i>Delete</button>
-      </div>
-    </div>
-    ${contractRows([
-      ['Status', statusLabel(task.status)],
-      ['Priority', titleCase(task.priority)],
-      ['Type', taskTypeLabel(task.type)],
-      ['Assignee', memberName(task.assignee_id)],
-      ['Due', formatDate(task.due)],
-      ['Company ID', task.company_id],
-      ['Project ID', task.project_id || 'Company-level task'],
-    ])}
-    <div class="detail-copy">
-      <strong>Description</strong>
-      <p>${h(task.description || 'No description yet.')}</p>
-    </div>
   `;
 }
 
@@ -9350,34 +9325,6 @@ function renderTaskDeleteModal() {
       <button class="btn danger" type="button" data-action="task-delete-confirm"><i class="ti ti-trash"></i>Delete task</button>
     </div>`;
   return renderModalShell('Task', 'Delete task', content, '');
-}
-
-function renderTaskForm(companyId, job, task) {
-  const edit = task || blankTask(companyId, job?.id || '');
-  return `
-    <form class="task-form" data-task-form>
-      <input type="hidden" name="id" value="${h(task ? edit.id : '')}" />
-      <input type="hidden" name="contact_id" value="${h(edit.contact_id || state.route?.params?.get('return_contact_id') || '')}" />
-      <input type="hidden" name="return_contact_id" value="${h(state.route?.params?.get('return_contact_id') || '')}" />
-      <div class="section-head">
-        <div><h2>${task ? 'Edit task' : 'New task'}</h2><p>Writes company_id and optional project_id directly to Quest tasks.</p></div>
-      </div>
-      ${field('Task title', 'title', edit.title, true)}
-      ${selectField('Job', 'project_id', edit.project_id || '', [['', 'Company-level task']].concat(companyJobs(companyId).map((item) => [item.id, item.name])))}
-      ${selectField('Status', 'status', edit.status, TASK_STATUSES.map((item) => [item, statusLabel(item)]))}
-      ${selectField('Priority', 'priority', edit.priority, TASK_PRIORITIES.map((item) => [item, titleCase(item)]))}
-      ${selectField('Type', 'type', edit.type, TASK_TYPES.map((item) => [item, taskTypeLabel(item)]))}
-      ${selectField('Assignee', 'assignee_id', edit.assignee_id, companyMembers(companyId).map((item) => [item.id, memberName(item.id)]))}
-      ${field('Due date', 'due', edit.due || isoDate(1), true, 'date')}
-      ${field('Due time', 'due_time', edit.due_time || '', false, 'time')}
-      ${textareaField('Description', 'description', edit.description)}
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit">Save task</button>
-        ${task ? `<button class="btn danger" type="button" data-action="delete-task" data-task-id="${h(task.id)}">Delete</button>` : ''}
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `;
 }
 
 function renderFilesPage(route, companyId) {
@@ -17482,9 +17429,6 @@ function renderActiveModal(route, session) {
   if (route.name === 'company' && route.section === 'jobs' && route.params.get('tab') === 'editor') {
     return renderJobFormModal(route.companyId, route.jobId ? jobById(route.jobId) : selectedJob());
   }
-  if (route.name === 'company' && route.section === 'tasks') {
-    return renderTaskRouteModal(route, route.companyId);
-  }
   return '';
 }
 
@@ -18599,22 +18543,6 @@ async function exportProposalPdf(proposalId) {
   ].filter(Boolean).join('\n');
   pdf.text(pdf.splitTextToSize(terms, pageWidth - margin * 2), margin, y);
   pdf.save(`Quest-Proposal-${slugify(proposal.proposal_no || proposal.id)}.pdf`);
-}
-
-function renderTaskRouteModal(route, companyId) {
-  const job = route.jobId ? jobById(route.jobId) : null;
-  const taskId = route.params.get('task_id') || '';
-  const task = taskId ? taskById(taskId) : null;
-  if (route.params.get('new') === '1') {
-    return renderModalShell('Tasks', 'New task', renderTaskForm(companyId, job, null), 'task-modal');
-  }
-  if (route.params.get('edit') === '1' && task) {
-    return renderModalShell('Tasks', 'Edit task', renderTaskForm(companyId, job, task), 'task-modal');
-  }
-  if (task) {
-    return renderDrawerShell('Task detail', task.title, renderTaskDetail(companyId, task));
-  }
-  return '';
 }
 
 function renderCalendarEventDetailModal(companyId) {
@@ -20838,15 +20766,6 @@ function closeActiveModal() {
     params.delete('account');
     const search = params.toString();
     navigate(`${route.path}${search ? `?${search}` : ''}`, { replace: true });
-    return;
-  }
-  if (route.name === 'company' && route.section === 'tasks' && (route.params.get('new') || route.params.get('edit') || route.params.get('task_id'))) {
-    const returnContactId = route.params.get('return_contact_id');
-    if (returnContactId) {
-      navigate(companyPath('contacts', { contact_id: returnContactId }, route.companyId), { replace: true });
-      return;
-    }
-    navigate(companyPath('tasks', route.jobId ? { job_id: route.jobId } : {}, route.companyId), { replace: true });
     return;
   }
   if (route.name === 'company' && route.section === 'jobs' && route.params.get('tab') === 'editor') {
