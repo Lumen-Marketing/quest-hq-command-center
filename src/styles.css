@@ -24215,3 +24215,23 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .wb-autonum { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; color: var(--ink-2, #565c67); }
 .wb-sub-time { color: var(--ink-2, #565c67); font-size: 13px; }
 .wb-auto-readonly { display: flex; align-items: center; gap: 6px; background: var(--surface-2, #f3f5f8); color: var(--muted, #8b929e); border-style: dashed; cursor: default; }
+
+/* Social sign-on (OAuth) buttons on the auth modal */
+.auth-sso-group { display: grid; gap: 9px; margin: 4px 0 2px; }
+.auth-sso {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 11px 14px; border: 1px solid var(--border, #dde1e8);
+  border-radius: 12px; background: var(--surface, #fff); color: var(--ink, #191c22);
+  font-family: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+.auth-sso:hover { border-color: var(--border-strong, #cbd1db); background: var(--surface-2, #f3f5f8); }
+.auth-sso:active { transform: translateY(1px); }
+.auth-sso:focus-visible { outline: 2px solid var(--accent, #e4500f); outline-offset: 2px; }
+.auth-sso svg { flex: 0 0 auto; }
+.auth-sso-divider {
+  display: flex; align-items: center; gap: 12px; margin: 15px 0 6px;
+  color: var(--muted, #8b929e); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.auth-sso-divider::before, .auth-sso-divider::after { content: ""; flex: 1; height: 1px; background: var(--border, #dde1e8); }
