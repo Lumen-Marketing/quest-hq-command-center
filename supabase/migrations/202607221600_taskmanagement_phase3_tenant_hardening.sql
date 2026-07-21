@@ -216,3 +216,70 @@ select c.id, 'tasks', 'installed', now(), now()
 from public.companies c
 on conflict (company_id, plugin_id) do update
 set status = 'installed', updated_at = now();
+
+-- ============================================================
+-- C. Seed default task taxonomy for newly created workspaces
+-- ============================================================
+-- Phase 2 seeded taxonomy for companies that already existed. New tenants need
+-- the same defaults or their task module opens with no types/statuses/labels.
+--
+-- Implemented as an AFTER INSERT trigger on public.companies rather than by
+-- editing public.create_company_workspace: the trigger is additive (no 150-line
+-- function reproduced, nothing to drift out of sync) and it covers EVERY path
+-- that creates a workspace, including admin/platform-side inserts that don't go
+-- through the RPC. Row shapes mirror 202607221400 section on task taxonomy.
+
+create or replace function app_private.seed_company_task_taxonomy(target_company_id text)
+returns void
+language sql
+security definer
+set search_path = public, app_private, pg_temp
+as $$
+  with seeded_types as (
+    insert into public.task_types (company_id, key, label, sort_order)
+    select target_company_id, t.key, t.label, t.ord
+    from (values
+      ('lead','Lead',0),('bid','Bid / Estimate',1),('admin','Admin',2),
+      ('invoicing','Invoicing',3),('ar','AR',4),('meeting','Meeting',5),
+      ('web_dev','Web development',6)
+    ) t(key,label,ord)
+    on conflict (company_id, key) do nothing
+    returning 1
+  ), seeded_statuses as (
+    insert into public.task_type_statuses (company_id, type_key, key, label, color, sort_order, is_done, is_default)
+    select target_company_id, ty.key, s.key, s.label, s.color, s.ord, s.is_done, s.is_default
+    from (values ('lead'),('bid'),('admin'),('invoicing'),('ar'),('meeting'),('web_dev')) ty(key)
+    cross join (values
+      ('todo','Working on it','#3E7BF2',0,false,true),
+      ('pending','Pending','#8F867B',1,false,false),
+      ('hold','Stuck','#E0484D',2,false,false),
+      ('review','In review','#ED9A3A',3,false,false),
+      ('done','Done','#2E9E6B',4,true,false)
+    ) s(key,label,color,ord,is_done,is_default)
+    on conflict (company_id, type_key, key) do nothing
+    returning 1
+  )
+  insert into public.task_labels (company_id, key, label, sort_order)
+  select target_company_id, l.key, l.label, l.ord
+  from (values ('roof','Roof',0),('roof_framing','Roof & Framing',1),('framing','Framing',2)) l(key,label,ord)
+  on conflict (company_id, key) do nothing;
+$$;
+
+revoke all on function app_private.seed_company_task_taxonomy(text) from public, anon, authenticated;
+
+create or replace function app_private.companies_seed_task_taxonomy()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, app_private, pg_temp
+as $$
+begin
+  perform app_private.seed_company_task_taxonomy(new.id);
+  return new;
+end;
+$$;
+
+drop trigger if exists companies_seed_task_taxonomy on public.companies;
+create trigger companies_seed_task_taxonomy
+after insert on public.companies
+for each row execute function app_private.companies_seed_task_taxonomy();
