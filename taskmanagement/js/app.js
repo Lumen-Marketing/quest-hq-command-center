@@ -238,12 +238,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   new App.HomeView({ controller });
   new App.ReportsView({ controller });
   new App.WallboardView({ controller });
-  new App.ApprovalView({ controller, dataStore });
+  // RETIRED (Phase 3): Command Center owns membership (approvals, invites, roles,
+  // account creation/removal). ApprovalView is no longer constructed and has no
+  // reachable entry point; the file stays on disk until Phase 4 cleanup.
+  // new App.ApprovalView({ controller, dataStore });
   new App.ClockDashboardView({ taskModel, timeModel, controller });
   new App.HierarchyView({ controller });
   new App.TaskSetupAdminView({ controller });
   new App.CheckinSettingsView({ controller });
-  new App.PermissionsAdminView({ controller });
+  // RETIRED (Phase 3): roles & permissions are administered in Command Center.
+  // new App.PermissionsAdminView({ controller });
   new App.ReportsAdminView({ controller, dataStore });
 
   applyRoleChrome(controller);

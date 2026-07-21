@@ -155,7 +155,8 @@ App.TopbarView = class TopbarView {
     const teamItems = [];
     if (App.can('time.team'))   teamItems.push({ view: 'time:resource', label: 'Team workload', icon: 'ti-users' });
     if (App.can('team.view'))   teamItems.push({ view: 'team:hierarchy', label: 'Team chart',    icon: 'ti-sitemap' });
-    if (App.can('roles.manage'))teamItems.push({ view: 'approvals',      label: 'Approvals',      icon: 'ti-user-check' });
+    // RETIRED (Phase 3): Command Center owns membership — approvals, invites and
+    // role assignment happen there, not here. Entry point removed on purpose.
     if (App.can('clock.admin')) teamItems.push({ view: 'admin:clock',    label: 'Clock dashboard',icon: 'ti-clock-play' });
     if (App.can('bug-reports.manage')) teamItems.push({ view: 'admin:reports', label: 'Problem reports', icon: 'ti-bug' });
 
@@ -438,9 +439,10 @@ App.TopbarView = class TopbarView {
     const myTimeHtml = this.controller.canView('time:mine')
       ? `<div class="user-menu-item" data-action="my-time"><i class="ti ti-clock"></i>My time</div>` : '';
 
-    // Roles & permissions reference matrix (admins/developers only).
-    const permsHtml = this.controller.canView('admin:permissions')
-      ? `<div class="user-menu-item" data-action="permissions"><i class="ti ti-key"></i>Roles &amp; permissions</div>` : '';
+    // RETIRED (Phase 3): the roles & permissions matrix lives in Command Center,
+    // which owns membership. Kept as an empty string so the menu template below
+    // is untouched.
+    const permsHtml = '';
 
     // The account chip lives in the top bar (top-right), so the menu drops
     // right-aligned from it (App.Menu 'bottom-end') and never runs off-screen.
@@ -516,12 +518,8 @@ App.TopbarView = class TopbarView {
           close();
           this.controller.setView('time:mine');
         });
-        // Roles & permissions matrix.
-        const permsItem = menu.querySelector('[data-action="permissions"]');
-        if (permsItem) permsItem.addEventListener('click', () => {
-          close();
-          this.controller.setView('admin:permissions');
-        });
+        // RETIRED (Phase 3): permissions matrix moved to Command Center; the menu
+        // item is no longer rendered, so there is no handler to wire.
         // Developer "View as" role preview.
         const viewAsSel = menu.querySelector('#menuViewAs');
         if (viewAsSel) {

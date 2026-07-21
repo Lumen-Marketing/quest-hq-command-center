@@ -901,65 +901,19 @@ App.SupabaseDataStore = class SupabaseDataStore {
      orphaned members (no remaining references) actually get removed, which
      mirrors the prune in migration 025. With no profile the account is
      treated as unapproved and gated out of the app (AuthModel.isApproved). */
-  /* Fully delete a user. Prefers the delete-user Edge Function, which also
-     removes the Auth login (freeing the email for re-registration) using the
-     service role. Falls back to a profile-only delete if the function isn't
-     deployed yet, so the button still revokes access in the meantime.
-     Returns { emailFreed: boolean }. */
-  async deleteProfile(profileId, memberId) {
-    if (!profileId) return { emailFreed: false };
-
-    try {
-      const { data, error } = await this.supabase.functions.invoke('delete-user', {
-        body: { profileId, memberId: memberId || null },
-      });
-      if (error) throw error;
-      if (data && data.ok) return { emailFreed: data.emailFreed !== false };
-      throw new Error((data && data.error) || 'delete-user did not confirm success');
-    } catch (err) {
-      // Function unavailable (not deployed) or errored — fall back to removing
-      // the profile directly so access is still revoked. The email stays
-      // reserved until the function is deployed.
-      console.warn('[datastore] delete-user function unavailable; profile-only fallback:', err && err.message);
-      const res = await this.supabase.from('profiles').delete().eq('id', profileId);
-      this._throwIfError(res, 'deleting profile');
-      if (memberId) {
-        const memberRes = await this.supabase.from('team_members').delete().eq('id', memberId);
-        if (memberRes && memberRes.error) {
-          console.warn('[datastore] team_member kept (still referenced or blocked):', memberRes.error.message);
-        }
-      }
-      return { emailFreed: false };
-    }
+  /* RETIRED (Phase 3, locked decision 7): Command Center owns membership.
+     Removing a worker = remove them from the workspace in Command Center (their
+     platform account survives — they may belong to another business). Creating an
+     account = Command Center's invite flow. The upstream create-user / delete-user
+     Edge Functions are intentionally NOT ported to the CC Supabase project, so
+     these methods must never reach the network. Their only caller was
+     ApprovalView, which is no longer constructed (app.js). */
+  async deleteProfile() {
+    throw new Error('User removal is managed in Command Center.');
   }
 
-  /* Create a brand-new user (admin-created account). Invokes the create-user
-     Edge Function, which makes the Auth login (the browser can't), approves the
-     profile with the chosen role/company/supervisor, and emails the person their
-     default password. Returns { ok, profileId, memberId, emailSent }. Throws an
-     Error carrying the function's message on failure (e.g. duplicate email). */
-  async createUser({ fullName, email, role, companyIds, supervisorId }) {
-    const { data, error } = await this.supabase.functions.invoke('create-user', {
-      body: {
-        fullName,
-        email,
-        role,
-        companyIds: Array.isArray(companyIds) ? companyIds : [],
-        supervisorId: supervisorId || null,
-      },
-    });
-    if (error) {
-      // Supabase wraps a non-2xx as `error`; the JSON body (with our message)
-      // is on error.context. Surface the function's message when we can read it.
-      let message = error.message || 'Could not add the person.';
-      try {
-        const body = await error.context?.json?.();
-        if (body && body.error) message = body.error;
-      } catch { /* fall back to error.message */ }
-      throw new Error(message);
-    }
-    if (!data || !data.ok) throw new Error((data && data.error) || 'Could not add the person.');
-    return data;
+  async createUser() {
+    throw new Error('User creation is managed in Command Center.');
   }
 
   _mapTaskRow(row) {
