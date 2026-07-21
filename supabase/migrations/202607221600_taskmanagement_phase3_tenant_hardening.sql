@@ -160,3 +160,59 @@ using (
   or app_private.is_quest_admin()
   or (task_company is not null and app_private.is_company_admin(task_company))
 );
+
+-- ============================================================
+-- B. Register the tasks module as a per-workspace plugin
+-- ============================================================
+-- Locked decision 5: tasks is ON for every workspace at launch (it can become a
+-- paid add-on later by flipping rows in company_plugins). Preset arrays below are
+-- reproduced verbatim from 20260701170157_price_book_plugin_allowlist.sql with
+-- 'tasks' appended — do not re-order or drop entries, a stale copy would silently
+-- remove modules from newly created workspaces.
+
+alter table public.company_plugins
+  drop constraint if exists company_plugins_known_plugin_check;
+
+alter table public.company_plugins
+  add constraint company_plugins_known_plugin_check check (
+    plugin_id in (
+      'crm',
+      'crm_2',
+      'underwriter',
+      'files',
+      'client_portal',
+      'workspace_builder',
+      'price_book',
+      'forms',
+      'finance',
+      'messages',
+      'calendar',
+      'time_clock',
+      'approvals',
+      'reporting',
+      'tasks'
+    )
+  );
+
+create or replace function app_private.plugin_ids_for_preset(preset_code text)
+returns text[]
+language sql
+stable
+set search_path = public, app_private, pg_temp
+as $$
+  select case lower(trim(coalesce(preset_code, 'generic')))
+    when 'roofing' then array['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'tasks']::text[]
+    when 'construction' then array['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks']::text[]
+    else array['crm', 'files', 'messages', 'workspace_builder', 'tasks']::text[]
+  end;
+$$;
+
+revoke all on function app_private.plugin_ids_for_preset(text) from public, anon;
+grant execute on function app_private.plugin_ids_for_preset(text) to authenticated;
+
+-- Backfill every existing workspace so current tenants get the module too.
+insert into public.company_plugins (company_id, plugin_id, status, installed_at, updated_at)
+select c.id, 'tasks', 'installed', now(), now()
+from public.companies c
+on conflict (company_id, plugin_id) do update
+set status = 'installed', updated_at = now();
