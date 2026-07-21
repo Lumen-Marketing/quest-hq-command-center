@@ -1,13 +1,11 @@
 window.App = window.App || {};
 
-App.PEOPLE = {
-  abraham:  { id: 'abraham',  name: 'Abraham',  full: 'Abraham Maldonado', email: 'abraham@quest.com',         color: '#E8A03A' },
-  alkeith:  { id: 'alkeith',  name: 'Alkeith',  full: 'Alkeith Cabezzas',  email: 'alkeith@questroofing.com',  color: '#993C1D' },
-  kristine: { id: 'kristine', name: 'Kristine', full: 'Kristine',          email: 'kristine@questroofing.com', color: '#185FA5' },
-  jesus:    { id: 'jesus',    name: 'Jesus',    full: 'Jesus',             email: 'jesus@questroofing.com',    color: '#BA7517' },
-  andres:   { id: 'andres',   name: 'Andres',   full: 'Andres',            email: 'andres@questdrafting.com',  color: '#3B6D11' },
-  adrian:   { id: 'adrian',   name: 'Adrian',   full: 'Adrian Alegria',    email: 'adrian@lumen.com',          color: '#6E430A' },
-};
+// Real people come from the team_members table (RLS-scoped to the caller's
+// companies) and are loaded into App.PEOPLE at boot. This fallback used to ship
+// Quest staff names and real email addresses to every tenant's browser, so in the
+// multi-tenant build it is intentionally empty. Localhost ?preview=1 therefore
+// boots with no seeded roster — use real data or a signed-in session instead.
+App.PEOPLE = {};
 
 App.COMPANIES = {
   roofing:  { id: 'roofing',  label: 'Roofing',  pill: 'pill-roof'    },
