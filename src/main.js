@@ -12451,10 +12451,24 @@ function wbItemTitle(app, item, depth = 0) {
 }
 // Label for a linked (relationship) item: the chosen display field's value if
 // the relationship field specifies one, otherwise the linked item's name.
+// The label shown for a linked record. When a "Show field" is chosen, display its
+// ACTUAL value -- including value-style fields (progress %, checklist, duration,
+// calculation, yes/no) that read as data, not a name. wbNameValue intentionally
+// blanks those, so route them through wbPlainVal (which renders "75%", "2/3", …);
+// name-style fields (text, category, user, linked record) keep using wbNameValue.
+const WB_VALUE_DISPLAY_TYPES = new Set(['progress', 'checklist', 'duration', 'calculation', 'checkbox']);
 function wbRelLabel(targetApp, item, displayFieldId, depth = 0) {
   if (displayFieldId) {
     const f = (targetApp.fields || []).find((x) => x.id === displayFieldId);
-    if (f) { const v = wbNameValue(targetApp, f, item, depth); if (v) return v; }
+    if (f) {
+      if (WB_VALUE_DISPLAY_TYPES.has(f.type)) {
+        const loc = wbLocateApp(targetApp);
+        const plain = wbPlainVal(loc.companyId, loc.workspace, targetApp, f, item?.values?.[f.id] ?? '', item?.values || {});
+        if (plain && !/^\s*(undefined|null|NaN)/.test(plain)) return plain;
+      }
+      const v = wbNameValue(targetApp, f, item, depth);
+      if (v) return v;
+    }
   }
   return wbItemTitle(targetApp, item, depth);
 }
