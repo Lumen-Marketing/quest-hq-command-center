@@ -486,18 +486,29 @@ App.SupabaseDataStore = class SupabaseDataStore {
     return { types: t.data || [], statuses: s.data || [], labels: l.data || [], sops: sop.data || [] };
   }
 
-  /* Proactive check-ins config (single row, id=1). Read/written by the boss-only
-     CheckinSettingsView; the scheduled `checkins` Edge Function reads the same
-     row via the service role. Admin RLS (migration 070) gates these calls. */
+  /* Proactive check-ins config — per-company row (PK company_id), scoped to the
+     current profile's first company. The scheduled `checkins` Edge Function reads
+     the same rows via the service role. Company-admin RLS gates these calls.
+     Multi-company selection in the (currently dark) settings UI: Phase 3. */
+  _checkinCompanyId() {
+    const ids = (App.currentProfile && App.currentProfile.company_ids) || [];
+    return ids[0] || null;
+  }
+
   async getCheckinSettings() {
+    const companyId = this._checkinCompanyId();
+    if (!companyId) throw new Error('No company for check-in settings');
     const { data, error } = await this.supabase
-      .from('checkin_settings').select('*').eq('id', 1).single();
+      .from('checkin_settings').select('*').eq('company_id', companyId).maybeSingle();
     if (error) throw error;
-    return data;
+    return data || { company_id: companyId, morning_enabled: false, eod_enabled: false, stalled_enabled: false, stalled_days: 3 };
   }
 
   async saveCheckinSettings(patch) {
+    const companyId = this._checkinCompanyId();
+    if (!companyId) throw new Error('No company for check-in settings');
     const row = {
+      company_id: companyId,
       morning_enabled: !!patch.morning_enabled,
       eod_enabled: !!patch.eod_enabled,
       stalled_enabled: !!patch.stalled_enabled,
@@ -506,7 +517,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
       updated_at: new Date().toISOString(),
     };
     const { data, error } = await this.supabase
-      .from('checkin_settings').update(row).eq('id', 1).select().single();
+      .from('checkin_settings').upsert(row, { onConflict: 'company_id' }).select().single();
     if (error) throw error;
     return data;
   }
