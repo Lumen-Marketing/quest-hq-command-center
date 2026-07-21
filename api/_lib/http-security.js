@@ -108,8 +108,3 @@ export function appendQuery(urlValue, key, value) {
   url.searchParams.set(key, value);
   return url.toString();
 }
-
-export function errorResponse(response, error, fallback = 'Request failed.') {
-  const status = Number(error?.statusCode) || 500;
-  return response.status(status).json({ error: status >= 500 ? fallback : (error?.message || fallback) });
-}
