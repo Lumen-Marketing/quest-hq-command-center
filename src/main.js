@@ -2561,6 +2561,16 @@ function render() {
   }
 
   if (state.route.name === 'home') {
+    // A signed-in Supabase user has no reason to sit on the marketing page.
+    // Email login navigates away explicitly, but OAuth just redirects back to
+    // "/", so without this the freshly-authenticated user is parked on the
+    // landing page and thinks nothing happened. Send them into the app, where
+    // routing lands them on their workspace or the no-company screen. The
+    // password-recovery sub-flow keeps the landing page -- its form lives there.
+    if (state.session?.auth === 'supabase' && state.authMode !== 'recovery') {
+      navigate(appHref(companyPath('jobs', {}, defaultCompanyId())), { replace: true });
+      return;
+    }
     renderLandingPage(false);
     return;
   }
