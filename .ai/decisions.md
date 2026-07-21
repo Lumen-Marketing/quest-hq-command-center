@@ -108,6 +108,22 @@ duplicates via recycleDeleteRecord in a new silent mode (no per-item toast,
 modal-close, or redirect, so batch callers drive the UI). No migration -- it
 reuses existing tables.
 
+## Cross-workspace relationships are safe because the RLS-gated load is the guard
+
+A Relationship field may target an app in another workspace -- i.e. another
+company the user belongs to -- via config.targetCompany (default: the field's own
+company, so existing links are unchanged). This needs no RPC and no migration:
+the client already loads workspace_builder_state with no company filter, and that
+table's SELECT policy is is_company_member AND subscription_allows_access AND
+has_company_permission('workspaces.view'). So state.workspaceBuilderDocs only ever
+holds companies the viewer may see. Resolution (wbRelTargetApp -> wbTargetApp ->
+wbDoc(targetCompany)) reads only from those loaded docs, so a viewer who is not a
+member of the linked company has no doc for it, resolves to null, and the field
+shows "No access". The field can never render data the browser was not already
+permitted to load -- the tenant boundary is enforced at load time, not by the
+render code, so a missed UI guard degrades to a blank, never a leak. The config's
+Workspace picker only appears when more than one company doc is loaded.
+
 ## No sensitive project-brain content
 
 The project brain records catalog metadata, architecture, decisions, and state—not credentials, user identities, row payloads, storage objects, or private operational content.
