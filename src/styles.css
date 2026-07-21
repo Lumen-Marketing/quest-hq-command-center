@@ -23989,3 +23989,7 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .dedupe-meta { font-size: 12px; color: var(--ink-2); }
 .dedupe-group-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 .dedupe-empty { padding: 8px 0 16px; }
+
+/* Cross-workspace relationship: shown when the viewer can't see the linked workspace. */
+.wb-rel.wb-rel-locked { background: var(--surface-2, #f3f5f8); color: var(--muted, #8b929e); border: 1px dashed var(--border, #dde1e8); display: inline-flex; align-items: center; gap: 5px; }
+.wb-rel.wb-rel-locked .ti { font-size: 13px; }
