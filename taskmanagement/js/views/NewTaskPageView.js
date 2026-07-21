@@ -580,6 +580,11 @@ App.NewTaskPageView = class NewTaskPageView {
      Keyed on company::label and a no-op when neither changed, so it's safe to call
      from every path that can move either one (label pick, company pick, AI draft). */
   _applySop() {
+    // SOP feature never shipped (no task_label_sops table; App.taxonomy.activeSop /
+    // App.utils.mergeSopSteps were never implemented in this release). Guarded to a
+    // no-op so label/company changes can't throw. Revisit if the SOP feature lands.
+    if (!App.taxonomy || typeof App.taxonomy.activeSop !== 'function'
+      || !App.utils || typeof App.utils.mergeSopSteps !== 'function') return;
     const label = this.S.label || null;
     const key = `${this.S.company}::${label}`;
     if (key === this._sopKey) return;
