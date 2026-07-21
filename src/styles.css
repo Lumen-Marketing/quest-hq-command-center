@@ -24204,3 +24204,14 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 /* Cross-workspace relationship: shown when the viewer can't see the linked workspace. */
 .wb-rel.wb-rel-locked { background: var(--surface-2, #f3f5f8); color: var(--muted, #8b929e); border: 1px dashed var(--border, #dde1e8); display: inline-flex; align-items: center; gap: 5px; }
 .wb-rel.wb-rel-locked .ti { font-size: 13px; }
+
+/* New App Builder field types: rating, tags, auto-number, timestamps, rollup */
+.wb-rating { display: inline-flex; align-items: center; gap: 2px; }
+.wb-star { background: none; border: 0; cursor: pointer; padding: 2px; font-size: 22px; line-height: 1; color: var(--border-strong, #cbd1db); transition: color .12s, transform .12s; }
+.wb-star:hover { transform: scale(1.15); }
+.wb-star.on { color: #f59e0b; }
+.wb-star-clear { background: none; border: 0; cursor: pointer; color: var(--muted, #8b929e); font-size: 18px; margin-left: 6px; }
+.wb-rating-view { display: inline-flex; gap: 1px; font-size: 15px; }
+.wb-autonum { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; color: var(--ink-2, #565c67); }
+.wb-sub-time { color: var(--ink-2, #565c67); font-size: 13px; }
+.wb-auto-readonly { display: flex; align-items: center; gap: 6px; background: var(--surface-2, #f3f5f8); color: var(--muted, #8b929e); border-style: dashed; cursor: default; }

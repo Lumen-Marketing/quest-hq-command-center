@@ -11333,8 +11333,17 @@ const WB_FIELD_TYPES = {
   progress: { label: 'Progress', icon: 'ti-progress', color: '#7c3aed', desc: 'Percent complete (0–100%)' },
   checklist: { label: 'Checklist', icon: 'ti-list-check', color: '#16a34a', desc: 'Checkable steps with live progress' },
   image: { label: 'Image', icon: 'ti-photo', color: '#0891b2', desc: 'Circular picture, like an avatar' },
+  rating: { label: 'Rating', icon: 'ti-star', color: '#f59e0b', desc: '0–5 star score' },
+  tags: { label: 'Multi-select', icon: 'ti-tags', color: '#d97706', desc: 'Pick one or more options' },
+  rollup: { label: 'Rollup', icon: 'ti-sum', color: '#0891b2', desc: 'Summarize linked records' },
+  autonumber: { label: 'Auto-number', icon: 'ti-hash', color: '#6b7280', desc: 'Automatic sequential ID' },
+  created_time: { label: 'Created time', icon: 'ti-calendar-plus', color: '#6b7280', desc: 'When the record was created' },
+  updated_time: { label: 'Last modified', icon: 'ti-calendar-up', color: '#6b7280', desc: 'When it last changed' },
 };
-const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'user', 'relationship', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'checkbox'];
+// Computed / automatic fields hold no user-entered value: created/updated read the
+// item's timestamps, autonumber is assigned on create, rollup and calculation compute.
+const WB_AUTO_FIELD_TYPES = new Set(['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time']);
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox'];
 // Comparison operators for numeric (number/money) automation triggers:
 // [operator, dropdown label, symbol for the human-readable rule summary].
 const WB_TRIG_OPS = [['==', 'equals', '='], ['!=', 'not equal', '≠'], ['>', 'greater than', '>'], ['<', 'less than', '<'], ['>=', 'at least', '≥'], ['<=', 'at most', '≤']];
@@ -12563,7 +12572,8 @@ function wbNameValue(app, field, item, depth = 0) {
   const raw = item && item.values ? item.values[field.id] : undefined;
   if (raw === undefined || raw === null || raw === '' || (Array.isArray(raw) && !raw.length)) return '';
   switch (field.type) {
-    case 'checklist': case 'progress': case 'checkbox': case 'file': case 'image': case 'duration': case 'calculation': return '';
+    case 'checklist': case 'progress': case 'checkbox': case 'file': case 'image': case 'duration': case 'calculation': case 'rating': case 'tags': case 'rollup': case 'created_time': case 'updated_time': return '';
+    case 'autonumber': return wbAutoNumberText(field, raw);
     case 'category': case 'status': { const o = (field.config.options || []).find((x) => x.id === raw); return o ? String(o.label) : ''; }
     case 'user': { const loc = wbLocateApp(app); const m = wbMemberById(loc.companyId, raw); return m ? String(m.name) : ''; }
     case 'relationship': {
@@ -12766,6 +12776,11 @@ function wbFmtVal(ctx, field, value) {
   // so they must render before the empty-value guard below (which would else swallow them).
   const meta = WB_FIELD_TYPES[field.type];
   if (field.type === 'calculation') return `<b style="color:${meta.color}">${h(wbComputeCalc(ctx.app, field, ctx.values || {}))}</b>`;
+  // Rollup and the time fields compute / read from the item, so they render before
+  // the empty guard (they have no stored value in item.values).
+  if (field.type === 'rollup') { const v = wbRollupValue(ctx.companyId, ctx.app, field, ctx.values || {}); if (v === null || v === undefined) return '<span class="wb-cell-empty">—</span>'; const disp = (field.config.agg === 'earliest' || field.config.agg === 'latest') ? formatDate(v) : Number(v).toLocaleString(); return `<b style="color:${meta.color}">${h(disp)}</b>`; }
+  if (field.type === 'created_time') { const t = ctx.item && ctx.item.createdAt; return t ? `<span class="wb-sub-time" title="${h(t)}">${h(wbTimeAgo(t) || formatDate(t))}</span>` : '<span class="wb-cell-empty">—</span>'; }
+  if (field.type === 'updated_time') { const t = ctx.item && (ctx.item.updatedAt || ctx.item.createdAt); return t ? `<span class="wb-sub-time" title="${h(t)}">${h(wbTimeAgo(t) || formatDate(t))}</span>` : '<span class="wb-cell-empty">—</span>'; }
   // Progress always shows its bar (0% included), so it renders before the empty guard.
   if (field.type === 'progress') {
     const fill = ctx.app ? wbProgressFillPct(ctx.app, field, ctx.values || {}, ctx.workspace) : null;
@@ -12792,6 +12807,9 @@ function wbFmtVal(ctx, field, value) {
     case 'duration': return h(wbFmtDuration(value));
     case 'image': { const fv = wbFileValue(value); return fv && fv.url ? `<img class="wb-img-avatar" src="${h(fv.url)}" alt="${h(fv.name || 'image')}" loading="lazy">` : '<span class="wb-cell-empty">—</span>'; }
     case 'textarea': { const str = String(value); return h(str.length > 60 ? `${str.slice(0, 60)}…` : str); }
+    case 'rating': return wbRatingStars(value);
+    case 'tags': return wbTagsChips(field, value) || '<span class="wb-cell-empty">—</span>';
+    case 'autonumber': return `<span class="wb-autonum">${h(wbAutoNumberText(field, value))}</span>`;
     default: return h(value);
   }
 }
@@ -12833,12 +12851,12 @@ function wbApplyPresetSort(app, rows, key) {
 }
 // Group field types into a handful of "kinds" that share filter/sort behavior.
 function wbFieldKind(f) {
-  if (['number', 'money', 'duration', 'progress', 'calculation'].includes(f.type)) return 'numeric';
-  if (f.type === 'date') return 'date';
+  if (['number', 'money', 'duration', 'progress', 'calculation', 'rating', 'autonumber', 'rollup'].includes(f.type)) return 'numeric';
+  if (['date', 'created_time', 'updated_time'].includes(f.type)) return 'date';
   if (f.type === 'status' || f.type === 'category') return 'option';
   if (f.type === 'user') return 'user';
   if (f.type === 'checkbox') return 'bool';
-  if (['relationship', 'file', 'image'].includes(f.type)) return 'rel';
+  if (['relationship', 'file', 'image', 'tags'].includes(f.type)) return 'rel';
   return 'text';
 }
 function wbFilterOps(kind) {
@@ -12854,6 +12872,7 @@ function wbFilterOps(kind) {
 // Plain-text (no HTML) rendering of a value, used for search and text sort/filter.
 function wbPlainVal(companyId, workspace, app, field, value, values) {
   if (field.type === 'calculation') { const r = wbCalcRaw(app, field, values || {}); return (r === null || Number.isNaN(r)) ? '' : String(r); }
+  if (field.type === 'rollup') { const v = wbRollupValue(companyId, app, field, values || {}); return (v === null || v === undefined) ? '' : String(v); }
   // A linked/checklist-driven progress derives its value from its source even
   // when it has no stored value, so compute it before the empty-value guard.
   if (field.type === 'progress' && field.config && field.config.source) { const pct = wbProgressFillPct(app, field, values || {}, workspace); if (pct != null) return `${pct}%`; }
@@ -12869,11 +12888,15 @@ function wbPlainVal(companyId, workspace, app, field, value, values) {
     case 'progress': { const src = field.config && field.config.source ? app.fields.find((x) => x.id === field.config.source && x.type === 'checklist') : null; return src ? `${wbChecklistStats((values || {})[src.id], src).pct}%` : `${value}%`; }
     case 'checklist': { const s = wbChecklistStats(value, field); return s.total ? `${s.done}/${s.total} (${s.pct}%): ${s.items.map((i) => `${i.done ? '[x]' : '[ ]'} ${i.label}`).join('; ')}` : ''; }
     case 'checkbox': return (value === true || value === 'true' || value === 1) ? 'yes' : 'no';
+    case 'rating': return value ? `${Math.round(Number(value))}/5` : '';
+    case 'tags': { const ids = Array.isArray(value) ? value : [value]; return ids.map((id) => (field.config.options || []).find((o) => o.id === id)).filter(Boolean).map((o) => o.label).join(', '); }
+    case 'autonumber': return wbAutoNumberText(field, value);
     default: return String(value);
   }
 }
 function wbFieldNumber(app, field, raw, values) {
   if (field.type === 'calculation') { const r = wbCalcRaw(app, field, values || {}); return (r === null || Number.isNaN(r)) ? NaN : r; }
+  if (field.type === 'rollup') { const v = wbRollupValue(wbLocateApp(app).companyId, app, field, values || {}); return Number.isFinite(Number(v)) ? Number(v) : NaN; }
   return Number(raw);
 }
 function wbIsEmptyVal(field, raw) {
@@ -13298,7 +13321,84 @@ function wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, select
 }
 
 // Sensible default labels for a field dragged in from the palette.
-const WB_FIELD_DEFAULT_LABEL = { text: 'Text', textarea: 'Notes', number: 'Number', money: 'Amount', date: 'Date', category: 'Category', status: 'Status', relationship: 'Linked record', file: 'File', user: 'Assignee', email: 'Email', phone: 'Phone', calculation: 'Total', checkbox: 'Done', location: 'Location', duration: 'Duration', progress: 'Progress', image: 'Image' };
+const WB_FIELD_DEFAULT_LABEL = { text: 'Text', textarea: 'Notes', number: 'Number', money: 'Amount', date: 'Date', category: 'Category', status: 'Status', relationship: 'Linked record', file: 'File', user: 'Assignee', email: 'Email', phone: 'Phone', calculation: 'Total', checkbox: 'Done', location: 'Location', duration: 'Duration', progress: 'Progress', image: 'Image', rating: 'Rating', tags: 'Tags', rollup: 'Rollup', autonumber: 'ID', created_time: 'Created', updated_time: 'Last modified' };
+
+// ---- New field-type helpers -------------------------------------------------
+
+// 0–5 star rating as HTML (filled + empty stars).
+function wbRatingStars(value, interactive = false, fieldId = '') {
+  const n = Math.max(0, Math.min(5, Math.round(Number(value) || 0)));
+  if (interactive) {
+    return `<div class="wb-rating" data-wb-rating><input type="hidden" data-f="${h(fieldId)}" value="${n || ''}">${[1, 2, 3, 4, 5].map((i) => `<button type="button" class="wb-star ${i <= n ? 'on' : ''}" data-star="${i}" aria-label="${i} star${i === 1 ? '' : 's'}"><i class="ti ti-star${i <= n ? '-filled' : ''}"></i></button>`).join('')}${n ? `<button type="button" class="wb-star-clear" data-star="0" title="Clear">&times;</button>` : ''}</div>`;
+  }
+  if (!n) return '<span class="wb-cell-empty">—</span>';
+  return `<span class="wb-rating-view" title="${n}/5">${[1, 2, 3, 4, 5].map((i) => `<i class="ti ti-star${i <= n ? '-filled' : ''}" style="color:${i <= n ? '#f59e0b' : 'var(--border-strong,#cbd1db)'}"></i>`).join('')}</span>`;
+}
+
+// Chips for a multi-select (tags) value: an array of option ids.
+function wbTagsChips(field, value) {
+  const ids = Array.isArray(value) ? value : (value ? [value] : []);
+  const opts = field.config.options || [];
+  const chips = ids.map((id) => opts.find((o) => o.id === id)).filter(Boolean)
+    .map((o) => `<span class="wb-tag" style="background:${o.color || '#6b7280'}1f;color:${o.color || '#6b7280'}">${h(o.label)}</span>`);
+  return chips.length ? chips.join(' ') : '';
+}
+
+// Formatted auto-number: optional prefix + zero-padded value.
+function wbAutoNumberText(field, value) {
+  if (value === undefined || value === null || value === '') return '';
+  const pad = Math.max(0, Math.min(10, Number(field.config.padding) || 0));
+  return `${field.config.prefix || ''}${String(value).padStart(pad, '0')}`;
+}
+
+// Next auto-number for an app field = 1 + the max existing numeric value.
+function wbNextAutoNumber(app, field) {
+  const start = Number(field.config.start);
+  let max = Number.isFinite(start) ? start - 1 : 0;
+  for (const it of (app.items || [])) { const n = Number(it.values?.[field.id]); if (Number.isFinite(n) && n > max) max = n; }
+  return max + 1;
+}
+
+// Assign auto-numbers to a new record's blank auto-number fields. Call BEFORE the
+// record is added to app.items, so it isn't counted in its own max.
+function wbAssignAutoNumbers(app, values) {
+  for (const f of (app.fields || [])) {
+    if (f.type === 'autonumber' && (values[f.id] === undefined || values[f.id] === '' || values[f.id] === null)) {
+      values[f.id] = wbNextAutoNumber(app, f);
+    }
+  }
+  return values;
+}
+
+// Rollup: aggregate a field across the records a relationship field links to.
+// Works cross-workspace because it resolves the target through wbRelTargetApp.
+function wbRollupValue(companyId, app, field, values) {
+  const cfg = field.config || {};
+  const relField = (app.fields || []).find((f) => f.id === cfg.relField && f.type === 'relationship');
+  if (!relField) return null;
+  const ta = wbRelTargetApp(relField, companyId);
+  if (!ta) return null;
+  const rawLinks = relField.config.fixedItem ? [relField.config.fixedItem] : (values || {})[relField.id];
+  const linkIds = Array.isArray(rawLinks) ? rawLinks : (rawLinks ? [rawLinks] : []);
+  const items = linkIds.map((id) => ta.items.find((it) => it.id === id)).filter(Boolean);
+  const agg = cfg.agg || 'count';
+  if (agg === 'count') return items.length;
+  const tf = (ta.fields || []).find((f) => f.id === cfg.targetField);
+  if (!tf) return null;
+  if (agg === 'earliest' || agg === 'latest') {
+    const dates = items.map((it) => it.values?.[tf.id]).filter((v) => v !== undefined && v !== null && v !== '').map(String).sort();
+    return dates.length ? (agg === 'latest' ? dates[dates.length - 1] : dates[0]) : null;
+  }
+  const nums = items.map((it) => wbFieldNumber(ta, tf, it.values?.[tf.id], it.values)).filter((n) => Number.isFinite(n));
+  if (!nums.length) return agg === 'sum' ? 0 : null;
+  switch (agg) {
+    case 'sum': return nums.reduce((s, n) => s + n, 0);
+    case 'avg': return Math.round((nums.reduce((s, n) => s + n, 0) / nums.length) * 100) / 100;
+    case 'min': return Math.min(...nums);
+    case 'max': return Math.max(...nums);
+    default: return items.length;
+  }
+}
 // Add a field of the given type instantly (drag-and-drop from the palette), at an
 // optional index. Sensible defaults are filled so it works immediately; the user
 // can refine it with the configure (sliders) button afterwards.
@@ -13558,6 +13658,7 @@ function wbImportCsvText(companyId, workspaceId, appId, text) {
     const values = {};
     fieldForCol.forEach((f, i) => { if (!f) return; const v = wbCoerceImport(companyId, app, f, cells[i]); if (v !== undefined && v !== '') values[f.id] = v; });
     if (!Object.keys(values).length) return;
+    wbAssignAutoNumbers(app, values);
     app.items.unshift({ id: wbUid(), values, createdAt: today, createdBy: activeSession().profile?.id || '', updatedAt: today, lastActivityAt: today });
     added++;
   });
@@ -14227,8 +14328,24 @@ function wbModalShell(eyebrow, extraClass, head, body, foot) {
 }
 function wbFieldConfigUI(fd, app) {
   const t = fd.type;
-  if (t === 'category' || t === 'status') {
-    return `<div class="wb-field"><label>Options</label><div class="wb-opt-list">${(fd.config.options || []).map((o) => wbOptRow(o)).join('')}</div><button class="btn btn-sm" data-wb-add-option><i class="ti ti-plus"></i>Add option</button></div>`;
+  if (t === 'category' || t === 'status' || t === 'tags') {
+    return `<div class="wb-field"><label>Options</label><div class="wb-opt-list">${(fd.config.options || []).map((o) => wbOptRow(o)).join('')}</div><button class="btn btn-sm" data-wb-add-option><i class="ti ti-plus"></i>Add option</button>${t === 'tags' ? '<div class="wb-sub">Records can hold several of these at once.</div>' : ''}</div>`;
+  }
+  if (t === 'autonumber') {
+    return `<div class="wb-field"><label>Prefix <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbAutoPrefix" value="${h(fd.config.prefix || '')}" placeholder="e.g. INV-" style="max-width:200px"></div>
+      <div class="wb-field"><label>Minimum digits <span class="wb-opt">(zero-pad)</span></label><input type="number" min="0" max="10" class="wb-input" id="wbAutoPad" value="${h(String(fd.config.padding || 0))}" style="max-width:120px"><div class="wb-sub">e.g. 4 shows <b>${h(fd.config.prefix || '')}0007</b>. Numbers count up from the highest existing record.</div></div>`;
+  }
+  if (t === 'rollup') {
+    const relFields = app.fields.filter((f) => f.type === 'relationship');
+    const rel = relFields.find((f) => f.id === fd.config.relField);
+    const ta = rel ? wbRelTargetApp(rel, canonicalCompanyId(state.builderModal.companyId)) : null;
+    const numTargets = ta ? ta.fields.filter((f) => ['number', 'money', 'duration', 'progress', 'calculation', 'rating', 'rollup', 'date', 'created_time', 'updated_time'].includes(f.type)) : [];
+    const AGGS = [['count', 'Count of records'], ['sum', 'Sum'], ['avg', 'Average'], ['min', 'Minimum'], ['max', 'Maximum'], ['earliest', 'Earliest date'], ['latest', 'Latest date']];
+    const agg = fd.config.agg || 'count';
+    if (!relFields.length) return '<div class="wb-field"><div class="wb-sub" style="color:var(--warning,#d97706)">Add a Relationship field first — a rollup summarizes the records it links to.</div></div>';
+    return `<div class="wb-field"><label>Through relationship</label><select class="wb-input" id="wbRollRel" data-wb-rel-refresh><option value="">— Select a relationship —</option>${relFields.map((f) => `<option value="${h(f.id)}" ${fd.config.relField === f.id ? 'selected' : ''}>${h(f.label)}${(f.config.targetCompany && f.config.targetCompany !== canonicalCompanyId(state.builderModal.companyId)) ? ` (${h(companyName(f.config.targetCompany) || 'other workspace')})` : ''}</option>`).join('')}</select><div class="wb-sub">Summarize the records this relationship links to${ta ? ` in <b>${h(ta.name)}</b>` : ''}.</div></div>
+      <div class="wb-field"><label>Summarize</label><select class="wb-input" id="wbRollAgg" data-wb-rel-refresh>${AGGS.map(([v, l]) => `<option value="${h(v)}" ${agg === v ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></div>
+      ${agg !== 'count' ? `<div class="wb-field"><label>Field to summarize</label><select class="wb-input" id="wbRollField"><option value="">— Select field —</option>${numTargets.map((f) => `<option value="${h(f.id)}" ${fd.config.targetField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select>${ta && !numTargets.length ? '<div class="wb-sub" style="color:var(--warning,#d97706)">The linked app has no number or date fields to summarize.</div>' : ''}</div>` : ''}`;
   }
   if (t === 'relationship') {
     const sourceCompany = canonicalCompanyId(state.builderModal.companyId);
@@ -14451,6 +14568,19 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
         </div>
         <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
       </div>`; break;
+    case 'rating': input = wbRatingStars(val, true, f.id); break;
+    case 'tags': {
+      const cur = Array.isArray(val) ? val : (val ? [val] : []);
+      const opts = f.config.options || [];
+      input = opts.length
+        ? `<select class="wb-input" data-f="${h(f.id)}" multiple style="min-height:110px">${opts.map((o) => `<option value="${h(o.id)}" ${cur.includes(o.id) ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</select><div class="wb-sub">Hold Ctrl/Cmd (or drag) to pick several.</div>`
+        : '<div class="wb-sub" style="color:var(--warning,#d97706)">Add options to this field in its settings first.</div>';
+      break;
+    }
+    case 'autonumber': input = `<div class="wb-input wb-auto-readonly">${val ? h(wbAutoNumberText(f, val)) : '<span class="wb-sub">Assigned automatically when saved</span>'}</div>`; break;
+    case 'created_time': input = `<div class="wb-input wb-auto-readonly"><span class="wb-sub">Recorded automatically when the record is created</span></div>`; break;
+    case 'updated_time': input = `<div class="wb-input wb-auto-readonly"><span class="wb-sub">Updates automatically on every save</span></div>`; break;
+    case 'rollup': input = `<div class="wb-input wb-auto-readonly"><i class="ti ti-sum"></i> <span class="wb-sub">Summarizes the linked records automatically</span></div>`; break;
     default: input = `<input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}">`;
   }
   return `<div class="wb-field">${lbl}${input}</div>`;
@@ -14758,6 +14888,23 @@ function wbMountProgressFields(overlay) {
     range.addEventListener('input', sync);
     sync();
   });
+  overlay.querySelectorAll('[data-wb-rating]').forEach((zone) => {
+    if (zone.dataset.bound) return;
+    zone.dataset.bound = '1';
+    const hidden = zone.querySelector('input[type="hidden"]');
+    zone.querySelectorAll('[data-star]').forEach((btn) => {
+      btn.onclick = () => {
+        const n = Number(btn.dataset.star) || 0;
+        if (hidden) { hidden.value = n || ''; hidden.dispatchEvent(new Event('input', { bubbles: true })); }
+        zone.querySelectorAll('.wb-star').forEach((s, i) => {
+          const on = (i + 1) <= n;
+          s.classList.toggle('on', on);
+          const ic = s.querySelector('i');
+          if (ic) ic.className = `ti ti-star${on ? '-filled' : ''}`;
+        });
+      };
+    });
+  });
 }
 // Checklist fields: check/uncheck, add, and remove steps. State lives in the
 // hidden [data-f] input as JSON; every change re-renders the body in place and
@@ -14799,12 +14946,15 @@ function wbMountChecklistFields(overlay) {
 }
 
 function wbReadFieldInput(f) {
+  // Auto fields hold no user input: keep their stored value untouched.
+  if (WB_AUTO_FIELD_TYPES.has(f.type)) return undefined;
   const el = document.querySelector(`[data-f="${f.id}"]`);
   if (!el) return f.type === 'calculation' ? undefined : '';
   if (f.type === 'checkbox') return el.checked;
   if (f.type === 'checklist') { try { return JSON.parse(el.value || '[]'); } catch { return []; } }
   if (f.type === 'number' || f.type === 'money' || f.type === 'duration' || f.type === 'progress') return el.value === '' ? '' : Number(el.value);
-  if (f.type === 'relationship' && f.config.multiple) return [...el.selectedOptions].map((o) => o.value);
+  if (f.type === 'rating') return el.value === '' ? '' : Number(el.value);
+  if ((f.type === 'relationship' && f.config.multiple) || f.type === 'tags') return [...el.selectedOptions].map((o) => o.value);
   // Match the contacts form: normalize phone numbers on save.
   if (f.type === 'phone') return formatPhoneNumber(el.value);
   return el.value;
@@ -14822,7 +14972,7 @@ function wbCollectModalDraft() {
     if (val('wbFLabel') !== undefined) m.draft.label = val('wbFLabel');
     m.draft.required = !!checked('wbFReq');
     const t = m.draft.type; m.draft.config = m.draft.config || {};
-    if (t === 'category' || t === 'status') m.draft.config.options = [...document.querySelectorAll('.wb-opt-item')].map((r) => ({ id: r.dataset.oid, label: r.querySelector('.wb-opt-label').value.trim() || 'Untitled', color: r.querySelector('.wb-dot-pick').value })).filter((o) => o.label);
+    if (t === 'category' || t === 'status' || t === 'tags') m.draft.config.options = [...document.querySelectorAll('.wb-opt-item')].map((r) => ({ id: r.dataset.oid, label: r.querySelector('.wb-opt-label').value.trim() || 'Untitled', color: r.querySelector('.wb-dot-pick').value })).filter((o) => o.label);
     if (t === 'relationship') {
       const prevTarget = m.draft.config.targetApp;
       const prevCompany = m.draft.config.targetCompany || canonicalCompanyId(state.builderModal.companyId);
@@ -14846,6 +14996,8 @@ function wbCollectModalDraft() {
     if (t === 'calculation') m.draft.config.formula = (val('wbCalcFormula') || '').trim();
     if (t === 'money') m.draft.config.currency = (val('wbCurSym') || '').trim() || '$';
     if (t === 'number') m.draft.config.unit = (val('wbNumUnit') || '').trim();
+    if (t === 'autonumber') { m.draft.config.prefix = val('wbAutoPrefix') || ''; m.draft.config.padding = Math.max(0, Math.min(10, Number(val('wbAutoPad')) || 0)); }
+    if (t === 'rollup') { m.draft.config.relField = val('wbRollRel') || ''; m.draft.config.agg = val('wbRollAgg') || 'count'; const rf = document.getElementById('wbRollField'); if (rf) m.draft.config.targetField = rf.value || ''; }
     if (t === 'text' || t === 'textarea' || t === 'url') m.draft.config.placeholder = (val('wbPhText') || '').trim();
     if (t === 'checklist') m.draft.config.steps = (val('wbClSteps') || '').split('\n').map((s) => s.trim()).filter(Boolean);
     if (t === 'progress') {
@@ -14941,6 +15093,7 @@ function wbSubmitModal() {
       // Return to the read-only view instead of closing, so the record stays open.
       state.builderModal = { ...m, mode: 'view', draft: { values: { ...values } } };
     } else {
+      wbAssignAutoNumbers(app, values);
       const item = { id: wbUid(), values, createdAt: nowStamp, createdBy: activeSession().profile?.id || '', updatedAt: nowStamp, lastActivityAt: nowStamp }; app.items.unshift(item);
       wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Added <b>${h(wbItemTitle(app, item))}</b> to ${h(app.name)}` });
       wbNotifyItem(companyId, workspace, app, item, `New ${app.name.replace(/s$/, '')}: ${wbItemTitle(app, item)}`, `${actorName()} added ${wbItemTitle(app, item)} to ${app.name}`);
