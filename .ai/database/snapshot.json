@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "captured_at": "2026-07-16T19:52:01.513Z",
+  "captured_at": "2026-07-21T00:27:56.075Z",
   "scope": "Catalog metadata only. Contains no production table rows, auth user records, object paths, or credentials.",
   "source": {
     "project_ref": "rqundirizvojpzhljtdn",
@@ -148,6 +148,14 @@
           "default": null,
           "nullable": true,
           "position": 17,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 18,
           "udt_name": "uuid",
           "data_type": "uuid"
         }
@@ -378,6 +386,14 @@
           "position": 20,
           "udt_name": "uuid",
           "data_type": "uuid"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 21,
+          "udt_name": "uuid",
+          "data_type": "uuid"
         }
       ],
       "primary_key": [
@@ -450,6 +466,88 @@
           "default": "now()",
           "nullable": false,
           "position": 8,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "automations",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "name",
+          "default": "'Automation'::text",
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "enabled",
+          "default": "true",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "trigger",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
+        },
+        {
+          "name": "actions",
+          "default": "'[]'::jsonb",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
+        },
+        {
+          "name": "creator_id",
+          "default": null,
+          "nullable": true,
+          "position": 7,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 9,
           "udt_name": "timestamptz",
           "data_type": "timestamp with time zone"
         }
@@ -2008,6 +2106,14 @@
           "position": 34,
           "udt_name": "uuid",
           "data_type": "uuid"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 35,
+          "udt_name": "uuid",
+          "data_type": "uuid"
         }
       ],
       "primary_key": [
@@ -2122,6 +2228,14 @@
           "position": 13,
           "udt_name": "timestamptz",
           "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 14,
+          "udt_name": "uuid",
+          "data_type": "uuid"
         }
       ],
       "primary_key": [
@@ -2298,6 +2412,14 @@
           "default": null,
           "nullable": true,
           "position": 21,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 22,
           "udt_name": "uuid",
           "data_type": "uuid"
         }
@@ -3334,6 +3456,14 @@
           "position": 16,
           "udt_name": "uuid",
           "data_type": "uuid"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 17,
+          "udt_name": "uuid",
+          "data_type": "uuid"
         }
       ],
       "primary_key": [
@@ -3558,6 +3688,14 @@
           "default": null,
           "nullable": true,
           "position": 27,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 28,
           "udt_name": "uuid",
           "data_type": "uuid"
         }
@@ -4201,6 +4339,14 @@
           "position": 8,
           "udt_name": "timestamptz",
           "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 9,
+          "udt_name": "uuid",
+          "data_type": "uuid"
         }
       ],
       "primary_key": [
@@ -4827,6 +4973,14 @@
           "position": 26,
           "udt_name": "uuid",
           "data_type": "uuid"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 27,
+          "udt_name": "uuid",
+          "data_type": "uuid"
         }
       ],
       "primary_key": [
@@ -5422,6 +5576,22 @@
           "position": 29,
           "udt_name": "text",
           "data_type": "text"
+        },
+        {
+          "name": "recurrence",
+          "default": null,
+          "nullable": true,
+          "position": 30,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 31,
+          "udt_name": "uuid",
+          "data_type": "uuid"
         }
       ],
       "primary_key": [
@@ -5724,6 +5894,14 @@
           "position": 17,
           "udt_name": "timestamptz",
           "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 18,
+          "udt_name": "uuid",
+          "data_type": "uuid"
         }
       ],
       "primary_key": [
@@ -6214,6 +6392,262 @@
         "company_id"
       ],
       "rls_enabled": true
+    },
+    {
+      "name": "workspace_memberships",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "profile_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "role_id",
+          "default": null,
+          "nullable": true,
+          "position": 3,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "status",
+          "default": "'active'::text",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "assigned_by",
+          "default": null,
+          "nullable": true,
+          "position": 5,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "workspace_id",
+        "profile_id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "workspace_plugins",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "plugin_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "status",
+          "default": "'installed'::text",
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "config",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
+        },
+        {
+          "name": "installed_by",
+          "default": null,
+          "nullable": true,
+          "position": 5,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "installed_at",
+          "default": null,
+          "nullable": true,
+          "position": 6,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "disabled_at",
+          "default": null,
+          "nullable": true,
+          "position": 7,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 9,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "workspace_id",
+        "plugin_id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "workspaces",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "slug",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "name",
+          "default": null,
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "description",
+          "default": "''::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "icon_key",
+          "default": "'home'::text",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "color",
+          "default": "'#f0b23b'::text",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "status",
+          "default": "'active'::text",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "is_default",
+          "default": "false",
+          "nullable": false,
+          "position": 9,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "created_by",
+          "default": null,
+          "nullable": true,
+          "position": 10,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 11,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 12,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
     }
   ],
   "relationships": [
@@ -6242,6 +6676,15 @@
       "from_table": "accounts",
       "delete_rule": "SET NULL",
       "from_column": "deleted_by",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "accounts_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "accounts",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -6335,6 +6778,15 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "activities_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "activities",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "audit_events_actor_profile_id_fkey",
       "to_table": "profiles",
       "to_column": "id",
@@ -6348,6 +6800,15 @@
       "to_table": "companies",
       "to_column": "id",
       "from_table": "audit_events",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "automations_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "automations",
       "delete_rule": "CASCADE",
       "from_column": "company_id",
       "update_rule": "NO ACTION"
@@ -6668,6 +7129,15 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "contacts_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "contacts",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "crm_sites_account_id_fkey",
       "to_table": "accounts",
       "to_column": "id",
@@ -6701,6 +7171,15 @@
       "from_table": "crm_sites",
       "delete_rule": "SET NULL",
       "from_column": "created_by",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "crm_sites_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "crm_sites",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -6764,6 +7243,15 @@
       "from_table": "deals",
       "delete_rule": "SET NULL",
       "from_column": "site_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "deals_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "deals",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -7010,6 +7498,15 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "job_files_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "job_files",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "jobs_account_id_fkey",
       "to_table": "accounts",
       "to_column": "id",
@@ -7070,6 +7567,15 @@
       "from_table": "jobs",
       "delete_rule": "SET NULL",
       "from_column": "site_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "jobs_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "jobs",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -7244,6 +7750,15 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "pipeline_stages_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "pipeline_stages",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "pricebook_materials_company_id_fkey",
       "to_table": "companies",
       "to_column": "id",
@@ -7358,6 +7873,15 @@
       "from_table": "proposal_documents",
       "delete_rule": "SET NULL",
       "from_column": "deleted_by",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "proposal_documents_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "proposal_documents",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -7478,6 +8002,15 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "tasks_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "tasks",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "time_entries_task_id_fkey",
       "to_table": "tasks",
       "to_column": "id",
@@ -7520,6 +8053,15 @@
       "from_table": "underwriting_cases",
       "delete_rule": "SET NULL",
       "from_column": "created_by",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "underwriting_cases_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "underwriting_cases",
+      "delete_rule": "RESTRICT",
+      "from_column": "workspace_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -7638,11 +8180,83 @@
       "delete_rule": "SET NULL",
       "from_column": "updated_by",
       "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspace_memberships_assigned_by_fkey",
+      "to_table": "profiles",
+      "to_column": "id",
+      "from_table": "workspace_memberships",
+      "delete_rule": "SET NULL",
+      "from_column": "assigned_by",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspace_memberships_profile_id_fkey",
+      "to_table": "profiles",
+      "to_column": "id",
+      "from_table": "workspace_memberships",
+      "delete_rule": "CASCADE",
+      "from_column": "profile_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspace_memberships_role_id_fkey",
+      "to_table": "roles",
+      "to_column": "id",
+      "from_table": "workspace_memberships",
+      "delete_rule": "SET NULL",
+      "from_column": "role_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspace_memberships_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "workspace_memberships",
+      "delete_rule": "CASCADE",
+      "from_column": "workspace_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspace_plugins_installed_by_fkey",
+      "to_table": "profiles",
+      "to_column": "id",
+      "from_table": "workspace_plugins",
+      "delete_rule": "SET NULL",
+      "from_column": "installed_by",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspace_plugins_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "workspace_plugins",
+      "delete_rule": "CASCADE",
+      "from_column": "workspace_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspaces_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "workspaces",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspaces_created_by_fkey",
+      "to_table": "profiles",
+      "to_column": "id",
+      "from_table": "workspaces",
+      "delete_rule": "SET NULL",
+      "from_column": "created_by",
+      "update_rule": "NO ACTION"
     }
   ],
   "policies": [
     {
-      "name": "accounts members delete",
+      "name": "accounts workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -7651,7 +8265,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "accounts members insert",
+      "name": "accounts workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -7660,7 +8274,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "accounts members read",
+      "name": "accounts workspace read",
       "roles": [
         "authenticated"
       ],
@@ -7669,7 +8283,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "accounts members update",
+      "name": "accounts workspace update",
       "roles": [
         "authenticated"
       ],
@@ -7714,7 +8328,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "activities members delete",
+      "name": "activities workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -7723,7 +8337,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "activities members insert",
+      "name": "activities workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -7732,7 +8346,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "activities members read",
+      "name": "activities workspace read",
       "roles": [
         "authenticated"
       ],
@@ -7741,7 +8355,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "activities members update",
+      "name": "activities workspace update",
       "roles": [
         "authenticated"
       ],
@@ -7764,6 +8378,42 @@
         "authenticated"
       ],
       "table": "audit_events",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "admins create company automations",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "automations",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "admins delete company automations",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "automations",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "admins update company automations",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "automations",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "members read company automations",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "automations",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
@@ -8029,7 +8679,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "contacts members delete",
+      "name": "contacts workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -8038,7 +8688,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "contacts members insert",
+      "name": "contacts workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -8047,7 +8697,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "contacts members read",
+      "name": "contacts workspace read",
       "roles": [
         "authenticated"
       ],
@@ -8056,7 +8706,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "contacts members update",
+      "name": "contacts workspace update",
       "roles": [
         "authenticated"
       ],
@@ -8065,7 +8715,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "crm_sites members delete",
+      "name": "crm_sites workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -8074,7 +8724,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "crm_sites members insert",
+      "name": "crm_sites workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -8083,7 +8733,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "crm_sites members read",
+      "name": "crm_sites workspace read",
       "roles": [
         "authenticated"
       ],
@@ -8092,7 +8742,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "crm_sites members update",
+      "name": "crm_sites workspace update",
       "roles": [
         "authenticated"
       ],
@@ -8101,7 +8751,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "deals members delete",
+      "name": "deals workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -8110,7 +8760,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "deals members insert",
+      "name": "deals workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -8119,7 +8769,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "deals members read",
+      "name": "deals workspace read",
       "roles": [
         "authenticated"
       ],
@@ -8128,7 +8778,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "deals members update",
+      "name": "deals workspace update",
       "roles": [
         "authenticated"
       ],
@@ -8380,7 +9030,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members delete job files",
+      "name": "job_files workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -8389,7 +9039,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members insert job files",
+      "name": "job_files workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -8398,7 +9048,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members read job files",
+      "name": "job_files workspace read",
       "roles": [
         "authenticated"
       ],
@@ -8407,7 +9057,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members update job files",
+      "name": "job_files workspace update",
       "roles": [
         "authenticated"
       ],
@@ -8416,7 +9066,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members delete jobs",
+      "name": "jobs workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -8425,7 +9075,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members insert jobs",
+      "name": "jobs workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -8434,7 +9084,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members read jobs",
+      "name": "jobs workspace read",
       "roles": [
         "authenticated"
       ],
@@ -8443,7 +9093,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members update jobs",
+      "name": "jobs workspace update",
       "roles": [
         "authenticated"
       ],
@@ -8695,7 +9345,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "pipeline stages members delete",
+      "name": "pipeline_stages workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -8704,7 +9354,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "pipeline stages members insert",
+      "name": "pipeline_stages workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -8713,7 +9363,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "pipeline stages members read",
+      "name": "pipeline_stages workspace read",
       "roles": [
         "authenticated"
       ],
@@ -8722,7 +9372,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "pipeline stages members update",
+      "name": "pipeline_stages workspace update",
       "roles": [
         "authenticated"
       ],
@@ -8884,16 +9534,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "members create company proposals",
-      "roles": [
-        "authenticated"
-      ],
-      "table": "proposal_documents",
-      "command": "INSERT",
-      "permissive": "PERMISSIVE"
-    },
-    {
-      "name": "members delete company proposals",
+      "name": "proposal_documents workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -8902,7 +9543,16 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "members read company proposals",
+      "name": "proposal_documents workspace insert",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "proposal_documents",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "proposal_documents workspace read",
       "roles": [
         "authenticated"
       ],
@@ -8911,7 +9561,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "members update company proposals",
+      "name": "proposal_documents workspace update",
       "roles": [
         "authenticated"
       ],
@@ -8983,16 +9633,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "assignees can read tasks",
-      "roles": [
-        "authenticated"
-      ],
-      "table": "tasks",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE"
-    },
-    {
-      "name": "role users can delete tasks",
+      "name": "tasks workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -9001,7 +9642,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "role users can insert tasks",
+      "name": "tasks workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -9010,7 +9651,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "role users can read tasks",
+      "name": "tasks workspace read",
       "roles": [
         "authenticated"
       ],
@@ -9019,7 +9660,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "role users can update tasks",
+      "name": "tasks workspace update",
       "roles": [
         "authenticated"
       ],
@@ -9100,7 +9741,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members delete underwriting cases",
+      "name": "underwriting_cases workspace delete",
       "roles": [
         "authenticated"
       ],
@@ -9109,7 +9750,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members insert underwriting cases",
+      "name": "underwriting_cases workspace insert",
       "roles": [
         "authenticated"
       ],
@@ -9118,7 +9759,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members read underwriting cases",
+      "name": "underwriting_cases workspace read",
       "roles": [
         "authenticated"
       ],
@@ -9127,7 +9768,7 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "subscription members update underwriting cases",
+      "name": "underwriting_cases workspace update",
       "roles": [
         "authenticated"
       ],
@@ -9224,6 +9865,105 @@
       "table": "workspace_builder_state",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace admins delete memberships",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspace_memberships",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace admins insert memberships",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspace_memberships",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace admins update memberships",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspace_memberships",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace users read memberships",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspace_memberships",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace admins delete plugins",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspace_plugins",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace admins insert plugins",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspace_plugins",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace admins update plugins",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspace_plugins",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace users read plugins",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspace_plugins",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins create workspaces",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspaces",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace admins update workspaces",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspaces",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace users read workspaces",
+      "roles": [
+        "authenticated"
+      ],
+      "table": "workspaces",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
     }
   ],
   "functions": [
@@ -9266,6 +10006,16 @@
       "security_definer": true,
       "service_role_execute": true,
       "authenticated_execute": false
+    },
+    {
+      "name": "apply_workspace_plugin_preset",
+      "returns": "text[]",
+      "arguments": "target_workspace_id uuid, preset_code text",
+      "volatility": "volatile",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
     },
     {
       "name": "assign_wo_number",
@@ -9311,6 +10061,16 @@
       "name": "create_company_workspace",
       "returns": "text",
       "arguments": "company_name text, preset_code text, icon_key text, owner_email text",
+      "volatility": "volatile",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
+      "name": "create_operational_workspace",
+      "returns": "uuid",
+      "arguments": "target_company_id text, workspace_name text, preset_code text, icon_key text",
       "volatility": "volatile",
       "anon_execute": false,
       "security_definer": true,
@@ -9608,6 +10368,16 @@
       "authenticated_execute": true
     },
     {
+      "name": "replace_workspace_pipeline_stages",
+      "returns": "SETOF pipeline_stages",
+      "arguments": "p_workspace_id uuid, p_kind text, p_stages jsonb, p_rename_map jsonb",
+      "volatility": "volatile",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
       "name": "request_company_access",
       "returns": "uuid",
       "arguments": "target_company_id text, request_message text",
@@ -9678,6 +10448,26 @@
       "authenticated_execute": true
     },
     {
+      "name": "set_workspace_member",
+      "returns": "workspace_memberships",
+      "arguments": "target_workspace_id uuid, target_profile_id uuid, target_role_id uuid, next_status text",
+      "volatility": "volatile",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
+      "name": "set_workspace_plugin",
+      "returns": "text",
+      "arguments": "target_workspace_id uuid, target_plugin_id text, next_status text",
+      "volatility": "volatile",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
       "name": "slugify_member_id",
       "returns": "text",
       "arguments": "input text",
@@ -9728,6 +10518,16 @@
       "authenticated_execute": true
     },
     {
+      "name": "update_operational_workspace",
+      "returns": "workspaces",
+      "arguments": "target_workspace_id uuid, workspace_name text, workspace_description text, icon_key text, next_status text",
+      "volatility": "volatile",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
       "name": "update_own_profile",
       "returns": "profiles",
       "arguments": "p_full_name text, p_avatar_url text",
@@ -9767,10 +10567,52 @@
       "orientation": "ROW"
     },
     {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "accounts",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "accounts",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "accounts",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
       "name": "activities_set_updated_at",
       "event": "UPDATE",
       "table": "activities",
       "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "activities",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "activities",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "activities",
+      "timing": "AFTER",
       "orientation": "ROW"
     },
     {
@@ -9865,6 +10707,27 @@
       "orientation": "ROW"
     },
     {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "contacts",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "contacts",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "contacts",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
       "name": "crm_sites_set_updated_at",
       "event": "UPDATE",
       "table": "crm_sites",
@@ -9872,10 +10735,52 @@
       "orientation": "ROW"
     },
     {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "crm_sites",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "crm_sites",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "crm_sites",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
       "name": "deals_set_updated_at",
       "event": "UPDATE",
       "table": "deals",
       "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "deals",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "deals",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "deals",
+      "timing": "AFTER",
       "orientation": "ROW"
     },
     {
@@ -9921,10 +10826,52 @@
       "orientation": "ROW"
     },
     {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "job_files",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "job_files",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "job_files",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
       "name": "jobs_set_updated_at",
       "event": "UPDATE",
       "table": "jobs",
       "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "jobs",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "jobs",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "jobs",
+      "timing": "AFTER",
       "orientation": "ROW"
     },
     {
@@ -9963,6 +10910,27 @@
       "orientation": "ROW"
     },
     {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "pipeline_stages",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "pipeline_stages",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "pipeline_stages",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
       "name": "profiles_set_updated_at",
       "event": "UPDATE",
       "table": "profiles",
@@ -9998,6 +10966,27 @@
       "orientation": "ROW"
     },
     {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "proposal_documents",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "proposal_documents",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "proposal_documents",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
       "name": "resource_acl_set_updated_at",
       "event": "UPDATE",
       "table": "resource_acl",
@@ -10019,10 +11008,52 @@
       "orientation": "ROW"
     },
     {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "tasks",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "tasks",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "tasks",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
       "name": "underwriting_cases_set_updated_at",
       "event": "UPDATE",
       "table": "underwriting_cases",
       "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_default_on_insert",
+      "event": "INSERT",
+      "table": "underwriting_cases",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "INSERT",
+      "table": "underwriting_cases",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_record_links_match",
+      "event": "UPDATE",
+      "table": "underwriting_cases",
+      "timing": "AFTER",
       "orientation": "ROW"
     },
     {
@@ -10043,6 +11074,48 @@
       "name": "workspace_builder_state_set_updated_at",
       "event": "UPDATE",
       "table": "workspace_builder_state",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_membership_role_matches",
+      "event": "INSERT",
+      "table": "workspace_memberships",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_membership_role_matches",
+      "event": "UPDATE",
+      "table": "workspace_memberships",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_memberships_set_updated_at",
+      "event": "UPDATE",
+      "table": "workspace_memberships",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspace_plugins_set_updated_at",
+      "event": "UPDATE",
+      "table": "workspace_plugins",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspaces_protect_identity",
+      "event": "UPDATE",
+      "table": "workspaces",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "workspaces_set_updated_at",
+      "event": "UPDATE",
+      "table": "workspaces",
       "timing": "BEFORE",
       "orientation": "ROW"
     }
@@ -10163,9 +11236,9 @@
   "cron_jobs": [
     {
       "name": "quest-hq-recycle-bin-purge",
-      "schedule": "15 3 * * *",
       "active": true,
-      "database": "postgres"
+      "database": "postgres",
+      "schedule": "15 3 * * *"
     }
   ],
   "migrations": [
@@ -10456,6 +11529,22 @@
     {
       "version": "20260716194836",
       "name": "task_deal_next_actions"
+    },
+    {
+      "version": "20260718013407",
+      "name": "task_recurrence"
+    },
+    {
+      "version": "20260718013424",
+      "name": "automations"
+    },
+    {
+      "version": "20260721002147",
+      "name": "company_operational_workspaces"
+    },
+    {
+      "version": "20260721002417",
+      "name": "workspace_tenancy_advisor_hardening"
     }
   ]
 }

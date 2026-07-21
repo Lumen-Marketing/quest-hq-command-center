@@ -8,9 +8,13 @@ The canonical context lives in .ai rather than a vendor-specific instruction fil
 
 The operating workflow does not use local servers. Tests and builds may run locally, but behavior is accepted against the directly deployed Vercel environment after merge.
 
-## Workspace membership is visible navigation context
+## Company accounts contain configurable operational workspaces
 
-The desktop command rail renders every company allowed by the signed-in profile's active memberships as a workspace row. The active row is persistent rather than hidden behind a single-company dropdown. Workspace switching continues through `setActiveCompany()` so route preservation, scoped UI reset, and company-specific pipeline stage application remain centralized. Workspace creation and identity management remain on the Company settings surface.
+A company is the market customer, subscription, and outer security tenant. The desktop rail groups operational child workspaces under that company account. Workspace switching preserves the company route and carries the child workspace as a query parameter. Owners, admins, and developers inherit every active child workspace; regular workers require explicit workspace memberships and can receive a different role per workspace. Creating or archiving an operational workspace never creates or deletes the company account.
+
+## Plugin entitlement and activation are separate
+
+`company_plugins` records what a customer's plan is entitled to use. `workspace_plugins` records which entitled plugins are active and how they are configured in one operational workspace. This keeps the system customizable without hardcoding one pipeline or app layout for every market customer.
 
 ## Supabase is production data truth
 
@@ -18,7 +22,7 @@ Repository migrations explain intended history; the live Supabase catalog determ
 
 ## Tenant isolation is layered
 
-Company-scoped columns, memberships, role/permission tables, field/resource controls, RLS policies, server endpoint checks, and plugin/subscription gates are all part of access control. Removing one layer requires explicit security review.
+Company and workspace columns, both membership layers, role/permission tables, field/resource controls, RLS policies, server endpoint checks, and plugin/subscription gates are all part of access control. Removing one layer requires explicit security review.
 
 ## Atomic and recoverable mutations
 

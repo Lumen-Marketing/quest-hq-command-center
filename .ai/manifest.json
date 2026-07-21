@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-17T22:18:31.207Z",
-  "generated_from_commit": "6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec",
+  "generated_at": "2026-07-21T00:27:56.075Z",
+  "generated_from_commit": "23ff0d7bb779076cf8a68208247d088ca028484d",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec",
-    "latest_migration": "202607181100_automations.sql"
+    "main_commit_at_capture": "7acfad7b41fba2034e7b4bdb7a7ac2a6843d847d",
+    "latest_migration": "202607211230_workspace_tenancy_advisor_hardening.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-07-16T19:52:01.513Z",
+    "supabase_verified_at": "2026-07-21T00:27:56.075Z",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260716194836",
-      "name": "task_deal_next_actions"
+      "version": "20260721002417",
+      "name": "workspace_tenancy_advisor_hardening"
     },
     "vercel_verified_at": "2026-07-17T22:18:31.207Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
