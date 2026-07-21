@@ -1,39 +1,23 @@
-import { createClient } from '@supabase/supabase-js';
-import { errorResponse, readJsonBody, requireAllowedOrigin, setApiHeaders } from './_lib/http-security.js';
-import { enforceRateLimit } from './_lib/rate-limit.js';
+import { defineEndpoint } from './_lib/endpoint.js';
+import { HttpError } from './_lib/http-security.js';
+import { createStorageClient } from './_lib/supabase-storage.js';
+import { supabaseBaseUrl, supabaseServiceKey } from './_lib/supabase-admin.js';
+import { FORM_FILE_BUCKET } from './_lib/form-files.js';
 
-const FORM_FILE_BUCKET = 'quest-form-response-files';
-
-const env = (name) => process.env[name] || '';
-const baseUrl = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
-const serviceKey = () => env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY');
-const isSupabaseSecretKey = () => /^sb_secret_/i.test(serviceKey()) || /^eyJ/i.test(serviceKey());
-
-function supabaseHeaders(extra = {}) {
-  const key = serviceKey();
-  return {
-    apikey: key,
-    ...(isSupabaseSecretKey() ? {} : { Authorization: `Bearer ${key}` }),
-    ...extra,
-  };
-}
-
-function serverClient() {
-  return createClient(baseUrl(), serviceKey(), {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
+// Query with the caller JWT so form_responses RLS enforces active membership
+// and forms.view before any service-role signed URL is minted. One caller, so
+// this stays local rather than becoming a seam of its own; it is injectable
+// only so the RLS-scoped read can be faked in tests.
 async function supabaseGetAsUser(path, token) {
-  const response = await fetch(`${baseUrl()}/rest/v1/${path}`, {
+  const response = await fetch(`${supabaseBaseUrl()}/rest/v1/${path}`, {
     headers: {
-      apikey: serviceKey(),
+      apikey: supabaseServiceKey(),
       Authorization: `Bearer ${token}`,
       Accept: 'application/json',
     },
   });
   const data = await response.json().catch(() => []);
-  if (!response.ok) throw new Error(Array.isArray(data) ? 'Supabase request failed.' : data.message || 'Supabase request failed.');
+  if (!response.ok) throw new HttpError(500, 'Could not open form file.');
   return data;
 }
 
@@ -44,45 +28,51 @@ function containsObjectPath(value, objectPath) {
   return Object.values(value).some((item) => containsObjectPath(item, objectPath));
 }
 
-export default async function handler(req, res) {
-  setApiHeaders(res);
-  if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
-  if (!baseUrl() || !serviceKey()) return res.status(500).json({ error: 'Public form files are not configured.' });
+export default defineEndpoint(
+  {
+    method: 'POST',
+    auth: 'none',
+    requireOrigin: true,
+    cacheControl: 'private, no-store',
+    notConfiguredStatus: 500,
+    notConfiguredMessage: 'Public form files are not configured.',
+    bodyLimitBytes: 16 * 1024,
+    rateLimit: { namespace: 'public-form-file-url', limit: 60, windowMs: 10 * 60 * 1000 },
+  },
+  async (ctx) => {
+    const { body, req } = ctx;
+    const storage = ctx.storage || createStorageClient();
+    const fetchAsUser = ctx.fetchAsUser || supabaseGetAsUser;
 
-  try {
-    if (!enforceRateLimit(req, res, { namespace: 'public-form-file-url', limit: 60, windowMs: 10 * 60 * 1000 })) return;
-    requireAllowedOrigin(req);
     const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
-    if (!token) return res.status(401).json({ error: 'Authentication required.' });
-    const client = serverClient();
-    const authenticated = await client.auth.getUser(token);
-    if (authenticated.error || !authenticated.data?.user?.id) return res.status(401).json({ error: 'Authentication required.' });
-    const body = await readJsonBody(req, { maxBytes: 16 * 1024 });
+    if (!token) throw new HttpError(401, 'Authentication required.');
+    const authenticated = await storage.auth.getUser(token);
+    if (authenticated.error || !authenticated.data?.user?.id) throw new HttpError(401, 'Authentication required.');
+
     const responseId = String(body.response_id || '').trim();
     const formId = String(body.form_id || '').trim();
     const bucketId = String(body.bucket_id || FORM_FILE_BUCKET).trim();
     const objectPath = String(body.object_path || '').trim();
     const fileName = String(body.file_name || 'form-upload').slice(0, 240);
-    if (!responseId || !formId || !objectPath) return res.status(400).json({ error: 'Missing file reference.' });
-    if (bucketId !== FORM_FILE_BUCKET) return res.status(400).json({ error: 'Unsupported file bucket.' });
 
-    // Query with the caller JWT so form_responses RLS enforces active
-    // membership and forms.view before any service-role signed URL is minted.
-    const rows = await supabaseGetAsUser(`form_responses?id=eq.${encodeURIComponent(responseId)}&form_id=eq.${encodeURIComponent(formId)}&select=id,form_id,company_id,answers`, token);
+    if (!responseId || !formId || !objectPath) throw new HttpError(400, 'Missing file reference.');
+    if (bucketId !== FORM_FILE_BUCKET) throw new HttpError(400, 'Unsupported file bucket.');
+
+    const rows = await fetchAsUser(
+      `form_responses?id=eq.${encodeURIComponent(responseId)}&form_id=eq.${encodeURIComponent(formId)}&select=id,form_id,company_id,answers`,
+      token,
+    );
     const response = rows[0];
     const expectedPrefix = response ? `${response.company_id}/${response.form_id}/` : '';
     if (!response || !objectPath.startsWith(expectedPrefix) || objectPath.includes('..') || !containsObjectPath(response.answers, objectPath)) {
-      return res.status(404).json({ error: 'File reference not found.' });
+      throw new HttpError(404, 'File reference not found.');
     }
-    const { data, error } = await client
-      .storage
+
+    const { data, error } = await storage.storage
       .from(FORM_FILE_BUCKET)
       .createSignedUrl(objectPath, 60 * 60, { download: fileName });
-    if (error) throw error;
+    if (error) throw new HttpError(500, 'Could not open form file.');
 
-    return res.status(200).json({ signed_url: data?.signedUrl || '' });
-  } catch (error) {
-    return errorResponse(res, error, 'Could not open form file.');
-  }
-}
+    return { signed_url: data?.signedUrl || '' };
+  },
+);
