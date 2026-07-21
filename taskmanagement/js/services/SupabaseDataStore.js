@@ -161,6 +161,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
       taxStatusesRes,
       taxLabelsRes,
       taxSopsRes,
+      companiesRes,
     ] = await Promise.all([
       this._pageAll(() => this.supabase.from('team_members').select('*').order('name', { ascending: true }).order('id', { ascending: true }), 'people'),
       this._pageAll(() => this.supabase.from('tasks').select('*').order('created_at', { ascending: true }).order('id', { ascending: true }), 'tasks'),
@@ -177,9 +178,13 @@ App.SupabaseDataStore = class SupabaseDataStore {
       this.supabase.from('task_type_statuses').select('*'),
       this.supabase.from('task_labels').select('*'),
       this._optionalSelect('task_label_sops'),
+      // Tenant identity. RLS returns only the caller's companies, so this is the
+      // source of truth for App.COMPANIES; js/constants.js is the offline fallback.
+      this.supabase.from('companies').select('id, name, short_name, label, pill, color'),
     ]);
 
     this._throwIfError(timersRes, 'active timers');
+    this._throwIfError(companiesRes, 'companies');
     this._throwIfError(profilesRes, 'profiles');
     this._throwIfError(projectsRes, 'projects');
     this._throwIfError(taxTypesRes, 'task types');
@@ -195,6 +200,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
     return {
       people: this._mapPeople(peopleRows),
       profiles: profilesRes.data || [],
+      companies: companiesRes.data || [],
       tasks,
       timeEntries: entryRows.map(row => ({
         id: row.id,

@@ -111,6 +111,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else {
     try {
       const saved = await dataStore.load();
+      // Tenant identity comes from the database (RLS returns only this user's
+      // companies). The hardcoded App.COMPANIES in constants.js is the offline
+      // fallback only — same contract as App.taxonomy's seedFromConstants().
+      // Must run BEFORE App.taxonomy.hydrate: taxonomy's constants fallback
+      // enumerates App.COMPANIES to decide which companies to seed.
+      if (Array.isArray(saved.companies) && saved.companies.length) {
+        const nextCompanies = {};
+        saved.companies.forEach((row) => {
+          nextCompanies[row.id] = {
+            id: row.id,
+            label: row.label || row.short_name || row.name || row.id,
+            pill: row.pill || `pill-${row.id}`,
+          };
+        });
+        // 'overall' is a synthetic spans-all sentinel, never a real company row.
+        nextCompanies.overall = { id: 'overall', label: 'Overall', pill: 'pill-overall', all: true };
+        App.COMPANIES = nextCompanies;
+        if (App.EventBus && App.EventBus.emit) App.EventBus.emit('companies:changed');
+      }
       if (saved.people && Object.keys(saved.people).length) App.PEOPLE = saved.people;
       App.PROFILES = saved.profiles || [];
       App.projects = saved.projects || {};
