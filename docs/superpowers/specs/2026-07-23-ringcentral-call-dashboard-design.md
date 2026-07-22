@@ -147,8 +147,14 @@ Indexes on `(company_id, started_at desc)`, `(company_id, extension_email)`, and
 index on `(company_id, started_at desc) where duration_seconds >= 60`.
 
 **`ringcentral_sync_state`** — one row per workspace.
-`company_id` (pk), `sync_token`, `last_sync_at`, `last_full_sync_at`,
-`consecutive_failures`, `last_error`.
+`company_id` (pk), `last_sync_at`, `backfilled_through`, `consecutive_failures`,
+`last_error`.
+
+**`ringcentral_extensions`** — the extension directory, refreshed by the sync job.
+`company_id`, `extension_id`, `extension_number`, `name`, `email`, `status`, `updated_at`.
+Primary key `(company_id, extension_id)`. This is what maps a call to a human name and
+what matches a logged-in member to their own extension. Call rows denormalize the name
+and email at write time so history survives a rename or a departure.
 
 **`ringcentral_presence`** — one row per extension, the memory that makes durations work.
 `company_id`, `extension_id`, `extension_number`, `extension_name`, `extension_email`,
@@ -223,23 +229,27 @@ a bundle budget via `scripts/check-bundle-budget.mjs`, and `src/main.js` is alre
 
 ## Sync behaviour
 
-RingCentral's call-log sync API issues a `syncToken` on a full sync; later incremental
-syncs pass that token and receive only what changed. Two documented limits shape the design:
+The job fetches a **rolling window of the company call log** and upserts it, keyed on
+`(company_id, call_id)`.
 
-- **Max 250 records per response.** If more than 250 calls changed since the last sync,
-  the token is rejected with a "max sync record number limit is exceeded" error.
-- **Rate limits** apply per app per account.
+This replaces an earlier design that used RingCentral's `call-log-sync` API with
+`FSync`/`ISync` sync tokens. Two problems killed it: the token is rejected whenever more
+than 250 records change between runs, forcing a full-sync fallback that has to be built
+and tested for a path that only fires under load; and the documented sync endpoint is
+extension-scoped, meaning one request per person instead of one for the company.
 
-Therefore:
+The rolling window has neither problem. Each run:
 
-1. No stored token, or token rejected → **full sync** over the backfill window, then store
-   the fresh token.
-2. Token present → **incremental sync**.
-3. HTTP 429 → record it, increment `consecutive_failures`, return without changing the
-   token. The next run catches up; because the sync is incremental, nothing is lost.
-4. Any success → reset `consecutive_failures` and clear `last_error`.
+1. Refreshes the extension directory, then fetches the call log for its window.
+2. Uses a **90-day** window the first time a company syncs, and **3 days** thereafter.
+3. Upserts every record. Re-fetching already-seen calls is free because the unique
+   constraint turns a duplicate into an update.
+4. On HTTP 429 or any other failure: increments `consecutive_failures`, records
+   `last_error`, and returns. Nothing else changes.
+5. On success: resets `consecutive_failures` and clears `last_error`.
 
-Initial backfill window: **90 days**, paged. Run once at install, not on every full sync.
+Because the 3-day window is far longer than the 15-minute interval, a missed or failed
+run needs no recovery logic — the next run simply covers it.
 
 ## Scheduling
 
@@ -291,9 +301,9 @@ than restating them.
 
 | Failure | Behaviour |
 |---|---|
-| First run / no sync token | Full sync over the 90-day backfill window |
-| Sync token rejected (>250 changes) | Automatic full sync, logged to `last_error` |
-| RingCentral 429 on sync | Back off, record, retry next run; token untouched |
+| First run for a company | 90-day backfill window instead of the 3-day rolling one |
+| A run is missed or fails | Covered by the next run; the 3-day window far exceeds the 15-minute interval |
+| RingCentral 429 on sync | Record the failure and return; the next run retries |
 | RingCentral unreachable (sync) | Conversations table renders stored data with staleness stamp |
 | RingCentral unreachable (presence) | Live board shows an explicit error state, never stale statuses |
 | ≥3 consecutive sync failures | Staleness stamp turns to a warning state |
@@ -307,11 +317,11 @@ than restating them.
 Unit tests in the existing harness (`node --test tests/*.mjs`), with a fake `fetch`
 injected into `api/_lib/ringcentral.js`:
 
-1. Full sync when no token is stored; the token is persisted.
-2. Incremental sync when a token exists; the stored token is sent.
-3. Sync-token-rejected error triggers a full-sync fallback and records the error.
+1. A company with no `backfilled_through` gets the 90-day window.
+2. A company that has synced gets the 3-day rolling window.
+3. The rolling window always spans at least 72 hours, so a missed run self-heals.
 4. Re-syncing the same call twice produces one row, updated (upsert idempotency).
-5. HTTP 429 leaves the token untouched and increments `consecutive_failures`.
+5. HTTP 429 increments `consecutive_failures` and records `last_error`.
 6. A successful run clears `last_error` and resets `consecutive_failures`.
 7. Sync request without `CRON_SECRET` returns 401 and performs no work.
 8. Presence responses are cached for 10 seconds — one upstream call for N requests.
