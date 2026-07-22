@@ -31,6 +31,27 @@ export async function syncSpaAssets(outDirArg = 'dist') {
   await cp(taskRuntimeSource, taskRuntimeTarget, { recursive: true });
   await cp(faviconSource, path.join(outDir, 'favicon.svg'));
 
+  // The vendored task module reads its Supabase connection from env.json. Write
+  // it from the SAME env vars the host build uses so the two apps can never point
+  // at different projects — if they do, they hold different login sessions on one
+  // origin and the embedded module bounces to the host login forever.
+  // Defaults mirror src/main.js CONFIG; publishable/anon key only, never a secret.
+  const taskRuntimeEnv = {
+    supabaseUrl: process.env.VITE_SUPABASE_URL || 'https://rqundirizvojpzhljtdn.supabase.co',
+    supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U',
+    sentryDsn: process.env.VITE_SENTRY_DSN || '',
+    release: process.env.VERCEL_GIT_COMMIT_SHA || '',
+    turnstileSiteKey: process.env.VITE_TURNSTILE_SITE_KEY || '',
+  };
+  if (/^sb_secret_|service_role/i.test(taskRuntimeEnv.supabaseAnonKey)) {
+    throw new Error('Refusing to write a service-role key into taskmanagement/env.json.');
+  }
+  await writeFile(
+    path.join(taskRuntimeTarget, 'env.json'),
+    `${JSON.stringify(taskRuntimeEnv, null, 2)}\n`,
+    'utf8',
+  );
+
   const indexHtml = await readFile(path.join(outDir, 'index.html'), 'utf8');
   await writeFile(path.join(outDir, '404.html'), indexHtml);
   await writeFile(path.join(outDir, '.nojekyll'), '');

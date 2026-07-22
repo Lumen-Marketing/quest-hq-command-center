@@ -1,5 +1,5 @@
 -- Post-migration verification. Read-only: changes nothing.
--- Paste into the Supabase SQL Editor for project lpzotcznihwyyudxycmd and Run.
+-- Paste into the Supabase SQL Editor for project rqundirizvojpzhljtdn and Run.
 -- Every row should say PASS.
 
 with checks as (

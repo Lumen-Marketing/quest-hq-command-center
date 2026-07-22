@@ -37,7 +37,7 @@ automatically by Supabase; do not set them by hand.
 Not yet deployed — deployment is batched with the migrations. When ready:
 
 ```bash
-supabase functions deploy notify-email --project-ref lpzotcznihwyyudxycmd
+supabase functions deploy notify-email --project-ref rqundirizvojpzhljtdn
 ```
 
 Then set the secrets above in the Supabase dashboard (Edge Functions → Secrets).

@@ -33,5 +33,5 @@ payload caps, and a 5-reports-per-hour rate limit per reporter.
 Batched with the migrations — not yet deployed:
 
 ```bash
-supabase functions deploy report-problem --project-ref lpzotcznihwyyudxycmd
+supabase functions deploy report-problem --project-ref rqundirizvojpzhljtdn
 ```

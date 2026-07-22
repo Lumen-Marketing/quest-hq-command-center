@@ -51,9 +51,17 @@ App.commandCenterProfileUrl = App.commandCenterIntegration.hosted
 // strips `#...&type=recovery` from the URL, so a later read would miss it.
 App.isRecoveryLanding = /[#&]type=recovery\b/.test(window.location.hash || '');
 
+// MUST match Command Center's own Supabase project (src/main.js CONFIG defaults).
+// If these drift apart the two apps hold DIFFERENT login sessions on the same
+// origin, and the task app bounces to the host login forever — that is exactly
+// what a stale project ref here caused on 2026-07-22.
+// In production, scripts/sync-spa-assets.mjs writes taskmanagement/env.json from
+// the same VITE_SUPABASE_* env vars the host build uses, and env.json wins over
+// these defaults. These values only apply to `vite dev` and to a build with no
+// env vars set.
 App.defaultSupabaseConfig = {
-  supabaseUrl: 'https://lpzotcznihwyyudxycmd.supabase.co',
-  supabaseAnonKey: 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07',
+  supabaseUrl: 'https://rqundirizvojpzhljtdn.supabase.co',
+  supabaseAnonKey: 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U',
 };
 
 // Runtime config: fetch env.json (per-environment, never committed) and

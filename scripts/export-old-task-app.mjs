@@ -28,7 +28,7 @@ if (!url || !key) {
   console.error('Set OLD_SUPABASE_URL and OLD_SUPABASE_SERVICE_KEY (old project only).');
   process.exit(1);
 }
-if (url.includes('lpzotcznihwyyudxycmd')) {
+if (url.includes('rqundirizvojpzhljtdn')) {
   console.error('Refusing to run: that is Command Center\'s project, not the old task app.');
   process.exit(1);
 }
