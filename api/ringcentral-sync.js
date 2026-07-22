@@ -121,6 +121,11 @@ export default async function handler(request, response) {
   if (!env('RINGCENTRAL_CLIENT_ID') || !env('RINGCENTRAL_CLIENT_SECRET')) {
     return response.status(503).json({ error: 'RingCentral is not configured.' });
   }
+  // Without this the Supabase client constructor throws and the whole function
+  // returns an opaque 500. A missing environment variable should say so.
+  if (!(env('SUPABASE_URL') || env('VITE_SUPABASE_URL')) || !(env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY'))) {
+    return response.status(503).json({ error: 'Supabase is not configured for this environment.' });
+  }
 
   const client = serverClient();
   const accounts = await client

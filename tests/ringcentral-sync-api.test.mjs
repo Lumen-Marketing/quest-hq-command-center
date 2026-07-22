@@ -64,3 +64,22 @@ test('Vercel runs the sync on a schedule', () => {
 test('the existing recycle purge cron survives the change', () => {
   assert.ok(vercel.crons?.some((entry) => entry.path === '/api/recycle-bin-purge' && entry.schedule === '20 3 * * *'));
 });
+
+test('a missing Supabase key returns a readable 503, not a 500 from the client constructor', () => {
+  // createClient() throws "supabaseKey is required" if this is unset, which
+  // surfaced as an opaque FUNCTION_INVOCATION_FAILED on a preview deployment.
+  assert.match(source, /Supabase is not configured for this environment/);
+  const guard = source.slice(source.indexOf('export default async function handler'));
+  assert.ok(
+    guard.indexOf('SUPABASE_SERVICE_ROLE_KEY') < guard.indexOf('serverClient()'),
+    'the guard must run before the Supabase client is constructed',
+  );
+});
+
+test('the sync endpoint guards the same environment variables as the sibling cron', () => {
+  const purge = readFileSync(new URL('../api/recycle-bin-purge.js', import.meta.url), 'utf8');
+  for (const name of ['SUPABASE_URL', 'VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY']) {
+    assert.ok(purge.includes(name), `precondition: ${name} guarded in recycle-bin-purge`);
+    assert.ok(source.includes(name), `${name} is not guarded in ringcentral-sync`);
+  }
+});
