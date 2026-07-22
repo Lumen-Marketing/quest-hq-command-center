@@ -26,3 +26,30 @@ Tickets and Templates remain future navigation entries. Product or AI work must 
 
 The recycle-bin purge endpoint expects server-side authorization, but this folder intentionally cannot prove or expose the credential value. Confirm presence in Vercel environment configuration when changing the cron path or authorization behavior.
 
+
+## RingCentral status durations are approximate and reset on deploy
+
+RingCentral's Presence API reports what an extension's status *is*, never how long it has
+been held. The live board derives the duration from `ringcentral_presence.status_since`,
+which the app sets the first time it observes a status change. Two consequences: every
+timer restarts at zero the first time the module runs after a deployment or after the
+table is cleared, and a status change occurring between two polls is timed from the poll
+rather than the actual change. Accurate to roughly the 15-second poll interval. The UI
+states this. Do not use these durations for payroll, billing, or any adjudicated purpose.
+
+## The RingCentral migration is written but not applied
+
+`202607231200_ringcentral_calls.sql` exists in the repository and the manifest points at
+it, but it has not been applied to Supabase, so the live catalog counts in
+[database/overview.md](database/overview.md) deliberately exclude its five tables, five
+policies, and one function. The Calls module also needs `RINGCENTRAL_CLIENT_ID`,
+`RINGCENTRAL_CLIENT_SECRET`, `RINGCENTRAL_JWT` and `RINGCENTRAL_SERVER_URL` in Vercel plus
+a `ringcentral_accounts` row before it shows anything. See [docs/ringcentral-setup.md](../docs/ringcentral-setup.md).
+
+## The RingCentral cron interval may exceed the Vercel plan
+
+vercel.json schedules `/api/ringcentral-sync` at `*/15 * * * *`. Sub-daily cron requires a
+Vercel Pro plan; the only other cron in the project is daily. If a deployment rejects the
+schedule, either coarsen it or trigger the same URL from Supabase `pg_cron` with the
+`CRON_SECRET` bearer header. The endpoint, its authorization, and its tests are identical
+under either trigger.

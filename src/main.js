@@ -1021,10 +1021,10 @@ const NAV_GROUPS = [
   { label: 'Pipeline', ids: ['contacts'] },
   { label: 'Production', ids: ['jobs'] },
   { label: 'Tools', ids: ['underwriter', 'proposals'] },
-  { label: 'Review', ids: ['analytics', 'users', 'calendar', 'calls'] },
+  { label: 'Review', ids: ['analytics', 'users', 'calendar'] },
   { label: 'Build', ids: ['templates', 'automations'] },
   { label: 'Workspace', ids: ['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'] },
-  { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload'] },
+  { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload', 'calls'] },
   { label: 'Control', ids: ['settings', 'tickets'] },
 ];
 

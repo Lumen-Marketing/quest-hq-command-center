@@ -19,8 +19,12 @@ test('the module reuses an existing permission instead of inventing one', () => 
   assert.doesNotMatch(main, /'calls\.view'/);
 });
 
-test('the calls module appears in navigation', () => {
-  assert.match(main, /ids: \['analytics', 'users', 'calendar', 'calls'\]/);
+test('the calls module appears in the Operations navigation group', () => {
+  // Deliberately not the Review group: its exact contents are pinned as
+  // stakeholder-approved IA by sidebar-navigation-static.test.mjs, and the
+  // module registry already files Calls under Operations.
+  assert.match(main, /\{ label: 'Operations', ids: \[[^\]]*'calls'\] \}/);
+  assert.match(main, /\{ label: 'Review', ids: \['analytics', 'users', 'calendar'\] \}/);
 });
 
 test('team.view resolves to the calls plugin in the browser as well as the database', () => {
