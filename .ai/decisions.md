@@ -155,3 +155,56 @@ the repo.
 
 The project brain records catalog metadata, architecture, decisions, and state—not credentials, user identities, row payloads, storage objects, or private operational content.
 
+
+## RingCentral sync uses a rolling window, not sync tokens
+
+RingCentral's `call-log-sync` API issues a `syncToken` for incremental pulls, which looks
+like the obvious choice and was the original design. Two things ruled it out. The token is
+rejected outright whenever more than 250 records change between runs ("max sync record
+number limit is exceeded"), so a full-sync fallback has to be written and tested for a
+path that only fires under load — exactly when it is least welcome. And the documented
+sync endpoint is extension-scoped, meaning one request per person rather than one for the
+company.
+
+The job instead re-fetches a rolling three-day window of the company call log and upserts
+on `(company_id, call_id)`, with a 90-day window the first time a company syncs. Re-seeing
+already-stored calls costs nothing because the unique constraint turns a duplicate into an
+update, and because the window is far longer than the 15-minute interval, a missed or
+failed run needs no recovery logic at all — the next run covers it. `ringcentral_sync_state`
+therefore holds no token, only `last_sync_at`, `backfilled_through`, `consecutive_failures`
+and `last_error`.
+
+## RingCentral users are matched to their own calls by email, with no mapping table
+
+Non-admin members see only calls handled by the extension whose email matches their login
+email, compared lowercased in the RLS policy. The alternative — a table linking RingCentral
+extensions to company members, plus an admin screen to maintain it — buys accuracy for
+mismatched addresses at the cost of a permanent upkeep burden every time someone joins or
+leaves. For a single company whose RingCentral and Command Center accounts use the same
+addresses, the mapping table is pure overhead.
+
+The failure mode is visible rather than silent: a member whose addresses do not match sees
+an explicit "we couldn't match you to a RingCentral extension" message, not an empty table
+that reads as "you made no calls".
+
+## Live phone status is polled, not subscribed, and does not use Live Reports
+
+RingCentral supports push subscriptions for presence events, but they require a public
+webhook, subscription renewal, and per-extension subscription management, and they fail
+silently when a subscription lapses. One cached call to the account presence endpoint every
+15 seconds returns every extension in a single request and cannot drift out of sync. At
+this headcount the poll is not worth engineering around.
+
+The board also does not depend on RingCentral's Live Reports add-on. Live Reports
+aggregates agent states into a bar chart — "4 available" — and cannot answer "which
+person is on a call right now", which is the entire point of the board. The Presence API
+provides the underlying per-extension data directly.
+
+## The Calls module reuses team.view rather than introducing calls.view
+
+A new permission string would have to be seeded into `role_permissions` for every role
+before anyone could open the module, and the only access distinction the feature needs —
+admin versus member on the live board — is enforced server-side in the presence endpoint.
+Reusing `team.view` required widening `app_private.permission_plugin_ids` (and its browser
+mirror) so `team.view` resolves to both `reporting` and `calls`; without that, a workspace
+with Calls installed but Reporting uninstalled would have been locked out of its own module.

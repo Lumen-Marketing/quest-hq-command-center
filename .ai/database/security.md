@@ -263,3 +263,27 @@ Operational workspace RPCs intentionally use `SECURITY DEFINER` with fixed searc
 | workspaces | company admins create workspaces | authenticated | INSERT | PERMISSIVE |
 | workspaces | workspace admins update workspaces | authenticated | UPDATE | PERMISSIVE |
 | workspaces | workspace users read workspaces | authenticated | SELECT | PERMISSIVE |
+
+## Pending: RingCentral call dashboard policies
+
+Added by `202607231200_ringcentral_calls.sql`, **not yet applied live**. Five select
+policies, no insert/update/delete policy anywhere — the sync and presence endpoints write
+with the service role, which bypasses RLS.
+
+| Table | Policy | Rule |
+| --- | --- | --- |
+| ringcentral_accounts | company admins read accounts | `is_quest_admin()` or `is_company_admin(company_id)` |
+| ringcentral_extensions | company admins read extensions | `is_quest_admin()` or `is_company_admin(company_id)` |
+| ringcentral_presence | company admins read presence | `is_quest_admin()` or `is_company_admin(company_id)` |
+| ringcentral_calls | members read own calls | admin as above, **or** `is_company_member(company_id)` and `extension_email = lower(auth.jwt() ->> 'email')` |
+| ringcentral_sync_state | members read sync state | `is_quest_admin()` or `is_company_member(company_id)` — members need the staleness stamp |
+
+`public.ringcentral_conversation_stats(text, timestamptz, timestamptz)` is `security
+invoker`, so it inherits the calls policy rather than restating it: an admin gets the
+whole team, a member gets one row. Execution is revoked from public and anon.
+
+Every table is explicitly granted `select` to `authenticated` and revoked from `anon`,
+because Supabase's 2026 API hardening does not expose new tables automatically.
+
+`api/ringcentral-presence.js` re-applies the admin test in the handler and returns 403 to
+non-admins. It must: its response comes from RingCentral and never passes through RLS.
