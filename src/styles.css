@@ -20971,6 +20971,22 @@ button {
   font-size: 10px;
   color: #8a95a3;
 }
+/* Contact SMS (Messages tab) */
+.sf-sms-thread { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding: 14px 15px; }
+.sf-sms-loading, .sf-sms-empty { color: var(--sf-mut); font-size: 12.5px; text-align: center; padding: 20px 0; }
+.sf-sms-bubble { max-width: 78%; padding: 8px 11px; border-radius: 12px; font-size: 12.5px; line-height: 1.4; }
+.sf-sms-bubble .sf-sms-text { white-space: pre-wrap; word-break: break-word; }
+.sf-sms-bubble .sf-sms-meta { margin-top: 3px; font-size: 10.5px; opacity: .7; }
+.sf-sms-bubble.out { align-self: flex-end; background: var(--brand); color: #fff; border-bottom-right-radius: 4px; }
+.sf-sms-bubble.in { align-self: flex-start; background: #eef0f3; color: #1a1a1a; border-bottom-left-radius: 4px; }
+.sf-sms-failed { color: #ffd7cc; font-weight: 700; }
+.sf-sms-bubble.in .sf-sms-failed { color: #c0341d; }
+.sf-sms-composer { display: flex; align-items: center; gap: 8px; margin: 0 15px 8px; padding: 9px 12px; border: 1px solid var(--sf-bd); border-radius: 4px; }
+.sf-sms-composer input[name="body"] { flex: 1; border: 0; outline: none; font-size: 12.5px; background: transparent; }
+.sf-sms-composer input[name="body"]:disabled { color: var(--sf-mut); }
+.sf-sms-composer button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; background: var(--brand); color: #fff; cursor: pointer; }
+.sf-sms-composer button:disabled { opacity: .45; cursor: not-allowed; }
+.sf-sms-hint { padding: 0 15px 14px; color: var(--sf-mut); font-size: 11px; }
 .sf-feed-empty { padding: 16px 15px; color: var(--sf-mut); font-size: 12.5px; }
 .sf-feed-item { display: flex; gap: 11px; padding: 12px 15px; border-top: 1px solid #f0f0f0; }
 .sf-feed-avatar { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 5px; color: #fff; font-size: 10px; font-weight: 800; flex: none; }

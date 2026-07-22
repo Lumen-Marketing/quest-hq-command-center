@@ -45,8 +45,12 @@ The Vercel functions under `api/` share one deep seam, `api/_lib/`:
   can never disagree about env resolution. Only the two public-form file
   endpoints use it, via `ctx.storage || createStorageClient()` — a real
   default in production, a fake in tests.
-- **`form-files.js`** — the Public Form file bucket name, size cap and allowed
-  MIME types, shared by the three form endpoints.
+- **`form-files.js`** — the Public Form file bucket name, size cap and upload
+  allowlists, shared by the three form endpoints. Holds three separate gates:
+  an allowed-MIME set (ZIP-based Office formats deliberately excluded), an
+  allowed-extension set, and a dangerous-extension blocklist checked against
+  every dot-segment of the raw filename, so `invoice.pdf.exe` and `logo.svg`
+  are rejected on this public, unauthenticated path.
 
 `ctx = { req, res, query, body, session?, db }`. Handlers return a plain object
 (→ JSON 200), a `fileResponse(...)` (→ raw bytes), a `jsonResponse(status, body)`
