@@ -850,12 +850,11 @@ const DASHBOARD_WIDGET_DEFAULTS = {
 // WORKSPACE_PLUGIN_REGISTRY entry with module_ids: ['tasks'].
 // 'automations' is core as of main; keep it when reconciling with older branches.
 const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings', 'automations']);
-const PRIVATE_PLUGIN_ACCESS = {
-  crm_2: {
-    label: 'Quest CRM',
-    password: 'LumenQuest@2026',
-  },
-};
+// Private plugins are gated by companyPluginStatus() against company_plugins,
+// not by a client-side password. The old private-plugin access constant, which
+// shipped a literal password in the bundle, was deliberately removed on main;
+// tests/workspace-plugins-static.test.mjs greps this file to keep it gone, so
+// do not reintroduce it (or name it) when reconciling older branches.
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
   { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
