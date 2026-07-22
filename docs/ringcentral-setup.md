@@ -1,8 +1,15 @@
 # RingCentral setup
 
 What has to happen outside the codebase before the Calls module shows anything.
-Steps 1–3 are the slow part — start them first, because everything else can be
-done while RingCentral reviews the app.
+
+**Do step 3 (graduate to production) as early as you can.** RingCentral's review
+takes days and blocks everything else; the rest is minutes of work.
+
+**Create the app first, then graduate it, then create the JWT — in that order.**
+A JWT credential is bound to one Client ID, and production issues a *different*
+Client ID than sandbox. Creating the JWT before graduating means creating it
+twice. The order below reflects that; step 2 deliberately comes after step 3
+unless you are deliberately testing in sandbox (see *Testing in sandbox first*).
 
 ## 1. Create the app
 
@@ -27,11 +34,24 @@ our own business application. No calls placed, no messages sent, no data written
 
 ## 2. Create the JWT credential
 
-This is a **separate screen** from the app and is easy to miss.
+**Do this after step 3, not before** — see the note at the top. It is listed here
+because it is logically part of setting up credentials, but a JWT created now would be
+bound to the sandbox Client ID and would stop working the moment the app is graduated.
+
+This is a **separate screen** from the app and is easy to miss: it lives under your user
+profile, not the app.
 
 1. Hover your name in the top-right corner → **Credentials** → **Create JWT**.
-2. Restrict it to specific apps and paste in the Client ID from step 1.
-3. Copy the JWT string immediately — it is shown once.
+2. **Label:** something you will recognise later, e.g. `Quest HQ Call Dashboard`.
+3. **Permitted apps:** choose **"Only specific apps of my choice"** and paste in the
+   **production** Client ID from step 3. Do not choose "all apps created by developers
+   within my organization" — that would let any future app on the account authenticate
+   as this user and read the call log.
+4. **Expiration date:** leave blank. An expiring credential means the sync stops
+   silently and the dashboard goes stale with no explanation. The tradeoff is a
+   permanent key: it lives only in Vercel's environment variables, and if it ever leaks,
+   delete it here and generate a new one.
+5. Copy the JWT string immediately — it is shown once.
 
 **It must be created by a RingCentral Super Admin.** A JWT inherits the permissions of
 whoever created it, so a credential made by a regular user would expose only that
@@ -45,6 +65,29 @@ calls appear only after the app is in Production.
 1. On the app dashboard, work through **Graduate to Production** and submit.
 2. RingCentral reviews it — allow a few days.
 3. Production issues a **different Client ID and Secret**. Those are the ones to use.
+
+### Which environment am I in?
+
+Every new app is sandbox-only. Production does not exist until graduation issues it, so
+if the app dashboard still shows a "Graduate to Production" button, the answer is
+sandbox. A graduated app shows two sets of Client ID and Secret, labelled separately.
+
+### Testing in sandbox first
+
+Optional, and only worth it if you want to prove the whole pipeline before production
+approval lands. It also flushes out whether the cron schedule is accepted on your Vercel
+plan (see step 5).
+
+Sandbox cannot be exercised from a local `vite dev` server — that serves the SPA but not
+the serverless functions, so `/api/ringcentral-presence` returns the app's HTML and the
+module correctly reports "not connected". It needs a real deployment, e.g. a Vercel
+preview build of the branch.
+
+If you do this, create a **second, sandbox-labelled** JWT against the sandbox Client ID,
+and set `RINGCENTRAL_SERVER_URL` to `https://platform.devtest.ringcentral.com` — **not**
+the production URL in step 4. Sandbox call data is fabricated, so the numbers prove the
+plumbing works and nothing else. Swap all four variables to the production values
+afterwards.
 
 ## 4. Set the environment variables
 
