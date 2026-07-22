@@ -9299,6 +9299,23 @@ function renderTasksPage(route, companyId) {
   // (.embedded-in-job-center) so Command Center's chrome is the only chrome, and
   // project_id scopes it to the job. The session is shared automatically — same
   // origin, same Supabase project — so there is no second login.
+  // The module authenticates against the same Supabase project as the host, so it
+  // needs a REAL session. Demo/local sessions have no Supabase user, and embedding
+  // it anyway just renders a sign-in page inside the frame (confusing) or loops.
+  // Say so plainly instead.
+  if (state.session?.auth !== 'supabase') {
+    return `
+      ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Task execution, timers and reminders.', '')}
+      <section class="task-layout task-layout-flat">
+        <article class="panel task-main">
+          ${emptyState(state.session?.auth === 'demo-readonly'
+            ? 'Tasks need a real account. You are exploring in demo mode — sign in with your Quest HQ account to use task execution, timers and reminders.'
+            : 'Tasks need a signed-in Quest HQ account. Sign in to continue.')}
+        </article>
+      </section>
+    `;
+  }
+
   const params = new URLSearchParams({ embed: '1' });
   if (job) params.set('project_id', job.id);
   params.set('return_url', window.location.href);
