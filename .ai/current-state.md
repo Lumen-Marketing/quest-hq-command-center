@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-22T22:24:26.326Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-23T07:02:18+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -9,15 +9,15 @@ Captured 2026-07-22T22:24:26.326Z. This is a point-in-time operational snapshot,
 - Current ready production deployment: dpl_763c8dwqm7M92n5rZ4iTXAhxv4NP
 - Deployed branch/commit: main at 070586e86952b2acf358727005d787bc79511322
 - GitHub default branch at capture: 070586e86952b2acf358727005d787bc79511322
-- Latest deployed Task preview: dpl_9g8NvVhdVxngSoQqZRFVnV7yJWc9 from feat/task-app-absorption at b6ae185; this is not production.
-- Latest overall preview is the RingCentral branch at 3416dbe; it is not the Task baseline and is not production.
+- Latest deployed Task preview at capture: dpl_BFspAASB2RMGPfNpyX8FpZv5fCcm from feat/task-gantt-foundation at efde616; this is not production.
+- Latest overall integration preview at capture: dpl_HGLVRqE2iQfX9po6VByUY1uXKXin from preview/deploy-integration-check at 59417a0; it is not production.
 - Production Guardian: scheduled every six hours and available by manual dispatch.
 - Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459
 - Last full production smoke context: 36 of 36 routes and 3 of 3 critical assets passed for `6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec`, with no browser-console or Vercel runtime errors.
 
 ## Repository health
 
-- Current branch regression suite: 422 tests passed.
+- Combined integration + Task branch regression suite: 566 tests passed.
 - The production build and bundle-budget check pass without a local application server.
 - CI runs npm run check on pushes and pull requests.
 - Build output is checked against a bundle budget and copies TaskManagement plus legacy SPA assets.
@@ -51,6 +51,8 @@ The repository filename history and Supabase's applied migration versions are no
 ## Feature state
 
 The current release branch separates each customer company account from its configurable operational child workspaces. The command rail groups child workspaces under the company header, highlights the selected workspace, and preserves it in the route. Company settings can create, rename, describe, icon, archive, and manage those children; user access assigns regular workers and a role independently per workspace. Company owners, admins, and developers inherit all active child workspaces. Company plugin records are entitlements, while activation and configuration live per child workspace. Contacts, accounts, sites, quotes, activities, jobs, tasks, pipeline stages, underwriting cases, files, and proposals are isolated by `workspace_id`; record conversions preserve that identity and database constraints reject cross-workspace links. The absorbed Task runtime now receives the selected workspace from the host, filters task reads and mutations to it, and is gated by its own per-workspace Tasks plugin activation. These Task foundation changes are not production state until the release branch is published and promoted.
+
+The release branch also contains the feature-flagged native Command Center Tasks surface: workspace-scoped list/board/detail/create/edit, visible Job/Contact/Quote links, direct Supabase reads and writes, and the existing recurrence and automation engines. `VITE_NATIVE_TASKS_MODULE` remains false by default and the deployed iframe remains the fallback until the Friday release gates are satisfied.
 
 The Underwriter workspace follows the approved Technical Ledger hierarchy: compact metrics and stage filters, a dense two-column estimator workbench with a dedicated decision summary, and a full-width estimate queue. Its primary action is Save decision and the calculator's persistence, permissions, and live recalculation remain intact. The application shell uses a 264px white Quest command rail with IBM Plex Sans and IBM Plex Mono, sidebar search, My work and Company scopes, stakeholder-approved Work/Pipeline/Production/Tools/Review/Build groups, and direct profile/settings access while preserving module permission gates. The Contacts rail follows the standalone nine-step sales lifecycle from Prospects through Lost. Tasks remain the shared "What's next" source across Contacts, Quotes/Deals, and Jobs. Application startup is deferred until top-level module state is initialized so cached direct links render safely.
 

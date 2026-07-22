@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-22T22:24:26.326Z",
-  "generated_from_commit": "b71b54fc91c7cdc5cb744422039fe4b91a71131d",
+  "generated_at": "2026-07-23T07:02:18+08:00",
+  "generated_from_commit": "250701d8e4d87cfef994feb46053d298a63125a2",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
@@ -18,13 +18,13 @@
       "version": "20260722192939",
       "name": "ringcentral_calls"
     },
-    "vercel_verified_at": "2026-07-22T22:24:26.326Z",
+    "vercel_verified_at": "2026-07-23T07:02:18+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://quest-hq-command-center-gamma.vercel.app",
     "vercel_deployment_id": "dpl_763c8dwqm7M92n5rZ4iTXAhxv4NP",
     "vercel_deployment_state": "READY",
     "vercel_deployed_commit": "070586e86952b2acf358727005d787bc79511322",
-    "github_verified_at": "2026-07-22T22:24:26.326Z",
+    "github_verified_at": "2026-07-23T07:02:18+08:00",
     "github_production_guardian_run": "https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459"
   },
   "refresh_commands": {
