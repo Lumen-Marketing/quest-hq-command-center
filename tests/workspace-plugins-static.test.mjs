@@ -29,7 +29,7 @@ const pluginAmbiguityMigration = pluginAmbiguityMigrationName
 const crm2RegistryEntry = source.match(/\{ id: 'crm_2'[^}]+\}/)?.[0] || '';
 
 test('plugin registry maps every non-core route to a workspace plugin', () => {
-  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'tasks', 'users', 'settings', 'automations'\]\);/);
+  assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'users', 'settings', 'automations'\]\);/);
   assert.match(source, /const WORKSPACE_PLUGIN_REGISTRY = \[/);
   assert.match(source, /id: 'crm'[\s\S]*module_ids: \['crm', 'contacts', 'deals'\]/);
   assert.match(source, /id: 'crm_2'[\s\S]*module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
@@ -59,9 +59,9 @@ test('quest crm plugin contents match the contacts quotes jobs workspace', () =>
 
 test('workspace presets install industry plugin bundles', () => {
   assert.match(source, /const WORKSPACE_PLUGIN_PRESETS = \{/);
-  assert.match(source, /roofing: \['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting'\]/);
-  assert.match(source, /construction: \['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting'\]/);
-  assert.match(source, /generic: \['crm', 'files', 'messages', 'workspace_builder'\]/);
+  assert.match(source, /roofing: \['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'tasks'\]/);
+  assert.match(source, /construction: \['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks'\]/);
+  assert.match(source, /generic: \['crm', 'files', 'messages', 'workspace_builder', 'tasks'\]/);
   assert.match(source, /name="preset_code"/);
   assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: presetCode, icon_key: iconKey \}\)/);
 });

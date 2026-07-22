@@ -31,7 +31,7 @@ The SPA supports:
 - Company routes scoped by company id and module section, with the selected operational workspace carried as `?workspace=<uuid>`.
 - Public client portal, proposal, and form routes.
 - Legacy route rewrites retained for compatibility.
-- TaskManagement embed/full-view handoff with project_id and return_url.
+- TaskManagement embed/full-view handoff with required `workspace_id`, optional `project_id`, and a same-origin `return_url`.
 
 ## Important source areas
 
@@ -62,6 +62,7 @@ The SPA supports:
 - Database mutations preserve the repository migration history.
 - Public-token endpoints expose the minimum required record fields.
 - TaskManagement owns task execution behavior; Quest HQ owns the surrounding business context.
+- The host resolves an allowed operational workspace before loading TaskManagement. The vendored store writes that id on every task row and filters task list, refresh, refetch, update, delete, and purge operations by it. Missing hosted workspace context fails closed before any task data loads.
 - Funnel "What's next" fields select from open tasks: contacts through `contact_id`, quotes/deals through tenant-scoped `deal_id`, and jobs through `project_id`.
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-workspace, per-contact records protected by Underwriter permissions and workspace RLS.

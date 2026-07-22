@@ -839,10 +839,11 @@ const DASHBOARD_WIDGET_DEFAULTS = {
   eos: ['rocks', 'scorecard', 'oneYearPlan', 'l10pulse', 'issues', 'todos', 'peopleAnalyzer', 'eosComponents', 'coreValues'],
 };
 
-const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings', 'automations']);
+const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'users', 'settings', 'automations']);
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
   { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
+  { id: 'tasks', label: 'Tasks', summary: 'Workspace task execution, timers, reminders, and team follow-through.', icon: 'ti-list-check', module_ids: ['tasks'], permissions: ['tasks.view', 'tasks.manage'] },
   { id: 'underwriter', label: 'Underwriter', summary: 'Qualification, scope, pricing, and handoff readiness queue.', icon: 'ti-clipboard-check', module_ids: ['underwriter'], permissions: ['underwriter.view', 'underwriter.manage'], recommendedWith: ['crm_2'] },
   { id: 'files', label: 'Files', summary: 'Shared files, job folders, and document storage.', icon: 'ti-folder', module_ids: ['files'], permissions: ['files.view', 'files.manage'] },
   { id: 'client_portal', label: 'Client Portal', summary: 'Password-protected plan links, markups, comments, and client review.', icon: 'ti-world-upload', module_ids: ['client-portals'], permissions: ['client_portals.view', 'client_portals.manage'], recommendedWith: ['files'] },
@@ -859,9 +860,9 @@ const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'templates', label: 'Templates', summary: 'Future reusable workspace templates.', icon: 'ti-template', module_ids: ['templates'], permissions: [], comingSoon: true },
 ];
 const WORKSPACE_PLUGIN_PRESETS = {
-  roofing: ['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting'],
-  construction: ['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting'],
-  generic: ['crm', 'files', 'messages', 'workspace_builder'],
+  roofing: ['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'tasks'],
+  construction: ['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks'],
+  generic: ['crm', 'files', 'messages', 'workspace_builder', 'tasks'],
 };
 const WORKSPACE_PLUGIN_PRESET_LABELS = {
   roofing: 'Roofing',
@@ -4387,6 +4388,7 @@ function installedModulesForMobileWork(companyId) {
 
 function permissionPluginIds(permission) {
   const clean = String(permission || '');
+  if (clean.startsWith('tasks.')) return ['tasks'];
   if (clean.startsWith('crm.')) return ['crm', 'crm_2'];
   if (clean.startsWith('underwriter.')) return ['underwriter'];
   if (clean.startsWith('files.')) return ['files'];
@@ -10281,6 +10283,7 @@ function renderJobEditor(companyId, job) {
 
 function renderTasksPage(route, companyId) {
   const job = route.jobId ? jobById(route.jobId) : null;
+  const workspaceId = workspaceIdForCompany(companyId);
   // The vendored task module at /taskmanagement/ replaces the former native
   // placeholder. It runs embedded: ?embed=1 makes it hide its own topbar
   // (.embedded-in-job-center) so Command Center's chrome is the only chrome, and
@@ -10303,14 +10306,26 @@ function renderTasksPage(route, companyId) {
     `;
   }
 
+  if (!workspaceId) {
+    return `
+      ${workspaceHeader('Tasks', 'Task execution, timers and reminders.', '')}
+      <section class="task-layout task-layout-flat">
+        <article class="panel task-main">
+          ${emptyState('Open Tasks from an active Questbase workspace. No operational workspace is available for this route.')}
+        </article>
+      </section>
+    `;
+  }
+
   const params = new URLSearchParams({ embed: '1' });
+  params.set('workspace_id', workspaceId);
   if (job) params.set('project_id', job.id);
   params.set('return_url', window.location.href);
   // Forward CC's deep-link params to the task app's own hash routes so every
   // existing "open this task" link across Command Center keeps working:
   //   ?task_id=X -> #/task/X      ?new=1 / ?edit=1 -> #/new
   const taskId = route.params.get('task_id');
-  const wantsNew = route.params.get('new') === '1';
+  const wantsNew = route.params.get('new') === '1' || route.params.get('edit') === '1';
   const hash = taskId ? `#/task/${encodeURIComponent(taskId)}` : (wantsNew ? '#/new' : '');
   const src = `${window.location.origin}/taskmanagement/app.html?${params.toString()}${hash}`;
   return `
@@ -29425,12 +29440,28 @@ function normalizeLegacyLocation() {
   if (path === '/clock') target = companyPath('clock', {}, companyId);
   if (path === '/task-management.html') {
     const jobId = params.get('project_id') || params.get('job_id') || '';
-    target = companyPath('tasks', jobId ? { job_id: jobId } : {}, companyIdForJob(jobId) || companyId);
+    const workspaceId = params.get('workspace') || params.get('workspace_id') || '';
+    const taskId = params.get('task_id') || '';
+    const wantsNew = params.get('new') === '1';
+    const wantsEdit = params.get('edit') === '1';
+    const taskParams = {
+      ...(jobId ? { job_id: jobId } : {}),
+      ...(workspaceId ? { workspace: workspaceId } : {}),
+      ...(taskId ? { task_id: taskId } : {}),
+      ...(wantsNew ? { new: '1' } : {}),
+      ...(wantsEdit ? { edit: '1' } : {}),
+    };
+    target = companyPath('tasks', taskParams, companyIdForJob(jobId) || companyId);
   }
   const jobTaskMatch = path.match(/^\/jobs\/([^/]+)\/tasks\/?$/);
   if (jobTaskMatch) {
     const jobId = decodeURIComponent(jobTaskMatch[1]);
-    target = companyPath('tasks', { job_id: jobId }, companyIdForJob(jobId) || companyId);
+    const workspaceId = params.get('workspace') || params.get('workspace_id') || '';
+    target = companyPath('tasks', {
+      job_id: jobId,
+      ...(workspaceId ? { workspace: workspaceId } : {}),
+      ...copyParams(params, ['task_id', 'new', 'edit']),
+    }, companyIdForJob(jobId) || companyId);
   }
 
   if (!target) return;
