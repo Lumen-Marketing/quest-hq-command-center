@@ -208,3 +208,15 @@ admin versus member on the live board — is enforced server-side in the presenc
 Reusing `team.view` required widening `app_private.permission_plugin_ids` (and its browser
 mirror) so `team.view` resolves to both `reporting` and `calls`; without that, a workspace
 with Calls installed but Reporting uninstalled would have been locked out of its own module.
+
+## X-Frame-Options is SAMEORIGIN, not DENY, so the task module can be framed
+
+The Tasks module is embedded as a same-origin `<iframe class="taskapp-frame"
+src="/taskmanagement/app.html">` (src/main.js). A site-wide `X-Frame-Options: DENY`
+header in vercel.json blocked that frame in the browser, so Tasks rendered as an empty
+grey box in production while working in local dev (which serves none of the vercel.json
+headers). SAMEORIGIN allows the app to frame its own pages while still blocking any
+cross-origin site from framing Command Center, preserving the clickjacking guard.
+The CSP is unaffected: it stays strict and Report-Only on purpose (its `frame-ancestors`
+and `wasm` violations are being collected deliberately, per tests/security-headers.test.mjs),
+so this fix is the enforced X-Frame-Options header only. Enforced by that same test.

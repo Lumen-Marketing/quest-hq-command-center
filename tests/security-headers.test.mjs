@@ -15,7 +15,12 @@ function headerMap() {
 test('the static app ships the unambiguous security headers', () => {
   const headers = headerMap();
   assert.equal(headers.get('X-Content-Type-Options'), 'nosniff');
-  assert.equal(headers.get('X-Frame-Options'), 'DENY');
+  // SAMEORIGIN, not DENY: the app embeds its own task module as a same-origin
+  // <iframe class="taskapp-frame" src="/taskmanagement/app.html"> (src/main.js).
+  // DENY blocks that frame too, so the task module renders as an empty/broken
+  // box on Vercel (which sends this header) while working locally (which does
+  // not). SAMEORIGIN still blocks cross-origin framing — the clickjacking guard.
+  assert.equal(headers.get('X-Frame-Options'), 'SAMEORIGIN');
   assert.ok(headers.has('Referrer-Policy'));
   assert.ok(headers.has('Cross-Origin-Opener-Policy'));
   assert.match(headers.get('Strict-Transport-Security') || '', /max-age=\d{7,}/);
