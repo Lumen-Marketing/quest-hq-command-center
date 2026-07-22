@@ -363,3 +363,39 @@ Nullable columns end in ?. Arrays and database-specific types use the live Postg
 - RLS: enabled
 - Primary key: id
 - Columns: `id` uuid; `company_id` text; `slug` text; `name` text; `description` text; `icon_key` text; `color` text; `status` text; `is_default` boolean; `created_by` uuid?; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+
+## Pending: RingCentral call dashboard
+
+Added by `202607231200_ringcentral_calls.sql`, **not yet applied live**. Company-scoped;
+no `workspace_id` by design. All five tables are RLS-enabled and service-role write only.
+
+### ringcentral_accounts
+
+- Primary key: company_id
+- Columns: `company_id` text; `rc_account_id` text; `credential_source` text; `credential_key` text; `status` text; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+- `credential_key` names a Vercel environment variable. The JWT is never stored here.
+
+### ringcentral_extensions
+
+- Primary key: company_id, extension_id
+- Columns: `company_id` text; `extension_id` text; `extension_number` text; `name` text; `email` text; `status` text; `updated_at` timestamp with time zone
+
+### ringcentral_calls
+
+- Primary key: id
+- Unique: (company_id, call_id)
+- Columns: `id` uuid; `company_id` text; `call_id` text; `session_id` text; `started_at` timestamp with time zone; `direction` text; `from_number` text; `from_name` text; `to_number` text; `to_name` text; `extension_id` text; `extension_number` text; `extension_name` text; `extension_email` text; `duration_seconds` integer; `result` text; `is_conversation` boolean; `raw` jsonb; `created_at` timestamp with time zone; `updated_at` timestamp with time zone
+- `is_conversation` is `duration_seconds >= 60`, written at sync time. A partial index covers it.
+- Extension name and email are denormalized so history survives a rename or a departure.
+
+### ringcentral_presence
+
+- Primary key: company_id, extension_id
+- Columns: `company_id` text; `extension_id` text; `display_status` text; `status_since` timestamp with time zone; `updated_at` timestamp with time zone
+- `status_since` is maintained by the app. RingCentral reports what a status is, never how long it has been held.
+
+### ringcentral_sync_state
+
+- Primary key: company_id
+- Columns: `company_id` text; `last_sync_at` timestamp with time zone; `backfilled_through` timestamp with time zone; `consecutive_failures` integer; `last_error` text; `updated_at` timestamp with time zone
+- There is no sync token: the job re-fetches a rolling window and upserts.

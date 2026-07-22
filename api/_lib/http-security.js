@@ -3,10 +3,13 @@ import { isIP } from 'node:net';
 export const DEFAULT_APP_ORIGIN = 'https://quest-hq-command-center-gamma.vercel.app';
 
 export class HttpError extends Error {
-  constructor(statusCode, message) {
+  // `body` carries extra response fields to merge alongside `{ error }`
+  // (e.g. { password_required: true }); optional and backward-compatible.
+  constructor(statusCode, message, body = null) {
     super(message);
     this.name = 'HttpError';
     this.statusCode = statusCode;
+    this.body = body;
   }
 }
 
@@ -106,6 +109,11 @@ export function appendQuery(urlValue, key, value) {
   return url.toString();
 }
 
+// For handlers that still own their own try/catch instead of going through
+// defineEndpoint (the three public-* endpoints and ringcentral-presence).
+// defineEndpoint applies the same status/message rule internally; this stays
+// until those four migrate onto it, and should be deleted with the last one.
+// The >=500 branch is what stops an internal error message reaching the client.
 export function errorResponse(response, error, fallback = 'Request failed.') {
   const status = Number(error?.statusCode) || 500;
   return response.status(status).json({ error: status >= 500 ? fallback : (error?.message || fallback) });

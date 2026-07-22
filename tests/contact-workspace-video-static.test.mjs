@@ -12,9 +12,9 @@ const allMigrations = readdirSync(migrationDir)
   .map((name) => readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'))
   .join('\n');
 
-test('contact workspace uses notes email and activity instead of old action clutter', () => {
+test('contact workspace uses notes email messages and activity instead of old action clutter', () => {
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
-  assert.match(recordSource, /const workspaceTabs = \[\['Notes', 'ti-note'\], \['Email', 'ti-mail'\], \['Activity', 'ti-activity'\]\]/);
+  assert.match(recordSource, /const workspaceTabs = \[\['Notes', 'ti-note'\], \['Email', 'ti-mail'\], \['Messages', 'ti-message'\], \['Activity', 'ti-activity'\]\]/);
   assert.match(recordSource, /data-action="set-contact-workspace-tab"/);
   assert.match(recordSource, /renderContactWorkspacePanel\(contact, activeWorkspaceTab, totalFeed, feed\)/);
   assert.doesNotMatch(recordSource, /const headerActions = \[\['Follow'/);

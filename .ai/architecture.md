@@ -44,6 +44,8 @@ The SPA supports:
 | Funnel next-action selection and record matching | [src/crm/next-action.js](../src/crm/next-action.js) |
 | Password, upload, realtime policy helpers | [src](../src) |
 | Serverless API handlers | [api](../api) |
+| RingCentral access (token exchange, paging, normalisation) | [api/_lib/ringcentral.js](../api/_lib/ringcentral.js) |
+| Browser bearer token to company-admin identity | [api/_lib/user-auth.js](../api/_lib/user-auth.js) |
 | Database history and authorization | [Supabase migrations](../supabase/migrations) |
 | Build, SPA fallback, scheduled endpoint | [vercel.json](../vercel.json) |
 | CI and production monitoring | [.github/workflows](../.github/workflows) |
@@ -66,4 +68,6 @@ The SPA supports:
 - Funnel "What's next" fields select from open tasks: contacts through `contact_id`, quotes/deals through tenant-scoped `deal_id`, and jobs through `project_id`.
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-workspace, per-contact records protected by Underwriter permissions and workspace RLS.
+- RingCentral data is company-scoped and carries no `workspace_id`: a phone account belongs to the whole company and its calls do not belong to any single operational workspace. All `ringcentral_*` tables are service-role write only; every browser-facing policy is select. Non-admin members are matched to their own calls by `auth.jwt() ->> 'email'`, so no extension-to-member mapping table exists.
+- RingCentral credentials live only in Vercel environment variables. `ringcentral_accounts.credential_key` names the variable; the JWT itself is never stored in Postgres and never reaches the browser.
 

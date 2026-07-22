@@ -20986,6 +20986,22 @@ button {
   font-size: 10px;
   color: #8a95a3;
 }
+/* Contact SMS (Messages tab) */
+.sf-sms-thread { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding: 14px 15px; }
+.sf-sms-loading, .sf-sms-empty { color: var(--sf-mut); font-size: 12.5px; text-align: center; padding: 20px 0; }
+.sf-sms-bubble { max-width: 78%; padding: 8px 11px; border-radius: 12px; font-size: 12.5px; line-height: 1.4; }
+.sf-sms-bubble .sf-sms-text { white-space: pre-wrap; word-break: break-word; }
+.sf-sms-bubble .sf-sms-meta { margin-top: 3px; font-size: 10.5px; opacity: .7; }
+.sf-sms-bubble.out { align-self: flex-end; background: var(--brand); color: #fff; border-bottom-right-radius: 4px; }
+.sf-sms-bubble.in { align-self: flex-start; background: #eef0f3; color: #1a1a1a; border-bottom-left-radius: 4px; }
+.sf-sms-failed { color: #ffd7cc; font-weight: 700; }
+.sf-sms-bubble.in .sf-sms-failed { color: #c0341d; }
+.sf-sms-composer { display: flex; align-items: center; gap: 8px; margin: 0 15px 8px; padding: 9px 12px; border: 1px solid var(--sf-bd); border-radius: 4px; }
+.sf-sms-composer input[name="body"] { flex: 1; border: 0; outline: none; font-size: 12.5px; background: transparent; }
+.sf-sms-composer input[name="body"]:disabled { color: var(--sf-mut); }
+.sf-sms-composer button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; background: var(--brand); color: #fff; cursor: pointer; }
+.sf-sms-composer button:disabled { opacity: .45; cursor: not-allowed; }
+.sf-sms-hint { padding: 0 15px 14px; color: var(--sf-mut); font-size: 11px; }
 .sf-feed-empty { padding: 16px 15px; color: var(--sf-mut); font-size: 12.5px; }
 .sf-feed-item { display: flex; gap: 11px; padding: 12px 15px; border-top: 1px solid #f0f0f0; }
 .sf-feed-avatar { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 5px; color: #fff; font-size: 10px; font-weight: 800; flex: none; }
@@ -24278,3 +24294,32 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   text-transform: uppercase; letter-spacing: .05em;
 }
 .auth-sso-divider::before, .auth-sso-divider::after { content: ""; flex: 1; height: 1px; background: var(--border, #dde1e8); }
+
+/* ── Calls (RingCentral) ─────────────────────────────────────────────────── */
+.calls-page { display: grid; gap: 18px; }
+.calls-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.calls-sync { font-size: 0.85rem; color: var(--muted, #6b7280); margin: 0; }
+.calls-sync.is-stale { color: var(--danger, #dc2626); font-weight: 600; }
+.calls-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.calls-board, .calls-table { width: 100%; border-collapse: collapse; }
+.calls-board td, .calls-table td, .calls-table th { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border, #e6e8eb); }
+.calls-table th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #6b7280); }
+.calls-board tr:last-child td, .calls-table tr:last-child td { border-bottom: 0; }
+.calls-board-name { font-weight: 600; }
+.calls-board-ext, .calls-board-since { color: var(--muted, #6b7280); font-variant-numeric: tabular-nums; }
+.calls-conversations { font-weight: 700; font-variant-numeric: tabular-nums; }
+.calls-status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--muted, #9ca3af); }
+.calls-status-on_call { background: #e0484d; }
+.calls-status-ringing { background: #ed9a3a; }
+.calls-status-busy { background: #ed9a3a; }
+.calls-status-available { background: #2e9e6b; }
+.calls-status-dnd { background: #8f867b; }
+.calls-status-offline { background: #c8cbd0; }
+.calls-ranges { display: flex; gap: 8px; flex-wrap: wrap; }
+.calls-range { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border, #e6e8eb); text-decoration: none; font-size: 0.85rem; }
+.calls-range.is-active { background: var(--accent-soft, rgba(237, 78, 13, .09)); border-color: transparent; font-weight: 600; }
+.calls-empty { color: var(--muted, #6b7280); margin: 0; }
+.calls-note { font-size: 0.78rem; color: var(--muted, #6b7280); margin: 10px 0 0; }
+.calls-widget { display: grid; gap: 12px; }
+.calls-widget-board { border: 1px solid var(--border, #e6e8eb); border-radius: 8px; padding: 4px 8px; background: var(--surface, #fff); }
+.calls-widget-link { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: 600; text-decoration: none; }

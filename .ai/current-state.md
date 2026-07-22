@@ -31,8 +31,17 @@ Captured 2026-07-22T22:24:26.326Z. This is a point-in-time operational snapshot,
 - Postgres: 17.6.1.127, engine 17
 - The catalog-count snapshot remains the 2026-07-21 metadata export; Task/workspace objects below were rechecked live on 2026-07-23.
 - Storage: 6 buckets cataloged without object data.
-- Latest repository migration: 20260722222107_task_workspace_plugin_activation.sql
-- Latest live ledger entry: 20260722192939 ringcentral_calls
+- Latest repository migration: 202607231200_ringcentral_calls.sql — **applied live 2026-07-23**
+- It adds five `ringcentral_*` tables, five select policies, the
+  `public.ringcentral_conversation_stats` function, and widens
+  `app_private.permission_plugin_ids` so `team.view` resolves to both `reporting` and
+  `calls`. The catalog counts above predate it and have not been re-captured.
+- The `lumen` company is seeded: a `ringcentral_accounts` row, the `calls` company plugin,
+  and the `calls` workspace plugin on its Main workspace.
+- **The live allowlist is ahead of the older plugin migrations.**
+  `company_plugins_known_plugin_check` contains `tasks`; a future migration that rebuilds
+  this constraint from a stale allowlist can drop `tasks` and fail against existing rows.
+  Always read the live constraint out of `pg_constraint` first.
 - Live tenancy verification: every one of the 3 company accounts has one active default operational workspace; all 11 workspace-owned pipeline tables have non-null workspace ids; zero company/workspace mismatches were found.
 - Live Task verification: `tasks.workspace_id` is required and existing task RLS is workspace-membership/permission scoped. Companies have the Tasks entitlement, but no Tasks rows existed in `workspace_plugins` at capture; the new forward migration supplies only those missing activations.
 - Migration drift: live contains the effects of the Task phase 2/3 migrations without their repository versions in the ledger. Do not replay those historical files; see `docs/supabase-migration-reconciliation.md`.
@@ -45,7 +54,9 @@ The current release branch separates each customer company account from its conf
 
 The Underwriter workspace follows the approved Technical Ledger hierarchy: compact metrics and stage filters, a dense two-column estimator workbench with a dedicated decision summary, and a full-width estimate queue. Its primary action is Save decision and the calculator's persistence, permissions, and live recalculation remain intact. The application shell uses a 264px white Quest command rail with IBM Plex Sans and IBM Plex Mono, sidebar search, My work and Company scopes, stakeholder-approved Work/Pipeline/Production/Tools/Review/Build groups, and direct profile/settings access while preserving module permission gates. The Contacts rail follows the standalone nine-step sales lifecycle from Prospects through Lost. Tasks remain the shared "What's next" source across Contacts, Quotes/Deals, and Jobs. Application startup is deferred until top-level module state is initialized so cached direct links render safely.
 
-The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Settings, plugins, and Workspace App Builder.
+The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Calls, Settings, plugins, and Workspace App Builder.
+
+Calls is a company-scoped RingCentral module with exactly two surfaces: a live board showing each extension's status and how long it has held it, and a table of total calls versus calls over 60 seconds per person. It deliberately reproduces nothing that RingCentral Analytics already shows. Historic counts are served by `public.ringcentral_conversation_stats` from synced rows, so the page renders when RingCentral is unreachable; only the live board reaches RingCentral, through `api/ringcentral-presence.js`, which is admin-only and caches upstream calls for ten seconds. `api/ringcentral-sync.js` runs on a Vercel cron, re-fetching a rolling three-day window of the company call log and upserting on `(company_id, call_id)`. The module is gated on the existing `team.view` permission and requires RingCentral credentials in Vercel plus a `ringcentral_accounts` row before it shows data.
 
 Future navigation entries currently include Tickets and Templates. Verify code and product direction before treating a planned page as complete.
 

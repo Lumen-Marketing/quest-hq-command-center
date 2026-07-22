@@ -27,6 +27,7 @@ The live Supabase public schema was captured 2026-07-21T00:27:56.075Z. The [mach
 | Client/public flows | clients, client_portals, client_portal_documents, client_portal_annotations, client_portal_events, forms, form_responses |
 | Finance and price book | finance_vendors, finance_invoices, finance_payments, finance_expenses, pricebook_vendors, pricebook_materials, pricebook_vendor_prices, v_pricebook_material_best |
 | Workspace configuration | workspace_plugins, company_plugins, workspace_builder_state, wo_counters |
+| Phone and call activity (pending migration) | ringcentral_accounts, ringcentral_extensions, ringcentral_calls, ringcentral_presence, ringcentral_sync_state |
 
 ## How to use this map
 

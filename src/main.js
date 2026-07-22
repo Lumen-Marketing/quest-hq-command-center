@@ -177,6 +177,9 @@ const RECYCLE_BIN_TYPES = {
 };
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
 const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
+// Which widgets each saved layout has already been offered, so a widget added to
+// the product later can surface once without resurrecting one the user removed.
+const DASHBOARD_SEEN_WIDGETS_CACHE_KEY = 'quest-hq-dashboard-seen-widgets-v1';
 const DASHBOARD_ROLE_VIEW_CACHE_KEY = 'quest-hq-dashboard-role-views-v1';
 const DASHBOARD_APP_WIDGET_CACHE_KEY = 'quest-hq-dashboard-app-widgets-v1';
 const SIDEBAR_SCROLL_KEY = 'quest-hq-sidebar-scroll';
@@ -836,14 +839,22 @@ const DASHBOARD_RANGE_OPTIONS = [
   ['quarter', 'Quarter'],
 ];
 const DASHBOARD_WIDGET_DEFAULTS = {
-  exec: ['kpis', 'avgTicket', 'revGrowth', 'goalPacing', 'leaderboard', 'backlog', 'pipelineCoverage', 'jobs', 'revenue', 'reviews'],
-  sales: ['kpis', 'leaderboard', 'callsTrend', 'sources', 'funnel', 'speed'],
-  ops: ['jobs', 'dispatch', 'weather', 'kpis', 'revenue'],
+  exec: ['calls', 'kpis', 'avgTicket', 'revGrowth', 'goalPacing', 'leaderboard', 'backlog', 'pipelineCoverage', 'jobs', 'revenue', 'reviews'],
+  sales: ['calls', 'kpis', 'leaderboard', 'callsTrend', 'sources', 'funnel', 'speed'],
+  ops: ['calls', 'jobs', 'dispatch', 'weather', 'kpis', 'revenue'],
   scale: ['pipelineCoverage', 'utilization', 'quota', 'dso', 'concentration', 'serviceMix', 'scorecard'],
   eos: ['rocks', 'scorecard', 'oneYearPlan', 'l10pulse', 'issues', 'todos', 'peopleAnalyzer', 'eosComponents', 'coreValues'],
 };
 
+// Core modules are always visible. Tasks is intentionally excluded: the
+// company plugin is the entitlement and each operational workspace controls
+// its own Tasks activation/configuration through workspace_plugins.
 const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'users', 'settings', 'automations']);
+// Private plugins are gated by companyPluginStatus() against company_plugins,
+// not by a client-side password. The old private-plugin access constant, which
+// shipped a literal password in the bundle, was deliberately removed on main;
+// tests/workspace-plugins-static.test.mjs greps this file to keep it gone, so
+// do not reintroduce it (or name it) when reconciling older branches.
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
   { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
@@ -860,6 +871,7 @@ const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'time_clock', label: 'Time & clock', summary: 'Personal time queues and clock dashboard.', icon: 'ti-clock-hour-4', module_ids: ['time', 'clock'], permissions: ['time.track', 'clock.manage'] },
   { id: 'approvals', label: 'Approvals', summary: 'Review queues for handoffs, forms, and access.', icon: 'ti-user-check', module_ids: ['approvals'], permissions: ['approvals.view', 'approvals.manage'] },
   { id: 'reporting', label: 'Reporting', summary: 'Analytics and team chart views.', icon: 'ti-chart-bar', module_ids: ['analytics', 'team-chart'], permissions: ['team.view'] },
+  { id: 'calls', label: 'Calls', summary: 'Live phone status and conversation counts from RingCentral.', icon: 'ti-phone', module_ids: ['calls'], permissions: ['team.view'] },
   { id: 'tickets', label: 'Tickets', summary: 'Future service and issue tracking module.', icon: 'ti-ticket', module_ids: ['tickets'], permissions: [], comingSoon: true },
   { id: 'templates', label: 'Templates', summary: 'Future reusable workspace templates.', icon: 'ti-template', module_ids: ['templates'], permissions: [], comingSoon: true },
 ];
@@ -1007,6 +1019,7 @@ const MODULE_REGISTRY = [
   { id: 'approvals', group: 'Operations', label: 'Approvals', icon: 'ti-user-check', symbol: 'q-symbol-approvals', status: 'live', permission: 'approvals.view' },
   { id: 'team-workload', group: 'Operations', label: 'Team workload', icon: 'ti-users', symbol: 'q-symbol-team-workload', status: 'live', permission: 'tasks.view' },
   { id: 'clock', group: 'Operations', label: 'Clock dashboard', icon: 'ti-clock-hour-4', symbol: 'q-symbol-clock', status: 'live', permission: 'clock.manage' },
+  { id: 'calls', group: 'Operations', label: 'Calls', icon: 'ti-phone', symbol: 'q-symbol-analytics', status: 'live', permission: 'team.view' },
 ];
 
 const NAVIGATION_LABELS = {
@@ -1026,7 +1039,7 @@ const NAV_GROUPS = [
   { label: 'Review', ids: ['analytics', 'users', 'calendar'] },
   { label: 'Build', ids: ['templates', 'automations'] },
   { label: 'Workspace', ids: ['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'] },
-  { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload'] },
+  { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload', 'calls'] },
   { label: 'Control', ids: ['settings', 'tickets'] },
 ];
 
@@ -2265,6 +2278,7 @@ const state = {
   dashboardCustomize: false,
   dashboardTrayOpen: false,
   dashboardLayouts: readJson(DASHBOARD_LAYOUT_CACHE_KEY, {}),
+  dashboardSeenWidgets: readJson(DASHBOARD_SEEN_WIDGETS_CACHE_KEY, {}),
   dashboardRoleViews: readJson(DASHBOARD_ROLE_VIEW_CACHE_KEY, []),
   dashboardAppWidgets: readJson(DASHBOARD_APP_WIDGET_CACHE_KEY, {}),
   workspaceIconDrafts: {},
@@ -2385,6 +2399,8 @@ const state = {
   automations: readSeededList(AUTOMATION_CACHE_KEY, automationsFallback).map(normalizeAutomation),
   knowledgeUi: { query: '', selectedId: '', editingId: null, creating: false },
   automationUi: { editingId: null, creating: false },
+  callsStats: { key: '', rows: [], sync: null, unavailable: false },
+  callsPresence: { agents: [], error: '', forbidden: false, notConnected: false },
 };
 
 const app = document.getElementById('app');
@@ -2678,6 +2694,7 @@ function render() {
   queueMicrotask(mountWorkspaceBuilder);
   queueMicrotask(mountFileViewer);
   queueMicrotask(mountDashboardWidgetDnD);
+  queueMicrotask(mountContactSmsThread);
 }
 
 function openNativeTimePicker(input) {
@@ -4406,7 +4423,9 @@ function permissionPluginIds(permission) {
   if (clean.startsWith('calendar.')) return ['calendar'];
   if (['time.track', 'clock.manage'].includes(clean)) return ['time_clock'];
   if (clean.startsWith('approvals.')) return ['approvals'];
-  if (clean === 'team.view') return ['reporting'];
+  // Mirrors app_private.permission_plugin_ids. Calls reuses team.view, so a
+  // workspace with Calls installed but Reporting uninstalled must still resolve.
+  if (clean === 'team.view') return ['reporting', 'calls'];
   return [];
 }
 
@@ -4494,6 +4513,7 @@ function renderWorkspace(route) {
   if (route.section === 'messages') return renderMessagesPage(route, companyId);
   if (route.section === 'team-chart') return renderTeamChartPage(companyId);
   if (route.section === 'time' || route.section === 'calendar' || route.section === 'approvals' || route.section === 'clock') return renderOperationsPage(route, companyId);
+  if (route.section === 'calls') return renderCallsPage(route, companyId);
   if (route.section === 'team-workload') return renderTeamWorkloadPage(companyId);
   if (route.section === 'knowledge') return renderKnowledgePage(route, companyId);
   if (route.section === 'automations') return renderAutomationsPage(route, companyId);
@@ -4535,6 +4555,242 @@ function renderTeamWorkloadPage(companyId) {
         <div class="tw-stat"><b>${wl.rows.length}</b><span>People</span></div>
       </div>
       ${wl.rows.length ? `<div class="tw-board panel">${rows}</div>` : emptyState('No active team members to show workload for.')}
+    </section>`;
+}
+
+// ── Calls (RingCentral) ──────────────────────────────────────────────────────
+// Two surfaces, both deliberately thin: who is on the phone right now, and how
+// many calls per person ran long enough to be a real conversation. Everything
+// else a manager might want is already in RingCentral's own Analytics page.
+//
+// Historic counts come from our own database through an aggregate RPC, so the
+// page renders even when RingCentral is unreachable. Only the live board talks
+// to RingCentral, through a server proxy that holds the credentials.
+
+const CALLS_RANGE_OPTIONS = [
+  ['today', 'Today'],
+  ['7d', 'Last 7 days'],
+  ['30d', 'Last 30 days'],
+];
+const CALLS_STATUS_LABELS = {
+  on_call: 'On call',
+  ringing: 'Ringing',
+  dnd: 'Do not disturb',
+  offline: 'Offline',
+  busy: 'Busy',
+  available: 'Available',
+};
+const CALLS_PRESENCE_POLL_MS = 15000;
+let callsPresenceTimer = null;
+
+function callsRangeKey(route) {
+  const requested = String(route?.params?.get?.('range') || 'today');
+  return CALLS_RANGE_OPTIONS.some(([key]) => key === requested) ? requested : 'today';
+}
+
+function callsRangeBounds(rangeKey) {
+  const to = new Date();
+  const from = new Date(to);
+  if (rangeKey === '7d') from.setDate(from.getDate() - 7);
+  else if (rangeKey === '30d') from.setDate(from.getDate() - 30);
+  else from.setHours(0, 0, 0, 0);
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
+function callsDurationLabel(sinceIso) {
+  const started = new Date(sinceIso).getTime();
+  if (!Number.isFinite(started)) return '—';
+  const seconds = Math.max(0, Math.floor((Date.now() - started) / 1000));
+  const pad = (value) => String(value).padStart(2, '0');
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return hours ? `${hours}:${pad(minutes)}:${pad(seconds % 60)}` : `${minutes}:${pad(seconds % 60)}`;
+}
+
+async function loadCallsStats(companyId, rangeKey) {
+  const key = `${companyId}|${rangeKey}`;
+  const client = createSupabaseClient();
+  if (!client) { state.callsStats = { key, rows: [], sync: null, unavailable: true }; return; }
+
+  const bounds = callsRangeBounds(rangeKey);
+  const [stats, sync] = await Promise.all([
+    client.rpc('ringcentral_conversation_stats', { p_company_id: companyId, p_from: bounds.from, p_to: bounds.to }),
+    client.from('ringcentral_sync_state').select('last_sync_at,consecutive_failures').eq('company_id', companyId).maybeSingle(),
+  ]);
+
+  // An erroring RPC means the migration has not been applied. That is a very
+  // different thing from "nobody made any calls", and saying so saves someone
+  // hunting for missing data that was never there.
+  state.callsStats = {
+    key,
+    rows: stats.error ? [] : (stats.data || []),
+    sync: sync.error ? null : sync.data,
+    unavailable: Boolean(stats.error),
+  };
+  if (callsSurfaceVisible()) render();
+}
+
+async function loadCallsPresence(companyId) {
+  const token = activeSession()?.access_token;
+  if (!token) return;
+  const idle = { agents: [], error: '', forbidden: false, notConnected: false };
+  try {
+    const response = await fetch(`/api/ringcentral-presence?company_id=${encodeURIComponent(companyId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const isJson = String(response.headers.get('content-type') || '').includes('application/json');
+
+    if (response.status === 403) {
+      // A member, not an admin. The board is a supervision surface, so hide it
+      // rather than showing them a single row about themselves.
+      state.callsPresence = { ...idle, forbidden: true };
+    } else if (response.status === 503 || !isJson) {
+      // 503 is the endpoint saying it has no credentials. A non-JSON body means
+      // the serverless function is not running at all — which is exactly what a
+      // plain `vite dev` server does, since it serves index.html for /api/*.
+      state.callsPresence = { ...idle, notConnected: true };
+    } else if (!response.ok) {
+      state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };
+    } else {
+      const payload = await response.json();
+      state.callsPresence = { ...idle, agents: payload.agents || [] };
+    }
+  } catch {
+    state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };
+  }
+  if (callsSurfaceVisible()) render();
+}
+
+// The Calls data feeds two surfaces: the module and a dashboard widget. Both
+// need loads and polling, so visibility is a question about either of them.
+function callsSurfaceVisible() {
+  return state.route?.section === 'calls' || state.route?.section === 'dashboard';
+}
+
+function ensureCallsData(companyId, rangeKey = 'today') {
+  const key = `${companyId}|${rangeKey}`;
+  if (state.callsStats.key !== key) queueMicrotask(() => loadCallsStats(companyId, rangeKey).catch(() => {}));
+  if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
+  queueMicrotask(() => loadCallsPresence(companyId).catch(() => {}));
+  ensureCallsPresencePolling(companyId);
+}
+
+function callsNotConnectedMarkup() {
+  return emptyState(`RingCentral isn't connected yet. Once the migration is applied and the RingCentral credentials are set, live status and conversation counts appear here.`);
+}
+
+function stopCallsPresencePolling() {
+  if (callsPresenceTimer) clearInterval(callsPresenceTimer);
+  callsPresenceTimer = null;
+}
+
+function ensureCallsPresencePolling(companyId) {
+  if (callsPresenceTimer) return;
+  callsPresenceTimer = setInterval(() => {
+    // The router replaces the whole view, so there is no unmount hook to hang
+    // this off; the timer retires itself once the user is somewhere else.
+    if (!callsSurfaceVisible()) { stopCallsPresencePolling(); return; }
+    if (document.hidden || state.callsPresence.forbidden || state.callsPresence.notConnected) return;
+    loadCallsPresence(companyId).catch(() => {});
+  }, CALLS_PRESENCE_POLL_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !callsSurfaceVisible()) return;
+    if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
+    loadCallsPresence(companyId).catch(() => {});
+  });
+}
+
+function callsBoardMarkup() {
+  const { agents, error, notConnected } = state.callsPresence;
+  if (notConnected) return '<p class="calls-empty">Not connected to RingCentral yet.</p>';
+  if (error) return `<p class="calls-empty">${h(error)}</p>`;
+  if (!agents.length) return '<p class="calls-empty">Loading live status…</p>';
+
+  const rank = { on_call: 0, ringing: 1, busy: 2, dnd: 3, available: 4, offline: 5 };
+  const ordered = [...agents].sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
+
+  return `<table class="calls-board"><tbody>${ordered.map((agent) => `
+    <tr>
+      <td class="calls-board-name">${h(agent.name || 'Unknown')}</td>
+      <td class="calls-board-ext">${h(agent.extension_number || '')}</td>
+      <td><span class="calls-status-dot calls-status-${h(agent.status)}"></span>${h(CALLS_STATUS_LABELS[agent.status] || agent.status)}</td>
+      <td class="calls-board-since">${h(callsDurationLabel(agent.since))}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// Dashboard widget. Same two ideas as the module, compressed: who is on the
+// phone, and today's conversation counts. Links through for the full view.
+function renderCallsWidget(companyId) {
+  ensureCallsData(companyId, 'today');
+
+  if (state.callsStats.unavailable || state.callsPresence.notConnected) return callsNotConnectedMarkup();
+
+  const rows = state.callsStats.key === `${companyId}|today` ? state.callsStats.rows : [];
+  const onCall = state.callsPresence.agents.filter((agent) => agent.status === 'on_call').length;
+  const available = state.callsPresence.agents.filter((agent) => agent.status === 'available').length;
+  const conversations = rows.reduce((total, row) => total + Number(row.conversations || 0), 0);
+  const totalCalls = rows.reduce((total, row) => total + Number(row.total_calls || 0), 0);
+
+  return `
+    <div class="calls-widget">
+      <section class="dash-kpis dash-widget-kpis">
+        ${dashboardMetricTile('ti-phone', onCall, 'On a call', `${available} available`)}
+        ${dashboardMetricTile('ti-message', conversations, 'Conversations 60s+', 'Today')}
+        ${dashboardMetricTile('ti-activity', totalCalls, 'Calls today', `${rows.length} people`)}
+      </section>
+      ${state.callsPresence.forbidden ? '' : `<div class="calls-widget-board">${callsBoardMarkup()}</div>`}
+      <a class="calls-widget-link" href="${appHref(companyPath('calls', {}, companyId))}" data-router>Open Calls<i class="ti ti-arrow-right" aria-hidden="true"></i></a>
+    </div>`;
+}
+
+function renderCallsPage(route, companyId) {
+  const rangeKey = callsRangeKey(route);
+  const key = `${companyId}|${rangeKey}`;
+  ensureCallsData(companyId, rangeKey);
+
+  const rows = state.callsStats.key === key ? state.callsStats.rows : [];
+  const sync = state.callsStats.sync;
+  const stale = Number(sync?.consecutive_failures || 0) >= 3;
+
+  const table = state.callsStats.unavailable
+    ? callsNotConnectedMarkup()
+    : rows.length
+    ? `<table class="calls-table">
+        <thead><tr><th>Name</th><th>Ext</th><th>Total calls</th><th>Conversations 60s+</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr>
+          <td>${h(row.extension_name || 'Unknown')}</td>
+          <td>${h(row.extension_number || '')}</td>
+          <td>${Number(row.total_calls || 0)}</td>
+          <td class="calls-conversations">${Number(row.conversations || 0)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`
+    : emptyState(`No calls in this range. If you expected to see your own, we couldn't match you to a RingCentral extension — ask your admin to check that your RingCentral email matches your Command Center login.`);
+
+  return `
+    <section class="calls-page">
+      <div class="calls-head">
+        <div>
+          <h1>Calls</h1>
+          <p class="muted">Who is on the phone right now, and how many real conversations each person is having.</p>
+        </div>
+        <p class="calls-sync${stale ? ' is-stale' : ''}">${sync?.last_sync_at ? `Synced ${h(timeAgo(sync.last_sync_at))}` : 'Not synced yet'}</p>
+      </div>
+
+      ${state.callsPresence.forbidden ? '' : `
+      <section class="panel calls-live">
+        <h2>Right now</h2>
+        ${callsBoardMarkup()}
+        <p class="calls-note">Durations are measured from when this dashboard first saw the status, so they are accurate to about 15 seconds.</p>
+      </section>`}
+
+      <section class="panel calls-conversations-panel">
+        <div class="calls-panel-head">
+          <h2>Conversations 60s+</h2>
+          <nav class="calls-ranges">${CALLS_RANGE_OPTIONS.map(([rangeId, label]) =>
+            `<a class="calls-range${rangeId === rangeKey ? ' is-active' : ''}" href="${appHref(companyPath('calls', { range: rangeId }, companyId))}" data-router>${h(label)}</a>`).join('')}</nav>
+        </div>
+        ${table}
+      </section>
     </section>`;
 }
 
@@ -5532,6 +5788,13 @@ function dashboardWidgetRegistry(companyId, ctx) {
   const commercialJobs = ctx.jobs.filter((job) => /commercial|storage|office|retail/i.test(String(job.job_type || job.name || '')));
   const collectedPct = ctx.fin.invoiced ? Math.round((ctx.fin.collected / ctx.fin.invoiced) * 100) : 0;
   const widgets = {
+    calls: {
+      title: 'Phones right now',
+      group: 'Operations',
+      span: true,
+      sub: 'Live RingCentral status, and conversations over 60 seconds today.',
+      render: () => renderCallsWidget(companyId),
+    },
     kpis: {
       title: 'Activity totals',
       group: 'Sales',
@@ -5877,7 +6140,20 @@ function dashboardAppMultiBody(app, fieldIds) {
 function dashboardWidgetLayout(companyId, role = state.dashboardRole) {
   const saved = state.dashboardLayouts?.[companyId]?.[role];
   const fallback = DASHBOARD_WIDGET_DEFAULTS[role] || DASHBOARD_WIDGET_DEFAULTS.exec;
-  return Array.isArray(saved) && saved.length ? saved : fallback.slice();
+  if (!Array.isArray(saved) || !saved.length) return fallback.slice();
+
+  // A saved layout used to replace the defaults outright, so any widget added to
+  // the product after someone first customised their dashboard stayed invisible
+  // to them permanently — they had to know to go hunting in Add widget.
+  //
+  // Introduce default widgets they have never been shown. `dashboardSeenWidgets`
+  // records what has been offered, and saving a layout records everything then on
+  // screen, so removing a widget still sticks: it is seen, therefore never
+  // reintroduced. Users with no record yet are treated as having seen exactly
+  // what they saved, which is what makes genuinely new widgets surface once.
+  const seen = new Set(state.dashboardSeenWidgets?.[companyId]?.[role] || saved);
+  const introductions = fallback.filter((id) => !seen.has(id) && !saved.includes(id));
+  return introductions.length ? [...introductions, ...saved] : saved;
 }
 
 function dashboardVisibleRoleViews(companyId = activeCompanyId()) {
@@ -5901,14 +6177,32 @@ function saveDashboardRoleViews(viewIds, companyId = activeCompanyId()) {
 }
 
 function saveDashboardWidgetLayout(companyId, role, widgetIds) {
+  const next = compactUnique(widgetIds);
   state.dashboardLayouts = {
     ...(state.dashboardLayouts || {}),
     [companyId]: {
       ...(state.dashboardLayouts?.[companyId] || {}),
-      [role]: compactUnique(widgetIds),
+      [role]: next,
     },
   };
   writeJson(DASHBOARD_LAYOUT_CACHE_KEY, state.dashboardLayouts);
+
+  // Everything in the registry has now been offered to this person, including
+  // whatever they just removed. Recording it here is what stops a removed widget
+  // reappearing on the next load.
+  const known = compactUnique([
+    ...(state.dashboardSeenWidgets?.[companyId]?.[role] || []),
+    ...next,
+    ...(DASHBOARD_WIDGET_DEFAULTS[role] || []),
+  ]);
+  state.dashboardSeenWidgets = {
+    ...(state.dashboardSeenWidgets || {}),
+    [companyId]: {
+      ...(state.dashboardSeenWidgets?.[companyId] || {}),
+      [role]: known,
+    },
+  };
+  writeJson(DASHBOARD_SEEN_WIDGETS_CACHE_KEY, state.dashboardSeenWidgets);
 }
 
 // Move widget `fromId` to sit next to `toId` in the active layout, then persist.
@@ -8083,7 +8377,7 @@ function renderContactRecord(companyId, contact) {
     </div>
   `;
 
-  const workspaceTabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Activity', 'ti-activity']];
+  const workspaceTabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Messages', 'ti-message'], ['Activity', 'ti-activity']];
   const quickTiles = [['Task', 'ti-checkbox'], ['Meeting', 'ti-calendar'], ['Estimate', 'ti-calculator'], ['Proposal', 'ti-file-text'], ['Email', 'ti-mail'], ['Call Log', 'ti-phone']];
 
   return `
@@ -8170,7 +8464,30 @@ function renderContactRecord(companyId, contact) {
 }
 
 function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed) {
-  const tabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Activity', 'ti-activity']];
+  const tabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Messages', 'ti-message'], ['Activity', 'ti-activity']];
+  const tabBar = `<div class="sf-activity-tabs">${tabs.map(([label, ico]) => `<button class="sf-activity-tab ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}</div>`;
+
+  if (activeWorkspaceTab === 'Messages') {
+    const textable = smsNormalize(contact.phone);
+    const disabled = textable ? '' : 'disabled';
+    const hint = textable
+      ? `Texting ${h(contact.phone)}`
+      : 'Add a valid mobile number to this contact before texting.';
+    return `
+      <div class="sf-card sf-workspace-card">
+        ${tabBar}
+        <div class="sf-sms-thread" data-sms-thread data-contact-id="${h(contact.id)}">
+          <div class="sf-sms-loading">Loading messages…</div>
+        </div>
+        <form class="sf-sms-composer" data-sms-form data-contact-id="${h(contact.id)}" autocomplete="off">
+          <input name="body" placeholder="Type a text message…" ${disabled} autocomplete="off" />
+          <button type="submit" ${disabled} title="Send text" aria-label="Send text"><i class="ti ti-send"></i></button>
+        </form>
+        <div class="sf-sms-hint">${hint}</div>
+      </div>
+    `;
+  }
+
   const noteItems = filteredActivitiesFor('contact', contact.id).filter((activity) => activity.type === 'note');
   const emailItems = filteredActivitiesFor('contact', contact.id).filter((activity) => activity.type === 'email');
   const panelFeed = activeWorkspaceTab === 'Notes' ? noteItems : activeWorkspaceTab === 'Email' ? emailItems : feed;
@@ -8214,6 +8531,90 @@ function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, fee
       </div>
     </div>
   `;
+}
+
+// --- Contact SMS (SMSblast) -------------------------------------------------
+// Client mirror of api/_lib/phone.js toE164 — the UI only needs to know whether
+// a number is textable and to display the thread.
+function smsNormalize(raw) {
+  const str = String(raw ?? '').trim();
+  if (!str) return null;
+  const digits = str.replace(/\D/g, '');
+  if (!digits) return null;
+  if (str.startsWith('+')) return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  return null;
+}
+
+function renderSmsBubbles(rows) {
+  if (!rows.length) return '<div class="sf-sms-empty">No messages yet. Say hello 👋</div>';
+  return rows.map((m) => {
+    const side = m.direction === 'outbound' ? 'out' : 'in';
+    const status = m.status === 'failed' ? ' <span class="sf-sms-failed">· failed</span>' : '';
+    const when = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+    return `<div class="sf-sms-bubble ${side}"><div class="sf-sms-text">${h(m.body || '')}</div>`
+      + `<div class="sf-sms-meta">${h(when)}${status}</div></div>`;
+  }).join('');
+}
+
+async function loadContactSmsThread(contactId) {
+  const selector = (window.CSS && CSS.escape) ? CSS.escape(contactId) : contactId;
+  const container = document.querySelector(`[data-sms-thread][data-contact-id="${selector}"]`);
+  if (!container) return;
+  try {
+    const client = createSupabaseClient();
+    const { data, error } = await client
+      .from('sms_messages')
+      .select('id,direction,body,status,created_at')
+      .eq('contact_id', contactId)
+      .order('created_at', { ascending: true })
+      .limit(200);
+    if (error) throw error;
+    container.innerHTML = renderSmsBubbles(data || []);
+    container.scrollTop = container.scrollHeight;
+  } catch (error) {
+    container.innerHTML = '<div class="sf-sms-empty">Could not load messages.</div>';
+  }
+}
+
+function mountContactSmsThread() {
+  const container = document.querySelector('[data-sms-thread]');
+  if (!container) return;
+  loadContactSmsThread(container.getAttribute('data-contact-id'));
+}
+
+async function sendContactSms(contactId, text) {
+  const session = activeSession();
+  const response = await fetch('/api/sms-send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify({ contact_id: contactId, body: text }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Text could not be sent.');
+  return payload.message;
+}
+
+async function submitContactSms(form) {
+  const contactId = form.getAttribute('data-contact-id');
+  const input = form.querySelector('input[name="body"]');
+  const text = (input?.value || '').trim();
+  if (!text) return;
+  input.disabled = true;
+  try {
+    await sendContactSms(contactId, text);
+    input.value = '';
+    await loadContactSmsThread(contactId);
+  } catch (error) {
+    showToast(error.message || 'Text could not be sent.', 'local', 'Messages');
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
 }
 
 function sfFeedItem(a) {
@@ -24579,6 +24980,12 @@ function onDocumentSubmit(event) {
     saveWorkdayNextStep(event.target).catch((error) => {
       showToast(error.message || 'Could not save next step.', 'local', 'Workday');
     });
+    return;
+  }
+
+  if (event.target.matches('[data-sms-form]')) {
+    event.preventDefault();
+    submitContactSms(event.target);
     return;
   }
 

@@ -54,6 +54,8 @@ Launch defaults use Supabase Auth, a public read-only demo, copy-link invites, a
 | `VITE_DEMO_MODE_ENABLED` | Recommended | Browser app | Enables the public sample workspace entry point before signup. |
 | `VITE_DEMO_READONLY` | Required for production demo | Browser app | Keep `true` so demo users cannot persist create/edit/delete actions. |
 | `VITE_BILLING_MODE` | Recommended | Browser app | Use `manual` until Stripe checkout and server secrets are configured. |
+| `SMSBLAST_API_KEY` | Required for SMS | Server functions | Server-only. SMSblast API key; never `VITE_`-prefixed. See `docs/sms-setup.md`. |
+| `SMSBLAST_WEBHOOK_TOKEN` | Required for SMS replies | Server functions | Server-only shared secret; appended as `?token=` on the inbound webhook URL. |
 
 Local env files such as `.env.local` are ignored by Git. For Vercel, configure these values in the project dashboard under Environment Variables for Preview and Production.
 
