@@ -1,67 +1,47 @@
 import crypto from 'node:crypto';
-import { appendQuery, readJsonBody, requireAllowedOrigin, safeReturnUrl, setApiHeaders } from './_lib/http-security.js';
-
-const json = (response, status, payload) => {
-  response.statusCode = status;
-  response.setHeader('Content-Type', 'application/json');
-  response.end(JSON.stringify(payload));
-};
+import { defineEndpoint, jsonResponse } from './_lib/endpoint.js';
+import { HttpError, appendQuery, safeReturnUrl } from './_lib/http-security.js';
+import { getUserFromBearer } from './_lib/user-auth.js';
 
 const env = (key) => process.env[key] || '';
 
-async function supabaseFetch(path, options = {}) {
-  const url = `${env('SUPABASE_URL') || env('VITE_SUPABASE_URL')}${path}`;
-  const serviceKey = env('SUPABASE_SERVICE_ROLE_KEY');
-  return fetch(url, {
-    ...options,
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      ...(options.headers || {}),
-    },
-  });
-}
-
-async function getUserFromBearer(request) {
-  const token = String(request.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (!token) return null;
-  const response = await fetch(`${env('SUPABASE_URL') || env('VITE_SUPABASE_URL')}/auth/v1/user`, {
-    headers: {
-      apikey: env('SUPABASE_SERVICE_ROLE_KEY'),
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!response.ok) return null;
-  return response.json();
-}
+const BILLING_ROLES = ['owner', 'admin', 'developer', 'construction_supervisor'];
 
 export function checkoutIdempotencyKey({ companyId, userId, priceId, requestId }) {
   return crypto.createHash('sha256').update(`${companyId}:${userId}:${priceId}:${requestId}`).digest('hex');
 }
 
-export default async function handler(request, response) {
-  setApiHeaders(response);
-  if (request.method !== 'POST') return json(response, 405, { error: 'Method not allowed' });
-  if (!env('STRIPE_SECRET_KEY') || !env('STRIPE_PRICE_ID') || !env('SUPABASE_SERVICE_ROLE_KEY')) {
-    return json(response, 501, { error: 'Billing is not configured yet.' });
-  }
+export default defineEndpoint(
+  {
+    method: 'POST',
+    auth: 'none',
+    requireOrigin: true,
+    cacheControl: 'private, no-store',
+    bodyLimitBytes: 16 * 1024,
+    rateLimit: { namespace: 'create-checkout-session', limit: 10, windowMs: 10 * 60 * 1000 },
+  },
+  async (ctx) => {
+    const { body, db, req } = ctx;
+    const getUser = ctx.getUser || getUserFromBearer;
+    const stripeFetch = ctx.stripeFetch || fetch;
 
-  const user = await getUserFromBearer(request);
-  if (!user?.id) return json(response, 401, { error: 'Authentication required.' });
+    if (!env('STRIPE_SECRET_KEY') || !env('STRIPE_PRICE_ID')) {
+      throw new HttpError(501, 'Billing is not configured yet.');
+    }
 
-  try {
-    requireAllowedOrigin(request);
-    const body = await readJsonBody(request, { maxBytes: 16 * 1024 });
+    const user = await getUser(req);
+    if (!user?.id) throw new HttpError(401, 'Authentication required.');
+
     const companyId = String(body.company_id || '').trim();
-    const requestId = String(body.request_id || request.headers['x-idempotency-key'] || '').trim();
-    const returnUrl = safeReturnUrl(body.return_url, request);
-    if (!companyId) return json(response, 400, { error: 'company_id is required.' });
-    if (!/^[A-Za-z0-9_-]{8,120}$/.test(requestId)) return json(response, 400, { error: 'A stable request_id is required.' });
+    const requestId = String(body.request_id || req.headers['x-idempotency-key'] || '').trim();
+    const returnUrl = safeReturnUrl(body.return_url, req);
+    if (!companyId) throw new HttpError(400, 'company_id is required.');
+    if (!/^[A-Za-z0-9_-]{8,120}$/.test(requestId)) throw new HttpError(400, 'A stable request_id is required.');
 
-    const membershipResponse = await supabaseFetch(`/rest/v1/company_memberships?company_id=eq.${encodeURIComponent(companyId)}&profile_id=eq.${encodeURIComponent(user.id)}&status=eq.active&select=role`);
-    const memberships = membershipResponse.ok ? await membershipResponse.json() : [];
-    const allowed = memberships.some((item) => ['owner', 'admin', 'developer', 'construction_supervisor'].includes(String(item.role || '').toLowerCase()));
-    if (!allowed) return json(response, 403, { error: 'Owner/Admin billing permission required.' });
+    const membershipRes = await db(`/rest/v1/company_memberships?company_id=eq.${encodeURIComponent(companyId)}&profile_id=eq.${encodeURIComponent(user.id)}&status=eq.active&select=role`);
+    const memberships = membershipRes.ok ? await membershipRes.json().catch(() => []) : [];
+    const allowed = memberships.some((item) => BILLING_ROLES.includes(String(item.role || '').toLowerCase()));
+    if (!allowed) throw new HttpError(403, 'Owner/Admin billing permission required.');
 
     const idempotencyKey = checkoutIdempotencyKey({ companyId, userId: user.id, priceId: env('STRIPE_PRICE_ID'), requestId });
     const params = new URLSearchParams();
@@ -76,7 +56,7 @@ export default async function handler(request, response) {
     params.set('subscription_data[metadata][company_id]', companyId);
     params.set('subscription_data[metadata][profile_id]', user.id);
 
-    const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    const stripeRes = await stripeFetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env('STRIPE_SECRET_KEY')}`,
@@ -85,10 +65,11 @@ export default async function handler(request, response) {
       },
       body: params,
     });
-    const payload = await stripeResponse.json();
-    if (!stripeResponse.ok) return json(response, stripeResponse.status, { error: payload.error?.message || 'Stripe checkout failed.' });
-    return json(response, 200, { url: payload.url });
-  } catch (error) {
-    return json(response, Number(error?.statusCode) || 500, { error: Number(error?.statusCode) < 500 ? error.message : 'Could not start billing.' });
-  }
-}
+    const payload = await stripeRes.json().catch(() => ({}));
+    if (!stripeRes.ok) {
+      return jsonResponse(stripeRes.status, { error: payload.error?.message || 'Stripe checkout failed.' });
+    }
+
+    return { url: payload.url };
+  },
+);

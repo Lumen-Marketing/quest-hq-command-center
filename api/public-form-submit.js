@@ -1,46 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { HttpError, readJsonBody, requireAllowedOrigin, setApiHeaders } from './_lib/http-security.js';
-import { enforceRateLimit } from './_lib/rate-limit.js';
-
-const FORM_FILE_BUCKET = 'quest-form-response-files';
-
-const env = (name) => process.env[name] || '';
-const baseUrl = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
-const serviceKey = () => env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY');
-const isSupabaseSecretKey = () => /^sb_secret_/i.test(serviceKey()) || /^eyJ/i.test(serviceKey());
-
-function supabaseHeaders(extra = {}) {
-  const key = serviceKey();
-  return {
-    apikey: key,
-    ...(isSupabaseSecretKey() ? {} : { Authorization: `Bearer ${key}` }),
-    ...extra,
-  };
-}
-
-async function supabaseGet(path) {
-  const response = await fetch(`${baseUrl()}/rest/v1/${path}`, {
-    headers: supabaseHeaders({ Accept: 'application/json' }),
-  });
-  const data = await response.json().catch(() => []);
-  if (!response.ok) throw new Error(Array.isArray(data) ? 'Supabase request failed.' : data.message || 'Supabase request failed.');
-  return data;
-}
-
-async function supabaseInsert(path, row) {
-  const response = await fetch(`${baseUrl()}/rest/v1/${path}`, {
-    method: 'POST',
-    headers: supabaseHeaders({
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Prefer: 'return=representation',
-    }),
-    body: JSON.stringify(row),
-  });
-  const data = await response.json().catch(() => []);
-  if (!response.ok) throw new Error(Array.isArray(data) ? 'Supabase insert failed.' : data.message || 'Supabase insert failed.');
-  return Array.isArray(data) ? data[0] : data;
-}
+import { defineEndpoint } from './_lib/endpoint.js';
+import { HttpError } from './_lib/http-security.js';
+import { FORM_FILE_BUCKET } from './_lib/form-files.js';
 
 function cleanAnswerValue(value, { form, question }) {
   if (Array.isArray(value)) return value.slice(0, 100).map((item) => cleanAnswerValue(item, { form, question }));
@@ -87,38 +48,52 @@ function cleanAnswers(input, form) {
   return answers;
 }
 
-export default async function handler(req, res) {
-  setApiHeaders(res);
-  if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
-  if (!baseUrl() || !serviceKey()) return res.status(500).json({ error: 'Public forms are not configured.' });
-  if (!enforceRateLimit(req, res, { namespace: 'public-form-submit', limit: 12, windowMs: 10 * 60 * 1000 })) return;
+export default defineEndpoint(
+  {
+    method: 'POST',
+    auth: 'none',
+    requireOrigin: true,
+    cacheControl: 'no-store',
+    notConfiguredStatus: 500,
+    notConfiguredMessage: 'Public forms are not configured.',
+    bodyLimitBytes: 1024 * 1024,
+    rateLimit: { namespace: 'public-form-submit', limit: 12, windowMs: 10 * 60 * 1000 },
+  },
+  async (ctx) => {
+    const { body, db } = ctx;
 
-  try {
-    requireAllowedOrigin(req);
-    const body = await readJsonBody(req, { maxBytes: 1024 * 1024 });
-    if (String(body.website || '').trim()) return res.status(200).json({ response: null });
+    if (String(body.website || '').trim()) return { response: null };
     const startedAt = Date.parse(String(body.started_at || ''));
-    if (Number.isFinite(startedAt) && Date.now() - startedAt < 1500) throw new HttpError(429, 'Please wait a moment before submitting.');
+    if (Number.isFinite(startedAt) && Date.now() - startedAt < 1500) {
+      throw new HttpError(429, 'Please wait a moment before submitting.');
+    }
+
     const formId = String(body.form_id || '').trim();
-    if (!formId) return res.status(400).json({ error: 'Missing form id.' });
-    const forms = await supabaseGet(`forms?id=eq.${encodeURIComponent(formId)}&status=eq.Published&select=id,company_id,title,status,collect_email,questions`);
-    const form = forms[0];
-    if (!form) return res.status(404).json({ error: 'Form not found or not published.' });
+    if (!formId) throw new HttpError(400, 'Missing form id.');
 
-    const response = await supabaseInsert('form_responses', {
-      id: `response-${randomUUID()}`,
-      company_id: form.company_id,
-      form_id: form.id,
-      submitted_by: String(body.submitted_by || body.submitter_email || 'Public respondent').slice(0, 240),
-      submitter_email: String(body.submitter_email || '').slice(0, 240),
-      answers: cleanAnswers(body.answers, form),
-      created_at: new Date().toISOString(),
+    const formsRes = await db(`/rest/v1/forms?id=eq.${encodeURIComponent(formId)}&status=eq.Published&select=id,company_id,title,status,collect_email,questions`);
+    if (!formsRes.ok) throw new HttpError(500, 'Could not submit form response.');
+    const form = (await formsRes.json().catch(() => []))[0];
+    if (!form) throw new HttpError(404, 'Form not found or not published.');
+
+    const answers = cleanAnswers(body.answers, form);
+
+    const insertRes = await db('/rest/v1/form_responses', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        id: `response-${randomUUID()}`,
+        company_id: form.company_id,
+        form_id: form.id,
+        submitted_by: String(body.submitted_by || body.submitter_email || 'Public respondent').slice(0, 240),
+        submitter_email: String(body.submitter_email || '').slice(0, 240),
+        answers,
+        created_at: new Date().toISOString(),
+      }),
     });
+    if (!insertRes.ok) throw new HttpError(500, 'Could not submit form response.');
+    const response = (await insertRes.json().catch(() => []))[0] || null;
 
-    return res.status(200).json({ response });
-  } catch (error) {
-    const status = Number(error?.statusCode) || 500;
-    return res.status(status).json({ error: status >= 500 ? 'Could not submit form response.' : error.message });
-  }
-}
+    return { response };
+  },
+);

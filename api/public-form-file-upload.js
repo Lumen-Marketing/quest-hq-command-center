@@ -1,64 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { createClient } from '@supabase/supabase-js';
-import { errorResponse, readJsonBody, requireAllowedOrigin, setApiHeaders } from './_lib/http-security.js';
-import { enforceRateLimit } from './_lib/rate-limit.js';
-
-const FORM_FILE_BUCKET = 'quest-form-response-files';
-const FORM_FILE_MAX_BYTES = 15 * 1024 * 1024;
-// Kept in lockstep with the client `formfile` policy (src/security/upload-policy.js).
-// ZIP-based office formats are intentionally excluded ("drop anything ZIP").
-const ALLOWED_PUBLIC_FORM_FILE_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-  'text/plain',
-  'text/csv',
-]);
-const ALLOWED_PUBLIC_FORM_FILE_EXTS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'csv']);
-const DANGEROUS_UPLOAD_EXTS = new Set([
-  'exe', 'bat', 'cmd', 'com', 'msi', 'scr', 'pif', 'sh', 'bash', 'ps1', 'vbs', 'js', 'mjs',
-  'jse', 'wsf', 'jar', 'app', 'apk', 'dmg', 'deb', 'rpm', 'html', 'htm', 'xhtml', 'svg',
-  'php', 'phtml', 'asp', 'aspx', 'jsp', 'py', 'rb', 'pl', 'dll', 'so', 'bin', 'lnk', 'reg',
-  'hta', 'cpl', 'zip',
-]);
-function uploadFileExtension(name) {
-  const clean = String(name || '').toLowerCase();
-  const dot = clean.lastIndexOf('.');
-  return dot >= 0 ? clean.slice(dot + 1) : '';
-}
-function hasDangerousUploadExtension(name) {
-  return String(name || '').toLowerCase().split('.').slice(1).some((part) => DANGEROUS_UPLOAD_EXTS.has(part.trim()));
-}
-
-const env = (name) => process.env[name] || '';
-const baseUrl = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
-const serviceKey = () => env('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_SECRET_KEY');
-const isSupabaseSecretKey = () => /^sb_secret_/i.test(serviceKey()) || /^eyJ/i.test(serviceKey());
-
-function supabaseHeaders(extra = {}) {
-  const key = serviceKey();
-  return {
-    apikey: key,
-    ...(isSupabaseSecretKey() ? {} : { Authorization: `Bearer ${key}` }),
-    ...extra,
-  };
-}
-
-function serverClient() {
-  return createClient(baseUrl(), serviceKey(), {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-async function supabaseGet(path) {
-  const response = await fetch(`${baseUrl()}/rest/v1/${path}`, {
-    headers: supabaseHeaders({ Accept: 'application/json' }),
-  });
-  const data = await response.json().catch(() => []);
-  if (!response.ok) throw new Error(Array.isArray(data) ? 'Supabase request failed.' : data.message || 'Supabase request failed.');
-  return data;
-}
+import { defineEndpoint } from './_lib/endpoint.js';
+import { HttpError } from './_lib/http-security.js';
+import { createStorageClient } from './_lib/supabase-storage.js';
+import {
+  ALLOWED_PUBLIC_FORM_FILE_EXTS,
+  ALLOWED_PUBLIC_FORM_FILE_TYPES,
+  FORM_FILE_BUCKET,
+  FORM_FILE_MAX_BYTES,
+  hasDangerousUploadExtension,
+  uploadFileExtension,
+} from './_lib/form-files.js';
 
 function safeFileName(name) {
   const cleaned = String(name || 'upload')
@@ -82,42 +33,50 @@ async function ensureFormFileBucket(client) {
   }
 }
 
-export default async function handler(req, res) {
-  setApiHeaders(res);
-  if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
-  if (!baseUrl() || !serviceKey()) return res.status(500).json({ error: 'Public form files are not configured.' });
+export default defineEndpoint(
+  {
+    method: 'POST',
+    auth: 'none',
+    requireOrigin: true,
+    cacheControl: 'no-store',
+    notConfiguredStatus: 500,
+    notConfiguredMessage: 'Public form files are not configured.',
+    bodyLimitBytes: 16 * 1024,
+    rateLimit: { namespace: 'public-form-file-upload', limit: 20, windowMs: 10 * 60 * 1000 },
+  },
+  async (ctx) => {
+    const { body, db } = ctx;
+    const storage = ctx.storage || createStorageClient();
 
-  try {
-    if (!enforceRateLimit(req, res, { namespace: 'public-form-file-upload', limit: 20, windowMs: 10 * 60 * 1000 })) return;
-    requireAllowedOrigin(req);
-    const body = await readJsonBody(req, { maxBytes: 16 * 1024 });
     const formId = String(body.form_id || '').trim();
     const questionId = String(body.question_id || '').trim();
     const fileName = safeFileName(body.file_name);
     const fileType = String(body.file_type || '').toLowerCase().trim().slice(0, 120);
     const fileSize = Number(body.file_size || 0) || 0;
-    if (!formId || !questionId) return res.status(400).json({ error: 'Missing form or question.' });
-    if (fileSize <= 0 || fileSize > FORM_FILE_MAX_BYTES) return res.status(413).json({ error: 'File is too large for this form.' });
-    if (hasDangerousUploadExtension(body.file_name)) return res.status(415).json({ error: 'That file type is blocked for security reasons.' });
-    if (!ALLOWED_PUBLIC_FORM_FILE_EXTS.has(uploadFileExtension(fileName))) return res.status(415).json({ error: 'Unsupported file extension.' });
-    if (!ALLOWED_PUBLIC_FORM_FILE_TYPES.has(fileType)) return res.status(415).json({ error: 'Unsupported file type.' });
 
-    const forms = await supabaseGet(`forms?id=eq.${encodeURIComponent(formId)}&status=eq.Published&select=id,company_id,status,questions`);
-    const form = forms[0];
-    if (!form) return res.status(404).json({ error: 'Form not found or not published.' });
+    if (!formId || !questionId) throw new HttpError(400, 'Missing form or question.');
+    if (fileSize <= 0 || fileSize > FORM_FILE_MAX_BYTES) throw new HttpError(413, 'File is too large for this form.');
+    // Checked against the raw name, before safeFileName() rewrites it.
+    if (hasDangerousUploadExtension(body.file_name)) throw new HttpError(415, 'That file type is blocked for security reasons.');
+    if (!ALLOWED_PUBLIC_FORM_FILE_EXTS.has(uploadFileExtension(fileName))) throw new HttpError(415, 'Unsupported file extension.');
+    if (!ALLOWED_PUBLIC_FORM_FILE_TYPES.has(fileType)) throw new HttpError(415, 'Unsupported file type.');
+
+    const formsRes = await db(`/rest/v1/forms?id=eq.${encodeURIComponent(formId)}&status=eq.Published&select=id,company_id,status,questions`);
+    if (!formsRes.ok) throw new HttpError(500, 'Could not prepare file upload.');
+    const form = (await formsRes.json().catch(() => []))[0];
+    if (!form) throw new HttpError(404, 'Form not found or not published.');
+
     const question = Array.isArray(form.questions) ? form.questions.find((item) => item.id === questionId) : null;
-    if (!question || question.type !== 'file') return res.status(400).json({ error: 'This question does not accept files.' });
+    if (!question || question.type !== 'file') throw new HttpError(400, 'This question does not accept files.');
 
-    const client = serverClient();
-    await ensureFormFileBucket(client);
+    await ensureFormFileBucket(storage);
     const objectPath = `${form.company_id}/${form.id}/${questionId}/${randomUUID()}-${fileName}`;
-    const { data, error } = await client.storage
+    const { data, error } = await storage.storage
       .from(FORM_FILE_BUCKET)
       .createSignedUploadUrl(objectPath, { upsert: false });
-    if (error) throw error;
+    if (error) throw new HttpError(500, 'Could not prepare file upload.');
 
-    return res.status(200).json({
+    return {
       bucket_id: FORM_FILE_BUCKET,
       object_path: objectPath,
       token: data?.token || '',
@@ -125,8 +84,6 @@ export default async function handler(req, res) {
       file_name: fileName,
       file_type: fileType,
       file_size: fileSize,
-    });
-  } catch (error) {
-    return errorResponse(res, error, 'Could not prepare file upload.');
-  }
-}
+    };
+  },
+);

@@ -39,6 +39,14 @@ The Vercel functions under `api/` share one deep seam, `api/_lib/`:
   owns base-URL resolution and the service-key header logic. Injected onto the
   handler context as `ctx.db`, which makes it a real seam: production passes the
   real fetch, tests pass a fake.
+- **`supabase-storage.js`** — `createStorageClient()` returns a supabase-js
+  client for the Storage operations `ctx.db` cannot express (signed upload and
+  download URLs). Base URL and key come from `supabase-admin.js`, so the two
+  can never disagree about env resolution. Only the two public-form file
+  endpoints use it, via `ctx.storage || createStorageClient()` — a real
+  default in production, a fake in tests.
+- **`form-files.js`** — the Public Form file bucket name, size cap and allowed
+  MIME types, shared by the three form endpoints.
 
 `ctx = { req, res, query, body, session?, db }`. Handlers return a plain object
 (→ JSON 200), a `fileResponse(...)` (→ raw bytes), a `jsonResponse(status, body)`
