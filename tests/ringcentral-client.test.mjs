@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createRingCentralClient, RingCentralError, CONVERSATION_THRESHOLD_SECONDS } from '../api/_lib/ringcentral.js';
+import {
+  createRingCentralClient,
+  RingCentralError,
+  CONVERSATION_THRESHOLD_SECONDS,
+  normalizeCallRecord,
+  deriveDisplayStatus,
+  normalizeExtension,
+} from '../api/_lib/ringcentral.js';
 
 const CONFIG = {
   clientId: 'cid',
@@ -99,4 +106,101 @@ test('fetchPaged sends the bearer token and surfaces a 429 as RingCentralError',
     assert.equal(error.statusCode, 429);
     return true;
   });
+});
+
+const EXTENSIONS = new Map([
+  ['201', { extension_id: '201', extension_number: '103', name: 'Ralph Garcia', email: 'Ralph@Quest.com ' }],
+]);
+
+test('normalizeCallRecord flattens a call and denormalizes the extension', () => {
+  const row = normalizeCallRecord({
+    id: 'call-1',
+    sessionId: 'sess-1',
+    startTime: '2026-07-20T17:04:05.000Z',
+    direction: 'Outbound',
+    duration: 95,
+    result: 'Call connected',
+    from: { phoneNumber: '+16025550101', name: 'Quest' },
+    to: { phoneNumber: '+16025550102', name: 'Customer' },
+    extension: { id: 201 },
+  }, { companyId: 'quest', extensions: EXTENSIONS });
+
+  assert.equal(row.company_id, 'quest');
+  assert.equal(row.call_id, 'call-1');
+  assert.equal(row.session_id, 'sess-1');
+  assert.equal(row.started_at, '2026-07-20T17:04:05.000Z');
+  assert.equal(row.direction, 'Outbound');
+  assert.equal(row.duration_seconds, 95);
+  assert.equal(row.result, 'Call connected');
+  assert.equal(row.from_number, '+16025550101');
+  assert.equal(row.to_name, 'Customer');
+  assert.equal(row.extension_id, '201');
+  assert.equal(row.extension_number, '103');
+  assert.equal(row.extension_name, 'Ralph Garcia');
+  assert.equal(row.extension_email, 'ralph@quest.com', 'email is lowercased and trimmed for matching');
+  assert.equal(row.is_conversation, true);
+});
+
+test('normalizeCallRecord is inclusive at exactly the threshold and excludes one second under', () => {
+  const build = (duration) => normalizeCallRecord(
+    { id: `c-${duration}`, startTime: '2026-07-20T17:00:00.000Z', duration, extension: { id: 201 } },
+    { companyId: 'quest', extensions: EXTENSIONS },
+  );
+  assert.equal(build(60).is_conversation, true);
+  assert.equal(build(59).is_conversation, false);
+  assert.equal(build(0).is_conversation, false);
+});
+
+test('normalizeCallRecord tolerates an unknown extension and a missing duration', () => {
+  const row = normalizeCallRecord(
+    { id: 'call-2', startTime: '2026-07-20T17:00:00.000Z', extension: { id: 999 } },
+    { companyId: 'quest', extensions: EXTENSIONS },
+  );
+  assert.equal(row.extension_id, '999');
+  assert.equal(row.extension_name, '');
+  assert.equal(row.extension_email, '');
+  assert.equal(row.duration_seconds, 0);
+  assert.equal(row.is_conversation, false);
+});
+
+test('normalizeCallRecord rejects a record with no id or no start time', () => {
+  const context = { companyId: 'quest', extensions: EXTENSIONS };
+  assert.equal(normalizeCallRecord({ startTime: '2026-07-20T17:00:00.000Z' }, context), null);
+  assert.equal(normalizeCallRecord({ id: 'call-3' }, context), null);
+});
+
+test('deriveDisplayStatus ranks an active call above every other signal', () => {
+  assert.equal(deriveDisplayStatus({ telephonyStatus: 'CallConnected', userStatus: 'Offline', dndStatus: 'DoNotAcceptAnyCalls' }), 'on_call');
+  assert.equal(deriveDisplayStatus({ telephonyStatus: 'Ringing', userStatus: 'Offline' }), 'ringing');
+  assert.equal(deriveDisplayStatus({ telephonyStatus: 'NoCall', dndStatus: 'DoNotAcceptAnyCalls' }), 'dnd');
+  assert.equal(deriveDisplayStatus({ telephonyStatus: 'NoCall', userStatus: 'Offline' }), 'offline');
+  assert.equal(deriveDisplayStatus({ telephonyStatus: 'NoCall', userStatus: 'Busy' }), 'busy');
+  assert.equal(deriveDisplayStatus({ telephonyStatus: 'NoCall', userStatus: 'Available' }), 'available');
+  assert.equal(deriveDisplayStatus({}), 'available', 'an empty payload falls back to available');
+});
+
+test('deriveDisplayStatus ignores a DND value that means DND is off', () => {
+  assert.equal(deriveDisplayStatus({ telephonyStatus: 'NoCall', userStatus: 'Available', dndStatus: 'TakeAllCalls' }), 'available');
+});
+
+test('normalizeExtension keeps only enabled user extensions', () => {
+  const row = normalizeExtension({
+    id: 201,
+    extensionNumber: '103',
+    name: 'Ralph Garcia',
+    contact: { email: 'Ralph@Quest.com' },
+    status: 'Enabled',
+    type: 'User',
+  }, 'quest');
+  assert.deepEqual(row, {
+    company_id: 'quest',
+    extension_id: '201',
+    extension_number: '103',
+    name: 'Ralph Garcia',
+    email: 'ralph@quest.com',
+    status: 'Enabled',
+  });
+
+  assert.equal(normalizeExtension({ id: 5, type: 'Department', status: 'Enabled' }, 'quest'), null);
+  assert.equal(normalizeExtension({ type: 'User', status: 'Enabled' }, 'quest'), null);
 });
