@@ -51,7 +51,17 @@ profile, not the app.
    silently and the dashboard goes stale with no explanation. The tradeoff is a
    permanent key: it lives only in Vercel's environment variables, and if it ever leaks,
    delete it here and generate a new one.
-5. Copy the JWT string immediately — it is shown once.
+5. Copy the JWT string. The credential's own page keeps a **Click to see** link, so it
+   can be retrieved later — but treat it like any other key and do not paste it into
+   chat, email, or a screenshot.
+
+The two halves of the credentials live on **different pages**, which is the most common
+place to get stuck:
+
+| Page | Holds |
+| --- | --- |
+| **Apps → your app** | Client ID, Client Secret, API Server URL |
+| **Your name ▾ → Credentials** | The JWT |
 
 **It must be created by a RingCentral Super Admin.** A JWT inherits the permissions of
 whoever created it, so a credential made by a regular user would expose only that
