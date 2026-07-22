@@ -33,6 +33,20 @@ App.TaskModel = class TaskModel {
     App.EventBus.emit('tasks:changed');
   }
 
+  /* Apply a FIELD-MERGED server-conflict result (server base + local edits) and
+     KEEP the task dirty so the next save retries it. Used on optimistic-lock
+     conflicts (fix #4): the datastore has already advanced its known version to
+     the server's updated_at, so the retry's lock will pass and the merge
+     converges (no infinite conflict loop). Emitting 'tasks:changed' both
+     re-renders and (via the bound `persist` debounce) schedules that retry. */
+  applyServerKeepDirty(task) {
+    if (!task) return;
+    const i = this.tasks.findIndex(t => t.id === task.id);
+    if (i === -1) this.tasks.push(task); else this.tasks[i] = task;
+    this._markDirty(task.id);
+    App.EventBus.emit('tasks:changed');
+  }
+
   // Snapshot of the ids with unsaved edits — passed to the data store's poll
   // so it won't advance their optimistic-lock version out from under a pending save.
   dirtyIds() { return new Set(this._dirty); }
@@ -72,7 +86,7 @@ App.TaskModel = class TaskModel {
       { id:'t1',  title:'Lien filing — CNL job', type:'admin', company:'roofing', creator:'abraham', assignee:'abraham', watchers:['kristine'], due:iso(-4), priority:'urgent',   status:'todo',    description:'Mechanic\'s lien paperwork prepped. Need to file with Maricopa County recorder before end of week.', subtasks:[{t:'Pull deed info',d:true},{t:'Notarize',d:false}], activity:[{who:'Abraham',what:'created this task',when:'5d ago'}] },
       { id:'t2',  title:'Update QR ROC complaint draft', type:'admin', company:'roofing', creator:'abraham', assignee:'kristine', watchers:[], due:iso(-2), priority:'high', status:'pending', description:'Add the contract excerpt and email chain as exhibits before sending.', subtasks:[], activity:[{who:'Abraham',what:'assigned this to Kristine',when:'3d ago'}] },
       { id:'t3',  title:'CNL demand letter follow-up', type:'ar', company:'roofing', creator:'abraham', assignee:'abraham', watchers:['kristine'], due:iso(0), priority:'critical', status:'todo', description:'Call CNL accounting by EOD. If no commitment, file mechanic\'s lien tomorrow + Justice Court small claims by Friday.', subtasks:[{t:'Send certified letter',d:true},{t:'Call accounting',d:false},{t:'Prep lien paperwork',d:false}], activity:[{who:'Kristine',what:'uploaded letter.pdf',when:'2h ago'},{who:'Abraham',what:'set due date today',when:'yesterday'}] },
-      { id:'t4',  title:'Paradise Valley demo punch list', type:'bid', bidStatus:'started', company:'roofing', creator:'abraham', assignee:'alkeith', watchers:['abraham'], due:iso(0), priority:'urgent', status:'todo', description:'Final walkthrough items. See photos in shared album.', subtasks:[{t:'Tear-off west slope',d:true},{t:'Replace decking 2 sheets',d:true},{t:'Drip edge install',d:false},{t:'Final cleanup + photos',d:false}], activity:[{who:'Abraham',what:'assigned this to Alkeith',when:'yesterday'}] },
+      { id:'t4',  title:'Paradise Valley demo punch list', type:'bid', company:'roofing', creator:'abraham', assignee:'alkeith', watchers:['abraham'], due:iso(0), priority:'urgent', status:'todo', description:'Final walkthrough items. See photos in shared album.', subtasks:[{t:'Tear-off west slope',d:true},{t:'Replace decking 2 sheets',d:true},{t:'Drip edge install',d:false},{t:'Final cleanup + photos',d:false}], activity:[{who:'Abraham',what:'assigned this to Alkeith',when:'yesterday'}] },
       { id:'t5',  title:'Jesus week-2 KPI review', type:'meeting', company:'roofing', creator:'abraham', assignee:'abraham', watchers:['jesus'], due:iso(0), priority:'high', status:'review', description:'Review against 90-day vesting milestones. Doors knocked, appts set, contracts signed.', subtasks:[], activity:[] },
       { id:'t6',  title:'Send Andres weekly QA brief', type:'admin', company:'drafting', creator:'abraham', assignee:'abraham', watchers:[], due:iso(0), priority:'medium', status:'todo', description:'', subtasks:[], activity:[] },
       { id:'t7',  title:'Adrian — confirm trial milestones', type:'meeting', company:'lumen', creator:'abraham', assignee:'abraham', watchers:['adrian'], due:iso(0), priority:'high', status:'todo', description:'3-month trial KPIs need to be in writing before next sync.', subtasks:[], activity:[] },
@@ -90,15 +104,25 @@ App.TaskModel = class TaskModel {
   /* ---------- queries ---------- */
   all() { return this.tasks; }
   find(id) { return this.tasks.find(t => t.id === id); }
-  byCompany(companyId) { return this.tasks.filter(t => t.company === companyId); }
-  byAssignee(userId) { return this.tasks.filter(t => t.assignee === userId); }
+  byCompany(companyId) { return this.tasks.filter(t => App.utils.taskInCompany(t, companyId)); }
+  byAssignee(userId) { return this.tasks.filter(t => App.utils.isAssignee(t, userId)); }
 
-  getFiltered({ view, searchQuery, currentUser, activeFilters, currentCompany, role, reportMemberIds, projectId }) {
+  /* The shared, cross-person Focus list: every active (not done, not soft-
+     cleared) task that's been given a focus position, ordered by it — regardless
+     of who it's assigned to. The #N badge a user sees is the index in THIS
+     array, not the stored focusSeq. (Visibility is already enforced upstream:
+     this.tasks only holds rows the viewer is allowed to see.) */
+  focusList() {
+    return this.tasks
+      .filter(t => t.focusSeq != null && !App.taxonomy.isDone(t) && !t.clearedAt)
+      .sort((a, b) => a.focusSeq - b.focusSeq);
+  }
+
+  getFiltered({ view, scope, searchQuery, currentUser, activeFilters, currentCompany, role, reportMemberIds }) {
     // Soft-cleared rows (Clear-done-group action) stay in memory so the
     // optimistic-lock save still works, but they never appear in any
     // view — boot-time purge hard-deletes them after the 30-day grace.
     let tasks = this.tasks.filter(t => !t.clearedAt);
-    if (projectId) tasks = tasks.filter(t => String(t.project || '') === String(projectId));
     const t0 = App.utils.todayISO(0);
     const clockTaskId = App.DEFAULT_CLOCK_TASK_ID;
 
@@ -107,7 +131,7 @@ App.TaskModel = class TaskModel {
     // companies" (god mode). The shared clock task is always visible so timers
     // work regardless of company.
     if (currentCompany && currentCompany !== '*') {
-      tasks = tasks.filter(t => t.company === currentCompany || t.id === clockTaskId);
+      tasks = tasks.filter(t => App.utils.taskInCompany(t, currentCompany) || t.id === clockTaskId);
     }
 
     // Role row-scope. Worker = tasks assigned to OR created by them (mirrors the
@@ -115,42 +139,50 @@ App.TaskModel = class TaskModel {
     // created and delegated to a teammate); Supervisor = own/created or assigned to
     // a direct report. Admin/developer see everything in scope.
     if (role === 'worker') {
-      tasks = tasks.filter(t => t.assignee === currentUser || t.creator === currentUser || t.id === clockTaskId);
+      tasks = tasks.filter(t => App.utils.isAssignee(t, currentUser) || t.creator === currentUser || t.id === clockTaskId);
     } else if (role === 'supervisor' && reportMemberIds) {
       tasks = tasks.filter(t =>
-        t.assignee === currentUser ||
+        App.utils.isAssignee(t, currentUser) ||
         t.creator === currentUser ||
-        reportMemberIds.has(t.assignee) ||
+        App.utils.taskAssignees(t).some(id => reportMemberIds.has(id)) ||
         t.id === clockTaskId
       );
     }
 
-    if (view === 'mine') tasks = tasks.filter(t => t.assignee === currentUser);
-    else if (view === 'hot') tasks = tasks.filter(t => (t.priority === 'critical' || t.priority === 'urgent') && t.status !== 'done');
-    else if (view === 'today') tasks = tasks.filter(t => t.due === t0 && t.status !== 'done');
-    else if (view === 'overdue') tasks = tasks.filter(t => t.due < t0 && t.status !== 'done');
+    if (view === 'mine') tasks = tasks.filter(t => App.utils.isAssignee(t, currentUser));
+    else if (view === 'hot') tasks = tasks.filter(t => (t.priority === 'critical' || t.priority === 'urgent') && !App.taxonomy.isDone(t));
+    else if (view === 'today') tasks = tasks.filter(t => t.due === t0 && !App.taxonomy.isDone(t));
+    // `t.due &&`: due === '' must not read as overdue ('' < any ISO date).
+    else if (view === 'overdue') tasks = tasks.filter(t => t.due && t.due < t0 && !App.taxonomy.isDone(t));
     else if (view === 'watching') tasks = tasks.filter(t => (t.watchers || []).includes(currentUser));
     else if (view.startsWith('company:')) {
       const c = view.split(':')[1];
-      tasks = tasks.filter(t => t.company === c);
+      tasks = tasks.filter(t => App.utils.taskInCompany(t, c));
     } else if (view.startsWith('person:')) {
       const p = view.split(':')[1];
-      tasks = tasks.filter(t => t.assignee === p);
+      tasks = tasks.filter(t => App.utils.isAssignee(t, p));
     }
+
+    // Scope segment ("My work"): narrows the active view to the viewer's own
+    // assignments without leaving it — Urgent stays Urgent, just mine. Counts
+    // co-assignments, not just the ones where you're the lead.
+    if (scope === 'mine') tasks = tasks.filter(t => App.utils.isAssignee(t, currentUser));
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       tasks = tasks.filter(t => {
         if (t.title.toLowerCase().includes(q)) return true;
         if ((t.description || '').toLowerCase().includes(q)) return true;
-        const person = App.PEOPLE[t.assignee];
+        const person = App.directory.person(t.assignee);
         if (person && (
           (person.name || '').toLowerCase().includes(q) ||
           (person.full || '').toLowerCase().includes(q) ||
           (person.email || '').toLowerCase().includes(q)
         )) return true;
-        if ((t.project || '').toLowerCase().includes(q)) return true;
-        const company = App.COMPANIES[t.company];
+        const proj = App.directory.project(t.project);
+        const projName = (proj && proj.name) || '';
+        if (projName.toLowerCase().includes(q)) return true;
+        const company = App.directory.company(t.company);
         if (company && (company.label || '').toLowerCase().includes(q)) return true;
         return false;
       });
@@ -158,18 +190,25 @@ App.TaskModel = class TaskModel {
 
     if (activeFilters) {
       const f = activeFilters;
-      if (f.assignees && f.assignees.length) tasks = tasks.filter(t => f.assignees.includes(t.assignee));
-      if (f.companies && f.companies.length) tasks = tasks.filter(t => f.companies.includes(t.company));
+      if (f.assignees && f.assignees.length) {
+        tasks = tasks.filter(t => App.utils.taskAssignees(t).some(id => f.assignees.includes(id)));
+      }
+      if (f.companies && f.companies.length) {
+        tasks = tasks.filter(t => f.companies.some(c => App.utils.taskInCompany(t, c)));
+      }
+      if (f.projectId) tasks = tasks.filter(t => t.project === f.projectId);
+      if (f.projects && f.projects.length) tasks = tasks.filter(t => f.projects.includes(t.project));
       if (f.statuses  && f.statuses.length)  tasks = tasks.filter(t => f.statuses.includes(t.status || 'todo'));
       if (f.priorities && f.priorities.length) tasks = tasks.filter(t => f.priorities.includes(t.priority || 'medium'));
       if (f.types && f.types.length) tasks = tasks.filter(t => f.types.includes(t.type || 'admin'));
+      if (f.labels && f.labels.length) tasks = tasks.filter(t => f.labels.includes(t.label || 'none'));
       if (f.dueRange && f.dueRange !== 'all') {
         const t1 = App.utils.todayISO(1);
         const t7 = App.utils.todayISO(7);
         const t30 = App.utils.todayISO(30);
         tasks = tasks.filter(t => {
           if (!t.due) return false;
-          if (f.dueRange === 'overdue') return t.due < t0 && t.status !== 'done';
+          if (f.dueRange === 'overdue') return t.due < t0 && !App.taxonomy.isDone(t);
           if (f.dueRange === 'today')   return t.due === t0;
           if (f.dueRange === 'tomorrow')return t.due === t1;
           if (f.dueRange === 'week')    return t.due >= t0 && t.due <= t7;
@@ -209,7 +248,7 @@ App.TaskModel = class TaskModel {
 
     tasks.forEach(t => {
       if (groupBy === 'due') {
-        if (t.status === 'done') ensure('done', 'Done', colorFor('done'), 6).items.push(t);
+        if (App.taxonomy.isDone(t)) ensure('done', 'Done', colorFor('done'), 6).items.push(t);
         else if (!t.due)         ensure('later', 'No due date', colorFor('later'), 5).items.push(t);
         else if (t.due < t0)     ensure('overdue', 'Overdue', colorFor('overdue'), 0).items.push(t);
         else if (t.due === t0)   ensure('today', 'Due today', colorFor('today'), 1).items.push(t);
@@ -223,11 +262,11 @@ App.TaskModel = class TaskModel {
         ensure(k, s.label, colorVar(colorMap[s.cls.replace('status-', '')] || '--ink-3'), Object.keys(App.STATUSES).indexOf(k)).items.push(t);
       } else if (groupBy === 'assignee') {
         const k = t.assignee || 'unassigned';
-        const p = App.PEOPLE[k];
+        const p = App.directory.person(k);
         ensure(k, p ? p.name : 'Unassigned', p ? p.color : 'var(--ink-3)', k).items.push(t);
       } else if (groupBy === 'company') {
         const k = t.company || 'none';
-        const c = App.COMPANIES[k];
+        const c = App.directory.company(k);
         const cMap = { roofing: '--rust', drafting: '--green', lumen: '--blue' };
         ensure(k, c ? c.label : 'No company', colorVar(cMap[k] || '--ink-3'), Object.keys(App.COMPANIES).indexOf(k)).items.push(t);
       } else if (groupBy === 'priority') {
@@ -253,7 +292,7 @@ App.TaskModel = class TaskModel {
     const dir = sortDir === 'desc' ? -1 : 1;
     const prioOrd = (t) => (App.PRIORITIES[t.priority] || App.PRIORITIES.medium).order;
     const statusOrd = (t) => Object.keys(App.STATUSES).indexOf(t.status || 'todo');
-    const assigneeName = (t) => (App.PEOPLE[t.assignee] && App.PEOPLE[t.assignee].name) || t.assignee || '';
+    const assigneeName = (t) => (App.directory.person(t.assignee) && App.directory.person(t.assignee).name) || t.assignee || '';
     const dueKey = (t) => t.due || '9999-12-31';
     return (a, b) => {
       let c = 0;
@@ -263,6 +302,12 @@ App.TaskModel = class TaskModel {
       else if (sortBy === 'assignee') c = assigneeName(a).localeCompare(assigneeName(b));
       else if (sortBy === 'status')   c = statusOrd(a) - statusOrd(b);
       else if (sortBy === 'created')  c = (a.id || '').localeCompare(b.id || '');
+      else if (sortBy === 'focus') {
+        // Nulls (not in Focus) sort last; otherwise ascending by focusSeq.
+        const av = a.focusSeq == null ? Infinity : a.focusSeq;
+        const bv = b.focusSeq == null ? Infinity : b.focusSeq;
+        c = av - bv;
+      }
       // Stable tiebreaker by due
       if (c === 0) c = dueKey(a).localeCompare(dueKey(b));
       return c * dir;
@@ -275,7 +320,7 @@ App.TaskModel = class TaskModel {
     const t1 = App.utils.todayISO(1);
     const t7 = App.utils.todayISO(7);
     tasks.forEach(t => {
-      if (t.status === 'done') groups.done.push(t);
+      if (App.taxonomy.isDone(t)) groups.done.push(t);
       else if (t.due < t0) groups.overdue.push(t);
       else if (t.due === t0) groups.today.push(t);
       else if (t.due === t1) groups.tomorrow.push(t);
@@ -319,10 +364,13 @@ App.TaskModel = class TaskModel {
   toggleDone(id, userName) {
     const t = this.find(id);
     if (!t) return;
-    const becomingDone = t.status !== 'done';
-    t.status = becomingDone ? 'done' : 'todo';
-    if (becomingDone) t._completedAt = App.utils.todayISO(0);
-    else delete t._completedAt;
+    const becomingDone = !App.taxonomy.isDone(t);
+    t.status = becomingDone
+      ? App.taxonomy.doneStatus(t.company, t.type)
+      : App.taxonomy.defaultStatus(t.company, t.type);
+    // Persisted completion timestamp (column completed_at) powers Reports history.
+    if (becomingDone) t.completedAt = new Date().toISOString();
+    else delete t.completedAt;
     this.pushActivity(t, userName, becomingDone ? 'marked this complete' : 'reopened this task');
     this._markDirty(id);
     App.EventBus.emit('tasks:changed');
@@ -335,7 +383,7 @@ App.TaskModel = class TaskModel {
      Returns the count of tasks cleared (0 if there were none).  */
   clearDoneTasks(userName) {
     const now = new Date().toISOString();
-    const done = this.tasks.filter(t => t.status === 'done' && !t.clearedAt);
+    const done = this.tasks.filter(t => App.taxonomy.isDone(t) && !t.clearedAt);
     if (!done.length) return 0;
     done.forEach(t => {
       t.clearedAt = now;
@@ -362,17 +410,50 @@ App.TaskModel = class TaskModel {
     if (!t || t.assignee === newAssignee) return null;
     const oldAssignee = t.assignee;
     t.assignee = newAssignee;
-    this.pushActivity(t, userName, `reassigned this from ${App.PEOPLE[oldAssignee].name} to ${App.PEOPLE[newAssignee].name}`);
+    this.pushActivity(t, userName, `reassigned this from ${App.directory.person(oldAssignee).name} to ${App.directory.person(newAssignee).name}`);
     this._markDirty(id);
     App.EventBus.emit('tasks:changed');
     return { oldAssignee, newAssignee };
   }
 
-  setField(id, field, value, userName) {
+  // activityText (optional) lets the caller log a specific entry
+  // ("changed status Working on it → Stuck") instead of the generic fallback.
+  setField(id, field, value, userName, activityText) {
     const t = this.find(id);
     if (!t) return;
     t[field] = value;
-    this.pushActivity(t, userName, `changed ${field}`);
+    this.pushActivity(t, userName, activityText || `changed ${field}`);
+    this._markDirty(id);
+    App.EventBus.emit('tasks:changed');
+  }
+
+  /* ---------- Focus list (execution order) ---------- */
+  // Add a task to the shared Focus list at the bottom. focusSeq is a float
+  // sort-key; appending = one past the current max (across ALL focus tasks, not
+  // per-assignee) so the existing order is kept.
+  addToFocus(id) {
+    const t = this.find(id);
+    if (!t) return;
+    const peers = this.tasks.filter(x => x.focusSeq != null && x.id !== id);
+    const max = peers.reduce((m, x) => Math.max(m, x.focusSeq), -Infinity);
+    t.focusSeq = (max === -Infinity) ? 0 : max + 1;
+    this._markDirty(id);
+    App.EventBus.emit('tasks:changed');
+  }
+
+  removeFromFocus(id) {
+    const t = this.find(id);
+    if (!t || t.focusSeq == null) return;
+    t.focusSeq = null;
+    this._markDirty(id);
+    App.EventBus.emit('tasks:changed');
+  }
+
+  // Set an explicit float position (drag-to-reorder computes a midpoint).
+  setFocusOrder(id, newSeq) {
+    const t = this.find(id);
+    if (!t) return;
+    t.focusSeq = newSeq;
     this._markDirty(id);
     App.EventBus.emit('tasks:changed');
   }

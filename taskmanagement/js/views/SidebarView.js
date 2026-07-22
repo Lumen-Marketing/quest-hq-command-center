@@ -9,7 +9,12 @@ App.SidebarView = class SidebarView {
 
     this.deck = document.querySelector('.deck');
     this.extraMount = document.getElementById('sideExtraGroups');
-    this.minimizeBtn = document.getElementById('sideMinimizeBtn');
+    // Primary sections + workspaces are shown only inside the mobile nav drawer
+    // (on desktop they live in the top bar). Rendered by renderMobileNav.
+    this.mobileNav = document.getElementById('railMobileNav');
+    // The brand mark now lives in the top bar and doubles as the mobile
+    // drawer toggle.
+    this.brandLogo = document.getElementById('brandLogo');
 
     this.SECTION_KEY  = 'questhq:sidebar-collapsed-sections';
     this.MINIMIZE_KEY = 'questhq:sidebar-minimized';
@@ -17,10 +22,11 @@ App.SidebarView = class SidebarView {
 
     this.applyRoleVisibility();
     this.bindStaticItems();
+    this.bindAskQuest();
     this.bindMinimize();
-    this.applyStoredMinimize();
     this.subscribe();
     this.renderExtraGroups();
+    this.renderMobileNav();
     this.renderCounts();
   }
 
@@ -49,15 +55,24 @@ App.SidebarView = class SidebarView {
     });
   }
 
+  // The sidebar "Ask Quest" bar is a styled entry point to the existing search —
+  // clicking it focuses the topbar search input (no new AI surface).
+  bindAskQuest() {
+    const ask = document.getElementById('askQuestBtn');
+    if (!ask) return;
+    ask.addEventListener('click', () => {
+      const search = document.getElementById('searchInput');
+      if (search) { search.focus(); search.select(); }
+    });
+  }
+
   applyStaticVisibility() {
-    // Roles scoped to their own work (no team supervision) don't need the
-    // Watching view, since it shows direct reports.
-    const isSelfOnlyRole = ['worker', 'member', 'sales', 'developer'].includes(App.effectiveRole());
+    // Watching now shows "Tasks you're watching" (relevant to every role), with
+    // the direct-reports dashboard only added when you actually have reports —
+    // so it's visible for workers/sales too, gated purely by canView.
     document.querySelectorAll('.side-item[data-view]').forEach(el => {
       const view = el.dataset.view;
-      let hidden = !this.controller.canView(view);
-      if (!hidden && isSelfOnlyRole && view === 'watching') hidden = true;
-      el.classList.toggle('hidden', hidden);
+      el.classList.toggle('hidden', !this.controller.canView(view));
     });
   }
 
@@ -71,26 +86,34 @@ App.SidebarView = class SidebarView {
     this.applyRoleVisibility();
     this.applyStaticVisibility();
     this.renderExtraGroups();
+    this.renderMobileNav();
     this.renderCounts();
   }
 
   /* ---------- Minimize / expand ---------- */
 
   bindMinimize() {
-    if (this.minimizeBtn) {
-      this.minimizeBtn.addEventListener('click', () => this.toggleMinimize());
-    }
-    const topLeft = document.querySelector('.topbar-left');
-    if (topLeft) {
-      topLeft.style.cursor = 'pointer';
-      topLeft.setAttribute('title', 'Toggle sidebar');
-      topLeft.addEventListener('click', () => {
+    // The top-bar brand mark: on desktop it always navigates Home — the
+    // always-available escape hatch, working from the new-task page and the
+    // task detail too. On phones it stays the nav-drawer toggle (the drawer's
+    // first item is Home), so mobile keeps its only entry into navigation.
+    if (this.brandLogo) {
+      this.brandLogo.style.cursor = 'pointer';
+      this._makeActivatable(this.brandLogo, () => {
         if (this._isMobile()) this._toggleMobileDrawer();
-        else this.toggleMinimize();
+        else this.controller.goHome();
       });
-      this._injectMobileMenuHint(topLeft);
+      this._syncLogoLabel();
     }
     this._setupMobileDrawer();
+  }
+
+  // Keep the logo's tooltip/label honest on both sides of the breakpoint.
+  _syncLogoLabel() {
+    if (!this.brandLogo) return;
+    const label = this._isMobile() ? 'Toggle navigation' : 'Go to Home';
+    this.brandLogo.title = label;
+    this.brandLogo.setAttribute('aria-label', label);
   }
 
   applyStoredMinimize() {
@@ -123,16 +146,10 @@ App.SidebarView = class SidebarView {
         this._closeMobileDrawer();
       }
     });
-    // Crossing the mobile breakpoint: reset minimize state and close drawer.
+    // Crossing the mobile breakpoint just closes the drawer (the desktop rail
+    // has no minimized state to restore).
     const mq = window.matchMedia('(max-width: 720px)');
-    mq.addEventListener('change', (e) => {
-      this._closeMobileDrawer();
-      if (e.matches) {
-        this._setMinimized(false);
-      } else {
-        this._setMinimized(localStorage.getItem(this.MINIMIZE_KEY) === '1');
-      }
-    });
+    mq.addEventListener('change', () => { this._closeMobileDrawer(); this._syncLogoLabel(); });
   }
 
   _toggleMobileDrawer() {
@@ -161,13 +178,9 @@ App.SidebarView = class SidebarView {
     if (!this.deck) return;
     this.deck.classList.toggle('minimized', min);
     document.body.classList.toggle('sidebar-minimized', min);
-    if (this.minimizeBtn) {
-      const i = this.minimizeBtn.querySelector('i');
-      if (i) i.className = min
-        ? 'ti ti-layout-sidebar-left-expand'
-        : 'ti ti-layout-sidebar-left-collapse';
-      this.minimizeBtn.title = min ? 'Expand sidebar' : 'Collapse sidebar';
-    }
+    // The logo no longer collapses the rail — don't let a stale
+    // "Collapse sidebar" label overwrite its Home/drawer labelling.
+    this._syncLogoLabel();
   }
 
   /* ---------- Extra sections (Company / Time / Org / Admin) ----------
@@ -191,8 +204,68 @@ App.SidebarView = class SidebarView {
     });
   }
 
+  // Mobile-only: render the primary sections (top-bar nav on desktop) + Team +
+  // Workspaces into the slide-in drawer, so phones reach the full navigation.
+  // Hidden on desktop via CSS (.rail-mobile-nav).
+  renderMobileNav() {
+    if (!this.mobileNav) return;
+    const canView = (v) => this.controller.canView(v);
+    const primary = [];
+    if (canView('home')) primary.push({ view: 'home', label: 'Home', icon: 'ti-home' });
+    if (App.can('tasks.view')) primary.push({ view: 'all', label: 'All tasks', icon: 'ti-list-check' });
+    if (canView('projects')) primary.push({ view: 'projects', label: 'Projects', icon: 'ti-folders' });
+    if (App.can('reports.view')) primary.push({ view: 'reports', label: 'Reports', icon: 'ti-chart-bar' });
+
+    // Views = the task quick-filters + My time + Wallboard (the top-bar icons on
+    // desktop), with live counts so the drawer matches the badges.
+    const c = this._computeCounts();
+    const views = [];
+    if (canView('hot'))       views.push({ view: 'hot',       label: 'Urgent',   icon: 'ti-bolt',           count: c.hot || null });
+    if (canView('today'))     views.push({ view: 'today',     label: 'Today',    icon: 'ti-flame',          count: c.today || null });
+    if (canView('overdue'))   views.push({ view: 'overdue',   label: 'Overdue',  icon: 'ti-alert-triangle', count: c.overdue || null });
+    if (canView('watching'))  views.push({ view: 'watching',  label: 'Watching', icon: 'ti-eye',            count: c.watching || null });
+    if (canView('time:mine')) views.push({ view: 'time:mine', label: 'My time',  icon: 'ti-clock' });
+    if (canView('wallboard')) views.push({ view: 'wallboard', label: 'Wallboard',icon: 'ti-device-tv' });
+
+    const sections = [
+      { key: 'go', label: 'Go to', items: primary },
+      ...this._buildSections(),
+      { key: 'views', label: 'Views', items: views },
+    ];
+    this.mobileNav.innerHTML = sections
+      .filter(sec => sec.items.length)
+      .map(sec => this._renderSection(sec)).join('');
+
+    this.mobileNav.querySelectorAll('.side-group-head').forEach(head => {
+      head.addEventListener('click', () => this._toggleSection(head.dataset.section));
+    });
+    this.mobileNav.querySelectorAll('.side-item[data-view]').forEach(el => {
+      this._makeActivatable(el, () => this.controller.setView(el.dataset.view));
+    });
+    this.mobileNav.querySelectorAll('.side-item[data-company]').forEach(el => {
+      this._makeActivatable(el, () => this.controller.setCompany(el.dataset.company));
+    });
+  }
+
   _buildSections() {
     const sections = [];
+
+    // "Team" = the supervisory/admin tools (the top-bar "Team ▾" dropdown on
+    // desktop). My time + Reports are reached elsewhere now (the rail and the
+    // top-nav Reports item), so they're not repeated here.
+    const teamItems = [];
+    if (App.can('time.team')) {
+      teamItems.push({ view: 'time:resource', label: 'Team workload', icon: 'ti-users', count: this.timeModel.allActive().length });
+    }
+    if (App.can('team.view')) {
+      teamItems.push({ view: 'team:hierarchy', label: 'Team chart', icon: 'ti-sitemap' });
+    }
+    if (App.can('roles.manage')) teamItems.push({ view: 'approvals',   label: 'Approvals',       icon: 'ti-user-check' });
+    if (App.can('clock.admin'))  teamItems.push({ view: 'admin:clock', label: 'Clock dashboard', icon: 'ti-clock-play', count: this.timeModel.allActive().length });
+    if (App.can('task-setup.manage')) teamItems.push({ view: 'admin:task-setup', label: 'Task setup', icon: 'ti-adjustments' });
+    if (App.can('checkins.manage')) teamItems.push({ view: 'admin:checkins', label: 'Check-ins', icon: 'ti-bell' });
+    if (App.can('bug-reports.manage')) teamItems.push({ view: 'admin:reports', label: 'Problem reports', icon: 'ti-bug' });
+    if (teamItems.length) sections.push({ key: 'team', label: 'Team', items: teamItems });
 
     // Company context lives in the sidebar: a single-select list of the
     // companies this user can access (plus "All companies" for developers).
@@ -205,40 +278,16 @@ App.SidebarView = class SidebarView {
       const cur = this.controller.uiState.currentCompany;
       const dotMap = { roofing: 'dot-roof', drafting: 'dot-draft', lumen: 'dot-lumen' };
       sections.push({
-        key: 'company', label: 'Company',
+        key: 'company', label: 'Workspaces',
         items: companies.map(id => ({
           company: id,
-          label: id === '*' ? 'All companies' : (App.COMPANIES[id] || { label: id }).label,
+          label: id === '*' ? 'All companies' : (App.directory.company(id) || { label: id }).label,
           dot: id === '*' ? null : dotMap[id],
           icon: id === '*' ? 'ti-building' : null,
           active: id === cur,
         })),
       });
     }
-
-    if (App.commandCenterIntegration && App.commandCenterIntegration.embedded) {
-      return sections;
-    }
-
-    const timeItems = [];
-    if (App.can('time.own') || App.can('clock.use')) {
-      timeItems.push({ view: 'time:mine', label: 'My time', icon: 'ti-clock', count: App.utils.formatHours(this.timeModel.totalForUser(this.currentUser)) });
-    }
-    if (App.can('time.team')) {
-      timeItems.push({ view: 'time:resource',  label: 'Team workload', icon: 'ti-users', count: this.timeModel.allActive().length });
-    }
-    if (timeItems.length) sections.push({ key: 'time', label: 'Time', items: timeItems });
-
-    if (App.can('team.view')) {
-      sections.push({
-        key: 'org', label: 'Org',
-        items: [{ view: 'team:hierarchy', label: 'Team chart', icon: 'ti-sitemap' }],
-      });
-    }
-    const adminItems = [];
-    if (App.can('roles.manage')) adminItems.push({ view: 'approvals',   label: 'Approvals',       icon: 'ti-user-check' });
-    if (App.can('clock.admin'))  adminItems.push({ view: 'admin:clock', label: 'Clock dashboard', icon: 'ti-clock-play', count: this.timeModel.allActive().length });
-    if (adminItems.length) sections.push({ key: 'admin', label: 'Admin', items: adminItems });
 
     return sections;
   }
@@ -293,38 +342,17 @@ App.SidebarView = class SidebarView {
 
   /* ---------- counts ---------- */
 
-  // The set of tasks this user can actually see right now (active company +
-  // role row-scope), so sidebar badges match the task list. Mirrors the
-  // scoping in TaskModel.getFiltered / migration 028.
-  _scopedActiveTasks() {
-    const role = App.effectiveRole();
-    const cur = this.controller.uiState.currentCompany;
-    const me = (App.currentProfile && App.currentProfile.member_id) || this.currentUser;
-    const clockId = App.DEFAULT_CLOCK_TASK_ID;
-    let base = this.taskModel.all().filter(t => t.status !== 'done' && !t.clearedAt);
-    if (cur && cur !== '*') {
-      base = base.filter(t => t.company === cur || t.id === clockId);
-    }
-    if (role === 'worker') {
-      base = base.filter(t => t.assignee === this.currentUser || t.creator === this.currentUser || t.id === clockId);
-    } else if (role === 'supervisor' && App.realRole() !== 'developer') {
-      // Real supervisor: narrow to their direct reports. A developer previewing
-      // as supervisor sees the whole selected company's team (no narrowing).
-      const reports = new Set((App.PROFILES || [])
-        .filter(p => p.supervisor_id === me).map(p => p.member_id));
-      base = base.filter(t =>
-        t.assignee === this.currentUser || t.creator === this.currentUser ||
-        reports.has(t.assignee) || t.id === clockId);
-    }
-    return base;
-  }
-
   subscribe() {
-    App.EventBus.on('tasks:changed', () => { this.renderCounts(); this.renderExtraGroups(); });
-    App.EventBus.on('time:changed',  () => { this.renderCounts(); this.renderExtraGroups(); });
+    App.EventBus.on('tasks:changed', () => { this.renderCounts(); this.renderMobileNav(); });
+    App.EventBus.on('time:changed',  () => { this.renderCounts(); this.renderMobileNav(); });
     App.EventBus.on('view:changed',  (view) => this.updateActive(view));
-    App.EventBus.on('company:changed', () => { this.renderCounts(); this.renderExtraGroups(); });
+    App.EventBus.on('company:changed', () => { this.renderCounts(); this.renderMobileNav(); });
     App.EventBus.on('role:changed', () => this.refreshForRole());
+    // Badges derive from the same narrowing the lists render with (see
+    // controller.badgeCounts), so they must re-render when that narrowing moves.
+    App.EventBus.on('scope:changed',   () => { this.renderCounts(); this.renderMobileNav(); });
+    App.EventBus.on('search:changed',  () => { this.renderCounts(); this.renderMobileNav(); });
+    App.EventBus.on('filters:changed', () => { this.renderCounts(); this.renderMobileNav(); });
   }
 
   updateActive(view) {
@@ -335,21 +363,29 @@ App.SidebarView = class SidebarView {
     });
   }
 
+  // Shared count computation for the top-bar badges + the mobile drawer.
+  // Delegates to the controller so badges run the exact getFiltered pipeline
+  // the list views render from — a badge can never disagree with visible rows.
+  _computeCounts() {
+    return this.controller.badgeCounts();
+  }
+
   renderCounts() {
-    const all = this._scopedActiveTasks();
-    const today = App.utils.todayISO(0);
-
-    const set = (id, value) => {
+    const c = this._computeCounts();
+    // Publish for the top-bar "Tasks" dropdown (TopbarView reads App.viewCounts).
+    App.viewCounts = c;
+    // Top-bar filter badges: blank at zero so the empty badge hides (CSS :empty).
+    const badge = (id, value) => {
       const el = document.getElementById(id);
-      if (el) el.textContent = value;
+      if (el) el.textContent = value > 0 ? value : '';
     };
-
-    set('cnt-all', App.can('tasks.view') ? all.length : 0);
-    set('cnt-mine', all.filter(t => t.assignee === this.currentUser).length);
-    set('cnt-hot', all.filter(t => t.priority === 'critical' || t.priority === 'urgent').length);
-    set('cnt-today', all.filter(t => t.due === today).length);
-    set('cnt-overdue', all.filter(t => t.due < today).length);
-    set('cnt-watching', all.filter(t => (t.watchers || []).includes(this.currentUser)).length);
-    set('cnt-clock-live', this.timeModel.allActive().length);
+    badge('cnt-all', c.all);
+    badge('cnt-mine', c.mine);
+    badge('cnt-hot', c.hot);
+    badge('cnt-today', c.today);
+    badge('cnt-overdue', c.overdue);
+    badge('cnt-watching', c.watching);
+    const live = document.getElementById('cnt-clock-live');
+    if (live) live.textContent = this.timeModel.allActive().length;
   }
 };

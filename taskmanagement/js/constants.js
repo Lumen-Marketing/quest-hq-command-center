@@ -1,18 +1,21 @@
 window.App = window.App || {};
 
-App.PEOPLE = {
-  abraham:  { id: 'abraham',  name: 'Abraham',  full: 'Abraham Maldonado', email: 'abraham@quest.com',         color: '#E8A03A' },
-  alkeith:  { id: 'alkeith',  name: 'Alkeith',  full: 'Alkeith Cabezzas',  email: 'alkeith@questroofing.com',  color: '#993C1D' },
-  kristine: { id: 'kristine', name: 'Kristine', full: 'Kristine',          email: 'kristine@questroofing.com', color: '#185FA5' },
-  jesus:    { id: 'jesus',    name: 'Jesus',    full: 'Jesus',             email: 'jesus@questroofing.com',    color: '#BA7517' },
-  andres:   { id: 'andres',   name: 'Andres',   full: 'Andres',            email: 'andres@questdrafting.com',  color: '#3B6D11' },
-  adrian:   { id: 'adrian',   name: 'Adrian',   full: 'Adrian Alegria',    email: 'adrian@lumen.com',          color: '#6E430A' },
-};
+// Real people come from the team_members table (RLS-scoped to the caller's
+// companies) and are loaded into App.PEOPLE at boot. This fallback used to ship
+// Quest staff names and real email addresses to every tenant's browser, so in the
+// multi-tenant build it is intentionally empty. Localhost ?preview=1 therefore
+// boots with no seeded roster — use real data or a signed-in session instead.
+App.PEOPLE = {};
 
 App.COMPANIES = {
   roofing:  { id: 'roofing',  label: 'Roofing',  pill: 'pill-roof'    },
   drafting: { id: 'drafting', label: 'Drafting', pill: 'pill-draft'   },
   lumen:    { id: 'lumen',    label: 'Lumen',    pill: 'pill-lumen'   },
+  // "Overall" spans every company. `all: true` marks it as the spans-all
+  // sentinel so code special-cases it without string-matching 'overall'.
+  // Visibility is still RLS-gated on profiles.company_ids (migration 028):
+  // only users granted 'overall' ever see or create Overall tasks.
+  overall:  { id: 'overall',  label: 'Overall',  pill: 'pill-overall', all: true },
 };
 
 App.TASK_TYPES = {
@@ -26,17 +29,13 @@ App.TASK_TYPES = {
 };
 
 // Job scope tag shown alongside Type. Combo-box choices in the New task popup.
+// 'none' is the explicit "no job-scope tag" choice — it renders as empty (—)
+// everywhere a label would show, so a task can opt out of a scope tag entirely.
 App.TASK_LABELS = {
+  none:         { id: 'none',         label: 'No label' },
   roof:         { id: 'roof',         label: 'Roof' },
   roof_framing: { id: 'roof_framing', label: 'Roof & Framing' },
   framing:      { id: 'framing',      label: 'Framing' },
-};
-
-App.BID_STATUSES = {
-  queue:    { id: 'queue',    label: 'In queue',          cls: 'bid-queue'    },
-  started:  { id: 'started',  label: 'Started',           cls: 'bid-started'  },
-  supplier: { id: 'supplier', label: 'Waiting supplier',  cls: 'bid-supplier' },
-  ready:    { id: 'ready',    label: 'Ready to submit',   cls: 'bid-ready'    },
 };
 
 App.STATUSES = {
@@ -62,6 +61,7 @@ App.SORT_OPTIONS = {
   assignee: { label: 'Assignee' },
   status:   { label: 'Status' },
   created:  { label: 'Created' },
+  focus:    { label: 'Execution order' },
 };
 
 App.GROUP_OPTIONS = {
@@ -87,12 +87,18 @@ App.ROLES = {
 };
 
 App.ROLE_PERMISSIONS = {
-  worker: ['app.use', 'clock.use', 'time.own', 'tasks.view', 'tasks.write'],
+  // 'home.view' is granted to every role (the Home landing screen is universal);
+  // 'reports.view' is limited to supervisors/admins (company analytics).
+  worker: ['app.use', 'clock.use', 'time.own', 'tasks.view', 'tasks.write', 'home.view'],
   // Identical to worker — keep these two arrays in sync.
-  sales: ['app.use', 'clock.use', 'time.own', 'tasks.view', 'tasks.write'],
-  supervisor: ['app.use', 'tasks.view', 'tasks.write', 'clock.use', 'time.own', 'time.team', 'team.view'],
-  admin: ['app.use', 'tasks.view', 'tasks.write', 'clock.use', 'time.own', 'time.team', 'roles.manage', 'clock.admin', 'team.view'],
-  developer: ['app.use', 'tasks.view', 'tasks.write', 'clock.use', 'time.own', 'time.team', 'roles.manage', 'clock.admin', 'team.view', 'debug.access'],
+  sales: ['app.use', 'clock.use', 'time.own', 'tasks.view', 'tasks.write', 'home.view'],
+  supervisor: ['app.use', 'tasks.view', 'tasks.write', 'clock.use', 'time.own', 'time.team', 'team.view', 'home.view', 'reports.view', 'task-setup.manage'],
+  admin: ['app.use', 'tasks.view', 'tasks.write', 'clock.use', 'time.own', 'time.team', 'roles.manage', 'clock.admin', 'team.view', 'home.view', 'reports.view', 'task-setup.manage', 'checkins.manage'],
+  developer: ['app.use', 'tasks.view', 'tasks.write', 'clock.use', 'time.own', 'time.team', 'roles.manage', 'clock.admin', 'team.view', 'home.view', 'reports.view', 'debug.access', 'task-setup.manage', 'bug-reports.manage', 'checkins.manage'],
+  // Construction supervisor: supervisor tools + task-taxonomy editing. Mirrors the
+  // DB RLS write policy on task_types/task_type_statuses/task_labels (developer,
+  // admin, construction_supervisor). None may exist yet; harmless until one does.
+  construction_supervisor: ['app.use', 'tasks.view', 'tasks.write', 'clock.use', 'time.own', 'time.team', 'team.view', 'home.view', 'reports.view', 'task-setup.manage'],
 };
 
 App.DEFAULT_CLOCK_TASK_ID = 'general-shift';

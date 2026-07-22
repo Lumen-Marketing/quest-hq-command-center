@@ -37,12 +37,12 @@ App.ClockDashboardView = class ClockDashboardView {
     const week0 = new Date(); week0.setDate(week0.getDate() - 7); week0.setHours(0, 0, 0, 0);
 
     const liveRows = active.map(timer => {
-      const p = App.PEOPLE[timer.userId] || App.utils.unknownPerson(timer.userId);
+      const p = App.directory.person(timer.userId) || App.utils.unknownPerson(timer.userId);
       // Prefer the loaded task; fall back to the label snapshotted on the timer
       // at clock-in so a task the viewer can't load still shows its name.
       const t = this.taskModel.find(timer.taskId);
       const title = t ? t.title : timer.taskTitle;
-      const company = App.COMPANIES[t ? t.company : timer.taskCompany];
+      const company = App.directory.company(t ? t.company : timer.taskCompany);
       const startedAtLabel = App.utils.formatInstant(timer.startedAt, {
         hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric', timeZoneName: 'short',
       });
@@ -54,7 +54,7 @@ App.ClockDashboardView = class ClockDashboardView {
             </span>
           </td>
           <td>${title ? App.utils.escapeHtml(title) : '<em>unknown task</em>'}</td>
-          <td>${company ? `<span class="pill ${company.pill}">${company.label}</span>` : '—'}</td>
+          <td>${company ? `<span class="pill ${company.pill}">${App.utils.escapeHtml(company.label)}</span>` : '—'}</td>
           <td class="mono">${App.utils.escapeHtml(startedAtLabel)}</td>
           <td class="mono" data-live-timer="${timer.userId}">${App.utils.formatDuration(Math.min(Date.now() - timer.startedAt, App.MAX_SHIFT_MS))}</td>
         </tr>
@@ -111,7 +111,7 @@ App.ClockDashboardView = class ClockDashboardView {
         <div class="time-section">
           <div class="time-section-title">Active right now</div>
           ${active.length ? `
-            <table class="time-table">
+            <table class="time-table clock-live-table">
               <thead><tr><th>Person</th><th>Current task</th><th>Project</th><th>Started</th><th>Elapsed</th></tr></thead>
               <tbody>${liveRows}</tbody>
             </table>

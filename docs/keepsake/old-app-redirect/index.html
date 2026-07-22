@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quest HQ — the task app has moved</title>
+<!--
+  Cutover page for task.questroofing.com (Phase 5, locked decision 9).
+
+  BEFORE DEPLOYING: replace __COMMAND_CENTER_URL__ below with Command Center's
+  production URL (the same value used for the APP_URL secret on the edge
+  functions). It appears twice: the meta refresh and the link/redirect script.
+
+  Keep this page live for months — bookmarks and phone home-screen shortcuts die
+  slowly. The old Supabase project stays read-only; nothing here touches data.
+-->
+<meta http-equiv="refresh" content="3;url=__COMMAND_CENTER_URL__/company" />
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #fbfaf8; color: #1c1917; padding: 24px;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #14110e; color: #f5f1eb; }
+    .card { background: #1e1a16; border-color: #3a332b; }
+    .sub { color: #b3a999; }
+  }
+  .card {
+    max-width: 460px; width: 100%; text-align: center;
+    background: #fff; border: 1px solid #e2d5bf; border-radius: 14px;
+    padding: 40px 32px;
+  }
+  .mark {
+    width: 52px; height: 52px; margin: 0 auto 20px; border-radius: 14px;
+    background: #f45d22; display: grid; place-items: center;
+    color: #fff; font-size: 26px; font-weight: 700;
+  }
+  h1 { margin: 0 0 10px; font-size: 21px; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 26px; font-size: 15px; line-height: 1.55; color: #6b6154; }
+  .btn {
+    display: inline-block; padding: 12px 24px; border-radius: 9px;
+    background: #f45d22; color: #fff; text-decoration: none; font-weight: 600;
+  }
+  .btn:hover { background: #d94d16; }
+  .note { margin: 22px 0 0; font-size: 13px; color: #8a8073; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="mark" aria-hidden="true">⚡</div>
+    <h1>The task app has moved</h1>
+    <p class="sub">
+      Task management now lives inside Quest HQ Command Center — same tasks,
+      same timers, one login for everything.
+    </p>
+    <a class="btn" id="go" href="__COMMAND_CENTER_URL__/company">Open Quest HQ</a>
+    <p class="note">Taking you there automatically… you can update your bookmark to the new address.</p>
+  </main>
+  <script>
+    // Immediate redirect for anyone with JS; the meta refresh above covers the rest.
+    // replace() so the back button doesn't bounce people back here.
+    window.location.replace(document.getElementById('go').href);
+  </script>
+</body>
+</html>

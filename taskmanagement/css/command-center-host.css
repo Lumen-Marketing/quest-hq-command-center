@@ -1,0 +1,91 @@
+/* Command Center integration layer (CC-only file, not upstream).
+ * Host bar shown when the app is mounted at /taskmanagement/ inside
+ * Quest HQ Command Center, plus embedded-in-Job-Center chrome removal.
+ * Markup lives in app.html (#commandCenterHostBar); behavior in
+ * js/command-center-host.js; state in js/config.js (App.commandCenterIntegration).
+ */
+
+.command-center-host-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, 32vw);
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+}
+
+.command-center-host-bar.hidden {
+  display: none;
+}
+
+.command-center-host-bar strong,
+.command-center-host-bar span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-center-host-bar strong {
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.command-center-host-bar span {
+  margin-top: 1px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.command-center-host-bar > div {
+  min-width: 0;
+}
+
+.command-center-host-bar a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: max-content;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Embedded in Job Center: the host app provides all chrome, so drop the
+ * task app's topbar and let the work area fill the frame. */
+.embedded-in-job-center .command-center-host-bar a {
+  display: none;
+}
+
+.embedded-in-job-center .topbar {
+  display: none;
+}
+
+.embedded-in-job-center .app {
+  grid-template-rows: 1fr;
+}
+
+.embedded-in-job-center .app > .deck,
+.embedded-in-job-center .app > .main {
+  grid-row: 1;
+}
+
+@media (max-width: 720px) {
+  .command-center-host-bar {
+    max-width: none;
+    flex: 1 1 auto;
+  }
+
+  .command-center-host-bar strong,
+  .command-center-host-bar span {
+    display: none;
+  }
+}
