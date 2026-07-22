@@ -54,3 +54,17 @@ Vercel Pro plan; the only other cron in the project is daily. If a deployment re
 schedule, either coarsen it or trigger the same URL from Supabase `pg_cron` with the
 `CRON_SECRET` bearer header. The endpoint, its authorization, and its tests are identical
 under either trigger.
+
+## The embedded Tasks iframe restarts on any full re-render
+
+The Tasks route renders the vendored module as `<iframe src="/taskmanagement/app.html">`.
+`render()` rebuilds `app.innerHTML` wholesale, so every full re-render destroys and
+recreates that iframe, and the module reboots from its splash — losing in-progress edits,
+scroll, and open panels. Two triggers are now handled: the auth-event echo (fixed — see
+`supabaseSessionSignature` in src/main.js, which was a self-sustaining ~1.4/sec reload
+loop that hung the module on its splash) and the boot splash itself (suppressed under
+`?embed=1`). But `refreshRealtimeDomains()` and other `render()` callers still recreate the
+frame whenever watched data changes underneath the user. The durable fix is to reuse the
+existing iframe element across renders (detaching it blanks its document, so preserving the
+node — not the innerHTML — is the only option) or to exempt the tasks route from full
+re-render. Until then, a background realtime update can bump a user out of a task mid-edit.

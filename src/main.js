@@ -2496,6 +2496,14 @@ async function initializeAuth() {
   try {
     const { data } = await client.auth.getSession();
     await setSupabaseSession(data?.session || null);
+    // Only react when the session MATERIALLY changed. The embedded task module
+    // (/taskmanagement/) builds its own Supabase client against the same storage
+    // key on this origin, so every time its iframe boots it re-announces the
+    // stored session and GoTrue echoes that back here as an auth event. Since
+    // render() rebuilds app.innerHTML wholesale, re-rendering on those echoes
+    // destroyed and recreated the iframe, which re-announced again — a reload
+    // loop (~1.4/sec) that left the module stuck on its splash forever.
+    let lastAuthSignature = supabaseSessionSignature(data?.session || null);
     client.auth.onAuthStateChange((event, session) => {
       setTimeout(() => {
         if (event === 'PASSWORD_RECOVERY') {
@@ -2503,9 +2511,13 @@ async function initializeAuth() {
           state.authBusy = false;
           state.loginError = '';
           state.authMessage = 'Choose a new password for your account.';
+          lastAuthSignature = supabaseSessionSignature(session || null);
           setSupabaseSession(session || null).finally(() => navigate('/?auth=recovery', { replace: true }));
           return;
         }
+        const signature = supabaseSessionSignature(session || null);
+        if (signature === lastAuthSignature) return;
+        lastAuthSignature = signature;
         setSupabaseSession(session || null).finally(() => {
           render();
         });
@@ -2517,6 +2529,14 @@ async function initializeAuth() {
     state.authReady = true;
     render();
   }
+}
+
+// Identity of a Supabase session for change detection. The access token is part
+// of it so a genuine TOKEN_REFRESHED still re-renders, while the repeated
+// re-announcements of an unchanged session (see onAuthStateChange above) do not.
+function supabaseSessionSignature(session) {
+  if (!session?.user?.id) return '';
+  return `${session.user.id}:${session.access_token || ''}`;
 }
 
 async function setSupabaseSession(session) {
@@ -10718,11 +10738,13 @@ function renderTasksPage(route, companyId) {
   const wantsNew = route.params.get('new') === '1';
   const hash = taskId ? `#/task/${encodeURIComponent(taskId)}` : (wantsNew ? '#/new' : '');
   const src = `${window.location.origin}/taskmanagement/app.html?${params.toString()}${hash}`;
+  // No workspace header: the task module carries its own toolbar, so CC's header
+  // row held nothing but a Jobs shortcut and cost ~78px above the frame. With no
+  // actions passed, workspaceHeader() renders nothing at all for a non-notice
+  // title, so the module starts at the top of the work surface. (Jobs is still
+  // one click away in the sidebar.)
   return `
-    ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Task execution, timers and reminders.', `
-      <a class="btn" href="${appHref(companyPath('jobs', job ? { tab: 'profile', job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
-    `)}
-    <section class="task-layout task-layout-flat">
+    <section class="task-layout task-layout-flat taskapp-shell">
       <article class="panel task-main taskapp-panel">
         <iframe class="taskapp-frame" src="${h(src)}" title="Task management"></iframe>
       </article>

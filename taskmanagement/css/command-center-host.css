@@ -60,22 +60,59 @@
 }
 
 /* Embedded in Job Center: the host app provides all chrome, so drop the
- * task app's topbar and let the work area fill the frame. */
-.embedded-in-job-center .command-center-host-bar a {
+ * task app's topbar and let the work area fill the frame.
+ *
+ * These are chained onto `body` deliberately. taskmanagement.css carries
+ * `body.ui-command-center .app { grid-template-rows: 56px 1fr }` and
+ * `body.ui-command-center .app > .main { grid-row: 2 }` at specificity (0,2,1);
+ * the unprefixed `.embedded-in-job-center .app` (0,2,0) LOST to them, so the
+ * row reserved for the hidden topbar kept 56px of dead space at the top of the
+ * embedded frame. Matching specificity + later source order wins both. */
+body.embedded-in-job-center .command-center-host-bar a {
   display: none;
 }
 
-.embedded-in-job-center .topbar {
+body.embedded-in-job-center .topbar {
   display: none;
 }
 
-.embedded-in-job-center .app {
+body.embedded-in-job-center .app {
   grid-template-rows: 1fr;
 }
 
-.embedded-in-job-center .app > .deck,
-.embedded-in-job-center .app > .main {
+body.embedded-in-job-center .app > .deck,
+body.embedded-in-job-center .app > .main {
   grid-row: 1;
+}
+
+/* Reclaim the outer gutter: the host frame is already inset, so the module's
+   own page-head does not need a full-height band above the toolbar. */
+body.embedded-in-job-center .page-head {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* Boot splash: suppressed at FIRST PAINT via the data-embedded flag that
+   theme-boot.js sets (render-blocking, so no flash). LoaderView also removes
+   the element outright when the flag is set, so this is only belt-and-braces
+   for the window before its deferred script runs. Keyed off <html> because the
+   body class arrives too late to matter here. */
+html[data-embedded="1"] #appLoader {
+  display: none;
+}
+
+/* Bottom tab bar: the host already renders its own, so the module's mobile nav
+   is a duplicate strip over the content. Zeroing --m-navh matters as much as
+   hiding it — mobile.css sizes the bar AND the bottom padding that .qt-wrap and
+   the bulk bar reserve for it from that variable, so hiding alone would leave a
+   ~58px dead strip at the bottom. The #id selector needs the body chain to
+   out-specify mobile.css's `#bottomNav` (1,0,0), which also loads later. */
+body.embedded-in-job-center {
+  --m-navh: 0px;
+}
+
+body.embedded-in-job-center #bottomNav {
+  display: none;
 }
 
 @media (max-width: 720px) {

@@ -10229,9 +10229,19 @@ button.side-item {
   min-height: 0;
 }
 
-/* Embedded task module (/taskmanagement/) shown inside the Tasks route. The
-   panel drops its own padding so the app fills the frame edge to edge. */
-.taskapp-panel {
+/* Embedded task module (/taskmanagement/) shown inside the Tasks route. It is a
+   full-page app, not a dashboard widget, so the .panel wrapper sheds all of its
+   card chrome — the module paints its own surface inside the frame.
+
+   Chained .panel.taskapp-panel deliberately: plain .taskapp-panel ties on
+   specificity with the theme-layer `.panel` blocks further down this file,
+   which would re-apply the card border/padding and put the box back. The
+   chained selector wins regardless of source order. */
+.panel.taskapp-panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   padding: 0;
   overflow: hidden;
 }
@@ -10242,6 +10252,49 @@ button.side-item {
   height: calc(100vh - 210px);
   min-height: 520px;
   border: 0;
+}
+
+/* On desktop the frame owns the full remaining viewport instead of a guessed
+   fixed height, so the module scrolls itself rather than nesting a second set of
+   scrollbars inside a short box. Same treatment the Messages route gets; :has()
+   keeps it off the signed-out fallback, which has no frame to stretch. */
+@media (min-width: 981px) {
+  .quest-app[data-section="tasks"]:has(.taskapp-shell) {
+    height: 100dvh;
+    height: 100vh;
+    max-height: 100dvh;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* No gutter: the embedded module supplies its own internal padding, so the
+     work surface's usual 18px/24px inset only shrank the frame. */
+  .quest-app[data-section="tasks"]:has(.taskapp-shell) .work-surface {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - 64px);
+    height: calc(100vh - 64px);
+    min-height: 0;
+    max-height: calc(100vh - 64px);
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .quest-app[data-section="tasks"] .work-surface > .workspace-head {
+    flex: 0 0 auto;
+  }
+
+  .quest-app[data-section="tasks"] .taskapp-shell {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .quest-app[data-section="tasks"] .taskapp-panel,
+  .quest-app[data-section="tasks"] .taskapp-frame {
+    height: 100%;
+    min-height: 0;
+  }
 }
 
 .drive-shell-compact {

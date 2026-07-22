@@ -264,6 +264,15 @@ void main() {
   function build() {
     const root = document.getElementById('appLoader');
     if (!root || root.dataset.built) return;
+    // Embedded in Command Center: the host owns the route transition, so a
+    // second full-screen splash inside the iframe just reads as the module
+    // hanging. Drop the element outright rather than hiding it, so the WebGL
+    // terminal and its rAF loop never start. hide()/stop() both no-op safely
+    // when #appLoader is absent.
+    if (document.documentElement.getAttribute('data-embedded') === '1') {
+      root.remove();
+      return;
+    }
     root.dataset.built = '1';
     root.innerHTML = ''; // drop the static first frame (app.html); the shader replaces it
     rootEl = root;
