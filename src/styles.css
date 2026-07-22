@@ -24261,3 +24261,6 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .calls-range.is-active { background: var(--accent-soft, rgba(237, 78, 13, .09)); border-color: transparent; font-weight: 600; }
 .calls-empty { color: var(--muted, #6b7280); margin: 0; }
 .calls-note { font-size: 0.78rem; color: var(--muted, #6b7280); margin: 10px 0 0; }
+.calls-widget { display: grid; gap: 12px; }
+.calls-widget-board { border: 1px solid var(--border, #e6e8eb); border-radius: 8px; padding: 4px 8px; background: var(--surface, #fff); }
+.calls-widget-link { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: 600; text-decoration: none; }

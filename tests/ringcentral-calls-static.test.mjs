@@ -53,8 +53,28 @@ test('the live board polls the presence endpoint and can stop itself', () => {
   assert.match(main, /clearInterval\(callsPresenceTimer\)/);
 });
 
-test('polling stops when the user navigates away from the module', () => {
-  assert.match(main, /state\.route\?\.section !== 'calls'/);
+test('polling stops when the user navigates away from both surfaces', () => {
+  assert.match(main, /function callsSurfaceVisible\(\)/);
+  assert.match(main, /if \(!callsSurfaceVisible\(\)\) \{ stopCallsPresencePolling\(\); return; \}/);
+});
+
+test('the dashboard carries a Calls widget on the executive, sales and ops views', () => {
+  assert.match(main, /title: 'Phones right now'/);
+  assert.match(main, /exec: \['calls',/);
+  assert.match(main, /ops: \['calls',/);
+  assert.match(main, /render: \(\) => renderCallsWidget\(companyId\)/);
+});
+
+test('an unapplied migration reads as not connected, never as zero calls', () => {
+  // "No calls" and "the table does not exist" are different facts and must not
+  // render the same way.
+  assert.match(main, /unavailable: Boolean\(stats\.error\)/);
+  assert.match(main, /RingCentral isn't connected yet/);
+});
+
+test('a non-JSON response from the presence route is treated as not connected', () => {
+  // A plain `vite dev` server answers /api/* with index.html.
+  assert.match(main, /response\.status === 503 \|\| !isJson/);
 });
 
 test('the page states the accuracy limit of the status timer', () => {

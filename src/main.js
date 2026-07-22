@@ -833,9 +833,9 @@ const DASHBOARD_RANGE_OPTIONS = [
   ['quarter', 'Quarter'],
 ];
 const DASHBOARD_WIDGET_DEFAULTS = {
-  exec: ['kpis', 'avgTicket', 'revGrowth', 'goalPacing', 'leaderboard', 'backlog', 'pipelineCoverage', 'jobs', 'revenue', 'reviews'],
-  sales: ['kpis', 'leaderboard', 'callsTrend', 'sources', 'funnel', 'speed'],
-  ops: ['jobs', 'dispatch', 'weather', 'kpis', 'revenue'],
+  exec: ['calls', 'kpis', 'avgTicket', 'revGrowth', 'goalPacing', 'leaderboard', 'backlog', 'pipelineCoverage', 'jobs', 'revenue', 'reviews'],
+  sales: ['calls', 'kpis', 'leaderboard', 'callsTrend', 'sources', 'funnel', 'speed'],
+  ops: ['calls', 'jobs', 'dispatch', 'weather', 'kpis', 'revenue'],
   scale: ['pipelineCoverage', 'utilization', 'quota', 'dso', 'concentration', 'serviceMix', 'scorecard'],
   eos: ['rocks', 'scorecard', 'oneYearPlan', 'l10pulse', 'issues', 'todos', 'peopleAnalyzer', 'eosComponents', 'coreValues'],
 };
@@ -2383,8 +2383,8 @@ const state = {
   automations: readSeededList(AUTOMATION_CACHE_KEY, automationsFallback).map(normalizeAutomation),
   knowledgeUi: { query: '', selectedId: '', editingId: null, creating: false },
   automationUi: { editingId: null, creating: false },
-  callsStats: { key: '', rows: [], sync: null },
-  callsPresence: { agents: [], error: '', forbidden: false },
+  callsStats: { key: '', rows: [], sync: null, unavailable: false },
+  callsPresence: { agents: [], error: '', forbidden: false, notConnected: false },
 };
 
 const app = document.getElementById('app');
@@ -4592,7 +4592,7 @@ function callsDurationLabel(sinceIso) {
 async function loadCallsStats(companyId, rangeKey) {
   const key = `${companyId}|${rangeKey}`;
   const client = createSupabaseClient();
-  if (!client) { state.callsStats = { key, rows: [], sync: null }; return; }
+  if (!client) { state.callsStats = { key, rows: [], sync: null, unavailable: true }; return; }
 
   const bounds = callsRangeBounds(rangeKey);
   const [stats, sync] = await Promise.all([
@@ -4600,31 +4600,65 @@ async function loadCallsStats(companyId, rangeKey) {
     client.from('ringcentral_sync_state').select('last_sync_at,consecutive_failures').eq('company_id', companyId).maybeSingle(),
   ]);
 
-  state.callsStats = { key, rows: stats.error ? [] : (stats.data || []), sync: sync.error ? null : sync.data };
-  if (state.route?.section === 'calls') render();
+  // An erroring RPC means the migration has not been applied. That is a very
+  // different thing from "nobody made any calls", and saying so saves someone
+  // hunting for missing data that was never there.
+  state.callsStats = {
+    key,
+    rows: stats.error ? [] : (stats.data || []),
+    sync: sync.error ? null : sync.data,
+    unavailable: Boolean(stats.error),
+  };
+  if (callsSurfaceVisible()) render();
 }
 
 async function loadCallsPresence(companyId) {
   const token = activeSession()?.access_token;
   if (!token) return;
+  const idle = { agents: [], error: '', forbidden: false, notConnected: false };
   try {
     const response = await fetch(`/api/ringcentral-presence?company_id=${encodeURIComponent(companyId)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    const isJson = String(response.headers.get('content-type') || '').includes('application/json');
+
     if (response.status === 403) {
       // A member, not an admin. The board is a supervision surface, so hide it
       // rather than showing them a single row about themselves.
-      state.callsPresence = { agents: [], error: '', forbidden: true };
+      state.callsPresence = { ...idle, forbidden: true };
+    } else if (response.status === 503 || !isJson) {
+      // 503 is the endpoint saying it has no credentials. A non-JSON body means
+      // the serverless function is not running at all — which is exactly what a
+      // plain `vite dev` server does, since it serves index.html for /api/*.
+      state.callsPresence = { ...idle, notConnected: true };
     } else if (!response.ok) {
-      state.callsPresence = { agents: [], error: 'Can\'t reach RingCentral right now.', forbidden: false };
+      state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };
     } else {
       const payload = await response.json();
-      state.callsPresence = { agents: payload.agents || [], error: '', forbidden: false };
+      state.callsPresence = { ...idle, agents: payload.agents || [] };
     }
   } catch {
-    state.callsPresence = { agents: [], error: 'Can\'t reach RingCentral right now.', forbidden: false };
+    state.callsPresence = { ...idle, error: 'Can\'t reach RingCentral right now.' };
   }
-  if (state.route?.section === 'calls') render();
+  if (callsSurfaceVisible()) render();
+}
+
+// The Calls data feeds two surfaces: the module and a dashboard widget. Both
+// need loads and polling, so visibility is a question about either of them.
+function callsSurfaceVisible() {
+  return state.route?.section === 'calls' || state.route?.section === 'dashboard';
+}
+
+function ensureCallsData(companyId, rangeKey = 'today') {
+  const key = `${companyId}|${rangeKey}`;
+  if (state.callsStats.key !== key) queueMicrotask(() => loadCallsStats(companyId, rangeKey).catch(() => {}));
+  if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
+  queueMicrotask(() => loadCallsPresence(companyId).catch(() => {}));
+  ensureCallsPresencePolling(companyId);
+}
+
+function callsNotConnectedMarkup() {
+  return emptyState(`RingCentral isn't connected yet. Once the migration is applied and the RingCentral credentials are set, live status and conversation counts appear here.`);
 }
 
 function stopCallsPresencePolling() {
@@ -4637,18 +4671,20 @@ function ensureCallsPresencePolling(companyId) {
   callsPresenceTimer = setInterval(() => {
     // The router replaces the whole view, so there is no unmount hook to hang
     // this off; the timer retires itself once the user is somewhere else.
-    if (state.route?.section !== 'calls') { stopCallsPresencePolling(); return; }
-    if (document.hidden || state.callsPresence.forbidden) return;
+    if (!callsSurfaceVisible()) { stopCallsPresencePolling(); return; }
+    if (document.hidden || state.callsPresence.forbidden || state.callsPresence.notConnected) return;
     loadCallsPresence(companyId).catch(() => {});
   }, CALLS_PRESENCE_POLL_MS);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden || state.route?.section !== 'calls' || state.callsPresence.forbidden) return;
+    if (document.hidden || !callsSurfaceVisible()) return;
+    if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
     loadCallsPresence(companyId).catch(() => {});
   });
 }
 
 function callsBoardMarkup() {
-  const { agents, error } = state.callsPresence;
+  const { agents, error, notConnected } = state.callsPresence;
+  if (notConnected) return '<p class="calls-empty">Not connected to RingCentral yet.</p>';
   if (error) return `<p class="calls-empty">${h(error)}</p>`;
   if (!agents.length) return '<p class="calls-empty">Loading live status…</p>';
 
@@ -4664,20 +4700,43 @@ function callsBoardMarkup() {
     </tr>`).join('')}</tbody></table>`;
 }
 
+// Dashboard widget. Same two ideas as the module, compressed: who is on the
+// phone, and today's conversation counts. Links through for the full view.
+function renderCallsWidget(companyId) {
+  ensureCallsData(companyId, 'today');
+
+  if (state.callsStats.unavailable || state.callsPresence.notConnected) return callsNotConnectedMarkup();
+
+  const rows = state.callsStats.key === `${companyId}|today` ? state.callsStats.rows : [];
+  const onCall = state.callsPresence.agents.filter((agent) => agent.status === 'on_call').length;
+  const available = state.callsPresence.agents.filter((agent) => agent.status === 'available').length;
+  const conversations = rows.reduce((total, row) => total + Number(row.conversations || 0), 0);
+  const totalCalls = rows.reduce((total, row) => total + Number(row.total_calls || 0), 0);
+
+  return `
+    <div class="calls-widget">
+      <section class="dash-kpis dash-widget-kpis">
+        ${dashboardMetricTile('ti-phone', onCall, 'On a call', `${available} available`)}
+        ${dashboardMetricTile('ti-message', conversations, 'Conversations 60s+', 'Today')}
+        ${dashboardMetricTile('ti-activity', totalCalls, 'Calls today', `${rows.length} people`)}
+      </section>
+      ${state.callsPresence.forbidden ? '' : `<div class="calls-widget-board">${callsBoardMarkup()}</div>`}
+      <a class="calls-widget-link" href="${appHref(companyPath('calls', {}, companyId))}" data-router>Open Calls<i class="ti ti-arrow-right" aria-hidden="true"></i></a>
+    </div>`;
+}
+
 function renderCallsPage(route, companyId) {
   const rangeKey = callsRangeKey(route);
   const key = `${companyId}|${rangeKey}`;
-  if (state.callsStats.key !== key) queueMicrotask(() => loadCallsStats(companyId, rangeKey).catch(() => {}));
-  if (!state.callsPresence.forbidden) {
-    queueMicrotask(() => loadCallsPresence(companyId).catch(() => {}));
-    ensureCallsPresencePolling(companyId);
-  }
+  ensureCallsData(companyId, rangeKey);
 
   const rows = state.callsStats.key === key ? state.callsStats.rows : [];
   const sync = state.callsStats.sync;
   const stale = Number(sync?.consecutive_failures || 0) >= 3;
 
-  const table = rows.length
+  const table = state.callsStats.unavailable
+    ? callsNotConnectedMarkup()
+    : rows.length
     ? `<table class="calls-table">
         <thead><tr><th>Name</th><th>Ext</th><th>Total calls</th><th>Conversations 60s+</th></tr></thead>
         <tbody>${rows.map((row) => `<tr>
@@ -5711,6 +5770,13 @@ function dashboardWidgetRegistry(companyId, ctx) {
   const commercialJobs = ctx.jobs.filter((job) => /commercial|storage|office|retail/i.test(String(job.job_type || job.name || '')));
   const collectedPct = ctx.fin.invoiced ? Math.round((ctx.fin.collected / ctx.fin.invoiced) * 100) : 0;
   const widgets = {
+    calls: {
+      title: 'Phones right now',
+      group: 'Operations',
+      span: true,
+      sub: 'Live RingCentral status, and conversations over 60 seconds today.',
+      render: () => renderCallsWidget(companyId),
+    },
     kpis: {
       title: 'Activity totals',
       group: 'Sales',
