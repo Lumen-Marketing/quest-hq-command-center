@@ -24240,10 +24240,10 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .calls-page { display: grid; gap: 18px; }
 .calls-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .calls-sync { font-size: 0.85rem; color: var(--muted, #6b7280); margin: 0; }
-.calls-sync.is-stale { color: var(--danger, #e0484d); font-weight: 600; }
+.calls-sync.is-stale { color: var(--danger, #dc2626); font-weight: 600; }
 .calls-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .calls-board, .calls-table { width: 100%; border-collapse: collapse; }
-.calls-board td, .calls-table td, .calls-table th { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line, #e5e7eb); }
+.calls-board td, .calls-table td, .calls-table th { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border, #e6e8eb); }
 .calls-table th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #6b7280); }
 .calls-board tr:last-child td, .calls-table tr:last-child td { border-bottom: 0; }
 .calls-board-name { font-weight: 600; }
@@ -24257,7 +24257,7 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .calls-status-dnd { background: #8f867b; }
 .calls-status-offline { background: #c8cbd0; }
 .calls-ranges { display: flex; gap: 8px; flex-wrap: wrap; }
-.calls-range { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line, #e5e7eb); text-decoration: none; font-size: 0.85rem; }
-.calls-range.is-active { background: var(--brand-soft, #eef2ff); border-color: transparent; font-weight: 600; }
+.calls-range { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border, #e6e8eb); text-decoration: none; font-size: 0.85rem; }
+.calls-range.is-active { background: var(--accent-soft, rgba(237, 78, 13, .09)); border-color: transparent; font-weight: 600; }
 .calls-empty { color: var(--muted, #6b7280); margin: 0; }
 .calls-note { font-size: 0.78rem; color: var(--muted, #6b7280); margin: 10px 0 0; }
