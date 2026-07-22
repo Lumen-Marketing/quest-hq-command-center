@@ -856,6 +856,7 @@ const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'time_clock', label: 'Time & clock', summary: 'Personal time queues and clock dashboard.', icon: 'ti-clock-hour-4', module_ids: ['time', 'clock'], permissions: ['time.track', 'clock.manage'] },
   { id: 'approvals', label: 'Approvals', summary: 'Review queues for handoffs, forms, and access.', icon: 'ti-user-check', module_ids: ['approvals'], permissions: ['approvals.view', 'approvals.manage'] },
   { id: 'reporting', label: 'Reporting', summary: 'Analytics and team chart views.', icon: 'ti-chart-bar', module_ids: ['analytics', 'team-chart'], permissions: ['team.view'] },
+  { id: 'calls', label: 'Calls', summary: 'Live phone status and conversation counts from RingCentral.', icon: 'ti-phone', module_ids: ['calls'], permissions: ['team.view'] },
   { id: 'tickets', label: 'Tickets', summary: 'Future service and issue tracking module.', icon: 'ti-ticket', module_ids: ['tickets'], permissions: [], comingSoon: true },
   { id: 'templates', label: 'Templates', summary: 'Future reusable workspace templates.', icon: 'ti-template', module_ids: ['templates'], permissions: [], comingSoon: true },
 ];
@@ -1003,6 +1004,7 @@ const MODULE_REGISTRY = [
   { id: 'approvals', group: 'Operations', label: 'Approvals', icon: 'ti-user-check', symbol: 'q-symbol-approvals', status: 'live', permission: 'approvals.view' },
   { id: 'team-workload', group: 'Operations', label: 'Team workload', icon: 'ti-users', symbol: 'q-symbol-team-workload', status: 'live', permission: 'tasks.view' },
   { id: 'clock', group: 'Operations', label: 'Clock dashboard', icon: 'ti-clock-hour-4', symbol: 'q-symbol-clock', status: 'live', permission: 'clock.manage' },
+  { id: 'calls', group: 'Operations', label: 'Calls', icon: 'ti-phone', symbol: 'q-symbol-analytics', status: 'live', permission: 'team.view' },
 ];
 
 const NAVIGATION_LABELS = {
@@ -1019,7 +1021,7 @@ const NAV_GROUPS = [
   { label: 'Pipeline', ids: ['contacts'] },
   { label: 'Production', ids: ['jobs'] },
   { label: 'Tools', ids: ['underwriter', 'proposals'] },
-  { label: 'Review', ids: ['analytics', 'users', 'calendar'] },
+  { label: 'Review', ids: ['analytics', 'users', 'calendar', 'calls'] },
   { label: 'Build', ids: ['templates', 'automations'] },
   { label: 'Workspace', ids: ['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'] },
   { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload'] },
@@ -2381,6 +2383,8 @@ const state = {
   automations: readSeededList(AUTOMATION_CACHE_KEY, automationsFallback).map(normalizeAutomation),
   knowledgeUi: { query: '', selectedId: '', editingId: null, creating: false },
   automationUi: { editingId: null, creating: false },
+  callsStats: { key: '', rows: [], sync: null },
+  callsPresence: { agents: [], error: '', forbidden: false },
 };
 
 const app = document.getElementById('app');
@@ -4401,7 +4405,9 @@ function permissionPluginIds(permission) {
   if (clean.startsWith('calendar.')) return ['calendar'];
   if (['time.track', 'clock.manage'].includes(clean)) return ['time_clock'];
   if (clean.startsWith('approvals.')) return ['approvals'];
-  if (clean === 'team.view') return ['reporting'];
+  // Mirrors app_private.permission_plugin_ids. Calls reuses team.view, so a
+  // workspace with Calls installed but Reporting uninstalled must still resolve.
+  if (clean === 'team.view') return ['reporting', 'calls'];
   return [];
 }
 
@@ -4489,6 +4495,7 @@ function renderWorkspace(route) {
   if (route.section === 'messages') return renderMessagesPage(route, companyId);
   if (route.section === 'team-chart') return renderTeamChartPage(companyId);
   if (route.section === 'time' || route.section === 'calendar' || route.section === 'approvals' || route.section === 'clock') return renderOperationsPage(route, companyId);
+  if (route.section === 'calls') return renderCallsPage(route, companyId);
   if (route.section === 'team-workload') return renderTeamWorkloadPage(companyId);
   if (route.section === 'knowledge') return renderKnowledgePage(route, companyId);
   if (route.section === 'automations') return renderAutomationsPage(route, companyId);
@@ -4530,6 +4537,183 @@ function renderTeamWorkloadPage(companyId) {
         <div class="tw-stat"><b>${wl.rows.length}</b><span>People</span></div>
       </div>
       ${wl.rows.length ? `<div class="tw-board panel">${rows}</div>` : emptyState('No active team members to show workload for.')}
+    </section>`;
+}
+
+// ── Calls (RingCentral) ──────────────────────────────────────────────────────
+// Two surfaces, both deliberately thin: who is on the phone right now, and how
+// many calls per person ran long enough to be a real conversation. Everything
+// else a manager might want is already in RingCentral's own Analytics page.
+//
+// Historic counts come from our own database through an aggregate RPC, so the
+// page renders even when RingCentral is unreachable. Only the live board talks
+// to RingCentral, through a server proxy that holds the credentials.
+
+const CALLS_RANGE_OPTIONS = [
+  ['today', 'Today'],
+  ['7d', 'Last 7 days'],
+  ['30d', 'Last 30 days'],
+];
+const CALLS_STATUS_LABELS = {
+  on_call: 'On call',
+  ringing: 'Ringing',
+  dnd: 'Do not disturb',
+  offline: 'Offline',
+  busy: 'Busy',
+  available: 'Available',
+};
+const CALLS_PRESENCE_POLL_MS = 15000;
+let callsPresenceTimer = null;
+
+function callsRangeKey(route) {
+  const requested = String(route?.params?.get?.('range') || 'today');
+  return CALLS_RANGE_OPTIONS.some(([key]) => key === requested) ? requested : 'today';
+}
+
+function callsRangeBounds(rangeKey) {
+  const to = new Date();
+  const from = new Date(to);
+  if (rangeKey === '7d') from.setDate(from.getDate() - 7);
+  else if (rangeKey === '30d') from.setDate(from.getDate() - 30);
+  else from.setHours(0, 0, 0, 0);
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
+function callsDurationLabel(sinceIso) {
+  const started = new Date(sinceIso).getTime();
+  if (!Number.isFinite(started)) return '—';
+  const seconds = Math.max(0, Math.floor((Date.now() - started) / 1000));
+  const pad = (value) => String(value).padStart(2, '0');
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return hours ? `${hours}:${pad(minutes)}:${pad(seconds % 60)}` : `${minutes}:${pad(seconds % 60)}`;
+}
+
+async function loadCallsStats(companyId, rangeKey) {
+  const key = `${companyId}|${rangeKey}`;
+  const client = createSupabaseClient();
+  if (!client) { state.callsStats = { key, rows: [], sync: null }; return; }
+
+  const bounds = callsRangeBounds(rangeKey);
+  const [stats, sync] = await Promise.all([
+    client.rpc('ringcentral_conversation_stats', { p_company_id: companyId, p_from: bounds.from, p_to: bounds.to }),
+    client.from('ringcentral_sync_state').select('last_sync_at,consecutive_failures').eq('company_id', companyId).maybeSingle(),
+  ]);
+
+  state.callsStats = { key, rows: stats.error ? [] : (stats.data || []), sync: sync.error ? null : sync.data };
+  if (state.route?.section === 'calls') render();
+}
+
+async function loadCallsPresence(companyId) {
+  const token = activeSession()?.access_token;
+  if (!token) return;
+  try {
+    const response = await fetch(`/api/ringcentral-presence?company_id=${encodeURIComponent(companyId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.status === 403) {
+      // A member, not an admin. The board is a supervision surface, so hide it
+      // rather than showing them a single row about themselves.
+      state.callsPresence = { agents: [], error: '', forbidden: true };
+    } else if (!response.ok) {
+      state.callsPresence = { agents: [], error: 'Can\'t reach RingCentral right now.', forbidden: false };
+    } else {
+      const payload = await response.json();
+      state.callsPresence = { agents: payload.agents || [], error: '', forbidden: false };
+    }
+  } catch {
+    state.callsPresence = { agents: [], error: 'Can\'t reach RingCentral right now.', forbidden: false };
+  }
+  if (state.route?.section === 'calls') render();
+}
+
+function stopCallsPresencePolling() {
+  if (callsPresenceTimer) clearInterval(callsPresenceTimer);
+  callsPresenceTimer = null;
+}
+
+function ensureCallsPresencePolling(companyId) {
+  if (callsPresenceTimer) return;
+  callsPresenceTimer = setInterval(() => {
+    // The router replaces the whole view, so there is no unmount hook to hang
+    // this off; the timer retires itself once the user is somewhere else.
+    if (state.route?.section !== 'calls') { stopCallsPresencePolling(); return; }
+    if (document.hidden || state.callsPresence.forbidden) return;
+    loadCallsPresence(companyId).catch(() => {});
+  }, CALLS_PRESENCE_POLL_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || state.route?.section !== 'calls' || state.callsPresence.forbidden) return;
+    loadCallsPresence(companyId).catch(() => {});
+  });
+}
+
+function callsBoardMarkup() {
+  const { agents, error } = state.callsPresence;
+  if (error) return `<p class="calls-empty">${h(error)}</p>`;
+  if (!agents.length) return '<p class="calls-empty">Loading live status…</p>';
+
+  const rank = { on_call: 0, ringing: 1, busy: 2, dnd: 3, available: 4, offline: 5 };
+  const ordered = [...agents].sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
+
+  return `<table class="calls-board"><tbody>${ordered.map((agent) => `
+    <tr>
+      <td class="calls-board-name">${h(agent.name || 'Unknown')}</td>
+      <td class="calls-board-ext">${h(agent.extension_number || '')}</td>
+      <td><span class="calls-status-dot calls-status-${h(agent.status)}"></span>${h(CALLS_STATUS_LABELS[agent.status] || agent.status)}</td>
+      <td class="calls-board-since">${h(callsDurationLabel(agent.since))}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+function renderCallsPage(route, companyId) {
+  const rangeKey = callsRangeKey(route);
+  const key = `${companyId}|${rangeKey}`;
+  if (state.callsStats.key !== key) queueMicrotask(() => loadCallsStats(companyId, rangeKey).catch(() => {}));
+  if (!state.callsPresence.forbidden) {
+    queueMicrotask(() => loadCallsPresence(companyId).catch(() => {}));
+    ensureCallsPresencePolling(companyId);
+  }
+
+  const rows = state.callsStats.key === key ? state.callsStats.rows : [];
+  const sync = state.callsStats.sync;
+  const stale = Number(sync?.consecutive_failures || 0) >= 3;
+
+  const table = rows.length
+    ? `<table class="calls-table">
+        <thead><tr><th>Name</th><th>Ext</th><th>Total calls</th><th>Conversations 60s+</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr>
+          <td>${h(row.extension_name || 'Unknown')}</td>
+          <td>${h(row.extension_number || '')}</td>
+          <td>${Number(row.total_calls || 0)}</td>
+          <td class="calls-conversations">${Number(row.conversations || 0)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`
+    : emptyState(`No calls in this range. If you expected to see your own, we couldn't match you to a RingCentral extension — ask your admin to check that your RingCentral email matches your Command Center login.`);
+
+  return `
+    <section class="calls-page">
+      <div class="calls-head">
+        <div>
+          <h1>Calls</h1>
+          <p class="muted">Who is on the phone right now, and how many real conversations each person is having.</p>
+        </div>
+        <p class="calls-sync${stale ? ' is-stale' : ''}">${sync?.last_sync_at ? `Synced ${h(timeAgo(sync.last_sync_at))}` : 'Not synced yet'}</p>
+      </div>
+
+      ${state.callsPresence.forbidden ? '' : `
+      <section class="panel calls-live">
+        <h2>Right now</h2>
+        ${callsBoardMarkup()}
+        <p class="calls-note">Durations are measured from when this dashboard first saw the status, so they are accurate to about 15 seconds.</p>
+      </section>`}
+
+      <section class="panel calls-conversations-panel">
+        <div class="calls-panel-head">
+          <h2>Conversations 60s+</h2>
+          <nav class="calls-ranges">${CALLS_RANGE_OPTIONS.map(([rangeId, label]) =>
+            `<a class="calls-range${rangeId === rangeKey ? ' is-active' : ''}" href="${appHref(companyPath('calls', { range: rangeId }, companyId))}" data-router>${h(label)}</a>`).join('')}</nav>
+        </div>
+        ${table}
+      </section>
     </section>`;
 }
 

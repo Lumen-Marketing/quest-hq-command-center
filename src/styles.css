@@ -24235,3 +24235,29 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   text-transform: uppercase; letter-spacing: .05em;
 }
 .auth-sso-divider::before, .auth-sso-divider::after { content: ""; flex: 1; height: 1px; background: var(--border, #dde1e8); }
+
+/* ── Calls (RingCentral) ─────────────────────────────────────────────────── */
+.calls-page { display: grid; gap: 18px; }
+.calls-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.calls-sync { font-size: 0.85rem; color: var(--muted, #6b7280); margin: 0; }
+.calls-sync.is-stale { color: var(--danger, #e0484d); font-weight: 600; }
+.calls-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.calls-board, .calls-table { width: 100%; border-collapse: collapse; }
+.calls-board td, .calls-table td, .calls-table th { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line, #e5e7eb); }
+.calls-table th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #6b7280); }
+.calls-board tr:last-child td, .calls-table tr:last-child td { border-bottom: 0; }
+.calls-board-name { font-weight: 600; }
+.calls-board-ext, .calls-board-since { color: var(--muted, #6b7280); font-variant-numeric: tabular-nums; }
+.calls-conversations { font-weight: 700; font-variant-numeric: tabular-nums; }
+.calls-status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--muted, #9ca3af); }
+.calls-status-on_call { background: #e0484d; }
+.calls-status-ringing { background: #ed9a3a; }
+.calls-status-busy { background: #ed9a3a; }
+.calls-status-available { background: #2e9e6b; }
+.calls-status-dnd { background: #8f867b; }
+.calls-status-offline { background: #c8cbd0; }
+.calls-ranges { display: flex; gap: 8px; flex-wrap: wrap; }
+.calls-range { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line, #e5e7eb); text-decoration: none; font-size: 0.85rem; }
+.calls-range.is-active { background: var(--brand-soft, #eef2ff); border-color: transparent; font-weight: 600; }
+.calls-empty { color: var(--muted, #6b7280); margin: 0; }
+.calls-note { font-size: 0.78rem; color: var(--muted, #6b7280); margin: 10px 0 0; }
