@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { resolveCompanyAdmin } from '../api/_lib/user-auth.js';
+import { reconcilePresence } from '../api/ringcentral-presence.js';
 
 const SUPABASE = { supabaseUrl: 'https://project.supabase.co', serviceKey: 'service-key' };
 
@@ -82,4 +84,57 @@ test('the membership lookup is scoped to the company, the profile, and active st
   assert.match(membershipUrl, /company_id=eq\.quest/);
   assert.match(membershipUrl, /profile_id=eq\.profile-1/);
   assert.match(membershipUrl, /status=eq\.active/);
+});
+
+const presenceSource = readFileSync(new URL('../api/ringcentral-presence.js', import.meta.url), 'utf8');
+const NOW = new Date('2026-07-23T12:00:00.000Z');
+
+test('an unchanged status keeps its original status_since', () => {
+  const previous = [{ extension_id: '201', display_status: 'available', status_since: '2026-07-23T11:00:00.000Z' }];
+  const live = [{ extension_id: '201', display_status: 'available' }];
+
+  const { rows, changed } = reconcilePresence(previous, live, NOW);
+
+  assert.equal(rows[0].status_since, '2026-07-23T11:00:00.000Z');
+  assert.equal(changed.length, 0, 'nothing changed, so nothing is written');
+});
+
+test('a changed status resets status_since to now', () => {
+  const previous = [{ extension_id: '201', display_status: 'available', status_since: '2026-07-23T11:00:00.000Z' }];
+  const live = [{ extension_id: '201', display_status: 'on_call' }];
+
+  const { rows, changed } = reconcilePresence(previous, live, NOW);
+
+  assert.equal(rows[0].display_status, 'on_call');
+  assert.equal(rows[0].status_since, '2026-07-23T12:00:00.000Z');
+  assert.equal(changed.length, 1);
+});
+
+test('an extension seen for the first time starts its clock now', () => {
+  const { rows, changed } = reconcilePresence([], [{ extension_id: '202', display_status: 'busy' }], NOW);
+
+  assert.equal(rows[0].status_since, '2026-07-23T12:00:00.000Z');
+  assert.equal(changed.length, 1);
+});
+
+test('an extension that disappears from the live payload is dropped', () => {
+  const previous = [{ extension_id: '201', display_status: 'available', status_since: '2026-07-23T11:00:00.000Z' }];
+  const { rows } = reconcilePresence(previous, [], NOW);
+  assert.equal(rows.length, 0);
+});
+
+test('the presence endpoint requires authentication and admin rights', () => {
+  assert.match(presenceSource, /resolveCompanyAdmin/);
+  assert.match(presenceSource, /isAdmin/);
+  assert.match(presenceSource, /status\(403\)/);
+});
+
+test('the presence endpoint caches upstream calls', () => {
+  assert.match(presenceSource, /CACHE_TTL_MS/);
+  assert.match(presenceSource, /detailedTelephonyState/);
+});
+
+test('the presence endpoint never exposes RingCentral credentials to the browser', () => {
+  assert.doesNotMatch(presenceSource, /VITE_RINGCENTRAL/);
+  assert.doesNotMatch(presenceSource, /access_token/);
 });
