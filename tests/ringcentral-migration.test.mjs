@@ -49,7 +49,7 @@ test('the aggregate function is security invoker so it inherits RLS', () => {
 
 test('the calls plugin joins the known-plugin allowlist without dropping existing entries', () => {
   assert.match(sql, /company_plugins_known_plugin_check/);
-  for (const plugin of ['crm', 'crm_2', 'underwriter', 'files', 'client_portal', 'workspace_builder', 'price_book', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'calls']) {
+  for (const plugin of ['crm', 'crm_2', 'underwriter', 'files', 'client_portal', 'workspace_builder', 'price_book', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks', 'calls']) {
     assert.match(sql, new RegExp(`'${plugin}'`), `${plugin} disappeared from the allowlist`);
   }
 });

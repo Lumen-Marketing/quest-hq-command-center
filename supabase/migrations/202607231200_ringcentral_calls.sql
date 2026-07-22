@@ -208,10 +208,13 @@ grant execute on function public.ringcentral_conversation_stats(text, timestampt
 -- ============================================================
 -- E. Register the plugin
 -- ============================================================
--- The array below is reproduced verbatim from
--- 20260701170157_price_book_plugin_allowlist.sql with 'calls' appended. Do not
--- re-order or drop entries: a stale copy would silently remove modules from
--- newly created workspaces.
+-- The array below is the LIVE allowlist with 'calls' appended, read back from
+-- pg_constraint rather than copied from the newest migration in this repository.
+-- Those two disagree: 'tasks' was added live by work that is applied to the
+-- database but still on an unmerged branch, so a copy taken from
+-- 20260701170157_price_book_plugin_allowlist.sql is missing it. Applying that
+-- stale copy fails outright against existing rows — which is how this was
+-- caught. Always re-read the live constraint before touching this.
 
 alter table public.company_plugins
   drop constraint if exists company_plugins_known_plugin_check;
@@ -233,6 +236,7 @@ alter table public.company_plugins
       'time_clock',
       'approvals',
       'reporting',
+      'tasks',
       'calls'
     )
   );

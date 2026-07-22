@@ -29,9 +29,18 @@ Captured 2026-07-21T00:27:56.075Z. This is a point-in-time operational snapshot,
 - Postgres: 17.6.1.127, engine 17
 - Public catalog: 60 relations, 178 foreign-key column links, 190 policies, 59 public functions, and 80 trigger events.
 - Storage: 6 buckets cataloged without object data.
-- Latest repository migration: 202607231200_ringcentral_calls.sql (**not yet applied live**)
-- Latest live ledger entries: 20260721002147 company_operational_workspaces and 20260721002417 workspace_tenancy_advisor_hardening
-- Pending migration 202607231200_ringcentral_calls.sql adds five `ringcentral_*` tables, five select policies, the `public.ringcentral_conversation_stats` function, and widens `app_private.permission_plugin_ids`. The catalog counts above describe the live database and deliberately exclude it until it is applied.
+- Latest repository migration: 202607231200_ringcentral_calls.sql — **applied live 2026-07-23**
+- It adds five `ringcentral_*` tables, five select policies, the
+  `public.ringcentral_conversation_stats` function, and widens
+  `app_private.permission_plugin_ids` so `team.view` resolves to both `reporting` and
+  `calls`. The catalog counts above predate it and have not been re-captured.
+- The `lumen` company is seeded: a `ringcentral_accounts` row, the `calls` company plugin,
+  and the `calls` workspace plugin on its Main workspace.
+- **The live allowlist is ahead of the repository.** `company_plugins_known_plugin_check`
+  contains `tasks`, added by work that is applied to the database but still sits on the
+  unmerged `feat/task-app-absorption` branch. A migration that rebuilds this constraint
+  from the newest file in `supabase/migrations` will drop `tasks` and fail against
+  existing rows. Always read the live constraint out of `pg_constraint` first.
 - Live tenancy verification: every one of the 3 company accounts has one active default operational workspace; all 11 workspace-owned pipeline tables have non-null workspace ids; zero company/workspace mismatches were found.
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.

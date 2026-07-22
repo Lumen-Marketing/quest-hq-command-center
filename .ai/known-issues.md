@@ -37,14 +37,15 @@ table is cleared, and a status change occurring between two polls is timed from 
 rather than the actual change. Accurate to roughly the 15-second poll interval. The UI
 states this. Do not use these durations for payroll, billing, or any adjudicated purpose.
 
-## The RingCentral migration is written but not applied
+## The plugin allowlist in the database is ahead of this repository
 
-`202607231200_ringcentral_calls.sql` exists in the repository and the manifest points at
-it, but it has not been applied to Supabase, so the live catalog counts in
-[database/overview.md](database/overview.md) deliberately exclude its five tables, five
-policies, and one function. The Calls module also needs `RINGCENTRAL_CLIENT_ID`,
-`RINGCENTRAL_CLIENT_SECRET`, `RINGCENTRAL_JWT` and `RINGCENTRAL_SERVER_URL` in Vercel plus
-a `ringcentral_accounts` row before it shows anything. See [docs/ringcentral-setup.md](../docs/ringcentral-setup.md).
+`company_plugins_known_plugin_check` live contains `tasks`, added by work that is applied
+to Supabase but still on the unmerged `feat/task-app-absorption` branch. The newest
+allowlist migration in `supabase/migrations` does not. Any migration that rebuilds this
+constraint by copying the newest file will silently drop `tasks` — and, because rows
+already use it, fail on apply. This bit the RingCentral migration on its first attempt.
+
+Read the live constraint out of `pg_constraint` before rewriting it, not the repository.
 
 ## The RingCentral cron interval may exceed the Vercel plan
 
