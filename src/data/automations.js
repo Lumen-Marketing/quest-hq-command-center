@@ -110,7 +110,10 @@ export function buildTaskFromAction(action, record, todayISO) {
     due: addDaysISO(todayISO, offset),
     priority: action.priority || 'medium',
     assignee_id: action.assignee_id || '',
+    workspace_id: record && record.__workspace_id ? record.__workspace_id : '',
+    project_id: record && record.__project_id ? record.__project_id : '',
     contact_id: record && record.__contact_id ? record.__contact_id : '',
+    deal_id: record && record.__deal_id ? record.__deal_id : '',
   };
 }
 

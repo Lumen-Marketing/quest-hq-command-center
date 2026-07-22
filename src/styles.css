@@ -24171,6 +24171,34 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 .task-repeat-badge .ti { font-size: 13px; }
 
+.task-context-links {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+.task-context-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.task-context-link:hover { border-color: var(--amber); background: #fff8e7; }
+.task-context-link > i { color: var(--muted); font-size: 17px; }
+.task-context-link > span { display: grid; min-width: 0; font-weight: 650; }
+.task-context-link small { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.task-context-link span:not(small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .task-context-links { grid-template-columns: 1fr; }
+}
+
 /* Automations module */
 .automation-list { display: grid; gap: 12px; }
 .automation-card {
