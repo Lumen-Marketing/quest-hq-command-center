@@ -40,7 +40,15 @@ App.FilterBarView = class FilterBarView {
       swatch: p.color, active: f.assignees.includes(p.id),
     })).join('');
 
-    const companyChips = Object.values(App.COMPANIES).map(c => this.chip({
+    // Source from accessible companies so the access-gated 'overall' shows
+    // only for granted users; fall back to the non-overall constants.
+    const companyList = (this.controller.uiState.companies || [])
+      .filter(id => id !== '*' && App.directory.company(id))
+      .map(id => App.directory.company(id));
+    const companyChips = (companyList.length
+      ? companyList
+      : Object.values(App.COMPANIES).filter(c => !c.all)
+    ).map(c => this.chip({
       group: 'companies', value: c.id, label: c.label,
       active: f.companies.includes(c.id),
     })).join('');
@@ -61,6 +69,13 @@ App.FilterBarView = class FilterBarView {
       active: f.types.includes(k),
     })).join('');
 
+    const projectChips = Object.values(App.projects || {})
+      .filter(p => ['lead', 'active', 'hold'].includes(p.status))
+      .map(p => this.chip({
+        group: 'projects', value: p.id, label: p.name,
+        swatch: p.color, active: (f.projects || []).includes(p.id),
+      })).join('');
+
     const dueOptions = [
       { value: 'all',      label: 'Any' },
       { value: 'overdue',  label: 'Overdue' },
@@ -70,7 +85,7 @@ App.FilterBarView = class FilterBarView {
       { value: 'month',    label: 'This month' },
     ];
     const dueChips = dueOptions.map(o =>
-      `<span class="filter-chip ${f.dueRange === o.value ? 'active' : ''}" data-due="${o.value}">${o.label}</span>`
+      `<button type="button" class="filter-chip ${f.dueRange === o.value ? 'active' : ''}" data-due="${o.value}" aria-pressed="${f.dueRange === o.value}">${o.label}</button>`
     ).join('');
 
     const count = this.controller.activeFilterCount();
@@ -112,6 +127,10 @@ App.FilterBarView = class FilterBarView {
           <div class="filter-chips">${typeChips}</div>
         </div>
         <div class="filter-group">
+          <span class="filter-label">Project</span>
+          <div class="filter-chips">${projectChips || '<span class="filter-empty" style="font-size:11px;color:var(--ink-3);">No projects</span>'}</div>
+        </div>
+        <div class="filter-group">
           <span class="filter-label">Due</span>
           <div class="filter-chips">${dueChips}</div>
         </div>
@@ -128,11 +147,11 @@ App.FilterBarView = class FilterBarView {
 
   chip({ group, value, label, swatch, swatchVar, active }) {
     const dot = swatch
-      ? `<span class="swatch" style="background:${swatch};"></span>`
+      ? `<span class="swatch" style="background:${App.utils.safeColor(swatch)};"></span>`
       : swatchVar
         ? `<span class="swatch" style="background:var(${swatchVar});"></span>`
         : '';
-    return `<span class="filter-chip ${active ? 'active' : ''}" data-group="${group}" data-value="${value}">${dot}${label}</span>`;
+    return `<button type="button" class="filter-chip ${active ? 'active' : ''}" data-group="${App.utils.escapeHtml(group)}" data-value="${App.utils.escapeHtml(value)}" aria-pressed="${!!active}">${dot}${App.utils.escapeHtml(label)}</button>`;
   }
 
   bindChips() {

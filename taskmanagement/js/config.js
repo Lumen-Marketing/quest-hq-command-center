@@ -1,5 +1,5 @@
 window.App = window.App || {};
-App.authEnabled = false;
+App.authEnabled = true;
 
 // Routes are derived from the URL and need no secrets, so they can be set
 // synchronously. Other modules read App.routes during script-load.
@@ -46,9 +46,22 @@ App.commandCenterProfileUrl = App.commandCenterIntegration.hosted
   ? `${window.location.origin}${commandCenterBasePath}command?account=profile`
   : '';
 
+// Capture whether we landed on a password-recovery link BEFORE creating the
+// Supabase client below — with detectSessionInUrl on, the client consumes and
+// strips `#...&type=recovery` from the URL, so a later read would miss it.
+App.isRecoveryLanding = /[#&]type=recovery\b/.test(window.location.hash || '');
+
+// MUST match Command Center's own Supabase project (src/main.js CONFIG defaults).
+// If these drift apart the two apps hold DIFFERENT login sessions on the same
+// origin, and the task app bounces to the host login forever — that is exactly
+// what a stale project ref here caused on 2026-07-22.
+// In production, scripts/sync-spa-assets.mjs writes taskmanagement/env.json from
+// the same VITE_SUPABASE_* env vars the host build uses, and env.json wins over
+// these defaults. These values only apply to `vite dev` and to a build with no
+// env vars set.
 App.defaultSupabaseConfig = {
-  supabaseUrl: 'https://lpzotcznihwyyudxycmd.supabase.co',
-  supabaseAnonKey: 'sb_publishable_Gd1aHMtItu-7daoq2YofeA_9wl1pQ07',
+  supabaseUrl: 'https://rqundirizvojpzhljtdn.supabase.co',
+  supabaseAnonKey: 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U',
 };
 
 // Runtime config: fetch env.json (per-environment, never committed) and
@@ -66,8 +79,15 @@ App.configReady = (async function loadRuntimeConfig() {
 
   const envUrl = `${App.basePath}env.json`;
   try {
+    // CC's Vercel SPA rewrite serves index.html (HTTP 200, text/html) for ANY
+    // missing path — including this env.json. So "res.ok" is not proof of JSON:
+    // parse defensively and fall back to the baked-in publishable config.
     const res = await fetch(envUrl, { cache: 'no-store', credentials: 'same-origin' });
-    const env = res.ok ? await res.json() : App.defaultSupabaseConfig;
+    let env = App.defaultSupabaseConfig;
+    if (res.ok) {
+      try { env = await res.json(); }
+      catch (parseError) { env = App.defaultSupabaseConfig; }
+    }
     const url = typeof env.supabaseUrl === 'string' ? env.supabaseUrl.trim() : '';
     const key = typeof env.supabaseAnonKey === 'string' ? env.supabaseAnonKey.trim() : '';
 

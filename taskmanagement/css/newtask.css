@@ -1,0 +1,327 @@
+/* New-Task screen — v1-FINAL fidelity to docs/pro1.html.
+   Everything is scoped to #newTaskWrap so it can't leak app-wide. This screen
+   INTENTIONALLY reverses the app's no-borders rule and hardcodes the locked
+   prototype palette (orange #ED4E0D, canvas #f4f2ee, bordered white cards),
+   exactly like the Task Detail (pro2) restyle. It is a light design — pro1 has
+   no dark variant, so the surface colors are literal, not token-driven.
+   Type system: Hanken Grotesk UI + IBM Plex Mono data (both loaded in app.html). */
+
+#newTaskWrap {
+  background: #f4f2ee;
+}
+#newTaskWrap .nt-page {
+  --orange: #ED4E0D; --orange-dark: #c2410c;
+  --red: #D92B2B;
+  --green: #0F6E56;
+  --ink: #111111; --ink-soft: #3f3d39;
+  --canvas: #f4f2ee; --card: #ffffff; --chip: #f5f2ee;
+  --line: #e5e1da; --line-soft: #f0ede8; --line-strong: #d6d2cb;
+  --sans: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  font-family: var(--sans);
+  color: var(--ink);
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px 24px 60px;
+}
+#newTaskWrap .nt-page *,
+#newTaskWrap .nt-page *::before,
+#newTaskWrap .nt-page *::after { box-sizing: border-box; }
+
+/* ---------------- pagehead ---------------- */
+#newTaskWrap .nt-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+#newTaskWrap .nt-crumb { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 700; }
+#newTaskWrap .nt-crumb-back { width: 26px; height: 26px; display: grid; place-items: center; border: none; background: none; color: var(--ink); font-size: 20px; line-height: 1; border-radius: 8px; cursor: pointer; }
+#newTaskWrap .nt-crumb-back:hover { background: var(--chip); }
+#newTaskWrap .nt-crumb-link { border: none; background: none; font-family: var(--sans); font-size: 14.5px; font-weight: 700; color: var(--ink); cursor: pointer; padding: 0; }
+#newTaskWrap .nt-crumb-link:hover { color: var(--orange); }
+#newTaskWrap .nt-crumb-sep { color: var(--line-strong); }
+#newTaskWrap .nt-crumb-cur { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; font-weight: 600; }
+#newTaskWrap .nt-createdby { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; }
+
+/* ---------------- columns ---------------- */
+#newTaskWrap .nt-cols { display: grid; grid-template-columns: minmax(0, 1.55fr) 380px; gap: 16px; align-items: start; }
+#newTaskWrap .nt-sheet { min-width: 0; }
+
+/* ---------------- cards ---------------- */
+#newTaskWrap .nt-titlebox,
+#newTaskWrap .nt-sec { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 19px 22px; }
+#newTaskWrap .nt-sec { margin-top: 14px; }
+
+/* section header */
+#newTaskWrap .nt-sec-h { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+#newTaskWrap .nt-n { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--ink); display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink); flex-shrink: 0; }
+#newTaskWrap .nt-t { font-family: var(--sans); font-size: 15px; font-weight: 800; letter-spacing: .02em; color: var(--ink); text-transform: uppercase; }
+#newTaskWrap .nt-k { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; color: var(--ink); font-weight: 600; }
+#newTaskWrap .nt-setup-link { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; background: none; border: none; padding: 0; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); cursor: pointer; }
+#newTaskWrap .nt-setup-link:hover { color: var(--orange); }
+#newTaskWrap .nt-setup-link i { font-size: 15px; }
+
+/* Job-type SOP: which SOP the current label pulled into the checklist below. */
+#newTaskWrap .nt-sop-note { margin-left: auto; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--orange-dark); background: #FDF1EA; padding: 3px 9px; border-radius: 6px; opacity: 0; transition: opacity .2s ease; }
+#newTaskWrap .nt-sop-note.show { opacity: 1; }
+
+/* ---------------- title ---------------- */
+#newTaskWrap .nt-title-in { width: 100%; font-family: var(--sans); font-size: 22px; font-weight: 600; border: 2px solid var(--ink); border-radius: 12px; padding: 15px 17px; outline: none; color: var(--ink); background: var(--card); }
+#newTaskWrap .nt-title-in::placeholder { color: #8a857e; font-weight: 600; }
+#newTaskWrap .nt-title-in:focus { box-shadow: 0 0 0 3px rgba(237, 78, 13, .18); border-color: var(--orange); }
+#newTaskWrap .nt-flash { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--green); height: 15px; margin-top: 8px; opacity: 0; transition: opacity .2s ease; }
+#newTaskWrap .nt-flash.show { opacity: 1; }
+#newTaskWrap .nt-hint { font-size: 14px; font-weight: 700; color: var(--ink); margin-top: 10px; }
+#newTaskWrap .nt-hint b { font-family: var(--mono); font-weight: 600; font-size: 11px; background: #FDF1EA; color: var(--orange-dark); padding: 2px 8px; border-radius: 6px; }
+
+/* ---------------- field grid ---------------- */
+#newTaskWrap .nt-frow { display: flex; flex-wrap: wrap; gap: 16px 26px; }
+#newTaskWrap .nt-f { position: relative; min-width: 0; }
+#newTaskWrap .nt-f > label { display: flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 13px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
+#newTaskWrap .nt-kk { font-family: var(--mono); font-size: 9px; letter-spacing: .05em; color: var(--ink); border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 5px; font-weight: 600; }
+
+/* pill buttons */
+#newTaskWrap .nt-pick { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; font-family: var(--sans); font-size: 14.5px; font-weight: 700; padding: 8px 15px; border-radius: 999px; border: 1.5px solid var(--line-strong); background: var(--card); color: var(--ink); cursor: pointer; transition: border-color .12s ease, box-shadow .12s ease; }
+#newTaskWrap .nt-pick:hover { border-color: var(--ink); }
+#newTaskWrap .nt-pick.glow { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(237, 78, 13, .18); }
+#newTaskWrap .nt-pick.nt-ghost,
+#newTaskWrap .nt-pick:has(.nt-pick-val.ph) { color: #57544f; border-style: dashed; font-weight: 700; }
+#newTaskWrap .nt-pick-val { display: inline-flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#newTaskWrap .nt-pick-val .nt-pick-txt { overflow: hidden; text-overflow: ellipsis; }
+#newTaskWrap .nt-pick-val i { font-size: 15px; opacity: .6; flex-shrink: 0; }
+#newTaskWrap .nt-car { width: 13px; height: 13px; opacity: .55; flex-shrink: 0; }
+#newTaskWrap .nt-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+#newTaskWrap .nt-sq { width: 8px; height: 8px; border-radius: 2px; background: var(--orange); flex-shrink: 0; }
+
+/* avatars */
+#newTaskWrap .nt-mini { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-family: var(--sans); font-size: 7.5px; font-weight: 700; color: #fff; flex-shrink: 0; }
+#newTaskWrap .nt-mini.stack { border: 1.5px solid var(--card); }
+#newTaskWrap .nt-mini.stack + .nt-mini.stack { margin-left: -7px; }
+
+/* ---------------- priority segment ---------------- */
+#newTaskWrap .nt-seg { display: inline-flex; border: 1.5px solid var(--line-strong); border-radius: 999px; overflow: hidden; }
+#newTaskWrap .nt-seg button { font-family: var(--sans); font-size: 13.5px; font-weight: 700; padding: 8px 18px; border: none; background: var(--card); color: var(--ink); cursor: pointer; }
+#newTaskWrap .nt-seg button + button { border-left: 1px solid var(--line-soft); }
+#newTaskWrap .nt-seg button:hover { background: var(--chip); }
+#newTaskWrap .nt-seg button.on[data-p="low"] { background: var(--chip); }
+#newTaskWrap .nt-seg button.on[data-p="medium"] { background: #FAC775; color: #412402; }
+#newTaskWrap .nt-seg button.on[data-p="high"] { background: var(--orange); color: #fff; }
+#newTaskWrap .nt-seg button.on[data-p="critical"] { background: var(--red); color: #fff; }
+
+/* ---------------- detail: description + checklist ---------------- */
+#newTaskWrap .nt-desc { width: 100%; font-family: var(--sans); font-size: 15px; font-weight: 600; line-height: 1.55; border: 1.5px solid var(--line-strong); border-radius: 12px; padding: 12px 14px; outline: none; resize: vertical; min-height: 84px; color: var(--ink); background: var(--card); }
+#newTaskWrap .nt-desc::placeholder { color: #8a857e; }
+#newTaskWrap .nt-desc:focus { border-color: var(--ink); }
+#newTaskWrap .nt-sublist { margin-top: 8px; }
+#newTaskWrap .nt-subitem { display: flex; align-items: center; gap: 9px; padding: 6px 0; animation: nt-row-in .18s ease; }
+@keyframes nt-row-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+#newTaskWrap .nt-sub-box { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ink); flex-shrink: 0; }
+#newTaskWrap .nt-subtext { font-size: 14px; font-weight: 700; flex: 1; min-width: 0; }
+#newTaskWrap .nt-subdel { background: none; border: none; color: var(--ink-soft); padding: 0; display: flex; cursor: pointer; }
+#newTaskWrap .nt-subdel:hover { color: var(--red); }
+/* A step the label's SOP put here (vs. one the user typed). Deletable like any other.
+   The tag sits right after its step (not flushed right) so 7 of them read as inline
+   annotations instead of a ragged second column. */
+#newTaskWrap .nt-subitem.is-sop .nt-sub-box { border-color: var(--orange); }
+#newTaskWrap .nt-subitem.is-sop .nt-subtext { flex: 0 1 auto; }
+#newTaskWrap .nt-subdel { margin-left: auto; }
+#newTaskWrap .nt-sop-tag { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .08em; color: var(--orange-dark); background: #FDF1EA; padding: 2px 6px; border-radius: 5px; flex-shrink: 0; }
+#newTaskWrap .nt-chkrow { display: flex; gap: 8px; margin-top: 10px; }
+#newTaskWrap .nt-chkrow input { flex: 1; min-width: 0; font-family: var(--sans); font-size: 14px; font-weight: 600; border: 1.5px solid var(--line-strong); border-radius: 10px; padding: 9px 12px; outline: none; color: var(--ink); background: var(--card); }
+#newTaskWrap .nt-chkrow input:focus { border-color: var(--ink); }
+#newTaskWrap .nt-chkadd { border: none; background: var(--orange); color: #fff; border-radius: 10px; width: 38px; display: flex; align-items: center; justify-content: center; font-size: 20px; line-height: 1; cursor: pointer; flex-shrink: 0; }
+#newTaskWrap .nt-chkadd:hover { background: var(--orange-dark); }
+
+/* ---------------- watchers ---------------- */
+#newTaskWrap .nt-wrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#newTaskWrap .nt-wtag { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; padding: 4px 12px 4px 4px; border-radius: 999px; border: 1.5px solid var(--line-strong); background: var(--card); }
+#newTaskWrap .nt-wtag button { background: none; border: none; color: var(--ink-soft); padding: 0; display: flex; cursor: pointer; }
+#newTaskWrap .nt-wtag button:hover { color: var(--red); }
+#newTaskWrap .nt-watch-add { position: relative; }
+#newTaskWrap .nt-watch-add .nt-pick { gap: 6px; }
+
+/* ---------------- menus ---------------- */
+#newTaskWrap .nt-menu { position: absolute; z-index: 60; top: calc(100% + 6px); left: 0; background: var(--card); border: 1px solid var(--line-strong); border-radius: 12px; padding: 7px; min-width: 210px; box-shadow: 0 12px 34px rgba(17, 17, 17, .16); display: none; }
+#newTaskWrap .nt-menu.open { display: block; animation: nt-menu-in .13s ease; }
+@keyframes nt-menu-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+#newTaskWrap .nt-mhead { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; color: var(--ink); padding: 6px 10px 4px; }
+#newTaskWrap .nt-mitem { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font-family: var(--sans); font-size: 15px; font-weight: 700; padding: 9px 11px; border: none; background: none; border-radius: 8px; color: var(--ink); cursor: pointer; }
+#newTaskWrap .nt-mitem:hover { background: var(--chip); }
+#newTaskWrap .nt-mitem[disabled] { opacity: .4; cursor: not-allowed; }
+#newTaskWrap .nt-mitem .nt-mname { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.15; }
+#newTaskWrap .nt-mitem .nt-mname small { font-family: var(--mono); font-size: 9.5px; color: var(--ink-soft); font-weight: 500; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#newTaskWrap .nt-check { margin-left: auto; color: var(--orange); font-weight: 700; display: inline-flex; }
+#newTaskWrap .nt-mempty { padding: 10px; font-size: 13px; color: var(--ink-soft); }
+
+/* create-new (menu) */
+#newTaskWrap .nt-createnew { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font-family: var(--sans); font-size: 15px; font-weight: 700; padding: 9px 11px; border: none; border-top: 1px solid var(--line-soft); border-radius: 0 0 8px 8px; margin-top: 4px; background: none; color: var(--orange); cursor: pointer; }
+#newTaskWrap .nt-createnew:hover { background: var(--chip); }
+#newTaskWrap .nt-newinput { display: flex; gap: 6px; padding: 6px; }
+#newTaskWrap .nt-newinput input { flex: 1; min-width: 0; font-family: var(--sans); font-size: 14px; font-weight: 600; border: 1.5px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; outline: none; color: var(--ink); background: var(--card); }
+#newTaskWrap .nt-newinput input:focus { border-color: var(--ink); }
+#newTaskWrap .nt-newinput button { flex: none; background: var(--orange); color: #fff; border: none; border-radius: 8px; padding: 8px 13px; font-size: 13px; font-weight: 700; cursor: pointer; }
+
+/* calendar + time menus */
+#newTaskWrap .nt-cal-menu { width: 268px; padding: 12px; }
+#newTaskWrap .nt-cal-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+#newTaskWrap .nt-cal-h b { font-size: 14px; font-weight: 800; }
+#newTaskWrap .nt-cal-h button { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--line-strong); background: none; color: var(--ink-soft); cursor: pointer; }
+#newTaskWrap .nt-cal-h button:hover { background: var(--chip); }
+#newTaskWrap .nt-cal-w { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 2px; }
+#newTaskWrap .nt-cal-w span { font-family: var(--mono); font-size: 9px; color: var(--ink-soft); text-align: center; padding: 3px 0; }
+#newTaskWrap .nt-cal-g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+#newTaskWrap .nt-cd { height: 30px; border: none; background: none; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+#newTaskWrap .nt-cd:hover { background: var(--chip); }
+#newTaskWrap .nt-cd.off { pointer-events: none; }
+#newTaskWrap .nt-cd.tod { box-shadow: inset 0 0 0 1.5px var(--orange); }
+#newTaskWrap .nt-cd.sel { background: var(--ink); color: #fff; }
+#newTaskWrap .nt-cal-q { display: flex; gap: 6px; margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+#newTaskWrap .nt-cal-q button { flex: 1; font-family: var(--mono); font-size: 10px; font-weight: 600; border: 1px solid var(--line-strong); background: none; border-radius: 7px; padding: 6px 0; color: var(--ink-soft); cursor: pointer; }
+#newTaskWrap .nt-cal-q button:hover { background: var(--chip); }
+#newTaskWrap .nt-time-menu { max-height: 244px; overflow: auto; }
+
+/* ---------------- preview card ---------------- */
+#newTaskWrap .nt-preview { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; position: sticky; top: 18px; }
+#newTaskWrap .nt-pv-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+#newTaskWrap .nt-pv-brand { display: flex; align-items: center; gap: 9px; }
+#newTaskWrap .nt-pv-q { width: 30px; height: 30px; border-radius: 8px; background: var(--orange); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; }
+#newTaskWrap .nt-pv-name { font-size: 14px; font-weight: 700; margin: 0; }
+#newTaskWrap .nt-pv-sub { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; color: var(--ink-soft); font-weight: 600; margin: 0; }
+#newTaskWrap .nt-pv-no { text-align: right; }
+#newTaskWrap .nt-pv-num { font-family: var(--mono); font-size: 12px; font-weight: 600; margin: 0; }
+#newTaskWrap .nt-pv-title { font-size: 17px; font-weight: 700; margin-bottom: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+#newTaskWrap .nt-pv-title.empty { color: #8a857e; }
+#newTaskWrap .nt-pv-table { width: 100%; font-size: 13px; border-collapse: collapse; border-top: 1px dashed var(--line-strong); }
+#newTaskWrap .nt-pv-table td { padding: 6px 0; vertical-align: middle; }
+#newTaskWrap .nt-pv-table td:first-child { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--ink-soft); font-weight: 600; white-space: nowrap; }
+#newTaskWrap .nt-pv-table td:last-child { text-align: right; font-weight: 700; }
+#newTaskWrap .nt-pv-table .mono { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+#newTaskWrap .nt-pv-table .dim { color: #a8a39b; }
+#newTaskWrap .nt-pv-sq { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+#newTaskWrap .nt-pv-table .nt-mini { vertical-align: middle; }
+#newTaskWrap .nt-badge { font-size: 11px; font-weight: 700; padding: 3px 11px; border-radius: 999px; }
+#newTaskWrap .nt-badge.critical { background: var(--red); color: #fff; }
+#newTaskWrap .nt-badge.high { background: var(--orange); color: #fff; }
+#newTaskWrap .nt-badge.med { background: #FAC775; color: #412402; }
+#newTaskWrap .nt-badge.low { background: var(--chip); border: 1px solid var(--line-strong); color: var(--ink); }
+
+/* dispatch */
+#newTaskWrap .nt-pv-dispatch { border-top: 1px dashed var(--line-strong); margin-top: 12px; padding-top: 12px; }
+#newTaskWrap .nt-pv-lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; color: var(--ink); font-weight: 600; margin: 0 0 8px; }
+#newTaskWrap .dchips { display: flex; gap: 7px; flex-wrap: wrap; }
+#newTaskWrap .dchip { font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--line-strong); background: var(--card); color: var(--ink-soft); cursor: pointer; }
+#newTaskWrap .dchip.on { border-color: var(--orange); color: var(--orange-dark); background: #FDF1EA; }
+#newTaskWrap .dchip:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ready + create */
+#newTaskWrap .nt-pv-ready { border-top: 1px dashed var(--line-strong); margin-top: 12px; padding-top: 12px; }
+#newTaskWrap .readyrow { font-size: 13px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+#newTaskWrap .readyrow .rst { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #b8b3ab; flex-shrink: 0; }
+#newTaskWrap .readyrow.ok { color: var(--ink); }
+#newTaskWrap .readyrow.ok .rst { background: var(--green); border-color: var(--green); }
+#newTaskWrap .nt-create { width: 100%; font-family: var(--sans); font-size: 15px; font-weight: 700; padding: 13px; background: var(--orange); color: #fff; border: none; border-radius: 999px; margin-top: 12px; cursor: pointer; }
+#newTaskWrap .nt-create:hover { background: var(--orange-dark); }
+#newTaskWrap .nt-create:disabled { background: #e0dcd5; color: #8a857e; cursor: not-allowed; }
+#newTaskWrap .nt-pv-note { font-size: 12px; font-weight: 700; color: var(--ink-soft); margin: 9px 0 0; text-align: center; line-height: 1.45; }
+
+/* ---------------- responsive ---------------- */
+@media (max-width: 920px) {
+  #newTaskWrap .nt-cols { grid-template-columns: 1fr; }
+  #newTaskWrap .nt-preview { position: static; }
+}
+@media (max-width: 560px) {
+  #newTaskWrap .nt-title-in { font-size: 19px; }
+  #newTaskWrap .nt-frow { gap: 14px 16px; }
+}
+
+/* ============================================================
+   DARK MODE — pro1 shipped as a light-only island; this block gives
+   #newTaskWrap a first-class dark variant that tracks the app tokens
+   (tokens.css) so the New Task screen matches the rest of Quest HQ
+   under html[data-theme="dark"]. Additive only — every rule above is
+   untouched, so light rendering is byte-for-byte identical. The --*
+   vars re-point at --bg/--surface/--ink/…; --ink maps through the
+   app's own --color-ink alias (it can't reference the same-named
+   token directly). Rules that hardcoded a literal light hex (#FDF1EA
+   tint, #8a857e / #57544f / #a8a39b greys, the #fff-on-ink calendar
+   day, the disabled-create fill) are re-stated with a [data-theme]
+   prefix so they out-specify the light rules.
+   ============================================================ */
+[data-theme="dark"] #newTaskWrap { background: var(--bg); }
+[data-theme="dark"] #newTaskWrap .nt-page {
+  --orange: #ED4E0D; --orange-dark: #c2410c;   /* orange-dark stays a darker orange — only used as button-hover fill + on tinted chips (overridden below) */
+  --red: #E5484D;                              /* one red that works as a fill (white text) AND as text */
+  --green: var(--green-ink);                   /* light green — success flash + ready dot */
+  --ink: var(--color-ink);                     /* app ink via its alias (avoids a --ink self-reference) */
+  --ink-soft: var(--ink-2);
+  --canvas: var(--bg); --card: var(--surface); --chip: var(--bg-3);
+  --line: var(--border); --line-soft: var(--border); --line-strong: var(--border-strong);
+}
+
+/* Placeholders + ghost/empty pill text — were literal warm greys. */
+[data-theme="dark"] #newTaskWrap .nt-title-in::placeholder,
+[data-theme="dark"] #newTaskWrap .nt-desc::placeholder,
+[data-theme="dark"] #newTaskWrap .nt-pick.nt-ghost,
+[data-theme="dark"] #newTaskWrap .nt-pick:has(.nt-pick-val.ph),
+[data-theme="dark"] #newTaskWrap .nt-pv-title.empty,
+[data-theme="dark"] #newTaskWrap .nt-pv-table .dim { color: var(--ink-3); }
+
+/* Orange-tinted chips (kbd hint + active dispatch chip) — dark rust tint. */
+[data-theme="dark"] #newTaskWrap .nt-hint b,
+[data-theme="dark"] #newTaskWrap .dchip.on { background: var(--rust-bg); color: var(--rust-ink); }
+
+/* Calendar selected day: base is (light-in-dark) --ink fill + #fff text → flip
+   the text dark so it reads on the light chip. */
+[data-theme="dark"] #newTaskWrap .nt-cd.sel { color: var(--bg); }
+
+/* Disabled "Create & dispatch" — was a light-grey fill. */
+[data-theme="dark"] #newTaskWrap .nt-create:disabled { background: var(--bg-3); color: var(--ink-3); }
+
+/* AI-filled field marker on the New Task page */
+.nt-ai {
+  display: inline-flex; align-items: center; margin-left: 6px; padding: 1px 6px;
+  font-size: 9px; font-weight: 800; letter-spacing: .04em; line-height: 1.4;
+  color: var(--amber); background: var(--amber-bg, rgba(237,78,13,.12));
+  border-radius: 999px; vertical-align: middle;
+}
+
+/* Voice dictation button in the title box — a branded, warm voice affordance. */
+.nt-title-row { display: flex; align-items: center; gap: 10px; }
+.nt-title-row .nt-title-in { flex: 1 1 auto; min-width: 0; }
+.nt-mic {
+  position: relative;
+  flex: 0 0 auto;
+  width: 42px; height: 42px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%;
+  background: rgba(237, 78, 13, .10);
+  color: #ED4E0D;
+  cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
+  transition: background .16s ease, transform .12s ease, color .16s ease, box-shadow .16s ease;
+}
+.nt-mic i { font-size: 19px; line-height: 1; transition: transform .16s ease; }
+.nt-mic:hover { background: rgba(237, 78, 13, .17); transform: translateY(-1px); }
+.nt-mic:active { transform: scale(.94); }
+.nt-mic:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(237, 78, 13, .28); }
+
+/* Recording: solid brand fill, white icon, breathing pulse ring. */
+.nt-mic.rec { background: #ED4E0D; color: #fff; transform: none; animation: nt-mic-pulse 1.15s ease-in-out infinite; }
+.nt-mic.rec i { transform: scale(1.08); }
+@keyframes nt-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(237, 78, 13, .45); }
+  50% { box-shadow: 0 0 0 7px rgba(237, 78, 13, 0); }
+}
+
+/* Transcribing: swap the icon for a spinner so it reads as "working". */
+.nt-mic.busy { cursor: default; background: rgba(237, 78, 13, .10); color: #ED4E0D; }
+.nt-mic.busy i { opacity: 0; }
+.nt-mic.busy::after {
+  content: ""; position: absolute; inset: 0; margin: auto;
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid rgba(237, 78, 13, .30); border-top-color: #ED4E0D;
+  animation: nt-mic-spin .7s linear infinite;
+}
+@keyframes nt-mic-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .nt-mic.rec { animation: none; }
+  .nt-mic.busy::after { animation-duration: 1.4s; }
+  .nt-mic:hover { transform: none; }
+}

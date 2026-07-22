@@ -11,17 +11,18 @@ App.UiScaleView = class UiScaleView {
     this.STEP = 0.05;
     this.DEFAULT = 1;
 
-    this.btn = document.getElementById('scaleBtn');
-    if (!this.btn) return;
     this.popover = null;
 
+    // Always apply the stored scale on boot, even though the trigger now lives
+    // in the account menu (there's no dedicated top-bar button anymore).
     this.applyStored();
-    this.btn.addEventListener('click', (e) => { e.stopPropagation(); this.toggle(); });
-    document.addEventListener('click', (e) => {
-      if (this.popover && !this.popover.contains(e.target) && e.target !== this.btn && !this.btn.contains(e.target)) {
-        this.close();
-      }
-    });
+
+    // Back-compat: if a #scaleBtn is present, keep wiring it.
+    this.btn = document.getElementById('scaleBtn');
+    if (this.btn) {
+      this.btn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleAt(this.btn); });
+    }
+    // Dismissal (click-away / Esc) is App.Menu's job.
   }
 
   currentScale() {
@@ -37,57 +38,60 @@ App.UiScaleView = class UiScaleView {
 
   applyStored() { this.apply(this.currentScale()); }
 
-  toggle() { if (this.popover) this.close(); else this.open(); }
-
-  open() {
+  // Public entry point used by the account menu: open the scale popover
+  // anchored to a given element (falls back to the legacy button).
+  openAt(anchor) {
+    if (this._handle) this._handle.close('api');
+    const anchorEl = anchor || this.btn;
     const cur = this.currentScale();
-    this.popover = document.createElement('div');
-    this.popover.className = 'scale-popover';
-    this.popover.innerHTML = `
-      <div class="scale-pop-title">Display size</div>
-      <div class="scale-pop-row">
-        <button class="scale-step" data-step="-1" aria-label="Smaller"><i class="ti ti-zoom-out"></i></button>
-        <input type="range" id="scaleRange" min="${this.MIN}" max="${this.MAX}" step="${this.STEP}" value="${cur}" />
-        <button class="scale-step" data-step="+1" aria-label="Bigger"><i class="ti ti-zoom-in"></i></button>
-      </div>
-      <div class="scale-pop-readout">
-        <span id="scaleReadout">${Math.round(cur * 100)}%</span>
-        <button class="scale-reset" data-action="reset">Reset</button>
-      </div>
-      <div class="scale-pop-hint">Drag the slider or use the +/− buttons to scale the whole app. Saved per browser.</div>
-    `;
-    document.body.appendChild(this.popover);
-
-    const r = this.btn.getBoundingClientRect();
-    this.popover.style.position = 'fixed';
-    this.popover.style.top   = (r.bottom + 6) + 'px';
-    this.popover.style.right = (window.innerWidth - r.right) + 'px';
-
-    const range = this.popover.querySelector('#scaleRange');
-    range.addEventListener('input', () => this.apply(parseFloat(range.value)));
-
-    this.popover.querySelectorAll('[data-step]').forEach(b => {
-      b.addEventListener('click', () => {
-        const dir = b.dataset.step === '+1' ? 1 : -1;
-        const next = Math.max(this.MIN, Math.min(this.MAX, this.currentScale() + dir * this.STEP));
-        const rounded = Math.round(next / this.STEP) * this.STEP;
-        range.value = String(rounded);
-        this.apply(rounded);
-      });
+    this._handle = App.Menu.open({
+      anchor: anchorEl,
+      className: 'scale-popover',
+      placement: 'bottom-end',
+      onClose: () => {
+        this._handle = null;
+        this.popover = null;
+        if (this.btn) this.btn.classList.remove('active');
+      },
+      build: (pop) => {
+        this.popover = pop;
+        pop.innerHTML = `
+          <div class="scale-pop-title">Display size</div>
+          <div class="scale-pop-row">
+            <button class="scale-step" data-step="-1" aria-label="Smaller"><i class="ti ti-zoom-out"></i></button>
+            <input type="range" id="scaleRange" min="${this.MIN}" max="${this.MAX}" step="${this.STEP}" value="${cur}" />
+            <button class="scale-step" data-step="+1" aria-label="Bigger"><i class="ti ti-zoom-in"></i></button>
+          </div>
+          <div class="scale-pop-readout">
+            <span id="scaleReadout">${Math.round(cur * 100)}%</span>
+            <button class="scale-reset" data-action="reset">Reset</button>
+          </div>
+          <div class="scale-pop-hint">Drag the slider or use the +/− buttons to scale the whole app. Saved per browser.</div>
+        `;
+        const range = pop.querySelector('#scaleRange');
+        range.addEventListener('input', () => this.apply(parseFloat(range.value)));
+        pop.querySelectorAll('[data-step]').forEach(b => {
+          b.addEventListener('click', () => {
+            const dir = b.dataset.step === '+1' ? 1 : -1;
+            const next = Math.max(this.MIN, Math.min(this.MAX, this.currentScale() + dir * this.STEP));
+            const rounded = Math.round(next / this.STEP) * this.STEP;
+            range.value = String(rounded);
+            this.apply(rounded);
+          });
+        });
+        pop.querySelector('[data-action="reset"]').addEventListener('click', () => {
+          range.value = String(this.DEFAULT);
+          this.apply(this.DEFAULT);
+        });
+      },
     });
-
-    this.popover.querySelector('[data-action="reset"]').addEventListener('click', () => {
-      range.value = String(this.DEFAULT);
-      this.apply(this.DEFAULT);
-    });
-
-    this.btn.classList.add('active');
+    if (this.btn) this.btn.classList.add('active');
   }
 
+  toggleAt(anchor) { if (this._handle) this._handle.close('api'); else this.openAt(anchor); }
+
   close() {
-    if (this.popover) this.popover.remove();
-    this.popover = null;
-    this.btn.classList.remove('active');
+    if (this._handle) this._handle.close('api');
   }
 
   updateReadout(scale) {

@@ -106,7 +106,6 @@ const ACTIVE_TIMER_KEY = 'quest-hq-active-timer-v1';
 const COMPANY_KEY = 'quest-hq-active-company';
 const ACTIVE_WORKSPACE_KEY = 'quest-hq-active-operational-workspace-v1';
 const PENDING_WORKSPACE_REVIEW_KEY = 'quest-hq-pending-workspace-review-v1';
-const TASK_VIEW_KEY = 'quest-hq-task-view';
 const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
 const SIDEBAR_COLLAPSED_KEY = 'quest-hq-sidebar-collapsed';
 const NAV_GROUP_COLLAPSED_KEY = 'quest-hq-nav-groups-collapsed';
@@ -840,7 +839,20 @@ const DASHBOARD_WIDGET_DEFAULTS = {
   eos: ['rocks', 'scorecard', 'oneYearPlan', 'l10pulse', 'issues', 'todos', 'peopleAnalyzer', 'eosComponents', 'coreValues'],
 };
 
+// Core modules are always visible, plugin rows notwithstanding. 'tasks' stays
+// core because the tasks module ships ON for every workspace (absorption plan,
+// locked decision 5) — gating it on company_plugins would only add a way for it
+// to disappear. Phase 3 still registers a 'tasks' plugin row per workspace, so
+// making it a paid add-on later is: drop 'tasks' from this set and add a
+// WORKSPACE_PLUGIN_REGISTRY entry with module_ids: ['tasks'].
+// 'automations' is core as of main; keep it when reconciling with older branches.
 const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'tasks', 'users', 'settings', 'automations']);
+const PRIVATE_PLUGIN_ACCESS = {
+  crm_2: {
+    label: 'Quest CRM',
+    password: 'LumenQuest@2026',
+  },
+};
 const WORKSPACE_PLUGIN_REGISTRY = [
   { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
   { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
@@ -2359,7 +2371,6 @@ const state = {
   pbMaterialVendorId: '',
   pbCostEditId: '',
   locationPicker: null,
-  taskView: localStorage.getItem(TASK_VIEW_KEY) || 'table',
   driveFolder: 'home',
   driveView: localStorage.getItem(DRIVE_VIEW_KEY) || 'list',
   sync: { label: 'Loading workspace...', mode: 'loading' },
@@ -10391,120 +10402,47 @@ function renderJobEditor(companyId, job) {
 
 function renderTasksPage(route, companyId) {
   const job = route.jobId ? jobById(route.jobId) : null;
-  const tasks = filteredTasks(companyId, job?.id);
-  return `
-    ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Native Quest task execution backed by the company task table.', `
-      <a class="btn" href="${appHref(companyPath('jobs', job ? { tab: 'profile', job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
-      <a class="btn btn-primary" href="${appHref(companyPath('tasks', { ...(job ? { job_id: job.id } : {}), new: '1' }, companyId))}" data-router><i class="ti ti-plus"></i>New task</a>
-    `)}
-    ${renderTaskToolbar(companyId, job)}
-    <section class="task-layout task-layout-flat">
-      <article class="panel task-main">
-        ${state.taskView === 'board' ? renderTaskBoard(companyId, tasks) : renderTaskTable(companyId, tasks)}
-      </article>
-    </section>
-  `;
-}
-
-function renderTaskToolbar(companyId, job) {
-  const jobs = companyJobs(companyId);
-  return `
-    <section class="workspace-toolbar">
-      <label>
-        <span>Job</span>
-        <select data-task-job-filter>
-          <option value="">All jobs</option>
-          ${jobs.map((item) => `<option value="${h(item.id)}" ${job?.id === item.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}
-        </select>
-      </label>
-      <label>
-        <span>Status</span>
-        <select data-task-status-filter>
-          ${['all'].concat(TASK_STATUSES).map((status) => `<option value="${h(status)}" ${state.taskStatusFilter === status ? 'selected' : ''}>${h(status === 'all' ? 'All statuses' : statusLabel(status))}</option>`).join('')}
-        </select>
-      </label>
-      <label>
-        <span>Priority</span>
-        <select data-task-priority-filter>
-          ${['all'].concat(TASK_PRIORITIES).map((priority) => `<option value="${h(priority)}" ${state.taskPriorityFilter === priority ? 'selected' : ''}>${h(priority === 'all' ? 'All priorities' : titleCase(priority))}</option>`).join('')}
-        </select>
-      </label>
-      <div class="segmented" role="group" aria-label="Task view">
-        <button class="${state.taskView === 'table' ? 'active' : ''}" type="button" data-action="set-task-view" data-view="table"><i class="ti ti-table"></i>Table</button>
-        <button class="${state.taskView === 'board' ? 'active' : ''}" type="button" data-action="set-task-view" data-view="board"><i class="ti ti-layout-kanban"></i>Board</button>
-      </div>
-    </section>
-  `;
-}
-
-function renderTaskTable(companyId, tasks) {
-  return `
-    <div class="data-table task-table">
-      <div class="table-head"><span>Task</span><span>Job</span><span>Assignee</span><span>Priority</span><span>Status</span><span>Due</span></div>
-      ${tasks.map((task) => `
-        <button class="table-row ${task.id === state.selectedTaskId ? 'active' : ''}" type="button" data-select-task="${h(task.id)}">
-          <span><strong>${h(task.title)}</strong><small>${h(task.description || taskTypeLabel(task.type))}</small></span>
-          <span>${h(jobById(task.project_id)?.name || 'Company task')}</span>
-          <span>${h(memberName(task.assignee_id))}</span>
-          <span>${taskPriorityPill(task.priority)}</span>
-          <span>${taskStatusPill(task.status)}</span>
-          <span>${formatDate(task.due)}</span>
-        </button>
-      `).join('') || emptyState('No tasks match this workspace view.')}
-    </div>
-  `;
-}
-
-function renderTaskBoard(companyId, tasks) {
-  return `
-    <div class="task-board">
-      ${TASK_STATUSES.map((status) => {
-        const column = tasks.filter((task) => task.status === status);
-        return `
-          <section class="task-column">
-            <h2><span>${h(statusLabel(status))}</span><b>${column.length}</b></h2>
-            ${column.map((task) => `
-              <button class="task-card priority-${h(task.priority)}" type="button" data-select-task="${h(task.id)}">
-                <strong>${h(task.title)}</strong>
-                <span>${h(jobById(task.project_id)?.name || companyName(companyId))}</span>
-                <small>${h(memberName(task.assignee_id))} - ${formatDate(task.due)}</small>
-              </button>
-            `).join('') || `<div class="lane-empty">No tasks</div>`}
-          </section>
-        `;
-      }).join('')}
-    </div>
-  `;
-}
-
-function renderTaskDetail(companyId, task) {
-  if (!task) {
+  // The vendored task module at /taskmanagement/ replaces the former native
+  // placeholder. It runs embedded: ?embed=1 makes it hide its own topbar
+  // (.embedded-in-job-center) so Command Center's chrome is the only chrome, and
+  // project_id scopes it to the job. The session is shared automatically — same
+  // origin, same Supabase project — so there is no second login.
+  // The module authenticates against the same Supabase project as the host, so it
+  // needs a REAL session. Demo/local sessions have no Supabase user, and embedding
+  // it anyway just renders a sign-in page inside the frame (confusing) or loops.
+  // Say so plainly instead.
+  if (state.session?.auth !== 'supabase') {
     return `
-      <div class="section-head"><div><h2>Task detail</h2><p>Select a task or create the first one.</p></div></div>
-      ${emptyState('No task selected.')}
+      ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Task execution, timers and reminders.', '')}
+      <section class="task-layout task-layout-flat">
+        <article class="panel task-main">
+          ${emptyState(state.session?.auth === 'demo-readonly'
+            ? 'Tasks need a real account. You are exploring in demo mode — sign in with your Quest HQ account to use task execution, timers and reminders.'
+            : 'Tasks need a signed-in Quest HQ account. Sign in to continue.')}
+        </article>
+      </section>
     `;
   }
+
+  const params = new URLSearchParams({ embed: '1' });
+  if (job) params.set('project_id', job.id);
+  params.set('return_url', window.location.href);
+  // Forward CC's deep-link params to the task app's own hash routes so every
+  // existing "open this task" link across Command Center keeps working:
+  //   ?task_id=X -> #/task/X      ?new=1 / ?edit=1 -> #/new
+  const taskId = route.params.get('task_id');
+  const wantsNew = route.params.get('new') === '1';
+  const hash = taskId ? `#/task/${encodeURIComponent(taskId)}` : (wantsNew ? '#/new' : '');
+  const src = `${window.location.origin}/taskmanagement/app.html?${params.toString()}${hash}`;
   return `
-    <div class="section-head">
-      <div><h2>${h(task.title)}</h2><p>${h(jobById(task.project_id)?.name || companyName(companyId))}</p></div>
-      <div class="detail-actions">
-        <a class="btn" href="${appHref(companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id, edit: '1' }, companyId))}" data-router>Edit</a>
-        <button class="btn danger" type="button" data-action="task-delete" data-task-id="${h(task.id)}"><i class="ti ti-trash"></i>Delete</button>
-      </div>
-    </div>
-    ${contractRows([
-      ['Status', statusLabel(task.status)],
-      ['Priority', titleCase(task.priority)],
-      ['Type', taskTypeLabel(task.type)],
-      ['Assignee', memberName(task.assignee_id)],
-      ['Due', formatDate(task.due)],
-      ['Company ID', task.company_id],
-      ['Project ID', task.project_id || 'Company-level task'],
-    ])}
-    <div class="detail-copy">
-      <strong>Description</strong>
-      <p>${h(task.description || 'No description yet.')}</p>
-    </div>
+    ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Task execution, timers and reminders.', `
+      <a class="btn" href="${appHref(companyPath('jobs', job ? { tab: 'profile', job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
+    `)}
+    <section class="task-layout task-layout-flat">
+      <article class="panel task-main taskapp-panel">
+        <iframe class="taskapp-frame" src="${h(src)}" title="Task management"></iframe>
+      </article>
+    </section>
   `;
 }
 
@@ -10625,36 +10563,6 @@ function recurrenceSelectOptions(current) {
   const cur = current ? serializeRecurrence(deserializeRecurrence(current)) : '';
   if (cur && !base.some(([value]) => value === cur)) base.push([cur, describeRecurrence(cur)]);
   return base;
-}
-
-function renderTaskForm(companyId, job, task) {
-  const edit = task || blankTask(companyId, job?.id || '');
-  return `
-    <form class="task-form" data-task-form>
-      <input type="hidden" name="id" value="${h(task ? edit.id : '')}" />
-      <input type="hidden" name="contact_id" value="${h(edit.contact_id || state.route?.params?.get('return_contact_id') || '')}" />
-      <input type="hidden" name="deal_id" value="${h(edit.deal_id || '')}" />
-      <input type="hidden" name="return_contact_id" value="${h(state.route?.params?.get('return_contact_id') || '')}" />
-      <div class="section-head">
-        <div><h2>${task ? 'Edit task' : 'New task'}</h2><p>Writes company_id and optional project_id directly to Quest tasks.</p></div>
-      </div>
-      ${field('Task title', 'title', edit.title, true)}
-      ${selectField('Job', 'project_id', edit.project_id || '', [['', 'Company-level task']].concat(companyJobs(companyId).map((item) => [item.id, item.name])))}
-      ${selectField('Status', 'status', edit.status, TASK_STATUSES.map((item) => [item, statusLabel(item)]))}
-      ${selectField('Priority', 'priority', edit.priority, TASK_PRIORITIES.map((item) => [item, titleCase(item)]))}
-      ${selectField('Type', 'type', edit.type, TASK_TYPES.map((item) => [item, taskTypeLabel(item)]))}
-      ${selectField('Assignee', 'assignee_id', edit.assignee_id, companyTaskAssignees(companyId).map((item) => [item.id, item.name]))}
-      ${field('Due date', 'due', edit.due || isoDate(1), true, 'date')}
-      ${field('Due time', 'due_time', edit.due_time || '', false, 'time')}
-      ${selectField('Repeat', 'recurrence', edit.recurrence || '', recurrenceSelectOptions(edit.recurrence))}
-      ${textareaField('Description', 'description', edit.description)}
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit">Save task</button>
-        ${task ? `<button class="btn danger" type="button" data-action="delete-task" data-task-id="${h(task.id)}">Delete</button>` : ''}
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `;
 }
 
 function renderFilesPage(route, companyId) {
@@ -20255,9 +20163,6 @@ function renderActiveModal(route, session) {
   if (route.name === 'company' && route.section === 'jobs' && route.params.get('tab') === 'editor') {
     return renderJobFormModal(route.companyId, route.jobId ? jobById(route.jobId) : selectedJob());
   }
-  if (route.name === 'company' && route.section === 'tasks') {
-    return renderTaskRouteModal(route, route.companyId);
-  }
   return '';
 }
 
@@ -21374,22 +21279,6 @@ async function exportProposalPdf(proposalId) {
   ].filter(Boolean).join('\n');
   pdf.text(pdf.splitTextToSize(terms, pageWidth - margin * 2), margin, y);
   pdf.save(`Quest-Proposal-${slugify(proposal.proposal_no || proposal.id)}.pdf`);
-}
-
-function renderTaskRouteModal(route, companyId) {
-  const job = route.jobId ? jobById(route.jobId) : null;
-  const taskId = route.params.get('task_id') || '';
-  const task = taskId ? taskById(taskId) : null;
-  if (route.params.get('new') === '1') {
-    return renderModalShell('Tasks', 'New task', renderTaskForm(companyId, job, null), 'task-modal');
-  }
-  if (route.params.get('edit') === '1' && task) {
-    return renderModalShell('Tasks', 'Edit task', renderTaskForm(companyId, job, task), 'task-modal');
-  }
-  if (task) {
-    return renderDrawerShell('Task detail', task.title, renderTaskDetail(companyId, task));
-  }
-  return '';
 }
 
 function renderCalendarEventDetailModal(companyId) {
@@ -24032,13 +23921,6 @@ function handleAction(event, node) {
     cancelProfileAvatarCrop(node.closest('[data-profile-form]'));
     return;
   }
-  if (action === 'set-task-view') {
-    event.preventDefault();
-    state.taskView = node.dataset.view === 'board' ? 'board' : 'table';
-    localStorage.setItem(TASK_VIEW_KEY, state.taskView);
-    render();
-    return;
-  }
   if (action === 'set-drive-view') {
     event.preventDefault();
     state.driveView = node.dataset.view === 'list' ? 'list' : 'grid';
@@ -24336,15 +24218,6 @@ function closeActiveModal() {
     params.delete('account');
     const search = params.toString();
     navigate(`${route.path}${search ? `?${search}` : ''}`, { replace: true });
-    return;
-  }
-  if (route.name === 'company' && route.section === 'tasks' && (route.params.get('new') || route.params.get('edit') || route.params.get('task_id'))) {
-    const returnContactId = route.params.get('return_contact_id');
-    if (returnContactId) {
-      navigate(companyPath('contacts', { contact_id: returnContactId }, route.companyId), { replace: true });
-      return;
-    }
-    navigate(companyPath('tasks', route.jobId ? { job_id: route.jobId } : {}, route.companyId), { replace: true });
     return;
   }
   if (route.name === 'company' && route.section === 'jobs' && route.params.get('tab') === 'editor') {
@@ -32560,18 +32433,6 @@ function financeSummary(companyId = activeCompanyId()) {
     net: collected - expenseTotal,
     aging,
   };
-}
-
-function filteredTasks(companyId = activeCompanyId(), jobId = '') {
-  const q = state.query.trim().toLowerCase();
-  return companyTasks(companyId).filter((task) => {
-    if (jobId && task.project_id !== jobId) return false;
-    if (state.taskStatusFilter !== 'all' && task.status !== state.taskStatusFilter) return false;
-    if (state.taskPriorityFilter !== 'all' && task.priority !== state.taskPriorityFilter) return false;
-    if (!q) return true;
-    return [task.title, task.description, taskTypeLabel(task.type), memberName(task.assignee_id), jobById(task.project_id)?.name]
-      .some((value) => String(value || '').toLowerCase().includes(q));
-  });
 }
 
 function allowedCompanies() {

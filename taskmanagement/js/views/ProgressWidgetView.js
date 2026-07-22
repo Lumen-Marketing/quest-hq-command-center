@@ -23,9 +23,9 @@ App.ProgressWidgetView = class ProgressWidgetView {
   metrics() {
     const today = App.utils.todayISO(0);
     const me = this.currentUser;
-    const mine = this.taskModel.all().filter(t => t.assignee === me);
+    const mine = this.taskModel.all().filter(t => App.utils.isAssignee(t, me));
     const dueToday   = mine.filter(t => t.due === today);
-    const doneToday  = mine.filter(t => t._completedAt === today);
+    const doneToday  = mine.filter(t => App.utils.hqDateOf(t.completedAt) === today);
     // "In play today" = due today OR finished today (so finishing an older
     // task still nudges the ring forward instead of leaving it at 0%).
     const inPlay = new Set([...dueToday, ...doneToday].map(t => t.id));
@@ -65,6 +65,13 @@ App.ProgressWidgetView = class ProgressWidgetView {
         <div class="progress-card-text">
           <div class="progress-card-eyebrow">Today's progress</div>
           <div class="progress-card-title">${m.completed} of ${m.total} done</div>
+        </div>
+        <!-- Phone-only meter: the ring is hidden at that size, so this carries
+             the percentage instead. Hidden by default in css/mobile.css (base,
+             outside the media query) — desktop keeps the ring. aria-hidden
+             because the title beside it already states the same numbers. -->
+        <div class="progress-line" aria-hidden="true">
+          <span style="width:${m.pct}%"></span>
         </div>
         <div class="progress-metrics">
           <div class="progress-metric">

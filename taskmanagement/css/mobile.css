@@ -1,0 +1,971 @@
+/* ============================================================
+   QUEST HQ — MOBILE COHESIVE SYSTEM  (≤720px, phone only)
+   Loaded LAST so it wins on equal specificity. Desktop is
+   untouched (every rule is inside the phone media query except
+   the one base #bottomNav hide). Dark palette + orange accent
+   kept — this is a cohesion + layout pass, not a re-theme.
+
+   Fixes the four complaints:
+     1. Topbar — mismatched shapes/sizes → one search pill + a row
+        of identical round controls.
+     2. Bottom nav — new Instagram-style tab bar (BottomNavView).
+     3. Pills — wrapping clutter → one horizontal scrolling strip.
+     4. Widgets — stacked cards → true 2×2 bento; table → cards.
+   ============================================================ */
+
+/* Base (all widths): the bottom bar only exists on phones. */
+#bottomNav { display: none; }
+/* Likewise the stat meter — desktop shows the ring instead (ProgressWidgetView
+   renders both; each size hides the one it doesn't use). */
+.progress-line { display: none; }
+
+/* The shared shell's nodes (§5) are rendered by every page at every width and
+   revealed only on phones, the same way .progress-line is. Rendering them
+   unconditionally is what keeps ProjectsView/HomeView free of width branches —
+   there is no resize handler and no "am I mobile" flag anywhere. */
+.m-statline,
+.m-chips { display: none; }
+/* Glyphs that stand in for a word on a phone (the sort control's icon). */
+.m-glyph { display: none; }
+/* Desktop keeps the original select/button exactly as it was: `contents` makes
+   the wrapper vanish from layout entirely, so .pv-head-r still lays its own
+   children out. */
+.m-selwrap { display: contents; }
+
+@media (max-width: 720px) {
+  :root {
+    --m-pad: 16px;
+    --m-gap: 12px;
+    --m-radius: 16px;
+    --m-radius-ctl: 12px;
+    --m-tap: 44px;
+    --m-ctl: 38px;      /* round topbar control diameter */
+    --m-navh: 58px;     /* bottom nav bar height (before safe area) */
+  }
+
+  /* ========================================================
+     0. NAV DRAWER — make the nav fill the drawer
+     The drawer (.deck) is `display: flex` (a row), so its .sidebar is a flex
+     item that shrinks to its content width (~200px) and leaves a wide empty
+     band on the right of the ~300px drawer. Stretch it to fill.
+     ======================================================== */
+  body.ui-command-center .deck.drawer .sidebar { flex: 1 1 auto; width: 100%; }
+
+  /* ========================================================
+     0b. TEAM-SECTION TABLES — de-crowd on phones
+     Team workload + Clock dashboard render 5-column tables (Person · Task ·
+     Project · Started/Elapsed · Live) that crush into slivers on a phone — the
+     task title wraps to 3 lines and the project pill collides with the timer.
+     Let columns size to content, trim padding, and drop the two secondary
+     columns on the "active right now" tables so Person · Task · Elapsed get room
+     (the green live row + running timer already signal "live"). Approvals keeps
+     its own horizontal-scroll table (min-width) and is untouched.
+     ======================================================== */
+  body.ui-command-center .time-table:not(.approval-table) { table-layout: auto; }
+  body.ui-command-center .time-table th,
+  body.ui-command-center .time-table td { padding: 9px 10px; }
+  body.ui-command-center .time-table td { font-size: 12px; }
+  /* Align the section titles + tables to the page gutter (24px) so they line up
+     with the shared "Team workload" header card above them (it sits at 24, while
+     .time-page defaulted to a 14px inset). */
+  body.ui-command-center #timeViewWrap .time-page { padding-left: 24px; padding-right: 24px; }
+  body.ui-command-center .time-section-title { font-size: 18px; padding-left: 0; }
+
+  /* Team workload "Active right now": drop Project (3) + the Live column (5). */
+  body.ui-command-center .time-live-table th:nth-child(3),
+  body.ui-command-center .time-live-table td:nth-child(3),
+  body.ui-command-center .time-live-table th:nth-child(5),
+  body.ui-command-center .time-live-table td:nth-child(5) { display: none; }
+
+  /* Clock dashboard "Active right now": drop Project (3) + Started (4). */
+  body.ui-command-center .clock-live-table th:nth-child(3),
+  body.ui-command-center .clock-live-table td:nth-child(3),
+  body.ui-command-center .clock-live-table th:nth-child(4),
+  body.ui-command-center .clock-live-table td:nth-child(4) { display: none; }
+
+  /* ========================================================
+     1. TOPBAR — slim, cohesive single row
+     Brand · Search (flex) · Clock · Chat · Bell · Avatar.
+     Every round control is the same size / radius / treatment;
+     search is the one pill that absorbs the flex. The desktop
+     section nav, the wallboard icon, the scope box that used to
+     sit here, and the account name/role text are all dropped —
+     nav moves to the bottom bar, the name to the Profile tab.
+     ======================================================== */
+  body.ui-command-center .topbar { padding: 0 var(--m-pad); gap: 8px; }
+  body.ui-command-center .primary-nav { display: none; }        /* → bottom nav */
+  body.ui-command-center .tb-views { display: none; }           /* wallboard → drawer "Views" */
+  body.ui-command-center .company-switcher { display: none; }   /* → drawer "Workspaces" */
+  body.ui-command-center #chatBtn { display: none; }            /* declutter — chat is desktop-only */
+  /* The bar uses justify-content:space-between, so the right group shrink-wraps
+     and the search never grows. Let it fill the space between the brand and the
+     icons. */
+  body.ui-command-center .topbar-right { flex: 1 1 auto; min-width: 0; }
+
+  /* Unify every round control to one shape + size. */
+  body.ui-command-center .tb-logo,
+  body.ui-command-center .topbar .icon-btn,
+  body.ui-command-center .topbar .avatar {
+    width: var(--m-ctl); height: var(--m-ctl);
+    min-width: var(--m-ctl);
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: 0 0 auto;
+  }
+  body.ui-command-center .topbar .icon-btn i { font-size: 17px; }
+
+  /* Search: the single flexible pill. */
+  body.ui-command-center .search { flex: 1 1 auto; min-width: 0; max-width: none; height: var(--m-ctl); }
+  body.ui-command-center .search input {
+    width: 100%; height: var(--m-ctl);
+    border-radius: 999px;
+  }
+
+  /* Clock: always a round icon-only control that matches the bell/avatar (idle
+     or running) — running just tints it green. Label + live timer are dropped
+     from the bar; the account menu still shows the running time. This kills the
+     odd-shaped green pill that broke the row's symmetry. */
+  body.ui-command-center .clock-widget,
+  body.ui-command-center .clock-widget.running {
+    height: var(--m-ctl); width: var(--m-ctl);
+    min-width: var(--m-ctl); min-height: var(--m-ctl); max-height: var(--m-ctl);
+    padding: 0; border-radius: 50%; justify-content: center; gap: 0;
+    flex: 0 0 auto;
+  }
+  body.ui-command-center .clock-widget i { font-size: 15px; }
+  body.ui-command-center .clock-widget #clockLabel,
+  body.ui-command-center .clock-widget .clock-timer { display: none; }
+
+  /* Account chip → avatar only (name + role + caret drop).
+     NOTE the selector: `body.ui-command-center .topbar-right .userchip`, not
+     `... .userchip`. taskmanagement.css:7160 uses the longer form inside its own
+     ≤720 block, and (0,3,0) beats (0,2,0) — so a shorter selector here loses and
+     the chip silently keeps 3px of padding plus a transparent 1px border.
+     Together with the .topbar-right padding below, that pushed the avatar 32px
+     off the right edge while the brand sat 16px off the left: the bar was
+     visibly lopsided, and the boss spotted it. */
+  body.ui-command-center .topbar-right .userchip {
+    gap: 0; padding: 0; background: none; border: 0;
+  }
+  body.ui-command-center .userchip .uc-meta,
+  body.ui-command-center .userchip .uc-gear { display: none; }
+
+  /* The other half of that asymmetry: taskmanagement.css:3803 gives
+     .topbar-right `padding-right: 12px` (and :3493 22px above it). That was for
+     a bar whose last item was a wide account chip; now the last item is a 38px
+     circle that should sit on the same gutter the brand does. The bar's own
+     --m-pad is the only inset either edge needs. */
+  body.ui-command-center .topbar-right { padding-right: 0; }
+
+  /* One gap for the whole bar. taskmanagement.css:4046 squeezes .topbar-right
+     to `gap: 2px` (and :3803 to 4px) — a leftover from when this row had to fit
+     a wide account chip, a wallboard icon and a workspace switcher that are all
+     dropped on phones now. It left the bell and the avatar all but touching
+     while the brand sat 8px off the search pill: same row, two different
+     rhythms. 8px matches .topbar's own gap, so every control is evenly spaced.
+     The search pill pays for it (192→174 at 390, 122→104 at 320) — it's a
+     placeholder-only field and still the widest thing on the row. */
+  body.ui-command-center .topbar-right { gap: 8px; }
+
+  /* ========================================================
+     2. BOTTOM NAV BAR (Instagram-style)
+     ======================================================== */
+  #bottomNav {
+    display: flex;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
+    height: calc(var(--m-navh) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--bg-2);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.28);
+    align-items: stretch;
+  }
+  #bottomNav .bn-tab {
+    flex: 1 1 0; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 6px 2px;
+    background: none; border: none; cursor: pointer;
+    color: var(--ink-3);
+    transition: color var(--dur-fast, .12s) var(--ease-out, ease);
+  }
+  #bottomNav .bn-tab i { font-size: 22px; line-height: 1; }
+  #bottomNav .bn-tab .bn-label {
+    font-size: 10px; font-weight: 600; letter-spacing: .01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+  }
+  #bottomNav .bn-tab.active { color: var(--accent, #ED4E0D); }
+  #bottomNav .bn-tab:active { transform: scale(.94); }
+
+  /* Center ⊕ — raised orange circle, the only mobile New-Task entry. */
+  #bottomNav .bn-tab.bn-center {
+    flex: 0 0 auto; justify-content: flex-start;
+  }
+  #bottomNav .bn-tab.bn-center i {
+    width: 52px; height: 52px; margin-top: -18px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; font-size: 26px;
+    background: var(--accent, #ED4E0D); color: #fff;
+    box-shadow: 0 6px 16px rgba(237, 78, 13, 0.45);
+  }
+  #bottomNav .bn-tab.bn-center .bn-label { color: var(--ink-3); }
+  #bottomNav .bn-tab.bn-center:active i { transform: scale(.94); }
+
+  /* Give the scroll area room so the last row / group clears the bar, and
+     retire the floating FAB (the center ⊕ replaces it). */
+  body.ui-command-center .main,
+  body.ui-command-center .list-pane {
+    padding-bottom: calc(var(--m-navh) + env(safe-area-inset-bottom, 0px) + 8px);
+  }
+  #fab { display: none !important; }
+  /* The bulk-action bar must clear the nav too. */
+  .bulk-bar:not(.hidden) { bottom: calc(var(--m-navh) + env(safe-area-inset-bottom, 0px)); }
+
+  /* ========================================================
+     3. PILLS — single horizontal scrolling strip
+     (company chip row in the Table skin). No more 2-row wrap.
+     ======================================================== */
+  #taskViewWrap.qt-skin .qt-chiprow {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* NO BLEED. This used to be `margin: 0 -12px` + `padding: 0 12px` so the
+       strip scrolled edge-to-edge. The side effect is what the boss spotted:
+       the SCROLLPORT is where chips get clipped, so with the bleed they
+       appeared and disappeared at x=12/378 while every table card sits at
+       24/366 — a scrolled-out chip peeked 12px outside the table's edge.
+       Sizing the strip to the content column instead means the clip line IS
+       the table's edge, top to bottom of the page.
+       (The scroll-padding that used to be here only existed to stop
+       scroll-snap eating that padding — no padding, nothing to eat.) */
+    /* fade the right edge so it reads as scrollable — the fade now ENDS on the
+       gutter, so "gone" and "card edge" are the same x. */
+    -webkit-mask-image: linear-gradient(90deg, #000 86%, transparent);
+            mask-image: linear-gradient(90deg, #000 86%, transparent);
+  }
+  #taskViewWrap.qt-skin .qt-chiprow::-webkit-scrollbar { display: none; }
+  #taskViewWrap.qt-skin .qt-chip { flex: 0 0 auto; scroll-snap-align: start; }
+
+  /* ========================================================
+     4. HEADER CARD — title + everything else as icons, one row
+     taskmanagement.css:7096 deliberately wraps this card into two rows on
+     phones ("the title + scope + actions can't share one row"). They can, once
+     every label collapses to its glyph: only the title keeps words.
+     [All tasks] [👤|👥] .......................... [▦] [⋯] [＋]
+     ======================================================== */
+  body.ui-command-center .head-card {
+    flex-wrap: nowrap;          /* undo the wrap at taskmanagement.css:7097 */
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--m-radius);
+    /* Without this the card is a flex item at its automatic min-content width
+       and grows past a 320px screen, clipping the last button. */
+    min-width: 0;
+  }
+  /* The title is the only thing that may shrink — it ellipsises rather than
+     pushing the controls off the row. */
+  body.ui-command-center .head-card .page-title,
+  body.ui-command-center .head-card .head-card-title {
+    font-size: 17px;
+    flex: 0 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Scope toggle → two glyphs, no words. */
+  body.ui-command-center .head-card #scopeSeg .seg-label { display: none; }
+  body.ui-command-center .head-card #scopeSeg button {
+    width: 34px; height: 32px; padding: 0; justify-content: center;
+  }
+  body.ui-command-center .head-card #scopeSeg button i { margin: 0; font-size: 15px; }
+  /* Actions → three equal icon buttons. `font-size: 0` drops each label while
+     leaving the text in the DOM, so the accessible name survives. */
+  /* taskmanagement.css:7101 gives this row `width:100%` so it sits on its own
+     line; put it back beside the title. */
+  body.ui-command-center .head-card-actions {
+    gap: 6px; width: auto; margin-left: auto; flex: 0 0 auto; flex-wrap: nowrap;
+  }
+  body.ui-command-center .head-card-actions .btn {
+    width: var(--m-ctl, 38px); height: var(--m-ctl, 38px);
+    min-height: 0; min-width: 0; padding: 0;
+    justify-content: center; gap: 0;
+    font-size: 0;
+    border-radius: var(--m-radius-ctl);
+  }
+  body.ui-command-center .head-card-actions .btn i { margin: 0; font-size: 17px; }
+  body.ui-command-center .head-card-actions .btn-more { width: var(--m-ctl, 38px); }
+  /* New task is dropped here, not shrunk: the bottom nav's raised orange ⊕ is
+     already the mobile New-Task entry (BottomNavView `new` → openNewTaskPage(),
+     behind the same App.can('tasks.write') gate), so this was a second button
+     for the same action. Removing it is also what buys the row enough width to
+     fit a 320px screen without shrinking the touch targets below 38px. */
+  body.ui-command-center .head-card-actions #newTaskBtn { display: none; }
+
+  /* Task-setup admin page: its heading was nearly flush (2px) while the head
+     card above it sits on the 24px gutter with its title text indented a further
+     10px (card padding). Line the "Task setup" heading + its content up under
+     the pill's TEXT so the two read as aligned. */
+  body.ui-command-center #timeViewWrap .tsetup { padding-left: 34px; padding-right: 20px; }
+
+  /* ========================================================
+     4a. WIDGETS — one hero card + a stat line
+     A 2×2 bento put four competing focal points above the task list. On a
+     phone only "Up next" earns a card; Progress and Focus are each one number
+     and one link, so they collapse into a single chrome-less line under it,
+     with the Filter/Sort/Group controls as icons at the end of that same line.
+     Row 1: Up next (full width).
+     Row 2: [ring 0%] [0 of 0 done] [Focus · Set order] ....... [▽] [↕] [⊟]
+     ======================================================== */
+  body.ui-command-center .page-head-widgets {
+    display: grid;
+    /* Row 2: the stat takes the 1fr itself — it runs from the left gutter to
+       the icon cluster, so the row has no dead space in the middle and the
+       stat's edges line up with the Up next card above. The four icon buttons
+       stay shrink-wrapped on the right gutter. */
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    row-gap: 14px; column-gap: 6px;
+    width: 100%;
+    overflow: hidden;   /* belt-and-braces: never let a widget push the page sideways */
+  }
+  body.ui-command-center .page-head-widgets > .up-next-mount,
+  body.ui-command-center .page-head-widgets > .focus-widget-mount,
+  body.ui-command-center .page-head-widgets > .progress-widget-mount,
+  body.ui-command-center .page-head-widgets > .controls-widget-mount {
+    width: auto; min-width: 0; flex: none;
+  }
+  /* Explicit placement — the skin sets flex `order` on these mounts, which grid
+     auto-placement would otherwise honour and scatter across the two rows. */
+  body.ui-command-center .page-head-widgets > .up-next-mount {
+    grid-area: 1 / 1 / 2 / -1; order: 0;
+  }
+  /* The stat mount is the 1fr; `width: auto` above lets it stretch to it. */
+  body.ui-command-center .page-head-widgets > .progress-widget-mount {
+    grid-area: 2 / 1 / 3 / 2; order: 0;
+  }
+  body.ui-command-center .page-head-widgets > .focus-widget-mount {
+    grid-area: 2 / 2 / 3 / 3; order: 0; min-width: 0;
+  }
+  body.ui-command-center .page-head-widgets > .controls-widget-mount {
+    grid-area: 2 / 3 / 3 / 4; order: 0;
+  }
+
+  /* --- Up next: the one real card. Full width, so the title gets a line to
+     itself and the timer button sits inline instead of overlapping. --- */
+  body.ui-command-center .page-head-widgets > * > .up-next-card {
+    border-radius: var(--m-radius);
+    overflow: hidden; min-width: 0;
+    flex-direction: row; align-items: center; gap: 10px;
+    padding: 12px 14px;
+  }
+  body.ui-command-center .page-head-widgets .up-next-icon { display: none; }
+  body.ui-command-center .page-head-widgets .up-next-text { min-width: 0; flex: 1 1 auto; }
+  body.ui-command-center .page-head-widgets .up-next-title {
+    white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  body.ui-command-center .page-head-widgets .up-next-meta { flex-wrap: wrap; }
+  body.ui-command-center .page-head-widgets .up-next-start {
+    width: 38px; height: 38px; flex: 0 0 auto;
+  }
+
+  /* --- Stat line: one right-hand cluster — [0 of 0 done] [☰₁] [▽] [↕] [⊟].
+     The 76px card chrome goes; what comes back is the .btn box the Filter /
+     Sort / Group buttons already wear, so the stat and all four glyphs read as
+     one row of controls instead of a card, a bare glyph, and three buttons. --- */
+  /* `#listPane` is load-bearing here, not padding: the skin hangs its card
+     chrome off `[data-theme="dark"] #listPane .progress-card` (:7757) and the
+     light twin (:6870), both `!important`. Two !importants → specificity
+     decides, and their ID beat a class-only strip. Hence the ID on our side. */
+  body.ui-command-center #listPane .page-head-widgets .progress-card,
+  body.ui-command-center #listPane .page-head-widgets .focus-widget,
+  body.ui-command-center #listPane .page-head-widgets .controls-card {
+    background: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0; margin: 0; min-width: 0;
+    /* The skin pins these to a card-sized 76px (and the controls card to 72px)
+       via `min-height` + `height` — both have to go, or the stat line keeps a
+       card's worth of empty space it no longer needs.
+       See taskmanagement.css:5313 and :7244.
+       36px back, not as card chrome but as the row's tap height — "Set order"
+       is a real button and 16px of text is not a target. */
+    height: auto; min-height: 36px;
+  }
+  /* The stat wears the .btn box (declared after the strip above, same
+     specificity — later wins). It is not tappable, so it carries the resting
+     chrome only: no hover, no :active scale. */
+  body.ui-command-center #listPane .page-head-widgets .progress-card,
+  body.ui-command-center #listPane .page-head-widgets .focus-widget-head {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--m-radius-ctl);
+  }
+  /* #listPane again: the strip block above already set `height: auto` at that
+     specificity, so a class-only rule here loses and the stat stands 38px
+     (min-height 36 + its two 1px borders) against the buttons' 36. */
+  body.ui-command-center #listPane .page-head-widgets .progress-card {
+    flex-direction: row; align-items: center; gap: 7px; text-align: left;
+    padding: 0 12px;
+    box-sizing: border-box; height: 36px;
+    /* Fills its 1fr column — the mount stretches, the card has to be told. */
+    width: 100%;
+  }
+  /* Ring goes too: at stat-line size it's a 26px circle around an unlabelled
+     "0" — decoration that reads as a puzzle. "0 of 0 done" already says it. */
+  body.ui-command-center .page-head-widgets .progress-metrics,
+  body.ui-command-center .page-head-widgets .progress-ring,
+  body.ui-command-center .page-head-widgets .progress-card-eyebrow { display: none; }
+  body.ui-command-center .page-head-widgets .progress-card-text {
+    display: flex; flex-direction: column; min-width: 0; flex: 0 0 auto;
+  }
+  /* The meter takes the width the stat gained: text left, track filling the
+     rest. 4px of colour reads at a glance where the hidden ring can't, and it
+     costs no height — the box stays 36px. The empty track still says "0%",
+     which a bare fill wouldn't. */
+  body.ui-command-center #listPane .page-head-widgets .progress-line {
+    display: block; flex: 1 1 auto; min-width: 0;
+    height: 4px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.10);
+    overflow: hidden;
+  }
+  body.ui-command-center #listPane .page-head-widgets .progress-line span {
+    display: block; height: 100%; border-radius: inherit;
+    background: var(--accent, #ED4E0D);
+    transition: width var(--dur-med, .24s) var(--ease-out, ease);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body.ui-command-center #listPane .page-head-widgets .progress-line span {
+      transition: none;
+    }
+  }
+  /* Stat text reads as quiet status; the Focus action reads as tappable. */
+  body.ui-command-center .page-head-widgets .progress-card-title {
+    white-space: nowrap; font-size: 14px; line-height: 36px; margin: 0;
+    font-weight: 600; color: var(--ink, #e7ebf3);
+  }
+  /* Focus collapses to its header ("Focus · Set order"). The hint paragraph and
+     the drag rows go — the full list is a tap away behind the header, which is
+     already a button that opens the Focus view. */
+  body.ui-command-center .page-head-widgets .focus-widget-hint,
+  body.ui-command-center .page-head-widgets .focus-widget-rows { display: none; }
+  body.ui-command-center .page-head-widgets .focus-widget-head {
+    padding: 0; gap: 6px; justify-content: flex-start; align-items: center;
+    width: auto; min-width: 0; min-height: 36px; white-space: nowrap;
+  }
+  /* Focus goes icon-only: the words cost ~55px on a line that has none to
+     spare. The eyebrow already carries the numbered-list glyph, so it renders
+     the icon (font-size:0 drops its "Focus" word) and the action keeps its
+     "Set order" / "Open" text in the DOM for screen readers only. */
+  body.ui-command-center .page-head-widgets .focus-widget-eyebrow {
+    display: inline-flex; align-items: center;
+    font-size: 0; flex: 0 0 auto;
+    /* gap:0 or the glyph sits 3px left of centre: the eyebrow's "Focus" text is
+       zero-width at font-size:0 but still a flex item, so the skin's 6px gap is
+       laid out beside it regardless — a 22px box for a 16px glyph. */
+    gap: 0;
+    /* Matches the Filter / Sort / Group glyphs exactly (16px, --ink-2). The box
+       was always identical; an 18px orange glyph inside it just read heavier
+       and rounder than its 16px grey neighbours. */
+    color: var(--ink-2, #aeb6c2);
+  }
+  body.ui-command-center .page-head-widgets .focus-widget-eyebrow i { font-size: 16px; }
+  body.ui-command-center .page-head-widgets .focus-widget-open {
+    font-size: 0; flex: 0 0 auto;
+  }
+  /* Same 36px box as Filter / Sort / Group, sitting immediately left of them. */
+  body.ui-command-center .page-head-widgets .focus-widget-head {
+    width: 36px; height: 36px; justify-content: center; gap: 0;
+  }
+  /* Press/hover parity: this is a <button>, not a .btn, so it inherits none of
+     the .btn states — and the resting border above is !important, which would
+     otherwise pin it while its neighbours respond to the same tap. */
+  body.ui-command-center #listPane .page-head-widgets .focus-widget-head:hover {
+    background: var(--bg-3) !important;
+    border-color: var(--border-strong) !important;
+  }
+  body.ui-command-center .page-head-widgets .focus-widget-head:active {
+    transform: scale(0.97);
+  }
+
+  /* Controls: icon-only at the end of the stat line. Same button nodes/IDs, so
+     every existing menu handler and anchor still works. Filter was hidden by
+     css/tasks.css; bring it back here. */
+  /* nowrap + flex:0 0 auto are the guard: the skin gives these `flex: 1 1 auto`
+     and lets the card wrap (:7244), so 3px of overflow at 320 silently folded
+     the buttons onto a second row instead of staying one line. */
+  body.ui-command-center #listPane .page-head-widgets .controls-card {
+    display: flex; flex-direction: row; gap: 4px; justify-content: flex-end;
+    flex-wrap: nowrap;
+  }
+  body.ui-command-center #listPane .page-head-widgets .controls-card .btn {
+    flex: 0 0 auto;
+    width: 36px; height: 36px; min-height: 36px; padding: 0;
+    justify-content: center; gap: 0;
+    font-size: 0;              /* label out, glyph stays — keeps the a11y text in the DOM */
+    border-radius: var(--m-radius-ctl);
+  }
+  body.ui-command-center .page-head-widgets .controls-card .btn i { font-size: 16px; }
+  #filterBtn { display: inline-flex !important; }   /* undo the desktop hide, mobile only */
+
+  /* ========================================================
+     4b. TABLE — clean stacked cards
+     Line 1 is the name and nothing else: [✓ · title].
+     Line 2 is every detail: [status · priority · label · due ... avatars].
+     The title used to share line 1 with the due date at flex 1 1 55%, which
+     wrapped nearly every title onto a second line — giving it the full width
+     is most of what makes the list shorter, before any padding comes off.
+     ======================================================== */
+  /* ONE gutter for the whole phone page. `#taskViewWrap` already contributes
+     12px margin + 12px padding, so .qt-wrap's own 12px pushed every table card
+     to x=36 while the page-head cards sat at x=24 — the head and the table were
+     never on the same line. Zero the horizontal padding here (keep the vertical
+     and the bottom-nav clearance) so table cards land at 24 with the rest. */
+  #taskViewWrap.qt-skin .qt-wrap { padding: 12px 0 calc(var(--m-navh) + 28px); }
+  #taskViewWrap.qt-skin .qt-cols { display: none; }
+  /* tighter group chrome so the list reads compact */
+  #taskViewWrap.qt-skin .qt-group { margin-bottom: 10px; border-radius: 12px; }
+  #taskViewWrap.qt-skin .qt-ghead { padding: 10px 14px; }
+
+  #taskViewWrap.qt-skin .qt-row {
+    display: flex; flex-wrap: wrap; align-items: center;
+    column-gap: 5px; row-gap: 4px;
+    padding: 8px 12px;
+  }
+  /* Line 1 — the name, with only the tick and the priority dot for company. */
+  #taskViewWrap.qt-skin .qt-ck { order: 1; flex: 0 0 auto; }
+  #taskViewWrap.qt-skin .qt-pdot { order: 2; flex: 0 0 auto; }
+  /* basis 0 so a long title never exceeds the line and wrap itself below the
+     checkbox — it grows into the space left beside the tick and wraps inside
+     its own box instead. */
+  #taskViewWrap.qt-skin .qt-tcell { order: 3; flex: 1 1 0; min-width: 0; }
+  #taskViewWrap.qt-skin .qt-ttitle { white-space: normal; font-size: 13.5px; line-height: 1.25; }
+  /* The break. A ::after on a flex container is itself a flex item, so a
+     zero-height 100%-wide one ends line 1 — without it the details would flow
+     up beside the title and re-wrap it, which is the thing being fixed. */
+  #taskViewWrap.qt-skin .qt-row::after {
+    content: ''; order: 4; flex: 0 0 100%; height: 0;
+  }
+  /* Line 2 — every detail, one tight line.
+     Status and label are the only elastic items: they shrink and ellipsis so
+     the line can't wrap. Sized to fit exactly, this line came to 316.3px in a
+     316px row and dropped the avatars onto a third line — 0.3px. Truncation is
+     the guard; the numbers below just decide where it starts biting. */
+  /* Fixed columns, so the line reads down the list as well as across.
+     Content-sized cells put every row's priority pill and due date at a
+     different x — "Working on it" is 25px wider than "Pending", and that shift
+     lands on everything after it. The status column is sized for its longest
+     value; priority for MEDIUM; the assignee column for a 4-avatar stack.
+     (Line 2 wraps rather than shrinks on a narrow phone: in a wrapping flex
+     container items wrap BEFORE they shrink, so ellipsis never fires. Two
+     readable lines beat one line of "Wo…" and "W.".) */
+  #taskViewWrap.qt-skin .qt-cell-status { flex: 0 0 96px; min-width: 0; }
+  #taskViewWrap.qt-skin .qt-cell-label  { flex: 0 1 auto; min-width: 0; }
+  #taskViewWrap.qt-skin .qt-cell-status .qt-cellbtn,
+  #taskViewWrap.qt-skin .qt-cell-label .qt-cellbtn {
+    max-width: 100%; min-width: 0;
+  }
+  #taskViewWrap.qt-skin .qt-cell-status .nm,
+  #taskViewWrap.qt-skin .qt-cell-label .nm {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #taskViewWrap.qt-skin .qt-cell-status   { order: 5; }
+  #taskViewWrap.qt-skin .qt-cell-priority { order: 6; flex: 0 0 58px; }
+  #taskViewWrap.qt-skin .qt-cell-label    { order: 7; }
+  /* Due sits hard against the avatar column and right-aligns, so its edge is
+     the same on every row whatever the word ("Tomorrow" vs "Fri" vs a date). */
+  #taskViewWrap.qt-skin .qt-due {
+    order: 8; flex: 0 0 auto; font-size: 10.5px;
+    margin-left: auto; text-align: right;
+  }
+  #taskViewWrap.qt-skin .qt-cell-assignee {
+    order: 9; flex: 0 0 54px;
+    display: flex; justify-content: flex-end;
+  }
+  /* Very tight: line 2 has to fit status + priority + label + due + avatars in
+     ~317px at 390. Everything sits on an 18px band; the priority badge was the
+     outlier at 24px tall with 11px side padding. */
+  #taskViewWrap.qt-skin .qt-cellbtn { padding: 2px 5px; font-size: 10.5px; }
+  #taskViewWrap.qt-skin .qt-pbadge {
+    padding: 2px 7px; font-size: 9.5px; min-height: 0; line-height: 1.45;
+  }
+  #taskViewWrap.qt-skin .qt-cell-priority .chv { display: none; }
+  #taskViewWrap.qt-skin .qt-avatar {
+    width: 18px; height: 18px; font-size: 8.5px;
+  }
+  /* The stack overlaps harder — 3 avatars + "+N" cost ~61px otherwise, which is
+     what tips the line over on a narrow phone. */
+  #taskViewWrap.qt-skin .qt-avstack .qt-avatar + .qt-avatar { margin-left: -7px; }
+  #taskViewWrap.qt-skin .qt-cell-assignee .qt-cellbtn { padding: 0; background: none; border: 0; }
+  #taskViewWrap.qt-skin .qt-cell-assignee .nm { display: none; }
+  #taskViewWrap.qt-skin .qt-actions { display: none; }
+
+  /* Declutter the meta line: the inline dropdown carets (the "⌄" after the
+     status + priority pills) and the empty-label "—" placeholder are
+     desktop-table affordances that just add noise on a phone. The pills stay
+     tappable; the dash only ever meant "no label". */
+  #taskViewWrap.qt-skin .qt-cell-status .chv,
+  #taskViewWrap.qt-skin .qt-cell-priority .chv { display: none; }
+  #taskViewWrap.qt-skin .qt-cell-label .qt-cellbtn:not(:has(.dot)) { display: none; }
+
+  /* give each task card a hairline separation that reads as a card edge */
+  #taskViewWrap.qt-skin .qt-row + .qt-row { border-top: 1px solid var(--border); }
+
+  /* Page head: consistent gutter with the rest of the mobile system. */
+  body.ui-command-center .page-head { padding: 14px var(--m-gap) 8px; }
+
+  /* ========================================================
+     5. THE SHARED SHELL  (.m-*)
+     Sections 1–4b above built this shape for the Tasks page against the Tasks
+     page's own markup, and every selector there is welded to it
+     (`.page-head-widgets`, `.progress-card`, `.qt-chiprow`). Projects and Home
+     have to wear the same shape, so the shape gets defined once here, in
+     markup-neutral classes, and those two pages emit it directly.
+
+     Tasks is NOT rebuilt on top of this: §4a stays exactly as shipped and
+     click-QA'd, and is now best read as the *adapter* that maps this shape onto
+     the old skin's card chrome. It needs `#listPane` + `!important` to win that
+     fight (taskmanagement.css:6870/:7757 hang card chrome off
+     `#listPane .progress-card` with !important, so only an ID beats it).
+
+     Projects and Home need none of that: #projectsWrap and #homeWrap are
+     SIBLINGS of #listPane (app.html:218-220), so none of that !important chrome
+     reaches them. Plain classes are enough. Copying §4a's ID armour over here
+     would be cargo-culting a fight that isn't happening.
+
+     The row:  [ text + meter ] ....... [glyph][glyph]
+               [ chip ][ chip ][ chip ] →scroll
+     ======================================================== */
+
+  /* --- 5b. Stat line — chrome-less, 36px, meter takes the slack.
+     [ 8 of 11 done ▬▬▬▬▬▭▭ ] ......... [▣][▣]
+     The left cell is the 1fr: it runs from the gutter to the glyph cluster, so
+     the row has no dead space and its edges line up with the hero above. --- */
+  .m-statline {
+    display: grid; grid-template-columns: 1fr auto;
+    align-items: center; column-gap: 6px;
+    width: 100%; margin-top: 14px;
+    overflow: hidden;   /* never let the meter push the page sideways */
+  }
+  /* The stat wears the .btn box, but it is not tappable — resting chrome only,
+     no hover, no :active. */
+  .m-stat {
+    display: flex; flex-direction: row; align-items: center; gap: 7px;
+    box-sizing: border-box; height: 36px; padding: 0 12px; min-width: 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--m-radius-ctl);
+  }
+  .m-stat-txt {
+    white-space: nowrap; flex: 0 0 auto;
+    font-size: 14px; font-weight: 600; line-height: 36px;
+    color: var(--ink, #e7ebf3);
+  }
+  /* 4px of colour reads at a glance where a ring can't, and costs no height —
+     the box stays 36px. The empty track still says "0%", which a bare fill
+     wouldn't. */
+  .m-meter {
+    display: block; flex: 1 1 auto; min-width: 0;
+    height: 4px; border-radius: 999px;
+    /* NOT rgba(255,255,255,.1): the app runs in LIGHT theme by default, where a
+       10%-white track on a white card is invisible and the meter reads as a
+       floating orange line with no scale. --bg-3 inverts with the theme (92%
+       light / 25% dark), so the empty part of the track is visible in both —
+       which is what makes 0% read as 0% rather than broken. */
+    background: var(--bg-3);
+    overflow: hidden;
+  }
+  .m-meter > span {
+    display: block; height: 100%; border-radius: inherit;
+    background: var(--accent, #ED4E0D);
+    transition: width var(--dur-med, .24s) var(--ease-out, ease);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .m-meter > span { transition: none; }
+  }
+  /* Right cluster: icon-only controls, identical boxes. */
+  .m-ctls { display: flex; flex-direction: row; gap: 4px; flex-wrap: nowrap; }
+  .m-ctl {
+    flex: 0 0 auto;
+    width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center; gap: 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--m-radius-ctl);
+    color: var(--ink-2, #aeb6c2); cursor: pointer;
+    font-size: 0;   /* label out, glyph stays — keeps the a11y text in the DOM */
+  }
+  .m-ctl i { font-size: 16px; }
+  .m-ctl:hover { background: var(--bg-3); border-color: var(--border-strong); }
+  .m-ctl:active { transform: scale(.97); }
+  .m-ctl.on { color: var(--accent, #ED4E0D); border-color: var(--accent, #ED4E0D); }
+
+  /* --- 5c. Chip strip — one scrolling row, never wraps. Clips exactly on the
+     page gutter, so the pills appear and disappear on the table's own edge. --- */
+  .m-chips {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 8px;
+    margin-top: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* NO BLEED — see §3. The scrollport is the clip line, so bleeding it 12px
+       past the gutter made chips appear/disappear 12px outside the cards. */
+    -webkit-mask-image: linear-gradient(90deg, #000 86%, transparent);
+            mask-image: linear-gradient(90deg, #000 86%, transparent);
+  }
+  .m-chips::-webkit-scrollbar { display: none; }
+  .m-chip {
+    flex: 0 0 auto; scroll-snap-align: start;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 13px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12.5px; font-weight: 600; color: var(--ink-2, #aeb6c2);
+    white-space: nowrap; cursor: pointer;
+  }
+  .m-chip .m-chip-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex: none;
+    background: var(--cc, var(--accent, #ED4E0D));
+  }
+  /* `--bg-1` DOES NOT EXIST anywhere in this codebase — it was my invention, so
+     the #14171c fallback always won and the selected chip rendered near-black
+     text on a near-black pill in LIGHT theme (unreadable; dark theme happened
+     to look fine, which is why a dark-only harness passed it).
+     --surface inverts with the theme (99.5% light / 18% dark), so ink-on-surface
+     is legible in both. */
+  .m-chip.on {
+    background: var(--ink); border-color: var(--ink);
+    color: var(--surface);
+  }
+  .m-chip:active { transform: scale(.97); }
+
+  /* --- 5d. Head card — one row, every label a glyph. Same treatment as §4. --- */
+  .m-glyph { display: inline-flex; }
+
+  /* ========================================================
+     6. PROJECTS  (#projectsWrap)
+     Was: a two-row head, then FIVE full-width KPI cards (.pv-kpis is
+     `flex: 1 1 168px`, so on a phone every card takes the whole row and they
+     stack) — ~380px of statistics before the first project. That is the same
+     mistake the Tasks bento made, and it gets the same answer: one hero, one
+     stat line.
+     ======================================================== */
+
+  /* --- 6a. Gutter. Projects sits on 28px (.pv-head/.pv-cobox margins) because
+     it is not in the @media 900px list at taskmanagement.css:5572 that puts
+     .page-head + #taskViewWrap on 12+12=24. Put it on 24 with the rest. --- */
+  body.ui-command-center .pv-head { margin: 14px 24px 12px; }
+  /* The shell is the #taskViewWrap-shaped box the chip strip needs (see the
+     comment in ProjectsView._heroHtml's caller). */
+  #projectsWrap .pv-shell { margin: 0 12px; padding: 0 12px; }
+  #projectsWrap .pv-cobox { margin: 12px 24px 10px; border-radius: 12px; }
+
+  /* --- 6b. Head card → one row: [Projects] ....... [⇅] [＋] --- */
+  body.ui-command-center .pv-head { flex-wrap: nowrap; gap: 8px; padding: 8px 10px 8px 14px; min-width: 0; }
+  #projectsWrap .pv-head-l { flex: 0 1 auto; min-width: 0; }
+  body.ui-command-center .pv-head .pv-title {
+    font-size: 17px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #projectsWrap .pv-head-r { gap: 6px; margin-left: auto; flex: 0 0 auto; }
+  /* Sort: the native <select> laid over a glyph. Styling a select's own text
+     away is unreliable across engines (the closed-state label is UA-drawn), so
+     the glyph is a real element and the select is a transparent hit target on
+     top of it — which keeps the native picker sheet. */
+  #projectsWrap .m-selwrap {
+    display: inline-flex; position: relative;
+    width: var(--m-ctl); height: var(--m-ctl); flex: 0 0 auto;
+    align-items: center; justify-content: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--m-radius-ctl);
+    color: var(--ink-2, #aeb6c2);
+  }
+  #projectsWrap .m-selwrap .m-glyph { font-size: 17px; }
+  #projectsWrap .m-selwrap .pv-sort {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%; padding: 0; margin: 0;
+    opacity: 0; border: 0; background: none;
+    -webkit-appearance: none; appearance: none;
+    cursor: pointer;
+  }
+  /* New project keeps its accent fill — it is the page's primary action and,
+     unlike Tasks' #newTaskBtn, the bottom nav's ⊕ does NOT duplicate it (that
+     ⊕ is New *Task*). Label out, glyph in. */
+  #projectsWrap .pv-new {
+    width: var(--m-ctl); height: var(--m-ctl); padding: 0; flex: 0 0 auto;
+    justify-content: center; gap: 0;
+    border-radius: var(--m-radius-ctl);
+  }
+  #projectsWrap .pv-new .pv-new-lbl { display: none; }
+  #projectsWrap .pv-new i { font-size: 18px; }
+
+  /* --- 6c. KPI cards — TWO PER ROW, not five stacked.
+     `flex: 1 1 168px` in a wrapping flex row means each card claims a whole
+     390px line, so the five of them stacked ~380px deep and you scrolled past
+     the lot to reach a project. A 2-col grid keeps the coloured icon tiles the
+     boss wants (the colour-coding IS the point) at ~200px total.
+     minmax(0,1fr) not 1fr — a 1fr track won't shrink below "Open tasks"'s
+     min-content and would push the pair off a 320px screen. --- */
+  #projectsWrap .pv-kpis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    /* The shell already provides the x=24 gutter; the cards' own 28px side
+       margin would sit ON TOP of it and land them at 52. */
+    margin: 12px 0 0;
+  }
+  #projectsWrap .pv-kpi {
+    flex: none;          /* it's a grid item now; the flex basis would fight it */
+    min-width: 0; gap: 10px; padding: 11px 12px; border-radius: 12px;
+  }
+  /* The ring card is the odd one out of five — give it the full width rather
+     than a lonely half-row, which is also where its "across all projects"
+     caption has room to stay on one line. */
+  #projectsWrap .pv-kpi-ring { grid-column: 1 / -1; }
+  #projectsWrap .pv-kpi-ic { width: 34px; height: 34px; border-radius: 10px; font-size: 17px; }
+  #projectsWrap .pv-ring { width: 34px; height: 34px; }
+  #projectsWrap .pv-ring::after { inset: 5px; }
+  #projectsWrap .pv-ring b { font-size: 10px; }
+  #projectsWrap .pv-kpi-num { font-size: 22px; }
+  #projectsWrap .pv-kpi-cmplbl { font-size: 15px; }
+  #projectsWrap .pv-kpi-lbl { font-size: 11.5px; }
+
+  /* --- 6e. Company panels. The chip strip carries the company now, so the
+     panel header is a duplicate label on a phone — but only once a single
+     company is chosen. With "All" it is the only thing separating the panels,
+     so it stays; ProjectsView marks .pv-body when a chip narrows the page. --- */
+  #projectsWrap .pv-body.pv-filtered .pv-cohead { display: none; }
+  #projectsWrap .pv-cohead { padding: 10px 14px; }
+  #projectsWrap .pv-duehdr { padding: 9px 14px; }
+
+  /* --- 6f. Folder rows → two-line cards, matching §4b's task cards.
+     Line 1: [chev][✓] name.
+     Line 2: progress ......... due.
+     Actions (add task / delete) drop: they are hover affordances with no hover
+     on a phone, and both live inside the project once it is open. --- */
+  #projectsWrap .pv-row {
+    display: flex; flex-wrap: wrap; align-items: center;
+    column-gap: 8px; row-gap: 5px;
+    padding: 9px 12px;
+  }
+  #projectsWrap .pv-chev { order: 1; flex: 0 0 auto; }
+  #projectsWrap .pv-check { order: 2; flex: 0 0 auto; }
+  #projectsWrap .pv-id { order: 3; flex: 1 1 0; min-width: 0; }
+  #projectsWrap .pv-name { white-space: normal; font-size: 13.5px; line-height: 1.25; }
+  /* The line break. A ::after on a flex container is itself a flex item, so a
+     zero-height 100%-wide one ends line 1 — without it the progress bar flows
+     up beside the name and re-wraps it, which is the thing being fixed. */
+  #projectsWrap .pv-row::after { content: ''; order: 4; flex: 0 0 100%; height: 0; }
+  /* Line 2 is indented to clear the chevron + tick, so the meters line up down
+     the list instead of starting under the name on some rows and the tick on
+     others. 22 (chev) + 20 (check) + 2 gaps = 58. */
+  #projectsWrap .pv-prog {
+    order: 5; flex: 1 1 auto; min-width: 0; margin-left: 58px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  #projectsWrap .pv-row:not(:has(.pv-check)) .pv-prog { margin-left: 30px; }
+  #projectsWrap .pv-progtxt { font-size: 10.5px; white-space: nowrap; }
+  /* taskmanagement.css:647 hides the due column on narrow widths — that was the
+     right call when it was competing for line 1, but line 2 is its own line now
+     and the Tasks cards end on a due date. Bring it back (the ID out-ranks that
+     class-only rule) and pin it right, so its edge is identical on every row
+     whatever the word. */
+  #projectsWrap .pv-duecol {
+    display: block; order: 6; flex: 0 0 auto; margin-left: auto;
+    font-size: 10.5px; text-align: right;
+  }
+  #projectsWrap .pv-actions { display: none; }
+
+  /* --- 6g. Expanded drawer: the task rows inside a folder get the same
+     compact treatment; assignee drops (the avatars aren't rendered here, just
+     a name, and it is the least useful thing on a 320px line). --- */
+  #projectsWrap .pv-trow { padding: 7px 12px 7px 58px; gap: 7px; }
+  #projectsWrap .pv-ttitle { font-size: 12.5px; }
+  #projectsWrap .pv-tassignee { display: none; }
+  #projectsWrap .pv-tstatus, #projectsWrap .pv-tdue { font-size: 10.5px; }
+
+  /* ========================================================
+     7. HOME  (#homeWrap)
+     Was: a greeting, the briefing, a 4-up trend row that goes 1-up on a phone
+     (taskmanagement.css:5652), then six dashboard cards stacked — a very long
+     scroll where nothing is ever the point. Now: greeting card, briefing as the
+     hero, one stat line, and a chip strip that shows one section at a time.
+     ======================================================== */
+
+  /* --- 7a. Gutter. .qhq-home sits on 18px; everything else on this phone sits
+     on 24. Its children ARE the bands (head, brief, statline, chips, cards), so
+     the page's own padding is the gutter — no per-card margins needed. The chip
+     strip then bleeds -12/+12 off that 24 and lands its first chip back on it,
+     exactly as the Tasks strip does inside #taskViewWrap. --- */
+  .qhq-home { padding: 14px 24px 28px; }
+
+  /* --- 7b. Head card → one row: [Good evening, Shan] ....... [▦] --- */
+  body.ui-command-center .qhq-head { flex-wrap: nowrap; gap: 8px; padding: 8px 10px 8px 14px; min-width: 0; }
+  body.ui-command-center .qhq-head > div:first-child { flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; }
+  body.ui-command-center .qhq-head .qhq-greet {
+    font-size: 17px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* The date is the one thing on this card the phone's own status bar already
+     answers, and it is what forces the greeting to wrap. */
+  body.ui-command-center .qhq-head .qhq-dateline { display: none; }
+  /* `width: auto` is the load-bearing one: taskmanagement.css:6139 gives this
+     row `width: 100%` so it sits on its own line, which on a nowrap card makes
+     it eat the whole row and squeeze the greeting to ZERO width — the card
+     rendered empty. Same trap, same fix as §4's .head-card-actions. */
+  .qhq-home .qhq-actions {
+    width: auto; gap: 6px; margin-left: auto; flex: 0 0 auto; flex-wrap: nowrap;
+  }
+  .qhq-home .qhq-act {
+    width: var(--m-ctl); height: var(--m-ctl); min-width: 0; padding: 0;
+    justify-content: center; gap: 0;
+    border-radius: var(--m-radius-ctl);
+  }
+  /* The label goes, the glyph stays. The text stays in the DOM, so the button
+     keeps its accessible name. */
+  .qhq-home .qhq-act .qhq-act-lbl { display: none; }
+  .qhq-home .qhq-act i { margin: 0; font-size: 17px; }
+  /* "New task" and "All tasks" are both already one tap away on the bottom nav
+     (the raised orange ⊕ and the Tasks tab) — the same reason §4 drops
+     #newTaskBtn from the Tasks head card. Calendar has no tab, so it stays. */
+  .qhq-home .qhq-act[data-act="new"],
+  .qhq-home .qhq-act[data-act="all"] { display: none; }
+
+  /* --- 7c. Briefing = the hero. It is already a card; it just has to stop
+     looking like one card among six and sit tight under the head. --- */
+  .qhq-home .qhq-brief { margin: 12px 0 0; border-radius: var(--m-radius); padding: 14px; }
+
+  /* --- 7d. Sections: one at a time, driven by the chip strip.
+     `.m-sec` is display:none until HomeView._applySection lights one. The
+     cards live inside .qhq-cc-shell / -main / -rail, which taskmanagement.css
+     already collapses to a single column at this width (:5737) — so hiding the
+     inactive ones is all that is left to do. --- */
+  #homeWrap .m-sec { display: none; }
+  #homeWrap .m-sec.on { display: block; }
+  #homeWrap .qhq-cc-shell { margin-top: 0; gap: 0; }
+  #homeWrap .qhq-cc-main,
+  #homeWrap .qhq-cc-rail { gap: 0; }
+  /* PRE-EXISTING BUG, not one this pass introduced: taskmanagement.css:5737
+     stacks these with `1fr`, which is minmax(AUTO, 1fr) — the track refuses to
+     shrink below the content's min-content width. .qhq-cc-main measured 342px
+     wide with a 378px track, so every Home card has been hanging 36px off the
+     right of a 390px phone. minmax(0, 1fr) lets the track shrink; the cards'
+     own min-width:0 below lets their contents follow.
+     (Same failure as the .app grid clipping fixed previously — `1fr` is never
+     the right column on a phone.) */
+  #homeWrap .qhq-cc-shell,
+  #homeWrap .qhq-cc-main { grid-template-columns: minmax(0, 1fr); }
+  #homeWrap .qhq-cc-main > *,
+  #homeWrap .qhq-cc-rail > * { min-width: 0; }
+  /* Only one section is ever visible, so every wrapper that still has a card in
+     it would otherwise contribute its own gap and stack empty space. */
+  #homeWrap .m-sec.on { margin-top: 12px; }
+  /* The section head repeats what the lit chip just said. */
+  #homeWrap .qhq-perf .qhq-sec-h { display: none; }
+  #homeWrap .qhq-perf { margin-top: 0; }
+  /* --tile-h is measured off the calendar for the desktop 2-col band; on a
+     phone the cards are full width and it just pins Up next to a random
+     height. HomeView sets it inline, so this has to out-rank a style attr. */
+  #homeWrap .qhq-cc-main { grid-template-rows: none !important; }
+  #homeWrap .qhq-cal { max-width: none; }
+}
+
