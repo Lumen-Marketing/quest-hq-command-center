@@ -98,3 +98,18 @@ test('the module ships styles', () => {
   assert.match(styles, /\.calls-board/);
   assert.match(styles, /\.calls-status-dot/);
 });
+
+test('a widget added after someone customised their dashboard still surfaces', () => {
+  // A saved layout used to replace DASHBOARD_WIDGET_DEFAULTS outright, so every
+  // future widget was invisible to existing users.
+  assert.match(main, /dashboardSeenWidgets/);
+  assert.match(main, /const introductions = fallback\.filter\(\(id\) => !seen\.has\(id\) && !saved\.includes\(id\)\)/);
+});
+
+test('removing a widget sticks, because saving records what has been offered', () => {
+  assert.match(main, /DASHBOARD_SEEN_WIDGETS_CACHE_KEY/);
+  const start = main.indexOf('function saveDashboardWidgetLayout');
+  const body = main.slice(start, main.indexOf('\nfunction ', start + 1));
+  assert.ok(body.includes('dashboardSeenWidgets'), 'saveDashboardWidgetLayout must record seen widgets');
+  assert.ok(body.includes('writeJson(DASHBOARD_SEEN_WIDGETS_CACHE_KEY'), 'seen widgets must be persisted');
+});

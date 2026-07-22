@@ -174,6 +174,9 @@ const RECYCLE_BIN_TYPES = {
 };
 const WORKSPACE_BUILDER_STORAGE_PREFIX = 'qhq_workspace_builder_v1';
 const DASHBOARD_LAYOUT_CACHE_KEY = 'quest-hq-dashboard-layouts-v1';
+// Which widgets each saved layout has already been offered, so a widget added to
+// the product later can surface once without resurrecting one the user removed.
+const DASHBOARD_SEEN_WIDGETS_CACHE_KEY = 'quest-hq-dashboard-seen-widgets-v1';
 const DASHBOARD_ROLE_VIEW_CACHE_KEY = 'quest-hq-dashboard-role-views-v1';
 const DASHBOARD_APP_WIDGET_CACHE_KEY = 'quest-hq-dashboard-app-widgets-v1';
 const SIDEBAR_SCROLL_KEY = 'quest-hq-sidebar-scroll';
@@ -2263,6 +2266,7 @@ const state = {
   dashboardCustomize: false,
   dashboardTrayOpen: false,
   dashboardLayouts: readJson(DASHBOARD_LAYOUT_CACHE_KEY, {}),
+  dashboardSeenWidgets: readJson(DASHBOARD_SEEN_WIDGETS_CACHE_KEY, {}),
   dashboardRoleViews: readJson(DASHBOARD_ROLE_VIEW_CACHE_KEY, []),
   dashboardAppWidgets: readJson(DASHBOARD_APP_WIDGET_CACHE_KEY, {}),
   workspaceIconDrafts: {},
@@ -6122,7 +6126,20 @@ function dashboardAppMultiBody(app, fieldIds) {
 function dashboardWidgetLayout(companyId, role = state.dashboardRole) {
   const saved = state.dashboardLayouts?.[companyId]?.[role];
   const fallback = DASHBOARD_WIDGET_DEFAULTS[role] || DASHBOARD_WIDGET_DEFAULTS.exec;
-  return Array.isArray(saved) && saved.length ? saved : fallback.slice();
+  if (!Array.isArray(saved) || !saved.length) return fallback.slice();
+
+  // A saved layout used to replace the defaults outright, so any widget added to
+  // the product after someone first customised their dashboard stayed invisible
+  // to them permanently — they had to know to go hunting in Add widget.
+  //
+  // Introduce default widgets they have never been shown. `dashboardSeenWidgets`
+  // records what has been offered, and saving a layout records everything then on
+  // screen, so removing a widget still sticks: it is seen, therefore never
+  // reintroduced. Users with no record yet are treated as having seen exactly
+  // what they saved, which is what makes genuinely new widgets surface once.
+  const seen = new Set(state.dashboardSeenWidgets?.[companyId]?.[role] || saved);
+  const introductions = fallback.filter((id) => !seen.has(id) && !saved.includes(id));
+  return introductions.length ? [...introductions, ...saved] : saved;
 }
 
 function dashboardVisibleRoleViews(companyId = activeCompanyId()) {
@@ -6146,14 +6163,32 @@ function saveDashboardRoleViews(viewIds, companyId = activeCompanyId()) {
 }
 
 function saveDashboardWidgetLayout(companyId, role, widgetIds) {
+  const next = compactUnique(widgetIds);
   state.dashboardLayouts = {
     ...(state.dashboardLayouts || {}),
     [companyId]: {
       ...(state.dashboardLayouts?.[companyId] || {}),
-      [role]: compactUnique(widgetIds),
+      [role]: next,
     },
   };
   writeJson(DASHBOARD_LAYOUT_CACHE_KEY, state.dashboardLayouts);
+
+  // Everything in the registry has now been offered to this person, including
+  // whatever they just removed. Recording it here is what stops a removed widget
+  // reappearing on the next load.
+  const known = compactUnique([
+    ...(state.dashboardSeenWidgets?.[companyId]?.[role] || []),
+    ...next,
+    ...(DASHBOARD_WIDGET_DEFAULTS[role] || []),
+  ]);
+  state.dashboardSeenWidgets = {
+    ...(state.dashboardSeenWidgets || {}),
+    [companyId]: {
+      ...(state.dashboardSeenWidgets?.[companyId] || {}),
+      [role]: known,
+    },
+  };
+  writeJson(DASHBOARD_SEEN_WIDGETS_CACHE_KEY, state.dashboardSeenWidgets);
 }
 
 // Move widget `fromId` to sit next to `toId` in the active layout, then persist.
