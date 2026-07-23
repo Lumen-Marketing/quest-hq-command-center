@@ -24348,3 +24348,13 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .calls-widget { display: grid; gap: 12px; }
 .calls-widget-board { border: 1px solid var(--border, #e6e8eb); border-radius: 8px; padding: 4px 8px; background: var(--surface, #fff); }
 .calls-widget-link { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: 600; text-decoration: none; }
+
+/* Linked apps — installed into another workspace, sharing data & fields */
+.wb-topbar-ic { position: relative; }
+.wb-topbar-link { position: absolute; right: -3px; bottom: -3px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface, #fff); color: var(--accent, #ED4E0D); display: grid; place-items: center; box-shadow: 0 0 0 1.5px var(--surface, #fff); }
+.wb-topbar-link i { font-size: 9px; }
+.wb-linkmark { font-size: .82em; color: var(--accent, #ED4E0D); margin-left: 3px; vertical-align: baseline; }
+.wb-linked-note { display: flex; gap: 10px; align-items: flex-start; background: var(--accent-soft, #fbe7dd); border: 1px solid var(--accent, #ED4E0D); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+.wb-linked-note > i { color: var(--accent, #ED4E0D); margin-top: 3px; flex: 0 0 auto; }
+.wb-install-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.wb-install-row select { flex: 1 1 200px; min-width: 0; }

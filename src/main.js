@@ -5990,7 +5990,7 @@ function dashboardAppWidgets(companyId) {
   const doc = wbDoc(companyId);
   if (!doc) return out;
   doc.workspaces.forEach((workspace) => {
-    (workspace.apps || []).forEach((app) => {
+    (workspace.apps || []).filter((app) => !app.linked).forEach((app) => {
       out[`app:${app.id}`] = {
         title: app.name || 'Untitled app',
         group: 'Workspace apps',
@@ -6337,7 +6337,7 @@ function dashboardFindApp(companyId, appId) {
   const doc = wbDoc(companyId);
   if (!doc) return null;
   for (const workspace of doc.workspaces) {
-    const app = (workspace.apps || []).find((a) => a.id === appId);
+    const app = (workspace.apps || []).find((a) => a.id === appId && !a.linked);
     if (app) return { workspace, app };
   }
   return null;
@@ -11567,7 +11567,15 @@ function normalizeWorkspaceBuilderDoc(doc) {
       activity: Array.isArray(ws.activity) ? ws.activity : [],
       feed: Array.isArray(ws.feed) ? ws.feed.map(normalizeFeedPost) : [],
       tiles: Array.isArray(ws.tiles) ? ws.tiles.map(normalizeWorkspaceTile) : null,
-      apps: Array.isArray(ws.apps) ? ws.apps.map((app) => ({
+      apps: Array.isArray(ws.apps) ? ws.apps.map((app) => (app && app.linked ? {
+        // A linked app is a pointer into another workspace's app, not a copy.
+        // Keep it lightweight so it stays a live reference (resolved at read time
+        // via wbResolveAppEntry) rather than being expanded into an empty app.
+        id: app.id || wbUid(),
+        linked: true,
+        linkedFromWs: String(app.linkedFromWs || ''),
+        installedAt: app.installedAt || new Date().toISOString().slice(0, 10),
+      } : {
         id: app.id || wbUid(),
         name: app.name || 'Untitled app',
         description: app.description || '',
@@ -11755,12 +11763,38 @@ async function saveWorkspaceBuilderDoc(companyId) {
     }
   }
 }
+// A linked app entry ({ id, linked:true, linkedFromWs }) points at a source app
+// that lives in another operational workspace of the SAME company. Because the
+// whole app object (fields + records) is shared, an edit from either workspace
+// mutates the one source and persists once -- so data and fields stay in sync
+// both ways. Resolve returns the live source, or null if the source was removed.
+function wbResolveAppEntry(doc, entry) {
+  if (!entry) return { app: null, linked: false, sourceWsId: null };
+  if (!entry.linked) return { app: entry, linked: false, sourceWsId: null };
+  const src = doc ? doc.workspaces.find((w) => w.id === entry.linkedFromWs) : null;
+  const app = src ? src.apps.find((a) => a.id === entry.id && !a.linked) || null : null;
+  return { app, linked: true, sourceWsId: entry.linkedFromWs };
+}
+
+// A workspace's apps for display: own apps plus resolved linked apps, each
+// tagged { app, linked }. Dangling links (source deleted) are dropped.
+function wbWorkspaceApps(doc, ws) {
+  if (!ws) return [];
+  return (ws.apps || []).map((entry) => {
+    const r = wbResolveAppEntry(doc, entry);
+    return r.app ? { app: r.app, linked: r.linked, sourceWsId: r.sourceWsId } : null;
+  }).filter(Boolean);
+}
+
 function wbFind(companyId, workspaceId, appId = '') {
   const doc = wbDoc(companyId);
   if (!doc) return { workspace: null, app: null };
   const workspace = doc.workspaces.find((item) => item.id === workspaceId) || null;
-  const app = workspace && appId ? workspace.apps.find((item) => item.id === appId) || null : null;
-  return { workspace, app };
+  const entry = workspace && appId ? workspace.apps.find((item) => item.id === appId) || null : null;
+  const resolved = wbResolveAppEntry(doc, entry);
+  // `app` is the live source (edits persist to it); `appEntry` is the raw entry
+  // in this workspace (a linked pointer or the app itself) for remove-from-here.
+  return { workspace, app: resolved.app, appEntry: entry, appLinked: resolved.linked };
 }
 function wbLogActivity(workspace, entry) {
   workspace.activity = workspace.activity || [];
@@ -11817,8 +11851,11 @@ function renderWorkspaceBuilderPage(route, companyId) {
   }
   const workspace = wbCompanyWorkspace(companyId);
   const appId = route.params.get('app_id') || '';
-  const app = appId ? workspace.apps.find((item) => item.id === appId) : null;
-  if (app) return `<section class="tool-page wb-page">${wbViewApp(route, companyId, workspace, app)}</section>`;
+  const appEntry = appId ? workspace.apps.find((item) => item.id === appId) : null;
+  // Linked apps resolve to their source object in another workspace, so the view
+  // renders (and edits) the shared app; appLinked drives the "linked" UI.
+  const { app, linked: appLinked } = wbResolveAppEntry(wbDoc(companyId), appEntry);
+  if (app) return `<section class="tool-page wb-page">${wbViewApp(route, companyId, workspace, app, appLinked)}</section>`;
   return `<section class="tool-page wb-page">${wbViewCompanyHome(companyId, workspace)}</section>`;
 }
 
@@ -12011,7 +12048,7 @@ function wbPostComments(companyId, post) {
 function wbSidebarTiles(workspace) {
   if (Array.isArray(workspace.tiles)) return workspace.tiles;
   const defaults = [{ id: wbUid(), type: 'apps', config: {} }];
-  const firstApp = (workspace.apps || [])[0];
+  const firstApp = (workspace.apps || []).find((a) => !a.linked);
   if (firstApp) defaults.push({ id: wbUid(), type: 'app', config: { appId: firstApp.id } });
   return defaults;
 }
@@ -12050,8 +12087,8 @@ function wbLayoutTiles() {
 function wbTileMeta(companyId, workspace, tile) {
   switch (tile.type) {
     case 'apps': return { title: 'Apps', icon: 'ti-apps', config: false };
-    case 'app': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId); return { title: a ? a.name : 'App', icon: a ? a.icon : 'ti-layout-grid', config: true, app: a }; }
-    case 'report': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId); return { title: a ? `${a.name} · Report` : 'Report', icon: 'ti-chart-bar', config: true, app: a }; }
+    case 'app': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId && !x.linked); return { title: a ? a.name : 'App', icon: a ? a.icon : 'ti-layout-grid', config: true, app: a }; }
+    case 'report': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId && !x.linked); return { title: a ? `${a.name} · Report` : 'Report', icon: 'ti-chart-bar', config: true, app: a }; }
     case 'tasks': return { title: 'Workspace tasks', icon: 'ti-checklist', config: false };
     case 'calendar': return { title: 'Calendar', icon: 'ti-calendar', config: false };
     case 'contacts': return { title: 'Contacts', icon: 'ti-address-book', config: false };
@@ -12104,12 +12141,12 @@ function wbTileBody(companyId, workspace, tile, meta) {
 }
 
 function wbTileApps(companyId, workspace) {
-  const apps = workspace.apps || [];
+  const apps = wbWorkspaceApps(wbDoc(companyId), workspace); // [{app, linked}], linked resolved
   if (!apps.length) return `<div class="wb-tile-empty">No apps yet.</div>`;
-  return `<div class="wb-tile-rows">${apps.map((app) => `
+  return `<div class="wb-tile-rows">${apps.map(({ app, linked }) => `
     <button class="wb-tile-row" data-open-app="${h(app.id)}">
       <span class="wb-tile-row-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></span>
-      <span class="wb-tile-row-main"><b>${h(app.name)}</b><span>${app.items.length} items · ${app.fields.length} fields</span></span>
+      <span class="wb-tile-row-main"><b>${h(app.name)}${linked ? ' <i class="ti ti-link wb-linkmark" title="Linked app"></i>' : ''}</b><span>${app.items.length} items · ${app.fields.length} fields</span></span>
       <i class="ti ti-chevron-right wb-tile-row-go" aria-hidden="true"></i>
     </button>`).join('')}</div>`;
 }
@@ -12354,13 +12391,15 @@ function wbTileLinks(tile) {
 // buttons only when there are more apps than fit. Activity is pinned left, Add
 // app pinned right.
 function wbWorkspaceHeader(companyId, workspace, activeAppId) {
-  const apps = (workspace && workspace.apps) || [];
+  // Resolve linked apps to their live source objects (and flag them so the tab
+  // can show a link mark). Each entry is { app, linked }.
+  const apps = wbWorkspaceApps(wbDoc(companyId), workspace);
   const perPage = Math.max(1, state.wbTopbarPerPage || 6);
   let page = Math.max(0, state.wbTopbarPage || 0);
   const pageCount = Math.max(1, Math.ceil(apps.length / perPage));
   // Keep the open app visible: jump to its page if it's off the current one.
   if (activeAppId) {
-    const idx = apps.findIndex((a) => a.id === activeAppId);
+    const idx = apps.findIndex((a) => a.app.id === activeAppId);
     if (idx >= 0 && (idx < page * perPage || idx >= page * perPage + perPage)) page = Math.floor(idx / perPage);
   }
   page = Math.min(page, pageCount - 1);
@@ -12369,10 +12408,11 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   const homeHref = appHref(companyPath('workspaces', {}, companyId));
   const homeActive = !activeAppId;
   const homeTab = `<a class="wb-topbar-tab wb-topbar-home ${homeActive ? 'active' : ''}" href="${homeHref}" data-router aria-current="${homeActive ? 'page' : 'false'}"><span class="wb-topbar-ic wb-topbar-ic-home"><i class="ti ti-activity" aria-hidden="true"></i></span><span class="wb-topbar-label">Activity</span></a>`;
-  const appTabs = pageApps.map((a) => {
+  const appTabs = pageApps.map(({ app: a, linked }) => {
     const active = a.id === activeAppId;
     const href = appHref(companyPath('workspaces', { app_id: a.id, tab: 'items' }, companyId));
-    return `<a class="wb-topbar-tab ${active ? 'active' : ''}" href="${href}" data-router title="${h(a.name)}" aria-current="${active ? 'page' : 'false'}"><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i></span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
+    const linkMark = linked ? '<span class="wb-topbar-link" title="Linked app — shares data with another workspace"><i class="ti ti-link" aria-hidden="true"></i></span>' : '';
+    return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router title="${h(a.name)}${linked ? ' (linked)' : ''}" aria-current="${active ? 'page' : 'false'}"><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
   }).join('');
   const prev = `<button class="wb-topbar-arrow" type="button" data-wb-topbar-page="${page - 1}" ${page === 0 ? 'disabled' : ''} title="Previous apps" aria-label="Previous apps"><i class="ti ti-chevron-left"></i></button>`;
   const next = `<button class="wb-topbar-arrow" type="button" data-wb-topbar-page="${page + 1}" ${page >= pageCount - 1 ? 'disabled' : ''} title="More apps" aria-label="More apps"><i class="ti ti-chevron-right"></i></button>`;
@@ -12397,7 +12437,7 @@ function wbMountTopbar() {
   if (perPage !== state.wbTopbarPerPage) { state.wbTopbarPerPage = perPage; render(); }
 }
 
-function wbViewApp(route, companyId, workspace, app) {
+function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   const canManage = can('workspaces.manage', companyId);
   const tabs = ['items', 'fields', 'reports', 'automations', 'settings'];
   const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'items';
@@ -12417,7 +12457,7 @@ function wbViewApp(route, companyId, workspace, app) {
   else if (tab === 'fields') body = wbViewBuilder(companyId, workspace, app);
   else if (tab === 'reports') body = wbViewReports(companyId, workspace, app);
   else if (tab === 'automations') body = wbViewAutomations(companyId, workspace, app);
-  else body = wbViewAppSettings(companyId, workspace, app);
+  else body = wbViewAppSettings(companyId, workspace, app, appLinked);
   return `
     ${wbWorkspaceHeader(companyId, workspace, app.id)}
     <div class="wb-page-head">
@@ -12898,7 +12938,7 @@ function wbAppIndex() {
   const docs = state.workspaceBuilderDocs || {};
   for (const companyId of Object.keys(docs)) {
     for (const workspace of (docs[companyId]?.workspaces || [])) {
-      for (const app of (workspace.apps || [])) idx.set(app.id, { companyId, workspace, app });
+      for (const app of (workspace.apps || [])) { if (app.linked) continue; idx.set(app.id, { companyId, workspace, app }); }
     }
   }
   wbAppIndexCache = idx;
@@ -13806,9 +13846,45 @@ function wbViewBuilder(companyId, workspace, app) {
   return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? 'data-wb-field-dropzone' : ''}><div class="wb-field-count">${app.fields.length} field${app.fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${list}${dropHint}</div>${palette}</div>`;
 }
 
-function wbViewAppSettings(companyId, workspace, app) {
+// Source-app only: install this app as a LIVE LINKED mirror into another
+// operational workspace of the same company. Unlike Download (a copy) or the
+// App Market (fields only), a linked install shares the same records + fields,
+// so edits sync both ways. Targets are workspaces the manager can reach.
+function wbInstallToWorkspaceField(companyId, workspace, app) {
+  const currentOpsId = String(workspace.id || '').replace(/^ws-/, '');
+  const doc = wbDoc(companyId);
+  const targets = (allowedOperationalWorkspaces(companyId) || []).filter((w) => w.status !== 'archived' && w.id !== currentOpsId);
+  const installedIn = (tId) => { const t = doc && doc.workspaces.find((x) => x.id === `ws-${tId}`); return !!(t && t.apps.some((a) => a.id === app.id)); };
+  if (!targets.length) {
+    return `<div class="wb-field"><label>Install to another workspace</label><div class="wb-sub">This company has only one workspace. Create another to install a linked copy of this app.</div></div>`;
+  }
+  const options = targets.map((w) => `<option value="${h(w.id)}" ${installedIn(w.id) ? 'disabled' : ''}>${h(w.name || 'Workspace')}${installedIn(w.id) ? ' — already installed' : ''}</option>`).join('');
+  return `<div class="wb-field"><label>Install to another workspace</label>
+      <div class="wb-sub">Install this app into another workspace you own. It stays <b>linked</b> — the same fields <b>and records</b> — so an edit made from either workspace shows up in the other. (Unlike the App Market, records are shared.)</div>
+      <div class="wb-install-row" style="margin-top:10px">
+        <select class="wb-input" data-wb-install-target><option value="">Choose a workspace…</option>${options}</select>
+        <button class="btn" data-wb-install-linked><i class="ti ti-link"></i>Install linked</button>
+      </div>
+    </div>`;
+}
+
+function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
   const canManage = can('workspaces.manage', companyId);
   const isCustomColor = !WB_PALETTE.includes(app.color);
+  // A linked app is a live mirror installed from another workspace. Its fields,
+  // records, name and icon belong to the source and are managed there; here we
+  // only explain the link and offer to remove it from this workspace.
+  if (appLinked) {
+    const entry = (workspace.apps || []).find((a) => a.id === app.id && a.linked);
+    const src = wbDoc(companyId)?.workspaces.find((w) => w.id === entry?.linkedFromWs);
+    return `<div class="wb-settings card">
+      <h3 class="wb-settings-title"><i class="ti ti-link" aria-hidden="true"></i> Linked app</h3>
+      <div class="wb-field">
+        <div class="wb-linked-note"><i class="ti ti-link"></i><div><b>${h(app.name)}</b> is installed here from <b>${h(src?.name || 'another workspace')}</b>. Its fields and records are <b>shared</b> — edits from either workspace sync both ways in real time.</div></div>
+      </div>
+      ${canManage ? `<div class="wb-settings-actions"><button class="btn danger" data-wb-remove-linked><i class="ti ti-unlink"></i>Remove from this workspace</button></div><div class="wb-sub" style="margin-top:8px">Removing only takes it out of this workspace. The original app and its data are untouched.</div>` : '<div class="wb-sub">Ask a workspace manager to remove this linked app.</div>'}
+    </div>`;
+  }
   return `<div class="wb-settings card">
     <h3 class="wb-settings-title">App settings</h3>
     <div class="wb-field"><label>App name</label><input class="wb-input" id="wbSetName" value="${h(app.name)}" ${canManage ? '' : 'disabled'}></div>
@@ -13822,6 +13898,7 @@ function wbViewAppSettings(companyId, workspace, app) {
       <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — including all fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'} and ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'} — to back it up or install it into another workspace.</div>
       <div class="wb-settings-actions" style="margin-top:10px"><button class="btn" data-wb-download-app><i class="ti ti-download"></i>Download app</button></div>
     </div>
+    ${canManage ? wbInstallToWorkspaceField(companyId, workspace, app) : ''}
     <div class="wb-field"><label>Quest App Market</label>
       <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Quest HQ can install its fields &amp; automations from the Quest App Market. Your records are never shared.' : 'Share this app so anyone on Quest HQ can install its fields &amp; automations from the Quest App Market. Your records are never shared.'}</div>
       ${canManage ? `<div class="wb-settings-actions" style="margin-top:10px"><button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share this app'}</button></div>` : ''}
@@ -14132,7 +14209,7 @@ function wbAllSystemApps() {
   Object.keys(state.workspaceBuilderDocs || {}).forEach((cid) => {
     const doc = state.workspaceBuilderDocs[cid];
     (doc?.workspaces || []).forEach((ws) => {
-      (ws.apps || []).forEach((app) => { if (app.shared) out.push({ companyId: cid, companyLabel: companyName(cid) || cid, workspaceName: ws.name || 'Workspace', app }); });
+      (ws.apps || []).forEach((app) => { if (app.shared && !app.linked) out.push({ companyId: cid, companyLabel: companyName(cid) || cid, workspaceName: ws.name || 'Workspace', app }); });
     });
   });
   return out;
@@ -14642,7 +14719,7 @@ function renderWorkspaceBuilderModal() {
     const workspace = wbCompanyWorkspace(m.companyId);
     const tile = workspace ? (workspace.tiles || []).find((t) => t.id === m.tileId) : null;
     if (!tile) return '';
-    const apps = workspace.apps || [];
+    const apps = (workspace.apps || []).filter((a) => !a.linked);
     const appSelect = (selected) => `<select class="wb-input" data-wb-tilecfg-app>${apps.length ? apps.map((a) => `<option value="${h(a.id)}" ${a.id === selected ? 'selected' : ''}>${h(a.name)}</option>`).join('') : '<option value="">No apps yet</option>'}</select>`;
     let form = '';
     if (tile.type === 'app') form = `<div class="wb-field"><label>Show records from</label>${appSelect(m.draft.appId)}</div>`;
@@ -15623,6 +15700,37 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-install-app]', () => wbInstallAppPrompt(companyId, workspaceId));
     bind('[data-wb-download-app]', () => wbDownloadApp(companyId, workspaceId, appId));
     bind('[data-wb-share-app]', () => { if (!wbGuard()) return; const { app } = wbFind(companyId, workspaceId, appId); if (!app) return; app.shared = !app.shared; wbSave(companyId); showToast(app.shared ? `"${app.name}" is now shared to the Quest App Market.` : `"${app.name}" removed from the Quest App Market.`, 'local', 'Workspaces'); render(); });
+    bind('[data-wb-install-linked]', (el) => {
+      if (!wbGuard()) return;
+      const targetOpsId = String(el.closest('.wb-field')?.querySelector('[data-wb-install-target]')?.value || '');
+      if (!targetOpsId) { showToast('Choose a workspace to install into.', 'error', 'Workspaces'); return; }
+      const { app } = wbFind(companyId, workspaceId, appId);
+      const doc = wbDoc(companyId);
+      if (!app || !doc) return;
+      const targetKey = `ws-${targetOpsId}`;
+      let target = doc.workspaces.find((w) => w.id === targetKey);
+      if (!target) {
+        const opsWs = state.operationalWorkspaces.find((w) => w.id === targetOpsId);
+        target = { id: targetKey, name: opsWs?.name || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], feed: [], tiles: null, createdAt: new Date().toISOString().slice(0, 10) };
+        doc.workspaces.push(target);
+      }
+      if (target.apps.some((a) => a.id === app.id)) { showToast(`${target.name} already has "${app.name}".`, 'local', 'Workspaces'); return; }
+      // A linked pointer -- linkedFromWs is the SOURCE (this) workspace; the app
+      // object itself is never copied, so records + fields stay shared.
+      target.apps.push({ id: app.id, linked: true, linkedFromWs: workspaceId, installedAt: new Date().toISOString().slice(0, 10) });
+      wbSave(companyId);
+      showToast(`Installed "${app.name}" into ${target.name} — linked, data is shared.`, 'local', 'Workspaces');
+      render();
+    });
+    bind('[data-wb-remove-linked]', () => {
+      if (!wbGuard()) return;
+      const { workspace } = wbFind(companyId, workspaceId, appId);
+      if (!workspace) return;
+      workspace.apps = workspace.apps.filter((a) => !(a.id === appId && a.linked));
+      wbSave(companyId);
+      showToast('Removed the linked app from this workspace. The original is untouched.', 'local', 'Workspaces');
+      navigate(companyPath('workspaces', {}, companyId));
+    });
     bind('[data-wb-delete-workspace]', () => { const ws = wbCompanyWorkspace(companyId); if (ws) openWbDeleteWorkspace(companyId, ws); });
     bind('[data-tab]', (el) => nav({ app_id: appId, tab: el.dataset.tab }));
     bind('[data-add-field]', () => nav({ app_id: appId, tab: 'fields' }));
