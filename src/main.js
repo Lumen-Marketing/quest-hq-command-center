@@ -4738,23 +4738,42 @@ function callsBoardMarkup() {
 // Dashboard widget. Same two ideas as the module, compressed: who is on the
 // phone, and today's conversation counts. Links through for the full view.
 function renderCallsWidget(companyId) {
-  ensureCallsData(companyId, 'today');
+  // Seven days rather than today: the point of the widget is the per-person
+  // ranking, and "today" alone is usually too sparse to rank anything. The live
+  // "on a call now" tile stays real-time via presence.
+  ensureCallsData(companyId, '7d');
 
   if (state.callsStats.unavailable || state.callsPresence.notConnected) return callsNotConnectedMarkup();
 
-  const rows = state.callsStats.key === `${companyId}|today` ? state.callsStats.rows : [];
+  const rows = state.callsStats.key === `${companyId}|7d` ? state.callsStats.rows : [];
   const onCall = state.callsPresence.agents.filter((agent) => agent.status === 'on_call').length;
   const available = state.callsPresence.agents.filter((agent) => agent.status === 'available').length;
   const conversations = rows.reduce((total, row) => total + Number(row.conversations || 0), 0);
-  const totalCalls = rows.reduce((total, row) => total + Number(row.total_calls || 0), 0);
+
+  const ranked = rows
+    .filter((row) => String(row.extension_name || '').trim())
+    .slice()
+    .sort((a, b) => Number(b.conversations || 0) - Number(a.conversations || 0));
+
+  const ranking = ranked.length
+    ? `<table class="calls-widget-rank"><tbody>${ranked.map((row) => `
+        <tr>
+          <td class="calls-rank-name">${h(row.extension_name)}</td>
+          <td class="calls-rank-sub">${Number(row.total_calls || 0)} calls</td>
+          <td class="calls-rank-conv"><b>${Number(row.conversations || 0)}</b> over 60s</td>
+        </tr>`).join('')}</tbody></table>`
+    : '<p class="calls-empty">No conversations in the last 7 days yet.</p>';
 
   return `
     <div class="calls-widget">
       <section class="dash-kpis dash-widget-kpis">
-        ${dashboardMetricTile('ti-phone', onCall, 'On a call', `${available} available`)}
-        ${dashboardMetricTile('ti-message', conversations, 'Conversations 60s+', 'Today')}
-        ${dashboardMetricTile('ti-activity', totalCalls, 'Calls today', `${rows.length} people`)}
+        ${dashboardMetricTile('ti-phone', onCall, 'On a call now', `${available} available`)}
+        ${dashboardMetricTile('ti-message', conversations, 'Conversations 60s+', 'Last 7 days')}
       </section>
+      <div class="calls-widget-rank-wrap">
+        <div class="calls-widget-rank-head"><span>Who is having real conversations</span><span>Last 7 days</span></div>
+        ${ranking}
+      </div>
       ${state.callsPresence.forbidden ? '' : `<div class="calls-widget-board">${callsBoardMarkup()}</div>`}
       <a class="calls-widget-link" href="${appHref(companyPath('calls', {}, companyId))}" data-router>Open Calls<i class="ti ti-arrow-right" aria-hidden="true"></i></a>
     </div>`;

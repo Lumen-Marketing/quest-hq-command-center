@@ -24358,3 +24358,14 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .wb-linked-note > i { color: var(--accent, #ED4E0D); margin-top: 3px; flex: 0 0 auto; }
 .wb-install-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .wb-install-row select { flex: 1 1 200px; min-width: 0; }
+
+/* ── Calls dashboard widget: per-person 60s+ ranking ─────────────────────── */
+.calls-widget-rank-wrap { border: 1px solid var(--border, #e6e8eb); border-radius: 8px; overflow: hidden; }
+.calls-widget-rank-head { display: flex; justify-content: space-between; padding: 8px 12px; background: var(--surface-2, #f6f7f8); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted, #6f7782); }
+.calls-widget-rank { width: 100%; border-collapse: collapse; }
+.calls-widget-rank td { padding: 9px 12px; border-top: 1px solid var(--border, #e6e8eb); }
+.calls-widget-rank tr:first-child td { border-top: 0; }
+.calls-rank-name { font-weight: 600; }
+.calls-rank-sub { color: var(--muted, #6f7782); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.calls-rank-conv { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.calls-rank-conv b { font-size: 1.05rem; }
