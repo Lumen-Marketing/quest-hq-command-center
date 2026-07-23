@@ -11781,10 +11781,34 @@ function wbTimeAgo(ts) {
 function wbCompanyWorkspace(companyId) {
   const doc = wbDoc(companyId);
   if (!doc) return null;
-  if (!doc.workspaces.length) {
-    doc.workspaces.push({ id: `ws-${canonicalCompanyId(companyId)}`, name: companyName(companyId) || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], createdAt: new Date().toISOString().slice(0, 10) });
+  // Each operational workspace (Employees, Stake Holders, ...) gets its OWN
+  // builder entry -- its own apps, feed, and tiles -- so switching workspace
+  // switches the whole no-code surface. The saved doc already stores a
+  // workspaces[] array; we key one entry per operational workspace id. No
+  // schema change: this all lives inside the existing per-company doc blob.
+  const canonicalCompany = canonicalCompanyId(companyId);
+  const opsId = workspaceIdForCompany(companyId);
+  const opsWorkspace = state.operationalWorkspaces.find((item) => item.id === opsId);
+  const wsKey = opsId ? `ws-${opsId}` : `ws-${canonicalCompany}`;
+  let entry = doc.workspaces.find((ws) => ws.id === wsKey);
+  if (!entry) {
+    // One-time adoption: legacy docs held a single company-wide entry
+    // (ws-<companyId>) holding every existing app. Fold it into the DEFAULT
+    // operational workspace so those apps aren't orphaned; other workspaces
+    // start empty.
+    const legacy = doc.workspaces.find((ws) => ws.id === `ws-${canonicalCompany}`);
+    const isDefaultOps = opsId && opsId === defaultOperationalWorkspaceId(companyId);
+    if (legacy && isDefaultOps) {
+      legacy.id = wsKey;
+      entry = legacy;
+    } else {
+      entry = { id: wsKey, name: opsWorkspace?.name || companyName(companyId) || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], createdAt: new Date().toISOString().slice(0, 10) };
+      doc.workspaces.push(entry);
+    }
   }
-  return doc.workspaces[0];
+  // Keep the builder entry's label in step with the operational workspace name.
+  if (opsWorkspace?.name && entry.name !== opsWorkspace.name) entry.name = opsWorkspace.name;
+  return entry;
 }
 
 function renderWorkspaceBuilderPage(route, companyId) {
@@ -11802,12 +11826,17 @@ function renderWorkspaceBuilderPage(route, companyId) {
 // feed (main column) and widget tiles (side column). Apps are reached through
 // the persistent app-switcher header rather than a grid on this page.
 function wbViewCompanyHome(companyId, workspace) {
+  // Title the builder home with the operational workspace the user is currently
+  // in (e.g. "Stake Holders"), not the company name -- the builder doc is
+  // company-scoped, but users read this header as "where am I".
+  const opsWorkspace = state.operationalWorkspaces.find((item) => item.id === workspaceIdForCompany(companyId));
+  const wsName = opsWorkspace?.name || workspace.name || companyName(companyId) || 'Workspace';
   return `
     ${wbWorkspaceHeader(companyId, workspace, null)}
     <div class="wb-page-head">
       <div>
-        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>${h(workspace.name || companyName(companyId) || 'Workspace')}</h1>
-        <div class="wb-sub">Build customizable, no-code dashboards for ${h(companyName(companyId) || 'this company')}.</div>
+        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>${h(wsName)}</h1>
+        <div class="wb-sub">Build customizable, no-code dashboards for ${h(wsName)}.</div>
       </div>
       <div class="wb-spacer"></div>
     </div>
