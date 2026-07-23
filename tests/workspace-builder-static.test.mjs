@@ -34,11 +34,11 @@ test('workspace builder supports working no-code workspace app flows inside a co
   assert.match(source, /if \(!doc\) doc = readJson\(workspaceBuilderStorageKey\(companyId\), \{ workspaces: \[\] \}\)/);
   assert.match(source, /function renderWorkspaceBuilderModal\(\)/);
   assert.match(source, /function wbViewCompanyHome\(companyId, workspace\)/);
-  assert.match(source, /function wbViewApp\(route, companyId, workspace, app\)/);
+  assert.match(source, /function wbViewApp\(route, companyId, workspace, app, appLinked = false\)/);
   assert.match(source, /function wbViewBuilder\(companyId, workspace, app\)/);
   assert.match(source, /function wbViewItems\(companyId, workspace, app\)/);
   assert.match(source, /function wbViewAutomations\(companyId, workspace, app\)/);
-  assert.match(source, /function wbViewAppSettings\(companyId, workspace, app\)/);
+  assert.match(source, /function wbViewAppSettings\(companyId, workspace, app, appLinked = false\)/);
   assert.match(source, /data-new-app/);
   assert.match(source, /data-add-field/);
   assert.match(source, /data-add-item/);

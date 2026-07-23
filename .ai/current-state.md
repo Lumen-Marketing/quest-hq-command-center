@@ -1,23 +1,23 @@
 # Current state
 
-Captured 2026-07-23T07:02:18+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-24T06:36:14+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
 - Production URL: https://quest-hq-command-center-gamma.vercel.app
 - Vercel project: prj_0MxrYyGIo61QgLNW2M74fvTxlMRV
-- Current ready production deployment: dpl_763c8dwqm7M92n5rZ4iTXAhxv4NP
-- Deployed branch/commit: main at 070586e86952b2acf358727005d787bc79511322
-- GitHub default branch at capture: 070586e86952b2acf358727005d787bc79511322
+- Current ready production deployment: dpl_5kJtcUuFuL3yXgHJvRxjFxdwg282
+- Deployed branch/commit: main at 119a5a5adf12ebedcb31ed7d1a1b07e435286094
+- GitHub default branch at capture: 119a5a5adf12ebedcb31ed7d1a1b07e435286094
 - Latest deployed Task preview at capture: dpl_BFspAASB2RMGPfNpyX8FpZv5fCcm from feat/task-gantt-foundation at efde616; this is not production.
 - Latest overall integration preview at capture: dpl_HGLVRqE2iQfX9po6VByUY1uXKXin from preview/deploy-integration-check at 59417a0; it is not production.
 - Production Guardian: scheduled every six hours and available by manual dispatch.
 - Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459
-- Last full production smoke context: 36 of 36 routes and 3 of 3 critical assets passed for `6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec`, with no browser-console or Vercel runtime errors.
+- Latest production smoke context: 36 of 36 routes and 3 of 3 critical assets passed for `119a5a5adf12ebedcb31ed7d1a1b07e435286094`. The latest one-hour Vercel sample contained no runtime errors or HTTP 429 rows.
 
 ## Repository health
 
-- Combined integration + Task branch regression suite: 566 tests passed.
+- Reconciled integration + Task branch regression suite: 574 tests passed.
 - The production build and bundle-budget check pass without a local application server.
 - CI runs npm run check on pushes and pull requests.
 - Build output is checked against a bundle budget and copies TaskManagement plus legacy SPA assets.
@@ -29,9 +29,9 @@ Captured 2026-07-23T07:02:18+08:00. This is a point-in-time operational snapshot
 - Status: ACTIVE_HEALTHY
 - Region: us-west-1
 - Postgres: 17.6.1.127, engine 17
-- The catalog-count snapshot remains the 2026-07-21 metadata export; Task/workspace objects below were rechecked live on 2026-07-23.
+- The catalog-count snapshot remains the 2026-07-21 metadata export; Task/workspace objects below were rechecked live on 2026-07-24.
 - Storage: 6 buckets cataloged without object data.
-- Latest repository migration: 202607231200_ringcentral_calls.sql — **applied live 2026-07-23**
+- Latest repository migration: `202607241200_per_person_task_visibility.sql`; its policy intent is applied live as ledger version `20260723183531`.
 - It adds five `ringcentral_*` tables, five select policies, the
   `public.ringcentral_conversation_stats` function, and widens
   `app_private.permission_plugin_ids` so `team.view` resolves to both `reporting` and
@@ -42,8 +42,10 @@ Captured 2026-07-23T07:02:18+08:00. This is a point-in-time operational snapshot
   `company_plugins_known_plugin_check` contains `tasks`; a future migration that rebuilds
   this constraint from a stale allowlist can drop `tasks` and fail against existing rows.
   Always read the live constraint out of `pg_constraint` first.
-- Live tenancy verification: every one of the 3 company accounts has one active default operational workspace; all 11 workspace-owned pipeline tables have non-null workspace ids; zero company/workspace mismatches were found.
-- Live Task verification: `tasks.workspace_id` is required and existing task RLS is workspace-membership/permission scoped. Companies have the Tasks entitlement, but no Tasks rows existed in `workspace_plugins` at capture; the new forward migration supplies only those missing activations.
+- Live tenancy verification: 6 active workspaces; all 14 task rows have non-null workspace ids; zero task company/workspace mismatches were found.
+- Live per-person Task visibility is active. Leads with `tasks.manage` and inherited company administrators can manage workspace tasks; `tasks.view`-only workers can read/update only tasks they are assigned or created. INSERT/DELETE remain `tasks.manage`-gated.
+- Live RLS verification on 2026-07-24 used two separate non-platform authenticated identities. Both saw their own tenant controls and zero rows from the foreign tenant across companies, memberships, workspaces, workspace/company plugins, tasks, contacts, deals, jobs, files, proposals, forms, form responses, workspace-builder state, and rollback-only message fixtures. Cross-tenant task/contact updates affected zero rows; authenticated task DELETE is denied at the table-grant layer. All temporary fixtures were rolled back and verified absent.
+- Five companies have the Tasks entitlement, but only 2 workspace Tasks activations exist; 4 eligible active workspaces remain without the plugin. The forward workspace-activation migration on this release branch is not in the live migration ledger.
 - Migration drift: live contains the effects of the Task phase 2/3 migrations without their repository versions in the ledger. Do not replay those historical files; see `docs/supabase-migration-reconciliation.md`.
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.

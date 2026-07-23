@@ -208,3 +208,43 @@ admin versus member on the live board — is enforced server-side in the presenc
 Reusing `team.view` required widening `app_private.permission_plugin_ids` (and its browser
 mirror) so `team.view` resolves to both `reporting` and `calls`; without that, a workspace
 with Calls installed but Reporting uninstalled would have been locked out of its own module.
+
+## X-Frame-Options is SAMEORIGIN, not DENY, so the task module can be framed
+
+The Tasks module is embedded as a same-origin `<iframe class="taskapp-frame"
+src="/taskmanagement/app.html">` (src/main.js). A site-wide `X-Frame-Options: DENY`
+header in vercel.json blocked that frame in the browser, so Tasks rendered as an empty
+grey box in production while working in local dev (which serves none of the vercel.json
+headers). SAMEORIGIN allows the app to frame its own pages while still blocking any
+cross-origin site from framing Command Center, preserving the clickjacking guard.
+The CSP is unaffected: it stays strict and Report-Only on purpose (its `frame-ancestors`
+and `wasm` violations are being collected deliberately, per tests/security-headers.test.mjs),
+so this fix is the enforced X-Frame-Options header only. Enforced by that same test.
+
+## The service worker never mediates the /taskmanagement/ task frame
+
+The Tasks iframe kept being refused with "X-Frame-Options: deny" for returning users even
+after that header was relaxed to SAMEORIGIN (above). The live network response was correct;
+the DENY copy came from the shell service worker. It cached `/` while the header was still
+DENY, and because the cache name (`quest-shell-v1`) never changed, no deploy evicted it — so
+the worker kept serving the stale DENY shell into the embedded frame. Incognito worked (no
+active worker); clearing site data and disabling extensions did not (a worker already
+controlling an open tab survives reload); only "Bypass for network" fixed it, isolating the
+worker as the cause. Fix: `public/sw.js` now early-returns for any `/taskmanagement/` path
+(same treatment as `/api/`) so the vendored task app always loads straight from the network,
+and the cache VERSION was bumped to `v2` so the activate handler drops the poisoned `v1`
+caches for everyone on their next visit. Guarded by tests/service-worker-taskframe.test.mjs.
+Do not re-include /taskmanagement/ in the worker's caching paths.
+
+## Task visibility is per person within a workspace
+
+Task visibility is scoped per person, with "team = the job/workspace" and no reporting
+hierarchy. A lead — anyone holding `tasks.manage` on the workspace, which company owners,
+admins, and developers do automatically — sees and manages every task on that job. Crew,
+holding only `tasks.view`, see and update just the tasks they are assigned to or created;
+the creator always sees their own task. Enforced by narrowing the `tasks workspace read`
+and `tasks workspace update` RLS policies in migration
+`202607241200_per_person_task_visibility.sql`; the `is_workspace_member` and
+`has_workspace_permission` gates and the INSERT/DELETE (`tasks.manage`) policies are
+unchanged, so tenant isolation and the permission model are preserved. Designating a lead
+is a role assignment in Command Center, not a code change.

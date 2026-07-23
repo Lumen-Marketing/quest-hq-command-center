@@ -2274,6 +2274,12 @@ const state = {
   companies: mergeCompanies(companiesFallback.map(normalizeCompany)),
   dashboardRole: 'exec',
   dashboardRange: 'week',
+  // The Calls widget carries its own date filter (Today / Last 7 days /
+  // Last 30 days / a custom From–To range) rather than following the global
+  // dashboard range. Default to 7 days because a single day is too sparse to
+  // rank who is having real conversations.
+  callsWidgetRange: '7d',
+  callsWidgetCustom: { from: '', to: '' },
   dashboardRep: 'all',
   dashboardCustomize: false,
   dashboardTrayOpen: false,
@@ -2498,6 +2504,14 @@ async function initializeAuth() {
   try {
     const { data } = await client.auth.getSession();
     await setSupabaseSession(data?.session || null);
+    // Only react when the session MATERIALLY changed. The embedded task module
+    // (/taskmanagement/) builds its own Supabase client against the same storage
+    // key on this origin, so every time its iframe boots it re-announces the
+    // stored session and GoTrue echoes that back here as an auth event. Since
+    // render() rebuilds app.innerHTML wholesale, re-rendering on those echoes
+    // destroyed and recreated the iframe, which re-announced again — a reload
+    // loop (~1.4/sec) that left the module stuck on its splash forever.
+    let lastAuthSignature = supabaseSessionSignature(data?.session || null);
     client.auth.onAuthStateChange((event, session) => {
       setTimeout(() => {
         if (event === 'PASSWORD_RECOVERY') {
@@ -2505,9 +2519,13 @@ async function initializeAuth() {
           state.authBusy = false;
           state.loginError = '';
           state.authMessage = 'Choose a new password for your account.';
+          lastAuthSignature = supabaseSessionSignature(session || null);
           setSupabaseSession(session || null).finally(() => navigate('/?auth=recovery', { replace: true }));
           return;
         }
+        const signature = supabaseSessionSignature(session || null);
+        if (signature === lastAuthSignature) return;
+        lastAuthSignature = signature;
         setSupabaseSession(session || null).finally(() => {
           render();
         });
@@ -2519,6 +2537,14 @@ async function initializeAuth() {
     state.authReady = true;
     render();
   }
+}
+
+// Identity of a Supabase session for change detection. The access token is part
+// of it so a genuine TOKEN_REFRESHED still re-renders, while the repeated
+// re-announcements of an unchanged session (see onAuthStateChange above) do not.
+function supabaseSessionSignature(session) {
+  if (!session?.user?.id) return '';
+  return `${session.user.id}:${session.access_token || ''}`;
 }
 
 async function setSupabaseSession(session) {
@@ -4572,6 +4598,8 @@ const CALLS_RANGE_OPTIONS = [
   ['7d', 'Last 7 days'],
   ['30d', 'Last 30 days'],
 ];
+// The dashboard widget adds a "Custom" pill that reveals two date pickers.
+const CALLS_WIDGET_RANGE_OPTIONS = [...CALLS_RANGE_OPTIONS, ['custom', 'Custom']];
 const CALLS_STATUS_LABELS = {
   on_call: 'On call',
   ringing: 'Ringing',
@@ -4582,6 +4610,7 @@ const CALLS_STATUS_LABELS = {
 };
 const CALLS_PRESENCE_POLL_MS = 15000;
 let callsPresenceTimer = null;
+let callsVisibilityBound = false;
 
 function callsRangeKey(route) {
   const requested = String(route?.params?.get?.('range') || 'today');
@@ -4589,6 +4618,15 @@ function callsRangeKey(route) {
 }
 
 function callsRangeBounds(rangeKey) {
+  // The dashboard widget can pass `custom:<from>|<to>` (each an YYYY-MM-DD date
+  // from its own pair of date pickers). We cover the whole of both days so a
+  // From and To on the same date still returns that day's calls.
+  if (typeof rangeKey === 'string' && rangeKey.startsWith('custom:')) {
+    const [fromStr, toStr] = rangeKey.slice(7).split('|');
+    const from = new Date(`${fromStr}T00:00:00`);
+    const to = new Date(`${toStr}T23:59:59.999`);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }
   const to = new Date();
   const from = new Date(to);
   if (rangeKey === '7d') from.setDate(from.getDate() - 7);
@@ -4671,7 +4709,10 @@ function ensureCallsData(companyId, rangeKey = 'today') {
   const key = `${companyId}|${rangeKey}`;
   if (state.callsStats.key !== key) queueMicrotask(() => loadCallsStats(companyId, rangeKey).catch(() => {}));
   if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
-  queueMicrotask(() => loadCallsPresence(companyId).catch(() => {}));
+  // Presence is fetched by the poller (an immediate first load plus every 15s),
+  // never here. This runs on every render, and loadCallsPresence calls render()
+  // on completion — fetching here created a render->fetch->render loop that hit
+  // the endpoint thousands of times and got the caller rate-limited.
   ensureCallsPresencePolling(companyId);
 }
 
@@ -4686,6 +4727,10 @@ function stopCallsPresencePolling() {
 
 function ensureCallsPresencePolling(companyId) {
   if (callsPresenceTimer) return;
+  // Set the timer handle before the first fetch resolves. loadCallsPresence
+  // calls render() on completion, which re-enters ensureCallsPresencePolling;
+  // with the handle already set that re-entry returns here instead of starting
+  // a second fetch — this is what keeps the one-shot load from becoming a loop.
   callsPresenceTimer = setInterval(() => {
     // The router replaces the whole view, so there is no unmount hook to hang
     // this off; the timer retires itself once the user is somewhere else.
@@ -4693,11 +4738,16 @@ function ensureCallsPresencePolling(companyId) {
     if (document.hidden || state.callsPresence.forbidden || state.callsPresence.notConnected) return;
     loadCallsPresence(companyId).catch(() => {});
   }, CALLS_PRESENCE_POLL_MS);
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden || !callsSurfaceVisible()) return;
-    if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
-    loadCallsPresence(companyId).catch(() => {});
-  });
+  // First load now, so the board is not blank for the first 15 seconds.
+  loadCallsPresence(companyId).catch(() => {});
+  if (!callsVisibilityBound) {
+    callsVisibilityBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || !callsSurfaceVisible() || !callsPresenceTimer) return;
+      if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
+      loadCallsPresence(activeCompanyId()).catch(() => {});
+    });
+  }
 }
 
 function callsBoardMarkup() {
@@ -4721,23 +4771,76 @@ function callsBoardMarkup() {
 // Dashboard widget. Same two ideas as the module, compressed: who is on the
 // phone, and today's conversation counts. Links through for the full view.
 function renderCallsWidget(companyId) {
-  ensureCallsData(companyId, 'today');
+  // The widget carries its own date filter (Today / Last 7 days / Last 30 days
+  // / a custom From–To range) so the range can be changed here without leaving
+  // the dashboard for the Calls page. The live "on a call now" tile stays
+  // real-time via presence regardless of range.
+  const widgetRange = state.callsWidgetRange || '7d';
+  const custom = state.callsWidgetCustom || { from: '', to: '' };
+  const customReady = widgetRange === 'custom' && Boolean(custom.from && custom.to);
+  const customPending = widgetRange === 'custom' && !customReady;
+
+  // Only a fully-picked custom range has a real key to fetch. While the user is
+  // still choosing dates we skip the stats fetch but keep the live board going.
+  const rangeKey = widgetRange === 'custom'
+    ? (customReady ? `custom:${custom.from}|${custom.to}` : null)
+    : widgetRange;
+
+  const rangeLabel = widgetRange === 'custom'
+    ? (customReady ? `${formatDate(`${custom.from}T00:00`)} – ${formatDate(`${custom.to}T00:00`)}` : 'Custom range')
+    : ((CALLS_WIDGET_RANGE_OPTIONS.find(([id]) => id === widgetRange) || [])[1] || 'Last 7 days');
+
+  if (rangeKey) ensureCallsData(companyId, rangeKey);
+  else if (!state.callsPresence.forbidden && !state.callsPresence.notConnected) ensureCallsPresencePolling(companyId);
 
   if (state.callsStats.unavailable || state.callsPresence.notConnected) return callsNotConnectedMarkup();
 
-  const rows = state.callsStats.key === `${companyId}|today` ? state.callsStats.rows : [];
+  const rows = rangeKey && state.callsStats.key === `${companyId}|${rangeKey}` ? state.callsStats.rows : [];
   const onCall = state.callsPresence.agents.filter((agent) => agent.status === 'on_call').length;
   const available = state.callsPresence.agents.filter((agent) => agent.status === 'available').length;
   const conversations = rows.reduce((total, row) => total + Number(row.conversations || 0), 0);
-  const totalCalls = rows.reduce((total, row) => total + Number(row.total_calls || 0), 0);
+
+  const ranked = rows
+    .filter((row) => String(row.extension_name || '').trim())
+    .slice()
+    .sort((a, b) => Number(b.conversations || 0) - Number(a.conversations || 0));
+
+  const noneLabel = widgetRange === 'custom' ? 'in this range' : rangeLabel.toLowerCase();
+  const ranking = customPending
+    ? `<p class="calls-empty">Pick a start and end date to see conversations.</p>`
+    : ranked.length
+    ? `<table class="calls-widget-rank"><tbody>${ranked.map((row) => `
+        <tr>
+          <td class="calls-rank-name">${h(row.extension_name)}</td>
+          <td class="calls-rank-sub">${Number(row.total_calls || 0)} calls</td>
+          <td class="calls-rank-conv"><b>${Number(row.conversations || 0)}</b> &gt; 60s</td>
+        </tr>`).join('')}</tbody></table>`
+    : `<p class="calls-empty">No calls over 60 seconds ${h(noneLabel)}.</p>`;
+
+  const ranges = `<nav class="calls-widget-ranges">${CALLS_WIDGET_RANGE_OPTIONS.map(([id, label]) =>
+    `<button class="calls-widget-range${id === widgetRange ? ' is-active' : ''}" type="button" data-action="calls-widget-range" data-range="${h(id)}">${h(label)}</button>`).join('')}</nav>`;
+
+  const customPicker = widgetRange === 'custom'
+    ? `<div class="calls-widget-custom">
+        <label>From <input type="date" data-calls-widget-custom="from" value="${h(custom.from)}"${custom.to ? ` max="${h(custom.to)}"` : ''}></label>
+        <label>To <input type="date" data-calls-widget-custom="to" value="${h(custom.to)}"${custom.from ? ` min="${h(custom.from)}"` : ''}></label>
+      </div>`
+    : '';
 
   return `
     <div class="calls-widget">
+      <div class="calls-widget-filter">
+        ${ranges}
+        ${customPicker}
+      </div>
       <section class="dash-kpis dash-widget-kpis">
-        ${dashboardMetricTile('ti-phone', onCall, 'On a call', `${available} available`)}
-        ${dashboardMetricTile('ti-message', conversations, 'Conversations 60s+', 'Today')}
-        ${dashboardMetricTile('ti-activity', totalCalls, 'Calls today', `${rows.length} people`)}
+        ${dashboardMetricTile('ti-phone', onCall, 'On a call now', `${available} available`)}
+        ${dashboardMetricTile('ti-message', conversations, 'Calls > 60s', h(rangeLabel))}
       </section>
+      <div class="calls-widget-rank-wrap">
+        <div class="calls-widget-rank-head"><span>Who is having real conversations</span><span>${h(rangeLabel)}</span></div>
+        ${ranking}
+      </div>
       ${state.callsPresence.forbidden ? '' : `<div class="calls-widget-board">${callsBoardMarkup()}</div>`}
       <a class="calls-widget-link" href="${appHref(companyPath('calls', {}, companyId))}" data-router>Open Calls<i class="ti ti-arrow-right" aria-hidden="true"></i></a>
     </div>`;
@@ -4756,7 +4859,7 @@ function renderCallsPage(route, companyId) {
     ? callsNotConnectedMarkup()
     : rows.length
     ? `<table class="calls-table">
-        <thead><tr><th>Name</th><th>Ext</th><th>Total calls</th><th>Conversations 60s+</th></tr></thead>
+        <thead><tr><th>Name</th><th>Ext</th><th>Total calls</th><th>Calls &gt; 60s</th></tr></thead>
         <tbody>${rows.map((row) => `<tr>
           <td>${h(row.extension_name || 'Unknown')}</td>
           <td>${h(row.extension_number || '')}</td>
@@ -4785,7 +4888,7 @@ function renderCallsPage(route, companyId) {
 
       <section class="panel calls-conversations-panel">
         <div class="calls-panel-head">
-          <h2>Conversations 60s+</h2>
+          <h2>Calls over 60 seconds</h2>
           <nav class="calls-ranges">${CALLS_RANGE_OPTIONS.map(([rangeId, label]) =>
             `<a class="calls-range${rangeId === rangeKey ? ' is-active' : ''}" href="${appHref(companyPath('calls', { range: rangeId }, companyId))}" data-router>${h(label)}</a>`).join('')}</nav>
         </div>
@@ -5973,7 +6076,7 @@ function dashboardAppWidgets(companyId) {
   const doc = wbDoc(companyId);
   if (!doc) return out;
   doc.workspaces.forEach((workspace) => {
-    (workspace.apps || []).forEach((app) => {
+    (workspace.apps || []).filter((app) => !app.linked).forEach((app) => {
       out[`app:${app.id}`] = {
         title: app.name || 'Untitled app',
         group: 'Workspace apps',
@@ -6320,7 +6423,7 @@ function dashboardFindApp(companyId, appId) {
   const doc = wbDoc(companyId);
   if (!doc) return null;
   for (const workspace of doc.workspaces) {
-    const app = (workspace.apps || []).find((a) => a.id === appId);
+    const app = (workspace.apps || []).find((a) => a.id === appId && !a.linked);
     if (app) return { workspace, app };
   }
   return null;
@@ -10774,11 +10877,13 @@ function renderEmbeddedTasksPage(route, companyId) {
   const wantsNew = route.params.get('new') === '1' || route.params.get('edit') === '1';
   const hash = taskId ? `#/task/${encodeURIComponent(taskId)}` : (wantsNew ? '#/new' : '');
   const src = `${window.location.origin}/taskmanagement/app.html?${params.toString()}${hash}`;
+  // No workspace header: the task module carries its own toolbar, so CC's header
+  // row held nothing but a Jobs shortcut and cost ~78px above the frame. With no
+  // actions passed, workspaceHeader() renders nothing at all for a non-notice
+  // title, so the module starts at the top of the work surface. (Jobs is still
+  // one click away in the sidebar.)
   return `
-    ${workspaceHeader(job ? `${job.name} tasks` : 'Tasks', 'Task execution, timers and reminders.', `
-      <a class="btn" href="${appHref(companyPath('jobs', job ? { tab: 'profile', job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
-    `)}
-    <section class="task-layout task-layout-flat">
+    <section class="task-layout task-layout-flat taskapp-shell">
       <article class="panel task-main taskapp-panel">
         <iframe class="taskapp-frame" src="${h(src)}" title="Task management"></iframe>
       </article>
@@ -11750,7 +11855,15 @@ function normalizeWorkspaceBuilderDoc(doc) {
       activity: Array.isArray(ws.activity) ? ws.activity : [],
       feed: Array.isArray(ws.feed) ? ws.feed.map(normalizeFeedPost) : [],
       tiles: Array.isArray(ws.tiles) ? ws.tiles.map(normalizeWorkspaceTile) : null,
-      apps: Array.isArray(ws.apps) ? ws.apps.map((app) => ({
+      apps: Array.isArray(ws.apps) ? ws.apps.map((app) => (app && app.linked ? {
+        // A linked app is a pointer into another workspace's app, not a copy.
+        // Keep it lightweight so it stays a live reference (resolved at read time
+        // via wbResolveAppEntry) rather than being expanded into an empty app.
+        id: app.id || wbUid(),
+        linked: true,
+        linkedFromWs: String(app.linkedFromWs || ''),
+        installedAt: app.installedAt || new Date().toISOString().slice(0, 10),
+      } : {
         id: app.id || wbUid(),
         name: app.name || 'Untitled app',
         description: app.description || '',
@@ -11938,12 +12051,38 @@ async function saveWorkspaceBuilderDoc(companyId) {
     }
   }
 }
+// A linked app entry ({ id, linked:true, linkedFromWs }) points at a source app
+// that lives in another operational workspace of the SAME company. Because the
+// whole app object (fields + records) is shared, an edit from either workspace
+// mutates the one source and persists once -- so data and fields stay in sync
+// both ways. Resolve returns the live source, or null if the source was removed.
+function wbResolveAppEntry(doc, entry) {
+  if (!entry) return { app: null, linked: false, sourceWsId: null };
+  if (!entry.linked) return { app: entry, linked: false, sourceWsId: null };
+  const src = doc ? doc.workspaces.find((w) => w.id === entry.linkedFromWs) : null;
+  const app = src ? src.apps.find((a) => a.id === entry.id && !a.linked) || null : null;
+  return { app, linked: true, sourceWsId: entry.linkedFromWs };
+}
+
+// A workspace's apps for display: own apps plus resolved linked apps, each
+// tagged { app, linked }. Dangling links (source deleted) are dropped.
+function wbWorkspaceApps(doc, ws) {
+  if (!ws) return [];
+  return (ws.apps || []).map((entry) => {
+    const r = wbResolveAppEntry(doc, entry);
+    return r.app ? { app: r.app, linked: r.linked, sourceWsId: r.sourceWsId } : null;
+  }).filter(Boolean);
+}
+
 function wbFind(companyId, workspaceId, appId = '') {
   const doc = wbDoc(companyId);
   if (!doc) return { workspace: null, app: null };
   const workspace = doc.workspaces.find((item) => item.id === workspaceId) || null;
-  const app = workspace && appId ? workspace.apps.find((item) => item.id === appId) || null : null;
-  return { workspace, app };
+  const entry = workspace && appId ? workspace.apps.find((item) => item.id === appId) || null : null;
+  const resolved = wbResolveAppEntry(doc, entry);
+  // `app` is the live source (edits persist to it); `appEntry` is the raw entry
+  // in this workspace (a linked pointer or the app itself) for remove-from-here.
+  return { workspace, app: resolved.app, appEntry: entry, appLinked: resolved.linked };
 }
 function wbLogActivity(workspace, entry) {
   workspace.activity = workspace.activity || [];
@@ -11964,10 +12103,34 @@ function wbTimeAgo(ts) {
 function wbCompanyWorkspace(companyId) {
   const doc = wbDoc(companyId);
   if (!doc) return null;
-  if (!doc.workspaces.length) {
-    doc.workspaces.push({ id: `ws-${canonicalCompanyId(companyId)}`, name: companyName(companyId) || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], createdAt: new Date().toISOString().slice(0, 10) });
+  // Each operational workspace (Employees, Stake Holders, ...) gets its OWN
+  // builder entry -- its own apps, feed, and tiles -- so switching workspace
+  // switches the whole no-code surface. The saved doc already stores a
+  // workspaces[] array; we key one entry per operational workspace id. No
+  // schema change: this all lives inside the existing per-company doc blob.
+  const canonicalCompany = canonicalCompanyId(companyId);
+  const opsId = workspaceIdForCompany(companyId);
+  const opsWorkspace = state.operationalWorkspaces.find((item) => item.id === opsId);
+  const wsKey = opsId ? `ws-${opsId}` : `ws-${canonicalCompany}`;
+  let entry = doc.workspaces.find((ws) => ws.id === wsKey);
+  if (!entry) {
+    // One-time adoption: legacy docs held a single company-wide entry
+    // (ws-<companyId>) holding every existing app. Fold it into the DEFAULT
+    // operational workspace so those apps aren't orphaned; other workspaces
+    // start empty.
+    const legacy = doc.workspaces.find((ws) => ws.id === `ws-${canonicalCompany}`);
+    const isDefaultOps = opsId && opsId === defaultOperationalWorkspaceId(companyId);
+    if (legacy && isDefaultOps) {
+      legacy.id = wsKey;
+      entry = legacy;
+    } else {
+      entry = { id: wsKey, name: opsWorkspace?.name || companyName(companyId) || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], createdAt: new Date().toISOString().slice(0, 10) };
+      doc.workspaces.push(entry);
+    }
   }
-  return doc.workspaces[0];
+  // Keep the builder entry's label in step with the operational workspace name.
+  if (opsWorkspace?.name && entry.name !== opsWorkspace.name) entry.name = opsWorkspace.name;
+  return entry;
 }
 
 function renderWorkspaceBuilderPage(route, companyId) {
@@ -11976,8 +12139,11 @@ function renderWorkspaceBuilderPage(route, companyId) {
   }
   const workspace = wbCompanyWorkspace(companyId);
   const appId = route.params.get('app_id') || '';
-  const app = appId ? workspace.apps.find((item) => item.id === appId) : null;
-  if (app) return `<section class="tool-page wb-page">${wbViewApp(route, companyId, workspace, app)}</section>`;
+  const appEntry = appId ? workspace.apps.find((item) => item.id === appId) : null;
+  // Linked apps resolve to their source object in another workspace, so the view
+  // renders (and edits) the shared app; appLinked drives the "linked" UI.
+  const { app, linked: appLinked } = wbResolveAppEntry(wbDoc(companyId), appEntry);
+  if (app) return `<section class="tool-page wb-page">${wbViewApp(route, companyId, workspace, app, appLinked)}</section>`;
   return `<section class="tool-page wb-page">${wbViewCompanyHome(companyId, workspace)}</section>`;
 }
 
@@ -11985,12 +12151,17 @@ function renderWorkspaceBuilderPage(route, companyId) {
 // feed (main column) and widget tiles (side column). Apps are reached through
 // the persistent app-switcher header rather than a grid on this page.
 function wbViewCompanyHome(companyId, workspace) {
+  // Title the builder home with the operational workspace the user is currently
+  // in (e.g. "Stake Holders"), not the company name -- the builder doc is
+  // company-scoped, but users read this header as "where am I".
+  const opsWorkspace = state.operationalWorkspaces.find((item) => item.id === workspaceIdForCompany(companyId));
+  const wsName = opsWorkspace?.name || workspace.name || companyName(companyId) || 'Workspace';
   return `
     ${wbWorkspaceHeader(companyId, workspace, null)}
     <div class="wb-page-head">
       <div>
-        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>${h(workspace.name || companyName(companyId) || 'Workspace')}</h1>
-        <div class="wb-sub">Build customizable, no-code dashboards for ${h(companyName(companyId) || 'this company')}.</div>
+        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>${h(wsName)}</h1>
+        <div class="wb-sub">Build customizable, no-code dashboards for ${h(wsName)}.</div>
       </div>
       <div class="wb-spacer"></div>
     </div>
@@ -12165,7 +12336,7 @@ function wbPostComments(companyId, post) {
 function wbSidebarTiles(workspace) {
   if (Array.isArray(workspace.tiles)) return workspace.tiles;
   const defaults = [{ id: wbUid(), type: 'apps', config: {} }];
-  const firstApp = (workspace.apps || [])[0];
+  const firstApp = (workspace.apps || []).find((a) => !a.linked);
   if (firstApp) defaults.push({ id: wbUid(), type: 'app', config: { appId: firstApp.id } });
   return defaults;
 }
@@ -12204,8 +12375,8 @@ function wbLayoutTiles() {
 function wbTileMeta(companyId, workspace, tile) {
   switch (tile.type) {
     case 'apps': return { title: 'Apps', icon: 'ti-apps', config: false };
-    case 'app': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId); return { title: a ? a.name : 'App', icon: a ? a.icon : 'ti-layout-grid', config: true, app: a }; }
-    case 'report': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId); return { title: a ? `${a.name} · Report` : 'Report', icon: 'ti-chart-bar', config: true, app: a }; }
+    case 'app': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId && !x.linked); return { title: a ? a.name : 'App', icon: a ? a.icon : 'ti-layout-grid', config: true, app: a }; }
+    case 'report': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId && !x.linked); return { title: a ? `${a.name} · Report` : 'Report', icon: 'ti-chart-bar', config: true, app: a }; }
     case 'tasks': return { title: 'Workspace tasks', icon: 'ti-checklist', config: false };
     case 'calendar': return { title: 'Calendar', icon: 'ti-calendar', config: false };
     case 'contacts': return { title: 'Contacts', icon: 'ti-address-book', config: false };
@@ -12258,12 +12429,12 @@ function wbTileBody(companyId, workspace, tile, meta) {
 }
 
 function wbTileApps(companyId, workspace) {
-  const apps = workspace.apps || [];
+  const apps = wbWorkspaceApps(wbDoc(companyId), workspace); // [{app, linked}], linked resolved
   if (!apps.length) return `<div class="wb-tile-empty">No apps yet.</div>`;
-  return `<div class="wb-tile-rows">${apps.map((app) => `
+  return `<div class="wb-tile-rows">${apps.map(({ app, linked }) => `
     <button class="wb-tile-row" data-open-app="${h(app.id)}">
       <span class="wb-tile-row-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></span>
-      <span class="wb-tile-row-main"><b>${h(app.name)}</b><span>${app.items.length} items · ${app.fields.length} fields</span></span>
+      <span class="wb-tile-row-main"><b>${h(app.name)}${linked ? ' <i class="ti ti-link wb-linkmark" title="Linked app"></i>' : ''}</b><span>${app.items.length} items · ${app.fields.length} fields</span></span>
       <i class="ti ti-chevron-right wb-tile-row-go" aria-hidden="true"></i>
     </button>`).join('')}</div>`;
 }
@@ -12508,13 +12679,15 @@ function wbTileLinks(tile) {
 // buttons only when there are more apps than fit. Activity is pinned left, Add
 // app pinned right.
 function wbWorkspaceHeader(companyId, workspace, activeAppId) {
-  const apps = (workspace && workspace.apps) || [];
+  // Resolve linked apps to their live source objects (and flag them so the tab
+  // can show a link mark). Each entry is { app, linked }.
+  const apps = wbWorkspaceApps(wbDoc(companyId), workspace);
   const perPage = Math.max(1, state.wbTopbarPerPage || 6);
   let page = Math.max(0, state.wbTopbarPage || 0);
   const pageCount = Math.max(1, Math.ceil(apps.length / perPage));
   // Keep the open app visible: jump to its page if it's off the current one.
   if (activeAppId) {
-    const idx = apps.findIndex((a) => a.id === activeAppId);
+    const idx = apps.findIndex((a) => a.app.id === activeAppId);
     if (idx >= 0 && (idx < page * perPage || idx >= page * perPage + perPage)) page = Math.floor(idx / perPage);
   }
   page = Math.min(page, pageCount - 1);
@@ -12523,10 +12696,11 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   const homeHref = appHref(companyPath('workspaces', {}, companyId));
   const homeActive = !activeAppId;
   const homeTab = `<a class="wb-topbar-tab wb-topbar-home ${homeActive ? 'active' : ''}" href="${homeHref}" data-router aria-current="${homeActive ? 'page' : 'false'}"><span class="wb-topbar-ic wb-topbar-ic-home"><i class="ti ti-activity" aria-hidden="true"></i></span><span class="wb-topbar-label">Activity</span></a>`;
-  const appTabs = pageApps.map((a) => {
+  const appTabs = pageApps.map(({ app: a, linked }) => {
     const active = a.id === activeAppId;
     const href = appHref(companyPath('workspaces', { app_id: a.id, tab: 'items' }, companyId));
-    return `<a class="wb-topbar-tab ${active ? 'active' : ''}" href="${href}" data-router title="${h(a.name)}" aria-current="${active ? 'page' : 'false'}"><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i></span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
+    const linkMark = linked ? '<span class="wb-topbar-link" title="Linked app — shares data with another workspace"><i class="ti ti-link" aria-hidden="true"></i></span>' : '';
+    return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router title="${h(a.name)}${linked ? ' (linked)' : ''}" aria-current="${active ? 'page' : 'false'}"><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
   }).join('');
   const prev = `<button class="wb-topbar-arrow" type="button" data-wb-topbar-page="${page - 1}" ${page === 0 ? 'disabled' : ''} title="Previous apps" aria-label="Previous apps"><i class="ti ti-chevron-left"></i></button>`;
   const next = `<button class="wb-topbar-arrow" type="button" data-wb-topbar-page="${page + 1}" ${page >= pageCount - 1 ? 'disabled' : ''} title="More apps" aria-label="More apps"><i class="ti ti-chevron-right"></i></button>`;
@@ -12551,7 +12725,7 @@ function wbMountTopbar() {
   if (perPage !== state.wbTopbarPerPage) { state.wbTopbarPerPage = perPage; render(); }
 }
 
-function wbViewApp(route, companyId, workspace, app) {
+function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   const canManage = can('workspaces.manage', companyId);
   const tabs = ['items', 'fields', 'reports', 'automations', 'settings'];
   const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'items';
@@ -12571,7 +12745,7 @@ function wbViewApp(route, companyId, workspace, app) {
   else if (tab === 'fields') body = wbViewBuilder(companyId, workspace, app);
   else if (tab === 'reports') body = wbViewReports(companyId, workspace, app);
   else if (tab === 'automations') body = wbViewAutomations(companyId, workspace, app);
-  else body = wbViewAppSettings(companyId, workspace, app);
+  else body = wbViewAppSettings(companyId, workspace, app, appLinked);
   return `
     ${wbWorkspaceHeader(companyId, workspace, app.id)}
     <div class="wb-page-head">
@@ -13052,7 +13226,7 @@ function wbAppIndex() {
   const docs = state.workspaceBuilderDocs || {};
   for (const companyId of Object.keys(docs)) {
     for (const workspace of (docs[companyId]?.workspaces || [])) {
-      for (const app of (workspace.apps || [])) idx.set(app.id, { companyId, workspace, app });
+      for (const app of (workspace.apps || [])) { if (app.linked) continue; idx.set(app.id, { companyId, workspace, app }); }
     }
   }
   wbAppIndexCache = idx;
@@ -13960,9 +14134,45 @@ function wbViewBuilder(companyId, workspace, app) {
   return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? 'data-wb-field-dropzone' : ''}><div class="wb-field-count">${app.fields.length} field${app.fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${list}${dropHint}</div>${palette}</div>`;
 }
 
-function wbViewAppSettings(companyId, workspace, app) {
+// Source-app only: install this app as a LIVE LINKED mirror into another
+// operational workspace of the same company. Unlike Download (a copy) or the
+// App Market (fields only), a linked install shares the same records + fields,
+// so edits sync both ways. Targets are workspaces the manager can reach.
+function wbInstallToWorkspaceField(companyId, workspace, app) {
+  const currentOpsId = String(workspace.id || '').replace(/^ws-/, '');
+  const doc = wbDoc(companyId);
+  const targets = (allowedOperationalWorkspaces(companyId) || []).filter((w) => w.status !== 'archived' && w.id !== currentOpsId);
+  const installedIn = (tId) => { const t = doc && doc.workspaces.find((x) => x.id === `ws-${tId}`); return !!(t && t.apps.some((a) => a.id === app.id)); };
+  if (!targets.length) {
+    return `<div class="wb-field"><label>Install to another workspace</label><div class="wb-sub">This company has only one workspace. Create another to install a linked copy of this app.</div></div>`;
+  }
+  const options = targets.map((w) => `<option value="${h(w.id)}" ${installedIn(w.id) ? 'disabled' : ''}>${h(w.name || 'Workspace')}${installedIn(w.id) ? ' — already installed' : ''}</option>`).join('');
+  return `<div class="wb-field"><label>Install to another workspace</label>
+      <div class="wb-sub">Install this app into another workspace you own. It stays <b>linked</b> — the same fields <b>and records</b> — so an edit made from either workspace shows up in the other. (Unlike the App Market, records are shared.)</div>
+      <div class="wb-install-row" style="margin-top:10px">
+        <select class="wb-input" data-wb-install-target><option value="">Choose a workspace…</option>${options}</select>
+        <button class="btn" data-wb-install-linked><i class="ti ti-link"></i>Install linked</button>
+      </div>
+    </div>`;
+}
+
+function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
   const canManage = can('workspaces.manage', companyId);
   const isCustomColor = !WB_PALETTE.includes(app.color);
+  // A linked app is a live mirror installed from another workspace. Its fields,
+  // records, name and icon belong to the source and are managed there; here we
+  // only explain the link and offer to remove it from this workspace.
+  if (appLinked) {
+    const entry = (workspace.apps || []).find((a) => a.id === app.id && a.linked);
+    const src = wbDoc(companyId)?.workspaces.find((w) => w.id === entry?.linkedFromWs);
+    return `<div class="wb-settings card">
+      <h3 class="wb-settings-title"><i class="ti ti-link" aria-hidden="true"></i> Linked app</h3>
+      <div class="wb-field">
+        <div class="wb-linked-note"><i class="ti ti-link"></i><div><b>${h(app.name)}</b> is installed here from <b>${h(src?.name || 'another workspace')}</b>. Its fields and records are <b>shared</b> — edits from either workspace sync both ways in real time.</div></div>
+      </div>
+      ${canManage ? `<div class="wb-settings-actions"><button class="btn danger" data-wb-remove-linked><i class="ti ti-unlink"></i>Remove from this workspace</button></div><div class="wb-sub" style="margin-top:8px">Removing only takes it out of this workspace. The original app and its data are untouched.</div>` : '<div class="wb-sub">Ask a workspace manager to remove this linked app.</div>'}
+    </div>`;
+  }
   return `<div class="wb-settings card">
     <h3 class="wb-settings-title">App settings</h3>
     <div class="wb-field"><label>App name</label><input class="wb-input" id="wbSetName" value="${h(app.name)}" ${canManage ? '' : 'disabled'}></div>
@@ -13976,6 +14186,7 @@ function wbViewAppSettings(companyId, workspace, app) {
       <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — including all fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'} and ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'} — to back it up or install it into another workspace.</div>
       <div class="wb-settings-actions" style="margin-top:10px"><button class="btn" data-wb-download-app><i class="ti ti-download"></i>Download app</button></div>
     </div>
+    ${canManage ? wbInstallToWorkspaceField(companyId, workspace, app) : ''}
     <div class="wb-field"><label>Quest App Market</label>
       <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Quest HQ can install its fields &amp; automations from the Quest App Market. Your records are never shared.' : 'Share this app so anyone on Quest HQ can install its fields &amp; automations from the Quest App Market. Your records are never shared.'}</div>
       ${canManage ? `<div class="wb-settings-actions" style="margin-top:10px"><button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share this app'}</button></div>` : ''}
@@ -14286,7 +14497,7 @@ function wbAllSystemApps() {
   Object.keys(state.workspaceBuilderDocs || {}).forEach((cid) => {
     const doc = state.workspaceBuilderDocs[cid];
     (doc?.workspaces || []).forEach((ws) => {
-      (ws.apps || []).forEach((app) => { if (app.shared) out.push({ companyId: cid, companyLabel: companyName(cid) || cid, workspaceName: ws.name || 'Workspace', app }); });
+      (ws.apps || []).forEach((app) => { if (app.shared && !app.linked) out.push({ companyId: cid, companyLabel: companyName(cid) || cid, workspaceName: ws.name || 'Workspace', app }); });
     });
   });
   return out;
@@ -14796,7 +15007,7 @@ function renderWorkspaceBuilderModal() {
     const workspace = wbCompanyWorkspace(m.companyId);
     const tile = workspace ? (workspace.tiles || []).find((t) => t.id === m.tileId) : null;
     if (!tile) return '';
-    const apps = workspace.apps || [];
+    const apps = (workspace.apps || []).filter((a) => !a.linked);
     const appSelect = (selected) => `<select class="wb-input" data-wb-tilecfg-app>${apps.length ? apps.map((a) => `<option value="${h(a.id)}" ${a.id === selected ? 'selected' : ''}>${h(a.name)}</option>`).join('') : '<option value="">No apps yet</option>'}</select>`;
     let form = '';
     if (tile.type === 'app') form = `<div class="wb-field"><label>Show records from</label>${appSelect(m.draft.appId)}</div>`;
@@ -15777,6 +15988,37 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-install-app]', () => wbInstallAppPrompt(companyId, workspaceId));
     bind('[data-wb-download-app]', () => wbDownloadApp(companyId, workspaceId, appId));
     bind('[data-wb-share-app]', () => { if (!wbGuard()) return; const { app } = wbFind(companyId, workspaceId, appId); if (!app) return; app.shared = !app.shared; wbSave(companyId); showToast(app.shared ? `"${app.name}" is now shared to the Quest App Market.` : `"${app.name}" removed from the Quest App Market.`, 'local', 'Workspaces'); render(); });
+    bind('[data-wb-install-linked]', (el) => {
+      if (!wbGuard()) return;
+      const targetOpsId = String(el.closest('.wb-field')?.querySelector('[data-wb-install-target]')?.value || '');
+      if (!targetOpsId) { showToast('Choose a workspace to install into.', 'error', 'Workspaces'); return; }
+      const { app } = wbFind(companyId, workspaceId, appId);
+      const doc = wbDoc(companyId);
+      if (!app || !doc) return;
+      const targetKey = `ws-${targetOpsId}`;
+      let target = doc.workspaces.find((w) => w.id === targetKey);
+      if (!target) {
+        const opsWs = state.operationalWorkspaces.find((w) => w.id === targetOpsId);
+        target = { id: targetKey, name: opsWs?.name || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], feed: [], tiles: null, createdAt: new Date().toISOString().slice(0, 10) };
+        doc.workspaces.push(target);
+      }
+      if (target.apps.some((a) => a.id === app.id)) { showToast(`${target.name} already has "${app.name}".`, 'local', 'Workspaces'); return; }
+      // A linked pointer -- linkedFromWs is the SOURCE (this) workspace; the app
+      // object itself is never copied, so records + fields stay shared.
+      target.apps.push({ id: app.id, linked: true, linkedFromWs: workspaceId, installedAt: new Date().toISOString().slice(0, 10) });
+      wbSave(companyId);
+      showToast(`Installed "${app.name}" into ${target.name} — linked, data is shared.`, 'local', 'Workspaces');
+      render();
+    });
+    bind('[data-wb-remove-linked]', () => {
+      if (!wbGuard()) return;
+      const { workspace } = wbFind(companyId, workspaceId, appId);
+      if (!workspace) return;
+      workspace.apps = workspace.apps.filter((a) => !(a.id === appId && a.linked));
+      wbSave(companyId);
+      showToast('Removed the linked app from this workspace. The original is untouched.', 'local', 'Workspaces');
+      navigate(companyPath('workspaces', {}, companyId));
+    });
     bind('[data-wb-delete-workspace]', () => { const ws = wbCompanyWorkspace(companyId); if (ws) openWbDeleteWorkspace(companyId, ws); });
     bind('[data-tab]', (el) => nav({ app_id: appId, tab: el.dataset.tab }));
     bind('[data-add-field]', () => nav({ app_id: appId, tab: 'fields' }));
@@ -22880,6 +23122,12 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'calls-widget-range') {
+    event.preventDefault();
+    state.callsWidgetRange = CALLS_WIDGET_RANGE_OPTIONS.some(([id]) => id === node.dataset.range) ? node.dataset.range : '7d';
+    render();
+    return;
+  }
   if (action === 'open-dashboard-activity') {
     event.preventDefault();
     state.modal = 'dashboard-activity';
@@ -27448,6 +27696,12 @@ function onDocumentChange(event) {
   }
   if (event.target.matches('[data-dashboard-rep]')) {
     state.dashboardRep = event.target.value || 'all';
+    render();
+    return;
+  }
+  if (event.target.matches('[data-calls-widget-custom]')) {
+    const edge = event.target.dataset.callsWidgetCustom === 'to' ? 'to' : 'from';
+    state.callsWidgetCustom = { ...(state.callsWidgetCustom || { from: '', to: '' }), [edge]: event.target.value || '' };
     render();
     return;
   }

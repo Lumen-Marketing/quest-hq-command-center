@@ -12,7 +12,15 @@
  *     not a performance win.
  */
 
-const VERSION = 'v1';
+// Bumped v1 -> v2 to evict a poisoned shell. Returning users cached `/` while it
+// still carried X-Frame-Options: DENY (before that header was relaxed to
+// SAMEORIGIN for the embedded Tasks module). Because the cache name never
+// changed, no deploy ever dropped that stale copy, and the worker kept serving
+// the DENY shell into the Tasks iframe — the frame was refused with
+// "X-Frame-Options: deny" even though the live network response was SAMEORIGIN.
+// The activate handler deletes any cache whose name is not the current one, so a
+// version bump flushes the bad copy for everyone on their next visit.
+const VERSION = 'v2';
 const SHELL_CACHE = `quest-shell-${VERSION}`;
 const ASSET_CACHE = `quest-assets-${VERSION}`;
 const SHELL_URL = '/';
@@ -61,6 +69,15 @@ self.addEventListener('fetch', (event) => {
   // Never touch the API or anything cross-origin (Supabase, fonts, map tiles).
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
+
+  // The vendored task app at /taskmanagement/ is a separate application with its
+  // own document, assets and caching. The CC shell worker must not mediate it:
+  // its embedded pages are iframe navigations, and the network-first handler
+  // below would (on any fetch hiccup) fall back to our cached SPA shell — which,
+  // served into the Tasks frame, is what surfaced the X-Frame-Options refusal.
+  // Leave it entirely to the network, exactly as it loads with the worker
+  // bypassed (which is the only state in which the frame reliably worked).
+  if (url.pathname.startsWith('/taskmanagement/')) return;
 
   // Navigations: network-first, cached shell only when the network is gone.
   if (request.mode === 'navigate') {

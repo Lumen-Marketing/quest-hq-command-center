@@ -138,3 +138,15 @@ test('the presence endpoint never exposes RingCentral credentials to the browser
   assert.doesNotMatch(presenceSource, /VITE_RINGCENTRAL/);
   assert.doesNotMatch(presenceSource, /access_token/);
 });
+
+test('a RingCentral failure serves stored status instead of an error', () => {
+  // A 429 or outage must degrade to last-known data, never a visible error,
+  // and cache it briefly so we back off the upstream that is refusing us.
+  assert.match(presenceSource, /STALE_CACHE_TTL_MS/);
+  assert.match(presenceSource, /catch \(upstreamError\)/);
+  assert.match(presenceSource, /stale = true/);
+  // The stored-data fallback path must not surface the upstream error to the client.
+  const handlerStart = presenceSource.indexOf('let rows;');
+  const handlerBody = presenceSource.slice(handlerStart, presenceSource.indexOf('return response.status(200).json(payload);', handlerStart));
+  assert.ok(handlerBody.includes('stored.data'), 'fallback must read stored presence');
+});

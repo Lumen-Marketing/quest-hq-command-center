@@ -4,6 +4,10 @@ import { resolveCompanyAdmin } from './_lib/user-auth.js';
 import { createRingCentralClient, deriveDisplayStatus } from './_lib/ringcentral.js';
 
 const CACHE_TTL_MS = 10_000;
+// When RingCentral is refusing us (rate limit / outage), serve the stored
+// snapshot and hold it a little longer so we stop poking an upstream that is
+// already saying no.
+const STALE_CACHE_TTL_MS = 30_000;
 
 const env = (name) => process.env[name] || '';
 const cache = new Map(); // companyId -> { expiresAt, payload }
@@ -81,31 +85,44 @@ export default async function handler(request, response) {
       serverUrl: env('RINGCENTRAL_SERVER_URL') || 'https://platform.ringcentral.com',
     });
 
-    const records = await ringcentral.fetchPaged(
-      `/restapi/v1.0/account/${account.data.rc_account_id}/presence`,
-      { detailedTelephonyState: 'true' },
-    );
-
     const [directory, stored] = await Promise.all([
       client.from('ringcentral_extensions').select('extension_id,extension_number,name').eq('company_id', companyId),
       client.from('ringcentral_presence').select('extension_id,display_status,status_since').eq('company_id', companyId),
     ]);
     const names = new Map((directory.data || []).map((row) => [String(row.extension_id), row]));
 
-    const live = records
-      .map((record) => ({
-        extension_id: String(record?.extension?.id || ''),
-        display_status: deriveDisplayStatus(record),
-      }))
-      .filter((row) => row.extension_id && names.has(row.extension_id));
-
-    const { rows, changed } = reconcilePresence(stored.data || [], live, new Date());
-
-    if (changed.length) {
-      await client.from('ringcentral_presence').upsert(
-        changed.map((row) => ({ ...row, company_id: companyId, updated_at: new Date().toISOString() })),
-        { onConflict: 'company_id,extension_id' },
+    // Try live presence, but never let a RingCentral hiccup or rate-limit turn
+    // into a visible "can't reach RingCentral" error. If the upstream call
+    // fails we serve the last-known statuses from the database instead, and
+    // cache that briefly so a burst of requests backs off RingCentral rather
+    // than hammering it while it is already refusing us.
+    let rows;
+    let stale = false;
+    try {
+      const records = await ringcentral.fetchPaged(
+        `/restapi/v1.0/account/${account.data.rc_account_id}/presence`,
+        { detailedTelephonyState: 'true' },
       );
+      const live = records
+        .map((record) => ({
+          extension_id: String(record?.extension?.id || ''),
+          display_status: deriveDisplayStatus(record),
+        }))
+        .filter((row) => row.extension_id && names.has(row.extension_id));
+
+      const reconciled = reconcilePresence(stored.data || [], live, new Date());
+      rows = reconciled.rows;
+      if (reconciled.changed.length) {
+        await client.from('ringcentral_presence').upsert(
+          reconciled.changed.map((row) => ({ ...row, company_id: companyId, updated_at: new Date().toISOString() })),
+          { onConflict: 'company_id,extension_id' },
+        );
+      }
+    } catch (upstreamError) {
+      stale = true;
+      rows = (stored.data || [])
+        .map((row) => ({ extension_id: String(row.extension_id), display_status: row.display_status, status_since: row.status_since }))
+        .filter((row) => names.has(row.extension_id));
     }
 
     const payload = {
@@ -117,8 +134,9 @@ export default async function handler(request, response) {
         since: row.status_since,
       })),
       fetched_at: new Date().toISOString(),
+      stale,
     };
-    cache.set(companyId, { expiresAt: Date.now() + CACHE_TTL_MS, payload });
+    cache.set(companyId, { expiresAt: Date.now() + (stale ? STALE_CACHE_TTL_MS : CACHE_TTL_MS), payload });
 
     return response.status(200).json(payload);
   } catch (error) {
