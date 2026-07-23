@@ -42,6 +42,7 @@ Captured 2026-07-21T00:27:56.075Z. This is a point-in-time operational snapshot,
   from the newest file in `supabase/migrations` will drop `tasks` and fail against
   existing rows. Always read the live constraint out of `pg_constraint` first.
 - Live tenancy verification: every one of the 3 company accounts has one active default operational workspace; all 11 workspace-owned pipeline tables have non-null workspace ids; zero company/workspace mismatches were found.
+- **Repository is ahead of live for task visibility.** Migration `202607241200_per_person_task_visibility.sql` (branch `feat/task-per-person-visibility`) narrows the `tasks workspace read`/`update` RLS to be per person — leads (`tasks.manage`) and owners/admins see and manage all workspace tasks, while `tasks.view`-only crew see and update only tasks they are assigned to or created (creator always sees own). It is committed but **not yet applied to the live project**; until it is applied, any workspace member with `tasks.view` still sees every task in the workspace. INSERT/DELETE stay `tasks.manage`-gated either way.
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.
 

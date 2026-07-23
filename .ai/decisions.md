@@ -235,3 +235,16 @@ worker as the cause. Fix: `public/sw.js` now early-returns for any `/taskmanagem
 and the cache VERSION was bumped to `v2` so the activate handler drops the poisoned `v1`
 caches for everyone on their next visit. Guarded by tests/service-worker-taskframe.test.mjs.
 Do not re-include /taskmanagement/ in the worker's caching paths.
+
+## Task visibility is per person within a workspace
+
+Task visibility is scoped per person, with "team = the job/workspace" and no reporting
+hierarchy. A lead — anyone holding `tasks.manage` on the workspace, which company owners,
+admins, and developers do automatically — sees and manages every task on that job. Crew,
+holding only `tasks.view`, see and update just the tasks they are assigned to or created;
+the creator always sees their own task. Enforced by narrowing the `tasks workspace read`
+and `tasks workspace update` RLS policies in migration
+`202607241200_per_person_task_visibility.sql`; the `is_workspace_member` and
+`has_workspace_permission` gates and the INSERT/DELETE (`tasks.manage`) policies are
+unchanged, so tenant isolation and the permission model are preserved. Designating a lead
+is a role assignment in Command Center, not a code change.

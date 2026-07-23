@@ -7,7 +7,7 @@
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
     "main_commit_at_capture": "7acfad7b41fba2034e7b4bdb7a7ac2a6843d847d",
-    "latest_migration": "202607231200_ringcentral_calls.sql"
+    "latest_migration": "202607241200_per_person_task_visibility.sql"
   },
   "live": {
     "supabase_verified_at": "2026-07-21T00:27:56.075Z",
