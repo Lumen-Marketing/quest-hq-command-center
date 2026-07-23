@@ -4607,6 +4607,13 @@ function callsRangeKey(route) {
 }
 
 function callsRangeBounds(rangeKey) {
+  // The dashboard widget passes `dash:<range>` so the Calls numbers follow the
+  // dashboard's own Today / This week / This month / Quarter control instead of
+  // carrying a second, competing date picker.
+  if (typeof rangeKey === 'string' && rangeKey.startsWith('dash:')) {
+    const window = dashboardRangeWindow(rangeKey.slice(5));
+    return { from: window.start.toISOString(), to: window.end.toISOString() };
+  }
   const to = new Date();
   const from = new Date(to);
   if (rangeKey === '7d') from.setDate(from.getDate() - 7);
@@ -4751,14 +4758,17 @@ function callsBoardMarkup() {
 // Dashboard widget. Same two ideas as the module, compressed: who is on the
 // phone, and today's conversation counts. Links through for the full view.
 function renderCallsWidget(companyId) {
-  // Seven days rather than today: the point of the widget is the per-person
-  // ranking, and "today" alone is usually too sparse to rank anything. The live
-  // "on a call now" tile stays real-time via presence.
-  ensureCallsData(companyId, '7d');
+  // Follows the dashboard's own range control (Today / This week / This month /
+  // Quarter), so "just today" is one click on the buttons already on screen and
+  // there is no second date picker to keep in sync. The live "on a call now"
+  // tile stays real-time via presence regardless of range.
+  const rangeKey = `dash:${state.dashboardRange}`;
+  const rangeLabel = (DASHBOARD_RANGE_OPTIONS.find(([id]) => id === state.dashboardRange) || [])[1] || 'This week';
+  ensureCallsData(companyId, rangeKey);
 
   if (state.callsStats.unavailable || state.callsPresence.notConnected) return callsNotConnectedMarkup();
 
-  const rows = state.callsStats.key === `${companyId}|7d` ? state.callsStats.rows : [];
+  const rows = state.callsStats.key === `${companyId}|${rangeKey}` ? state.callsStats.rows : [];
   const onCall = state.callsPresence.agents.filter((agent) => agent.status === 'on_call').length;
   const available = state.callsPresence.agents.filter((agent) => agent.status === 'available').length;
   const conversations = rows.reduce((total, row) => total + Number(row.conversations || 0), 0);
@@ -4773,18 +4783,18 @@ function renderCallsWidget(companyId) {
         <tr>
           <td class="calls-rank-name">${h(row.extension_name)}</td>
           <td class="calls-rank-sub">${Number(row.total_calls || 0)} calls</td>
-          <td class="calls-rank-conv"><b>${Number(row.conversations || 0)}</b> over 60s</td>
+          <td class="calls-rank-conv"><b>${Number(row.conversations || 0)}</b> &gt; 60s</td>
         </tr>`).join('')}</tbody></table>`
-    : '<p class="calls-empty">No conversations in the last 7 days yet.</p>';
+    : `<p class="calls-empty">No calls over 60 seconds ${h(rangeLabel.toLowerCase())}.</p>`;
 
   return `
     <div class="calls-widget">
       <section class="dash-kpis dash-widget-kpis">
         ${dashboardMetricTile('ti-phone', onCall, 'On a call now', `${available} available`)}
-        ${dashboardMetricTile('ti-message', conversations, 'Conversations 60s+', 'Last 7 days')}
+        ${dashboardMetricTile('ti-message', conversations, 'Calls &gt; 60s', h(rangeLabel))}
       </section>
       <div class="calls-widget-rank-wrap">
-        <div class="calls-widget-rank-head"><span>Who is having real conversations</span><span>Last 7 days</span></div>
+        <div class="calls-widget-rank-head"><span>Who is having real conversations</span><span>${h(rangeLabel)}</span></div>
         ${ranking}
       </div>
       ${state.callsPresence.forbidden ? '' : `<div class="calls-widget-board">${callsBoardMarkup()}</div>`}
@@ -4805,7 +4815,7 @@ function renderCallsPage(route, companyId) {
     ? callsNotConnectedMarkup()
     : rows.length
     ? `<table class="calls-table">
-        <thead><tr><th>Name</th><th>Ext</th><th>Total calls</th><th>Conversations 60s+</th></tr></thead>
+        <thead><tr><th>Name</th><th>Ext</th><th>Total calls</th><th>Calls &gt; 60s</th></tr></thead>
         <tbody>${rows.map((row) => `<tr>
           <td>${h(row.extension_name || 'Unknown')}</td>
           <td>${h(row.extension_number || '')}</td>
@@ -4834,7 +4844,7 @@ function renderCallsPage(route, companyId) {
 
       <section class="panel calls-conversations-panel">
         <div class="calls-panel-head">
-          <h2>Conversations 60s+</h2>
+          <h2>Calls over 60 seconds</h2>
           <nav class="calls-ranges">${CALLS_RANGE_OPTIONS.map(([rangeId, label]) =>
             `<a class="calls-range${rangeId === rangeKey ? ' is-active' : ''}" href="${appHref(companyPath('calls', { range: rangeId }, companyId))}" data-router>${h(label)}</a>`).join('')}</nav>
         </div>

@@ -86,7 +86,7 @@ test('a member with no matching extension is told why the table is empty', () =>
 });
 
 test('the sixty second threshold is labelled in the UI, not recomputed in the browser', () => {
-  assert.match(main, /Conversations 60s\+/);
+  assert.match(main, /Calls &gt; 60s|Calls over 60 seconds/);
   assert.doesNotMatch(main, /duration_seconds >= 60/);
 });
 
