@@ -13,7 +13,7 @@ The app uses:
 - Vercel Functions under [api](../api) for privileged or public-token flows.
 - Stripe checkout and webhook APIs through server-side functions.
 - Lazy-loaded Leaflet and PDF.js; JSZip is used for archive/export behavior.
-- A vendored TaskManagement runtime copied into the production bundle during build.
+- A vendored TaskManagement runtime copied into the production bundle during build, now surfaced in-shell as the Tasks module via a same-origin `<iframe>` (see the X-Frame-Options and service-worker decisions) rather than a separate app the user is handed off to.
 
 ## Request and data flow
 
@@ -31,7 +31,7 @@ The SPA supports:
 - Company routes scoped by company id and module section, with the selected operational workspace carried as `?workspace=<uuid>`.
 - Public client portal, proposal, and form routes.
 - Legacy route rewrites retained for compatibility.
-- TaskManagement embed/full-view handoff with project_id and return_url.
+- The Tasks module renders inside the command-center shell as a same-origin iframe of the vendored task app (Task HQ), reached from the Work scope like any other module. Business context still links through project_id / contact_id / deal_id; the app is framed in place rather than handed off to a separate origin. Task rows honour the live per-person visibility model (crew see/edit their own tasks; leads manage all).
 
 ## Important source areas
 
