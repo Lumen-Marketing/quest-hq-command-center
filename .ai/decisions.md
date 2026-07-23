@@ -220,3 +220,18 @@ cross-origin site from framing Command Center, preserving the clickjacking guard
 The CSP is unaffected: it stays strict and Report-Only on purpose (its `frame-ancestors`
 and `wasm` violations are being collected deliberately, per tests/security-headers.test.mjs),
 so this fix is the enforced X-Frame-Options header only. Enforced by that same test.
+
+## The service worker never mediates the /taskmanagement/ task frame
+
+The Tasks iframe kept being refused with "X-Frame-Options: deny" for returning users even
+after that header was relaxed to SAMEORIGIN (above). The live network response was correct;
+the DENY copy came from the shell service worker. It cached `/` while the header was still
+DENY, and because the cache name (`quest-shell-v1`) never changed, no deploy evicted it — so
+the worker kept serving the stale DENY shell into the embedded frame. Incognito worked (no
+active worker); clearing site data and disabling extensions did not (a worker already
+controlling an open tab survives reload); only "Bypass for network" fixed it, isolating the
+worker as the cause. Fix: `public/sw.js` now early-returns for any `/taskmanagement/` path
+(same treatment as `/api/`) so the vendored task app always loads straight from the network,
+and the cache VERSION was bumped to `v2` so the activate handler drops the poisoned `v1`
+caches for everyone on their next visit. Guarded by tests/service-worker-taskframe.test.mjs.
+Do not re-include /taskmanagement/ in the worker's caching paths.
