@@ -65,6 +65,28 @@ test('the dashboard carries a Calls widget on the executive, sales and ops views
   assert.match(main, /render: \(\) => renderCallsWidget\(companyId\)/);
 });
 
+test('the Calls widget carries its own date filter with a custom range', () => {
+  // The widget no longer borrows the global dashboard range; it has its own
+  // Today / Last 7 days / Last 30 days / Custom control.
+  assert.match(main, /CALLS_WIDGET_RANGE_OPTIONS = \[\.\.\.CALLS_RANGE_OPTIONS, \['custom', 'Custom'\]\]/);
+  assert.match(main, /data-action="calls-widget-range"/);
+  assert.match(main, /action === 'calls-widget-range'/);
+  // The custom From–To pickers feed state and, when both are set, a real key.
+  assert.match(main, /data-calls-widget-custom="from"/);
+  assert.match(main, /data-calls-widget-custom="to"/);
+  assert.match(main, /`custom:\$\{custom\.from\}\|\$\{custom\.to\}`/);
+  // callsRangeBounds must turn that key into real timestamps covering both days.
+  assert.match(main, /rangeKey\.startsWith\('custom:'\)/);
+  assert.match(main, /T23:59:59\.999/);
+});
+
+test('the widget conversations tile shows a real > sign, not a literal &gt;', () => {
+  // dashboardMetricTile escapes its label, so the source must pass a plain '>'
+  // ('Calls > 60s'); passing 'Calls &gt; 60s' double-escapes to a visible &gt;.
+  assert.match(main, /dashboardMetricTile\('ti-message', conversations, 'Calls > 60s'/);
+  assert.doesNotMatch(main, /dashboardMetricTile\([^)]*'Calls &gt; 60s'/);
+});
+
 test('an unapplied migration reads as not connected, never as zero calls', () => {
   // "No calls" and "the table does not exist" are different facts and must not
   // render the same way.

@@ -2273,6 +2273,12 @@ const state = {
   companies: mergeCompanies(companiesFallback.map(normalizeCompany)),
   dashboardRole: 'exec',
   dashboardRange: 'week',
+  // The Calls widget carries its own date filter (Today / Last 7 days /
+  // Last 30 days / a custom From–To range) rather than following the global
+  // dashboard range. Default to 7 days because a single day is too sparse to
+  // rank who is having real conversations.
+  callsWidgetRange: '7d',
+  callsWidgetCustom: { from: '', to: '' },
   dashboardRep: 'all',
   dashboardCustomize: false,
   dashboardTrayOpen: false,
@@ -4589,6 +4595,8 @@ const CALLS_RANGE_OPTIONS = [
   ['7d', 'Last 7 days'],
   ['30d', 'Last 30 days'],
 ];
+// The dashboard widget adds a "Custom" pill that reveals two date pickers.
+const CALLS_WIDGET_RANGE_OPTIONS = [...CALLS_RANGE_OPTIONS, ['custom', 'Custom']];
 const CALLS_STATUS_LABELS = {
   on_call: 'On call',
   ringing: 'Ringing',
@@ -4607,12 +4615,14 @@ function callsRangeKey(route) {
 }
 
 function callsRangeBounds(rangeKey) {
-  // The dashboard widget passes `dash:<range>` so the Calls numbers follow the
-  // dashboard's own Today / This week / This month / Quarter control instead of
-  // carrying a second, competing date picker.
-  if (typeof rangeKey === 'string' && rangeKey.startsWith('dash:')) {
-    const window = dashboardRangeWindow(rangeKey.slice(5));
-    return { from: window.start.toISOString(), to: window.end.toISOString() };
+  // The dashboard widget can pass `custom:<from>|<to>` (each an YYYY-MM-DD date
+  // from its own pair of date pickers). We cover the whole of both days so a
+  // From and To on the same date still returns that day's calls.
+  if (typeof rangeKey === 'string' && rangeKey.startsWith('custom:')) {
+    const [fromStr, toStr] = rangeKey.slice(7).split('|');
+    const from = new Date(`${fromStr}T00:00:00`);
+    const to = new Date(`${toStr}T23:59:59.999`);
+    return { from: from.toISOString(), to: to.toISOString() };
   }
   const to = new Date();
   const from = new Date(to);
@@ -4758,17 +4768,31 @@ function callsBoardMarkup() {
 // Dashboard widget. Same two ideas as the module, compressed: who is on the
 // phone, and today's conversation counts. Links through for the full view.
 function renderCallsWidget(companyId) {
-  // Follows the dashboard's own range control (Today / This week / This month /
-  // Quarter), so "just today" is one click on the buttons already on screen and
-  // there is no second date picker to keep in sync. The live "on a call now"
-  // tile stays real-time via presence regardless of range.
-  const rangeKey = `dash:${state.dashboardRange}`;
-  const rangeLabel = (DASHBOARD_RANGE_OPTIONS.find(([id]) => id === state.dashboardRange) || [])[1] || 'This week';
-  ensureCallsData(companyId, rangeKey);
+  // The widget carries its own date filter (Today / Last 7 days / Last 30 days
+  // / a custom From–To range) so the range can be changed here without leaving
+  // the dashboard for the Calls page. The live "on a call now" tile stays
+  // real-time via presence regardless of range.
+  const widgetRange = state.callsWidgetRange || '7d';
+  const custom = state.callsWidgetCustom || { from: '', to: '' };
+  const customReady = widgetRange === 'custom' && Boolean(custom.from && custom.to);
+  const customPending = widgetRange === 'custom' && !customReady;
+
+  // Only a fully-picked custom range has a real key to fetch. While the user is
+  // still choosing dates we skip the stats fetch but keep the live board going.
+  const rangeKey = widgetRange === 'custom'
+    ? (customReady ? `custom:${custom.from}|${custom.to}` : null)
+    : widgetRange;
+
+  const rangeLabel = widgetRange === 'custom'
+    ? (customReady ? `${formatDate(`${custom.from}T00:00`)} – ${formatDate(`${custom.to}T00:00`)}` : 'Custom range')
+    : ((CALLS_WIDGET_RANGE_OPTIONS.find(([id]) => id === widgetRange) || [])[1] || 'Last 7 days');
+
+  if (rangeKey) ensureCallsData(companyId, rangeKey);
+  else if (!state.callsPresence.forbidden && !state.callsPresence.notConnected) ensureCallsPresencePolling(companyId);
 
   if (state.callsStats.unavailable || state.callsPresence.notConnected) return callsNotConnectedMarkup();
 
-  const rows = state.callsStats.key === `${companyId}|${rangeKey}` ? state.callsStats.rows : [];
+  const rows = rangeKey && state.callsStats.key === `${companyId}|${rangeKey}` ? state.callsStats.rows : [];
   const onCall = state.callsPresence.agents.filter((agent) => agent.status === 'on_call').length;
   const available = state.callsPresence.agents.filter((agent) => agent.status === 'available').length;
   const conversations = rows.reduce((total, row) => total + Number(row.conversations || 0), 0);
@@ -4778,20 +4802,37 @@ function renderCallsWidget(companyId) {
     .slice()
     .sort((a, b) => Number(b.conversations || 0) - Number(a.conversations || 0));
 
-  const ranking = ranked.length
+  const noneLabel = widgetRange === 'custom' ? 'in this range' : rangeLabel.toLowerCase();
+  const ranking = customPending
+    ? `<p class="calls-empty">Pick a start and end date to see conversations.</p>`
+    : ranked.length
     ? `<table class="calls-widget-rank"><tbody>${ranked.map((row) => `
         <tr>
           <td class="calls-rank-name">${h(row.extension_name)}</td>
           <td class="calls-rank-sub">${Number(row.total_calls || 0)} calls</td>
           <td class="calls-rank-conv"><b>${Number(row.conversations || 0)}</b> &gt; 60s</td>
         </tr>`).join('')}</tbody></table>`
-    : `<p class="calls-empty">No calls over 60 seconds ${h(rangeLabel.toLowerCase())}.</p>`;
+    : `<p class="calls-empty">No calls over 60 seconds ${h(noneLabel)}.</p>`;
+
+  const ranges = `<nav class="calls-widget-ranges">${CALLS_WIDGET_RANGE_OPTIONS.map(([id, label]) =>
+    `<button class="calls-widget-range${id === widgetRange ? ' is-active' : ''}" type="button" data-action="calls-widget-range" data-range="${h(id)}">${h(label)}</button>`).join('')}</nav>`;
+
+  const customPicker = widgetRange === 'custom'
+    ? `<div class="calls-widget-custom">
+        <label>From <input type="date" data-calls-widget-custom="from" value="${h(custom.from)}"${custom.to ? ` max="${h(custom.to)}"` : ''}></label>
+        <label>To <input type="date" data-calls-widget-custom="to" value="${h(custom.to)}"${custom.from ? ` min="${h(custom.from)}"` : ''}></label>
+      </div>`
+    : '';
 
   return `
     <div class="calls-widget">
+      <div class="calls-widget-filter">
+        ${ranges}
+        ${customPicker}
+      </div>
       <section class="dash-kpis dash-widget-kpis">
         ${dashboardMetricTile('ti-phone', onCall, 'On a call now', `${available} available`)}
-        ${dashboardMetricTile('ti-message', conversations, 'Calls &gt; 60s', h(rangeLabel))}
+        ${dashboardMetricTile('ti-message', conversations, 'Calls > 60s', h(rangeLabel))}
       </section>
       <div class="calls-widget-rank-wrap">
         <div class="calls-widget-rank-head"><span>Who is having real conversations</span><span>${h(rangeLabel)}</span></div>
@@ -22858,6 +22899,12 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'calls-widget-range') {
+    event.preventDefault();
+    state.callsWidgetRange = CALLS_WIDGET_RANGE_OPTIONS.some(([id]) => id === node.dataset.range) ? node.dataset.range : '7d';
+    render();
+    return;
+  }
   if (action === 'open-dashboard-activity') {
     event.preventDefault();
     state.modal = 'dashboard-activity';
@@ -27415,6 +27462,12 @@ function onDocumentChange(event) {
   }
   if (event.target.matches('[data-dashboard-rep]')) {
     state.dashboardRep = event.target.value || 'all';
+    render();
+    return;
+  }
+  if (event.target.matches('[data-calls-widget-custom]')) {
+    const edge = event.target.dataset.callsWidgetCustom === 'to' ? 'to' : 'from';
+    state.callsWidgetCustom = { ...(state.callsWidgetCustom || { from: '', to: '' }), [edge]: event.target.value || '' };
     render();
     return;
   }

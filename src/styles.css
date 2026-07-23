@@ -24369,3 +24369,12 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .calls-rank-sub { color: var(--muted, #6f7782); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .calls-rank-conv { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .calls-rank-conv b { font-size: 1.05rem; }
+/* The widget's own date filter: quick pills + a custom From–To picker. */
+.calls-widget-filter { display: flex; flex-direction: column; gap: 8px; }
+.calls-widget-ranges { display: flex; gap: 8px; flex-wrap: wrap; }
+.calls-widget-range { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border, #e6e8eb); background: transparent; color: inherit; font: inherit; font-size: 0.85rem; cursor: pointer; }
+.calls-widget-range:hover { border-color: var(--muted, #6f7782); }
+.calls-widget-range.is-active { background: var(--accent-soft, rgba(237, 78, 13, .09)); border-color: transparent; font-weight: 600; }
+.calls-widget-custom { display: flex; gap: 12px; flex-wrap: wrap; }
+.calls-widget-custom label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted, #6f7782); }
+.calls-widget-custom input { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border, #e6e8eb); background: var(--surface, #fff); color: inherit; font: inherit; font-size: 0.85rem; }
