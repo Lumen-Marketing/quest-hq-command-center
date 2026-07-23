@@ -113,3 +113,13 @@ test('removing a widget sticks, because saving records what has been offered', (
   assert.ok(body.includes('dashboardSeenWidgets'), 'saveDashboardWidgetLayout must record seen widgets');
   assert.ok(body.includes('writeJson(DASHBOARD_SEEN_WIDGETS_CACHE_KEY'), 'seen widgets must be persisted');
 });
+
+test('presence is not fetched on every render (guards against the rate-limit loop)', () => {
+  // loadCallsPresence calls render(); if ensureCallsData also fetched presence,
+  // render -> fetch -> render would hammer the endpoint into 429s. ensureCallsData
+  // must only start the poller, never queue its own presence load.
+  const start = main.indexOf('function ensureCallsData');
+  const body = main.slice(start, main.indexOf('\nfunction ', start + 1));
+  assert.ok(!body.includes('loadCallsPresence('), 'ensureCallsData must not call loadCallsPresence directly');
+  assert.ok(body.includes('ensureCallsPresencePolling('), 'ensureCallsData must start the poller');
+});

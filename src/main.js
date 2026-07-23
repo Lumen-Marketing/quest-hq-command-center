@@ -4599,6 +4599,7 @@ const CALLS_STATUS_LABELS = {
 };
 const CALLS_PRESENCE_POLL_MS = 15000;
 let callsPresenceTimer = null;
+let callsVisibilityBound = false;
 
 function callsRangeKey(route) {
   const requested = String(route?.params?.get?.('range') || 'today');
@@ -4688,7 +4689,10 @@ function ensureCallsData(companyId, rangeKey = 'today') {
   const key = `${companyId}|${rangeKey}`;
   if (state.callsStats.key !== key) queueMicrotask(() => loadCallsStats(companyId, rangeKey).catch(() => {}));
   if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
-  queueMicrotask(() => loadCallsPresence(companyId).catch(() => {}));
+  // Presence is fetched by the poller (an immediate first load plus every 15s),
+  // never here. This runs on every render, and loadCallsPresence calls render()
+  // on completion — fetching here created a render->fetch->render loop that hit
+  // the endpoint thousands of times and got the caller rate-limited.
   ensureCallsPresencePolling(companyId);
 }
 
@@ -4703,6 +4707,10 @@ function stopCallsPresencePolling() {
 
 function ensureCallsPresencePolling(companyId) {
   if (callsPresenceTimer) return;
+  // Set the timer handle before the first fetch resolves. loadCallsPresence
+  // calls render() on completion, which re-enters ensureCallsPresencePolling;
+  // with the handle already set that re-entry returns here instead of starting
+  // a second fetch — this is what keeps the one-shot load from becoming a loop.
   callsPresenceTimer = setInterval(() => {
     // The router replaces the whole view, so there is no unmount hook to hang
     // this off; the timer retires itself once the user is somewhere else.
@@ -4710,11 +4718,16 @@ function ensureCallsPresencePolling(companyId) {
     if (document.hidden || state.callsPresence.forbidden || state.callsPresence.notConnected) return;
     loadCallsPresence(companyId).catch(() => {});
   }, CALLS_PRESENCE_POLL_MS);
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden || !callsSurfaceVisible()) return;
-    if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
-    loadCallsPresence(companyId).catch(() => {});
-  });
+  // First load now, so the board is not blank for the first 15 seconds.
+  loadCallsPresence(companyId).catch(() => {});
+  if (!callsVisibilityBound) {
+    callsVisibilityBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || !callsSurfaceVisible() || !callsPresenceTimer) return;
+      if (state.callsPresence.forbidden || state.callsPresence.notConnected) return;
+      loadCallsPresence(activeCompanyId()).catch(() => {});
+    });
+  }
 }
 
 function callsBoardMarkup() {
