@@ -8,6 +8,14 @@ The canonical context lives in .ai rather than a vendor-specific instruction fil
 
 The operating workflow does not use local servers. Tests and builds may run locally, but behavior is accepted against the directly deployed Vercel environment after merge.
 
+## Questbase is the market-facing product name
+
+The public product is branded Questbase.io. The repository, deployment project, storage keys, package metadata, and some internal compatibility labels may retain Quest HQ identifiers until a separately verified migration changes them. Public landing and authentication surfaces should use Questbase; do not rename internal identifiers casually because they participate in routes, caches, deployment history, and integrations.
+
+## The public landing converts into real account flows
+
+The approved Modular Quest landing direction is the public visual source of truth. Its product preview is an illustrative, read-only interaction, while every conversion action uses the existing authentication lanes: Business login maps to sign-in, Start workspace maps to company-workspace registration, Join by invite maps to invite access, and an authenticated session receives Open workspace. Questbase does not collect a fake early-access form when the actual account flows are available.
+
 ## Company accounts contain configurable operational workspaces
 
 A company is the market customer, subscription, and outer security tenant. The desktop rail groups operational child workspaces under that company account. Workspace switching preserves the company route and carries the child workspace as a query parameter. Owners, admins, and developers inherit every active child workspace; regular workers require explicit workspace memberships and can receive a different role per workspace. Creating or archiving an operational workspace never creates or deletes the company account.

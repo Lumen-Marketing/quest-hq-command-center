@@ -1,12 +1,12 @@
 # Product context
 
-Quest HQ Command Center is Lumen's multi-tenant operating system for roofing companies. It combines customer and job management, estimating, work execution, files, collaboration, finance, access control, and configurable operational workspaces inside each customer company account.
+Questbase is Lumen's multi-tenant operating system for roofing and service companies. The repository and some internal runtime identifiers retain the historical Quest HQ Command Center name while the customer-facing product transitions to Questbase.io. It combines customer and job management, estimating, work execution, files, collaboration, finance, access control, and configurable operational workspaces inside each customer company account.
 
 ## Product boundary
 
-Quest HQ owns the company shell, authentication flow, company and workspace memberships, subscription gating, roles and permissions, CRM records, job containers, files, forms, finance, messaging, calendar, client portals, reporting, settings, workspace plugins, and custom workspace apps.
+Questbase owns the company shell, authentication flow, company and workspace memberships, subscription gating, roles and permissions, CRM records, job containers, files, forms, finance, messaging, calendar, client portals, reporting, settings, workspace plugins, and custom workspace apps.
 
-TaskManagement remains the vendored work-execution engine. Quest HQ links those tasks to jobs through `project_id`, contacts through `contact_id`, and quotes/deals through tenant-scoped `deal_id`. Do not create a second independent task or next-step model inside Quest HQ.
+TaskManagement remains the vendored work-execution engine. Questbase links those tasks to jobs through `project_id`, contacts through `contact_id`, and quotes/deals through tenant-scoped `deal_id`. Do not create a second independent task or next-step model inside Questbase.
 
 ## Live product areas
 
