@@ -5,7 +5,7 @@
 - Branch: `feat/task-gantt-foundation`
 - Tested code candidate: `c1707b964bad97949edcd688c8643a3af92084cc`
 - Reconciled with `origin/main`: `119a5a5adf12ebedcb31ed7d1a1b07e435286094`
-- Divergence after reconciliation: 7 commits ahead, 0 commits behind `origin/main`
+- Divergence after reconciliation: 0 commits behind `origin/main`
 
 ## Local non-server verification
 
@@ -41,16 +41,26 @@ The live per-person Task policy verification also passed all five structural ass
 4. Insert and delete remain `tasks.manage`-only.
 5. All four workspace Task policies remain present.
 
+## Live Tasks workspace activation
+
+The forward-only migration was first exercised inside a rollback-only transaction. It would insert exactly 4 missing rows, all for active workspaces whose companies already had the installed Tasks entitlement.
+
+It was then applied through the Supabase migration API as `20260724000851_task_workspace_plugin_activation`. Post-apply verification found:
+
+- 6 eligible active workspaces.
+- 6 installed Tasks workspace rows.
+- 0 missing Tasks workspace rows.
+- 0 unexpected non-eligible Tasks rows.
+- 0 disabled rows overwritten.
+
 ## Scope and remaining gates
 
 This proves live database-level RLS behavior for the tested identities. The password-based `supabase-js` harness was not run because a second tenant password was not available in the release environment.
 
-The following are not Josh's completed test work and remain shared release gates:
+The following remain shared release gates:
 
-- Review and apply the forward Tasks workspace-plugin activation migration.
-- Verify the live missing activation count changes from 4 to 0.
 - Complete Shan's Job-to-Task and What's next regression pass.
 - Complete Rom's business UAT on the exact candidate.
 - Make the team go/no-go decision before enabling native Tasks.
 
-No production deployment or database migration was performed during this evidence run.
+No Vercel production deployment was performed during this evidence run. The forward-only Tasks workspace-activation database migration was applied and verified as described above.

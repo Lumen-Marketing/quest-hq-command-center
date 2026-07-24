@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-24T06:36:14+08:00",
+  "generated_at": "2026-07-24T08:09:18+08:00",
   "generated_from_commit": "119a5a5adf12ebedcb31ed7d1a1b07e435286094",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
@@ -10,13 +10,13 @@
     "latest_migration": "202607241200_per_person_task_visibility.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-07-24T06:36:14+08:00",
+    "supabase_verified_at": "2026-07-24T08:09:18+08:00",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260723183531",
-      "name": "per_person_task_visibility"
+      "version": "20260724000851",
+      "name": "task_workspace_plugin_activation"
     },
     "vercel_verified_at": "2026-07-24T06:36:14+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",

@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-24T06:36:14+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-24T08:09:18+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -45,7 +45,7 @@ Captured 2026-07-24T06:36:14+08:00. This is a point-in-time operational snapshot
 - Live tenancy verification: 6 active workspaces; all 14 task rows have non-null workspace ids; zero task company/workspace mismatches were found.
 - Live per-person Task visibility is active. Leads with `tasks.manage` and inherited company administrators can manage workspace tasks; `tasks.view`-only workers can read/update only tasks they are assigned or created. INSERT/DELETE remain `tasks.manage`-gated.
 - Live RLS verification on 2026-07-24 used two separate non-platform authenticated identities. Both saw their own tenant controls and zero rows from the foreign tenant across companies, memberships, workspaces, workspace/company plugins, tasks, contacts, deals, jobs, files, proposals, forms, form responses, workspace-builder state, and rollback-only message fixtures. Cross-tenant task/contact updates affected zero rows; authenticated task DELETE is denied at the table-grant layer. All temporary fixtures were rolled back and verified absent.
-- Five companies have the Tasks entitlement, but only 2 workspace Tasks activations exist; 4 eligible active workspaces remain without the plugin. The forward workspace-activation migration on this release branch is not in the live migration ledger.
+- The forward-only Tasks workspace-activation migration is applied live as ledger version `20260724000851_task_workspace_plugin_activation`. All 6 eligible active workspaces now have an installed Tasks row; the verified missing count is 0 and there are no unexpected non-eligible rows.
 - Migration drift: live contains the effects of the Task phase 2/3 migrations without their repository versions in the ledger. Do not replay those historical files; see `docs/supabase-migration-reconciliation.md`.
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.
