@@ -6,6 +6,7 @@
 - Tested code candidate: `c1707b964bad97949edcd688c8643a3af92084cc`
 - Reconciled with `origin/main`: `119a5a5adf12ebedcb31ed7d1a1b07e435286094`
 - Divergence after reconciliation: 0 commits behind `origin/main`
+- Latest verified previewed candidate: `7bd752f14cecfaa89d854bcc5ea167c86f89a2d0`
 
 ## Local non-server verification
 
@@ -64,3 +65,9 @@ The following remain shared release gates:
 - Make the team go/no-go decision before enabling native Tasks.
 
 No Vercel production deployment was performed during this evidence run. The forward-only Tasks workspace-activation database migration was applied and verified as described above.
+
+## Preview deployment verification
+
+Vercel built commit `7bd752f14cecfaa89d854bcc5ea167c86f89a2d0` successfully as READY deployment `dpl_GZ2SWDw8kxA914HxnHBprs9UtyiH`. The protected preview loaded the Quest HQ application shell, and its generated Task runtime environment recorded that exact commit.
+
+The preview is not yet valid for workspace/Tasks business UAT. Its isolated Supabase project, `qqvmcsvdxhgjooirznrj`, has legacy `companies` and `tasks` tables but no `workspaces`, `workspace_plugins`, or `company_memberships`. Before Rom's exact-candidate UAT, reconcile a current staging database or create a reviewed Supabase branch. Do not point preview code at production data merely to make the test pass.

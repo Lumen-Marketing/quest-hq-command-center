@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-24T08:09:18+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-24T08:15:00+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -9,7 +9,7 @@ Captured 2026-07-24T08:09:18+08:00. This is a point-in-time operational snapshot
 - Current ready production deployment: dpl_5kJtcUuFuL3yXgHJvRxjFxdwg282
 - Deployed branch/commit: main at 119a5a5adf12ebedcb31ed7d1a1b07e435286094
 - GitHub default branch at capture: 119a5a5adf12ebedcb31ed7d1a1b07e435286094
-- Latest deployed Task preview at capture: dpl_BFspAASB2RMGPfNpyX8FpZv5fCcm from feat/task-gantt-foundation at efde616; this is not production.
+- Latest deployed Task preview at capture: `dpl_GZ2SWDw8kxA914HxnHBprs9UtyiH` from `feat/task-gantt-foundation` at `7bd752f`; it is READY, Vercel-auth protected, and is not production.
 - Latest overall integration preview at capture: dpl_HGLVRqE2iQfX9po6VByUY1uXKXin from preview/deploy-integration-check at 59417a0; it is not production.
 - Production Guardian: scheduled every six hours and available by manual dispatch.
 - Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459
@@ -46,6 +46,7 @@ Captured 2026-07-24T08:09:18+08:00. This is a point-in-time operational snapshot
 - Live per-person Task visibility is active. Leads with `tasks.manage` and inherited company administrators can manage workspace tasks; `tasks.view`-only workers can read/update only tasks they are assigned or created. INSERT/DELETE remain `tasks.manage`-gated.
 - Live RLS verification on 2026-07-24 used two separate non-platform authenticated identities. Both saw their own tenant controls and zero rows from the foreign tenant across companies, memberships, workspaces, workspace/company plugins, tasks, contacts, deals, jobs, files, proposals, forms, form responses, workspace-builder state, and rollback-only message fixtures. Cross-tenant task/contact updates affected zero rows; authenticated task DELETE is denied at the table-grant layer. All temporary fixtures were rolled back and verified absent.
 - The forward-only Tasks workspace-activation migration is applied live as ledger version `20260724000851_task_workspace_plugin_activation`. All 6 eligible active workspaces now have an installed Tasks row; the verified missing count is 0 and there are no unexpected non-eligible rows.
+- The Vercel preview environment points to the separate `qqvmcsvdxhgjooirznrj` Supabase project. That project contains legacy `companies` and `tasks` tables but lacks `workspaces`, `workspace_plugins`, and `company_memberships`, so the preview can verify the built shell and commit but cannot be used for workspace/Tasks business UAT until its staging schema is reconciled. Do not solve this by silently granting preview code access to production data.
 - Migration drift: live contains the effects of the Task phase 2/3 migrations without their repository versions in the ledger. Do not replay those historical files; see `docs/supabase-migration-reconciliation.md`.
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.

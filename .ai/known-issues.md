@@ -16,6 +16,10 @@ Supabase records provider-generated applied versions, so the repository filename
 
 The live catalog also contains the effects of `202607221400_taskmanagement_phase2_runtime_delta.sql` and `202607221600_taskmanagement_phase3_tenant_hardening.sql` without corresponding ledger entries. Do not replay those historical files during a feature deploy: their shared plugin constraint/function replacements predate the later RingCentral `calls` migration. The independent forward Task workspace-activation migration is applied live as `20260724000851_task_workspace_plugin_activation`; reconcile only the older historical ledger through the documented maintenance procedure.
 
+## Preview database cannot support workspace UAT
+
+Vercel preview deployments use the separate Supabase project `qqvmcsvdxhgjooirznrj`, not production. Live inspection on 2026-07-24 found legacy `companies` and `tasks` tables but no `workspaces`, `workspace_plugins`, or `company_memberships`. A READY preview therefore proves the build artifact, not the workspace/Tasks business flow. Reconcile a staging database or create a reviewed Supabase branch before Rom's exact-candidate UAT; do not point unreviewed preview code at production data.
+
 ## Supabase flags intentional authenticated security-definer RPCs
 
 The security advisor reports its generic warning for authenticated `SECURITY DEFINER` routines, including the operational-workspace management RPCs. Those reviewed routines require authenticated app access, use fixed search paths, revoke public/anonymous execution, and perform server-side company/workspace permission checks. Treat a change to those grants or checks as a security-sensitive migration; do not silence the advisor by removing the app's required authenticated execution.
