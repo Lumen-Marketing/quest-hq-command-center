@@ -1,8 +1,8 @@
 # Task Workspace Foundation Design
 
-**Date:** 2026-07-23  
-**Gantt block:** Thursday — Foundation  
-**Owner:** Josh  
+**Date:** 2026-07-23
+**Gantt block:** Thursday — Foundation
+**Owner:** Josh
 **Status:** Approved for implementation by the instruction to continue the agreed Gantt
 
 ## Outcome
@@ -90,4 +90,3 @@ Live Supabase contains the effects of the Task phase migrations but lacks their 
 - A new permission/role model.
 - RingCentral, SMS, billing, or marketplace work.
 - Reworking the Task application's broader UI.
-

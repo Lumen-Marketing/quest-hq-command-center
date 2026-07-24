@@ -105,4 +105,3 @@ Run the focused test and verify it fails for the missing behavior before impleme
 4. Run static Supabase/RLS checks and the two-tenant leak harness where credentials are available.
 5. Inspect the complete branch diff against `origin/main` and confirm no RingCentral/SMS regression or stale plugin allowlist replacement.
 6. Only then publish the branch and apply/promote according to the project's deployment workflow.
-
