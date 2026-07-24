@@ -97,17 +97,16 @@ test('contact locations support google maps autocomplete and pin links', () => {
 
 test('contact tasks preserve details time and can be opened for editing', () => {
   const taskRowSource = source.match(/function renderSfTaskRow\(task, options = \{\}\) \{[\s\S]*?\n\}/)?.[0] || '';
-  const tasksPageSource = source.match(/function renderTasksPage\(route, companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const embeddedTasksSource = source.match(/function renderEmbeddedTasksPage\(route, companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(taskRowSource, /data-action="open-contact-task"/);
   assert.match(taskRowSource, /task\.description/);
   assert.match(taskRowSource, /task\.due_time/);
   assert.match(taskRowSource, /data-action="edit-contact-task"/);
-  // Task editing lives in the embedded task module now (Phase 4), not in a
-  // Command Center form. Both contact handlers navigate to the tasks route with
-  // task_id, which the route forwards into the module's own #/task/<id> page.
-  assert.match(tasksPageSource, /route\.params\.get\('task_id'\)/);
-  assert.match(tasksPageSource, /#\/task\//);
-  assert.match(tasksPageSource, /taskmanagement\/app\.html/);
+  // During the native-module rollout the deployed embedded fallback must still
+  // forward contact task deep links into the module's own #/task/<id> page.
+  assert.match(embeddedTasksSource, /route\.params\.get\('task_id'\)/);
+  assert.match(embeddedTasksSource, /#\/task\//);
+  assert.match(embeddedTasksSource, /taskmanagement\/app\.html/);
   assert.match(source, /async function createContactTask\(contactId, taskInput\)/);
   assert.match(source, /description: clean\.description/);
   assert.match(source, /due_time: clean\.due_time/);

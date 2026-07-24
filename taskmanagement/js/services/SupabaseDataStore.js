@@ -1,11 +1,13 @@
 window.App = window.App || {};
 
 App.SupabaseDataStore = class SupabaseDataStore {
-  constructor({ supabase, currentUser, role }) {
+  constructor({ supabase, currentUser, role, workspaceId }) {
     if (!supabase) throw new Error('Supabase client is required.');
     this.supabase = supabase;
     this.currentUser = currentUser;
     this.role = role || 'member';
+    this.workspaceId = String(workspaceId || '').trim();
+    if (!this.workspaceId) throw new Error('Operational workspace context is required.');
     this._profileColumns = 'id, email, full_name, approved, role, email_verified, member_id, supervisor_id, company_ids, avatar_url, position, created_at';
     // Last-seen updated_at per task id — used as an optimistic-concurrency guard
     // so a save can't silently clobber an edit made elsewhere.
@@ -164,7 +166,14 @@ App.SupabaseDataStore = class SupabaseDataStore {
       companiesRes,
     ] = await Promise.all([
       this._pageAll(() => this.supabase.from('team_members').select('*').order('name', { ascending: true }).order('id', { ascending: true }), 'people'),
-      this._pageAll(() => this.supabase.from('tasks').select('*').order('created_at', { ascending: true }).order('id', { ascending: true }), 'tasks'),
+      this._pageAll(() => {
+        return this.supabase
+          .from('tasks')
+          .select('*')
+          .eq('workspace_id', this.workspaceId)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true });
+      }, 'tasks'),
       this._pageAll(() => this.supabase.from('time_entries').select('*').order('start_at', { ascending: false }).order('id', { ascending: true }), 'time entries'),
       this._pageAll(() => this.supabase.from('notifications').select('*').eq('member_id', this.currentUser).order('created_at', { ascending: false }).order('id', { ascending: true }), 'notifications'),
       this.supabase.from('active_timers').select('*'),
@@ -196,13 +205,14 @@ App.SupabaseDataStore = class SupabaseDataStore {
       this._taskVersions[row.id] = row.updated_at;
       return this._mapTaskRow(row);
     });
+    const workspaceTaskIds = new Set(taskRows.map(row => row.id));
 
     return {
       people: this._mapPeople(peopleRows),
       profiles: profilesRes.data || [],
       companies: companiesRes.data || [],
       tasks,
-      timeEntries: entryRows.map(row => ({
+      timeEntries: entryRows.filter(row => workspaceTaskIds.has(row.task_id)).map(row => ({
         id: row.id,
         userId: row.user_id,
         taskId: row.task_id,
@@ -211,7 +221,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
         durationMs: Number(row.duration_ms || 0),
         note: row.note || '',
       })),
-      activeTimers: Object.fromEntries((timersRes.data || []).map(row => [
+      activeTimers: Object.fromEntries((timersRes.data || []).filter(row => workspaceTaskIds.has(row.task_id)).map(row => [
         row.user_id,
         {
           taskId: row.task_id,
@@ -220,7 +230,9 @@ App.SupabaseDataStore = class SupabaseDataStore {
           taskCompany: row.task_company || null,
         },
       ])),
-      notifications: notificationRows.map(row => this._mapNotificationRow(row)),
+      notifications: notificationRows
+        .filter(row => !row.task_id || workspaceTaskIds.has(row.task_id))
+        .map(row => this._mapNotificationRow(row)),
       projects: this._mapProjects(projectsRes.data || []),
       taxonomy: {
         types: taxTypesRes.data || [],
@@ -256,11 +268,14 @@ App.SupabaseDataStore = class SupabaseDataStore {
     // Paged so the poll re-pull isn't truncated once the tasks table grows past
     // the PostgREST max-rows cap. Secondary .order('id') keeps paging stable.
     const rows = await this._pageAll(
-      () => this.supabase
-        .from('tasks')
-        .select('*')
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true }),
+      () => {
+        return this.supabase
+          .from('tasks')
+          .select('*')
+          .eq('workspace_id', this.workspaceId)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true });
+      },
       'tasks',
     );
     return rows.map(row => {
@@ -298,6 +313,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
         const res = await this.supabase
           .from('tasks')
           .update(row)
+          .eq('workspace_id', this.workspaceId)
           .eq('id', task.id)
           .eq('updated_at', known)
           .select('updated_at')
@@ -340,7 +356,12 @@ App.SupabaseDataStore = class SupabaseDataStore {
   }
 
   async _refetchTask(id) {
-    const res = await this.supabase.from('tasks').select('*').eq('id', id).maybeSingle();
+    const res = await this.supabase
+      .from('tasks')
+      .select('*')
+      .eq('workspace_id', this.workspaceId)
+      .eq('id', id)
+      .maybeSingle();
     if (res.error || !res.data) return null;
     return { updatedAt: res.data.updated_at, row: res.data, task: this._mapTaskRow(res.data) };
   }
@@ -389,6 +410,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
   _taskRow(task) {
     return {
       id: task.id,
+      workspace_id: this.workspaceId,
       title: task.title,
       description: task.description || '',
       type: task.type || 'admin',
@@ -587,7 +609,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
      active_timers, notifications) cascade-delete via the schema FKs. */
   async deleteTask(id) {
     if (!id) return;
-    const res = await this.supabase.from('tasks').delete().eq('id', id);
+    const res = await this.supabase.from('tasks').delete().eq('workspace_id', this.workspaceId).eq('id', id);
     this._throwIfError(res, 'deleting task');
     delete this._taskVersions[id];
   }
@@ -603,6 +625,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
       const res = await this.supabase
         .from('tasks')
         .delete()
+        .eq('workspace_id', this.workspaceId)
         .lt('cleared_at', cutoff)
         .select('id');
       if (res.error) {

@@ -75,6 +75,31 @@ test('buildTaskFromAction fills the template and offsets the due date', () => {
   assert.equal(t.priority, 'high');
 });
 
+test('buildTaskFromAction carries workspace and business-record context', () => {
+  const t = buildTaskFromAction(
+    { type: 'create_task', title: 'Follow up {{name}}' },
+    {
+      name: 'Ridgeline Reroof',
+      __workspace_id: 'workspace-a',
+      __project_id: 'job-a',
+      __contact_id: 'contact-a',
+      __deal_id: 'deal-a',
+    },
+    '2026-07-18',
+  );
+  assert.deepEqual({
+    workspace_id: t.workspace_id,
+    project_id: t.project_id,
+    contact_id: t.contact_id,
+    deal_id: t.deal_id,
+  }, {
+    workspace_id: 'workspace-a',
+    project_id: 'job-a',
+    contact_id: 'contact-a',
+    deal_id: 'deal-a',
+  });
+});
+
 test('buildTaskFromAction defaults the offset to +1 day and ignores non-task actions', () => {
   assert.equal(buildTaskFromAction({ type: 'create_task', title: 'x' }, {}, '2026-07-18').due, '2026-07-19');
   assert.equal(buildTaskFromAction({ type: 'notify', message: 'x' }, {}, '2026-07-18'), null);

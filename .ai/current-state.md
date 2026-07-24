@@ -1,21 +1,23 @@
 # Current state
 
-Captured 2026-07-21T00:27:56.075Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-24T08:15:00+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
 - Production URL: https://quest-hq-command-center-gamma.vercel.app
 - Vercel project: prj_0MxrYyGIo61QgLNW2M74fvTxlMRV
-- Current ready production deployment: dpl_FiH4yFuPbZEd67NTT38X8QZWH2Ac
-- Deployed branch/commit: main at fd6e1cb02e4a766dc48e21413879b274c93f5991 (recurring tasks, automations, contact dedupe shipped; task_recurrence + automations migrations applied live)
-- GitHub default branch at capture: fd6e1cb02e4a766dc48e21413879b274c93f5991
+- Current ready production deployment: dpl_5kJtcUuFuL3yXgHJvRxjFxdwg282
+- Deployed branch/commit: main at 119a5a5adf12ebedcb31ed7d1a1b07e435286094
+- GitHub default branch at capture: 119a5a5adf12ebedcb31ed7d1a1b07e435286094
+- Latest deployed Task preview at capture: `dpl_GZ2SWDw8kxA914HxnHBprs9UtyiH` from `feat/task-gantt-foundation` at `7bd752f`; it is READY, Vercel-auth protected, and is not production.
+- Latest overall integration preview at capture: dpl_HGLVRqE2iQfX9po6VByUY1uXKXin from preview/deploy-integration-check at 59417a0; it is not production.
 - Production Guardian: scheduled every six hours and available by manual dispatch.
 - Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459
-- Last full production smoke context: 36 of 36 routes and 3 of 3 critical assets passed for `6699c9f4f5ee8915f2226dfc2d67477b4c0e8cec`, with no browser-console or Vercel runtime errors.
+- Latest production smoke context: 36 of 36 routes and 3 of 3 critical assets passed for `119a5a5adf12ebedcb31ed7d1a1b07e435286094`. The latest one-hour Vercel sample contained no runtime errors or HTTP 429 rows.
 
 ## Repository health
 
-- Current branch regression suite: 344 tests passed.
+- Reconciled integration + Task branch regression suite: 574 tests passed.
 - The production build and bundle-budget check pass without a local application server.
 - CI runs npm run check on pushes and pull requests.
 - Build output is checked against a bundle budget and copies TaskManagement plus legacy SPA assets.
@@ -27,28 +29,33 @@ Captured 2026-07-21T00:27:56.075Z. This is a point-in-time operational snapshot,
 - Status: ACTIVE_HEALTHY
 - Region: us-west-1
 - Postgres: 17.6.1.127, engine 17
-- Public catalog: 60 relations, 178 foreign-key column links, 190 policies, 59 public functions, and 80 trigger events.
+- The catalog-count snapshot remains the 2026-07-21 metadata export; Task/workspace objects below were rechecked live on 2026-07-24.
 - Storage: 6 buckets cataloged without object data.
-- Latest repository migration: 202607231200_ringcentral_calls.sql — **applied live 2026-07-23**
+- Latest repository migration: `202607241200_per_person_task_visibility.sql`; its policy intent is applied live as ledger version `20260723183531`.
 - It adds five `ringcentral_*` tables, five select policies, the
   `public.ringcentral_conversation_stats` function, and widens
   `app_private.permission_plugin_ids` so `team.view` resolves to both `reporting` and
   `calls`. The catalog counts above predate it and have not been re-captured.
 - The `lumen` company is seeded: a `ringcentral_accounts` row, the `calls` company plugin,
   and the `calls` workspace plugin on its Main workspace.
-- **The live allowlist is ahead of the repository.** `company_plugins_known_plugin_check`
-  contains `tasks`, added by work that is applied to the database but still sits on the
-  unmerged `feat/task-app-absorption` branch. A migration that rebuilds this constraint
-  from the newest file in `supabase/migrations` will drop `tasks` and fail against
-  existing rows. Always read the live constraint out of `pg_constraint` first.
-- Live tenancy verification: every one of the 3 company accounts has one active default operational workspace; all 11 workspace-owned pipeline tables have non-null workspace ids; zero company/workspace mismatches were found.
-- **Repository is ahead of live for task visibility.** Migration `202607241200_per_person_task_visibility.sql` (branch `feat/task-per-person-visibility`) narrows the `tasks workspace read`/`update` RLS to be per person — leads (`tasks.manage`) and owners/admins see and manage all workspace tasks, while `tasks.view`-only crew see and update only tasks they are assigned to or created (creator always sees own). It is committed but **not yet applied to the live project**; until it is applied, any workspace member with `tasks.view` still sees every task in the workspace. INSERT/DELETE stay `tasks.manage`-gated either way.
+- **The live allowlist is ahead of the older plugin migrations.**
+  `company_plugins_known_plugin_check` contains `tasks`; a future migration that rebuilds
+  this constraint from a stale allowlist can drop `tasks` and fail against existing rows.
+  Always read the live constraint out of `pg_constraint` first.
+- Live tenancy verification: 6 active workspaces; all 14 task rows have non-null workspace ids; zero task company/workspace mismatches were found.
+- Live per-person Task visibility is active. Leads with `tasks.manage` and inherited company administrators can manage workspace tasks; `tasks.view`-only workers can read/update only tasks they are assigned or created. INSERT/DELETE remain `tasks.manage`-gated.
+- Live RLS verification on 2026-07-24 used two separate non-platform authenticated identities. Both saw their own tenant controls and zero rows from the foreign tenant across companies, memberships, workspaces, workspace/company plugins, tasks, contacts, deals, jobs, files, proposals, forms, form responses, workspace-builder state, and rollback-only message fixtures. Cross-tenant task/contact updates affected zero rows; authenticated task DELETE is denied at the table-grant layer. All temporary fixtures were rolled back and verified absent.
+- The forward-only Tasks workspace-activation migration is applied live as ledger version `20260724000851_task_workspace_plugin_activation`. All 6 eligible active workspaces now have an installed Tasks row; the verified missing count is 0 and there are no unexpected non-eligible rows.
+- The Vercel preview environment points to the separate `qqvmcsvdxhgjooirznrj` Supabase project. That project contains legacy `companies` and `tasks` tables but lacks `workspaces`, `workspace_plugins`, and `company_memberships`, so the preview can verify the built shell and commit but cannot be used for workspace/Tasks business UAT until its staging schema is reconciled. Do not solve this by silently granting preview code access to production data.
+- Migration drift: live contains the effects of the Task phase 2/3 migrations without their repository versions in the ledger. Do not replay those historical files; see `docs/supabase-migration-reconciliation.md`.
 
 The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.
 
 ## Feature state
 
-The current release candidate separates each customer company account from its configurable operational child workspaces. The command rail groups child workspaces under the company header, highlights the selected workspace, and preserves it in the route. Company settings can create, rename, describe, icon, archive, and manage those children; user access assigns regular workers and a role independently per workspace. Company owners, admins, and developers inherit all active child workspaces. Company plugin records are entitlements, while activation and configuration live per child workspace. Contacts, accounts, sites, quotes, activities, jobs, tasks, pipeline stages, underwriting cases, files, and proposals are isolated by `workspace_id`; record conversions preserve that identity and database constraints reject cross-workspace links.
+The current release branch separates each customer company account from its configurable operational child workspaces. The command rail groups child workspaces under the company header, highlights the selected workspace, and preserves it in the route. Company settings can create, rename, describe, icon, archive, and manage those children; user access assigns regular workers and a role independently per workspace. Company owners, admins, and developers inherit all active child workspaces. Company plugin records are entitlements, while activation and configuration live per child workspace. Contacts, accounts, sites, quotes, activities, jobs, tasks, pipeline stages, underwriting cases, files, and proposals are isolated by `workspace_id`; record conversions preserve that identity and database constraints reject cross-workspace links. The absorbed Task runtime now receives the selected workspace from the host, filters task reads and mutations to it, and is gated by its own per-workspace Tasks plugin activation. These Task foundation changes are not production state until the release branch is published and promoted.
+
+The release branch also contains the feature-flagged native Command Center Tasks surface: workspace-scoped list/board/detail/create/edit, visible Job/Contact/Quote links, direct Supabase reads and writes, and the existing recurrence and automation engines. `VITE_NATIVE_TASKS_MODULE` remains false by default and the deployed iframe remains the fallback until the Friday release gates are satisfied.
 
 The public home now uses the approved Modular Quest product direction and the market-facing Questbase.io name. Its interactive workspace preview demonstrates role-focused workspaces while keeping one company record connected. The original mockup's early-access form was not carried into the application: Business login, Start workspace, Join by invite, and session-aware Open workspace actions all use the existing authentication and tenancy flows.
 

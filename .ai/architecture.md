@@ -31,7 +31,7 @@ The SPA supports:
 - Company routes scoped by company id and module section, with the selected operational workspace carried as `?workspace=<uuid>`.
 - Public client portal, proposal, and form routes.
 - Legacy route rewrites retained for compatibility.
-- The Tasks module renders inside the command-center shell as a same-origin iframe of the vendored task app (Task HQ), reached from the Work scope like any other module. Business context still links through project_id / contact_id / deal_id; the app is framed in place rather than handed off to a separate origin. Task rows honour the live per-person visibility model (crew see/edit their own tasks; leads manage all).
+- The Tasks module defaults to a same-origin iframe of the vendored Task app inside the command-center shell. The host passes a required `workspace_id`, optional `project_id`, and same-origin `return_url`; business context remains linked through `project_id`, `contact_id`, and `deal_id`. The feature-flagged native Tasks surface uses the same workspace boundary and per-person visibility model.
 
 ## Important source areas
 
@@ -64,6 +64,7 @@ The SPA supports:
 - Database mutations preserve the repository migration history.
 - Public-token endpoints expose the minimum required record fields.
 - TaskManagement owns task execution behavior; Quest HQ owns the surrounding business context.
+- The host resolves an allowed operational workspace before loading TaskManagement. The vendored store writes that id on every task row and filters task list, refresh, refetch, update, delete, and purge operations by it. Missing hosted workspace context fails closed before any task data loads.
 - Funnel "What's next" fields select from open tasks: contacts through `contact_id`, quotes/deals through tenant-scoped `deal_id`, and jobs through `project_id`.
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-workspace, per-contact records protected by Underwriter permissions and workspace RLS.

@@ -20,13 +20,13 @@ window.App = window.App || {};
     if (bar) bar.classList.remove('hidden');
     if (label) {
       if (integration.embedded && integration.projectId) {
-        label.textContent = `Job Center scope: ${integration.projectId}`;
+        label.textContent = `Workspace ${integration.workspaceId} / job ${integration.projectId}`;
       } else if (integration.embedded) {
-        label.textContent = 'Embedded in Job Center';
+        label.textContent = `Workspace scope: ${integration.workspaceId}`;
       } else if (integration.projectId) {
-        label.textContent = `Job scope: ${integration.projectId}`;
+        label.textContent = `Workspace ${integration.workspaceId} / job ${integration.projectId}`;
       } else {
-        label.textContent = 'No job selected; showing task scope allowed by your account';
+        label.textContent = `Workspace scope: ${integration.workspaceId}`;
       }
     }
     if (returnLink && integration.returnUrl) returnLink.href = integration.returnUrl;

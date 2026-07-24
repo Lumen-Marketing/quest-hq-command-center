@@ -9,6 +9,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   App.currentProfile = App.currentProfile || {};
   App.CURRENT_USER = App.currentProfile.member_id || App.CURRENT_USER;
 
+  if (App.commandCenterIntegration.hosted && !App.commandCenterIntegration.workspaceId) {
+    renderWorkspaceGate();
+    return;
+  }
+
   if (!App.can('app.use') && !App.can('clock.use') && !App.can('roles.manage')) {
     renderRoleGate();
     return;
@@ -70,6 +75,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         supabase: App.supabase,
         currentUser: App.CURRENT_USER,
         role: App.currentProfile.role || 'member',
+        workspaceId: App.commandCenterIntegration.workspaceId,
       });
 
   if (App.previewMode) {
@@ -269,6 +275,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (pv) controller.setView(pv);
   } else {
     controller.restoreUiState();
+  }
+
+  // The host's job/project scope wins over a stale saved filter. Set it before
+  // hash routing so new-task and task-detail deep links keep their intent while
+  // the surrounding list stays narrowed to the selected Job Center record.
+  if (App.commandCenterIntegration.hosted && App.commandCenterIntegration.projectId) {
+    controller.openProject(App.commandCenterIntegration.projectId);
   }
 
   // Real browser history: back/forward walks the user's path, #/… deep links
@@ -662,6 +675,19 @@ function applyRoleChrome(controller) {
   if (App.can('clock.use') && !App.can('tasks.view')) {
     controller.setView('time:mine');
   }
+}
+
+function renderWorkspaceGate() {
+  if (App.LoaderView) App.LoaderView.stop();
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:grid;place-items:center;background:#F6F1E8;color:#23180D;font-family:Inter,system-ui,sans-serif;padding:24px;">
+      <div style="max-width:520px;background:#FFF9EF;border:1px solid #E2D3BC;border-radius:8px;padding:22px;box-shadow:0 16px 40px rgba(46,31,17,.12);">
+        <div style="font-weight:800;font-size:18px;margin-bottom:8px;">Workspace required</div>
+        <div style="font-size:14px;line-height:1.5;color:#6E5B45;">Open Tasks from an active Questbase workspace. This direct link has no workspace context, so no task data was loaded.</div>
+        <a href="${App.commandCenterIntegration.returnUrl}" style="display:inline-block;margin-top:16px;padding:10px 14px;border-radius:6px;background:#8D3F1F;color:white;font-weight:700;text-decoration:none;">Return to Questbase</a>
+      </div>
+    </div>
+  `;
 }
 
 function renderRoleGate() {
