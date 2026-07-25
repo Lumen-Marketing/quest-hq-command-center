@@ -24164,7 +24164,7 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 
 @media (min-width: 901px) {
   .topbar-global-search {
-    display: none;
+    display: grid;
   }
 }
 

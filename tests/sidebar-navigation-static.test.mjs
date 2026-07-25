@@ -41,7 +41,6 @@ test('contacts navigation renders the standalone sales lifecycle instead of lega
 
 test('desktop navigation adopts the compact Quest command rail', () => {
   assert.match(source, /<aside class="deck quest-nav-v2" aria-label="Quest navigation">/);
-  assert.match(source, /class="deck-global-search"[\s\S]*?data-action="command-open"[\s\S]*?<span>Search or jump to/);
   assert.match(source, /class="sidebar-scope-toggle"[\s\S]*?data-sidebar-scope="my-work"[\s\S]*?data-sidebar-scope="company"/);
   assert.match(styles, /\.quest-app\s*\{[\s\S]*?--sidebar-width:\s*264px/);
   assert.match(styles, /\.quest-nav-v2\s*\{[\s\S]*?background:\s*#fff/);
@@ -65,9 +64,10 @@ test('settings remains directly reachable from the compact profile footer', () =
   assert.match(styles, /\.quest-nav-v2 \.deck-settings-link\s*\{/);
 });
 
-test('mobile keeps the topbar search while the desktop rail owns desktop search', () => {
+test('the topbar search is visible on both desktop and mobile', () => {
   assert.match(source, /class="global-search topbar-global-search"/);
-  assert.match(styles, /@media \(min-width:\s*901px\)\s*\{[\s\S]*?\.topbar-global-search\s*\{\s*display:\s*none/);
+  // Desktop shows the topbar search (the sidebar no longer carries a search bar).
+  assert.match(styles, /@media \(min-width:\s*901px\)\s*\{[\s\S]*?\.topbar-global-search\s*\{\s*display:\s*grid/);
   assert.match(styles, /@media \(max-width:\s*900px\)\s*\{[\s\S]*?\.topbar-global-search\s*\{\s*display:/);
 });
 
