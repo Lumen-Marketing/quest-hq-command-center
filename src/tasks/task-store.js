@@ -53,5 +53,11 @@ export function createTasks({ db, isLive, normalize, toPayload, onChange }) {
     return { ok: true, task: saved };
   }
 
-  return { all, byId, seed, save };
+  async function setStatus(id, status) {
+    const current = byId(id);
+    if (!current) return { ok: false, task: null, error: new Error('Task not found.') };
+    return save({ ...current, status, updated_at: new Date().toISOString() });
+  }
+
+  return { all, byId, seed, save, setStatus };
 }

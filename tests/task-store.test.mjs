@@ -86,3 +86,24 @@ test('a null db keeps the store local-only', async () => {
   assert.equal(res.ok, true);
   assert.equal(store.byId('t1').title, 'Local');
 });
+
+test('setStatus routes through the guarded write (full payload + tenant eq, no bare update)', async () => {
+  const db = fakeDb();
+  const store = createTasks({ db, isLive: () => true, normalize, toPayload, onChange() {} });
+  store.seed([{ id: 't1', title: 'X', status: 'todo', workspace_id: 'ws-7' }].map(normalize));
+  const res = await store.setStatus('t1', 'done');
+  assert.equal(res.ok, true);
+  assert.equal(store.byId('t1').status, 'done');
+  assert.equal(db.calls[0].op, 'update');
+  assert.equal('title' in db.calls[0].payload, true);   // full payload, not a bare { status }
+  assert.equal(db.calls[0].payload.status, 'done');
+  assert.equal(db.calls[0].eq.workspace_id, 'ws-7');     // tenant guard preserved
+});
+
+test('setStatus on an unknown id is a no-op failure', async () => {
+  const db = fakeDb();
+  const store = createTasks({ db, isLive: () => true, normalize, toPayload, onChange() {} });
+  const res = await store.setStatus('missing', 'done');
+  assert.equal(res.ok, false);
+  assert.equal(db.calls.length, 0);
+});
