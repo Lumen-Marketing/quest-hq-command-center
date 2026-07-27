@@ -9,9 +9,26 @@ interface, implementation, depth, seam, adapter, leverage, locality**.
 - **Company / Company Workspace** — the top-level tenant. Owns jobs, contacts,
   CRM records, files, forms, finance, settings, dashboards.
 - **Job** — the parent container for work; `jobs.id` is the stable identifier
-  handed to TaskManagement as `tasks.project_id`.
-- **TaskManagement** — the vendored work-execution module (tasks, time,
-  notifications). Integrated across one seam: `job.id -> task.project_id`.
+  task execution scopes by, as `tasks.project_id`.
+- **Tasks surface** — how a Job's tasks are rendered. Flag-gated by
+  `VITE_NATIVE_TASKS_MODULE` (`CONFIG.nativeTasksModule`, default **off**):
+  `renderTasksPage` routes to `renderNativeTasksPage` when on, else
+  `renderEmbeddedTasksPage`. This flag is the migration mechanism from embed to
+  native — a deliberate strangler, not an accident.
+  - **Embedded (default)** — the vendored **TaskManagement** app under
+    `taskmanagement/`, run in an iframe with `?embed=1&project_id=<job.id>`,
+    session shared same-origin against the same Supabase project. Requires a real
+    Supabase session (demo/local render a sign-in notice instead).
+  - **Native (flag on)** — the host's own task UI (board/table/detail/forms)
+    writing directly to `tasks`, workspace-scoped.
+- **Tasks store** (`src/tasks/task-store.js`) — the injectable write engine for
+  the **native** path. Owns the write protocol (optimistic apply → guarded
+  insert/update → rollback → `onChange`); updates are scoped by both `id` and
+  `workspace_id` (tenant guard). `normalizeTask` / `taskPayload` (main.js) are
+  injected, so there is one row shape and one write shape; the `db` client is
+  injected too, so the interface is the test surface. Pure predicates in
+  `src/tasks/task-shape.js` (`isOpenTask`, `scopeToJob`). Built but not yet
+  wired into `main.js`. See ADR-0001.
 - **Plugin** — per-company feature gating (`company_plugins`, presets).
 - **Client Portal** — the guest-facing surface where an external client opens a
   tokened link, optionally enters a password, and reviews/annotates documents.
