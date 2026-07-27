@@ -1,30 +1,30 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-24T08:09:18+08:00",
-  "generated_from_commit": "119a5a5adf12ebedcb31ed7d1a1b07e435286094",
+  "generated_at": "2026-07-28T03:20:25+08:00",
+  "generated_from_commit": "694518b9906ac9e14115997ba84f60e90ea4fcc7",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "119a5a5adf12ebedcb31ed7d1a1b07e435286094",
+    "main_commit_at_capture": "694518b9906ac9e14115997ba84f60e90ea4fcc7",
     "latest_migration": "202607281130_company_invite_launch_hardening.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-07-24T08:09:18+08:00",
+    "supabase_verified_at": "2026-07-28T03:20:25+08:00",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260724000851",
-      "name": "task_workspace_plugin_activation"
+      "version": "20260727190835",
+      "name": "company_invite_launch_hardening"
     },
-    "vercel_verified_at": "2026-07-24T06:36:14+08:00",
+    "vercel_verified_at": "2026-07-28T03:20:25+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://quest-hq-command-center-gamma.vercel.app",
-    "vercel_deployment_id": "dpl_5kJtcUuFuL3yXgHJvRxjFxdwg282",
+    "vercel_deployment_id": "dpl_AbscXPnJhswTyQfrvGXr7YaowU8M",
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "119a5a5adf12ebedcb31ed7d1a1b07e435286094",
-    "github_verified_at": "2026-07-24T06:36:14+08:00",
+    "vercel_deployed_commit": "694518b9906ac9e14115997ba84f60e90ea4fcc7",
+    "github_verified_at": "2026-07-28T03:20:25+08:00",
     "github_production_guardian_run": "https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459"
   },
   "refresh_commands": {

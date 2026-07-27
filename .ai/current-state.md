@@ -1,79 +1,76 @@
 # Current state
 
-Captured 2026-07-24T08:15:00+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-28T03:20:25+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
-- Production URL: https://quest-hq-command-center-gamma.vercel.app
-- Vercel project: prj_0MxrYyGIo61QgLNW2M74fvTxlMRV
-- Current ready production deployment: dpl_5kJtcUuFuL3yXgHJvRxjFxdwg282
-- Deployed branch/commit: main at 119a5a5adf12ebedcb31ed7d1a1b07e435286094
-- GitHub default branch at capture: 119a5a5adf12ebedcb31ed7d1a1b07e435286094
-- Latest deployed Task preview at capture: `dpl_GZ2SWDw8kxA914HxnHBprs9UtyiH` from `feat/task-gantt-foundation` at `7bd752f`; it is READY, Vercel-auth protected, and is not production.
-- Latest overall integration preview at capture: dpl_HGLVRqE2iQfX9po6VByUY1uXKXin from preview/deploy-integration-check at 59417a0; it is not production.
-- Production Guardian: scheduled every six hours and available by manual dispatch.
-- Last explicitly verified Guardian run in this project context: https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459
-- Latest production smoke context: 36 of 36 routes and 3 of 3 critical assets passed for `119a5a5adf12ebedcb31ed7d1a1b07e435286094`. The latest one-hour Vercel sample contained no runtime errors or HTTP 429 rows.
+- Product: Questbase, formerly Quest HQ Command Center.
+- Canonical public domains: https://questbase.io and https://www.questbase.io.
+- Stable Vercel URL: https://quest-hq-command-center-gamma.vercel.app.
+- Vercel project: `prj_0MxrYyGIo61QgLNW2M74fvTxlMRV`.
+- Ready production deployment: `dpl_AbscXPnJhswTyQfrvGXr7YaowU8M`.
+- Deployed application revision: `694518b9906ac9e14115997ba84f60e90ea4fcc7` from `main`.
+- Production smoke passed for the exact revision: 36 of 36 routes and 3 of 3 entry assets.
+- Signed-in browser verification passed for company/workspace navigation and the new teammate-invite modal. The verification did not create an invite or send email.
+- Production Guardian remains scheduled every six hours and available by manual dispatch.
 
 ## Repository health
 
-- Reconciled integration + Task branch regression suite: 574 tests passed.
-- The production build and bundle-budget check pass without a local application server.
-- CI runs npm run check on pushes and pull requests.
-- Build output is checked against a bundle budget and copies TaskManagement plus legacy SPA assets.
-- Production smoke can assert that the deployed HTML revision matches main.
+- GitHub repository: `Lumen-Marketing/quest-hq-command-center`.
+- Default branch at capture: `main` at `694518b9906ac9e14115997ba84f60e90ea4fcc7`.
+- `npm run check` passes: 590 tests, AI/project-state validation, production build, and bundle-budget gate.
+- CI runs the same check on pushes and pull requests.
+- The main application still emits a Vite advisory for a JavaScript chunk over 500 kB; the repository's explicit bundle budget passes.
 
 ## Supabase
 
-- Project ref: rqundirizvojpzhljtdn
-- Status: ACTIVE_HEALTHY
-- Region: us-west-1
-- Postgres: 17.6.1.127, engine 17
-- The catalog-count snapshot remains the 2026-07-21 metadata export; Task/workspace objects below were rechecked live on 2026-07-24.
-- Storage: 6 buckets cataloged without object data.
-- Latest repository migration: `202607241200_per_person_task_visibility.sql`; its policy intent is applied live as ledger version `20260723183531`.
-- It adds five `ringcentral_*` tables, five select policies, the
-  `public.ringcentral_conversation_stats` function, and widens
-  `app_private.permission_plugin_ids` so `team.view` resolves to both `reporting` and
-  `calls`. The catalog counts above predate it and have not been re-captured.
-- The `lumen` company is seeded: a `ringcentral_accounts` row, the `calls` company plugin,
-  and the `calls` workspace plugin on its Main workspace.
-- **The live allowlist is ahead of the older plugin migrations.**
-  `company_plugins_known_plugin_check` contains `tasks`; a future migration that rebuilds
-  this constraint from a stale allowlist can drop `tasks` and fail against existing rows.
-  Always read the live constraint out of `pg_constraint` first.
-- Live tenancy verification: 6 active workspaces; all 14 task rows have non-null workspace ids; zero task company/workspace mismatches were found.
-- Live per-person Task visibility is active. Leads with `tasks.manage` and inherited company administrators can manage workspace tasks; `tasks.view`-only workers can read/update only tasks they are assigned or created. INSERT/DELETE remain `tasks.manage`-gated.
-- Live RLS verification on 2026-07-24 used two separate non-platform authenticated identities. Both saw their own tenant controls and zero rows from the foreign tenant across companies, memberships, workspaces, workspace/company plugins, tasks, contacts, deals, jobs, files, proposals, forms, form responses, workspace-builder state, and rollback-only message fixtures. Cross-tenant task/contact updates affected zero rows; authenticated task DELETE is denied at the table-grant layer. All temporary fixtures were rolled back and verified absent.
-- The forward-only Tasks workspace-activation migration is applied live as ledger version `20260724000851_task_workspace_plugin_activation`. All 6 eligible active workspaces now have an installed Tasks row; the verified missing count is 0 and there are no unexpected non-eligible rows.
-- The Vercel preview environment points to the separate `qqvmcsvdxhgjooirznrj` Supabase project. That project contains legacy `companies` and `tasks` tables but lacks `workspaces`, `workspace_plugins`, and `company_memberships`, so the preview can verify the built shell and commit but cannot be used for workspace/Tasks business UAT until its staging schema is reconciled. Do not solve this by silently granting preview code access to production data.
-- Migration drift: live contains the effects of the Task phase 2/3 migrations without their repository versions in the ledger. Do not replay those historical files; see `docs/supabase-migration-reconciliation.md`.
+- Project ref: `rqundirizvojpzhljtdn`.
+- Status: `ACTIVE_HEALTHY`.
+- Region: `us-west-1`.
+- Postgres: `17.6.1.127`, engine 17.
+- Live catalog snapshot captured 2026-07-28 from metadata only: 75 public tables/views, 191 foreign-key column relationships, 223 policies, 60 public functions, 83 triggers, 6 storage buckets, and 81 applied migration records.
+- Latest repository migration: `202607281130_company_invite_launch_hardening.sql`.
+- The migration is live under provider ledger version `20260727190835` with name `company_invite_launch_hardening`.
+- The `send-company-invite` Edge Function is live and active as version 2. It manually validates the caller JWT and requires an active Owner, Admin, or Developer membership in the invite's company.
+- Strict CORS is active for the stable Vercel URL and the two Questbase domains. Unknown origins do not receive an allow-origin header.
+- Live unauthenticated function calls return 401.
+- A rollback-only production proof accepted an intentionally elevated invite candidate and verified that no elevated membership or role assignment survived, the selected workspace membership was created, and the transaction left no data behind.
+- Existing legacy pending invites with no selected workspace fall back to the company's default active workspace.
+- Supabase security advisor reported no errors after the migration. Its remaining warnings are primarily existing generic `SECURITY DEFINER` notices; authenticated execution of `accept_company_invite` is intentional and protected by token, email, state, expiry, membership, role, and workspace checks.
 
-The repository filename history and Supabase's applied migration versions are not identical because some live migrations were applied/reconciled under provider-generated versions. Compare intent and live schema; do not assume filename equality means deployment status.
+Repository migration filenames and Supabase provider ledger versions can differ because some live migrations were applied or reconciled under provider-generated timestamps. Compare intent and live schema before replaying historical files.
+
+## Tenancy and onboarding
+
+The market customer and outer security boundary is a company. Each company owns configurable operational workspaces. Owners, Admins, and Developers inherit access to active workspaces; workers and other members require explicit active workspace memberships and can have a separate role in each workspace.
+
+The teammate flow now follows one bounded path:
+
+1. A company manager selects a non-elevated role and one or more active workspaces.
+2. Questbase creates a pending company invite.
+3. The server-side Edge Function derives the recipient, company, role, workspace names, token, subject, and HTML from that invite.
+4. The recipient signs in with the invited email and accepts the token.
+5. The database creates the company membership, clears stale custom roles, inserts only a verified non-elevated role, and creates the selected workspace memberships.
+
+Invites cannot grant Owner, Admin, or Developer. Existing active members cannot use another invite to change their access. Elevated promotion remains a separate owner-guarded action after onboarding.
+
+Email delivery is observable and recoverable. Invite rows record `not_sent`, `sent`, or `failed`; a delivery failure does not invalidate the token, and managers can retry or copy the link manually.
 
 ## Feature state
 
-The current release branch separates each customer company account from its configurable operational child workspaces. The command rail groups child workspaces under the company header, highlights the selected workspace, and preserves it in the route. Company settings can create, rename, describe, icon, archive, and manage those children; user access assigns regular workers and a role independently per workspace. Company owners, admins, and developers inherit all active child workspaces. Company plugin records are entitlements, while activation and configuration live per child workspace. Contacts, accounts, sites, quotes, activities, jobs, tasks, pipeline stages, underwriting cases, files, and proposals are isolated by `workspace_id`; record conversions preserve that identity and database constraints reject cross-workspace links. The absorbed Task runtime now receives the selected workspace from the host, filters task reads and mutations to it, and is gated by its own per-workspace Tasks plugin activation. These Task foundation changes are not production state until the release branch is published and promoted.
+- Company and operational-workspace separation is production state.
+- Workspaces independently activate entitled plugins and preserve workspace identity through CRM, pipeline, underwriting, job, file, proposal, and task records.
+- Pipeline stages are stored and replaced per operational workspace rather than hardcoded globally.
+- The compact Quest command rail, Modular Quest landing direction, IBM Plex typography, Technical Ledger underwriter, Contacts lifecycle, Dashboard, Workday, Jobs, Tasks, Messages, Files, Forms, Client Portals, Price Book, Calls, Automations, Analytics, Users, and Workspace App Builder are present.
+- Shared CSV parsing now preserves empty columns and supports quoted commas, quotes, and newlines.
+- Imported and persisted Workspace App Builder colors are constrained to CSS hex values before reaching style sinks.
 
-The release branch also contains the feature-flagged native Command Center Tasks surface: workspace-scoped list/board/detail/create/edit, visible Job/Contact/Quote links, direct Supabase reads and writes, and the existing recurrence and automation engines. `VITE_NATIVE_TASKS_MODULE` remains false by default and the deployed iframe remains the fallback until the Friday release gates are satisfied.
+## Remaining controlled launch configuration
 
-The public home now uses the approved Modular Quest product direction and the market-facing Questbase.io name. Its interactive workspace preview demonstrates role-focused workspaces while keeping one company record connected. The original mockup's early-access form was not carried into the application: Business login, Start workspace, Join by invite, and session-aware Open workspace actions all use the existing authentication and tenancy flows.
-
-The Underwriter workspace follows the approved Technical Ledger hierarchy: compact metrics and stage filters, a dense two-column estimator workbench with a dedicated decision summary, and a full-width estimate queue. Its primary action is Save decision and the calculator's persistence, permissions, and live recalculation remain intact. The application shell uses a 264px white Quest command rail with IBM Plex Sans and IBM Plex Mono, sidebar search, My work and Company scopes, stakeholder-approved Work/Pipeline/Production/Tools/Review/Build groups, and direct profile/settings access while preserving module permission gates. The Contacts rail follows the standalone nine-step sales lifecycle from Prospects through Lost. Tasks remain the shared "What's next" source across Contacts, Quotes/Deals, and Jobs. Application startup is deferred until top-level module state is initialized so cached direct links render safely.
-
-The implementation includes Dashboard, Workday, Contacts, Quotes/Deals, Proposals, Jobs, Tasks, Files, Forms, Client Portals with document review, Price Book, Finance, Messages, Calendar, Analytics, Users, Team Chart, Team Workload, Knowledge, Time, Approvals, Clock, Calls, Settings, plugins, and Workspace App Builder.
-
-Calls is a company-scoped RingCentral module with exactly two surfaces: a live board showing each extension's status and how long it has held it, and a table of total calls versus calls over 60 seconds per person. It deliberately reproduces nothing that RingCentral Analytics already shows. Historic counts are served by `public.ringcentral_conversation_stats` from synced rows, so the page renders when RingCentral is unreachable; only the live board reaches RingCentral, through `api/ringcentral-presence.js`, which is admin-only and caches upstream calls for ten seconds. `api/ringcentral-sync.js` runs on a Vercel cron, re-fetching a rolling three-day window of the company call log and upserting on `(company_id, call_id)`. The module is gated on the existing `team.view` permission and requires RingCentral credentials in Vercel plus a `ringcentral_accounts` row before it shows data.
-
-Future navigation entries currently include Tickets and Templates. Verify code and product direction before treating a planned page as complete.
-
-Automations is now live: company-scoped trigger -> action rules (e.g. "when a deal reaches Won, create a task") stored in the automations table, gated on settings.manage to edit and membership to read. The matching engine is pure (src/data/automations.js) and fires on the transition into a target state; rules run from persistDeal, setContactStage, and task completion.
-
-The web app is installable. A manifest, maskable icon set, and service worker let Android Chrome install it to the home screen on phones and tablets, running standalone from `/command`. The worker is scoped narrowly on purpose: navigations are network-first, only content-hashed build assets are cached, and the API and all cross-origin traffic are never cached. A signed Trusted Web Activity APK/AAB (package com.questroofing.hq) wraps this PWA for sideload/Play Store; the build workspace and signing keystore live in the git-ignored twa/ folder.
-
-Tasks support recurrence: a task with a rule in tasks.recurrence rolls forward to its next occurrence when completed via the checkbox or a dashboard tile. Rules and date math live in src/data/recurrence.js; the command bar parses cadence phrases into the Repeat control.
+- Payments remain intentionally out of this change set.
+- Before public onboarding, run one invite to a designated team-owned mailbox to prove the configured Resend API key, verified sender/domain, and inbox delivery. The code, authorization, database delivery ledger, retry path, and manual fallback are live, but no existing teammate was emailed during this rollout.
+- Supabase Auth registration, verification, and recovery email use a separate channel. Confirm custom SMTP and branded Auth templates in the Supabase dashboard before public launch.
 
 ## Freshness
 
-The exact capture metadata is in [manifest.json](manifest.json). Refresh live metadata whenever the database, production deployment, main revision, or product-module status materially changes.
-
+Exact capture metadata is in [manifest.json](manifest.json). Refresh live metadata whenever the database, production deployment, main revision, or product-module status materially changes.
