@@ -1,10 +1,7 @@
 # report-problem
 
-Receives in-app bug / problem / suggestion reports, stores them in
+Receives in-app bug, problem, and suggestion reports, stores them in
 `public.bug_reports`, and emails a copy to the platform inbox via Resend.
-Ported unchanged from the standalone task app in Phase 4.
-
-## Why unchanged
 
 Its insert columns (`reporter_id`, `reporter_name`, `reporter_email`, `type`,
 `description`, `context`) match the `bug_reports` table created by
@@ -23,15 +20,20 @@ payload caps, and a 5-reports-per-hour rate limit per reporter.
 | --- | --- |
 | `RESEND_API_KEY` | Resend API key (same key as notify-email) |
 | `EMAIL_FROM` | From address on the notification copy |
-| `ALLOWED_ORIGINS` | Comma-separated origins allowed to call the function (CORS) |
-| `APP_URL` | Base URL for links in the emailed copy |
+| `ALLOWED_ORIGINS` | Optional extra preview or pilot origins allowed by CORS |
 
 `SUPABASE_*` values are injected automatically.
 
-## Deploy
+The production Questbase domains and stable Vercel URL are built into the CORS
+allowlist. Unknown origins remain blocked. Email is best effort: the stored
+report is the source of truth if Resend is not configured or delivery fails.
 
-Batched with the migrations — not yet deployed:
+## Deployment
+
+This function is live in the Questbase Supabase project. Deploy it with gateway
+JWT verification disabled because the function validates the caller token and
+approved profile itself:
 
 ```bash
-supabase functions deploy report-problem --project-ref rqundirizvojpzhljtdn
+supabase functions deploy report-problem --no-verify-jwt --project-ref rqundirizvojpzhljtdn
 ```

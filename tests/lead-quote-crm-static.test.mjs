@@ -189,37 +189,37 @@ test('roof system options use Quest Roofing service roof types instead of saved 
   assert.doesNotMatch(helperSource, /Object\.values\(ROOF_ESTIMATE_SYSTEMS\)/);
 });
 
-test('contacts list uses a Salesforce-style searchable filterable table view', () => {
+test('contacts list uses a searchable table with the active field-group filter rail', () => {
+  const pageSource = source.match(/function renderContactsPage\(route, companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
   const tableSource = source.match(/function renderContactTable\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const sidebarSource = source.match(/function renderContactFieldGroupsSidebar\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /contactSort: 'name'/);
   assert.match(source, /const CONTACT_SORT_OPTIONS = \[/);
   assert.match(source, /const CONTACT_FILTER_DEFAULTS = /);
-  assert.match(source, /function renderContactFilterBar\(companyId\)/);
   assert.match(source, /function contactFilterOptions\(companyId\)/);
   assert.match(source, /function activeContactFilters\(\)/);
   assert.match(source, /function sortedContacts\(contacts\)/);
   assert.match(source, /if \(event\.target\.matches\('\[data-contact-search\]'\)\)/);
-  assert.match(source, /if \(event\.target\.matches\('\[data-contact-filter\]'\)\)/);
   assert.match(source, /if \(action === 'set-contact-sort'\)/);
+  assert.match(source, /if \(action === 'set-contact-filter'\)/);
   assert.match(source, /if \(action === 'clear-contact-filters'\)/);
-  assert.match(source, /if \(action === 'remove-contact-filter'\)/);
+  assert.match(pageSource, /renderContactFieldGroupsSidebar\(companyId\)/);
+  assert.match(sidebarSource, /data-action="set-contact-filter"/);
+  assert.match(sidebarSource, /data-action="clear-contact-filters"/);
+  assert.match(sidebarSource, /aria-label="Contact field groups"/);
   assert.match(tableSource, /class="panel contact-list-view"/);
   assert.match(tableSource, /All Contacts/);
   assert.match(tableSource, /data-contact-search/);
-  assert.match(tableSource, /renderContactFilterBar\(companyId\)/);
   assert.match(tableSource, /data-action="open-contact-form" data-mode="new"/);
   assert.match(tableSource, /data-action="open-stage-manager" data-module="contacts"/);
   assert.match(tableSource, /data-action="set-pipeline-view" data-module="contacts" data-view="table"/);
   assert.match(tableSource, /data-action="set-pipeline-view" data-module="contacts" data-view="board"/);
   assert.match(styles, /\.contact-list-view/);
-  assert.match(styles, /\.contact-filter-bar/);
-  assert.match(styles, /\.contact-filter-select/);
-  assert.match(styles, /\.contact-filter-select\.primed/);
-  assert.match(styles, /\.contact-filter-chips/);
+  assert.match(styles, /\.cv2-rail/);
+  assert.match(styles, /\.cv2-opt/);
+  assert.match(styles, /\.cv2-opt\.active/);
   assert.match(styles, /\.contact-header-sort/);
-  assert.match(styles, /\.contact-filter-wrap \{[\s\S]*?width: fit-content;/);
-  assert.match(styles, /\.contact-filter-select \{[\s\S]*?flex: 0 0 auto;[\s\S]*?max-width: 190px;/);
-  assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.contact-filter-wrap,[\s\S]*?\.contact-filter-bar,[\s\S]*?\.contact-filter-select \{[\s\S]*?width: 100%;/);
+  assert.match(styles, /\.cv2-wrap/);
 });
 
 test('record activity feeds expose a usable filter bar', () => {

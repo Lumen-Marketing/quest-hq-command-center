@@ -190,15 +190,24 @@ Deno.serve(async (req: Request) => {
     const loginUrl = new URL("/login", appUrl);
     loginUrl.searchParams.set("invite", invite.token);
     const workspaceNames = workspaces
-      .map((workspace: { name: string }) => escapeHtml(workspace.name))
+      .map((workspace: { name: string }) => String(workspace.name ?? "").trim())
+      .filter(Boolean)
       .join(", ");
     const subject = `You're invited to ${companyName} on Questbase`;
+    const text = `Questbase
+
+You've been invited to join ${companyName} as ${roleName}.
+Workspace access: ${workspaceNames}
+
+Accept invitation: ${loginUrl.toString()}
+
+This link is tied to ${String(invite.email).trim()} and expires ${new Date(invite.expires_at).toUTCString()}.`;
     const html = `
       <div style="font-family:Inter,Arial,sans-serif;max-width:620px;margin:0 auto;padding:32px;color:#172033">
         <div style="font-weight:800;font-size:22px;color:#ed4e0d">Questbase</div>
         <h1 style="font-size:28px;line-height:1.2;margin:28px 0 12px">Join ${escapeHtml(companyName)}</h1>
         <p style="font-size:16px;line-height:1.6">You've been invited as <strong>${escapeHtml(roleName)}</strong>.</p>
-        <p style="font-size:16px;line-height:1.6"><strong>Workspace access:</strong> ${workspaceNames}</p>
+        <p style="font-size:16px;line-height:1.6"><strong>Workspace access:</strong> ${escapeHtml(workspaceNames)}</p>
         <a href="${escapeHtml(loginUrl.toString())}" style="display:inline-block;margin:20px 0;padding:13px 20px;border-radius:10px;background:#ed4e0d;color:#fff;text-decoration:none;font-weight:700">Accept invitation</a>
         <p style="font-size:13px;line-height:1.6;color:#667085">This link is tied to ${escapeHtml(invite.email)} and expires ${escapeHtml(new Date(invite.expires_at).toUTCString())}.</p>
       </div>
@@ -215,6 +224,7 @@ Deno.serve(async (req: Request) => {
         from,
         to: [String(invite.email).trim().toLowerCase()],
         subject,
+        text,
         html,
       }),
     });

@@ -1,6 +1,6 @@
-# Quest HQ Production QA Checklist
+# Questbase Production QA Checklist
 
-Use this checklist against `https://quest-hq-command-center.vercel.app` after every meaningful deployment.
+Use this checklist against `https://www.questbase.io` after every meaningful deployment.
 
 ## Access
 
@@ -11,6 +11,8 @@ Use this checklist against `https://quest-hq-command-center.vercel.app` after ev
 - New business registration creates a workspace request with Manual approval status.
 - Sign out returns to `/login`.
 - Single-company users see a non-interactive company badge, not a company dropdown.
+- Owners see the setup checklist until workspace, app, teammate, customer, and task setup is complete.
+- Invited workers land on the permission-neutral Dashboard after acceptance.
 
 ## Route Smoke Matrix
 
@@ -76,7 +78,17 @@ Run these with at least two real Supabase users after pending migrations are app
 - Worker invited to Company A can accept that company only.
 - Same email invited by Company B joins as the same person account with a separate membership, not a duplicate account.
 - Owner can create a copyable invite code/link.
-- Invite UI does not imply automatic email delivery is active.
+- Invite email is sent only by the server-side function; provider failure keeps the copyable link valid.
+- Invite email has both HTML and plain-text content.
+
+## Support
+
+- Account menu opens Help & support.
+- Email support opens the configured support address.
+- A signed-in approved user can submit a bug, problem, or suggestion.
+- The submitted report appears in the platform report inbox.
+- Production-origin preflight for `report-problem` returns the matching
+  `Access-Control-Allow-Origin`; an unrelated origin receives none.
 
 ## Sensitive Files And Finance QA
 
@@ -107,6 +119,8 @@ Run after the secure finance/files migrations are applied:
 
 - `node --check src/main.js`
 - `npm run build`
-- `npm run smoke:prod`
+- `npm run smoke:prod -- --base-url https://www.questbase.io --expect-sha <main-sha>`
 - `git diff --check`
-- Commit, push, and deploy with `npx vercel --prod --yes`.
+- Commit and push the verified change to `main`.
+- Wait for Vercel's Git deployment to reach `READY` for the exact commit.
+- Complete [the pilot onboarding rehearsal](../operations/pilot-onboarding-rehearsal.md).

@@ -11,7 +11,6 @@ import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscri
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
 import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
-import { searchHelp, HELP_TOPICS } from './assistant/help-index.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
@@ -71,6 +70,7 @@ const CONFIG = {
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL || 'https://rqundirizvojpzhljtdn.supabase.co',
   supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U',
   stripePriceId: import.meta.env.VITE_STRIPE_PRICE_ID || '',
+  supportEmail: import.meta.env.VITE_SUPPORT_EMAIL || 'info@lumenmarketingusa.com',
 };
 const INVITE_BLOCKED_ROLE_NAMES = new Set(['owner', 'admin', 'developer']);
 
@@ -2422,6 +2422,7 @@ const state = {
   toastTimer: null,
   modal: '',
   accountMenuOpen: false,
+  supportReport: { type: 'problem', description: '', error: '', submitting: false },
   notificationMenuOpen: false,
   workspaceMenuOpen: false,
   mobileMenuOpen: false,
@@ -2437,6 +2438,11 @@ const state = {
 
 const app = document.getElementById('app');
 let supabaseClientCache = null;
+let supportController = null;
+let pilotReadinessModule = null;
+let pilotReadinessPromise = null;
+let helpModule = null;
+let helpModulePromise = null;
 let commandResults = [];
 const COMMAND_RECENTS_KEY = 'quest.command.recents';
 const COMMAND_RECENTS_MAX = 8;
@@ -3641,6 +3647,23 @@ function createSupabaseClient() {
   return supabaseClientCache;
 }
 
+async function loadSupportController() {
+  if (supportController) return supportController;
+  const { createSupportController } = await import('./support/reporting.js');
+  supportController = createSupportController({
+    state,
+    CONFIG,
+    h,
+    renderModalShell,
+    isLiveSupabaseSession,
+    createSupabaseClient,
+    activeCompanyId,
+    render,
+    showToast,
+  });
+  return supportController;
+}
+
 function safeSupabaseQuery(query) {
   return Promise.resolve(query).catch((error) => ({ error }));
 }
@@ -4052,6 +4075,7 @@ function shellTemplate(route, workspace) {
               ${renderAccountThemeControls()}
               <button type="button" data-action="open-profile"><i class="ti ti-user-circle"></i>Profile</button>
               <button type="button" data-action="open-settings"><i class="ti ti-settings"></i>Settings</button>
+              <button type="button" data-action="open-support"><i class="ti ti-help-circle"></i>Help & support</button>
               <button type="button" data-action="sign-out"><i class="ti ti-logout"></i>Sign out</button>
             </div>
           </div>
@@ -5919,6 +5943,43 @@ function renderCompanyAccessDeniedPage(companyId) {
   `;
 }
 
+function renderPilotLaunchChecklist(companyId) {
+  if (isReadOnlyDemo() || !canManageOperationalWorkspaces(companyId)) return '';
+  if (!pilotReadinessModule) {
+    if (!pilotReadinessPromise) {
+      pilotReadinessPromise = import('./launch/pilot-readiness.js')
+        .then((module) => {
+          pilotReadinessModule = module;
+          render();
+        })
+        .catch(() => {
+          pilotReadinessPromise = null;
+        });
+    }
+    return '';
+  }
+  const workspaceId = activeWorkspaceId();
+  return pilotReadinessModule.renderPilotChecklist({
+    input: {
+      hasWorkspace: !!activeWorkspace(),
+      installedPluginCount: workspacePluginRows(workspaceId).filter((row) => row.status === 'installed').length,
+      activeMemberCount: companyMembers(companyId).length,
+      pendingInviteCount: state.companyInvites.filter((invite) => invite.company_id === companyId && invite.status === 'pending').length,
+      customerRecordCount: companyContacts(companyId).length + companyJobs(companyId).length,
+      taskCount: companyTasks(companyId).length,
+    },
+    links: {
+      workspace: companyPath('settings', { tab: 'company' }, companyId),
+      apps: companyPath('settings', { tab: 'plugins' }, companyId),
+      team: companyPath('users', {}, companyId),
+      customer: companyPath('contacts', {}, companyId),
+      task: companyPath('tasks', {}, companyId),
+    },
+    href: appHref,
+    escapeHtml: h,
+  });
+}
+
 function renderCompanyDashboard(companyId) {
   const messagesModule = moduleById('messages');
   const showMessages = messagesModule && canViewModule(messagesModule, companyId);
@@ -5951,6 +6012,8 @@ function renderCompanyDashboard(companyId) {
           ${renderAvatar(activeSession().profile, 'avatar')}
         </div>
       </div>
+
+      ${renderPilotLaunchChecklist(companyId)}
 
       <section class="dash-commandbar">
         <div class="dash-role-tabs">
@@ -21171,6 +21234,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'files-delete') return renderFilesDeleteModal();
   if (state.modal === 'files-transfer') return renderFilesTransferModal();
   if (state.modal === 'system-status') return renderSystemStatusModal();
+  if (state.modal === 'support') return supportController?.renderSupportModal() || '';
   if (state.modal === 'cp-mark-info') return renderClientPortalMarkModal();
   if (state.modal === 'profile') return renderProfileModal(session.profile);
   if (state.modal === 'workspace-icon') return renderWorkspaceIconModal(activeCompanyId());
@@ -22641,6 +22705,17 @@ function openCommandPalette() {
   // the landing or auth screens.
   if (!state.route || state.route.name !== 'company') return;
   state.commandPalette = { open: true, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null };
+  if (!helpModulePromise) {
+    helpModulePromise = import('./assistant/help-index.js').then((module) => {
+      helpModule = module;
+      if (state.commandPalette.open) {
+        render();
+        queueMicrotask(() => document.querySelector('[data-command-input]')?.focus());
+      }
+    }).catch(() => {
+      helpModulePromise = null;
+    });
+  }
   render();
   queueMicrotask(() => {
     const input = document.querySelector('[data-command-input]');
@@ -22800,7 +22875,7 @@ function commandAssistantResults(query) {
   if (!q) return [];
   const extras = [];
 
-  for (const topic of searchHelp(q).slice(0, 3)) {
+  for (const topic of (helpModule?.searchHelp(q) || []).slice(0, 3)) {
     extras.push({
       id: `help:${topic.id}`, group: 'Guide', icon: 'ti-help-circle',
       label: topic.title, hint: '', run: { kind: 'help', topicId: topic.id },
@@ -22931,7 +23006,7 @@ function runCommand(command) {
   // These two stay inside the palette (they swap its body), so handle them
   // before the close below.
   if (run.kind === 'help') {
-    state.commandPalette.answer = HELP_TOPICS.find((t) => t.id === run.topicId) || null;
+    state.commandPalette.answer = helpModule?.HELP_TOPICS.find((t) => t.id === run.topicId) || null;
     render();
     return;
   }
@@ -23452,6 +23527,14 @@ function handleAction(event, node) {
     event.preventDefault();
     state.accountMenuOpen = false;
     signOut();
+    return;
+  }
+  if (action === 'open-support') {
+    event.preventDefault();
+    state.accountMenuOpen = false;
+    loadSupportController()
+      .then((controller) => controller.open())
+      .catch((error) => showToast(error?.message || 'Support could not be opened.', 'error', 'Support'));
     return;
   }
   if (action === 'toggle-account-menu') {
@@ -25458,6 +25541,13 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-support-report-form]')) {
+    event.preventDefault();
+    if (!supportController) return;
+    supportController.submitSupportReport(event.target).catch((error) => supportController.fail(error));
+    return;
+  }
+
   if (event.target.matches('[data-command-task-form]')) {
     event.preventDefault();
     submitCommandTask(event.target);
@@ -27391,7 +27481,7 @@ async function acceptCompanyInvite(token, fallbackReturnUrl = '') {
   state.authMessage = '';
   state.loginError = '';
   state.dataLoaded = false;
-  navigate(companyPath('jobs', {}, companyId), { replace: true });
+  navigate(companyPath('dashboard', {}, companyId), { replace: true });
 }
 
 async function copyInviteLink(inviteId) {
@@ -33877,6 +33967,7 @@ function isMutableAction(action = '') {
     'kb-cancel',
     'sign-out',
     'toggle-account-menu',
+    'open-support',
     'toggle-notifications',
     'toggle-workspace-menu',
     'select-workspace',

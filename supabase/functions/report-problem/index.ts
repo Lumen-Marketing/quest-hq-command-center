@@ -14,6 +14,7 @@
 // -----------------------------------------------------------------------------
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeadersForOrigin } from "./cors.js";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const MAX_DESCRIPTION = 2000;
@@ -23,24 +24,13 @@ const MAX_REPORTS_PER_HOUR = 5;
 const TYPES = new Set(["bug", "problem", "suggestion"]);
 const CONTEXT_KEYS = ["view", "company", "userAgent", "viewport", "path"];
 
-// CORS: strict allowlist, fails closed — same contract as notify-email.
+// Production Questbase origins are always allowed. ALLOWED_ORIGINS can add
+// controlled preview or pilot origins without opening CORS to every site.
 function corsHeadersFor(req: Request): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Vary": "Origin",
-  };
-  const allowList = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
-    .split(",").map((s) => s.trim()).filter(Boolean);
-  if (allowList.length === 0) {
-    console.error("[report-problem] ALLOWED_ORIGINS is not set — refusing cross-origin responses.");
-    return headers;
-  }
-  const origin = req.headers.get("Origin") ?? "";
-  if (allowList.includes(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin;
-  }
-  return headers;
+  return corsHeadersForOrigin(
+    req.headers.get("Origin") ?? "",
+    Deno.env.get("ALLOWED_ORIGINS") ?? "",
+  );
 }
 
 function json(req: Request, body: unknown, status = 200): Response {
@@ -68,7 +58,7 @@ Deno.serve(async (req: Request) => {
     }
     // Email is best-effort: a missing Resend key must not block report storage.
     const resendKey = Deno.env.get("RESEND_API_KEY") ?? "";
-    const from = Deno.env.get("EMAIL_FROM") ?? "Quest HQ <onboarding@resend.dev>";
+    const from = Deno.env.get("EMAIL_FROM") ?? "Questbase <onboarding@resend.dev>";
 
     // -------- caller authorization ---------------------------------------
     // Any APPROVED profile may report, regardless of role. This is a
@@ -193,7 +183,7 @@ Deno.serve(async (req: Request) => {
           body: JSON.stringify({
             from,
             to,
-            subject: `[Quest HQ] ${typeLabel} report from ${reporterName}`,
+            subject: `[Questbase] ${typeLabel} report from ${reporterName}`,
             html,
           }),
         });

@@ -50,6 +50,12 @@ test('invite UI only offers non-elevated roles and captures workspace assignment
   assert.match(MAIN, /data-action="send-invite-email"/);
 });
 
+test('an invited worker lands on the permission-neutral dashboard after joining', () => {
+  const acceptSource = MAIN.match(/async function acceptCompanyInvite\(token, fallbackReturnUrl = ''\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(acceptSource, /navigate\(companyPath\('dashboard', \{\}, companyId\), \{ replace: true \}\)/);
+  assert.doesNotMatch(acceptSource, /navigate\(companyPath\('jobs'/);
+});
+
 test('invite email function derives recipient and content from a server-side invite', () => {
   assert.equal(existsSync(EDGE_PATH), true, 'send-company-invite Edge Function must exist');
   const source = readFileSync(EDGE_PATH, 'utf8');
@@ -64,6 +70,8 @@ test('invite email function derives recipient and content from a server-side inv
   assert.match(source, /https:\/\/quest-hq-command-center-gamma\.vercel\.app/);
   assert.match(source, /https:\/\/questbase\.io/);
   assert.match(source, /https:\/\/www\.questbase\.io/);
+  assert.match(source, /const text = `[\s\S]*?Accept invitation:/);
+  assert.match(source, /body:\s*JSON\.stringify\(\{[\s\S]*?\btext,/);
 });
 
 test('invite email status is persisted without invalidating the invite on provider failure', () => {

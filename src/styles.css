@@ -25865,3 +25865,222 @@ html[data-card-style="glass"] .message-context-rail {
   gap: 6px;
   font-size: 12.5px;
 }
+
+/* Pilot setup is derived from real company/workspace state, so it can guide a
+   new owner without creating another onboarding record or fixed pipeline. */
+.pilot-launch-checklist {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 18px;
+  border-color: color-mix(in srgb, var(--accent, #ed4e0d) 28%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent, #ed4e0d) 8%, transparent), transparent 52%),
+    var(--surface, #fff);
+}
+
+.pilot-launch-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.pilot-launch-summary h2 {
+  margin: 2px 0 3px;
+  font-size: 18px;
+}
+
+.pilot-launch-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pilot-launch-summary > strong {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--accent, #ed4e0d);
+}
+
+.pilot-launch-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #fff;
+  background: var(--accent, #ed4e0d);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent, #ed4e0d) 24%, transparent);
+}
+
+.pilot-launch-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-2, #f3f1ee);
+}
+
+.pilot-launch-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, #ed4e0d);
+  transition: width 180ms ease;
+}
+
+.pilot-launch-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pilot-launch-step {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface, #fff) 86%, transparent);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pilot-launch-step:hover {
+  border-color: color-mix(in srgb, var(--accent, #ed4e0d) 55%, var(--border));
+  transform: translateY(-1px);
+}
+
+.pilot-launch-step > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pilot-launch-step > .ti:first-child {
+  color: var(--muted);
+}
+
+.pilot-launch-step.complete {
+  color: var(--muted);
+  background: var(--surface-2, #f3f1ee);
+}
+
+.pilot-launch-step.complete > .ti:first-child {
+  color: #168451;
+}
+
+@media (max-width: 1050px) {
+  .pilot-launch-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .pilot-launch-checklist {
+    padding: 14px;
+  }
+
+  .pilot-launch-summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pilot-launch-summary > strong {
+    display: none;
+  }
+
+  .pilot-launch-steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+.support-modal {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.support-modal-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  gap: 18px;
+}
+
+.support-guide-card,
+.support-report-form {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+
+.support-guide-card {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent, #ed4e0d) 10%, transparent), transparent 58%),
+    var(--surface-2, #f7f5f2);
+}
+
+.support-guide-card h3,
+.support-report-form h3 {
+  margin: 0 0 5px;
+  font-size: 17px;
+}
+
+.support-guide-card p,
+.support-report-form p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.support-guide-card small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.support-guide-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #fff;
+  background: var(--accent, #ed4e0d);
+  font-size: 20px;
+}
+
+.support-guide-card kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface, #fff);
+  color: var(--ink);
+  font: 600 11px 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.support-report-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.support-report-form textarea {
+  min-height: 142px;
+  resize: vertical;
+}
+
+@media (max-width: 720px) {
+  .support-modal-grid {
+    grid-template-columns: 1fr;
+  }
+}
