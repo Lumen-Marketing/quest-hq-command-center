@@ -87,3 +87,26 @@ frame whenever watched data changes underneath the user. The durable fix is to r
 existing iframe element across renders (detaching it blanks its document, so preserving the
 node — not the innerHTML — is the only option) or to exempt the tasks route from full
 re-render. Until then, a background realtime update can bump a user out of a task mid-edit.
+
+## Operational-workspace default and uploaded icon do not persist in live mode
+
+The Company-settings "Workspace directory" lets an admin **set a default workspace** and **upload a
+custom workspace icon/image** (in addition to picking a built-in icon). Both take effect immediately
+in session state and persist under the local fallback, but the live RPCs
+`create_operational_workspace` and `update_operational_workspace` accept only `icon_key` and
+`status` — there is no column or parameter for an uploaded image or a set-default action. On a live
+Supabase session these two changes therefore do **not** survive a reload. A reviewed migration adding
+a `workspaces.icon_image` column and a `set_default_operational_workspace` RPC (plus threading
+`icon_image` through the create/update RPCs) is required before they persist for the team. The client
+already stores `icon_image` on the normalized workspace and applies the default flag optimistically.
+
+## Appearance customization is per-browser and cannot reach the Tasks iframe
+
+Settings → Appearance (theme, accent, background pattern/upload, card solid/glass) stores choices in
+`localStorage` and applies them as CSS variables + `data-*` attributes on `<html>`, so they survive
+the full `render()` rebuilds without reapplying. Two scope limits: the embedded Task-management view
+is an `<iframe>` (a separate document) and cannot inherit the host page's background/card styling; and
+the accent picker mainly affects light mode, because the dark-mode palette block re-hardcodes
+`--orange` after the `[data-accent]` blocks. Widening either requires, respectively, passing the
+appearance into the iframe (URL param / postMessage) and having dark mode derive `--orange` from the
+accent rather than hardcoding it.

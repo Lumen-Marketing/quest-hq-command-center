@@ -1,5 +1,8 @@
 export const DEFAULT_BUNDLE_LIMITS = Object.freeze({
-  entryJs: 340 * 1024,
+  // Raised 340 -> 342 KB (2026-07) for the Appearance customization feature (theme
+  // background patterns/upload + card glass/solid styling). Conscious, measured bump;
+  // the guard stays active. Prefer trimming/extracting before raising this further.
+  entryJs: 342 * 1024,
   initialJs: 440 * 1024,
   entryCss: 120 * 1024,
 });

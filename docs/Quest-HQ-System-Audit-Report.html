@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quest HQ — System Audit Report</title>
+<style>
+  :root{
+    --ink:#1c1917; --muted:#57534e; --faint:#78716c;
+    --line:#e7e5e4; --bg:#ffffff; --soft:#faf9f7;
+    --accent:#ED4E0D; --accent-soft:#fdeee6;
+    --p0:#b42318; --p0bg:#fef3f2;
+    --p1:#b54708; --p1bg:#fffaeb;
+    --p2:#175cd3; --p2bg:#eff8ff;
+    --p3:#3538cd; --p3bg:#eef4ff;
+    --good:#067647; --goodbg:#ecfdf3;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  body{
+    font-family:"Segoe UI",-apple-system,Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--bg); margin:0;
+    font-size:11pt; line-height:1.5;
+  }
+  .page{padding:0 4mm;}
+  h1,h2,h3,h4{line-height:1.2; margin:0;}
+  h2{font-size:19pt; margin:0 0 4px; letter-spacing:-.01em;}
+  h3{font-size:13.5pt; margin:22px 0 8px; padding-bottom:5px; border-bottom:2px solid var(--line);}
+  h4{font-size:11.5pt; margin:16px 0 4px;}
+  p{margin:0 0 9px;}
+  a{color:var(--accent); text-decoration:none;}
+  code{font-family:"Cascadia Code",Consolas,monospace; font-size:9.2pt; background:var(--soft); border:1px solid var(--line); border-radius:4px; padding:1px 4px;}
+  .muted{color:var(--muted);} .faint{color:var(--faint);}
+  .small{font-size:9.5pt;}
+
+  /* Cover */
+  .cover{height:247mm; display:flex; flex-direction:column; justify-content:space-between; padding:20mm 6mm 12mm;}
+  .cover-badge{display:inline-block; font-size:9pt; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); background:var(--accent-soft); border-radius:999px; padding:6px 14px;}
+  .cover h1{font-size:40pt; letter-spacing:-.02em; margin:18px 0 10px;}
+  .cover .sub{font-size:15pt; color:var(--muted); font-weight:400; max-width:150mm;}
+  .cover-meta{border-top:2px solid var(--ink); padding-top:14px; display:grid; grid-template-columns:repeat(4,1fr); gap:14px;}
+  .cover-meta div span{display:block;}
+  .cover-meta .k{font-size:8.5pt; text-transform:uppercase; letter-spacing:.08em; color:var(--faint); margin-bottom:3px;}
+  .cover-meta .v{font-size:11pt; font-weight:600;}
+
+  /* Blocks */
+  .lead{font-size:12pt; color:var(--muted);}
+  .callout{background:var(--soft); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; padding:12px 15px; margin:12px 0;}
+  .callout.good{border-left-color:var(--good); background:var(--goodbg);}
+  .callout.warn{border-left-color:var(--p1); background:var(--p1bg);}
+
+  /* Scorecard */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .card{border:1px solid var(--line); border-radius:10px; padding:13px 15px; background:var(--bg);}
+  .card .label{font-size:8.5pt; text-transform:uppercase; letter-spacing:.07em; color:var(--faint);}
+  .card .big{font-size:24pt; font-weight:800; letter-spacing:-.02em; margin:2px 0;}
+  .card .note{font-size:9.2pt; color:var(--muted);}
+
+  /* Severity chips */
+  .chip{display:inline-block; font-size:8pt; font-weight:800; letter-spacing:.04em; padding:2px 8px; border-radius:999px; vertical-align:middle;}
+  .c-p0{color:var(--p0); background:var(--p0bg);}
+  .c-p1{color:var(--p1); background:var(--p1bg);}
+  .c-p2{color:var(--p2); background:var(--p2bg);}
+  .c-p3{color:var(--p3); background:var(--p3bg);}
+  .c-good{color:var(--good); background:var(--goodbg);}
+
+  /* Legend table */
+  table{width:100%; border-collapse:collapse; margin:8px 0 4px; font-size:10pt;}
+  th,td{text-align:left; padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{font-size:8.5pt; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); border-bottom:1.5px solid var(--ink);}
+  tbody tr:nth-child(even){background:var(--soft);}
+
+  /* Finding cards */
+  .finding{border:1px solid var(--line); border-radius:10px; padding:0; margin:12px 0; overflow:hidden; break-inside:avoid;}
+  .finding .head{display:flex; align-items:center; gap:9px; padding:10px 14px; background:var(--soft); border-bottom:1px solid var(--line);}
+  .finding .head .id{font-weight:800; font-size:11pt;}
+  .finding .head .ttl{font-weight:700; font-size:11pt; flex:1;}
+  .finding .head .cat{font-size:8pt; color:var(--faint); text-transform:uppercase; letter-spacing:.05em;}
+  .finding .body{padding:11px 14px;}
+  .finding .row{margin:0 0 7px;}
+  .finding .row b{font-size:8.5pt; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); display:block; margin-bottom:1px;}
+  .loc{font-family:"Cascadia Code",Consolas,monospace; font-size:8.8pt; color:var(--muted);}
+
+  .section-intro{color:var(--muted); margin-bottom:6px;}
+  ul{margin:4px 0 10px; padding-left:20px;} li{margin:3px 0;}
+  .kv{display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:10pt;}
+
+  /* Print */
+  @page{size:A4; margin:15mm 12mm;}
+  .break{break-before:page;}
+  .avoid{break-inside:avoid;}
+  footer{position:fixed; bottom:-9mm; left:0; right:0; font-size:8pt; color:var(--faint); display:flex; justify-content:space-between;}
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<section class="cover">
+  <div>
+    <span class="cover-badge">Confidential · Internal</span>
+    <h1>Quest HQ<br>System Audit Report</h1>
+    <p class="sub">A comprehensive review of the Command Center platform — security, correctness, performance, architecture, and user experience — written for both business and engineering readers.</p>
+  </div>
+  <div class="cover-meta">
+    <div><span class="k">Prepared</span><span class="v">28 Jul 2026</span></div>
+    <div><span class="k">Method</span><span class="v">OOAD audit,<br>6 review tracks</span></div>
+    <div><span class="k">Scope</span><span class="v">Full stack<br>(web · API · DB)</span></div>
+    <div><span class="k">Status</span><span class="v">1 issue already<br>fixed</span></div>
+  </div>
+</section>
+
+<!-- ============ EXECUTIVE SUMMARY ============ -->
+<section class="page break">
+  <h2>1 · Executive summary</h2>
+  <p class="lead">In plain terms: the foundations of Quest HQ are strong, but a handful of issues can quietly corrupt data or confuse users, and the app is doing far more work behind the scenes than it needs to.</p>
+
+  <p>We reviewed the entire Quest HQ system across six independent tracks — client (browser) security, back-end &amp; database security, software architecture, correctness/bugs, performance, and user experience/accessibility. Every issue in this report was confirmed by reading the actual code, not guessed.</p>
+
+  <div class="callout good">
+    <b>The good news.</b> The parts that protect customer data are well built. The back-end and database enforce strict tenant isolation, block cross-company access, verify payment webhooks, and harden their database functions. Our security review found <b>no critical break-ins</b> — no way for one company to read another's data, no injection holes, no leaked secrets in the code.
+  </div>
+
+  <div class="callout warn">
+    <b>Where to focus.</b> The risk lives in three areas: <b>(1)</b> the in-progress "contact filter rail" ships buttons that look clickable but do nothing; <b>(2)</b> several paths can silently corrupt or lose data (a spreadsheet import that puts phone numbers in the email field; a text message that can vanish without warning); and <b>(3)</b> the app rebuilds its <i>entire</i> screen on every tiny change, which wastes performance and interrupts users mid-typing.
+  </div>
+
+  <h4>What we counted</h4>
+  <div class="grid3">
+    <div class="card"><div class="label">Total findings</div><div class="big">30</div><div class="note">across 6 review tracks</div></div>
+    <div class="card"><div class="label">Urgent (P0 / P1)</div><div class="big" style="color:var(--p0)">12</div><div class="note">5 ship-blockers · 7 high</div></div>
+    <div class="card"><div class="label">Already fixed</div><div class="big" style="color:var(--good)">1</div><div class="note">broken stylesheet rule</div></div>
+  </div>
+</section>
+
+<!-- ============ HOW TO READ ============ -->
+<section class="page break">
+  <h2>2 · How to read this report</h2>
+  <p class="section-intro">Each finding is written twice: a one-line <b>“What it means”</b> for everyone, and the technical detail for engineers. Issues are grouped by <b>priority</b>, not by team, so the most important work is always at the top.</p>
+
+  <h4>Priority levels</h4>
+  <table>
+    <thead><tr><th style="width:70px">Level</th><th style="width:150px">Meaning</th><th>Act by</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip c-p0">P0</span></td><td>Ship-blocker</td><td>Before the current work is released — active breakage, data corruption, or a security hole.</td></tr>
+      <tr><td><span class="chip c-p1">P1</span></td><td>High</td><td>Next work cycle — real bugs or risks users/customers will hit.</td></tr>
+      <tr><td><span class="chip c-p2">P2</span></td><td>Medium</td><td>Scheduled hardening — fold into related feature work.</td></tr>
+      <tr><td><span class="chip c-p3">P3</span></td><td>Architecture</td><td>Long-term health — reduces future bugs and speeds up the team. Incremental.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>The six tracks we reviewed</h4>
+  <div class="grid2">
+    <div class="card"><b>Client security</b><div class="note">Can a malicious input run code in a user's browser?</div></div>
+    <div class="card"><b>Back-end &amp; database security</b><div class="note">Can someone reach data or actions they shouldn't?</div></div>
+    <div class="card"><b>Correctness / bugs</b><div class="note">Does the software do the right thing with real-world data?</div></div>
+    <div class="card"><b>Performance &amp; redundancy</b><div class="note">Is the app fast, or doing wasted work?</div></div>
+    <div class="card"><b>Architecture (OOAD)</b><div class="note">Is the code organized so the team can change it safely?</div></div>
+    <div class="card"><b>UX &amp; accessibility</b><div class="note">Is it usable, clear, and reachable by keyboard/screen readers?</div></div>
+  </div>
+</section>
+
+<!-- ============ HEALTH SCORECARD ============ -->
+<section class="page break">
+  <h2>3 · System health scorecard</h2>
+  <p class="section-intro">A quick read on each area. “Grade” reflects current risk, not effort spent.</p>
+  <table>
+    <thead><tr><th style="width:190px">Area</th><th style="width:70px">Grade</th><th>Summary</th></tr></thead>
+    <tbody>
+      <tr><td>Back-end &amp; DB security</td><td><span class="chip c-good">Strong</span></td><td>Strict tenant isolation, verified webhooks, hardened DB functions. No critical holes.</td></tr>
+      <tr><td>Client (browser) security</td><td><span class="chip c-p1">Good*</span></td><td>Consistent output escaping; one stored-XSS gap via imported app files.</td></tr>
+      <tr><td>Correctness</td><td><span class="chip c-p1">At risk</span></td><td>Data-corruption on import, a daily date off-by-one, and two silent data-loss paths.</td></tr>
+      <tr><td>Performance</td><td><span class="chip c-p1">At risk</span></td><td>Whole-screen rebuild on every change; the same data re-computed dozens of times.</td></tr>
+      <tr><td>UX &amp; accessibility</td><td><span class="chip c-p1">At risk</span></td><td>Dead controls in new work; keyboard users can't select or edit rows.</td></tr>
+      <tr><td>Architecture</td><td><span class="chip c-p2">Aging</span></td><td>One 38k-line file holds almost everything; safe to improve incrementally.</td></tr>
+    </tbody>
+  </table>
+
+  <h4 style="margin-top:20px">The system at a glance</h4>
+  <div class="grid3">
+    <div class="card"><div class="label">Main code file</div><div class="big">38,781</div><div class="note">lines in one file (<code>main.js</code>)</div></div>
+    <div class="card"><div class="label">Screen rebuilds triggered from</div><div class="big">~549</div><div class="note">places in the code</div></div>
+    <div class="card"><div class="label">Shared state fields</div><div class="big">228</div><div class="note">in one global object</div></div>
+  </div>
+  <div class="callout"><b>One issue was already resolved during this audit:</b> a new stylesheet block had been pasted inside another unclosed rule, which would have left the new contact filter rail completely unstyled and broken a task badge. Fixed and verified with a clean production build.</div>
+</section>
+
+<!-- ============ P0 ============ -->
+<section class="page break">
+  <h2>4 · Priority 0 — Ship-blockers <span class="chip c-p0" style="font-size:9pt">5</span></h2>
+  <p class="section-intro">These should be resolved before the current contact-rail work is released. They are active breakage, data corruption, or a security hole.</p>
+
+  <div class="finding">
+    <div class="head"><span class="id">P0-1</span><span class="ttl">“Team / Private” tabs do nothing</span><span class="cat">UX · in-progress work</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>The new contact panel shows a “Team / Private” switch that looks fully functional but is not connected to anything. Clicking it gives no response, which reads as a broken app.</div>
+      <div class="row"><b>Technical detail</b>The buttons are rendered with active/inactive styling but carry no <code>data-action</code> and have no handler anywhere. <span class="loc">src/main.js:8400</span></div>
+      <div class="row"><b>Fix</b>Wire to a real state key with a handler and filtered data, or remove the tabs until the feature exists.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P0-2</span><span class="ttl">“Show more” is dead — some filters are unreachable</span><span class="cat">UX · in-progress work</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>Each filter group only shows the first 7 values; the rest hide behind a “Show more” link that doesn't work. Because this panel is now the <i>only</i> way to filter, any 8th-or-later value (e.g. the 8th owner) can't be selected at all.</div>
+      <div class="row"><b>Technical detail</b><code>values.slice(0,7)</code> caps the list; “Show more” is a plain <code>&lt;span&gt;</code> with no action. <span class="loc">src/main.js:8379, 8393</span></div>
+      <div class="row"><b>Fix</b>Make it an expanding button (track expanded groups in state) or paginate.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P0-3</span><span class="ttl">No way to see or clear active filters</span><span class="cat">UX · in-progress work</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>The old “active filters” bar (with per-filter remove chips and a “Clear all”) was removed. Users can end up with a narrowed list and no clear indication of why, and the only reset clears everything at once.</div>
+      <div class="row"><b>Technical detail</b><code>renderContactFilterBar</code> is still defined but never called; its <code>remove-contact-filter</code> handler is now dead code. <span class="loc">src/main.js:8410 (unused)</span></div>
+      <div class="row"><b>Fix</b>Restore a compact active-filter chip strip in the toolbar (reuse <code>activeContactFilters()</code>); delete the orphaned handlers.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P0-4</span><span class="ttl">Contact import puts data in the wrong fields</span><span class="cat">Correctness · data corruption</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>When importing a contacts spreadsheet, any blank cell shifts every following column one place to the left — so a phone number can land in the email field and be lost, silently.</div>
+      <div class="row"><b>Technical detail</b>The row splitter <code>/(?:"[^"]*"|[^,])+/g</code> skips empty fields. Example: header <code>Name,Email,Phone</code> with row <code>John Doe,,555-1234</code> → email becomes the phone number. <span class="loc">src/main.js:8320</span></div>
+      <div class="row"><b>Fix</b>Route imports through the existing correct CSV parser <code>wbParseCsv</code> (<span class="loc">src/main.js:14365</span>). One change also fixes P2 items on multi-line fields and decimals.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P0-5</span><span class="ttl">Malicious “app file” can run code for teammates</span><span class="cat">Security · stored XSS (High)</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>The Workspace App Builder lets a user install an app from a <code>.questapp.json</code> file. A crafted file can smuggle in a hidden script that then runs in every teammate's browser when they view the workspace — potentially stealing their session.</div>
+      <div class="row"><b>Technical detail</b>Imported <code>color</code> values are copied verbatim (no format check) and interpolated into <code>style="…"</code> without escaping in ~6 places, allowing attribute break-out. <span class="loc">import src/main.js:14523; sinks 13536, 14031, 14278</span></div>
+      <div class="row"><b>Fix</b>Validate every color against <code>^#[0-9a-fA-F]{3,8}$</code> at the import boundary; escape at the sinks. Enforcing CSP (P2-18) adds a second layer.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ P1 ============ -->
+<section class="page break">
+  <h2>5 · Priority 1 — High severity <span class="chip c-p1" style="font-size:9pt">7</span></h2>
+  <p class="section-intro">Real bugs and risks users or customers will encounter. Schedule for the next work cycle.</p>
+
+  <div class="finding">
+    <div class="head"><span class="id">P1-6</span><span class="ttl">The app rebuilds the entire screen on every change</span><span class="cat">Performance · systemic</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>Every small update — a click, a background sync, a 15-second phone-status poll — throws away and rebuilds the whole page. This wastes performance, and it can interrupt users mid-typing and reset their scroll position. It is the single biggest lever in this report because it also causes several other problems.</div>
+      <div class="row"><b>Technical detail</b><code>render()</code> reassigns <code>app.innerHTML</code> for the entire shell + page + command palette, invoked from ~549 sites, plus a 15s poll, a 5s portal poll, and ~45 realtime table subscriptions. Also reboots the embedded Tasks iframe on background refresh. <span class="loc">src/main.js:2717</span></div>
+      <div class="row"><b>Fix</b>Coalesce renders through a single animation-frame scheduler, and update only the changed region rather than the whole page. Highest ROI change in the codebase.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P1-7</span><span class="ttl">“Today” is off by one day in the evening</span><span class="cat">Correctness · timezone</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>For the US/Arizona team, after about 5pm the app starts treating tomorrow as “today.” The dashboard's “today's dispatch,” the mini-calendar highlight, and automation due-dates all drift by a day.</div>
+      <div class="row"><b>Technical detail</b><code>isoDate()</code> returns a UTC date while surrounding logic uses the local date. <span class="loc">src/main.js:38588</span></div>
+      <div class="row"><b>Fix</b>Compute the local date in <code>isoDate()</code>, or standardize all “today” comparisons on one basis.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P1-8</span><span class="ttl">Incoming text messages can vanish silently</span><span class="cat">Correctness · data loss (API)</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>If two texts arrive from a brand-new number at nearly the same moment, one message can be dropped with no error and no retry — the customer's reply simply disappears.</div>
+      <div class="row"><b>Technical detail</b>On a contact-insert race the code falls back to a non-existent contact id, the message insert fails its foreign key unchecked, and the webhook still returns <code>{ok:true}</code> so the provider never retries. <span class="loc">api/sms-inbound.js:46</span></div>
+      <div class="row"><b>Fix</b>Re-select the existing contact on insert failure; check the message insert result and return a non-2xx so the provider retries.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P1-9</span><span class="ttl">Saving portal notes can wipe existing ones</span><span class="cat">Correctness · data loss (API)</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>When a client saves annotations in the portal, the system deletes all their existing notes first, then re-adds them. If the re-add fails midway, every note is gone with no recovery.</div>
+      <div class="row"><b>Technical detail</b>Delete-then-reinsert with no transaction. <span class="loc">api/client-portal-annotations.js:71</span></div>
+      <div class="row"><b>Fix</b>Perform the replace inside a single database transaction/RPC, or insert-then-delete-stale.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P1-10</span><span class="ttl">Abuse protection is weaker than it appears</span><span class="cat">Security · anti-automation</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>The rate limit that's supposed to stop attackers from guessing secret links or portal passwords resets often and can be sidestepped, so guessing attacks are more feasible than intended.</div>
+      <div class="row"><b>Technical detail</b>The limiter is in-memory per serverless instance (effective limit = limit × warm instances, resets on cold start) and keys off the spoofable leftmost <code>X-Forwarded-For</code>. It is the sole control behind proposal/invite token enumeration and portal-password guessing. <span class="loc">api/_lib/rate-limit.js:3; http-security.js:24</span></div>
+      <div class="row"><b>Fix</b>Back the limiter with a shared store (e.g. Vercel KV / Redis / a Postgres table); use the platform-provided client IP.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P1-11</span><span class="ttl">Keyboard users can't select or edit contacts</span><span class="cat">Accessibility</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>Someone using only a keyboard (including many screen-reader users) cannot tick a contact's checkbox, use inline edit, or reach the row menu. This is an accessibility and compliance gap.</div>
+      <div class="row"><b>Technical detail</b>Row checkboxes are <code>tabindex="-1"</code> inside a plain <code>&lt;span data-action&gt;</code>; inline-edit fields are non-focusable spans; the row-menu dots and header chevron are dead affordances. <span class="loc">src/main.js:8112, 8515</span></div>
+      <div class="row"><b>Fix</b>Use real <code>&lt;button&gt;</code> elements (or add role + tabindex + key handlers); make the checkbox itself focusable.</div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="head"><span class="id">P1-12</span><span class="ttl">Recurring tasks can reappear already overdue</span><span class="cat">Correctness · scheduling</span></div>
+    <div class="body">
+      <div class="row"><b>What it means</b>If a repeating task is completed late, the next copy is created with a due date in the past. The user then has to clear weeks of “historical” tasks to catch up.</div>
+      <div class="row"><b>Technical detail</b>The next occurrence anchors to the old due date and advances exactly one interval, with no roll-forward past today. <span class="loc">src/main.js:9009</span></div>
+      <div class="row"><b>Fix</b>After computing the next date, advance whole intervals until it is on or after today.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ P2 ============ -->
+<section class="page break">
+  <h2>6 · Priority 2 — Medium <span class="chip c-p2" style="font-size:9pt">11</span></h2>
+  <p class="section-intro">Hardening, data hygiene, accessibility polish, and performance. Fold into related feature work.</p>
+
+  <h4>Correctness &amp; data</h4>
+  <table>
+    <thead><tr><th style="width:44px">ID</th><th style="width:230px">Issue</th><th>Detail &amp; location</th></tr></thead>
+    <tbody>
+      <tr><td>P2-13</td><td>Multi-line spreadsheet cells corrupt import</td><td>CSV pre-split on newlines tears quoted multi-line fields. <span class="loc">main.js:8321</span></td></tr>
+      <tr><td>P2-14</td><td>Exported CSV can run formulas in Excel</td><td>Cells starting <code>= + - @</code> not neutralized (CSV-injection). <span class="loc">main.js:14350</span></td></tr>
+      <tr><td>P2-15</td><td>Price-book import 100× cost error</td><td>Strips all commas → comma-decimal locales mis-read. <span class="loc">main.js:5602</span></td></tr>
+      <tr><td>P2-16</td><td>Portal writes report success on zero rows</td><td>PATCH/DELETE on a non-owned id returns “done”. Misreport, no data leak.</td></tr>
+      <tr><td>P2-17</td><td>Bad password hash returns 500 not 401</td><td>Unguarded <code>timingSafeEqual</code>. <span class="loc">api/client-portal-open.js:34</span></td></tr>
+    </tbody>
+  </table>
+
+  <h4>Back-end hardening</h4>
+  <table>
+    <thead><tr><th style="width:44px">ID</th><th style="width:230px">Issue</th><th>Detail &amp; location</th></tr></thead>
+    <tbody>
+      <tr><td>P2-18</td><td>Content-Security-Policy is report-only</td><td>Well-formed but never enforced — finish the staged rollout. <span class="loc">vercel.json:26</span></td></tr>
+      <tr><td>P2-19</td><td>Portal session secret falls back to master key</td><td>If a dedicated secret is unset, sessions are signed with the service-role key. <span class="loc">portal-session.js:10</span></td></tr>
+      <tr><td>P2-20</td><td>Stripe webhook leaks raw error text</td><td>Return generic messages, log details server-side.</td></tr>
+      <tr><td>P2-21</td><td>Upload bucket auto-created without type allowlist</td><td>Loses storage-layer MIME backstop on fresh environments.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Performance (all recomputed on every screen rebuild — compounds P1-6)</h4>
+  <table>
+    <thead><tr><th style="width:44px">ID</th><th style="width:230px">Issue</th><th>Detail &amp; location</th></tr></thead>
+    <tbody>
+      <tr><td>P2-22</td><td>Same contact/task lists filtered 138× uncached</td><td>Memoize <code>companyX()</code> per render pass.</td></tr>
+      <tr><td>P2-23</td><td>Per-row workspace re-resolution (O(n·m))</td><td>Hoist invariants out of the per-element predicate. <span class="loc">main.js:34431</span></td></tr>
+      <tr><td>P2-24</td><td>Name lookups scan the full list inside row loops</td><td>Build id→record Maps for <code>profileById</code>/<code>memberName</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <h4 class="break">Accessibility &amp; consistency</h4>
+  <table>
+    <thead><tr><th style="width:44px">ID</th><th style="width:230px">Issue</th><th>Detail &amp; location</th></tr></thead>
+    <tbody>
+      <tr><td>P2-25</td><td>New rail hardcodes colors instead of theme tokens</td><td>~10 hex literals break theming/dark-mode. <span class="loc">styles.css:24247</span></td></tr>
+      <tr><td>P2-26</td><td>Tiny grey counts fail contrast (WCAG AA)</td><td><code>#a8a29e</code> at 8–10px ≈ 2.5:1. Darken/enlarge.</td></tr>
+      <tr><td>P2-27</td><td>Icon buttons labeled by tooltip only; missing button type</td><td>Add <code>aria-label</code>; default 64 buttons to <code>type="button"</code>.</td></tr>
+      <tr><td>P2-28</td><td>Filter rail dominates the mobile screen</td><td>Below 1100px it stacks above the list; use a drawer/chips.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ P3 ============ -->
+<section class="page break">
+  <h2>7 · Priority 3 — Architecture (OOAD) <span class="chip c-p3" style="font-size:9pt">long-term</span></h2>
+  <p class="section-intro">These are maintainability risks, not bugs. They make future changes slower and more error-prone. The recommended approach is incremental — no risky “big rewrite.”</p>
+
+  <div class="callout">
+    <b>In plain terms.</b> Almost the entire application lives in one enormous file. It works, but it means every change carries a risk of accidentally breaking something unrelated, and it's hard to test in isolation. Tidying it up gradually will reduce bugs and let the team move faster.
+  </div>
+
+  <h4>Measured facts</h4>
+  <div class="grid2">
+    <div class="card"><div class="label">One file, many jobs</div><div class="note"><b>main.js = 38,781 lines</b> holding routing, screens, data access, business rules, and events together (~2,073 top-level symbols).</div></div>
+    <div class="card"><div class="label">Shared mutable state</div><div class="note"><b>228 fields</b> in one global object, referenced <b>2,435×</b> — any function can change anything.</div></div>
+    <div class="card"><div class="label">Giant dispatchers</div><div class="note"><code>handleAction</code> = <b>2,055 lines / ~309 branches</b>; a second is 529 lines. Adding a feature means appending to these.</div></div>
+    <div class="card"><div class="label">Database calls in the UI</div><div class="note"><b>252</b> table calls + <b>42</b> stored-procedure calls inline in the screen code — no data-access layer.</div></div>
+    <div class="card"><div class="label">Tests</div><div class="note"><b>52 of 96</b> test files check that certain <i>text</i> exists in the code, not that it works — they pass even if the feature is broken.</div></div>
+    <div class="card"><div class="label">Plugin system</div><div class="note">Adding a plugin requires editing the monolith <i>and</i> a hand-copied database rule — the source of a known drift bug.</div></div>
+  </div>
+
+  <div class="callout good" style="margin-top:14px">
+    <b>Recommended single highest-leverage move.</b> Introduce a <b>per-feature “registry”</b> so each feature owns its own actions, screen, and data in a small module instead of adding to the giant shared functions. This can be done gradually, one feature at a time, and it simultaneously (a) creates safe boundaries, (b) makes the plugin system properly extensible, and (c) finally makes real (behavioral) testing possible. It is fully compatible with the team's existing decision to avoid a big-bang split.
+  </div>
+</section>
+
+<!-- ============ WHAT'S ALREADY GOOD ============ -->
+<section class="page break">
+  <h2>8 · What's already done well</h2>
+  <p class="section-intro">An audit should be balanced. These are verified strengths worth protecting as the code evolves.</p>
+  <ul>
+    <li><b>Tenant isolation is enforced twice</b> — database row-level security for logged-in users, plus explicit company scoping on server paths. No way found for one company to read another's data.</li>
+    <li><b>Database functions are uniformly hardened</b> — all 111 privileged functions across 37 migrations set a fixed search path; sensitive ones revoke public access and re-check permissions server-side.</li>
+    <li><b>Payment &amp; messaging webhooks are properly verified</b> — Stripe signatures and cron secrets use correct, constant-time checks.</li>
+    <li><b>A recorded past privilege-escalation hole was correctly closed</b>, and invites fail safe (any elevated role request is downgraded to “member”).</li>
+    <li><b>Output is consistently escaped</b> in the browser via a correct helper, and heavy libraries (maps, PDF, zip) are loaded only when needed.</li>
+    <li><b>No secrets are committed</b> to the repository.</li>
+    <li><b>The code documents its own reasoning inline</b> and maintains a vendor-neutral “project brain,” which made this audit faster and safer.</li>
+  </ul>
+</section>
+
+<!-- ============ ROADMAP ============ -->
+<section class="page break">
+  <h2>9 · Recommended sequence</h2>
+  <table>
+    <thead><tr><th style="width:90px">Stage</th><th style="width:150px">Items</th><th>Outcome</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip c-p0">Now</span></td><td>P0-1 … P0-5</td><td>Finishes the current contact-rail work correctly and closes the data-corruption and stored-XSS paths. Small, self-contained.</td></tr>
+      <tr><td><span class="chip c-p1">Next cycle</span></td><td>P1-6 … P1-12</td><td>Fix the date bug and the two data-loss paths (small); plan the screen-rebuild improvement (P1-6) as its own focused effort.</td></tr>
+      <tr><td><span class="chip c-p2">Ongoing</span></td><td>P2-13 … P2-28</td><td>Hardening and accessibility, folded into whatever feature touches those areas.</td></tr>
+      <tr><td><span class="chip c-p3">Continuous</span></td><td>Architecture</td><td>Extract one feature at a time into the registry pattern, each with real tests.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout" style="margin-top:16px">
+    <b>Immediate next step available.</b> The five P0 items can be delivered together as one reviewable change: wire or remove the dead rail controls, restore the active-filter summary, route imports through the correct CSV parser, and add the color-import safety check — then re-run the build and tests.
+  </div>
+
+  <p class="small faint" style="margin-top:26px; border-top:1px solid var(--line); padding-top:10px">
+    Every finding in this report was confirmed against the current source code. Locations are given as <code>file:line</code> for engineers. One issue (a broken stylesheet rule) was fixed during the audit and verified with a clean production build. No production data, secrets, or customer records are included in this document.
+  </p>
+</section>
+
+</body>
+</html>

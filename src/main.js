@@ -158,6 +158,22 @@ const ACCENT_OPTIONS = [
   ['green', 'Field Green', '#15803d'],
   ['slate', 'Command Slate', '#475569'],
 ];
+const APPEARANCE_KEY = 'quest-appearance';
+const APPEARANCE_DEFAULTS = {
+  bgType: 'default',   // 'default' | 'preset' | 'image'
+  bgPreset: 'dots',    // one of APPEARANCE_BG_PRESETS
+  bgImage: '',         // data URL when bgType === 'image'
+  cardStyle: 'default', // 'default' | 'solid' | 'glass'
+  cardColor: '#ffffff',
+  cardOpacity: 72,     // percent, used by glass
+  cardBlur: 14,        // px, used by glass
+};
+const APPEARANCE_BG_PRESETS = [
+  ['dots', 'Dots'],
+  ['grid', 'Grid'],
+  ['diagonal', 'Diagonal'],
+  ['mesh', 'Mesh'],
+];
 const RECYCLE_BIN_TYPES = {
   contact: { type: 'contact', label: 'Contact', table: 'contacts', stateKey: 'contacts', permission: 'crm.manage', normalize: normalizeContact, title: (record) => record.name || 'Contact', redirect: (companyId) => companyPath('contacts', {}, companyId) },
   account: { type: 'account', label: 'Account', table: 'accounts', stateKey: 'accounts', permission: 'crm.manage', normalize: normalizeAccount, title: (record) => record.name || 'Account', redirect: (companyId) => companyPath('crm', {}, companyId) },
@@ -1427,6 +1443,10 @@ const teamMembersFallback = [
 ];
 
 const membershipsFallback = [
+  // Fix: read-only demo profile needs memberships or the public demo cannot open any module.
+  { company_id: 'roofing', profile_id: 'demo-readonly-user', role: 'owner', status: 'active' },
+  { company_id: 'drafting', profile_id: 'demo-readonly-user', role: 'owner', status: 'active' },
+  { company_id: 'lumen', profile_id: 'demo-readonly-user', role: 'owner', status: 'active' },
   { company_id: 'roofing', profile_id: 'basic-quest-user', role: 'developer', status: 'active' },
   { company_id: 'drafting', profile_id: 'basic-quest-user', role: 'developer', status: 'active' },
   { company_id: 'lumen', profile_id: 'basic-quest-user', role: 'developer', status: 'active' },
@@ -2292,6 +2312,8 @@ const state = {
   dashboardRoleViews: readJson(DASHBOARD_ROLE_VIEW_CACHE_KEY, []),
   dashboardAppWidgets: readJson(DASHBOARD_APP_WIDGET_CACHE_KEY, {}),
   workspaceIconDrafts: {},
+  selectedOperationalWorkspaceId: '',
+  operationalWorkspaceModalIcon: null,
   activeCompanyId: localStorage.getItem(COMPANY_KEY) || '',
   activeWorkspaceId: localStorage.getItem(ACTIVE_WORKSPACE_KEY) || '',
   sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
@@ -2427,6 +2449,7 @@ let locationPickerMarker = null;
 function init() {
   normalizeLegacyLocation();
   applyTheme();
+  applyAppearance();
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if (getThemeMode() === 'system') applyTheme();
   });
@@ -2479,14 +2502,115 @@ function setTheme(theme) {
   const next = ['light', 'dark', 'system'].includes(theme) ? theme : 'light';
   localStorage.setItem(THEME_KEY, next);
   applyTheme(next);
-  render();
+  refreshThemeControls();
 }
 
 function setAccent(accent) {
   const next = ACCENT_OPTIONS.some(([id]) => id === accent) ? accent : 'quest';
   localStorage.setItem(ACCENT_KEY, next);
   applyTheme(getThemeMode(), next);
-  render();
+  refreshThemeControls();
+}
+
+function hexToRgba(hex, alpha = 1) {
+  const clean = String(hex || '').replace('#', '').trim();
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean.padEnd(6, '0').slice(0, 6);
+  const n = parseInt(full, 16);
+  if (Number.isNaN(n)) return `rgba(255, 255, 255, ${alpha})`;
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function getAppearance() {
+  const saved = readJson(APPEARANCE_KEY, {});
+  const merged = { ...APPEARANCE_DEFAULTS, ...(saved && typeof saved === 'object' ? saved : {}) };
+  merged.cardOpacity = Math.min(100, Math.max(20, Number(merged.cardOpacity) || APPEARANCE_DEFAULTS.cardOpacity));
+  merged.cardBlur = Math.min(40, Math.max(0, Number(merged.cardBlur) || 0));
+  return merged;
+}
+
+// Writes the appearance choices to CSS custom properties + data-* on <html>. These live on
+// documentElement, so they survive the app's full innerHTML re-renders without reapplying.
+// Preset pattern geometry lives in CSS keyed by [data-app-preset]; only an uploaded image's
+// data URL needs to travel through a custom property.
+function applyAppearance(settings = getAppearance()) {
+  const root = document.documentElement;
+  const style = root.style;
+  if (settings.bgType === 'image' && settings.bgImage) {
+    root.dataset.appBg = 'image';
+    delete root.dataset.appPreset;
+    style.setProperty('--app-bg-image', `url("${settings.bgImage}")`);
+  } else if (settings.bgType === 'preset') {
+    root.dataset.appBg = 'preset';
+    root.dataset.appPreset = APPEARANCE_BG_PRESETS.some(([key]) => key === settings.bgPreset) ? settings.bgPreset : 'dots';
+    style.removeProperty('--app-bg-image');
+  } else {
+    delete root.dataset.appBg;
+    delete root.dataset.appPreset;
+    style.removeProperty('--app-bg-image');
+  }
+  if (settings.cardStyle === 'solid') {
+    root.dataset.cardStyle = 'solid';
+    style.setProperty('--card-custom-bg', settings.cardColor);
+    style.removeProperty('--card-blur');
+  } else if (settings.cardStyle === 'glass') {
+    root.dataset.cardStyle = 'glass';
+    style.setProperty('--card-custom-bg', hexToRgba(settings.cardColor, settings.cardOpacity / 100));
+    style.setProperty('--card-blur', `${settings.cardBlur}px`);
+  } else {
+    delete root.dataset.cardStyle;
+    style.removeProperty('--card-custom-bg');
+    style.removeProperty('--card-blur');
+  }
+}
+
+function setAppearance(patch = {}) {
+  const next = { ...getAppearance(), ...patch };
+  writeJson(APPEARANCE_KEY, next);
+  applyAppearance(next);
+  return next;
+}
+
+function resetAppearance() {
+  writeJson(APPEARANCE_KEY, { ...APPEARANCE_DEFAULTS });
+  applyAppearance(APPEARANCE_DEFAULTS);
+  refreshAppearanceControls();
+  showToast('Appearance reset to default.', 'local', 'Appearance');
+}
+
+// Re-render only the appearance control panel in place. The visual change is already applied
+// via CSS variables on <html>, so a full render() (which rebuilds the page and resets the
+// content-pane scroll to the top) is unnecessary here.
+function refreshAppearanceControls() {
+  const host = document.querySelector('.appearance-controls');
+  if (host) host.outerHTML = renderAppearanceControls();
+}
+
+// Theme/accent buttons appear both in the account popover and the appearance panel; refresh
+// every instance in place without a full re-render so neither scroll position nor the open
+// popover is disturbed.
+function refreshThemeControls() {
+  document.querySelectorAll('.account-theme-panel').forEach((el) => {
+    el.outerHTML = renderAccountThemeControls();
+  });
+}
+
+async function prepareAppearanceBgUpload(file) {
+  if (!file) return;
+  const check = await validateUpload(file, 'image');
+  if (!check.ok) throw new Error(check.reason);
+  if (file.size > 8 * 1024 * 1024) throw new Error('Background images must be 8 MB or smaller.');
+  const dataUrl = await fileToDataUrl(file);
+  const image = await loadImage(dataUrl);
+  const scale = Math.min(1, 1920 / (image.naturalWidth || 1920));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+  let output = canvas.toDataURL('image/webp', 0.82);
+  if (output.length > 1_400_000) output = canvas.toDataURL('image/webp', 0.6);
+  if (output.length > 2_200_000) throw new Error('That image is too large. Try a smaller one.');
+  setAppearance({ bgType: 'image', bgImage: output });
+  refreshAppearanceControls();
 }
 
 async function initializeAuth() {
@@ -4064,6 +4188,50 @@ function renderAccountThemeControls() {
           <button class="account-accent-swatch ${accent === id ? 'active' : ''}" type="button" data-action="set-accent" data-accent="${h(id)}" title="${h(label)}" aria-label="${h(label)}" aria-pressed="${accent === id ? 'true' : 'false'}" style="--swatch:${h(color)}"></button>
         `).join('')}
       </div>
+    </div>
+  `;
+}
+
+function renderAppearanceControls() {
+  const a = getAppearance();
+  const bgIs = (type, preset) => a.bgType === type && (type !== 'preset' || a.bgPreset === preset);
+  return `
+    <div class="appearance-controls">
+      ${renderAccountThemeControls()}
+      <div class="appearance-section">
+        <div class="appearance-section-head"><i class="ti ti-photo"></i><span>Background</span></div>
+        <div class="appearance-bg-grid">
+          <button class="appearance-bg-chip ${a.bgType === 'default' ? 'active' : ''}" type="button" data-action="set-appearance-bg" data-bg-type="default">
+            <span class="appearance-bg-swatch bg-default"></span>Default
+          </button>
+          ${APPEARANCE_BG_PRESETS.map(([key, label]) => `
+            <button class="appearance-bg-chip ${bgIs('preset', key) ? 'active' : ''}" type="button" data-action="set-appearance-bg" data-bg-type="preset" data-bg-preset="${h(key)}">
+              <span class="appearance-bg-swatch bg-${h(key)}"></span>${h(label)}
+            </button>
+          `).join('')}
+          <button class="appearance-bg-chip ${a.bgType === 'image' ? 'active' : ''}" type="button" data-action="open-appearance-bg-upload">
+            <span class="appearance-bg-swatch bg-upload"${a.bgType === 'image' && a.bgImage ? ` style="background-image:url('${h(a.bgImage)}');background-size:cover;background-position:center"` : ''}><i class="ti ti-upload"></i></span>${a.bgType === 'image' ? 'Uploaded' : 'Upload image'}
+          </button>
+          <input type="file" accept="image/png,image/jpeg,image/webp" data-appearance-bg-upload hidden />
+        </div>
+      </div>
+      <div class="appearance-section">
+        <div class="appearance-section-head"><i class="ti ti-square-rounded"></i><span>Cards</span></div>
+        <div class="appearance-seg" role="group" aria-label="Card style">
+          ${[['default', 'Default'], ['solid', 'Solid'], ['glass', 'Glass']].map(([id, label]) => `
+            <button class="${a.cardStyle === id ? 'active' : ''}" type="button" data-action="set-appearance-card-style" data-card-style="${id}" aria-pressed="${a.cardStyle === id ? 'true' : 'false'}">${h(label)}</button>
+          `).join('')}
+        </div>
+        ${a.cardStyle === 'solid' ? `
+          <label class="appearance-field"><span>Card color</span><input type="color" value="${h(a.cardColor)}" data-appearance-card-color /></label>
+        ` : ''}
+        ${a.cardStyle === 'glass' ? `
+          <label class="appearance-field"><span>Tint color</span><input type="color" value="${h(a.cardColor)}" data-appearance-card-color /></label>
+          <label class="appearance-range"><span>Opacity <b data-appearance-out="opacity">${a.cardOpacity}%</b></span><input type="range" min="20" max="100" step="1" value="${a.cardOpacity}" data-appearance-range="cardOpacity" /></label>
+          <label class="appearance-range"><span>Blur <b data-appearance-out="blur">${a.cardBlur}px</b></span><input type="range" min="0" max="40" step="1" value="${a.cardBlur}" data-appearance-range="cardBlur" /></label>
+        ` : ''}
+      </div>
+      <button class="btn appearance-reset" type="button" data-action="reset-appearance"><i class="ti ti-rotate-2"></i>Reset to default</button>
     </div>
   `;
 }
@@ -8045,14 +8213,16 @@ function renderContactsPage(route, companyId) {
   if (state.contactLifecycleFilter !== 'all') state.contactStageFilter = 'all';
   const stageParam = route.params.get('stage');
   if (stageParam) state.contactStageFilter = contactStageNames().includes(stageParam) ? stageParam : 'all';
-  if (state.contactBoardView === 'table') return renderContactTable(companyId);
+  if (state.contactBoardView === 'table') {
+    return `<div class="cv2-wrap">${renderContactFieldGroupsSidebar(companyId)}<div class="cv2-main">${renderContactTable(companyId)}</div></div>`;
+  }
   return `
     ${workspaceHeader('Contacts', 'Top-of-funnel contacts before quote handoff.', `
       <button class="btn" type="button" data-action="open-stage-manager" data-module="contacts"><i class="ti ti-adjustments-horizontal"></i>Manage stages</button>
       <button class="btn btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>Add contact</button>
     `)}
     ${pipelineToolbar('contacts', companyId)}
-    ${state.contactBoardView === 'board' ? renderContactBoard(companyId) : renderContactTable(companyId)}
+    <div class="cv2-wrap">${renderContactFieldGroupsSidebar(companyId)}<div class="cv2-main">${state.contactBoardView === 'board' ? renderContactBoard(companyId) : renderContactTable(companyId)}</div></div>
   `;
 }
 
@@ -8093,7 +8263,6 @@ function renderContactTable(companyId) {
         </div>
       </div>
       <div class="contact-list-toolbar">
-        ${renderContactFilterBar(companyId)}
         <label class="contact-list-search">
           <i class="ti ti-search"></i>
           <input type="search" data-contact-search value="${h(state.contactQuery)}" placeholder="Search this list..." aria-label="Search this list" />
@@ -8338,6 +8507,51 @@ function importContactsFromFile() {
     showToast(`Imported ${toImport.length} contact${toImport.length === 1 ? '' : 's'}${skipped}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
   });
   input.click();
+}
+
+function renderContactFieldGroupsSidebar(companyId) {
+  const contacts = companyContacts(companyId);
+  const options = contactFilterOptions(companyId);
+  const filters = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}) };
+  const valueOf = {
+    temperature: (contact) => String(contact.temperature || ''),
+    job_type: (contact) => contactFilterJobType(contact),
+    owner_name: (contact) => String(contact.owner_name || ''),
+    pay_type: (contact) => contactFilterPayType(contact),
+  };
+  const dotPalette = ['#3B82F6', '#F59E0B', '#22C55E', '#A78BFA', '#FB7185', '#06B6D4', '#EAB308', '#94A3B8'];
+  const tempDot = { Hot: '#EF4444', Warm: '#FB923C', Cold: '#60A5FA' };
+  const group = (key, label, values) => {
+    if (!values.length) return '';
+    const shown = values.slice(0, 7);
+    return `
+      <div class="cv2-group">
+        <div class="cv2-group-head">${h(label)}<span class="cv2-fieldtag">FIELD</span><span class="cv2-group-count">${contacts.length}</span></div>
+        ${shown.map((value, index) => {
+          const count = contacts.filter((contact) => valueOf[key](contact) === value).length;
+          const active = filters[key] === value;
+          const dot = key === 'temperature' ? (tempDot[value] || dotPalette[index % dotPalette.length]) : dotPalette[index % dotPalette.length];
+          return `
+            <button class="cv2-opt ${active ? 'active' : ''}" type="button" data-action="set-contact-filter" data-filter="${h(key)}" data-value="${h(value)}">
+              <span class="cv2-dot" style="background:${dot}"></span><span class="cv2-opt-label">${h(value)}</span><span class="cv2-opt-count">${count}</span>
+            </button>
+          `;
+        }).join('')}
+        ${values.length > shown.length ? `<span class="cv2-more">Show more</span>` : ''}
+      </div>
+    `;
+  };
+  const anyActive = activeContactFilters().length > 0;
+  return `
+    <aside class="cv2-rail" aria-label="Contact field groups">
+      <div class="cv2-views-tabs"><button class="cv2-view-tab active" type="button">Team</button><button class="cv2-view-tab" type="button">Private</button></div>
+      <button class="cv2-all ${anyActive ? '' : 'active'}" type="button" data-action="clear-contact-filters">All Contacts<span class="cv2-opt-count">${contacts.length}</span></button>
+      ${group('temperature', 'Temperature', options.temperature)}
+      ${group('job_type', 'Job type', options.job_type)}
+      ${group('pay_type', 'Pay type', options.pay_type)}
+      ${group('owner_name', 'Owner', options.owner_name)}
+    </aside>
+  `;
 }
 
 function renderContactFilterBar(companyId) {
@@ -17288,97 +17502,89 @@ function renderWorkspaceSettings(companyId) {
       ? 'Quest HQ is checking the workspace data connection.'
       : 'This company account is using local fallback data. Changes may not persist for the team.';
   return `
-    <article class="panel span-2">
-      <div class="section-head"><div><h2>Company account</h2><p>The customer, billing, and security boundary above every operational workspace.</p></div></div>
-      <form class="workspace-settings-form" data-workspace-settings-form>
-        <input type="hidden" name="company_id" value="${h(companyId)}" />
-        <input type="hidden" name="icon_key" value="${h(iconDraft.icon_key)}" />
-        <input type="hidden" name="icon_image" value="${h(iconDraft.icon_image)}" />
-        ${field('Company name', 'workspace_name', companyName(companyId), true, 'text', 'workspace-name-field')}
-        <div class="workspace-icon-section">
-          <span>Company logo</span>
-          <div class="workspace-icon-current">
-            ${workspaceIconMarkup({ ...company, icon_key: iconDraft.icon_key, icon_image: iconDraft.icon_image }, 'large')}
-            <div>
-              <strong>${h(iconDraft.icon_image ? 'Uploaded icon' : workspaceIconOption(iconDraft.icon_key).label)}</strong>
-              <small>${h(iconDraft.icon_image ? 'Custom image for this company account.' : 'Built-in icon from the Quest library.')}</small>
+    <div class="settings-col">
+      <article class="panel">
+        <div class="section-head"><div><h2>Company account</h2><p>The customer, billing, and security boundary above every operational workspace.</p></div></div>
+        <form class="workspace-settings-form" data-workspace-settings-form>
+          <input type="hidden" name="company_id" value="${h(companyId)}" />
+          <input type="hidden" name="icon_key" value="${h(iconDraft.icon_key)}" />
+          <input type="hidden" name="icon_image" value="${h(iconDraft.icon_image)}" />
+          ${field('Company name', 'workspace_name', companyName(companyId), true, 'text', 'workspace-name-field')}
+          <div class="workspace-icon-section">
+            <span>Company logo</span>
+            <div class="workspace-icon-current">
+              ${workspaceIconMarkup({ ...company, icon_key: iconDraft.icon_key, icon_image: iconDraft.icon_image }, 'large')}
+              <div>
+                <strong>${h(iconDraft.icon_image ? 'Uploaded icon' : workspaceIconOption(iconDraft.icon_key).label)}</strong>
+                <small>${h(iconDraft.icon_image ? 'Custom image for this company account.' : 'Built-in icon from the Quest library.')}</small>
+              </div>
+              <button class="btn" type="button" data-action="open-workspace-icon-modal" ${canManage ? '' : 'disabled'}><i class="ti ti-photo-edit"></i>Change icon</button>
             </div>
-            <button class="btn" type="button" data-action="open-workspace-icon-modal" ${canManage ? '' : 'disabled'}><i class="ti ti-photo-edit"></i>Change icon</button>
           </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save company</button>
-        </div>
-      </form>
-    </article>
-    <article class="panel">
-      <div class="section-head"><div><h2>Current workspace</h2><p>Configure this operational area without changing the company account.</p></div></div>
-      ${workspace ? `
-        <form class="workspace-settings-form operational-workspace-form" data-operational-workspace-settings-form>
-          <input type="hidden" name="workspace_id" value="${h(workspace.id)}" />
-          ${field('Workspace name', 'workspace_name', workspace.name, true, 'text')}
-          <label>Description<textarea name="workspace_description" rows="3" placeholder="What this team handles">${h(workspace.description)}</textarea></label>
-          ${workspaceIconSelect(workspace.icon_key)}
-          <label>Status
-            <select name="workspace_status" ${canManage ? '' : 'disabled'}>
-              <option value="active" ${workspace.status === 'active' ? 'selected' : ''}>Active</option>
-              <option value="archived" ${workspace.status === 'archived' ? 'selected' : ''} ${workspace.is_default ? 'disabled' : ''}>Archived</option>
-            </select>
-          </label>
-          ${workspace.is_default ? '<p class="form-note">Default workspace cannot be archived.</p>' : ''}
-          <button class="btn btn-primary full" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save workspace</button>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save company</button>
+          </div>
         </form>
-      ` : emptyState('No operational workspace is assigned to your user.')}
-    </article>
-    <article class="panel" id="create-operational-workspace">
-      <div class="section-head"><div><h2>Create workspace</h2><p>Add a configurable operational area inside ${h(companyName(companyId))}.</p></div></div>
-      <form class="workspace-create-mini" data-operational-workspace-create-form>
-        <input type="hidden" name="company_id" value="${h(companyId)}" />
-        <label>Workspace name<input name="workspace_name" placeholder="Sales, Underwriting, Production..." required ${canManage ? '' : 'disabled'} /></label>
-        ${workspacePresetSelect()}
-        ${workspaceIconSelect()}
-        <button class="btn btn-primary full" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-plus"></i>Create workspace</button>
-      </form>
-    </article>
-    <article class="panel span-2">
-      <div class="section-head"><div><h2>Workspace directory</h2><p>${companyWorkspaces.length} operational workspace${companyWorkspaces.length === 1 ? '' : 's'} under this company account.</p></div></div>
-      <div class="operational-workspace-directory">
-        ${companyWorkspaces.map((item) => `
-          <button class="operational-workspace-row ${item.id === activeWorkspaceId() ? 'active' : ''} ${item.status === 'archived' ? 'muted' : ''}" type="button" data-action="select-workspace" data-workspace-id="${h(item.id)}" ${item.status === 'archived' ? 'disabled' : ''}>
-            ${workspaceIconMarkup(item)}
-            <span><strong>${h(item.name)}</strong><small>${h(item.is_default ? 'Default workspace' : titleCase(item.status))} / ${h(workspaceMemberCount(item.id))} assigned</small></span>
-            ${item.id === activeWorkspaceId() ? '<i class="ti ti-check"></i>' : '<i class="ti ti-chevron-right"></i>'}
-          </button>
-        `).join('') || emptyState('No workspaces have been created.')}
-      </div>
-    </article>
-    <article class="panel">
-      <div class="section-head"><div><h2>Workspace data</h2><p>Pipeline records, stages, members, and plugins are isolated here.</p></div></div>
-      ${contractRows([
-        ['Company ID', companyId],
-        ['Workspace ID', workspace?.id || 'Not assigned'],
-        ['Workspace role', workspace ? workspaceRoleLabel(workspace.id) : 'No access'],
-        ['Visible jobs', companyJobs(companyId).length],
-        ['Installed plugins', availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length],
-      ])}
-    </article>
-    <article class="panel">
-      <div class="section-head"><div><h2>Appearance</h2><p>Choose the workspace color mode for this browser.</p></div></div>
-      <div class="theme-toggle-row">${renderAccountThemeControls()}</div>
-    </article>
-    <article class="panel settings-connection-card">
-      <div class="section-head"><div><h2>Data connection</h2><p>Admin-only health check for where workspace changes are being saved.</p></div></div>
-      <div class="settings-connection-status">
-        <span class="sync-pill ${h(connectionMode)}" data-sync-state><i class="ti ti-database"></i>${h(connectionLabel)}</span>
-        <p>${h(connectionDescription)}</p>
-      </div>
-      ${contractRows([
-        ['Company account', companyName(companyId)],
-        ['Workspace', workspace?.name || 'Not assigned'],
-        ['Current status', state.sync.label],
-        ['Storage mode', connectionMode === 'live' ? 'Quest cloud database' : connectionMode === 'loading' ? 'Checking' : 'This browser only'],
-      ])}
-    </article>
+      </article>
+      <article class="panel">
+        <div class="section-head">
+          <div><h2>Workspace directory</h2><p>${companyWorkspaces.length} operational workspace${companyWorkspaces.length === 1 ? '' : 's'} under this company account. Click one to configure it.</p></div>
+          <button class="btn btn-primary" type="button" data-action="open-create-operational-workspace-modal" ${canManage ? '' : 'disabled'}><i class="ti ti-plus"></i>Create workspace</button>
+        </div>
+        <div class="operational-workspace-directory">
+          ${companyWorkspaces.map((item) => {
+            const isActive = item.id === activeWorkspaceId();
+            const memberLabel = `${workspaceMemberCount(item.id)} assigned`;
+            return `
+            <div class="operational-workspace-row ${isActive ? 'active' : ''} ${item.status === 'archived' ? 'muted' : ''}">
+              <button class="ows-open" type="button" data-action="open-edit-operational-workspace-modal" data-workspace-id="${h(item.id)}" aria-label="Configure ${h(item.name)}">
+                ${workspaceIconMarkup(item)}
+                <span class="ows-open-text"><strong>${h(item.name)}</strong><small>${item.is_default ? '<span class="ows-default-flag">Default</span>' : h(titleCase(item.status))} · ${h(memberLabel)}</small></span>
+                <i class="ti ti-settings ows-open-hint" aria-hidden="true"></i>
+              </button>
+              <div class="ows-actions">
+                ${isActive
+                  ? '<span class="ows-tag open"><i class="ti ti-check" aria-hidden="true"></i>Open</span>'
+                  : `<button class="btn ows-action" type="button" data-action="select-workspace" data-workspace-id="${h(item.id)}" ${item.status === 'archived' ? 'disabled' : ''}><i class="ti ti-arrow-right"></i>Open</button>`}
+                ${item.is_default
+                  ? '<span class="ows-tag default"><i class="ti ti-star-filled" aria-hidden="true"></i>Default</span>'
+                  : `<button class="btn ows-action" type="button" data-action="set-default-workspace" data-workspace-id="${h(item.id)}" ${canManage && item.status !== 'archived' ? '' : 'disabled'}><i class="ti ti-star"></i>Set default</button>`}
+              </div>
+            </div>
+          `;
+          }).join('') || emptyState('No workspaces have been created.')}
+        </div>
+      </article>
+      <article class="panel">
+        <div class="section-head"><div><h2>Appearance</h2><p>Theme, background, and card style for this browser.</p></div></div>
+        <div class="theme-toggle-row">${renderAppearanceControls()}</div>
+      </article>
+    </div>
+    <div class="settings-col">
+      <article class="panel">
+        <div class="section-head"><div><h2>Workspace data</h2><p>Pipeline records, stages, members, and plugins are isolated here.</p></div></div>
+        ${contractRows([
+          ['Company ID', companyId],
+          ['Workspace ID', workspace?.id || 'Not assigned'],
+          ['Workspace role', workspace ? workspaceRoleLabel(workspace.id) : 'No access'],
+          ['Visible jobs', companyJobs(companyId).length],
+          ['Installed plugins', availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length],
+        ])}
+      </article>
+      <article class="panel settings-connection-card">
+        <div class="section-head"><div><h2>Data connection</h2><p>Admin-only health check for where workspace changes are being saved.</p></div></div>
+        <div class="settings-connection-status">
+          <span class="sync-pill ${h(connectionMode)}" data-sync-state><i class="ti ti-database"></i>${h(connectionLabel)}</span>
+          <p>${h(connectionDescription)}</p>
+        </div>
+        ${contractRows([
+          ['Company account', companyName(companyId)],
+          ['Workspace', workspace?.name || 'Not assigned'],
+          ['Current status', state.sync.label],
+          ['Storage mode', connectionMode === 'live' ? 'Quest cloud database' : connectionMode === 'loading' ? 'Checking' : 'This browser only'],
+        ])}
+      </article>
+    </div>
   `;
 }
 
@@ -20875,6 +21081,88 @@ function renderWorkspaceIconModal(companyId) {
   `, 'wide-modal workspace-icon-modal-panel');
 }
 
+// Icon control shared by the operational-workspace create/edit modals: a live preview,
+// a built-in icon picker, and an "upload your own image" option. The working choice lives
+// in state.operationalWorkspaceModalIcon and is carried into the form via hidden inputs.
+function operationalWorkspaceModalIconControl() {
+  const draft = state.operationalWorkspaceModalIcon || { icon_key: 'home', icon_image: '' };
+  const selectedKey = workspaceIconOption(draft.icon_key).key;
+  const hasImage = !!draft.icon_image;
+  return `
+    <input type="hidden" name="icon_key" value="${h(selectedKey)}" />
+    <input type="hidden" name="icon_image" value="${h(draft.icon_image || '')}" />
+    <div class="ows-icon-control">
+      <span class="ows-icon-caption">Workspace icon</span>
+      <div class="ows-icon-current">
+        ${workspaceIconMarkup({ icon_key: selectedKey, icon_image: draft.icon_image, color: '#f0b23b' }, 'large')}
+        <div>
+          <strong>${h(hasImage ? 'Uploaded image' : workspaceIconOption(selectedKey).label)}</strong>
+          <small>${h(hasImage ? 'Custom image for this workspace.' : 'Choose a built-in icon or upload your own.')}</small>
+        </div>
+        ${hasImage ? '<button class="btn ows-icon-remove" type="button" data-action="clear-operational-workspace-modal-icon"><i class="ti ti-x"></i>Remove image</button>' : ''}
+      </div>
+      <div class="ows-icon-picker" aria-label="Workspace icon choices">
+        ${WORKSPACE_ICON_OPTIONS.map((item) => `
+          <button class="ows-icon-choice ${!hasImage && item.key === selectedKey ? 'active' : ''}" type="button" data-action="set-operational-workspace-modal-icon" data-icon-key="${h(item.key)}" title="${h(item.label)}" aria-label="${h(item.label)}">
+            ${workspaceIconSvgMarkup(item)}
+          </button>
+        `).join('')}
+      </div>
+      <label class="ows-icon-upload">
+        <i class="ti ti-upload" aria-hidden="true"></i><span>${h(hasImage ? 'Replace uploaded image' : 'Upload icon or image')}</span>
+        <input type="file" accept="image/png,image/jpeg,image/webp" data-operational-workspace-modal-icon-upload hidden />
+      </label>
+    </div>
+  `;
+}
+
+function renderOperationalWorkspaceCreateModal(companyId) {
+  const canManage = canManageOperationalWorkspaces(companyId);
+  return renderModalShell('Workspaces', 'Create workspace', `
+    <form class="ows-modal-form" data-operational-workspace-create-form>
+      <input type="hidden" name="company_id" value="${h(companyId)}" />
+      <p class="ows-modal-sub">Add a configurable operational area inside ${h(companyName(companyId))}.</p>
+      <label>Workspace name<input name="workspace_name" placeholder="Sales, Underwriting, Production..." required autofocus ${canManage ? '' : 'disabled'} /></label>
+      ${workspacePresetSelect()}
+      ${operationalWorkspaceModalIconControl()}
+      <div class="modal-actions">
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+        <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-plus"></i>Create workspace</button>
+      </div>
+    </form>
+  `, 'ows-modal-panel');
+}
+
+function renderOperationalWorkspaceEditModal(companyId) {
+  const canManage = canManageOperationalWorkspaces(companyId);
+  const workspace = state.operationalWorkspaces.find((item) => item.id === state.selectedOperationalWorkspaceId);
+  if (!workspace) {
+    return renderModalShell('Workspaces', 'Workspace', `
+      ${emptyState('That workspace is no longer available.')}
+      <div class="modal-actions"><button class="btn btn-primary" type="button" data-action="close-modal">Close</button></div>
+    `, 'ows-modal-panel');
+  }
+  return renderModalShell('Workspaces', 'Configure workspace', `
+    <form class="ows-modal-form" data-operational-workspace-settings-form>
+      <input type="hidden" name="workspace_id" value="${h(workspace.id)}" />
+      ${field('Workspace name', 'workspace_name', workspace.name, true, 'text')}
+      <label>Description<textarea name="workspace_description" rows="3" placeholder="What this team handles">${h(workspace.description)}</textarea></label>
+      ${operationalWorkspaceModalIconControl()}
+      <label>Status
+        <select name="workspace_status" ${canManage ? '' : 'disabled'}>
+          <option value="active" ${workspace.status === 'active' ? 'selected' : ''}>Active</option>
+          <option value="archived" ${workspace.status === 'archived' ? 'selected' : ''} ${workspace.is_default ? 'disabled' : ''}>Archived</option>
+        </select>
+      </label>
+      ${workspace.is_default ? '<p class="form-note">Default workspace cannot be archived.</p>' : ''}
+      <div class="modal-actions">
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+        <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save workspace</button>
+      </div>
+    </form>
+  `, 'ows-modal-panel');
+}
+
 function renderActiveModal(route, session) {
   if (state.builderModal) return renderWorkspaceBuilderModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
@@ -20886,6 +21174,8 @@ function renderActiveModal(route, session) {
   if (state.modal === 'cp-mark-info') return renderClientPortalMarkModal();
   if (state.modal === 'profile') return renderProfileModal(session.profile);
   if (state.modal === 'workspace-icon') return renderWorkspaceIconModal(activeCompanyId());
+  if (state.modal === 'operational-workspace-create') return renderOperationalWorkspaceCreateModal(activeCompanyId());
+  if (state.modal === 'operational-workspace-edit') return renderOperationalWorkspaceEditModal(activeCompanyId());
   if (state.modal === 'dashboard-widget-library') return renderDashboardWidgetLibraryModal(activeCompanyId());
   if (state.modal === 'dashboard-view-manager') return renderDashboardViewManagerModal(activeCompanyId());
   if (state.modal === 'dashboard-app-widget-config') return renderDashboardAppWidgetConfigModal(activeCompanyId());
@@ -23681,6 +23971,33 @@ function handleAction(event, node) {
     setAccent(node.dataset.accent || 'quest');
     return;
   }
+  if (action === 'set-appearance-bg') {
+    event.preventDefault();
+    const bgType = node.dataset.bgType || 'default';
+    const patch = { bgType };
+    if (bgType === 'preset') patch.bgPreset = APPEARANCE_BG_PRESETS.some(([key]) => key === node.dataset.bgPreset) ? node.dataset.bgPreset : 'dots';
+    setAppearance(patch);
+    refreshAppearanceControls();
+    return;
+  }
+  if (action === 'open-appearance-bg-upload') {
+    event.preventDefault();
+    const input = node.closest('.appearance-bg-grid')?.querySelector('[data-appearance-bg-upload]');
+    if (input) input.click();
+    return;
+  }
+  if (action === 'set-appearance-card-style') {
+    event.preventDefault();
+    const cardStyle = ['default', 'solid', 'glass'].includes(node.dataset.cardStyle) ? node.dataset.cardStyle : 'default';
+    setAppearance({ cardStyle });
+    refreshAppearanceControls();
+    return;
+  }
+  if (action === 'reset-appearance') {
+    event.preventDefault();
+    resetAppearance();
+    return;
+  }
   if (action === 'open-delete-company') {
     event.preventDefault();
     openDeleteCompanyWorkspace();
@@ -23915,6 +24232,49 @@ function handleAction(event, node) {
       icon_image: '',
     });
     render();
+    return;
+  }
+  if (action === 'open-create-operational-workspace-modal') {
+    event.preventDefault();
+    if (!canManageOperationalWorkspaces(activeCompanyId())) {
+      showToast('Workspace admin access is required.', 'local', 'Workspaces');
+      return;
+    }
+    state.selectedOperationalWorkspaceId = '';
+    state.operationalWorkspaceModalIcon = { icon_key: 'home', icon_image: '' };
+    state.modal = 'operational-workspace-create';
+    render();
+    return;
+  }
+  if (action === 'open-edit-operational-workspace-modal') {
+    event.preventDefault();
+    const target = state.operationalWorkspaces.find((item) => item.id === node.dataset.workspaceId);
+    if (!target) {
+      showToast('That workspace is no longer available.', 'local', 'Workspaces');
+      return;
+    }
+    state.selectedOperationalWorkspaceId = target.id;
+    state.operationalWorkspaceModalIcon = { icon_key: workspaceIconOption(target.icon_key).key, icon_image: sanitizeWorkspaceIconImage(target.icon_image) || '' };
+    state.modal = 'operational-workspace-edit';
+    render();
+    return;
+  }
+  if (action === 'set-operational-workspace-modal-icon') {
+    event.preventDefault();
+    state.operationalWorkspaceModalIcon = { icon_key: workspaceIconOption(node.dataset.iconKey).key, icon_image: '' };
+    render();
+    return;
+  }
+  if (action === 'clear-operational-workspace-modal-icon') {
+    event.preventDefault();
+    const current = state.operationalWorkspaceModalIcon || { icon_key: 'home', icon_image: '' };
+    state.operationalWorkspaceModalIcon = { icon_key: current.icon_key || 'home', icon_image: '' };
+    render();
+    return;
+  }
+  if (action === 'set-default-workspace') {
+    event.preventDefault();
+    setDefaultOperationalWorkspace(node.dataset.workspaceId);
     return;
   }
   if (action === 'open-role-form') {
@@ -24650,6 +25010,18 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'set-contact-filter') {
+    event.preventDefault();
+    const key = node.dataset.filter;
+    const value = node.dataset.value || 'all';
+    if (Object.prototype.hasOwnProperty.call(CONTACT_FILTER_DEFAULTS, key)) {
+      const current = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}) };
+      current[key] = current[key] === value ? 'all' : value;
+      state.contactFilters = current;
+      render();
+    }
+    return;
+  }
   if (action === 'remove-contact-filter') {
     event.preventDefault();
     const key = node.dataset.filter;
@@ -25043,6 +25415,8 @@ function closeActiveModal() {
   const route = state.route || getRoute();
   state.dashboardTrayOpen = false;
   state.modal = '';
+  state.selectedOperationalWorkspaceId = '';
+  state.operationalWorkspaceModalIcon = null;
   state.formStartTemplateId = '';
   state.formStartTab = 'blank';
   state.estimateContext = null;
@@ -26197,6 +26571,7 @@ async function createOperationalWorkspace(formNode) {
   const workspaceName = String(form.workspace_name || '').trim();
   const presetCode = WORKSPACE_PLUGIN_PRESETS[form.preset_code] ? form.preset_code : 'generic';
   const iconKey = workspaceIconOption(form.icon_key).key;
+  const iconImage = sanitizeWorkspaceIconImage(form.icon_image) || '';
   if (!workspaceName) {
     showToast('Workspace name is required.', 'local', 'Workspaces');
     return;
@@ -26233,6 +26608,7 @@ async function createOperationalWorkspace(formNode) {
       name: workspaceName,
       slug: workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace',
       icon_key: iconKey,
+      icon_image: iconImage,
       color: companyColor(companyId),
       status: 'active',
       created_by: activeSession().profile.id,
@@ -26246,12 +26622,15 @@ async function createOperationalWorkspace(formNode) {
       assigned_by: activeSession().profile.id,
     })));
   }
+  if (iconImage) saved = normalizeOperationalWorkspace({ ...saved, icon_image: iconImage });
   state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.concat(saved));
   applyWorkspacePluginPresetLocal(saved.id, presetCode);
   state.activeCompanyId = companyId;
   state.activeWorkspaceId = saved.id;
   localStorage.setItem(COMPANY_KEY, companyId);
   localStorage.setItem(ACTIVE_WORKSPACE_KEY, saved.id);
+  state.modal = '';
+  state.operationalWorkspaceModalIcon = null;
   showToast(`${saved.name} workspace created.`, live ? 'live' : 'local', 'Workspaces');
   navigate(companyPath('settings', { tab: 'company', workspace: saved.id }, companyId));
 }
@@ -26271,6 +26650,7 @@ async function saveOperationalWorkspaceSettings(formNode) {
   const workspaceName = String(form.workspace_name || '').trim();
   const workspaceDescription = String(form.workspace_description || '').trim();
   const iconKey = workspaceIconOption(form.icon_key).key;
+  const iconImage = sanitizeWorkspaceIconImage(form.icon_image) || '';
   const status = String(form.workspace_status || 'active') === 'archived' ? 'archived' : 'active';
   if (!workspaceName) {
     showToast('Workspace name is required.', 'local', 'Workspaces');
@@ -26300,11 +26680,17 @@ async function saveOperationalWorkspaceSettings(formNode) {
   } else {
     saved = normalizeOperationalWorkspace({ ...workspace, name: workspaceName, description: workspaceDescription, icon_key: iconKey, status, updated_at: new Date().toISOString() });
   }
+  // The icon selection (built-in or uploaded) reflects the modal draft carried in the form;
+  // apply it explicitly so it survives the live RPC round-trip, which does not store images.
+  saved = normalizeOperationalWorkspace({ ...saved, icon_key: iconKey, icon_image: iconImage });
   state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.filter((item) => item.id !== saved.id).concat(saved));
   if (saved.status === 'archived' && state.activeWorkspaceId === saved.id) {
     state.activeWorkspaceId = defaultOperationalWorkspaceId(saved.company_id);
     localStorage.setItem(ACTIVE_WORKSPACE_KEY, state.activeWorkspaceId);
   }
+  state.modal = '';
+  state.selectedOperationalWorkspaceId = '';
+  state.operationalWorkspaceModalIcon = null;
   showToast('Workspace settings saved.', live ? 'live' : 'local', 'Workspaces');
   navigate(companyPath('settings', { tab: 'company' }, saved.company_id), { replace: true });
 }
@@ -27638,6 +28024,20 @@ async function openMessageAttachment(attachmentId) {
 }
 
 function onDocumentInput(event) {
+  if (event.target.matches('[data-appearance-range]')) {
+    // Live-apply the CSS variable + update the readout without a full re-render,
+    // so dragging the slider stays smooth and the input keeps focus.
+    const kind = event.target.dataset.appearanceRange === 'cardBlur' ? 'cardBlur' : 'cardOpacity';
+    const value = Number(event.target.value);
+    setAppearance({ [kind]: value });
+    const out = event.target.closest('.appearance-range')?.querySelector('[data-appearance-out]');
+    if (out) out.textContent = kind === 'cardOpacity' ? `${value}%` : `${value}px`;
+    return;
+  }
+  if (event.target.matches('[data-appearance-card-color]')) {
+    setAppearance({ cardColor: event.target.value });
+    return;
+  }
   if (event.target.matches('[data-underwriting-field]')) {
     syncUnderwritingForm(event.target.closest('[data-underwriting-form]'));
     return;
@@ -27966,6 +28366,18 @@ function onDocumentChange(event) {
   if (event.target.matches('[data-workspace-icon-upload]')) {
     prepareWorkspaceIconUpload(event.target.files?.[0] || null).catch((error) => {
       showToast(error.message || 'Could not preview that workspace icon.', 'local', 'Settings');
+    });
+    return;
+  }
+  if (event.target.matches('[data-operational-workspace-modal-icon-upload]')) {
+    prepareOperationalWorkspaceModalIconUpload(event.target.files?.[0] || null).catch((error) => {
+      showToast(error.message || 'Could not use that image.', 'local', 'Workspaces');
+    });
+    return;
+  }
+  if (event.target.matches('[data-appearance-bg-upload]')) {
+    prepareAppearanceBgUpload(event.target.files?.[0] || null).catch((error) => {
+      showToast(error.message || 'Could not use that background image.', 'local', 'Appearance');
     });
     return;
   }
@@ -33682,12 +34094,9 @@ function setWorkspaceIconDraft(companyId, patch = {}) {
   };
 }
 
-async function prepareWorkspaceIconUpload(file) {
-  if (isReadOnlyDemo()) {
-    requireMutableWorkspace();
-    return;
-  }
-  if (!file) return;
+// Validate, square-crop to 192px, and compress an uploaded image to a data URL suitable
+// for a workspace/company icon. Shared by the company-logo and operational-workspace uploads.
+async function workspaceIconFileToDataUrl(file) {
   const check = await validateUpload(file, 'image');
   if (!check.ok) throw new Error(check.reason);
   if (file.size > 2 * 1024 * 1024) throw new Error('Workspace icon uploads must be 2 MB or smaller.');
@@ -33706,10 +34115,55 @@ async function prepareWorkspaceIconUpload(file) {
   let output = canvas.toDataURL('image/webp', 0.82);
   if (output.length > WORKSPACE_ICON_UPLOAD_MAX_BYTES * 1.5) output = canvas.toDataURL('image/png');
   if (!sanitizeWorkspaceIconImage(output)) throw new Error('That image is too large for a workspace icon. Try a smaller logo.');
+  return output;
+}
+
+async function prepareWorkspaceIconUpload(file) {
+  if (isReadOnlyDemo()) {
+    requireMutableWorkspace();
+    return;
+  }
+  if (!file) return;
+  const output = await workspaceIconFileToDataUrl(file);
   setWorkspaceIconDraft(activeCompanyId(), {
     icon_key: workspaceIconDraft(activeCompanyId()).icon_key,
     icon_image: output,
   });
+  render();
+}
+
+async function prepareOperationalWorkspaceModalIconUpload(file) {
+  if (isReadOnlyDemo()) {
+    requireMutableWorkspace();
+    return;
+  }
+  if (!file) return;
+  const output = await workspaceIconFileToDataUrl(file);
+  const current = state.operationalWorkspaceModalIcon || { icon_key: 'home', icon_image: '' };
+  state.operationalWorkspaceModalIcon = { icon_key: workspaceIconOption(current.icon_key).key, icon_image: output };
+  render();
+}
+
+// Marks a workspace as the company default. Persisted to session state so it takes effect
+// immediately; live server persistence needs a reviewed set-default RPC (see .ai/known-issues).
+function setDefaultOperationalWorkspace(workspaceId) {
+  const target = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
+  if (!target) {
+    showToast('That workspace is no longer available.', 'local', 'Workspaces');
+    return;
+  }
+  if (!canManageOperationalWorkspaces(target.company_id)) {
+    showToast('Workspace admin access is required.', 'local', 'Workspaces');
+    return;
+  }
+  if (target.status === 'archived') {
+    showToast('Archived workspaces cannot be set as default.', 'local', 'Workspaces');
+    return;
+  }
+  if (target.is_default) return;
+  state.operationalWorkspaces = state.operationalWorkspaces.map((item) =>
+    item.company_id === target.company_id ? { ...item, is_default: item.id === target.id } : item);
+  showToast(`${target.name} is now the default workspace.`, 'local', 'Workspaces');
   render();
 }
 
@@ -34533,6 +34987,7 @@ function normalizeOperationalWorkspace(input) {
     name: String(input.name || 'Workspace').trim() || 'Workspace',
     description: String(input.description || '').trim(),
     icon_key: String(input.icon_key || 'home').trim() || 'home',
+    icon_image: sanitizeWorkspaceIconImage(input.icon_image) || '',
     color: String(input.color || '#f0b23b'),
     status: String(input.status || 'active').toLowerCase() === 'archived' ? 'archived' : 'active',
     is_default: input.is_default === true,

@@ -20,6 +20,10 @@
   --amber: #f4b234;
   --amber-2: #f8d995;
   --orange: #e66a1f;
+  /* Accent tokens follow --orange, which the [data-accent] blocks swap — so every element
+     using var(--accent)/var(--accent-soft) re-colors when the accent theme changes. */
+  --accent: var(--orange);
+  --accent-soft: color-mix(in srgb, var(--orange) 13%, var(--surface));
   --blue: #2563eb;
   --green: #15803d;
   --red: #b91c1c;
@@ -4624,18 +4628,15 @@ textarea:focus {
 }
 
 .operational-workspace-row {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 20px;
+  display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 48px;
+  min-height: 52px;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface);
   color: var(--ink-2);
-  padding: 7px 10px;
-  text-align: left;
-  cursor: pointer;
+  padding: 6px 8px 6px 10px;
 }
 
 .operational-workspace-row:hover,
@@ -4649,14 +4650,34 @@ textarea:focus {
   opacity: .62;
 }
 
+/* Clickable "configure" area that fills the row and opens the settings modal. */
+.operational-workspace-row .ows-open {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  padding: 3px 2px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
 .operational-workspace-row .workspace-icon {
   width: 30px;
   height: 30px;
 }
 
-.operational-workspace-row span,
-.operational-workspace-row strong,
-.operational-workspace-row small {
+.operational-workspace-row .ows-open-text {
+  min-width: 0;
+}
+
+.operational-workspace-row .ows-open-text strong,
+.operational-workspace-row .ows-open-text small {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -4664,14 +4685,184 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.operational-workspace-row strong {
+.operational-workspace-row .ows-open-text strong {
   font-size: 13px;
 }
 
-.operational-workspace-row small {
+.operational-workspace-row .ows-open-text small {
   margin-top: 2px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.operational-workspace-row .ows-default-flag {
+  color: var(--accent, #ED4E0D);
+  font-weight: 700;
+}
+
+.operational-workspace-row .ows-open-hint {
+  color: var(--muted);
+  font-size: 15px;
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+
+.operational-workspace-row:hover .ows-open-hint,
+.operational-workspace-row .ows-open:focus-visible .ows-open-hint {
+  opacity: 1;
+}
+
+.operational-workspace-row .ows-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.operational-workspace-row .ows-action {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  gap: 5px;
+}
+
+.operational-workspace-row .ows-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.operational-workspace-row .ows-tag.open {
+  color: #067647;
+  background: #ecfdf3;
+}
+
+.operational-workspace-row .ows-tag.default {
+  color: var(--accent, #ED4E0D);
+  background: var(--accent-soft, #fdeee6);
+}
+
+@media (max-width: 640px) {
+  .operational-workspace-row { flex-wrap: wrap; }
+  .operational-workspace-row .ows-actions { width: 100%; justify-content: flex-end; padding-left: 42px; }
+}
+
+/* ===== Operational workspace create/edit modal ===== */
+.ows-modal-panel .ows-modal-form {
+  display: grid;
+  gap: 14px;
+}
+
+.ows-modal-form .ows-modal-sub {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ows-icon-control {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--surface-2, #faf9f7);
+}
+
+.ows-icon-caption {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.ows-icon-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ows-icon-current .workspace-icon {
+  width: 44px;
+  height: 44px;
+}
+
+.ows-icon-current > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ows-icon-current strong {
+  display: block;
+  font-size: 13px;
+}
+
+.ows-icon-current small {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.ows-icon-remove {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  gap: 5px;
+}
+
+.ows-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ows-icon-choice {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  cursor: pointer;
+  color: var(--ink-2);
+}
+
+.ows-icon-choice:hover {
+  border-color: rgba(244, 93, 34, .4);
+}
+
+.ows-icon-choice.active {
+  border-color: var(--accent, #ED4E0D);
+  background: var(--accent-soft, #fdeee6);
+  color: var(--accent, #ED4E0D);
+}
+
+.ows-icon-choice .workspace-icon-svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ows-icon-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  justify-self: start;
+  padding: 7px 12px;
+  border: 1px dashed var(--border-strong, #d6d3cd);
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.ows-icon-upload:hover {
+  border-color: var(--accent, #ED4E0D);
+  color: var(--accent, #ED4E0D);
 }
 
 .plugin-preset-row {
@@ -10330,6 +10521,15 @@ button.side-item {
 .compact-settings-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
+}
+
+/* Company settings uses two independently-stacking columns so panels flow directly under
+   one another (no cross-column row alignment gap). */
+.compact-settings-grid > .settings-col {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
 }
 
 .messages-page {
@@ -16078,6 +16278,10 @@ html,
 body {
   min-height: 100%;
   background: var(--bg);
+  /* Clip horizontal overflow at the viewport (this value propagates to the viewport,
+     so body itself stays a normal box). Keeping it here rather than on .quest-app lets
+     the document remain the scroll root, which is what the sticky .topbar anchors to. */
+  overflow-x: hidden;
 }
 
 body {
@@ -16086,7 +16290,8 @@ body {
 
 .quest-app {
   --sidebar-width: 248px;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   width: 100%;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -16094,7 +16299,9 @@ body {
   background: var(--bg);
   padding: 0;
   color: var(--ink);
-  overflow-x: hidden;
+  /* App-shell: the shell itself does not scroll, so the topbar (grid row 1) and the
+     fixed sidebar stay pinned while only .work-surface (row 2) scrolls internally. */
+  overflow: hidden;
 }
 
 .quest-app.sidebar-collapsed {
@@ -16177,6 +16384,14 @@ body {
   width: min(560px, 42vw);
   border-radius: 999px;
   padding: 0 15px;
+}
+
+/* The pill owns its focus treatment via .global-search:focus-within. Suppress the
+   generic input:focus ring so the inner input doesn't paint a second, tighter-cornered
+   outline inside the 999px pill (same fix as .contact-list-search input). */
+.global-search input:focus {
+  box-shadow: none;
+  border-color: transparent;
 }
 
 .sync-pill {
@@ -16576,13 +16791,14 @@ button.side-item.planned b {
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
-  min-height: calc(100vh - 64px);
+  min-height: 0;
   border: 0;
   border-radius: 0;
   background: var(--surface-2);
   box-shadow: none;
   padding: 24px 28px 42px;
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .workspace-head {
@@ -19354,14 +19570,14 @@ button {
   height: 42px;
   border-radius: 8px;
   flex: 0 0 auto;
-  background: rgba(237, 78, 13, .10);
-  color: #ed4e0d;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .dash-kpi .dk-ic i { font-size: 21px; }
 .dash-kpi.pipe .dk-ic,
 .dash-kpi.cash .dk-ic { background: rgba(22, 163, 74, .12); color: #16a34a; }
-.dash-kpi.jobs .dk-ic { background: rgba(237, 78, 13, .10); color: #ed4e0d; }
+.dash-kpi.jobs .dk-ic { background: var(--accent-soft); color: var(--accent); }
 .dash-kpi.tasks .dk-ic { background: rgba(37, 99, 235, .12); color: #2563eb; }
 .dash-kpi.ar .dk-ic { background: rgba(124, 58, 237, .12); color: #7c3aed; }
 .dash-kpi.warn .dk-ic { background: rgba(217, 119, 6, .16); color: #d97706; }
@@ -23831,8 +24047,8 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 
 .workspace-rail-item.active {
-  background: #fff1eb;
-  color: #c74616;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .workspace-rail-item .workspace-icon {
@@ -23846,8 +24062,8 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 
 .workspace-rail-item.active .workspace-icon {
-  background: #ffe1d5;
-  color: #dd5725;
+  background: color-mix(in srgb, var(--orange) 22%, var(--surface));
+  color: var(--accent);
 }
 
 .workspace-rail-item .workspace-icon-svg {
@@ -24260,6 +24476,30 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   font-weight: 600;
 }
 .task-repeat-badge .ti { font-size: 13px; }
+
+/* ===== Quest v2: contact field-group rail (approved design) ===== */
+.cv2-wrap { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 18px; align-items: start; }
+.cv2-main { min-width: 0; }
+.cv2-rail { background: var(--surface, #fff); border: 1px solid var(--border, #e8e6e2); border-radius: 14px; padding: 12px 10px; position: sticky; top: 84px; box-shadow: 0 1px 2px rgba(20, 18, 16, 0.04); }
+.cv2-views-tabs { display: flex; gap: 4px; background: #f3f1ee; border-radius: 10px; padding: 3px; margin-bottom: 10px; }
+.cv2-view-tab { flex: 1; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 700; color: #78716c; padding: 6px; border-radius: 8px; cursor: pointer; }
+.cv2-view-tab.active { background: #fff; color: #1c1917; box-shadow: 0 1px 3px rgba(20, 18, 16, 0.1); }
+.cv2-all { display: flex; align-items: center; width: 100%; border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 800; color: #1c1917; padding: 8px 10px; border-radius: 9px; cursor: pointer; text-align: left; }
+.cv2-all:hover { background: #f6f4f1; }
+.cv2-all.active { background: var(--accent-soft); color: var(--accent); }
+.cv2-group { margin-top: 12px; }
+.cv2-group-head { display: flex; align-items: center; gap: 7px; padding: 4px 10px 6px; font-size: 12.5px; font-weight: 800; color: #1c1917; }
+.cv2-fieldtag { font-size: 8px; font-weight: 800; letter-spacing: 0.06em; background: #f3f1ee; color: #a8a29e; padding: 2px 6px; border-radius: 4px; }
+.cv2-group-count { margin-left: auto; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; color: #a8a29e; font-weight: 600; }
+.cv2-opt { display: flex; align-items: center; gap: 9px; width: 100%; border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: #44403c; padding: 5.5px 10px 5.5px 14px; border-radius: 8px; cursor: pointer; text-align: left; line-height: 1.35; }
+.cv2-opt:hover { background: #f6f4f1; }
+.cv2-opt.active { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.cv2-opt.active .cv2-opt-count { color: var(--accent); }
+.cv2-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.cv2-opt-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv2-opt-count { margin-left: auto; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10.5px; color: #a8a29e; flex-shrink: 0; }
+.cv2-more { display: block; padding: 4px 10px 2px 14px; font-size: 11.5px; color: #a8a29e; font-weight: 600; }
+@media (max-width: 1100px) { .cv2-wrap { grid-template-columns: 1fr; } .cv2-rail { position: static; } }
 
 .task-context-links {
   display: grid;
@@ -25396,4 +25636,232 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
     scroll-behavior: auto !important;
     transition: none !important;
   }
+}
+
+/* ===== Appearance customization (per-browser background + card style) ===== */
+:root { --app-pattern-ink: rgba(68, 64, 60, .13); }
+:root[data-theme="dark"] { --app-pattern-ink: rgba(255, 255, 255, .09); }
+
+/* Custom background painted onto the app shell. Attribute-prefixed so it reliably wins
+   over the several plain .quest-app background rules regardless of source order. Preset
+   pattern geometry lives here (keyed by [data-app-preset]); JS only sets the attributes. */
+/* Painted on .work-surface (the scrolling content pane), because .quest-app's background
+   is fully covered by the opaque work-surface. Attribute-prefixed to win over the several
+   plain .work-surface background rules regardless of source order. */
+html[data-app-bg="image"] .work-surface,
+html[data-app-bg="preset"] .work-surface {
+  background-position: center;
+  background-attachment: fixed;
+}
+html[data-app-bg="image"] .work-surface {
+  background-image: var(--app-bg-image);
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+html[data-app-bg="preset"][data-app-preset="dots"] .work-surface {
+  background-image: radial-gradient(var(--app-pattern-ink) 1.3px, transparent 1.3px);
+  background-size: 18px 18px;
+}
+html[data-app-bg="preset"][data-app-preset="grid"] .work-surface {
+  background-image: linear-gradient(var(--app-pattern-ink) 1px, transparent 1px), linear-gradient(90deg, var(--app-pattern-ink) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+html[data-app-bg="preset"][data-app-preset="diagonal"] .work-surface {
+  background-image: repeating-linear-gradient(45deg, var(--app-pattern-ink) 0 1px, transparent 1px 13px);
+}
+html[data-app-bg="preset"][data-app-preset="mesh"] .work-surface {
+  background-image: radial-gradient(at 18% 12%, rgba(244, 93, 34, .16), transparent 42%), radial-gradient(at 82% 0%, rgba(37, 99, 235, .14), transparent 44%), radial-gradient(at 92% 78%, rgba(21, 128, 61, .13), transparent 46%);
+  background-size: cover;
+}
+
+/* Card style overrides. Covers the main card surfaces across the app so a custom card style
+   reaches dashboard, messages, files, jobs and lists — not just generic .panel cards.
+   NOTE: the embedded task-management view is an <iframe> (a separate document) and cannot
+   inherit these styles from the host page. */
+html[data-card-style="solid"] .panel,
+html[data-card-style="solid"] .card,
+html[data-card-style="solid"] .mini-card,
+html[data-card-style="solid"] .metric,
+html[data-card-style="solid"] .home-metric-card,
+html[data-card-style="solid"] .file-tile,
+html[data-card-style="solid"] .folder-card,
+html[data-card-style="solid"] .job-card,
+html[data-card-style="solid"] .message-simple-sidebar,
+html[data-card-style="solid"] .messages-empty-panel,
+html[data-card-style="solid"] .message-context-rail,
+html[data-card-style="glass"] .panel,
+html[data-card-style="glass"] .card,
+html[data-card-style="glass"] .mini-card,
+html[data-card-style="glass"] .metric,
+html[data-card-style="glass"] .home-metric-card,
+html[data-card-style="glass"] .file-tile,
+html[data-card-style="glass"] .folder-card,
+html[data-card-style="glass"] .job-card,
+html[data-card-style="glass"] .message-simple-sidebar,
+html[data-card-style="glass"] .messages-empty-panel,
+html[data-card-style="glass"] .message-context-rail {
+  background: var(--card-custom-bg);
+}
+html[data-card-style="glass"] .panel,
+html[data-card-style="glass"] .card,
+html[data-card-style="glass"] .mini-card,
+html[data-card-style="glass"] .metric,
+html[data-card-style="glass"] .home-metric-card,
+html[data-card-style="glass"] .file-tile,
+html[data-card-style="glass"] .folder-card,
+html[data-card-style="glass"] .job-card,
+html[data-card-style="glass"] .message-simple-sidebar,
+html[data-card-style="glass"] .messages-empty-panel,
+html[data-card-style="glass"] .message-context-rail {
+  backdrop-filter: blur(var(--card-blur, 12px)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--card-blur, 12px)) saturate(1.1);
+  border-color: color-mix(in srgb, var(--card-custom-bg) 60%, transparent);
+}
+
+/* --- Appearance controls (Settings → Appearance) --- */
+.appearance-controls {
+  display: grid;
+  gap: 16px;
+}
+
+.appearance-section {
+  display: grid;
+  gap: 10px;
+}
+
+.appearance-section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.appearance-section-head i {
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.appearance-bg-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.appearance-bg-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-2);
+  padding: 6px 11px 6px 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.appearance-bg-chip:hover { border-color: rgba(244, 93, 34, .4); }
+
+.appearance-bg-chip.active {
+  border-color: var(--accent, #ED4E0D);
+  background: var(--accent-soft, #fdeee6);
+  color: var(--accent, #ED4E0D);
+}
+
+.appearance-bg-swatch {
+  width: 34px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background-color: var(--surface-2, #faf9f7);
+  overflow: hidden;
+}
+
+.appearance-bg-swatch.bg-default { background: linear-gradient(135deg, #f7f0e2, #efe6d6); }
+.appearance-bg-swatch.bg-dots { background-image: radial-gradient(var(--app-pattern-ink) 1.3px, transparent 1.3px); background-size: 8px 8px; }
+.appearance-bg-swatch.bg-grid { background-image: linear-gradient(var(--app-pattern-ink) 1px, transparent 1px), linear-gradient(90deg, var(--app-pattern-ink) 1px, transparent 1px); background-size: 9px 9px; }
+.appearance-bg-swatch.bg-diagonal { background-image: repeating-linear-gradient(45deg, var(--app-pattern-ink) 0 1px, transparent 1px 7px); }
+.appearance-bg-swatch.bg-mesh { background-image: radial-gradient(at 20% 20%, rgba(244, 93, 34, .5), transparent 55%), radial-gradient(at 80% 30%, rgba(37, 99, 235, .45), transparent 55%), radial-gradient(at 60% 90%, rgba(21, 128, 61, .4), transparent 55%); }
+
+.appearance-seg {
+  display: inline-flex;
+  gap: 3px;
+  background: var(--surface-2, #f3f1ee);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.appearance-seg button {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.appearance-seg button.active {
+  background: var(--surface, #fff);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(20, 18, 16, .12);
+}
+
+.appearance-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.appearance-field input[type="color"] {
+  width: 46px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+
+.appearance-range {
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.appearance-range span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.appearance-range b {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.appearance-range input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent, #ED4E0D);
+}
+
+.appearance-reset {
+  justify-self: start;
+  gap: 6px;
+  font-size: 12.5px;
 }
