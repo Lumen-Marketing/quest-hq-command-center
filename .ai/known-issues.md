@@ -6,6 +6,13 @@ Only confirmed, actionable items belong here.
 
 Vite still emits a large-chunk advisory for the primary application bundle. The repository bundle-budget check passes, and Leaflet/PDF.js are lazy-loaded, but src/main.js remains a performance and maintainability risk. Measure production behavior before splitting and retain the budget guard.
 
+## Tasks write store has rollback concurrency footguns (unwired)
+
+src/tasks/task-store.js is not yet wired into src/main.js, so these are latent, but must be resolved before wiring it into the native Tasks surface:
+
+- `all()` returns the internal `tasks` array by reference; `put()` mutates in place while `seed()` and the error rollback reassign (`tasks = snapshot`). A caller holding a cached `all()` reference can keep a phantom optimistic task after a rollback. Fix by returning a copy from `all()` or restoring in place.
+- `save()` captures a whole-array `snapshot` per call and rolls back with `tasks = snapshot`. Two overlapping saves (or a save racing a `seed()` refresh) can let a failed save discard another save that already committed. Scope rollback to the affected row, or serialise writes, before relying on it under concurrency.
+
 ## Browser code and styling are monolithic
 
 Most product behavior is concentrated in src/main.js and most styling in src/styles.css. Broad edits can create cross-module regressions, so use focused changes and full checks until module boundaries are deliberately extracted.

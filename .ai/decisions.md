@@ -44,7 +44,11 @@ Where live routines provide atomic mutations or safe-delete/recycle-bin behavior
 
 ## Task system boundary
 
-TaskManagement owns task execution. Quest HQ links business containers to tasks through jobs.id to tasks.project_id and must not fork the task model.
+Task rendering is flag-gated by `VITE_NATIVE_TASKS_MODULE` (`CONFIG.nativeTasksModule`, default off). The vendored TaskManagement app, embedded as a same-origin iframe, is the default surface; a host-native Tasks surface is the flag-on path. The flag is a deliberate strangler migration from embed to native, not an ad-hoc fork.
+
+There is exactly one task model and one row shape: `normalizeTask` / `taskPayload` in src/main.js. Neither surface may define a second. Quest HQ links business containers to tasks through `jobs.id -> tasks.project_id`, plus `contact_id` and tenant-scoped `deal_id`.
+
+Per ADR-0001 (docs/adr/0001-task-write-protocol-task-specific.md), the native path's writes consolidate into a task-specific, injectable write store, src/tasks/task-store.js. It reuses the single shape, scopes every update by `id` + `workspace_id`, and injects its data client so the interface is the test surface. It is built and unit-tested but not yet wired into main.js. We do not generalise it into a cross-entity `Records.save`, and we do not delete the vendored fork while the flag governs the default surface.
 
 ## Funnel next actions are tasks
 

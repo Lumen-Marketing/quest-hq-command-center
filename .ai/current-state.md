@@ -64,6 +64,7 @@ Email delivery is observable and recoverable. Invite rows record `not_sent`, `se
 - The compact Quest command rail, Modular Quest landing direction, IBM Plex typography, Technical Ledger underwriter, Contacts lifecycle, Dashboard, Workday, Jobs, Tasks, Messages, Files, Forms, Client Portals, Price Book, Calls, Automations, Analytics, Users, and Workspace App Builder are present.
 - Shared CSV parsing now preserves empty columns and supports quoted commas, quotes, and newlines.
 - Imported and persisted Workspace App Builder colors are constrained to CSS hex values before reaching style sinks.
+- An injectable task write store (src/tasks/task-store.js, src/tasks/task-shape.js) with unit tests exists as the write engine for the flag-on native Tasks surface. It is not yet wired into src/main.js; the default embed surface is unaffected (see ADR-0001).
 
 ## Remaining controlled launch configuration
 

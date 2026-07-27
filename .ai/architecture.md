@@ -72,6 +72,7 @@ The SPA supports:
 - Public-token endpoints expose the minimum required record fields.
 - TaskManagement owns task execution behavior; Quest HQ owns the surrounding business context.
 - The host resolves an allowed operational workspace before loading TaskManagement. The vendored store writes that id on every task row and filters task list, refresh, refetch, update, delete, and purge operations by it. Missing hosted workspace context fails closed before any task data loads.
+- The flag-on native surface's writes consolidate into an injectable write store, src/tasks/task-store.js, with pure predicates in src/tasks/task-shape.js. It owns the write protocol (optimistic apply, guarded insert/update, rollback, onChange), scopes every update by `id` + `workspace_id`, and reuses the single `normalizeTask` / `taskPayload` shape by injection. Built and unit-tested; not yet wired into src/main.js (see ADR-0001).
 - Funnel "What's next" fields select from open tasks: contacts through `contact_id`, quotes/deals through tenant-scoped `deal_id`, and jobs through `project_id`.
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-workspace, per-contact records protected by Underwriter permissions and workspace RLS.

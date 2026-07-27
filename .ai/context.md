@@ -6,7 +6,7 @@ Questbase is Lumen's multi-tenant operating system for roofing and service compa
 
 Questbase owns the company shell, authentication flow, company and workspace memberships, subscription gating, roles and permissions, CRM records, job containers, files, forms, finance, messaging, calendar, client portals, reporting, settings, workspace plugins, and custom workspace apps.
 
-TaskManagement remains the vendored work-execution engine. Questbase links those tasks to jobs through `project_id`, contacts through `contact_id`, and quotes/deals through tenant-scoped `deal_id`. Do not create a second independent task or next-step model inside Questbase.
+TaskManagement remains the vendored work-execution engine and the default task surface; a host-native Tasks surface is gated behind `VITE_NATIVE_TASKS_MODULE` (off by default). Questbase links those tasks to jobs through `project_id`, contacts through `contact_id`, and quotes/deals through tenant-scoped `deal_id`. Do not create a second independent task or next-step model inside Questbase. The native surface's write engine (src/tasks/task-store.js) is not a second model: it reuses the single `normalizeTask` / `taskPayload` shape.
 
 ## Live product areas
 
