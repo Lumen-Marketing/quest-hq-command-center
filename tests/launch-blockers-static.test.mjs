@@ -41,9 +41,11 @@ test('new form modal shows clear validation for blank/default titles', () => {
   assert.match(source, /const validation = validateNewFormModal\(formEl, template\);[\s\S]*if \(!validation\.ok\) return;/);
 });
 
-test('invite modal explains link-code invite flow without implying email delivery', () => {
-  assert.match(source, /Copy this invite link or code and send it to the teammate yourself\./);
-  assert.doesNotMatch(source, /Automatic invite email delivery is not active in v1\./);
+test('invite modal sends email while preserving a manual link fallback', () => {
+  assert.match(source, /Questbase will email a secure acceptance link\./);
+  assert.match(source, /client\.functions\.invoke\('send-company-invite'/);
+  assert.match(source, /Email delivery failed\. The invite is still valid - copy its link or retry\./);
+  assert.match(source, /data-action="copy-invite-link"/);
 });
 
 test('dashboard nav badge helpers do not read underwriter stages before initialization', () => {

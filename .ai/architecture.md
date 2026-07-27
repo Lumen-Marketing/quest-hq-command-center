@@ -23,6 +23,8 @@ The tenancy hierarchy is `profile -> company membership -> company -> operationa
 
 Public flows such as client portals, public forms, and proposals go through token-aware API handlers. Server handlers use deployment-only credentials and must validate method, input, tenant scope, and authorization before accessing Supabase.
 
+Worker onboarding follows one bounded path: a company manager selects a non-elevated role and one or more operational workspaces, the browser inserts a pending `company_invites` row, and the `send-company-invite` Supabase Edge Function derives and sends the recipient-specific message. Acceptance runs through `accept_company_invite`, which verifies the signed-in email and invite state, creates the company membership, clears stale custom-role assignments, inserts only a verified non-elevated role, and creates the selected `workspace_memberships`. Legacy invites without workspace selections fall back to the company default workspace.
+
 ## Routing
 
 The SPA supports:
@@ -43,7 +45,10 @@ The SPA supports:
 | Operational workspace selection and isolation rules | [src/workspaces/model.js](../src/workspaces/model.js) |
 | Funnel next-action selection and record matching | [src/crm/next-action.js](../src/crm/next-action.js) |
 | Password, upload, realtime policy helpers | [src](../src) |
+| Shared CSV parser | [src/data/csv.js](../src/data/csv.js) |
+| Imported/persisted color validation | [src/security/color.js](../src/security/color.js) |
 | Serverless API handlers | [api](../api) |
+| Supabase Edge Functions | [supabase/functions](../supabase/functions) |
 | RingCentral access (token exchange, paging, normalisation) | [api/_lib/ringcentral.js](../api/_lib/ringcentral.js) |
 | Browser bearer token to company-admin identity | [api/_lib/user-auth.js](../api/_lib/user-auth.js) |
 | Database history and authorization | [Supabase migrations](../supabase/migrations) |
@@ -56,6 +61,8 @@ The SPA supports:
 - Company id remains the customer/billing/security tenant boundary; `workspace_id` is the operational data boundary for CRM, pipelines, underwriting, files, jobs, proposals, and tasks.
 - Every company has one non-archivable default operational workspace. Existing company data was backfilled into it.
 - Owners, admins, and developers inherit access to every active workspace in their company. Workers and other members require explicit active workspace membership and use that workspace's assigned role.
+- Invites never grant Owner, Admin, or Developer. Those promotions happen only after onboarding through the owner-guarded member-access path.
+- Invite email callers cannot choose the recipient, subject, HTML, token, company, role, or workspace names; the Edge Function derives them from the tenant-scoped invite.
 - Company plugins are entitlements; workspace plugins control activation and configuration independently inside each child workspace.
 - Linked CRM, quote, job, task, file, proposal, and underwriting records must share a workspace. Database constraint triggers enforce this independently of the browser.
 - Browser access uses the publishable/anon key and relies on RLS.

@@ -20,6 +20,12 @@ The approved Modular Quest landing direction is the public visual source of trut
 
 A company is the market customer, subscription, and outer security tenant. The desktop rail groups operational child workspaces under that company account. Workspace switching preserves the company route and carries the child workspace as a query parameter. Owners, admins, and developers inherit every active child workspace; regular workers require explicit workspace memberships and can receive a different role per workspace. Creating or archiving an operational workspace never creates or deletes the company account.
 
+## Worker invites are non-elevated and workspace-explicit
+
+An invite may assign a regular/custom role and one or more active operational workspaces, but it can never confer Owner, Admin, or Developer. Acceptance clears stale custom-role assignments and reinserts only a role proven non-elevated and company-scoped. Existing active members cannot use a second invite to mutate their access. Elevated promotion remains a separate, owner-guarded action after the teammate joins.
+
+Invite delivery is durable state, not the source of access truth. The database invite remains valid when the email provider is unavailable, records `not_sent`, `sent`, or `failed`, and always exposes the manual link fallback. The mail endpoint accepts only an invite id and derives every message field server-side so it cannot become an arbitrary mail relay.
+
 ## Plugin entitlement and activation are separate
 
 `company_plugins` records what a customer's plan is entitled to use. `workspace_plugins` records which entitled plugins are active and how they are configured in one operational workspace. This keeps the system customizable without hardcoding one pipeline or app layout for every market customer.

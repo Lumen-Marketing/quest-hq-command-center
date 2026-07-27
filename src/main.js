@@ -18,8 +18,10 @@ import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.j
 import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDueDate } from './data/recurrence.js';
 import { collectAutomationActions, buildTaskFromAction, describeAutomation, AUTOMATION_OBJECTS } from './data/automations.js';
 import { findDuplicateGroups, mergeContactFields, partitionImport } from './data/dedupe.js';
+import { parseContactsCsv, parseCsvRows } from './data/csv.js';
 import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
 import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
+import { safeHexColor, sanitizeColorConfig } from './security/color.js';
 import {
   allowedWorkspaces as resolveAllowedWorkspaces,
   workspaceForRoute,
@@ -70,6 +72,7 @@ const CONFIG = {
   supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U',
   stripePriceId: import.meta.env.VITE_STRIPE_PRICE_ID || '',
 };
+const INVITE_BLOCKED_ROLE_NAMES = new Set(['owner', 'admin', 'developer']);
 
 const BASE_PATH = new URL(import.meta.env.BASE_URL || '/', window.location.origin).pathname.replace(/\/$/, '');
 const SESSION_KEY = 'quest-hq-local-session';
@@ -8312,26 +8315,6 @@ async function performBulkContactsDelete(targets) {
   render();
 }
 
-function parseContactsCsv(text) {
-  const lines = String(text || '').split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return [];
-  const split = (line) => (line.match(/(?:"[^"]*"|[^,])+/g) || []).map((s) => s.replace(/^"|"$/g, '').trim());
-  const headers = split(lines[0]).map((x) => x.toLowerCase());
-  const findIdx = (names) => headers.findIndex((x) => names.some((n) => x.includes(n)));
-  const iName = findIdx(['name', 'contact', 'full']);
-  const iEmail = findIdx(['email', 'e-mail']);
-  const iPhone = findIdx(['phone', 'mobile', 'cell', 'tel']);
-  const iTitle = findIdx(['title', 'job']);
-  const out = [];
-  for (let i = 1; i < lines.length; i += 1) {
-    const cols = split(lines[i]);
-    const name = (iName >= 0 ? cols[iName] : cols[0]) || '';
-    if (!name.trim()) continue;
-    out.push({ name, email: iEmail >= 0 ? (cols[iEmail] || '') : '', phone: iPhone >= 0 ? (cols[iPhone] || '') : '', title: iTitle >= 0 ? (cols[iTitle] || '') : '' });
-  }
-  return out;
-}
-
 function importContactsFromFile() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -11746,14 +11729,24 @@ function renderJoinRequestRow(request, canManageUsers) {
 function renderInviteRow(invite, canManageUsers) {
   const role = roleById(invite.company_id, invite.role_id);
   const expired = invite.expires_at && Date.parse(invite.expires_at) < Date.now();
+  const workspaceNames = invite.workspace_ids
+    .map((workspaceId) => state.operationalWorkspaces.find((workspace) => workspace.id === workspaceId)?.name)
+    .filter(Boolean);
+  const deliveryLabel = invite.email_status === 'sent'
+    ? `Email sent${invite.email_sent_at ? ` ${formatDate(invite.email_sent_at)}` : ''}`
+    : invite.email_status === 'failed'
+      ? 'Email delivery failed - invite link is still valid'
+      : 'Email not sent';
   return `
     <article class="access-invite-row ${expired ? 'muted' : ''}">
       <div>
         <strong>${h(invite.email)}</strong>
         <span>${h(role?.name || 'Member')} / ${expired ? 'Expired' : `Expires ${formatDate(invite.expires_at)}`}</span>
+        <span>${h(workspaceNames.length ? workspaceNames.join(', ') : 'Default workspace')} / ${h(deliveryLabel)}</span>
         ${invite.token ? `<code class="invite-code">${h(invite.token)}</code>` : ''}
       </div>
       <div>
+        ${invite.email_status !== 'sent' ? `<button class="btn" type="button" data-action="send-invite-email" data-invite-id="${h(invite.id)}" ${canManageUsers && !expired ? '' : 'disabled'}><i class="ti ti-mail"></i>${invite.email_status === 'failed' ? 'Retry email' : 'Send email'}</button>` : ''}
         <button class="btn" type="button" data-action="copy-invite-code" data-invite-id="${h(invite.id)}" ${canManageUsers && invite.token ? '' : 'disabled'}><i class="ti ti-key"></i>Copy code</button>
         <button class="btn" type="button" data-action="copy-invite-link" data-invite-id="${h(invite.id)}" ${canManageUsers && invite.token ? '' : 'disabled'}><i class="ti ti-link"></i>Copy link</button>
         <button class="btn danger" type="button" data-action="revoke-invite" data-invite-id="${h(invite.id)}" ${canManageUsers ? '' : 'disabled'}>Revoke</button>
@@ -11845,7 +11838,7 @@ function normalizeWorkspaceBuilderDoc(doc) {
       name: ws.name || 'Untitled workspace',
       description: ws.description || '',
       icon: ws.icon || WB_WS_ICONS[0],
-      color: ws.color || WB_PALETTE[1],
+      color: safeHexColor(ws.color, WB_PALETTE[1]),
       members: Array.isArray(ws.members) ? ws.members.map(String) : [],
       createdAt: ws.createdAt || new Date().toISOString().slice(0, 10),
       activity: Array.isArray(ws.activity) ? ws.activity : [],
@@ -11865,10 +11858,10 @@ function normalizeWorkspaceBuilderDoc(doc) {
         description: app.description || '',
         type: app.type || '',
         icon: app.icon || WB_APP_ICONS[0],
-        color: app.color || ws.color || WB_PALETTE[1],
+        color: safeHexColor(app.color, safeHexColor(ws.color, WB_PALETTE[1])),
         shared: !!app.shared,
         ...(Array.isArray(app.cardFields) ? { cardFields: app.cardFields.filter((id) => typeof id === 'string') } : {}),
-        fields: Array.isArray(app.fields) ? app.fields.map((field) => ({ id: field.id || wbUid(), label: field.label || 'Field', type: WB_FIELD_TYPES[field.type] ? field.type : 'text', required: !!field.required, hidden: !!field.hidden, config: field.config && typeof field.config === 'object' ? field.config : {} })) : [],
+        fields: Array.isArray(app.fields) ? app.fields.map((field) => ({ id: field.id || wbUid(), label: field.label || 'Field', type: WB_FIELD_TYPES[field.type] ? field.type : 'text', required: !!field.required, hidden: !!field.hidden, config: sanitizeColorConfig(field.config && typeof field.config === 'object' ? field.config : {}, safeHexColor(app.color, WB_PALETTE[1])) })) : [],
         items: Array.isArray(app.items) ? app.items.map((item) => { const createdAt = item.createdAt || new Date().toISOString().slice(0, 10); return { id: item.id || wbUid(), values: item.values && typeof item.values === 'object' ? item.values : {}, createdAt, createdBy: item.createdBy || '', updatedAt: item.updatedAt || createdAt, lastActivityAt: item.lastActivityAt || item.updatedAt || createdAt, comments: Array.isArray(item.comments) ? item.comments : [] }; }) : [],
         automations: Array.isArray(app.automations) ? app.automations.map((auto) => ({ id: auto.id || wbUid(), name: auto.name || 'Automation', enabled: auto.enabled !== false, trigger: auto.trigger && typeof auto.trigger === 'object' ? auto.trigger : { event: 'created' }, actions: Array.isArray(auto.actions) ? auto.actions : [] })) : [],
       })) : [],
@@ -14313,22 +14306,7 @@ function wbExportCsv(companyId, workspaceId, appId) {
 }
 // RFC-4180-ish parser: handles quoted fields with embedded commas/newlines and "" escapes.
 function wbParseCsv(text) {
-  const s = String(text || '').replace(/^﻿/, '');
-  const rows = []; let row = []; let field = ''; let inQ = false; let i = 0;
-  while (i < s.length) {
-    const c = s[i];
-    if (inQ) {
-      if (c === '"') { if (s[i + 1] === '"') { field += '"'; i += 2; continue; } inQ = false; i++; continue; }
-      field += c; i++; continue;
-    }
-    if (c === '"') { inQ = true; i++; continue; }
-    if (c === ',') { row.push(field); field = ''; i++; continue; }
-    if (c === '\r') { i++; continue; }
-    if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
-    field += c; i++;
-  }
-  if (field !== '' || row.length) { row.push(field); rows.push(row); }
-  return rows;
+  return parseCsvRows(text);
 }
 function wbParseDurationCell(s) {
   const t = String(s).trim();
@@ -14445,7 +14423,7 @@ function wbBuildInstalledApp(workspace, src, includeItems) {
   const fields = (src.fields || []).map((f) => {
     const id = wbUid();
     fieldIdMap[f.id] = id;
-    return { id, label: String(f.label || 'Field'), type: WB_FIELD_TYPES[f.type] ? f.type : 'text', required: !!f.required, hidden: !!f.hidden, config: f.config && typeof f.config === 'object' ? clone(f.config) : {} };
+    return { id, label: String(f.label || 'Field'), type: WB_FIELD_TYPES[f.type] ? f.type : 'text', required: !!f.required, hidden: !!f.hidden, config: sanitizeColorConfig(f.config && typeof f.config === 'object' ? f.config : {}, safeHexColor(src.color, WB_PALETTE[1])) };
   });
   // Remap same-app field references inside config now that all ids exist — e.g. a
   // Progress field that fills from a Checklist in this app (config.source).
@@ -14468,7 +14446,7 @@ function wbBuildInstalledApp(workspace, src, includeItems) {
   });
   let name = String(src.name || 'Imported app').trim() || 'Imported app';
   if (workspace.apps.some((a) => a.name === name)) { let n = 2; while (workspace.apps.some((a) => a.name === `${name} (${n})`)) n += 1; name = `${name} (${n})`; }
-  return { id: wbUid(), name, description: String(src.description || ''), type: String(src.type || ''), icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0], color: src.color || WB_PALETTE[1], fields, items, automations };
+  return { id: wbUid(), name, description: String(src.description || ''), type: String(src.type || ''), icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0], color: safeHexColor(src.color, WB_PALETTE[1]), fields, items, automations };
 }
 function wbInstallAppFromJson(companyId, workspaceId, text) {
   let bundle;
@@ -17878,16 +17856,28 @@ function renderRoleDeleteModal() {
 }
 
 function renderInviteFormModal(companyId) {
-  const roles = companyRoles(companyId).filter((role) => role.name.toLowerCase() !== 'owner');
+  const roles = companyRoles(companyId)
+    .filter((role) => !INVITE_BLOCKED_ROLE_NAMES.has(role.name.toLowerCase()));
+  const workspaces = state.operationalWorkspaces
+    .filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
   const options = [['', 'Member']].concat(roles.map((role) => [role.id, role.name]));
-  return renderModalShell('Users', 'Create invite code', `
+  return renderModalShell('Users', 'Invite teammate', `
     <form class="role-form" data-invite-form>
       <input type="hidden" name="company_id" value="${h(companyId)}" />
       ${field('Email', 'email', '', true, 'email')}
       ${selectField('Role', 'role_id', defaultInviteRoleId(companyId), options)}
-      <div class="form-message span-2">Copy this invite link or code and send it to the teammate yourself.</div>
+      <fieldset class="workspace-access-grid invite-workspace-grid span-2">
+        <legend>Workspace access</legend>
+        ${workspaces.map((workspace, index) => `
+          <label class="workspace-access-assignment">
+            <input type="checkbox" name="workspace_ids" value="${h(workspace.id)}" ${workspace.is_default || (!workspaces.some((item) => item.is_default) && index === 0) ? 'checked' : ''} />
+            <span><b>${h(workspace.name)}</b><small>${h(workspace.is_default ? 'Default workspace' : 'Explicit assignment')}</small></span>
+          </label>
+        `).join('') || '<span class="form-note">Create an active workspace before inviting a worker.</span>'}
+      </fieldset>
+      <div class="form-message span-2">Questbase will email a secure acceptance link. If delivery is unavailable, the invite remains valid so you can copy its link manually.</div>
       <div class="form-actions span-2">
-        <button class="btn btn-primary" type="submit">Create invite code</button>
+        <button class="btn btn-primary" type="submit" ${workspaces.length ? '' : 'disabled'}>Create &amp; send invite</button>
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
       </div>
     </form>
@@ -24188,6 +24178,12 @@ function handleAction(event, node) {
     openRecycleDeleteModal({ type: 'calendar_event', id: node.dataset.eventId });
     return;
   }
+  if (action === 'send-invite-email') {
+    event.preventDefault();
+    if (!requirePermission('users.manage', activeCompanyId(), 'Your role cannot send invite emails.', 'Users')) return;
+    sendCompanyInviteEmail(node.dataset.inviteId);
+    return;
+  }
   if (action === 'copy-invite-link') {
     event.preventDefault();
     if (!requirePermission('users.manage', activeCompanyId(), 'Your role cannot view invite links.', 'Users')) return;
@@ -26884,8 +26880,24 @@ async function saveInvite(formNode) {
   if (!requirePermission('users.manage', companyId, 'Your role cannot invite users.', 'Users')) return;
   const email = String(data.get('email') || '').trim().toLowerCase();
   const roleId = String(data.get('role_id') || '').trim();
+  const availableWorkspaceIds = new Set(state.operationalWorkspaces
+    .filter((workspace) => workspace.company_id === companyId && workspace.status === 'active')
+    .map((workspace) => workspace.id));
+  const workspaceIds = compactUnique(data.getAll('workspace_ids').map(String))
+    .filter((workspaceId) => availableWorkspaceIds.has(workspaceId));
   if (!email) {
     state.sync = { label: 'Invite email is required', mode: 'local' };
+    render();
+    return;
+  }
+  if (!workspaceIds.length) {
+    state.sync = { label: 'Select at least one workspace for this teammate', mode: 'local' };
+    render();
+    return;
+  }
+  const inviteRole = roleById(companyId, roleId);
+  if (inviteRole && INVITE_BLOCKED_ROLE_NAMES.has(inviteRole.name.toLowerCase())) {
+    state.sync = { label: 'Owner, Admin, and Developer access must be granted after the teammate joins', mode: 'local' };
     render();
     return;
   }
@@ -26895,6 +26907,8 @@ async function saveInvite(formNode) {
     company_id: companyId,
     email,
     role_id: isUuid(roleId) ? roleId : '',
+    workspace_ids: workspaceIds,
+    email_status: 'not_sent',
     token: generateInviteCode(),
     status: 'pending',
     invited_by: activeSession().profile.id,
@@ -26908,6 +26922,7 @@ async function saveInvite(formNode) {
       company_id: invite.company_id,
       email: invite.email,
       role_id: invite.role_id || null,
+      workspace_ids: invite.workspace_ids,
       token: invite.token,
       status: 'pending',
       invited_by: activeSession().profile.id,
@@ -26920,16 +26935,50 @@ async function saveInvite(formNode) {
     }
     state.companyInvites.unshift(normalizeCompanyInvite(result.data));
     await recordAuditEvent(invite.company_id, 'invite.created', 'company_invite', result.data.id, { email: invite.email }, true);
-    state.sync = { label: 'Invite code created. Copy it for the new user.', mode: 'live' };
+    await sendCompanyInviteEmail(result.data.id, { renderAfter: false });
   } else {
     state.companyInvites.unshift(invite);
     recordAuditEvent(invite.company_id, 'invite.created', 'company_invite', invite.id, { email: invite.email });
-    state.sync = { label: 'Invite code created locally', mode: 'local' };
+    state.sync = { label: 'Invite created locally. Copy its link to share it.', mode: 'local' };
   }
 
-  notifyLocalEvent('access.invite', 'Invite code created', `${actorName()} created an invite code for ${invite.email}.`, companyPath('settings', { tab: 'access' }, invite.company_id), 'invite', invite.id, invite.company_id);
+  notifyLocalEvent('access.invite', 'Teammate invited', `${actorName()} invited ${invite.email}.`, companyPath('settings', { tab: 'access' }, invite.company_id), 'invite', invite.id, invite.company_id);
   state.modal = '';
   render();
+}
+
+async function sendCompanyInviteEmail(inviteId, { renderAfter = true } = {}) {
+  const invite = state.companyInvites.find((item) => item.id === String(inviteId || ''));
+  if (!invite) return false;
+  if (!requirePermission('users.manage', invite.company_id, 'Your role cannot send invite emails.', 'Users')) return false;
+  const client = createSupabaseClient();
+  if (!isLiveSupabaseSession() || !client) {
+    state.sync = { label: 'Email delivery requires a live Questbase session. Copy the invite link instead.', mode: 'local' };
+    if (renderAfter) render();
+    return false;
+  }
+
+  state.sync = { label: `Sending invite to ${invite.email}...`, mode: 'live' };
+  if (renderAfter) render();
+  const { data, error } = await client.functions.invoke('send-company-invite', {
+    body: { invite_id: invite.id },
+  });
+  const sent = !error && data?.ok === true;
+  state.companyInvites = state.companyInvites.map((item) => (
+    item.id === invite.id
+      ? normalizeCompanyInvite({
+        ...item,
+        email_status: sent ? 'sent' : 'failed',
+        email_sent_at: sent ? (data?.email_sent_at || item.email_sent_at || new Date().toISOString()) : '',
+        email_last_error: sent ? '' : 'delivery_failed',
+      })
+      : item
+  ));
+  state.sync = sent
+    ? { label: data?.already_sent ? 'Invite email was already sent' : `Invite emailed to ${invite.email}`, mode: 'live' }
+    : { label: 'Email delivery failed. The invite is still valid - copy its link or retry.', mode: 'local' };
+  if (renderAfter) render();
+  return sent;
 }
 
 async function acceptCompanyInvite(token, fallbackReturnUrl = '') {
@@ -31225,7 +31274,8 @@ function roleIdForName(companyId, roleName) {
 }
 
 function defaultInviteRoleId(companyId = activeCompanyId()) {
-  const roles = companyRoles(companyId).filter((role) => role.name.toLowerCase() !== 'owner');
+  const roles = companyRoles(companyId)
+    .filter((role) => !INVITE_BLOCKED_ROLE_NAMES.has(role.name.toLowerCase()));
   return roles.find((role) => role.name.toLowerCase() === 'staff')?.id || roles.find((role) => role.name.toLowerCase() === 'member')?.id || roles[0]?.id || '';
 }
 
@@ -33504,6 +33554,7 @@ function isMutableAction(action = '') {
     'apply-workspace-plugin-preset',
     'select-workspace-icon',
     'start-checkout',
+    'send-invite-email',
     'review-workspace',
     'platform-company-action',
     'builder-create-workspace',
@@ -35402,6 +35453,10 @@ function normalizeCompanyInvite(input) {
     role_id: String(input.role_id || ''),
     token: String(input.token || ''),
     status: String(input.status || 'pending'),
+    workspace_ids: Array.isArray(input.workspace_ids) ? compactUnique(input.workspace_ids.map(String).filter(Boolean)) : [],
+    email_status: String(input.email_status || 'not_sent'),
+    email_sent_at: input.email_sent_at || '',
+    email_last_error: String(input.email_last_error || ''),
     expires_at: input.expires_at || '',
     invited_by: String(input.invited_by || ''),
     accepted_by: String(input.accepted_by || ''),

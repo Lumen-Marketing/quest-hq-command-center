@@ -5286,9 +5286,30 @@ textarea:focus {
   height: 32px;
 }
 
+.invite-workspace-grid {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  padding: 9px 0 0;
+}
+
+.invite-workspace-grid legend {
+  padding: 0 0 6px;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.invite-workspace-grid .workspace-access-assignment {
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
 .access-request-row > div:last-child,
 .access-invite-row > div:last-child {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
 }

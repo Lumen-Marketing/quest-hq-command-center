@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "captured_at": "2026-07-21T00:27:56.075Z",
+  "captured_at": "2026-07-27T19:13:43.004Z",
   "scope": "Catalog metadata only. Contains no production table rows, auth user records, object paths, or credentials.",
   "source": {
     "project_ref": "rqundirizvojpzhljtdn",
@@ -558,6 +558,96 @@
       "rls_enabled": true
     },
     {
+      "name": "bug_reports",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "reporter_id",
+          "default": null,
+          "nullable": true,
+          "position": 2,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "reporter_name",
+          "default": null,
+          "nullable": true,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "reporter_email",
+          "default": null,
+          "nullable": true,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "type",
+          "default": "'bug'::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "description",
+          "default": null,
+          "nullable": false,
+          "position": 6,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "context",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
+        },
+        {
+          "name": "status",
+          "default": "'open'::text",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 9,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "resolved_at",
+          "default": null,
+          "nullable": true,
+          "position": 10,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
       "name": "calendar_events",
       "schema": "public",
       "columns": [
@@ -700,6 +790,124 @@
       ],
       "primary_key": [
         "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "checkin_log",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "kind",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "subject",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "period",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "sent_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "kind",
+        "subject",
+        "period"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "checkin_settings",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "morning_enabled",
+          "default": "false",
+          "nullable": false,
+          "position": 2,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "eod_enabled",
+          "default": "false",
+          "nullable": false,
+          "position": 3,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "stalled_enabled",
+          "default": "false",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "stalled_days",
+          "default": "3",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "int4",
+          "data_type": "integer"
+        },
+        {
+          "name": "eod_idle_minutes",
+          "default": "90",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "int4",
+          "data_type": "integer"
+        },
+        {
+          "name": "updated_by",
+          "default": null,
+          "nullable": true,
+          "position": 7,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "company_id"
       ],
       "rls_enabled": true
     },
@@ -1282,6 +1490,56 @@
       "rls_enabled": true
     },
     {
+      "name": "comment_reactions",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "comment_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "member_id",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "emoji",
+          "default": null,
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
       "name": "companies",
       "schema": "public",
       "columns": [
@@ -1454,6 +1712,38 @@
           "position": 11,
           "udt_name": "timestamptz",
           "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "workspace_ids",
+          "default": "'{}'::uuid[]",
+          "nullable": false,
+          "position": 12,
+          "udt_name": "_uuid",
+          "data_type": "ARRAY"
+        },
+        {
+          "name": "email_status",
+          "default": "'not_sent'::text",
+          "nullable": false,
+          "position": 13,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "email_sent_at",
+          "default": null,
+          "nullable": true,
+          "position": 14,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "email_last_error",
+          "default": null,
+          "nullable": true,
+          "position": 15,
+          "udt_name": "text",
+          "data_type": "text"
         }
       ],
       "primary_key": [
@@ -4755,6 +5045,120 @@
           "position": 13,
           "udt_name": "timestamptz",
           "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "position",
+          "default": null,
+          "nullable": true,
+          "position": 14,
+          "udt_name": "text",
+          "data_type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "projects",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "name",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "address",
+          "default": "''::text",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "status",
+          "default": "'active'::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "budget",
+          "default": null,
+          "nullable": true,
+          "position": 6,
+          "udt_name": "numeric",
+          "data_type": "numeric"
+        },
+        {
+          "name": "start_date",
+          "default": null,
+          "nullable": true,
+          "position": 7,
+          "udt_name": "date",
+          "data_type": "date"
+        },
+        {
+          "name": "due_date",
+          "default": null,
+          "nullable": true,
+          "position": 8,
+          "udt_name": "date",
+          "data_type": "date"
+        },
+        {
+          "name": "color",
+          "default": "'#8f867b'::text",
+          "nullable": false,
+          "position": 9,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "client",
+          "default": null,
+          "nullable": true,
+          "position": 10,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 11,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 12,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
         }
       ],
       "primary_key": [
@@ -5127,6 +5531,41 @@
       "rls_enabled": true
     },
     {
+      "name": "reminder_log",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "task_id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "kind",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "sent_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 3,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "task_id",
+        "kind"
+      ],
+      "rls_enabled": true
+    },
+    {
       "name": "resource_acl",
       "schema": "public",
       "columns": [
@@ -5213,6 +5652,418 @@
       ],
       "primary_key": [
         "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "ringcentral_accounts",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "rc_account_id",
+          "default": "'~'::text",
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "credential_source",
+          "default": "'env'::text",
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "credential_key",
+          "default": "'RINGCENTRAL_JWT'::text",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "status",
+          "default": "'active'::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "company_id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "ringcentral_calls",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "call_id",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "session_id",
+          "default": "''::text",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "started_at",
+          "default": null,
+          "nullable": false,
+          "position": 5,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "direction",
+          "default": "''::text",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "from_number",
+          "default": "''::text",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "from_name",
+          "default": "''::text",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "to_number",
+          "default": "''::text",
+          "nullable": false,
+          "position": 9,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "to_name",
+          "default": "''::text",
+          "nullable": false,
+          "position": 10,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "extension_id",
+          "default": "''::text",
+          "nullable": false,
+          "position": 11,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "extension_number",
+          "default": "''::text",
+          "nullable": false,
+          "position": 12,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "extension_name",
+          "default": "''::text",
+          "nullable": false,
+          "position": 13,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "extension_email",
+          "default": "''::text",
+          "nullable": false,
+          "position": 14,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "duration_seconds",
+          "default": "0",
+          "nullable": false,
+          "position": 15,
+          "udt_name": "int4",
+          "data_type": "integer"
+        },
+        {
+          "name": "result",
+          "default": "''::text",
+          "nullable": false,
+          "position": 16,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "is_conversation",
+          "default": "false",
+          "nullable": false,
+          "position": 17,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "raw",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 18,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 19,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 20,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "ringcentral_extensions",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "extension_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "extension_number",
+          "default": "''::text",
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "name",
+          "default": "''::text",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "email",
+          "default": "''::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "status",
+          "default": "''::text",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "company_id",
+        "extension_id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "ringcentral_presence",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "extension_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "display_status",
+          "default": "'available'::text",
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "status_since",
+          "default": "now()",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "company_id",
+        "extension_id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "ringcentral_sync_state",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "last_sync_at",
+          "default": null,
+          "nullable": true,
+          "position": 2,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "backfilled_through",
+          "default": null,
+          "nullable": true,
+          "position": 3,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "consecutive_failures",
+          "default": "0",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "int4",
+          "data_type": "integer"
+        },
+        {
+          "name": "last_error",
+          "default": "''::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "company_id"
       ],
       "rls_enabled": true
     },
@@ -5332,6 +6183,318 @@
           "default": "now()",
           "nullable": false,
           "position": 9,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "task_comments",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "task_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "author_id",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "body",
+          "default": null,
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "mentions",
+          "default": "'{}'::text[]",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "_text",
+          "data_type": "ARRAY"
+        },
+        {
+          "name": "kind",
+          "default": "'comment'::text",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "task_labels",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "key",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "label",
+          "default": null,
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "color",
+          "default": "'#8f867b'::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "sort_order",
+          "default": "0",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "float8",
+          "data_type": "double precision"
+        },
+        {
+          "name": "active",
+          "default": "true",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "task_type_statuses",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "type_key",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "key",
+          "default": null,
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "label",
+          "default": null,
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "color",
+          "default": "'#8f867b'::text",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "sort_order",
+          "default": "0",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "float8",
+          "data_type": "double precision"
+        },
+        {
+          "name": "is_done",
+          "default": "false",
+          "nullable": false,
+          "position": 8,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "is_default",
+          "default": "false",
+          "nullable": false,
+          "position": 9,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "active",
+          "default": "true",
+          "nullable": false,
+          "position": 10,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 11,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "task_types",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "key",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "label",
+          "default": null,
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "color",
+          "default": "'#8f867b'::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "sort_order",
+          "default": "0",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "float8",
+          "data_type": "double precision"
+        },
+        {
+          "name": "active",
+          "default": "true",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "bool",
+          "data_type": "boolean"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 8,
           "udt_name": "timestamptz",
           "data_type": "timestamp with time zone"
         }
@@ -5592,6 +6755,30 @@
           "position": 31,
           "udt_name": "uuid",
           "data_type": "uuid"
+        },
+        {
+          "name": "focus_seq",
+          "default": null,
+          "nullable": true,
+          "position": 32,
+          "udt_name": "float4",
+          "data_type": "real"
+        },
+        {
+          "name": "completed_at",
+          "default": null,
+          "nullable": true,
+          "position": 33,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "stuck",
+          "default": null,
+          "nullable": true,
+          "position": 34,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
         }
       ],
       "primary_key": [
@@ -5674,6 +6861,22 @@
           "position": 9,
           "udt_name": "timestamptz",
           "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "position",
+          "default": null,
+          "nullable": true,
+          "position": 10,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "role",
+          "default": null,
+          "nullable": true,
+          "position": 11,
+          "udt_name": "text",
+          "data_type": "text"
         }
       ],
       "primary_key": [
@@ -6814,6 +8017,15 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "bug_reports_reporter_id_fkey",
+      "to_table": "profiles",
+      "to_column": "id",
+      "from_table": "bug_reports",
+      "delete_rule": "SET NULL",
+      "from_column": "reporter_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "calendar_events_company_id_fkey",
       "to_table": "companies",
       "to_column": "id",
@@ -6838,6 +8050,15 @@
       "from_table": "calendar_events",
       "delete_rule": "SET NULL",
       "from_column": "deleted_by",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "checkin_settings_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "checkin_settings",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -6973,6 +8194,15 @@
       "from_table": "clients",
       "delete_rule": "RESTRICT",
       "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "comment_reactions_comment_id_fkey",
+      "to_table": "task_comments",
+      "to_column": "id",
+      "from_table": "comment_reactions",
+      "delete_rule": "CASCADE",
+      "from_column": "comment_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -7858,6 +9088,15 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "projects_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "projects",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "proposal_documents_company_id_fkey",
       "to_table": "companies",
       "to_column": "id",
@@ -7921,6 +9160,51 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "ringcentral_accounts_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "ringcentral_accounts",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "ringcentral_calls_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "ringcentral_calls",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "ringcentral_extensions_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "ringcentral_extensions",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "ringcentral_presence_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "ringcentral_presence",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "ringcentral_sync_state_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "ringcentral_sync_state",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "role_permissions_role_id_fkey",
       "to_table": "roles",
       "to_column": "id",
@@ -7945,6 +9229,42 @@
       "from_table": "roles",
       "delete_rule": "SET NULL",
       "from_column": "created_by",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "task_comments_task_id_fkey",
+      "to_table": "tasks",
+      "to_column": "id",
+      "from_table": "task_comments",
+      "delete_rule": "CASCADE",
+      "from_column": "task_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "task_labels_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "task_labels",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "task_type_statuses_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "task_type_statuses",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "task_types_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "task_types",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
       "update_rule": "NO ACTION"
     },
     {
@@ -8257,1710 +9577,1561 @@
   "policies": [
     {
       "name": "accounts workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "accounts",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "accounts workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "accounts",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "accounts workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "accounts",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "accounts workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "accounts",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "own or company-admin read active_timers",
+      "roles": "{authenticated}",
+      "table": "active_timers",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "role users can delete active_timers",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "active_timers",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "role users can insert active_timers",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "active_timers",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "role users can read active_timers",
-      "roles": [
-        "authenticated"
-      ],
-      "table": "active_timers",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE"
-    },
-    {
       "name": "role users can update active_timers",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "active_timers",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "activities workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "activities",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "activities workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "activities",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "activities workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "activities",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "activities workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "activities",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins insert audit events",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "audit_events",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read audit events",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "audit_events",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins create company automations",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "automations",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins delete company automations",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "automations",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins update company automations",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "automations",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read company automations",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "automations",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "quest admins delete bug_reports",
+      "roles": "{authenticated}",
+      "table": "bug_reports",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "quest admins read bug_reports",
+      "roles": "{authenticated}",
+      "table": "bug_reports",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "quest admins update bug_reports",
+      "roles": "{authenticated}",
+      "table": "bug_reports",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "calendar events delete by managers or creator",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "calendar_events",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "calendar events insert by managers",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "calendar_events",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "calendar events update by managers or creator",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "calendar_events",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "calendar events visible to allowed members",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "calendar_events",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "company admins insert checkin_settings",
+      "roles": "{authenticated}",
+      "table": "checkin_settings",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins read checkin_settings",
+      "roles": "{authenticated}",
+      "table": "checkin_settings",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins update checkin_settings",
+      "roles": "{authenticated}",
+      "table": "checkin_settings",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "managers delete portal annotations",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_annotations",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers insert portal annotations",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_annotations",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update portal annotations",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_annotations",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read portal annotations",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_annotations",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers delete portal documents",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_documents",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers insert portal documents",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_documents",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update portal documents",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_documents",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read portal documents",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_documents",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers insert portal events",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_events",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read portal events",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portal_events",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers delete client portals",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portals",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers insert client portals",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portals",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update client portals",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portals",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read client portals",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "client_portals",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members access clients",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "clients",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "company members insert own comment_reactions",
+      "roles": "{authenticated}",
+      "table": "comment_reactions",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company members read comment_reactions",
+      "roles": "{authenticated}",
+      "table": "comment_reactions",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "owners and admins delete comment_reactions",
+      "roles": "{authenticated}",
+      "table": "comment_reactions",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "admins update companies",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "companies",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "role users can read companies",
-      "roles": [
-        "authenticated"
-      ],
+      "name": "members read their companies",
+      "roles": "{authenticated}",
       "table": "companies",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage invites",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "company_invites",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage join requests",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "company_join_requests",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "requesters read own join requests",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "company_join_requests",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage company memberships",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "company_memberships",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read company memberships",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "company_memberships",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage company plugins",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "company_plugins",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read company plugins",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "company_plugins",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read subscriptions",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "company_subscriptions",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "contacts workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "contacts",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "contacts workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "contacts",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "contacts workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "contacts",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "contacts workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "contacts",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "crm_sites workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "crm_sites",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "crm_sites workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "crm_sites",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "crm_sites workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "crm_sites",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "crm_sites workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "crm_sites",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "deals workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "deals",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "deals workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "deals",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "deals workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "deals",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "deals workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "deals",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage field permissions",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "field_permissions",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read field permissions",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "field_permissions",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_expenses_delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_expenses",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_expenses_insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_expenses",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_expenses_select",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_expenses",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_expenses_update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_expenses",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_invoices_delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_invoices",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_invoices_insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_invoices",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_invoices_select",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_invoices",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_invoices_update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_invoices",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_payments_delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_payments",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_payments_insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_payments",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_payments_select",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_payments",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_payments_update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_payments",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_vendors_delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_vendors",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_vendors_insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_vendors",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_vendors_select",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_vendors",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "finance_vendors_update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "finance_vendors",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers delete company form responses",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "form_responses",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update company form responses",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "form_responses",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read company form responses",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "form_responses",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members submit company form responses",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "form_responses",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers create company forms",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "forms",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers delete company forms",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "forms",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update company forms",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "forms",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read company forms",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "forms",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members access job activity",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "job_activity",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "job_files workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "job_files",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "job_files workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "job_files",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "job_files workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "job_files",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "job_files workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "job_files",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "jobs workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "jobs",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "jobs workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "jobs",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "jobs workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "jobs",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "jobs workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "jobs",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers create company knowledge",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "knowledge_articles",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers delete company knowledge",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "knowledge_articles",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update company knowledge",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "knowledge_articles",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read company knowledge",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "knowledge_articles",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message attachments insert allowed",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_attachments",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message attachments select conversation access",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_attachments",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message access delete managers",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_conversation_access",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message access insert creator or manager",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_conversation_access",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message access select visible",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_conversation_access",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message access update managers",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_conversation_access",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message conversations insert allowed",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_conversations",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message conversations select access",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_conversations",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message conversations update managers",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_conversations",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message reads select own",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_reads",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message reads update own",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_reads",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "message reads upsert own",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "message_reads",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "messages insert senders",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "messages",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "messages select conversation access",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "messages",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "messages update delete permissions",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "messages",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "active members insert company notifications",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "notifications",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "notification recipients delete own rows",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "notifications",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "notification recipients read own rows",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "notifications",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "notification recipients update own rows",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "notifications",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "role users can delete notifications",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "notifications",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "role users can insert notifications",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "notifications",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "role users can read notifications",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "notifications",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "role users can update notifications",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "notifications",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "pipeline_stages workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pipeline_stages",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "pipeline_stages workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pipeline_stages",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "pipeline_stages workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pipeline_stages",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "pipeline_stages workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pipeline_stages",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers delete pricebook materials",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_materials",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers insert pricebook materials",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_materials",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update pricebook materials",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_materials",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read pricebook materials",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_materials",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers delete pricebook prices",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_vendor_prices",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers insert pricebook prices",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_vendor_prices",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update pricebook prices",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_vendor_prices",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read pricebook prices",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_vendor_prices",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers delete pricebook vendors",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_vendors",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers insert pricebook vendors",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_vendors",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update pricebook vendors",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_vendors",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read pricebook vendors",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "pricebook_vendors",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers delete profiles",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "profiles",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update profiles",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "profiles",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "team viewers read profiles",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "profiles",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "users read own profile",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "profiles",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "users update own profile name",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "profiles",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "company members delete projects",
+      "roles": "{authenticated}",
+      "table": "projects",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company members insert projects",
+      "roles": "{authenticated}",
+      "table": "projects",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company members read projects",
+      "roles": "{authenticated}",
+      "table": "projects",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company members update projects",
+      "roles": "{authenticated}",
+      "table": "projects",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "proposal_documents workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "proposal_documents",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "proposal_documents workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "proposal_documents",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "proposal_documents workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "proposal_documents",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "proposal_documents workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "proposal_documents",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage recycle bin",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "recycle_bin_items",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage resource acl",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "resource_acl",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read resource acl",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "resource_acl",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "company admins read accounts",
+      "roles": "{authenticated}",
+      "table": "ringcentral_accounts",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "members read own calls",
+      "roles": "{authenticated}",
+      "table": "ringcentral_calls",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins read extensions",
+      "roles": "{authenticated}",
+      "table": "ringcentral_extensions",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins read presence",
+      "roles": "{authenticated}",
+      "table": "ringcentral_presence",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "members read sync state",
+      "roles": "{authenticated}",
+      "table": "ringcentral_sync_state",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "admins manage role permissions",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "role_permissions",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read role permissions",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "role_permissions",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage roles",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "roles",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read roles",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "roles",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "authors and admins delete task_comments",
+      "roles": "{authenticated}",
+      "table": "task_comments",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company members insert own task_comments",
+      "roles": "{authenticated}",
+      "table": "task_comments",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company members read task_comments",
+      "roles": "{authenticated}",
+      "table": "task_comments",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins delete task_labels",
+      "roles": "{authenticated}",
+      "table": "task_labels",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins insert task_labels",
+      "roles": "{authenticated}",
+      "table": "task_labels",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins update task_labels",
+      "roles": "{authenticated}",
+      "table": "task_labels",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company members read task_labels",
+      "roles": "{authenticated}",
+      "table": "task_labels",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins delete task_type_statuses",
+      "roles": "{authenticated}",
+      "table": "task_type_statuses",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins insert task_type_statuses",
+      "roles": "{authenticated}",
+      "table": "task_type_statuses",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins update task_type_statuses",
+      "roles": "{authenticated}",
+      "table": "task_type_statuses",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company members read task_type_statuses",
+      "roles": "{authenticated}",
+      "table": "task_type_statuses",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins delete task_types",
+      "roles": "{authenticated}",
+      "table": "task_types",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins insert task_types",
+      "roles": "{authenticated}",
+      "table": "task_types",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company admins update task_types",
+      "roles": "{authenticated}",
+      "table": "task_types",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "company members read task_types",
+      "roles": "{authenticated}",
+      "table": "task_types",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "tasks workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "tasks",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "tasks workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "tasks",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "tasks workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "tasks",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "tasks workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "tasks",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "managers can delete team_members",
-      "roles": [
-        "authenticated"
-      ],
+      "name": "company admins delete own roster",
+      "roles": "{authenticated}",
       "table": "team_members",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "managers can insert team_members",
-      "roles": [
-        "authenticated"
-      ],
+      "name": "company admins insert own roster",
+      "roles": "{authenticated}",
       "table": "team_members",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "managers can update team_members",
-      "roles": [
-        "authenticated"
-      ],
+      "name": "company admins update own roster",
+      "roles": "{authenticated}",
       "table": "team_members",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "role users can read team_members",
-      "roles": [
-        "authenticated"
-      ],
+      "name": "members read own company roster",
+      "roles": "{authenticated}",
       "table": "team_members",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "role users can delete time_entries",
-      "roles": [
-        "authenticated"
-      ],
-      "table": "time_entries",
-      "command": "DELETE",
-      "permissive": "PERMISSIVE"
-    },
-    {
-      "name": "role users can insert time_entries",
-      "roles": [
-        "authenticated"
-      ],
+      "name": "own insert time_entries",
+      "roles": "{authenticated}",
       "table": "time_entries",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "role users can read time_entries",
-      "roles": [
-        "authenticated"
-      ],
+      "name": "own or company-admin delete time_entries",
+      "roles": "{authenticated}",
+      "table": "time_entries",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "own or company-admin read time_entries",
+      "roles": "{authenticated}",
       "table": "time_entries",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "role users can update time_entries",
-      "roles": [
-        "authenticated"
-      ],
+      "name": "own or company-admin update time_entries",
+      "roles": "{authenticated}",
       "table": "time_entries",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "underwriting_cases workspace delete",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "underwriting_cases",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "underwriting_cases workspace insert",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "underwriting_cases",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "underwriting_cases workspace read",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "underwriting_cases",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "underwriting_cases workspace update",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "underwriting_cases",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage role assignments",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "user_role_assignments",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read role assignments",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "user_role_assignments",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "company members read wo counters",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "wo_counters",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "platform admins manage backup copies",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_backup_copies",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "platform admins read backup copies",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_backup_copies",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "admins manage company backups",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_backups",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read company backups",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_backups",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers insert workspace builder",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_builder_state",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "managers update workspace builder",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_builder_state",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "members read workspace builder",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_builder_state",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace admins delete memberships",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_memberships",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace admins insert memberships",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_memberships",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace admins update memberships",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_memberships",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace users read memberships",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_memberships",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace admins delete plugins",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_plugins",
       "command": "DELETE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace admins insert plugins",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_plugins",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace admins update plugins",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_plugins",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace users read plugins",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspace_plugins",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "company admins create workspaces",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspaces",
       "command": "INSERT",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace admins update workspaces",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspaces",
       "command": "UPDATE",
       "permissive": "PERMISSIVE"
     },
     {
       "name": "workspace users read workspaces",
-      "roles": [
-        "authenticated"
-      ],
+      "roles": "{authenticated}",
       "table": "workspaces",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
@@ -9971,7 +11142,7 @@
       "name": "accept_company_invite",
       "returns": "text",
       "arguments": "invite_token text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -9981,7 +11152,7 @@
       "name": "accept_public_proposal",
       "returns": "jsonb",
       "arguments": "proposal_token text, signer_name text, signer_email text, decision text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -9991,7 +11162,7 @@
       "name": "apply_company_plugin_preset",
       "returns": "text[]",
       "arguments": "target_company_id text, preset_code text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10001,7 +11172,7 @@
       "name": "apply_stripe_subscription_event",
       "returns": "boolean",
       "arguments": "p_event_id text, p_event_created_at timestamp with time zone, p_company_id text, p_customer_id text, p_subscription_id text, p_status text, p_current_period_end timestamp with time zone, p_trial_ends_at timestamp with time zone",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10011,7 +11182,7 @@
       "name": "apply_workspace_plugin_preset",
       "returns": "text[]",
       "arguments": "target_workspace_id uuid, preset_code text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10021,7 +11192,7 @@
       "name": "assign_wo_number",
       "returns": "integer",
       "arguments": "company text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10031,7 +11202,7 @@
       "name": "can_manage_roles",
       "returns": "boolean",
       "arguments": "",
-      "volatility": "stable",
+      "volatility": "s",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10041,7 +11212,7 @@
       "name": "can_view_team",
       "returns": "boolean",
       "arguments": "",
-      "volatility": "stable",
+      "volatility": "s",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10051,7 +11222,7 @@
       "name": "convert_deal_to_job",
       "returns": "jsonb",
       "arguments": "p_job jsonb, p_deal jsonb",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10061,7 +11232,7 @@
       "name": "create_company_workspace",
       "returns": "text",
       "arguments": "company_name text, preset_code text, icon_key text, owner_email text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10071,7 +11242,7 @@
       "name": "create_operational_workspace",
       "returns": "uuid",
       "arguments": "target_company_id text, workspace_name text, preset_code text, icon_key text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10081,7 +11252,7 @@
       "name": "current_company_ids",
       "returns": "text[]",
       "arguments": "",
-      "volatility": "stable",
+      "volatility": "s",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10091,7 +11262,7 @@
       "name": "current_member_id",
       "returns": "text",
       "arguments": "",
-      "volatility": "stable",
+      "volatility": "s",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10101,7 +11272,7 @@
       "name": "current_profile_role",
       "returns": "text",
       "arguments": "",
-      "volatility": "stable",
+      "volatility": "s",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10111,7 +11282,7 @@
       "name": "delete_company_role",
       "returns": "boolean",
       "arguments": "p_role_id uuid",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10121,7 +11292,7 @@
       "name": "delete_company_workspace",
       "returns": "void",
       "arguments": "target_company_id text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10131,7 +11302,7 @@
       "name": "handle_new_user",
       "returns": "trigger",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10141,7 +11312,7 @@
       "name": "is_platform_admin",
       "returns": "boolean",
       "arguments": "",
-      "volatility": "stable",
+      "volatility": "s",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10151,7 +11322,7 @@
       "name": "job_files_refresh_job_count",
       "returns": "trigger",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": true,
       "security_definer": false,
       "service_role_execute": true,
@@ -10161,7 +11332,7 @@
       "name": "leave_company",
       "returns": "company_memberships",
       "arguments": "target_company_id text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": false,
       "service_role_execute": true,
@@ -10171,7 +11342,7 @@
       "name": "list_platform_backup_copies",
       "returns": "TABLE(id text, backup_id text, company_id text, company_name text, owner_profile_id uuid, owner_email text, created_by uuid, created_by_label text, kind text, status text, size_bytes bigint, record_counts jsonb, source_table text, original_created_at timestamp with time zone, deleted_at timestamp with time zone, deleted_by uuid, created_at timestamp with time zone, updated_at timestamp with time zone)",
       "arguments": "filter_company_id text, filter_status text, filter_kind text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10181,7 +11352,7 @@
       "name": "list_platform_companies",
       "returns": "TABLE(company_id text, company_name text, short_name text, color text, label text, pill text, icon_key text, status text, plan_code text, amount_cents integer, currency text, owner_profile_id uuid, owner_name text, owner_email text, member_count integer, active_member_count integer, pending_member_count integer, disabled_member_count integer, trial_ends_at timestamp with time zone, current_period_end timestamp with time zone, grace_ends_at timestamp with time zone, created_at timestamp with time zone, updated_at timestamp with time zone)",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10191,7 +11362,7 @@
       "name": "list_platform_company_members",
       "returns": "TABLE(company_id text, profile_id uuid, member_id text, full_name text, email text, role text, role_label text, role_id uuid, status text, created_at timestamp with time zone, updated_at timestamp with time zone, disabled_at timestamp with time zone, left_at timestamp with time zone, last_active_at timestamp with time zone)",
       "arguments": "target_company_id text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10201,7 +11372,7 @@
       "name": "list_workspace_app_library",
       "returns": "jsonb",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10211,7 +11382,7 @@
       "name": "list_workspace_reviews",
       "returns": "TABLE(company_id text, company_name text, status text, plan_code text, amount_cents integer, currency text, owner_profile_id uuid, owner_name text, owner_email text, trial_ends_at timestamp with time zone, current_period_end timestamp with time zone, grace_ends_at timestamp with time zone, created_at timestamp with time zone, updated_at timestamp with time zone)",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10221,7 +11392,7 @@
       "name": "lookup_company_invite",
       "returns": "TABLE(company_id text, company_name text, email text, status text, expires_at timestamp with time zone)",
       "arguments": "invite_token text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10231,7 +11402,7 @@
       "name": "manage_platform_company",
       "returns": "text",
       "arguments": "target_company_id text, platform_action text, review_note text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10241,7 +11412,7 @@
       "name": "mark_platform_backup_copy_deleted",
       "returns": "text",
       "arguments": "copy_id text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10251,7 +11422,7 @@
       "name": "message_touch_conversation",
       "returns": "trigger",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10261,7 +11432,7 @@
       "name": "mirror_workspace_backup_copy",
       "returns": "trigger",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10271,7 +11442,7 @@
       "name": "permanently_delete_platform_backup_copy",
       "returns": "text",
       "arguments": "copy_id text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10281,7 +11452,7 @@
       "name": "promote_company_owner",
       "returns": "company_memberships",
       "arguments": "target_company_id text, target_profile_id uuid",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": false,
       "service_role_execute": true,
@@ -10291,7 +11462,7 @@
       "name": "public_proposal_by_token",
       "returns": "jsonb",
       "arguments": "proposal_token text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10301,7 +11472,7 @@
       "name": "purge_expired_recycle_bin",
       "returns": "integer",
       "arguments": "p_limit integer",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10311,7 +11482,7 @@
       "name": "quest_confirm_email_before_insert",
       "returns": "trigger",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10321,7 +11492,7 @@
       "name": "recycle_move_item",
       "returns": "recycle_bin_items",
       "arguments": "p_item jsonb",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10331,7 +11502,7 @@
       "name": "recycle_permanently_delete_item",
       "returns": "boolean",
       "arguments": "p_item_id text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10341,7 +11512,7 @@
       "name": "recycle_restore_item",
       "returns": "recycle_bin_items",
       "arguments": "p_item_id text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10351,7 +11522,7 @@
       "name": "refresh_job_file_count",
       "returns": "void",
       "arguments": "target_job_id uuid",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": true,
       "security_definer": false,
       "service_role_execute": true,
@@ -10361,7 +11532,7 @@
       "name": "replace_pipeline_stages",
       "returns": "SETOF pipeline_stages",
       "arguments": "p_company_id text, p_kind text, p_stages jsonb, p_rename_map jsonb",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10371,7 +11542,7 @@
       "name": "replace_workspace_pipeline_stages",
       "returns": "SETOF pipeline_stages",
       "arguments": "p_workspace_id uuid, p_kind text, p_stages jsonb, p_rename_map jsonb",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10381,7 +11552,7 @@
       "name": "request_company_access",
       "returns": "uuid",
       "arguments": "target_company_id text, request_message text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10391,7 +11562,7 @@
       "name": "review_company_join_request",
       "returns": "company_join_requests",
       "arguments": "target_request_id uuid, decision text, target_role_id uuid",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": false,
       "service_role_execute": true,
@@ -10401,7 +11572,7 @@
       "name": "review_company_workspace",
       "returns": "text",
       "arguments": "target_company_id text, next_status text, review_note text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10411,7 +11582,17 @@
       "name": "revoke_company_invite",
       "returns": "company_invites",
       "arguments": "target_invite_id uuid",
-      "volatility": "volatile",
+      "volatility": "v",
+      "anon_execute": false,
+      "security_definer": false,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
+      "name": "ringcentral_conversation_stats",
+      "returns": "TABLE(extension_id text, extension_number text, extension_name text, total_calls bigint, conversations bigint)",
+      "arguments": "p_company_id text, p_from timestamp with time zone, p_to timestamp with time zone",
+      "volatility": "s",
       "anon_execute": false,
       "security_definer": false,
       "service_role_execute": true,
@@ -10421,7 +11602,7 @@
       "name": "save_company_role",
       "returns": "roles",
       "arguments": "p_role jsonb, p_permissions text[]",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10431,7 +11612,7 @@
       "name": "set_company_plugin",
       "returns": "text",
       "arguments": "target_company_id text, target_plugin_id text, next_status text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10441,7 +11622,7 @@
       "name": "set_updated_at",
       "returns": "trigger",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": true,
       "security_definer": false,
       "service_role_execute": true,
@@ -10451,7 +11632,7 @@
       "name": "set_workspace_member",
       "returns": "workspace_memberships",
       "arguments": "target_workspace_id uuid, target_profile_id uuid, target_role_id uuid, next_status text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10461,7 +11642,7 @@
       "name": "set_workspace_plugin",
       "returns": "text",
       "arguments": "target_workspace_id uuid, target_plugin_id text, next_status text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10471,7 +11652,7 @@
       "name": "slugify_member_id",
       "returns": "text",
       "arguments": "input text",
-      "volatility": "immutable",
+      "volatility": "i",
       "anon_execute": false,
       "security_definer": false,
       "service_role_execute": true,
@@ -10481,7 +11662,7 @@
       "name": "sync_team_member_from_profile",
       "returns": "trigger",
       "arguments": "",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10491,7 +11672,7 @@
       "name": "update_company_member_access",
       "returns": "company_memberships",
       "arguments": "target_company_id text, target_profile_id uuid, target_role text, target_role_id uuid, target_status text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": false,
       "service_role_execute": true,
@@ -10501,7 +11682,7 @@
       "name": "update_company_workspace",
       "returns": "text",
       "arguments": "target_company_id text, workspace_name text, icon_key text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10511,7 +11692,7 @@
       "name": "update_company_workspace",
       "returns": "text",
       "arguments": "target_company_id text, workspace_name text, icon_key text, icon_image text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10521,7 +11702,7 @@
       "name": "update_operational_workspace",
       "returns": "workspaces",
       "arguments": "target_workspace_id uuid, workspace_name text, workspace_description text, icon_key text, next_status text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10531,7 +11712,7 @@
       "name": "update_own_profile",
       "returns": "profiles",
       "arguments": "p_full_name text, p_avatar_url text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10541,7 +11722,7 @@
       "name": "wb_add_item_comment",
       "returns": "jsonb",
       "arguments": "p_company_id text, p_workspace_id text, p_app_id text, p_item_id text, p_comment jsonb",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10551,7 +11732,7 @@
       "name": "wb_modify_item_comment",
       "returns": "jsonb",
       "arguments": "p_company_id text, p_workspace_id text, p_app_id text, p_item_id text, p_comment_id text, p_action text, p_text text",
-      "volatility": "volatile",
+      "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
       "service_role_execute": true,
@@ -10623,6 +11804,13 @@
       "orientation": "ROW"
     },
     {
+      "name": "checkin_settings_set_updated_at",
+      "event": "UPDATE",
+      "table": "checkin_settings",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
       "name": "client_portal_annotations_set_updated_at",
       "event": "UPDATE",
       "table": "client_portal_annotations",
@@ -10648,6 +11836,13 @@
       "event": "UPDATE",
       "table": "clients",
       "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "companies_seed_task_taxonomy",
+      "event": "INSERT",
+      "table": "companies",
+      "timing": "AFTER",
       "orientation": "ROW"
     },
     {
@@ -10956,6 +12151,13 @@
       "event": "UPDATE",
       "table": "profiles",
       "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "projects_set_updated_at",
+      "event": "UPDATE",
+      "table": "projects",
+      "timing": "BEFORE",
       "orientation": "ROW"
     },
     {
@@ -11545,6 +12747,26 @@
     {
       "version": "20260721002417",
       "name": "workspace_tenancy_advisor_hardening"
+    },
+    {
+      "version": "20260722192939",
+      "name": "ringcentral_calls"
+    },
+    {
+      "version": "20260723183531",
+      "name": "per_person_task_visibility"
+    },
+    {
+      "version": "20260724000851",
+      "name": "task_workspace_plugin_activation"
+    },
+    {
+      "version": "20260724222242",
+      "name": "fix_create_operational_workspace_auto_default"
+    },
+    {
+      "version": "20260727190835",
+      "name": "company_invite_launch_hardening"
     }
   ]
 }
