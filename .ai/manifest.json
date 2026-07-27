@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-28T03:20:25+08:00",
-  "generated_from_commit": "694518b9906ac9e14115997ba84f60e90ea4fcc7",
+  "generated_at": "2026-07-28T07:22:29+08:00",
+  "generated_from_commit": "fbdbf8d42be7066760458747dacc80606981f2f8",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "694518b9906ac9e14115997ba84f60e90ea4fcc7",
+    "main_commit_at_capture": "fbdbf8d42be7066760458747dacc80606981f2f8",
     "latest_migration": "202607281130_company_invite_launch_hardening.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-07-28T03:20:25+08:00",
+    "supabase_verified_at": "2026-07-28T07:22:29+08:00",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
@@ -18,19 +18,19 @@
       "version": "20260727190835",
       "name": "company_invite_launch_hardening"
     },
-    "vercel_verified_at": "2026-07-28T03:20:25+08:00",
+    "vercel_verified_at": "2026-07-28T07:22:29+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://quest-hq-command-center-gamma.vercel.app",
-    "vercel_deployment_id": "dpl_AbscXPnJhswTyQfrvGXr7YaowU8M",
+    "vercel_deployment_id": "dpl_8c4V8xbgTB4VfgdS2YdYhiL1Xtco",
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "694518b9906ac9e14115997ba84f60e90ea4fcc7",
-    "github_verified_at": "2026-07-28T03:20:25+08:00",
+    "vercel_deployed_commit": "fbdbf8d42be7066760458747dacc80606981f2f8",
+    "github_verified_at": "2026-07-28T07:22:29+08:00",
     "github_production_guardian_run": "https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459"
   },
   "refresh_commands": {
     "validate": "npm run ai:check",
     "full_check": "npm run check",
-    "production_smoke": "npm run smoke:prod -- --base-url https://quest-hq-command-center-gamma.vercel.app --expect-sha <main-sha>"
+    "production_smoke": "npm run smoke:prod -- --base-url https://www.questbase.io --expect-sha <main-sha>"
   }
 }
 

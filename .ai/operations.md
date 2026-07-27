@@ -24,6 +24,19 @@ This project deploys directly. Do not run npm run dev or npm run preview, and do
 
 Relevant automation lives in [CI](../.github/workflows/ci.yml) and [Production Guardian](../.github/workflows/production-guardian.yml).
 
+## Pilot launch rehearsal
+
+- Follow [Pilot onboarding rehearsal](../docs/operations/pilot-onboarding-rehearsal.md) with two team-owned accounts before public registration.
+- Record each observed result rather than marking a step complete from code inspection alone.
+- Use the manual invite-link fallback if delivery fails; do not invalidate a valid invite while diagnosing the mail provider.
+- Use [Provider handoff](../docs/operations/provider-handoff.md) for the owner-controlled email, payment, pricing, legal, and support inputs.
+
+## Support and invite functions
+
+- `send-company-invite` and `report-problem` are Supabase Edge Functions with custom bearer-token validation, so their provider `verify_jwt` setting remains disabled intentionally.
+- Both functions must keep strict production-origin handling. `https://questbase.io`, `https://www.questbase.io`, and the stable Vercel application URL are built in; additional origins are explicit configuration.
+- A release check may verify preflight behavior and unauthenticated rejection without creating an invite or report. A real end-to-end delivery test must use a designated team-owned mailbox and be recorded as controlled UAT.
+
 ## Database changes
 
 1. Inspect the relevant existing migrations and [database map](database/overview.md).

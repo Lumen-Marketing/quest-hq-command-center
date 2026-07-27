@@ -41,9 +41,13 @@ The recycle-bin purge endpoint expects server-side authorization, but this folde
 
 ## Production email credentials and deliverability need one controlled UAT
 
-The `send-company-invite` Edge Function, database delivery ledger, authorization, strict production-origin CORS, and unauthenticated rejection are live and verified. The project connector cannot list secret values, and this rollout intentionally did not email an existing pending invite, so `RESEND_API_KEY`, `EMAIL_FROM`, sender-domain verification, and inbox delivery are not yet proven end to end. Run one controlled invite to a team-owned mailbox before public launch; failure is recoverable because the invite link remains valid and the UI exposes retry/copy actions.
+The `send-company-invite` version 3 and `report-problem` version 7 Edge Functions, database delivery ledger, custom authorization, strict production-origin CORS, and unauthenticated invite rejection are live and verified. Invite messages now include HTML and plain-text bodies. The project connector cannot list secret values, and this rollout intentionally did not email an existing pending invite or submit a support report, so `RESEND_API_KEY`, `EMAIL_FROM`, sender-domain verification, inbox delivery, and the final report notification path are not yet proven end to end. Run one controlled invite and one controlled support report using team-owned accounts before public launch; invite failure is recoverable because the link remains valid and the UI exposes retry/copy actions.
 
 Supabase Auth email (registration, recovery, and verification) is a separate channel from the invite Edge Function. Confirm custom SMTP and branded Auth templates in the Supabase dashboard before public launch so Auth mail is not dependent on development/default sending limits.
+
+## Owner-controlled commercial launch inputs remain open
+
+The software-side pilot preparation does not choose the company's bank/payment provider, prices and included limits, refund rules, legal text, billing contact, or public support promises. Capture those decisions through `docs/operations/provider-handoff.md` before enabling paid public onboarding.
 
 
 ## RingCentral status durations are approximate and reset on deploy

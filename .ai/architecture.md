@@ -13,6 +13,7 @@ The app uses:
 - Vercel Functions under [api](../api) for privileged or public-token flows.
 - Stripe checkout and webhook APIs through server-side functions.
 - Lazy-loaded Leaflet and PDF.js; JSZip is used for archive/export behavior.
+- Lazy-loaded pilot-readiness, support-reporting, and help-index modules keep first-run and support behavior outside the primary browser bundle until needed.
 - A vendored TaskManagement runtime copied into the production bundle during build, now surfaced in-shell as the Tasks module via a same-origin `<iframe>` (see the X-Frame-Options and service-worker decisions) rather than a separate app the user is handed off to.
 
 ## Request and data flow
@@ -47,6 +48,8 @@ The SPA supports:
 | Password, upload, realtime policy helpers | [src](../src) |
 | Shared CSV parser | [src/data/csv.js](../src/data/csv.js) |
 | Imported/persisted color validation | [src/security/color.js](../src/security/color.js) |
+| First-run launch checklist | [src/launch/pilot-readiness.js](../src/launch/pilot-readiness.js) |
+| In-product support reporting | [src/support/reporting.js](../src/support/reporting.js) |
 | Serverless API handlers | [api](../api) |
 | Supabase Edge Functions | [supabase/functions](../supabase/functions) |
 | RingCentral access (token exchange, paging, normalisation) | [api/_lib/ringcentral.js](../api/_lib/ringcentral.js) |
