@@ -3091,7 +3091,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--amber);
-  box-shadow: 0 0 0 3px rgba(240, 178, 59, .2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 20%, transparent);
 }
 
 .selected-job-chip {
@@ -4069,8 +4069,12 @@ textarea:focus {
   font-size: 13.5px;
 }
 
+/* The wrapper draws the focus ring for the whole control, so the borderless input
+   inside it must not stack a second one. */
 .company-directory-search input:focus {
   outline: none;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .company-directory-search:focus-within {
@@ -17042,8 +17046,8 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #f4a340;
-  box-shadow: 0 0 0 3px rgba(237, 78, 13, .1);
+  border-color: var(--accent);
+  box-shadow: var(--ring);
 }
 
 .panel,
@@ -25974,6 +25978,25 @@ html[data-card-style="glass"] .message-context-rail {
   justify-self: start;
   gap: 6px;
   font-size: 12.5px;
+}
+
+.appearance-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.appearance-actions .btn {
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.appearance-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 /* Pilot setup is derived from real company/workspace state, so it can guide a

@@ -39,6 +39,18 @@ test('the focus ring follows the accent', () => {
   assert.match(ring, /var\(--orange\)/, `--ring must follow --orange, got: ${ring}`);
 });
 
+test('global input focus rules tint from a token, not a literal', () => {
+  // A hardcoded halo here painted orange inside every accent-coloured control —
+  // most visibly as a second ring nested in the company search box.
+  const rules = [...styles.matchAll(/input:focus,\s*\n\s*select:focus,\s*\n\s*textarea:focus\s*\{[^}]*\}/g)]
+    .map((match) => match[0]);
+  assert.ok(rules.length >= 2, `expected the global input:focus rules, found ${rules.length}`);
+  for (const rule of rules) {
+    assert.doesNotMatch(withoutVarFallbacks(rule), LITERAL_ACCENT, `global input focus must not hardcode an accent colour: ${rule}`);
+    assert.match(rule, /var\(--(ring|orange|amber|accent)\)|color-mix/, `global input focus must tint from a token: ${rule}`);
+  }
+});
+
 test('primary buttons keep the accent on hover', () => {
   // The base colour already used var(--orange); only the :hover shade was a literal,
   // so a green primary button turned orange the instant the pointer touched it.
