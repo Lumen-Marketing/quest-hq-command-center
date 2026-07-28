@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-28T08:20:35+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-29T05:16:33+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -8,9 +8,10 @@ Captured 2026-07-28T08:20:35+08:00. This is a point-in-time operational snapshot
 - Canonical public domains: https://questbase.io and https://www.questbase.io.
 - Stable Vercel URL: https://quest-hq-command-center-gamma.vercel.app.
 - Vercel project: `prj_0MxrYyGIo61QgLNW2M74fvTxlMRV`.
-- Ready production deployment: `dpl_Bx8i2D2xxBd3nta2vrD1mtFajKRw`.
-- Deployed application revision: `c17f1681bfd62c4af38ec1c268268063636e464e` from `main`.
+- Ready production deployment: `dpl_K6SmLSVJwnnbAcDsmvNB3tWoq9cZ`.
+- Deployed application revision: `02bdb021392ca94198e7dca8ff866d85e0bd768f` from `main`.
 - Production smoke passed for the exact revision: 36 of 36 routes and 3 of 3 entry assets.
+- Signed-in browser verification passed for the production Job form's local draft lifecycle: an unfinished edit autosaved, reopening offered Restore or Discard, Restore recovered the exact field value, Discard removed the temporary QA draft, no job record was created, and the browser reported no console errors.
 - Signed-in browser verification passed for the Dashboard account menu and Help & support dialog. The production dialog exposed the in-product guide, bug/problem/suggestion form, 2,000-character limit, enabled submit action, and support-email fallback with no browser-console errors. The verification did not submit a report.
 - Signed-in browser verification also passed for the production Tasks route: the same-origin TaskManagement surface loaded as one embedded frame with no browser-console errors. Background realtime refreshes now update host state without rebuilding an already-mounted embedded Tasks frame, so they no longer discard the task user's active scroll, panels, or edit state.
 - Production Guardian remains scheduled every six hours and available by manual dispatch.
@@ -18,8 +19,8 @@ Captured 2026-07-28T08:20:35+08:00. This is a point-in-time operational snapshot
 ## Repository health
 
 - GitHub repository: `Lumen-Marketing/quest-hq-command-center`.
-- Default branch at capture: `main` at `c17f1681bfd62c4af38ec1c268268063636e464e`.
-- `npm run check` passes: 609 tests, AI/project-state validation, production build, and bundle-budget gate.
+- Default branch at capture: `main` at `02bdb021392ca94198e7dca8ff866d85e0bd768f`.
+- `npm run check` passes: 640 tests, AI/project-state validation, production build, and bundle-budget gate.
 - `npm audit --audit-level=high` reports zero vulnerabilities after the locked PostCSS/Nanoid transitive dependency update.
 - CI runs the same check on pushes and pull requests.
 - The main application still emits a Vite advisory for a JavaScript chunk over 500 kB; the repository's explicit bundle budget passes.
@@ -76,6 +77,7 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Appearance (theme mode, accent, background preset, card styling) follows the signed-in user across devices via `profiles.appearance_prefs` and the `update_own_appearance` RPC. A custom uploaded background image is excluded by design and stays browser-local. Requires migration `202607291200_profile_appearance_sync.sql`; until it is applied the RPC call fails soft and appearance stays per browser.
 - Accent-tinted chrome derives from the `--orange` token throughout, so the accent picker recolours hovers, active rows, focus rings, and primary-button hover states. Guarded by tests/accent-theme-static.test.mjs.
 - Archived companies (subscription status `canceled`) are hidden from the company switcher, company pickers, and both platform company lists; the lists expose search, a status filter including Archived, and 25-per-page navigation (src/platform-directory.js, unit tested).
+- Contacts, Jobs, Quotes, and Underwriter forms protect unfinished work with browser-local autosave, explicit Restore or Discard recovery, seven-day expiry, and profile/company/workspace/record scoping. Sensitive credential-like fields and files are excluded, drafts survive failed saves, successful saves clear them, and sign-out purges the departing profile's drafts. This recovery is browser-local by design and does not require a database migration.
 
 ## Remaining controlled launch configuration
 
