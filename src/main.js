@@ -2558,6 +2558,57 @@ function appearanceSyncPayload() {
   return { themeMode: getThemeMode(), accent: getAccent(), ...shareable };
 }
 
+function hasPrefs(prefs) {
+  return !!prefs && typeof prefs === 'object' && Object.keys(prefs).length > 0;
+}
+
+// A member's own saved appearance wins; otherwise the company default applies.
+// Personal prefs are only ever written by an explicit user action (setTheme /
+// setAccent / setAppearance), never by applying an inherited look — so a non-empty
+// profile record genuinely means "this person chose for themselves" and the company
+// default must not stomp it.
+function resolvedAppearancePrefs() {
+  const personal = activeSession()?.profile?.appearance_prefs;
+  if (hasPrefs(personal)) return personal;
+  const company = companyById(activeCompanyId())?.appearance_prefs;
+  return hasPrefs(company) ? company : null;
+}
+
+// Re-resolve after the pieces that feed it change: the profile lands at sign-in,
+// companies arrive with the bootstrap load, and switching company can bring a
+// different default.
+function refreshResolvedAppearance() {
+  applySyncedAppearance(resolvedAppearancePrefs());
+}
+
+function canManageCompanyAppearance(companyId = activeCompanyId()) {
+  return isQuestDeveloper() || ['owner', 'admin', 'developer']
+    .includes(String(membershipForProfile(companyId, activeSession().profile.id)?.role || '').toLowerCase());
+}
+
+async function saveCompanyAppearanceDefault() {
+  const companyId = activeCompanyId();
+  if (!canManageCompanyAppearance(companyId)) {
+    showToast('Owner or Admin access is required.', 'local', 'Appearance');
+    return;
+  }
+  const prefs = appearanceSyncPayload();
+  const company = companyById(companyId);
+  if (company) company.appearance_prefs = prefs;
+  if (!isLiveSupabaseSession()) {
+    showToast('Saved as the company default for this demo session.', 'local', 'Appearance');
+    return;
+  }
+  const client = createSupabaseClient();
+  if (!client) return;
+  const result = await client.rpc('update_company_appearance', { target_company_id: companyId, p_prefs: prefs });
+  if (result.error) {
+    showToast(result.error.message || 'Could not save the company default.', 'error', 'Appearance');
+    return;
+  }
+  showToast('Saved. Members without their own theme will use this.', 'live', 'Appearance');
+}
+
 // Apply prefs that arrived with the profile. Mirrored into localStorage so the
 // next cold start on this device paints correctly before auth resolves.
 function applySyncedAppearance(prefs) {
@@ -2787,8 +2838,9 @@ async function setSupabaseSession(session) {
   state.session = nextSession;
   // The profile carries this user's appearance choices from whatever device they
   // last set them on. Applied after the session lands so a fresh browser adopts
-  // them instead of showing defaults.
-  applySyncedAppearance(profile?.appearance_prefs);
+  // them instead of showing defaults. Companies may not be loaded yet, so the
+  // company default is picked up by the bootstrap-load pass.
+  refreshResolvedAppearance();
   if (shouldReloadWorkspace) {
     resetLiveWorkspaceData();
     state.dataLoaded = false;
@@ -3547,6 +3599,9 @@ function ensureDataLoad() {
       state.dataLoaded = true;
       state.everLoaded = true;
       state.dataLoading = false;
+      // Companies are loaded now, so a member with no personal theme can pick up
+      // their company's default.
+      refreshResolvedAppearance();
       await maybeRunAutomaticBackups().catch((error) => console.warn('Automatic backup failed', error));
       persistAll();
       if (state.session?.auth === 'supabase') { try { subscribeToGlobalRealtime(); } catch (err) { console.warn('Realtime subscribe failed', err); } }
@@ -4573,7 +4628,15 @@ function renderAppearanceControls() {
           <label class="appearance-range"><span>Blur <b data-appearance-out="blur">${a.cardBlur}px</b></span><input type="range" min="0" max="40" step="1" value="${a.cardBlur}" data-appearance-range="cardBlur" /></label>
         ` : ''}
       </div>
-      <button class="btn appearance-reset" type="button" data-action="reset-appearance"><i class="ti ti-rotate-2"></i>Reset to default</button>
+      <div class="appearance-actions">
+        <button class="btn appearance-reset" type="button" data-action="reset-appearance"><i class="ti ti-rotate-2"></i>Reset to default</button>
+        ${canManageCompanyAppearance() ? `
+          <button class="btn btn-primary" type="button" data-action="save-company-appearance"><i class="ti ti-building-community"></i>Set as company default</button>
+        ` : ''}
+      </div>
+      ${canManageCompanyAppearance()
+        ? '<p class="appearance-note">Members who have not chosen their own theme will use the company default. Anyone who sets their own keeps it.</p>'
+        : ''}
     </div>
   `;
 }
@@ -17946,7 +18009,7 @@ function renderWorkspaceSettings(companyId) {
         </div>
       </article>
       <article class="panel">
-        <div class="section-head"><div><h2>Appearance</h2><p>Theme, background, and card style for this browser.</p></div></div>
+        <div class="section-head"><div><h2>Appearance</h2><p>Theme, background, and card style. Your choice follows you to any device you sign in on.</p></div></div>
         <div class="theme-toggle-row">${renderAppearanceControls()}</div>
       </article>
     </div>
@@ -24473,6 +24536,11 @@ function handleAction(event, node) {
   if (action === 'reset-appearance') {
     event.preventDefault();
     resetAppearance();
+    return;
+  }
+  if (action === 'save-company-appearance') {
+    event.preventDefault();
+    saveCompanyAppearanceDefault().catch((error) => showToast(error.message || 'Could not save the company default.', 'error', 'Appearance'));
     return;
   }
   if (action === 'open-delete-company') {
@@ -31567,6 +31635,9 @@ function setActiveCompany(companyId) {
   const next = allowed.includes(target) ? target : allowed[0] || defaultCompanyId();
   state.activeCompanyId = next;
   localStorage.setItem(COMPANY_KEY, next);
+  // Companies can carry different appearance defaults; a member without their own
+  // theme should see the one belonging to the company they just switched into.
+  refreshResolvedAppearance();
   const workspace = workspaceForRoute({
     companyId: next,
     storedWorkspaceId: localStorage.getItem(ACTIVE_WORKSPACE_KEY) || '',
@@ -35586,6 +35657,9 @@ function normalizeCompany(input) {
     pill: String(input.pill || ''),
     icon_key: workspaceIconOption(input.icon_key).key,
     icon_image: sanitizeWorkspaceIconImage(input.icon_image),
+    appearance_prefs: (input.appearance_prefs && typeof input.appearance_prefs === 'object')
+      ? input.appearance_prefs
+      : {},
   };
 }
 

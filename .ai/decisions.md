@@ -303,3 +303,22 @@ is a listing rule, not a permission change.
 Known limitation: the approval console's Reject action writes the same `canceled` status, so
 archived and rejected companies are indistinguishable in the data today. Separating them
 needs a distinct status value.
+
+## Company appearance is a default, not a mandate
+
+Owners and Admins can save the current appearance as the company default via
+`update_company_appearance(text, jsonb)` (SECURITY DEFINER, gated on
+`app_private.is_company_admin` or `is_quest_admin`), stored on
+`companies.appearance_prefs`. The client resolves in the order: the member's own saved
+appearance if they have ever set one, otherwise the company default, otherwise the built-in
+defaults. Applying an inherited look never writes it into the member's profile — only the
+explicit setTheme/setAccent/setAppearance paths push — so a non-empty
+`profiles.appearance_prefs` reliably means "this person chose for themselves" and an admin
+change cannot stomp it.
+
+Chosen over enforcing the company look on everyone: theme is frequently an accessibility
+need (dark mode, contrast), and a member who has deliberately picked one should not have it
+overwritten when an admin restyles the company. The resolved appearance is re-applied at the
+three points its inputs change: sign-in (profile lands), the end of the bootstrap load
+(companies land), and company switch (a different default may apply). Added in
+`202607291400_company_appearance_default.sql`.
