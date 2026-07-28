@@ -14,6 +14,7 @@ The app uses:
 - Stripe checkout and webhook APIs through server-side functions.
 - Lazy-loaded Leaflet and PDF.js; JSZip is used for archive/export behavior.
 - Lazy-loaded pilot-readiness, support-reporting, and help-index modules keep first-run and support behavior outside the primary browser bundle until needed.
+- A lazy-loaded local form-draft engine protects unsaved Contact, Job, Quote, and Underwriter input without adding those recovery copies to the primary browser bundle.
 - A vendored TaskManagement runtime copied into the production bundle during build, now surfaced in-shell as the Tasks module via a same-origin `<iframe>` (see the X-Frame-Options and service-worker decisions) rather than a separate app the user is handed off to.
 
 ## Request and data flow
@@ -51,6 +52,7 @@ The SPA supports:
 | Imported/persisted color validation | [src/security/color.js](../src/security/color.js) |
 | First-run launch checklist | [src/launch/pilot-readiness.js](../src/launch/pilot-readiness.js) |
 | In-product support reporting | [src/support/reporting.js](../src/support/reporting.js) |
+| Same-browser operational form recovery | [src/drafts/form-drafts.js](../src/drafts/form-drafts.js) |
 | Serverless API handlers | [api](../api) |
 | Supabase Edge Functions | [supabase/functions](../supabase/functions) |
 | RingCentral access (token exchange, paging, normalisation) | [api/_lib/ringcentral.js](../api/_lib/ringcentral.js) |
@@ -80,6 +82,7 @@ The SPA supports:
 - Funnel "What's next" fields select from open tasks: contacts through `contact_id`, quotes/deals through tenant-scoped `deal_id`, and jobs through `project_id`.
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-workspace, per-contact records protected by Underwriter permissions and workspace RLS.
+- Local form drafts are recovery copies, not business records. Their storage keys include profile, company, operational workspace, form type, and record id; they expire after seven days, exclude sensitive/file fields, clear after a successful real save or explicit discard, and purge for the signing-out profile.
 - RingCentral data is company-scoped and carries no `workspace_id`: a phone account belongs to the whole company and its calls do not belong to any single operational workspace. All `ringcentral_*` tables are service-role write only; every browser-facing policy is select. Non-admin members are matched to their own calls by `auth.jwt() ->> 'email'`, so no extension-to-member mapping table exists.
 - RingCentral credentials live only in Vercel environment variables. `ringcentral_accounts.credential_key` names the variable; the JWT itself is never stored in Postgres and never reaches the browser.
 

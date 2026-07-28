@@ -2967,12 +2967,12 @@ function protectedFormDraftAttributes(formType, recordId, companyId, workspaceId
   ].join(' ');
 }
 
-function renderProtectedFormDraftStrip() {
+function renderProtectedFormDraftStrip(contextAttributes = '') {
   return `
-    <div class="form-draft-strip span-2">
+    <div class="form-draft-strip span-2" ${contextAttributes}>
       <div class="form-draft-recovery" data-form-draft-recovery hidden>
         <span class="form-draft-recovery-copy">
-          <i class="ti ti-history"></i>
+          <i class="ti ti-restore"></i>
           <span data-form-draft-recovery-copy>Unsaved local changes are available.</span>
         </span>
         <div class="form-draft-recovery-actions">
@@ -2981,7 +2981,7 @@ function renderProtectedFormDraftStrip() {
         </div>
       </div>
       <span class="form-draft-status is-idle" data-form-draft-status aria-live="polite">
-        <i class="ti ti-cloud-check"></i>
+        <i class="ti ti-check"></i>
         <span>Drafts save automatically</span>
       </span>
     </div>
@@ -2990,12 +2990,14 @@ function renderProtectedFormDraftStrip() {
 
 function protectedFormDraftContext(form) {
   if (!form) return null;
+  const contextNode = form.matches('[data-form-draft]') ? form : form.querySelector('[data-form-draft]');
+  if (!contextNode) return null;
   const context = {
     profileId: activeDraftProfileId(),
-    companyId: String(form.dataset.draftCompanyId || '').trim(),
-    workspaceId: String(form.dataset.draftWorkspaceId || '').trim(),
-    formType: String(form.dataset.draftType || '').trim().toLowerCase(),
-    recordId: String(form.dataset.draftRecordId || 'new').trim() || 'new',
+    companyId: String(contextNode.dataset.draftCompanyId || '').trim(),
+    workspaceId: String(contextNode.dataset.draftWorkspaceId || '').trim(),
+    formType: String(contextNode.dataset.draftType || '').trim().toLowerCase(),
+    recordId: String(contextNode.dataset.draftRecordId || 'new').trim() || 'new',
   };
   if (!context.profileId || !context.companyId || !context.workspaceId || !context.formType) return null;
   return context;
@@ -3023,18 +3025,19 @@ function setProtectedFormDraftStatus(form, stateName, timeLabel = '') {
   };
   const view = views[stateName] || views.idle;
   const iconName = {
-    saving: 'ti-loader-2',
+    saving: 'ti-refresh',
     saved: 'ti-device-floppy',
-    restored: 'ti-history',
+    restored: 'ti-restore',
     unavailable: 'ti-alert-triangle',
-  }[view.tone] || 'ti-cloud-check';
+  }[view.tone] || 'ti-check';
   status.className = `form-draft-status is-${view.tone}`;
   status.innerHTML = `<i class="ti ${iconName}"></i><span>${h(view.label)}</span>`;
 }
 
 async function mountProtectedFormDrafts() {
   const manager = formDraftManager || await formDraftManagerReady;
-  document.querySelectorAll('form[data-form-draft]').forEach((form) => {
+  document.querySelectorAll('[data-form-draft]').forEach((contextNode) => {
+    const form = contextNode.matches('form') ? contextNode : contextNode.closest('form');
     const context = protectedFormDraftContext(form);
     if (!context || !manager) {
       setProtectedFormDraftStatus(form, 'unavailable');
@@ -3087,8 +3090,8 @@ function queueProtectedFormDraft(form) {
 function onProtectedFormDraftChange(event) {
   const target = event.target;
   if (!target?.closest || target.matches('[data-draft-ignore]')) return;
-  const form = target.closest('form[data-form-draft]');
-  if (!form) return;
+  const form = target.closest('form');
+  if (!protectedFormDraftContext(form)) return;
   if (form.dataset.draftRecoveryPending === 'true') {
     form.dataset.draftChangedWhilePending = 'true';
     return;
@@ -3138,7 +3141,7 @@ async function syncContactAddressFromRestoredDraft(form) {
 }
 
 function handleProtectedFormDraftAction(actionName, node) {
-  const form = node.closest('form[data-form-draft]');
+  const form = node.closest('form');
   const context = protectedFormDraftContext(form);
   if (!form || !context || !formDraftManager) {
     setProtectedFormDraftStatus(form, 'unavailable');
@@ -8484,8 +8487,8 @@ function renderUnderwriterPage(route, companyId) {
           ${selectedContact && underwritingCaseForContact(selectedContact.id, companyId) ? '<span class="underwriting-saved"><i class="ti ti-check"></i>Saved case</span>' : ''}
         </div>
         ${selectedContact ? `
-          <form id="underwriting-form" data-underwriting-form ${protectedFormDraftAttributes('underwriter', selectedContact.id, companyId, selectedContact.workspace_id || activeWorkspaceId())}>
-            ${renderProtectedFormDraftStrip()}
+          <form id="underwriting-form" data-underwriting-form>
+            ${renderProtectedFormDraftStrip(protectedFormDraftAttributes('underwriter', selectedContact.id, companyId, selectedContact.workspace_id || activeWorkspaceId()))}
             <div class="underwriting-form-side">
               <label class="underwriting-field span-2"><span>Contact</span><select name="contact_id" data-underwriting-contact data-draft-ignore>
                 ${contacts.map((contact) => `<option value="${h(contact.id)}" ${contact.id === selectedContact.id ? 'selected' : ''}>${h(contact.name)} - ${h(contact.pay_type || 'Retail')}</option>`).join('')}

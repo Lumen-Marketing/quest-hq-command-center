@@ -8,6 +8,8 @@ Questbase owns the company shell, authentication flow, company and workspace mem
 
 TaskManagement remains the vendored work-execution engine and the default task surface; a host-native Tasks surface is gated behind `VITE_NATIVE_TASKS_MODULE` (off by default). Questbase links those tasks to jobs through `project_id`, contacts through `contact_id`, and quotes/deals through tenant-scoped `deal_id`. Do not create a second independent task or next-step model inside Questbase. The native surface's write engine (src/tasks/task-store.js) is not a second model: it reuses the single `normalizeTask` / `taskPayload` shape.
 
+Questbase also keeps same-browser recovery copies for unsaved Contact, Job, Quote, and Underwriter forms. These copies protect interrupted typing only; successful form submissions still write through the existing Supabase paths and remain the shared business record.
+
 ## Live product areas
 
 | Group | Modules |

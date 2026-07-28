@@ -66,6 +66,10 @@ Direct job-card photo capture writes image bytes to the existing private `quest-
 
 Calculator drafts are stored in `underwriting_cases` with one current case per company/contact. Browser-only persistence was rejected because underwriting decisions need to survive devices and be visible to other authorized team members.
 
+## Local form drafts are recovery copies, not shared records
+
+Contacts, Jobs, Quotes, and the Underwriter keep an expiring same-browser copy while a user types. The key is scoped by profile, company, operational workspace, form type, and record id so one tenant or worker cannot recover another context's input. Passwords, tokens, secrets, credentials, API keys, file controls, and explicitly ignored controls are never captured. A real save clears the copy only after the server/local write succeeds; validation and server failures preserve it. Signing out purges that profile's copies. The database remains the source of truth, and saved underwriting cases remain shared `underwriting_cases` records.
+
 ## Sidebar scopes organize navigation without bypassing access rules
 
 The desktop command rail separates daily modules into My work and administrative/tooling modules into Company. Both scopes are derived from the existing module registry, installed-plugin checks, and permission gates; the mobile More sheet continues to expose the complete allowed module set.
