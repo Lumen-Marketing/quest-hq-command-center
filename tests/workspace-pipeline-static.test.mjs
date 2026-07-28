@@ -40,7 +40,10 @@ test('company record selectors are scoped to the active operational workspace', 
     ['companyDeals', 'deal'],
     ['companyActivities', 'activity'],
   ].forEach(([name, variable]) => {
-    assert.match(functionSource(name), new RegExp(`recordVisibleInOperationalWorkspace\\(${variable}, companyId\\)`), `${name} must filter by workspace`);
+    // Accept either the per-record predicate recordVisibleInOperationalWorkspace(x, companyId)
+    // or the hoisted collection helper recordsVisibleInOperationalWorkspace(state.X, companyId);
+    // both enforce the same company/workspace scoping.
+    assert.match(functionSource(name), new RegExp(`records?VisibleInOperationalWorkspace\\((${variable}|state\\.\\w+), companyId\\)`), `${name} must filter by workspace`);
   });
   assert.match(functionSource('underwritingCaseForContact'), /recordVisibleInOperationalWorkspace\(item, companyId\)/);
 });

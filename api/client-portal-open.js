@@ -31,7 +31,10 @@ export default defineEndpoint(
     if (portal.password_hash) {
       if (!password) throw new HttpError(401, 'Password required.', { password_required: true });
       const nextHash = hashPassword(password, portal.password_salt);
-      if (!crypto.timingSafeEqual(Buffer.from(nextHash), Buffer.from(portal.password_hash))) {
+      const expected = String(portal.password_hash);
+      // Length pre-check: timingSafeEqual throws on unequal-length buffers, so a malformed
+      // stored hash would otherwise surface as a 500 instead of a clean "incorrect password".
+      if (nextHash.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(nextHash), Buffer.from(expected))) {
         throw new HttpError(401, 'Incorrect portal password.', { password_required: true });
       }
     }

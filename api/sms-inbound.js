@@ -50,10 +50,20 @@ export default defineEndpoint(
         headers: { Prefer: 'return=representation' },
         body: JSON.stringify({ id: newId, company_id: companyId, name: from, phone: from, stage: 'Leads' }),
       });
-      contact = createRes.ok ? (await createRes.json().catch(() => []))[0] : { id: newId };
+      if (createRes.ok) contact = (await createRes.json().catch(() => []))[0] || null;
+      // On failure (commonly a concurrent inbound that already created this contact and
+      // tripped a unique constraint) re-select by phone rather than inventing an id that
+      // has no row — otherwise the sms_messages FK insert fails and the message is lost.
+      if (!contact) {
+        const retryRes = await db(`/rest/v1/contacts?company_id=eq.${encodeURIComponent(companyId)}&select=id,phone`);
+        const retryContacts = retryRes.ok ? (await retryRes.json().catch(() => [])) : [];
+        contact = retryContacts.find((c) => toE164(c.phone) === from) || null;
+      }
+      // Do not silently drop the message: return 5xx so the provider retries.
+      if (!contact?.id) throw new HttpError(502, 'Could not resolve contact for inbound message.');
     }
 
-    await db('/rest/v1/sms_messages', {
+    const messageRes = await db('/rest/v1/sms_messages', {
       method: 'POST',
       body: JSON.stringify({
         company_id: companyId,
@@ -66,6 +76,7 @@ export default defineEndpoint(
         provider_message_id: providerId,
       }),
     });
+    if (!messageRes.ok) throw new HttpError(502, 'Failed to store inbound message.');
 
     return { ok: true };
   },

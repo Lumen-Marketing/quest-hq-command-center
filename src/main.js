@@ -2329,6 +2329,8 @@ const state = {
   contactQuery: '',
   contactSort: 'name',
   contactFilters: { ...CONTACT_FILTER_DEFAULTS },
+  contactRailScope: 'team',
+  contactRailExpanded: {},
   selectedContactId: '',
   stageFilterDeals: 'all',
   dealQuery: '',
@@ -5781,14 +5783,21 @@ async function importPricebookRows(form) {
   if (file) { if (!(await guardUpload(file, 'csv', 'Price Book'))) return; text = String(await file.text().catch(() => text)).trim(); }
   if (!text) return showToast('Paste CSV rows or choose a CSV file.', 'local', 'Price Book');
   const delimiter = (text.split(/\r?\n/)[0] || '').includes('\t') ? '\t' : ',';
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (lines[0] && /material|name/i.test(lines[0]) && /cost|price/i.test(lines[0])) lines.shift();
+  // Comma files go through the shared RFC-4180 parser so quoted multi-line/embedded-comma
+  // cells import correctly; tab files keep the simple split (tab data rarely quotes newlines).
+  const rows = (delimiter === '\t'
+    ? text.split(/\r?\n/).map((line) => line.split('\t'))
+    : parseCsvRows(text)
+  ).filter((cells) => cells.some((cell) => String(cell || '').trim()));
+  if (rows[0]) {
+    const header = rows[0].join(' ');
+    if (/material|name/i.test(header) && /cost|price/i.test(header)) rows.shift();
+  }
   const client = createSupabaseClient();
   const live = isLiveSupabaseSession() && client;
   const now = new Date().toISOString();
   let count = 0;
-  for (const line of lines) {
-    const cells = parsePricebookCsvLine(line, delimiter);
+  for (const cells of rows) {
     const name = String(cells[0] || '').trim();
     const cost = Number(String(cells[4] || cells.at(-1) || '').replace(/[$,]/g, ''));
     if (!name || !Number.isFinite(cost) || cost < 0) continue;
@@ -8337,9 +8346,10 @@ function renderContactTable(companyId) {
           <button class="icon-btn" type="button" data-action="refresh-data" title="Refresh"><i class="ti ti-refresh"></i></button>
         </div>
       </div>
+      ${renderContactFilterBar(companyId)}
       <div class="data-table contacts-table">
         <div class="table-head">
-          <span class="select-cell" data-action="toggle-contact-select-all"><input type="checkbox" ${allSelected ? 'checked' : ''} tabindex="-1" aria-label="Select all contacts" /></span>
+          <span class="select-cell" data-action="toggle-contact-select-all"><input type="checkbox" ${allSelected ? 'checked' : ''} aria-label="Select all contacts" /></span>
           <span>${headerSort('Name', 'name')}</span>
           <span>What's next</span>
           <span>${headerSort('Account Name', 'owner')}</span>
@@ -8351,7 +8361,7 @@ function renderContactTable(companyId) {
         </div>
         ${rows.map((contact) => `
           <div class="table-row ${selected.has(contact.id) ? 'selected ' : ''}${contact.id === state.selectedContactId ? 'active' : ''}" role="button" tabindex="0" data-action="open-contact" data-contact-id="${h(contact.id)}">
-            <span class="select-cell" data-action="toggle-contact-select" data-contact-id="${h(contact.id)}"><input type="checkbox" ${selected.has(contact.id) ? 'checked' : ''} tabindex="-1" aria-label="Select ${h(contact.name)}" /></span>
+            <span class="select-cell" data-action="toggle-contact-select" data-contact-id="${h(contact.id)}"><input type="checkbox" ${selected.has(contact.id) ? 'checked' : ''} aria-label="Select ${h(contact.name)}" /></span>
             <span class="cell-lead">${pipelineDot(contactStageColor(contact.stage))}<span><strong>${h(contact.name)}</strong><small>${h(contact.stage || 'No stage')}</small></span></span>
             ${renderPipelineNextAction('contact', contact, { compact: true })}
             <span>${contact.account_id ? h(accountName(contact.account_id) || '-') : '<span class="muted-dash">-</span>'}</span>
@@ -8584,12 +8594,15 @@ function renderContactFieldGroupsSidebar(companyId) {
   };
   const dotPalette = ['#3B82F6', '#F59E0B', '#22C55E', '#A78BFA', '#FB7185', '#06B6D4', '#EAB308', '#94A3B8'];
   const tempDot = { Hot: '#EF4444', Warm: '#FB923C', Cold: '#60A5FA' };
+  const expandedGroups = state.contactRailExpanded || {};
   const group = (key, label, values) => {
     if (!values.length) return '';
-    const shown = values.slice(0, 7);
+    const expanded = !!expandedGroups[key];
+    const shown = expanded ? values : values.slice(0, 7);
+    const hidden = values.length - 7;
     return `
       <div class="cv2-group">
-        <div class="cv2-group-head">${h(label)}<span class="cv2-fieldtag">FIELD</span><span class="cv2-group-count">${contacts.length}</span></div>
+        <div class="cv2-group-head">${h(label)}<span class="cv2-fieldtag">FIELD</span><span class="cv2-group-count">${values.length}</span></div>
         ${shown.map((value, index) => {
           const count = contacts.filter((contact) => valueOf[key](contact) === value).length;
           const active = filters[key] === value;
@@ -8600,15 +8613,19 @@ function renderContactFieldGroupsSidebar(companyId) {
             </button>
           `;
         }).join('')}
-        ${values.length > shown.length ? `<span class="cv2-more">Show more</span>` : ''}
+        ${values.length > 7 ? `<button class="cv2-more" type="button" data-action="toggle-contact-rail-group" data-key="${h(key)}">${expanded ? 'Show less' : `Show ${hidden} more`}</button>` : ''}
       </div>
     `;
   };
+  const scope = state.contactRailScope === 'private' ? 'private' : 'team';
   const anyActive = activeContactFilters().length > 0;
   return `
     <aside class="cv2-rail" aria-label="Contact field groups">
-      <div class="cv2-views-tabs"><button class="cv2-view-tab active" type="button">Team</button><button class="cv2-view-tab" type="button">Private</button></div>
-      <button class="cv2-all ${anyActive ? '' : 'active'}" type="button" data-action="clear-contact-filters">All Contacts<span class="cv2-opt-count">${contacts.length}</span></button>
+      <div class="cv2-views-tabs" role="group" aria-label="Contact scope">
+        <button class="cv2-view-tab ${scope === 'team' ? 'active' : ''}" type="button" data-action="set-contact-rail-scope" data-scope="team" aria-pressed="${scope === 'team' ? 'true' : 'false'}">Team</button>
+        <button class="cv2-view-tab ${scope === 'private' ? 'active' : ''}" type="button" data-action="set-contact-rail-scope" data-scope="private" aria-pressed="${scope === 'private' ? 'true' : 'false'}">Private</button>
+      </div>
+      <button class="cv2-all ${anyActive ? '' : 'active'}" type="button" data-action="clear-contact-filters">${scope === 'private' ? 'My Contacts' : 'All Contacts'}<span class="cv2-opt-count">${scope === 'private' ? contacts.filter(contactOwnedByMe).length : contacts.length}</span></button>
       ${group('temperature', 'Temperature', options.temperature)}
       ${group('job_type', 'Job type', options.job_type)}
       ${group('pay_type', 'Pay type', options.pay_type)}
@@ -8617,59 +8634,33 @@ function renderContactFieldGroupsSidebar(companyId) {
   `;
 }
 
+// Compact active-filter summary shown above the contact table. Selection happens in the
+// field-group rail (renderContactFieldGroupsSidebar); this reflects what is active and lets
+// the user remove a single filter, drop the "My contacts" scope, or clear everything.
 function renderContactFilterBar(companyId) {
-  const filters = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}) };
-  const options = contactFilterOptions(companyId);
+  void companyId;
   const activeFilters = activeContactFilters();
-  const select = (key, label, values) => `
-    <select class="contact-filter-select ${filters[key] !== 'all' ? 'primed' : ''}" data-contact-filter="${h(key)}" aria-label="${h(label)}">
-      <option value="all">${h(label)}: all</option>
-      ${values.map((value) => `<option value="${h(value)}" ${filters[key] === value ? 'selected' : ''}>${h(value)}</option>`).join('')}
-    </select>
-  `;
+  const scopePrivate = state.contactRailScope === 'private';
+  if (!activeFilters.length && !scopePrivate) return '';
   return `
     <div class="contact-filter-wrap">
-      <div class="contact-filter-bar" aria-label="Filter contacts">
-        <span class="contact-filter-label"><i class="ti ti-settings"></i>Filter</span>
-        ${select('temperature', 'Temperature', options.temperature)}
-        ${select('job_type', 'Job type', options.job_type)}
-        ${select('owner_name', 'Owner', options.owner_name)}
-        ${select('pay_type', 'Pay type', options.pay_type)}
-        ${activeFilters.length ? '<button class="contact-filter-clear" type="button" data-action="clear-contact-filters">Clear all</button>' : ''}
-      </div>
-      ${activeFilters.length ? `
+      <div class="contact-filter-bar" aria-label="Active contact filters">
+        <span class="contact-filter-label"><i class="ti ti-filter"></i>Active</span>
         <div class="contact-filter-chips">
-          <span>Active filters:</span>
+          ${scopePrivate ? `
+            <button class="contact-filter-chip scope" type="button" data-action="set-contact-rail-scope" data-scope="team">
+              My contacts <i class="ti ti-x"></i>
+            </button>
+          ` : ''}
           ${activeFilters.map((filter) => `
             <button class="contact-filter-chip" type="button" data-action="remove-contact-filter" data-filter="${h(filter.key)}">
               ${h(filter.label)}: ${h(filter.value)} <i class="ti ti-x"></i>
             </button>
           `).join('')}
         </div>
-      ` : ''}
-    </div>
-  `;
-}
-
-function renderContactTableLegacy(companyId) {
-  const rows = filteredContacts(companyId);
-  return `
-    <section class="panel">
-      <div class="section-head"><div><h2>Contacts</h2><p>${rows.length} visible contact${rows.length === 1 ? '' : 's'}</p></div></div>
-      <div class="data-table contacts-table">
-        <div class="table-head"><span>Client</span><span>Phone</span><span>Email</span><span>Location</span><span>Stage</span><span>Value</span></div>
-        ${rows.map((contact) => `
-          <button class="table-row ${contact.id === state.selectedContactId ? 'active' : ''}" type="button" data-action="open-contact" data-contact-id="${h(contact.id)}">
-            <span class="cell-lead">${pipelineDot(contactStageColor(contact.stage))}<span><strong>${h(contact.name)}</strong><small>${h(contact.owner_name || 'Unassigned')}</small></span></span>
-            <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">—</span>'}</span>
-            <span>${contact.email ? h(contact.email) : '<span class="muted-dash">—</span>'}</span>
-            <span>${contact.location ? h(contact.location) : '<span class="muted-dash">—</span>'}</span>
-            <span>${stageTagPipe('contacts', contact.stage, companyId)}</span>
-            <span>${contact.value ? money(contact.value) : '<span class="muted-dash">—</span>'}</span>
-          </button>
-        `).join('') || emptyState('No contacts in this view yet.')}
+        ${activeFilters.length ? '<button class="contact-filter-clear" type="button" data-action="clear-contact-filters">Clear all</button>' : ''}
       </div>
-    </section>
+    </div>
   `;
 }
 
@@ -9222,8 +9213,17 @@ async function spawnNextRecurrence(task) {
   const companyId = task.company_id || activeCompanyId();
   if (!can('tasks.manage', companyId)) return null; // never create on behalf of a role that cannot
   const anchor = String(task.due || '').slice(0, 10) || isoDate(0);
-  const nextDue = nextDueDate(rule, anchor);
+  let nextDue = nextDueDate(rule, anchor);
   if (!nextDue) return null;
+  // If the task was completed late, advance whole intervals until the next occurrence is
+  // today or later — otherwise a weekly task completed weeks late spawns an already-overdue
+  // copy and the series never catches up. Guard bounds the loop (~10y of weekly).
+  const today = isoDate(0);
+  for (let guard = 0; nextDue < today && guard < 520; guard += 1) {
+    const advanced = nextDueDate(rule, nextDue);
+    if (!advanced || advanced <= nextDue) break;
+    nextDue = advanced;
+  }
 
   // Carry a reminder forward by the same gap, so a "remind me 2 days before"
   // stays 2 days before the new due date.
@@ -14567,7 +14567,13 @@ function wbPrintReports(companyId, workspaceId, appId) {
 }
 
 /* ---- Workspace import / export (CSV) --------------------------------------- */
-function wbCsvEscape(v) { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+function wbCsvEscape(v) {
+  let s = String(v ?? '');
+  // Neutralize spreadsheet formula injection: a cell starting with = + - @ (or tab/CR) is
+  // prefixed with an apostrophe so Excel/Sheets treat it as text, not a live formula.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 // Export every item to a CSV using field labels as headers (human-friendly text).
 function wbExportCsv(companyId, workspaceId, appId) {
   const { workspace, app } = wbFind(companyId, workspaceId, appId);
@@ -25093,6 +25099,23 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'set-contact-rail-scope') {
+    event.preventDefault();
+    state.contactRailScope = node.dataset.scope === 'private' ? 'private' : 'team';
+    render();
+    return;
+  }
+  if (action === 'toggle-contact-rail-group') {
+    event.preventDefault();
+    const key = node.dataset.key;
+    if (key) {
+      const current = { ...(state.contactRailExpanded || {}) };
+      current[key] = !current[key];
+      state.contactRailExpanded = current;
+      render();
+    }
+    return;
+  }
   if (action === 'set-contact-filter') {
     event.preventDefault();
     const key = node.dataset.filter;
@@ -31213,11 +31236,11 @@ function taskById(id) {
 }
 
 function companyJobs(companyId = activeCompanyId()) {
-  return state.jobs.filter((job) => recordVisibleInOperationalWorkspace(job, companyId));
+  return recordsVisibleInOperationalWorkspace(state.jobs, companyId);
 }
 
 function companyTasks(companyId = activeCompanyId()) {
-  return state.tasks.filter((task) => recordVisibleInOperationalWorkspace(task, companyId));
+  return recordsVisibleInOperationalWorkspace(state.tasks, companyId);
 }
 
 function filteredTasks(companyId = activeCompanyId(), jobId = '') {
@@ -31618,7 +31641,7 @@ function calendarTypeIcon(type) {
 }
 
 function companyFiles(companyId = activeCompanyId()) {
-  return state.files.filter((file) => recordVisibleInOperationalWorkspace(file, companyId));
+  return recordsVisibleInOperationalWorkspace(state.files, companyId);
 }
 
 function companyDriveFolders(companyId = activeCompanyId()) {
@@ -31816,7 +31839,7 @@ function filteredJobs(companyId = activeCompanyId(), ignoreStage = false) {
 }
 
 function companyContacts(companyId = activeCompanyId()) {
-  return state.contacts.filter((contact) => recordVisibleInOperationalWorkspace(contact, companyId));
+  return recordsVisibleInOperationalWorkspace(state.contacts, companyId);
 }
 
 function contactFilterJobType(contact) {
@@ -31861,6 +31884,18 @@ function activeContactFilters() {
     .map((key) => ({ key, label: labels[key], value: filters[key] }));
 }
 
+// "Private" rail scope: contacts whose owner matches the signed-in user (by name or email).
+function contactOwnedByMe(contact) {
+  const profile = activeSession()?.profile;
+  if (!profile) return false;
+  const owner = String(contact.owner_name || '').trim().toLowerCase();
+  if (!owner) return false;
+  return [profile.full_name, profile.name, profile.email]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean)
+    .includes(owner);
+}
+
 function filteredContacts(companyId = activeCompanyId(), ignoreStage = false) {
   const q = state.contactQuery.trim().toLowerCase();
   const filters = { ...CONTACT_FILTER_DEFAULTS, ...(state.contactFilters || {}) };
@@ -31871,6 +31906,7 @@ function filteredContacts(companyId = activeCompanyId(), ignoreStage = false) {
     if (filters.job_type !== 'all' && contactFilterJobType(contact) !== filters.job_type) return false;
     if (filters.owner_name !== 'all' && String(contact.owner_name || '') !== filters.owner_name) return false;
     if (filters.pay_type !== 'all' && contactFilterPayType(contact) !== filters.pay_type) return false;
+    if (state.contactRailScope === 'private' && !contactOwnedByMe(contact)) return false;
     if (!q) return true;
     return [contact.name, contact.phone, contact.email, contact.location, contact.owner_name, contact.stage, contact.title, accountName(contact.account_id)]
       .some((value) => String(value || '').toLowerCase().includes(q));
@@ -31936,7 +31972,7 @@ function setPipelineStage(kind, stage, forceNav) {
 
 // ---- CRM getters + CRUD: accounts / deals / activities --------------------
 function companyAccounts(companyId = activeCompanyId()) {
-  return state.accounts.filter((account) => recordVisibleInOperationalWorkspace(account, companyId));
+  return recordsVisibleInOperationalWorkspace(state.accounts, companyId);
 }
 function accountById(id) {
   return id ? state.accounts.find((account) => account.id === id && recordVisibleInOperationalWorkspace(account)) || null : null;
@@ -31948,7 +31984,7 @@ function selectedAccount() {
   return accountById(state.selectedAccountId);
 }
 function companyCrmSites(companyId = activeCompanyId()) {
-  return state.sites.filter((site) => recordVisibleInOperationalWorkspace(site, companyId));
+  return recordsVisibleInOperationalWorkspace(state.sites, companyId);
 }
 function crmSiteById(id) {
   return id ? state.sites.find((site) => site.id === id && recordVisibleInOperationalWorkspace(site)) || null : null;
@@ -31967,7 +32003,7 @@ function filteredAccounts(companyId = activeCompanyId()) {
 }
 
 function companyDeals(companyId = activeCompanyId()) {
-  return state.deals.filter((deal) => recordVisibleInOperationalWorkspace(deal, companyId));
+  return recordsVisibleInOperationalWorkspace(state.deals, companyId);
 }
 function dealById(id) {
   return id ? state.deals.find((deal) => deal.id === id && recordVisibleInOperationalWorkspace(deal)) || null : null;
@@ -31995,7 +32031,7 @@ function jobsForAccount(accountId) {
 }
 
 function companyActivities(companyId = activeCompanyId()) {
-  return state.activities.filter((activity) => recordVisibleInOperationalWorkspace(activity, companyId));
+  return recordsVisibleInOperationalWorkspace(state.activities, companyId);
 }
 function relationThreadIds(relatedType, relatedId) {
   const ids = { account_id: '', contact_id: '', site_id: '', deal_id: '', job_id: '' };
@@ -34967,6 +35003,17 @@ function recordVisibleInOperationalWorkspace(record, companyId = activeCompanyId
   const workspaceId = workspaceIdForCompany(canonicalCompany);
   return record?.company_id === canonicalCompany
     && recordBelongsToWorkspace(record, workspaceId, defaultOperationalWorkspaceId(canonicalCompany));
+}
+
+// Filter a whole collection by workspace visibility, resolving the company/workspace ids
+// ONCE instead of per element. The per-record predicate above recomputed them for every
+// item (O(n·m)); the list helpers below run tens of times per render, so this is the hot path.
+function recordsVisibleInOperationalWorkspace(records, companyId = activeCompanyId()) {
+  const canonicalCompany = canonicalCompanyId(companyId);
+  const workspaceId = workspaceIdForCompany(canonicalCompany);
+  const defaultWorkspaceId = defaultOperationalWorkspaceId(canonicalCompany);
+  return (records || []).filter((record) => record?.company_id === canonicalCompany
+    && recordBelongsToWorkspace(record, workspaceId, defaultWorkspaceId));
 }
 
 function ensureRecordWorkspace(record) {
@@ -39131,9 +39178,11 @@ function titleCase(value) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+// Local calendar date (YYYY-MM-DD). Must stay local, not UTC: the dashboard "today",
+// mini-calendar, and automation due-dates compare against local dates, so a UTC value
+// flips to tomorrow after ~5pm for US users and breaks those comparisons.
 function isoDate(offsetDays = 0) {
-  const date = new Date(Date.now() + offsetDays * 86400000);
-  return date.toISOString().slice(0, 10);
+  return localDateKey(new Date(Date.now() + offsetDays * 86400000));
 }
 
 function formatDate(value) {

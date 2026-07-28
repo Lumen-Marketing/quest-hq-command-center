@@ -41,6 +41,10 @@ test('a valid portal session reaches the handler and drives the injected db', as
   const calls = [];
   const fakeDb = async (path, options = {}) => {
     calls.push({ path, method: options.method || 'GET' });
+    // A representation PATCH on an existing, in-scope document returns the updated row(s).
+    if (path.includes('client_portal_documents') && options.method === 'PATCH') {
+      return { ok: true, status: 200, async json() { return [{ id: 'doc_1', review_status: 'approved' }]; } };
+    }
     return { ok: true, status: 200, async json() { return []; } };
   };
 

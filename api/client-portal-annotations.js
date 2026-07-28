@@ -24,8 +24,11 @@ export default defineEndpoint(
     if (body.action === 'delete') {
       const annotationId = String(body.annotation_id || '').trim();
       if (!annotationId) throw new HttpError(400, 'annotation_id is required.');
-      const result = await db(`/rest/v1/client_portal_annotations?id=eq.${encodeURIComponent(annotationId)}&portal_id=eq.${encodeURIComponent(session.portal_id)}&guest_name=eq.${encodeURIComponent(guestName)}`, { method: 'DELETE' });
-      return jsonResponse(result.ok ? 200 : result.status, { deleted: result.ok });
+      const result = await db(`/rest/v1/client_portal_annotations?id=eq.${encodeURIComponent(annotationId)}&portal_id=eq.${encodeURIComponent(session.portal_id)}&guest_name=eq.${encodeURIComponent(guestName)}`, { method: 'DELETE', headers: { Prefer: 'return=representation' } });
+      if (!result.ok) return jsonResponse(result.status, { deleted: false });
+      const removed = await result.json().catch(() => []);
+      // 2xx with an empty body means the id was not this guest's annotation — report honestly.
+      return jsonResponse(200, { deleted: Array.isArray(removed) && removed.length > 0 });
     }
 
     const sanitize = (annotation, documentId) => {
@@ -68,9 +71,31 @@ export default defineEndpoint(
     const annotations = Array.isArray(body.annotations) ? body.annotations : [];
     if (!documentId) throw new HttpError(400, 'document_id is required.');
     const rows = annotations.slice(0, 500).map((annotation) => sanitize(annotation, documentId));
-    await db(`/rest/v1/client_portal_annotations?portal_id=eq.${encodeURIComponent(session.portal_id)}&document_id=eq.${encodeURIComponent(documentId)}&guest_name=eq.${encodeURIComponent(guestName)}`, { method: 'DELETE' });
-    if (!rows.length) return jsonResponse(200, { annotations: [] });
-    const result = await db('/rest/v1/client_portal_annotations', { method: 'POST', body: JSON.stringify(rows) });
-    return jsonResponse(result.ok ? 200 : result.status, { annotations: result.ok ? await result.json() : [], saved: result.ok });
+    const scope = `portal_id=eq.${encodeURIComponent(session.portal_id)}&company_id=eq.${encodeURIComponent(session.company_id)}&document_id=eq.${encodeURIComponent(documentId)}&guest_name=eq.${encodeURIComponent(guestName)}`;
+
+    // Empty save clears this guest's annotations for the document.
+    if (!rows.length) {
+      const del = await db(`/rest/v1/client_portal_annotations?${scope}`, { method: 'DELETE' });
+      return jsonResponse(del.ok ? 200 : del.status, { annotations: [], saved: del.ok });
+    }
+
+    // Upsert the new set FIRST so a failed write can never destroy existing annotations
+    // (the previous delete-then-insert wiped everything if the insert failed).
+    const result = await db('/rest/v1/client_portal_annotations?on_conflict=id', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify(rows),
+    });
+    if (!result.ok) return jsonResponse(result.status, { annotations: [], saved: false });
+
+    // Then remove this guest's stale rows for the document (present before, absent now),
+    // one exact id at a time so the filter is always URL-safe.
+    const keep = new Set(rows.map((row) => row.id));
+    const existingRes = await db(`/rest/v1/client_portal_annotations?${scope}&select=id`);
+    const existingRows = existingRes.ok ? await existingRes.json().catch(() => []) : [];
+    for (const staleId of existingRows.map((row) => row.id).filter((id) => !keep.has(id))) {
+      await db(`/rest/v1/client_portal_annotations?id=eq.${encodeURIComponent(staleId)}&${scope}`, { method: 'DELETE' });
+    }
+    return jsonResponse(200, { annotations: await result.json(), saved: true });
   },
 );

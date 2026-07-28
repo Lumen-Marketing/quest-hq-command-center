@@ -27,6 +27,9 @@ async function ensureFormFileBucket(client) {
   const created = await client.storage.createBucket(FORM_FILE_BUCKET, {
     public: false,
     fileSizeLimit: FORM_FILE_MAX_BYTES,
+    // Keep the storage-layer MIME allowlist in lockstep with the endpoint validation so a
+    // freshly auto-created bucket isn't missing the type backstop the migration provisions.
+    allowedMimeTypes: ALLOWED_PUBLIC_FORM_FILE_TYPES,
   });
   if (created.error && !/already exists/i.test(created.error.message || '')) {
     throw created.error;

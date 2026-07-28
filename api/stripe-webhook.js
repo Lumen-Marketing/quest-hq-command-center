@@ -114,8 +114,11 @@ export default async function handler(request, response) {
     response.setHeader('Content-Type', 'application/json');
     response.end(JSON.stringify({ received: true }));
   } catch (error) {
+    // Log the detail server-side; return a generic message so config/DB error text
+    // (which can precede signature verification) is never echoed to the caller.
+    console.error('[stripe-webhook]', error?.message || error);
     response.statusCode = 400;
     response.setHeader('Content-Type', 'application/json');
-    response.end(JSON.stringify({ error: error.message || 'Webhook failed' }));
+    response.end(JSON.stringify({ error: 'Webhook processing failed' }));
   }
 }
