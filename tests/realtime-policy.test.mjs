@@ -7,6 +7,7 @@ import {
   realtimeSubscriptions,
   shouldAcceptRealtimePayload,
   shouldDeferRealtimeRefresh,
+  shouldRenderAfterRealtimeRefresh,
 } from '../src/data/realtime-policy.js';
 
 test('tables invalidate only their owning data domain', () => {
@@ -36,6 +37,36 @@ test('modal and editing state defer realtime refreshes', () => {
   assert.equal(shouldDeferRealtimeRefresh({ modal: 'profile' }), true);
   assert.equal(shouldDeferRealtimeRefresh({ dataLoading: true }), true);
   assert.equal(shouldDeferRealtimeRefresh({}), false);
+});
+
+test('realtime refresh preserves an already-mounted embedded Tasks session', () => {
+  assert.equal(shouldRenderAfterRealtimeRefresh({
+    routeName: 'company',
+    routeSection: 'tasks',
+    nativeTasksEnabled: false,
+    embeddedTasksMounted: true,
+  }), false);
+
+  assert.equal(shouldRenderAfterRealtimeRefresh({
+    routeName: 'company',
+    routeSection: 'tasks',
+    nativeTasksEnabled: true,
+    embeddedTasksMounted: true,
+  }), true);
+
+  assert.equal(shouldRenderAfterRealtimeRefresh({
+    routeName: 'company',
+    routeSection: 'tasks',
+    nativeTasksEnabled: false,
+    embeddedTasksMounted: false,
+  }), true);
+
+  assert.equal(shouldRenderAfterRealtimeRefresh({
+    routeName: 'company',
+    routeSection: 'jobs',
+    nativeTasksEnabled: false,
+    embeddedTasksMounted: false,
+  }), true);
 });
 
 test('batcher coalesces burst domains into one flush', () => {

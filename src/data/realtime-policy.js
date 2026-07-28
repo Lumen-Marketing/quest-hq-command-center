@@ -88,6 +88,14 @@ export function shouldDeferRealtimeRefresh(state = {}) {
   );
 }
 
+export function shouldRenderAfterRealtimeRefresh(state = {}) {
+  const embeddedTasksActive = state.routeName === 'company'
+    && state.routeSection === 'tasks'
+    && state.nativeTasksEnabled !== true
+    && state.embeddedTasksMounted === true;
+  return !embeddedTasksActive;
+}
+
 export function createRealtimeBatcher({ onFlush, delay = 700, schedule = setTimeout, cancel = clearTimeout } = {}) {
   const pending = new Set();
   let timer = null;

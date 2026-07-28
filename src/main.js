@@ -7,7 +7,7 @@ import questbaseModularLogoUrl from './assets/questbase-modular-logo.png';
 import questbaseInteriorJobsUrl from './assets/questbase-interior-jobs.png';
 import { requireOk, settleObserved } from './lib/result.js';
 import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequirements } from './auth/password-policy.js';
-import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh } from './data/realtime-policy.js';
+import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh, shouldRenderAfterRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
 import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
@@ -37285,7 +37285,14 @@ async function refreshRealtimeDomains(domains) {
   });
   state.backgroundRefreshing = false;
   persistAll();
-  render();
+  if (shouldRenderAfterRealtimeRefresh({
+    routeName: state.route?.name,
+    routeSection: state.route?.section,
+    nativeTasksEnabled: nativeTasksModuleEnabled(state.route),
+    embeddedTasksMounted: Boolean(document.querySelector('.taskapp-frame')),
+  })) {
+    render();
+  }
   if (unique.includes('access')) queueMicrotask(() => subscribeToGlobalRealtime());
 }
 
