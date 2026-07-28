@@ -15,8 +15,8 @@
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260727190835",
-      "name": "company_invite_launch_hardening"
+      "version": "20260728214456",
+      "name": "company_appearance_default"
     },
     "vercel_verified_at": "2026-07-29T05:16:33+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
