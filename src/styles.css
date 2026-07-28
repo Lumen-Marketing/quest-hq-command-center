@@ -19499,7 +19499,11 @@ textarea:focus {
 
 /* CRM detail polish */
 .crm-detail-grid .panel { padding: 18px; }
-.contract-rows div { padding: 9px 0; border-bottom: 1px solid var(--border); }
+/* Keep the horizontal padding: this block tightens the vertical rhythm for the CRM
+   detail view, but it is unscoped, and the base rule still gives every row a border,
+   background and radius. Dropping to `9px 0` left the label and value flush against
+   the edges of a visible box everywhere contractRows() is used. */
+.contract-rows div { padding: 9px 12px; border-bottom: 1px solid var(--border); }
 .contract-rows div:last-child { border-bottom: 0; }
 .contract-rows span { color: var(--muted); font-size: 12.5px; }
 .contract-rows strong { font-size: 13.5px; font-weight: 750; }
