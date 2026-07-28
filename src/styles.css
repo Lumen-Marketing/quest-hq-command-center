@@ -26194,3 +26194,100 @@ html[data-card-style="glass"] .message-context-rail {
     grid-template-columns: 1fr;
   }
 }
+
+/* Local recovery for long, high-value operational forms. */
+.form-draft-strip {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.form-draft-recovery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.form-draft-recovery-copy,
+.form-draft-recovery-actions,
+.form-draft-status {
+  display: inline-flex;
+  align-items: center;
+}
+
+.form-draft-recovery-copy {
+  min-width: 0;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.form-draft-recovery-copy > i {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 17px;
+}
+
+.form-draft-recovery-actions {
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.form-draft-recovery-actions .btn {
+  min-height: 31px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.form-draft-status {
+  width: max-content;
+  max-width: 100%;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.form-draft-status i {
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+.form-draft-status.is-saving i {
+  animation: form-draft-spin .9s linear infinite;
+}
+
+.form-draft-status.is-saved,
+.form-draft-status.is-restored {
+  color: var(--green);
+}
+
+.form-draft-status.is-unavailable {
+  color: var(--red);
+}
+
+@keyframes form-draft-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 620px) {
+  .form-draft-recovery {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .form-draft-recovery-actions {
+    width: 100%;
+  }
+
+  .form-draft-recovery-actions .btn {
+    flex: 1 1 0;
+  }
+}

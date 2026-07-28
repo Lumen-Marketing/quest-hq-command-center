@@ -2457,6 +2457,17 @@ let addressSuggestionRequestSeq = 0;
 let pipeDrag = null;
 let locationPickerMap = null;
 let locationPickerMarker = null;
+let formDraftManager = null;
+const formDraftManagerReady = import('./drafts/form-drafts.js').then(({ createDraftStore, createFormDraftManager }) => {
+  let storage = null;
+  try {
+    storage = window.localStorage;
+  } catch {
+    storage = null;
+  }
+  formDraftManager = createFormDraftManager({ store: createDraftStore({ storage }) });
+  return formDraftManager;
+}).catch(() => null);
 
 function init() {
   normalizeLegacyLocation();
@@ -2473,11 +2484,14 @@ function init() {
   document.addEventListener('keydown', onDocumentKeydown);
   document.addEventListener('submit', onDocumentSubmit);
   document.addEventListener('input', onDocumentInput);
+  document.addEventListener('input', onProtectedFormDraftChange);
   document.addEventListener('change', onDocumentChange);
+  document.addEventListener('change', onProtectedFormDraftChange);
   document.addEventListener('dragstart', onPipeDragStart);
   document.addEventListener('dragend', onPipeDragEnd);
   document.addEventListener('dragover', onPipeDragOver);
   document.addEventListener('drop', onPipeDrop);
+  window.addEventListener('pagehide', () => formDraftManager?.flushAll());
   initializeAuth();
   render();
 }
@@ -2936,6 +2950,226 @@ function render() {
   queueMicrotask(mountFileViewer);
   queueMicrotask(mountDashboardWidgetDnD);
   queueMicrotask(mountContactSmsThread);
+  queueMicrotask(mountProtectedFormDrafts);
+}
+
+function activeDraftProfileId() {
+  return String(state.session?.profile?.id || state.session?.user?.id || '').trim();
+}
+
+function protectedFormDraftAttributes(formType, recordId, companyId, workspaceId = activeWorkspaceId()) {
+  return [
+    'data-form-draft',
+    `data-draft-type="${h(formType)}"`,
+    `data-draft-record-id="${h(recordId || 'new')}"`,
+    `data-draft-company-id="${h(companyId || '')}"`,
+    `data-draft-workspace-id="${h(workspaceId || '')}"`,
+  ].join(' ');
+}
+
+function renderProtectedFormDraftStrip() {
+  return `
+    <div class="form-draft-strip span-2">
+      <div class="form-draft-recovery" data-form-draft-recovery hidden>
+        <span class="form-draft-recovery-copy">
+          <i class="ti ti-history"></i>
+          <span data-form-draft-recovery-copy>Unsaved local changes are available.</span>
+        </span>
+        <div class="form-draft-recovery-actions">
+          <button class="btn btn-primary btn-small" type="button" data-action="restore-form-draft">Restore</button>
+          <button class="btn btn-small" type="button" data-action="discard-form-draft">Discard</button>
+        </div>
+      </div>
+      <span class="form-draft-status is-idle" data-form-draft-status aria-live="polite">
+        <i class="ti ti-cloud-check"></i>
+        <span>Drafts save automatically</span>
+      </span>
+    </div>
+  `;
+}
+
+function protectedFormDraftContext(form) {
+  if (!form) return null;
+  const context = {
+    profileId: activeDraftProfileId(),
+    companyId: String(form.dataset.draftCompanyId || '').trim(),
+    workspaceId: String(form.dataset.draftWorkspaceId || '').trim(),
+    formType: String(form.dataset.draftType || '').trim().toLowerCase(),
+    recordId: String(form.dataset.draftRecordId || 'new').trim() || 'new',
+  };
+  if (!context.profileId || !context.companyId || !context.workspaceId || !context.formType) return null;
+  return context;
+}
+
+function protectedFormDraftTimeLabel(updatedAt) {
+  if (!Number.isFinite(updatedAt)) return '';
+  try {
+    return new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+function setProtectedFormDraftStatus(form, stateName, timeLabel = '') {
+  const status = form?.querySelector('[data-form-draft-status]');
+  if (!status) return;
+  const views = {
+    idle: { label: 'Drafts save automatically', tone: 'idle' },
+    saving: { label: 'Saving draft…', tone: 'saving' },
+    saved: { label: `Draft saved locally${timeLabel ? ` · ${timeLabel}` : ''}`, tone: 'saved' },
+    restored: { label: 'Local draft restored', tone: 'restored' },
+    discarded: { label: 'Local draft discarded', tone: 'idle' },
+    unavailable: { label: 'Local draft saving unavailable', tone: 'unavailable' },
+  };
+  const view = views[stateName] || views.idle;
+  const iconName = {
+    saving: 'ti-loader-2',
+    saved: 'ti-device-floppy',
+    restored: 'ti-history',
+    unavailable: 'ti-alert-triangle',
+  }[view.tone] || 'ti-cloud-check';
+  status.className = `form-draft-status is-${view.tone}`;
+  status.innerHTML = `<i class="ti ${iconName}"></i><span>${h(view.label)}</span>`;
+}
+
+async function mountProtectedFormDrafts() {
+  const manager = formDraftManager || await formDraftManagerReady;
+  document.querySelectorAll('form[data-form-draft]').forEach((form) => {
+    const context = protectedFormDraftContext(form);
+    if (!context || !manager) {
+      setProtectedFormDraftStatus(form, 'unavailable');
+      return;
+    }
+    const result = manager.read(context);
+    if (!result.ok) {
+      setProtectedFormDraftStatus(form, 'unavailable');
+      return;
+    }
+    if (!result.draft) {
+      setProtectedFormDraftStatus(form, 'idle');
+      return;
+    }
+    form.dataset.draftRecoveryPending = 'true';
+    const recovery = form.querySelector('[data-form-draft-recovery]');
+    const recoveryCopy = form.querySelector('[data-form-draft-recovery-copy]');
+    const timeLabel = protectedFormDraftTimeLabel(result.draft.updatedAt);
+    if (recovery) recovery.hidden = false;
+    if (recoveryCopy) recoveryCopy.textContent = `Unsaved local changes${timeLabel ? ` from ${timeLabel}` : ''} are available.`;
+    setProtectedFormDraftStatus(form, 'saved', timeLabel);
+  });
+}
+
+function queueProtectedFormDraft(form) {
+  const context = protectedFormDraftContext(form);
+  if (!context) {
+    setProtectedFormDraftStatus(form, 'unavailable');
+    return;
+  }
+  setProtectedFormDraftStatus(form, 'saving');
+  const capture = (manager) => {
+    if (!manager || !form.isConnected) {
+      if (form.isConnected) setProtectedFormDraftStatus(form, 'unavailable');
+      return;
+    }
+    manager.capture(context, form.elements, (result) => {
+      if (!form.isConnected) return;
+      setProtectedFormDraftStatus(
+        form,
+        result.ok ? 'saved' : 'unavailable',
+        result.ok ? protectedFormDraftTimeLabel(result.draft?.updatedAt) : '',
+      );
+    });
+  };
+  if (formDraftManager) capture(formDraftManager);
+  else formDraftManagerReady.then(capture);
+}
+
+function onProtectedFormDraftChange(event) {
+  const target = event.target;
+  if (!target?.closest || target.matches('[data-draft-ignore]')) return;
+  const form = target.closest('form[data-form-draft]');
+  if (!form) return;
+  if (form.dataset.draftRecoveryPending === 'true') {
+    form.dataset.draftChangedWhilePending = 'true';
+    return;
+  }
+  queueProtectedFormDraft(form);
+}
+
+function clearProtectedFormDraft(form) {
+  const context = protectedFormDraftContext(form);
+  if (!context) return;
+  if (formDraftManager) formDraftManager.clear(context);
+  else formDraftManagerReady.then((manager) => manager?.clear(context));
+}
+
+async function syncContactAddressFromRestoredDraft(form) {
+  if (!form?.matches('[data-contact-address-form]')) return;
+  await initContactAddressForm();
+  const countryName = String(form.elements.country?.value || '').trim();
+  const provinceName = String(form.elements.province?.value || '').trim();
+  const cityName = String(form.elements.city?.value || '').trim();
+  const barangayName = String(form.elements.barangay?.value || '').trim();
+  const locationName = String(form.elements.location?.value || '').trim();
+  const dial = String(form.elements.country_code?.value || '').trim();
+  const country = qcEl('qc-country');
+  await qcLoadCountries();
+  if (country?.tagName === 'SELECT' && countryName && qcSelectByText(country, countryName)) {
+    await qcLoadProvinces(country.value, provinceName);
+    if (cityName) await qcLoadCities(cityName);
+    if (barangayName) await qcLoadBarangays(barangayName);
+  } else if (country?.tagName === 'INPUT') {
+    country.value = countryName;
+  }
+  if (dial) {
+    const match = qcCountryData.find((item) => item.dial === dial);
+    qcSelectDial(dial, match?.iso2 || '');
+  }
+  const lat = Number(form.elements.lat?.value);
+  const lng = Number(form.elements.lng?.value);
+  if (Number.isFinite(lat) && Number.isFinite(lng) && form.elements.lat?.value && form.elements.lng?.value) {
+    qcPlacePin(lat, lng, { center: true });
+  }
+  if (form.elements.country) form.elements.country.value = countryName;
+  if (form.elements.province) form.elements.province.value = provinceName;
+  if (form.elements.city) form.elements.city.value = cityName;
+  if (form.elements.barangay) form.elements.barangay.value = barangayName;
+  if (form.elements.location) form.elements.location.value = locationName;
+}
+
+function handleProtectedFormDraftAction(actionName, node) {
+  const form = node.closest('form[data-form-draft]');
+  const context = protectedFormDraftContext(form);
+  if (!form || !context || !formDraftManager) {
+    setProtectedFormDraftStatus(form, 'unavailable');
+    return false;
+  }
+  const recovery = form.querySelector('[data-form-draft-recovery]');
+  if (actionName === 'restore-form-draft') {
+    const result = formDraftManager.restore(context, form.elements);
+    if (!result.ok) {
+      setProtectedFormDraftStatus(form, 'unavailable');
+      return true;
+    }
+    if (recovery) recovery.hidden = true;
+    delete form.dataset.draftRecoveryPending;
+    delete form.dataset.draftChangedWhilePending;
+    setProtectedFormDraftStatus(form, result.draft ? 'restored' : 'idle');
+    if (form.matches('[data-underwriting-form]')) syncUnderwritingForm(form);
+    syncContactAddressFromRestoredDraft(form).catch((error) => console.warn('Contact draft address restore failed', error));
+    return true;
+  }
+  if (actionName === 'discard-form-draft') {
+    const changedWhilePending = form.dataset.draftChangedWhilePending === 'true';
+    const result = formDraftManager.clear(context);
+    if (recovery) recovery.hidden = true;
+    delete form.dataset.draftRecoveryPending;
+    delete form.dataset.draftChangedWhilePending;
+    setProtectedFormDraftStatus(form, result.ok ? 'discarded' : 'unavailable');
+    if (result.ok && changedWhilePending) queueProtectedFormDraft(form);
+    return true;
+  }
+  return false;
 }
 
 function openNativeTimePicker(input) {
@@ -8250,9 +8484,10 @@ function renderUnderwriterPage(route, companyId) {
           ${selectedContact && underwritingCaseForContact(selectedContact.id, companyId) ? '<span class="underwriting-saved"><i class="ti ti-check"></i>Saved case</span>' : ''}
         </div>
         ${selectedContact ? `
-          <form id="underwriting-form" data-underwriting-form>
+          <form id="underwriting-form" data-underwriting-form ${protectedFormDraftAttributes('underwriter', selectedContact.id, companyId, selectedContact.workspace_id || activeWorkspaceId())}>
+            ${renderProtectedFormDraftStrip()}
             <div class="underwriting-form-side">
-              <label class="underwriting-field span-2"><span>Contact</span><select name="contact_id" data-underwriting-contact>
+              <label class="underwriting-field span-2"><span>Contact</span><select name="contact_id" data-underwriting-contact data-draft-ignore>
                 ${contacts.map((contact) => `<option value="${h(contact.id)}" ${contact.id === selectedContact.id ? 'selected' : ''}>${h(contact.name)} - ${h(contact.pay_type || 'Retail')}</option>`).join('')}
               </select></label>
               ${underwritingNumberField('Contract price', 'contractPrice', draft.contractPrice)}
@@ -10409,11 +10644,12 @@ async function initContactAddressForm() {
 function renderContactEditor(companyId, contact) {
   const edit = contact || blankContact(companyId);
   return `
-    <form class="job-editor contact-editor" data-contact-form data-contact-address-form>
+    <form class="job-editor contact-editor" data-contact-form data-contact-address-form ${protectedFormDraftAttributes('contact', edit.id || 'new', companyId, edit.workspace_id || activeWorkspaceId())}>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
       <div class="section-head span-2">
         <div><h2>${contact ? 'Edit contact' : 'New contact'}</h2><p>Contacts move through Prospects, Leads, and Nurturing before quote handoff.</p></div>
       </div>
+      ${renderProtectedFormDraftStrip()}
       ${field('Name', 'name', edit.name, true)}
       ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
       ${selectField('Account', 'account_id', edit.account_id, [['', '- None -']].concat(companyAccounts(companyId).map((account) => [account.id, account.name])))}
@@ -10563,6 +10799,7 @@ async function saveContact(form) {
       if (!result.error && result.data) {
         upsertContact(normalizeContact(result.data));
         state.selectedContactId = payload.id;
+        clearProtectedFormDraft(form);
         state.modal = '';
         showToast(`${payload.name} saved.`, 'live', 'Contacts');
         render();
@@ -10582,6 +10819,7 @@ async function saveContact(form) {
   }
   upsertContact(payload);
   state.selectedContactId = payload.id;
+  clearProtectedFormDraft(form);
   state.modal = '';
   showToast(`${payload.name} saved.`, 'local', 'Contacts');
   render();
@@ -11104,11 +11342,12 @@ function renderJobEditor(companyId, job) {
   const edit = job || blankJob(companyId);
   const addressOptions = contactAddressOptions(companyId);
   return `
-    <form class="job-editor" data-job-form>
+    <form class="job-editor" data-job-form ${protectedFormDraftAttributes('job', edit.id || 'new', companyId, edit.workspace_id || activeWorkspaceId())}>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
       <div class="section-head span-2">
         <div><h2>${job ? 'Edit job' : 'Create job'}</h2><p>Creates the company job container for tasks, files, forms, and reporting.</p></div>
       </div>
+      ${renderProtectedFormDraftStrip()}
       ${field('Workspace name', 'name', edit.name, true)}
       ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
       ${field('Client', 'client_name', edit.client_name)}
@@ -19387,9 +19626,10 @@ function renderDealEditor(companyId, deal) {
   const accounts = companyAccounts(companyId);
   const contacts = companyContacts(companyId);
   return `
-    <form class="job-editor" data-deal-form>
+    <form class="job-editor" data-deal-form ${protectedFormDraftAttributes('quote', edit.id || 'new', companyId, edit.workspace_id || activeWorkspaceId())}>
       <input type="hidden" name="id" value="${h(edit.id || '')}" />
       <div class="section-head span-2"><div><h2>${deal ? 'Edit quote' : 'New quote'}</h2><p>A priced opportunity moving through the bottom-of-funnel quote path.</p></div></div>
+      ${renderProtectedFormDraftStrip()}
       ${field('Quote name', 'name', edit.name, true)}
       ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
       ${selectField('Account', 'account_id', edit.account_id, [['', '- None -']].concat(accounts.map((account) => [account.id, account.name])))}
@@ -23502,6 +23742,11 @@ function onDocumentClick(event) {
 
 function handleAction(event, node) {
   const action = node.dataset.action;
+  if (action === 'restore-form-draft' || action === 'discard-form-draft') {
+    event.preventDefault();
+    handleProtectedFormDraftAction(action, node);
+    return;
+  }
   if (isReadOnlyDemo() && isMutableAction(action)) {
     event.preventDefault();
     requireMutableWorkspace();
@@ -26277,6 +26522,11 @@ function onPipeDrop(event) {
 }
 
 async function signOut() {
+  const draftProfileId = activeDraftProfileId();
+  if (draftProfileId) {
+    if (formDraftManager) formDraftManager.purgeProfile(draftProfileId);
+    else formDraftManagerReady.then((manager) => manager?.purgeProfile(draftProfileId));
+  }
   try { teardownGlobalRealtime(); } catch { /* ignore */ }
   if (isLiveSupabaseSession()) {
     const client = createSupabaseClient();
@@ -28699,6 +28949,7 @@ async function saveJob(form) {
     if (!result.error && result.data) {
       upsertJob(normalizeJob(result.data));
       state.sync = { label: 'Quest Supabase live', mode: 'live' };
+      clearProtectedFormDraft(form);
       state.modal = '';
       navigate(companyPath('jobs', { tab: 'profile', job_id: result.data.id }, payload.company_id), { replace: true });
       return true;
@@ -28711,6 +28962,7 @@ async function saveJob(form) {
   }
 
   upsertJob(payload);
+  clearProtectedFormDraft(form);
   state.modal = '';
   navigate(companyPath('jobs', { tab: 'profile', job_id: payload.id }, payload.company_id), { replace: true });
   return true;
@@ -28877,6 +29129,7 @@ async function saveUnderwritingCase(form) {
   }
   state.underwritingCases = [saved, ...state.underwritingCases.filter((entry) => !(entry.company_id === companyId && entry.contact_id === contact.id))];
   state.underwritingDraft = { companyId, ...input };
+  clearProtectedFormDraft(form);
   showToast(`Underwriting saved for ${contact.name}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Underwriter');
   render();
   return true;
@@ -33351,6 +33604,7 @@ async function saveDeal(form) {
     await logActivity({ type: 'stage_change', subject: `Stage -> ${payload.stage}`, related_type: 'deal', related_id: payload.id, account_id: payload.account_id });
   }
   state.selectedDealId = savedDeal.id;
+  clearProtectedFormDraft(form);
   state.modal = '';
   showToast(`${payload.name} saved.`, ok ? 'live' : 'local', 'Quotes');
   render();
