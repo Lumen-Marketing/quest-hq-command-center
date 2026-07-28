@@ -8,6 +8,8 @@ const migrations = readdirSync(new URL('../supabase/migrations/', import.meta.ur
 const recycleMigrationName = migrations.find((name) => /recycle_bin_safe_delete/.test(name));
 const recycleMigration = recycleMigrationName ? readFileSync(new URL(`../supabase/migrations/${recycleMigrationName}`, import.meta.url), 'utf8') : '';
 const hardeningMigration = readFileSync(new URL('../supabase/migrations/202607101200_production_security_and_atomic_mutations.sql', import.meta.url), 'utf8');
+const historyMigrationName = migrations.find((name) => /record_history_and_recent_delete_undo/.test(name));
+const historyMigration = historyMigrationName ? readFileSync(new URL(`../supabase/migrations/${historyMigrationName}`, import.meta.url), 'utf8') : '';
 
 test('settings exposes a recycle bin for 30 day safe deletes', () => {
   assert.match(source, /const RECYCLE_BIN_RETENTION_DAYS = 30;/);
@@ -87,4 +89,5 @@ test('supabase migration creates an RLS protected recycle bin ledger', () => {
   assert.match(recycleMigration, /alter table public\.job_files add column if not exists deleted_by uuid/);
   assert.match(hardeningMigration, /drop policy if exists "members read recycle bin"/);
   assert.match(hardeningMigration, /create or replace function public\.recycle_move_item/);
+  assert.match(historyMigration, /create or replace function public\.recycle_undo_item/);
 });
