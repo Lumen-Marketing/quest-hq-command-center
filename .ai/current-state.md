@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-28T07:22:29+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-28T08:20:35+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -8,17 +8,18 @@ Captured 2026-07-28T07:22:29+08:00. This is a point-in-time operational snapshot
 - Canonical public domains: https://questbase.io and https://www.questbase.io.
 - Stable Vercel URL: https://quest-hq-command-center-gamma.vercel.app.
 - Vercel project: `prj_0MxrYyGIo61QgLNW2M74fvTxlMRV`.
-- Ready production deployment: `dpl_8c4V8xbgTB4VfgdS2YdYhiL1Xtco`.
-- Deployed application revision: `fbdbf8d42be7066760458747dacc80606981f2f8` from `main`.
+- Ready production deployment: `dpl_Bx8i2D2xxBd3nta2vrD1mtFajKRw`.
+- Deployed application revision: `c17f1681bfd62c4af38ec1c268268063636e464e` from `main`.
 - Production smoke passed for the exact revision: 36 of 36 routes and 3 of 3 entry assets.
 - Signed-in browser verification passed for the Dashboard account menu and Help & support dialog. The production dialog exposed the in-product guide, bug/problem/suggestion form, 2,000-character limit, enabled submit action, and support-email fallback with no browser-console errors. The verification did not submit a report.
+- Signed-in browser verification also passed for the production Tasks route: the same-origin TaskManagement surface loaded as one embedded frame with no browser-console errors. Background realtime refreshes now update host state without rebuilding an already-mounted embedded Tasks frame, so they no longer discard the task user's active scroll, panels, or edit state.
 - Production Guardian remains scheduled every six hours and available by manual dispatch.
 
 ## Repository health
 
 - GitHub repository: `Lumen-Marketing/quest-hq-command-center`.
-- Default branch at capture: `main` at `fbdbf8d42be7066760458747dacc80606981f2f8`.
-- `npm run check` passes: 608 tests, AI/project-state validation, production build, and bundle-budget gate.
+- Default branch at capture: `main` at `c17f1681bfd62c4af38ec1c268268063636e464e`.
+- `npm run check` passes: 609 tests, AI/project-state validation, production build, and bundle-budget gate.
 - `npm audit --audit-level=high` reports zero vulnerabilities after the locked PostCSS/Nanoid transitive dependency update.
 - CI runs the same check on pushes and pull requests.
 - The main application still emits a Vite advisory for a JavaScript chunk over 500 kB; the repository's explicit bundle budget passes.
@@ -68,6 +69,7 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - The account menu now exposes a lazy-loaded Help & support dialog with Ctrl+K guidance, an email fallback, and an authenticated report form backed by `report-problem`.
 - Pilot onboarding rehearsal, support response, and provider handoff procedures are documented under `docs/operations`.
 - The compact Quest command rail, Modular Quest landing direction, IBM Plex typography, Technical Ledger underwriter, Contacts lifecycle, Dashboard, Workday, Jobs, Tasks, Messages, Files, Forms, Client Portals, Price Book, Calls, Automations, Analytics, Users, and Workspace App Builder are present.
+- The embedded Tasks surface is protected from host-shell replacement during background realtime refreshes. Explicit host renders can still recreate the frame and remain tracked as a narrower follow-up risk.
 - Shared CSV parsing now preserves empty columns and supports quoted commas, quotes, and newlines.
 - Imported and persisted Workspace App Builder colors are constrained to CSS hex values before reaching style sinks.
 - An injectable task write store (src/tasks/task-store.js, src/tasks/task-shape.js) with unit tests exists as the write engine for the flag-on native Tasks surface. It is not yet wired into src/main.js; the default embed surface is unaffected (see ADR-0001).

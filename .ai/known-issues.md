@@ -78,19 +78,20 @@ schedule, either coarsen it or trigger the same URL from Supabase `pg_cron` with
 `CRON_SECRET` bearer header. The endpoint, its authorization, and its tests are identical
 under either trigger.
 
-## The embedded Tasks iframe restarts on any full re-render
+## Explicit full host renders can still restart the embedded Tasks iframe
 
 The Tasks route renders the vendored module as `<iframe src="/taskmanagement/app.html">`.
 `render()` rebuilds `app.innerHTML` wholesale, so every full re-render destroys and
 recreates that iframe, and the module reboots from its splash — losing in-progress edits,
-scroll, and open panels. Two triggers are now handled: the auth-event echo (fixed — see
+scroll, and open panels. Three high-frequency triggers are now handled: the auth-event echo (fixed — see
 `supabaseSessionSignature` in src/main.js, which was a self-sustaining ~1.4/sec reload
-loop that hung the module on its splash) and the boot splash itself (suppressed under
-`?embed=1`). But `refreshRealtimeDomains()` and other `render()` callers still recreate the
-frame whenever watched data changes underneath the user. The durable fix is to reuse the
-existing iframe element across renders (detaching it blanks its document, so preserving the
-node — not the innerHTML — is the only option) or to exempt the tasks route from full
-re-render. Until then, a background realtime update can bump a user out of a task mid-edit.
+loop that hung the module on its splash), the boot splash itself (suppressed under
+`?embed=1`), and background realtime refreshes. `refreshRealtimeDomains()` still loads and
+persists fresh host state, but now skips the full-shell render when the embedded frame is
+already mounted. Explicit `render()` callers can still recreate the frame while the user
+remains on Tasks. The durable end state is to reuse a persistent iframe host across shell
+renders or finish the native Tasks migration; until then, review new asynchronous render
+callers for whether they can fire while Tasks is open.
 
 ## Operational-workspace default and uploaded icon do not persist in live mode
 

@@ -35,6 +35,7 @@ The SPA supports:
 - Public client portal, proposal, and form routes.
 - Legacy route rewrites retained for compatibility.
 - The Tasks module defaults to a same-origin iframe of the vendored Task app inside the command-center shell. The host passes a required `workspace_id`, optional `project_id`, and same-origin `return_url`; business context remains linked through `project_id`, `contact_id`, and `deal_id`. The feature-flagged native Tasks surface uses the same workspace boundary and per-person visibility model.
+- Realtime refreshes continue loading host data while an embedded Tasks frame is active, but skip the host's full-shell render when that frame is already mounted. This preserves the live TaskManagement document and its in-progress UI state; normal navigation, native Tasks, and non-Tasks routes keep the standard render path.
 
 ## Important source areas
 
