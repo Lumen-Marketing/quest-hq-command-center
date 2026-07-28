@@ -73,6 +73,9 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Shared CSV parsing now preserves empty columns and supports quoted commas, quotes, and newlines.
 - Imported and persisted Workspace App Builder colors are constrained to CSS hex values before reaching style sinks.
 - An injectable task write store (src/tasks/task-store.js, src/tasks/task-shape.js) with unit tests exists as the write engine for the flag-on native Tasks surface. It is not yet wired into src/main.js; the default embed surface is unaffected (see ADR-0001).
+- Appearance (theme mode, accent, background preset, card styling) follows the signed-in user across devices via `profiles.appearance_prefs` and the `update_own_appearance` RPC. A custom uploaded background image is excluded by design and stays browser-local. Requires migration `202607291200_profile_appearance_sync.sql`; until it is applied the RPC call fails soft and appearance stays per browser.
+- Accent-tinted chrome derives from the `--orange` token throughout, so the accent picker recolours hovers, active rows, focus rings, and primary-button hover states. Guarded by tests/accent-theme-static.test.mjs.
+- Archived companies (subscription status `canceled`) are hidden from the company switcher, company pickers, and both platform company lists; the lists expose search, a status filter including Archived, and 25-per-page navigation (src/platform-directory.js, unit tested).
 
 ## Remaining controlled launch configuration
 

@@ -54,6 +54,11 @@ export const UPLOAD_POLICIES = {
   image: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 5 * MB, label: 'image' },
   // Dashboard image tiles upload to Storage, so they allow larger files.
   tileimage: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 25 * MB, label: 'image' },
+  // Workspace/company icons are re-encoded to a 192px tile before anything is
+  // stored, so the source file's weight is irrelevant — take whatever the camera
+  // produced and let the client compress it. The cap is only a decode guard: past
+  // this size the browser is likelier to die decoding than to produce an icon.
+  workspaceicon: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 64 * MB, label: 'image' },
   document: { exts: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'csv'], max: 25 * MB, label: 'document' },
   csv: { exts: ['csv', 'tsv', 'txt'], max: 10 * MB, label: 'spreadsheet' },
   backup: { exts: ['zip'], max: 50 * MB, label: 'backup archive' },

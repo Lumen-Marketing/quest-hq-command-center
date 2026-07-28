@@ -52,6 +52,23 @@ test('oversize files are rejected', async () => {
   assert.equal(result.ok, false);
 });
 
+test('workspace icons take a file far past the general image cap, but still not a runaway one', async () => {
+  const photo = fakeFile('logo.png', PNG, 'image/png');
+  photo.size = 24 * 1024 * 1024; // a phone photo: rejected as 'image', fine as an icon source
+  assert.equal((await validateUpload(photo, 'image')).ok, false);
+  assert.equal((await validateUpload(photo, 'workspaceicon')).ok, true);
+  const runaway = fakeFile('logo.png', PNG, 'image/png');
+  runaway.size = 200 * 1024 * 1024;
+  assert.equal((await validateUpload(runaway, 'workspaceicon')).ok, false);
+});
+
+test('the workspace icon policy keeps every content check the image policy applies', async () => {
+  const disguised = await validateUpload(fakeFile('logo.png', ZIP, 'image/png'), 'workspaceicon');
+  assert.equal(disguised.ok, false);
+  const executable = await validateUpload(fakeFile('logo.png.exe', PNG), 'workspaceicon');
+  assert.equal(executable.ok, false);
+});
+
 test('Layer 1: accept attribute advertises the policy extensions and MIME types', () => {
   const accept = acceptAttr('image');
   assert.match(accept, /\.png/);

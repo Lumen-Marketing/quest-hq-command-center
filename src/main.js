@@ -10,6 +10,7 @@ import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequi
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh, shouldRenderAfterRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
+import { ARCHIVED_COMPANY_STATUS, COMPANY_STATUS_FILTERS, filterCompanyRows, paginate } from './platform-directory.js';
 import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
@@ -2265,6 +2266,9 @@ const state = {
   platformCompanyMembers: [],
   platformBackupCopies: [],
   platformBackupFilters: { company_id: 'all', status: 'all', kind: 'all', query: '' },
+  // Archived companies are excluded by the default 'active' status filter.
+  platformCompanyFilters: { search: '', status: 'active', page: 0 },
+  workspaceReviewFilters: { search: '', status: 'active', page: 0 },
   subscriptions: [],
   workspaceReviews: [],
   workspaceBackups: readSeededList(WORKSPACE_BACKUP_CACHE_KEY, []).map(normalizeWorkspaceBackup),
@@ -2511,6 +2515,7 @@ function setTheme(theme) {
   localStorage.setItem(THEME_KEY, next);
   applyTheme(next);
   refreshThemeControls();
+  pushAppearanceSync();
 }
 
 function setAccent(accent) {
@@ -2518,6 +2523,74 @@ function setAccent(accent) {
   localStorage.setItem(ACCENT_KEY, next);
   applyTheme(getThemeMode(), next);
   refreshThemeControls();
+  pushAppearanceSync();
+}
+
+// ---------------------------------------------------------------------------
+// Cross-device appearance sync
+//
+// localStorage stays the source of truth for *painting*: it is readable before
+// auth resolves, so the app opens in the right theme with no flash. The profile
+// row is the source of truth for *carrying* the choice between devices — it is
+// applied over the local copy once the signed-in profile loads.
+//
+// bgImage is excluded on purpose. It is a data URL up to ~2.2 MB and profiles are
+// fetched with select('*') for the team directory; see the migration for why it
+// stays browser-local.
+// ---------------------------------------------------------------------------
+
+function appearanceSyncPayload() {
+  const { bgImage, ...shareable } = getAppearance();
+  return { themeMode: getThemeMode(), accent: getAccent(), ...shareable };
+}
+
+// Apply prefs that arrived with the profile. Mirrored into localStorage so the
+// next cold start on this device paints correctly before auth resolves.
+function applySyncedAppearance(prefs) {
+  if (!prefs || typeof prefs !== 'object' || !Object.keys(prefs).length) return;
+  // A token refresh can land mid-debounce with the pre-change row. The unsaved
+  // local choice is the newer intent, so let it win rather than flicker back.
+  if (appearanceSyncPending) return;
+  const { themeMode, accent, ...appearance } = prefs;
+  if (['light', 'dark', 'system'].includes(themeMode)) localStorage.setItem(THEME_KEY, themeMode);
+  if (ACCENT_OPTIONS.some(([id]) => id === accent)) localStorage.setItem(ACCENT_KEY, accent);
+  if (Object.keys(appearance).length) {
+    // Keep whatever background image this device already holds: the synced record
+    // never carries one, so merging rather than replacing avoids wiping it.
+    writeJson(APPEARANCE_KEY, { ...getAppearance(), ...appearance });
+  }
+  applyTheme();
+  applyAppearance();
+}
+
+let appearanceSyncTimer = null;
+let appearanceSyncPending = false;
+
+// Debounced: the opacity/blur sliders fire on every input event, and one write per
+// pixel of drag would hammer the RPC for no benefit.
+function pushAppearanceSync() {
+  if (!isLiveSupabaseSession()) return;
+  appearanceSyncPending = true;
+  clearTimeout(appearanceSyncTimer);
+  appearanceSyncTimer = setTimeout(() => {
+    appearanceSyncPending = false;
+    flushAppearanceSync();
+  }, 800);
+}
+
+async function flushAppearanceSync() {
+  const client = createSupabaseClient();
+  if (!client) return;
+  const prefs = appearanceSyncPayload();
+  const result = await client.rpc('update_own_appearance', { p_prefs: prefs });
+  // Appearance is a preference, not data: a failed sync must never interrupt the
+  // user. The choice is already applied and stored locally either way.
+  if (result?.error) {
+    console.warn('Appearance sync failed', result.error.message);
+    return;
+  }
+  const session = activeSession();
+  if (session?.profile) session.profile.appearance_prefs = prefs;
 }
 
 function hexToRgba(hex, alpha = 1) {
@@ -2575,6 +2648,7 @@ function setAppearance(patch = {}) {
   const next = { ...getAppearance(), ...patch };
   writeJson(APPEARANCE_KEY, next);
   applyAppearance(next);
+  pushAppearanceSync();
   return next;
 }
 
@@ -2582,6 +2656,7 @@ function resetAppearance() {
   writeJson(APPEARANCE_KEY, { ...APPEARANCE_DEFAULTS });
   applyAppearance(APPEARANCE_DEFAULTS);
   refreshAppearanceControls();
+  pushAppearanceSync();
   showToast('Appearance reset to default.', 'local', 'Appearance');
 }
 
@@ -2696,6 +2771,10 @@ async function setSupabaseSession(session) {
   const nextSession = buildSupabaseSession(session, profile);
   const shouldReloadWorkspace = shouldReloadWorkspaceForSession(state.session, nextSession);
   state.session = nextSession;
+  // The profile carries this user's appearance choices from whatever device they
+  // last set them on. Applied after the session lands so a fresh browser adopts
+  // them instead of showing defaults.
+  applySyncedAppearance(profile?.appearance_prefs);
   if (shouldReloadWorkspace) {
     resetLiveWorkspaceData();
     state.dataLoaded = false;
@@ -3139,7 +3218,7 @@ function workspacePresetSelect(selected = 'generic') {
 function workspaceIconSelect(selected = 'home') {
   const activeIcon = workspaceIconOption(selected).key;
   return `
-    <label>Workspace icon
+    <label>Company workspace icon
       <select name="icon_key">
         ${WORKSPACE_ICON_OPTIONS.map((item) => `<option value="${h(item.key)}" ${item.key === activeIcon ? 'selected' : ''}>${h(item.label)}</option>`).join('')}
       </select>
@@ -17780,14 +17859,19 @@ function renderBillingSettings(companyId) {
 function renderWorkspaceApprovalConsole(companyId) {
   const reviews = workspaceReviewRows();
   const pending = reviews.filter((review) => review.status === 'pending_review').length;
+  const filters = companyDirectoryFilters('review');
+  const matched = filterCompanyRows(reviews, filters);
+  const view = paginate(matched, filters.page);
   return `
     <article class="panel span-3">
       <div class="section-head">
         <div><h2>Quest approval console</h2><p>${pending} workspace${pending === 1 ? '' : 's'} waiting for manual activation.</p></div>
       </div>
+      ${renderCompanyDirectoryToolbar('review', filters, view)}
       <div class="approval-console-list">
-        ${reviews.map((review) => renderWorkspaceReviewRow(review, companyId)).join('') || emptyState('No workspace reviews found.')}
+        ${view.rows.map((review) => renderWorkspaceReviewRow(review, companyId)).join('') || companyDirectoryEmptyState(filters)}
       </div>
+      ${renderCompanyDirectoryPager('review', view)}
     </article>
   `;
 }
@@ -17812,8 +17896,62 @@ function renderWorkspaceReviewRow(review, currentCompanyId) {
   `;
 }
 
+// Search/filter/paging state for the two platform-owner company lists. 'platform'
+// is the master panel, 'review' the Quest approval console.
+function companyDirectoryFilters(scope) {
+  const key = scope === 'review' ? 'workspaceReviewFilters' : 'platformCompanyFilters';
+  return { search: '', status: 'active', page: 0, ...(state[key] || {}) };
+}
+
+function setCompanyDirectoryFilters(scope, patch = {}) {
+  const key = scope === 'review' ? 'workspaceReviewFilters' : 'platformCompanyFilters';
+  state[key] = { ...companyDirectoryFilters(scope), ...patch };
+  return state[key];
+}
+
+function renderCompanyDirectoryToolbar(scope, filters, view) {
+  return `
+    <div class="company-directory-toolbar">
+      <label class="company-directory-search">
+        <i class="ti ti-search" aria-hidden="true"></i>
+        <input type="search" value="${h(filters.search || '')}" placeholder="Search name, ID, or owner email"
+          data-company-directory-search="${h(scope)}" aria-label="Search companies" />
+      </label>
+      <label class="company-directory-status">
+        <span>Status</span>
+        <select data-company-directory-status="${h(scope)}">
+          ${COMPANY_STATUS_FILTERS.map(([value, label]) => `<option value="${h(value)}" ${filters.status === value ? 'selected' : ''}>${h(label)}</option>`).join('')}
+        </select>
+      </label>
+      <span class="company-directory-count">${view.total ? `${view.from}-${view.to} of ${view.total}` : 'No matches'}</span>
+    </div>
+  `;
+}
+
+function renderCompanyDirectoryPager(scope, view) {
+  if (view.pageCount <= 1) return '';
+  return `
+    <div class="company-directory-pager">
+      <button class="btn" type="button" data-action="company-directory-page" data-scope="${h(scope)}" data-page="${view.page - 1}" ${view.hasPrev ? '' : 'disabled'}><i class="ti ti-chevron-left"></i>Previous</button>
+      <span>Page ${view.page + 1} of ${view.pageCount}</span>
+      <button class="btn" type="button" data-action="company-directory-page" data-scope="${h(scope)}" data-page="${view.page + 1}" ${view.hasNext ? '' : 'disabled'}>Next<i class="ti ti-chevron-right"></i></button>
+    </div>
+  `;
+}
+
+function companyDirectoryEmptyState(filters) {
+  if (filters.search) return emptyState(`No companies match "${filters.search}".`);
+  if (filters.status === 'canceled') return emptyState('No archived companies.');
+  return emptyState('No companies found for platform review.');
+}
+
 function renderPlatformMasterPanel(currentCompanyId) {
   const companies = platformCompanyRows();
+  const filters = companyDirectoryFilters('platform');
+  const matched = filterCompanyRows(companies, filters);
+  const view = paginate(matched, filters.page);
+  // Metrics deliberately summarise every company, not the filtered page, so the
+  // headline numbers hold still while the list is searched.
   const totals = companies.reduce((acc, company) => {
     acc.members += number(company.member_count);
     acc.pending += company.status === 'pending_review' ? 1 : 0;
@@ -17837,16 +17975,18 @@ function renderPlatformMasterPanel(currentCompanyId) {
         ${metricCard('Members', totals.members)}
       </section>
       <form class="platform-workspace-create" data-platform-workspace-create-form>
-        <strong>Create workspace</strong>
-        <label>Workspace name<input name="company_name" placeholder="Customer workspace" required /></label>
+        <strong>Create company workspace</strong>
+        <label>Company workspace name<input name="company_name" placeholder="Customer workspace" required /></label>
         <label>Owner email<input name="owner_email" type="email" placeholder="owner@company.com" /></label>
         ${workspacePresetSelect()}
         ${workspaceIconSelect()}
         <button class="btn btn-primary" type="submit"><i class="ti ti-plus"></i>Create</button>
       </form>
+      ${renderCompanyDirectoryToolbar('platform', filters, view)}
       <div class="platform-company-list">
-        ${companies.map((company) => renderPlatformCompanyRow(company, currentCompanyId)).join('') || emptyState('No companies found for platform review.')}
+        ${view.rows.map((company) => renderPlatformCompanyRow(company, currentCompanyId)).join('') || companyDirectoryEmptyState(filters)}
       </div>
+      ${renderCompanyDirectoryPager('platform', view)}
       ${renderPlatformBackupLedger(currentCompanyId)}
     </article>
   `;
@@ -21131,7 +21271,7 @@ function renderWorkspaceIconModal(companyId) {
       <section class="workspace-icon-upload-card">
         <div>
           <strong>Upload</strong>
-          <span>PNG, JPG, or WebP. Keep it simple; square logos work best.</span>
+          <span>PNG, JPG, or WebP at any size — large images are resized and compressed automatically. Square logos work best.</span>
         </div>
         <input type="file" accept="image/png,image/jpeg,image/webp" data-workspace-icon-upload />
       </section>
@@ -21166,7 +21306,7 @@ function operationalWorkspaceModalIconControl() {
         ${workspaceIconMarkup({ icon_key: selectedKey, icon_image: draft.icon_image, color: '#f0b23b' }, 'large')}
         <div>
           <strong>${h(hasImage ? 'Uploaded image' : workspaceIconOption(selectedKey).label)}</strong>
-          <small>${h(hasImage ? 'Custom image for this workspace.' : 'Choose a built-in icon or upload your own.')}</small>
+          <small>${h(hasImage ? 'Custom image for this workspace.' : 'Choose a built-in icon, or upload your own at any size — it is resized and compressed for you.')}</small>
         </div>
         ${hasImage ? '<button class="btn ows-icon-remove" type="button" data-action="clear-operational-workspace-modal-icon"><i class="ti ti-x"></i>Remove image</button>' : ''}
       </div>
@@ -24676,6 +24816,12 @@ function handleAction(event, node) {
   if (action === 'platform-company-action') {
     event.preventDefault();
     managePlatformCompany(node.dataset.companyId, node.dataset.platformAction);
+    return;
+  }
+  if (action === 'company-directory-page') {
+    event.preventDefault();
+    setCompanyDirectoryFilters(node.dataset.scope, { page: Number(node.dataset.page) || 0 });
+    updateWorkspaceOnly();
     return;
   }
   if (action === 'open-job-photos') {
@@ -28308,6 +28454,14 @@ function onDocumentInput(event) {
     updateWorkspaceOnly();
     return;
   }
+  if (event.target.matches('[data-company-directory-search]')) {
+    const scope = event.target.dataset.companyDirectorySearch;
+    // Back to page 1: staying on page 3 of the old result set would show an empty
+    // list for a search that actually matched something.
+    setCompanyDirectoryFilters(scope, { search: event.target.value, page: 0 });
+    updateWorkspacePreservingFocus(`[data-company-directory-search="${scope}"]`);
+    return;
+  }
   if (event.target.matches('[data-form-field]')) {
     updateFormField(event.target);
     return;
@@ -28356,6 +28510,11 @@ function onDocumentChange(event) {
     const key = event.target.dataset.platformBackupFilter;
     state.platformBackupFilters = { company_id: 'all', status: 'all', kind: 'all', query: '', ...(state.platformBackupFilters || {}), [key]: event.target.value };
     render();
+    return;
+  }
+  if (event.target.matches('[data-company-directory-status]')) {
+    setCompanyDirectoryFilters(event.target.dataset.companyDirectoryStatus, { status: event.target.value, page: 0 });
+    updateWorkspaceOnly();
     return;
   }
   if (event.target.matches('[data-recycle-filter]')) {
@@ -30899,6 +31058,21 @@ function updateWorkspaceOnly() {
   if (!workspace) return;
   reconcileSelection(state.route);
   workspace.innerHTML = renderWorkspace(state.route);
+}
+
+// Replacing the workspace innerHTML drops focus, which would eject the user from a
+// search box on every keystroke. Re-focus the same control and restore the caret.
+function updateWorkspacePreservingFocus(selector) {
+  const before = document.querySelector(selector);
+  const start = before?.selectionStart ?? null;
+  const end = before?.selectionEnd ?? null;
+  updateWorkspaceOnly();
+  const after = document.querySelector(selector);
+  if (!after) return;
+  after.focus();
+  if (start != null && typeof after.setSelectionRange === 'function') {
+    try { after.setSelectionRange(start, end); } catch { /* control type has no caret */ }
+  }
 }
 
 function rememberSidebarScroll() {
@@ -33935,9 +34109,21 @@ function financeSummary(companyId = activeCompanyId()) {
   };
 }
 
-function allowedCompanies() {
+// A company's lifecycle status lives on its subscription row, not on the company
+// record — archiving from the master panel writes 'canceled' there.
+function isArchivedCompanyId(companyId) {
+  return String(companySubscription(canonicalCompanyId(companyId))?.status || '') === ARCHIVED_COMPANY_STATUS;
+}
+
+// Archiving keeps memberships intact (so access rules and history survive) but the
+// company should drop out of the switcher and every company picker. The company
+// you are currently inside is never hidden: archiving the one you are looking at
+// would otherwise strand you on a screen you cannot identify or switch away from.
+function allowedCompanies({ includeArchived = false } = {}) {
   const ids = allowedCompanyIds();
-  return state.companies.filter((company) => ids.includes(company.id));
+  const currentId = state.activeCompanyId;
+  return state.companies.filter((company) => ids.includes(company.id)
+    && (includeArchived || company.id === currentId || !isArchivedCompanyId(company.id)));
 }
 
 function can(permission, companyId = activeCompanyId()) {
@@ -34221,28 +34407,72 @@ function setWorkspaceIconDraft(companyId, patch = {}) {
   };
 }
 
+// Decode an uploaded image without materialising an inflated base64 copy of it
+// first. createImageBitmap streams from the File and applies EXIF rotation, so a
+// 40 MP phone photo costs one bitmap rather than a ~1.37x data URL string plus a
+// decoded <img>. Older Safari rejects the options bag — fall back to the data-URL
+// path there. Callers must call release() once they have drawn the source.
+async function decodeImageFile(file) {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      return { source: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close?.() };
+    } catch {
+      // Fall through to the <img> path below.
+    }
+  }
+  const dataUrl = await fileToDataUrl(file);
+  if (!dataUrl) throw new Error('Could not read that image.');
+  const image = await loadImage(dataUrl);
+  return { source: image, width: image.naturalWidth, height: image.naturalHeight, release: () => {} };
+}
+
+// Step the encoder down until the icon fits its storage budget. WebP wins by a
+// wide margin at this size; browsers that cannot encode it get a PNG data URL back
+// from toDataURL, which the JPEG rungs then undercut. At 192x192 the first rung
+// effectively always fits — the ladder exists so an awkward image compresses
+// further instead of being rejected.
+function compressWorkspaceIconCanvas(canvas) {
+  const attempts = [
+    ['image/webp', 0.82], ['image/webp', 0.7], ['image/webp', 0.55],
+    ['image/jpeg', 0.82], ['image/jpeg', 0.6], ['image/jpeg', 0.4],
+  ];
+  let smallest = '';
+  for (const [type, quality] of attempts) {
+    const output = canvas.toDataURL(type, quality);
+    if (!smallest || output.length < smallest.length) smallest = output;
+    if (output.length <= WORKSPACE_ICON_UPLOAD_MAX_BYTES) return output;
+  }
+  if (sanitizeWorkspaceIconImage(smallest)) return smallest;
+  throw new Error('Could not compress that image small enough. Try a simpler logo.');
+}
+
 // Validate, square-crop to 192px, and compress an uploaded image to a data URL suitable
 // for a workspace/company icon. Shared by the company-logo and operational-workspace uploads.
+// Any picture the browser can decode is accepted at any practical file size: the source is
+// downscaled to the 192px tile and then quality-stepped until it fits, so a 20 MB camera
+// photo and a 20 KB logo both land as a small icon.
 async function workspaceIconFileToDataUrl(file) {
-  const check = await validateUpload(file, 'image');
+  const check = await validateUpload(file, 'workspaceicon');
   if (!check.ok) throw new Error(check.reason);
-  if (file.size > 2 * 1024 * 1024) throw new Error('Workspace icon uploads must be 2 MB or smaller.');
-  const dataUrl = await fileToDataUrl(file);
-  const image = await loadImage(dataUrl);
-  const canvas = document.createElement('canvas');
-  canvas.width = 192;
-  canvas.height = 192;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
-  const drawWidth = image.naturalWidth * scale;
-  const drawHeight = image.naturalHeight * scale;
-  ctx.drawImage(image, (canvas.width - drawWidth) / 2, (canvas.height - drawHeight) / 2, drawWidth, drawHeight);
-  let output = canvas.toDataURL('image/webp', 0.82);
-  if (output.length > WORKSPACE_ICON_UPLOAD_MAX_BYTES * 1.5) output = canvas.toDataURL('image/png');
-  if (!sanitizeWorkspaceIconImage(output)) throw new Error('That image is too large for a workspace icon. Try a smaller logo.');
-  return output;
+  const decoded = await decodeImageFile(file);
+  try {
+    if (!decoded.width || !decoded.height) throw new Error('Could not read that image.');
+    const canvas = document.createElement('canvas');
+    canvas.width = 192;
+    canvas.height = 192;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingQuality = 'high';
+    const scale = Math.max(canvas.width / decoded.width, canvas.height / decoded.height);
+    const drawWidth = decoded.width * scale;
+    const drawHeight = decoded.height * scale;
+    ctx.drawImage(decoded.source, (canvas.width - drawWidth) / 2, (canvas.height - drawHeight) / 2, drawWidth, drawHeight);
+    return compressWorkspaceIconCanvas(canvas);
+  } finally {
+    decoded.release();
+  }
 }
 
 async function prepareWorkspaceIconUpload(file) {
@@ -36543,6 +36773,9 @@ function normalizeProfile(input, fallback = {}) {
     approved: input.approved !== false,
     email_verified: emailVerified,
     supervisor_id: String(input.supervisor_id || fallback.supervisor_id || ''),
+    appearance_prefs: (input.appearance_prefs && typeof input.appearance_prefs === 'object')
+      ? input.appearance_prefs
+      : (fallback.appearance_prefs || {}),
   };
 }
 

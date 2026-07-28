@@ -266,3 +266,36 @@ and `tasks workspace update` RLS policies in migration
 `has_workspace_permission` gates and the INSERT/DELETE (`tasks.manage`) policies are
 unchanged, so tenant isolation and the permission model are preserved. Designating a lead
 is a role assignment in Command Center, not a code change.
+
+## Appearance follows the user, not the browser
+
+Theme mode, accent, background preset and card styling are stored on
+`public.profiles.appearance_prefs` (jsonb) and applied when the signed-in profile loads, so
+a user re-themes once rather than per device. localStorage is still written on every change
+and remains the source of truth for *painting*: it is readable before auth resolves, so the
+app opens in the right theme with no flash. Writes go through the SECURITY DEFINER
+`update_own_appearance(jsonb)` RPC keyed on `auth.uid()`, mirroring `update_own_profile` —
+the strict `profiles` WITH CHECK would otherwise block a user saving their own preference.
+The RPC whitelists and coerces every field server-side, so the client never decides what may
+be stored. Added in `202607291200_profile_appearance_sync.sql`.
+
+An uploaded custom background image is deliberately excluded and stays browser-local. It is
+a data URL up to ~2.2 MB and `public.profiles` is read with `select('*')` to build the team
+directory, so a blob per row would make that query pathological. A `pg_column_size <= 2048`
+check constraint stops the column being repurposed as a blob store. Syncing the image would
+mean a Storage bucket plus its RLS, upload path and cleanup of replaced images.
+
+## Archived companies stay accessible but stop being listed
+
+Archiving a company from the master panel writes subscription status `canceled`
+(`platformActionStatus`), leaving memberships and history intact. Archived companies are
+filtered out of `allowedCompanies()` — the switcher and every company picker — and out of
+the platform company lists, which default to the Active status filter and can surface them
+again via the Archived option. The company a user is currently inside is never hidden;
+archiving the one you are looking at would otherwise strand you on a screen you cannot
+identify or switch away from. Access control (`allowedCompanyIds()`) is untouched, so this
+is a listing rule, not a permission change.
+
+Known limitation: the approval console's Reject action writes the same `canceled` status, so
+archived and rejected companies are indistinguishable in the data today. Separating them
+needs a distinct status value.

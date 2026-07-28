@@ -19,6 +19,16 @@ The live Supabase public catalog was captured 2026-07-27T19:13:43.004Z. The [mac
 
 The active `send-company-invite` Edge Function accepts only an invite id, derives recipient/content server-side, checks the caller's active Owner/Admin/Developer membership, and records sent/failed delivery status without invalidating the invite. Browser CORS is restricted to the production Vercel origin and Questbase domains.
 
+## User preference state
+
+`profiles.appearance_prefs` (jsonb, default `{}`) carries the signed-in user's theme mode,
+accent, background preset and card styling so appearance follows them between devices. It is
+written only through `update_own_appearance(jsonb)` — SECURITY DEFINER, `search_path = ''`,
+keyed on `auth.uid()` — which whitelists and coerces every field, so a tampered client
+payload cannot store arbitrary data. A `pg_column_size(appearance_prefs) <= 2048` check
+constraint keeps the column from being used as a blob store; uploaded background images are
+deliberately not stored here. Added in `202607291200_profile_appearance_sync.sql`.
+
 ## Maps
 
 - [Schema](schema.md)

@@ -106,6 +106,13 @@ test('workspace settings can rename and change one of many filled icons', () => 
   assert.match(source, /data-workspace-icon-upload/);
   assert.match(source, /async function prepareWorkspaceIconUpload\(file\)/);
   assert.match(source, /function sanitizeWorkspaceIconImage\(value\)/);
+  // Icon uploads compress rather than reject: no hard byte cap in the icon path,
+  // a decode that streams from the File, and a quality ladder down to the budget.
+  assert.match(source, /validateUpload\(file, 'workspaceicon'\)/);
+  assert.doesNotMatch(source, /Workspace icon uploads must be 2 MB or smaller/);
+  assert.match(source, /createImageBitmap\(file, \{ imageOrientation: 'from-image' \}\)/);
+  assert.match(source, /function compressWorkspaceIconCanvas\(canvas\)/);
+  assert.match(source, /output\.length <= WORKSPACE_ICON_UPLOAD_MAX_BYTES\) return output;/);
   assert.match(source, /async function saveWorkspaceSettings\(formNode\)/);
   assert.match(source, /client\.rpc\('update_company_workspace', \{ target_company_id: companyId, workspace_name: workspaceName, icon_key: iconKey, icon_image: iconImage \}\)/);
   assert.match(styles, /\.workspace-icon i::before,\s*\.workspace-icon-choice i::before\s*\{/);
