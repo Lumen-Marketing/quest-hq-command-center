@@ -17624,7 +17624,7 @@ function renderWorkspaceSettings(companyId) {
       </article>
     </div>
     <div class="settings-col">
-      <article class="panel">
+      <article class="panel settings-workspace-data-card">
         <div class="section-head"><div><h2>Workspace data</h2><p>Pipeline records, stages, members, and plugins are isolated here.</p></div></div>
         ${contractRows([
           ['Company ID', companyId],

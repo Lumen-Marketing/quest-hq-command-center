@@ -175,3 +175,12 @@ test('technical data connection status lives in settings, not the topbar', () =>
   assert.match(styles, /\.settings-connection-card\s*\{/);
   assert.match(styles, /\.settings-connection-status\s*\{/);
 });
+
+test('workspace data summary rows keep a readable horizontal inset', () => {
+  const settingsBlock = source.match(/function renderWorkspaceSettings\(companyId\) \{[\s\S]*?function renderPluginsSettings/)?.[0] || '';
+  assert.ok(settingsBlock, 'Expected workspace settings block');
+  assert.match(settingsBlock, /<article class="panel settings-workspace-data-card">/);
+
+  const rule = styles.match(/\.settings-workspace-data-card \.contract-rows div\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(rule, /padding-inline:\s*12px\s*;/);
+});

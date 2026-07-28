@@ -4423,6 +4423,10 @@ textarea:focus {
   align-content: start;
 }
 
+.settings-workspace-data-card .contract-rows div {
+  padding-inline: 12px;
+}
+
 .settings-connection-status {
   display: grid;
   gap: 10px;
