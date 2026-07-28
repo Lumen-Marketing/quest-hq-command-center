@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-29T06:31:54+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-29T06:39:31+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -8,10 +8,11 @@ Captured 2026-07-29T06:31:54+08:00. This is a point-in-time operational snapshot
 - Canonical public domains: https://questbase.io and https://www.questbase.io.
 - Stable Vercel URL: https://quest-hq-command-center-gamma.vercel.app.
 - Vercel project: `prj_0MxrYyGIo61QgLNW2M74fvTxlMRV`.
-- Ready production deployment: `dpl_K6SmLSVJwnnbAcDsmvNB3tWoq9cZ`.
-- Deployed application revision: `02bdb021392ca94198e7dca8ff866d85e0bd768f` from `main`.
+- Ready production deployment: `dpl_8ckg6c31JNdpRL8izyHg5YGvE5ta`.
+- Deployed application revision: `b9f9e596d03f87faed99ac4334011706eec77cd2` from `main`.
 - Production smoke passed for the exact revision: 36 of 36 routes and 3 of 3 entry assets.
 - Signed-in browser verification passed for the production Job form's local draft lifecycle: an unfinished edit autosaved, reopening offered Restore or Discard, Restore recovered the exact field value, Discard removed the temporary QA draft, no job record was created, and the browser reported no console errors.
+- Signed-in browser verification passed for the production Job record-history entry point: History opened against the correct workspace and record, completed its live query, showed the expected empty pre-migration state for an older record, and produced no browser warnings or errors. The verification was read-only.
 - Signed-in browser verification passed for the Dashboard account menu and Help & support dialog. The production dialog exposed the in-product guide, bug/problem/suggestion form, 2,000-character limit, enabled submit action, and support-email fallback with no browser-console errors. The verification did not submit a report.
 - Signed-in browser verification also passed for the production Tasks route: the same-origin TaskManagement surface loaded as one embedded frame with no browser-console errors. Background realtime refreshes now update host state without rebuilding an already-mounted embedded Tasks frame, so they no longer discard the task user's active scroll, panels, or edit state.
 - Production Guardian remains scheduled every six hours and available by manual dispatch.
@@ -19,7 +20,7 @@ Captured 2026-07-29T06:31:54+08:00. This is a point-in-time operational snapshot
 ## Repository health
 
 - GitHub repository: `Lumen-Marketing/quest-hq-command-center`.
-- Default branch at capture: `main` at `02bdb021392ca94198e7dca8ff866d85e0bd768f`.
+- Default branch at capture: `main` at `b9f9e596d03f87faed99ac4334011706eec77cd2`.
 - `npm run check` passes: 665 tests, AI/project-state validation, production build, and bundle-budget gate.
 - `npm audit --audit-level=high` reports zero vulnerabilities after the locked PostCSS/Nanoid transitive dependency update.
 - CI runs the same check on pushes and pull requests.

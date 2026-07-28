@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-29T06:31:54+08:00",
-  "generated_from_commit": "02bdb021392ca94198e7dca8ff866d85e0bd768f",
+  "generated_at": "2026-07-29T06:39:31+08:00",
+  "generated_from_commit": "b9f9e596d03f87faed99ac4334011706eec77cd2",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "02bdb021392ca94198e7dca8ff866d85e0bd768f",
+    "main_commit_at_capture": "b9f9e596d03f87faed99ac4334011706eec77cd2",
     "latest_migration": "202607291730_record_history_workspace_fk_index.sql"
   },
   "live": {
@@ -18,13 +18,13 @@
       "version": "20260728223037",
       "name": "record_history_workspace_fk_index"
     },
-    "vercel_verified_at": "2026-07-29T05:16:33+08:00",
+    "vercel_verified_at": "2026-07-29T06:39:31+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://quest-hq-command-center-gamma.vercel.app",
-    "vercel_deployment_id": "dpl_K6SmLSVJwnnbAcDsmvNB3tWoq9cZ",
+    "vercel_deployment_id": "dpl_8ckg6c31JNdpRL8izyHg5YGvE5ta",
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "02bdb021392ca94198e7dca8ff866d85e0bd768f",
-    "github_verified_at": "2026-07-29T05:16:33+08:00",
+    "vercel_deployed_commit": "b9f9e596d03f87faed99ac4334011706eec77cd2",
+    "github_verified_at": "2026-07-29T06:39:31+08:00",
     "github_production_guardian_run": "https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459"
   },
   "refresh_commands": {
