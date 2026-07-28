@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-29T05:16:33+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-29T06:31:54+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -20,7 +20,7 @@ Captured 2026-07-29T05:16:33+08:00. This is a point-in-time operational snapshot
 
 - GitHub repository: `Lumen-Marketing/quest-hq-command-center`.
 - Default branch at capture: `main` at `02bdb021392ca94198e7dca8ff866d85e0bd768f`.
-- `npm run check` passes: 640 tests, AI/project-state validation, production build, and bundle-budget gate.
+- `npm run check` passes: 665 tests, AI/project-state validation, production build, and bundle-budget gate.
 - `npm audit --audit-level=high` reports zero vulnerabilities after the locked PostCSS/Nanoid transitive dependency update.
 - CI runs the same check on pushes and pull requests.
 - The main application still emits a Vite advisory for a JavaScript chunk over 500 kB; the repository's explicit bundle budget passes.
@@ -31,9 +31,10 @@ Captured 2026-07-29T05:16:33+08:00. This is a point-in-time operational snapshot
 - Status: `ACTIVE_HEALTHY`.
 - Region: `us-west-1`.
 - Postgres: `17.6.1.127`, engine 17.
-- Live catalog snapshot captured 2026-07-28 from metadata only: 75 public tables/views, 191 foreign-key column relationships, 223 policies, 60 public functions, 83 triggers, 6 storage buckets, and 81 applied migration records.
-- Latest repository migration: `202607291400_company_appearance_default.sql`.
-- The migration is live under provider ledger version `20260728214456` with name `company_appearance_default`. The appearance pair (`202607291200_profile_appearance_sync.sql`, `202607291400_company_appearance_default.sql`) was applied 2026-07-29 and verified live: both `appearance_prefs` columns and size constraints exist, both RPCs are SECURITY DEFINER, and EXECUTE is granted to `authenticated` only (never `anon`/`PUBLIC`).
+- Live catalog snapshot captured 2026-07-29 from metadata only: 76 public tables/views, 194 foreign-key column relationships, 224 policies, 63 public functions, 91 triggers, 6 storage buckets, and 85 applied migration records.
+- Latest repository migration: `202607291730_record_history_workspace_fk_index.sql`.
+- The latest live provider ledger entry is `20260728223037_record_history_workspace_fk_index`. The appearance pair (`202607291200_profile_appearance_sync.sql`, `202607291400_company_appearance_default.sql`) and recoverable-history pair (`20260728221620_record_history_and_recent_delete_undo.sql`, `202607291730_record_history_workspace_fk_index.sql`) are applied.
+- Live verification confirmed the `record_history` table, SELECT-only authenticated grant, workspace/permission RLS, all four source triggers, fixed-search-path functions, and the workspace foreign-key index. A rollback-only database smoke test passed created, updated, deleted, and restored capture without leaving test data.
 - The `send-company-invite` Edge Function is live and active as version 3. It manually validates the caller JWT, requires an active Owner, Admin, or Developer membership in the invite's company, and sends matching HTML and plain-text invite content.
 - The `report-problem` Edge Function is live and active as version 7. It manually validates the caller JWT before accepting a report.
 - Both functions use built-in Questbase production origins plus optional configured origins. Live preflight from `https://www.questbase.io` returned an exact matching allow-origin header; an unrelated origin received no allow-origin header.
@@ -78,6 +79,7 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Accent-tinted chrome derives from the `--orange` token throughout, so the accent picker recolours hovers, active rows, focus rings, and primary-button hover states. Guarded by tests/accent-theme-static.test.mjs.
 - Archived companies (subscription status `canceled`) are hidden from the company switcher, company pickers, and both platform company lists; the lists expose search, a status filter including Archived, and 25-per-page navigation (src/platform-directory.js, unit tested).
 - Contacts, Jobs, Quotes, and Underwriter forms protect unfinished work with browser-local autosave, explicit Restore or Discard recovery, seven-day expiry, and profile/company/workspace/record scoping. Sensitive credential-like fields and files are excluded, drafts survive failed saves, successful saves clear them, and sign-out purges the departing profile's drafts. This recovery is browser-local by design and does not require a database migration.
+- Saved Contacts, Quotes, Jobs, and Tasks now write created, updated, deleted, and restored events to a shared append-only, workspace-scoped history ledger. Contact, Quote, and Job forms expose history on demand; tracked values use a strict business-field allowlist that excludes contact details, addresses, notes, and descriptions. A single safe delete offers immediate same-actor Undo, while the existing 30-day Recycle Bin remains the durable restore path.
 
 ## Remaining controlled launch configuration
 

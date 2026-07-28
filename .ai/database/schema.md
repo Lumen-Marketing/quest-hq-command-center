@@ -1,6 +1,6 @@
 # Public schema catalog
 
-Captured 2026-07-27T19:13:43.004Z from the live Supabase catalog. Nullable columns end in `?`.
+Captured 2026-07-28T22:31:54.000Z from the live Supabase catalog. Nullable columns end in `?`.
 
 ## public.accounts
 
@@ -96,7 +96,7 @@ Captured 2026-07-27T19:13:43.004Z from the live Supabase catalog. Nullable colum
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `name` text; `short_name` text; `color` text?; `created_at` timestamptz; `label` text?; `pill` text?; `icon_key` text; `icon_image` text
+- Columns: `id` text; `name` text; `short_name` text; `color` text?; `created_at` timestamptz; `label` text?; `pill` text?; `icon_key` text; `icon_image` text; `appearance_prefs` jsonb
 
 ## public.company_invites
 
@@ -276,7 +276,7 @@ Captured 2026-07-27T19:13:43.004Z from the live Supabase catalog. Nullable colum
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` uuid; `email` text; `full_name` text?; `approved` bool; `role` text; `email_verified` bool; `member_id` text?; `supervisor_id` text?; `company_ids` _text; `avatar_url` text?; `onboarded` bool; `created_at` timestamptz; `updated_at` timestamptz; `position` text?
+- Columns: `id` uuid; `email` text; `full_name` text?; `approved` bool; `role` text; `email_verified` bool; `member_id` text?; `supervisor_id` text?; `company_ids` _text; `avatar_url` text?; `onboarded` bool; `created_at` timestamptz; `updated_at` timestamptz; `position` text?; `appearance_prefs` jsonb
 
 ## public.projects
 
@@ -295,6 +295,12 @@ Captured 2026-07-27T19:13:43.004Z from the live Supabase catalog. Nullable colum
 - RLS: enabled
 - Primary key: id
 - Columns: `id` text; `company_id` text; `source_type` text; `source_table` text; `source_id` text; `item_label` text; `status` text; `deleted_by` uuid?; `deleted_by_label` text; `deleted_at` timestamptz; `restore_until` timestamptz; `restored_at` timestamptz?; `restored_by` uuid?; `snapshot` jsonb; `created_at` timestamptz; `updated_at` timestamptz
+
+## public.record_history
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id` uuid; `company_id` text; `workspace_id` uuid; `record_type` text; `record_id` text; `record_label` text; `action` text; `actor_profile_id` uuid?; `changed_fields` _text; `changes` jsonb; `created_at` timestamptz
 
 ## public.reminder_log
 

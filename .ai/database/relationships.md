@@ -1,6 +1,6 @@
 # Public relationships
 
-Captured 2026-07-27T19:13:43.004Z. Composite foreign keys appear as one row per paired column.
+Captured 2026-07-28T22:31:54.000Z. Composite foreign keys appear as one row per paired column.
 
 | Constraint | From | To | Update | Delete |
 | --- | --- | --- | --- | --- |
@@ -145,6 +145,9 @@ Captured 2026-07-27T19:13:43.004Z. Composite foreign keys appear as one row per 
 | proposal_documents_company_id_fkey | `proposal_documents.company_id` | `companies.id` | NO ACTION | CASCADE |
 | proposal_documents_deleted_by_fkey | `proposal_documents.deleted_by` | `profiles.id` | NO ACTION | SET NULL |
 | proposal_documents_workspace_id_fkey | `proposal_documents.workspace_id` | `workspaces.id` | NO ACTION | RESTRICT |
+| record_history_actor_profile_id_fkey | `record_history.actor_profile_id` | `profiles.id` | NO ACTION | SET NULL |
+| record_history_company_id_fkey | `record_history.company_id` | `companies.id` | NO ACTION | CASCADE |
+| record_history_workspace_id_fkey | `record_history.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
 | recycle_bin_items_company_id_fkey | `recycle_bin_items.company_id` | `companies.id` | NO ACTION | CASCADE |
 | recycle_bin_items_deleted_by_fkey | `recycle_bin_items.deleted_by` | `profiles.id` | NO ACTION | SET NULL |
 | recycle_bin_items_restored_by_fkey | `recycle_bin_items.restored_by` | `profiles.id` | NO ACTION | SET NULL |

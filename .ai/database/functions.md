@@ -1,6 +1,6 @@
 # Public functions
 
-Captured 2026-07-27T19:13:43.004Z. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
+Captured 2026-07-28T22:31:54.000Z. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
 
 | Function | Returns | Definer | anon | authenticated | service_role |
 | --- | --- | --- | --- | --- | --- |
@@ -42,6 +42,7 @@ Captured 2026-07-27T19:13:43.004Z. Execute grants are catalog facts; SECURITY DE
 | `recycle_move_item(p_item jsonb)` | recycle_bin_items | yes | no | yes | yes |
 | `recycle_permanently_delete_item(p_item_id text)` | boolean | yes | no | yes | yes |
 | `recycle_restore_item(p_item_id text)` | recycle_bin_items | yes | no | yes | yes |
+| `recycle_undo_item(p_item_id text)` | recycle_bin_items | yes | no | yes | yes |
 | `refresh_job_file_count(target_job_id uuid)` | void | no | yes | yes | yes |
 | `replace_pipeline_stages(p_company_id text, p_kind text, p_stages jsonb, p_rename_map jsonb)` | SETOF pipeline_stages | yes | no | yes | yes |
 | `replace_workspace_pipeline_stages(p_workspace_id uuid, p_kind text, p_stages jsonb, p_rename_map jsonb)` | SETOF pipeline_stages | yes | no | yes | yes |
@@ -58,9 +59,11 @@ Captured 2026-07-27T19:13:43.004Z. Execute grants are catalog facts; SECURITY DE
 | `slugify_member_id(input text)` | text | no | no | no | yes |
 | `sync_team_member_from_profile()` | trigger | yes | no | no | yes |
 | `update_company_member_access(target_company_id text, target_profile_id uuid, target_role text, target_role_id uuid, target_status text)` | company_memberships | no | no | yes | yes |
+| `update_company_appearance(target_company_id text, p_prefs jsonb)` | companies | yes | no | yes | yes |
 | `update_company_workspace(target_company_id text, workspace_name text, icon_key text)` | text | yes | no | yes | yes |
 | `update_company_workspace(target_company_id text, workspace_name text, icon_key text, icon_image text)` | text | yes | no | yes | yes |
 | `update_operational_workspace(target_workspace_id uuid, workspace_name text, workspace_description text, icon_key text, next_status text)` | workspaces | yes | no | yes | yes |
+| `update_own_appearance(p_prefs jsonb)` | profiles | yes | no | yes | yes |
 | `update_own_profile(p_full_name text, p_avatar_url text)` | profiles | yes | no | yes | yes |
 | `wb_add_item_comment(p_company_id text, p_workspace_id text, p_app_id text, p_item_id text, p_comment jsonb)` | jsonb | yes | no | yes | yes |
 | `wb_modify_item_comment(p_company_id text, p_workspace_id text, p_app_id text, p_item_id text, p_comment_id text, p_action text, p_text text)` | jsonb | yes | no | yes | yes |
@@ -70,5 +73,5 @@ Captured 2026-07-27T19:13:43.004Z. Execute grants are catalog facts; SECURITY DE
 | Function | Version | Gateway JWT | Authorization model |
 | --- | ---: | --- | --- |
 | notify-email | 6 | required | Gateway JWT plus management-role and tenant-recipient checks |
-| report-problem | 6 | manual | Caller JWT verified server-side; approved users only |
-| send-company-invite | 2 | manual | Caller JWT verified server-side; active company Owner/Admin/Developer only |
+| report-problem | 7 | manual | Caller JWT verified server-side; approved users only |
+| send-company-invite | 3 | manual | Caller JWT verified server-side; active company Owner/Admin/Developer only |

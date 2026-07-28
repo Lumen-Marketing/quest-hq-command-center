@@ -10,6 +10,8 @@ TaskManagement remains the vendored work-execution engine and the default task s
 
 Questbase also keeps same-browser recovery copies for unsaved Contact, Job, Quote, and Underwriter forms. These copies protect interrupted typing only; successful form submissions still write through the existing Supabase paths and remain the shared business record.
 
+Saved Contacts, Quotes, Jobs, and Tasks have a separate shared record-history ledger. It records who changed whitelisted business fields and preserves delete/restore events within the record's workspace permissions; it never turns the browser-local draft cache into shared company data.
+
 ## Live product areas
 
 | Group | Modules |

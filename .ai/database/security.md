@@ -1,6 +1,6 @@
 # Database security catalog
 
-Captured 2026-07-27T19:13:43.004Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
+Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
 
 ## RLS coverage
 
@@ -55,6 +55,7 @@ Captured 2026-07-27T19:13:43.004Z. Policy expressions are intentionally omitted 
 | projects | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | proposal_documents | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | recycle_bin_items | enabled | 1 | ALL |
+| record_history | enabled | 1 | SELECT |
 | reminder_log | enabled | 0 | ? |
 | resource_acl | enabled | 2 | ALL, SELECT |
 | ringcentral_accounts | enabled | 1 | SELECT |
@@ -246,6 +247,7 @@ Captured 2026-07-27T19:13:43.004Z. Policy expressions are intentionally omitted 
 | proposal_documents | proposal_documents workspace read | {authenticated} | SELECT | PERMISSIVE |
 | proposal_documents | proposal_documents workspace update | {authenticated} | UPDATE | PERMISSIVE |
 | recycle_bin_items | admins manage recycle bin | {authenticated} | ALL | PERMISSIVE |
+| record_history | record history workspace read | {authenticated} | SELECT | PERMISSIVE |
 | resource_acl | admins manage resource acl | {authenticated} | ALL | PERMISSIVE |
 | resource_acl | members read resource acl | {authenticated} | SELECT | PERMISSIVE |
 | ringcentral_accounts | company admins read accounts | {authenticated} | SELECT | PERMISSIVE |
@@ -313,3 +315,9 @@ Captured 2026-07-27T19:13:43.004Z. Policy expressions are intentionally omitted 
 ## Invite acceptance advisory
 
 Supabase's linter reports `accept_company_invite(text)` because it is an authenticated SECURITY DEFINER RPC. This exposure is intentional: a signed-in invite recipient must call it. The routine fixes `search_path`, validates `auth.uid()`, token status/expiry, exact profile email, current membership state, tenant-scoped role/workspace ids, and grants no elevated invite role. Public and anon execution are revoked.
+
+The same generic advisor also reports `recycle_undo_item(text)`. Authenticated execution is
+intentional and narrowly bounded: the routine fixes `search_path`, requires the current user
+to be the deleting actor, enforces the ten-minute Undo and 30-day restore windows, resolves
+the source table from a server allowlist, re-checks current company/workspace permission, and
+restores the source plus recycle ledger atomically. Public and anonymous execution are revoked.

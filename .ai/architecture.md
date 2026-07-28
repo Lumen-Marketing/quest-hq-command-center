@@ -15,6 +15,7 @@ The app uses:
 - Lazy-loaded Leaflet and PDF.js; JSZip is used for archive/export behavior.
 - Lazy-loaded pilot-readiness, support-reporting, and help-index modules keep first-run and support behavior outside the primary browser bundle until needed.
 - A lazy-loaded local form-draft engine protects unsaved Contact, Job, Quote, and Underwriter input without adding those recovery copies to the primary browser bundle.
+- A lazy-loaded record-history presenter reads the workspace-scoped `record_history` ledger only when a Contact, Quote, or Job history dialog is opened.
 - A vendored TaskManagement runtime copied into the production bundle during build, now surfaced in-shell as the Tasks module via a same-origin `<iframe>` (see the X-Frame-Options and service-worker decisions) rather than a separate app the user is handed off to.
 
 ## Request and data flow
@@ -53,6 +54,7 @@ The SPA supports:
 | First-run launch checklist | [src/launch/pilot-readiness.js](../src/launch/pilot-readiness.js) |
 | In-product support reporting | [src/support/reporting.js](../src/support/reporting.js) |
 | Same-browser operational form recovery | [src/drafts/form-drafts.js](../src/drafts/form-drafts.js) |
+| Shared business-record history presentation | [src/history/record-history.js](../src/history/record-history.js) |
 | Serverless API handlers | [api](../api) |
 | Supabase Edge Functions | [supabase/functions](../supabase/functions) |
 | RingCentral access (token exchange, paging, normalisation) | [api/_lib/ringcentral.js](../api/_lib/ringcentral.js) |
@@ -83,6 +85,7 @@ The SPA supports:
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-workspace, per-contact records protected by Underwriter permissions and workspace RLS.
 - Local form drafts are recovery copies, not business records. Their storage keys include profile, company, operational workspace, form type, and record id; they expire after seven days, exclude sensitive/file fields, clear after a successful real save or explicit discard, and purge for the signing-out profile.
+- Shared record history is append-only and workspace-scoped. Database triggers capture only whitelisted business fields for Contacts, Quotes, Jobs, and Tasks; readers still require current workspace membership plus the module's view permission. Immediate Undo is same-actor, time-limited, source-allowlisted, and server-authorized, while the 30-day Recycle Bin remains the durable recovery path.
 - RingCentral data is company-scoped and carries no `workspace_id`: a phone account belongs to the whole company and its calls do not belong to any single operational workspace. All `ringcentral_*` tables are service-role write only; every browser-facing policy is select. Non-admin members are matched to their own calls by `auth.jwt() ->> 'email'`, so no extension-to-member mapping table exists.
 - RingCentral credentials live only in Vercel environment variables. `ringcentral_accounts.credential_key` names the variable; the JWT itself is never stored in Postgres and never reaches the browser.
 

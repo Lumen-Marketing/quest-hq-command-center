@@ -1,17 +1,17 @@
 # Database overview
 
-The live Supabase public catalog was captured 2026-07-27T19:13:43.004Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
+The live Supabase public catalog was captured 2026-07-28T22:31:54.000Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
 
 ## Catalog summary
 
-- Public tables/views: 75
-- Foreign-key column relationships: 191
-- RLS policies: 223
-- Public functions: 60
-- Triggers: 83
+- Public tables/views: 76
+- Foreign-key column relationships: 194
+- RLS policies: 224
+- Public functions: 63
+- Triggers: 91
 - Storage buckets: 6
-- Applied migration ledger entries: 81
-- Latest live ledger entry: `20260727190835_company_invite_launch_hardening`
+- Applied migration ledger entries: 85
+- Latest live ledger entry: `20260728223037_record_history_workspace_fk_index`
 
 ## Launch-critical onboarding state
 
@@ -28,6 +28,22 @@ keyed on `auth.uid()` — which whitelists and coerces every field, so a tampere
 payload cannot store arbitrary data. A `pg_column_size(appearance_prefs) <= 2048` check
 constraint keeps the column from being used as a blob store; uploaded background images are
 deliberately not stored here. Added in `202607291200_profile_appearance_sync.sql`.
+
+`companies.appearance_prefs` carries a company default through the separately authorized
+`update_company_appearance(text, jsonb)` RPC. A member's saved preference wins; otherwise the
+company default is inherited.
+
+## Recoverable business-record history
+
+`record_history` is an append-only, workspace-scoped history ledger for Contacts, Quotes,
+Jobs, and Tasks. Database triggers capture created, updated, deleted, and restored events
+using a strict field allowlist that excludes phone, email, address, notes, and descriptions.
+Signed-in users can only read history when they belong to the matching active workspace and
+hold the module's view permission.
+
+The existing 30-day Recycle Bin remains the durable recovery path. `recycle_undo_item(text)`
+adds a narrower immediate Undo path that is limited to the deleting user, ten minutes,
+the original tenant/workspace, and the source module's current permission check.
 
 ## Maps
 

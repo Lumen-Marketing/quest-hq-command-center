@@ -6,6 +6,10 @@ const migrations = readdirSync(new URL('../supabase/migrations/', import.meta.ur
 const migrationName = migrations.find((name) => /record_history_and_recent_delete_undo/.test(name));
 const migrationUrl = new URL(`../supabase/migrations/${migrationName || 'missing.sql'}`, import.meta.url);
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';
+const recordHistoryMigrations = migrations
+  .filter((name) => /record_history/.test(name))
+  .map((name) => readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'))
+  .join('\n');
 const undoFunction = migration.match(/create or replace function public\.recycle_undo_item[\s\S]*?\$\$;/i)?.[0] || '';
 const captureFunction = migration.match(/create or replace function app_private\.capture_record_history[\s\S]*?\$\$;/i)?.[0] || '';
 
@@ -26,6 +30,13 @@ test('creates an append-only workspace-scoped record history ledger', () => {
   assert.match(migration, /revoke all on table public\.record_history from public, anon, authenticated/i);
   assert.match(migration, /grant select on table public\.record_history to authenticated/i);
   assert.doesNotMatch(migration, /grant\s+(?:insert|update|delete|all)[^;]*record_history[^;]*authenticated/i);
+});
+
+test('record history has a covering workspace foreign-key index', () => {
+  assert.match(
+    recordHistoryMigrations,
+    /create index if not exists record_history_workspace_idx\s+on public\.record_history\s*\(\s*workspace_id\s*\)/i,
+  );
 });
 
 test('history read policy requires membership and the matching workspace view permission', () => {

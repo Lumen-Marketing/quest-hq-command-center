@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "captured_at": "2026-07-27T19:13:43.004Z",
+  "captured_at": "2026-07-28T22:31:54.000Z",
   "scope": "Catalog metadata only. Contains no production table rows, auth user records, object paths, or credentials.",
   "source": {
     "project_ref": "rqundirizvojpzhljtdn",
@@ -1614,6 +1614,14 @@
           "position": 9,
           "udt_name": "text",
           "data_type": "text"
+        },
+        {
+          "name": "appearance_prefs",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 10,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
         }
       ],
       "primary_key": [
@@ -5053,6 +5061,14 @@
           "position": 14,
           "udt_name": "text",
           "data_type": "text"
+        },
+        {
+          "name": "appearance_prefs",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 15,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
         }
       ],
       "primary_key": [
@@ -5385,6 +5401,104 @@
           "position": 27,
           "udt_name": "uuid",
           "data_type": "uuid"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "rls_enabled": true
+    },
+    {
+      "name": "record_history",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "default": "gen_random_uuid()",
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "company_id",
+          "default": null,
+          "nullable": false,
+          "position": 2,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 3,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "record_type",
+          "default": null,
+          "nullable": false,
+          "position": 4,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "record_id",
+          "default": null,
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "record_label",
+          "default": "''::text",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "action",
+          "default": null,
+          "nullable": false,
+          "position": 7,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "actor_profile_id",
+          "default": null,
+          "nullable": true,
+          "position": 8,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "changed_fields",
+          "default": "'{}'::text[]",
+          "nullable": false,
+          "position": 9,
+          "udt_name": "_text",
+          "data_type": "ARRAY"
+        },
+        {
+          "name": "changes",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 10,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 11,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
         }
       ],
       "primary_key": [
@@ -9124,6 +9238,33 @@
       "update_rule": "NO ACTION"
     },
     {
+      "name": "record_history_actor_profile_id_fkey",
+      "to_table": "profiles",
+      "to_column": "id",
+      "from_table": "record_history",
+      "delete_rule": "SET NULL",
+      "from_column": "actor_profile_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "record_history_company_id_fkey",
+      "to_table": "companies",
+      "to_column": "id",
+      "from_table": "record_history",
+      "delete_rule": "CASCADE",
+      "from_column": "company_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "record_history_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "record_history",
+      "delete_rule": "CASCADE",
+      "from_column": "workspace_id",
+      "update_rule": "NO ACTION"
+    },
+    {
       "name": "recycle_bin_items_company_id_fkey",
       "to_table": "companies",
       "to_column": "id",
@@ -10689,6 +10830,13 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "record history workspace read",
+      "roles": "{authenticated}",
+      "table": "record_history",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "admins manage recycle bin",
       "roles": "{authenticated}",
       "table": "recycle_bin_items",
@@ -11519,6 +11667,16 @@
       "authenticated_execute": true
     },
     {
+      "name": "recycle_undo_item",
+      "returns": "recycle_bin_items",
+      "arguments": "p_item_id text",
+      "volatility": "v",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
       "name": "refresh_job_file_count",
       "returns": "void",
       "arguments": "target_job_id uuid",
@@ -11669,6 +11827,16 @@
       "authenticated_execute": false
     },
     {
+      "name": "update_company_appearance",
+      "returns": "companies",
+      "arguments": "target_company_id text, p_prefs jsonb",
+      "volatility": "v",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
       "name": "update_company_member_access",
       "returns": "company_memberships",
       "arguments": "target_company_id text, target_profile_id uuid, target_role text, target_role_id uuid, target_status text",
@@ -11702,6 +11870,16 @@
       "name": "update_operational_workspace",
       "returns": "workspaces",
       "arguments": "target_workspace_id uuid, workspace_name text, workspace_description text, icon_key text, next_status text",
+      "volatility": "v",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
+      "name": "update_own_appearance",
+      "returns": "profiles",
+      "arguments": "p_prefs jsonb",
       "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
@@ -11895,6 +12073,20 @@
       "orientation": "ROW"
     },
     {
+      "name": "contacts_capture_record_history",
+      "event": "INSERT",
+      "table": "contacts",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "contacts_capture_record_history",
+      "event": "UPDATE",
+      "table": "contacts",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
       "name": "contacts_set_updated_at",
       "event": "UPDATE",
       "table": "contacts",
@@ -11947,6 +12139,20 @@
       "name": "workspace_record_links_match",
       "event": "UPDATE",
       "table": "crm_sites",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "deals_capture_record_history",
+      "event": "INSERT",
+      "table": "deals",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "deals_capture_record_history",
+      "event": "UPDATE",
+      "table": "deals",
       "timing": "AFTER",
       "orientation": "ROW"
     },
@@ -12038,6 +12244,20 @@
       "name": "workspace_record_links_match",
       "event": "UPDATE",
       "table": "job_files",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "jobs_capture_record_history",
+      "event": "INSERT",
+      "table": "jobs",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "jobs_capture_record_history",
+      "event": "UPDATE",
+      "table": "jobs",
       "timing": "AFTER",
       "orientation": "ROW"
     },
@@ -12207,6 +12427,20 @@
       "event": "UPDATE",
       "table": "tasks",
       "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "tasks_capture_record_history",
+      "event": "INSERT",
+      "table": "tasks",
+      "timing": "AFTER",
+      "orientation": "ROW"
+    },
+    {
+      "name": "tasks_capture_record_history",
+      "event": "UPDATE",
+      "table": "tasks",
+      "timing": "AFTER",
       "orientation": "ROW"
     },
     {
@@ -12767,6 +13001,22 @@
     {
       "version": "20260727190835",
       "name": "company_invite_launch_hardening"
+    },
+    {
+      "version": "20260728214441",
+      "name": "profile_appearance_sync"
+    },
+    {
+      "version": "20260728214456",
+      "name": "company_appearance_default"
+    },
+    {
+      "version": "20260728222751",
+      "name": "record_history_and_recent_delete_undo"
+    },
+    {
+      "version": "20260728223037",
+      "name": "record_history_workspace_fk_index"
     }
   ]
 }
