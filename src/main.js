@@ -21775,8 +21775,18 @@ function renderToast() {
   if (!state.toast) return '';
   return `
     <div class="app-toast ${h(state.toast.mode || 'local')}" role="status" aria-live="polite">
-      <strong>${h(state.toast.title || 'Quest HQ')}</strong>
-      <span>${h(state.toast.message || '')}</span>
+      <div class="app-toast-copy">
+        <strong>${h(state.toast.title || 'Quest HQ')}</strong>
+        <span>${h(state.toast.message || '')}</span>
+      </div>
+      ${state.toast.action ? `
+        <button
+          class="app-toast-action"
+          type="button"
+          data-action="${h(state.toast.action.action)}"
+          data-recycle-id="${h(state.toast.action.recycleId)}"
+        >${h(state.toast.action.label)}</button>
+      ` : ''}
     </div>
   `;
 }
@@ -21796,15 +21806,31 @@ function paintToast() {
   layer.innerHTML = state.toast ? renderToast() : '';
 }
 
-function showToast(message, mode = 'local', title = 'Not available yet') {
+function normalizeToastAction(input) {
+  if (!input || input.action !== 'undo-recycle-delete') return null;
+  const recycleId = String(input.recycleId || '').trim();
+  if (!recycleId) return null;
+  return {
+    action: 'undo-recycle-delete',
+    label: String(input.label || 'Undo').slice(0, 32),
+    recycleId,
+  };
+}
+
+function showToast(message, mode = 'local', title = 'Not available yet', options = {}) {
   if (state.toastTimer) clearTimeout(state.toastTimer);
-  state.toast = { title, message, mode };
+  const action = normalizeToastAction(options.action);
+  const requestedDuration = Number(options.duration);
+  const duration = Number.isFinite(requestedDuration)
+    ? Math.min(Math.max(requestedDuration, 1500), 15000)
+    : 4200;
+  state.toast = { title, message, mode, action };
   paintToast();
   state.toastTimer = setTimeout(() => {
     state.toast = null;
     state.toastTimer = null;
     paintToast();
-  }, 4200);
+  }, duration);
 }
 
 function renderModalShell(eyebrow, title, content, className = '', headerActions = '') {
@@ -23946,6 +23972,14 @@ function handleAction(event, node) {
   if (action === 'restore-recycle-item') {
     event.preventDefault();
     restoreRecycleBinItem(node.dataset.recycleId || '').catch((error) => showToast(error.message || 'Restore failed.', 'error', 'Recycle Bin'));
+    return;
+  }
+  if (action === 'undo-recycle-delete') {
+    event.preventDefault();
+    node.disabled = true;
+    undoRecycleDelete(node.dataset.recycleId || '')
+      .catch((error) => showToast(error.message || 'Undo failed.', 'error', 'Recycle Bin'))
+      .finally(() => { if (node.isConnected) node.disabled = false; });
     return;
   }
   if (action === 'open-permanent-delete-recycle-item') {
@@ -33533,6 +33567,7 @@ async function recycleDeleteRecord(config) {
   if (!typeConfig || !record) return false;
   if (typeConfig.permission && !requirePermission(typeConfig.permission, record.company_id, `Your role cannot delete this ${typeConfig.label.toLowerCase()}.`, typeConfig.label)) return false;
   const item = buildRecycleBinItem(record, config);
+  let deletedItem = item;
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
     const row = supabaseRow(item, RECYCLE_BIN_COLS);
@@ -33541,9 +33576,9 @@ async function recycleDeleteRecord(config) {
       notifySyncFailure(result.error, 'Delete');
       return false;
     }
-    upsertRecycleBinItemLocal(normalizeRecycleBinItem(result.data || item));
+    deletedItem = upsertRecycleBinItemLocal(normalizeRecycleBinItem(result.data || item));
   } else {
-    upsertRecycleBinItemLocal(item);
+    deletedItem = upsertRecycleBinItemLocal(item);
   }
   removeRecycleSourceLocal(typeConfig, record.id);
   persistAll();
@@ -33552,7 +33587,15 @@ async function recycleDeleteRecord(config) {
   if (config.options?.silent) return true;
   state.modal = '';
   state.recycleDeleteCtx = null;
-  showToast(`${typeConfig.label} moved to Recycle Bin.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
+  showToast(
+    `${typeConfig.label} moved to Recycle Bin.`,
+    isLiveSupabaseSession() ? 'live' : 'local',
+    'Recycle Bin',
+    {
+      duration: 10000,
+      action: { action: 'undo-recycle-delete', label: 'Undo', recycleId: deletedItem.id },
+    },
+  );
   const redirect = config.options?.stayOnPage ? '' : typeConfig.redirect?.(record.company_id);
   if (redirect) navigate(redirect, { replace: true });
   else render();
@@ -33577,6 +33620,40 @@ function recycleItemById(itemId) {
 
 function recycleDaysLeft(item) {
   return Math.ceil((Date.parse(item.restore_until || 0) - Date.now()) / 86400000);
+}
+
+async function undoRecycleDelete(itemId) {
+  const item = recycleItemById(itemId);
+  const typeConfig = recycleTypeConfig(item?.source_type);
+  if (!item || !typeConfig) {
+    showToast('This delete is no longer available to undo. Check the Recycle Bin.', 'error', 'Undo unavailable');
+    return false;
+  }
+
+  const now = new Date().toISOString();
+  let restoredItem = normalizeRecycleBinItem({
+    ...item,
+    status: 'restored',
+    restored_at: now,
+    restored_by: recycleActorId(),
+    updated_at: now,
+  });
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await client.rpc('recycle_undo_item', { p_item_id: item.id });
+    if (result.error) {
+      showToast(result.error.message || 'The record could not be restored.', 'error', 'Undo failed');
+      return false;
+    }
+    if (result.data) restoredItem = normalizeRecycleBinItem(result.data);
+  }
+
+  restoreRecycleSourceLocal(typeConfig, item.snapshot);
+  state.recycleBinItems = state.recycleBinItems.map((row) => (row.id === item.id ? restoredItem : row));
+  persistAll();
+  showToast(`${typeConfig.label} restored.`, isLiveSupabaseSession() ? 'live' : 'local', 'Undo complete');
+  render();
+  return true;
 }
 
 async function restoreRecycleBinItem(itemId) {

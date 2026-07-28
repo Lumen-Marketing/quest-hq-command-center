@@ -57,6 +57,30 @@ test('recycle helpers soft delete restore and permanently delete from recycle bi
   assert.match(source, /This permanently deletes the original record and cannot be undone/);
 });
 
+test('successful single deletes offer a delegated one-click undo action', () => {
+  assert.match(source, /function showToast\(message, mode = 'local', title = 'Not available yet', options = \{\}\)/);
+  assert.match(source, /state\.toast = \{ title, message, mode, action \}/);
+  assert.match(source, /data-action="\$\{h\(state\.toast\.action\.action\)\}"/);
+  assert.match(source, /data-recycle-id="\$\{h\(state\.toast\.action\.recycleId\)\}"/);
+  assert.match(source, /action === 'undo-recycle-delete'/);
+  assert.match(source, /undoRecycleDelete\(node\.dataset\.recycleId \|\| ''\)/);
+  assert.match(source, /class="app-toast-action"/);
+  assert.match(styles, /\.app-toast-action/);
+  assert.match(source, /duration: 10000/);
+  assert.match(source, /action: \{ action: 'undo-recycle-delete', label: 'Undo', recycleId: deletedItem\.id \}/);
+});
+
+test('undo restores through the actor-limited RPC without requiring recycle-bin administration', () => {
+  const undoStart = source.indexOf('async function undoRecycleDelete(itemId)');
+  const undoEnd = source.indexOf('async function restoreRecycleBinItem(itemId)', undoStart);
+  const undoBody = source.slice(undoStart, undoEnd);
+  assert.ok(undoStart >= 0 && undoEnd > undoStart, 'undo helper should be defined before admin restore');
+  assert.match(undoBody, /client\.rpc\('recycle_undo_item', \{ p_item_id: item\.id \}\)/);
+  assert.match(undoBody, /restoreRecycleSourceLocal\(typeConfig, item\.snapshot\)/);
+  assert.match(undoBody, /status: 'restored'/);
+  assert.doesNotMatch(undoBody, /requirePermission\('settings\.manage'/);
+});
+
 test('normal file deletes keep storage bytes until permanent delete', () => {
   assert.match(source, /async function softDeleteRecycleSource\(typeConfig, record, item\)/);
   assert.match(source, /typeConfig\.type === 'file'/);
