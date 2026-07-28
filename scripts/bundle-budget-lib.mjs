@@ -1,9 +1,15 @@
 export const DEFAULT_BUNDLE_LIMITS = Object.freeze({
   // Raised 340 -> 342 KB (2026-07) for the Appearance customization feature, then
   // 342 -> 344 KB after merging the native-Tasks/launch-hardening work and finishing the
-  // contacts filter rail. Conscious, measured bumps; the guard stays active. The durable
-  // fix is extracting slices of src/main.js into modules — prefer that before raising further.
-  entryJs: 344 * 1024,
+  // contacts filter rail, then 344 -> 346 KB for cross-device/company appearance sync and
+  // the company directory search+paging (measured 352277, 21 bytes over the old ceiling).
+  // Conscious, measured bumps; the guard stays active. The durable fix is extracting slices
+  // of src/main.js into modules — prefer that before raising further.
+  //
+  // Note: this ceiling is only meaningful because __QUEST_BUILD_SHA__ falls back to a
+  // high-entropy 40-char placeholder (vite.config.js). Before that, local builds embedded
+  // a short word, measured ~33 gzip bytes light, and passed here while failing the deploy.
+  entryJs: 346 * 1024,
   initialJs: 440 * 1024,
   entryCss: 120 * 1024,
 });
