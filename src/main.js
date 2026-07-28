@@ -2294,6 +2294,16 @@ const state = {
   companyInvites: [],
   joinRequests: [],
   auditEvents: [],
+  recordHistory: {
+    companyId: '',
+    workspaceId: '',
+    recordType: '',
+    recordId: '',
+    recordLabel: '',
+    loading: false,
+    error: '',
+    events: [],
+  },
   companyPlugins: [],
   operationalWorkspaces: [],
   workspaceMemberships: [],
@@ -2458,6 +2468,8 @@ let pipeDrag = null;
 let locationPickerMap = null;
 let locationPickerMarker = null;
 let formDraftManager = null;
+let recordHistoryModule = null;
+let recordHistoryModulePromise = null;
 const formDraftManagerReady = import('./drafts/form-drafts.js').then(({ createDraftStore, createFormDraftManager }) => {
   let storage = null;
   try {
@@ -9123,6 +9135,7 @@ function renderContactRecord(companyId, contact) {
         <div><div class="sf-record-label">Contact</div><div class="sf-record-name">${h(contact.name)}</div></div>
         <div class="sf-actions">
           ${workspaceTabs.map(([label, ico]) => `<button class="sf-btn ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
+          <button class="sf-btn" type="button" data-action="open-record-history" data-record-type="contact" data-record-id="${h(contact.id)}" data-record-label="${h(contact.name)}" data-company-id="${h(contact.company_id || companyId)}" data-workspace-id="${h(contact.workspace_id || activeWorkspaceId())}"><i class="ti ti-history"></i>History</button>
           <button class="sf-btn" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit</button>
         </div>
       </div>
@@ -11319,6 +11332,7 @@ function renderJobRecord(companyId, job) {
         <span class="sf-record-icon"><i class="ti ti-briefcase"></i></span>
         <div><div class="sf-record-label">Job</div><div class="sf-record-name">${h(job.name)}</div></div>
         <div class="sf-actions">
+          <button class="sf-btn" type="button" data-action="open-record-history" data-record-type="job" data-record-id="${h(job.id)}" data-record-label="${h(job.name)}" data-company-id="${h(job.company_id || companyId)}" data-workspace-id="${h(job.workspace_id || activeWorkspaceId())}"><i class="ti ti-history"></i>History</button>
           ${headerActions.map(([label, ico]) => label === 'Edit'
             ? `<button class="sf-btn" type="button" data-action="open-job-form" data-mode="edit" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`
             : label === 'Photos'
@@ -19606,6 +19620,7 @@ function renderDealDetail(companyId, deal) {
         <span class="sf-record-icon"><i class="ti ti-briefcase"></i></span>
         <div><div class="sf-record-label">Quote</div><div class="sf-record-name">${h(deal.name)}</div></div>
         <div class="sf-actions">
+          <button class="sf-btn" type="button" data-action="open-record-history" data-record-type="deal" data-record-id="${h(deal.id)}" data-record-label="${h(deal.name)}" data-company-id="${h(deal.company_id || companyId)}" data-workspace-id="${h(deal.workspace_id || activeWorkspaceId())}"><i class="ti ti-history"></i>History</button>
           ${headerActions.map(([label, ico]) => label === 'Edit'
             ? `<button class="sf-btn" type="button" data-action="open-deal-form" data-mode="edit" data-deal-id="${h(deal.id)}"><i class="ti ${ico}"></i>${label}</button>`
             : `<button class="sf-btn" type="button" data-action="deal-quick" data-kind="${h(label)}" data-deal-id="${h(deal.id)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
@@ -21680,6 +21695,7 @@ function renderOperationalWorkspaceEditModal(companyId) {
 
 function renderActiveModal(route, session) {
   if (state.builderModal) return renderWorkspaceBuilderModal();
+  if (state.modal === 'record-history') return renderRecordHistoryModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
   if (state.modal === 'contacts-dedupe') return renderContactsDedupeModal();
   if (state.modal === 'task-delete') return renderTaskDeleteModal();
@@ -21831,6 +21847,160 @@ function showToast(message, mode = 'local', title = 'Not available yet', options
     state.toastTimer = null;
     paintToast();
   }, duration);
+}
+
+function recordHistoryScopeKey(input = {}) {
+  return [input.companyId, input.workspaceId, input.recordType, input.recordId].map((value) => String(value || '')).join(':');
+}
+
+function loadRecordHistoryModel() {
+  if (!recordHistoryModulePromise) {
+    recordHistoryModulePromise = import('./history/record-history.js').then((module) => {
+      recordHistoryModule = module;
+      return module;
+    });
+  }
+  return recordHistoryModulePromise;
+}
+
+async function openRecordHistory(input = {}) {
+  const recordType = String(input.recordType || '');
+  const next = {
+    companyId: String(input.companyId || activeCompanyId()),
+    workspaceId: String(input.workspaceId || activeWorkspaceId()),
+    recordType: ['contact', 'deal', 'job', 'task'].includes(recordType) ? recordType : '',
+    recordId: String(input.recordId || ''),
+    recordLabel: String(input.recordLabel || ''),
+    loading: true,
+    error: '',
+    events: [],
+  };
+  if (!next.companyId || !next.workspaceId || !next.recordType || !next.recordId) {
+    showToast('This record is missing its workspace identity.', 'error', 'History unavailable');
+    return false;
+  }
+  state.recordHistory = next;
+  state.modal = 'record-history';
+  render();
+  try {
+    await loadRecordHistory(next);
+  } catch {
+    if (recordHistoryScopeKey(state.recordHistory) !== recordHistoryScopeKey(next)) return false;
+    state.recordHistory = {
+      ...state.recordHistory,
+      loading: false,
+      error: 'History could not be loaded. Please try again.',
+      events: [],
+    };
+    if (state.modal === 'record-history') render();
+  }
+  return true;
+}
+
+async function loadRecordHistory(input = state.recordHistory) {
+  await loadRecordHistoryModel();
+  const requestKey = recordHistoryScopeKey(input);
+  if (!isLiveSupabaseSession()) {
+    if (recordHistoryScopeKey(state.recordHistory) !== requestKey) return false;
+    state.recordHistory = { ...state.recordHistory, loading: false, error: '', events: [] };
+    if (state.modal === 'record-history') render();
+    return true;
+  }
+  const client = createSupabaseClient();
+  if (!client) throw new Error('History could not be loaded.');
+  const result = await client
+    .from('record_history')
+    .select('*')
+    .eq('company_id', input.companyId)
+    .eq('workspace_id', input.workspaceId)
+    .eq('record_type', input.recordType)
+    .eq('record_id', input.recordId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (recordHistoryScopeKey(state.recordHistory) !== requestKey) return false;
+  if (result.error) throw result.error;
+  state.recordHistory = {
+    ...state.recordHistory,
+    loading: false,
+    error: '',
+    events: recordHistoryModule.recordHistoryFor(result.data || [], input),
+  };
+  if (state.modal === 'record-history') render();
+  return true;
+}
+
+function recordHistoryActor(event) {
+  const profile = profileById(event.actor_profile_id);
+  if (profile?.full_name || profile?.email) return profile.full_name || profile.email;
+  return event.actor_profile_id ? 'Former member' : 'System';
+}
+
+function renderRecordHistoryEvent(event) {
+  const actor = recordHistoryActor(event);
+  const icon = {
+    created: 'ti-plus',
+    updated: 'ti-pencil',
+    deleted: 'ti-trash',
+    restored: 'ti-restore',
+  }[event.action] || 'ti-history';
+  const changes = event.changed_fields.map((field) => {
+    const change = event.changes?.[field];
+    if (!change || typeof change !== 'object') return '';
+    return `
+      <div class="record-history-change">
+        <strong>${h(recordHistoryModule.historyFieldLabel(event.record_type, field))}</strong>
+        <span>${h(recordHistoryModule.formatHistoryValue(change.before))}</span>
+        <i class="ti ti-arrow-right" aria-hidden="true"></i>
+        <span>${h(recordHistoryModule.formatHistoryValue(change.after))}</span>
+      </div>
+    `;
+  }).join('');
+  return `
+    <article class="record-history-event ${h(event.action)}">
+      <span class="record-history-icon"><i class="ti ${h(icon)}"></i></span>
+      <div class="record-history-main">
+        <div class="record-history-summary">
+          <strong>${h(recordHistoryModule.describeRecordHistoryEvent(event))}</strong>
+          <time datetime="${h(event.created_at)}">${h(formatDateTime(event.created_at))}</time>
+        </div>
+        <div class="record-history-actor">${renderAvatar({ full_name: actor }, 'avatar small')}<span>${h(actor)}</span></div>
+        ${changes ? `<div class="record-history-changes">${changes}</div>` : ''}
+      </div>
+    </article>
+  `;
+}
+
+function renderRecordHistoryModal() {
+  const history = state.recordHistory;
+  let content = '';
+  if (history.loading) {
+    content = '<div class="record-history-state" role="status"><i class="ti ti-loader-2 spin"></i><strong>Loading history...</strong></div>';
+  } else if (history.error) {
+    content = `
+      <div class="record-history-state error">
+        <i class="ti ti-alert-circle"></i>
+        <strong>History could not be loaded</strong>
+        <p>${h(history.error)}</p>
+        <button class="btn" type="button" data-action="open-record-history" data-record-type="${h(history.recordType)}" data-record-id="${h(history.recordId)}" data-record-label="${h(history.recordLabel)}" data-company-id="${h(history.companyId)}" data-workspace-id="${h(history.workspaceId)}">Try again</button>
+      </div>
+    `;
+  } else if (!history.events.length) {
+    content = `
+      <div class="record-history-state">
+        <i class="ti ti-history"></i>
+        <strong>No recorded changes yet</strong>
+        <p>${isLiveSupabaseSession() ? 'New changes to this record will appear here.' : 'History is available for records in a live workspace.'}</p>
+      </div>
+    `;
+  } else {
+    content = `<div class="record-history-list">${history.events.map(renderRecordHistoryEvent).join('')}</div>`;
+  }
+  return renderModalShell(
+    'Record history',
+    history.recordLabel || `${titleCase(history.recordType)} history`,
+    content,
+    'record-history-modal',
+  );
 }
 
 function renderModalShell(eyebrow, title, content, className = '', headerActions = '') {
@@ -23837,6 +24007,17 @@ function handleAction(event, node) {
   if (action === 'restore-form-draft' || action === 'discard-form-draft') {
     event.preventDefault();
     handleProtectedFormDraftAction(action, node);
+    return;
+  }
+  if (action === 'open-record-history') {
+    event.preventDefault();
+    openRecordHistory({
+      recordType: node.dataset.recordType,
+      recordId: node.dataset.recordId,
+      recordLabel: node.dataset.recordLabel,
+      companyId: node.dataset.companyId,
+      workspaceId: node.dataset.workspaceId,
+    }).catch((error) => showToast(error.message || 'History could not be loaded.', 'error', 'History'));
     return;
   }
   if (isReadOnlyDemo() && isMutableAction(action)) {

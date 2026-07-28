@@ -26353,3 +26353,192 @@ html[data-card-style="glass"] .message-context-rail {
     flex: 1 1 0;
   }
 }
+
+/* ===== Record history ===== */
+.record-history-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 32px));
+}
+
+.record-history-modal .modal-body {
+  min-height: 240px;
+  overflow: auto;
+  padding: 0;
+}
+
+.record-history-list {
+  display: grid;
+}
+
+.record-history-event {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 18px;
+}
+
+.record-history-event:last-child {
+  border-bottom: 0;
+}
+
+.record-history-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  font-size: 17px;
+}
+
+.record-history-event.deleted .record-history-icon {
+  background: color-mix(in srgb, var(--red) 12%, var(--surface));
+  color: var(--red);
+}
+
+.record-history-event.restored .record-history-icon {
+  background: color-mix(in srgb, var(--green) 13%, var(--surface));
+  color: var(--green);
+}
+
+.record-history-main {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.record-history-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.record-history-summary strong {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 850;
+}
+
+.record-history-summary time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.record-history-actor {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.record-history-actor .avatar {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  font-size: 10px;
+}
+
+.record-history-changes {
+  display: grid;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.record-history-change {
+  display: grid;
+  grid-template-columns: minmax(110px, .75fr) minmax(90px, 1fr) auto minmax(90px, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  padding: 8px 10px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.record-history-change strong {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .035em;
+}
+
+.record-history-change span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-history-change i {
+  color: var(--muted);
+}
+
+.record-history-state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 240px;
+  padding: 30px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.record-history-state > i {
+  color: var(--accent);
+  font-size: 28px;
+}
+
+.record-history-state .spin {
+  animation: record-history-spin .9s linear infinite;
+}
+
+@keyframes record-history-spin {
+  to { transform: rotate(360deg); }
+}
+
+.record-history-state > strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.record-history-state p {
+  max-width: 420px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.record-history-state.error > i {
+  color: var(--red);
+}
+
+@media (max-width: 620px) {
+  .record-history-modal {
+    width: calc(100vw - 20px);
+  }
+
+  .record-history-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .record-history-change {
+    grid-template-columns: 1fr auto 1fr;
+  }
+
+  .record-history-change strong {
+    grid-column: 1 / -1;
+  }
+}
