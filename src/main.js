@@ -2267,6 +2267,8 @@ const state = {
   platformBackupCopies: [],
   platformBackupFilters: { company_id: 'all', status: 'all', kind: 'all', query: '' },
   // Archived companies are excluded by the default 'active' status filter.
+  directMessageQuery: '',
+  directMessageTargetId: '',
   platformCompanyFilters: { search: '', status: 'active', page: 0 },
   workspaceReviewFilters: { search: '', status: 'active', page: 0 },
   subscriptions: [],
@@ -20279,11 +20281,56 @@ function renderMessageWorkspaceMembersModal(companyId) {
   `, 'message-modal message-create-modal message-workspace-members-modal');
 }
 
+// Recipient is chosen by searching rather than scrolling a <select>: a company with
+// more than a handful of people makes the dropdown unusable, and the option label
+// alone ("RJ") is often not enough to tell two teammates apart.
+function directMessageCandidates(companyId) {
+  const me = activeSession().profile.id;
+  const users = companyAccessUsers(companyId).filter((user) => (user.profile_id || user.member_id) !== me);
+  const query = String(state.directMessageQuery || '').trim().toLowerCase();
+  if (!query) return { users, query, matches: users };
+  const terms = query.split(/\s+/).filter(Boolean);
+  const matches = users.filter((user) => {
+    const haystack = `${user.name || ''} ${user.email || ''} ${user.role_label || user.role || ''}`.toLowerCase();
+    return terms.every((term) => haystack.includes(term));
+  });
+  return { users, query, matches };
+}
+
 function renderDirectMessageModal(companyId) {
-  const users = companyAccessUsers(companyId).filter((user) => (user.profile_id || user.member_id) !== activeSession().profile.id);
+  const { query, matches } = directMessageCandidates(companyId);
+  const idOf = (user) => user.profile_id || user.member_id;
+  // Keep the pick only while it is still in the visible results, so the hidden field
+  // can never submit someone the user has since filtered away.
+  const selectedId = matches.some((user) => idOf(user) === state.directMessageTargetId)
+    ? state.directMessageTargetId
+    : (matches.length === 1 ? idOf(matches[0]) : '');
   return renderModalShell('Messages', 'New direct message', `
     <form class="message-modal-form" data-direct-message-form>
-      ${selectField('Person', 'profile_id', users[0]?.profile_id || users[0]?.member_id || '', users.map((user) => [user.profile_id || user.member_id, user.name]))}
+      <input type="hidden" name="profile_id" value="${h(selectedId)}" />
+      <label class="dm-person-field">
+        <span>Person</span>
+        <span class="dm-person-search">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input type="search" value="${h(query)}" placeholder="Search by name, email, or role"
+            data-direct-message-search aria-label="Search people" autocomplete="off" />
+        </span>
+      </label>
+      <div class="dm-person-results" role="listbox" aria-label="People">
+        ${matches.slice(0, 8).map((user) => `
+          <button class="dm-person ${idOf(user) === selectedId ? 'active' : ''}" type="button" role="option"
+            aria-selected="${idOf(user) === selectedId ? 'true' : 'false'}"
+            data-action="select-direct-message-person" data-profile-id="${h(idOf(user))}">
+            ${renderAvatar({ ...user, full_name: user.name }, 'avatar tiny')}
+            <span class="dm-person-copy">
+              <strong>${h(user.name || 'Teammate')}</strong>
+              <small>${h(user.email || user.role_label || user.role || '')}</small>
+            </span>
+            <i class="ti ti-check dm-person-check" aria-hidden="true"></i>
+          </button>
+        `).join('') || `<p class="dm-person-empty">No one matches "${h(query)}".</p>`}
+      </div>
+      ${matches.length > 8 ? `<p class="dm-person-more">${matches.length - 8} more — keep typing to narrow.</p>` : ''}
       <label><span>First message</span><textarea name="body" rows="3" placeholder="Start with a short note"></textarea></label>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">Start chat</button>
@@ -25142,7 +25189,16 @@ function handleAction(event, node) {
   if (action === 'new-direct-message') {
     event.preventDefault();
     if (!requirePermission('messages.send', activeCompanyId(), 'Your role cannot start direct messages.', 'Messages')) return;
+    // Fresh search each time the modal opens; a stale query would hide most people.
+    state.directMessageQuery = '';
+    state.directMessageTargetId = '';
     state.modal = 'message-direct-new';
+    render();
+    return;
+  }
+  if (action === 'select-direct-message-person') {
+    event.preventDefault();
+    state.directMessageTargetId = node.dataset.profileId || '';
     render();
     return;
   }
@@ -28998,6 +29054,11 @@ function onDocumentInput(event) {
     updateWorkspaceOnly();
     return;
   }
+  if (event.target.matches('[data-direct-message-search]')) {
+    state.directMessageQuery = event.target.value;
+    rerenderPreservingFocus('[data-direct-message-search]');
+    return;
+  }
   if (event.target.matches('[data-company-directory-search]')) {
     const scope = event.target.dataset.companyDirectorySearch;
     // Back to page 1: staying on page 3 of the old result set would show an empty
@@ -31605,6 +31666,21 @@ function updateWorkspaceOnly() {
   if (!workspace) return;
   reconcileSelection(state.route);
   workspace.innerHTML = renderWorkspace(state.route);
+}
+
+// Modals are rebuilt by the full render(), so the same focus/caret restore is needed
+// there as for the workspace-only path below.
+function rerenderPreservingFocus(selector) {
+  const before = document.querySelector(selector);
+  const start = before?.selectionStart ?? null;
+  const end = before?.selectionEnd ?? null;
+  render();
+  const after = document.querySelector(selector);
+  if (!after) return;
+  after.focus();
+  if (start != null && typeof after.setSelectionRange === 'function') {
+    try { after.setSelectionRange(start, end); } catch { /* control type has no caret */ }
+  }
 }
 
 // Replacing the workspace innerHTML drops focus, which would eject the user from a

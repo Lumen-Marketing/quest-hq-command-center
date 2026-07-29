@@ -9,7 +9,14 @@ export const DEFAULT_BUNDLE_LIMITS = Object.freeze({
   // Note: this ceiling is only meaningful because __QUEST_BUILD_SHA__ falls back to a
   // high-entropy 40-char placeholder (vite.config.js). Before that, local builds embedded
   // a short word, measured ~33 gzip bytes light, and passed here while failing the deploy.
-  entryJs: 346 * 1024,
+  // 346 -> 348 KB for the direct-message recipient search (measured 354581). This is
+  // the fourth bump. Raising it again should be treated as blocked: the next growth
+  // needs a real reduction, and the only thing that shrinks the ENTRY chunk is moving
+  // a slice behind a dynamic import (a statically imported module still gets bundled
+  // into the same chunk — see how the Help dialog and vendor-supabase are split).
+  // Admin-only surfaces (platform master panel, client-portal plan reviewer) are the
+  // obvious candidates.
+  entryJs: 348 * 1024,
   initialJs: 440 * 1024,
   entryCss: 120 * 1024,
 });
