@@ -33,7 +33,7 @@ Captured 2026-07-29T06:39:31+08:00. This is a point-in-time operational snapshot
 - Region: `us-west-1`.
 - Postgres: `17.6.1.127`, engine 17.
 - Live catalog snapshot captured 2026-07-29 from metadata only: 76 public tables/views, 194 foreign-key column relationships, 224 policies, 63 public functions, 91 triggers, 6 storage buckets, and 85 applied migration records.
-- Latest repository migration: `202607291730_record_history_workspace_fk_index.sql`.
+- Latest repository migration: `202607300900_message_conversation_icons.sql`.
 - The latest live provider ledger entry is `20260728223037_record_history_workspace_fk_index`. The appearance pair (`202607291200_profile_appearance_sync.sql`, `202607291400_company_appearance_default.sql`) and recoverable-history pair (`20260728221620_record_history_and_recent_delete_undo.sql`, `202607291730_record_history_workspace_fk_index.sql`) are applied.
 - Live verification confirmed the `record_history` table, SELECT-only authenticated grant, workspace/permission RLS, all four source triggers, fixed-search-path functions, and the workspace foreign-key index. A rollback-only database smoke test passed created, updated, deleted, and restored capture without leaving test data.
 - The `send-company-invite` Edge Function is live and active as version 3. It manually validates the caller JWT, requires an active Owner, Admin, or Developer membership in the invite's company, and sends matching HTML and plain-text invite content.

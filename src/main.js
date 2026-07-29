@@ -2270,6 +2270,7 @@ const state = {
   directMessageQuery: '',
   directMessageTargetId: '',
   rolePermissionQuery: '',
+  messageGroupIcon: { icon_key: '', icon_image: '' },
   platformCompanyFilters: { search: '', status: 'active', page: 0 },
   workspaceReviewFilters: { search: '', status: 'active', page: 0 },
   subscriptions: [],
@@ -20015,16 +20016,43 @@ function renderEmptyChatList() {
   `;
 }
 
+// A direct chat is identified by the person on the other side, not by whoever sent
+// the newest message — which is usually you, so the row showed your own face.
+function conversationCounterpartProfileId(conversation) {
+  if (!conversation || conversation.type !== 'direct') return '';
+  const me = activeSession().profile.id;
+  return conversationAccessRows(conversation.id)
+    .filter((row) => row.target_type === 'profile')
+    .map((row) => row.target_id)
+    .find((profileId) => profileId !== me) || '';
+}
+
+// Groups show their own icon (built-in or uploaded); direct chats show the other
+// person; anything else falls back to the conversation title's initials.
+function renderConversationIcon(conversation, className) {
+  if (conversation.type !== 'direct' && (conversation.icon_image || conversation.icon_key)) {
+    return workspaceIconMarkup({
+      icon_key: conversation.icon_key,
+      icon_image: conversation.icon_image,
+      color: '#f0b23b',
+    }, className);
+  }
+  const counterpartId = conversationCounterpartProfileId(conversation);
+  if (counterpartId) return renderAvatar(messageSenderProfile(counterpartId), `avatar ${className}`);
+  const last = conversationMessages(conversation.id).at(-1);
+  const sender = last ? messageSenderProfile(last.sender_profile_id) : null;
+  return renderAvatar(sender || { full_name: conversation.title }, `avatar ${className}`);
+}
+
 function renderConversationRow(conversation, companyId, active) {
   const last = conversationMessages(conversation.id).at(-1);
   const unread = conversationUnreadCount(conversation.id);
-  const sender = last ? messageSenderProfile(last.sender_profile_id) : null;
   const attachments = conversationAttachments(conversation.id).length;
   const initials = messageWorkspaceInitials(conversation, companyId);
   return `
     <a class="conversation-row ${active ? 'active' : ''}" href="${appHref(companyPath('messages', { conversation: conversation.id }, companyId))}" data-router>
       <span class="conversation-unread-dot ${unread ? 'active' : ''}"></span>
-      ${renderAvatar(sender || { full_name: conversation.title }, 'avatar conversation-avatar')}
+      ${renderConversationIcon(conversation, 'conversation-avatar')}
       <span class="message-workspace-chip">${h(initials)}</span>
       <span class="conversation-copy">
         <strong>${h(conversation.title)}</strong>
@@ -20046,7 +20074,10 @@ function renderMessageThread(companyId, conversation) {
     <div class="thread-head">
       <a class="btn mobile-thread-back" href="${appHref(companyPath('messages', {}, companyId))}" data-router><i class="ti ti-arrow-left"></i>Chats</a>
       <div class="thread-title">
-        <span>${svgIcon(messageTypeSymbol(conversation.type))}</span>
+        ${conversation.type !== 'direct' && (conversation.icon_image || conversation.icon_key)
+          || conversationCounterpartProfileId(conversation)
+          ? renderConversationIcon(conversation, 'thread-title-icon')
+          : `<span>${svgIcon(messageTypeSymbol(conversation.type))}</span>`}
         <div>
           <h2>${h(conversation.title)}</h2>
           <p>${h(accessSummary(conversation))}</p>
@@ -20298,6 +20329,7 @@ function renderMessageGroupModal(companyId) {
           <input name="title" placeholder="e.g. Roof crew - Maple St." />
         </label>
         <input type="hidden" name="type" value="custom" />
+        ${renderMessageGroupIconControl()}
         ${renderMessagePeoplePicker(teammates, [])}
         <details class="message-role-disclosure">
           <summary data-message-role-toggle>Adding a whole team? Pick by role instead <i class="ti ti-chevron-down"></i></summary>
@@ -20311,6 +20343,65 @@ function renderMessageGroupModal(companyId) {
       </form>
     </div>
   `, 'message-modal message-create-modal');
+}
+
+// Group chat icon: a built-in glyph or an uploaded image, reusing the same option set
+// and the same compress-to-192px pipeline as workspace icons so there is one place
+// that decides what a stored icon may be.
+function messageGroupIconDraft() {
+  const draft = state.messageGroupIcon || {};
+  return {
+    icon_key: WORKSPACE_ICON_OPTIONS.some((item) => item.key === draft.icon_key) ? draft.icon_key : '',
+    icon_image: sanitizeWorkspaceIconImage(draft.icon_image),
+  };
+}
+
+function renderMessageGroupIconControl() {
+  const draft = messageGroupIconDraft();
+  const hasImage = !!draft.icon_image;
+  return `
+    <input type="hidden" name="icon_key" value="${h(draft.icon_key)}" />
+    <input type="hidden" name="icon_image" value="${h(draft.icon_image)}" />
+    <div class="group-icon-control">
+      <span class="group-icon-caption">Chat icon <small>(optional)</small></span>
+      <div class="group-icon-current">
+        ${draft.icon_image || draft.icon_key
+          ? workspaceIconMarkup({ icon_key: draft.icon_key, icon_image: draft.icon_image, color: '#f0b23b' }, 'large')
+          : '<span class="group-icon-placeholder"><i class="ti ti-users" aria-hidden="true"></i></span>'}
+        <div>
+          <strong>${h(hasImage ? 'Uploaded image' : (draft.icon_key ? workspaceIconOption(draft.icon_key).label : 'No icon yet'))}</strong>
+          <small>${h(hasImage ? 'Custom image for this chat.' : 'Pick a built-in icon, or upload your own at any size.')}</small>
+        </div>
+        ${draft.icon_image || draft.icon_key
+          ? '<button class="btn group-icon-remove" type="button" data-action="clear-message-group-icon"><i class="ti ti-x"></i>Remove</button>'
+          : ''}
+      </div>
+      <div class="group-icon-picker" aria-label="Chat icon choices">
+        ${WORKSPACE_ICON_OPTIONS.slice(0, 24).map((item) => `
+          <button class="group-icon-choice ${!hasImage && item.key === draft.icon_key ? 'active' : ''}" type="button"
+            data-action="set-message-group-icon" data-icon-key="${h(item.key)}"
+            title="${h(item.label)}" aria-label="${h(item.label)}">
+            ${workspaceIconSvgMarkup(item)}
+          </button>
+        `).join('')}
+      </div>
+      <label class="group-icon-upload">
+        <i class="ti ti-upload" aria-hidden="true"></i><span>${h(hasImage ? 'Replace uploaded image' : 'Upload icon or image')}</span>
+        <input type="file" accept="image/png,image/jpeg,image/webp" data-message-group-icon-upload hidden />
+      </label>
+    </div>
+  `;
+}
+
+async function prepareMessageGroupIconUpload(file) {
+  if (isReadOnlyDemo()) {
+    requireMutableWorkspace();
+    return;
+  }
+  if (!file) return;
+  const output = await workspaceIconFileToDataUrl(file);
+  state.messageGroupIcon = { icon_key: messageGroupIconDraft().icon_key, icon_image: output };
+  render();
 }
 
 function renderMessageWorkspaceMembersModal(companyId) {
@@ -25259,6 +25350,8 @@ function handleAction(event, node) {
   if (action === 'new-message-group') {
     event.preventDefault();
     if (!requirePermission('messages.create_group', activeCompanyId(), 'Your role cannot create group chats.', 'Messages')) return;
+    // Fresh icon each time; a leftover draft would silently brand the next new group.
+    state.messageGroupIcon = { icon_key: '', icon_image: '' };
     state.modal = 'message-group-new';
     render();
     return;
@@ -25276,6 +25369,19 @@ function handleAction(event, node) {
   if (action === 'select-direct-message-person') {
     event.preventDefault();
     state.directMessageTargetId = node.dataset.profileId || '';
+    render();
+    return;
+  }
+  if (action === 'set-message-group-icon') {
+    event.preventDefault();
+    // Picking a glyph clears any uploaded image, so the two cannot both be "active".
+    state.messageGroupIcon = { icon_key: node.dataset.iconKey || '', icon_image: '' };
+    render();
+    return;
+  }
+  if (action === 'clear-message-group-icon') {
+    event.preventDefault();
+    state.messageGroupIcon = { icon_key: '', icon_image: '' };
     render();
     return;
   }
@@ -28528,6 +28634,8 @@ async function saveMessageGroup(form) {
     title: String(data.get('title') || '').trim() || 'New group chat',
     type,
     created_by: activeSession().profile.id,
+    icon_key: data.get('icon_key') || '',
+    icon_image: data.get('icon_image') || '',
     last_message_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -29325,6 +29433,12 @@ function onDocumentChange(event) {
   if (event.target.matches('[data-workspace-icon-upload]')) {
     prepareWorkspaceIconUpload(event.target.files?.[0] || null).catch((error) => {
       showToast(error.message || 'Could not preview that workspace icon.', 'local', 'Settings');
+    });
+    return;
+  }
+  if (event.target.matches('[data-message-group-icon-upload]')) {
+    prepareMessageGroupIconUpload(event.target.files?.[0] || null).catch((error) => {
+      showToast(error.message || 'Could not use that image.', 'local', 'Messages');
     });
     return;
   }
@@ -37062,6 +37176,13 @@ function normalizeMessageConversation(input) {
     title: String(input.title || 'Messages').trim() || 'Messages',
     type: MESSAGE_TYPES.includes(input.type) ? input.type : 'custom',
     created_by: String(input.created_by || ''),
+    // Group icon. Empty icon_key means "no icon chosen", which renders as initials —
+    // distinct from workspace icons, where a key is always required.
+    icon_key: String(input.icon_key || '').trim()
+      && WORKSPACE_ICON_OPTIONS.some((item) => item.key === String(input.icon_key).trim())
+      ? String(input.icon_key).trim()
+      : '',
+    icon_image: sanitizeWorkspaceIconImage(input.icon_image),
     last_message_at: input.last_message_at || input.updated_at || input.created_at || '',
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || input.created_at || new Date().toISOString(),
@@ -37150,6 +37271,8 @@ function messageConversationPayload(conversation) {
     title: conversation.title,
     type: conversation.type,
     created_by: conversation.created_by || activeSession().profile.id,
+    icon_key: conversation.icon_key || '',
+    icon_image: conversation.icon_image || '',
     last_message_at: conversation.last_message_at || null,
   };
 }
