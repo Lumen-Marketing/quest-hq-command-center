@@ -969,3 +969,40 @@
   #homeWrap .qhq-cal { max-width: none; }
 }
 
+/* Ordinary phone widths have enough room for 40px controls. Keep the compact
+   32–38px fallback below 340px so a genuinely narrow embedded frame still
+   fits, while the 360–390px host phone sizes receive reliable tap targets. */
+@media (min-width: 340px) and (max-width: 720px) {
+  :root {
+    --m-ctl: 40px;
+  }
+
+  body.ui-command-center .head-card #scopeSeg button {
+    width: 40px;
+    height: 40px;
+  }
+
+  body.ui-command-center .head-card-actions .btn,
+  body.ui-command-center .head-card-actions .btn-more {
+    width: 40px;
+    height: 40px;
+  }
+
+  body.ui-command-center .page-head-widgets .up-next-start {
+    width: 40px;
+    height: 40px;
+  }
+
+  body.ui-command-center .page-head-widgets .focus-widget-head {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+
+  body.ui-command-center #listPane .page-head-widgets .controls-card .btn {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+}
+
