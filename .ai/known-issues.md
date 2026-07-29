@@ -115,3 +115,17 @@ the accent picker mainly affects light mode, because the dark-mode palette block
 `--orange` after the `[data-accent]` blocks. Widening either requires, respectively, passing the
 appearance into the iframe (URL param / postMessage) and having dark mode derive `--orange` from the
 accent rather than hardcoding it.
+
+## Storage buckets need a SELECT policy for uploads to succeed
+
+Profile picture uploads failed for every signed-in user with "new row violates row-level
+security policy" (HTTP 400 from storage). The `avatars` bucket had INSERT, UPDATE and
+DELETE policies but no SELECT policy. The Storage API reads the object row back as part of
+an upload, so that read was denied and the request failed even though the write was
+permitted. Fixed in `202607301000_avatar_object_read_policy.sql`.
+
+This is the same failure shape as `message_conversations`, where `.insert().select()`
+emitted `INSERT ... RETURNING` and the SELECT policy could not see the new row. When adding
+a bucket or a table whose rows are written then read back, check the SELECT path as well as
+the write path; a public bucket does not need a SELECT policy for public reads
+(`/object/public/...` does not consult it) but does need one for the upload read-back.

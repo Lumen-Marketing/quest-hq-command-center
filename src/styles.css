@@ -12423,15 +12423,20 @@ button.side-item {
   padding: 20px 22px 14px;
 }
 
+/* The stream is a flex column, where justify-self does nothing — the earlier
+   `justify-self: end` on own messages never applied, and default flex stretch made
+   every bubble full width. align-self is the flex equivalent. */
 .message-bubble {
   grid-template-columns: 36px minmax(0, auto);
   max-width: 76%;
   gap: 9px;
+  align-self: flex-start;
 }
 
 .message-bubble.own {
   grid-template-columns: minmax(0, auto);
   max-width: 72%;
+  align-self: flex-end;
 }
 
 .message-bubble.own .message-avatar {
@@ -23346,6 +23351,41 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   min-height: 0;
   max-height: none;
   overflow: auto;
+}
+
+/* The stream can only scroll if an ancestor bounds its height. .message-simple-workspace
+   is `flex: 1` inside a page that is not itself height-bounded, so the thread grew to fit
+   every message: the composer was pushed below the fold and .message-simple-main's
+   overflow:hidden meant there was nothing to scroll to it.
+   Bounding the workspace makes the sidebar list and the message stream each scroll
+   inside their own panel, and keeps the composer pinned in view.
+   Scoped with :has() rather than a class because the .has-thread hook the older media
+   queries reference is never actually applied by the renderer. */
+.message-simple-workspace {
+  height: min(720px, calc(100vh - 200px));
+  min-height: 420px;
+}
+
+.message-simple-main:has(.message-stream) {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+/* Keep the composer visible and let only the stream scroll under it. */
+.message-simple-main .message-composer {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 900px) {
+  /* One panel at a time on narrow screens, so a fixed two-column height would strand
+     the composer again. Let the page scroll instead. */
+  .message-simple-workspace {
+    height: auto;
+    min-height: 0;
+  }
+
+  .messages-page.thread-open .message-simple-main {
+    height: min(720px, calc(100vh - 180px));
+  }
 }
 
 .message-create-modal {

@@ -909,6 +909,11 @@ const WORKSPACE_PLUGIN_PRESET_LABELS = {
 const WORKSPACE_SELF_CREATE_LIMIT = 3;
 const WORKSPACE_RAIL_VISIBLE_LIMIT = 6;
 const WORKSPACE_ICON_UPLOAD_MAX_BYTES = 220 * 1024;
+// Avatars are stored as a 512px square; the crop source is bounded separately so the
+// cropper stays responsive on a large photo without discarding usable detail.
+const AVATAR_EDGE_PX = 512;
+const AVATAR_MAX_DATA_URL = 400 * 1024;
+const AVATAR_CROP_SOURCE_PX = 1600;
 const WORKSPACE_ICON_OPTIONS = [
   { key: 'home', icon: 'ti-home-filled', label: 'Home' },
   { key: 'building', icon: 'ti-building-broadcast-tower-filled', label: 'Building' },
@@ -21756,7 +21761,7 @@ function renderProfileModal(profile) {
           <label class="profile-upload-field">
             <span>Profile picture</span>
             <input name="avatar_file" type="file" accept="image/png,image/jpeg,image/webp" data-profile-avatar-file />
-            <small>PNG, JPG, or WebP. Live accounts support up to 2 MB.</small>
+            <small>PNG, JPG, or WebP at any size — large photos are cropped to a square and compressed automatically.</small>
           </label>
           <div class="profile-crop-modal" data-profile-avatar-crop-modal hidden>
             <section class="profile-cropper" data-profile-cropper>
@@ -27136,12 +27141,11 @@ async function prepareProfileAvatarCrop(formNode) {
   const hidden = formNode.querySelector('[data-profile-cropped-avatar]');
   if (hidden) hidden.value = '';
   if (!file) return;
-  const check = await validateUpload(file, 'image');
+  const check = await validateUpload(file, 'avatarimage');
   if (!check.ok) throw new Error(check.reason);
-  if (file.size > 2 * 1024 * 1024) throw new Error('Profile pictures must be 2 MB or smaller.');
-  const dataUrl = await fileToDataUrl(file);
-  if (!dataUrl) throw new Error('Could not read that image file.');
-  const image = await loadImage(dataUrl);
+  // No byte cap: the crop source is downscaled to a bounded edge and the saved avatar
+  // is re-encoded to a 512px square, so a large photo is compressed rather than refused.
+  const image = await croppableImageFromFile(file);
   const modal = formNode.querySelector('[data-profile-avatar-crop-modal]');
   if (modal) modal.hidden = false;
   const preview = formNode.querySelector('#profile-avatar-preview');
@@ -27249,27 +27253,33 @@ function cancelProfileAvatarCrop(formNode) {
 }
 
 async function saveProfileAvatar(file) {
-  const check = await validateUpload(file, 'image');
+  const check = await validateUpload(file, 'avatarimage');
   if (!check.ok) { showToast(check.reason, 'error', 'Profile'); return { ok: false, url: '' }; }
-  if (file.size > 2 * 1024 * 1024) {
-    showToast('Profile pictures must be 2 MB or smaller.', 'local', 'Profile');
+  // Compress before anything is stored or uploaded, so the source file's size never
+  // matters. This also normalizes the already-cropped PNG the crop flow hands over.
+  let avatarUrl = '';
+  try {
+    avatarUrl = await avatarDataUrlFromFile(file);
+  } catch (error) {
+    showToast(error.message || 'Could not read that image file.', 'local', 'Profile');
     return { ok: false, url: '' };
   }
-  if (state.session?.auth !== 'supabase') {
-    const url = await fileToDataUrl(file);
-    if (!url) {
-      showToast('Could not read that image file.', 'local', 'Profile');
-      return { ok: false, url: '' };
-    }
-    return { ok: true, url };
+  if (!avatarUrl) {
+    showToast('Could not read that image file.', 'local', 'Profile');
+    return { ok: false, url: '' };
   }
+  if (state.session?.auth !== 'supabase') return { ok: true, url: avatarUrl };
   const client = createSupabaseClient();
   const profileId = activeSession().profile.id;
-  const ext = avatarFileExtension(file);
+  // Extension and content type follow the compressed output, not the original file:
+  // the ladder may have produced webp from a jpg, and a mismatched content type would
+  // be rejected by the bucket's allowed_mime_types.
+  const compressed = dataUrlToFile(avatarUrl, `avatar-${Date.now()}`);
+  const ext = avatarFileExtension(compressed);
   const objectPath = `${profileId}/avatar-${Date.now()}.${ext}`;
   const upload = await client.storage
     .from('avatars')
-    .upload(objectPath, file, { cacheControl: '3600', upsert: true, contentType: contentTypeFor(file) });
+    .upload(objectPath, compressed, { cacheControl: '3600', upsert: true, contentType: contentTypeFor(compressed) });
   if (upload.error) {
     showToast(upload.error.message || 'Profile picture upload failed.', 'local', 'Profile');
     return { ok: false, url: '' };
@@ -35298,7 +35308,7 @@ async function decodeImageFile(file) {
 // from toDataURL, which the JPEG rungs then undercut. At 192x192 the first rung
 // effectively always fits — the ladder exists so an awkward image compresses
 // further instead of being rejected.
-function compressWorkspaceIconCanvas(canvas) {
+function compressCanvasToBudget(canvas, budget) {
   const attempts = [
     ['image/webp', 0.82], ['image/webp', 0.7], ['image/webp', 0.55],
     ['image/jpeg', 0.82], ['image/jpeg', 0.6], ['image/jpeg', 0.4],
@@ -35307,10 +35317,65 @@ function compressWorkspaceIconCanvas(canvas) {
   for (const [type, quality] of attempts) {
     const output = canvas.toDataURL(type, quality);
     if (!smallest || output.length < smallest.length) smallest = output;
-    if (output.length <= WORKSPACE_ICON_UPLOAD_MAX_BYTES) return output;
+    if (output.length <= budget) return output;
   }
-  if (sanitizeWorkspaceIconImage(smallest)) return smallest;
+  return smallest;
+}
+
+function compressWorkspaceIconCanvas(canvas) {
+  const output = compressCanvasToBudget(canvas, WORKSPACE_ICON_UPLOAD_MAX_BYTES);
+  if (sanitizeWorkspaceIconImage(output)) return output;
   throw new Error('Could not compress that image small enough. Try a simpler logo.');
+}
+
+// Cover-crop a decoded image into a square canvas of `size` px.
+function drawSquareCover(decoded, size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, size, size);
+  ctx.imageSmoothingQuality = 'high';
+  const scale = Math.max(size / decoded.width, size / decoded.height);
+  const drawWidth = decoded.width * scale;
+  const drawHeight = decoded.height * scale;
+  ctx.drawImage(decoded.source, (size - drawWidth) / 2, (size - drawHeight) / 2, drawWidth, drawHeight);
+  return canvas;
+}
+
+// Normalize any decodable picture into a compact square avatar. The source file's size
+// is irrelevant: it is decoded with bounded memory, downscaled to 512px, and
+// quality-stepped until it fits, so a 20 MB camera photo uploads as a small avatar.
+async function avatarDataUrlFromFile(file) {
+  const decoded = await decodeImageFile(file);
+  try {
+    if (!decoded.width || !decoded.height) throw new Error('Could not read that image.');
+    return compressCanvasToBudget(drawSquareCover(decoded, AVATAR_EDGE_PX), AVATAR_MAX_DATA_URL);
+  } finally {
+    decoded.release();
+  }
+}
+
+// The cropper reads naturalWidth/naturalHeight, so it needs a real <img>, and it should
+// not hold a 40 MP bitmap while the user drags. Downscale to a bounded edge first.
+async function croppableImageFromFile(file) {
+  const decoded = await decodeImageFile(file);
+  try {
+    if (!decoded.width || !decoded.height) throw new Error('Could not read that image.');
+    const scale = Math.min(1, AVATAR_CROP_SOURCE_PX / Math.max(decoded.width, decoded.height));
+    const width = Math.max(1, Math.round(decoded.width * scale));
+    const height = Math.max(1, Math.round(decoded.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(decoded.source, 0, 0, width, height);
+    return loadImage(canvas.toDataURL('image/webp', 0.9));
+  } finally {
+    decoded.release();
+  }
 }
 
 // Validate, square-crop to 192px, and compress an uploaded image to a data URL suitable

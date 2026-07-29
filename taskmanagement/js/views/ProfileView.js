@@ -57,7 +57,7 @@ App.ProfileView = class ProfileView {
                 <input type="file" id="pf-file" accept="image/*" style="display:none;" />
               </label>
               <button type="button" class="btn-link ${currentAvatar ? '' : 'hidden'}" id="pf-remove">Remove photo</button>
-              <div class="profile-hint">JPG or PNG, up to 2 MB. Auto-resized to 512×512.</div>
+              <div class="profile-hint">JPG or PNG, any size. Auto-resized to 512&times;512 and compressed.</div>
             </div>
           </div>
 
@@ -130,20 +130,27 @@ App.ProfileView = class ProfileView {
         e.target.value = '';
         return;
       }
-      if (file.size > 2 * 1024 * 1024) {
-        this._inlineError('Image must be 2 MB or smaller.');
-        e.target.value = '';
-        return;
-      }
+      // No size cap: _uploadAvatar already resizes to 512px and re-encodes as JPEG, so
+      // the source file's weight never reaches storage. Preview from the resized blob
+      // rather than the original — a data URL of a 40 MP photo is many megabytes of
+      // string held in memory just to draw a thumbnail.
       this.pendingFile = file;
       this.removePending = false;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        document.getElementById('pf-preview').innerHTML =
-          `<img src="${ev.target.result}" alt="New avatar preview" />`;
-        if (removeBtn) removeBtn.classList.remove('hidden');
-      };
-      reader.readAsDataURL(file);
+      this._resizeImage(file, 512)
+        .then((blob) => {
+          const preview = document.getElementById('pf-preview');
+          if (!preview) return;
+          const url = URL.createObjectURL(blob);
+          preview.innerHTML = `<img src="${url}" alt="New avatar preview" />`;
+          const img = preview.querySelector('img');
+          if (img) img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+          if (removeBtn) removeBtn.classList.remove('hidden');
+        })
+        .catch(() => {
+          this.pendingFile = null;
+          this._inlineError('Could not read that image.');
+          e.target.value = '';
+        });
     });
 
     this.modal.addEventListener('keydown', (e) => {

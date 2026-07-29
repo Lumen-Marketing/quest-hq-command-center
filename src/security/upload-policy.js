@@ -59,6 +59,9 @@ export const UPLOAD_POLICIES = {
   // produced and let the client compress it. The cap is only a decode guard: past
   // this size the browser is likelier to die decoding than to produce an icon.
   workspaceicon: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 64 * MB, label: 'image' },
+  // Profile pictures are re-encoded to a 512px square before upload, so the source
+  // file's weight is irrelevant here too. Same decode-guard reasoning as above.
+  avatarimage: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 64 * MB, label: 'image' },
   document: { exts: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'csv'], max: 25 * MB, label: 'document' },
   csv: { exts: ['csv', 'tsv', 'txt'], max: 10 * MB, label: 'spreadsheet' },
   backup: { exts: ['zip'], max: 50 * MB, label: 'backup archive' },
