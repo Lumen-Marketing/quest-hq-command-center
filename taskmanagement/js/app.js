@@ -124,11 +124,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       // enumerates App.COMPANIES to decide which companies to seed.
       if (Array.isArray(saved.companies) && saved.companies.length) {
         const nextCompanies = {};
+        // Archived companies stay in the map so existing tasks still resolve a label
+        // and stay valid; the flag keeps them out of the filter chips and pickers.
+        // Same split the host makes between listing and access.
+        const archived = new Set(saved.archivedCompanyIds || []);
         saved.companies.forEach((row) => {
           nextCompanies[row.id] = {
             id: row.id,
             label: row.label || row.short_name || row.name || row.id,
             pill: row.pill || `pill-${row.id}`,
+            archived: archived.has(row.id),
           };
         });
         // 'overall' is a synthetic spans-all sentinel, never a real company row.

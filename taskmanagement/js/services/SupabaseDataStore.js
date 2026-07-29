@@ -164,6 +164,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
       taxLabelsRes,
       taxSopsRes,
       companiesRes,
+      subscriptionsRes,
     ] = await Promise.all([
       this._pageAll(() => this.supabase.from('team_members').select('*').order('name', { ascending: true }).order('id', { ascending: true }), 'people'),
       this._pageAll(() => {
@@ -190,6 +191,11 @@ App.SupabaseDataStore = class SupabaseDataStore {
       // Tenant identity. RLS returns only the caller's companies, so this is the
       // source of truth for App.COMPANIES; js/constants.js is the offline fallback.
       this.supabase.from('companies').select('id, name, short_name, label, pill, color'),
+      // Lifecycle status lives on the subscription row, not the company row: archiving
+      // a company from the host's master panel writes status 'canceled' here. Optional
+      // so a permission failure degrades to "nothing archived" rather than breaking the
+      // whole load.
+      this._optionalSelect('company_subscriptions'),
     ]);
 
     this._throwIfError(timersRes, 'active timers');
@@ -211,6 +217,9 @@ App.SupabaseDataStore = class SupabaseDataStore {
       people: this._mapPeople(peopleRows),
       profiles: profilesRes.data || [],
       companies: companiesRes.data || [],
+      archivedCompanyIds: (subscriptionsRes.data || [])
+        .filter(row => String(row && row.status) === 'canceled')
+        .map(row => row.company_id),
       tasks,
       timeEntries: entryRows.filter(row => workspaceTaskIds.has(row.task_id)).map(row => ({
         id: row.id,
