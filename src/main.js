@@ -2269,6 +2269,7 @@ const state = {
   // Archived companies are excluded by the default 'active' status filter.
   directMessageQuery: '',
   directMessageTargetId: '',
+  rolePermissionQuery: '',
   platformCompanyFilters: { search: '', status: 'active', page: 0 },
   workspaceReviewFilters: { search: '', status: 'active', page: 0 },
   subscriptions: [],
@@ -18546,17 +18547,91 @@ function renderRoleFormModal(companyId, role = null) {
       ${field('Role name', 'name', editing ? role.name : '', true)}
       ${field('Color', 'color', editing ? role.color : '#f0b23b', false, 'color')}
       ${field('Priority', 'priority', editing ? String(role.priority) : '100', false, 'number')}
-      <div class="permission-grid span-2">
-        ${PERMISSION_KEYS.filter(([key]) => permissionAvailableForCompany(key, companyId) || key.startsWith('workspaces.') || key.startsWith('client_portals.')).map(([key, label]) => `
-          <label><input type="checkbox" name="permissions" value="${h(key)}" ${selectedPermissions.has(key) ? 'checked' : ''} /> <span>${h(label)}</span></label>
-        `).join('')}
-      </div>
+      ${renderRolePermissionPicker(companyId, selectedPermissions)}
       <div class="form-actions span-2">
         <button class="btn btn-primary" type="submit">${editing ? 'Save role' : 'Create role'}</button>
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
       </div>
     </form>
   `, 'finance-modal');
+}
+
+// Human labels for the prefix of each permission key, so the picker can be grouped.
+// A flat, unlabelled list of ~46 checkboxes in a short scroll box made whole modules
+// (Messages especially) read as missing rather than merely below the fold.
+const PERMISSION_GROUP_LABELS = {
+  messages: 'Messages',
+  jobs: 'Jobs',
+  tasks: 'Tasks',
+  files: 'Files',
+  forms: 'Forms',
+  workspaces: 'Workspace apps',
+  client_portals: 'Client portal',
+  crm: 'CRM',
+  underwriter: 'Underwriter',
+  finance: 'Finance',
+  price_book: 'Price book',
+  calendar: 'Calendar',
+  approvals: 'Approvals',
+  time: 'Time',
+  clock: 'Clock',
+  users: 'Users',
+  roles: 'Roles',
+  plugins: 'Plugins',
+  billing: 'Billing',
+  settings: 'Settings',
+};
+
+function renderRolePermissionPicker(companyId, selectedPermissions) {
+  const available = PERMISSION_KEYS.filter(([key]) => permissionAvailableForCompany(key, companyId)
+    || key.startsWith('workspaces.') || key.startsWith('client_portals.'));
+  const query = String(state.rolePermissionQuery || '').trim().toLowerCase();
+  const matches = query
+    ? available.filter(([key, label]) => `${key} ${label}`.toLowerCase().includes(query))
+    : available;
+  const groups = new Map();
+  matches.forEach(([key, label]) => {
+    const prefix = key.split('.')[0];
+    const groupLabel = PERMISSION_GROUP_LABELS[prefix] || titleCase(prefix.replace(/_/g, ' '));
+    if (!groups.has(groupLabel)) groups.set(groupLabel, []);
+    groups.get(groupLabel).push([key, label]);
+  });
+  const selectedCount = available.filter(([key]) => selectedPermissions.has(key)).length;
+  return `
+    <div class="permission-picker span-2">
+      <div class="permission-picker-head">
+        <label class="permission-search">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input type="search" value="${h(state.rolePermissionQuery || '')}" placeholder="Filter permissions, e.g. messages"
+            data-role-permission-search aria-label="Filter permissions" autocomplete="off" />
+        </label>
+        <span class="permission-count">${selectedCount} selected</span>
+      </div>
+      <div class="permission-groups">
+        ${[...groups.entries()].map(([groupLabel, items]) => `
+          <fieldset class="permission-group">
+            <legend>${h(groupLabel)}</legend>
+            ${items.map(([key, label]) => `
+              <label><input type="checkbox" name="permissions" value="${h(key)}" ${selectedPermissions.has(key) ? 'checked' : ''} /> <span>${h(label)}</span></label>
+            `).join('')}
+          </fieldset>
+        `).join('') || `<p class="permission-empty">No permission matches "${h(query)}".</p>`}
+      </div>
+      ${/* save_company_role REPLACES the whole permission set, and only rendered
+           checkboxes submit. Without resubmitting the selected-but-filtered-out keys,
+           typing a filter and saving would silently delete every permission the filter
+           happened to hide. */ ''}
+      ${available
+        .filter(([key]) => selectedPermissions.has(key) && !matches.some(([matchKey]) => matchKey === key))
+        .map(([key]) => `<input type="hidden" name="permissions" value="${h(key)}" />`)
+        .join('')}
+      ${query ? `
+        <p class="permission-note">
+          Filtered view. Permissions hidden by the filter keep their current setting — only what you tick or untick here changes.
+        </p>
+      ` : ''}
+    </div>
+  `;
 }
 
 function openRoleDeleteModal(roleId) {
@@ -25087,6 +25162,7 @@ function handleAction(event, node) {
   if (action === 'open-role-form') {
     event.preventDefault();
     if (!requirePermission('roles.manage', activeCompanyId(), 'Your role cannot manage roles.', 'Roles')) return;
+    state.rolePermissionQuery = '';
     state.modal = 'role-new';
     render();
     return;
@@ -25105,6 +25181,7 @@ function handleAction(event, node) {
       return;
     }
     state.selectedRoleId = role.id;
+    state.rolePermissionQuery = '';
     state.modal = 'role-edit';
     render();
     return;
@@ -29052,6 +29129,11 @@ function onDocumentInput(event) {
     const key = event.target.dataset.platformBackupFilter;
     state.platformBackupFilters = { company_id: 'all', status: 'all', kind: 'all', query: '', ...(state.platformBackupFilters || {}), [key]: event.target.value };
     updateWorkspaceOnly();
+    return;
+  }
+  if (event.target.matches('[data-role-permission-search]')) {
+    state.rolePermissionQuery = event.target.value;
+    rerenderPreservingFocus('[data-role-permission-search]');
     return;
   }
   if (event.target.matches('[data-direct-message-search]')) {
