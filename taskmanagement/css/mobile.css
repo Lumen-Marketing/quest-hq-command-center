@@ -1006,3 +1006,49 @@
   }
 }
 
+/* Compact the embedded Tasks surface without shrinking its primary tap targets.
+   The host already reserves mobile chrome, so this layer spends less vertical
+   space on framing and leaves more room for the actual task list. */
+@media (max-width: 720px) {
+  body.ui-command-center .page-head {
+    padding: 10px var(--m-gap) 6px;
+  }
+
+  body.ui-command-center .head-card {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  body.ui-command-center .page-head-widgets {
+    row-gap: 8px;
+  }
+
+  body.ui-command-center .page-head-widgets > * > .up-next-card {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  #taskViewWrap.qt-skin .qt-wrap {
+    padding-top: 8px;
+  }
+
+  #taskViewWrap.qt-skin .qt-group {
+    margin-bottom: 8px;
+    border-radius: 10px;
+  }
+
+  #taskViewWrap.qt-skin .qt-ghead {
+    padding: 8px 12px;
+  }
+
+  #taskViewWrap.qt-skin .qt-row {
+    row-gap: 3px;
+    padding: 6px 10px;
+  }
+
+  #taskViewWrap.qt-skin .qt-ttitle {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+}
+

@@ -27144,3 +27144,550 @@ html[data-card-style="glass"] .message-context-rail {
     min-height: 44px;
   }
 }
+
+/* Mobile density system
+   The shell previously collapsed desktop columns without reducing desktop
+   chrome, spacing, or component rhythm. Keep full-size form fields where iOS
+   zoom prevention matters, but make the surrounding product UI phone-sized. */
+@media (max-width: 720px) {
+  .quest-app,
+  .quest-app.sidebar-collapsed,
+  .quest-app:not(.sidebar-collapsed) {
+    height: 100dvh;
+    min-height: 0;
+    grid-template-rows: 52px 42px minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .topbar {
+    height: 52px;
+    min-height: 52px;
+    padding: 6px 10px;
+  }
+
+  .topbar-right {
+    gap: 6px;
+  }
+
+  .topbar-right > .btn,
+  .topbar-right .avatar-button,
+  .topbar-right .notification-button {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 9px;
+  }
+
+  .mobile-status-rail {
+    height: 42px;
+    max-height: 42px;
+    gap: 6px;
+    padding: 4px 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .mobile-status-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-status-rail a {
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
+  }
+
+  .work-surface {
+    height: auto;
+    min-height: 0;
+    padding: 12px 10px calc(64px + env(safe-area-inset-bottom, 0px));
+    font-size: 14px;
+    overscroll-behavior: contain;
+  }
+
+  .mobile-tabbar {
+    gap: 2px;
+    padding: 4px 6px max(4px, env(safe-area-inset-bottom));
+  }
+
+  .mobile-tabbar a,
+  .mobile-tabbar button {
+    min-height: 50px;
+    gap: 2px;
+    border-radius: 10px;
+    font-size: 10px;
+  }
+
+  .mobile-tabbar a i,
+  .mobile-tabbar button i {
+    font-size: 20px;
+  }
+
+  .message-simple-page {
+    height: 100%;
+    min-height: 0;
+    gap: 10px;
+  }
+
+  .message-command-bar {
+    min-height: 52px;
+    gap: 8px;
+    padding: 0 0 8px;
+  }
+
+  .message-command-brand {
+    gap: 7px;
+    font-size: 13px;
+  }
+
+  .message-command-brand span {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+  }
+
+  .message-command-actions {
+    gap: 6px;
+  }
+
+  .message-command-actions .btn {
+    min-height: 36px;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .messages-page.thread-open .message-command-bar {
+    display: none;
+  }
+
+  .message-simple-workspace {
+    height: 100%;
+    min-height: 0;
+    gap: 10px;
+  }
+
+  .message-simple-main {
+    height: 100%;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    border-radius: 10px;
+  }
+
+  .message-simple-main .thread-head {
+    min-height: 54px;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .message-simple-main .thread-title {
+    gap: 7px;
+  }
+
+  .message-simple-main .thread-title-icon {
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+  }
+
+  .message-simple-main .mobile-thread-back,
+  .message-simple-main .thread-actions .btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+  }
+
+  .message-simple-main .message-stream {
+    gap: 2px;
+    padding: 10px 8px 8px;
+  }
+
+  .message-simple-main .message-bubble,
+  .message-simple-main .message-bubble.own {
+    gap: 6px;
+    max-width: 90%;
+  }
+
+  .message-simple-main .message-avatar {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+    font-size: 10px;
+  }
+
+  .message-simple-main .message-card {
+    border-radius: 14px;
+    padding: 7px 10px;
+  }
+
+  .message-simple-main .message-card p {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .message-simple-main .message-meta {
+    font-size: 10px;
+  }
+
+  .message-simple-main .message-composer {
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
+    gap: 6px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .message-simple-main .message-attach-button,
+  .message-simple-main .message-composer .btn-primary {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+
+  .message-simple-main .message-composer input[name="body"] {
+    min-height: 40px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 720px) {
+  .home-cockpit.dash {
+    gap: 10px;
+  }
+
+  .home-cockpit.dash .home-hero {
+    min-height: 0;
+    margin-bottom: 0;
+  }
+
+  .home-cockpit.dash .home-hero h1 {
+    font-size: 20px;
+    line-height: 1.15;
+  }
+
+  .home-cockpit.dash .home-hero p {
+    margin-top: 2px;
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+
+  .dash-commandbar,
+  .dash-filter-bar {
+    gap: 8px;
+    border-radius: 10px;
+    padding: 8px;
+  }
+
+  .dash-commandbar {
+    align-items: stretch;
+  }
+
+  .dash-role-tabs,
+  .dash-range-seg {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dash-role-tabs::-webkit-scrollbar,
+  .dash-range-seg::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dash-role-tabs button,
+  .dash-range-seg button,
+  .dash-manage-view {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .dash-command-actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .dash-command-actions .btn {
+    flex: 1 1 0;
+    min-height: 36px;
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+
+  .dash-filter-bar {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .dash-filter-field,
+  .dash-filter-field:first-child,
+  .dash-filter-range {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    flex: none;
+  }
+
+  .dash-filter-field label {
+    font-size: 10px;
+  }
+
+  .dash-filter-field select {
+    width: 100%;
+    min-height: 38px;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .dash-widget-grid {
+    gap: 10px;
+  }
+
+  .dash-widget-card {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .dash-widget-head {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .dash-widget-head h2 {
+    font-size: 15px;
+    line-height: 1.2;
+  }
+
+  .dash-widget-head p {
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .dash-widget-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .dash-kpi {
+    gap: 8px;
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  .dash-kpi .dk-ic {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+
+  .dash-kpi .dk-ic i {
+    font-size: 17px;
+  }
+
+  .dash-kpi .dk-body b {
+    font-size: 18px;
+  }
+
+  .dash-kpi .dk-label {
+    font-size: 11px;
+  }
+
+  .dash-kpi .dk-sub {
+    font-size: 10px;
+  }
+
+  .calls-widget {
+    gap: 8px;
+  }
+
+  .calls-widget-ranges {
+    gap: 6px;
+  }
+
+  .calls-widget-range {
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .calls-widget-rank-head {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .calls-widget-rank td,
+  .calls-board td {
+    padding: 7px 8px;
+    font-size: 12px;
+  }
+
+  .calls-widget-board {
+    padding: 2px 6px;
+  }
+
+  .calls-widget-link {
+    min-height: 36px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace-head {
+    gap: 10px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+  }
+
+  .workspace-head h1 {
+    font-size: 20px;
+  }
+
+  .workspace-head p {
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+
+  .head-copy {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .head-symbol {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+
+  .workspace-head-actions-only {
+    margin-bottom: 8px;
+    padding: 0;
+  }
+
+  .workspace-head-actions-only .head-actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .workspace-head-actions-only .head-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workspace-head-actions-only .head-actions .btn {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding-inline: 10px;
+    font-size: 12.5px;
+  }
+
+  .pipe-toolbar {
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .pipe-chips {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    gap: 5px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pipe-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pipe-chip {
+    flex: 0 0 auto;
+    min-height: 30px;
+    gap: 5px;
+    padding-inline: 9px;
+    font-size: 11.5px;
+  }
+
+  .pipe-board {
+    grid-auto-columns: min(82vw, 300px);
+    gap: 8px;
+    padding: 1px 1px 8px;
+    scroll-snap-type: x proximity;
+  }
+
+  .pipe-lane {
+    border-radius: 10px;
+    scroll-snap-align: start;
+  }
+
+  .pipe-lane-head {
+    gap: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .pipe-lane-head b {
+    min-width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+
+  .pipe-lane-body {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .job-card {
+    gap: 4px;
+    margin-bottom: 0;
+    border-radius: 8px;
+    padding: 10px;
+  }
+
+  .job-card-main {
+    gap: 4px;
+  }
+
+  .job-card strong {
+    font-size: 14px;
+    line-height: 1.2;
+  }
+
+  .job-card span,
+  .job-card small {
+    font-size: 11.5px;
+    line-height: 1.25;
+  }
+
+  .job-card em {
+    margin-top: 1px;
+    padding: 2px 6px;
+    font-size: 10.5px;
+  }
+
+  .job-card > .pipeline-next-action {
+    margin-top: 0;
+  }
+
+  .pipeline-next-action {
+    padding: 5px 7px;
+  }
+
+  .job-card .pipeline-next-action strong {
+    font-size: 11.5px;
+  }
+
+  .job-card .pipeline-next-action small {
+    font-size: 9.5px;
+  }
+}
