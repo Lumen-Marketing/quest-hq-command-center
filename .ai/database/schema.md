@@ -456,4 +456,4 @@ Captured 2026-07-28T22:31:54.000Z from the live Supabase catalog. Nullable colum
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` uuid; `company_id` text; `slug` text; `name` text; `description` text; `icon_key` text; `color` text; `status` text; `is_default` bool; `created_by` uuid?; `created_at` timestamptz; `updated_at` timestamptz
+- Columns: `id` uuid; `company_id` text; `slug` text; `name` text; `description` text; `icon_key` text; `color` text; `status` text; `is_default` bool; `created_by` uuid?; `created_at` timestamptz; `updated_at` timestamptz; `icon_image` text

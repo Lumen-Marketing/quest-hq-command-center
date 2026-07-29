@@ -2468,6 +2468,7 @@ let pilotReadinessModule = null;
 let pilotReadinessPromise = null;
 let helpModule = null;
 let helpModulePromise = null;
+let companySearchModule = null;
 let commandResults = [];
 const COMMAND_RECENTS_KEY = 'quest.command.recents';
 const COMMAND_RECENTS_MAX = 8;
@@ -4445,9 +4446,9 @@ function shellTemplate(route, workspace) {
           </div>
         </div>
         <div class="topbar-right">
-          <label class="global-search topbar-global-search">
+          <label class="global-search topbar-global-search" data-action="command-open">
             ${svgIcon('q-search')}
-            <input data-global-search value="${h(state.query)}" placeholder="Search this company" />
+            <input data-global-search value="" placeholder="Search this company" />
           </label>
           <button class="btn command-trigger" type="button" data-action="command-open" title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette"><i class="ti ti-command" aria-hidden="true"></i></button>
           <button class="btn" type="button" data-action="refresh-data" title="Refresh workspace data" aria-label="Refresh workspace data"><i class="ti ti-refresh"></i></button>
@@ -5052,9 +5053,9 @@ function permissionPluginId(permission) {
   return permissionPluginIds(permission)[0] || '';
 }
 
-function permissionAvailableForCompany(permission, companyId = activeCompanyId()) {
+function permissionAvailableForCompany(permission, companyId = activeCompanyId(), workspaceId = workspaceIdForCompany(companyId)) {
   const pluginIds = permissionPluginIds(permission);
-  return !pluginIds.length || pluginIds.some((pluginId) => isPluginInstalled(companyId, pluginId));
+  return !pluginIds.length || pluginIds.some((pluginId) => isPluginInstalled(companyId, pluginId, workspaceId));
 }
 
 function canViewModule(module, companyId = activeCompanyId()) {
@@ -23566,14 +23567,18 @@ function toggleCommandPalette() {
   else openCommandPalette();
 }
 
-function openCommandPalette() {
+function openCommandPalette(initialQuery = '') {
   // Only meaningful inside a company workspace — there is nothing to jump to on
   // the landing or auth screens.
   if (!state.route || state.route.name !== 'company') return;
-  state.commandPalette = { open: true, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null };
+  state.commandPalette = { open: true, query: initialQuery, index: 0, answer: null, taskDraft: null, contactDraft: null };
   if (!helpModulePromise) {
-    helpModulePromise = import('./assistant/help-index.js').then((module) => {
-      helpModule = module;
+    helpModulePromise = Promise.all([
+      import('./assistant/help-index.js'),
+      import('./company-search.js'),
+    ]).then(([help, companySearch]) => {
+      helpModule = help;
+      companySearchModule = companySearch;
       if (state.commandPalette.open) {
         render();
         queueMicrotask(() => document.querySelector('[data-command-input]')?.focus());
@@ -23610,54 +23615,23 @@ function commandPaletteQuickActions() {
 
 // Record groups are capped per-group so a broad query ("a") can't flood the
 // list with hundreds of contacts.
-const COMMAND_RECORD_GROUPS = new Set(['Contacts', 'Jobs', 'Quotes', 'Proposals']);
+const COMMAND_RECORD_GROUPS = new Set(['Contacts', 'Jobs', 'Quotes', 'Tasks', 'Files', 'Proposals']);
 const COMMAND_RECORDS_PER_GROUP = 6;
 
 function commandPaletteRecords() {
+  if (!companySearchModule) return [];
   const companyId = activeCompanyId();
-  const records = [];
-  if (can('crm.view', companyId)) {
-    for (const contact of companyContacts(companyId)) {
-      records.push({
-        id: `contact-${contact.id}`, group: 'Contacts', icon: 'ti-user',
-        label: contact.name || 'Unnamed contact',
-        hint: contact.stage || contact.owner_name || '',
-        keywords: `${contact.email || ''} ${contact.phone || ''} ${contact.location || ''} contact`,
-        section: 'contacts', params: { contact_id: contact.id },
-      });
-    }
-    for (const deal of companyDeals(companyId)) {
-      records.push({
-        id: `deal-${deal.id}`, group: 'Quotes', icon: 'ti-briefcase',
-        label: deal.name || 'Quote',
-        hint: deal.stage || deal.owner_name || '',
-        keywords: `${deal.owner_name || ''} quote deal estimate`,
-        section: 'deals', params: { tab: 'profile', deal_id: deal.id },
-      });
-    }
-    for (const proposal of companyProposals(companyId)) {
-      records.push({
-        id: `proposal-${proposal.id}`, group: 'Proposals', icon: 'ti-file-dollar',
-        label: proposal.title || proposal.proposal_no || 'Proposal',
-        hint: proposal.proposal_no || '',
-        keywords: 'proposal document',
-        section: 'proposals', params: { proposal_id: proposal.id },
-      });
-    }
-  }
-  if (can('jobs.view', companyId)) {
-    for (const job of companyJobs(companyId)) {
-      const client = job.client_name || '';
-      records.push({
-        id: `job-${job.id}`, group: 'Jobs', icon: 'ti-hammer',
-        label: job.name || client || 'Job',
-        hint: client && client !== job.name ? client : (job.status || ''),
-        keywords: `${client} job`,
-        section: 'jobs', params: { tab: 'profile', job_id: job.id },
-      });
-    }
-  }
-  return records;
+  const workspaces = allowedOperationalWorkspaces(companyId);
+  return companySearchModule.buildCompanySearchRecordsFromState({
+    state,
+    companyId,
+    workspaces,
+    canAccess: (permission, moduleId, workspaceId) => (
+      isModuleInstalled(moduleId, companyId, workspaceId)
+      && can(permission, companyId, workspaceId)
+    ),
+    memberName,
+  });
 }
 
 function commandPaletteCommands(query) {
@@ -23899,7 +23873,13 @@ function runCommand(command) {
   if (run.kind === 'navigate') {
     navigate(companyPath(run.section, {}, activeCompanyId()));
   } else if (run.kind === 'record') {
-    navigate(companyPath(run.section, run.params, activeCompanyId()));
+    const params = { ...(run.params || {}) };
+    if (params.file_id) {
+      state.selectedFileId = params.file_id;
+      state.modal = 'file-detail';
+      delete params.file_id;
+    }
+    navigate(companyPath(run.section, params, activeCompanyId()));
   } else if (run.kind === 'company') {
     if (!run.noop) setActiveCompany(run.companyId);
   } else if (run.kind === 'action') {
@@ -27630,6 +27610,7 @@ async function createOperationalWorkspace(formNode) {
       workspace_name: workspaceName,
       preset_code: presetCode,
       icon_key: iconKey,
+      icon_image: iconImage,
     }));
     if (result.error) {
       showToast(result.error.message || 'Workspace creation failed.', 'local', 'Workspaces');
@@ -27715,6 +27696,7 @@ async function saveOperationalWorkspaceSettings(formNode) {
       workspace_description: workspaceDescription,
       icon_key: iconKey,
       next_status: status,
+      icon_image: iconImage,
     }));
     if (result.error) {
       showToast(result.error.message || 'Workspace update failed.', 'local', 'Workspaces');
@@ -27724,8 +27706,7 @@ async function saveOperationalWorkspaceSettings(formNode) {
   } else {
     saved = normalizeOperationalWorkspace({ ...workspace, name: workspaceName, description: workspaceDescription, icon_key: iconKey, status, updated_at: new Date().toISOString() });
   }
-  // The icon selection (built-in or uploaded) reflects the modal draft carried in the form;
-  // apply it explicitly so it survives the live RPC round-trip, which does not store images.
+  // Keep local/demo mode and older cached API responses aligned with the saved draft.
   saved = normalizeOperationalWorkspace({ ...saved, icon_key: iconKey, icon_image: iconImage });
   state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.filter((item) => item.id !== saved.id).concat(saved));
   if (saved.status === 'archived' && state.activeWorkspaceId === saved.id) {
@@ -29152,8 +29133,7 @@ function onDocumentInput(event) {
     return;
   }
   if (event.target.matches('[data-global-search]')) {
-    state.query = event.target.value;
-    updateWorkspaceOnly();
+    openCommandPalette(event.target.value);
     return;
   }
   if (event.target.matches('[data-file-search]')) {
@@ -35002,9 +34982,9 @@ function allowedCompanies({ includeArchived = false } = {}) {
     && (includeArchived || company.id === currentId || !isArchivedCompanyId(company.id)));
 }
 
-function can(permission, companyId = activeCompanyId()) {
+function can(permission, companyId = activeCompanyId(), workspaceId = workspaceIdForCompany(companyId)) {
   if (!permission) return true;
-  if (!permissionAvailableForCompany(permission, companyId)) return false;
+  if (!permissionAvailableForCompany(permission, companyId, workspaceId)) return false;
   const previewRole = rolePreviewForCompany(companyId);
   if (previewRole) return roleAllowsPermission(previewRole, permission);
   const variants = permissionVariants(permission);
@@ -35013,7 +34993,7 @@ function can(permission, companyId = activeCompanyId()) {
     const membership = membershipForProfile(companyId, profile.id);
     if (!membership || membership.status !== 'active') return false;
     if (['owner', 'admin', 'developer'].includes(String(membership.role).toLowerCase())) return true;
-    const workspaceMembership = workspaceMembershipForProfile(workspaceIdForCompany(companyId), profile.id);
+    const workspaceMembership = workspaceMembershipForProfile(workspaceId, profile.id);
     if (!workspaceMembership || workspaceMembership.status !== 'active') return false;
     const assignedRoleIds = workspaceMembership.role_id
       ? [workspaceMembership.role_id]
@@ -35432,9 +35412,9 @@ async function prepareOperationalWorkspaceModalIconUpload(file) {
   render();
 }
 
-// Marks a workspace as the company default. Persisted to session state so it takes effect
-// immediately; live server persistence needs a reviewed set-default RPC (see .ai/known-issues).
-function setDefaultOperationalWorkspace(workspaceId) {
+// Marks a workspace as the company default and waits for the server before changing
+// local state, so a rejected or interrupted write never appears to have succeeded.
+async function setDefaultOperationalWorkspace(workspaceId) {
   const target = state.operationalWorkspaces.find((item) => item.id === String(workspaceId || ''));
   if (!target) {
     showToast('That workspace is no longer available.', 'local', 'Workspaces');
@@ -35449,9 +35429,27 @@ function setDefaultOperationalWorkspace(workspaceId) {
     return;
   }
   if (target.is_default) return;
+
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession() && client;
+  let saved = target;
+  if (live) {
+    const result = await safeSupabaseQuery(
+      client.rpc('set_default_operational_workspace', { target_workspace_id: target.id }),
+    );
+    if (result.error) {
+      showToast(result.error.message || 'Default workspace update failed.', 'local', 'Workspaces');
+      return;
+    }
+    const row = Array.isArray(result.data) ? result.data[0] : result.data;
+    if (row) saved = normalizeOperationalWorkspace(row);
+  }
+
   state.operationalWorkspaces = state.operationalWorkspaces.map((item) =>
-    item.company_id === target.company_id ? { ...item, is_default: item.id === target.id } : item);
-  showToast(`${target.name} is now the default workspace.`, 'local', 'Workspaces');
+    item.company_id === target.company_id
+      ? normalizeOperationalWorkspace({ ...(item.id === saved.id ? saved : item), is_default: item.id === saved.id })
+      : item);
+  showToast(`${saved.name} is now the default workspace.`, live ? 'live' : 'local', 'Workspaces');
   render();
 }
 

@@ -14,6 +14,7 @@ The app uses:
 - Stripe checkout and webhook APIs through server-side functions.
 - Lazy-loaded Leaflet and PDF.js; JSZip is used for archive/export behavior.
 - Lazy-loaded pilot-readiness, support-reporting, and help-index modules keep first-run and support behavior outside the primary browser bundle until needed.
+- A lazy-loaded company-search index maps only permission-allowed Contacts, Quotes, Jobs, Tasks, Files, and Proposals into workspace-aware command-palette routes.
 - A lazy-loaded local form-draft engine protects unsaved Contact, Job, Quote, and Underwriter input without adding those recovery copies to the primary browser bundle.
 - A lazy-loaded record-history presenter reads the workspace-scoped `record_history` ledger only when a Contact, Quote, or Job history dialog is opened.
 - A vendored TaskManagement runtime copied into the production bundle during build, now surfaced in-shell as the Tasks module via a same-origin `<iframe>` (see the X-Frame-Options and service-worker decisions) rather than a separate app the user is handed off to.
@@ -55,6 +56,7 @@ The SPA supports:
 | In-product support reporting | [src/support/reporting.js](../src/support/reporting.js) |
 | Same-browser operational form recovery | [src/drafts/form-drafts.js](../src/drafts/form-drafts.js) |
 | Shared business-record history presentation | [src/history/record-history.js](../src/history/record-history.js) |
+| Permission-scoped company search mapping | [src/company-search.js](../src/company-search.js) |
 | Serverless API handlers | [api](../api) |
 | Supabase Edge Functions | [supabase/functions](../supabase/functions) |
 | RingCentral access (token exchange, paging, normalisation) | [api/_lib/ringcentral.js](../api/_lib/ringcentral.js) |
@@ -68,6 +70,7 @@ The SPA supports:
 
 - Company id remains the customer/billing/security tenant boundary; `workspace_id` is the operational data boundary for CRM, pipelines, underwriting, files, jobs, proposals, and tasks.
 - Every company has one non-archivable default operational workspace. Existing company data was backfilled into it.
+- Uploaded operational-workspace icons are validated and stored with the workspace. Default changes use one authorized, company-scoped database transaction; the browser updates only after that transaction succeeds.
 - Owners, admins, and developers inherit access to every active workspace in their company. Workers and other members require explicit active workspace membership and use that workspace's assigned role.
 - Invites never grant Owner, Admin, or Developer. Those promotions happen only after onboarding through the owner-guarded member-access path.
 - Invite email callers cannot choose the recipient, subject, HTML, token, company, role, or workspace names; the Edge Function derives them from the tenant-scoped invite.
@@ -84,6 +87,7 @@ The SPA supports:
 - Funnel "What's next" fields select from open tasks: contacts through `contact_id`, quotes/deals through tenant-scoped `deal_id`, and jobs through `project_id`.
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-workspace, per-contact records protected by Underwriter permissions and workspace RLS.
+- Company search indexes only records already loaded for operational workspaces the signed-in user may enter, applies each target workspace's plugin and permission checks, and carries that workspace into navigation.
 - Local form drafts are recovery copies, not business records. Their storage keys include profile, company, operational workspace, form type, and record id; they expire after seven days, exclude sensitive/file fields, clear after a successful real save or explicit discard, and purge for the signing-out profile.
 - Shared record history is append-only and workspace-scoped. Database triggers capture only whitelisted business fields for Contacts, Quotes, Jobs, and Tasks; readers still require current workspace membership plus the module's view permission. Immediate Undo is same-actor, time-limited, source-allowlisted, and server-authorized, while the 30-day Recycle Bin remains the durable recovery path.
 - RingCentral data is company-scoped and carries no `workspace_id`: a phone account belongs to the whole company and its calls do not belong to any single operational workspace. All `ringcentral_*` tables are service-role write only; every browser-facing policy is select. Non-admin members are matched to their own calls by `auth.jwt() ->> 'email'`, so no extension-to-member mapping table exists.

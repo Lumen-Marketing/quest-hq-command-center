@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "captured_at": "2026-07-28T22:31:54.000Z",
+  "captured_at": "2026-07-29T22:52:09.000Z",
   "scope": "Catalog metadata only. Contains no production table rows, auth user records, object paths, or credentials.",
   "source": {
     "project_ref": "rqundirizvojpzhljtdn",
@@ -7959,6 +7959,14 @@
           "position": 12,
           "udt_name": "timestamptz",
           "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "icon_image",
+          "default": "''::text",
+          "nullable": false,
+          "position": 13,
+          "udt_name": "text",
+          "data_type": "text"
         }
       ],
       "primary_key": [
@@ -11389,7 +11397,7 @@
     {
       "name": "create_operational_workspace",
       "returns": "uuid",
-      "arguments": "target_company_id text, workspace_name text, preset_code text, icon_key text",
+      "arguments": "target_company_id text, workspace_name text, preset_code text, icon_key text, icon_image text",
       "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
@@ -11777,6 +11785,16 @@
       "authenticated_execute": true
     },
     {
+      "name": "set_default_operational_workspace",
+      "returns": "workspaces",
+      "arguments": "target_workspace_id uuid",
+      "volatility": "v",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
       "name": "set_updated_at",
       "returns": "trigger",
       "arguments": "",
@@ -11869,7 +11887,7 @@
     {
       "name": "update_operational_workspace",
       "returns": "workspaces",
-      "arguments": "target_workspace_id uuid, workspace_name text, workspace_description text, icon_key text, next_status text",
+      "arguments": "target_workspace_id uuid, workspace_name text, workspace_description text, icon_key text, next_status text, icon_image text",
       "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
@@ -13017,6 +13035,10 @@
     {
       "version": "20260728223037",
       "name": "record_history_workspace_fk_index"
+    },
+    {
+      "version": "20260729224956",
+      "name": "operational_workspace_persistence"
     }
   ]
 }

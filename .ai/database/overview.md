@@ -1,17 +1,25 @@
 # Database overview
 
-The live Supabase public catalog was captured 2026-07-28T22:31:54.000Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
+The live Supabase public catalog was captured 2026-07-29T22:52:09.000Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
 
 ## Catalog summary
 
 - Public tables/views: 76
 - Foreign-key column relationships: 194
 - RLS policies: 224
-- Public functions: 63
+- Public functions: 64
 - Triggers: 91
 - Storage buckets: 6
-- Applied migration ledger entries: 85
-- Latest live ledger entry: `20260728223037_record_history_workspace_fk_index`
+- Applied migration ledger entries: 86
+- Latest live ledger entry: `20260729224956_operational_workspace_persistence`
+
+## Operational-workspace identity
+
+`workspaces.icon_image` stores a validated PNG, JPEG, or WebP data URL for shared uploaded
+workspace icons; an empty value selects the built-in `icon_key`. The create and update RPCs
+accept that field through backward-compatible trailing parameters. The authorized
+`set_default_operational_workspace(uuid)` RPC serializes each company's change and atomically
+clears the old default before selecting an active replacement.
 
 ## Launch-critical onboarding state
 

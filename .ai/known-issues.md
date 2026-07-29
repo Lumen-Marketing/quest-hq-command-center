@@ -93,18 +93,6 @@ remains on Tasks. The durable end state is to reuse a persistent iframe host acr
 renders or finish the native Tasks migration; until then, review new asynchronous render
 callers for whether they can fire while Tasks is open.
 
-## Operational-workspace default and uploaded icon do not persist in live mode
-
-The Company-settings "Workspace directory" lets an admin **set a default workspace** and **upload a
-custom workspace icon/image** (in addition to picking a built-in icon). Both take effect immediately
-in session state and persist under the local fallback, but the live RPCs
-`create_operational_workspace` and `update_operational_workspace` accept only `icon_key` and
-`status` — there is no column or parameter for an uploaded image or a set-default action. On a live
-Supabase session these two changes therefore do **not** survive a reload. A reviewed migration adding
-a `workspaces.icon_image` column and a `set_default_operational_workspace` RPC (plus threading
-`icon_image` through the create/update RPCs) is required before they persist for the team. The client
-already stores `icon_image` on the normalized workspace and applies the default flag optimistically.
-
 ## Appearance customization is per-browser and cannot reach the Tasks iframe
 
 Settings → Appearance (theme, accent, background pattern/upload, card solid/glass) stores choices in

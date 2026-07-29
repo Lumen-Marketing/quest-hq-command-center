@@ -1,6 +1,6 @@
 # Public functions
 
-Captured 2026-07-28T22:31:54.000Z. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
+Captured 2026-07-29T22:52:09.000Z. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
 
 | Function | Returns | Definer | anon | authenticated | service_role |
 | --- | --- | --- | --- | --- | --- |
@@ -14,7 +14,7 @@ Captured 2026-07-28T22:31:54.000Z. Execute grants are catalog facts; SECURITY DE
 | `can_view_team()` | boolean | yes | no | yes | yes |
 | `convert_deal_to_job(p_job jsonb, p_deal jsonb)` | jsonb | yes | no | yes | yes |
 | `create_company_workspace(company_name text, preset_code text, icon_key text, owner_email text)` | text | yes | no | yes | yes |
-| `create_operational_workspace(target_company_id text, workspace_name text, preset_code text, icon_key text)` | uuid | yes | no | yes | yes |
+| `create_operational_workspace(target_company_id text, workspace_name text, preset_code text, icon_key text, icon_image text)` | uuid | yes | no | yes | yes |
 | `current_company_ids()` | text[] | yes | no | yes | yes |
 | `current_member_id()` | text | yes | no | yes | yes |
 | `current_profile_role()` | text | yes | no | yes | yes |
@@ -53,6 +53,7 @@ Captured 2026-07-28T22:31:54.000Z. Execute grants are catalog facts; SECURITY DE
 | `ringcentral_conversation_stats(p_company_id text, p_from timestamp with time zone, p_to timestamp with time zone)` | TABLE(extension_id text, extension_number text, extension_name text, total_calls bigint, conversations bigint) | no | no | yes | yes |
 | `save_company_role(p_role jsonb, p_permissions text[])` | roles | yes | no | yes | yes |
 | `set_company_plugin(target_company_id text, target_plugin_id text, next_status text)` | text | yes | no | yes | yes |
+| `set_default_operational_workspace(target_workspace_id uuid)` | workspaces | yes | no | yes | yes |
 | `set_updated_at()` | trigger | no | yes | yes | yes |
 | `set_workspace_member(target_workspace_id uuid, target_profile_id uuid, target_role_id uuid, next_status text)` | workspace_memberships | yes | no | yes | yes |
 | `set_workspace_plugin(target_workspace_id uuid, target_plugin_id text, next_status text)` | text | yes | no | yes | yes |
@@ -62,7 +63,7 @@ Captured 2026-07-28T22:31:54.000Z. Execute grants are catalog facts; SECURITY DE
 | `update_company_appearance(target_company_id text, p_prefs jsonb)` | companies | yes | no | yes | yes |
 | `update_company_workspace(target_company_id text, workspace_name text, icon_key text)` | text | yes | no | yes | yes |
 | `update_company_workspace(target_company_id text, workspace_name text, icon_key text, icon_image text)` | text | yes | no | yes | yes |
-| `update_operational_workspace(target_workspace_id uuid, workspace_name text, workspace_description text, icon_key text, next_status text)` | workspaces | yes | no | yes | yes |
+| `update_operational_workspace(target_workspace_id uuid, workspace_name text, workspace_description text, icon_key text, next_status text, icon_image text)` | workspaces | yes | no | yes | yes |
 | `update_own_appearance(p_prefs jsonb)` | profiles | yes | no | yes | yes |
 | `update_own_profile(p_full_name text, p_avatar_url text)` | profiles | yes | no | yes | yes |
 | `wb_add_item_comment(p_company_id text, p_workspace_id text, p_app_id text, p_item_id text, p_comment jsonb)` | jsonb | yes | no | yes | yes |
