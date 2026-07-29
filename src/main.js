@@ -28749,9 +28749,16 @@ async function saveMessageAttachments(message, files) {
 async function persistConversation(conversation, accessRows, update = false) {
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
+    // No .select() on the insert. PostgREST turns that into INSERT ... RETURNING, and
+    // Postgres applies the SELECT policy to the returned row. A brand-new conversation
+    // has no message_conversation_access rows yet, so can_access_message_conversation()
+    // cannot see it and the statement fails with "new row violates row-level security
+    // policy" — which reads like the insert was rejected when it is really the read-back.
+    // The access rows are written immediately after, and the locally built row is already
+    // the same data, so there is nothing to gain from reading it back here.
     const conversationResult = update
       ? await client.from('message_conversations').update(messageConversationPayload(conversation)).eq('id', conversation.id).select().single()
-      : await client.from('message_conversations').insert(messageConversationPayload(conversation)).select().single();
+      : await client.from('message_conversations').insert(messageConversationPayload(conversation));
     if (conversationResult.error) {
       showToast(conversationResult.error.message || 'Conversation save failed.', 'local', 'Messages');
       return false;
@@ -28768,7 +28775,8 @@ async function persistConversation(conversation, accessRows, update = false) {
         return false;
       }
     }
-    conversation = normalizeMessageConversation(conversationResult.data);
+    // Only the update path reads the row back; the insert path keeps the local object.
+    if (conversationResult.data) conversation = normalizeMessageConversation(conversationResult.data);
     state.sync = { label: 'Quest Supabase live', mode: 'live' };
   }
   state.messageConversations = [conversation].concat(state.messageConversations.filter((item) => item.id !== conversation.id));
