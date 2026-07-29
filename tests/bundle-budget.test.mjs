@@ -16,6 +16,32 @@ test('bundle budget reports individual and total initial JavaScript regressions'
   assert.ok(checkBundleBudget({ manifest, gzipSizes: sizes, limits: { entryJs: 250, initialJs: 400, entryCss: 90 } }).length >= 3);
 });
 
+test('bundle budget allows only an explicit bounded cross-zlib gzip variance', () => {
+  const manifest = {
+    'src/main.js': { file: 'assets/app.js', isEntry: true },
+  };
+  const limits = { entryJs: 100, initialJs: 1_000, entryCss: 100 };
+
+  assert.deepEqual(
+    checkBundleBudget({
+      manifest,
+      gzipSizes: { 'assets/app.js': 102 },
+      limits,
+      toleranceBytes: 2,
+    }),
+    [],
+  );
+  assert.match(
+    checkBundleBudget({
+      manifest,
+      gzipSizes: { 'assets/app.js': 103 },
+      limits,
+      toleranceBytes: 2,
+    })[0],
+    /Entry JavaScript 103 exceeds 100 gzip bytes/,
+  );
+});
+
 test('map runtime is lazy and stable vendors have explicit chunk boundaries', () => {
   assert.doesNotMatch(app, /from ['"]leaflet['"]/);
   assert.match(app, /import\(['"]leaflet['"]\)/);

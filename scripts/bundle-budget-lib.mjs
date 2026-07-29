@@ -21,6 +21,11 @@ export const DEFAULT_BUNDLE_LIMITS = Object.freeze({
   entryCss: 120 * 1024,
 });
 
+// zlib patch versions can encode the same minified asset a few bytes
+// differently. Keep the product budget unchanged while allowing a deliberately
+// tiny, explicit margin between local Node and Vercel's Node runtime.
+export const GZIP_ENVIRONMENT_TOLERANCE_BYTES = 64;
+
 function initialManifestEntries(manifest, entryKey) {
   const seen = new Set();
   const visit = (key) => {
@@ -32,8 +37,14 @@ function initialManifestEntries(manifest, entryKey) {
   return [...seen].map((key) => manifest[key]);
 }
 
-export function checkBundleBudget({ manifest, gzipSizes, limits = DEFAULT_BUNDLE_LIMITS }) {
+export function checkBundleBudget({
+  manifest,
+  gzipSizes,
+  limits = DEFAULT_BUNDLE_LIMITS,
+  toleranceBytes = 0,
+}) {
   const failures = [];
+  const tolerance = Math.max(0, Number(toleranceBytes) || 0);
   const entryPair = Object.entries(manifest || {}).find(([, value]) => value?.isEntry);
   if (!entryPair) return ['Bundle manifest has no entry module.'];
   const [entryKey, entry] = entryPair;
@@ -41,8 +52,8 @@ export function checkBundleBudget({ manifest, gzipSizes, limits = DEFAULT_BUNDLE
   const initialBytes = initialManifestEntries(manifest, entryKey)
     .reduce((total, item) => total + Number(gzipSizes[item.file] || 0), 0);
   const cssBytes = (entry.css || []).reduce((total, file) => total + Number(gzipSizes[file] || 0), 0);
-  if (entryBytes > limits.entryJs) failures.push(`Entry JavaScript ${entryBytes} exceeds ${limits.entryJs} gzip bytes.`);
-  if (initialBytes > limits.initialJs) failures.push(`Initial JavaScript ${initialBytes} exceeds ${limits.initialJs} gzip bytes.`);
-  if (cssBytes > limits.entryCss) failures.push(`Entry CSS ${cssBytes} exceeds ${limits.entryCss} gzip bytes.`);
+  if (entryBytes > limits.entryJs + tolerance) failures.push(`Entry JavaScript ${entryBytes} exceeds ${limits.entryJs} gzip bytes.`);
+  if (initialBytes > limits.initialJs + tolerance) failures.push(`Initial JavaScript ${initialBytes} exceeds ${limits.initialJs} gzip bytes.`);
+  if (cssBytes > limits.entryCss + tolerance) failures.push(`Entry CSS ${cssBytes} exceeds ${limits.entryCss} gzip bytes.`);
   return failures;
 }
