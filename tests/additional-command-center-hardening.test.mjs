@@ -127,11 +127,18 @@ test('workspace review subscription fallback retains every normalized lifecycle 
   assert.deepEqual(reviews.map((review) => review.status).sort(), statuses.slice().sort());
 });
 
-test('lifecycle migration preserves the reviewed permission function and applies only the audit-proven non-Stripe archive backfill', () => {
-  assert.match(migration, /status in \('pending_review', 'trialing', 'active', 'past_due', 'grace', 'suspended', 'archived', 'rejected', 'canceled', 'incomplete'\)/);
-  assert.match(migration, /where cs\.status = 'canceled'[\s\S]*cs\.stripe_subscription_id is null[\s\S]*latest_terminal\.event_type = 'platform\.company\.archive'/);
+test('lifecycle migration preserves legacy status compatibility and classifies audit-proven terminal outcomes', () => {
+  assert.match(migration, /status in \('pending_review', 'trialing', 'active', 'past_due', 'grace', 'suspended', 'canceled', 'incomplete'\)/);
+  assert.match(migration, /add column if not exists terminal_status text default null/);
+  assert.match(migration, /where cs\.status = 'canceled'[\s\S]*latest_terminal\.created_at >= cs\.stripe_event_created_at/);
+  assert.match(migration, /platform\.company\.archive[\s\S]*platform\.company\.delete[\s\S]*platform\.company\.cancel[\s\S]*then 'archived'/);
+  assert.match(migration, /workspace\.reviewed'[\s\S]*details ->> 'status' = 'canceled'[\s\S]*then 'rejected'/);
   assert.match(migration, /create or replace function public\.list_workspace_reviews\(\)/);
+  assert.match(migration, /create or replace function public\.list_workspace_reviews_v2\(\)/);
   assert.match(migration, /create or replace function public\.review_company_workspace\([\s\S]*'rejected'/);
   assert.match(migration, /create or replace function public\.list_platform_companies\(\)[\s\S]*icon_key text/);
+  assert.match(migration, /create or replace function public\.list_platform_companies_v2\(\)[\s\S]*icon_key text/);
   assert.match(migration, /create or replace function public\.manage_platform_company\([\s\S]*when 'archive' then 'archived'/);
+  assert.match(migration, /case when next_status in \('archived', 'rejected', 'canceled'\) then 'canceled' else next_status end/);
+  assert.match(migration, /case when next_status in \('archived', 'rejected', 'canceled'\) then next_status else null end/);
 });

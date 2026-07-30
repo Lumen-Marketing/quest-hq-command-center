@@ -3890,10 +3890,11 @@ async function loadSupabaseData() {
 
   if (state.platformAdmin) {
     const [platformCompaniesResult, platformMembersResult, platformBackupCopiesResult] = await Promise.all([
-      safeSupabaseQuery(client.rpc('list_platform_companies')),
+      safeSupabaseQuery(client.rpc('list_platform_companies_v2')),
       safeSupabaseQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
       safeSupabaseQuery(client.rpc('list_platform_backup_copies', { filter_company_id: null, filter_status: null, filter_kind: null })),
     ]);
+    if (platformCompaniesResult.error) throw platformCompaniesResult.error;
     if (!platformCompaniesResult.error) {
       state.platformCompanies = (platformCompaniesResult.data || []).map(normalizePlatformCompany);
       state.workspaceReviews = state.platformCompanies.map(normalizeWorkspaceReview);
@@ -3917,7 +3918,8 @@ async function loadSupabaseData() {
   }
 
   if (isQuestDeveloper() && !state.platformCompanies.length) {
-    const reviewsResult = await safeSupabaseQuery(client.rpc('list_workspace_reviews'));
+    const reviewsResult = await safeSupabaseQuery(client.rpc('list_workspace_reviews_v2'));
+    if (reviewsResult.error) throw reviewsResult.error;
     if (!reviewsResult.error) {
       state.workspaceReviews = (reviewsResult.data || []).map(normalizeWorkspaceReview);
       const reviewCompanies = state.workspaceReviews.map((review) => normalizeCompany({
@@ -4016,9 +4018,10 @@ async function loadSupabaseBootstrapData() {
   }
   if (state.platformAdmin) {
     const [platformCompaniesResult, platformMembersResult] = await Promise.all([
-      safeSupabaseQuery(client.rpc('list_platform_companies')),
+      safeSupabaseQuery(client.rpc('list_platform_companies_v2')),
       safeSupabaseQuery(client.rpc('list_platform_company_members', { target_company_id: null })),
     ]);
+    if (platformCompaniesResult.error) throw platformCompaniesResult.error;
     if (!platformCompaniesResult.error) {
       state.platformCompanies = (platformCompaniesResult.data || []).map(normalizePlatformCompany);
       state.companies = mergeCompanies(state.companies.concat(state.platformCompanies.map((company) => normalizeCompany({
@@ -35778,6 +35781,7 @@ function subscriptionAllowsCompany(companyId = activeCompanyId()) {
   if (subscriptionNeedsReview(companyId)) return false;
   const subscription = companySubscription(companyId);
   if (!subscription) return true;
+  if (INACTIVE_COMPANY_STATUSES.includes(subscription.status)) return false;
   if (['trialing', 'active', 'past_due', 'grace'].includes(subscription.status)) return true;
   if (subscription.grace_ends_at && Date.parse(subscription.grace_ends_at) > Date.now()) return true;
   return false;
@@ -37206,7 +37210,7 @@ function normalizeMembership(input) {
 function normalizeSubscription(input) {
   return {
     company_id: canonicalCompanyId(input.company_id || ''),
-    status: normalizeSubscriptionStatus(input.status) || 'pending_review',
+    status: normalizeSubscriptionStatus(input.terminal_status || input.status) || 'pending_review',
     plan_code: String(input.plan_code || 'quest_company_300'),
     amount_cents: number(input.amount_cents || 30000),
     currency: String(input.currency || 'usd'),
@@ -37229,7 +37233,7 @@ function normalizeWorkspaceReview(input) {
     pill: String(input.pill || ''),
     icon_key: workspaceIconOption(input.icon_key).key,
     icon_image: sanitizeWorkspaceIconImage(input.icon_image),
-    status: normalizeSubscriptionStatus(input.status) || 'pending_review',
+    status: normalizeSubscriptionStatus(input.terminal_status || input.status) || 'pending_review',
     plan_code: String(input.plan_code || 'quest_company_300'),
     amount_cents: number(input.amount_cents || 30000),
     currency: String(input.currency || 'usd'),

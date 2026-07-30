@@ -35,7 +35,7 @@ test('supabase access survives noncritical full-data load fallback without trust
   assert.match(source, /async function loadSupabaseBootstrapData\(\)/);
   assert.match(source, /safeSupabaseQuery\(client\.from\('company_memberships'\)\.select\('\*'\)\.eq\('profile_id', profile\.id\)\)/);
   assert.match(source, /safeSupabaseQuery\(client\.rpc\('is_platform_admin'\)\)/);
-  assert.match(source, /safeSupabaseQuery\(client\.rpc\('list_platform_companies'\)\)/);
+  assert.match(source, /safeSupabaseQuery\(client\.rpc\('list_platform_companies_v2'\)\)/);
   assert.doesNotMatch(source, /client\.rpc\([^;\n]+\.catch\(\(error\) => \(\{ error \}\)\)/);
   assert.match(source, /const companyIds = compactUnique\(state\.memberships[\s\S]*item\.profile_id === activeSession\(\)\.profile\.id && item\.status === 'active'/);
   assert.match(source, /if \(state\.session\?\.auth === 'supabase'\) \{[\s\S]*const membershipIds = state\.memberships[\s\S]*return compactUnique\(membershipIds\)/);

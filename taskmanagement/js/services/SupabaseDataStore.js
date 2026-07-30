@@ -1,5 +1,9 @@
 window.App = window.App || {};
 
+function taskSubscriptionStatus(row) {
+  return String((row && (row.terminal_status || row.status)) || '');
+}
+
 App.SupabaseDataStore = class SupabaseDataStore {
   constructor({ supabase, currentUser, role, workspaceId }) {
     if (!supabase) throw new Error('Supabase client is required.');
@@ -217,7 +221,7 @@ App.SupabaseDataStore = class SupabaseDataStore {
       profiles: profilesRes.data || [],
       companies: companiesRes.data || [],
       inactiveCompanyIds: (subscriptionsRes.data || [])
-        .filter(row => ['archived', 'rejected', 'canceled'].includes(String(row && row.status)))
+        .filter(row => ['archived', 'rejected', 'canceled'].includes(taskSubscriptionStatus(row)))
         .map(row => row.company_id),
       tasks,
       timeEntries: entryRows.filter(row => workspaceTaskIds.has(row.task_id)).map(row => ({

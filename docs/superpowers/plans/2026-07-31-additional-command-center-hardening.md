@@ -14,9 +14,13 @@ state.
 Add failing regression tests and then update browser lifecycle mapping, filters, labels,
 inactive-company handling, and the task module's company visibility rules. Archive must
 write `archived`, Reject must write `rejected`, and Stripe cancellation must remain
-`canceled`. Add one additive Supabase migration that expands the status constraint and
-replaces the affected platform functions. Do not blindly rewrite historical canceled
-rows.
+`canceled` as effective statuses. Implement them as an expand/contract migration:
+legacy `status` remains `canceled` for every terminal row, nullable `terminal_status`
+stores the distinction, v1 list RPCs retain the legacy projection, and v2 list RPCs serve
+the current client. Translate legacy Reject input, preserve manual terminal state across
+non-canceled Stripe events, let Stripe cancellation supersede it, and clear terminal state
+only on the permitted reactivation path. Backfill only audit-proven outcomes and add
+old-client plus transition-matrix regressions.
 
 ## Task 3: Insert-return and Storage contracts
 
@@ -30,6 +34,7 @@ policies.
 
 ## Task 4: Live verification, publishing, and checked PDF
 
-Apply the database migration, rerun focused and full checks, inspect Supabase advisors,
-publish the branch/main update, deploy, and run production smoke checks. Generate, render,
-and visually inspect the final plain-language PDF checklist.
+Apply the compatibility database migration first, verify v1 and v2 RPC behavior, then deploy
+the lifecycle-v2 client. Rerun focused and full checks, inspect Supabase advisors, publish
+the branch/main update, and run production smoke checks for old and current client paths.
+Generate, render, and visually inspect the final plain-language PDF checklist.

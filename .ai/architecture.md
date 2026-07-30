@@ -83,6 +83,7 @@ The SPA supports:
 - Contact SMS does not mount its thread or composer until a server readiness response proves tenant access, provider setup, workspace-safe storage/number assignment, and a complete code-level workspace-routing contract.
 - Browser access uses the publishable/anon key and relies on RLS.
 - Service credentials never enter Vite client variables.
+- Terminal company lifecycle uses an expand/contract projection: `company_subscriptions.status` keeps the legacy `canceled` value for every terminal row, while nullable `terminal_status` distinguishes `archived`, `rejected`, and Stripe `canceled`. Legacy RPCs expose the safe legacy projection; lifecycle-v2 RPCs and current clients expose `coalesce(terminal_status, status)`. A non-null terminal status always blocks subscription access, including when a stale grace date remains.
 - Destructive business operations use safe-delete/recycle-bin or atomic RPCs where defined.
 - Database mutations preserve the repository migration history.
 - Public-token endpoints expose the minimum required record fields.

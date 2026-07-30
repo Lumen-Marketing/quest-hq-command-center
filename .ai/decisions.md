@@ -305,20 +305,31 @@ directory, so a blob per row would make that query pathological. A `pg_column_si
 check constraint stops the column being repurposed as a blob store. Syncing the image would
 mean a Storage bucket plus its RLS, upload path and cleanup of replaced images.
 
-## Terminal company lifecycle states stay distinct while remaining accessible
+## Terminal company lifecycle uses a backward-compatible projection
 
-The master-panel Archive action writes `archived`, approval-console Reject writes `rejected`,
-and Stripe webhooks alone write `canceled`. Memberships and history stay intact. All three
-states are inactive in normal selectors and task filters; platform lists expose separate
-Archived, Rejected, and Canceled filters. Inactive companies are filtered out of
-`allowedCompanies()` — the switcher and every company picker — and out of the platform
-company lists, which default to the Active status filter. The company a user is currently
-inside is never hidden; archiving the one you are looking at would otherwise strand you on a screen you cannot
-identify or switch away from. Access control (`allowedCompanyIds()`) is untouched, so this
-is a listing rule, not a permission change.
+Archive, approval rejection, and Stripe cancellation must remain distinct without making
+an already-open production client treat a new status as pending. The canonical distinction
+therefore lives in nullable `company_subscriptions.terminal_status`
+(`archived|rejected|canceled`), while the existing `status` column keeps the legacy value
+`canceled` for every terminal row. Legacy list RPCs continue to expose `status`; lifecycle-v2
+RPCs and current direct-row normalizers prefer `terminal_status`. The database trigger
+defaults a legacy canceled write to terminal `canceled` and ensures every non-terminal
+legacy status carries no terminal value.
 
-A narrowly targeted migration backfilled only legacy canceled rows without a Stripe
-subscription whose latest terminal audit event was `platform.company.archive`.
+Archive/Delete/Cancel platform actions write legacy `canceled` plus terminal `archived`.
+Approval-console Reject, including the legacy client input `canceled`, writes terminal
+`rejected`. Stripe cancellation overwrites the terminal outcome with `canceled`; a newer
+non-canceled Stripe event clears a prior Stripe cancellation but cannot reopen a manually
+archived or rejected company. Only an explicit platform reactivation clears a manual
+terminal outcome. A non-null terminal status blocks database access even if an old grace
+date is still in the future.
+
+All three effective terminal states are inactive in normal selectors and task filters;
+platform lists expose separate Archived, Rejected, and Canceled filters. The company a user
+is currently inside remains visible to prevent stranding. A narrowly targeted backfill
+classifies only audit-proven platform archive/delete/cancel and rejected-review events that
+are at least as recent as the last Stripe event; every other legacy canceled row becomes a
+Stripe-style terminal cancellation.
 
 ## Company appearance is a default, not a mandate
 

@@ -14,11 +14,18 @@ Close the five release checks supplied by the team without widening tenant acces
 
 - Permission parity and real-company alias precedence already exist on `main`. This change
   adds verification evidence instead of replacing working code.
-- Company lifecycle adds `archived` and `rejected`. Existing `canceled` rows remain
-  `canceled`, because old data does not reliably reveal whether a row came from billing,
-  Archive, or Reject.
-- Archive writes `archived`; the approval console's Reject action writes `rejected`;
-  billing cancellation remains `canceled`. All three remain non-active states.
+- Company lifecycle uses an expand/contract projection. The legacy `status` column keeps
+  terminal rows as `canceled`; nullable `terminal_status` carries `archived`, `rejected`, or
+  Stripe `canceled`. Old RPCs remain safe for already-open clients, while lifecycle-v2 RPCs
+  and current direct-row normalizers expose the effective value.
+- Archive/Delete/Cancel platform actions set terminal `archived`; approval-console Reject
+  (including a legacy `canceled` request) sets terminal `rejected`; Stripe cancellation sets
+  terminal `canceled`. A later live Stripe event clears only a Stripe cancellation and
+  preserves a manual archive/rejection until explicit platform reactivation.
+- The backfill classifies audit-proven platform archive/delete/cancel or rejected review
+  events only when the audit is at least as recent as the last Stripe event. Other legacy
+  canceled rows remain effectively canceled. Every terminal state blocks subscription
+  access even if a stale grace date remains.
 - Each audited `insert(...).select(...)` site must either have row visibility immediately
   after INSERT or stop requesting a returned row.
 - `quest-form-response-files` remains private and has no browser Storage policy. Files are
@@ -28,7 +35,7 @@ Close the five release checks supplied by the team without widening tenant acces
 
 ## Verification
 
-- Focused lifecycle, permission, alias, insert-return, and file-storage contract tests.
+- Focused lifecycle transition/old-client, permission, alias, insert-return, and file-storage contract tests.
 - Full repository check, including build and existing regression suite.
 - Live Supabase function, constraint, bucket, and policy checks.
 - Production deployment and smoke test.

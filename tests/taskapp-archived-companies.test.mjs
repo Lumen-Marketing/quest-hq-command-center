@@ -19,7 +19,23 @@ const taskDetail = readFileSync(new URL('../taskmanagement/js/views/TaskDetailVi
 test('the task app loads subscription status into inactive company ids', () => {
   assert.match(store, /_optionalSelect\('company_subscriptions'\)/);
   assert.match(store, /inactiveCompanyIds:/);
-  assert.match(store, /\['archived', 'rejected', 'canceled'\]\.includes\(String\(row && row\.status\)\)/);
+  assert.match(store, /\['archived', 'rejected', 'canceled'\]\.includes\(taskSubscriptionStatus\(row\)\)/);
+});
+
+test('the task app prefers terminal status while old task clients still see canceled', () => {
+  const match = store.match(/function taskSubscriptionStatus\(row\) \{[\s\S]*?\n\}/);
+  assert.ok(match, 'expected taskSubscriptionStatus helper');
+  const run = new Function('row', `${match[0]}\nreturn taskSubscriptionStatus(row);`);
+
+  assert.equal(run({ status: 'canceled', terminal_status: 'archived' }), 'archived');
+  assert.equal(run({ status: 'canceled', terminal_status: 'rejected' }), 'rejected');
+  assert.equal(run({ status: 'canceled', terminal_status: 'canceled' }), 'canceled');
+  assert.equal(run({ status: 'active', terminal_status: null }), 'active');
+
+  const legacyTaskInactive = (row) => ['archived', 'rejected', 'canceled'].includes(String(row && row.status));
+  for (const terminal_status of ['archived', 'rejected', 'canceled']) {
+    assert.equal(legacyTaskInactive({ status: 'canceled', terminal_status }), true);
+  }
 });
 
 test('the subscription read is optional so a permission failure cannot break loading', () => {

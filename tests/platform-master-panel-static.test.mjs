@@ -25,7 +25,7 @@ test('platform master panel is gated to platform admins and lists companies with
   assert.match(source, /function renderPlatformCompanyRow\(company, currentCompanyId\)/);
   assert.match(source, /function renderPlatformMemberRow\(member\)/);
   assert.match(source, /data-action="platform-company-action"/);
-  assert.match(source, /client\.rpc\('list_platform_companies'\)/);
+  assert.match(source, /client\.rpc\('list_platform_companies_v2'\)/);
   assert.match(source, /client\.rpc\('list_platform_company_members', \{ target_company_id: null \}\)/);
   assert.match(source, /client\.rpc\('manage_platform_company'/);
 });
