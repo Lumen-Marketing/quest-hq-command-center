@@ -7,7 +7,7 @@
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
     "main_commit_at_capture": "7d430904d7070fc5a9a2f19ea31d025ed1ce956b",
-    "latest_migration": "20260730181000_pipeline_stage_seed_repair.sql"
+    "latest_migration": "20260730192246_additional_command_center_hardening.sql"
   },
   "live": {
     "supabase_verified_at": "2026-07-31T02:38:55+08:00",
