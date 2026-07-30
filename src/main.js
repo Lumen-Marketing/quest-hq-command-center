@@ -36210,7 +36210,7 @@ function canonicalCompanyId(id) {
   // The alias must not apply when a REAL company owns the raw id: naming a company
   // "Quest Roofing" slugs it to `quest-roofing`, and a blanket alias rewrote every
   // reference to the demo `roofing` company, so the new workspace silently vanished.
-  const raw = authoritativeCompanyId(id);
+  const raw = String(id || '').trim();
   const alias = { 'quest-roofing': 'roofing', 'quest-drafting': 'drafting' }[raw];
   if (!alias) return raw;
   // The module-load seed calls this from inside the `const state = {...}` initializer, so
