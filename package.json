@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "test": "node --test tests/*.mjs",
     "build:icons": "node scripts/build-icon-subset.mjs",
-    "build": "vite build && node scripts/sync-spa-assets.mjs dist && node scripts/check-bundle-budget.mjs dist",
+    "build": "vite build && node scripts/sync-spa-assets.mjs dist && node scripts/check-bundle-budget.mjs dist && node scripts/check-bundle-boots.mjs dist",
     "ai:check": "node scripts/check-ai-context.mjs",
     "check": "npm test && npm run ai:check && npm run build",
     "preview": "vite preview --host 127.0.0.1",

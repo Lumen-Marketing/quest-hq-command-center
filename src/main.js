@@ -36186,20 +36186,19 @@ function photoCountForJob(jobId) {
   return state.files.filter((file) => file.job_id === jobId && fileTypeKind(file) === 'image').length;
 }
 
-// Legacy aliases for the seeded demo companies, kept so old links still resolve.
-//
-// They must not apply when a REAL company owns the raw id: naming a company
-// "Quest Roofing" slugs it to `quest-roofing`, and a blanket alias rewrote every
-// reference to the demo `roofing` company — so the new workspace silently vanished.
-// The alias is now a fallback used only when nothing real answers to the id.
-const LEGACY_COMPANY_ALIASES = {
-  'quest-roofing': 'roofing',
-  'quest-drafting': 'drafting',
-};
-
 function canonicalCompanyId(id) {
+  // Legacy aliases for the seeded demo companies, kept so old links still resolve.
+  //
+  // Declared INSIDE the function on purpose. The module-load seed calls this from the
+  // `const state = {...}` initializer near the top of the file, so a module-scope const
+  // declared down here would still be in its temporal dead zone and throw — which blanked
+  // the whole app at startup.
+  //
+  // The alias must not apply when a REAL company owns the raw id: naming a company
+  // "Quest Roofing" slugs it to `quest-roofing`, and a blanket alias rewrote every
+  // reference to the demo `roofing` company, so the new workspace silently vanished.
   const raw = String(id || '').trim();
-  const alias = LEGACY_COMPANY_ALIASES[raw];
+  const alias = { 'quest-roofing': 'roofing', 'quest-drafting': 'drafting' }[raw];
   if (!alias) return raw;
   // The module-load seed calls this from inside the `const state = {...}` initializer, so
   // `state` is still in its temporal dead zone and even `state?.` would throw. Nothing is

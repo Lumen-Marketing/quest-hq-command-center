@@ -5,10 +5,18 @@ import test from 'node:test';
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 
 // Rebuild canonicalCompanyId in isolation so the alias rule can be exercised directly.
-const from = source.indexOf('const LEGACY_COMPANY_ALIASES');
 const at = source.indexOf('\nfunction canonicalCompanyId(id) {');
-const code = source.slice(from, source.indexOf('\n}', at) + 2);
+const code = source.slice(at, source.indexOf('\n}', at) + 2);
 const canonical = new Function('state', 'id', `${code}\nreturn canonicalCompanyId(id);`);
+
+// This blanked the whole app in production. The module-load seed calls this from inside
+// the `const state = {...}` initializer, so ANY module-scope const this function reads —
+// including the alias map itself — is still in its temporal dead zone and throws before
+// the first render. The map has to be function-scoped.
+test('the alias map is not a module-scope const read from the dead zone', () => {
+  assert.doesNotMatch(source, /^const LEGACY_COMPANY_ALIASES/m, 'the map must live inside the function');
+  assert.match(code, /const alias = \{ 'quest-roofing': 'roofing', 'quest-drafting': 'drafting' \}\[raw\];/);
+});
 
 // Naming a company "Quest Roofing" slugs it to `quest-roofing`. A blanket alias rewrote
 // every reference to the seeded demo `roofing` company, so the real workspace silently
