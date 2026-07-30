@@ -5,18 +5,20 @@
 // The subscription statuses that read as "this company is live".
 export const ACTIVE_COMPANY_STATUSES = ['active', 'trialing', 'past_due', 'grace'];
 
-// Archiving a company writes the 'canceled' status (platformActionStatus in
-// main.js). Rejecting one from the approval console writes the SAME status, so
-// "archived" and "rejected" are indistinguishable in the data today — anything
-// filed under 'canceled' is treated as archived here.
-export const ARCHIVED_COMPANY_STATUS = 'canceled';
+// Terminal lifecycle states deliberately remain distinct. `canceled` is reserved
+// for Stripe, while platform archiving and approval rejection write their own
+// states. All three are inactive in normal company selectors.
+export const ARCHIVED_COMPANY_STATUS = 'archived';
+export const INACTIVE_COMPANY_STATUSES = ['archived', 'rejected', 'canceled'];
 
 export const COMPANY_STATUS_FILTERS = [
   ['active', 'Active'],
   ['pending_review', 'Pending review'],
   ['suspended', 'Suspended'],
-  ['canceled', 'Archived'],
-  ['all', 'All (incl. archived)'],
+  ['archived', 'Archived'],
+  ['rejected', 'Rejected'],
+  ['canceled', 'Canceled'],
+  ['all', 'All (incl. inactive)'],
 ];
 
 export const COMPANY_PAGE_SIZE = 25;
@@ -45,10 +47,13 @@ export function isArchivedCompany(row) {
   return String(row?.status || '') === ARCHIVED_COMPANY_STATUS;
 }
 
-// status 'all' shows everything including archived; any other value matches that
+export function isInactiveCompany(row) {
+  return INACTIVE_COMPANY_STATUSES.includes(String(row?.status || ''));
+}
+
+// status 'all' shows everything including inactive companies; any other value matches that
 // status exactly, except 'active' which covers the whole live family (trialing,
-// past_due, grace). Archived rows are hidden unless explicitly asked for — that is
-// the point of archiving one.
+// past_due, grace). Terminal rows are hidden unless explicitly requested.
 export function filterCompanyRows(rows, { search = '', status = 'active' } = {}) {
   const list = Array.isArray(rows) ? rows : [];
   return list.filter((row) => {

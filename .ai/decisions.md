@@ -305,20 +305,20 @@ directory, so a blob per row would make that query pathological. A `pg_column_si
 check constraint stops the column being repurposed as a blob store. Syncing the image would
 mean a Storage bucket plus its RLS, upload path and cleanup of replaced images.
 
-## Archived companies stay accessible but stop being listed
+## Terminal company lifecycle states stay distinct while remaining accessible
 
-Archiving a company from the master panel writes subscription status `canceled`
-(`platformActionStatus`), leaving memberships and history intact. Archived companies are
-filtered out of `allowedCompanies()` — the switcher and every company picker — and out of
-the platform company lists, which default to the Active status filter and can surface them
-again via the Archived option. The company a user is currently inside is never hidden;
-archiving the one you are looking at would otherwise strand you on a screen you cannot
+The master-panel Archive action writes `archived`, approval-console Reject writes `rejected`,
+and Stripe webhooks alone write `canceled`. Memberships and history stay intact. All three
+states are inactive in normal selectors and task filters; platform lists expose separate
+Archived, Rejected, and Canceled filters. Inactive companies are filtered out of
+`allowedCompanies()` — the switcher and every company picker — and out of the platform
+company lists, which default to the Active status filter. The company a user is currently
+inside is never hidden; archiving the one you are looking at would otherwise strand you on a screen you cannot
 identify or switch away from. Access control (`allowedCompanyIds()`) is untouched, so this
 is a listing rule, not a permission change.
 
-Known limitation: the approval console's Reject action writes the same `canceled` status, so
-archived and rejected companies are indistinguishable in the data today. Separating them
-needs a distinct status value.
+A narrowly targeted migration backfilled only legacy canceled rows without a Stripe
+subscription whose latest terminal audit event was `platform.company.archive`.
 
 ## Company appearance is a default, not a mandate
 

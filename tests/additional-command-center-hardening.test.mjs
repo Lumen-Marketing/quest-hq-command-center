@@ -98,3 +98,23 @@ test('SQL permissions match browser message aliases while retaining plugin gates
   assert.match(migration, /not exists \(select 1 from assigned where effect = 'deny'\)[\s\S]*exists \(select 1 from assigned where effect = 'allow'\)/);
   assert.match(migration, /permission in \('jobs\.view', 'tasks\.view', 'users\.view', 'settings\.view', 'plugins\.view'\)/);
 });
+
+test('distinct terminal lifecycle states are normalized, labeled, and used by their respective browser actions', () => {
+  const actionStatus = functionSource('platformActionStatus', 'subscriptionAllowsCompany');
+  const labelStatus = functionSource('subscriptionLabelForStatus', 'normalizeSubscriptionStatus');
+  const normalizeStatus = functionSource('normalizeSubscriptionStatus', 'isQuestDeveloper');
+  const statusFor = new Function(`${actionStatus}\nreturn platformActionStatus('archive');`);
+  const labelFor = new Function('formatDate', `${normalizeStatus}\n${labelStatus}\nreturn [subscriptionLabelForStatus('archived'), subscriptionLabelForStatus('rejected'), subscriptionLabelForStatus('canceled')];`);
+  assert.equal(statusFor(), 'archived');
+  assert.deepEqual(labelFor(() => ''), ['Archived', 'Rejected', 'Canceled']);
+  assert.match(source, /data-action="review-workspace"[^>]*data-status="rejected"[^>]*>Reject<\/button>/);
+});
+
+test('lifecycle migration preserves the reviewed permission function and applies only the audit-proven non-Stripe archive backfill', () => {
+  assert.match(migration, /status in \('pending_review', 'trialing', 'active', 'past_due', 'grace', 'suspended', 'archived', 'rejected', 'canceled', 'incomplete'\)/);
+  assert.match(migration, /where cs\.status = 'canceled'[\s\S]*cs\.stripe_subscription_id is null[\s\S]*latest_terminal\.event_type = 'platform\.company\.archive'/);
+  assert.match(migration, /create or replace function public\.list_workspace_reviews\(\)/);
+  assert.match(migration, /create or replace function public\.review_company_workspace\([\s\S]*'rejected'/);
+  assert.match(migration, /create or replace function public\.list_platform_companies\(\)[\s\S]*icon_key text/);
+  assert.match(migration, /create or replace function public\.manage_platform_company\([\s\S]*when 'archive' then 'archived'/);
+});

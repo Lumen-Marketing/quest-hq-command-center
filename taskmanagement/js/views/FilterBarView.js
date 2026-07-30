@@ -48,7 +48,7 @@ App.FilterBarView = class FilterBarView {
     const companyChips = (companyList.length
       ? companyList
       : Object.values(App.COMPANIES).filter(c => !c.all)
-    ).filter(c => !c.archived).map(c => this.chip({
+    ).filter(c => !c.inactive).map(c => this.chip({
       group: 'companies', value: c.id, label: c.label,
       active: f.companies.includes(c.id),
     })).join('');

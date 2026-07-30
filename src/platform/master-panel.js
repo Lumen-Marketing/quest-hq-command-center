@@ -44,7 +44,7 @@ export function createPlatformPanel(ctx) {
       acc.members += number(company.member_count);
       acc.pending += company.status === 'pending_review' ? 1 : 0;
       acc.active += ['active', 'trialing', 'past_due', 'grace'].includes(company.status) ? 1 : 0;
-      acc.suspended += ['suspended', 'canceled'].includes(company.status) ? 1 : 0;
+      acc.suspended += ['suspended', 'archived', 'rejected', 'canceled'].includes(company.status) ? 1 : 0;
       return acc;
     }, { members: 0, pending: 0, active: 0, suspended: 0 });
     return `
@@ -108,7 +108,7 @@ export function createPlatformPanel(ctx) {
   function renderPlatformCompanyRow(company, currentCompanyId) {
     const active = ['active', 'trialing', 'past_due', 'grace'].includes(company.status);
     const pending = company.status === 'pending_review';
-    const suspended = ['suspended', 'canceled'].includes(company.status);
+    const suspended = ['suspended', 'archived', 'rejected', 'canceled'].includes(company.status);
     const isPlatformCompany = company.company_id === 'lumen';
     const members = platformMembersForCompany(company.company_id);
     const statusClass = active ? 'active' : pending ? 'pending' : suspended ? 'muted' : 'hold';
@@ -132,7 +132,7 @@ export function createPlatformPanel(ctx) {
           <button class="btn btn-primary" type="button" data-action="platform-company-action" data-company-id="${h(company.company_id)}" data-platform-action="approve" ${active ? 'disabled' : ''}>Approve</button>
           <button class="btn" type="button" data-action="platform-company-action" data-company-id="${h(company.company_id)}" data-platform-action="suspend" ${suspended || isPlatformCompany ? 'disabled' : ''}>Suspend</button>
           <button class="btn" type="button" data-action="platform-company-action" data-company-id="${h(company.company_id)}" data-platform-action="reactivate" ${active ? 'disabled' : ''}>Reactivate</button>
-          <button class="btn danger" type="button" data-action="platform-company-action" data-company-id="${h(company.company_id)}" data-platform-action="archive" ${isPlatformCompany || company.status === 'canceled' ? 'disabled' : ''}>Archive</button>
+          <button class="btn danger" type="button" data-action="platform-company-action" data-company-id="${h(company.company_id)}" data-platform-action="archive" ${isPlatformCompany || ['archived', 'rejected', 'canceled'].includes(company.status) ? 'disabled' : ''}>Archive</button>
         </div>
         <details class="platform-members" ${pending ? 'open' : ''}>
           <summary>${members.length} member${members.length === 1 ? '' : 's'}</summary>

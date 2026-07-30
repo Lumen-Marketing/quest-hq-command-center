@@ -84,9 +84,9 @@ App.NewTaskPageView = class NewTaskPageView {
     // company_ids via the primary path, not from the full constant list.
     if (!ids.length) ids = Object.keys(App.COMPANIES || {}).filter(id => id !== 'overall');
     const cur = this.controller.uiState && this.controller.uiState.currentCompany;
-    // No new work in an archived company — but keep it selectable if it is somehow
+    // No new work in an inactive company — but keep it selectable if it is somehow
     // already the active one, so the form does not silently retarget the task.
-    ids = ids.filter(id => id === cur || !(App.directory.company(id) || {}).archived);
+    ids = ids.filter(id => id === cur || !(App.directory.company(id) || {}).inactive);
     const selected = (cur && cur !== '*') ? cur : ids[0];
     return { ids, selected };
   }

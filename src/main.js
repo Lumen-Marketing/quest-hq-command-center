@@ -10,7 +10,7 @@ import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequi
 import { createDeferredDomainAccumulator, createRealtimeBatcher, realtimeSubscriptions, shouldAcceptRealtimePayload, shouldDeferRealtimeRefresh, shouldRenderAfterRealtimeRefresh } from './data/realtime-policy.js';
 import { acceptAttr, contentTypeFor, validateUpload } from './security/upload-policy.js';
 import { buildCommandIndex, filterCommands, groupCommands } from './command-palette.js';
-import { ARCHIVED_COMPANY_STATUS, COMPANY_STATUS_FILTERS, filterCompanyRows, paginate } from './platform-directory.js';
+import { COMPANY_STATUS_FILTERS, INACTIVE_COMPANY_STATUSES, filterCompanyRows, paginate } from './platform-directory.js';
 import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
@@ -18437,7 +18437,7 @@ function renderWorkspaceReviewRow(review, currentCompanyId) {
         <button class="btn btn-primary" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="active" ${active ? 'disabled' : ''}>Approve</button>
         <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="pending_review" ${review.status === 'pending_review' ? 'disabled' : ''}>Pending</button>
         <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="suspended" ${review.status === 'suspended' ? 'disabled' : ''}>Suspend</button>
-        <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="canceled" ${review.status === 'canceled' ? 'disabled' : ''}>Reject</button>
+        <button class="btn" type="button" data-action="review-workspace" data-company-id="${h(review.company_id)}" data-status="rejected" ${review.status === 'rejected' ? 'disabled' : ''}>Reject</button>
       </div>
     </article>
   `;
@@ -18488,7 +18488,9 @@ function renderCompanyDirectoryPager(scope, view) {
 
 function companyDirectoryEmptyState(filters) {
   if (filters.search) return emptyState(`No companies match "${filters.search}".`);
-  if (filters.status === 'canceled') return emptyState('No archived companies.');
+  if (filters.status === 'archived') return emptyState('No archived companies.');
+  if (filters.status === 'rejected') return emptyState('No rejected companies.');
+  if (filters.status === 'canceled') return emptyState('No canceled companies.');
   return emptyState('No companies found for platform review.');
 }
 
@@ -35106,9 +35108,10 @@ function financeSummary(companyId = activeCompanyId()) {
 }
 
 // A company's lifecycle status lives on its subscription row, not on the company
-// record — archiving from the master panel writes 'canceled' there.
-function isArchivedCompanyId(companyId) {
-  return String(companySubscription(canonicalCompanyId(companyId))?.status || '') === ARCHIVED_COMPANY_STATUS;
+// record. Archived, rejected, and Stripe-canceled companies are inactive for
+// normal selectors while the current company remains available to avoid stranding.
+function isInactiveCompanyId(companyId) {
+  return INACTIVE_COMPANY_STATUSES.includes(String(companySubscription(canonicalCompanyId(companyId))?.status || ''));
 }
 
 // Archiving keeps memberships intact (so access rules and history survive) but the
@@ -35119,7 +35122,7 @@ function allowedCompanies({ includeArchived = false } = {}) {
   const ids = allowedCompanyIds();
   const currentId = state.activeCompanyId;
   return state.companies.filter((company) => ids.includes(company.id)
-    && (includeArchived || company.id === currentId || !isArchivedCompanyId(company.id)));
+    && (includeArchived || company.id === currentId || !isInactiveCompanyId(company.id)));
 }
 
 function can(permission, companyId = activeCompanyId(), workspaceId = workspaceIdForCompany(companyId)) {
@@ -35732,7 +35735,7 @@ function platformCompanyRows() {
 }
 
 function platformCompanySort(a, b) {
-  const weight = { pending_review: 0, active: 1, trialing: 2, suspended: 3, canceled: 4 };
+  const weight = { pending_review: 0, active: 1, trialing: 2, suspended: 3, archived: 4, rejected: 5, canceled: 6 };
   return (weight[a.status] ?? 5) - (weight[b.status] ?? 5) || String(a.company_name).localeCompare(String(b.company_name));
 }
 
@@ -35763,7 +35766,7 @@ function platformActionStatus(action) {
     reactivate: 'active',
     suspend: 'suspended',
     disable: 'suspended',
-    archive: 'canceled',
+    archive: 'archived',
     delete: 'canceled',
     cancel: 'canceled',
     pending: 'pending_review',
@@ -35824,13 +35827,15 @@ function subscriptionLabelForStatus(status, subscription = {}) {
   if (clean === 'past_due') return 'Past due grace';
   if (clean === 'grace') return `Grace - ${formatDate(subscription.grace_ends_at)}`;
   if (clean === 'suspended') return 'Suspended';
-  if (clean === 'canceled') return 'Rejected';
+  if (clean === 'archived') return 'Archived';
+  if (clean === 'rejected') return 'Rejected';
+  if (clean === 'canceled') return 'Canceled';
   return titleCase(clean || 'Unknown');
 }
 
 function normalizeSubscriptionStatus(status) {
   const clean = String(status || '').toLowerCase().trim();
-  return ['pending_review', 'trialing', 'active', 'past_due', 'grace', 'suspended', 'canceled', 'incomplete'].includes(clean) ? clean : '';
+  return ['pending_review', 'trialing', 'active', 'past_due', 'grace', 'suspended', 'archived', 'rejected', 'canceled', 'incomplete'].includes(clean) ? clean : '';
 }
 
 function isQuestDeveloper() {

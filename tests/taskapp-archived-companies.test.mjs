@@ -10,10 +10,10 @@ const newTask = readFileSync(new URL('../taskmanagement/js/views/NewTaskPageView
 // The embedded task app has its own data store, so the host's allowedCompanies()
 // filter does not reach it. Archiving a company writes company_subscriptions.status
 // = 'canceled'; without reading that table the app cannot know a company is gone.
-test('the task app loads subscription status so it can tell archived companies apart', () => {
+test('the task app loads subscription status into inactive company ids', () => {
   assert.match(store, /_optionalSelect\('company_subscriptions'\)/);
-  assert.match(store, /archivedCompanyIds:/);
-  assert.match(store, /String\(row && row\.status\) === 'canceled'/);
+  assert.match(store, /inactiveCompanyIds:/);
+  assert.match(store, /\['archived', 'rejected', 'canceled'\]\.includes\(String\(row && row\.status\)\)/);
 });
 
 test('the subscription read is optional so a permission failure cannot break loading', () => {
@@ -23,18 +23,18 @@ test('the subscription read is optional so a permission failure cannot break loa
   assert.doesNotMatch(store, /_throwIfError\(subscriptionsRes/);
 });
 
-test('archived companies stay in the map so existing tasks still resolve', () => {
-  // Dropping them would leave tasks in an archived company with no label, and
+test('inactive companies stay in the map so existing tasks still resolve', () => {
+  // Dropping them would leave tasks in an inactive company with no label, and
   // validate.js checks payload.company against Object.keys(App.COMPANIES).
-  assert.match(app, /const archived = new Set\(saved\.archivedCompanyIds \|\| \[\]\);/);
-  assert.match(app, /archived: archived\.has\(row\.id\),/);
-  assert.doesNotMatch(app, /saved\.companies\s*\.filter\([^)]*archived/);
+  assert.match(app, /const inactive = new Set\(saved\.inactiveCompanyIds \|\| \[\]\);/);
+  assert.match(app, /inactive: inactive\.has\(row\.id\),/);
+  assert.doesNotMatch(app, /saved\.companies\s*\.filter\([^)]*inactive/);
 });
 
-test('archived companies are excluded from the filter chips', () => {
-  assert.match(filterBar, /\.filter\(c => !c\.archived\)\.map\(c => this\.chip\(\{/);
+test('inactive companies are excluded from the filter chips', () => {
+  assert.match(filterBar, /\.filter\(c => !c\.inactive\)\.map\(c => this\.chip\(\{/);
 });
 
-test('archived companies are excluded from the new-task picker but not force-switched', () => {
-  assert.match(newTask, /ids = ids\.filter\(id => id === cur \|\| !\(App\.directory\.company\(id\) \|\| \{\}\)\.archived\);/);
+test('inactive companies are excluded from the new-task picker but not force-switched', () => {
+  assert.match(newTask, /ids = ids\.filter\(id => id === cur \|\| !\(App\.directory\.company\(id\) \|\| \{\}\)\.inactive\);/);
 });

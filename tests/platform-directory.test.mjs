@@ -12,7 +12,9 @@ const ROWS = [
   { company_id: 'lumen', company_name: 'Lumen Marketing', owner_email: 'info@lumenmarketingusa.com', status: 'active' },
   { company_id: 'rom', company_name: 'Rom', owner_email: 'eugenioiromanjuan@gmail.com', status: 'trialing' },
   { company_id: 'esscore', company_name: 'ESSCORE', owner_email: 'meromero0013@gmail.com', status: 'active' },
-  { company_id: '111', company_name: '111', owner_email: 'info@lumenmarketingusa.com', status: 'canceled' },
+  { company_id: '111', company_name: '111', owner_email: 'info@lumenmarketingusa.com', status: 'archived' },
+  { company_id: 'rejected', company_name: 'Rejected workspace', owner_email: 'review@example.com', status: 'rejected' },
+  { company_id: 'stripe-canceled', company_name: 'Stripe canceled', owner_email: 'billing@example.com', status: 'canceled' },
   { company_id: 'test-2', company_name: 'test 2', owner_email: 'info@lumenmarketingusa.com', status: 'pending_review' },
   { company_id: 'laptop', company_name: 'laptop', owner_email: 'azgrid07@gmail.com', status: 'suspended' },
 ];
@@ -30,8 +32,21 @@ test('the active filter covers the whole live family, not just the literal statu
 });
 
 test('archived companies are reachable through the Archived filter', () => {
-  const archived = filterCompanyRows(ROWS, { status: 'canceled' });
+  const archived = filterCompanyRows(ROWS, { status: 'archived' });
   assert.deepEqual(archived.map((r) => r.company_id), ['111']);
+});
+
+test('terminal lifecycle filters keep archived, rejected, and Stripe-canceled companies distinct', () => {
+  assert.deepEqual(filterCompanyRows(ROWS, { status: 'archived' }).map((r) => r.company_id), ['111']);
+  assert.deepEqual(filterCompanyRows(ROWS, { status: 'rejected' }).map((r) => r.company_id), ['rejected']);
+  assert.deepEqual(filterCompanyRows(ROWS, { status: 'canceled' }).map((r) => r.company_id), ['stripe-canceled']);
+});
+
+test('all terminal lifecycle states are excluded from the active directory by default', () => {
+  const visibleIds = filterCompanyRows(ROWS, { status: 'active' }).map((row) => row.company_id);
+  assert.equal(visibleIds.includes('111'), false);
+  assert.equal(visibleIds.includes('rejected'), false);
+  assert.equal(visibleIds.includes('stripe-canceled'), false);
 });
 
 test('the all filter includes archived rows', () => {
