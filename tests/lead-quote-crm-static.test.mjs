@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const contactQuoteWorkflow = readFileSync(new URL('../src/crm/contact-to-quote.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('crm navigation uses contacts quotes and production funnels', () => {
@@ -55,23 +56,28 @@ test('record detail routes read as contacts and quotes', () => {
 
 test('nurturing contact records expose a stage-level graduate to quote action', () => {
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
-  assert.match(recordSource, /const canGraduateContactToQuote = resolvePipelineStage\('contacts', contact\.stage, companyId\) === 'Nurturing'/);
-  assert.match(recordSource, /canGraduateContactToQuote \? `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="contact-convert-quote"/);
+  assert.match(recordSource, /const canGraduateContactToQuote = canManageContactQuotes[\s\S]*resolvePipelineStage\('contacts', contact\.stage, companyId\) === 'Nurturing'/);
+  assert.match(recordSource, /canGraduateContactToQuote[\s\S]*data-action="contact-convert-quote"/);
   assert.match(recordSource, /Graduate to Quote/);
+  assert.match(recordSource, /data-action="open-contact-quote"/);
   assert.doesNotMatch(recordSource, /data-action="contact-convert-job"/);
   assert.doesNotMatch(recordSource, /Graduate to Job/);
 });
 
 test('contacts graduate into quotes before quotes graduate to unscheduled jobs', () => {
-  const contactConverter = source.match(/async function convertContactToQuote\(contactId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const contactConverter = contactQuoteWorkflow.match(/export async function runContactToQuote\(contactId, \{ createAnother = false \} = \{\}, api\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const localContactConverter = contactQuoteWorkflow.match(/async function convertContactToQuoteLocally\(contact, companyId, api\) \{[\s\S]*?\n\}/)?.[0] || '';
   const quoteConverter = source.match(/async function convertDealToJob\(dealId\) \{[\s\S]*?\n\}/)?.[0] || '';
-  assert.match(source, /async function convertContactToQuote\(contactId\)/);
+  assert.match(source, /async function convertContactToQuote\(contactId, \{ createAnother = false \} = \{\}\)/);
+  assert.match(source, /import\('\.\/crm\/contact-to-quote\.js'\)/);
   assert.doesNotMatch(source, /async function convertContactToJob\(contactId\)/);
   assert.match(source, /data-action="contact-convert-quote"/);
   assert.match(source, /if \(action === 'contact-convert-quote'\)/);
+  assert.match(source, /data-action="contact-create-another-quote"/);
   assert.doesNotMatch(source, /contact-convert-job/);
-  assert.match(contactConverter, /stage: pipelineStages\('deals', companyId\)\[0\]\?\.name \|\| dealStageNames\(\)\[0\]/);
-  assert.match(contactConverter, /primary_contact_id: contact\.id/);
+  assert.match(contactConverter, /client\.rpc\('convert_contact_to_quote'/);
+  assert.match(localContactConverter, /stage: pipelineStages\('deals', companyId\)\[0\]\?\.name \|\| dealStageNames\(\)\[0\]/);
+  assert.match(localContactConverter, /primary_contact_id: contact\.id/);
   assert.match(quoteConverter, /stage: pipelineStages\('jobs', companyId\)\[0\]\?\.name \|\| jobStageNames\(\)\[0\]/);
 });
 

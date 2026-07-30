@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('the calls plugin is registered and maps to the calls module', () => {
-  assert.match(main, /\{ id: 'calls', label: 'Calls',[^}]*module_ids: \['calls'\]/);
+  const plugin = WORKSPACE_PLUGIN_REGISTRY.find(({ id }) => id === 'calls');
+  assert.ok(plugin, 'Expected the calls plugin in the workspace catalog');
+  assert.equal(plugin.label, 'Calls');
+  assert.deepEqual(plugin.module_ids, ['calls']);
 });
 
 test('the calls module is registered as live behind an already-granted permission', () => {

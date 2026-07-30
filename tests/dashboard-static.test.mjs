@@ -20,7 +20,8 @@ test('legacy home and command links redirect to dashboard', () => {
   assert.match(source, /'\/command\.html': companyPath\('dashboard', \{\}, companyId\)/);
   assert.match(source, /if \(route\.section === 'home'\) return companyPath\('dashboard', Object\.fromEntries\(route\.params\.entries\(\)\), route\.companyId\);/);
   assert.match(source, /return companyPath\('dashboard', \{\}, route\.companyId\);/);
-  assert.match(source, /if \(!validSections\.includes\(route\.section\)\) return companyPath\('dashboard', \{\}, route\.companyId\);/);
+  assert.match(source, /const section = validSections\.includes\(route\.section\) \? route\.section : 'dashboard';/);
+  assert.match(source, /section !== route\.section/);
 });
 
 test('dashboard uses the team operating dashboard widgets', () => {

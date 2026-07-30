@@ -17,11 +17,17 @@ src/tasks/task-store.js is not yet wired into src/main.js, so these are latent, 
 
 Most product behavior is concentrated in src/main.js and most styling in src/styles.css. Broad edits can create cross-module regressions, so use focused changes and full checks until module boundaries are deliberately extracted.
 
+## Workspace SMS remains intentionally disabled
+
+The committed SMS send and inbound endpoints still use the earlier company-only routing model. The P0 readiness endpoint has a separate code-level backend contract fixed at closed, so provider credentials or partially created workspace columns cannot expose the contact Messages UI. A later coordinated migration must make outbound number selection, inbound number routing, contact resolution, message persistence, policies, and tests workspace-safe before that contract is opened.
+
 ## Migration identifiers differ between repository and live ledger
 
 Supabase records provider-generated applied versions, so the repository filenames `202607211200_company_operational_workspaces.sql` and `202607211230_workspace_tenancy_advisor_hardening.sql` appear live as versions `20260721002147` and `20260721002417`. Always verify live objects and migration intent rather than comparing filename timestamps alone.
 
 The live catalog also contains the effects of `202607221400_taskmanagement_phase2_runtime_delta.sql` and `202607221600_taskmanagement_phase3_tenant_hardening.sql` without corresponding ledger entries. Do not replay those historical files during a feature deploy: their shared plugin constraint/function replacements predate the later RingCentral `calls` migration. The independent forward Task workspace-activation migration is applied live as `20260724000851_task_workspace_plugin_activation`; reconcile only the older historical ledger through the documented maintenance procedure.
+
+The EOD Reports migration is now present as `202607301200_eod_reports.sql`, while the provider ledger records the applied version as `20260730175234_eod_reports`. Its trigger helper currently produces a Supabase advisor warning because `touch_eod_report_updated_at()` is SECURITY DEFINER and executable by anon. This predates the P0 migrations and should be reviewed as separate EOD hardening work.
 
 ## Preview database cannot support workspace UAT
 

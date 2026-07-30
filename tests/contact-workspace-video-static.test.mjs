@@ -16,9 +16,19 @@ test('contact workspace uses notes email messages and activity instead of old ac
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(recordSource, /const workspaceTabs = \[\['Notes', 'ti-note'\], \['Email', 'ti-mail'\], \['Messages', 'ti-message'\], \['Activity', 'ti-activity'\]\]/);
   assert.match(recordSource, /data-action="set-contact-workspace-tab"/);
-  assert.match(recordSource, /renderContactWorkspacePanel\(contact, activeWorkspaceTab, totalFeed, feed\)/);
+  assert.match(recordSource, /renderContactWorkspacePanel\(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities\)/);
   assert.doesNotMatch(recordSource, /const headerActions = \[\['Follow'/);
   assert.doesNotMatch(recordSource, /New Estimate/);
+});
+
+test('contact SMS stays disabled until workspace backend readiness is verified', () => {
+  assert.match(source, /import \{ smsUiCapabilities \} from '\.\/communications\/sms-readiness\.js';/);
+  assert.match(source, /async function mountContactSmsReadiness\(\)/);
+  assert.match(source, /fetch\(`\/api\/sms-readiness\?contact_id=\$\{encodeURIComponent\(contactId\)\}`/);
+  assert.match(source, /if \(!contactSmsCapabilities\(contactId\)\.canMountThread\) return;/);
+  assert.match(source, /if \(!contactSmsCapabilities\(contactId\)\.canMountComposer\)/);
+  assert.match(source, /disabled aria-disabled="true"/);
+  assert.match(styles, /\.sf-sms-setup-state/);
 });
 
 test('contact intake fields have real suggestions and constrained source options', () => {

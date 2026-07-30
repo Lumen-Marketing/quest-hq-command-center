@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import {
+  WORKSPACE_PLUGIN_PRESETS,
+  WORKSPACE_PLUGIN_REGISTRY,
+} from '../src/workspaces/plugin-catalog.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -26,27 +30,28 @@ const pluginAmbiguityMigrationName = migrationFiles.find((name) => /fix_plugin_i
 const pluginAmbiguityMigration = pluginAmbiguityMigrationName
   ? readFileSync(new URL(`../supabase/migrations/${pluginAmbiguityMigrationName}`, import.meta.url), 'utf8')
   : '';
-const crm2RegistryEntry = source.match(/\{ id: 'crm_2'[^}]+\}/)?.[0] || '';
+const pluginById = (id) => WORKSPACE_PLUGIN_REGISTRY.find((plugin) => plugin.id === id);
 
 test('plugin registry maps every non-core route to a workspace plugin', () => {
   assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'users', 'settings', 'automations'\]\);/);
   assert.match(source, /const WORKSPACE_PLUGIN_REGISTRY = \[/);
-  assert.match(source, /id: 'crm'[\s\S]*module_ids: \['crm', 'contacts', 'deals'\]/);
-  assert.match(source, /id: 'crm_2'[\s\S]*module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
-  assert.match(source, /id: 'underwriter'[\s\S]*module_ids: \['underwriter'\]/);
-  assert.match(source, /id: 'time_clock'[\s\S]*module_ids: \['time', 'clock'\]/);
-  assert.match(source, /id: 'reporting'[\s\S]*module_ids: \['analytics', 'team-chart'\]/);
+  assert.deepEqual(pluginById('crm').module_ids, ['crm', 'contacts', 'deals']);
+  assert.deepEqual(pluginById('crm_2').module_ids, ['workday', 'contacts', 'deals', 'proposals', 'jobs']);
+  assert.deepEqual(pluginById('underwriter').module_ids, ['underwriter']);
+  assert.deepEqual(pluginById('time_clock').module_ids, ['time', 'clock']);
+  assert.deepEqual(pluginById('reporting').module_ids, ['analytics', 'team-chart']);
   assert.match(source, /\{ id: 'underwriter'[\s\S]*label: 'Underwriter'[\s\S]*permission: 'underwriter\.view'/);
   assert.match(source, /function pluginsForModule\(moduleId\)/);
   assert.match(source, /function isModuleInstalled\(moduleId, companyId = activeCompanyId\(\), workspaceId = workspaceIdForCompany\(companyId\)\)/);
 });
 
 test('quest crm plugin contents match the contacts quotes jobs workspace', () => {
-  assert.match(crm2RegistryEntry, /label: 'Quest CRM'/);
-  assert.match(crm2RegistryEntry, /summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.'/);
-  assert.match(crm2RegistryEntry, /module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
-  assert.match(crm2RegistryEntry, /private: true/);
-  assert.doesNotMatch(crm2RegistryEntry, /module_ids: \['crm'/);
+  const crm2 = pluginById('crm_2');
+  assert.equal(crm2.label, 'Quest CRM');
+  assert.equal(crm2.summary, 'Private contacts, quotes, estimates, proposals, and production jobs workspace.');
+  assert.deepEqual(crm2.module_ids, ['workday', 'contacts', 'deals', 'proposals', 'jobs']);
+  assert.equal(crm2.private, true);
+  assert.equal(crm2.module_ids.includes('crm'), false);
   assert.match(source, /\{ label: 'Pipeline', ids: \['contacts'\] \}/);
   assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
   assert.match(source, /\{ label: 'Tools', ids: \['underwriter', 'proposals'\] \}/);
@@ -58,10 +63,9 @@ test('quest crm plugin contents match the contacts quotes jobs workspace', () =>
 });
 
 test('workspace presets install industry plugin bundles', () => {
-  assert.match(source, /const WORKSPACE_PLUGIN_PRESETS = \{/);
-  assert.match(source, /roofing: \['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'tasks'\]/);
-  assert.match(source, /construction: \['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks'\]/);
-  assert.match(source, /generic: \['crm', 'files', 'messages', 'workspace_builder', 'tasks'\]/);
+  assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.roofing, ['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'tasks']);
+  assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.construction, ['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks']);
+  assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.generic, ['crm', 'files', 'messages', 'workspace_builder', 'tasks']);
   assert.match(source, /name="preset_code"/);
   assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: presetCode, icon_key: iconKey \}\)/);
 });
@@ -120,13 +124,14 @@ test('quest crm and underwriter plugins are separate in the registry', () => {
   assert.match(source, /\['underwriter\.view', 'View underwriter'\]/);
   assert.match(source, /\['underwriter\.manage', 'Manage underwriter'\]/);
   assert.match(source, /if \(clean\.startsWith\('underwriter\.'\)\) return \['underwriter'\];/);
-  assert.match(source, /recommendedWith: \['crm_2'\]/);
+  assert.deepEqual(pluginById('underwriter').recommendedWith, ['crm_2']);
   assert.match(source, /Underwriter connects best when Quest CRM is installed/);
   assert.doesNotMatch(source, /if \(clean\.startsWith\('underwriter\.'\)\) return 'crm_2';/);
 });
 
 test('crm plugins are mutually exclusive and migrated separately from underwriter', () => {
-  assert.match(source, /exclusiveGroup: 'crm'/);
+  assert.equal(pluginById('crm').exclusiveGroup, 'crm');
+  assert.equal(pluginById('crm_2').exclusiveGroup, 'crm');
   assert.match(source, /function conflictingPluginIds\(companyId, pluginId, nextStatus, workspaceId = workspaceIdForCompany\(companyId\)\)/);
   assert.match(source, /window\.confirm\(`Installing \$\{plugin\.label\} will disable \$\{conflictLabels\}\. Continue\?`\)/);
   assert.match(source, /upsertCompanyPluginLocal\(companyId, conflictId, 'disabled'\)/);

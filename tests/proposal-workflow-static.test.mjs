@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -8,7 +9,10 @@ const smoke = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import
 
 assert.match(main, /const PROPOSAL_CACHE_KEY = 'quest-hq-proposal-cache-v1'/);
 assert.match(main, /id: 'proposals'.*label: 'Proposals'/s);
-assert.match(main, /module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
+assert.deepEqual(
+  WORKSPACE_PLUGIN_REGISTRY.find(({ id }) => id === 'crm_2')?.module_ids,
+  ['workday', 'contacts', 'deals', 'proposals', 'jobs'],
+);
 assert.match(main, /if \(route\.section === 'proposals'\) return renderProposalsPage\(route, companyId\);/);
 
 assert.match(main, /function normalizeProposal\(/);

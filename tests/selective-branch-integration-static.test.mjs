@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
+import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -19,9 +20,12 @@ test('supabase client is pinned and api routes are not swallowed by the SPA rewr
 });
 
 test('price book is a real installed workspace module without removing proposals', () => {
+  const priceBookPlugin = WORKSPACE_PLUGIN_REGISTRY.find(({ id }) => id === 'price_book');
+  const crmPlugin = WORKSPACE_PLUGIN_REGISTRY.find(({ id }) => id === 'crm_2');
   assert.match(source, /\['price_book\.view', 'View price book'\]/);
   assert.match(source, /\['price_book\.manage', 'Manage price book/);
-  assert.match(source, /id: 'price_book'[\s\S]*module_ids: \['price-book'\]/);
+  assert.ok(priceBookPlugin, 'Expected the price book plugin in the workspace catalog');
+  assert.deepEqual(priceBookPlugin.module_ids, ['price-book']);
   assert.match(source, /\{ id: 'price-book', group: 'Estimating', label: 'Price Book'/);
   assert.match(source, /if \(route\.section === 'price-book'\) return renderPriceBookPage\(route, companyId\);/);
   assert.match(source, /function renderPriceBookPage\(route, companyId\)/);
@@ -31,7 +35,8 @@ test('price book is a real installed workspace module without removing proposals
   assert.match(source, /client\.from\('pricebook_vendors'\)\.select\('\*'\)/);
   assert.match(source, /client\.from\('pricebook_materials'\)\.select\('\*'\)/);
   assert.match(source, /client\.from\('pricebook_vendor_prices'\)\.select\('\*'\)/);
-  assert.match(source, /id: 'crm_2'[\s\S]*label: 'Quest CRM'[\s\S]*module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
+  assert.equal(crmPlugin?.label, 'Quest CRM');
+  assert.deepEqual(crmPlugin?.module_ids, ['workday', 'contacts', 'deals', 'proposals', 'jobs']);
   assert.match(source, /\{ id: 'proposals', group: 'Quest CRM', label: 'Proposals'/);
   assert.match(source, /\{ label: 'Pipeline', ids: \['contacts'\] \}/);
   assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);

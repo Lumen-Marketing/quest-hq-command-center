@@ -1,7 +1,7 @@
 # Questbase P0 Release Hardening - Batch 1
 
-**Date:** 2026-07-31  
-**Status:** Approved by the instruction to proceed with the release-readiness PDF  
+**Date:** 2026-07-31
+**Status:** Approved by the instruction to proceed with the release-readiness PDF
 **Source of truth:** `output/pdf/questbase-release-readiness-todo-list.pdf`
 
 ## Revalidation
@@ -38,12 +38,13 @@ The endpoint is ready only when:
 - the provider key exists;
 - the user is an active company member;
 - the contact has a workspace;
+- the deployed SMS send and inbound routes declare the complete workspace-safe backend contract;
 - the workspace-aware `sms_numbers` backend exists; and
 - an active number is assigned to the contact's workspace.
 
 The contact surface initially treats SMS as unavailable. It checks readiness only when a contact record is open, caches the result for that contact, and rerenders the Messages tab. A missing table, old company-only table, missing key, or missing workspace number produces a disabled setup state and never queries `sms_messages` or calls the send API.
 
-This gate is deliberately compatible with the future workspace-scoped SMS migration. It does not enable the old company-only schema.
+This gate is deliberately compatible with the future workspace-scoped SMS migration. Its backend contract version remains closed until send, inbound routing, and persistence are upgraded together, so neither the old company-only schema nor a partial table migration can enable SMS.
 
 ## Canonical tenant routes
 
@@ -72,14 +73,14 @@ Add an authenticated Postgres function that:
 
 - verifies active workspace membership and CRM permission;
 - locks and validates the source contact;
-- reuses the same open handoff quote when the user repeats `Graduate to quote`;
+- uses a browser-generated request UUID so a repeated or retried handoff returns the same quote;
 - creates or reuses a compatible primary site;
 - validates company/workspace consistency across contact, account, site, and quote links; and
 - returns the complete saved quote.
 
-The browser calls the RPC in live mode and keeps the existing local-only behavior for the read-only demo. A future explicit `Create another quote` action may request a new quote; the default graduation action remains idempotent.
+The browser calls the RPC in live mode and keeps the existing local-only behavior for the read-only demo. Once a contact has a quote, the default action opens that quote and a separate `Create another quote` action generates a new request UUID. This preserves Questbase's supported one-contact-to-many-quotes relationship without turning a retry into a duplicate.
 
-No existing pilot records are automatically repaired in this batch.
+No existing CRM account/contact/site/quote records are automatically rewritten in this batch. Workspaces that are missing an entire pipeline kind receive that company's configured default stages first, with baseline starting stages used only when the company default is also missing the kind.
 
 ## Release safety
 
@@ -87,4 +88,3 @@ No existing pilot records are automatically repaired in this batch.
 - Database work is additive and forward-only.
 - New public database objects ship with explicit grants and RLS/authorization checks.
 - The complete repository test, project-brain check, production build, deployment revision check, and production smoke test must pass before the batch is called complete.
-

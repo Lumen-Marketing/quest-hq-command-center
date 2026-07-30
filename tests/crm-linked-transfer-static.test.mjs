@@ -3,23 +3,25 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const workflow = readFileSync(new URL('../src/crm/contact-to-quote.js', import.meta.url), 'utf8');
 const migrationUrl = new URL('../supabase/migrations/202607021030_crm_linked_transfer_sites.sql', import.meta.url);
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';
 const indexMigrationUrl = new URL('../supabase/migrations/202607021031_crm_sites_fk_indexes.sql', import.meta.url);
 const indexMigration = existsSync(indexMigrationUrl) ? readFileSync(indexMigrationUrl, 'utf8') : '';
 
 test('crm transfers preserve a shared customer and site instead of copying address-only data', () => {
-  const contactConverter = source.match(/async function convertContactToQuote\(contactId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const contactConverter = workflow.match(/async function convertContactToQuoteLocally\(contact, companyId, api\) \{[\s\S]*?\n\}/)?.[0] || '';
   const dealConverter = source.match(/async function convertDealToJob\(dealId\) \{[\s\S]*?\n\}/)?.[0] || '';
 
   assert.match(source, /function normalizeCrmSite\(input\)/);
-  assert.match(source, /async function ensureCrmSiteForContact\(contact\)/);
+  assert.match(workflow, /async function ensureCrmSiteForContact\(contact, api\)/);
   assert.match(source, /const SITE_COLS = \[/);
   assert.match(source, /const JOB_COLS = \[/);
 
-  assert.match(contactConverter, /const site = await ensureCrmSiteForContact\(contact\)/);
+  assert.match(contactConverter, /const site = await ensureCrmSiteForContact\(contact, api\)/);
   assert.match(contactConverter, /site_id: site\?\.id \|\| ''/);
   assert.match(contactConverter, /primary_contact_id: contact\.id/);
+  assert.match(workflow, /client\.rpc\('convert_contact_to_quote'/);
 
   assert.match(dealConverter, /const site = crmSiteById\(deal\.site_id\)/);
   assert.match(dealConverter, /contact_id: deal\.primary_contact_id/);

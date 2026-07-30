@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -8,7 +9,10 @@ const smoke = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import
 
 test('Quest CRM exposes a Workday route for the daily action queue', () => {
   assert.match(source, /\{ id: 'workday', group: 'Quest CRM', label: 'Workday'/);
-  assert.match(source, /module_ids: \['workday', 'contacts', 'deals', 'proposals', 'jobs'\]/);
+  assert.deepEqual(
+    WORKSPACE_PLUGIN_REGISTRY.find(({ id }) => id === 'crm_2')?.module_ids,
+    ['workday', 'contacts', 'deals', 'proposals', 'jobs'],
+  );
   assert.match(source, /\{ label: 'Workspace', ids: \['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'\] \}/);
   assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
   assert.match(source, /if \(route\.section === 'workday'\) return renderWorkdayPage\(companyId\);/);

@@ -28,6 +28,14 @@ import {
   recordBelongsToWorkspace,
   workspacePluginStatus as resolveWorkspacePluginStatus,
 } from './workspaces/model.js';
+import {
+  WORKSPACE_PLUGIN_REGISTRY as WORKSPACE_PLUGIN_CATALOG,
+  WORKSPACE_PLUGIN_PRESETS as WORKSPACE_PLUGIN_PRESET_CATALOG,
+  WORKSPACE_PLUGIN_PRESET_LABELS as WORKSPACE_PLUGIN_PRESET_LABEL_CATALOG,
+  pluginDataScopeDetails,
+} from './workspaces/plugin-catalog.js';
+import { resolveTenantRoute } from './workspaces/tenant-route.js';
+import { smsUiCapabilities } from './communications/sms-readiness.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -878,36 +886,9 @@ const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'users', 'settings', 'auto
 // shipped a literal password in the bundle, was deliberately removed on main;
 // tests/workspace-plugins-static.test.mjs greps this file to keep it gone, so
 // do not reintroduce it (or name it) when reconciling older branches.
-const WORKSPACE_PLUGIN_REGISTRY = [
-  { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm' },
-  { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true },
-  { id: 'tasks', label: 'Tasks', summary: 'Workspace task execution, timers, reminders, and team follow-through.', icon: 'ti-list-check', module_ids: ['tasks'], permissions: ['tasks.view', 'tasks.manage'] },
-  { id: 'underwriter', label: 'Underwriter', summary: 'Qualification, scope, pricing, and handoff readiness queue.', icon: 'ti-clipboard-check', module_ids: ['underwriter'], permissions: ['underwriter.view', 'underwriter.manage'], recommendedWith: ['crm_2'] },
-  { id: 'files', label: 'Files', summary: 'Shared files, job folders, and document storage.', icon: 'ti-folder', module_ids: ['files'], permissions: ['files.view', 'files.manage'] },
-  { id: 'client_portal', label: 'Client Portal', summary: 'Password-protected plan links, markups, comments, and client review.', icon: 'ti-world-upload', module_ids: ['client-portals'], permissions: ['client_portals.view', 'client_portals.manage'], recommendedWith: ['files'] },
-  { id: 'workspace_builder', label: 'Workspace App Builder', summary: 'No-code workspaces, custom apps, fields, items, reports, and automations.', icon: 'ti-layout-grid-add', module_ids: ['workspaces'], permissions: ['workspaces.view', 'workspaces.manage'] },
-  { id: 'price_book', label: 'Price Book', summary: 'Vendor cost catalog for estimating materials, costs, stale pricing, and best-price checks.', icon: 'ti-book', module_ids: ['price-book'], permissions: ['price_book.view', 'price_book.manage'] },
-  { id: 'forms', label: 'Forms', summary: 'Internal forms, templates, and response capture.', icon: 'ti-clipboard-list', module_ids: ['forms'], permissions: ['forms.view', 'forms.manage'] },
-  { id: 'finance', label: 'Finance', summary: 'Invoices, payments, expenses, vendors, and AR.', icon: 'ti-receipt-dollar', module_ids: ['finance'], permissions: ['finance.view', 'finance.manage'] },
-  { id: 'messages', label: 'Messages', summary: 'Company chats, role rooms, direct messages, and attachments.', icon: 'ti-messages', module_ids: ['messages'], permissions: ['messages.view', 'messages.send', 'messages.create_group', 'messages.manage_groups', 'messages.attach_files', 'messages.delete_own', 'messages.delete_any', 'messages.manage'] },
-  { id: 'calendar', label: 'Calendar', summary: 'Company schedule, task deadlines, and manual events.', icon: 'ti-calendar', module_ids: ['calendar'], permissions: ['calendar.view', 'calendar.manage', 'calendar.view_team'] },
-  { id: 'time_clock', label: 'Time & clock', summary: 'Personal time queues and clock dashboard.', icon: 'ti-clock-hour-4', module_ids: ['time', 'clock'], permissions: ['time.track', 'clock.manage'] },
-  { id: 'approvals', label: 'Approvals', summary: 'Review queues for handoffs, forms, and access.', icon: 'ti-user-check', module_ids: ['approvals'], permissions: ['approvals.view', 'approvals.manage'] },
-  { id: 'reporting', label: 'Reporting', summary: 'Analytics and team chart views.', icon: 'ti-chart-bar', module_ids: ['analytics', 'team-chart'], permissions: ['team.view'] },
-  { id: 'calls', label: 'Calls', summary: 'Live phone status and conversation counts from RingCentral.', icon: 'ti-phone', module_ids: ['calls'], permissions: ['team.view'] },
-  { id: 'tickets', label: 'Tickets', summary: 'Future service and issue tracking module.', icon: 'ti-ticket', module_ids: ['tickets'], permissions: [], comingSoon: true },
-  { id: 'templates', label: 'Templates', summary: 'Future reusable workspace templates.', icon: 'ti-template', module_ids: ['templates'], permissions: [], comingSoon: true },
-];
-const WORKSPACE_PLUGIN_PRESETS = {
-  roofing: ['crm_2', 'underwriter', 'price_book', 'files', 'forms', 'finance', 'messages', 'calendar', 'approvals', 'reporting', 'tasks'],
-  construction: ['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks'],
-  generic: ['crm', 'files', 'messages', 'workspace_builder', 'tasks'],
-};
-const WORKSPACE_PLUGIN_PRESET_LABELS = {
-  roofing: 'Roofing',
-  construction: 'Construction',
-  generic: 'Generic services',
-};
+const WORKSPACE_PLUGIN_REGISTRY = [...WORKSPACE_PLUGIN_CATALOG];
+const WORKSPACE_PLUGIN_PRESETS = WORKSPACE_PLUGIN_PRESET_CATALOG;
+const WORKSPACE_PLUGIN_PRESET_LABELS = WORKSPACE_PLUGIN_PRESET_LABEL_CATALOG;
 const WORKSPACE_SELF_CREATE_LIMIT = 3;
 const WORKSPACE_RAIL_VISIBLE_LIMIT = 6;
 const WORKSPACE_ICON_UPLOAD_MAX_BYTES = 220 * 1024;
@@ -2383,6 +2364,9 @@ const state = {
   workdayManagerAlertFilter: 'all',
   workdayNextStepContext: null,
   contactWorkspaceTab: 'Notes',
+  smsReadinessByContact: {},
+  contactQuoteGraduationRequests: {},
+  contactQuoteConversionInFlight: {},
   contactPrefill: null,
   selectedJobId: '',
   selectedTaskId: '',
@@ -3027,6 +3011,7 @@ function render() {
   queueMicrotask(mountWorkspaceBuilder);
   queueMicrotask(mountFileViewer);
   queueMicrotask(mountDashboardWidgetDnD);
+  queueMicrotask(mountContactSmsReadiness);
   queueMicrotask(mountContactSmsThread);
   queueMicrotask(mountProtectedFormDrafts);
 }
@@ -9226,11 +9211,22 @@ function renderContactRecord(companyId, contact) {
   const ci = stages.findIndex((s) => s.name === contact.stage);
   const g = guidanceForStage(contact.stage);
   const tempColor = contact.temperature === 'Hot' ? '#C2410C' : contact.temperature === 'Warm' ? '#B07A12' : '#2E72B8';
-  const activeWorkspaceTab = state.contactWorkspaceTab || 'Notes';
+  const smsCapabilities = contactSmsCapabilities(contact.id);
+  const requestedWorkspaceTab = state.contactWorkspaceTab || 'Notes';
+  const activeWorkspaceTab = requestedWorkspaceTab === 'Messages' && !smsCapabilities.canMountThread
+    ? 'Notes'
+    : requestedWorkspaceTab;
   const tasks = tasksForContact(contact.id);
   const totalFeed = activitiesFor('contact', contact.id);
   const feed = filteredActivitiesFor('contact', contact.id);
-  const canGraduateContactToQuote = resolvePipelineStage('contacts', contact.stage, companyId) === 'Nurturing';
+  const contactQuotes = companyDeals(companyId)
+    .filter((deal) => deal.primary_contact_id === contact.id)
+    .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
+  const latestContactQuote = contactQuotes[0] || null;
+  const canManageContactQuotes = can('crm.manage', companyId, contact.workspace_id);
+  const canGraduateContactToQuote = canManageContactQuotes
+    && resolvePipelineStage('contacts', contact.stage, companyId) === 'Nurturing';
+  const quoteInFlight = Boolean(state.contactQuoteConversionInFlight?.[contact.id]);
 
   const ed = (key, opts = {}) => {
     const isEmpty = contact[key] === '' || contact[key] == null;
@@ -9265,7 +9261,10 @@ function renderContactRecord(companyId, contact) {
         <span class="sf-record-icon"><i class="ti ti-user"></i></span>
         <div><div class="sf-record-label">Contact</div><div class="sf-record-name">${h(contact.name)}</div></div>
         <div class="sf-actions">
-          ${workspaceTabs.map(([label, ico]) => `<button class="sf-btn ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
+          ${workspaceTabs.map(([label, ico]) => {
+            const smsDisabled = label === 'Messages' && !smsCapabilities.canMountThread;
+            return `<button class="sf-btn ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"${smsDisabled ? ` disabled aria-disabled="true" title="${h(smsCapabilities.message)}"` : ''}><i class="ti ${ico}"></i>${label}${smsDisabled ? '<i class="ti ti-lock sf-tab-lock" aria-hidden="true"></i>' : ''}</button>`;
+          }).join('')}
           <button class="sf-btn" type="button" data-action="open-record-history" data-record-type="contact" data-record-id="${h(contact.id)}" data-record-label="${h(contact.name)}" data-company-id="${h(contact.company_id || companyId)}" data-workspace-id="${h(contact.workspace_id || activeWorkspaceId())}"><i class="ti ti-history"></i>History</button>
           <button class="sf-btn" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit</button>
         </div>
@@ -9280,7 +9279,11 @@ function renderContactRecord(companyId, contact) {
             }).join('')}
           </div>
           <button class="sf-mark-btn" type="button" data-action="contact-mark-next" data-contact-id="${h(contact.id)}">Mark as Current Stage</button>
-          ${canGraduateContactToQuote ? `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"><i class="ti ti-file-text"></i>Graduate to Quote</button>` : ''}
+          ${canGraduateContactToQuote
+            ? latestContactQuote
+              ? `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="open-contact-quote" data-deal-id="${h(latestContactQuote.id)}"><i class="ti ti-file-text"></i>Open latest Quote</button>`
+              : `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-file-text"></i>${quoteInFlight ? 'Creating Quote…' : 'Graduate to Quote'}</button>`
+            : ''}
         </div>
         <div class="sf-guidance">
           <div class="sf-guidance-label">Guidance for Success</div>
@@ -9310,13 +9313,20 @@ function renderContactRecord(companyId, contact) {
         </div>
 
         <div class="sf-col">
-          ${renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed)}
+          ${renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities)}
         </div>
 
         <div class="sf-col">
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-bolt"></i>Quick Create</div>
             <div class="sf-quick-grid">${quickTiles.map(([label, ico]) => `<button class="sf-quick-tile" type="button" data-action="contact-quick" data-kind="${h(label)}" data-contact-id="${h(contact.id)}"><i class="ti ${ico}"></i><span>${label}</span></button>`).join('')}</div>
-            <button class="sf-convert-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"><i class="ti ti-arrow-right"></i>Convert to Quote</button>
+            ${latestContactQuote
+              ? `
+                <button class="sf-convert-btn" type="button" data-action="open-contact-quote" data-deal-id="${h(latestContactQuote.id)}"><i class="ti ti-external-link"></i>Open latest Quote</button>
+                ${canManageContactQuotes ? `<button class="sf-convert-btn sf-convert-secondary" type="button" data-action="contact-create-another-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-copy"></i>${quoteInFlight ? 'Creating Quote…' : 'Create another Quote'}</button>` : ''}
+              `
+              : canManageContactQuotes
+                ? `<button class="sf-convert-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-arrow-right"></i>${quoteInFlight ? 'Creating Quote…' : 'Convert to Quote'}</button>`
+                : ''}
           </div>
           <div class="sf-card"><div class="sf-card-head"><i class="ti ti-checkbox"></i>Open Tasks<span class="sf-connect"><i class="ti ti-plug"></i>Connect</span></div>
             <div class="sf-tasks">
@@ -9337,9 +9347,21 @@ function renderContactRecord(companyId, contact) {
   `;
 }
 
-function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed) {
-  const tabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Messages', 'ti-message'], ['Activity', 'ti-activity']];
-  const tabBar = `<div class="sf-activity-tabs">${tabs.map(([label, ico]) => `<button class="sf-activity-tab ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}</div>`;
+function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities = contactSmsCapabilities(contact.id)) {
+  const tabs = [
+    ['Notes', 'ti-note'],
+    ['Email', 'ti-mail'],
+    ['Messages', 'ti-message'],
+    ['Activity', 'ti-activity'],
+  ];
+  const tabBar = `<div class="sf-activity-tabs">${tabs.map(([label, ico]) => {
+    const smsDisabled = label === 'Messages' && !smsCapabilities.canMountThread;
+    const title = smsDisabled ? ` title="${h(smsCapabilities.message)}"` : '';
+    return `<button class="sf-activity-tab ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"${smsDisabled ? ' disabled aria-disabled="true"' : ''}${title}><i class="ti ${ico}"></i>${label}${smsDisabled ? '<i class="ti ti-lock sf-tab-lock" aria-hidden="true"></i>' : ''}</button>`;
+  }).join('')}</div>`;
+  const smsSetupNotice = !smsCapabilities.ready && can('plugins.manage', contact.company_id)
+    ? `<div class="sf-sms-setup-state" role="status"><i class="ti ti-lock" aria-hidden="true"></i><span><strong>SMS is off</strong>${h(smsCapabilities.message)}</span></div>`
+    : '';
 
   if (activeWorkspaceTab === 'Messages') {
     const textable = smsNormalize(contact.phone);
@@ -9397,8 +9419,9 @@ function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, fee
       ? (totalFeed.length ? 'No activity matches this filter.' : 'No activity yet. Log a note, email, call, meeting, or task.')
       : 'No notes yet.';
   return `
-    <div class="sf-card sf-workspace-card">
-      <div class="sf-activity-tabs">${tabs.map(([label, ico]) => `<button class="sf-activity-tab ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}</div>
+      <div class="sf-card sf-workspace-card">
+      ${tabBar}
+      ${smsSetupNotice}
       ${composer}
       <div class="sf-feed">
         ${panelFeed.length ? panelFeed.map((a) => sfFeedItem(a)).join('') : `<div class="sf-feed-empty">${emptyText}</div>`}
@@ -9432,7 +9455,60 @@ function renderSmsBubbles(rows) {
   }).join('');
 }
 
+function contactSmsCapabilities(contactId) {
+  const cached = state.smsReadinessByContact?.[contactId];
+  if (cached) return smsUiCapabilities(cached);
+  return smsUiCapabilities({
+    ready: false,
+    status: 'unavailable',
+    message: isLiveSupabaseSession()
+      ? 'Checking workspace SMS setup...'
+      : 'SMS requires a signed-in live workspace.',
+  });
+}
+
+async function mountContactSmsReadiness() {
+  const contactId = state.selectedContactId;
+  const contact = contactById(contactId);
+  if (!contact || !isLiveSupabaseSession()) return;
+  const current = state.smsReadinessByContact[contactId];
+  if (current?._checked || current?._loading) return;
+  state.smsReadinessByContact[contactId] = {
+    ready: false,
+    status: 'unavailable',
+    message: 'Checking workspace SMS setup...',
+    _loading: true,
+  };
+  const session = activeSession();
+  let next;
+  try {
+    const response = await fetch(`/api/sms-readiness?contact_id=${encodeURIComponent(contactId)}`, {
+      method: 'GET',
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+    });
+    const payload = await response.json().catch(() => ({}));
+    next = response.ok
+      ? { ...payload, _checked: true }
+      : {
+          ready: false,
+          status: 'unavailable',
+          message: payload.error || 'SMS readiness could not be verified.',
+          _checked: true,
+        };
+  } catch {
+    next = {
+      ready: false,
+      status: 'unavailable',
+      message: 'SMS readiness could not be verified.',
+      _checked: true,
+    };
+  }
+  state.smsReadinessByContact[contactId] = next;
+  if (state.selectedContactId === contactId) updateWorkspaceOnly();
+}
+
 async function loadContactSmsThread(contactId) {
+  if (!contactSmsCapabilities(contactId).canMountThread) return;
   const selector = (window.CSS && CSS.escape) ? CSS.escape(contactId) : contactId;
   const container = document.querySelector(`[data-sms-thread][data-contact-id="${selector}"]`);
   if (!container) return;
@@ -9459,6 +9535,9 @@ function mountContactSmsThread() {
 }
 
 async function sendContactSms(contactId, text) {
+  if (!contactSmsCapabilities(contactId).canMountComposer) {
+    throw new Error('SMS is not ready for this workspace.');
+  }
   const session = activeSession();
   const response = await fetch('/api/sms-send', {
     method: 'POST',
@@ -9817,68 +9896,40 @@ async function postContactNote(form) {
   await logContactActivity(contactId, typeMap[tab] || 'note', '', text);
 }
 
-async function ensureCrmSiteForContact(contact) {
-  if (!contact?.id) return null;
-  const existing = crmSitesForContact(contact.id).find((site) => site.address || site.roof_system) || crmSitesForContact(contact.id)[0];
-  if (existing) return existing;
-  const site = normalizeCrmSite({
-    id: `site-${crypto.randomUUID()}`,
-    company_id: contact.company_id,
-    workspace_id: contact.workspace_id || activeWorkspaceId(),
-    contact_id: contact.id,
-    account_id: contact.account_id,
-    label: 'Primary site',
-    address: contact.location,
-    roof_system: contact.roof_system,
-    secondary_roof_system: contact.secondary_roof_system,
-    has_multiple_roof_systems: contact.has_multiple_roof_systems,
-    notes: contact.notes,
+async function convertContactToQuote(contactId, { createAnother = false } = {}) {
+  const { runContactToQuote } = await import('./crm/contact-to-quote.js');
+  return runContactToQuote(contactId, { createAnother }, {
+    activeWorkspaceId,
+    companyPath,
+    contactById,
+    createSupabaseClient,
+    crmSitesForContact,
+    DEAL_COLS,
+    dealStageNames,
+    emptyToNull,
+    isLiveSupabaseSession,
+    logActivity,
+    navigate,
+    normalizeAccount,
+    normalizeActivity,
+    normalizeContact,
+    normalizeCrmSite,
+    normalizeDeal,
+    notifySyncFailure,
+    pipelineStages,
+    requirePermission,
+    safeSupabaseQuery,
+    showToast,
+    SITE_COLS,
+    state,
+    supabaseRow,
+    supabaseWrite,
+    upsertAccount,
+    upsertActivity,
+    upsertContact,
+    upsertCrmSite,
+    upsertDeal,
   });
-  site.updated_at = new Date().toISOString();
-  const row = emptyToNull(supabaseRow(site, SITE_COLS), ['contact_id', 'account_id']);
-  const { ok, data } = await supabaseWrite('crm_sites', row);
-  if (!ok) return false;
-  const savedSite = data ? normalizeCrmSite(data) : site;
-  upsertCrmSite(savedSite);
-  return savedSite;
-}
-
-async function convertContactToQuote(contactId) {
-  const contact = contactById(contactId);
-  if (!contact) return;
-  const companyId = contact.company_id;
-  if (!requirePermission('crm.view', companyId, 'Your role cannot create quotes.', 'Quotes')) return;
-  const site = await ensureCrmSiteForContact(contact);
-  if (site === false) return false;
-  const deal = normalizeDeal({
-    id: `deal-${crypto.randomUUID()}`,
-    company_id: companyId,
-    workspace_id: contact.workspace_id || activeWorkspaceId(),
-    account_id: contact.account_id,
-    primary_contact_id: contact.id,
-    site_id: site?.id || '',
-    name: `${contact.name}${contact.title ? ' - ' + contact.title : ''}`,
-    stage: pipelineStages('deals', companyId)[0]?.name || dealStageNames()[0],
-    status: 'open',
-    value: contact.value,
-    owner_name: contact.owner_name,
-    source: contact.source,
-    notes: contact.notes,
-  });
-  deal.updated_at = new Date().toISOString();
-  const row = emptyToNull(supabaseRow(deal, DEAL_COLS), ['account_id', 'primary_contact_id', 'site_id', 'close_date', 'job_id']);
-  const { ok, data, error } = await supabaseWrite('deals', row);
-  if (!ok) {
-    if (error) notifySyncFailure(error, 'Quote conversion');
-    return false;
-  }
-  const savedDeal = normalizeDeal(data || deal);
-  upsertDeal(savedDeal);
-  await logActivity({ type: 'system', subject: 'Contact graduated -> Quote created', body: deal.name, related_type: 'contact', related_id: contact.id, account_id: contact.account_id });
-  state.selectedDealId = savedDeal.id;
-  showToast('Contact graduated to quote.', isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
-  navigate(companyPath('deals', { tab: 'profile', deal_id: savedDeal.id }, companyId));
-  return true;
 }
 function tasksForContact(contactId) {
   return companyTasks().filter((task) => taskMatchesRecord(task, { kind: 'contact', id: contactId }))
@@ -18228,6 +18279,7 @@ function renderPluginCard(companyId, workspaceId, plugin, canManagePlugins) {
   const moduleLabels = plugin.module_ids
     .map((moduleId) => MODULE_REGISTRY.find((module) => module.id === moduleId)?.label || titleCase(moduleId))
     .join(', ');
+  const scope = pluginDataScopeDetails(plugin.dataScope);
   return `
     <article class="plugin-card ${installed ? 'installed' : disabled ? 'disabled' : comingSoon ? 'coming-soon' : unavailable ? 'unavailable' : 'available'}">
       <div class="plugin-card-icon"><i class="ti ${h(plugin.icon)}"></i></div>
@@ -18235,6 +18287,8 @@ function renderPluginCard(companyId, workspaceId, plugin, canManagePlugins) {
         <strong>${h(plugin.label)}</strong>
         <span>${h(plugin.summary)}</span>
         <small>${h(moduleLabels)}</small>
+        <small class="plugin-scope-badge ${h(plugin.dataScope)}"><i class="ti ti-database" aria-hidden="true"></i>${h(scope.label)}</small>
+        <small class="plugin-scope-description">${h(scope.description)}</small>
         ${unavailable ? '<small class="plugin-card-note">Not included in this company account.</small>' : ''}
         ${prerequisiteNote ? `<small class="plugin-card-note">${h(prerequisiteNote)}</small>` : ''}
         ${conflictLabels && !installed ? `<small class="plugin-card-note warning">Installing ${h(plugin.label)} disables ${h(conflictLabels)}.</small>` : ''}
@@ -25920,13 +25974,30 @@ function handleAction(event, node) {
   }
   if (action === 'set-contact-workspace-tab') {
     event.preventDefault();
-    state.contactWorkspaceTab = ['Notes', 'Email', 'Activity'].includes(node.dataset.tab) ? node.dataset.tab : 'Notes';
+    const requestedTab = node.dataset.tab;
+    const allowedTabs = ['Notes', 'Email', 'Messages', 'Activity'];
+    if (requestedTab === 'Messages' && !contactSmsCapabilities(node.dataset.contactId).canMountThread) return;
+    state.contactWorkspaceTab = allowedTabs.includes(requestedTab) ? requestedTab : 'Notes';
     updateWorkspaceOnly();
+    if (state.contactWorkspaceTab === 'Messages') queueMicrotask(mountContactSmsThread);
     return;
   }
   if (action === 'contact-convert-quote') {
     event.preventDefault();
     convertContactToQuote(node.dataset.contactId);
+    return;
+  }
+  if (action === 'contact-create-another-quote') {
+    event.preventDefault();
+    convertContactToQuote(node.dataset.contactId, { createAnother: true });
+    return;
+  }
+  if (action === 'open-contact-quote') {
+    event.preventDefault();
+    const deal = dealById(node.dataset.dealId);
+    if (!deal) return;
+    state.selectedDealId = deal.id;
+    navigate(companyPath('deals', { tab: 'profile', deal_id: deal.id }, deal.company_id));
     return;
   }
   if (action === 'set-job-stage') {
@@ -31983,12 +32054,25 @@ function routeRedirect(route) {
   }
   const allowed = allowedCompanyIds();
   if (state.session?.auth === 'supabase' && !allowed.length) return null;
-  if (!allowed.includes(route.companyId)) {
-    if (state.session?.auth === 'supabase') return '';
-    return companyPath(route.section || 'jobs', Object.fromEntries(route.params.entries()), allowed[0] || defaultCompanyId());
-  }
   const validSections = MODULE_REGISTRY.map((module) => module.id);
-  if (!validSections.includes(route.section)) return companyPath('dashboard', {}, route.companyId);
+  const section = validSections.includes(route.section) ? route.section : 'dashboard';
+  const resolvedTenant = resolveTenantRoute({
+    routeCompanyId: route.companyId,
+    routeWorkspaceId: route.params.get('workspace') || '',
+    storedWorkspaceId: state.activeWorkspaceId || localStorage.getItem(ACTIVE_WORKSPACE_KEY) || '',
+    allowedCompanyIds: allowed,
+    workspaces: state.operationalWorkspaces,
+    memberships: state.workspaceMemberships,
+    profileId: activeSession().profile.id,
+    companyRoles: Object.fromEntries(allowed.map((companyId) => [companyId, companyRoleForWorkspaceAccess(companyId)])),
+  });
+  if (resolvedTenant.status === 'no-access') return null;
+  if (resolvedTenant.needsRedirect || section !== route.section) {
+    return companyPath(section, {
+      ...Object.fromEntries(route.params.entries()),
+      workspace: resolvedTenant.workspaceId,
+    }, resolvedTenant.companyId);
+  }
   const jobCompanyId = route.jobId ? companyIdForJob(route.jobId) : '';
   if (jobCompanyId && jobCompanyId !== route.companyId && allowed.includes(jobCompanyId)) {
     return companyPath(route.section, Object.fromEntries(route.params.entries()), jobCompanyId);
@@ -35141,6 +35225,7 @@ function isMutableAction(action = '') {
     'contact-quick',
     'contact-mark-next',
     'contact-convert-quote',
+    'contact-create-another-quote',
     'response-create-contact',
     'response-create-job',
     'response-create-task',

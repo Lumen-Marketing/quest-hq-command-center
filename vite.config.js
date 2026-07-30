@@ -17,6 +17,14 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          const normalizedId = id.replaceAll('\\', '/');
+          if (
+            normalizedId.endsWith('/src/workspaces/plugin-catalog.js')
+            || normalizedId.endsWith('/src/workspaces/tenant-route.js')
+            || normalizedId.endsWith('/src/communications/sms-readiness.js')
+          ) {
+            return 'workspace-runtime';
+          }
           if (!id.includes('node_modules')) return undefined;
           if (id.includes('@supabase')) return 'vendor-supabase';
           return undefined;

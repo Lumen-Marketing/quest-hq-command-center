@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-30T06:52:09+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-31T02:38:55+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -20,8 +20,8 @@ Captured 2026-07-30T06:52:09+08:00. This is a point-in-time operational snapshot
 ## Repository health
 
 - GitHub repository: `Lumen-Marketing/quest-hq-command-center`.
-- Default branch at capture: `main` at `b9f9e596d03f87faed99ac4334011706eec77cd2`.
-- `npm run check` passes: 709 tests, AI/project-state validation, production build, and bundle-budget gate.
+- Default branch at capture: `main` at `2c5a0eab0dffdc8e0808d38a95c5e051c66d4dd0`.
+- The P0 release-hardening candidate passes 764 tests, AI/project-state validation, the production build, and the bundle-budget gate. Its database migrations are live; the application revision is not production state until the branch is published and deployed.
 - `npm audit --audit-level=high` reports zero vulnerabilities after the locked PostCSS/Nanoid transitive dependency update.
 - CI runs the same check on pushes and pull requests.
 - The main application still emits a Vite advisory for a JavaScript chunk over 500 kB; the repository's explicit bundle budget passes.
@@ -32,9 +32,11 @@ Captured 2026-07-30T06:52:09+08:00. This is a point-in-time operational snapshot
 - Status: `ACTIVE_HEALTHY`.
 - Region: `us-west-1`.
 - Postgres: `17.6.1.127`, engine 17.
-- Live catalog snapshot captured 2026-07-29 from metadata only: 76 public tables/views, 194 foreign-key column relationships, 224 policies, 63 public functions, 91 triggers, 6 storage buckets, and 85 applied migration records.
-- Latest repository migration: `202607301200_eod_reports.sql`.
-- The latest live provider ledger entry is `20260729224956_operational_workspace_persistence`. The appearance pair (`202607291200_profile_appearance_sync.sql`, `202607291400_company_appearance_default.sql`) and recoverable-history pair (`20260728221620_record_history_and_recent_delete_undo.sql`, `202607291730_record_history_workspace_fk_index.sql`) are applied.
+- The committed full catalog snapshot remains the 2026-07-29 metadata-only capture. A targeted live verification on 2026-07-31 found 77 public tables/views, 197 foreign-key column relationships, 228 policies, 66 public functions, 92 triggers, 6 storage buckets, and 91 applied migration records.
+- Latest repository migration: `20260730181000_pipeline_stage_seed_repair.sql`.
+- The latest live provider ledger entry is `20260730183713_pipeline_stage_seed_repair`, preceded by `20260730183658_atomic_contact_to_quote`. The repository filenames retain their forward migration timestamps.
+- Live verification confirmed the quote request column and unique partial index, SECURITY INVOKER conversion RPC, authenticated-only execute grant, per-kind operational-workspace seeding logic, and zero missing contacts/deals/jobs pipeline kinds across active workspaces.
+- Post-migration advisors reported no ERROR or CRITICAL findings. The operational-workspace RPC retains its previously documented authenticated SECURITY DEFINER warning because it performs its own company-admin authorization with a fixed search path.
 - Live verification confirmed the workspace icon column and both validation constraints, the backward-compatible create/update RPC signatures, the atomic set-default RPC, exactly one active default per current company, and zero invalid stored icons. Supabase security and performance advisors returned no findings after the migration.
 - Live verification confirmed the `record_history` table, SELECT-only authenticated grant, workspace/permission RLS, all four source triggers, fixed-search-path functions, and the workspace foreign-key index. A rollback-only database smoke test passed created, updated, deleted, and restored capture without leaving test data.
 - The `send-company-invite` Edge Function is live and active as version 3. It manually validates the caller JWT, requires an active Owner, Admin, or Developer membership in the invite's company, and sends matching HTML and plain-text invite content.
@@ -73,6 +75,10 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Operational-workspace defaults and uploaded icons now persist in Supabase and survive a reload; rejected writes no longer appear successful in the browser.
 - "Search this company" now opens the command search and returns permission-scoped Contacts, Quotes, Jobs, Tasks, and Files across every operational workspace the user may enter, preserving the result's workspace when navigating.
 - Pipeline stages are stored and replaced per operational workspace rather than hardcoded globally.
+- The P0 candidate reconciles stale company/workspace URLs to an allowed tenant before rendering, rather than letting browser state and the URL disagree.
+- Every workspace plugin declares and visibly explains whether its data is workspace-only, company-wide, or mixed.
+- The P0 candidate replaces the live Contacts-to-Quotes browser write chain with one workspace-authorized, retry-safe transaction. A separate Create another Quote action intentionally uses a new request id.
+- Contact SMS is fail-closed behind provider, tenant, storage, assigned-number, and complete-backend-contract checks. The complete workspace SMS routing contract is not implemented yet, so production remains disabled even if someone partially creates the tables.
 - The account menu now exposes a lazy-loaded Help & support dialog with Ctrl+K guidance, an email fallback, and an authenticated report form backed by `report-problem`.
 - Pilot onboarding rehearsal, support response, and provider handoff procedures are documented under `docs/operations`.
 - The compact Quest command rail, Modular Quest landing direction, IBM Plex typography, Technical Ledger underwriter, Contacts lifecycle, Dashboard, Workday, Jobs, Tasks, Messages, Files, Forms, Client Portals, Price Book, Calls, Automations, Analytics, Users, and Workspace App Builder are present.
@@ -89,6 +95,7 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.
+- Workspace-safe SMS send, inbound routing, persistence, and table migration remain a later coordinated change. Do not enable SMS from provider credentials or a partial schema alone.
 - Before public onboarding, run one invite to a designated team-owned mailbox to prove the configured Resend API key, verified sender/domain, and inbox delivery. The code, authorization, database delivery ledger, retry path, and manual fallback are live, but no existing teammate was emailed during this rollout.
 - Supabase Auth registration, verification, and recovery email use a separate channel. Confirm custom SMTP and branded Auth templates in the Supabase dashboard before public launch.
 - Complete the documented two-user pilot rehearsal with a company owner and newly invited worker before opening public registration.

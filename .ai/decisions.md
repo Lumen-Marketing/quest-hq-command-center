@@ -30,6 +30,22 @@ Invite delivery is durable state, not the source of access truth. The database i
 
 `company_plugins` records what a customer's plan is entitled to use. `workspace_plugins` records which entitled plugins are active and how they are configured in one operational workspace. This keeps the system customizable without hardcoding one pipeline or app layout for every market customer.
 
+## Plugin activation does not imply one data boundary
+
+Every plugin declares a customer-visible data scope: workspace-private, company-shared, or hybrid. The label describes the current storage and permission model; it does not pretend every enabled app is isolated to one workspace. Changing a declaration requires reviewing the plugin's tables, APIs, RLS, and navigation behavior together.
+
+## Contact-to-quote conversion is atomic and request-idempotent
+
+Live Contacts-to-Quotes conversion uses one workspace-authorized database transaction. A browser-generated request UUID makes network retries return the same account, site, quote, and activity. The explicit Create another Quote action generates a new UUID because multiple intentional quotes for one contact remain supported.
+
+## Incomplete SMS infrastructure must stay invisible
+
+The contact SMS surface is fail-closed. Provider keys and workspace-looking tables are insufficient: the readiness endpoint also requires a code-level workspace SMS backend contract. That contract remains closed until outbound selection, inbound routing, persistence, and schema are upgraded together, preventing a partial rollout from exposing the wrong company's or workspace's number.
+
+## Tenant URLs are reconciled before rendering
+
+A requested company and operational workspace must both belong to the signed-in user's allowed tenant set. Stale or inaccessible identifiers are replaced with the first allowed company and its stored/default allowed workspace; users with no company access remain in the no-access state. The URL, active state, navigation, and loaded records therefore resolve to the same tenant.
+
 ## Supabase is production data truth
 
 Repository migrations explain intended history; the live Supabase catalog determines the current production shape. Database documentation is a metadata-only snapshot and must be refreshed after database changes.
@@ -311,8 +327,8 @@ Owners and Admins can save the current appearance as the company default via
 `app_private.is_company_admin` or `is_quest_admin`), stored on
 `companies.appearance_prefs`. The client resolves in the order: the member's own saved
 appearance if they have ever set one, otherwise the company default, otherwise the built-in
-defaults. Applying an inherited look never writes it into the member's profile — only the
-explicit setTheme/setAccent/setAppearance paths push — so a non-empty
+defaults. Applying an inherited look never writes it into the member's profile -- only the
+explicit setTheme/setAccent/setAppearance paths push -- so a non-empty
 `profiles.appearance_prefs` reliably means "this person chose for themselves" and an admin
 change cannot stomp it.
 

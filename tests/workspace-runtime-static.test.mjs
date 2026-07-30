@@ -27,6 +27,8 @@ test('route reconciliation selects only an allowed child workspace', () => {
   assert.match(source, /function activeWorkspaceId\(/);
   assert.match(source, /function setActiveWorkspace\(/);
   assert.match(source, /workspaceForRoute\(\{/);
+  assert.match(source, /resolveTenantRoute\(\{/);
+  assert.match(source, /if \(resolvedTenant\.needsRedirect \|\| section !== route\.section\)/);
   assert.match(source, /route\.params\.get\('workspace'\)/);
   assert.match(source, /localStorage\.setItem\(ACTIVE_WORKSPACE_KEY/);
   assert.match(source, /search\.set\('workspace', workspaceId\)/);

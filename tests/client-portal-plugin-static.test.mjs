@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -13,7 +14,9 @@ const portalMigrationName = migrationFiles.find((name) => {
 const portalMigration = portalMigrationName ? readFileSync(new URL(`../supabase/migrations/${portalMigrationName}`, import.meta.url), 'utf8') : '';
 
 test('client portal plugin is registered, gated, and permissioned', () => {
-  assert.match(source, /id: 'client_portal'[\s\S]*module_ids: \['client-portals'\]/);
+  const plugin = WORKSPACE_PLUGIN_REGISTRY.find(({ id }) => id === 'client_portal');
+  assert.ok(plugin, 'Expected the client portal plugin in the workspace catalog');
+  assert.deepEqual(plugin.module_ids, ['client-portals']);
   assert.match(source, /\['client_portals\.view', 'View client portal'\]/);
   assert.match(source, /\['client_portals\.manage', 'Create\/edit client portal'\]/);
   assert.match(source, /\{ id: 'client-portals'[\s\S]*label: 'Client portals'[\s\S]*permission: 'client_portals\.view'/);

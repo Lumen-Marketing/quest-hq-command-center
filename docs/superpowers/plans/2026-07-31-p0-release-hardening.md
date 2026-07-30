@@ -84,4 +84,3 @@
 6. Confirm Vercel READY points at the published commit.
 7. Run production smoke plus targeted tenant-route and SMS-gate checks.
 8. Report completed PDF checkboxes and the remaining open P0 items without marking the full PDF complete.
-

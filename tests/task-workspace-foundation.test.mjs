@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
+import { WORKSPACE_PLUGIN_PRESETS, WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 const hostSource = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const taskConfig = readFileSync(new URL('../taskmanagement/js/config.js', import.meta.url), 'utf8');
@@ -25,16 +26,16 @@ test('Tasks uses company entitlement plus independent workspace activation', () 
   assert.match(hostSource, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'users', 'settings', 'automations'\]\);/);
   assert.doesNotMatch(hostSource, /CORE_MODULE_IDS = new Set\([^\n]*'tasks'/);
 
-  const taskPlugin = hostSource.match(/\{ id: 'tasks'[^}]+\}/)?.[0] || '';
-  assert.match(taskPlugin, /label: 'Tasks'/);
-  assert.match(taskPlugin, /module_ids: \['tasks'\]/);
-  assert.match(taskPlugin, /permissions: \['tasks\.view', 'tasks\.manage'\]/);
+  const taskPlugin = WORKSPACE_PLUGIN_REGISTRY.find(({ id }) => id === 'tasks');
+  assert.ok(taskPlugin, 'Expected the Tasks plugin in the workspace catalog');
+  assert.equal(taskPlugin.label, 'Tasks');
+  assert.deepEqual(taskPlugin.module_ids, ['tasks']);
+  assert.deepEqual(taskPlugin.permissions, ['tasks.view', 'tasks.manage']);
   assert.match(hostSource, /if \(clean\.startsWith\('tasks\.'\)\) return \['tasks'\];/);
 
-  const presets = sourceBetween(hostSource, 'const WORKSPACE_PLUGIN_PRESETS = {', 'const WORKSPACE_PLUGIN_PRESET_LABELS');
-  assert.match(presets, /roofing: \[[^\n]*'tasks'/);
-  assert.match(presets, /construction: \[[^\n]*'tasks'/);
-  assert.match(presets, /generic: \[[^\n]*'tasks'/);
+  assert.ok(WORKSPACE_PLUGIN_PRESETS.roofing.includes('tasks'));
+  assert.ok(WORKSPACE_PLUGIN_PRESETS.construction.includes('tasks'));
+  assert.ok(WORKSPACE_PLUGIN_PRESETS.generic.includes('tasks'));
 });
 
 test('the Command Center host passes a required workspace boundary into the Task module', () => {

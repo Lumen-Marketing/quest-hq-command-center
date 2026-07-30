@@ -144,7 +144,7 @@ Captured 2026-07-28T22:31:54.000Z from the live Supabase catalog. Nullable colum
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id` text; `company_id` text; `account_id` text?; `primary_contact_id` text?; `name` text; `stage` text; `status` text; `value` numeric; `probability` int4; `close_date` date?; `owner_name` text; `source` text; `job_id` uuid?; `notes` text; `created_by` uuid?; `created_at` timestamptz; `updated_at` timestamptz; `site_id` text?; `line_items` jsonb; `deleted_at` timestamptz?; `deleted_by` uuid?; `workspace_id` uuid
+- Columns: `id` text; `company_id` text; `account_id` text?; `primary_contact_id` text?; `name` text; `stage` text; `status` text; `value` numeric; `probability` int4; `close_date` date?; `owner_name` text; `source` text; `job_id` uuid?; `notes` text; `created_by` uuid?; `created_at` timestamptz; `updated_at` timestamptz; `site_id` text?; `line_items` jsonb; `deleted_at` timestamptz?; `deleted_by` uuid?; `workspace_id` uuid; `contact_quote_request_id` uuid?
 
 ## public.field_permissions
 

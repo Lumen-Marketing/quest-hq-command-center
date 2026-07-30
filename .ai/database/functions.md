@@ -1,6 +1,6 @@
 # Public functions
 
-Captured 2026-07-29T22:52:09.000Z. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
+Captured from the full catalog on 2026-07-29T22:52:09.000Z and updated from targeted live verification on 2026-07-30T18:38:55.932Z. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
 
 | Function | Returns | Definer | anon | authenticated | service_role |
 | --- | --- | --- | --- | --- | --- |
@@ -12,6 +12,7 @@ Captured 2026-07-29T22:52:09.000Z. Execute grants are catalog facts; SECURITY DE
 | `assign_wo_number(company text)` | integer | yes | no | yes | yes |
 | `can_manage_roles()` | boolean | yes | no | yes | yes |
 | `can_view_team()` | boolean | yes | no | yes | yes |
+| `convert_contact_to_quote(p_contact_id text, p_request_id uuid)` | jsonb | no | no | yes | yes |
 | `convert_deal_to_job(p_job jsonb, p_deal jsonb)` | jsonb | yes | no | yes | yes |
 | `create_company_workspace(company_name text, preset_code text, icon_key text, owner_email text)` | text | yes | no | yes | yes |
 | `create_operational_workspace(target_company_id text, workspace_name text, preset_code text, icon_key text, icon_image text)` | uuid | yes | no | yes | yes |

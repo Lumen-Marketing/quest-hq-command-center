@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
+import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -8,10 +9,11 @@ const migrationUrl = new URL('../supabase/migrations/202606270800_workspace_buil
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';
 
 test('workspace builder is integrated as a current app plugin, not an old standalone clone', () => {
-  assert.match(source, /id: 'workspace_builder'/);
-  assert.match(source, /label: 'Workspace App Builder'/);
-  assert.match(source, /module_ids: \['workspaces'\]/);
-  assert.match(source, /permissions: \['workspaces.view', 'workspaces.manage'\]/);
+  const plugin = WORKSPACE_PLUGIN_REGISTRY.find(({ id }) => id === 'workspace_builder');
+  assert.ok(plugin, 'Expected workspace builder in the workspace catalog');
+  assert.equal(plugin.label, 'Workspace App Builder');
+  assert.deepEqual(plugin.module_ids, ['workspaces']);
+  assert.deepEqual(plugin.permissions, ['workspaces.view', 'workspaces.manage']);
   assert.match(source, /id: 'workspaces'[\s\S]*label: 'Workspaces'[\s\S]*permission: 'workspaces.view'/);
   assert.match(source, /\{ label: 'Workspace', ids: \['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'\] \}/);
   assert.match(source, /\{ label: 'Tools', ids: \['underwriter', 'proposals'\] \}/);

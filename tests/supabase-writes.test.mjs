@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const contactToQuoteSource = readFileSync(new URL('../src/crm/contact-to-quote.js', import.meta.url), 'utf8');
 const createJobTaskSource = source.slice(source.indexOf('async function createJobTask'), source.indexOf('function jobQuickCreate'));
 
 test('contact saves and task toggles roll back returned Supabase errors', () => {
@@ -11,10 +12,14 @@ test('contact saves and task toggles roll back returned Supabase errors', () => 
   assert.match(source, /async function toggleContactTask\(taskId\)[\s\S]*if \(result\.error\)[\s\S]*upsertTask\(task\)/);
 });
 
-test('quote conversion never navigates or inserts local data after a failed write', () => {
-  assert.match(source, /const \{ ok, data, error \} = await supabaseWrite\('deals', row\);/);
-  assert.match(source, /if \(!ok\)[\s\S]*return false;/);
-  assert.match(source, /const savedDeal = normalizeDeal\(data \|\| deal\);[\s\S]*upsertDeal\(savedDeal\)/);
+test('live contact-to-quote conversion stops before local updates when the atomic RPC fails', () => {
+  const start = contactToQuoteSource.indexOf('export async function runContactToQuote');
+  const body = contactToQuoteSource.slice(start);
+
+  assert.match(body, /client\.rpc\('convert_contact_to_quote'/);
+  assert.match(body, /if \(result\.error\) \{[\s\S]*notifySyncFailure\(result\.error, 'Quote conversion'\);[\s\S]*return false;[\s\S]*\}/);
+  assert.ok(body.indexOf('if (result.error)') < body.indexOf('upsertDeal(savedDeal)'));
+  assert.ok(body.indexOf('if (result.error)') < body.indexOf("navigate(companyPath('deals'"));
 });
 
 test('job task creation requires a real authenticated creator and checks insert errors', () => {

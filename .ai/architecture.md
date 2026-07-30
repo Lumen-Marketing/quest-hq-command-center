@@ -23,6 +23,8 @@ The app uses:
 
 Browser route -> company/session reconciliation -> operational-workspace reconciliation -> permission, subscription, and plugin checks -> module renderer -> Supabase query/RPC or a narrowly scoped Vercel Function.
 
+The route reconciliation step canonicalizes stale or inaccessible company/workspace identifiers against the signed-in member's allowed tenant set before any company module renders.
+
 The tenancy hierarchy is `profile -> company membership -> company -> operational workspace -> workspace membership/role/plugins -> workspace-owned records`. A company is the customer, billing, and top-level security tenant. Operational workspaces are configurable child environments inside that company; they are not separate customer accounts.
 
 Public flows such as client portals, public forms, and proposals go through token-aware API handlers. Server handlers use deployment-only credentials and must validate method, input, tenant scope, and authorization before accessing Supabase.
@@ -75,7 +77,10 @@ The SPA supports:
 - Invites never grant Owner, Admin, or Developer. Those promotions happen only after onboarding through the owner-guarded member-access path.
 - Invite email callers cannot choose the recipient, subject, HTML, token, company, role, or workspace names; the Edge Function derives them from the tenant-scoped invite.
 - Company plugins are entitlements; workspace plugins control activation and configuration independently inside each child workspace.
+- Plugin catalog entries also disclose whether their current records are workspace-private, company-shared, or hybrid; activation alone does not change the underlying data boundary.
 - Linked CRM, quote, job, task, file, proposal, and underwriting records must share a workspace. Database constraint triggers enforce this independently of the browser.
+- Contact-to-quote graduation is a single authenticated RPC keyed by a client request UUID. The transaction locks the contact and returns all linked records so retries cannot create duplicate quotes.
+- Contact SMS does not mount its thread or composer until a server readiness response proves tenant access, provider setup, workspace-safe storage/number assignment, and a complete code-level workspace-routing contract.
 - Browser access uses the publishable/anon key and relies on RLS.
 - Service credentials never enter Vite client variables.
 - Destructive business operations use safe-delete/recycle-bin or atomic RPCs where defined.
