@@ -324,6 +324,10 @@ cancellation but cannot reopen a manually archived or rejected company. Only an 
 platform reactivation clears a manual terminal outcome. A non-null terminal status blocks
 database access even if an old grace date is still in the future.
 
+Stripe events are also idempotent by event id. The exact same webhook event cannot be
+applied again after a later platform action, while a different event at the same provider
+timestamp can still advance the subscription.
+
 All three effective terminal states are inactive in normal selectors and task filters;
 platform lists expose separate Archived, Rejected, and Canceled filters. The company a user
 is currently inside remains visible to prevent stranding. A narrowly targeted backfill

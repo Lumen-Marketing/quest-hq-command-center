@@ -775,8 +775,11 @@ begin
         stripe_event_id = excluded.stripe_event_id,
         stripe_event_created_at = excluded.stripe_event_created_at,
         updated_at = now()
-  where company_subscriptions.stripe_event_created_at is null
-     or company_subscriptions.stripe_event_created_at <= excluded.stripe_event_created_at
+  where company_subscriptions.stripe_event_id is distinct from excluded.stripe_event_id
+    and (
+      company_subscriptions.stripe_event_created_at is null
+      or company_subscriptions.stripe_event_created_at <= excluded.stripe_event_created_at
+    )
   returning true into v_applied;
 
   return coalesce(v_applied, false);

@@ -238,6 +238,39 @@ test('manual terminal provenance survives a Stripe canceled then active sequence
   }
 });
 
+test('an exact Stripe event retry cannot undo a later platform reactivation', () => {
+  const stripe = sqlFunctionSource(
+    'create or replace function public.apply_stripe_subscription_event(',
+    'revoke execute on function public.apply_stripe_subscription_event',
+  );
+
+  assert.match(
+    stripe,
+    /where company_subscriptions\.stripe_event_id is distinct from excluded\.stripe_event_id[\s\S]*company_subscriptions\.stripe_event_created_at <= excluded\.stripe_event_created_at/,
+  );
+
+  const shouldApplyStripe = (storedEventId, storedAt, incomingEventId, incomingAt) => (
+    storedEventId !== incomingEventId
+    && (storedAt === null || storedAt <= incomingAt)
+  );
+  const canceledEvent = { id: 'evt-canceled-1', at: 100 };
+
+  assert.equal(
+    shouldApplyStripe(null, null, canceledEvent.id, canceledEvent.at),
+    true,
+  );
+  // Platform reactivation changes lifecycle state but intentionally retains
+  // the last provider event marker, so an exact provider retry is a no-op.
+  assert.equal(
+    shouldApplyStripe(canceledEvent.id, canceledEvent.at, canceledEvent.id, canceledEvent.at),
+    false,
+  );
+  assert.equal(
+    shouldApplyStripe(canceledEvent.id, canceledEvent.at, 'evt-active-2', 101),
+    true,
+  );
+});
+
 test('terminal lifecycle blocks access even when an old grace date remains in the future', () => {
   const check = new Function(
     'state',
