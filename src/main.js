@@ -35671,7 +35671,7 @@ function companySubscription(companyId = activeCompanyId()) {
 function workspaceReviewRows() {
   const fromRpc = state.workspaceReviews.map(normalizeWorkspaceReview);
   const fromSubscriptions = state.subscriptions
-    .filter((subscription) => ['pending_review', 'active', 'trialing', 'suspended', 'canceled'].includes(subscription.status))
+    .filter((subscription) => Boolean(normalizeSubscriptionStatus(subscription.status)))
     .map((subscription) => normalizeWorkspaceReview({
       company_id: subscription.company_id,
       company_name: companyName(subscription.company_id),
@@ -35767,8 +35767,8 @@ function platformActionStatus(action) {
     suspend: 'suspended',
     disable: 'suspended',
     archive: 'archived',
-    delete: 'canceled',
-    cancel: 'canceled',
+    delete: 'archived',
+    cancel: 'archived',
     pending: 'pending_review',
   }[String(action || '').toLowerCase().trim()] || '';
 }

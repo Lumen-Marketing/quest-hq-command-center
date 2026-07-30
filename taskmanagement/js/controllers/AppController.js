@@ -141,33 +141,33 @@ App.AppController = class AppController {
     // access even while previewing another role).
     const role = App.realRole();
     const all = Object.keys(App.COMPANIES || {});
+    let requested = this.uiState.currentCompany;
+    try {
+      requested = localStorage.getItem(this._companyKey()) || requested;
+    } catch (e) { /* localStorage unavailable */ }
+    const assigned = (App.currentProfile && App.currentProfile.company_ids) || [];
+    const accessible = role === 'developer' ? all : all.filter(id => assigned.includes(id));
+    const retainedInactive = requested && requested !== '*' && accessible.includes(requested) ? requested : null;
+    const visible = accessible.filter((id) => id === retainedInactive || !(App.COMPANIES[id] || {}).inactive);
     let companies;
     let fallback;
     if (role === 'developer') {
       // Developers get an "All companies" sentinel ('*') across every company,
       // and default to it. '*' means no company filter (god mode).
-      companies = ['*'].concat(all);
+      companies = ['*'].concat(visible);
       fallback = '*';
     } else {
-      const assigned = (App.currentProfile && App.currentProfile.company_ids) || [];
-      const mine = all.filter(id => assigned.includes(id));
       // Anyone who spans more than one company also gets an "All companies"
       // option. For them '*' isn't god mode — it just drops the company filter,
       // so they see every company they can access (still RLS-scoped to those).
       // Multi-company users default to "All companies" so they land on
       // everything they can access; single-company users default to that one.
-      companies = mine.length > 1 ? ['*'].concat(mine) : mine;
-      fallback = mine.length > 1 ? '*' : (mine[0] || null);
+      companies = visible.length > 1 ? ['*'].concat(visible) : visible;
+      fallback = visible.length > 1 ? '*' : (visible[0] || null);
     }
     this.uiState.companies = companies;
 
-    let current = null;
-    try {
-      const stored = localStorage.getItem(this._companyKey());
-      if (stored && companies.includes(stored)) current = stored;
-    } catch (e) { /* localStorage unavailable */ }
-    if (!current) current = fallback;
-    this.uiState.currentCompany = current;
+    this.uiState.currentCompany = requested && companies.includes(requested) ? requested : fallback;
   }
 
   _companyKey() {
@@ -209,6 +209,7 @@ App.AppController = class AppController {
     if (this.uiState.currentCompany === id) return;
     this.uiState.currentCompany = id;
     try { localStorage.setItem(this._companyKey(), id); } catch (e) { /* ignore */ }
+    this.initCompanyContext();
     this.uiState.selectedTaskId = null;
     App.EventBus.emit('company:changed', id);
     // Reuse the existing re-render path so every list/sidebar refreshes.

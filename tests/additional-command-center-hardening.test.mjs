@@ -20,6 +20,8 @@ const normalizePlatformCompanySource = functionSource('normalizePlatformCompany'
 const normalizePlatformCompanyMemberSource = functionSource('normalizePlatformCompanyMember', 'normalizeWorkspaceBackup');
 const applyCreatedWorkspaceSource = functionSource('applyCreatedWorkspace', 'applyPlatformCreatedWorkspace');
 const applyPlatformCreatedWorkspaceSource = functionSource('applyPlatformCreatedWorkspace', 'applyPluginPresetLocal');
+const workspaceReviewRowsSource = functionSource('workspaceReviewRows', 'platformCompanyRows');
+const normalizeSubscriptionStatusSource = functionSource('normalizeSubscriptionStatus', 'isQuestDeveloper');
 
 test('authoritative company normalization preserves a trimmed Supabase id that is also a legacy URL alias', () => {
   const normalize = new Function('authoritativeCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'input', `${normalizeCompanySource}\nreturn normalizeCompany(input);`);
@@ -103,11 +105,26 @@ test('distinct terminal lifecycle states are normalized, labeled, and used by th
   const actionStatus = functionSource('platformActionStatus', 'subscriptionAllowsCompany');
   const labelStatus = functionSource('subscriptionLabelForStatus', 'normalizeSubscriptionStatus');
   const normalizeStatus = functionSource('normalizeSubscriptionStatus', 'isQuestDeveloper');
-  const statusFor = new Function(`${actionStatus}\nreturn platformActionStatus('archive');`);
+  const statusFor = new Function(`${actionStatus}\nreturn ['archive', 'delete', 'cancel'].map(platformActionStatus);`);
   const labelFor = new Function('formatDate', `${normalizeStatus}\n${labelStatus}\nreturn [subscriptionLabelForStatus('archived'), subscriptionLabelForStatus('rejected'), subscriptionLabelForStatus('canceled')];`);
-  assert.equal(statusFor(), 'archived');
+  assert.deepEqual(statusFor(), ['archived', 'archived', 'archived']);
   assert.deepEqual(labelFor(() => ''), ['Archived', 'Rejected', 'Canceled']);
   assert.match(source, /data-action="review-workspace"[^>]*data-status="rejected"[^>]*>Reject<\/button>/);
+});
+
+test('workspace review subscription fallback retains every normalized lifecycle status', () => {
+  const statuses = ['pending_review', 'trialing', 'active', 'past_due', 'grace', 'suspended', 'archived', 'rejected', 'canceled', 'incomplete'];
+  const run = new Function(
+    'state', 'normalizeWorkspaceReview', 'pendingReviewCompanyIds', 'companyName',
+    `${normalizeSubscriptionStatusSource}\n${workspaceReviewRowsSource}\nreturn workspaceReviewRows();`,
+  );
+  const reviews = run(
+    { workspaceReviews: [], subscriptions: statuses.map((status) => ({ company_id: status, status })) },
+    (row) => row,
+    () => [],
+    (id) => id,
+  );
+  assert.deepEqual(reviews.map((review) => review.status).sort(), statuses.slice().sort());
 });
 
 test('lifecycle migration preserves the reviewed permission function and applies only the audit-proven non-Stripe archive backfill', () => {
