@@ -27699,3 +27699,42 @@ html[data-card-style="glass"] .message-context-rail {
     font-size: 9.5px;
   }
 }
+
+/* EOD reports: file-a-report form beside the weekly quote target, then the log. */
+.eod-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.eod-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.eod-form label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.eod-form .eod-wide { grid-column: 1 / -1; }
+
+.eod-note {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eod-ok { color: var(--green); }
+.eod-under { color: var(--muted); }
+
+@media (max-width: 900px) {
+  .eod-grid { grid-template-columns: minmax(0, 1fr); }
+  .eod-form { grid-template-columns: minmax(0, 1fr); }
+}

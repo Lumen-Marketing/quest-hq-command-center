@@ -33,7 +33,7 @@ Captured 2026-07-30T06:52:09+08:00. This is a point-in-time operational snapshot
 - Region: `us-west-1`.
 - Postgres: `17.6.1.127`, engine 17.
 - Live catalog snapshot captured 2026-07-29 from metadata only: 76 public tables/views, 194 foreign-key column relationships, 224 policies, 63 public functions, 91 triggers, 6 storage buckets, and 85 applied migration records.
-- Latest repository migration: `202607301100_operational_workspace_persistence.sql`.
+- Latest repository migration: `202607301200_eod_reports.sql`.
 - The latest live provider ledger entry is `20260729224956_operational_workspace_persistence`. The appearance pair (`202607291200_profile_appearance_sync.sql`, `202607291400_company_appearance_default.sql`) and recoverable-history pair (`20260728221620_record_history_and_recent_delete_undo.sql`, `202607291730_record_history_workspace_fk_index.sql`) are applied.
 - Live verification confirmed the workspace icon column and both validation constraints, the backward-compatible create/update RPC signatures, the atomic set-default RPC, exactly one active default per current company, and zero invalid stored icons. Supabase security and performance advisors returned no findings after the migration.
 - Live verification confirmed the `record_history` table, SELECT-only authenticated grant, workspace/permission RLS, all four source triggers, fixed-search-path functions, and the workspace foreign-key index. A rollback-only database smoke test passed created, updated, deleted, and restored capture without leaving test data.
@@ -68,6 +68,7 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 ## Feature state
 
 - Company and operational-workspace separation is production state.
+- EOD reports are a native Operations module backed by `public.eod_reports`, gated by the new `eod.view` / `eod.manage` permissions. The page and the admin-only platform master panel are both lazily loaded, which is what kept the entry bundle under its ceiling.
 - Workspaces independently activate entitled plugins and preserve workspace identity through CRM, pipeline, underwriting, job, file, proposal, and task records.
 - Operational-workspace defaults and uploaded icons now persist in Supabase and survive a reload; rejected writes no longer appear successful in the browser.
 - "Search this company" now opens the command search and returns permission-scoped Contacts, Quotes, Jobs, Tasks, and Files across every operational workspace the user may enter, preserving the result's workspace when navigating.

@@ -469,6 +469,8 @@ const PERMISSION_KEYS = [
   ['messages.delete_own', 'Delete own messages'],
   ['messages.delete_any', 'Delete any messages'],
   ['messages.manage', 'Manage messages (compatibility)'],
+  ['eod.view', 'View + file EOD reports'],
+  ['eod.manage', 'Review/edit anyone’s EOD reports'],
   ['price_book.view', 'View price book'],
   ['price_book.manage', 'Manage price book (vendors, materials, costs, imports)'],
 ];
@@ -1046,6 +1048,7 @@ const MODULE_REGISTRY = [
   { id: 'team-workload', group: 'Operations', label: 'Team workload', icon: 'ti-users', symbol: 'q-symbol-team-workload', status: 'live', permission: 'tasks.view' },
   { id: 'clock', group: 'Operations', label: 'Clock dashboard', icon: 'ti-clock-hour-4', symbol: 'q-symbol-clock', status: 'live', permission: 'clock.manage' },
   { id: 'calls', group: 'Operations', label: 'Calls', icon: 'ti-phone', symbol: 'q-symbol-analytics', status: 'live', permission: 'team.view' },
+  { id: 'eod', group: 'Operations', label: 'EOD reports', icon: 'ti-clipboard-check', symbol: 'q-symbol-approvals', status: 'live', permission: 'eod.view' },
 ];
 
 const NAVIGATION_LABELS = {
@@ -1065,7 +1068,7 @@ const NAV_GROUPS = [
   { label: 'Review', ids: ['analytics', 'users', 'calendar'] },
   { label: 'Build', ids: ['templates', 'automations'] },
   { label: 'Workspace', ids: ['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'] },
-  { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload', 'calls'] },
+  { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload', 'eod', 'calls'] },
   { label: 'Control', ids: ['settings', 'tickets'] },
 ];
 
@@ -2279,6 +2282,7 @@ const state = {
   platformCompanyFilters: { search: '', status: 'active', page: 0 },
   workspaceReviewFilters: { search: '', status: 'active', page: 0 },
   subscriptions: [],
+  eodReports: [],
   workspaceReviews: [],
   workspaceBackups: readSeededList(WORKSPACE_BACKUP_CACHE_KEY, []).map(normalizeWorkspaceBackup),
   recycleBinItems: readSeededList(RECYCLE_BIN_CACHE_KEY, []).map(normalizeRecycleBinItem),
@@ -3979,6 +3983,7 @@ async function loadSupabaseBootstrapData() {
       workspacesResult,
       workspaceMembershipsResult,
       workspacePluginsResult,
+      eodReportsResult,
     ] = await Promise.all([
       safeSupabaseQuery(client.from('companies').select('*').in('id', companyIds)),
       safeSupabaseQuery(client.from('company_subscriptions').select('*').in('company_id', companyIds)),
@@ -3989,6 +3994,9 @@ async function loadSupabaseBootstrapData() {
       safeSupabaseQuery(client.from('workspaces').select('*').in('company_id', companyIds)),
       safeSupabaseQuery(client.from('workspace_memberships').select('*')),
       safeSupabaseQuery(client.from('workspace_plugins').select('*')),
+      // Scoped by RLS to companies where the caller holds eod.view; the id filter just
+      // keeps the payload to companies already in session.
+      safeSupabaseQuery(client.from('eod_reports').select('*').in('company_id', companyIds).order('report_date', { ascending: false })),
     ]);
     if (!companiesResult.error) state.companies = mergeCompanies(state.companies.concat((companiesResult.data || []).map(normalizeCompany)));
     if (!subscriptionsResult.error) state.subscriptions = mergeSubscriptions(state.subscriptions.concat((subscriptionsResult.data || []).map(normalizeSubscription)));
@@ -4010,6 +4018,7 @@ async function loadSupabaseBootstrapData() {
     if (!workspacePluginsResult.error) {
       state.workspacePlugins = mergeWorkspacePlugins(state.workspacePlugins.concat((workspacePluginsResult.data || []).map(normalizeWorkspacePlugin)));
     }
+    if (!eodReportsResult.error) state.eodReports = eodReportsResult.data || [];
   }
   if (state.platformAdmin) {
     const [platformCompaniesResult, platformMembersResult] = await Promise.all([
@@ -5099,6 +5108,117 @@ function compactTabs(label, items) {
   `;
 }
 
+// Raw rows are kept as they come back from Supabase; normalising them is the page's
+// job, so normalizeEodReport lives in the lazily loaded module rather than the entry
+// chunk. Nothing in the shell reads these fields.
+function companyEodReports(companyId = activeCompanyId()) {
+  const canonical = canonicalCompanyId(companyId);
+  return state.eodReports.filter((report) => canonicalCompanyId(report.company_id) === canonical);
+}
+
+// The page markup is a whole surface most sessions never open, and the entry chunk is at
+// its budget ceiling — so it loads on demand. A static import would land in the same
+// chunk and save nothing; this import must stay dynamic.
+let eodPageModule = null;
+let eodPagePromise = null;
+
+function loadEodModule() {
+  if (eodPageModule) return Promise.resolve(eodPageModule);
+  if (!eodPagePromise) {
+    eodPagePromise = import('./eod/eod-page.js')
+      .then((module) => { eodPageModule = module; return module; })
+      .catch((error) => { eodPagePromise = null; throw error; });
+  }
+  return eodPagePromise;
+}
+
+// The few shell capabilities the module needs, so it never imports from main.js.
+function eodContext() {
+  const companyId = activeCompanyId();
+  return {
+    companyId: canonicalCompanyId(companyId),
+    workspaceId: workspaceIdForCompany(companyId) || null,
+    profileId: activeSession().profile.id,
+    live: isLiveSupabaseSession(),
+    readOnly: isReadOnlyDemo(),
+    client: createSupabaseClient(),
+    uuid: () => crypto.randomUUID(),
+    can: (permission) => can(permission, companyId),
+    toast: (message, mode, title) => showToast(message, mode, title),
+    push: (row) => { state.eodReports = [row].concat(state.eodReports); },
+    patch: (id, changes) => {
+      const row = state.eodReports.find((item) => item.id === id);
+      if (row) Object.assign(row, changes);
+    },
+    render,
+  };
+}
+
+function runEodAction(name, ...args) {
+  loadEodModule()
+    .then((module) => module[name](eodContext(), ...args))
+    .catch((error) => showToast(error.message || 'EOD action failed.', 'error', 'EOD'));
+}
+
+function renderEodPage(route, companyId) {
+  if (!eodPageModule) {
+    loadEodModule().then(() => render()).catch(() => null);
+    return `<section class="tool-page eod-page"><div class="workspace-head"><div><h1>EOD reports</h1><p>Loading...</p></div></div></section>`;
+  }
+  return eodPageModule.renderEodPage({
+    companyLabel: companyName(companyId),
+    rows: companyEodReports(companyId),
+    canManage: can('eod.manage', companyId),
+    h,
+    metricCard,
+    emptyState,
+    titleCase,
+  });
+}
+
+// Admin-only surface, loaded on demand so non-admin sessions never download it.
+// The import must stay dynamic: a static one would be bundled back into the entry chunk.
+let platformPanelApi = null;
+let platformPanelPromise = null;
+
+function renderPlatformMasterPanel(companyId) {
+  if (!platformPanelApi) {
+    if (!platformPanelPromise) {
+      platformPanelPromise = import('./platform/master-panel.js')
+        .then((module) => {
+          platformPanelApi = module.createPlatformPanel({
+            availableWorkspacePlugins,
+            companyColor,
+            companyDirectoryEmptyState,
+            companyDirectoryFilters,
+            companyName,
+            emptyState,
+            filterCompanyRows,
+            h,
+            isPluginInstalled,
+            metricCard,
+            number,
+            paginate,
+            platformCompanyRows,
+            platformMembersForCompany,
+            renderAvatar,
+            renderCompanyDirectoryPager,
+            renderCompanyDirectoryToolbar,
+            shortUserId,
+            subscriptionLabelForStatus,
+            titleCase,
+            workspaceIconSelect,
+            workspacePresetSelect,
+          });
+          render();
+        })
+        .catch(() => { platformPanelPromise = null; });
+    }
+    return '<article class="panel span-3"><div class="section-head"><div><h2>Master panel</h2><p>Loading...</p></div></div></article>';
+  }
+  return platformPanelApi.renderPlatformMasterPanel(companyId);
+}
+
 function renderWorkspace(route) {
   if (route.name === 'command') return renderCompanyDashboard(activeCompanyId());
   if (route.name !== 'company') return renderPlannedPage(route.name);
@@ -5134,6 +5254,7 @@ function renderWorkspace(route) {
   if (route.section === 'team-chart') return renderTeamChartPage(companyId);
   if (route.section === 'time' || route.section === 'calendar' || route.section === 'approvals' || route.section === 'clock') return renderOperationsPage(route, companyId);
   if (route.section === 'calls') return renderCallsPage(route, companyId);
+  if (route.section === 'eod') return renderEodPage(route, companyId);
   if (route.section === 'team-workload') return renderTeamWorkloadPage(companyId);
   if (route.section === 'knowledge') return renderKnowledgePage(route, companyId);
   if (route.section === 'automations') return renderAutomationsPage(route, companyId);
@@ -18274,77 +18395,7 @@ function companyDirectoryEmptyState(filters) {
   return emptyState('No companies found for platform review.');
 }
 
-function renderPlatformMasterPanel(currentCompanyId) {
-  const companies = platformCompanyRows();
-  const filters = companyDirectoryFilters('platform');
-  const matched = filterCompanyRows(companies, filters);
-  const view = paginate(matched, filters.page);
-  // Metrics deliberately summarise every company, not the filtered page, so the
-  // headline numbers hold still while the list is searched.
-  const totals = companies.reduce((acc, company) => {
-    acc.members += number(company.member_count);
-    acc.pending += company.status === 'pending_review' ? 1 : 0;
-    acc.active += ['active', 'trialing', 'past_due', 'grace'].includes(company.status) ? 1 : 0;
-    acc.suspended += ['suspended', 'canceled'].includes(company.status) ? 1 : 0;
-    return acc;
-  }, { members: 0, pending: 0, active: 0, suspended: 0 });
-  return `
-    <article class="panel span-3 platform-master-panel">
-      <div class="section-head">
-        <div>
-          <h2>Master panel</h2>
-          <p>Platform-owner view of companies, members, and workspace access.</p>
-        </div>
-        <button class="btn" type="button" data-action="refresh-data"><i class="ti ti-refresh"></i>Refresh</button>
-      </div>
-      <section class="metric-grid platform-master-metrics">
-        ${metricCard('Companies', companies.length)}
-        ${metricCard('Active', totals.active)}
-        ${metricCard('Pending', totals.pending)}
-        ${metricCard('Members', totals.members)}
-      </section>
-      <form class="platform-workspace-create" data-platform-workspace-create-form>
-        <strong>Create company workspace</strong>
-        <label>Company workspace name<input name="company_name" placeholder="Customer workspace" required /></label>
-        <label>Owner email<input name="owner_email" type="email" placeholder="owner@company.com" /></label>
-        ${workspacePresetSelect()}
-        ${workspaceIconSelect()}
-        <button class="btn btn-primary" type="submit"><i class="ti ti-plus"></i>Create</button>
-      </form>
-      ${renderCompanyDirectoryToolbar('platform', filters, view)}
-      <div class="platform-company-list">
-        ${view.rows.map((company) => renderPlatformCompanyRow(company, currentCompanyId)).join('') || companyDirectoryEmptyState(filters)}
-      </div>
-      ${renderCompanyDirectoryPager('platform', view)}
-      ${renderPlatformBackupLedger(currentCompanyId)}
-    </article>
-  `;
-}
 
-function renderPlatformBackupLedger(currentCompanyId) {
-  const rows = filteredPlatformBackupCopies(currentCompanyId);
-  const filters = state.platformBackupFilters || {};
-  const companyOptions = [['all', 'All companies']].concat(platformCompanyRows().map((company) => [company.company_id, company.company_name || companyName(company.company_id)]));
-  return `
-    <section class="platform-backup-ledger">
-      <div class="section-head">
-        <div>
-          <h3>Backup safety copies</h3>
-          <p>Master-only ledger of the second backup table. These are separate from the visible workspace backups.</p>
-        </div>
-      </div>
-      <div class="platform-backup-filters">
-        <label><span>Company</span><select data-platform-backup-filter="company_id">${companyOptions.map(([value, label]) => `<option value="${h(value)}" ${filters.company_id === value ? 'selected' : ''}>${h(label)}</option>`).join('')}</select></label>
-        <label><span>State</span><select data-platform-backup-filter="status">${['all', 'active', 'deleted'].map((value) => `<option value="${value}" ${filters.status === value ? 'selected' : ''}>${h(titleCase(value))}</option>`).join('')}</select></label>
-        <label><span>Type</span><select data-platform-backup-filter="kind">${['all', 'manual', 'automatic', 'import', 'restore', 'mirror'].map((value) => `<option value="${value}" ${filters.kind === value ? 'selected' : ''}>${h(titleCase(value))}</option>`).join('')}</select></label>
-        <label><span>Search</span><input data-platform-backup-filter="query" value="${h(filters.query || '')}" placeholder="Company, user, backup..." /></label>
-      </div>
-      <div class="platform-backup-list">
-        ${rows.map(renderPlatformBackupCopyRow).join('') || emptyState('No backup safety copies match these filters.')}
-      </div>
-    </section>
-  `;
-}
 
 function renderPlatformBackupCopyRow(copy) {
   return `
@@ -18401,79 +18452,8 @@ function filteredPlatformBackupCopies(currentCompanyId) {
   });
 }
 
-function renderPlatformCompanyRow(company, currentCompanyId) {
-  const active = ['active', 'trialing', 'past_due', 'grace'].includes(company.status);
-  const pending = company.status === 'pending_review';
-  const suspended = ['suspended', 'canceled'].includes(company.status);
-  const isPlatformCompany = company.company_id === 'lumen';
-  const members = platformMembersForCompany(company.company_id);
-  const statusClass = active ? 'active' : pending ? 'pending' : suspended ? 'muted' : 'hold';
-  return `
-    <article class="platform-company-card ${pending ? 'pending' : suspended ? 'suspended' : ''}">
-      <div class="platform-company-main">
-        <span class="company-dot" style="--company-color:${h(company.color || companyColor(company.company_id))}"></span>
-        <div>
-          <strong>${h(company.company_name || companyName(company.company_id))}${company.company_id === currentCompanyId ? ' / current' : ''}</strong>
-          <small>${h(company.company_id)} / Owner: ${h(company.owner_email || company.owner_name || 'No owner yet')}</small>
-        </div>
-      </div>
-      <div class="platform-company-stats">
-        <b class="status-pill ${statusClass}">${h(subscriptionLabelForStatus(company.status, company))}</b>
-        <span>${h(String(number(company.active_member_count)))} active</span>
-        <span>${h(String(number(company.pending_member_count)))} pending</span>
-        <span>${h(String(number(company.disabled_member_count)))} disabled</span>
-      </div>
-      ${renderPlatformPluginStrip(company.company_id)}
-      <div class="platform-company-actions">
-        <button class="btn btn-primary" type="button" data-action="platform-company-action" data-company-id="${h(company.company_id)}" data-platform-action="approve" ${active ? 'disabled' : ''}>Approve</button>
-        <button class="btn" type="button" data-action="platform-company-action" data-company-id="${h(company.company_id)}" data-platform-action="suspend" ${suspended || isPlatformCompany ? 'disabled' : ''}>Suspend</button>
-        <button class="btn" type="button" data-action="platform-company-action" data-company-id="${h(company.company_id)}" data-platform-action="reactivate" ${active ? 'disabled' : ''}>Reactivate</button>
-        <button class="btn danger" type="button" data-action="platform-company-action" data-company-id="${h(company.company_id)}" data-platform-action="archive" ${isPlatformCompany || company.status === 'canceled' ? 'disabled' : ''}>Archive</button>
-      </div>
-      <details class="platform-members" ${pending ? 'open' : ''}>
-        <summary>${members.length} member${members.length === 1 ? '' : 's'}</summary>
-        <div class="platform-member-list">
-          ${members.map(renderPlatformMemberRow).join('') || emptyState('No members found for this company.')}
-        </div>
-      </details>
-    </article>
-  `;
-}
 
-function renderPlatformPluginStrip(companyId) {
-  const installed = availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id));
-  return `
-    <details class="platform-plugins">
-      <summary>${installed.length}/${availableWorkspacePlugins().length} plugins installed</summary>
-      <div class="platform-plugin-list">
-        ${availableWorkspacePlugins().map((plugin) => {
-          const active = isPluginInstalled(companyId, plugin.id);
-          return `
-            <span class="${active ? 'active' : 'muted'}">
-              <b>${h(plugin.label)}</b>
-              <button class="btn" type="button" data-action="set-company-plugin" data-company-id="${h(companyId)}" data-plugin-id="${h(plugin.id)}" data-status="${active ? 'disabled' : 'installed'}">
-                ${active ? 'Disable' : 'Install'}
-              </button>
-            </span>
-          `;
-        }).join('')}
-      </div>
-    </details>
-  `;
-}
 
-function renderPlatformMemberRow(member) {
-  return `
-    <article class="platform-member-row ${member.status !== 'active' ? 'muted' : ''}">
-      ${renderAvatar({ full_name: member.name, email: member.email }, 'avatar small')}
-      <span>
-        <strong>${h(member.name || member.email || shortUserId(member.profile_id))}</strong>
-        <small>${h(member.email || member.profile_id)} / ${h(member.role_label)} / ${h(titleCase(member.status))}</small>
-      </span>
-      <b class="status-pill ${member.status === 'active' ? 'active' : member.status === 'pending' ? 'pending' : 'muted'}">${h(titleCase(member.status))}</b>
-    </article>
-  `;
-}
 
 function renderRolesSettings(companyId) {
   const roles = companyRoles(companyId);
@@ -25573,6 +25553,11 @@ function handleAction(event, node) {
     managePlatformCompany(node.dataset.companyId, node.dataset.platformAction);
     return;
   }
+  if (action === 'review-eod-report') {
+    event.preventDefault();
+    runEodAction('reviewEodReport', node.dataset.reportId);
+    return;
+  }
   if (action === 'company-directory-page') {
     event.preventDefault();
     setCompanyDirectoryFilters(node.dataset.scope, { page: Number(node.dataset.page) || 0 });
@@ -26935,6 +26920,12 @@ function onDocumentSubmit(event) {
   if (event.target.matches('[data-role-form]')) {
     event.preventDefault();
     saveRole(event.target);
+    return;
+  }
+
+  if (event.target.matches('[data-eod-form]')) {
+    event.preventDefault();
+    runEodAction('saveEodReport', event.target);
     return;
   }
 

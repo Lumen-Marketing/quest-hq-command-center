@@ -322,3 +322,25 @@ overwritten when an admin restyles the company. The resolved appearance is re-ap
 three points its inputs change: sign-in (profile lands), the end of the bootstrap load
 (companies land), and company switch (a different default may apply). Added in
 `202607291400_company_appearance_default.sql`.
+
+## EOD reports are a first-class module, and paid for by extracting the master panel
+
+End-of-day numbers (calls, quotes, appointments, follow-ups, hot leads, blockers) are a
+real table, `eod_reports`, rather than free text in chat, so the counts can be totalled.
+Tenancy is the standard shape: company membership + subscription + an explicit permission.
+`eod.view` lets someone read and file their own report; `eod.manage` is needed to edit or
+review anyone else's. Owners and developers get both implicitly through
+`has_company_permission`. Added in `202607301200_eod_reports.sql`.
+
+The entry bundle was already at its ceiling before this feature (measured 356408 against a
+356352 limit, passing only on the 64-byte environment tolerance), so the module could not
+simply be added. Both new surfaces are therefore behind dynamic imports: the EOD page and
+its persistence in `src/eod/eod-page.js`, and - as the bundle-budget notes had been asking
+for - the admin-only platform master panel in `src/platform/master-panel.js`. Each takes
+its shell helpers through a `ctx` object and imports nothing from `src/main.js`, so neither
+can form a cycle or be pulled back into the entry chunk. Net effect: the ceiling was not
+raised a fifth time, and non-admin sessions no longer download the master panel at all.
+
+Dates in the EOD module are computed from local calendar parts, never `toISOString()`.
+Converting to UTC put every week boundary and "today" a day early for anyone east of
+Greenwich, which is where this team works.
