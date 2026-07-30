@@ -36155,11 +36155,27 @@ function photoCountForJob(jobId) {
   return state.files.filter((file) => file.job_id === jobId && fileTypeKind(file) === 'image').length;
 }
 
+// Legacy aliases for the seeded demo companies, kept so old links still resolve.
+//
+// They must not apply when a REAL company owns the raw id: naming a company
+// "Quest Roofing" slugs it to `quest-roofing`, and a blanket alias rewrote every
+// reference to the demo `roofing` company — so the new workspace silently vanished.
+// The alias is now a fallback used only when nothing real answers to the id.
+const LEGACY_COMPANY_ALIASES = {
+  'quest-roofing': 'roofing',
+  'quest-drafting': 'drafting',
+};
+
 function canonicalCompanyId(id) {
-  return {
-    'quest-roofing': 'roofing',
-    'quest-drafting': 'drafting',
-  }[String(id || '').trim()] || String(id || '').trim();
+  const raw = String(id || '').trim();
+  const alias = LEGACY_COMPANY_ALIASES[raw];
+  if (!alias) return raw;
+  // The module-load seed calls this from inside the `const state = {...}` initializer, so
+  // `state` is still in its temporal dead zone and even `state?.` would throw. Nothing is
+  // loaded at that point anyway, so falling back to the alias is correct there.
+  let companies = [];
+  try { companies = Array.isArray(state.companies) ? state.companies : []; } catch { companies = []; }
+  return companies.some((company) => company.id === raw) ? raw : alias;
 }
 
 function mergeCompanies(companies) {
