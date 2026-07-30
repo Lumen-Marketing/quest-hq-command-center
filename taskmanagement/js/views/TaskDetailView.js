@@ -865,10 +865,11 @@ App.TaskDetailView = class TaskDetailView {
   // already-set value always renders. Mirrors NewTaskPageView._companyChoices.
   _companyOpts(current) {
     const access = (this.controller.uiState && this.controller.uiState.companies) || [];
-    const ids = access.filter(id => id !== '*' && App.directory.company(id));
+    const accessible = access.filter(id => id !== '*' && App.directory.company(id));
+    const ids = accessible.length
+      ? accessible
+      : Object.values(App.COMPANIES).filter(c => !c.all && !c.inactive).map(c => c.id);
     if (current && !ids.includes(current)) ids.unshift(current);
-    if (!ids.length) return Object.values(App.COMPANIES)
-      .filter(c => !c.all).map(c => [c.id, c.label]);
     return ids.map(id => [id, (App.directory.company(id) || { label: id }).label]);
   }
 

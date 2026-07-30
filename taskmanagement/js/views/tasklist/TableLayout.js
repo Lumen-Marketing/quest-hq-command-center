@@ -28,7 +28,9 @@
     const active = (view.controller.uiState.filters && view.controller.uiState.filters.companies) || [];
     const accessible = (view.controller.uiState.companies || []).filter(id => App.directory.company(id));
     // Fallback (accessible empty) must not leak the access-gated 'overall'.
-    const ids = accessible.length ? accessible : Object.keys(App.COMPANIES).filter(id => id !== 'overall');
+    const ids = accessible.length
+      ? accessible
+      : Object.keys(App.COMPANIES).filter(id => id !== 'overall' && !(App.COMPANIES[id] || {}).inactive);
     const chips = [{ id: 'all', label: 'All' }].concat(ids.map(id => ({ id, label: App.directory.company(id).label })));
     row.innerHTML = chips.map(c => {
       const on = c.id === 'all' ? active.length === 0 : (active.length === 1 && active[0] === c.id);
@@ -212,7 +214,7 @@
       const access = (view.controller.uiState.companies || []).filter(id => id !== '*' && App.directory.company(id));
       const entries = access.length
         ? access.map(id => [id, (App.directory.company(id) || { label: id }).label])
-        : Object.values(App.COMPANIES).filter(c => !c.all).map(c => [c.id, c.label]);
+        : Object.values(App.COMPANIES).filter(c => !c.all && !c.inactive).map(c => [c.id, c.label]);
       return { multi: true, group: 'companies', title: 'Filter company',
         options: entries.map(([k, label]) => ({ value: k, label, selected: (f.companies || []).includes(k) })) };
     }
