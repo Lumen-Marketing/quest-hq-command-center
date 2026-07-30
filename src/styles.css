@@ -23361,9 +23361,18 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
    inside their own panel, and keeps the composer pinned in view.
    Scoped with :has() rather than a class because the .has-thread hook the older media
    queries reference is never actually applied by the renderer. */
+/* The bound must live on the PAGE, not here. .message-simple-page is a flex column
+   and this element has `flex: 1`, which sets flex-basis: 0% — that overrides `height`
+   on the main axis, so a height here is silently ignored and the track grows to fit
+   the thread instead. Pinning the page's max-height to its existing min-height makes
+   the page height definite, which is what lets `flex: 1` resolve to the leftover
+   space so this panel can bound its own scrolling children. */
+.message-simple-page {
+  max-height: min(820px, calc(100vh - 112px));
+}
+
 .message-simple-workspace {
-  height: min(720px, calc(100vh - 200px));
-  min-height: 420px;
+  min-height: 0;
 }
 
 .message-simple-main:has(.message-stream) {
@@ -23376,11 +23385,10 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 }
 
 @media (max-width: 900px) {
-  /* One panel at a time on narrow screens, so a fixed two-column height would strand
-     the composer again. Let the page scroll instead. */
-  .message-simple-workspace {
-    height: auto;
-    min-height: 0;
+  /* Panels stack here, so a single bounded viewport-height column would leave the
+     composer stranded again. Release the bound and let the page scroll instead. */
+  .message-simple-page {
+    max-height: none;
   }
 
   .messages-page.thread-open .message-simple-main {
