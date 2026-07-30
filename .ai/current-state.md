@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-31T02:38:55+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-07-31T02:49:38+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -8,9 +8,9 @@ Captured 2026-07-31T02:38:55+08:00. This is a point-in-time operational snapshot
 - Canonical public domains: https://questbase.io and https://www.questbase.io.
 - Stable Vercel URL: https://quest-hq-command-center-gamma.vercel.app.
 - Vercel project: `prj_0MxrYyGIo61QgLNW2M74fvTxlMRV`.
-- Ready production deployment: `dpl_8ckg6c31JNdpRL8izyHg5YGvE5ta`.
-- Deployed application revision: `b9f9e596d03f87faed99ac4334011706eec77cd2` from `main`.
-- Production smoke passed for the exact revision: 36 of 36 routes and 3 of 3 entry assets.
+- Ready production deployment: `dpl_DYtyBPAMLDsDtkKGV4n8EXTNPrH1`.
+- Deployed application revision: `7d430904d7070fc5a9a2f19ea31d025ed1ce956b` from `main`.
+- Production smoke passed for the exact revision: 36 of 36 routes and 4 of 4 entry assets.
 - Signed-in browser verification passed for the production Job form's local draft lifecycle: an unfinished edit autosaved, reopening offered Restore or Discard, Restore recovered the exact field value, Discard removed the temporary QA draft, no job record was created, and the browser reported no console errors.
 - Signed-in browser verification passed for the production Job record-history entry point: History opened against the correct workspace and record, completed its live query, showed the expected empty pre-migration state for an older record, and produced no browser warnings or errors. The verification was read-only.
 - Signed-in browser verification passed for the Dashboard account menu and Help & support dialog. The production dialog exposed the in-product guide, bug/problem/suggestion form, 2,000-character limit, enabled submit action, and support-email fallback with no browser-console errors. The verification did not submit a report.
@@ -20,8 +20,8 @@ Captured 2026-07-31T02:38:55+08:00. This is a point-in-time operational snapshot
 ## Repository health
 
 - GitHub repository: `Lumen-Marketing/quest-hq-command-center`.
-- Default branch at capture: `main` at `2c5a0eab0dffdc8e0808d38a95c5e051c66d4dd0`.
-- The P0 release-hardening candidate passes 764 tests, AI/project-state validation, the production build, and the bundle-budget gate. Its database migrations are live; the application revision is not production state until the branch is published and deployed.
+- Default branch at capture: `main` at `7d430904d7070fc5a9a2f19ea31d025ed1ce956b`.
+- The deployed P0 release-hardening revision passes 764 tests, AI/project-state validation, the production build, and the bundle-budget gate. Its reviewed database migrations are live.
 - `npm audit --audit-level=high` reports zero vulnerabilities after the locked PostCSS/Nanoid transitive dependency update.
 - CI runs the same check on pushes and pull requests.
 - The main application still emits a Vite advisory for a JavaScript chunk over 500 kB; the repository's explicit bundle budget passes.
