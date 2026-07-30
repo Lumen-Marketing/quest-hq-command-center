@@ -38853,15 +38853,18 @@ async function notifyEvent(input) {
   if (isLiveSupabaseSession()) {
     const client = createSupabaseClient();
     if (!client) return [];
-    const result = await client.from('notifications').insert(rows.map(notificationPayload)).select();
+    // An INSERT can target other recipients, but notifications RLS only exposes
+    // the current recipient. Avoid INSERT ... RETURNING and retain the local
+    // row we already created for this profile as the immediate inbox update.
+    const result = await client.from('notifications').insert(rows.map(notificationPayload));
     if (result.error) {
       console.warn('Notification insert failed', result.error);
       return [];
     }
-    const saved = (result.data || []).map(normalizeNotification);
-    mergeNotifications(saved);
+    const ownRows = rows.filter((row) => row.recipient_profile_id === activeSession().profile.id);
+    mergeNotifications(ownRows);
     render();
-    return saved;
+    return rows;
   }
 
   mergeNotifications(rows);

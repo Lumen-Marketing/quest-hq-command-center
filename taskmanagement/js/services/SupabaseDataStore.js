@@ -591,25 +591,6 @@ App.SupabaseDataStore = class SupabaseDataStore {
     return res.data;
   }
 
-  /* SOP checklist steps, one row per step of a label's job-type SOP (migration 069).
-     Unlike types/statuses/labels these are NOT soft-deleted: a checklist step carries
-     no history on existing tasks (its text was copied into the task's own checklist at
-     creation), so removing one is a plain delete. */
-  async createSopStep(row) {
-    const res = await this.supabase.from('task_label_sops').insert(row).select('*').single();
-    this._throwIfError(res, 'creating SOP step');
-    return res.data;
-  }
-  async updateSopStep(id, patch) {
-    const res = await this.supabase.from('task_label_sops').update(patch).eq('id', id).select('*').single();
-    this._throwIfError(res, 'updating SOP step');
-    return res.data;
-  }
-  async deleteSopStep(id) {
-    const res = await this.supabase.from('task_label_sops').delete().eq('id', id);
-    this._throwIfError(res, 'removing SOP step');
-  }
-
   /* Hard-delete a single task on demand. RLS gates this to the same
      roles allowed by migration 017's "role users can delete tasks"
      policy (admin / construction_supervisor / developer / supervisor /

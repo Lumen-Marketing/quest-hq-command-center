@@ -118,8 +118,10 @@ DELETE policies but no SELECT policy. The Storage API reads the object row back 
 an upload, so that read was denied and the request failed even though the write was
 permitted. Fixed in `202607301000_avatar_object_read_policy.sql`.
 
-This is the same failure shape as `message_conversations`, where `.insert().select()`
-emitted `INSERT ... RETURNING` and the SELECT policy could not see the new row. When adding
-a bucket or a table whose rows are written then read back, check the SELECT path as well as
-the write path; a public bucket does not need a SELECT policy for public reads
-(`/object/public/...` does not consult it) but does need one for the upload read-back.
+The multi-recipient Notifications path has the same split visibility: it may insert rows for
+other active members, while the caller can SELECT only its own recipient row. It therefore
+inserts without `RETURNING`, returns its locally-created rows, and merges only the current
+profile's row into the local inbox. When adding a bucket or a table whose rows are written
+then read back, check the SELECT path as well as the write path; a public bucket does not
+need a SELECT policy for public reads (`/object/public/...` does not consult it) but does
+need one for the upload read-back.
