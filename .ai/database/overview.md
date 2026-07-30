@@ -30,15 +30,20 @@ Two reviewed forward migrations are live and newer than the committed full catal
 
 Supabase recorded them as `20260730183658_atomic_contact_to_quote` and `20260730183713_pipeline_stage_seed_repair`. Targeted catalog verification confirmed the column, index, grants, function security mode, per-kind creation guard, and zero missing required pipeline kinds in active workspaces.
 
-## Reviewed forward lifecycle migration
+## Live lifecycle hardening migration
 
-`20260730192246_additional_command_center_hardening.sql` is prepared but is not in the live
-ledger captured above. It adds nullable `company_subscriptions.terminal_status`, keeps the
+`20260730213315_additional_command_center_hardening.sql` is in the live Supabase ledger.
+It adds nullable `company_subscriptions.terminal_status`, keeps the
 legacy `status` vocabulary intact, and exposes lifecycle-v2 platform/review RPCs that return
 the effective status. A trigger enforces the legacy/canonical projection, audit-aware
 backfill classifies only provable manual terminal actions, and subscription access rejects
 every non-null terminal state. The migration preserves the existing function authorization,
 fixed search paths, revokes, and authenticated/service-role grants.
+
+Live verification found seven Active and two legacy Canceled subscriptions; the two terminal
+rows classify as Archived, with zero lifecycle invariant violations. Rollback-only probes
+confirmed that manual archive/reject decisions survive Stripe events and that an exact
+Stripe-event retry cannot undo a later platform reactivation.
 
 ## Launch-critical onboarding state
 

@@ -1,3 +1,4 @@
+-- Live Supabase migration version: 20260730213315.
 -- Keep browser and RLS message-management permission aliases in parity.
 -- The preceding admin-elevation migration replaced this function without the
 -- compatibility variants, so old roles and newer message-management checks
