@@ -52,6 +52,8 @@ export function renderEodPage({
   companyLabel,
   rows,
   canManage,
+  editingId,
+  profileId,
   h,
   metricCard,
   emptyState,
@@ -68,7 +70,11 @@ export function renderEodPage({
     const rows = thisWeek.filter((report) => report.team_member === name);
     return { name, quotes: rows.reduce((sum, r) => sum + r.quotes_sent, 0), reports: rows.length };
   });
-  const columns = canManage ? 10 : 9;
+  const editing = editingId ? reports.find((report) => report.id === editingId) : null;
+  const value = (key, fallback) => (editing ? editing[key] : fallback);
+  // You may edit your own report; eod.manage may edit anyone's.
+  const editable = (report) => canManage || (profileId && report.created_by === profileId);
+  const columns = (canManage ? 10 : 9) + 1;
   return `
     <section class="tool-page eod-page">
       <div class="workspace-head">
@@ -82,22 +88,24 @@ export function renderEodPage({
       </section>
       <div class="eod-grid">
         <article class="panel eod-form-panel">
-          <div class="section-head"><div><h2>File a report</h2><p>One per person per day.</p></div></div>
+          <div class="section-head"><div><h2>${editing ? 'Edit report' : 'File a report'}</h2><p>${editing ? `${h(editing.team_member)} - ${h(editing.report_date)}` : 'One per person per day.'}</p></div></div>
           <form class="eod-form" data-eod-form>
-            <label>Report date<input type="date" name="report_date" value="${h(today)}" required /></label>
+            <input type="hidden" name="editing_id" value="${h(editing ? editing.id : '')}" />
+            <label>Report date<input type="date" name="report_date" value="${h(value('report_date', today))}" required /></label>
             <label>Team member
-              <input name="team_member" list="eod-team-members" placeholder="Name" required />
+              <input name="team_member" list="eod-team-members" placeholder="Name" value="${h(value('team_member', ''))}" required />
               <datalist id="eod-team-members">${EOD_TEAM_MEMBERS.map((name) => `<option value="${h(name)}"></option>`).join('')}</datalist>
             </label>
-            <label>Calls made<input type="number" name="calls_made" min="0" max="100000" value="0" required /></label>
-            <label>Quotes sent<input type="number" name="quotes_sent" min="0" max="100000" value="0" required /></label>
-            <label>Appointments set<input type="number" name="appointments_set" min="0" max="100000" value="0" required /></label>
-            <label>Follow-ups completed<input type="number" name="follow_ups_completed" min="0" max="100000" value="0" required /></label>
-            <label class="eod-wide">Hot leads / jobs pending<textarea name="hot_leads" rows="2" placeholder="Name + quick note"></textarea></label>
-            <label class="eod-wide">Blockers / anything you need<textarea name="blockers" rows="2"></textarea></label>
-            <label>Status<select name="status">${EOD_STATUSES.map(([value, label]) => `<option value="${h(value)}" ${value === 'submitted' ? 'selected' : ''}>${h(label)}</option>`).join('')}</select></label>
+            <label>Calls made<input type="number" name="calls_made" min="0" max="100000" value="${h(String(value('calls_made', 0)))}" required /></label>
+            <label>Quotes sent<input type="number" name="quotes_sent" min="0" max="100000" value="${h(String(value('quotes_sent', 0)))}" required /></label>
+            <label>Appointments set<input type="number" name="appointments_set" min="0" max="100000" value="${h(String(value('appointments_set', 0)))}" required /></label>
+            <label>Follow-ups completed<input type="number" name="follow_ups_completed" min="0" max="100000" value="${h(String(value('follow_ups_completed', 0)))}" required /></label>
+            <label class="eod-wide">Hot leads / jobs pending<textarea name="hot_leads" rows="2" placeholder="Name + quick note">${h(value('hot_leads', ''))}</textarea></label>
+            <label class="eod-wide">Blockers / anything you need<textarea name="blockers" rows="2">${h(value('blockers', ''))}</textarea></label>
+            <label>Status<select name="status">${EOD_STATUSES.map(([id, label]) => `<option value="${h(id)}" ${id === value('status', 'submitted') ? 'selected' : ''}>${h(label)}</option>`).join('')}</select></label>
             <div class="form-actions eod-wide">
-              <button class="btn btn-primary" type="submit"><i class="ti ti-send"></i>Submit report</button>
+              <button class="btn btn-primary" type="submit"><i class="ti ti-send"></i>${editing ? 'Save changes' : 'Submit report'}</button>
+              ${editing ? '<button class="btn" type="button" data-action="cancel-eod-edit">Cancel</button>' : ''}
             </div>
           </form>
         </article>
@@ -114,10 +122,13 @@ export function renderEodPage({
         </article>
       </div>
       <article class="panel">
-        <div class="section-head"><div><h2>Recent reports</h2><p>${reports.length} report${reports.length === 1 ? '' : 's'} on file.</p></div></div>
+        <div class="section-head">
+          <div><h2>Recent reports</h2><p>${reports.length} report${reports.length === 1 ? '' : 's'} on file.</p></div>
+          <button class="btn" type="button" data-action="export-eod-csv" ${reports.length ? '' : 'disabled'}><i class="ti ti-download"></i>Export CSV</button>
+        </div>
         <div class="table-wrap">
           <table class="data-table eod-table">
-            <thead><tr><th>Date</th><th>Member</th><th>Calls</th><th>Quotes</th><th>Appts</th><th>Follow-ups</th><th>Hot leads</th><th>Blockers</th><th>Status</th>${canManage ? '<th></th>' : ''}</tr></thead>
+            <thead><tr><th>Date</th><th>Member</th><th>Calls</th><th>Quotes</th><th>Appts</th><th>Follow-ups</th><th>Hot leads</th><th>Blockers</th><th>Status</th><th></th>${canManage ? '<th></th>' : ''}</tr></thead>
             <tbody>
               ${reports.slice(0, 60).map((report) => `
                 <tr>
@@ -130,6 +141,7 @@ export function renderEodPage({
                   <td class="eod-note">${h(report.hot_leads || '—')}</td>
                   <td class="eod-note">${h(report.blockers || '—')}</td>
                   <td><b class="status-pill ${report.status === 'reviewed' ? 'active' : report.status === 'draft' ? 'muted' : 'pending'}">${h(titleCase(report.status))}</b></td>
+                  <td>${editable(report) ? `<button class="btn btn-sm" type="button" data-action="edit-eod-report" data-report-id="${h(report.id)}">Edit</button>` : ''}</td>
                   ${canManage ? `<td><button class="btn btn-sm" type="button" data-action="review-eod-report" data-report-id="${h(report.id)}" ${report.status === 'reviewed' ? 'disabled' : ''}>Mark reviewed</button></td>` : ''}
                 </tr>
               `).join('') || `<tr><td colspan="${columns}">${emptyState('No EOD reports yet. File the first one on the left.')}</td></tr>`}
@@ -165,6 +177,20 @@ export async function saveEodReport(ctx, formNode) {
     created_by: ctx.profileId,
   };
   if (!row.report_date || !row.team_member) return ctx.toast('Pick a date and a team member.', 'local', 'EOD');
+  const editingId = String(data.get('editing_id') || '').trim();
+  if (editingId) {
+    // Only the changed columns: id, company, workspace and author must not move on an edit.
+    const { id, company_id: _c, workspace_id: _w, created_by: _b, ...changes } = row;
+    if (ctx.live && ctx.client) {
+      const result = await ctx.client.from('eod_reports').update(changes).eq('id', editingId);
+      if (result.error) return ctx.toast(result.error.message || 'Could not update that report.', 'error', 'EOD');
+    }
+    ctx.patch(editingId, changes);
+    ctx.setEditing('');
+    ctx.toast('Report updated.', ctx.live ? 'live' : 'local', 'EOD');
+    ctx.render();
+    return undefined;
+  }
   if (ctx.live && ctx.client) {
     // No .select(): the row is only readable through the eod.view policy, and reading it
     // back adds nothing the locally built row does not already have.
@@ -186,4 +212,32 @@ export async function reviewEodReport(ctx, reportId) {
   ctx.patch(reportId, { status: 'reviewed' });
   ctx.render();
   return undefined;
+}
+
+// One row per report, same order as the table. Quotes are doubled per RFC 4180 so a
+// blocker containing a comma or a quote cannot shift the columns.
+export function eodReportsCsv(rows) {
+  const reports = (rows || []).map(normalizeEodReport)
+    .sort((a, b) => (a.report_date < b.report_date ? 1 : a.report_date > b.report_date ? -1 : 0));
+  const cell = (raw) => `"${String(raw === null || raw === undefined ? '' : raw).replace(/"/g, '""')}"`;
+  const header = ['Date', 'Team member', 'Calls', 'Quotes', 'Appointments', 'Follow-ups', 'Hot leads', 'Blockers', 'Status'];
+  const lines = reports.map((r) => [
+    r.report_date, r.team_member, r.calls_made, r.quotes_sent, r.appointments_set,
+    r.follow_ups_completed, r.hot_leads, r.blockers, r.status,
+  ].map(cell).join(','));
+  return [header.map(cell).join(','), ...lines].join('\r\n');
+}
+
+export function exportEodCsv(ctx) {
+  const csv = eodReportsCsv(ctx.rows());
+  // Byte-order mark so Excel reads it as UTF-8 instead of mangling accented names.
+  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `eod-reports-${localDate()}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

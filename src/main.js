@@ -2272,6 +2272,7 @@ const state = {
   workspaceReviewFilters: { search: '', status: 'active', page: 0 },
   subscriptions: [],
   eodReports: [],
+  eodEditingId: '',
   workspaceReviews: [],
   workspaceBackups: readSeededList(WORKSPACE_BACKUP_CACHE_KEY, []).map(normalizeWorkspaceBackup),
   recycleBinItems: readSeededList(RECYCLE_BIN_CACHE_KEY, []).map(normalizeRecycleBinItem),
@@ -5138,6 +5139,8 @@ function eodContext() {
     uuid: () => crypto.randomUUID(),
     can: (permission) => can(permission, companyId),
     toast: (message, mode, title) => showToast(message, mode, title),
+    rows: () => companyEodReports(companyId),
+    setEditing: (id) => { state.eodEditingId = String(id || ''); },
     push: (row) => { state.eodReports = [row].concat(state.eodReports); },
     patch: (id, changes) => {
       const row = state.eodReports.find((item) => item.id === id);
@@ -5154,6 +5157,10 @@ function runEodAction(name, ...args) {
 }
 
 function renderEodPage(route, companyId) {
+  // A stale editing id would silently reopen an old report the next time the page loads.
+  if (state.eodEditingId && !companyEodReports(companyId).some((row) => row.id === state.eodEditingId)) {
+    state.eodEditingId = '';
+  }
   if (!eodPageModule) {
     loadEodModule().then(() => render()).catch(() => null);
     return `<section class="tool-page eod-page"><div class="workspace-head"><div><h1>EOD reports</h1><p>Loading...</p></div></div></section>`;
@@ -5162,6 +5169,8 @@ function renderEodPage(route, companyId) {
     companyLabel: companyName(companyId),
     rows: companyEodReports(companyId),
     canManage: can('eod.manage', companyId),
+    editingId: state.eodEditingId,
+    profileId: activeSession().profile.id,
     h,
     metricCard,
     emptyState,
@@ -20590,6 +20599,7 @@ function renderMessageAccessModal(companyId, conversationId) {
     <form class="message-modal-form" data-message-access-form data-conversation-id="${h(conversation.id)}">
       ${field('Chat name', 'title', conversation.title, true)}
       ${selectField('Type', 'type', conversation.type, [['company', 'Company-wide'], ['role', 'Role-based'], ['custom', 'Custom group'], ['direct', 'Direct message']])}
+      ${conversation.type === 'direct' ? '' : renderMessageGroupIconControl()}
       ${renderMessageRolePicker(companyId, selectedRoles)}
       ${renderMessagePeoplePicker(companyAccessUsers(companyId), selectedProfiles)}
       <div class="form-actions">
@@ -25469,6 +25479,8 @@ function handleAction(event, node) {
     event.preventDefault();
     if (!requirePermission('messages.manage_groups', activeCompanyId(), 'Your role cannot manage chat access.', 'Messages')) return;
     state.selectedConversationId = node.dataset.conversationId || state.selectedConversationId;
+    const managed = state.messageConversations.find((item) => item.id === state.selectedConversationId);
+    state.messageGroupIcon = { icon_key: managed?.icon_key || '', icon_image: managed?.icon_image || '' };
     state.modal = 'message-access';
     render();
     return;
@@ -25639,6 +25651,23 @@ function handleAction(event, node) {
   if (action === 'platform-company-action') {
     event.preventDefault();
     managePlatformCompany(node.dataset.companyId, node.dataset.platformAction);
+    return;
+  }
+  if (action === 'edit-eod-report') {
+    event.preventDefault();
+    state.eodEditingId = node.dataset.reportId || '';
+    render();
+    return;
+  }
+  if (action === 'cancel-eod-edit') {
+    event.preventDefault();
+    state.eodEditingId = '';
+    render();
+    return;
+  }
+  if (action === 'export-eod-csv') {
+    event.preventDefault();
+    runEodAction('exportEodCsv');
     return;
   }
   if (action === 'review-eod-report') {
@@ -28868,6 +28897,8 @@ async function saveMessageAccess(form) {
     ...conversation,
     title: String(data.get('title') || '').trim() || conversation.title,
     type: MESSAGE_TYPES.includes(data.get('type')) ? String(data.get('type')) : conversation.type,
+    icon_key: data.has('icon_key') ? data.get('icon_key') : conversation.icon_key,
+    icon_image: data.has('icon_image') ? data.get('icon_image') : conversation.icon_image,
     updated_at: new Date().toISOString(),
   });
   const accessRows = messageAccessFromForm(data, next, next.type);

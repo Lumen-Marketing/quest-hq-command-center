@@ -69,3 +69,55 @@ test('the database rejects negative counts and unknown statuses', () => {
   assert.match(migration, /check \(status in \('draft', 'submitted', 'reviewed'\)\)/);
   assert.match(migration, /calls_made between 0 and 100000/);
 });
+
+test('the CSV survives commas and quotes inside a field', async () => {
+  const { eodReportsCsv } = await import('../src/eod/eod-page.js');
+  const csv = eodReportsCsv([{
+    report_date: '2026-07-30', team_member: 'Alkeith', calls_made: 5, quotes_sent: 2,
+    appointments_set: 1, follow_ups_completed: 3, hot_leads: 'Smith, Jane',
+    blockers: 'needs "ladder"', status: 'submitted',
+  }]);
+  const [header, row] = csv.split('\r\n');
+  assert.equal(header, '"Date","Team member","Calls","Quotes","Appointments","Follow-ups","Hot leads","Blockers","Status"');
+  // A bare comma would shift every later column; a bare quote would break the field.
+  assert.match(row, /"Smith, Jane"/);
+  assert.match(row, /"needs ""ladder"""/);
+});
+
+test('the CSV lists newest first, matching the table', async () => {
+  const { eodReportsCsv } = await import('../src/eod/eod-page.js');
+  const csv = eodReportsCsv([
+    { report_date: '2026-07-28', team_member: 'A' },
+    { report_date: '2026-07-31', team_member: 'B' },
+  ]);
+  const lines = csv.split('\r\n');
+  assert.match(lines[1], /2026-07-31/);
+  assert.match(lines[2], /2026-07-28/);
+});
+
+test('editing updates in place and never moves ownership', async () => {
+  const page = readFileSync(new URL('../src/eod/eod-page.js', import.meta.url), 'utf8');
+  // id / company / workspace / author are stripped from the update payload.
+  assert.match(page, /const \{ id, company_id: _c, workspace_id: _w, created_by: _b, \.\.\.changes \} = row;/);
+  assert.match(page, /\.from\('eod_reports'\)\.update\(changes\)\.eq\('id', editingId\)/);
+});
+
+test('you can edit your own report; eod.manage can edit anyone\u2019s', () => {
+  const page = readFileSync(new URL('../src/eod/eod-page.js', import.meta.url), 'utf8');
+  assert.match(page, /const editable = \(report\) => canManage \|\| \(profileId && report\.created_by === profileId\);/);
+});
+
+test('a stale editing id cannot reopen a vanished report', () => {
+  assert.match(main, /if \(state\.eodEditingId && !companyEodReports\(companyId\)\.some\(\(row\) => row\.id === state\.eodEditingId\)\)/);
+});
+
+test('a group chat icon can be changed after creation', () => {
+  // The manage modal seeds the draft from the conversation, otherwise it would show the
+  // leftover draft from whatever group was created last.
+  assert.match(main, /state\.messageGroupIcon = \{ icon_key: managed\?\.icon_key \|\| '', icon_image: managed\?\.icon_image \|\| '' \};/);
+  assert.match(main, /\$\{conversation\.type === 'direct' \? '' : renderMessageGroupIconControl\(\)\}/);
+  // Falls back to the stored value, so a direct chat (which renders no control) cannot
+  // have its icon blanked by the save.
+  assert.match(main, /icon_key: data\.has\('icon_key'\) \? data\.get\('icon_key'\) : conversation\.icon_key,/);
+  assert.match(main, /icon_image: data\.has\('icon_image'\) \? data\.get\('icon_image'\) : conversation\.icon_image,/);
+});
