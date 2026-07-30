@@ -3750,7 +3750,7 @@ async function loadSupabaseData() {
 
   let liveTables = 0;
   if (!companiesResult.error) {
-    state.companies = (companiesResult.data || []).map((company) => normalizeCompany(company, { authoritative: true }));
+    state.companies = (companiesResult.data || []).map(normalizeCompany);
     liveTables += 1;
   }
   if (!jobsResult.error) {
@@ -3905,7 +3905,7 @@ async function loadSupabaseData() {
         label: company.label,
         pill: company.pill,
         icon_key: company.icon_key,
-      }, { authoritative: true }))));
+      }))));
       state.subscriptions = mergeSubscriptions(state.subscriptions.concat(state.platformCompanies.map(normalizeSubscription)));
     }
     if (!platformMembersResult.error) {
@@ -3924,7 +3924,7 @@ async function loadSupabaseData() {
         id: review.company_id,
         name: review.company_name,
         short_name: review.company_name,
-      }, { authoritative: true }));
+      }));
       const reviewSubscriptions = state.workspaceReviews.map((review) => normalizeSubscription({
         company_id: review.company_id,
         status: review.status,
@@ -3992,7 +3992,7 @@ async function loadSupabaseBootstrapData() {
       // keeps the payload to companies already in session.
       safeSupabaseQuery(client.from('eod_reports').select('*').in('company_id', companyIds).order('report_date', { ascending: false })),
     ]);
-    if (!companiesResult.error) state.companies = mergeCompanies(state.companies.concat((companiesResult.data || []).map((company) => normalizeCompany(company, { authoritative: true }))));
+    if (!companiesResult.error) state.companies = mergeCompanies(state.companies.concat((companiesResult.data || []).map(normalizeCompany)));
     if (!subscriptionsResult.error) state.subscriptions = mergeSubscriptions(state.subscriptions.concat((subscriptionsResult.data || []).map(normalizeSubscription)));
     if (!rolesResult.error) state.roles = mergeRoles(state.roles.concat((rolesResult.data || []).map(normalizeRole)));
     if (!rolePermissionsResult.error) state.rolePermissions = (rolePermissionsResult.data || []).map(normalizeRolePermission);
@@ -4028,7 +4028,7 @@ async function loadSupabaseBootstrapData() {
         color: company.color,
         label: company.label,
         pill: company.pill,
-      }, { authoritative: true }))));
+      }))));
       state.subscriptions = mergeSubscriptions(state.subscriptions.concat(state.platformCompanies.map(normalizeSubscription)));
     }
     if (!platformMembersResult.error) state.platformCompanyMembers = (platformMembersResult.data || []).map(normalizePlatformCompanyMember);
@@ -27919,7 +27919,7 @@ function applyCreatedWorkspace(workspaceId, requestedName = '', iconKey = 'home'
     short_name: cleanName,
     color: companyColor(companyId),
     icon_key: iconKey,
-  }, { authoritative: true })));
+  })));
   state.memberships = state.memberships
     .filter((membership) => !(membership.company_id === companyId && membership.profile_id === activeSession().profile.id))
     .concat(normalizeMembership({
@@ -27960,7 +27960,7 @@ function applyPlatformCreatedWorkspace(workspaceId, requestedName = '', iconKey 
     label: cleanName,
     color: companyColor(companyId),
     icon_key: iconKey,
-  }, { authoritative: true })));
+  })));
   state.subscriptions = mergeSubscriptions(state.subscriptions.concat(normalizeSubscription({
     company_id: companyId,
     status: 'pending_review',
@@ -36412,9 +36412,8 @@ function demoWorkspacePluginRows() {
   }));
 }
 
-function normalizeCompany(input, { authoritative = false } = {}) {
-  const rawId = String(input.id || '').trim();
-  const id = authoritative ? rawId : canonicalCompanyId(rawId);
+function normalizeCompany(input) {
+  const id = authoritativeCompanyId(input.id);
   return {
     id,
     name: String(input.name || input.short_name || input.id || '').trim(),
@@ -37187,7 +37186,7 @@ function normalizeTeamMember(input) {
 function normalizeMembership(input) {
   const status = ['active', 'pending', 'disabled', 'left'].includes(String(input.status)) ? String(input.status) : 'active';
   return {
-    company_id: canonicalCompanyId(input.company_id || ''),
+    company_id: authoritativeCompanyId(input.company_id),
     profile_id: String(input.profile_id || input.member_id || ''),
     member_id: input.member_id ? String(input.member_id) : '',
     role: String(input.role || 'member'),
@@ -37217,7 +37216,7 @@ function normalizeSubscription(input) {
 
 function normalizeWorkspaceReview(input) {
   return {
-    company_id: canonicalCompanyId(input.company_id || ''),
+    company_id: authoritativeCompanyId(input.company_id),
     company_name: String(input.company_name || input.name || input.short_name || input.company_id || '').trim(),
     short_name: String(input.short_name || input.company_name || input.name || input.company_id || '').trim(),
     color: String(input.color || '#f0b23b'),
@@ -37250,7 +37249,7 @@ function normalizePlatformCompany(input) {
 
 function normalizePlatformCompanyMember(input) {
   return {
-    company_id: canonicalCompanyId(input.company_id || ''),
+    company_id: authoritativeCompanyId(input.company_id),
     profile_id: String(input.profile_id || ''),
     member_id: String(input.member_id || ''),
     name: String(input.full_name || input.name || input.email || input.profile_id || '').trim(),
@@ -38641,7 +38640,7 @@ async function loadIdentityRealtimeDomain(client, domain) {
       client.from('workspace_memberships').select('*'),
       client.from('workspace_plugins').select('*'),
     ]);
-    if (!companies.error) state.companies = (companies.data || []).map((company) => normalizeCompany(company, { authoritative: true }));
+    if (!companies.error) state.companies = (companies.data || []).map(normalizeCompany);
     if (!team.error) state.teamMembers = (team.data || []).map(normalizeTeamMember);
     if (!memberships.error) state.memberships = (memberships.data || []).map(normalizeMembership);
     if (!profiles.error) state.profiles = (profiles.data || []).map((profile) => normalizeProfile(profile));

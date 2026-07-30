@@ -13,35 +13,50 @@ function functionSource(name, nextName) {
 }
 
 const normalizeCompanySource = functionSource('normalizeCompany', 'normalizeCompanyPlugin');
+const mergeCompaniesSource = functionSource('mergeCompanies', 'mergeSubscriptions');
+const normalizeMembershipSource = functionSource('normalizeMembership', 'normalizeSubscription');
+const normalizeWorkspaceReviewSource = functionSource('normalizeWorkspaceReview', 'normalizePlatformCompany');
+const normalizePlatformCompanySource = functionSource('normalizePlatformCompany', 'normalizePlatformCompanyMember');
+const normalizePlatformCompanyMemberSource = functionSource('normalizePlatformCompanyMember', 'normalizeWorkspaceBackup');
 const applyCreatedWorkspaceSource = functionSource('applyCreatedWorkspace', 'applyPlatformCreatedWorkspace');
 const applyPlatformCreatedWorkspaceSource = functionSource('applyPlatformCreatedWorkspace', 'applyPluginPresetLocal');
 
 test('authoritative company normalization preserves a trimmed Supabase id that is also a legacy URL alias', () => {
-  const normalize = new Function('canonicalCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'input', `${normalizeCompanySource}\nreturn normalizeCompany(input, { authoritative: true });`);
-  const company = normalize(() => 'roofing', (key) => ({ key: key || 'home' }), () => '', { id: ' quest-roofing ', name: 'Quest Roofing' });
+  const normalize = new Function('authoritativeCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'input', `${normalizeCompanySource}\nreturn normalizeCompany(input);`);
+  const company = normalize((id) => String(id || '').trim(), (key) => ({ key: key || 'home' }), () => '', { id: ' quest-roofing ', name: 'Quest Roofing' });
   assert.equal(company.id, 'quest-roofing');
 });
 
-test('initial Supabase company loads normalize rows as authoritative', () => {
-  const bootstrapStart = source.indexOf('async function loadSupabaseBootstrapData()');
-  const bootstrapEnd = source.indexOf('\nfunction createSupabaseClient()', bootstrapStart);
-  const bootstrap = source.slice(bootstrapStart, bootstrapEnd);
-  assert.match(bootstrap, /\(companiesResult\.data \|\| \[\]\)\.map\(\(company\) => normalizeCompany\(company, \{ authoritative: true \}\)\)/);
+test('initial Supabase company loads preserve authoritative ids through real merge behavior', () => {
+  const load = new Function('authoritativeCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'rows', `${normalizeCompanySource}\n${mergeCompaniesSource}\nreturn mergeCompanies(rows.map(normalizeCompany));`);
+  const companies = load((id) => String(id || '').trim(), (key) => ({ key: key || 'home' }), () => '', [{ id: ' quest-roofing ', name: 'Quest Roofing' }]);
+  assert.equal(companies[0].id, 'quest-roofing');
+});
+
+test('limited initial bootstrap keeps membership company ids authoritative before company rows load', () => {
+  const normalize = new Function('canonicalCompanyId', 'authoritativeCompanyId', 'row', `${normalizeMembershipSource}\nreturn normalizeMembership(row);`);
+  const membership = normalize(() => 'roofing', (id) => String(id || '').trim(), { company_id: ' quest-roofing ', profile_id: 'profile-1', status: 'active' });
+  assert.equal(membership.company_id, 'quest-roofing');
+});
+
+test('platform, review, and member RPC normalizers preserve authoritative company ids before company state exists', () => {
+  const normalize = new Function('authoritativeCompanyId', 'canonicalCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'normalizeSubscriptionStatus', 'number', 'titleCase', 'row', `${normalizeWorkspaceReviewSource}\n${normalizePlatformCompanySource}\n${normalizePlatformCompanyMemberSource}\nreturn [normalizePlatformCompany(row), normalizeWorkspaceReview(row), normalizePlatformCompanyMember(row)];`);
+  const rows = normalize((id) => String(id || '').trim(), () => 'roofing', (key) => ({ key: key || 'home' }), () => '', (status) => status, Number, (value) => value, { company_id: ' quest-roofing ', company_name: 'Quest Roofing' });
+  assert.deepEqual(rows.map((row) => row.company_id), ['quest-roofing', 'quest-roofing', 'quest-roofing']);
 });
 
 function creationHarness(fnSource, workspaceId) {
   const run = new Function(
     'state', 'localStorage', 'canonicalCompanyId', 'defaultCompanyId', 'companyName', 'companySubscription', 'companyColor',
-    'mergeCompanies', 'normalizeCompany', 'normalizeMembership', 'mergeSubscriptions', 'normalizeSubscription',
+    'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'normalizeMembership', 'mergeSubscriptions', 'normalizeSubscription',
     'activeSession', 'compactUnique', 'normalizeProfile', 'writeJson', 'markWorkspacePendingReview', 'clearWorkspacePendingReview',
     'workspaceId',
-    `const SESSION_KEY = 'quest-hq-session';\nconst COMPANY_KEY = 'quest-hq-company';\nconst authoritativeCompanyId = (id) => String(id || '').trim();\n${fnSource}\n${fnSource.includes('applyPlatformCreatedWorkspace') ? 'applyPlatformCreatedWorkspace(workspaceId);' : 'applyCreatedWorkspace(workspaceId);'}\nreturn state;`,
+    `const SESSION_KEY = 'quest-hq-session';\nconst COMPANY_KEY = 'quest-hq-company';\nconst authoritativeCompanyId = (id) => String(id || '').trim();\n${normalizeCompanySource}\n${mergeCompaniesSource}\n${fnSource}\n${fnSource.includes('applyPlatformCreatedWorkspace') ? 'applyPlatformCreatedWorkspace(workspaceId);' : 'applyCreatedWorkspace(workspaceId);'}\nreturn state;`,
   );
   const state = { companies: [], memberships: [], subscriptions: [], session: { auth: 'supabase', profile: { id: 'profile-1', member_id: 'member-1', company_ids: [], role: 'member' } } };
   return run(
     state, { setItem() {} }, (id) => String(id || '').trim() === 'quest-roofing' ? 'roofing' : String(id || '').trim(), () => 'fallback',
-    (id) => id, () => null, () => '#f0b23b', (rows) => rows,
-    (row, { authoritative = false } = {}) => ({ ...row, id: authoritative ? String(row.id || '').trim() : String(row.id || '').trim() === 'quest-roofing' ? 'roofing' : String(row.id || '').trim() }),
+    (id) => id, () => null, () => '#f0b23b', (key) => ({ key: key || 'home' }), () => '',
     (row) => row, (rows) => rows, (row) => row,
     () => state.session, (ids) => [...new Set(ids)], (profile) => profile, () => {}, () => {}, () => {}, workspaceId,
   );
