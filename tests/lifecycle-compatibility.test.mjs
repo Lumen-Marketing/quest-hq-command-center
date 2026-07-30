@@ -192,7 +192,7 @@ test('archive, Stripe cancellation, and reactivation explicitly manage terminal 
   );
   assert.match(
     stripe,
-    /terminal_status = case[\s\S]*excluded\.terminal_status = 'canceled' then 'canceled'[\s\S]*company_subscriptions\.terminal_status in \('archived', 'rejected'\)[\s\S]*then company_subscriptions\.terminal_status[\s\S]*else excluded\.terminal_status/,
+    /terminal_status = case[\s\S]*company_subscriptions\.terminal_status in \('archived', 'rejected'\)[\s\S]*then company_subscriptions\.terminal_status[\s\S]*excluded\.terminal_status = 'canceled' then 'canceled'[\s\S]*else excluded\.terminal_status/,
   );
   assert.match(stripe, /set search_path = ''/);
   assert.match(stripe, /service role required/);
@@ -200,6 +200,42 @@ test('archive, Stripe cancellation, and reactivation explicitly manage terminal 
     migration,
     /revoke execute on function public\.apply_stripe_subscription_event\([\s\S]*from public, anon, authenticated;[\s\S]*grant execute[\s\S]*to service_role;/,
   );
+});
+
+test('manual terminal provenance survives a Stripe canceled then active sequence', () => {
+  const stripe = sqlFunctionSource(
+    'create or replace function public.apply_stripe_subscription_event(',
+    'revoke execute on function public.apply_stripe_subscription_event',
+  );
+  const terminalCase = stripe.slice(
+    stripe.indexOf('terminal_status = case'),
+    stripe.indexOf('plan_code = excluded.plan_code'),
+  );
+
+  const manualGuard = terminalCase.indexOf(
+    "company_subscriptions.terminal_status in ('archived', 'rejected')",
+  );
+  const stripeCanceled = terminalCase.indexOf(
+    "excluded.terminal_status = 'canceled'",
+  );
+  assert.ok(manualGuard !== -1 && stripeCanceled !== -1);
+  assert.ok(
+    manualGuard < stripeCanceled,
+    'Manual archive/reject must win before Stripe cancellation so a later active event cannot reopen access',
+  );
+
+  const applyStripe = (currentTerminal, stripeStatus) => {
+    if (['archived', 'rejected'].includes(currentTerminal)) return currentTerminal;
+    if (stripeStatus === 'canceled') return 'canceled';
+    return null;
+  };
+
+  for (const manualTerminal of ['archived', 'rejected']) {
+    const afterCancel = applyStripe(manualTerminal, 'canceled');
+    const afterActive = applyStripe(afterCancel, 'active');
+    assert.equal(afterCancel, manualTerminal);
+    assert.equal(afterActive, manualTerminal);
+  }
 });
 
 test('terminal lifecycle blocks access even when an old grace date remains in the future', () => {

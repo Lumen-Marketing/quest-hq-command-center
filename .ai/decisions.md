@@ -318,11 +318,11 @@ legacy status carries no terminal value.
 
 Archive/Delete/Cancel platform actions write legacy `canceled` plus terminal `archived`.
 Approval-console Reject, including the legacy client input `canceled`, writes terminal
-`rejected`. Stripe cancellation overwrites the terminal outcome with `canceled`; a newer
-non-canceled Stripe event clears a prior Stripe cancellation but cannot reopen a manually
-archived or rejected company. Only an explicit platform reactivation clears a manual
-terminal outcome. A non-null terminal status blocks database access even if an old grace
-date is still in the future.
+`rejected`. Stripe cancellation writes `canceled` only when no manual archive/reject
+decision already exists; a newer non-canceled Stripe event clears a prior Stripe-only
+cancellation but cannot reopen a manually archived or rejected company. Only an explicit
+platform reactivation clears a manual terminal outcome. A non-null terminal status blocks
+database access even if an old grace date is still in the future.
 
 All three effective terminal states are inactive in normal selectors and task filters;
 platform lists expose separate Archived, Rejected, and Canceled filters. The company a user

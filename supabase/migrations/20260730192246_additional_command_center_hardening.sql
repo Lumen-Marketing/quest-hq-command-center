@@ -762,9 +762,9 @@ begin
           else excluded.status
         end,
         terminal_status = case
-          when excluded.terminal_status = 'canceled' then 'canceled'
           when company_subscriptions.terminal_status in ('archived', 'rejected')
           then company_subscriptions.terminal_status
+          when excluded.terminal_status = 'canceled' then 'canceled'
           else excluded.terminal_status
         end,
         plan_code = excluded.plan_code,
