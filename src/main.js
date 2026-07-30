@@ -40213,35 +40213,16 @@ async function saveFormResponse(formEl) {
   render();
 }
 
+let publicFormFileUploadModulePromise;
+
 async function uploadPublicFormFile(form, question, file) {
-  const check = await validateUpload(file, 'formfile');
-  if (!check.ok) throw new Error(check.reason);
-  const response = await fetch('/api/public-form-file-upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      form_id: form.id,
-      question_id: question.id,
-      file_name: file.name,
-      file_type: contentTypeFor(file),
-      file_size: file.size,
-    }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || 'Could not prepare file upload.');
-  const client = createSupabaseClient();
-  if (!client) throw new Error('File upload is not available in this session.');
-  const upload = await client
-    .storage
-    .from(payload.bucket_id)
-    .uploadToSignedUrl(payload.object_path, payload.token, file, {
-      contentType: contentTypeFor(file),
-    });
-  if (upload.error) throw upload.error;
-  return formFileAnswerMeta(file, '', {
-    bucket_id: payload.bucket_id,
-    object_path: payload.object_path,
-    uploaded_at: new Date().toISOString(),
+  publicFormFileUploadModulePromise ||= import('./forms/public-form-file-upload.js');
+  const uploadModule = await publicFormFileUploadModulePromise;
+  return uploadModule.uploadPublicFormFile({
+    form,
+    question,
+    file,
+    createSupabaseClient,
   });
 }
 

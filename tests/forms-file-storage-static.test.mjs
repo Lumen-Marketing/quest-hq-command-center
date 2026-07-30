@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const uploadModulePath = new URL('../src/forms/public-form-file-upload.js', import.meta.url);
 const uploadApiPath = new URL('../api/public-form-file-upload.js', import.meta.url);
 const urlApiPath = new URL('../api/public-form-file-url.js', import.meta.url);
 
@@ -16,11 +17,16 @@ test('public form file answers upload to storage before the response is submitte
   assert.match(uploadApi, /forms\?/);
   assert.match(uploadApi, /status=eq\.Published/);
 
+  assert.ok(existsSync(uploadModulePath), 'public form upload capability module should exist');
+  const uploadModule = readFileSync(uploadModulePath, 'utf8');
   assert.match(source, /async function uploadPublicFormFile\(form, question, file\)/);
-  assert.match(source, /uploadToSignedUrl/);
+  assert.match(source, /import\('\.\/forms\/public-form-file-upload\.js'\)/);
+  assert.doesNotMatch(source, /uploadToSignedUrl|\/api\/public-form-file-upload/);
+  assert.match(uploadModule, /\/api\/public-form-file-upload/);
+  assert.match(uploadModule, /uploadToSignedUrl/);
   assert.match(source, /collectFormAnswers\(form, data, \{ publicUpload: true \}\)/);
-  assert.match(source, /bucket_id/);
-  assert.match(source, /object_path/);
+  assert.match(uploadModule, /bucket_id/);
+  assert.match(uploadModule, /object_path/);
 });
 
 test('stored form files render as previews or downloadable links in response detail', () => {

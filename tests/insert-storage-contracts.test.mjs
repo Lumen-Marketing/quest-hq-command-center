@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const taskStore = readFileSync(new URL('../taskmanagement/js/services/SupabaseDataStore.js', import.meta.url), 'utf8');
@@ -191,6 +191,18 @@ function closingParenthesis(tokens, openIndex) {
   return -1;
 }
 
+function openingParenthesis(tokens, closeIndex) {
+  let depth = 0;
+  for (let index = closeIndex; index >= 0; index -= 1) {
+    if (tokens[index].value === ')') depth += 1;
+    else if (tokens[index].value === '(') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
 function callArgument(tokens, openIndex, closeIndex, source) {
   const argumentTokens = tokens.slice(openIndex + 1, closeIndex);
   if (argumentTokens.length === 1 && argumentTokens[0].type === 'string') {
@@ -203,23 +215,84 @@ function callArgument(tokens, openIndex, closeIndex, source) {
   };
 }
 
+function simpleBuilderAssignment(tokens, declarationIndex, source) {
+  const nameToken = tokens[declarationIndex + 1];
+  if (!nameToken
+    || nameToken.type !== 'identifier'
+    || tokens[declarationIndex + 2]?.value !== '=') return null;
+
+  const expressionStart = declarationIndex + 3;
+  let statementEnd = expressionStart;
+  while (statementEnd < tokens.length && tokens[statementEnd].value !== ';') statementEnd += 1;
+  const expressionEnd = statementEnd;
+  for (let index = expressionStart; index < expressionEnd - 2; index += 1) {
+    if (tokens[index].value !== '.'
+      || tokens[index + 1]?.value !== 'from'
+      || tokens[index + 2]?.value !== '(') continue;
+    const fromClose = closingParenthesis(tokens, index + 2);
+    if (fromClose === -1 || fromClose !== expressionEnd - 1) return { name: nameToken.value, table: null };
+
+    const receiver = tokens.slice(expressionStart, index);
+    const simpleReceiver = receiver.length > 0
+      && receiver.every((token, receiverIndex) => (
+        receiverIndex % 2 === 0 ? token.type === 'identifier' : token.value === '.'
+      ));
+    if (!simpleReceiver) return { name: nameToken.value, table: null };
+    return {
+      name: nameToken.value,
+      table: callArgument(tokens, index + 2, fromClose, source).value,
+    };
+  }
+  return { name: nameToken.value, table: null };
+}
+
 function insertReturningChains(source) {
   const tokens = javascriptTokens(source);
   const chains = [];
+  const builderTables = new Map();
   for (let index = 0; index < tokens.length - 2; index += 1) {
-    if (tokens[index].value !== '.' || tokens[index + 1].value !== 'from' || tokens[index + 2].value !== '(') continue;
-    const fromClose = closingParenthesis(tokens, index + 2);
-    if (fromClose === -1
-      || tokens[fromClose + 1]?.value !== '.'
-      || tokens[fromClose + 2]?.value !== 'insert'
-      || tokens[fromClose + 3]?.value !== '(') continue;
-    const insertClose = closingParenthesis(tokens, fromClose + 3);
+    if (['const', 'let', 'var'].includes(tokens[index].value)) {
+      const assignment = simpleBuilderAssignment(tokens, index, source);
+      if (assignment) {
+        builderTables.set(
+          assignment.name,
+          builderTables.has(assignment.name) ? null : assignment.table,
+        );
+      }
+    } else if (tokens[index].type === 'identifier'
+      && tokens[index + 1]?.value === '='
+      && tokens[index + 2]?.value !== '='
+      && !['const', 'let', 'var'].includes(tokens[index - 1]?.value)
+      && builderTables.has(tokens[index].value)) {
+      builderTables.set(tokens[index].value, null);
+    }
+
+    if (tokens[index].value !== '.'
+      || tokens[index + 1]?.value !== 'insert'
+      || tokens[index + 2]?.value !== '(') continue;
+    const insertClose = closingParenthesis(tokens, index + 2);
     if (insertClose === -1
       || tokens[insertClose + 1]?.value !== '.'
       || tokens[insertClose + 2]?.value !== 'select'
       || tokens[insertClose + 3]?.value !== '(') continue;
-    const table = callArgument(tokens, index + 2, fromClose, source);
-    chains.push({ table: table.value, tableExpression: table.expression, start: tokens[index].start });
+
+    let table = null;
+    let tableExpression = '';
+    const receiver = tokens[index - 1];
+    if (receiver?.type === 'identifier') {
+      table = builderTables.has(receiver.value) ? builderTables.get(receiver.value) : null;
+      tableExpression = receiver.value;
+    } else if (receiver?.value === ')') {
+      const fromOpen = openingParenthesis(tokens, index - 1);
+      if (fromOpen !== -1
+        && tokens[fromOpen - 1]?.value === 'from'
+        && tokens[fromOpen - 2]?.value === '.') {
+        const argument = callArgument(tokens, fromOpen, index - 1, source);
+        table = argument.value;
+        tableExpression = argument.expression;
+      }
+    }
+    chains.push({ table, tableExpression, start: tokens[index].start });
   }
   return chains;
 }
@@ -319,65 +392,104 @@ function splitSqlStatements(source) {
   return statements;
 }
 
+function stripSqlComments(source) {
+  let output = '';
+  let index = 0;
+  while (index < source.length) {
+    if (source[index] === '-' && source[index + 1] === '-') {
+      const end = source.indexOf('\n', index + 2);
+      const commentEnd = end === -1 ? source.length : end;
+      output += ' '.repeat(commentEnd - index);
+      index = commentEnd;
+      continue;
+    }
+    if (source[index] === '/' && source[index + 1] === '*') {
+      const start = index;
+      let depth = 1;
+      index += 2;
+      while (index < source.length && depth > 0) {
+        if (source[index] === '/' && source[index + 1] === '*') {
+          depth += 1;
+          index += 2;
+        } else if (source[index] === '*' && source[index + 1] === '/') {
+          depth -= 1;
+          index += 2;
+        } else {
+          index += 1;
+        }
+      }
+      output += source.slice(start, index).replace(/[^\r\n]/g, ' ');
+      continue;
+    }
+    if (source[index] === "'") {
+      const end = skipSqlSingleQuote(source, index);
+      output += source.slice(index, end);
+      index = end;
+      continue;
+    }
+    if (source[index] === '"') {
+      const end = skipSqlDoubleQuote(source, index);
+      output += source.slice(index, end);
+      index = end;
+      continue;
+    }
+    if (source[index] === '$') {
+      const tag = sqlDollarTagAt(source, index);
+      if (tag) {
+        const closingIndex = source.indexOf(tag, index + tag.length);
+        const end = closingIndex === -1 ? source.length : closingIndex + tag.length;
+        output += source.slice(index, end);
+        index = end;
+        continue;
+      }
+    }
+    output += source[index];
+    index += 1;
+  }
+  return output;
+}
+
 function objectPolicyStatementsForBucket(sources, bucket) {
   const cleanBucket = String(bucket).toLowerCase();
   return sources
     .flatMap(splitSqlStatements)
     .filter((statement) => {
-      const normalized = statement.toLowerCase().replaceAll('"', '');
+      const normalized = stripSqlComments(statement).toLowerCase().replaceAll('"', '');
       return /\bcreate\s+policy\b/.test(normalized)
-        && /\bstorage\s*\.\s*objects\b/.test(normalized)
         && normalized.includes(cleanBucket);
     });
 }
 
-function browserStorageCalls(source) {
+function concatenatedJavascriptStringValues(source) {
   const tokens = javascriptTokens(source);
-  const calls = [];
-  for (let index = 1; index < tokens.length - 2; index += 1) {
-    if (tokens[index - 1].value !== 'storage'
-      || tokens[index].value !== '.'
-      || tokens[index + 1].value !== 'from'
-      || tokens[index + 2].value !== '(') continue;
-    const fromClose = closingParenthesis(tokens, index + 2);
-    if (fromClose === -1) continue;
-    const hasImmediateOperation = tokens[fromClose + 1]?.value === '.'
-      && tokens[fromClose + 2]?.type === 'identifier'
-      && tokens[fromClose + 3]?.value === '(';
-    const bucket = callArgument(tokens, index + 2, fromClose, source);
-    calls.push({
-      bucket: bucket.value,
-      bucketExpression: bucket.expression,
-      operation: hasImmediateOperation ? tokens[fromClose + 2].value : null,
-      start: tokens[index - 1].start,
-    });
+  const values = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index].type !== 'string') continue;
+    let value = tokens[index].value;
+    let cursor = index + 1;
+    while (tokens[cursor]?.value === '+' && tokens[cursor + 1]?.type === 'string') {
+      value += tokens[cursor + 1].value;
+      cursor += 2;
+    }
+    values.push(value);
+    index = cursor - 1;
   }
-  return calls;
+  return values;
 }
 
-function browserFormStorageViolations(sources, bucket) {
-  const violations = [];
-  for (const file of sources) {
-    const tokens = javascriptTokens(file.source);
-    if (tokens.some((token) => token.type === 'string' && token.value === bucket)) {
-      violations.push({ path: file.path, reason: 'browser names the server-only bucket' });
-      continue;
-    }
-    for (const call of browserStorageCalls(file.source)) {
-      const expression = call.bucketExpression.replace(/\s+/g, '');
-      const formDerivedBucket = expression === 'payload.bucket_id'
-        || /(?:form|response).*bucket|bucket.*(?:form|response)/i.test(expression);
-      const serverIssuedSignedUpload = expression === 'payload.bucket_id'
-        && call.operation === 'uploadToSignedUrl';
-      if (formDerivedBucket && !serverIssuedSignedUpload) {
-        violations.push({
-          path: file.path,
-          reason: `${call.operation} uses a form-derived bucket expression`,
-        });
-      }
-    }
-  }
-  return violations;
+function browserSourcesNamingBucket(sources, bucket) {
+  return sources
+    .filter((file) => concatenatedJavascriptStringValues(file.source).includes(bucket))
+    .map((file) => file.path)
+    .sort();
+}
+
+function browserCapabilitySourcePaths(sources) {
+  const capabilityValues = new Set(['/api/public-form-file-upload', 'uploadToSignedUrl']);
+  return sources
+    .filter((file) => javascriptTokens(file.source).some((token) => capabilityValues.has(token.value)))
+    .map((file) => file.path)
+    .sort();
 }
 
 function browserJavascriptSources(directory, prefix) {
@@ -412,6 +524,23 @@ test('insert-returning inventory resolves every JavaScript string literal form, 
   ]);
 });
 
+test('insert-returning inventory resolves detached builders and fails closed on unknown receivers', () => {
+  const fixture = `
+    const checkinQuery = this.supabase.from('checkin_settings');
+    await checkinQuery.insert(row).select();
+    await unknownBuilder.insert(row).select();
+    let reassignedQuery = this.supabase.from('tasks');
+    reassignedQuery = this.supabase.from('checkin_settings');
+    await reassignedQuery.insert(row).select();
+  `;
+
+  assert.deepEqual(nonTaskInsertReturningTables(fixture), [
+    null,
+    null,
+    'checkin_settings',
+  ]);
+});
+
 test('SQL statement splitting keeps policy predicates after comment, quoted, and dollar-body semicolons', () => {
   const fixture = `
     create policy "form; file reads"
@@ -431,45 +560,118 @@ test('SQL statement splitting keeps policy predicates after comment, quoted, and
   assert.match(objectPolicyStatementsForBucket([fixture], 'quest-form-response-files')[0], /bucket_id = 'quest-form-response-files'/);
 });
 
-test('browser form-file capability scan rejects direct target-bucket operations anywhere while allowing other buckets', () => {
-  const allowed = [{
-    path: 'allowed.js',
+test('policy inventory catches search-path targets and ignores bucket names mentioned only in comments', () => {
+  const unqualifiedPolicy = `
+    set search_path = storage, public;
+    create policy form_file_reads on objects
+      for select using (bucket_id = 'quest-form-response-files');
+  `;
+  const commentOnly = `
+    -- Never create policy on storage.objects for quest-form-response-files.
+    select 1;
+  `;
+
+  assert.equal(objectPolicyStatementsForBucket([unqualifiedPolicy], 'quest-form-response-files').length, 1);
+  assert.deepEqual(objectPolicyStatementsForBucket([commentOnly], 'quest-form-response-files'), []);
+});
+
+test('public form upload capability is isolated and returns metadata without leaking the signing token', async () => {
+  const uploadModuleUrl = new URL('../src/forms/public-form-file-upload.js', import.meta.url);
+  assert.ok(existsSync(uploadModuleUrl), 'the isolated public form upload capability module should exist');
+
+  const { uploadPublicFormFile } = await import(uploadModuleUrl.href);
+  const bytes = new TextEncoder().encode('%PDF-1.7\n');
+  const file = {
+    name: 'proof.pdf',
+    size: bytes.byteLength,
+    type: 'application/pdf',
+    lastModified: 123,
+    slice(start, end) {
+      const chunk = bytes.slice(start, end);
+      return {
+        async arrayBuffer() {
+          return chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength);
+        },
+      };
+    },
+  };
+  const requests = [];
+  const uploads = [];
+  const result = await uploadPublicFormFile({
+    form: { id: 'form-1' },
+    question: { id: 'question-1' },
+    file,
+    fetchImpl: async (...args) => {
+      requests.push(args);
+      return {
+        ok: true,
+        async json() {
+          return {
+            bucket_id: 'server-issued-bucket',
+            object_path: 'company/form/question/proof.pdf',
+            token: 'server-issued-secret',
+          };
+        },
+      };
+    },
+    createSupabaseClient: () => ({
+      storage: {
+        from(bucket) {
+          return {
+            async uploadToSignedUrl(path, token, uploadedFile, options) {
+              uploads.push({ bucket, path, token, uploadedFile, options });
+              return { error: null };
+            },
+          };
+        },
+      },
+    }),
+    now: () => '2026-07-31T00:00:00.000Z',
+  });
+
+  assert.equal(requests[0][0], '/api/public-form-file-upload');
+  assert.deepEqual(JSON.parse(requests[0][1].body), {
+    form_id: 'form-1',
+    question_id: 'question-1',
+    file_name: 'proof.pdf',
+    file_type: 'application/pdf',
+    file_size: bytes.byteLength,
+  });
+  assert.deepEqual(uploads, [{
+    bucket: 'server-issued-bucket',
+    path: 'company/form/question/proof.pdf',
+    token: 'server-issued-secret',
+    uploadedFile: file,
+    options: { contentType: 'application/pdf' },
+  }]);
+  assert.deepEqual(result, {
+    kind: 'file',
+    name: 'proof.pdf',
+    size: bytes.byteLength,
+    type: 'application/pdf',
+    lastModified: 123,
+    data_url: '',
+    bucket_id: 'server-issued-bucket',
+    object_path: 'company/form/question/proof.pdf',
+    uploaded_at: '2026-07-31T00:00:00.000Z',
+  });
+  assert.equal('token' in result, false);
+});
+
+test('browser capability boundary catches concatenated private-bucket literals and permits unrelated buckets', () => {
+  const sources = [{
+    path: 'safe.js',
     source: `
       client.storage.from('quest-job-files').upload(path, file);
-      client.storage.from("quest-message-attachments").list();
-      client.storage.from(\`avatars\`).download(path);
-      client.storage.from('quest-client-portal-documents').remove([path]);
-      client.storage.from('quest-job-files').createSignedUrl(path);
-      client.storage.from(payload.bucket_id).uploadToSignedUrl(payload.object_path, payload.token, file);
+      client.storage.from('quest-message-attachments').list();
     `,
+  }, {
+    path: 'unsafe.js',
+    source: "client.storage.from('quest-form-' + /* hidden */ 'response-files').upload(path, file);",
   }];
-  assert.deepEqual(browserFormStorageViolations(allowed, 'quest-form-response-files'), []);
 
-  for (const operation of ['upload', 'list', 'download', 'remove', 'createSignedUrl', 'createSignedUploadUrl']) {
-    const violations = browserFormStorageViolations([{
-      path: `unsafe-${operation}.js`,
-      source: `client.storage.from('quest-form-response-files').${operation}(path);`,
-    }], 'quest-form-response-files');
-    assert.equal(violations.length, 1, `${operation} must not target the form-response bucket in browser code`);
-  }
-
-  const computedViolation = browserFormStorageViolations([{
-    path: 'unsafe-server-payload.js',
-    source: 'client.storage.from(payload.bucket_id).remove([payload.object_path]);',
-  }], 'quest-form-response-files');
-  assert.equal(computedViolation.length, 1);
-
-  const detachedCapabilityViolation = browserFormStorageViolations([{
-    path: 'unsafe-detached-capability.js',
-    source: 'const formBucket = client.storage.from(payload.bucket_id); formBucket.remove([payload.object_path]);',
-  }], 'quest-form-response-files');
-  assert.equal(detachedCapabilityViolation.length, 1);
-
-  const unverifiedSignedCapability = browserFormStorageViolations([{
-    path: 'unsafe-unverified-signed-capability.js',
-    source: 'client.storage.from(formResponseBucket).uploadToSignedUrl(path, token, file);',
-  }], 'quest-form-response-files');
-  assert.equal(unverifiedSignedCapability.length, 1);
+  assert.deepEqual(browserSourcesNamingBucket(sources, 'quest-form-response-files'), ['unsafe.js']);
+  assert.deepEqual(browserSourcesNamingBucket([sources[0]], 'quest-form-response-files'), []);
 });
 
 test('TaskManagement insert-returning audit permits only the six live, SELECT-visible tables and retires the seventh dead SOP site', () => {
@@ -531,8 +733,9 @@ test('multi-recipient notifications insert without RETURNING, return every creat
   assert.deepEqual(mergedRows, [[created[0]]]);
 });
 
-test('form-response files remain a private, signed-only Storage route with no browser object operations or object policies', () => {
+test('form-response files remain a private, signed-only route behind one browser capability module and no object policies', () => {
   const uploadSource = functionSource('uploadPublicFormFile', 'collectFormAnswers');
+  const uploadModule = readFileSync(new URL('../src/forms/public-form-file-upload.js', import.meta.url), 'utf8');
   const uploadApi = readFileSync(new URL('../api/public-form-file-upload.js', import.meta.url), 'utf8');
   const urlApi = readFileSync(new URL('../api/public-form-file-url.js', import.meta.url), 'utf8');
   const hardeningMigration = readFileSync(new URL('../supabase/migrations/202607111000_harden_file_upload_buckets.sql', import.meta.url), 'utf8');
@@ -544,24 +747,14 @@ test('form-response files remain a private, signed-only Storage route with no br
     .filter((name) => name.endsWith('.sql'))
     .map((name) => readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'));
   const matchingObjectPolicies = objectPolicyStatementsForBucket(migrationSources, 'quest-form-response-files');
-  const serverPayloadStorageCalls = browserSources.flatMap((file) => (
-    browserStorageCalls(file.source)
-      .filter((call) => call.bucketExpression.replace(/\s+/g, '') === 'payload.bucket_id')
-      .map((call) => ({
-        path: file.path,
-        bucketExpression: call.bucketExpression.replace(/\s+/g, ''),
-        operation: call.operation,
-      }))
-  ));
 
-  assert.match(uploadSource, /\.uploadToSignedUrl\(payload\.object_path, payload\.token, file/);
-  assert.doesNotMatch(uploadSource, /\.(?:upload|list|download|remove|createSignedUrl)\(/);
-  assert.deepEqual(browserFormStorageViolations(browserSources, 'quest-form-response-files'), []);
-  assert.deepEqual(serverPayloadStorageCalls, [{
-    path: 'src/main.js',
-    bucketExpression: 'payload.bucket_id',
-    operation: 'uploadToSignedUrl',
-  }]);
+  assert.match(uploadSource, /import\('\.\/forms\/public-form-file-upload\.js'\)/);
+  assert.match(uploadSource, /return uploadModule\.uploadPublicFormFile\(\{/);
+  assert.doesNotMatch(uploadSource, /payload\.(?:bucket_id|object_path|token)|uploadToSignedUrl|\/api\/public-form-file-upload/);
+  assert.match(uploadModule, /fetchImpl\('\/api\/public-form-file-upload'/);
+  assert.match(uploadModule, /\.uploadToSignedUrl\(payload\.object_path, payload\.token, file/);
+  assert.deepEqual(browserCapabilitySourcePaths(browserSources), ['src/forms/public-form-file-upload.js']);
+  assert.deepEqual(browserSourcesNamingBucket(browserSources, 'quest-form-response-files'), []);
   assert.match(uploadApi, /createStorageClient/);
   assert.match(uploadApi, /createSignedUploadUrl\(objectPath, \{ upsert: false \}\)/);
   assert.match(urlApi, /createStorageClient/);
