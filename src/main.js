@@ -425,6 +425,14 @@ const DEFAULT_PROPOSAL_PREMIUM = {
 };
 const PROPOSAL_STATUS_OPTIONS = ['Draft', 'Sent', 'Viewed', 'Accepted', 'Declined'];
 
+// Kept in lockstep with app_private.has_company_permission. Elevated roles are allowed
+// everything; any other active member gets this small read-only set even with no role
+// assigned, and anything beyond it needs an explicit allow.
+const ELEVATED_COMPANY_ROLES = ['owner', 'admin', 'developer'];
+const DEFAULT_MEMBER_PERMISSIONS = ['jobs.view', 'tasks.view', 'users.view', 'settings.view', 'plugins.view'];
+
+// Demo and local-only sessions have no database to consult, so they fall back to this
+// static table. Live Supabase sessions must never use it — see `can`.
 const ROLE_PERMISSIONS = {
   developer: ['*'],
   admin: ['*'],
@@ -13527,48 +13535,74 @@ function wbTileLinks(tile) {
 function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   // Resolve linked apps to their live source objects (and flag them so the tab
   // can show a link mark). Each entry is { app, linked }.
+  //
+  // Every app is rendered: the strip is a horizontally scrollable track rather than a
+  // pager, so it can be swiped on touch and dragged/wheeled on desktop. The arrows
+  // remain for mouse users and simply scroll the same track.
   const apps = wbWorkspaceApps(wbDoc(companyId), workspace);
-  const perPage = Math.max(1, state.wbTopbarPerPage || 6);
-  let page = Math.max(0, state.wbTopbarPage || 0);
-  const pageCount = Math.max(1, Math.ceil(apps.length / perPage));
-  // Keep the open app visible: jump to its page if it's off the current one.
-  if (activeAppId) {
-    const idx = apps.findIndex((a) => a.app.id === activeAppId);
-    if (idx >= 0 && (idx < page * perPage || idx >= page * perPage + perPage)) page = Math.floor(idx / perPage);
-  }
-  page = Math.min(page, pageCount - 1);
-  state.wbTopbarPage = page;
-  const pageApps = apps.slice(page * perPage, page * perPage + perPage);
   const homeHref = appHref(companyPath('workspaces', {}, companyId));
   const homeActive = !activeAppId;
   const homeTab = `<a class="wb-topbar-tab wb-topbar-home ${homeActive ? 'active' : ''}" href="${homeHref}" data-router aria-current="${homeActive ? 'page' : 'false'}"><span class="wb-topbar-ic wb-topbar-ic-home"><i class="ti ti-activity" aria-hidden="true"></i></span><span class="wb-topbar-label">Activity</span></a>`;
-  const appTabs = pageApps.map(({ app: a, linked }) => {
+  const appTabs = apps.map(({ app: a, linked }) => {
     const active = a.id === activeAppId;
     const href = appHref(companyPath('workspaces', { app_id: a.id, tab: 'items' }, companyId));
     const linkMark = linked ? '<span class="wb-topbar-link" title="Linked app — shares data with another workspace"><i class="ti ti-link" aria-hidden="true"></i></span>' : '';
-    return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router title="${h(a.name)}${linked ? ' (linked)' : ''}" aria-current="${active ? 'page' : 'false'}"><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
+    return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router title="${h(a.name)}${linked ? ' (linked)' : ''}" aria-current="${active ? 'page' : 'false'}"${active ? ' data-wb-topbar-active' : ''}><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
   }).join('');
-  const prev = `<button class="wb-topbar-arrow" type="button" data-wb-topbar-page="${page - 1}" ${page === 0 ? 'disabled' : ''} title="Previous apps" aria-label="Previous apps"><i class="ti ti-chevron-left"></i></button>`;
-  const next = `<button class="wb-topbar-arrow" type="button" data-wb-topbar-page="${page + 1}" ${page >= pageCount - 1 ? 'disabled' : ''} title="More apps" aria-label="More apps"><i class="ti ti-chevron-right"></i></button>`;
-  const nav = pageCount > 1 ? `<div class="wb-topbar-nav">${prev}${next}</div>` : '';
+  // Rendered unconditionally and hidden by wbMountTopbar when nothing overflows, because
+  // overflow depends on measured width which is not known at render time.
+  const nav = `<div class="wb-topbar-nav" data-wb-topbar-nav hidden>`
+    + `<button class="wb-topbar-arrow" type="button" data-wb-topbar-scroll="-1" title="Scroll left" aria-label="Scroll apps left"><i class="ti ti-chevron-left"></i></button>`
+    + `<button class="wb-topbar-arrow" type="button" data-wb-topbar-scroll="1" title="Scroll right" aria-label="Scroll apps right"><i class="ti ti-chevron-right"></i></button>`
+    + `</div>`;
   const addBtn = can('workspaces.manage', companyId)
     ? `<button class="wb-topbar-add" type="button" data-new-app title="Add app" aria-label="Add app"><i class="ti ti-plus" aria-hidden="true"></i><span>Add app</span></button>`
     : '';
-  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps">${homeTab}<div class="wb-topbar-apps" data-wb-topbar-apps>${appTabs}</div><div class="wb-topbar-spacer"></div>${nav}${addBtn}</nav>`;
+  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps">${homeTab}<div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0">${appTabs}</div><div class="wb-topbar-spacer"></div>${nav}${addBtn}</nav>`;
 }
 
-// Measure how many fixed-width app tabs fit the bar and adjust the page size,
-// re-rendering once when it changes. Reserves room for Activity, Add app, and
-// the paging buttons so toggling arrows on/off can't oscillate.
+// Wire the app strip as a scrollable track: keep the open app in view, and show the
+// arrows only when there is something to scroll to. Re-runs after each render, so the
+// listeners are attached once per element via a data flag.
 function wbMountTopbar() {
-  const nav = document.querySelector('[data-wb-topbar]');
-  if (!nav || !nav.clientWidth) return;
-  const home = nav.querySelector('.wb-topbar-home');
-  const add = nav.querySelector('.wb-topbar-add');
-  const TAB_W = 90; // fixed app-tab width (84) + gap (6)
-  const reserve = (home ? home.offsetWidth : 0) + (add ? add.offsetWidth : 0) + 80 /* paging */ + 32 /* gaps */;
-  const perPage = Math.max(1, Math.floor((nav.clientWidth - reserve) / TAB_W));
-  if (perPage !== state.wbTopbarPerPage) { state.wbTopbarPerPage = perPage; render(); }
+  const track = document.querySelector('[data-wb-topbar-apps]');
+  const nav = document.querySelector('[data-wb-topbar-nav]');
+  if (!track) return;
+  const sync = () => {
+    if (!nav) return;
+    const overflowing = track.scrollWidth - track.clientWidth > 1;
+    nav.hidden = !overflowing;
+    const [left, right] = nav.querySelectorAll('.wb-topbar-arrow');
+    if (left) left.disabled = track.scrollLeft <= 1;
+    if (right) right.disabled = track.scrollLeft >= track.scrollWidth - track.clientWidth - 1;
+  };
+  if (!track.dataset.wbScrollBound) {
+    track.dataset.wbScrollBound = '1';
+    track.addEventListener('scroll', sync, { passive: true });
+    // A vertical wheel over a horizontal strip should move it sideways; without this the
+    // page scrolls instead and the strip feels stuck on a trackpad or mouse.
+    track.addEventListener('wheel', (event) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      const before = track.scrollLeft;
+      track.scrollLeft += event.deltaY;
+      if (track.scrollLeft !== before) event.preventDefault();
+    }, { passive: false });
+    window.addEventListener('resize', sync);
+  }
+  // Bring the open app into view without yanking the page around it.
+  const active = track.querySelector('[data-wb-topbar-active]');
+  if (active && !track.dataset.wbCenteredFor) {
+    active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    track.dataset.wbCenteredFor = active.getAttribute('href') || '1';
+  }
+  sync();
+}
+
+function wbScrollTopbar(direction) {
+  const track = document.querySelector('[data-wb-topbar-apps]');
+  if (!track) return;
+  // Just under a full width, so a tab is never left half-cut at the edge.
+  track.scrollBy({ left: direction * Math.max(120, track.clientWidth * 0.8), behavior: 'smooth' });
 }
 
 function wbViewApp(route, companyId, workspace, app, appLinked = false) {
@@ -16784,7 +16818,7 @@ function mountWorkspaceBuilder() {
   if (state.route?.section === 'workspaces') wbMountTopbar();
   if (!state.wbTopbarResizeBound) { state.wbTopbarResizeBound = true; window.addEventListener('resize', () => { if (state.route?.section === 'workspaces') { wbMountTopbar(); wbLayoutTiles(); } }); }
   if (state.route?.section === 'workspaces' && !state.builderModal) {
-    bind('[data-wb-topbar-page]', (el) => { state.wbTopbarPage = +el.dataset.wbTopbarPage; render(); });
+    bind('[data-wb-topbar-scroll]', (el) => wbScrollTopbar(Number(el.dataset.wbTopbarScroll) || 1));
     bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp, tab: 'items' }));
     bind('[data-new-app]', () => openWbAppChooser(companyId, workspaceId));
     // Workspace activity feed (dashboard home): publisher + posts.
@@ -35065,19 +35099,24 @@ function can(permission, companyId = activeCompanyId(), workspaceId = workspaceI
   const variants = permissionVariants(permission);
   const profile = activeSession().profile;
   if (state.session?.auth === 'supabase') {
+    // Mirror app_private.has_company_permission and answer here — do NOT fall through to
+    // ROLE_PERMISSIONS. That fallback made the UI promise access RLS then refused: a member
+    // whose role granted nothing still matched the static 'member' list (which includes
+    // messages.send), so they were offered actions that failed with a raw policy error or
+    // a silently empty screen. The static table is for demo/local sessions only.
     const membership = membershipForProfile(companyId, profile.id);
     if (!membership || membership.status !== 'active') return false;
-    if (['owner', 'admin', 'developer'].includes(String(membership.role).toLowerCase())) return true;
-    const workspaceMembership = workspaceMembershipForProfile(workspaceId, profile.id);
-    if (!workspaceMembership || workspaceMembership.status !== 'active') return false;
-    const assignedRoleIds = workspaceMembership.role_id
-      ? [workspaceMembership.role_id]
-      : state.roleAssignments
-        .filter((item) => item.company_id === companyId && item.profile_id === profile.id)
-        .map((item) => item.role_id);
-    const permissions = state.rolePermissions.filter((item) => assignedRoleIds.includes(item.role_id));
-    if (permissions.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'deny')) return false;
-    if (permissions.some((item) => (variants.includes(item.permission_key) || item.permission_key === '*') && item.effect === 'allow')) return true;
+    if (ELEVATED_COMPANY_ROLES.includes(String(membership.role).toLowerCase())) return true;
+    // Company-level assignments only, because that is what the SQL consults. Honouring a
+    // workspace role the server ignores would recreate the same over-promise.
+    const assignedRoleIds = state.roleAssignments
+      .filter((item) => item.company_id === companyId && item.profile_id === profile.id)
+      .map((item) => item.role_id);
+    const assigned = state.rolePermissions.filter((item) => assignedRoleIds.includes(item.role_id));
+    const matches = (item) => variants.includes(item.permission_key) || item.permission_key === '*';
+    if (assigned.some((item) => matches(item) && item.effect === 'deny')) return false;
+    if (assigned.some((item) => matches(item) && item.effect === 'allow')) return true;
+    return variants.some((variant) => DEFAULT_MEMBER_PERMISSIONS.includes(variant));
   }
   const role = String(membershipForProfile(companyId, profile.id)?.role || profile.role || 'member').toLowerCase();
   const permissions = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.member;
