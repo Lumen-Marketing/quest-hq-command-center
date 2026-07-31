@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-01T03:15:00+08:00",
-  "generated_from_commit": "3e1dfa1fb208dd6ab7cf7fd3249d8033f085f27a",
+  "generated_at": "2026-08-01T03:55:00+08:00",
+  "generated_from_commit": "d8b635fa1208fcc95a42b5c900c3303958c591da",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "3e1dfa1fb208dd6ab7cf7fd3249d8033f085f27a",
+    "main_commit_at_capture": "d8b635fa1208fcc95a42b5c900c3303958c591da",
     "latest_migration": "202608010900_rls_initplan_and_parent_row_checks.sql"
   },
   "live": {
@@ -18,12 +18,12 @@
       "version": "20260731191048",
       "name": "rls_initplan_and_parent_row_checks"
     },
-    "vercel_verified_at": "2026-08-01T02:25:00+08:00",
+    "vercel_verified_at": "2026-08-01T03:55:00+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://www.questbase.io",
-    "vercel_deployment_id": "dpl_5aaF2zkD2z1nKCMHwyzpRLWGHuaH",
+    "vercel_deployment_id": "dpl_877wddrbdsYqQanobU64seu69kro",
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "3e1dfa1fb208dd6ab7cf7fd3249d8033f085f27a",
+    "vercel_deployed_commit": "d8b635fa1208fcc95a42b5c900c3303958c591da",
     "github_verified_at": "2026-07-31T02:49:38+08:00",
     "github_production_guardian_run": "https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459"
   },
