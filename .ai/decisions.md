@@ -745,3 +745,82 @@ The accessor-hook test paid for itself twice more:
 rejected: they feed the dashboard's pending-invite widget, which renders on first paint.
 Deferring them would show a confident "0 pending" until somebody opened Settings, and a
 wrong number is worse than one extra query.
+
+## The bundle budget needs the builder modal extracted, and that is its own job
+
+Entry chunk headroom is **179 bytes**. The sprite move bought room in the morning and
+a day of features consumed it. The next change of any size fails the budget again, so
+this is now the blocking constraint on the codebase, not a background concern.
+
+I measured three candidate extractions rather than guessing, and the result is worth
+recording so the next person does not repeat it:
+
+**1. The four modal functions alone — no.** `renderWorkspaceBuilderModal`, `wbMountModal`,
+`wbFieldConfigUI` and `wbRenderFieldInput` are 64.9 KB of genuinely lazy-able code (they
+only run once someone opens the builder editor). But they call out to 66 distinct
+main.js functions. Threading 66 dependencies through a context object is not an
+extraction, it is a new coupling surface.
+
+**2. The pure helper closure — no, and this is the non-obvious one.** There are exactly 50
+`wb*` declarations that touch no state, no DOM, and call nothing outside their own set:
+20.9 KB, and on paper an ideal tested module. They cannot help. They are called from
+eager paths too — `wbUid` from 41 sites, `wbLogActivity` from 16 — so the module has to
+be a *static* import and stays in the entry chunk. Moving pure code out of main.js is
+good hygiene; it is not the same thing as buying gzip headroom, and only lazy-loading is.
+
+**3. The whole subsystem — yes, but not in one sweep.** 220 `wb*` declarations, 267 KB
+raw, interleaved with unrelated code across 4,477 lines. The shape that works is three
+modules, not two:
+
+    src/workspace/builder-core.js    shared helpers, statically imported (stays eager)
+    src/workspace/builder-modal.js   the editing UI, dynamically imported (lazy)
+    src/main.js                      static import of core, dynamic import of modal
+
+The third module is what avoids the circular import main -> modal -> main, which is the
+failure mode already recorded against a big-bang split. The work is triaging 220
+declarations into core vs modal, and it needs someone able to exercise the builder UI
+afterwards — an automated suite cannot tell you the field-config panel silently stopped
+rendering.
+
+Deliberately not attempted at the end of a long session. The App Builder is in daily use
+and a blind 267 KB refactor is exactly how it breaks.
+
+Until it happens, the budget has no slack: any feature that adds to the entry chunk has
+to be paired with a real extraction, or the ceiling has to move as a conscious decision
+with the reason recorded.
+
+## Secondary text was below AA contrast in four of seven themes
+
+Measured, not eyeballed. `--muted` carries secondary text everywhere — metadata, hints,
+table sub-labels — and it is the colour most likely to be tuned for looks and least likely
+to be re-checked afterwards. Four of the seven theme blocks had drifted just under WCAG AA:
+
+| Theme | Before | After |
+| --- | --- | --- |
+| base palette (amber) | 4.42:1 | 4.55:1 |
+| Option 7 white SaaS | 4.22:1 | 4.60:1 |
+| Option 3 white control room | 4.45:1 | 4.59:1 |
+| Option 4 professional white | 4.43:1 | 4.56:1 |
+
+Both dark themes were already comfortable at 7.7:1 and 7.3:1 and were not touched.
+
+The fix walks each colour one percent darker at a time and stops at the first value that
+clears 4.55:1 — deliberately the *smallest* change that works, so the design shifts as
+little as possible. Every channel moved by between two and six points and the hue is
+preserved; the greys still read as the same greys.
+
+Two things worth noting about doing this properly:
+
+- A first pass took the first definition of each variable and reported a single failure.
+  That was wrong: the stylesheet layers several `:root` blocks (design directions added
+  over time), so contrast has to be computed per theme block against *that block's* own
+  `--bg`. Scoping it turned one finding into four.
+- Contrast has to be checked against the surface the text actually sits on, and
+  translucent colours flattened over their backdrop first, or the number is fiction.
+
+`tests/colour-contrast.test.mjs` recomputes the ratio for every theme from the stylesheet
+and fails below 4.5:1, so the next palette tweak cannot quietly undo this.
+
+Still open on accessibility: the viewport matrix across phone/tablet/laptop widths, which
+needs real devices or a browser harness rather than static analysis, and contrast for
+non-text UI (borders, focus rings, chart colours) against the 3:1 requirement.

@@ -321,3 +321,51 @@ intentional and narrowly bounded: the routine fixes `search_path`, requires the 
 to be the deleting actor, enforces the ten-minute Undo and 30-day restore windows, resolves
 the source table from a server allowlist, re-checks current company/workspace permission, and
 restores the source plus recycle ledger atomically. Public and anonymous execution are revoked.
+
+## Browser reachability inventory
+
+Derived from live state on 2026-07-31, not from reading migrations. A table is
+*browser-reachable* only if RLS is on, at least one policy exists, and `anon` or
+`authenticated` holds a grant. Anything else is reachable solely through a SECURITY
+DEFINER RPC, an API route, or the service role — which is a design decision and should be
+recorded rather than rediscovered.
+
+**Totals: 77 tables in `public` — 75 browser-reachable, 2 server-only, 0 with RLS off.**
+
+### Server-only tables
+
+| Table | Why it is unreachable | Intent |
+| --- | --- | --- |
+| `checkin_log` | RLS on, zero policies | Written by server-side check-in processing; never read by the client |
+| `reminder_log` | RLS on, zero policies | Written by server-side reminder dispatch; never read by the client |
+
+RLS enabled with no policy denies every row to every non-owner role, so these fail closed
+regardless of grants. Both nonetheless carried `anon`/`authenticated` table grants until
+`202608011000_revoke_unintended_browser_grants.sql` removed them. The grants were not a
+hole on their own — they described an access path that did not exist — but they would have
+become one the moment anybody added a policy, which is the kind of latent trap that only
+looks obvious afterwards. Supabase's advisor reports both as `rls_enabled_no_policy` at
+INFO level; that finding is expected here and should not be "fixed" by adding a policy.
+
+### Tables granted to `authenticated` only
+
+Most tables carry grants to both `anon` and `authenticated` — the Supabase default — which
+is harmless because every policy is written `to authenticated`, so `anon` matches nothing.
+These six are narrower still, with no `anon` grant at all:
+
+`record_history`, `underwriting_cases`, `ringcentral_accounts`, `ringcentral_calls`,
+`ringcentral_extensions`, `ringcentral_presence`, `ringcentral_sync_state`.
+
+### Trigger functions are not RPCs
+
+PostgreSQL grants EXECUTE on new functions to PUBLIC by default, and PostgREST turns
+anything the browser roles can execute into a callable `/rest/v1/rpc` endpoint. That makes
+`create function … returns trigger` quietly ship an anon-reachable endpoint unless the
+grant is revoked.
+
+All six SECURITY DEFINER trigger functions in `public` now have browser EXECUTE revoked:
+`handle_new_user`, `message_touch_conversation`, `mirror_workspace_backup_copy`,
+`quest_confirm_email_before_insert`, `sync_team_member_from_profile`, and
+`touch_eod_report_updated_at` (the last of which was exposed until 202608011000).
+`tests/function-exposure.test.mjs` derives this list from the migration history and fails
+if a new trigger function ships without its revoke.

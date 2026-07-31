@@ -9,7 +9,7 @@
   --rail-line: rgba(255, 244, 218, .12);
   --ink: #17130f;
   --ink-2: #473f34;
-  --muted: #72695d;
+  --muted: #70675b;
   /* Alias the --text* naming used across components onto the --ink* system so a
      single set of values drives both, and dark mode flips them automatically. */
   --text: var(--ink);
@@ -13853,7 +13853,7 @@ button.side-item.planned b {
   --rail-line: #e8eaed;
   --ink: #16171a;
   --ink-2: #3f4650;
-  --muted: #6f7782;
+  --muted: #69717c;
   --border: #e6e8eb;
   --border-strong: #d8dce1;
   --amber: #f5a51b;
@@ -14462,7 +14462,7 @@ button.side-item.planned b {
   --rail-line: rgba(255, 255, 255, .1);
   --ink: #111318;
   --ink-2: #3d4450;
-  --muted: #68717d;
+  --muted: #666f7b;
   --border: #dfe3e8;
   --border-strong: #cbd2da;
   --amber: #f3a71c;
@@ -16766,7 +16766,7 @@ button.side-item.planned b {
   --rail-line: #e1e6ec;
   --ink: #111827;
   --ink-2: #354052;
-  --muted: #687385;
+  --muted: #667182;
   --border: #dfe5ec;
   --border-strong: #cbd5e1;
   --amber: #ed8b00;
