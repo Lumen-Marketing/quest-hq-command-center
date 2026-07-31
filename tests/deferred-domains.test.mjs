@@ -15,6 +15,7 @@ const DEFERRED_TABLES = [
   'pricebook_vendors', 'pricebook_materials', 'pricebook_vendor_prices',
   'client_portals', 'client_portal_documents', 'client_portal_annotations', 'client_portal_events',
   'recycle_bin_items',
+  'audit_events', 'underwriting_cases', 'proposal_documents',
 ];
 
 test('deferred tables are not fetched before first paint', () => {
@@ -51,7 +52,7 @@ test('every deferred domain has a loader to defer to', () => {
   const list = main.match(/const DEFERRED_DOMAINS = \[([^\]]*)\]/);
   assert.ok(list, 'DEFERRED_DOMAINS should exist');
   const domains = [...list[1].matchAll(/'([a-z]+)'/g)].map((x) => x[1]);
-  assert.deepEqual(domains, ['finance', 'forms', 'pricebook', 'portals', 'recycle']);
+  assert.deepEqual(domains, ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals']);
   for (const domain of domains) {
     assert.ok(
       new RegExp(`domain === '${domain}'`).test(main),
@@ -70,6 +71,9 @@ test('every read of a deferred dataset goes through a hooked accessor', () => {
     pricebook: ['pricebookVendors', 'pricebookMaterials', 'pricebookPrices'],
     portals: ['clientPortals', 'clientPortalDocuments', 'clientPortalAnnotations', 'clientPortalEvents'],
     recycle: ['recycleBinItems'],
+    audit: ['auditEvents'],
+    underwriting: ['underwritingCases'],
+    proposals: ['proposals'],
   };
   // Functions allowed to touch the raw state without triggering a load:
   //
@@ -80,7 +84,7 @@ test('every read of a deferred dataset goes through a hooked accessor', () => {
   //    persistAll can never observe a half-loaded state and cannot cache an empty array
   //    over a good one. Checked, not assumed: isLiveSupabaseSession() is
   //    `auth === 'supabase' && !isReadOnlyDemo()`.
-  const ALLOWED = /^(loadSupabaseData|loadRealtimeDomain|loadSecondaryRealtimeDomain|loadIdentityRealtimeDomain|applyWorkspaceBackupPayload|persistWorkspaceBackupPayloadToSupabase|buildWorkspaceBackupPayload|resetLiveWorkspaceData|resetDemoWorkspaceData|ensureDomainLoaded|persistAll|pricebookPersistLocal|saveFormsState)$/;
+  const ALLOWED = /^(loadSupabaseData|loadRealtimeDomain|loadSecondaryRealtimeDomain|loadIdentityRealtimeDomain|applyWorkspaceBackupPayload|persistWorkspaceBackupPayloadToSupabase|buildWorkspaceBackupPayload|resetLiveWorkspaceData|resetDemoWorkspaceData|ensureDomainLoaded|persistAll|pricebookPersistLocal|saveFormsState|persistProposalsLocal|recordAuditEvent)$/;
 
   const fns = [...main.matchAll(/^(?:async )?function ([\w$]+)/gm)].map((m) => ({ at: m.index, name: m[1] }));
   const owner = (idx) => {

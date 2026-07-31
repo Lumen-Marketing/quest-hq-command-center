@@ -688,3 +688,60 @@ badge. `workspace_builder_state` stays because workspace pages render app tiles
 immediately. `audit_events`, `company_invites` and `company_join_requests` are settings-
 only and are the obvious next candidates, but they have no existing domain loader, so
 deferring them means writing one — worth doing when someone next touches that area.
+
+## Two unintended browser grants, found by auditing rather than counting
+
+The security advisor reports 48 findings in the SECURITY DEFINER family. Counting them
+is useless; classifying them is not. Every one of them is a function the browser roles
+can execute, but a **trigger function** and an **RPC** are different things, and only one
+of them belongs on `/rest/v1/rpc`.
+
+Of the six SECURITY DEFINER trigger functions in `public`, five already carried no
+browser grants. The sixth, `touch_eod_report_updated_at()`, was executable by PUBLIC,
+anon and authenticated — introduced by my own `202607301200_eod_reports`, which created
+it without revoking PostgreSQL's default grant of EXECUTE to PUBLIC. PostgREST turns that
+into a callable endpoint reachable without signing in.
+
+The other 47 are authenticated-executable RPCs — `accept_company_invite`,
+`save_company_role`, the recycle and workspace functions — which ARE the application's
+API and each perform their own permission checks. Reviewed and left alone, not silenced.
+
+Revoking EXECUTE does not disturb the trigger: triggers fire in the context of the
+statement's table, not the caller's function-execute privilege. Proved rather than
+assumed, and the first attempt at proving it was wrong in an instructive way. `now()` is
+fixed for a transaction, so comparing `updated_at` before and after an update in one
+transaction shows no movement and looks like a regression. The test that actually works
+is to write an obviously wrong `updated_at` and observe the trigger replace it: the
+client sent 2000-01-01, the row stored the current timestamp.
+
+`checkin_log` and `reminder_log` also had `anon`/`authenticated` table grants while
+having RLS enabled and zero policies. Not a hole — RLS with no policy denies everything —
+but the grants described an access path that did not exist and would have become real the
+moment anyone added a policy. Revoked so the intent reads correctly: server-only tables.
+
+A test now derives every `returns trigger` function from the migration history and
+requires its browser EXECUTE to be revoked, so the next one is caught in CI rather than
+by an advisor weeks later.
+
+Incidentally confirmed while probing: `eod_reports` has zero rows. The app built for the
+crew has never been used by them, which is consistent with none of them having a login.
+
+## Three more domains deferred, and one the guard refused
+
+`audit_events`, `underwriting_cases` and `proposal_documents` now load on demand,
+taking first paint from 37 tables to 34.
+
+The accessor-hook test paid for itself twice more:
+
+- It rejected `proposals` as cleanly section-scoped, because `contactJobTypeOptions`
+  reads it — that is a CRM surface, not the proposals section, so deferring blindly would
+  have silently dropped job-type options for everyone. Hooking that reader keeps it
+  correct, and sessions that never open contacts still skip the fetch.
+- The public proposal flow (`ensureProposalPublicOpen`, `submitPublicProposalDecision`)
+  also reads it. Harmless — those run anonymously, where `ensureDomainLoaded`
+  short-circuits — but it had to be hooked for the signed-in case.
+
+`company_invites` and `company_join_requests` were candidates and were deliberately
+rejected: they feed the dashboard's pending-invite widget, which renders on first paint.
+Deferring them would show a confident "0 pending" until somebody opened Settings, and a
+wrong number is worse than one extra query.

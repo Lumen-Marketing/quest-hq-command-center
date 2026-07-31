@@ -3691,7 +3691,12 @@ function applyWorkspaceBuilderRows(rows) {
 // of change produces empty screens: some widget on an unrelated page reads the data,
 // nobody remembers to list that route, and the screen renders blank with no error.
 // Every read goes through these accessors, so hooking them cannot miss a caller.
-const DEFERRED_DOMAINS = ['finance', 'forms', 'pricebook', 'portals', 'recycle'];
+const DEFERRED_DOMAINS = ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals'];
+
+// Deliberately NOT deferred, having checked: company_invites and company_join_requests
+// feed the dashboard's pending-invite widget, which renders on first paint. Deferring
+// them would show a confident "0 pending" until somebody opened Settings -- a wrong
+// number is worse than an extra query.
 
 function ensureDomainLoaded(domain) {
   if (!DEFERRED_DOMAINS.includes(domain)) return true;
@@ -3744,7 +3749,6 @@ async function loadSupabaseData() {
     fieldPermissionsResult,
     invitesResult,
     joinRequestsResult,
-    auditEventsResult,
     messageConversationsResult,
     messageAccessResult,
     messagesResult,
@@ -3753,12 +3757,10 @@ async function loadSupabaseData() {
     calendarEventsResult,
     notificationsResult,
     contactsResult,
-    underwritingCasesResult,
     pipelineStagesResult,
     accountsResult,
     dealsResult,
     sitesResult,
-    proposalsResult,
     activitiesResult,
     companyPluginsResult,
     workspacesResult,
@@ -3783,7 +3785,6 @@ async function loadSupabaseData() {
     client.from('field_permissions').select('*'),
     client.from('company_invites').select('*').order('created_at', { ascending: false }),
     client.from('company_join_requests').select('*').order('created_at', { ascending: false }),
-    client.from('audit_events').select('*').order('created_at', { ascending: false }).limit(100),
     client.from('message_conversations').select('*').order('last_message_at', { ascending: false }),
     client.from('message_conversation_access').select('*'),
     client.from('messages').select('*').order('created_at', { ascending: true }).limit(500),
@@ -3792,12 +3793,10 @@ async function loadSupabaseData() {
     client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
     client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
     client.from('contacts').select('*').order('updated_at', { ascending: false }),
-    safeSupabaseQuery(client.from('underwriting_cases').select('*').order('updated_at', { ascending: false })),
     client.from('pipeline_stages').select('*').order('position', { ascending: true }),
     client.from('accounts').select('*').order('name', { ascending: true }),
     client.from('deals').select('*').order('updated_at', { ascending: false }),
     safeSupabaseQuery(client.from('crm_sites').select('*').order('updated_at', { ascending: false })),
-    safeSupabaseQuery(client.from('proposal_documents').select('*').order('updated_at', { ascending: false })),
     client.from('activities').select('*').order('created_at', { ascending: false }).limit(500),
     safeSupabaseQuery(client.from('company_plugins').select('*')),
     client.from('workspaces').select('*').order('name', { ascending: true }),
@@ -3852,7 +3851,6 @@ async function loadSupabaseData() {
   if (!fieldPermissionsResult.error) state.fieldPermissions = (fieldPermissionsResult.data || []).map(normalizeFieldPermission);
   if (!invitesResult.error) state.companyInvites = (invitesResult.data || []).map(normalizeCompanyInvite);
   if (!joinRequestsResult.error) state.joinRequests = (joinRequestsResult.data || []).map(normalizeJoinRequest);
-  if (!auditEventsResult.error) state.auditEvents = auditEventsResult.data || [];
   if (!messageConversationsResult.error) state.messageConversations = (messageConversationsResult.data || []).map(normalizeMessageConversation);
   if (!messageAccessResult.error) state.messageAccess = (messageAccessResult.data || []).map(normalizeMessageAccess);
   if (!messagesResult.error) state.messages = (messagesResult.data || []).map(normalizeMessage);
@@ -3862,10 +3860,6 @@ async function loadSupabaseData() {
   if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
   if (!contactsResult.error) {
     state.contacts = activeRows(contactsResult.data || []).map(normalizeContact);
-    liveTables += 1;
-  }
-  if (!underwritingCasesResult.error) {
-    state.underwritingCases = (underwritingCasesResult.data || []).map(normalizeUnderwritingCase);
     liveTables += 1;
   }
   if (!pipelineStagesResult.error) {
@@ -3882,9 +3876,6 @@ async function loadSupabaseData() {
   }
   if (!sitesResult.error) {
     state.sites = (sitesResult.data || []).map(normalizeCrmSite);
-  }
-  if (!proposalsResult.error) {
-    state.proposals = activeRows(proposalsResult.data || []).map(normalizeProposal);
   }
   if (!activitiesResult.error) {
     state.activities = activeRows(activitiesResult.data || []).map(normalizeActivity);
@@ -8520,6 +8511,7 @@ const CRM2_UNDERWRITER_GUIDANCE = {
 };
 
 function underwritingCaseForContact(contactId, companyId = activeCompanyId()) {
+  ensureDomainLoaded('underwriting');
   return state.underwritingCases.find((item) => recordVisibleInOperationalWorkspace(item, companyId) && item.contact_id === contactId) || null;
 }
 
@@ -19638,6 +19630,7 @@ function renderProposalPublicPage(route) {
 }
 
 async function ensureProposalPublicOpen(token) {
+  ensureDomainLoaded('proposals');
   const cleanToken = String(token || '').trim();
   if (!cleanToken) throw new Error('Missing proposal link.');
   if (state.proposalPublic?.token === cleanToken && state.proposalPublic.proposal) return;
@@ -19673,6 +19666,7 @@ async function ensureProposalPublicOpen(token) {
 }
 
 async function submitPublicProposalDecision(form) {
+  ensureDomainLoaded('proposals');
   const data = Object.fromEntries(new FormData(form).entries());
   const submitter = form.ownerDocument.activeElement;
   const decision = submitter?.name === 'decision' ? submitter.value : data.decision || 'accept';
@@ -22904,16 +22898,19 @@ function normalizeProposal(input = {}) {
 }
 
 function proposalById(id) {
+  ensureDomainLoaded('proposals');
   return id ? state.proposals.find((proposal) => proposal.id === id) || null : null;
 }
 
 function companyProposals(companyId = activeCompanyId()) {
+  ensureDomainLoaded('proposals');
   return state.proposals
     .filter((proposal) => recordVisibleInOperationalWorkspace(proposal, companyId))
     .sort((a, b) => Date.parse(b.updated_at || 0) - Date.parse(a.updated_at || 0));
 }
 
 function proposalsFor(relatedType, relatedId) {
+  ensureDomainLoaded('proposals');
   if (!relatedId) return [];
   return state.proposals
     .filter((proposal) => proposal.related_type === relatedType && proposal.related_id === relatedId)
@@ -32941,6 +32938,7 @@ function companyInvites(companyId = activeCompanyId()) {
 }
 
 function companyAuditEvents(companyId = activeCompanyId()) {
+  ensureDomainLoaded('audit');
   return state.auditEvents
     .filter((event) => event.company_id === companyId)
     .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
@@ -36222,6 +36220,7 @@ function contactAddressOptions(companyId) {
 }
 
 function contactJobTypeOptions(companyId) {
+  ensureDomainLoaded('proposals');
   return compactUnique([
     ...CONTACT_JOB_TYPE_OPTIONS,
     ...companyContacts(companyId).map((contact) => contact.title),
@@ -38663,6 +38662,21 @@ async function loadSecondaryRealtimeDomain(client, domain) {
   if (domain === 'notifications') {
     const result = await client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200);
     if (!result.error) state.notifications = (result.data || []).map(normalizeNotification);
+    return;
+  }
+  if (domain === 'audit') {
+    const result = await safeSupabaseQuery(client.from('audit_events').select('*').order('created_at', { ascending: false }).limit(100));
+    if (!result.error) state.auditEvents = result.data || [];
+    return;
+  }
+  if (domain === 'underwriting') {
+    const result = await safeSupabaseQuery(client.from('underwriting_cases').select('*').order('updated_at', { ascending: false }));
+    if (!result.error) state.underwritingCases = activeRows(result.data || []).map(normalizeUnderwritingCase);
+    return;
+  }
+  if (domain === 'proposals') {
+    const result = await safeSupabaseQuery(client.from('proposal_documents').select('*').order('updated_at', { ascending: false }));
+    if (!result.error) state.proposals = activeRows(result.data || []).map(normalizeProposal);
     return;
   }
   if (domain === 'recycle') {
