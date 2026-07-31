@@ -27820,3 +27820,31 @@ html[data-card-style="glass"] .message-context-rail {
   .eod-grid { grid-template-columns: minmax(0, 1fr); }
   .eod-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Handoff review: grouped findings, read-only by design. */
+.handoff-review .handoff-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.handoff-group { margin-top: 16px; }
+
+.handoff-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.handoff-group-head strong { font-size: 13.5px; }
+
+.handoff-detail {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.handoff-review .contract-rows a { color: var(--accent); font-weight: 750; }

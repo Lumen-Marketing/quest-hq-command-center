@@ -55,7 +55,7 @@ async function loadLeaflet() {
 }
 
 const CONFIG = {
-  buildId: 'Quest HQ Company Workspace v1',
+  buildId: 'Questbase Company Workspace v1',
   questAuthEnabled: import.meta.env.VITE_QUEST_AUTH_ENABLED !== 'false',
   // Social sign-on providers offered on the auth screen. Each ALSO has to be
   // enabled + credentialed in the Supabase dashboard, or its button returns a
@@ -2182,7 +2182,7 @@ const calendarEventsFallback = [
   {
     id: 'calendar-lumen-product',
     company_id: 'lumen',
-    title: 'Quest HQ product review',
+    title: 'Questbase product review',
     description: 'Review workspace permissions, messages, and calendar flow.',
     event_type: 'Company event',
     starts_at: `${isoDate(4)}T18:00:00.000Z`,
@@ -2927,7 +2927,7 @@ function render() {
   }
 
   if (state.route.name === 'client-portal') {
-    document.title = 'Client portal | Quest HQ';
+    document.title = 'Client portal | Questbase';
     try {
       app.innerHTML = renderClientPortalPublicPage(state.route);
     } catch (error) {
@@ -2948,7 +2948,7 @@ function render() {
   }
 
   if (state.route.name === 'proposal-public') {
-    document.title = 'Proposal | Quest HQ';
+    document.title = 'Proposal | Questbase';
     app.innerHTML = renderProposalPublicPage(state.route);
     queueMicrotask(() => {
       ensureProposalPublicOpen(state.route.token).catch((error) => {
@@ -2960,7 +2960,7 @@ function render() {
   }
 
   if (state.route.name === 'form-public') {
-    document.title = 'Form | Quest HQ';
+    document.title = 'Form | Questbase';
     app.innerHTML = renderPublicFormPage(state.route);
     queueMicrotask(() => {
       ensurePublicFormOpen(state.route.token).catch((error) => {
@@ -3002,12 +3002,12 @@ function render() {
       && clientPortalById(state.route.params.get('portal_id'))) {
     const portalId = state.route.params.get('portal_id');
     ensureClientPortalAnnotateState('owner', portalId, state.route.params.get('document_id') || '');
-    document.title = `Plan review | ${companyName(activeCompanyId())} | Quest HQ`;
+    document.title = `Plan review | ${companyName(activeCompanyId())} | Questbase`;
     app.innerHTML = `<div class="cp-fullscreen">${renderClientPortalAnnotate('owner')}</div>`;
     queueMicrotask(() => mountClientPortalAnnotate().catch((error) => console.warn('Annotate mount failed', error)));
     return;
   }
-  document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Quest HQ`;
+  document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Questbase`;
   trackRouteForRecents(state.route);
   app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette();
   queueMicrotask(restoreSidebarScroll);
@@ -3498,13 +3498,13 @@ function shouldHoldCompanyRouteForLiveData(route) {
 }
 
 function renderWorkspaceLoading(route) {
-  document.title = `${routeTitle(route)} | Quest HQ`;
+  document.title = `${routeTitle(route)} | Questbase`;
   app.innerHTML = `
     <main class="login-shell">
       <section class="login-panel">
         <div class="login-brand">
           <span class="side-mark logo-image-mark">${questLogoImage()}</span>
-          <span><strong>Quest HQ</strong><small>Secure workspace</small></span>
+          <span><strong>Questbase</strong><small>Secure workspace</small></span>
         </div>
         ${emptyState('Loading workspace data...')}
       </section>
@@ -3538,13 +3538,13 @@ function workspaceIconSelect(selected = 'home') {
 function renderNoCompanyAccess() {
   const busy = /creating|joining|opening/i.test(state.authMessage || '');
   const canCreate = canCreateAnotherWorkspace();
-  document.title = 'Company access pending | Quest HQ';
+  document.title = 'Company access pending | Questbase';
   app.innerHTML = `
     <main class="login-shell">
       <section class="login-panel">
         <div class="login-brand">
           <span class="side-mark logo-image-mark">${questLogoImage()}</span>
-          <span><strong>Quest HQ</strong><small>Access pending</small></span>
+          <span><strong>Questbase</strong><small>Access pending</small></span>
         </div>
         <div>
           <div class="eyebrow">Tenant security</div>
@@ -3590,13 +3590,13 @@ function needsLocalLogin(route) {
 }
 
 function renderAuthLoading() {
-  document.title = 'Loading | Quest HQ';
+  document.title = 'Loading | Questbase';
   app.innerHTML = `
     <main class="login-shell">
       <section class="login-panel">
         <div class="login-brand">
           <span class="side-mark logo-image-mark">${questLogoImage()}</span>
-          <span><strong>Quest HQ</strong><small>Secure workspace</small></span>
+          <span><strong>Questbase</strong><small>Secure workspace</small></span>
         </div>
         ${emptyState('Checking secure session...')}
       </section>
@@ -4333,7 +4333,7 @@ function svgIcon(id, className = 'symbol-icon') {
   return `<svg class="${h(className)}" aria-hidden="true" focusable="false"><use href="#${h(id)}"></use></svg>`;
 }
 
-function questLogoImage(alt = 'Quest HQ') {
+function questLogoImage(alt = 'Questbase') {
   return `<img class="quest-logo-image" src="${h(questLogoMarkUrl)}" alt="${h(alt)}" />`;
 }
 
@@ -4443,11 +4443,11 @@ function shellTemplate(route, workspace) {
       ${renderSvgSprite()}
       <header class="topbar">
         <div class="topbar-left">
-          <a class="logo logo-image-mark" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Quest HQ workspace">
+          <a class="logo logo-image-mark" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Questbase workspace">
             ${questLogoImage()}
           </a>
           <div>
-            <div class="brand-name">Quest HQ</div>
+            <div class="brand-name">Questbase</div>
             <div class="brand-sub">${h(CONFIG.buildId)}</div>
           </div>
         </div>
@@ -4739,7 +4739,7 @@ function renderDeck(route) {
   const groups = sidebarGroupsForScope(route);
   return `
     <div class="deck-brand">
-      <a class="logo logo-image-mark" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Quest HQ dashboard">
+      <a class="logo logo-image-mark" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Questbase dashboard">
         ${questLogoImage()}
       </a>
       <span><strong>Quest</strong><small>command center</small></span>
@@ -5222,6 +5222,43 @@ function renderPlatformMasterPanel(companyId) {
     return '<article class="panel span-3"><div class="section-head"><div><h2>Master panel</h2><p>Loading...</p></div></div></article>';
   }
   return platformPanelApi.renderPlatformMasterPanel(companyId);
+}
+
+// Admin-only review surface, loaded on demand so it never enters the entry chunk.
+// The import must stay dynamic: a static one would be bundled straight back in.
+let handoffReviewModule = null;
+let handoffReviewPromise = null;
+
+function renderHandoffReviewPanel(companyId) {
+  if (!handoffReviewModule) {
+    if (!handoffReviewPromise) {
+      handoffReviewPromise = import('./crm/handoff-review.js')
+        .then((module) => { handoffReviewModule = module; render(); })
+        .catch(() => { handoffReviewPromise = null; });
+    }
+    return '<article class="panel span-3"><div class="section-head"><div><h2>Handoff review</h2><p>Loading...</p></div></div></article>';
+  }
+  const canonical = canonicalCompanyId(companyId);
+  const mine = (rows) => (rows || []).filter((row) => canonicalCompanyId(row.company_id) === canonical);
+  const findings = handoffReviewModule.findHandoffIssues({
+    contacts: mine(state.contacts),
+    deals: mine(state.deals),
+    jobs: mine(state.jobs),
+  });
+  return handoffReviewModule.renderHandoffReview({
+    findings,
+    companyLabel: companyName(companyId),
+    h,
+    emptyState,
+    metricCard,
+    // Link straight to the record so review means opening it, not hunting for it.
+    hrefFor: (item) => {
+      if (item.kind === 'contact') return appHref(companyPath('contacts', { contact: item.id }, companyId));
+      if (item.kind === 'deal') return appHref(companyPath('deals', { deal: item.id }, companyId));
+      if (item.kind === 'job') return appHref(companyPath('jobs', { job_id: item.id }, companyId));
+      return '';
+    },
+  });
 }
 
 function renderWorkspace(route) {
@@ -11704,8 +11741,8 @@ function renderEmbeddedTasksPage(route, companyId) {
       <section class="task-layout task-layout-flat">
         <article class="panel task-main">
           ${emptyState(state.session?.auth === 'demo-readonly'
-            ? 'Tasks need a real account. You are exploring in demo mode — sign in with your Quest HQ account to use task execution, timers and reminders.'
-            : 'Tasks need a signed-in Quest HQ account. Sign in to continue.')}
+            ? 'Tasks need a real account. You are exploring in demo mode — sign in with your Questbase account to use task execution, timers and reminders.'
+            : 'Tasks need a signed-in Questbase account. Sign in to continue.')}
         </article>
       </section>
     `;
@@ -12194,7 +12231,7 @@ function renderFileDetails(file, companyId) {
     <div class="file-detail-list">
       ${detailRow('Category', file.category || folderLabel(file.folder))}
       ${detailRow('Job', jobById(file.job_id)?.name || 'Company shared')}
-      ${detailRow('Uploaded by', file.uploaded_by_label || 'Quest HQ')}
+      ${detailRow('Uploaded by', file.uploaded_by_label || 'Questbase')}
       ${detailRow('Uploaded', formatDate(file.created_at))}
       ${detailRow('Size', formatBytes(file.size_bytes))}
       ${detailRow('Storage path', file.object_path || 'Metadata only')}
@@ -12234,7 +12271,7 @@ function renderFileViewer(file, companyId) {
         <div class="file-detail-list">
           ${detailRow('Location', folderLabel(file.folder))}
           ${detailRow('Job', jobById(file.job_id)?.name || 'Company shared')}
-          ${detailRow('Uploaded by', file.uploaded_by_label || 'Quest HQ')}
+          ${detailRow('Uploaded by', file.uploaded_by_label || 'Questbase')}
           ${detailRow('Modified', formatDate(file.updated_at || file.created_at))}
           ${detailRow('Storage', file.object_path || 'Metadata only')}
         </div>
@@ -12378,7 +12415,7 @@ function renderFileUploadModal() {
           ${selectField('Folder', 'folder', folder, driveFolderOptions(companyId))}
           ${selectField('Job', 'job_id', jobId, [['', 'Company shared file']].concat(companyJobs(companyId).map((job) => [job.id, job.name])))}
           ${selectField('Category', 'category', folderLabel(folder), FILE_CATEGORIES.filter((item) => item !== 'All categories').map((item) => [item, item]))}
-          ${field('Uploaded by', 'uploaded_by_label', activeSession().profile.full_name || 'Quest HQ')}
+          ${field('Uploaded by', 'uploaded_by_label', activeSession().profile.full_name || 'Questbase')}
           ${textareaField('Notes', 'notes', '', 'span-2')}
           <div class="form-actions span-2">
             <button class="btn btn-primary" type="submit" data-upload-submit><i class="ti ti-upload"></i>Upload to drive</button>
@@ -13732,7 +13769,7 @@ function wbMirrorFeedFileToDrive(attachment, companyId, workspaceName) {
       size_bytes: attachment.size || 0,
       category: wsName,
       notes: `Posted to workspace feed "${wsName}".`,
-      uploaded_by_label: activeSession().profile.full_name || 'Quest HQ',
+      uploaded_by_label: activeSession().profile.full_name || 'Questbase',
       bucket_id: attachment.bucket || 'quest-job-files',
       object_path: attachment.objectPath || '',
       created_at: new Date().toISOString(),
@@ -15080,7 +15117,7 @@ function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
     </div>
     ${canManage ? wbInstallToWorkspaceField(companyId, workspace, app) : ''}
     <div class="wb-field"><label>Quest App Market</label>
-      <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Quest HQ can install its fields &amp; automations from the Quest App Market. Your records are never shared.' : 'Share this app so anyone on Quest HQ can install its fields &amp; automations from the Quest App Market. Your records are never shared.'}</div>
+      <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Questbase can install its fields &amp; automations from the Quest App Market. Your records are never shared.' : 'Share this app so anyone on Questbase can install its fields &amp; automations from the Quest App Market. Your records are never shared.'}</div>
       ${canManage ? `<div class="wb-settings-actions" style="margin-top:10px"><button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share this app'}</button></div>` : ''}
     </div>
     ${canManage ? `<div class="wb-settings-actions"><button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save changes</button><button class="btn danger" data-del-app><i class="ti ti-trash"></i>Delete app</button></div>` : ''}
@@ -15166,7 +15203,7 @@ function wbPrintTitleBlock(companyId, app, subtitle) {
   const when = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   return `<div class="wb-print-head">
     <div><h1>${h(app.name)}${subtitle ? ` — ${h(subtitle)}` : ''}</h1><div class="wb-print-meta">${app.items.length} item${app.items.length === 1 ? '' : 's'} · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'}</div></div>
-    <div class="wb-print-meta">${h(companyName(companyId) || 'Quest HQ')}<br>Printed ${h(when)}</div>
+    <div class="wb-print-meta">${h(companyName(companyId) || 'Questbase')}<br>Printed ${h(when)}</div>
   </div>`;
 }
 // Print items in the app (all fields). With `onlyIds` (a Set), prints just those
@@ -15361,7 +15398,7 @@ function wbInstallAppFromJson(companyId, workspaceId, text) {
   let bundle;
   try { bundle = JSON.parse(text); } catch { showToast('That file isn\'t valid JSON.', 'local', 'Workspaces'); return; }
   const src = bundle && bundle.app ? bundle.app : bundle;
-  if (!src || !Array.isArray(src.fields)) { showToast('That doesn\'t look like a Quest HQ app file.', 'local', 'Workspaces'); return; }
+  if (!src || !Array.isArray(src.fields)) { showToast('That doesn\'t look like a Questbase app file.', 'local', 'Workspaces'); return; }
   const { workspace } = wbFind(companyId, workspaceId);
   if (!workspace) return;
   // A file the user uploaded is their own backup/template, so bring its records
@@ -15802,7 +15839,7 @@ function renderWorkspaceBuilderModal() {
           </div>`;
         }).join('') || `<div class="wb-empty wb-empty-inline"><i class="ti ti-package"></i><h3>No apps yet</h3><p>${q ? 'No shared apps match your search.' : 'No apps have been shared to the market yet. Share one from an app\'s Settings.'}</p></div>`);
       return wbModalShell('Add app', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:#0891b2"><i class="ti ti-building-store"></i></div><h3>Quest App Market</h3>`,
-        `<div class="wb-sub" style="margin-bottom:12px">Install apps shared by anyone on Quest HQ. Installing copies its <b>fields and automations</b> into this workspace — records are not copied.</div>
+        `<div class="wb-sub" style="margin-bottom:12px">Install apps shared by anyone on Questbase. Installing copies its <b>fields and automations</b> into this workspace — records are not copied.</div>
          <div class="wb-search-box" style="max-width:none;margin-bottom:14px"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-lib-search value="${h(m.q || '')}" placeholder="Search the app market…"></div>
          <div class="wb-lib-grid" id="wbLibGrid">${cards}</div>`,
         `<button class="btn" type="button" data-wb-chooser-back><i class="ti ti-arrow-left"></i>Back</button><button class="btn" data-action="wb-modal-close">Close</button>`);
@@ -15812,7 +15849,7 @@ function renderWorkspaceBuilderModal() {
       `<div class="wb-chooser">
         ${opt('create', 'ti-pencil-plus', '#e0552d', 'Create your own app', 'Start from a blank canvas and design fields, reports and automations.')}
         ${opt('file', 'ti-file-import', '#16a34a', 'Install from a file', 'Upload a .questapp.json you downloaded to recreate that app here.')}
-        ${opt('library', 'ti-building-store', '#0891b2', 'Quest App Market', 'Browse apps shared by anyone on Quest HQ and copy one into this workspace.')}
+        ${opt('library', 'ti-building-store', '#0891b2', 'Quest App Market', 'Browse apps shared by anyone on Questbase and copy one into this workspace.')}
       </div>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button>`);
   }
@@ -16295,7 +16332,7 @@ function wbFindOrCreateDriveFolder(companyId, name, parentKey) {
   let folder = state.driveFolders.find((f) => f.id === id)
     || state.driveFolders.find((f) => canonicalCompanyId(f.company_id) === canon && String(f.parent_key || 'home') === parentKey && f.name === clean);
   if (!folder) {
-    folder = normalizeDriveFolder({ id, company_id: companyId, name: clean, parent_key: parentKey, created_by_label: activeSession().profile.full_name || 'Quest HQ', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    folder = normalizeDriveFolder({ id, company_id: companyId, name: clean, parent_key: parentKey, created_by_label: activeSession().profile.full_name || 'Questbase', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
     state.driveFolders.unshift(folder);
   }
   return folder;
@@ -16353,7 +16390,7 @@ function wbMirrorFileToDrive(file, objectPath, companyId, fieldId) {
       size_bytes: file.size,
       category: appName,
       notes: `Uploaded from workspace app "${appName}" · field "${fieldName}".`,
-      uploaded_by_label: activeSession().profile.full_name || 'Quest HQ',
+      uploaded_by_label: activeSession().profile.full_name || 'Questbase',
       bucket_id: 'quest-job-files',
       object_path: objectPath,
       created_at: new Date().toISOString(),
@@ -17217,6 +17254,9 @@ function renderSettingsPage(route, companyId) {
     [companyPath('settings', { tab: 'recycle-bin' }, companyId), 'Recycle Bin', 'recycle-bin'],
     [companyPath('settings', { tab: 'team' }, companyId), 'Workers', 'team'],
   ];
+  if (can('crm.manage', companyId)) {
+    settingsTabs.push([companyPath('settings', { tab: 'handoff-review' }, companyId), 'Data review', 'handoff-review']);
+  }
   if (isQuestDeveloper()) settingsTabs.push([companyPath('settings', { tab: 'master' }, companyId), 'Master', 'master']);
   const allowedTabs = settingsTabs.map((item) => item[2]);
   const tab = allowedTabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'company';
@@ -17230,6 +17270,7 @@ function renderSettingsPage(route, companyId) {
       ${tab === 'roles' ? renderRolesSettings(companyId) : ''}
       ${tab === 'backups' ? renderBackupsSettings(companyId) : ''}
       ${tab === 'recycle-bin' ? renderRecycleBinSettings(companyId) : ''}
+      ${tab === 'handoff-review' ? renderHandoffReviewPanel(companyId) : ''}
       ${tab === 'access' ? `
       <article class="panel">
         <div class="section-head"><div><h2>Access</h2><p>Memberships, invites, and join requests.</p></div></div>
@@ -18194,7 +18235,7 @@ function renderWorkspaceSettings(companyId) {
   const connectionDescription = connectionMode === 'live'
     ? 'Company and workspace changes are saving to the live database.'
     : connectionMode === 'loading'
-      ? 'Quest HQ is checking the workspace data connection.'
+      ? 'Questbase is checking the workspace data connection.'
       : 'This company account is using local fallback data. Changes may not persist for the team.';
   return `
     <div class="settings-col">
@@ -19128,7 +19169,7 @@ function renderPublicFormPage(route) {
       <form class="form-public-card response-form" data-public-form-response data-form-id="${h(form.id)}" style="--form-accent:${h(form.theme_color || company.color || '#f45d22')}">
         <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Form')}</span><span><strong>${h(company.name || 'Quest Forms')}</strong><small>${h(form.audience || 'Response')}</small></span></div>
         <div class="designed-form-header">
-          <span>${h(company.name || 'Quest HQ')}</span>
+          <span>${h(company.name || 'Questbase')}</span>
           <h1>${h(form.title)}</h1>
           <p>${h(form.description || 'Complete this form and send it to the workspace team.')}</p>
         </div>
@@ -19948,7 +19989,7 @@ function renderActivityDetailModal() {
         <span class="activity-ico activity-${h(activity.type)}"><i class="ti ${activityIcon(activity.type)}"></i></span>
         <div>
           <strong>${h(titleCase(activity.type))}</strong>
-          <span>${h(activity.owner_name || 'Quest HQ')} / ${h(formatDateTime(activity.completed_at || activity.created_at))}</span>
+          <span>${h(activity.owner_name || 'Questbase')} / ${h(formatDateTime(activity.completed_at || activity.created_at))}</span>
         </div>
       </div>
       ${activity.body ? `<p class="activity-detail-body">${h(activity.body)}</p>` : '<p class="activity-detail-body muted-dash">No details were written.</p>'}
@@ -22094,7 +22135,7 @@ function renderToast() {
   return `
     <div class="app-toast ${h(state.toast.mode || 'local')}" role="status" aria-live="polite">
       <div class="app-toast-copy">
-        <strong>${h(state.toast.title || 'Quest HQ')}</strong>
+        <strong>${h(state.toast.title || 'Questbase')}</strong>
         <span>${h(state.toast.message || '')}</span>
       </div>
       ${state.toast.action ? `
@@ -27432,7 +27473,7 @@ async function requestPasswordReset(formNode) {
   const form = Object.fromEntries(new FormData(formNode).entries());
   const email = String(form.email || '').trim();
   const client = createSupabaseClient();
-  if (!client?.auth || !email) throw new Error('Enter the email for your Quest HQ account.');
+  if (!client?.auth || !email) throw new Error('Enter the email for your Questbase account.');
   state.authBusy = true;
   state.loginError = '';
   state.authMessage = 'Sending reset link...';
@@ -27642,7 +27683,7 @@ async function registerWorkspace(formNode) {
     state.authBusy = false;
     const duplicateAccount = /already|registered|exists/i.test(signUp.error.message || '');
     state.loginError = duplicateAccount && inviteToken
-      ? 'That email already has a Quest HQ account. Sign in with the invited email to accept this invite.'
+      ? 'That email already has a Questbase account. Sign in with the invited email to accept this invite.'
       : signUp.error.message || 'Unable to create account.';
     if (duplicateAccount && inviteToken) state.authMode = 'signin';
     state.authMessage = '';
@@ -28237,7 +28278,7 @@ async function reviewWorkspace(companyId, status) {
     const result = await client.rpc('review_company_workspace', {
       target_company_id: targetCompanyId,
       next_status: nextStatus,
-      review_note: `Marked ${nextStatus} from Quest HQ approval console`,
+      review_note: `Marked ${nextStatus} from Questbase approval console`,
     });
     if (result.error) {
       state.sync = { label: result.error.message || 'Workspace review failed', mode: 'local' };
@@ -29866,7 +29907,7 @@ async function saveJobPhotos(form) {
       size_bytes: item.size,
       category: JOB_PHOTO_CATEGORIES.includes(fields.category) ? fields.category : 'Inspection',
       notes: String(fields.notes || '').trim(),
-      uploaded_by_label: activeSession().profile.full_name || activeSession().profile.email || 'Quest HQ',
+      uploaded_by_label: activeSession().profile.full_name || activeSession().profile.email || 'Questbase',
       bucket_id: 'quest-job-files',
       object_path: uploaded ? objectPath : '',
       created_at: new Date().toISOString(),
@@ -31514,7 +31555,7 @@ function createDriveFolder(form) {
     company_id: companyId,
     name,
     parent_key: fields.parent_key || 'home',
-    created_by_label: activeSession().profile.full_name || 'Quest HQ',
+    created_by_label: activeSession().profile.full_name || 'Questbase',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
@@ -31815,7 +31856,7 @@ async function performFilesTransfer() {
   let target = String(document.getElementById('filesTransferFolder')?.value || '');
   if (!newName && !target) { state.filesTransfer = { ...t, error: 'Choose a folder or enter a new folder name.' }; render(); return; }
   if (newName) {
-    const folder = normalizeDriveFolder({ id: `folder-${crypto.randomUUID()}`, company_id: companyId, name: newName, parent_key: 'home', created_by_label: activeSession().profile.full_name || 'Quest HQ', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    const folder = normalizeDriveFolder({ id: `folder-${crypto.randomUUID()}`, company_id: companyId, name: newName, parent_key: 'home', created_by_label: activeSession().profile.full_name || 'Questbase', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
     state.driveFolders.unshift(folder);
     target = folder.id;
   }
@@ -32201,7 +32242,7 @@ function companyPath(section = 'jobs', params = {}, companyId = activeCompanyId(
 }
 
 function routeTitle(route) {
-  if (route.name === 'home') return 'Quest HQ';
+  if (route.name === 'home') return 'Questbase';
   if (route.name === 'company') return titleCase(route.section);
   if (route.name === 'command') return 'Company Dashboard';
   if (route.name === 'login') return 'Sign in';
@@ -36961,7 +37002,7 @@ function normalizeFile(input) {
     category,
     bucket_id: input.bucket_id || 'quest-job-files',
     object_path: input.object_path || '',
-    uploaded_by_label: String(input.uploaded_by_label || 'Quest HQ'),
+    uploaded_by_label: String(input.uploaded_by_label || 'Questbase'),
     notes: String(input.notes || ''),
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || input.created_at || new Date().toISOString(),
@@ -36974,7 +37015,7 @@ function normalizeDriveFolder(input) {
     company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
     name: String(input.name || 'New folder').trim() || 'New folder',
     parent_key: String(input.parent_key || 'home'),
-    created_by_label: String(input.created_by_label || 'Quest HQ'),
+    created_by_label: String(input.created_by_label || 'Questbase'),
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || input.created_at || new Date().toISOString(),
   };
@@ -39186,7 +39227,7 @@ function membershipAuditEventType(previous, next) {
 }
 
 function actorName() {
-  return activeSession().profile.full_name || activeSession().profile.email || 'Quest HQ';
+  return activeSession().profile.full_name || activeSession().profile.email || 'Questbase';
 }
 
 function metricCard(label, value, text = '') {
@@ -39612,9 +39653,9 @@ function formQuestionCount(form) {
 function formCreatorLabel(form) {
   const creatorId = String(form?.creator_id || '');
   const profile = activeSession().profile;
-  if (!creatorId) return form?.created_by_label || profile.full_name || 'Quest HQ';
+  if (!creatorId) return form?.created_by_label || profile.full_name || 'Questbase';
   if (creatorId && (creatorId === profile.member_id || creatorId === profile.id)) return profile.full_name || 'Quest Basic Mode';
-  return memberName(creatorId) || form?.created_by_label || 'Quest HQ';
+  return memberName(creatorId) || form?.created_by_label || 'Questbase';
 }
 
 function formInput(label, key, value = '', required = false, type = 'text') {
@@ -40699,6 +40740,66 @@ init();
 // Installability (Android home screen, standalone window) needs a registered
 // worker. Production only -- a worker in front of the dev server caches things
 // nobody asked it to. Failure here is never fatal: the app runs fine without it.
+// Uncaught browser errors are reported to /api/client-error, which logs them where
+// Vercel's runtime logs collect them.
+//
+// This exists because a startup crash reached production and was found by a user seeing a
+// blank page, not by any gate — syntax, tests and the bundle budget all passed, because
+// none of them ran the bundle in a browser.
+//
+// The reporter must never become the problem it reports, so it is deliberately timid:
+// it sends identifiers only (never names, emails, or field values), caps how much it will
+// ever send, drops duplicates, and swallows every failure of its own.
+if (import.meta.env.PROD) {
+  const REPORT_LIMIT = 5;          // per page load; a render loop must not flood the log
+  const seen = new Set();
+  let sent = 0;
+
+  const report = (kind, message, stack, source) => {
+    try {
+      if (sent >= REPORT_LIMIT) return;
+      // A loop usually repeats one fault; the first copy is the useful one.
+      const key = `${kind}:${String(message).slice(0, 200)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      sent += 1;
+
+      const route = state?.route;
+      const payload = JSON.stringify({
+        kind,
+        message: String(message || '').slice(0, 500),
+        stack: String(stack || '').slice(0, 2000),
+        url: source || window.location.href,
+        // Structural context only: which screen, not what was on it.
+        route: route ? `${route.name || ''}/${route.section || ''}` : '',
+        revision: typeof __QUEST_BUILD_SHA__ === 'string' ? __QUEST_BUILD_SHA__ : '',
+        company_id: state?.activeCompanyId || '',
+        workspace_id: state?.activeWorkspaceId || '',
+        profile_id: state?.session?.profile?.id || '',
+      });
+
+      // sendBeacon survives the page being torn down, which is exactly when a fatal
+      // error fires. fetch with keepalive is the fallback where it is unavailable.
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/client-error', new Blob([payload], { type: 'application/json' }));
+      } else {
+        fetch('/api/client-error', { method: 'POST', body: payload, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {});
+      }
+    } catch {
+      // Reporting is best effort. It must never throw, or a broken page becomes a
+      // broken page plus an error loop inside the error handler.
+    }
+  };
+
+  window.addEventListener('error', (event) => {
+    report('error', event?.message || event?.error?.message, event?.error?.stack, event?.filename);
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event?.reason;
+    report('unhandledrejection', reason?.message || String(reason || ''), reason?.stack, '');
+  });
+}
+
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((error) => {

@@ -17,7 +17,7 @@ function pngSize(rel) {
 }
 
 test('the manifest carries what Chrome needs to offer an install', () => {
-  assert.equal(manifest.name, 'Quest HQ Command Center');
+  assert.equal(manifest.name, 'Questbase Command Center');
   assert.ok(manifest.short_name.length <= 12, 'short_name must survive a home screen label');
   assert.equal(manifest.display, 'standalone');
   assert.equal(manifest.scope, '/');

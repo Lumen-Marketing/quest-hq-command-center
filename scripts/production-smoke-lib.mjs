@@ -29,9 +29,18 @@ export function buildProductionRoutes(companies = DEFAULT_COMPANIES) {
   return LEGACY_ROUTES.concat(companies.flatMap((company) => MODULE_ROUTES.map((module) => `/company/${company}/${module}`)));
 }
 
+// Both brands are accepted on purpose. The product is being renamed Quest HQ -> Questbase,
+// and the smoke check runs against whatever production currently serves — which is the old
+// title until the rename deploys, and the new one after. Pinning either single value would
+// make deploy verification fail in that window, exactly when it is most needed.
+const APP_SHELL_MARKERS = ['Questbase Operations Command', 'Quest HQ Operations Command'];
+const LEGACY_REDIRECT_MARKERS = ['Opening Questbase', 'Opening Quest HQ'];
+
 export function validateAppShell(html) {
   const source = String(html || '');
-  if (!source.includes('Quest HQ Operations Command')) return { ok: false, reason: 'missing Quest HQ application marker' };
+  if (!APP_SHELL_MARKERS.some((marker) => source.includes(marker))) {
+    return { ok: false, reason: 'missing Questbase application marker' };
+  }
   if (!/<script\b[^>]*\bsrc=["'][^"']*\/assets\/[^"']+\.js["']/i.test(source)) {
     return { ok: false, reason: 'missing built JavaScript entry asset' };
   }
@@ -40,7 +49,9 @@ export function validateAppShell(html) {
 
 export function validateLegacyRedirect(html) {
   const source = String(html || '');
-  if (!source.includes('Opening Quest HQ')) return { ok: false, reason: 'missing Quest HQ legacy redirect marker' };
+  if (!LEGACY_REDIRECT_MARKERS.some((marker) => source.includes(marker))) {
+    return { ok: false, reason: 'missing Questbase legacy redirect marker' };
+  }
   if (!/window\.location\.replace\s*\(/.test(source)) {
     return { ok: false, reason: 'legacy page does not redirect into the application' };
   }

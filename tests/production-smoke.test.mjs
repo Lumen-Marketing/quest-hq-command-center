@@ -24,7 +24,7 @@ test('production smoke defaults to the current gamma production domain', () => {
 test('app shell validation rejects generic SPA 200 responses', () => {
   assert.deepEqual(validateAppShell('<html><body>ok</body></html>'), {
     ok: false,
-    reason: 'missing Quest HQ application marker',
+    reason: 'missing Questbase application marker',
   });
 });
 

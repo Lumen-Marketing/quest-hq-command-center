@@ -78,7 +78,7 @@ function legacyRedirect(file) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Opening Quest HQ</title>
+    <title>Opening Questbase</title>
     <script>
       (function () {
         var file = ${JSON.stringify(file)};
@@ -153,7 +153,7 @@ function legacyRedirect(file) {
     </script>
   </head>
   <body>
-    <p>Opening Quest HQ...</p>
+    <p>Opening Questbase...</p>
   </body>
 </html>
 `;

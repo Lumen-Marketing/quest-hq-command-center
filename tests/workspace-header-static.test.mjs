@@ -18,10 +18,10 @@ test('standard workspace headers collapse to actions only while notices keep rea
   assert.match(styles, /\.workspace-head-actions-only\s+\.head-actions\s*\{/);
 });
 
-test('Quest HQ brand surfaces use the generated logo mark instead of placeholder badges', () => {
-  assert.ok(existsSync(logoAssetUrl), 'Expected generated Quest HQ logo mark asset');
+test('Questbase brand surfaces use the generated logo mark instead of placeholder badges', () => {
+  assert.ok(existsSync(logoAssetUrl), 'Expected generated Questbase logo mark asset');
   assert.match(source, /import questLogoMarkUrl from '\.\/assets\/quest-hq-logo-mark\.webp';/);
-  assert.match(source, /function questLogoImage\(alt = 'Quest HQ'\)/);
+  assert.match(source, /function questLogoImage\(alt = 'Questbase'\)/);
   assert.match(source, /class="logo logo-image-mark"/);
   assert.match(source, /class="side-mark logo-image-mark"/);
   assert.match(source, /questLogoImage\('Quest Client Portal'\)/);
