@@ -2288,6 +2288,14 @@ const state = {
   workspaceBuilderDocs: {},
   workspaceBuilderLive: {},
   workspaceBuilderLoading: '',
+  // Optimistic-concurrency bookkeeping for the shared builder doc, per company.
+  // wbDocVersions holds the row's updated_at as this client last saw it: a save is
+  // conditional on it, so a write based on a stale read fails instead of silently
+  // erasing whoever got there first. wbDocBase holds that same revision's document,
+  // which is the common ancestor the three-way merge needs to tell an addition
+  // apart from a deletion.
+  wbDocVersions: {},
+  wbDocBase: {},
   builderModal: null,
   roles: [],
   rolePermissions: [],
@@ -3874,8 +3882,16 @@ async function loadSupabaseData() {
     state.workspaceBuilderLive = {};
     (workspaceBuilderResult.data || []).forEach((row) => {
       const companyId = canonicalCompanyId(row.company_id);
-      state.workspaceBuilderDocs[companyId] = holdLocalWb && prevDocs[companyId] ? prevDocs[companyId] : normalizeWorkspaceBuilderDoc(row.doc);
+      const serverDoc = normalizeWorkspaceBuilderDoc(row.doc);
+      const heldLocal = holdLocalWb && prevDocs[companyId];
+      state.workspaceBuilderDocs[companyId] = heldLocal ? prevDocs[companyId] : serverDoc;
       state.workspaceBuilderLive[companyId] = true;
+      // The version and ancestor describe the SERVER revision either way. When a
+      // local edit is being held, the ancestor must stay the row this client last
+      // synced -- overwriting it with the local doc would make the next merge think
+      // the user's unsaved edits were already agreed on, and quietly drop theirs.
+      state.wbDocVersions[companyId] = row.updated_at || '';
+      state.wbDocBase[companyId] = wbCloneDoc(serverDoc);
     });
     // Preserve any local-only docs (unsaved companies) that the server didn't return.
     if (holdLocalWb) Object.keys(prevDocs).forEach((cid) => { if (!state.workspaceBuilderDocs[cid]) state.workspaceBuilderDocs[cid] = prevDocs[cid]; });
@@ -4113,6 +4129,11 @@ function resetLiveWorkspaceData() {
   state.recycleBinItems = [];
   state.workspaceBuilderDocs = {};
   state.workspaceBuilderLive = {};
+  // Clear the concurrency bookkeeping with the docs it describes. A version token
+  // left over from the previous identity would authorise a write against a row this
+  // session has not actually read.
+  state.wbDocVersions = {};
+  state.wbDocBase = {};
   state.roles = [];
   state.rolePermissions = [];
   state.roleAssignments = [];
@@ -4191,142 +4212,6 @@ function resetDemoWorkspaceData() {
   state.pluginLoadFailed = false;
   state.companies = mergeCompanies(companiesFallback.map(normalizeCompany));
   state.sync = { label: isReadOnlyDemo() ? 'Read-only demo' : 'Demo mode', mode: 'local' };
-}
-
-function renderSvgSprite() {
-  return `
-    <svg class="svg-sprite" aria-hidden="true" focusable="false">
-      <symbol id="q-logo" viewBox="0 0 32 32">
-        <path d="M4 25V12.8L16 5l12 7.8V25h-6.2v-9.2H10.2V25H4Z" />
-        <path d="M10.2 15.8 16 11.9l5.8 3.9" />
-        <path d="M12 21h8" />
-      </symbol>
-      <symbol id="q-company" viewBox="0 0 24 24">
-        <path d="M4 20V8l8-4 8 4v12" />
-        <path d="M8 20v-7h8v7" />
-        <path d="M9 9h.1M12 8h.1M15 9h.1" />
-      </symbol>
-      <symbol id="q-search" viewBox="0 0 24 24">
-        <circle cx="10.8" cy="10.8" r="6.3" />
-        <path d="m16 16 4.3 4.3" />
-      </symbol>
-      <symbol id="q-empty" viewBox="0 0 24 24">
-        <path d="M5 18.5V7.7L12 4l7 3.7v10.8" />
-        <path d="M8 12h8M9.5 15h5" />
-      </symbol>
-      <symbol id="q-symbol-jobs" viewBox="0 0 24 24">
-        <path d="M5 20V8h14v12H5Z" />
-        <path d="M9 8V5h6v3M8 12h8M8 16h5" />
-      </symbol>
-      <symbol id="q-symbol-tasks" viewBox="0 0 24 24">
-        <path d="M6 7h12M6 12h12M6 17h12" />
-        <path d="m4 7 .9.9L6.4 6.4M4 12l.9.9 1.5-1.5M4 17l.9.9 1.5-1.5" />
-      </symbol>
-      <symbol id="q-symbol-files" viewBox="0 0 24 24">
-        <path d="M4 19.5V6h6l2 2h8v11.5H4Z" />
-        <path d="M4 10h16" />
-      </symbol>
-      <symbol id="q-symbol-forms" viewBox="0 0 24 24">
-        <path d="M7 4h10v16H7V4Z" />
-        <path d="M9.5 8h5M9.5 12h5M9.5 16h3" />
-      </symbol>
-      <symbol id="q-symbol-analytics" viewBox="0 0 24 24">
-        <path d="M5 19V5" />
-        <path d="M5 19h14" />
-        <path d="M8 16v-4M12 16V8M16 16v-6" />
-      </symbol>
-      <symbol id="q-symbol-crm" viewBox="0 0 24 24">
-        <circle cx="9" cy="9" r="3" />
-        <path d="M3.8 19c.8-3 2.5-4.5 5.2-4.5s4.4 1.5 5.2 4.5" />
-        <path d="M15.5 8.2a2.7 2.7 0 1 1 0 5.4M16.8 15.2c1.8.6 3 1.9 3.6 3.8" />
-      </symbol>
-      <symbol id="q-symbol-tickets" viewBox="0 0 24 24">
-        <path d="M4 8.5h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4v-3Z" />
-        <path d="M9 9v10" />
-      </symbol>
-      <symbol id="q-symbol-finance" viewBox="0 0 24 24">
-        <path d="M6 4h12v16H6V4Z" />
-        <path d="M9 8h6M9 12h6M9 16h3" />
-        <path d="M15.5 14.5c0 1.4-1 2.5-3.2 2.5" />
-      </symbol>
-      <symbol id="q-symbol-knowledge" viewBox="0 0 24 24">
-        <path d="M5 5.5c2.8-.8 5-.4 7 1.2 2-1.6 4.2-2 7-1.2V19c-2.8-.8-5-.4-7 1.2-2-1.6-4.2-2-7-1.2V5.5Z" />
-        <path d="M12 6.7v13.5" />
-      </symbol>
-      <symbol id="q-symbol-automations" viewBox="0 0 24 24">
-        <path d="M7 8a4 4 0 0 1 8 0c0 3-4 3.5-4 7" />
-        <path d="M9 20h4M10 17h2M16.5 13.5l3 3M20 13l-3.5 3.5" />
-      </symbol>
-      <symbol id="q-symbol-templates" viewBox="0 0 24 24">
-        <path d="M5 5h14v14H5V5Z" />
-        <path d="M5 10h14M10 10v9" />
-      </symbol>
-      <symbol id="q-symbol-users" viewBox="0 0 24 24">
-        <circle cx="8.5" cy="9" r="3" />
-        <circle cx="16" cy="10" r="2.5" />
-        <path d="M3.8 19c.8-3 2.3-4.5 4.7-4.5s3.9 1.5 4.7 4.5M13.4 15.3c2.6 0 4.2 1.2 4.8 3.7" />
-      </symbol>
-      <symbol id="q-symbol-messages" viewBox="0 0 24 24">
-        <path d="M4.5 6.5h15v9.5h-8l-4.5 3v-3H4.5v-9.5Z" />
-        <path d="M8 10h8M8 13h5" />
-      </symbol>
-      <symbol id="q-symbol-company-chat" viewBox="0 0 24 24">
-        <path d="M4 18V7l8-4 8 4v11" />
-        <path d="M8 18v-6h8v6" />
-        <path d="M6.5 21h11M8 8h.1M12 7h.1M16 8h.1" />
-      </symbol>
-      <symbol id="q-symbol-role-chat" viewBox="0 0 24 24">
-        <circle cx="8" cy="8" r="3" />
-        <circle cx="16" cy="9" r="2.5" />
-        <path d="M3.8 18c.8-3 2.2-4.5 4.2-4.5s3.4 1.5 4.2 4.5M13 14.5c2.8.1 4.5 1.6 5.2 4.5" />
-      </symbol>
-      <symbol id="q-symbol-direct-chat" viewBox="0 0 24 24">
-        <circle cx="12" cy="8" r="3.5" />
-        <path d="M5.5 20c1-4 3.1-6 6.5-6s5.5 2 6.5 6" />
-      </symbol>
-      <symbol id="q-message-file" viewBox="0 0 24 24">
-        <path d="M7 3.5h7l3 3V20H7V3.5Z" />
-        <path d="M14 3.5V7h3M9.5 12h5M9.5 15h4" />
-      </symbol>
-      <symbol id="q-message-image" viewBox="0 0 24 24">
-        <path d="M4.5 6h15v12h-15V6Z" />
-        <circle cx="9" cy="10" r="1.4" />
-        <path d="m6.8 16 3.6-3.5 2.3 2.1 2.1-2.7 2.8 4.1" />
-      </symbol>
-      <symbol id="q-symbol-settings" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 3.8v2.4M12 17.8v2.4M4.9 6l1.7 1.7M17.4 16.3l1.7 1.7M3.8 12h2.4M17.8 12h2.4M4.9 18l1.7-1.7M17.4 7.7 19.1 6" />
-      </symbol>
-      <symbol id="q-symbol-team-chart" viewBox="0 0 24 24">
-        <path d="M12 5v5M7 15v4M17 15v4M7 15h10M12 10h-5v5M12 10h5v5" />
-        <circle cx="12" cy="4" r="2" />
-        <circle cx="7" cy="20" r="2" />
-        <circle cx="17" cy="20" r="2" />
-      </symbol>
-      <symbol id="q-symbol-time" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="8" />
-        <path d="M12 7.5V12l3 2" />
-      </symbol>
-      <symbol id="q-symbol-calendar" viewBox="0 0 24 24">
-        <path d="M5 5.5h14v14H5v-14Z" />
-        <path d="M8 3.5v4M16 3.5v4M5 9.5h14M8.5 13h2M13.5 13h2M8.5 16h2" />
-      </symbol>
-      <symbol id="q-symbol-approvals" viewBox="0 0 24 24">
-        <path d="M5 12.5 9.2 17 19 7" />
-        <path d="M5 5h14v14H5V5Z" />
-      </symbol>
-      <symbol id="q-symbol-team-workload" viewBox="0 0 24 24">
-        <path d="M4 18c.7-2.7 2.1-4 4.2-4s3.5 1.3 4.2 4M12.5 18c.7-2.7 2.1-4 4.2-4s3.5 1.3 4.2 4" />
-        <circle cx="8.2" cy="9" r="3" />
-        <circle cx="16.7" cy="9" r="3" />
-      </symbol>
-      <symbol id="q-symbol-clock" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="8" />
-        <path d="M12 6.8v5.4l3.7 2.1" />
-        <path d="M5 4.8 3.5 6.3M19 4.8l1.5 1.5" />
-      </symbol>
-    </svg>
-  `;
 }
 
 function svgIcon(id, className = 'symbol-icon') {
@@ -4440,7 +4325,6 @@ function shellTemplate(route, workspace) {
   const emailVerified = isSessionEmailVerified(session);
   return `
     <div class="quest-app ${state.sidebarCollapsed ? 'sidebar-collapsed' : ''}" data-route="${h(route.name)}" data-section="${h(route.section || '')}">
-      ${renderSvgSprite()}
       <header class="topbar">
         <div class="topbar-left">
           <a class="logo logo-image-mark" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Questbase workspace">
@@ -12924,16 +12808,45 @@ function ensureWorkspaceBuilderLoaded(companyId) {
     let doc = null;
     const client = createSupabaseClient();
     if (isLiveSupabaseSession() && client) {
-      const result = await client.from('workspace_builder_state').select('doc').eq('company_id', key).maybeSingle();
+      const result = await client.from('workspace_builder_state').select('doc, updated_at').eq('company_id', key).maybeSingle();
       doc = result.data?.doc || null;
+      if (result.data) state.wbDocVersions[key] = result.data.updated_at || '';
     }
     if (!doc) doc = readJson(workspaceBuilderStorageKey(companyId), { workspaces: [] });
     state.workspaceBuilderDocs[key] = normalizeWorkspaceBuilderDoc(doc);
+    // Snapshot what the server had, before any local edit can touch it.
+    state.wbDocBase[key] = wbCloneDoc(state.workspaceBuilderDocs[key]);
     state.workspaceBuilderLoading = '';
     render();
   })();
   return false;
 }
+function wbCloneDoc(doc) {
+  return doc ? JSON.parse(JSON.stringify(doc)) : null;
+}
+
+// A conditional write lost the race: someone saved between our last read and now.
+// Pull their revision, merge it under ours, and report only what genuinely collided.
+// Returns false if their copy could not be read, in which case the caller must not
+// retry -- retrying blind would be the overwrite this whole mechanism exists to stop.
+async function wbMergeWithServerDoc(key, client) {
+  const fresh = await client.from('workspace_builder_state').select('doc, updated_at').eq('company_id', key).maybeSingle();
+  if (fresh.error || !fresh.data) return false;
+  // Loaded on demand: merging is the rare path, so it has no business in the entry
+  // chunk. Keep this import dynamic -- a static one would be bundled straight back in.
+  const { mergeBuilderDocs, describeConflicts } = await import('./workspace/builder-merge.js');
+  const theirs = normalizeWorkspaceBuilderDoc(fresh.data.doc);
+  const { doc: merged, conflicts } = mergeBuilderDocs(state.wbDocBase[key], state.workspaceBuilderDocs[key], theirs);
+  state.workspaceBuilderDocs[key] = normalizeWorkspaceBuilderDoc(merged);
+  state.wbDocVersions[key] = fresh.data.updated_at || '';
+  state.wbDocBase[key] = wbCloneDoc(theirs);
+  if (conflicts.length) {
+    showToast(`Someone else was editing ${describeConflicts(conflicts, state.workspaceBuilderDocs[key])} at the same time. Your version was kept -- check it before moving on.`, 'local', 'Workspaces');
+  }
+  render();
+  return true;
+}
+
 async function saveWorkspaceBuilderDoc(companyId) {
   const key = canonicalCompanyId(companyId);
   const doc = state.workspaceBuilderDocs[key];
@@ -12946,8 +12859,37 @@ async function saveWorkspaceBuilderDoc(companyId) {
     state.wbPendingSaves = (state.wbPendingSaves || 0) + 1;
     state.wbLastLocalEditAt = Date.now();
     try {
-      const { error } = await client.from('workspace_builder_state').upsert({ company_id: key, doc, updated_by: activeSession()?.profile?.id || null });
-      if (error) showToast(error.message || 'Workspace save failed.', 'local', 'Workspaces');
+      const actor = activeSession()?.profile?.id || null;
+      // Each attempt writes only if the row still holds the revision this edit was
+      // based on. A collision merges in whatever landed and retries against the new
+      // revision; two editors converge on the first retry, and the bound stops a
+      // pair of fast auto-savers from spinning here forever.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const known = state.wbDocVersions[key];
+        // updated_at is maintained by a BEFORE UPDATE trigger, so it is read back
+        // rather than sent -- the stored value is the only one worth remembering.
+        const payload = { company_id: key, doc: state.workspaceBuilderDocs[key], updated_by: actor };
+        const result = known
+          ? await client.from('workspace_builder_state').update(payload).eq('company_id', key).eq('updated_at', known).select('updated_at')
+          : await client.from('workspace_builder_state').insert(payload).select('updated_at');
+
+        if (!result.error && (result.data || []).length) {
+          state.wbDocVersions[key] = result.data[0].updated_at || '';
+          state.wbDocBase[key] = wbCloneDoc(state.workspaceBuilderDocs[key]);
+          return;
+        }
+        // 23505 is the unique violation from racing two first-ever inserts; like a
+        // zero-row update it means somebody else got there first, so it merges too.
+        if (result.error && result.error.code !== '23505') {
+          showToast(result.error.message || 'Workspace save failed.', 'local', 'Workspaces');
+          return;
+        }
+        if (!(await wbMergeWithServerDoc(key, client))) {
+          showToast('Workspace changes could not be saved. They are safe on this device -- reload to try again.', 'local', 'Workspaces');
+          return;
+        }
+      }
+      showToast('Workspace changes could not be saved while others are editing. They are safe on this device -- try again in a moment.', 'local', 'Workspaces');
     } finally {
       state.wbPendingSaves = Math.max(0, (state.wbPendingSaves || 1) - 1);
       state.wbLastLocalEditAt = Date.now();
@@ -33990,8 +33932,18 @@ async function persistWorkspaceBackupPayloadToSupabase(payload) {
     if (result.error) notifySyncFailure(result.error, 'Restore');
   }
   if (data.workspaceBuilderDoc) {
-    const result = await client.from('workspace_builder_state').upsert({ company_id: payload.company_id, doc: data.workspaceBuilderDoc, updated_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null });
+    // Restoring a backup is a deliberate, human-initiated overwrite, so unlike an
+    // ordinary edit it is not conditional on the current revision -- replacing what
+    // is there is the entire point. It must still reset the concurrency bookkeeping:
+    // leaving a pre-restore ancestor behind would make the next save merge against
+    // it and quietly resurrect everything the restore was meant to remove.
+    const key = canonicalCompanyId(payload.company_id);
+    const result = await client.from('workspace_builder_state').upsert({ company_id: payload.company_id, doc: data.workspaceBuilderDoc, updated_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null }).select('updated_at');
     if (result.error) notifySyncFailure(result.error, 'Restore');
+    else {
+      state.wbDocVersions[key] = result.data?.[0]?.updated_at || '';
+      state.wbDocBase[key] = wbCloneDoc(state.workspaceBuilderDocs?.[key] || null);
+    }
   }
 }
 

@@ -479,3 +479,64 @@ migration reporting success is not evidence that the index you wanted exists.
 The apply also hit a 502 mid-run and left one of six indexes created. Because every statement is
 `if not exists`, re-running was safe and completed the rest — worth keeping that property on any
 migration that might be retried through a flaky gateway.
+
+## Concurrent App Builder edits merge instead of overwriting
+
+A company's whole App Builder document is one JSONB row, and saving it was a blind
+`upsert`. Two people editing at once meant the second save silently erased the first —
+no error, no warning, and the loser only discovered it when their app was missing.
+
+The write is now conditional on the revision the edit was based on. `updated_at` is
+already maintained by a `BEFORE UPDATE` trigger, so the row carries a natural version
+token and no migration was needed: the client remembers the `updated_at` it last read
+and saves with `.eq('updated_at', known)`. A save built on a stale read matches zero
+rows instead of overwriting.
+
+A rejected save is not an error the user should have to resolve by hand. It triggers a
+three-way merge (`src/workspace/builder-merge.js`) against the last-synced revision as
+the common ancestor, then retries against the new revision. This is only possible
+because every entity in the document carries a stable id — workspaces, apps, fields,
+items, automations, feed posts, poll options — so "the same thing" can be identified
+across two divergent copies. Edits to different apps, records, or columns therefore
+combine with no user involvement at all, which is the overwhelmingly common case.
+
+Two rules are deliberate and worth stating, because both trade a little tidiness for
+not destroying work:
+
+- When both sides changed the *same* field, the local value wins and the collision is
+  reported by name ("Ops / Roof Inspections"). The local user is present and can see
+  the result; the remote user has already moved on.
+- When one side deleted an entry the other had edited, the entry comes back and is
+  reported. A stale row costs a cleanup; a dropped one costs work the user cannot
+  recover.
+
+Without a common ancestor the merge degrades to a union that deletes nothing, so a
+client that has never synced cannot cause a deletion.
+
+Restoring a backup stays an unconditional overwrite — replacing what is there is the
+whole point — but it now resets the version and ancestor. Leaving a pre-restore
+ancestor behind would make the next ordinary save merge against it and resurrect
+exactly what the restore removed.
+
+Verified against production (rolled back): two clients load the same revision; A's
+guarded write is accepted, B's stale write matches zero rows, and B's retry against
+A's revision is accepted. Sixteen tests cover the merge rules directly.
+
+### The bundle budget had no headroom left, and the sprite paid for it
+
+Worth recording because it nearly forced a bad decision. The entry chunk measured
+356363 gzip bytes against a 356352 ceiling *before* this change — already 11 bytes over,
+passing only on the 64-byte environment tolerance. Any feature at all would have failed
+the check, and the note in `bundle-budget-lib.mjs` says a fifth raise is blocked.
+
+Extraction paid for it instead. `renderSvgSprite()` was 5.7 KB of source that took no
+arguments, read no state, and returned a constant — it sat in the entry chunk purely to
+emit static markup, and was re-serialised into `innerHTML` on every render. It now lives
+in `index.html`, outside `#app` so re-rendering the shell cannot wipe it; `<use href="#q-…">`
+resolves against the whole document either way. All 29 symbols moved intact and every id
+the bundle requests still resolves. Icons are now painted by the HTML parser before any
+JavaScript runs.
+
+The durable fix remains extracting the App Builder editing UI (`renderWorkspaceBuilderModal`,
+`wbMountModal`, `wbFieldConfigUI`, `wbRenderFieldInput` — roughly 63 KB of source that is
+only needed once someone opens the builder editor). That is the next real headroom.
