@@ -25420,13 +25420,13 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   --qb-surface-3: #f1f4f7;
   --qb-ink: #111827;
   --qb-ink-2: #354052;
-  --qb-muted: #687385;
+  --qb-muted: #646e80;
   --qb-border: #dfe5ec;
   --qb-border-strong: #cbd5e1;
   --qb-orange: var(--orange);
   --qb-orange-dark: color-mix(in srgb, var(--orange) 88%, #000);
   --qb-orange-soft: color-mix(in srgb, var(--orange) 12%, var(--surface));
-  --qb-green: #138a58;
+  --qb-green: #117f51;
   --qb-shadow: 0 18px 40px rgba(15, 23, 42, .07);
   --qb-soft-shadow: 0 1px 2px rgba(15, 23, 42, .05);
   min-height: 100vh;

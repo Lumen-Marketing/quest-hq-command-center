@@ -51,3 +51,31 @@ test('--muted meets WCAG AA 4.5:1 against its own --bg in every theme', () => {
 
   assert.deepEqual(failures, [], 'secondary text below AA contrast in these themes');
 });
+
+// The public landing page carries its own --qb-* palette, which the --muted sweep above
+// does not touch. It was missed on the first pass and is the highest-stakes surface in
+// the product: it is what a prospective customer sees before anything else.
+test('the landing palette meets AA against the surfaces it is actually used on', () => {
+  const declared = (name) => {
+    const m = css.match(new RegExp(`--qb-${name}\\s*:\\s*(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6})\\s*;`));
+    assert.ok(m, `--qb-${name} should be declared`);
+    return hex(m[1]);
+  };
+
+  // Contrast is only meaningful against the backdrop the text really sits on, so these
+  // pairings are taken from the rules that use each colour, not from the page background.
+  const surfaces = ['bg', 'surface', 'surface-2', 'surface-3'].map(declared);
+  const mutedWorst = Math.min(...surfaces.map((s) => ratio(declared('muted'), s)));
+  assert.ok(mutedWorst >= 4.5, `--qb-muted worst surface is ${mutedWorst.toFixed(2)}:1`);
+
+  // --qb-green is used as text on a fixed mint chip, not on the page surfaces.
+  const chip = hex('#eaf7f0');
+  const greenRatio = ratio(declared('green'), chip);
+  assert.ok(greenRatio >= 4.5, `--qb-green on its chip is ${greenRatio.toFixed(2)}:1`);
+
+  // Body and heading ink should stay far clear; a regression here would be severe.
+  for (const name of ['ink', 'ink-2']) {
+    const worst = Math.min(...surfaces.map((s) => ratio(declared(name), s)));
+    assert.ok(worst >= 4.5, `--qb-${name} worst surface is ${worst.toFixed(2)}:1`);
+  }
+});
