@@ -13207,7 +13207,9 @@ function wbPostComments(companyId, post) {
 function wbSidebarTiles(workspace) {
   if (Array.isArray(workspace.tiles)) return workspace.tiles;
   const defaults = [{ id: wbUid(), type: 'apps', config: {} }];
-  const firstApp = (workspace.apps || []).find((a) => !a.linked);
+  // Linked entries count. A workspace whose only app was installed from elsewhere is
+  // still a workspace with an app in it, and skipping those left it looking empty.
+  const firstApp = (workspace.apps || [])[0];
   if (firstApp) defaults.push({ id: wbUid(), type: 'app', config: { appId: firstApp.id } });
   return defaults;
 }
@@ -13242,12 +13244,25 @@ function wbLayoutTiles() {
   });
 }
 
+// Find the app a tile points at, following a link if the entry is one. Tiles store
+// only an appId, and that id is identical for a linked entry and its source, so the
+// entry has to be resolved rather than matched on `!linked`.
+function wbTileTargetApp(companyId, workspace, appId) {
+  if (!appId) return null;
+  const entry = (workspace.apps || []).find((x) => x.id === appId);
+  if (!entry) return null;
+  return wbResolveAppEntry(wbDoc(companyId), entry).app;
+}
+
 // Per-tile display metadata (default title + icon + whether it has a config UI).
 function wbTileMeta(companyId, workspace, tile) {
   switch (tile.type) {
     case 'apps': return { title: 'Apps', icon: 'ti-apps', config: false };
-    case 'app': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId && !x.linked); return { title: a ? a.name : 'App', icon: a ? a.icon : 'ti-layout-grid', config: true, app: a }; }
-    case 'report': { const a = (workspace.apps || []).find((x) => x.id === tile.config.appId && !x.linked); return { title: a ? `${a.name} · Report` : 'Report', icon: 'ti-chart-bar', config: true, app: a }; }
+    // Resolve through the link: a tile pointing at an app installed from another
+    // workspace must show that app's real name, icon and records, not fall back to a
+    // generic empty "App" tile.
+    case 'app': { const a = wbTileTargetApp(companyId, workspace, tile.config.appId); return { title: a ? a.name : 'App', icon: a ? a.icon : 'ti-layout-grid', config: true, app: a }; }
+    case 'report': { const a = wbTileTargetApp(companyId, workspace, tile.config.appId); return { title: a ? `${a.name} · Report` : 'Report', icon: 'ti-chart-bar', config: true, app: a }; }
     case 'tasks': return { title: 'Workspace tasks', icon: 'ti-checklist', config: false };
     case 'calendar': return { title: 'Calendar', icon: 'ti-calendar', config: false };
     case 'contacts': return { title: 'Contacts', icon: 'ti-address-book', config: false };
@@ -15895,7 +15910,9 @@ function renderWorkspaceBuilderModal() {
     const workspace = wbCompanyWorkspace(m.companyId);
     const tile = workspace ? (workspace.tiles || []).find((t) => t.id === m.tileId) : null;
     if (!tile) return '';
-    const apps = (workspace.apps || []).filter((a) => !a.linked);
+    // Offer linked apps too -- they are as much a part of this workspace as its own,
+    // and excluding them made a linked app impossible to put on a tile.
+    const apps = wbWorkspaceApps(wbDoc(m.companyId), workspace).map((r) => r.app);
     const appSelect = (selected) => `<select class="wb-input" data-wb-tilecfg-app>${apps.length ? apps.map((a) => `<option value="${h(a.id)}" ${a.id === selected ? 'selected' : ''}>${h(a.name)}</option>`).join('') : '<option value="">No apps yet</option>'}</select>`;
     let form = '';
     if (tile.type === 'app') form = `<div class="wb-field"><label>Show records from</label>${appSelect(m.draft.appId)}</div>`;

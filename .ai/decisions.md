@@ -824,3 +824,39 @@ and fails below 4.5:1, so the next palette tweak cannot quietly undo this.
 Still open on accessibility: the viewport matrix across phone/tablet/laptop widths, which
 needs real devices or a browser harness rather than static analysis, and contrast for
 non-text UI (borders, focus rings, chart colours) against the 3:1 requirement.
+
+## Linked apps were real but second-class, which read as "the install did nothing"
+
+The "install this app into another workspace, sharing fields *and* records" feature was
+already built: a linked entry is a pointer (`{ id, linked: true, linkedFromWs }`), never a
+copy, so both workspaces read the same app object and edits from either side are the same
+edit. That part works and is now covered by tests that mutate through the link and assert
+the source changed, in both directions.
+
+What did not work was everything around it. Four places looked at the raw
+`workspace.apps` entry and filtered on `!a.linked`, which silently treats a linked app as
+if it does not exist:
+
+- **The default sidebar.** `wbSidebarTiles` picked the first non-linked app for the
+  default app tile. A workspace whose *only* app was installed from elsewhere therefore
+  got no app tile at all — it showed "Apps" and nothing else. This is the one that makes
+  the feature look broken, because it is exactly what you see after installing into a
+  fresh second workspace.
+- **Tile metadata.** A tile pointing at a linked app resolved to nothing and fell back to
+  a generic empty "App" with a placeholder icon.
+- **The tile configurator.** Linked apps were excluded from the picker, so one could not
+  be placed on a tile at all.
+
+The mistake is the same in each: an app id is *identical* for a linked entry and its
+source, so `!linked` does not distinguish "not this app" from "reach it through the
+link" — the entry has to be resolved, which `wbResolveAppEntry` already did. All three now
+resolve through a shared `wbTileTargetApp`.
+
+Two sites that filter on `!a.linked` are correct and were left alone: `dashboardFindApp`
+and the dashboard widget registry both iterate every workspace and would otherwise list
+the same app once per workspace it is installed in.
+
+Not addressed, and worth knowing: the link is scoped to a single company, because the
+builder document is one JSONB row per company and a cross-company link would have nothing
+to resolve against. Installing an app into a workspace belonging to a different company is
+a genuinely different feature.
