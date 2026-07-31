@@ -6,13 +6,19 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const migrationUrl = new URL('../supabase/migrations/202607010900_forms_shared_data.sql', import.meta.url);
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';
 
-test('forms load from Supabase tables during live workspace bootstrap', () => {
-  assert.match(source, /formsResult/);
-  assert.match(source, /formResponsesResult/);
+// Forms no longer load in the bootstrap batch — nothing on a first-paint screen reads
+// them, so they are fetched the first time an accessor asks (see deferred-domains).
+// The point this test protects is unchanged: in a live session forms come from
+// Supabase, not from local storage only. Only where that fetch happens has moved.
+test('forms load from Supabase, on demand rather than at bootstrap', () => {
   assert.match(source, /client\.from\('forms'\)\.select\('\*'\)\.order\('updated_at'/);
   assert.match(source, /client\.from\('form_responses'\)\.select\('\*'\)\.order\('created_at'/);
-  assert.match(source, /state\.forms = activeRows\(formsResult\.data \|\| \[\]\)\.map\(normalizeForm\)/);
-  assert.match(source, /state\.formResponses = activeRows\(formResponsesResult\.data \|\| \[\]\)\.map\(normalizeFormResponse\)/);
+  assert.match(source, /state\.forms = activeRows\(forms\.data \|\| \[\]\)\.map\(normalizeForm\)/);
+  assert.match(source, /state\.formResponses = activeRows\(responses\.data \|\| \[\]\)\.map\(normalizeFormResponse\)/);
+  // Reachable: the domain loader exists and the accessors trigger it.
+  assert.match(source, /domain === 'forms'/);
+  // \s* rather than \n: this file reads main.js raw, and the working tree is CRLF.
+  assert.match(source, /function companyForms\(.*\) \{\s*ensureDomainLoaded\('forms'\);/);
 });
 
 test('forms save and response submission use Supabase in live sessions', () => {

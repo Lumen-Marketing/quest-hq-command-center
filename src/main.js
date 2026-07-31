@@ -2297,6 +2297,8 @@ const state = {
   // apart from a deletion.
   wbDocVersions: {},
   wbDocBase: {},
+  // Which deferred domains have been fetched this session: '' | 'loading' | 'loaded'.
+  loadedDomains: {},
   // Selector for whatever opened the current modal, so focus can go back there
   // when it closes. A selector rather than a node reference: the app re-renders
   // wholesale, so the original element is gone by the time the modal is dismissed.
@@ -3650,6 +3652,71 @@ function ensureDataLoad() {
     });
 }
 
+// Apply a fresh set of workspace_builder_state rows to memory.
+//
+// Shared by the bootstrap load and the realtime 'workspace' domain reload. It used to
+// be duplicated, and the copy in the reload path silently skipped the concurrency
+// bookkeeping -- leaving wbDocVersions/wbDocBase describing a revision that was no
+// longer current, so the next save failed its guard and then merged against a stale
+// ancestor. One copy now, because that is the only way the two stay in agreement.
+function applyWorkspaceBuilderRows(rows) {
+  // Don't let a background refresh clobber optimistic edits whose save is still in
+  // flight (or landed in the last few seconds) -- keep the local doc for those.
+  const holdLocalWb = (state.wbPendingSaves || 0) > 0 || (Date.now() - (state.wbLastLocalEditAt || 0) < 4000);
+  const prevDocs = state.workspaceBuilderDocs || {};
+  state.workspaceBuilderDocs = {};
+  state.workspaceBuilderLive = {};
+  (rows || []).forEach((row) => {
+    const companyId = canonicalCompanyId(row.company_id);
+    const serverDoc = normalizeWorkspaceBuilderDoc(row.doc);
+    const heldLocal = holdLocalWb && prevDocs[companyId];
+    state.workspaceBuilderDocs[companyId] = heldLocal ? prevDocs[companyId] : serverDoc;
+    state.workspaceBuilderLive[companyId] = true;
+    // The version and ancestor describe the SERVER revision either way. When a local
+    // edit is being held, the ancestor must stay the row this client last synced --
+    // overwriting it with the local doc would make the next merge treat the user's
+    // unsaved edits as already agreed on, and quietly drop the other side's.
+    state.wbDocVersions[companyId] = row.updated_at || '';
+    state.wbDocBase[companyId] = wbCloneDoc(serverDoc);
+  });
+  // Preserve any local-only docs (unsaved companies) the server didn't return.
+  if (holdLocalWb) Object.keys(prevDocs).forEach((cid) => { if (!state.workspaceBuilderDocs[cid]) state.workspaceBuilderDocs[cid] = prevDocs[cid]; });
+}
+
+// Datasets that no first-paint screen needs. Each already had a loader, written for
+// realtime refresh; deferring the bootstrap fetch just means calling that loader the
+// first time something actually asks for the data.
+//
+// The trigger is the ACCESSOR, not the route. Route-based triggering is how this kind
+// of change produces empty screens: some widget on an unrelated page reads the data,
+// nobody remembers to list that route, and the screen renders blank with no error.
+// Every read goes through these accessors, so hooking them cannot miss a caller.
+const DEFERRED_DOMAINS = ['finance', 'forms', 'pricebook', 'portals', 'recycle'];
+
+function ensureDomainLoaded(domain) {
+  if (!DEFERRED_DOMAINS.includes(domain)) return true;
+  if (state.loadedDomains[domain] === 'loaded') return true;
+  // Demo and local sessions have their data seeded in memory already; there is
+  // nothing to fetch and nothing to wait for.
+  if (!isLiveSupabaseSession()) return true;
+  if (state.loadedDomains[domain] === 'loading') return false;
+  const client = createSupabaseClient();
+  if (!client) return true;
+  state.loadedDomains[domain] = 'loading';
+  (async () => {
+    try {
+      await loadRealtimeDomain(client, domain);
+      state.loadedDomains[domain] = 'loaded';
+    } catch (error) {
+      // Let it be retried rather than leaving the section permanently empty.
+      state.loadedDomains[domain] = '';
+      console.error(`Deferred load failed for ${domain}`, error);
+    }
+    render();
+  })();
+  return false;
+}
+
 async function loadSupabaseData() {
   if (state.session?.auth === 'local-basic' || state.session?.auth === 'demo-readonly') {
     state.sync = { label: isReadOnlyDemo() ? 'Read-only demo' : 'Demo mode', mode: 'local' };
@@ -3685,12 +3752,6 @@ async function loadSupabaseData() {
     messageReadsResult,
     calendarEventsResult,
     notificationsResult,
-    formsResult,
-    formResponsesResult,
-    financeInvoicesResult,
-    financePaymentsResult,
-    financeExpensesResult,
-    financeVendorsResult,
     contactsResult,
     underwritingCasesResult,
     pipelineStagesResult,
@@ -3703,15 +3764,7 @@ async function loadSupabaseData() {
     workspacesResult,
     workspaceMembershipsResult,
     workspacePluginsResult,
-    clientPortalsResult,
-    clientPortalDocumentsResult,
-    clientPortalAnnotationsResult,
-    clientPortalEventsResult,
-    pricebookVendorsResult,
-    pricebookMaterialsResult,
-    pricebookPricesResult,
     workspaceBackupsResult,
-    recycleBinResult,
     workspaceBuilderResult,
     platformAdminResult,
   ] = await Promise.all([
@@ -3738,12 +3791,6 @@ async function loadSupabaseData() {
     client.from('message_reads').select('*'),
     client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
     client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
-    client.from('forms').select('*').order('updated_at', { ascending: false }),
-    client.from('form_responses').select('*').order('created_at', { ascending: false }).limit(500),
-    client.from('finance_invoices').select('*').order('updated_at', { ascending: false }),
-    client.from('finance_payments').select('*').order('received_at', { ascending: false }),
-    client.from('finance_expenses').select('*').order('spent_at', { ascending: false }),
-    client.from('finance_vendors').select('*').order('name', { ascending: true }),
     client.from('contacts').select('*').order('updated_at', { ascending: false }),
     safeSupabaseQuery(client.from('underwriting_cases').select('*').order('updated_at', { ascending: false })),
     client.from('pipeline_stages').select('*').order('position', { ascending: true }),
@@ -3756,15 +3803,7 @@ async function loadSupabaseData() {
     client.from('workspaces').select('*').order('name', { ascending: true }),
     client.from('workspace_memberships').select('*'),
     client.from('workspace_plugins').select('*'),
-    safeSupabaseQuery(client.from('client_portals').select('*').order('updated_at', { ascending: false })),
-    safeSupabaseQuery(client.from('client_portal_documents').select('*').order('created_at', { ascending: false })),
-    safeSupabaseQuery(client.from('client_portal_annotations').select('*').order('created_at', { ascending: true })),
-    safeSupabaseQuery(client.from('client_portal_events').select('*').order('created_at', { ascending: false }).limit(500)),
-    safeSupabaseQuery(client.from('pricebook_vendors').select('*').order('name', { ascending: true })),
-    safeSupabaseQuery(client.from('pricebook_materials').select('*').order('name', { ascending: true })),
-    safeSupabaseQuery(client.from('pricebook_vendor_prices').select('*').order('updated_at', { ascending: false })),
     safeSupabaseQuery(client.from('workspace_backups').select('*').order('created_at', { ascending: false })),
-    safeSupabaseQuery(client.from('recycle_bin_items').select('*').order('deleted_at', { ascending: false })),
     safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
     safeSupabaseQuery(client.rpc('is_platform_admin')),
   ]);
@@ -3821,18 +3860,6 @@ async function loadSupabaseData() {
   if (!messageReadsResult.error) state.messageReads = (messageReadsResult.data || []).map(normalizeMessageRead);
   if (!calendarEventsResult.error) state.calendarEvents = activeRows(calendarEventsResult.data || []).map(normalizeCalendarEvent);
   if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
-  if (!formsResult.error) {
-    state.forms = activeRows(formsResult.data || []).map(normalizeForm);
-    liveTables += 1;
-  }
-  if (!formResponsesResult.error) state.formResponses = activeRows(formResponsesResult.data || []).map(normalizeFormResponse);
-  if (!financeInvoicesResult.error) {
-    state.financeInvoices = activeRows(financeInvoicesResult.data || []).map(normalizeFinanceInvoice);
-    liveTables += 1;
-  }
-  if (!financePaymentsResult.error) state.financePayments = activeRows(financePaymentsResult.data || []).map(normalizeFinancePayment);
-  if (!financeExpensesResult.error) state.financeExpenses = activeRows(financeExpensesResult.data || []).map(normalizeFinanceExpense);
-  if (!financeVendorsResult.error) state.financeVendors = activeRows(financeVendorsResult.data || []).map(normalizeFinanceVendor);
   if (!contactsResult.error) {
     state.contacts = activeRows(contactsResult.data || []).map(normalizeContact);
     liveTables += 1;
@@ -3877,38 +3904,8 @@ async function loadSupabaseData() {
   if (!workspacePluginsResult.error) {
     state.workspacePlugins = (workspacePluginsResult.data || []).map(normalizeWorkspacePlugin);
   }
-  if (!clientPortalsResult.error) state.clientPortals = activeRows(clientPortalsResult.data || []).map(normalizeClientPortal);
-  if (!clientPortalDocumentsResult.error) state.clientPortalDocuments = activeRows(clientPortalDocumentsResult.data || []).map(normalizeClientPortalDocument);
-  if (!clientPortalAnnotationsResult.error) state.clientPortalAnnotations = (clientPortalAnnotationsResult.data || []).map(normalizeClientPortalAnnotation);
-  if (!clientPortalEventsResult.error) state.clientPortalEvents = (clientPortalEventsResult.data || []).map(normalizeClientPortalEvent);
-  if (!pricebookVendorsResult.error) state.pricebookVendors = activeRows(pricebookVendorsResult.data || []).map(normalizePricebookVendor);
-  if (!pricebookMaterialsResult.error) state.pricebookMaterials = activeRows(pricebookMaterialsResult.data || []).map(normalizePricebookMaterial);
-  if (!pricebookPricesResult.error) state.pricebookPrices = activeRows(pricebookPricesResult.data || []).map(normalizePricebookPrice);
   if (!workspaceBackupsResult.error) state.workspaceBackups = (workspaceBackupsResult.data || []).map(normalizeWorkspaceBackup);
-  if (!recycleBinResult.error) state.recycleBinItems = (recycleBinResult.data || []).map(normalizeRecycleBinItem);
-  if (!workspaceBuilderResult.error) {
-    // Don't let a background refresh clobber optimistic edits whose save is still
-    // in flight (or landed in the last few seconds) — keep the local doc for those.
-    const holdLocalWb = (state.wbPendingSaves || 0) > 0 || (Date.now() - (state.wbLastLocalEditAt || 0) < 4000);
-    const prevDocs = state.workspaceBuilderDocs || {};
-    state.workspaceBuilderDocs = {};
-    state.workspaceBuilderLive = {};
-    (workspaceBuilderResult.data || []).forEach((row) => {
-      const companyId = canonicalCompanyId(row.company_id);
-      const serverDoc = normalizeWorkspaceBuilderDoc(row.doc);
-      const heldLocal = holdLocalWb && prevDocs[companyId];
-      state.workspaceBuilderDocs[companyId] = heldLocal ? prevDocs[companyId] : serverDoc;
-      state.workspaceBuilderLive[companyId] = true;
-      // The version and ancestor describe the SERVER revision either way. When a
-      // local edit is being held, the ancestor must stay the row this client last
-      // synced -- overwriting it with the local doc would make the next merge think
-      // the user's unsaved edits were already agreed on, and quietly drop theirs.
-      state.wbDocVersions[companyId] = row.updated_at || '';
-      state.wbDocBase[companyId] = wbCloneDoc(serverDoc);
-    });
-    // Preserve any local-only docs (unsaved companies) that the server didn't return.
-    if (holdLocalWb) Object.keys(prevDocs).forEach((cid) => { if (!state.workspaceBuilderDocs[cid]) state.workspaceBuilderDocs[cid] = prevDocs[cid]; });
-  }
+  if (!workspaceBuilderResult.error) applyWorkspaceBuilderRows(workspaceBuilderResult.data);
   state.platformAdmin = !platformAdminResult.error && platformAdminResult.data === true;
 
   // Automations load in their own query (not the aligned batch above) and through
@@ -4147,6 +4144,9 @@ function resetLiveWorkspaceData() {
   // session has not actually read.
   state.wbDocVersions = {};
   state.wbDocBase = {};
+  // Forget what was fetched, or the next identity inherits this one's 'loaded' marks
+  // and never fetches its own rows.
+  state.loadedDomains = {};
   state.roles = [];
   state.rolePermissions = [];
   state.roleAssignments = [];
@@ -5847,9 +5847,11 @@ function pricebookPersistLocal() {
   writeJson(PRICEBOOK_PRICE_CACHE_KEY, state.pricebookPrices);
 }
 function pbCompanyVendors(companyId = activeCompanyId()) {
+  ensureDomainLoaded('pricebook');
   return state.pricebookVendors.filter((vendor) => vendor.company_id === companyId).sort((a, b) => a.name.localeCompare(b.name));
 }
 function pbRows(companyId = activeCompanyId()) {
+  ensureDomainLoaded('pricebook');
   const materials = new Map(state.pricebookMaterials.filter((item) => item.company_id === companyId).map((item) => [item.id, item]));
   const vendors = new Map(state.pricebookVendors.filter((item) => item.company_id === companyId).map((item) => [item.id, item]));
   return state.pricebookPrices
@@ -5979,6 +5981,7 @@ function renderPriceBookMaterialsTable(companyId, canManage) {
     </section>`;
 }
 function renderPriceBookVendorDetail(companyId, canManage) {
+  ensureDomainLoaded('pricebook');
   const vendor = state.pricebookVendors.find((item) => item.company_id === companyId && item.id === state.pricebookVendorId);
   if (!vendor) {
     state.pricebookVendorId = '';
@@ -6004,6 +6007,7 @@ function renderPriceBookVendorDetail(companyId, canManage) {
 }
 
 function renderPriceBookVendorModal() {
+  ensureDomainLoaded('pricebook');
   const editing = state.pbEditingVendor ? state.pricebookVendors.find((vendor) => vendor.id === state.pbEditingVendor) : null;
   return renderModalShell('Price Book', editing ? 'Edit vendor' : 'Add vendor', `
     <form class="compact-tool-form" data-pb-vendor-form>
@@ -17668,6 +17672,7 @@ async function cpResolveBase(doc, page) {
 }
 
 function clientPortalDocumentById(documentId) {
+  ensureDomainLoaded('portals');
   return state.clientPortalDocuments.find((doc) => doc.id === documentId) || null;
 }
 
@@ -34282,6 +34287,7 @@ async function confirmRecycleDelete() {
 }
 
 function recycleBinItemsForCompany(companyId) {
+  ensureDomainLoaded('recycle');
   return (state.recycleBinItems || [])
     .map(normalizeRecycleBinItem)
     .filter((item) => item.company_id === companyId && item.status === 'active')
@@ -34289,6 +34295,7 @@ function recycleBinItemsForCompany(companyId) {
 }
 
 function recycleItemById(itemId) {
+  ensureDomainLoaded('recycle');
   return (state.recycleBinItems || []).map(normalizeRecycleBinItem).find((item) => item.id === itemId) || null;
 }
 
@@ -35105,34 +35112,41 @@ function taskSortForOperations(a, b) {
 }
 
 function companyFinanceInvoices(companyId = activeCompanyId()) {
+  ensureDomainLoaded('finance');
   return state.financeInvoices
     .filter((invoice) => invoice.company_id === companyId)
     .sort(dateDesc('updated_at'));
 }
 
 function companyFinancePayments(companyId = activeCompanyId()) {
+  ensureDomainLoaded('finance');
   return state.financePayments.filter((payment) => payment.company_id === companyId);
 }
 
 function companyFinanceExpenses(companyId = activeCompanyId()) {
+  ensureDomainLoaded('finance');
   return state.financeExpenses
     .filter((expense) => expense.company_id === companyId)
     .sort(dateDesc('updated_at'));
 }
 
 function companyFinanceVendors(companyId = activeCompanyId()) {
+  ensureDomainLoaded('finance');
   return state.financeVendors.filter((vendor) => vendor.company_id === companyId);
 }
 
 function financeInvoiceById(id) {
+  ensureDomainLoaded('finance');
   return state.financeInvoices.find((invoice) => invoice.id === id) || null;
 }
 
 function financeExpenseById(id) {
+  ensureDomainLoaded('finance');
   return state.financeExpenses.find((expense) => expense.id === id) || null;
 }
 
 function financeVendorById(id) {
+  ensureDomainLoaded('finance');
   return state.financeVendors.find((vendor) => vendor.id === id) || null;
 }
 
@@ -35141,6 +35155,7 @@ function financeVendorName(id) {
 }
 
 function paymentsForInvoice(invoiceId) {
+  ensureDomainLoaded('finance');
   return state.financePayments.filter((payment) => payment.invoice_id === invoiceId).sort(dateDesc('received_at'));
 }
 
@@ -38661,15 +38676,7 @@ async function loadSecondaryRealtimeDomain(client, domain) {
       safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
     ]);
     if (!backups.error) state.workspaceBackups = (backups.data || []).map(normalizeWorkspaceBackup);
-    if (!builder.error) {
-      state.workspaceBuilderDocs = {};
-      state.workspaceBuilderLive = {};
-      (builder.data || []).forEach((row) => {
-        const companyId = canonicalCompanyId(row.company_id);
-        state.workspaceBuilderDocs[companyId] = normalizeWorkspaceBuilderDoc(row.doc);
-        state.workspaceBuilderLive[companyId] = true;
-      });
-    }
+    if (!builder.error) applyWorkspaceBuilderRows(builder.data);
     return;
   }
   return loadIdentityRealtimeDomain(client, domain);
@@ -39403,6 +39410,7 @@ function filteredDriveFiles(companyId = activeCompanyId(), folder = 'home', jobI
 }
 
 function companyClientPortals(companyId = activeCompanyId()) {
+  ensureDomainLoaded('portals');
   return state.clientPortals.filter((portal) => portal.company_id === companyId);
 }
 
@@ -39417,10 +39425,12 @@ function filteredClientPortals(companyId = activeCompanyId()) {
 }
 
 function clientPortalById(id) {
+  ensureDomainLoaded('portals');
   return state.clientPortals.find((portal) => portal.id === id) || null;
 }
 
 function clientPortalDocumentsForPortal(portalId) {
+  ensureDomainLoaded('portals');
   return state.clientPortalDocuments.filter((doc) => doc.portal_id === portalId).sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
 }
 
@@ -39452,14 +39462,17 @@ function currentVersionOf(versions) {
 }
 
 function clientPortalAnnotationsForPortal(portalId) {
+  ensureDomainLoaded('portals');
   return state.clientPortalAnnotations.filter((annotation) => annotation.portal_id === portalId).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 }
 
 function clientPortalAnnotationsForDocument(documentId) {
+  ensureDomainLoaded('portals');
   return state.clientPortalAnnotations.filter((annotation) => annotation.document_id === documentId).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 }
 
 function clientPortalEventsForPortal(portalId) {
+  ensureDomainLoaded('portals');
   return state.clientPortalEvents.filter((event) => event.portal_id === portalId).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 }
 
@@ -39621,6 +39634,7 @@ function fileTypeShortLabel(file) {
 }
 
 function companyForms(companyId = activeCompanyId()) {
+  ensureDomainLoaded('forms');
   return state.forms.filter((form) => form.company_id === companyId);
 }
 
@@ -39655,6 +39669,7 @@ function selectedForm(companyId = activeCompanyId()) {
 }
 
 function formById(id) {
+  ensureDomainLoaded('forms');
   return state.forms.find((form) => form.id === id) || null;
 }
 
@@ -39663,10 +39678,12 @@ function selectedFormMutable() {
 }
 
 function companyFormResponses(companyId = activeCompanyId()) {
+  ensureDomainLoaded('forms');
   return state.formResponses.filter((response) => response.company_id === companyId);
 }
 
 function responsesForForm(formId) {
+  ensureDomainLoaded('forms');
   return state.formResponses.filter((response) => response.form_id === formId);
 }
 
@@ -40327,6 +40344,7 @@ async function collectFormAnswers(form, data) {
 }
 
 function responseById(id) {
+  ensureDomainLoaded('forms');
   return state.formResponses.find((response) => response.id === id) || null;
 }
 

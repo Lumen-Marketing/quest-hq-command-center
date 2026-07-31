@@ -623,3 +623,68 @@ ones, and these policies are the tenancy boundary — the thing this project has
 most effort proving correct. One readable policy per intent is what makes that boundary
 auditable at a glance; a merged disjunction trades a minor planner optimisation for
 exactly the kind of expression where a mistake hides. Not worth it at this data volume.
+
+## Bootstrap fetches 37 tables instead of 51
+
+The checklist said "~30 tables"; it was actually 51, plus one RPC, all before first paint.
+
+Measurement first, because the obvious assumption was wrong. The payload is not the
+problem: the largest table in production is `activities` at 338 rows, and jobs/tasks/
+contacts are in single or low double digits. The seven fastest-growing tables already
+carried limits. So the cost today is round trips and per-query RLS evaluation, not bytes
+— and the durable benefit is that these won't degrade as the business grows.
+
+Five domains now load on demand: finance, forms, pricebook, portals, recycle. Fourteen
+tables, 51 -> 37.
+
+Almost no new machinery was needed. `loadRealtimeDomain` already knew how to fetch each
+domain — it was written for realtime refresh — so deferring the bootstrap fetch just
+means calling that same tested loader the first time something asks.
+
+**The trigger is the accessor, not the route.** This matters more than it looks. Route-
+based triggering is exactly how this kind of change produces blank screens: some widget
+on an unrelated page reads the data, nobody remembers to list that route, and it renders
+empty with no error to point at. Every read goes through a small set of accessors, so
+hooking those cannot miss a caller. A test enumerates every `state.<deferred field>` read
+in the file and fails if one is reached from a function that neither triggers the load nor
+is a write path.
+
+That test earned its keep immediately — it found six readers the first pass had missed
+(`responseById`, `clientPortalDocumentById`, the two pricebook vendor renderers, and both
+client-portal annotation accessors), each of which would have rendered an empty section.
+
+Two things checked rather than assumed:
+
+- `persistAll` writes every dataset to local storage and would happily cache an empty
+  array over a good one. It is safe because it returns early on `auth === 'supabase'`,
+  and deferral only applies to live Supabase sessions.
+- The recycle-bin writers can fire from anywhere, since deleting any record appends to
+  the bin. Safe unhooked: the local upsert prepends to whatever list is in memory, which
+  is correct against an empty one, and a later load replaces the array from the server.
+  Hooking them would refetch the whole bin on every delete — the opposite of the point.
+
+A failed deferred load clears its marker so it retries, rather than leaving a section
+permanently empty.
+
+### The bug this turned up
+
+The realtime `workspace` domain reload had its own copy of the builder-doc apply logic,
+and that copy skipped the concurrency bookkeeping added earlier the same day: it replaced
+`workspaceBuilderDocs` without the hold-local guard and without refreshing
+`wbDocVersions` / `wbDocBase`. So after any realtime workspace refresh, the version token
+described a revision that was no longer current — the next save would fail its guard and
+then merge against a stale ancestor, which is precisely the failure the guard exists to
+prevent.
+
+Two copies of the logic is what caused it. There is one now,
+`applyWorkspaceBuilderRows`, called from both paths, with a test asserting exactly one
+definition and two call sites.
+
+### Not deferred, and why
+
+`messages`, `notifications` and `files` stay in the bootstrap: the topbar shows unread
+counts on first paint, so deferring them would trade a round trip for a visibly wrong
+badge. `workspace_builder_state` stays because workspace pages render app tiles
+immediately. `audit_events`, `company_invites` and `company_join_requests` are settings-
+only and are the obvious next candidates, but they have no existing domain loader, so
+deferring them means writing one — worth doing when someone next touches that area.
