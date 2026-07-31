@@ -2296,6 +2296,10 @@ const state = {
   // apart from a deletion.
   wbDocVersions: {},
   wbDocBase: {},
+  // Selector for whatever opened the current modal, so focus can go back there
+  // when it closes. A selector rather than a node reference: the app re-renders
+  // wholesale, so the original element is gone by the time the modal is dismissed.
+  focusReturn: '',
   builderModal: null,
   roles: [],
   rolePermissions: [],
@@ -2507,7 +2511,14 @@ function init() {
     rememberSidebarScroll();
     render();
   });
-  document.addEventListener('click', onDocumentClick);
+  document.addEventListener('click', (event) => {
+    // Capture the trigger before the handler runs: if this click opens a modal, this
+    // is the control focus should return to once it closes.
+    const hadModal = !!(state.modal || state.builderModal);
+    const trigger = hadModal ? '' : modalTriggerSelector(event.target);
+    onDocumentClick(event);
+    if (!hadModal && trigger && (state.modal || state.builderModal)) state.focusReturn = trigger;
+  });
   document.addEventListener('keydown', onDocumentKeydown);
   document.addEventListener('submit', onDocumentSubmit);
   document.addEventListener('input', onDocumentInput);
@@ -2906,6 +2917,7 @@ async function fetchSupabaseProfile(user) {
 }
 
 function render() {
+  queueMicrotask(syncModalFocus);
   wbInvalidateAppIndex(); // rebuild the builder app-index fresh for this render
   state.route = getRoute();
 
@@ -13171,7 +13183,7 @@ function wbPostComments(companyId, post) {
     const del = mine ? `<button class="wb-comment-act danger" type="button" data-wb-post-cmt-del="${h(post.id)}:${h(c.id)}" title="Delete"><i class="ti ti-trash" aria-hidden="true"></i></button>` : '';
     return `<div class="wb-comment"><span class="wb-avatar" style="width:26px;height:26px;background:${h(ccolor)}" title="${h(cname)}">${h(wbInitials(cname))}</span><div class="wb-comment-body"><div class="wb-comment-head"><b>${h(cname)}</b><span>${h(wbTimeAgo(c.ts))}</span>${del}</div><div class="wb-comment-text">${wbFeedText(companyId, c.text)}</div></div></div>`;
   }).join('');
-  return `<div class="wb-post-comments">${list}<div class="wb-comment-add"><input class="wb-input" data-wb-post-cmt-input="${h(post.id)}" placeholder="Write a comment…"><button class="btn btn-sm btn-primary" type="button" data-wb-post-cmt-add="${h(post.id)}"><i class="ti ti-send" aria-hidden="true"></i></button></div></div>`;
+  return `<div class="wb-post-comments">${list}<div class="wb-comment-add"><input class="wb-input" data-wb-post-cmt-input="${h(post.id)}" placeholder="Write a comment…"><button class="btn btn-sm btn-primary" type="button" aria-label="Post comment" data-wb-post-cmt-add="${h(post.id)}"><i class="ti ti-send" aria-hidden="true"></i></button></div></div>`;
 }
 
 // Right-column widget tiles — a configurable, workspace-scoped sidebar. Owners
@@ -15050,7 +15062,7 @@ function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
     <div class="wb-field"><label>Description</label><textarea class="wb-input" id="wbSetDesc" ${canManage ? '' : 'disabled'}>${h(app.description || '')}</textarea></div>
     <div class="wb-field"><label>Type</label><input class="wb-input" id="wbSetType" value="${h(app.type || '')}" placeholder="e.g. Contacts, Tasks, Projects" ${canManage ? '' : 'disabled'}></div>
     <div class="wb-field"><label>Icon &amp; color</label>
-      <div class="wb-emoji-pick" id="wbSetIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${app.icon === icon ? 'sel' : ''}" data-icon="${icon}"><i class="ti ${icon}"></i></button>`).join('')}</div>
+      <div class="wb-emoji-pick" id="wbSetIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${app.icon === icon ? 'sel' : ''}" type="button" data-icon="${icon}" aria-pressed="${app.icon === icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('')}</div>
       <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}<label class="wb-swatch wb-swatch-custom ${isCustomColor ? 'sel' : ''}" data-color="${h(app.color)}" title="Custom color"${isCustomColor ? ` style="background:${h(app.color)}"` : ''}><input type="color" id="wbSetCustomColor" value="${h(isCustomColor ? app.color : '#000000')}" aria-label="Custom color" ${canManage ? '' : 'disabled'}><i class="ti ${isCustomColor ? 'ti-check' : 'ti-plus'}"></i></label></div>
     </div>
     <div class="wb-field"><label>Portability</label>
@@ -15729,7 +15741,7 @@ function renderWorkspaceBuilderModal() {
     return wbModalShell(editing ? 'Edit workspace' : 'Create workspace', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:${h(m.draft.color)}"><i class="ti ${h(m.draft.icon)}"></i></div><h3>${editing ? 'Edit workspace' : 'Create workspace'}</h3>`,
       `<div class="wb-field"><label>Workspace name</label><input class="wb-input" id="wbWsName" value="${h(m.draft.name ?? editing?.name ?? '')}" placeholder="e.g. Marketing, Field Operations" autofocus></div>
       <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbWsDesc" placeholder="What is this workspace for?">${h(m.draft.description ?? editing?.description ?? '')}</textarea></div>
-      <div class="wb-row2"><div class="wb-field"><label>Icon</label><div class="wb-emoji-pick">${WB_WS_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" data-wb-pick-icon="${icon}"><i class="ti ${icon}"></i></button>`).join('')}</div></div>
+      <div class="wb-row2"><div class="wb-field"><label>Icon</label><div class="wb-emoji-pick">${WB_WS_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" type="button" data-wb-pick-icon="${icon}" aria-pressed="${icon === m.draft.icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('')}</div></div>
       <div class="wb-field"><label>Color</label>${wbColorSwatches(m.draft.color)}</div></div>
       <div class="wb-field"><label>${editing ? 'Members' : 'Invite members'} <span class="wb-opt">(who collaborates here)</span></label><div class="wb-member-pick">${wbMembers(m.companyId).map((member) => `<button class="wb-member-opt ${m.draft.members.includes(member.id) ? 'on' : ''}" data-wb-toggle-member="${h(member.id)}">${wbAvatar(member, 30)}<div class="wb-mo-info"><b>${h(member.name)}</b><span>${h(member.role)} · ${h(member.email)}</span></div><span class="wb-ck"><i class="ti ti-check"></i></span></button>`).join('') || '<div class="wb-sub">No company members found.</div>'}</div></div>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-check"></i>${editing ? 'Save changes' : 'Create workspace'}</button>`);
@@ -15802,7 +15814,7 @@ function renderWorkspaceBuilderModal() {
       <div class="wb-field"><label>App type <span class="wb-opt">(optional)</span></label><select class="wb-input" id="wbApType"><option value="">— Select a type —</option>${['Contacts', 'Tasks', 'Projects', 'Records', 'Inventory', 'Documents', 'Calendar', 'Tickets', 'Invoices', 'Custom'].map((t) => `<option ${m.draft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div class="wb-field"><label>Icon</label>
         <div class="wb-search-box wb-icon-search"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-icon-search value="${h(m.iconQuery || '')}" placeholder="Search icons…"></div>
-        <div class="wb-emoji-pick wb-icon-grid" id="wbAppIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" data-wb-pick-icon="${icon}" data-icon-name="${h(icon.replace('ti-', '').replace(/-/g, ' '))}"><i class="ti ${icon}"></i></button>`).join('')}</div>
+        <div class="wb-emoji-pick wb-icon-grid" id="wbAppIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" type="button" aria-pressed="${icon === m.draft.icon}" aria-label="Icon ${h(wbIconLabel(icon))}" data-wb-pick-icon="${icon}" data-icon-name="${h(icon.replace('ti-', '').replace(/-/g, ' '))}"><i class="ti ${icon}"></i></button>`).join('')}</div>
       </div>
       <div class="wb-field"><label>Color</label>${wbColorSwatches(m.draft.color)}</div>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-plus"></i>Create app</button>`);
@@ -15914,11 +15926,17 @@ function wbTileLinkRow(link) {
     <button class="wb-tile-mbtn danger" type="button" data-wb-tilecfg-dellink title="Remove"><i class="ti ti-x"></i></button>
   </div>`;
 }
+// "ti-building-store" -> "building store". The raw class name is what the picker has
+// to work with, and read aloud verbatim it is worse than nothing.
+function wbIconLabel(icon) {
+  return String(icon || '').replace(/^ti-/, '').replace(/-/g, ' ').trim() || 'icon';
+}
+
 function wbModalShell(eyebrow, extraClass, head, body, foot) {
   // Generic modal format: explicit "Close" button (no 'X' icon) and no
   // backdrop-close — the overlay carries no close action, so only the header
   // Close button or a footer Cancel/Close dismisses the modal.
-  return `<div class="modal-overlay wb-modal-overlay"><div class="wb-modal ${extraClass}"><div class="wb-modal-head">${head}<button class="btn wb-modal-close-btn" type="button" data-action="wb-modal-close">Close</button></div><div class="wb-modal-body">${body}</div><div class="wb-modal-foot">${foot}</div></div></div>`;
+  return `<div class="modal-overlay wb-modal-overlay"><div class="wb-modal ${extraClass}" role="dialog" aria-modal="true" tabindex="-1"><div class="wb-modal-head">${head}<button class="btn wb-modal-close-btn" type="button" data-action="wb-modal-close">Close</button></div><div class="wb-modal-body">${body}</div><div class="wb-modal-foot">${foot}</div></div></div>`;
 }
 function wbFieldConfigUI(fd, app) {
   const t = fd.type;
@@ -16061,7 +16079,7 @@ function wbActionCardsUI(companyId, draft, app) {
     } else {
       cfg = `<input class="wb-input" data-wb-acmsg="${i}" value="${h(ac.message || '')}" placeholder="Message for the activity feed">`;
     }
-    return `<div class="wb-action-card"><div class="wb-acgrow"><select class="wb-input" data-wb-actype="${i}"><option value="notify" ${ac.type === 'notify' ? 'selected' : ''}>Post a notification</option><option value="set_field" ${ac.type === 'set_field' ? 'selected' : ''}>Set a field value</option><option value="assign" ${ac.type === 'assign' ? 'selected' : ''}>Assign a member</option></select>${cfg}</div><button class="wb-icon-btn danger" data-wb-acdel="${i}" type="button"><i class="ti ti-x"></i></button></div>`;
+    return `<div class="wb-action-card"><div class="wb-acgrow"><select class="wb-input" data-wb-actype="${i}"><option value="notify" ${ac.type === 'notify' ? 'selected' : ''}>Post a notification</option><option value="set_field" ${ac.type === 'set_field' ? 'selected' : ''}>Set a field value</option><option value="assign" ${ac.type === 'assign' ? 'selected' : ''}>Assign a member</option></select>${cfg}</div><button class="wb-icon-btn danger" data-wb-acdel="${i}" type="button" aria-label="Delete automation"><i class="ti ti-x"></i></button></div>`;
   }).join('');
 }
 function wbRenderFieldInput(companyId, workspaceId, f, val) {
@@ -22291,9 +22309,9 @@ function renderRecordHistoryModal() {
 function renderModalShell(eyebrow, title, content, className = '', headerActions = '') {
   return `
     <div class="modal-overlay">
-      <div class="modal-panel ${h(className)}" role="dialog" aria-modal="true">
+      <div class="modal-panel ${h(className)}" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
         <div class="modal-head">
-          <div><div class="eyebrow">${h(eyebrow)}</div><h2>${h(title)}</h2></div>
+          <div><div class="eyebrow">${h(eyebrow)}</div><h2 id="modalTitle">${h(title)}</h2></div>
           <div class="modal-head-actions">
             ${headerActions}
             <button class="btn" type="button" data-action="close-modal">Close</button>
@@ -23572,6 +23590,52 @@ function renderFormActionsModal(companyId, form) {
 // like the contacts table are usable without a mouse. Native controls
 // (button/a/input) already handle their own keys and are skipped.
 // The currently open modal overlay, if any (builder modals or generic modals).
+// Turn the element that opened a modal into a selector that will still match after
+// the app re-renders. Data attributes are what identify an action here (data-action
+// plus whatever id it carries), so they are enough to find the same control again.
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function modalTriggerSelector(target) {
+  const el = target?.closest?.('[data-action], [data-wb-open], [data-open-app], [data-wb-pick-icon]');
+  if (!el) return '';
+  const parts = [el.tagName.toLowerCase()];
+  for (const attr of el.attributes) {
+    if (!attr.name.startsWith('data-') || !attr.value || attr.value.length > 80) continue;
+    try { parts.push(`[${attr.name}="${CSS.escape(attr.value)}"]`); } catch { return ''; }
+  }
+  return parts.length > 1 ? parts.join('') : '';
+}
+
+// Focus follows the modal, in both directions.
+//
+// Opening: move focus into the dialog. Without this it stays on a button that the
+// re-render has already destroyed, so it falls to <body> -- a screen reader never
+// announces the dialog, and the first Tab starts from the top of the page.
+//
+// Closing: put focus back on whatever opened it, for the same reason in reverse.
+// Losing your place on every close is the kind of thing that makes an app unusable
+// by keyboard without ever looking like a bug to someone using a mouse.
+function syncModalFocus() {
+  const overlay = activeModalOverlay();
+  if (overlay) {
+    if (overlay.contains(document.activeElement)) return;
+    const panel = overlay.querySelector('[role="dialog"]');
+    // Prefer the dialog container so assistive tech reads its title before its
+    // contents; fall back to the first real control if the panel can't take focus.
+    if (panel && panel.tabIndex === -1) { panel.focus(); return; }
+    const first = [...overlay.querySelectorAll(FOCUSABLE_SELECTOR)]
+      .find((el) => !el.hidden && (el.offsetWidth + el.offsetHeight) > 0);
+    first?.focus();
+    return;
+  }
+  const selector = state.focusReturn;
+  if (!selector) return;
+  state.focusReturn = '';
+  // The trigger may legitimately be gone -- deleted, or on a page we navigated away
+  // from. Nothing to restore in that case, and nothing worth reporting either.
+  try { document.querySelector(selector)?.focus(); } catch { /* selector no longer resolves */ }
+}
+
 function activeModalOverlay() {
   return document.querySelector('.wb-modal-overlay') || document.querySelector('.modal-overlay');
 }
@@ -23586,8 +23650,7 @@ function dismissTopModal() {
 function trapModalFocus(event) {
   const overlay = activeModalOverlay();
   if (!overlay) return;
-  const sel = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-  const nodes = [...overlay.querySelectorAll(sel)].filter((el) => !el.hidden && (el.offsetWidth + el.offsetHeight) > 0);
+  const nodes = [...overlay.querySelectorAll(FOCUSABLE_SELECTOR)].filter((el) => !el.hidden && (el.offsetWidth + el.offsetHeight) > 0);
   if (!nodes.length) return;
   const first = nodes[0];
   const last = nodes[nodes.length - 1];

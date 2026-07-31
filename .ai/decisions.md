@@ -540,3 +540,38 @@ JavaScript runs.
 The durable fix remains extracting the App Builder editing UI (`renderWorkspaceBuilderModal`,
 `wbMountModal`, `wbFieldConfigUI`, `wbRenderFieldInput` — roughly 63 KB of source that is
 only needed once someone opens the builder editor). That is the next real headroom.
+
+## Modal focus follows the modal
+
+The audit found the app in better shape than expected: a real focus trap, Escape
+handling, `role="dialog"` on the generic shell, and 112 of 117 icon-only buttons already
+named. Two things were genuinely missing, and both are the kind of defect that is
+invisible to anyone using a mouse.
+
+Focus was never moved into a modal when it opened, and never restored when it closed.
+Because the app re-renders wholesale, the element that opened the dialog is destroyed by
+the time it appears — so focus fell to `<body>`. A screen reader never announced the
+dialog, and every close dropped the keyboard user back at the top of the page. Both are
+now handled in one place: `syncModalFocus`, queued at the top of `render()` so it runs
+after whichever early return fires.
+
+The trigger is recorded as a *selector* built from its data attributes, not as a node
+reference — the node will not survive the re-render. It is armed only when a click
+actually opened a modal, and cleared once used.
+
+Ordering matters and is deliberate: the sync is queued first, so a screen that wants the
+cursor in a particular input queues its own `focus()` later and still wins.
+
+Also fixed: the builder modal was not announced as a dialog at all, the generic dialog
+had no accessible name (announced as bare "dialog"), and five icon-only controls had no
+name. The icon-picker swatches were the worst of them — every option in the grid read
+identically as "button", so the picker was unusable without sight. They now carry the
+icon name, `aria-pressed`, and an explicit `type="button"`.
+
+The focus trap and the focus mover now share one `FOCUSABLE_SELECTOR` rather than two
+copies that had to be kept in step by hand.
+
+Not changed, having checked: 64 buttons omit `type=`, but none sits inside a `<form>`, so
+the implicit `submit` does nothing. Three `<img>` without `alt` are inside code comments.
+Both were false positives from the first pass of the audit, recorded here so the next
+person does not re-investigate them.
