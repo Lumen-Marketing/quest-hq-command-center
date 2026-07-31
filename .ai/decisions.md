@@ -463,3 +463,19 @@ An unindexed foreign key turns any DELETE of the parent row into a full scan of 
 table, so deleting a role or a profile is the action that would start timing out first.
 Added in `202607311200_foreign_key_indexes.sql`. Note the advisor's headline count of 32
 covers several categories; only these six are genuinely uncovered foreign keys.
+
+### Follow-up: `if not exists` on an index name is not a guarantee
+
+Applying the foreign-key indexes exposed a trap worth recording. `calendar_events(created_by)`
+stayed uncovered even after the migration reported success, because an index already existed
+under the intended NAME on `(company_id, created_by)`. `create index if not exists` matches on
+the name, so it silently did nothing, and a composite index only covers a foreign key when the
+FK columns are a leading prefix — `(company_id, created_by)` does not cover `created_by` alone.
+
+Fixed with a distinct name in `202607311300_calendar_events_created_by_fk_index.sql`. Re-running
+the uncovered-FK query afterwards now returns none, which is the check that caught it: a
+migration reporting success is not evidence that the index you wanted exists.
+
+The apply also hit a 502 mid-run and left one of six indexes created. Because every statement is
+`if not exists`, re-running was safe and completed the rest — worth keeping that property on any
+migration that might be retried through a flaky gateway.

@@ -7,7 +7,7 @@
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
     "main_commit_at_capture": "58e109d6beeecb6588636a6f6dbafa34ea20409c",
-    "latest_migration": "202607311200_foreign_key_indexes.sql"
+    "latest_migration": "202607311300_calendar_events_created_by_fk_index.sql"
   },
   "live": {
     "supabase_verified_at": "2026-07-31T05:35:19+08:00",
@@ -15,8 +15,8 @@
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260730213315",
-      "name": "additional_command_center_hardening"
+      "version": "20260731180000",
+      "name": "calendar_events_created_by_fk_index"
     },
     "vercel_verified_at": "2026-07-31T02:49:38+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
