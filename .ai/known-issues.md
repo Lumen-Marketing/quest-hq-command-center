@@ -125,3 +125,24 @@ profile's row into the local inbox. When adding a bucket or a table whose rows a
 then read back, check the SELECT path as well as the write path; a public bucket does not
 need a SELECT policy for public reads (`/object/public/...` does not consult it) but does
 need one for the upload read-back.
+
+## Stale remote branches
+
+Audited 2026-07-31 at revision 972dffa4. Nineteen remote branches exist; seventeen are
+fully merged into `main` (zero unmerged commits) and are safe to archive or delete
+whenever the owner wants — several date back to June.
+
+Two carry commits that are NOT on `main`, so neither should be deleted without a decision:
+
+- `docs/code-review-d050fd9` — one commit from 2026-06-23 adding `report.md`, a 95-line
+  code review of a revision that is now months old. Almost certainly disposable, but it is
+  the only copy of that review.
+- `quest-hq-command-center-for-deployment` — three commits from early July touching 29
+  files (+7,784 / -1,141): dark theme surfaces, CRM/Jobs Kanban, quote line items, an
+  activity modal, client portal pan/zoom, Price Book, and a `vercel.json` change. This is
+  a substantial parallel line of work. Whether it was superseded by later work on `main`
+  or genuinely never landed needs a human to judge; deleting it would discard the only
+  copy of that code.
+
+No branch was deleted. Deleting a remote branch is not recoverable from the local clone
+once the reflog expires, and the two above are exactly the cases where that would matter.

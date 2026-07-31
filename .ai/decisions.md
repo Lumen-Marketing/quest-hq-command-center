@@ -375,3 +375,91 @@ raised a fifth time, and non-admin sessions no longer download the master panel 
 Dates in the EOD module are computed from local calendar parts, never `toISOString()`.
 Converting to UTC put every week boundary and "today" a day early for anyone east of
 Greenwich, which is where this team works.
+
+## Tenancy isolation is proved live, guarded statically
+
+The isolation claim needs two different things, and neither is sufficient alone.
+
+The proof is a live rollback-only probe against production, run 2026-07-31 at revision
+972dffa4. It impersonates a real identity, then counts rows the database is willing to
+show it outside its own tenancy:
+
+- Company dimension: a non-platform-admin member (of `rom` and `lumen`) saw ZERO rows
+  belonging to any other company, across all 62 tables carrying `company_id`.
+- Workspace dimension: no existing account belonged to only one workspace of a
+  multi-workspace company, so the probe temporarily granted one company membership plus a
+  single workspace membership (`new` / App Test), then read the 15 tables carrying
+  `workspace_id`. It saw ZERO rows from the sibling `new` / Main workspace, which holds
+  real contacts, quotes, jobs and tasks. The transaction was aborted; a follow-up query
+  confirmed no membership rows survived.
+- A platform admin DOES see other companies' rows in `company_plugins`, `task_types`,
+  `task_labels` and `task_type_statuses`. That is intentional: each of those policies
+  carries an explicit `OR app_private.is_quest_admin()`. It is not a leak, but it is why
+  the probe must run as a non-admin — running it as an owner reports false positives.
+
+The guard is `scripts/check-tenancy-matrix.mjs`, in `npm run check`. Every table carrying
+`company_id` or `workspace_id` must have RLS enabled and at least one SELECT/ALL policy.
+It reads `.ai/database/snapshot.json` rather than parsing migration SQL: policies are
+replaced across migrations and formatting varies, so a text scan produced 26 false
+failures against a schema that is actually correct.
+
+Two limits, stated so nobody over-reads a green line. The snapshot records policy names
+and commands but not their USING expressions, so the script proves a readable policy
+EXISTS, not that it is correctly gated — that is what the live probe is for. And views
+carry no RLS of their own; they inherit it only when defined `security_invoker`. The one
+tenant-scoped view, `v_pricebook_material_best`, is `security_invoker=on`; any new view
+over tenant data fails the check until a human confirms the same and allow-lists it.
+
+Verified the guard fails on injected regressions (RLS switched off, a table left with only
+write policies, and a new unvetted view) rather than only passing on the happy path.
+
+## Browser errors are reported to the server log, not a database
+
+Uncaught browser errors POST to `/api/client-error`, which writes one structured line to
+stdout where Vercel's runtime logs already collect and retain it. Modelled on the existing
+`csp-report.js`: best effort, rate limited, never errors, always answers 204.
+
+Deliberately no table. A database sink would mean a new migration, new RLS surface, and a
+write path reachable from an unauthenticated page — a lot of attack surface for telemetry
+that is already queryable through the runtime logs. If an in-product dashboard is wanted
+later, that is a separate decision with a separate threat model.
+
+This exists because a startup crash reached production and was found by a user reporting a
+blank page. Syntax, 788 tests and the bundle budget all passed, because none of them ran
+the bundle in a browser. `scripts/check-bundle-boots.mjs` now stops that specific fault
+before deploy; this catches the ones that only appear on a real device or a real tenant.
+
+Only identifiers and structural context are accepted: message, stack, revision, route
+name/section, and company/workspace/profile IDs. Never a name, email, or field value.
+URLs are reduced to origin plus path before logging — in both the `url` field and inside
+the stack — because invite and password-recovery links carry their secrets in the query
+string and fragment, and logging those would put working credentials in the log.
+
+The client half is written to never become the fault it reports: it runs only in
+production builds, caps at five reports per page load, drops repeats of the same message
+(a render loop repeats one fault), swallows all of its own failures, and prefers
+`sendBeacon` so a report survives the page being torn down — which is exactly when a fatal
+error fires.
+
+## Renaming to Questbase without breaking deploy verification
+
+The signed-in shell, PWA manifest, document titles, brand mark and legacy redirect stubs
+now say Questbase. Storage keys were deliberately left alone: they use the lowercase
+`quest-hq-` prefix, and renaming them would orphan every returning user's cached session,
+active company, and local drafts for no visible gain.
+
+The coupling that made this more than a find-and-replace is the production smoke check. It
+identifies the app by the literal `Quest HQ Operations Command` in the shell title, and the
+legacy stubs by `Opening Quest HQ`. Renaming those while the check pinned the old strings
+would have failed deploy verification in the window between merge and deploy — precisely
+when it matters. Both validators now accept either brand, so the check passes against the
+old title before the rename ships and the new one after. The old markers can be dropped
+once production has served the new shell.
+
+Six foreign keys had no covering index (`calendar_events.created_by`,
+`company_join_requests.profile_id`, `field_permissions.role_id`,
+`pricebook_vendor_prices.material_id` and `.vendor_id`, `user_role_assignments.role_id`).
+An unindexed foreign key turns any DELETE of the parent row into a full scan of the child
+table, so deleting a role or a profile is the action that would start timing out first.
+Added in `202607311200_foreign_key_indexes.sql`. Note the advisor's headline count of 32
+covers several categories; only these six are genuinely uncovered foreign keys.
