@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-01T03:55:00+08:00",
+  "generated_at": "2026-07-31T19:35:36.974Z",
   "generated_from_commit": "d8b635fa1208fcc95a42b5c900c3303958c591da",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
@@ -10,7 +10,7 @@
     "latest_migration": "202608010900_rls_initplan_and_parent_row_checks.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-08-01T03:15:00+08:00",
+    "supabase_verified_at": "2026-07-31T19:35:36.974Z",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
@@ -18,7 +18,7 @@
       "version": "20260731191048",
       "name": "rls_initplan_and_parent_row_checks"
     },
-    "vercel_verified_at": "2026-08-01T03:55:00+08:00",
+    "vercel_verified_at": "2026-07-31T19:35:36.974Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
     "vercel_production_url": "https://www.questbase.io",
     "vercel_deployment_id": "dpl_877wddrbdsYqQanobU64seu69kro",
