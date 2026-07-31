@@ -60,6 +60,8 @@ test('icon-only contact, message, and file controls expose names and button sema
 });
 
 test('display names stay consistent with the navigation labels', () => {
+  assert.match(source, /<span><strong>Questbase<\/strong><small>workspace<\/small><\/span>/);
+  assert.doesNotMatch(source, /<strong>Quest<\/strong><small>command center<\/small>/);
   assert.match(source, /function routeTitle\(route\)[\s\S]*?navigationLabel\(route\.section/);
   assert.match(source, /<strong>Reports<\/strong>/);
   assert.match(source, /analyticsJobChoiceLabel\(job\)/);

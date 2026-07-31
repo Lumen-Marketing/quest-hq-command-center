@@ -4639,7 +4639,7 @@ function renderDeck(route) {
       <a class="logo logo-image-mark" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router aria-label="Questbase dashboard">
         ${questLogoImage()}
       </a>
-      <span><strong>Quest</strong><small>command center</small></span>
+      <span><strong>Questbase</strong><small>workspace</small></span>
       <button class="deck-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}" aria-expanded="${state.sidebarCollapsed ? 'false' : 'true'}">
         <i class="ti ${state.sidebarCollapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-left-collapse'}"></i>
       </button>
