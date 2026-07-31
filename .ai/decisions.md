@@ -575,3 +575,51 @@ Not changed, having checked: 64 buttons omit `type=`, but none sits inside a `<f
 the implicit `submit` does nothing. Three `<img>` without `alt` are inside code comments.
 Both were false positives from the first pass of the audit, recorded here so the next
 person does not re-investigate them.
+
+## RLS: hoisted auth calls, and three checks that were doing nothing
+
+The performance advisor's 17 `auth_rls_initplan` findings were the stated task, and they
+are a real if unglamorous win: every one of those policies called `auth.uid()` (or
+`auth.jwt()`) bare, so Postgres re-evaluated it once per row instead of once per query.
+Wrapping the call in a scalar subquery — `(select auth.uid())` — lets the planner hoist it
+into an InitPlan evaluated once. Identical value, far fewer calls. It matters most on
+`messages` and `message_reads`, which are read on every poll of the inbox.
+
+Reading the policies to rewrite them turned up something more serious. Three of them
+compared a column to itself:
+
+    (mc.company_id = mc.company_id)          -- messages insert senders
+    (mc.company_id = mc.company_id)          -- message access insert creator or manager
+    (m.conversation_id = m.conversation_id)  -- message attachments insert allowed
+    (m.company_id = m.company_id)            -- message attachments insert allowed
+
+Always true. The intent was clearly to tie the new row to its parent — a message's
+company must match its conversation's, an attachment's conversation and company must
+match the message it hangs off. As written the clause did nothing, so a client could
+insert a message carrying one company's id into another company's conversation. Nothing
+prevented it except the client being well-behaved.
+
+Confirmed safe to tighten before doing it: zero existing rows violate the intended
+constraint on any of the four checks. So this closes a hole rather than invalidating data
+anyone depends on.
+
+Verified live by acting as a real member (rolled back): a normal send is still accepted,
+a message tagged with a foreign company id is now rejected, and a message sent as
+somebody else is rejected. The first of those is the one that mattered — a tightened
+policy that also breaks ordinary sending would be a worse outcome than the hole.
+
+Both rewrites were checked mechanically rather than by eye: normalising the new
+definitions back to their pre-migration form (stripping the InitPlan wrapper) leaves no
+differences beyond the four intended ones, and no policy anywhere in `public` or
+`app_private` still contains an unhoisted `auth.uid()`/`auth.jwt()`.
+
+Advisor after: 165 findings down to 148. `auth_rls_initplan` 17 -> 0,
+`unindexed_foreign_keys` 1 -> 0 (the last one, `app_private.platform_admins.created_by`).
+
+### Not doing: the 15 `multiple_permissive_policies` findings
+
+Left deliberately. Removing them means merging separate policies into single compound
+ones, and these policies are the tenancy boundary — the thing this project has spent the
+most effort proving correct. One readable policy per intent is what makes that boundary
+auditable at a glance; a merged disjunction trades a minor planner optimisation for
+exactly the kind of expression where a mistake hides. Not worth it at this data volume.
