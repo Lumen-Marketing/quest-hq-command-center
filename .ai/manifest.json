@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T05:35:19+08:00",
-  "generated_from_commit": "6d742e605e7a8831f94ef222d57a8be11c9ddb72",
+  "generated_at": "2026-08-01T02:25:00+08:00",
+  "generated_from_commit": "3e1dfa1fb208dd6ab7cf7fd3249d8033f085f27a",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
-    "main_commit_at_capture": "58e109d6beeecb6588636a6f6dbafa34ea20409c",
+    "main_commit_at_capture": "3e1dfa1fb208dd6ab7cf7fd3249d8033f085f27a",
     "latest_migration": "202607311300_calendar_events_created_by_fk_index.sql"
   },
   "live": {
@@ -18,12 +18,12 @@
       "version": "20260731180000",
       "name": "calendar_events_created_by_fk_index"
     },
-    "vercel_verified_at": "2026-07-31T02:49:38+08:00",
+    "vercel_verified_at": "2026-08-01T02:25:00+08:00",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
-    "vercel_production_url": "https://quest-hq-command-center-gamma.vercel.app",
-    "vercel_deployment_id": "dpl_DYtyBPAMLDsDtkKGV4n8EXTNPrH1",
+    "vercel_production_url": "https://www.questbase.io",
+    "vercel_deployment_id": "dpl_5aaF2zkD2z1nKCMHwyzpRLWGHuaH",
     "vercel_deployment_state": "READY",
-    "vercel_deployed_commit": "7d430904d7070fc5a9a2f19ea31d025ed1ce956b",
+    "vercel_deployed_commit": "3e1dfa1fb208dd6ab7cf7fd3249d8033f085f27a",
     "github_verified_at": "2026-07-31T02:49:38+08:00",
     "github_production_guardian_run": "https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459"
   },
@@ -33,4 +33,3 @@
     "production_smoke": "npm run smoke:prod -- --base-url https://www.questbase.io --expect-sha <main-sha>"
   }
 }
-
