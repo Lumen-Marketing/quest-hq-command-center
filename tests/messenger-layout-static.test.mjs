@@ -18,7 +18,7 @@ test('messages composer uses icon attach and send controls around the input', ()
   assert.match(source, /<form class="message-composer"/);
   assert.match(source, /class="icon-button message-attach-button"/);
   assert.match(source, /<input name="body" placeholder="Message \$\{h\(conversation\.title\)\}"/);
-  assert.match(source, /<button class="icon-button btn-primary" type="submit" title="Send">/);
+  assert.match(source, /<button class="icon-button btn-primary" type="submit" title="Send" aria-label="Send message">/);
 });
 
 test('new group modal supports solo and team states from the mockup', () => {

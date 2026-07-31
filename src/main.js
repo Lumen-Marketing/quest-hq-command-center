@@ -36,6 +36,7 @@ import {
 } from './workspaces/plugin-catalog.js';
 import { resolveTenantRoute } from './workspaces/tenant-route.js';
 import { smsUiCapabilities } from './communications/sms-readiness.js';
+import { analyticsJobChoiceLabel, compactContactFilterValues } from './ui/audit-hardening.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -2359,7 +2360,7 @@ const state = {
   contactSort: 'name',
   contactFilters: { ...CONTACT_FILTER_DEFAULTS },
   contactRailScope: 'team',
-  contactRailExpanded: {},
+  contactRailSearch: {},
   selectedContactId: '',
   stageFilterDeals: 'all',
   dealQuery: '',
@@ -8431,14 +8432,14 @@ function renderAnalyticsPage(route, companyId) {
     <section class="analytics-workspace">
       <section class="analytics-toolbar panel">
         <div>
-          <strong>Analytics</strong>
+          <strong>Reports</strong>
           <span>${h(scopedJob ? scopedJob.name : companyName(companyId))}</span>
         </div>
         <label>
           <span>Job</span>
           <select data-analytics-job-filter>
             <option value="">All jobs</option>
-            ${companyJobs(companyId).map((job) => `<option value="${h(job.id)}" ${scopedJob?.id === job.id ? 'selected' : ''}>${h(job.name)}</option>`).join('')}
+            ${companyJobs(companyId).map((job) => `<option value="${h(job.id)}" ${scopedJob?.id === job.id ? 'selected' : ''}>${h(analyticsJobChoiceLabel(job))}</option>`).join('')}
           </select>
         </label>
         <a class="btn" href="${appHref(companyPath('jobs', scopedJob ? { tab: 'profile', job_id: scopedJob.id } : {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
@@ -8801,10 +8802,10 @@ function renderContactTable(companyId) {
           <input type="search" data-contact-search value="${h(state.contactQuery)}" placeholder="Search this list..." aria-label="Search this list" />
         </label>
         <div class="contact-list-tools">
-          <button class="icon-btn ${state.contactBoardView === 'table' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="contacts" data-view="table" title="Table view"><i class="ti ti-table"></i></button>
-          <button class="icon-btn ${state.contactBoardView === 'board' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="contacts" data-view="board" title="Board view"><i class="ti ti-layout-kanban"></i></button>
-          <button class="icon-btn" type="button" data-action="open-stage-manager" data-module="contacts" title="Manage stages"><i class="ti ti-adjustments-horizontal"></i></button>
-          <button class="icon-btn" type="button" data-action="refresh-data" title="Refresh"><i class="ti ti-refresh"></i></button>
+          <button class="icon-btn ${state.contactBoardView === 'table' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="contacts" data-view="table" title="Table view" aria-label="Table view"><i class="ti ti-table"></i></button>
+          <button class="icon-btn ${state.contactBoardView === 'board' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="contacts" data-view="board" title="Board view" aria-label="Board view"><i class="ti ti-layout-kanban"></i></button>
+          <button class="icon-btn" type="button" data-action="open-stage-manager" data-module="contacts" title="Manage stages" aria-label="Manage stages"><i class="ti ti-adjustments-horizontal"></i></button>
+          <button class="icon-btn" type="button" data-action="refresh-data" title="Refresh" aria-label="Refresh contacts"><i class="ti ti-refresh"></i></button>
         </div>
       </div>
       ${renderContactFilterBar(companyId)}
@@ -9055,15 +9056,21 @@ function renderContactFieldGroupsSidebar(companyId) {
   };
   const dotPalette = ['#3B82F6', '#F59E0B', '#22C55E', '#A78BFA', '#FB7185', '#06B6D4', '#EAB308', '#94A3B8'];
   const tempDot = { Hot: '#EF4444', Warm: '#FB923C', Cold: '#60A5FA' };
-  const expandedGroups = state.contactRailExpanded || {};
+  const railSearch = state.contactRailSearch || {};
   const group = (key, label, values) => {
     if (!values.length) return '';
-    const expanded = !!expandedGroups[key];
-    const shown = expanded ? values : values.slice(0, 7);
-    const hidden = values.length - 7;
+    const query = railSearch[key] || '';
+    const compact = compactContactFilterValues(values, query);
+    const shown = compact.items;
     return `
       <div class="cv2-group">
         <div class="cv2-group-head">${h(label)}<span class="cv2-fieldtag">FIELD</span><span class="cv2-group-count">${values.length}</span></div>
+        ${compact.searchable ? `
+          <label class="cv2-group-search">
+            <i class="ti ti-search"></i>
+            <input type="search" data-contact-rail-search="${h(key)}" value="${h(query)}" placeholder="Search ${h(label.toLowerCase())}" aria-label="Search ${h(label)} filters" />
+          </label>
+        ` : ''}
         ${shown.map((value, index) => {
           const count = contacts.filter((contact) => valueOf[key](contact) === value).length;
           const active = filters[key] === value;
@@ -9074,7 +9081,7 @@ function renderContactFieldGroupsSidebar(companyId) {
             </button>
           `;
         }).join('')}
-        ${values.length > 7 ? `<button class="cv2-more" type="button" data-action="toggle-contact-rail-group" data-key="${h(key)}">${expanded ? 'Show less' : `Show ${hidden} more`}</button>` : ''}
+        ${compact.searchable ? `<div class="cv2-search-status" aria-live="polite">${compact.matchCount ? `${compact.matchCount} match${compact.matchCount === 1 ? '' : 'es'}${compact.hiddenCount ? ` - keep typing to narrow` : ''}` : 'No matching options'}</div>` : ''}
       </div>
     `;
   };
@@ -11297,9 +11304,15 @@ function renderJobPanel(tab, companyId, job) {
 }
 
 function renderPipeline(companyId) {
+  const showSidebarStageNav = state.sidebarScope === 'my-work'
+    && !state.sidebarCollapsed
+    && !state.collapsedNavGroups.has('Production')
+    && state.expandedNav.has('jobs');
   return `
-    ${pipelineToolbar('jobs', companyId)}
-    ${state.jobBoardView === 'board' ? renderJobBoard(companyId) : renderJobList(companyId)}
+    <div class="jobs-pipeline ${showSidebarStageNav ? 'stage-nav-in-sidebar' : ''}">
+      ${pipelineToolbar('jobs', companyId)}
+      ${state.jobBoardView === 'board' ? renderJobBoard(companyId) : renderJobList(companyId)}
+    </div>
   `;
 }
 
@@ -11308,7 +11321,7 @@ function renderJobBoard(companyId) {
   const filter = state.stageFilter;
   const lanes = filter === 'all' ? pipelineStages('jobs', companyId) : pipelineStages('jobs', companyId).filter((stage) => stage.name === filter);
   return `
-    <section class="pipe-board">
+    <section class="pipe-board" tabindex="0" aria-label="Job stages. Scroll horizontally to view later stages.">
       ${lanes.map((stage) => {
         const cards = rows.filter((job) => resolvePipelineStage('jobs', job.stage, companyId) === stage.name);
         return `
@@ -11968,7 +11981,7 @@ function renderFilesPage(route, companyId) {
           </div>
           <label class="drive-search">
             <i class="ti ti-search"></i>
-            <input data-file-search value="${h(state.fileQuery)}" placeholder="Search drive" />
+            <input data-file-search value="${h(state.fileQuery)}" placeholder="Search drive" aria-label="Search drive" />
           </label>
           <div class="drive-actions">
             ${canManageFiles ? `
@@ -12066,12 +12079,15 @@ function renderFolderRow(folder) {
 function renderFileRow(file) {
   const selected = (state.selectedFileIds || []).includes(file.id);
   return `
-    <button type="button" class="explorer-row ${selected ? 'selected ' : ''}${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}" role="row">
-      <span class="explorer-name"><span class="file-check ${selected ? 'on' : ''}" data-action="toggle-file-select" data-file-id="${h(file.id)}" title="Select file"><i class="ti ${selected ? 'ti-checkbox' : 'ti-square'}"></i></span>${fileTypeBadge(file)}<strong>${h(file.file_name)}</strong></span>
-      <span>${formatDate(file.updated_at || file.created_at)}</span>
-      <span>${h(fileTypeLabel(file))}</span>
-      <span>${formatBytes(file.size_bytes)}</span>
-    </button>
+    <div class="explorer-row ${selected ? 'selected ' : ''}${file.id === state.selectedFileId ? 'active' : ''}" role="row">
+      <span class="explorer-name" role="cell">
+        <button class="file-check ${selected ? 'on' : ''}" type="button" data-action="toggle-file-select" data-file-id="${h(file.id)}" title="Select file" aria-label="Select ${h(file.file_name)}" aria-pressed="${selected ? 'true' : 'false'}"><i class="ti ${selected ? 'ti-checkbox' : 'ti-square'}"></i></button>
+        <button class="explorer-file-open" type="button" data-action="select-file" data-file-id="${h(file.id)}" aria-label="Open ${h(file.file_name)}">${fileTypeBadge(file)}<strong>${h(file.file_name)}</strong></button>
+      </span>
+      <span role="cell">${formatDate(file.updated_at || file.created_at)}</span>
+      <span role="cell">${h(fileTypeLabel(file))}</span>
+      <span role="cell">${formatBytes(file.size_bytes)}</span>
+    </div>
   `;
 }
 
@@ -12097,12 +12113,14 @@ function fileTypeBadge(file) {
 function renderFileTile(file) {
   const selected = (state.selectedFileIds || []).includes(file.id);
   return `
-    <button type="button" class="file-card-live ${selected ? 'selected ' : ''}${file.id === state.selectedFileId ? 'active' : ''}" data-action="select-file" data-file-id="${h(file.id)}">
-      <span class="file-check tile ${selected ? 'on' : ''}" data-action="toggle-file-select" data-file-id="${h(file.id)}" title="Select file"><i class="ti ${selected ? 'ti-checkbox' : 'ti-square'}"></i></span>
-      <span class="file-thumb">${fileThumb(file)}</span>
-      <strong>${h(file.file_name)}</strong>
-      <span>${h(fileTypeLabel(file))} / ${formatBytes(file.size_bytes)}</span>
-    </button>
+    <article class="file-card-live ${selected ? 'selected ' : ''}${file.id === state.selectedFileId ? 'active' : ''}">
+      <button class="file-check tile ${selected ? 'on' : ''}" type="button" data-action="toggle-file-select" data-file-id="${h(file.id)}" title="Select file" aria-label="Select ${h(file.file_name)}" aria-pressed="${selected ? 'true' : 'false'}"><i class="ti ${selected ? 'ti-checkbox' : 'ti-square'}"></i></button>
+      <button class="file-card-open" type="button" data-action="select-file" data-file-id="${h(file.id)}" aria-label="Open ${h(file.file_name)}">
+        <span class="file-thumb">${fileThumb(file)}</span>
+        <strong>${h(file.file_name)}</strong>
+        <span>${h(fileTypeLabel(file))} / ${formatBytes(file.size_bytes)}</span>
+      </button>
+    </article>
   `;
 }
 
@@ -20053,7 +20071,7 @@ function renderMessagesPage(route, companyId) {
           <p class="count">${h(String(visibleCount))} conversation${visibleCount === 1 ? '' : 's'}</p>
           <label class="message-search-field">
             <i class="ti ti-search"></i>
-            <input data-message-search value="${h(state.messageQuery)}" placeholder="Find a chat or person" />
+            <input data-message-search value="${h(state.messageQuery)}" placeholder="Find a chat or person" aria-label="Find a chat or person" />
           </label>
           <div class="message-filter" role="group" aria-label="Message filters">
             ${['all', 'unread', 'groups', 'direct'].map((filter) => `
@@ -20206,9 +20224,9 @@ function renderMessageDetailsRail(companyId, conversation) {
         <h3>${h(conversation.title)}</h3>
         <p>${h(accessSummary(conversation))}</p>
         <div class="messenger-profile-actions">
-          <button class="icon-button" type="button" data-action="message-search-results" title="Search chat"><i class="ti ti-search"></i></button>
-          <button class="icon-button" type="button" data-action="message-details" data-conversation-id="${h(conversation.id)}" title="Chat details"><i class="ti ti-info-circle"></i></button>
-          <button class="icon-button" type="button" data-action="manage-message-chat" data-conversation-id="${h(conversation.id)}" title="Manage access" ${can('messages.manage_groups', companyId) || can('messages.manage', companyId) ? '' : 'disabled'}><i class="ti ti-users"></i></button>
+          <button class="icon-button" type="button" data-action="message-search-results" title="Search chat" aria-label="Search chat"><i class="ti ti-search"></i></button>
+          <button class="icon-button" type="button" data-action="message-details" data-conversation-id="${h(conversation.id)}" title="Chat details" aria-label="Chat details"><i class="ti ti-info-circle"></i></button>
+          <button class="icon-button" type="button" data-action="manage-message-chat" data-conversation-id="${h(conversation.id)}" title="Manage access" aria-label="Manage chat access" ${can('messages.manage_groups', companyId) || can('messages.manage', companyId) ? '' : 'disabled'}><i class="ti ti-users"></i></button>
         </div>
       </section>
       ${renderChatAccessCard(companyId, conversation)}
@@ -20309,14 +20327,13 @@ function renderMessageAttachment(attachment) {
 }
 
 function renderMessageComposer(conversation) {
+  const canAttach = can('messages.attach_files', conversation.company_id);
   return `
     <form class="message-composer" data-message-form data-conversation-id="${h(conversation.id)}">
-      <label class="icon-button message-attach-button" title="Attach file">
-        <i class="ti ti-paperclip"></i>
-        <input name="attachments" type="file" multiple accept="${acceptAttr('document')}" ${can('messages.attach_files', conversation.company_id) ? '' : 'disabled'} />
-      </label>
-      <input name="body" placeholder="Message ${h(conversation.title)}" autocomplete="off" />
-      <button class="icon-button btn-primary" type="submit" title="Send"><i class="ti ti-send"></i></button>
+      <button class="icon-button message-attach-button" type="button" data-action="pick-message-attachments" title="Attach files" aria-label="Attach files" ${canAttach ? '' : 'disabled'}><i class="ti ti-paperclip"></i></button>
+      <input class="message-attachment-input" name="attachments" type="file" multiple accept="${acceptAttr('document')}" ${canAttach ? '' : 'disabled'} />
+      <input name="body" placeholder="Message ${h(conversation.title)}" aria-label="Message ${h(conversation.title)}" autocomplete="off" />
+      <button class="icon-button btn-primary" type="submit" title="Send" aria-label="Send message"><i class="ti ti-send"></i></button>
     </form>
   `;
 }
@@ -25549,6 +25566,12 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'pick-message-attachments') {
+    event.preventDefault();
+    const input = node.closest('[data-message-form]')?.querySelector('input[name="attachments"]');
+    if (input && !input.disabled) input.click();
+    return;
+  }
   if (action === 'set-message-filter') {
     event.preventDefault();
     state.messageFilter = ['all', 'unread', 'groups', ...MESSAGE_TYPES].includes(node.dataset.filter) ? node.dataset.filter : 'all';
@@ -26174,17 +26197,6 @@ function handleAction(event, node) {
     event.preventDefault();
     state.contactRailScope = node.dataset.scope === 'private' ? 'private' : 'team';
     render();
-    return;
-  }
-  if (action === 'toggle-contact-rail-group') {
-    event.preventDefault();
-    const key = node.dataset.key;
-    if (key) {
-      const current = { ...(state.contactRailExpanded || {}) };
-      current[key] = !current[key];
-      state.contactRailExpanded = current;
-      render();
-    }
     return;
   }
   if (action === 'set-contact-filter') {
@@ -29347,6 +29359,13 @@ function onDocumentInput(event) {
     if (next) { next.focus(); try { next.setSelectionRange(pos, pos); } catch { /* noop */ } }
     return;
   }
+  if (event.target.matches('[data-contact-rail-search]')) {
+    const key = event.target.dataset.contactRailSearch || '';
+    if (!Object.prototype.hasOwnProperty.call(CONTACT_FILTER_DEFAULTS, key)) return;
+    state.contactRailSearch = { ...(state.contactRailSearch || {}), [key]: event.target.value };
+    updateWorkspacePreservingFocus(`[data-contact-rail-search="${key}"]`);
+    return;
+  }
   if (event.target.matches('[data-knowledge-search]')) {
     state.knowledgeUi.query = event.target.value;
     const pos = event.target.selectionStart;
@@ -32248,7 +32267,10 @@ function companyPath(section = 'jobs', params = {}, companyId = activeCompanyId(
 
 function routeTitle(route) {
   if (route.name === 'home') return 'Questbase';
-  if (route.name === 'company') return titleCase(route.section);
+  if (route.name === 'company') {
+    const module = MODULE_REGISTRY.find((item) => item.id === route.section);
+    return navigationLabel(route.section, module?.label || titleCase(route.section));
+  }
   if (route.name === 'command') return 'Company Dashboard';
   if (route.name === 'login') return 'Sign in';
   return titleCase(route.name || 'Workspace');
