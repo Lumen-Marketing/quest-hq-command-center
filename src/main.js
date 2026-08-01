@@ -1,6 +1,7 @@
 import './tabler-icons.css';
 import './styles.css';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
+import { resolveAppEntry, workspaceApps, tileTargetApp } from './workspace/builder-core.js';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import questLogoMarkUrl from './assets/quest-hq-logo-mark.webp';
 import questbaseModularLogoUrl from './assets/questbase-modular-logo.png';
@@ -12922,28 +12923,12 @@ async function saveWorkspaceBuilderDoc(companyId) {
     }
   }
 }
-// A linked app entry ({ id, linked:true, linkedFromWs }) points at a source app
-// that lives in another operational workspace of the SAME company. Because the
-// whole app object (fields + records) is shared, an edit from either workspace
-// mutates the one source and persists once -- so data and fields stay in sync
-// both ways. Resolve returns the live source, or null if the source was removed.
-function wbResolveAppEntry(doc, entry) {
-  if (!entry) return { app: null, linked: false, sourceWsId: null };
-  if (!entry.linked) return { app: entry, linked: false, sourceWsId: null };
-  const src = doc ? doc.workspaces.find((w) => w.id === entry.linkedFromWs) : null;
-  const app = src ? src.apps.find((a) => a.id === entry.id && !a.linked) || null : null;
-  return { app, linked: true, sourceWsId: entry.linkedFromWs };
-}
+// Link resolution lives in src/workspace/builder-core.js so it can be imported and
+// tested directly rather than reimplemented inside a test. These wrappers keep the
+// existing wb* call sites unchanged.
+function wbResolveAppEntry(doc, entry) { return resolveAppEntry(doc, entry); }
 
-// A workspace's apps for display: own apps plus resolved linked apps, each
-// tagged { app, linked }. Dangling links (source deleted) are dropped.
-function wbWorkspaceApps(doc, ws) {
-  if (!ws) return [];
-  return (ws.apps || []).map((entry) => {
-    const r = wbResolveAppEntry(doc, entry);
-    return r.app ? { app: r.app, linked: r.linked, sourceWsId: r.sourceWsId } : null;
-  }).filter(Boolean);
-}
+function wbWorkspaceApps(doc, ws) { return workspaceApps(doc, ws); }
 
 function wbFind(companyId, workspaceId, appId = '') {
   const doc = wbDoc(companyId);
@@ -13248,10 +13233,7 @@ function wbLayoutTiles() {
 // only an appId, and that id is identical for a linked entry and its source, so the
 // entry has to be resolved rather than matched on `!linked`.
 function wbTileTargetApp(companyId, workspace, appId) {
-  if (!appId) return null;
-  const entry = (workspace.apps || []).find((x) => x.id === appId);
-  if (!entry) return null;
-  return wbResolveAppEntry(wbDoc(companyId), entry).app;
+  return tileTargetApp(wbDoc(companyId), workspace, appId);
 }
 
 // Per-tile display metadata (default title + icon + whether it has a config UI).

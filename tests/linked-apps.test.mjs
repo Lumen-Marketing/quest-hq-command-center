@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { resolveAppEntry, tileTargetApp, workspaceApps, workspaceHasApp } from '../src/workspace/builder-core.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 // Installing an app into a second workspace stores a POINTER, never a copy. That is the
 // whole basis of "one app, two workspaces, shared data" — a copy would diverge the moment
-// either side was edited. These reproduce the resolver against the real document shape.
-const resolve = (doc, entry) => {
-  if (!entry) return null;
-  if (!entry.linked) return entry;
-  const src = doc.workspaces.find((w) => w.id === entry.linkedFromWs);
-  return src ? src.apps.find((a) => a.id === entry.id && !a.linked) || null : null;
-};
+// either side was edited.
+//
+// These exercise the SHIPPED resolver. An earlier version of this file reimplemented it
+// here, which was worse than no test: it would have kept passing while the real
+// implementation broke, because it was only ever testing its own copy.
+const resolve = (doc, entry) => resolveAppEntry(doc, entry).app;
 
 const makeDoc = () => ({
   workspaces: [
@@ -87,8 +87,10 @@ test('tiles resolve through the link instead of matching on !linked', () => {
   assert.ok(!/!x\.linked/.test(body), 'a tile pointing at a linked app fell back to a generic empty "App"');
   assert.match(body, /wbTileTargetApp\(companyId, workspace, tile\.config\.appId\)/);
 
+  // The helper delegates to the extracted module; what it actually does is asserted
+  // behaviourally below, against the shipped resolver rather than against this string.
   const helper = main.slice(main.indexOf('function wbTileTargetApp('));
-  assert.match(helper.slice(0, helper.indexOf('\n}\n')), /wbResolveAppEntry\(wbDoc\(companyId\), entry\)/);
+  assert.match(helper.slice(0, helper.indexOf('\n}\n')), /tileTargetApp\(wbDoc\(companyId\), workspace, appId\)/);
 });
 
 test('the tile configurator offers linked apps as targets', () => {
@@ -112,4 +114,36 @@ test('installing writes a pointer carrying the source workspace, never a copied 
 test('the app list and topbar both mark a linked app', () => {
   assert.match(main, /wb-linkmark/);
   assert.match(main, /wb-topbar-link/);
+});
+
+// --- now testable, because the resolver is a module rather than a line in a monolith ---
+
+test('workspaceApps lists own and linked apps, dropping dangling links', () => {
+  const doc = makeDoc();
+  doc.workspaces[1].apps.push({ id: 'ghost', linked: true, linkedFromWs: 'ws-gone' });
+  const shown = workspaceApps(doc, doc.workspaces[1]);
+  assert.deepEqual(shown.map((r) => r.app.id), ['app-1'], 'a link whose source is gone must not render');
+  assert.equal(shown[0].linked, true);
+  assert.equal(shown[0].sourceWsId, 'ws-sales');
+});
+
+test('a tile resolves through the link rather than matching on !linked', () => {
+  const doc = makeDoc();
+  const viaTile = tileTargetApp(doc, doc.workspaces[1], 'app-1');
+  assert.equal(viaTile, doc.workspaces[0].apps[0]);
+  assert.equal(tileTargetApp(doc, doc.workspaces[1], 'nope'), null);
+});
+
+test('a link cannot point at another link, so resolution always terminates', () => {
+  const doc = makeDoc();
+  // Two workspaces each linking to the other would loop if links chained.
+  doc.workspaces[0].apps = [{ id: 'app-1', linked: true, linkedFromWs: 'ws-ops' }];
+  assert.equal(resolveAppEntry(doc, doc.workspaces[1].apps[0]).app, null);
+});
+
+test('workspaceHasApp sees an app whether owned or linked', () => {
+  const doc = makeDoc();
+  assert.equal(workspaceHasApp(doc.workspaces[0], 'app-1'), true, 'owned');
+  assert.equal(workspaceHasApp(doc.workspaces[1], 'app-1'), true, 'linked');
+  assert.equal(workspaceHasApp(doc.workspaces[1], 'other'), false);
 });
