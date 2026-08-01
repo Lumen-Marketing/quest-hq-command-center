@@ -2,6 +2,10 @@ import './tabler-icons.css';
 import './styles.css';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import { resolveAppEntry, workspaceApps, tileTargetApp } from './workspace/builder-core.js';
+import {
+  assignmentRow, assignmentsToCreate, describeAssignment, findLabel,
+  isValidLabelName, labelsForContact as labelsForContactRows, newLabelRow,
+} from './crm/contact-labels.js';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import questLogoMarkUrl from './assets/quest-hq-logo-mark.webp';
 import questbaseModularLogoUrl from './assets/questbase-modular-logo.png';
@@ -2313,6 +2317,10 @@ const state = {
   companyInvites: [],
   joinRequests: [],
   auditEvents: [],
+  // Contact labels and their assignments. Loaded on demand with the 'labels' domain;
+  // nothing on a first-paint screen reads them.
+  contactLabels: [],
+  contactLabelAssignments: [],
   recordHistory: {
     companyId: '',
     workspaceId: '',
@@ -3692,7 +3700,7 @@ function applyWorkspaceBuilderRows(rows) {
 // of change produces empty screens: some widget on an unrelated page reads the data,
 // nobody remembers to list that route, and the screen renders blank with no error.
 // Every read goes through these accessors, so hooking them cannot miss a caller.
-const DEFERRED_DOMAINS = ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals'];
+const DEFERRED_DOMAINS = ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals', 'labels'];
 
 // Deliberately NOT deferred, having checked: company_invites and company_join_requests
 // feed the dashboard's pending-invite widget, which renders on first paint. Deferring
@@ -4146,6 +4154,8 @@ function resetLiveWorkspaceData() {
   state.fieldPermissions = [];
   state.companyInvites = [];
   state.joinRequests = [];
+  state.contactLabels = [];
+  state.contactLabelAssignments = [];
   state.auditEvents = [];
   state.companyPlugins = [];
   state.operationalWorkspaces = [];
@@ -4209,6 +4219,8 @@ function resetDemoWorkspaceData() {
   state.fieldPermissions = [];
   state.companyInvites = [];
   state.joinRequests = [];
+  state.contactLabels = [];
+  state.contactLabelAssignments = [];
   state.auditEvents = [];
   state.companyPlugins = demoCompanyPluginRows();
   state.operationalWorkspaces = demoOperationalWorkspaceRows();
@@ -8983,6 +8995,123 @@ function renderContactBulkModal() {
   return renderModalShell('Contacts', title, content, '');
 }
 
+// Labels a contact carries. Reading this is what triggers the deferred fetch, so any
+// screen that shows a contact gets them without needing to know they load separately.
+function contactLabelsFor(contactId) {
+  ensureDomainLoaded('labels');
+  return labelsForContactRows(state.contactLabels, state.contactLabelAssignments, contactId);
+}
+
+function companyContactLabels(companyId = activeCompanyId()) {
+  ensureDomainLoaded('labels');
+  const canonical = canonicalCompanyId(companyId);
+  return state.contactLabels.filter((label) => canonicalCompanyId(label.company_id) === canonical);
+}
+
+// Apply one label to a set of contacts, creating it if this workspace does not have it.
+//
+// Replaces two lossy writes: the campaign action overwrote `source` (destroying where the
+// contact came from) and the label action appended a line to `notes` (unrenameable,
+// uncountable, unfilterable). Nothing here touches either field.
+async function applyContactLabel(targets, name) {
+  if (!isValidLabelName(name)) {
+    showToast('Enter a label name.', 'error', 'Contacts');
+    return false;
+  }
+  const companyId = activeCompanyId();
+  const client = createSupabaseClient();
+  const live = isLiveSupabaseSession() && client;
+
+  // Group by the CONTACT's own workspace, not the active one. The row-level policies
+  // check the assignment against the contact's workspace, so a selection spanning two
+  // workspaces needs a label in each rather than one row that will be rejected.
+  const byWorkspace = new Map();
+  for (const contact of targets) {
+    const wsId = contact.workspace_id || activeWorkspaceId();
+    if (!wsId) continue;
+    if (!byWorkspace.has(wsId)) byWorkspace.set(wsId, []);
+    byWorkspace.get(wsId).push(contact);
+  }
+  if (!byWorkspace.size) {
+    showToast('These contacts are not in a workspace yet.', 'error', 'Contacts');
+    return false;
+  }
+
+  const profileId = activeSession()?.profile?.id || null;
+  let requested = 0;
+  let created = 0;
+
+  for (const [workspaceId, contacts] of byWorkspace) {
+    requested += contacts.length;
+    let label = findLabel(state.contactLabels, workspaceId, name);
+
+    if (!label) {
+      const row = newLabelRow({ name, workspaceId, companyId, profileId });
+      if (live) {
+        const result = await client.from('contact_labels').insert(row).select().single();
+        if (result.error) {
+          // A concurrent create loses the unique index race; re-read rather than fail.
+          const again = await safeSupabaseQuery(
+            client.from('contact_labels').select('*').eq('workspace_id', workspaceId),
+          );
+          if (!again.error) state.contactLabels = mergeById(state.contactLabels, again.data || []);
+          label = findLabel(state.contactLabels, workspaceId, name);
+          if (!label) { showToast(result.error.message || 'Could not create that label.', 'error', 'Contacts'); return false; }
+        } else {
+          label = result.data;
+          state.contactLabels = mergeById(state.contactLabels, [label]);
+        }
+      } else {
+        label = { ...row, id: `label-${crypto.randomUUID()}` };
+        state.contactLabels = mergeById(state.contactLabels, [label]);
+      }
+    }
+
+    const todo = assignmentsToCreate({
+      contactIds: contacts.map((c) => c.id),
+      labelId: label.id,
+      assignments: state.contactLabelAssignments,
+    });
+    if (!todo.length) continue;
+
+    const rows = todo.map((contactId) => assignmentRow({
+      contactId, labelId: label.id, workspaceId, companyId, profileId,
+    }));
+    if (live) {
+      const result = await client.from('contact_label_assignments').insert(rows).select();
+      if (result.error) { showToast(result.error.message || 'Could not apply that label.', 'error', 'Contacts'); return false; }
+      state.contactLabelAssignments = state.contactLabelAssignments.concat(result.data || []);
+    } else {
+      state.contactLabelAssignments = state.contactLabelAssignments.concat(rows);
+    }
+    created += todo.length;
+  }
+
+  showToast(describeAssignment({ requested, created, labelName: String(name).trim() }),
+    live ? 'live' : 'local', 'Contacts');
+  return true;
+}
+
+async function removeContactLabel(contactId, labelId) {
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await client.from('contact_label_assignments').delete()
+      .eq('contact_id', contactId).eq('label_id', labelId);
+    if (result.error) { showToast(result.error.message || 'Could not remove that label.', 'error', 'Contacts'); return; }
+  }
+  state.contactLabelAssignments = state.contactLabelAssignments
+    .filter((a) => !(a.contact_id === contactId && a.label_id === labelId));
+  render();
+}
+
+// Merge rows by id, letting the newer copy win. Used when a concurrent create means the
+// local list and the server disagree about which labels exist.
+function mergeById(existing, incoming) {
+  const byId = new Map((existing || []).map((row) => [row.id, row]));
+  for (const row of incoming || []) byId.set(row.id, row);
+  return [...byId.values()];
+}
+
 function submitContactBulk() {
   const b = state.contactBulk || {};
   const targets = selectedContactRows();
@@ -8990,15 +9119,12 @@ function submitContactBulk() {
   if (b.kind === 'delete') { performBulkContactsDelete(targets); return; }
   const value = String(document.getElementById('contactBulkInput')?.value || '').trim();
   if (!value) { state.contactBulk = { ...b, error: `Enter a ${b.kind === 'campaign' ? 'campaign' : 'label'} name.` }; render(); return; }
-  if (b.kind === 'campaign') {
-    targets.forEach((c) => persistContact({ ...c, source: value }));
-    showToast(`${targets.length} contact${targets.length === 1 ? '' : 's'} added to "${value}".`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
-  } else {
-    targets.forEach((c) => { const line = `Label: ${value}`; const notes = c.notes ? (c.notes.includes(line) ? c.notes : `${c.notes}\n${line}`) : line; persistContact({ ...c, notes }); });
-    showToast(`Labeled ${targets.length} contact${targets.length === 1 ? '' : 's'} "${value}".`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
-  }
+  // Both actions now record membership as a durable label. Campaign membership used to
+  // overwrite `source`, which is provenance, not membership -- that field answers "is this
+  // channel worth the money" and must survive being added to a campaign.
   state.modal = '';
   state.contactBulk = null;
+  applyContactLabel(targets, value).then(() => render());
   render();
 }
 
@@ -9163,6 +9289,25 @@ function contactCard(contact) {
   `;
 }
 
+// The labels on a contact, as removable chips. Rendering this is what triggers the
+// deferred fetch, so opening a contact loads them without the caller knowing.
+function renderContactLabelStrip(companyId, contact) {
+  const labels = contactLabelsFor(contact.id);
+  const canManage = can('crm.manage', companyId);
+  if (!labels.length && !canManage) return '';
+  return `
+    <div class="contact-label-strip">
+      <span class="contact-label-lead"><i class="ti ti-tag" aria-hidden="true"></i>Labels</span>
+      ${labels.length
+        ? labels.map((label) => `
+          <span class="contact-label-chip" style="--chip:${h(safeHexColor(label.color, '#64748b'))}">
+            ${h(label.name)}
+            ${canManage ? `<button type="button" class="contact-label-x" data-action="contact-label-remove" data-contact-id="${h(contact.id)}" data-label-id="${h(label.id)}" aria-label="Remove label ${h(label.name)}"><i class="ti ti-x" aria-hidden="true"></i></button>` : ''}
+          </span>`).join('')
+        : '<span class="contact-label-empty">None yet</span>'}
+    </div>`;
+}
+
 function renderContactRecord(companyId, contact) {
   const stages = contactStages();
   const ci = stages.findIndex((s) => s.name === contact.stage);
@@ -9226,6 +9371,8 @@ function renderContactRecord(companyId, contact) {
           <button class="sf-btn" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit</button>
         </div>
       </div>
+
+      ${renderContactLabelStrip(companyId, contact)}
 
       <div class="sf-path-wrap">
         <div class="sf-path-row">
@@ -26009,6 +26156,11 @@ function handleAction(event, node) {
     bulkContactsEmail();
     return;
   }
+  if (action === 'contact-label-remove') {
+    if (!can('crm.manage', activeCompanyId())) { showToast('Your role cannot change labels.', 'error', 'Contacts'); return; }
+    removeContactLabel(node.dataset.contactId || '', node.dataset.labelId || '');
+    return;
+  }
   if (action === 'contacts-campaign') {
     event.preventDefault();
     bulkContactsCampaign();
@@ -38661,6 +38813,15 @@ async function loadSecondaryRealtimeDomain(client, domain) {
   if (domain === 'notifications') {
     const result = await client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200);
     if (!result.error) state.notifications = (result.data || []).map(normalizeNotification);
+    return;
+  }
+  if (domain === 'labels') {
+    const [labels, assignments] = await Promise.all([
+      safeSupabaseQuery(client.from('contact_labels').select('*').order('name', { ascending: true })),
+      safeSupabaseQuery(client.from('contact_label_assignments').select('*')),
+    ]);
+    if (!labels.error) state.contactLabels = labels.data || [];
+    if (!assignments.error) state.contactLabelAssignments = assignments.data || [];
     return;
   }
   if (domain === 'audit') {

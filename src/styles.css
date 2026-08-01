@@ -27968,3 +27968,54 @@ html[data-card-style="glass"] .message-context-rail {
 }
 
 .handoff-review .contract-rows a { color: var(--accent); font-weight: 750; }
+
+/* Contact labels ---------------------------------------------------------- */
+/* Chips tint from the label's own colour rather than a fixed palette, so a label reads
+   the same here as it will in a segment list later. --chip is set inline per label. */
+.contact-label-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+.contact-label-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.contact-label-empty { font-size: 13px; color: var(--muted); }
+.contact-label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--chip) 72%, var(--ink));
+  background: color-mix(in srgb, var(--chip) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--chip) 32%, transparent);
+}
+.contact-label-x {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  color: inherit;
+  background: transparent;
+  opacity: .6;
+}
+.contact-label-x:hover { opacity: 1; background: color-mix(in srgb, var(--chip) 22%, transparent); }
+.contact-label-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; opacity: 1; }
+.contact-label-x i { font-size: 11px; }

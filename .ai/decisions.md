@@ -912,3 +912,48 @@ than half-regenerated while appearing complete.
 Worth fixing properly: a check whose coverage silently shrinks relative to reality is
 worse than no check, because it produces a reassuring number. The refresh should be part
 of applying a migration, not something remembered later.
+
+## The campaign action stopped destroying lead source
+
+The second P1 6 line closes. Two bulk-contact actions were writing lossy data:
+
+- **Add to campaign** did `persistContact({ ...c, source: value })` — it overwrote the
+  contact's `source` with the campaign name. That field is *provenance*: it answers "is
+  this channel worth the money". Membership is not provenance, and overwriting it threw
+  away the only record of where the contact came from. This is the actual defect behind
+  the checklist line; the notes one is merely untidy by comparison.
+- **Assign label** appended `Label: X` to the notes field. Unrenameable, unremovable,
+  uncountable, unfilterable — and "VIP" and "vip" produced two things that look identical.
+
+Both now write rows into the tables added in `202608011200`. Neither touches `source` or
+`notes`.
+
+Three decisions worth stating:
+
+**Grouped by the contact's own workspace, not the active one.** The row-level policies
+check an assignment against its contact's workspace, so a selection spanning two
+workspaces needs a label in each. Using whichever workspace happens to be on screen would
+produce rows the database rejects, and the user would see an unexplained failure.
+
+**Assignment is filtered before insert, not attempted and caught.** The primary key is
+`(contact_id, label_id)`, so re-labelling an already-labelled contact is a duplicate-key
+error rather than a no-op. A bulk action over a partly-labelled selection would fail on
+the ones already done. The toast reports what actually happened — "Labelled 1 contact
+'VIP' — 2 already had it" — instead of claiming credit for the whole selection.
+
+**A lost create race re-reads rather than fails.** Two people creating the same label at
+once means one loses the unique index. That client re-reads the workspace's labels and
+uses the winner, because the user asked for a label to exist and it now does.
+
+A campaign is represented as a label until real campaigns exist. That is deliberate: the
+line asks to stop *destroying* lead source, and a labelled set is the honest minimum. When
+campaigns become their own entity they can carry schedules and delivery events, which a
+label should not.
+
+The pure half lives in `src/crm/contact-labels.js` — matching, diffing and row shapes —
+so it is tested directly rather than through the UI. Labels render as removable chips on
+the contact record, and rendering them is what triggers the deferred fetch, so any screen
+showing a contact gets them without knowing they load separately.
+
+Still open in P1 6: saved segments, campaigns proper, templates/consent/delivery, and
+campaign reporting.
