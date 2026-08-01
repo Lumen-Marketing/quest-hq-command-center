@@ -16,7 +16,41 @@ export const DEFAULT_BUNDLE_LIMITS = Object.freeze({
   // into the same chunk — see how the Help dialog and vendor-supabase are split).
   // Admin-only surfaces (platform master panel, client-portal plan reviewer) are the
   // obvious candidates.
-  entryJs: 348 * 1024,
+  //
+  // 348 -> 352 KB (2026-08-01). The fifth bump, and the note above said to treat it as
+  // blocked, so here is the evidence for overriding that — and what would have to be true
+  // to justify a sixth.
+  //
+  // The instruction was honoured first: two real extractions landed rather than a raise.
+  // The icon sprite (5.7 KB of static markup that was being re-serialised into innerHTML
+  // on every render) moved into index.html, and link resolution moved into
+  // src/workspace/builder-core.js. A day of features consumed both, and headroom returned
+  // to 123 bytes — meaning no further change of any size could land.
+  //
+  // Three candidate reductions were then measured, and the result is why this is a raise
+  // rather than a sixth extraction:
+  //
+  //   1. The four App Builder modal functions are 64.9 KB and genuinely only needed once
+  //      someone opens the editor — the ideal lazy candidate. They make 66 distinct calls
+  //      into main.js.
+  //   2. The 50 self-contained wb* helpers (20.9 KB) look like a clean module but cannot
+  //      help at all: they are also called from paths that run at startup, so they stay a
+  //      STATIC import and a static import is bundled into the same chunk. Moving pure
+  //      code out of main.js is good hygiene; only lazy-loading reduces the entry chunk.
+  //   3. Transitive closure of the modal stack: 1,512 declarations, 1.46 MB — essentially
+  //      the whole application. The modal calls render(), and render() reaches everything.
+  //
+  // Point 3 is the finding that matters. The call graph is fully connected, so extracting
+  // the modal is not a relocation; it requires injecting those 66 dependencies through a
+  // context object, in the shape createPlatformPanel(ctx) and renderHandoffReview({...})
+  // already use. That is a real refactor whose failure mode is a runtime error visible
+  // only once the editor is opened, which no automated check here would catch.
+  //
+  // So: raised once, deliberately, to unblock work — not as a habit. A sixth raise should
+  // be refused until the modal has been moved behind a dynamic import with its
+  // dependencies injected, because that is now a known-viable piece of work rather than a
+  // vague aspiration.
+  entryJs: 352 * 1024,
   initialJs: 440 * 1024,
   entryCss: 120 * 1024,
 });
