@@ -2321,6 +2321,9 @@ const state = {
   // nothing on a first-paint screen reads them.
   contactLabels: [],
   contactLabelAssignments: [],
+  // Filter text for the company picker dialog. Cleared each time it opens so a stale
+  // search cannot hide the account you are looking for.
+  companyPickerQuery: '',
   recordHistory: {
     companyId: '',
     workspaceId: '',
@@ -4278,13 +4281,11 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
             <small>Company account</small>
           </span>
           ${companies.length > 1 ? `
-            <label class="company-account-switcher" title="Switch company account">
-              <span class="sr-only">Switch company account</span>
-              <select data-company-switch aria-label="Active company account">
-                ${menuCompanies.map((company) => `<option value="${h(company.id)}" ${company.id === current.id ? 'selected' : ''}>${h(companyLabel(company))}</option>`).join('')}
-              </select>
+            <button class="company-account-switcher" type="button" data-action="open-company-picker"
+                    aria-haspopup="dialog" title="Switch company account"
+                    aria-label="Switch company account — currently ${h(companyLabel(current))}">
               <i class="ti ti-selector" aria-hidden="true"></i>
-            </label>
+            </button>
           ` : ''}
         </div>
         <div class="workspace-rail-head">
@@ -22158,6 +22159,60 @@ function renderOperationalWorkspaceEditModal(companyId) {
   `, 'ows-modal-panel');
 }
 
+// Switching company is a consequential move -- it changes which customers, jobs and
+// money you are looking at -- and a native select gave it the same weight as choosing a
+// sort order, with no room to show which account you are actually about to enter.
+//
+// Built on renderModalShell so it inherits what that already does correctly: role=dialog,
+// an accessible name, the focus trap, focus returning to this button on close, and Escape.
+function renderCompanyPickerModal() {
+  const companies = allowedCompanies();
+  const currentId = activeCompanyId();
+  const query = String(state.companyPickerQuery || '').trim().toLowerCase();
+  // Search only earns its place once the list stops fitting on screen; below that it is
+  // one more thing to tab past.
+  const searchable = companies.length > 6;
+  const matches = query
+    ? companies.filter((company) => companyLabel(company).toLowerCase().includes(query))
+    : companies;
+  // Current account first: it is the one being compared against.
+  const ordered = matches.filter((c) => c.id === currentId).concat(matches.filter((c) => c.id !== currentId));
+
+  const rows = ordered.map((company) => {
+    const isCurrent = company.id === currentId;
+    const spaces = (allowedOperationalWorkspaces(company.id) || []).filter((w) => w.status !== 'archived');
+    const count = spaces.length;
+    return `
+      <button class="company-pick ${isCurrent ? 'current' : ''}" type="button"
+              data-action="pick-company" data-company-id="${h(company.id)}"
+              ${isCurrent ? 'aria-current="true"' : ''}>
+        ${workspaceIconMarkup(company, 'company-pick-icon')}
+        <span class="company-pick-copy">
+          <strong>${h(companyLabel(company))}</strong>
+          <small>${count} workspace${count === 1 ? '' : 's'}</small>
+        </span>
+        ${isCurrent
+          ? '<span class="company-pick-flag">Current</span>'
+          : '<i class="ti ti-arrow-right company-pick-go" aria-hidden="true"></i>'}
+      </button>`;
+  }).join('');
+
+  const content = `
+    ${searchable ? `
+      <div class="company-pick-search">
+        <i class="ti ti-search" aria-hidden="true"></i>
+        <input class="wb-input" type="search" id="companyPickerSearch" data-company-picker-search
+               placeholder="Search company accounts" aria-label="Search company accounts"
+               value="${h(state.companyPickerQuery || '')}">
+      </div>` : ''}
+    <div class="company-pick-list">
+      ${rows || '<p class="company-pick-none">No company account matches that search.</p>'}
+    </div>
+    <p class="company-pick-note">Switching changes the customers, jobs and billing you are working in.</p>`;
+
+  return renderModalShell('Company account', 'Switch company', content, 'company-picker-modal');
+}
+
 function renderActiveModal(route, session) {
   if (state.builderModal) return renderWorkspaceBuilderModal();
   if (state.modal === 'record-history') return renderRecordHistoryModal();
@@ -22166,6 +22221,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'task-delete') return renderTaskDeleteModal();
   if (state.modal === 'files-delete') return renderFilesDeleteModal();
   if (state.modal === 'files-transfer') return renderFilesTransferModal();
+  if (state.modal === 'company-picker') return renderCompanyPickerModal();
   if (state.modal === 'system-status') return renderSystemStatusModal();
   if (state.modal === 'support') return supportController?.renderSupportModal() || '';
   if (state.modal === 'cp-mark-info') return renderClientPortalMarkModal();
@@ -26156,6 +26212,22 @@ function handleAction(event, node) {
     bulkContactsEmail();
     return;
   }
+  if (action === 'open-company-picker') {
+    state.companyPickerQuery = '';
+    state.modal = 'company-picker';
+    render();
+    return;
+  }
+  if (action === 'pick-company') {
+    const nextCompanyId = node.dataset.companyId || '';
+    state.modal = '';
+    state.companyPickerQuery = '';
+    // setActiveCompany re-resolves the route and renders; closing first means the dialog
+    // is gone before the new company's screen appears rather than blinking over it.
+    if (nextCompanyId && nextCompanyId !== activeCompanyId()) setActiveCompany(nextCompanyId);
+    else render();
+    return;
+  }
   if (action === 'contact-label-remove') {
     if (!can('crm.manage', activeCompanyId())) { showToast('Your role cannot change labels.', 'error', 'Contacts'); return; }
     removeContactLabel(node.dataset.contactId || '', node.dataset.labelId || '');
@@ -29402,6 +29474,16 @@ async function openMessageAttachment(attachmentId) {
 }
 
 function onDocumentInput(event) {
+  if (event.target.matches('[data-company-picker-search]')) {
+    state.companyPickerQuery = event.target.value || '';
+    render();
+    // The re-render replaces the input, so put the caret back where it was.
+    queueMicrotask(() => {
+      const field = document.getElementById('companyPickerSearch');
+      if (field) { field.focus(); field.setSelectionRange(field.value.length, field.value.length); }
+    });
+    return;
+  }
   if (event.target.matches('[data-appearance-range]')) {
     // Live-apply the CSS variable + update the readout without a full re-render,
     // so dragging the slider stays smooth and the input keeps focus.
