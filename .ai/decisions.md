@@ -860,3 +860,55 @@ Not addressed, and worth knowing: the link is scoped to a single company, becaus
 builder document is one JSONB row per company and a cross-company link would have nothing
 to resolve against. Installing an app into a workspace belonging to a different company is
 a genuinely different feature.
+
+## Contact labels as durable rows (P1 6, first line)
+
+Labels were being written into the contact's notes field, with `lead_source` overwritten
+to record campaign membership. Both are lossy: a label could not be renamed, removed,
+counted or filtered on, and overwriting `lead_source` destroyed the record of where the
+contact actually came from.
+
+Two tables — `contact_labels` and `contact_label_assignments` — because a contact has many
+labels and a label has many contacts. An array column on the contact would make renaming a
+label a rewrite of every contact row, and "which contacts carry this label" a scan. That
+second query is what a saved segment *is*, so it gets its own index; the composite primary
+key leads with `contact_id` and would not serve it.
+
+Scoping matches `contacts` exactly: workspace membership plus `crm.view` to read and
+`crm.manage` to change. A label is only ever seen beside the contacts it describes, and
+anything looser would leak one workspace's segmentation vocabulary into another's.
+
+The assignment policies deliberately verify the contact's *and* the label's own workspace
+rather than only the assignment row's `workspace_id` column. Checking only the row's own
+column is exactly the defect fixed in `202608010900` — it lets a caller name a workspace
+they belong to while pointing at a record that lives elsewhere.
+
+No UPDATE policy on assignments: the row carries no mutable state, so changing a label
+means delete plus insert, which keeps `assigned_at` honest.
+
+Verified as a real member, rolled back: creating a label and labelling a contact in one's
+own workspace are accepted; an assignment claiming a workspace the contact is not in is
+rejected; a label created in a workspace the member does not belong to is rejected; and a
+duplicate name differing only in case is rejected. `contacts.id` is `text`, not `uuid`,
+which the foreign key refused outright on the first attempt — a useful failure, since the
+mismatch would otherwise have surfaced as a puzzling type error at query time.
+
+Still open in P1 6: the labels UI, saved segments, campaigns, and removing the code that
+writes labels into notes. This lands the durable model those depend on.
+
+## The tenancy guard was three tables out of date
+
+Refreshing the snapshot for the new tables exposed a quieter problem: the guard reads
+`.ai/database/snapshot.json`, which was captured on 29 July, so it had been reporting
+"63 tenant-scoped tables all have RLS" while the database actually held 66. Any table
+added since that capture — including `eod_reports` — was outside its coverage entirely,
+and the check reported success the whole time.
+
+The `tables` and `policies` sections are now regenerated from live catalogue state (79
+relations, 235 policies) and the guard covers 66. Only those two sections were replaced,
+because they are the only ones this check consumes; the rest is left as captured rather
+than half-regenerated while appearing complete.
+
+Worth fixing properly: a check whose coverage silently shrinks relative to reality is
+worse than no check, because it produces a reassuring number. The refresh should be part
+of applying a migration, not something remembered later.
