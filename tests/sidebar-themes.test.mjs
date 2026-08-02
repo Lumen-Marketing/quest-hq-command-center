@@ -113,7 +113,7 @@ test('the choice rides the existing sync, so it follows you between devices', ()
   // special casing, but a future refactor to an allow-list would silently drop them.
   const payload = fn('appearanceSyncPayload');
   assert.match(payload, /\.\.\.shareable/);
-  assert.match(main, /sidebarTheme: 'default'/, 'must be part of APPEARANCE_DEFAULTS to sync');
+  assert.match(main, /sidebarTheme: '[a-z]+'/, 'must be part of APPEARANCE_DEFAULTS to sync');
 });
 
 // --- stylesheet -----------------------------------------------------------------
@@ -236,4 +236,37 @@ test('appearance is per account, and sharing it is a separate deliberate act', (
   assert.match(main, /action === 'save-company-appearance'/);
   const save = fn('saveCompanyAppearanceDefault');
   assert.match(save, /canManageCompanyAppearance\(companyId\)/, 'and it is permission-gated');
+});
+
+// --- what ships out of the box ------------------------------------------------
+
+test('the light menu is the shipped default', () => {
+  // Chosen so the brand mark appears in its full-colour form rather than the lightened
+  // variant, which is what the dark menu requires.
+  assert.match(main, /sidebarTheme: 'light',/);
+  assert.ok(presets.some((p) => p.id === 'light'), 'the default must be a real preset');
+});
+
+test('the no-overrides preset is labelled for how it looks, not for being the default', () => {
+  // It is no longer the default, so calling it "Default" would be a lie in the picker.
+  const entry = presets.find((p) => p.id === 'default');
+  assert.equal(entry.label, 'Charcoal');
+  assert.equal(entry.vars, null, 'it must still apply no overrides');
+});
+
+test('an account that already chose a theme is not moved to the new default', () => {
+  // getAppearance merges saved values over the defaults, so a stored choice wins. Only
+  // an account that never picked anything follows the shipped default.
+  const fn = main.slice(main.indexOf('function getAppearance()'));
+  assert.match(fn.slice(0, fn.indexOf('\n}\n')), /\{ \.\.\.APPEARANCE_DEFAULTS, \.\.\.\(saved/);
+});
+
+test('the document does not scroll behind the app shell', () => {
+  // Two scrollbars: .quest-app is viewport-height with overflow hidden and .work-surface
+  // scrolls inside it, so a scrollable document is a second, redundant scrollbar.
+  const block = css.slice(css.indexOf('/* ---- One scrollbar, not two'));
+  assert.match(block, /body:has\(\.quest-app\)/, 'must not affect the landing page or portals');
+  assert.match(block, /@media \(min-width: 981px\)/, 'below this the shell scrolls on purpose');
+  assert.match(block, /overflow-y: hidden;/);
+  assert.ok(!/overflow: hidden;/.test(block), 'horizontal clipping is already handled elsewhere');
 });

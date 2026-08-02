@@ -195,7 +195,10 @@ const ACCENT_OPTIONS = [
 // treatment. `dark: false` tells the stylesheet this is a light surface, which flips the
 // hairlines and hover wash that would otherwise disappear.
 const SIDEBAR_THEMES = [
-  ['default', 'Default', null],
+  // Labelled for what it looks like, not for its role: the shipped default is now the
+  // light menu below. This is still the 'no overrides at all' entry, so the charcoal it
+  // shows comes from the base stylesheet and cannot drift as this table is edited.
+  ['default', 'Charcoal', null],
   ['midnight', 'Midnight', { bg: 'linear-gradient(180deg,#132038 0%,#0d1626 100%)', text: 'rgba(226,236,250,.82)', strong: '#f8fafc', label: 'rgba(148,178,222,.66)', activeBg: 'rgba(224,85,45,.16)', activeText: '#ff8a5c', dark: true }],
   ['dark', 'Dark', { bg: 'linear-gradient(180deg,#17181b 0%,#101113 100%)', text: 'rgba(228,228,231,.8)', strong: '#fafafa', label: 'rgba(161,161,170,.7)', activeBg: 'rgba(255,255,255,.1)', activeText: '#ffffff', dark: true }],
   ['coffee', 'Coffee', { bg: 'linear-gradient(180deg,#2c211a 0%,#1d1512 100%)', text: 'rgba(240,226,211,.82)', strong: '#fdf6ee', label: 'rgba(198,166,133,.7)', activeBg: 'rgba(214,158,94,.18)', activeText: '#e8b27a', dark: true }],
@@ -209,7 +212,10 @@ const SIDEBAR_THEME_IDS = SIDEBAR_THEMES.map(([id]) => id);
 
 const APPEARANCE_KEY = 'quest-appearance';
 const APPEARANCE_DEFAULTS = {
-  sidebarTheme: 'default', // one of SIDEBAR_THEME_IDS, or 'custom'
+  // The light side menu ships as the default so the brand mark reads in its full-colour
+  // form rather than the lightened one. Anyone who explicitly picked a theme keeps it --
+  // only an account that never chose follows this.
+  sidebarTheme: 'light', // one of SIDEBAR_THEME_IDS, or 'custom'
   sidebarBg: '#132038',    // used only by 'custom'
   sidebarAccent: '#e0552d',
   // Empty means "follow the preset", which already picks light or dark text to suit its
