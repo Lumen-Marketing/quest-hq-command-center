@@ -112,16 +112,16 @@
 
 <div class="meta">
   <div><b>Date</b>2 August 2026</div>
-  <div><b>Baseline</b>09cd7dd (last pushed)</div>
-  <div><b>Branch</b>main — uncommitted</div>
-  <div><b>Deployed</b>No — local only</div>
+  <div><b>Released</b>7fd44a7 on main</div>
+  <div><b>Live</b>questbase.io</div>
+  <div><b>Verified</b>36/36 routes</div>
 </div>
 
 <div class="stats">
-  <div class="stat"><span>1,188</span><small>Tests passing</small></div>
+  <div class="stat"><span>1,197</span><small>Tests passing</small></div>
   <div class="stat"><span>71</span><small>Files changed</small></div>
   <div class="stat"><span>15.5 KB</span><small>Moved off first load</small></div>
-  <div class="stat"><span>5</span><small>Bugs fixed</small></div>
+  <div class="stat"><span>7</span><small>Bugs fixed</small></div>
 </div>
 
 <h2>What's new</h2>
@@ -221,6 +221,14 @@
       <td><b>Empty chart claimed a total of 1</b></td>
       <td>A single value served as both the divide-by-zero guard and the printed figure. Found only because the chart code was moved somewhere it could be tested directly.</td>
     </tr>
+    <tr>
+      <td><b>Master panel would not open</b></td>
+      <td>Long-standing, and unrelated to this batch — it has been broken since the panel was moved into its own module in an earlier release. Three of the things it needs were never handed to it, so it failed instantly every time. Because the failure happened while the page was being built, the browser simply kept showing the previous screen: the address changed but nothing else did, which made it look like the feature had been removed. Restored, along with the company directory, the create-company form and the backup ledger.</td>
+    </tr>
+    <tr>
+      <td><b>Smoke check reported 8/36 after the first deploy</b></td>
+      <td>The page title had been shortened during the icon work, and that exact wording is what production verification looks for to tell a real page from an error or login screen. Every route was in fact serving correctly. Title restored and a test now ties it to the checker, so the two cannot drift apart. Re-verified at 36/36.</td>
+    </tr>
   </tbody>
 </table>
 
@@ -243,7 +251,7 @@
 <h2>Needs a decision</h2>
 
 <div class="note stop">
-  <b>Database change is written but NOT applied.</b>
+  <b>Database change is written but NOT applied.</b> This does not block anything already released —
   <code>202608021000_company_icon_color.sql</code> adds storage for the icon colour and style. It has deliberately not been run against the live database, because that is a production schema change and warrants review first.
   <br /><br />
   <b>Until it is applied:</b> icon colour and icon style work immediately but reset when the page is reloaded. Everything else in this update is unaffected. The migration is written to be applied safely on its own, ahead of any deployment.
@@ -259,7 +267,16 @@
 </ul>
 
 <h2>Status</h2>
-<p><b>Nothing in this update has been committed, pushed or deployed.</b> It is running locally only. 71 files are changed. The recommended next step is to commit this work to a branch so it is safely stored, then decide separately on deployment and on the database migration above.</p>
+<p><b>Released and live on questbase.io.</b> Verified at 36 of 36 production routes with all entry assets loading.</p>
+<table>
+  <thead><tr><th style="width:22%">Commit</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td class="num"><code>d48b03a</code></td><td>The feature batch — pipeline stages, cross-company installs, side menu themes, message dock, icons.</td></tr>
+    <tr><td class="num"><code>40e085f</code></td><td>Restored the page title the production smoke check reads.</td></tr>
+    <tr><td class="num"><code>7fd44a7</code></td><td>Master panel fix.</td></tr>
+  </tbody>
+</table>
+<p>Deployed manually, as this project requires — pushing to <code>main</code> does not deploy on its own.</p>
 
 <footer>
   Questbase — internal development update, 2 August 2026. Generated from the working repository; figures verified against the test suite and production build at the time of writing.
