@@ -82,8 +82,14 @@ try {
   // event loop. Exit explicitly or this check hangs the build forever.
   process.exit(0);
 } catch (error) {
-  console.log('BOOT THREW:', error?.name, '-', error?.message);
-  console.log(String(error?.stack || '').split('\n').slice(0, 3).join('\n').slice(0, 600));
+  // This MUST fail the build. It printed and exited 0 once, which made the check
+  // decorative: a temporal-dead-zone error shipped a blank page while `npm run check`
+  // reported success, because the only thing distinguishing pass from fail was a line of
+  // output nobody was matching on.
+  console.error('Bundle failed to boot:', error?.name, '-', error?.message);
+  console.error(String(error?.stack || '').split('\n').slice(0, 6).join('\n').slice(0, 900));
+  if (createdPkg) rmSync(pkg, { force: true });
+  process.exit(1);
 } finally {
   if (createdPkg) rmSync(pkg, { force: true });
 }

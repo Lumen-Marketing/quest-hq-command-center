@@ -24,14 +24,14 @@ const workspaceReviewRowsSource = functionSource('workspaceReviewRows', 'platfor
 const normalizeSubscriptionStatusSource = functionSource('normalizeSubscriptionStatus', 'isQuestDeveloper');
 
 test('authoritative company normalization preserves a trimmed Supabase id that is also a legacy URL alias', () => {
-  const normalize = new Function('authoritativeCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'input', `${normalizeCompanySource}\nreturn normalizeCompany(input);`);
-  const company = normalize((id) => String(id || '').trim(), (key) => ({ key: key || 'home' }), () => '', { id: ' quest-roofing ', name: 'Quest Roofing' });
+  const normalize = new Function('authoritativeCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'normalizeIconColor', 'workspaceIconPack', 'input', `${normalizeCompanySource}\nreturn normalizeCompany(input);`);
+  const company = normalize((id) => String(id || '').trim(), (key) => ({ key: key || 'home' }), () => '', (value) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || '').trim()) ? String(value).trim().toLowerCase() : '#e0552d', (value) => ['solid', 'line'].includes(String(value || '').trim()) ? String(value).trim() : 'solid', { id: ' quest-roofing ', name: 'Quest Roofing' });
   assert.equal(company.id, 'quest-roofing');
 });
 
 test('initial Supabase company loads preserve authoritative ids through real merge behavior', () => {
-  const load = new Function('authoritativeCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'rows', `${normalizeCompanySource}\n${mergeCompaniesSource}\nreturn mergeCompanies(rows.map(normalizeCompany));`);
-  const companies = load((id) => String(id || '').trim(), (key) => ({ key: key || 'home' }), () => '', [{ id: ' quest-roofing ', name: 'Quest Roofing' }]);
+  const load = new Function('authoritativeCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'normalizeIconColor', 'workspaceIconPack', 'rows', `${normalizeCompanySource}\n${mergeCompaniesSource}\nreturn mergeCompanies(rows.map(normalizeCompany));`);
+  const companies = load((id) => String(id || '').trim(), (key) => ({ key: key || 'home' }), () => '', (value) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || '').trim()) ? String(value).trim().toLowerCase() : '#e0552d', (value) => ['solid', 'line'].includes(String(value || '').trim()) ? String(value).trim() : 'solid', [{ id: ' quest-roofing ', name: 'Quest Roofing' }]);
   assert.equal(companies[0].id, 'quest-roofing');
 });
 
@@ -42,15 +42,15 @@ test('limited initial bootstrap keeps membership company ids authoritative befor
 });
 
 test('platform, review, and member RPC normalizers preserve authoritative company ids before company state exists', () => {
-  const normalize = new Function('authoritativeCompanyId', 'canonicalCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'normalizeSubscriptionStatus', 'number', 'titleCase', 'row', `${normalizeWorkspaceReviewSource}\n${normalizePlatformCompanySource}\n${normalizePlatformCompanyMemberSource}\nreturn [normalizePlatformCompany(row), normalizeWorkspaceReview(row), normalizePlatformCompanyMember(row)];`);
-  const rows = normalize((id) => String(id || '').trim(), () => 'roofing', (key) => ({ key: key || 'home' }), () => '', (status) => status, Number, (value) => value, { company_id: ' quest-roofing ', company_name: 'Quest Roofing' });
+  const normalize = new Function('authoritativeCompanyId', 'canonicalCompanyId', 'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'normalizeIconColor', 'workspaceIconPack', 'normalizeSubscriptionStatus', 'number', 'titleCase', 'row', `${normalizeWorkspaceReviewSource}\n${normalizePlatformCompanySource}\n${normalizePlatformCompanyMemberSource}\nreturn [normalizePlatformCompany(row), normalizeWorkspaceReview(row), normalizePlatformCompanyMember(row)];`);
+  const rows = normalize((id) => String(id || '').trim(), () => 'roofing', (key) => ({ key: key || 'home' }), () => '', (value) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || '').trim()) ? String(value).trim().toLowerCase() : '#e0552d', (value) => ['solid', 'line'].includes(String(value || '').trim()) ? String(value).trim() : 'solid', (status) => status, Number, (value) => value, { company_id: ' quest-roofing ', company_name: 'Quest Roofing' });
   assert.deepEqual(rows.map((row) => row.company_id), ['quest-roofing', 'quest-roofing', 'quest-roofing']);
 });
 
 function creationHarness(fnSource, workspaceId) {
   const run = new Function(
     'state', 'localStorage', 'canonicalCompanyId', 'defaultCompanyId', 'companyName', 'companySubscription', 'companyColor',
-    'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'normalizeMembership', 'mergeSubscriptions', 'normalizeSubscription',
+    'workspaceIconOption', 'sanitizeWorkspaceIconImage', 'normalizeIconColor', 'workspaceIconPack', 'normalizeMembership', 'mergeSubscriptions', 'normalizeSubscription',
     'activeSession', 'compactUnique', 'normalizeProfile', 'writeJson', 'markWorkspacePendingReview', 'clearWorkspacePendingReview',
     'workspaceId',
     `const SESSION_KEY = 'quest-hq-session';\nconst COMPANY_KEY = 'quest-hq-company';\nconst authoritativeCompanyId = (id) => String(id || '').trim();\n${normalizeCompanySource}\n${mergeCompaniesSource}\n${fnSource}\n${fnSource.includes('applyPlatformCreatedWorkspace') ? 'applyPlatformCreatedWorkspace(workspaceId);' : 'applyCreatedWorkspace(workspaceId);'}\nreturn state;`,
@@ -58,7 +58,7 @@ function creationHarness(fnSource, workspaceId) {
   const state = { companies: [], memberships: [], subscriptions: [], session: { auth: 'supabase', profile: { id: 'profile-1', member_id: 'member-1', company_ids: [], role: 'member' } } };
   return run(
     state, { setItem() {} }, (id) => String(id || '').trim() === 'quest-roofing' ? 'roofing' : String(id || '').trim(), () => 'fallback',
-    (id) => id, () => null, () => '#f0b23b', (key) => ({ key: key || 'home' }), () => '',
+    (id) => id, () => null, () => '#f0b23b', (key) => ({ key: key || 'home' }), () => '', (value) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || '').trim()) ? String(value).trim().toLowerCase() : '#e0552d', (value) => ['solid', 'line'].includes(String(value || '').trim()) ? String(value).trim() : 'solid',
     (row) => row, (rows) => rows, (row) => row,
     () => state.session, (ids) => [...new Set(ids)], (profile) => profile, () => {}, () => {}, () => {}, workspaceId,
   );

@@ -789,6 +789,73 @@ Until it happens, the budget has no slack: any feature that adds to the entry ch
 to be paired with a real extraction, or the ceiling has to move as a conscious decision
 with the reason recorded.
 
+### Follow-up: the Reports tab paid for the cross-company install
+
+The rule above was applied rather than waived. Cross-company installs put the entry chunk
+234 bytes over, and the choice was a sixth budget raise or a real extraction. The charts
+came out instead:
+
+    src/workspace/reports-view.js    donut, bars, KPIs, sparkline — dynamically imported
+
+It qualifies on the test that ruled option 2 out above: nothing on an eager path calls it.
+The Reports tab needs a click, the print view needs a button, and both call sites live in
+one place. Its only outside dependency is *who a person is*, passed in as `memberById`, so
+there is no context object of 66 functions. Result: **1,122 bytes of headroom** and a
+2 KB chunk fetched on first use.
+
+Two things worth knowing before touching it:
+
+- **Printing takes a synchronous path when the module is already loaded.** `window.open`
+  has to run in the same task as the click or browsers treat the window as an unsolicited
+  pop-up — and an `await` that resolves instantly still yields the task. The Print button
+  only exists on a Reports tab that has already fetched the module, so the fast path is
+  the normal one; the async branch is the retry after a failed fetch.
+- **Extracting it surfaced a display bug.** One `|| 1` was serving as both the divide-by-
+  zero guard and the printed total, so an empty donut claimed a total of 1. Unreachable
+  from the tab today (the empty state returns earlier), but wrong in a now-public
+  function. The guard and the figure are separate values.
+
+This is the pattern for the next one: find a subsystem behind a click with a narrow
+dependency edge, pass its dependencies as data, and take the tests that become possible
+once the code is callable. The builder modal is still the big prize and still its own job.
+
+### Follow-up: four chunks out, and the dependency count was the thing to measure
+
+The board, stage manager and side-menu presets were each paired with an extraction rather
+than a budget raise. Cumulatively **10.4 KB gzip** now loads on demand:
+
+    workspace/reports-view.js      2.0 KB   charts, behind the Reports tab
+    workspace/board-view.js        1.2 KB   kanban columns, behind the view switch
+    workspace/field-config-ui.js   5.4 KB   field editor panel + record form inputs
+    ui/appearance-panel.js         1.8 KB   the Appearance settings panel
+
+Entry headroom: **1,074 bytes**.
+
+What made these work where the earlier attempt failed is worth stating plainly, because
+the recorded reason above ("66 dependencies") reads as a property of the builder modal
+when it is really the metric to check first. Measured before starting: `wbFieldConfigUI`
+needed 11 helpers and 4 constants; `wbRenderFieldInput` 11; the appearance panel 6 and 4.
+At that size a single `ctx` object is a fine seam. **Count the edges before deciding an
+extraction is impossible.**
+
+Two techniques carried all four:
+
+- **Move, do not rewrite.** Each body was relocated verbatim and its helpers destructured
+  from `ctx` under their original names, so the diff is a cut and a paste plus a header.
+  Nothing inside the moved code was retyped, which is where a 12 KB move would go wrong.
+- **A factory when the body recurses.** `wbRenderFieldInput` calls itself for nested
+  fields. Exporting `createFieldInput(ctx)` that closes over the context lets those inner
+  calls keep their original four-argument shape.
+
+And one rule that decides *how* a chunk is awaited:
+
+- **A dialog awaits its chunk before opening; a page renders a loader.** `openWbFieldModal`
+  and `openWbItemModal` are `async` and load before setting modal state, so a form never
+  appears as an empty shell. Tabs and panels return `questLoader(...)` and re-render.
+- **Anything that calls `window.open` must not await.** Print takes a synchronous path
+  when the module is already in hand — an `await` that resolves instantly still yields the
+  task, which is enough for a browser to treat the window as an unsolicited pop-up.
+
 ## Secondary text was below AA contrast in four of seven themes
 
 Measured, not eyeballed. `--muted` carries secondary text everywhere — metadata, hints,
@@ -856,10 +923,50 @@ Two sites that filter on `!a.linked` are correct and were left alone: `dashboard
 and the dashboard widget registry both iterate every workspace and would otherwise list
 the same app once per workspace it is installed in.
 
-Not addressed, and worth knowing: the link is scoped to a single company, because the
-builder document is one JSONB row per company and a cross-company link would have nothing
-to resolve against. Installing an app into a workspace belonging to a different company is
-a genuinely different feature.
+The link was scoped to a single company, because the builder document is one JSONB row per
+company and a cross-company link had nothing to resolve against. That is no longer true —
+see the next entry.
+
+## Installing an app into another company you own
+
+Requested directly: pick a company, then a workspace inside it, and install there. The
+same-company case above is unchanged; this widens where the pointer may point.
+
+The pointer gains one optional field:
+
+    { id, linked: true, linkedFromWs, linkedFromCompany?, installedAt }
+
+**Absent means "this document".** Every link created before this feature existed has no
+`linkedFromCompany`, so absent has to keep resolving against the current company or all of
+them break on deploy. `resolveAppEntry` only consults the cross-company path when the field
+is present, and the install handler only writes it when the two companies actually differ —
+a same-company install still produces a byte-identical entry.
+
+Three consequences worth holding on to:
+
+- **Resolution needs a way to reach another document,** so `resolveAppEntry`,
+  `workspaceApps` and `tileTargetApp` take a `getDoc(companyId)` argument. main.js passes
+  `wbDoc` — which is why `wbTileTargetApp` appears to pass the document twice. It does not:
+  once as *this* company's document, once as the getter for someone else's.
+- **Saving had to change, and this is where data loss would have been.** A linked app's
+  data lives in the document of the company that *owns* it, so editing through the link
+  mutates the owner's row. Saving only the current company would leave the edit on screen
+  until the next reload discarded it, with no error anywhere. `companiesToSave` returns the
+  current company plus every distinct company it links out to, and `wbSave` writes all of
+  them.
+- **Losing access is a normal outcome, not an error.** If the reader can no longer see the
+  other company, `getDoc` returns null, the link stops resolving, and the app disappears
+  from the list. Nothing throws. The same path covers a deleted source workspace.
+
+Permission is checked twice: only companies passing `canManageOperationalWorkspaces` are
+offered in the picker, and the destination is re-checked in the handler, because the
+select was rendered from state that may since have gone stale. The picker states plainly
+that records are shared and that deleting from either side deletes for both — sharing data
+across a company boundary should not be something you discover afterwards.
+
+Also fixed while here: the document normaliser runs on every load and would have stripped
+`linkedFromCompany`, writing the link correctly and erasing it moments later. There is a
+test pinning that field's survival specifically, because the failure is silent.
 
 ## Contact labels as durable rows (P1 6, first line)
 
@@ -957,3 +1064,226 @@ showing a contact gets them without knowing they load separately.
 
 Still open in P1 6: saved segments, campaigns proper, templates/consent/delivery, and
 campaign reporting.
+
+## Pipeline stages are an existing status field, read as a sequence
+
+Asked for: a Manage stages button, working pipeline stages, and a board view for moving
+records through them.
+
+The decision that shaped everything else was **not** to introduce a stages structure. A
+`status` field's options already are an ordered list of `{ id, label, color }`, already
+drive the status pill, filters and automations, and are already persisted. Adding a
+parallel structure would have created two sources of truth that drift the first time
+someone edits the field in the field editor instead of the stage manager. So: the options
+*are* the stages, in listed order, and any app that already had a status field is already
+a pipeline with no migration.
+
+`src/workspace/pipeline-core.js` holds the model — grouping, reordering, safe deletion —
+pure and callable. `src/workspace/board-view.js` renders the columns and is fetched on
+demand.
+
+Four things worth keeping in mind:
+
+- **A record whose stage was deleted must still appear.** Unresolvable and unset values
+  collect in a leading "No stage" column rather than being filtered out. A board that
+  silently drops records is the worst kind of wrong: the column counts stop adding up to
+  the number of records that exist, and nobody can find the missing one.
+- **Deleting a stage asks where its records go.** `removeStage` returns the ids standing
+  on it plus a destination, and clearing is offered alongside every other stage — without
+  that, the last stage would be undeletable. Nothing is applied until Save, so Cancel
+  really cancels.
+- **A drag is an edit.** `wbSetItemStage` stamps `updatedAt`, runs automations and saves,
+  exactly as editing the field on the record form does. An automation should not care how
+  a status changed. It also re-checks the stage still exists, because the board may have
+  been drawn before someone else deleted it.
+- **The card body is passed into the board module, not rebuilt there.** A record looks the
+  same on the board as in Cards because both render from `wbCardFieldHtml`; the board only
+  owns columns and drop targets.
+
+The record card carries only its id. The company, workspace, app and field come from the
+`[data-wb-board]` container it was dropped on, so a second board on screen cannot be
+mistaken for this one.
+
+### The stage_moves automation trigger
+
+`field_is` could already say "changes TO Won". What a pipeline actually gets asked is
+"leaves Quoted" and "moves at all", so `stage_moves` expresses from → to with either side
+left as *any stage*.
+
+It fires only when the value genuinely changed (`now !== was`). Without that guard every
+save on a record would trip every pipeline rule attached to it. No value is required —
+"any to any" is a legitimate rule — but saving is refused when the app has no pipeline for
+it to watch.
+
+## Side menu presets, and why Default is empty
+
+Asked for: presets for the side menu, with the current layout as the default.
+
+**"Default" applies no overrides at all.** It is `null` in the preset table, sets no data
+attribute, and matches none of the themed CSS. The alternative — writing the shipped
+charcoal values into the table as one preset among seven — means the current look drifts
+the moment anyone edits that table, and "Default" quietly becomes an approximation of
+itself. Every themed rule is scoped to `[data-sidebar-theme]`, which is only ever set for
+a non-default choice, and a test enumerates those rules to keep it that way.
+
+Presets: Midnight (the navy in the reference), Dark, Coffee, Hot, Forest, Light, plus
+Custom.
+
+- **Light is the reason `dark: true/false` exists.** Six presets are dark surfaces where
+  hairlines and hover lift with white; the light one has to darken instead or its dividers
+  and hover state vanish. That flag becomes `data-sidebar-surface`, kept separate from the
+  preset name so the stylesheet does not have to list every preset to know which way to go.
+- **Custom derives its text from the background's relative luminance**, not from a guess.
+  A naive channel average puts `#0000ff` and `#ffff00` in the same place and would make one
+  of them unreadable.
+- **The colour pickers do not re-render.** A re-render mid-drag tears down the open native
+  colour popup, so they write state and let the CSS variables repaint.
+
+The choice rides the existing appearance sync (the payload spreads the whole record), so
+it follows the account between devices and can be set as the company default like any
+other appearance setting.
+
+## Choosing an install company no longer re-renders the settings page
+
+A `render()` on the company `<select>` rebuilt the whole app-settings page and returned the
+reader to the top of it — a long way from the control they had just used, for a change that
+affects one other dropdown.
+
+The block that actually depends on the company (the workspace picker and the cross-company
+warning) is now `wbInstallTargetBody`, swapped in place. The install handler moved to
+`wbInstallLinkedApp` so the first render and the in-place rebind call the same function
+rather than keeping two copies that drift.
+
+This is the same class of problem as the scroll-preservation work: the general fix restores
+position after a render, but not re-rendering at all is better when only one block changed.
+
+## The boot check found a blank page and passed anyway
+
+Two blank screens shipped in one session, and the second is the more important one.
+
+**The bug.** `main.js` builds its initial `state` at module scope, and that initializer
+maps `normalizeCompany` over the fallback companies. I added `icon_color` and `icon_pack`
+to that normaliser, with their lookup tables declared beside the functions that use them —
+about 35,000 lines further down. At the moment `state` is built those consts are still in
+their temporal dead zone, so the app threw before its first render: a completely blank
+page and `Cannot access 'Vk' before initialization` in the console.
+
+The fix is placement, not logic: the icon colour and pack tables now sit beside
+`WORKSPACE_ICON_OPTIONS`, above the state initializer, with a comment saying why they are
+not next to the code that reads them. `tests/module-init-order.test.mjs` asserts the
+ordering, and also asserts that `normalizeCompany` still calls all three helpers — so the
+ordering test cannot quietly become vacuous.
+
+**The part worth remembering.** `scripts/check-bundle-boots.mjs` exists for exactly this
+failure, and it *detected* it. It printed `BOOT THREW: ReferenceError …` and then exited
+**0**. `npm run check` reported success. I only found the error by writing a throwaway
+probe, and then discovered the real check had been telling me all along.
+
+A check that detects a fault and exits zero is decoration. The catch block now exits 1,
+and a test asserts it does. Worth applying the same suspicion to every other script under
+`scripts/` that reports rather than gates.
+
+Second lesson, same session: I confirmed the fix by grepping the check's output for a
+success string. Grepping for "the good line" cannot distinguish "passed" from "printed
+something else entirely" — check exit codes, not stdout.
+
+**A probe artifact, and how it looked real.** After fixing the dead zone the probe reported
+a stack overflow on the settings route. That was the probe: its `history.pushState` was a
+no-op, so a redirect the app performs during render never moved `location` and repeated
+forever. A test harness that does not implement navigation will manufacture infinite
+redirect loops that look exactly like application bugs.
+
+## Company and workspace icons: a plain glyph, a colour, and two local packs
+
+Three related changes, driven by one observation — a chosen icon is a symbol, not a
+picture, and the tinted tile around it was chrome for something that never needed a frame.
+
+- **Plain unless uploaded.** `.workspace-icon:not(.has-upload)` drops the border, radius
+  and fill. An uploaded image keeps its container: it has its own edges, arbitrary colours
+  and an aspect ratio to crop. The distinction already existed in `workspaceIconMarkup`,
+  so the CSS follows it rather than inventing a second one that could disagree.
+- **Icon colour**, defaulting to Quest orange rather than the company tint, so a new
+  account looks like the product instead of like whatever colour its label happened to
+  get. Only a plain 3- or 6-digit hex is accepted — the value is interpolated into a
+  `style` attribute, which makes the validator a security boundary as well as a
+  correctness one.
+- **124 icons in 10 groups, with Solid and Line packs**, all local. This is only
+  affordable because rendering moved from inline SVG paths to the bundled Tabler font.
+  The old path table cost 4.9 KB of the entry chunk for 47 icons — roughly 105 bytes per
+  icon — which is precisely what capped the library. Font glyphs cost the entry chunk
+  nothing per icon; the subset grew to 66 KB woff2 and the entry chunk got *smaller*.
+
+Tabler ships filled variants for only 45 of the 124, so the Solid pack falls back to the
+line glyph. The alternative — dropping unfilled icons from that pack — would make a style
+choice silently change which icons exist.
+
+Two traps worth recording:
+
+- **Keys are permanent.** They are stored on company rows, so renaming one resets every
+  company using it to the first icon in the list. The generator refuses to emit a list
+  that would orphan a previously-shipped key, and a test repeats the check on the
+  committed table.
+- **The subset builder correctly refused to build.** Once the glyph is chosen at runtime
+  the name never appears next to a `ti-` prefix, so its static scan saw an unresolvable
+  name and stopped — which is exactly right, because subsetting on a guess would have
+  shipped a picker full of blank boxes. The fix was to teach it to read the icon table
+  (`collectTableIcons`) and to exempt only the one helper by name, with a comment binding
+  the exemption to the collector so neither can be added without the other.
+
+## The floating message dock, and a guide that cannot make things up
+
+A circular button in the bottom-right corner opens a small panel with three tabs — recent
+conversations, a people picker, and a Questbase guide — and any conversation opens as a
+floating window over the current page rather than navigating away.
+
+**It reimplements nothing.** Starting a conversation goes through
+`startDirectMessageWithProfile`, which finds an existing direct thread before creating one;
+without that the dock would spawn duplicate threads alongside the Messages page. The
+composer posts through the app's own `data-message-form` handler, so permissions,
+attachment rules and the double-send guard all still apply. A second send path would mean
+a second set of those rules to keep in step.
+
+`src/messaging/dock.js` receives **accessor functions**, not state — `conversations()`,
+`members()`, `canSend(companyId)`. The module cannot reach into the application, every read
+goes through code that already applies access filtering, and shaping the data inside the
+module keeps it out of the eager bundle.
+
+### The guide is grounded, not generative
+
+It searches `HELP_TOPICS` — the curated index that already backs the command palette — and
+the loader hands that index to the dock rather than importing it twice, so the two can
+never disagree about what the product does.
+
+This was a deliberate choice over wiring in a language model:
+
+- It cannot invent a feature that does not exist. The failure mode is "nothing on that
+  yet", which is the right answer for in-product help and a wrong answer no LLM reliably
+  gives.
+- It works offline, costs nothing per question, and sends no user text anywhere.
+- The panel says outright that answers come from Questbase's built-in help, so silence
+  reads as "not covered" rather than as a broken assistant.
+
+The cost is real and worth stating: it only knows what is written in `HELP_TOPICS`. Adding
+a capability means adding a topic there. That file already said as much before this
+existed; the dock just made it user-facing.
+
+## Print, CSV and download moved to a fetched chunk — carefully
+
+`src/workspace/data-io.js` holds the print windows, CSV import/export and app download —
+11.5 KB raw, every entry point a button, nothing needed to paint the app.
+
+The thing that made this the *last* extraction attempted rather than the first:
+**`window.open` must run in the same task as the click**, or the browser treats the new
+window as an unsolicited pop-up. An `await` that resolves immediately still yields the
+task, so the usual "load on demand, then act" shape breaks printing.
+
+The resolution is a prefetch plus a synchronous path:
+
+- `wbViewApp` fires `wbLoadDataIO()` on render, fire-and-forget. Every one of these buttons
+  lives on that view, so by the time one can be clicked the module is in hand.
+- `wbDataIO(name, ...args)` calls straight through when loaded, and only falls back to the
+  async path if that prefetch failed — where a pop-up prompt is better than doing nothing.
+
+The same rule already applied to the Reports print path; this generalises it. Any future
+chunk containing `window.open`, a download anchor, or clipboard access needs the same
+treatment, and a test pins the synchronous branch.

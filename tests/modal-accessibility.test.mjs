@@ -49,7 +49,10 @@ test('the trigger is recorded as a selector, because the node does not survive a
 });
 
 test('focus syncing is queued once, at the top of render, so early returns still get it', () => {
-  assert.match(main, /function render\(\) \{\n  queueMicrotask\(syncModalFocus\);/);
+  // Both run at the top of render so every early return is covered. Scroll capture comes
+  // first because it has to read the outgoing DOM before innerHTML is replaced.
+  assert.match(main, /function render\(\) \{\n  const keptScroll = captureScrollForRender\(\);/);
+  assert.match(main, /queueMicrotask\(syncModalFocus\);/);
 });
 
 test('the focus trap and the focus mover agree on what is focusable', () => {

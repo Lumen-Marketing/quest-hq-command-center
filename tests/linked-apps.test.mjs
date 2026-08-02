@@ -89,8 +89,10 @@ test('tiles resolve through the link instead of matching on !linked', () => {
 
   // The helper delegates to the extracted module; what it actually does is asserted
   // behaviourally below, against the shipped resolver rather than against this string.
+  // wbDoc is passed twice on purpose: once as this company's document, and once as the
+  // getter used to reach ANOTHER company's document when the link crosses companies.
   const helper = main.slice(main.indexOf('function wbTileTargetApp('));
-  assert.match(helper.slice(0, helper.indexOf('\n}\n')), /tileTargetApp\(wbDoc\(companyId\), workspace, appId\)/);
+  assert.match(helper.slice(0, helper.indexOf('\n}\n')), /tileTargetApp\(wbDoc\(companyId\), workspace, appId, wbDoc\)/);
 });
 
 test('the tile configurator offers linked apps as targets', () => {
@@ -102,9 +104,10 @@ test('the tile configurator offers linked apps as targets', () => {
 });
 
 test('installing writes a pointer carrying the source workspace, never a copied app', () => {
-  const handler = main.slice(main.indexOf("bind('[data-wb-install-linked]'"));
-  const body = handler.slice(0, handler.indexOf('\n    });'));
-  assert.match(body, /target\.apps\.push\(\{ id: app\.id, linked: true, linkedFromWs: workspaceId/);
+  const handler = main.slice(main.indexOf('function wbInstallLinkedApp('));
+  const body = handler.slice(0, handler.indexOf('\n}\n'));
+  assert.match(body, /const entry = \{ id: app\.id, linked: true, linkedFromWs: workspaceId/);
+  assert.match(body, /target\.apps\.push\(entry\)/);
   assert.ok(!/JSON\.parse\(JSON\.stringify\(app\)\)|\{ \.\.\.app \}/.test(body), 'must not copy the app');
   // Installing the same app twice into one workspace would create two entries with the
   // same id, which the resolver cannot tell apart.

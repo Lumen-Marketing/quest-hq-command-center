@@ -1641,12 +1641,16 @@ button { cursor: pointer; }
   }
 }
 
+/* The amber border, near-black fill and inset white hairline all belonged to the old
+   dark roofing mark. The Questbase mark carries its own white field, so a ring around it
+   reads as a stray outline rather than a frame. Background stays white only so a failed
+   image load does not flash a dark square. */
 .logo-image-mark {
   overflow: hidden;
-  border: 1px solid rgba(240, 178, 59, .5);
-  background: #0b0a08;
+  border: 0;
+  background: #fff;
   color: transparent;
-  box-shadow: 0 8px 18px rgba(17, 12, 6, .16), inset 0 0 0 1px rgba(255, 255, 255, .04);
+  box-shadow: 0 6px 16px rgba(17, 12, 6, .14);
 }
 
 .quest-logo-image {
@@ -3258,10 +3262,21 @@ textarea:focus {
   font-weight: 800;
 }
 
+/* These symbols are outlines: the paths carry no fill and rely on a stroke. `.empty-symbol`
+   is passed to svgIcon() *instead of* the default `symbol-icon` class rather than beside
+   it, so it inherited none of the stroke setup — and an unfilled outline path with no
+   stroke falls back to fill:black, which is why every empty state rendered a solid black
+   blob instead of an icon. q-empty is the only symbol given a custom class, so it was the
+   only one affected. */
 .empty-symbol {
   width: 34px;
   height: 34px;
   color: rgba(33, 31, 27, .32);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .data-table {
@@ -14740,10 +14755,18 @@ button.side-item.planned b {
   justify-items: center;
 }
 
+/* Collapsing the rail hides the labels and leaves the icons.
+   This block lost its declarations in 4cc10a4, where the client-portal rule below was
+   inserted between this selector list and its `{ display: none; }`. A trailing comma is
+   not a syntax error, so the four selectors silently joined the next rule and every nav
+   label became `position: fixed; inset: 0` painted with the page background — a stack of
+   full-screen panels over the whole app, every time the sidebar was collapsed. */
 .sidebar-collapsed .deck-brand span,
 .sidebar-collapsed .company-card div,
 .sidebar-collapsed .side-label,
-.sidebar-collapsed .side-item span,
+.sidebar-collapsed .side-item span {
+  display: none;
+}
 
 /* ===================== Client portal — annotate engine ===================== */
 .client-portal-public.open {
@@ -24047,11 +24070,11 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .deck-brand .logo.logo-image-mark,
 .client-portal-brand .side-mark.logo-image-mark {
   overflow: hidden;
-  border-color: rgba(240, 178, 59, .55);
-  background: #0b0a08;
+  border: 0;
+  background: #fff;
   color: transparent;
   padding: 0;
-  box-shadow: 0 8px 18px rgba(17, 12, 6, .16), inset 0 0 0 1px rgba(255, 255, 255, .04);
+  box-shadow: 0 6px 16px rgba(17, 12, 6, .14);
 }
 
 .logo-image-mark .quest-logo-image {
@@ -28106,4 +28129,1635 @@ html[data-card-style="glass"] .message-context-rail {
   margin: 12px 0 0;
   font-size: 12.5px;
   color: var(--muted);
+}
+
+/* Presence ring ------------------------------------------------------------ */
+/* A ring around a chat avatar: green while that person is connected, grey when not.
+   Drawn with box-shadow rather than border so it does not change the avatar's box and
+   push the surrounding layout around when the state flips. */
+.presence-ring {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  border-radius: 50%;
+  transition: box-shadow .18s ease;
+}
+.presence-ring > .avatar { display: block; }
+
+/* Two rings: a gap in the page background, then the status colour. Without the gap the
+   ring reads as a border on the photo instead of a status around it. */
+.presence-ring.is-online {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px #16a34a;
+}
+.presence-ring.is-offline {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
+/* Colour alone cannot carry a status, so online also gets a dot in the corner — visible
+   to anyone who cannot separate the two hues. The sr-only label covers screen readers. */
+.presence-ring.is-online::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presence-ring { transition: none; }
+}
+
+/* ===========================================================================
+   Warm command surface
+   ---------------------------------------------------------------------------
+   Declared last so it wins over the earlier light palettes. Dark mode is
+   :root[data-theme="dark"] (0,2,0) and still overrides this (0,1,0), so the two
+   do not fight.
+
+   The structure was already right — 14px cards, hairline shadows, a spacing
+   scale. What read as "not quite finished" was the palette: a cool blue-grey
+   canvas (#f4f6f8) with blue-tinted neutrals, against a warm orange accent. The
+   two hues pulled in opposite directions, which is what makes an interface feel
+   assembled rather than designed.
+
+   These neutrals are warm and share the accent's hue family, so the orange sits
+   in the palette instead of on top of it. Every value is contrast-checked:
+   --muted is 5.03:1 on the canvas, well past the 4.5:1 AA floor, and
+   tests/colour-contrast.test.mjs recomputes it from this file.
+   =========================================================================== */
+:root {
+  --bg: #f2f0ec;
+  --surface: #ffffff;
+  --surface-2: #faf9f6;
+  --surface-3: #f4f2ed;
+  --rail: #faf9f6;
+  --rail-2: #ffffff;
+  --rail-line: #e5e1d8;
+  --ink: #16150f;
+  --ink-2: #3b3830;
+  --muted: #6b6659;
+  --border: #e5e1d8;
+  --border-strong: #d2ccc0;
+  /* Shadows carry less of the load than borders do: a hairline reads as precise,
+     a heavy shadow reads as a floating box. */
+  --shadow: 0 16px 36px rgba(28, 25, 16, .06);
+  --soft-shadow: 0 1px 2px rgba(28, 25, 16, .04);
+  --shadow-card: 0 1px 2px rgba(28, 25, 16, .03), 0 1px 3px rgba(28, 25, 16, .04);
+  --shadow-pop: 0 12px 32px rgba(28, 25, 16, .10);
+}
+
+/* Figures that sit in columns or get compared line to line are set in tabular
+   monospace, so digits align and a number does not reflow as it changes. This is
+   the detail that most separates an operations tool from a website. */
+.metric-card strong,
+.metric-value,
+.kpi-value,
+.data-table td.num,
+.money,
+.contract-rows strong {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Micro-labels: the uppercase, letterspaced captions above a value or a group.
+   Small, quiet, and consistent — they do the work of separating regions so the
+   layout does not need extra rules to do it. */
+.eyebrow,
+.metric-card span,
+.context-line {
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Cards: one radius, one hairline, one whisper of a shadow. */
+.panel,
+.data-table,
+.metric-card {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+}
+
+/* Sidebar collapse toggle -------------------------------------------------- */
+/* The button used to live inside .deck-brand, which becomes a centred single column when
+   collapsed — so it jumped from beside the wordmark to below the logo. The control moved
+   out from under the cursor at the moment you clicked it, and you had to go find it again
+   to undo what you just did. It now sits in its own row directly under the brand, at the
+   same vertical position in both states, so toggling never moves it. */
+/* One chevron, rotated — not two icons swapped. Swapping pops between two glyphs with
+   nothing to animate; rotating makes the flip itself the transition, and the direction it
+   turns tells you which way the panel is about to move. */
+.deck-toggle i {
+  display: block;
+  font-size: 16px;
+  transition: transform .24s cubic-bezier(.4, 0, .2, 1);
+}
+
+.sidebar-collapsed .deck-toggle i {
+  transform: rotate(180deg);
+}
+
+/* A small nudge toward the edge it will move, on hover. */
+.deck-toggle:hover i { transform: translateX(-1px); }
+.sidebar-collapsed .deck-toggle:hover i { transform: rotate(180deg) translateX(-1px); }
+
+.deck-toggle:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-toggle i { transition: none; }
+}
+
+/* Loading indicator -------------------------------------------------------- */
+/* Echoes the Questbase mark — two arc pairs and a dot — rather than a generic spinner.
+   The rings turn at different speeds and in opposite directions, which reads as something
+   working rather than something merely spinning. */
+.quest-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 34px 16px;
+}
+
+.quest-loader-mark {
+  width: 52px;
+  height: 52px;
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 4;
+  overflow: visible;
+}
+
+.quest-loader-outer,
+.quest-loader-inner {
+  transform-origin: 24px 24px;
+}
+
+.quest-loader-outer {
+  stroke: var(--orange);
+  animation: quest-loader-spin 1.6s linear infinite;
+}
+
+/* Counter-rotating, and slower: two rings turning the same way just look like one ring. */
+.quest-loader-inner {
+  stroke: var(--ink);
+  opacity: .55;
+  animation: quest-loader-spin 2.4s linear infinite reverse;
+}
+
+.quest-loader-dot {
+  fill: var(--orange);
+  stroke: none;
+  transform-origin: 24px 24px;
+  animation: quest-loader-pulse 1.6s ease-in-out infinite;
+}
+
+.quest-loader-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .01em;
+}
+
+@keyframes quest-loader-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes quest-loader-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.82); }
+}
+
+/* Continuous motion is a genuine problem for vestibular disorders, and a loading screen
+   is unavoidable — you cannot look away from it. Hold the shape still and fade instead. */
+@media (prefers-reduced-motion: reduce) {
+  .quest-loader-outer,
+  .quest-loader-inner,
+  .quest-loader-dot {
+    animation: quest-loader-fade 1.8s ease-in-out infinite;
+  }
+  @keyframes quest-loader-fade {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .45; }
+  }
+}
+
+/* Sidebar: the toggle stays put, and the panel glides ---------------------- */
+/* The chevron belongs on the brand row, top-aligned, in BOTH states. Collapsing turned
+   .deck-brand into a centred single column, which pushed the button below the logo — so
+   the control moved out from under the cursor at the moment it was clicked, and you had
+   to hunt for it to undo what you just did. Collapsed keeps two columns: logo, chevron. */
+/* Flex, not grid. Three earlier rules set a grid template on this element, and overriding
+   only `grid-template-columns` left the wordmark's slot in play — so the chevron wrapped
+   to a second implicit row and sat under the logo instead of beside it. Switching the
+   display mode retires every one of those templates at once, and a flex row simply skips
+   the wordmark while it is display:none. */
+.sidebar-collapsed .deck-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding-inline: 0;
+}
+
+.sidebar-collapsed .deck-toggle {
+  width: 20px;
+  height: 30px;
+  align-self: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* The rail width is the animation. Long enough to read as movement, short enough not to
+   sit between the click and the result — and eased so it settles rather than stops. */
+.quest-app {
+  transition: grid-template-columns .32s cubic-bezier(.4, 0, .2, 1);
+}
+
+/* Everything inside the rail is clipped while it moves, so labels slide out of view with
+   the panel instead of reflowing mid-transition and jumping. */
+.deck {
+  overflow-x: hidden;
+}
+
+.deck-brand span,
+.side-label,
+.side-item span,
+.company-card div {
+  transition: opacity .18s ease;
+}
+
+.sidebar-collapsed .deck-brand span,
+.sidebar-collapsed .side-label,
+.sidebar-collapsed .side-item span,
+.sidebar-collapsed .company-card div {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quest-app,
+  .deck-brand span,
+  .side-label,
+  .side-item span,
+  .company-card div {
+    transition: none;
+  }
+}
+
+/* Sidebar scrollbar -------------------------------------------------------- */
+/* The rail is 76px collapsed, and a visible scrollbar eats a fifth of that while adding
+   nothing — the list is short and scrolls fine without a visible track. Hidden in every
+   engine, with scrolling itself untouched: `overflow: auto` still works, the wheel still
+   works, and keyboard scrolling still works. */
+.deck-scroll {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* older Edge */
+}
+
+.deck-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ===========================================================================
+   Collapsed rail: make the icons actually fit
+   ---------------------------------------------------------------------------
+   Six earlier rules set a layout on .side-item, several of them inside media
+   queries, and the one that won kept a three-column grid — icon, flexible
+   label, badge. At 236px that is right. At 76px the row is still asking for
+   its full width, so its centred contents sit largely outside the rail and
+   `overflow-x: hidden` clips them: what reaches the screen is a sliver of each
+   icon at the very edge, which reads as "the icons are gone".
+
+   Selectors here lead with .quest-app so they carry enough specificity to win
+   without !important, and they are last in the file so ties go this way too.
+   =========================================================================== */
+
+/* A grid item will not shrink below its content unless told it may. Without
+   this the rail simply refuses to be 76px wide. */
+.quest-app.sidebar-collapsed .deck,
+.quest-app.sidebar-collapsed .deck-scroll,
+.quest-app.sidebar-collapsed .side-items,
+.quest-app.sidebar-collapsed .side-group {
+  min-width: 0;
+}
+
+.quest-app.sidebar-collapsed .side-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  column-gap: 0;
+}
+
+/* The icon is the entire row now, so give it a size that reads at a glance. */
+.quest-app.sidebar-collapsed .side-item .symbol-icon {
+  width: 20px;
+  height: 20px;
+  justify-self: center;
+  margin: 0;
+}
+
+/* Anything textual is hidden rather than squeezed — a one-character-wide label
+   is noise, and it is what was producing those clipped glyphs. */
+.quest-app.sidebar-collapsed .side-item span,
+.quest-app.sidebar-collapsed .side-label,
+.quest-app.sidebar-collapsed .side-pipe-head span {
+  display: none;
+}
+
+/* Count badges ride the icon's top-right corner instead of taking a column. */
+.quest-app.sidebar-collapsed .side-item b {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 15px;
+}
+
+/* Group expanders keep their chevron centred rather than pushed off the edge. */
+.quest-app.sidebar-collapsed .side-pipe-head,
+.quest-app.sidebar-collapsed .side-group-head {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* A little more room: 76px left the icon almost touching both edges once the
+   scrollbar was gone. */
+.quest-app.sidebar-collapsed {
+  grid-template-columns: 84px minmax(0, 1fr);
+}
+
+/* Dialable phone cell ------------------------------------------------------ */
+/* Matches the email cell's treatment so the two read as the same kind of thing: a value
+   you can act on. Green rather than blue, because dialing and mailing are different
+   actions and the field type is already green in the builder. */
+.wb-tel-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #16803d;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.wb-tel-cell:hover { text-decoration: underline; }
+.wb-tel-cell:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; border-radius: 4px; }
+.wb-tel-cell i { font-size: 13px; opacity: .75; }
+
+/* Workspaces rail ---------------------------------------------------------- */
+/* The row used to be a single <button>. It is a container now, because a settings control
+   inside a button is invalid markup and browsers resolve the click target for it
+   unpredictably — so the two actions are siblings, each with its own hit area. */
+.workspace-rail-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The count sits with the label; the add button is pushed to the far edge. */
+.workspace-rail-count { margin-right: auto; }
+
+.workspace-rail-add {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+  background: transparent;
+}
+.workspace-rail-add:hover { background: var(--surface-2); color: var(--orange); }
+.workspace-rail-add:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+.workspace-rail-add i { font-size: 15px; }
+
+/* The container carries the hover and selected treatment the button used to. */
+.workspace-rail-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+}
+
+.workspace-rail-open {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+.workspace-rail-open:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+
+.workspace-rail-item:hover { background: var(--surface-2); }
+.workspace-rail-item.active { background: var(--accent-soft, color-mix(in srgb, var(--orange) 10%, transparent)); }
+.workspace-rail-item.active .workspace-rail-copy strong { color: var(--orange); }
+
+/* Stays reachable at all times rather than appearing on hover: a control that is only
+   there when the pointer is makes it unusable by keyboard and invisible on touch. */
+.workspace-rail-settings {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+  background: transparent;
+}
+.workspace-rail-settings:hover { background: var(--surface); color: var(--ink); }
+.workspace-rail-settings:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+.workspace-rail-settings i { font-size: 15px; }
+
+/* Collapsible workspaces section ------------------------------------------- */
+/* Reuses the sidebar's existing group-collapse state, so it persists across reloads and
+   behaves like every other collapsible group rather than being a second mechanism that
+   merely looks the same. */
+.workspace-rail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.workspace-rail-toggle:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; border-radius: 4px; }
+.workspace-rail-toggle .workspace-rail-count { margin-right: 0; }
+/* The chevron sits at the far end, and the count stays beside the label. */
+.workspace-rail-toggle .side-label-chevron { margin-left: auto; }
+
+/* Hidden rather than animated to height: the list is variable-length, and an auto-height
+   transition needs a measured pixel value that goes stale the moment a workspace is
+   added. The chevron carries the state change instead. */
+.workspace-rail.list-collapsed .workspace-rail-list,
+.workspace-rail.list-collapsed .workspace-rail-more {
+  display: none;
+}
+
+.workspace-rail.list-collapsed .side-label-chevron {
+  transform: rotate(-90deg);
+}
+
+/* ---- App Builder board (pipeline) view ------------------------------------
+   Deliberately mirrors .pipe-board / .pipe-lane, which is the CRM pipeline: the
+   two are the same idea over different data, and a board that scrolled or
+   highlighted differently depending on which one you were looking at would read
+   as a bug. Shared tokens, separate classes, because the markup differs. */
+.wb-board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(248px, 288px);
+  gap: 12px;
+  align-items: start;
+  overflow-x: auto;
+  padding: 2px 2px 12px;
+  scroll-snap-type: inline proximity;
+  scrollbar-gutter: stable;
+  overscroll-behavior-inline: contain;
+}
+
+.wb-board-col {
+  display: flex;
+  flex-direction: column;
+  /* Tall enough to be an obvious drop target while empty; the whole point of the
+     first drag is landing on a stage that has nothing in it yet. */
+  min-height: 220px;
+  max-height: 68vh;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--soft-shadow);
+  overflow: hidden;
+  scroll-snap-align: start;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Records whose stage was deleted, or never set. Dashed so it reads as a holding
+   area rather than a stage someone configured. */
+.wb-board-unplaced {
+  border-style: dashed;
+  background: var(--surface-2, var(--surface));
+}
+
+.wb-board-col.drag-over {
+  border-color: var(--primary, #e0552d);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #e0552d) 28%, transparent);
+}
+
+.wb-board-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 850;
+  color: var(--ink);
+}
+
+.wb-board-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wb-stage, #6b7280);
+}
+
+.wb-board-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-board-count {
+  flex: none;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wb-stage, #6b7280) 16%, transparent);
+  color: var(--wb-stage, #6b7280);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.wb-board-total {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-board-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.wb-board-card {
+  cursor: grab;
+}
+
+.wb-board-card.dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
+/* The board reuses the Cards markup; these trim it to column width. */
+.wb-board-card .wb-bc {
+  margin: 0;
+  width: auto;
+}
+
+.wb-board-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* ---- Stage manager (inside the builder modal) ---- */
+.wb-stage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-stage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-stage-order {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.wb-stage-order .wb-icon-btn {
+  width: 22px;
+  height: 17px;
+  padding: 0;
+}
+
+.wb-stage-order .wb-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wb-stage-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* How many records this stage holds — shown before you delete it, not after. */
+.wb-stage-count {
+  flex: none;
+  min-width: 26px;
+  padding: 0 7px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--surface-2, #eef1f5);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-stage-confirm .wb-field {
+  margin-top: 10px;
+}
+
+.wb-empty-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-board-col {
+    transition: none;
+  }
+}
+
+/* ---- Side menu themes -------------------------------------------------------
+   Every rule here is scoped to [data-sidebar-theme], which main.js sets only for a
+   NON-default choice. The shipped charcoal therefore matches these selectors not at
+   all: "Default" is the absence of this block, not a copy of it, so the current look
+   cannot drift as presets are added or edited.
+
+   Colours arrive as custom properties on <html>. [data-sidebar-surface] carries only
+   light-vs-dark, so hairlines and hover washes can flip without naming each preset. */
+[data-sidebar-theme] .deck {
+  background: var(--deck-bg);
+  border-color: var(--deck-hairline);
+}
+
+[data-sidebar-theme] {
+  /* Dark surfaces lift with white; a light one has to darken instead, or its hover
+     state and dividers vanish entirely. */
+  --deck-hairline: rgba(255, 255, 255, .1);
+  --deck-hover: rgba(255, 255, 255, .07);
+}
+
+[data-sidebar-surface="light"] {
+  --deck-hairline: rgba(23, 19, 15, .12);
+  --deck-hover: rgba(23, 19, 15, .05);
+}
+
+/* Body text across every kind of row the side menu holds. Listed explicitly rather
+   than set once on .deck because several of these carry their own colour. */
+[data-sidebar-theme] .side-item,
+[data-sidebar-theme] .side-item span,
+[data-sidebar-theme] .side-link,
+[data-sidebar-theme] .side-sub-link,
+[data-sidebar-theme] .side-sub-name,
+[data-sidebar-theme] .workspace-rail-open,
+[data-sidebar-theme] .workspace-rail-copy,
+[data-sidebar-theme] .deck-settings-link,
+[data-sidebar-theme] .deck-company-switch span,
+[data-sidebar-theme] .deck-user-card span {
+  color: var(--deck-text);
+}
+
+/* The headline text. `strong` and `small` are listed explicitly because they carry their
+   own colours from the base stylesheet and would otherwise keep them — which is exactly
+   what happened: on the Midnight preset the product name and company name stayed near
+   black on navy, unreadable, while everything around them themed correctly. */
+[data-sidebar-theme] .deck-brand,
+[data-sidebar-theme] .deck-brand span,
+[data-sidebar-theme] .deck-brand strong,
+[data-sidebar-theme] .company-card div,
+[data-sidebar-theme] .company-account-header,
+[data-sidebar-theme] .company-account-header strong,
+[data-sidebar-theme] .company-account-copy strong,
+[data-sidebar-theme] .workspace-rail-copy strong,
+[data-sidebar-theme] .deck-user-card b,
+[data-sidebar-theme] .side-item.active span {
+  color: var(--deck-strong);
+}
+
+/* The quieter second line under each of those. */
+[data-sidebar-theme] .deck-brand small,
+[data-sidebar-theme] .company-account-copy small,
+[data-sidebar-theme] .workspace-rail-copy small,
+[data-sidebar-theme] .deck-user-card small,
+[data-sidebar-theme] .company-account-switcher,
+[data-sidebar-theme] .workspace-rail-settings,
+[data-sidebar-theme] .deck-toggle {
+  color: var(--deck-label);
+}
+
+/* Section headings and counts: the quietest text, and the first to become unreadable
+   when a surface flips. */
+[data-sidebar-theme] .side-label,
+[data-sidebar-theme] .side-head,
+[data-sidebar-theme] .side-label-chevron,
+[data-sidebar-theme] .side-sub-divider,
+[data-sidebar-theme] .company-account-copy,
+[data-sidebar-theme] .side-item .symbol-icon {
+  color: var(--deck-label);
+}
+
+[data-sidebar-theme] .side-item:hover,
+[data-sidebar-theme] .side-sub-link:hover,
+[data-sidebar-theme] .workspace-rail-item:hover {
+  background: var(--deck-hover);
+}
+
+/* The active row. Both the pill and its text come from the theme so a preset's accent
+   is the one that shows, rather than the global orange sitting on an unrelated hue. */
+[data-sidebar-theme] .side-item.active,
+[data-sidebar-theme] .side-pipe.expanded > .side-pipe-head .side-item.active,
+[data-sidebar-theme] .side-sub-link.active,
+[data-sidebar-theme] .workspace-rail-item.active {
+  background: var(--deck-active-bg);
+  border-color: transparent;
+  color: var(--deck-active-text);
+}
+
+[data-sidebar-theme] .side-item.active .symbol-icon,
+[data-sidebar-theme] .side-item.active span,
+[data-sidebar-theme] .side-sub-link.active span {
+  color: var(--deck-active-text);
+}
+
+[data-sidebar-theme] .side-card,
+[data-sidebar-theme] .company-card,
+[data-sidebar-theme] .deck-footer,
+[data-sidebar-theme] .deck-footer-row,
+[data-sidebar-theme] .workspace-rail-item,
+[data-sidebar-theme] .side-sub {
+  border-color: var(--deck-hairline);
+}
+
+/* Count badges: readable on either surface without a per-preset value. */
+[data-sidebar-theme] .side-item b {
+  background: var(--deck-hover);
+  color: var(--deck-text);
+}
+
+[data-sidebar-theme] .side-item.active b {
+  background: var(--deck-active-bg);
+  color: var(--deck-active-text);
+}
+
+/* ---- Side menu picker (in Appearance settings) ---- */
+.appearance-side-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+}
+
+.appearance-side-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-2, var(--ink));
+  text-align: left;
+}
+
+.appearance-side-chip:hover {
+  border-color: var(--border-strong, var(--border));
+}
+
+.appearance-side-chip.active {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 2px var(--ring, rgba(224, 85, 45, .22));
+  color: var(--orange);
+}
+
+/* A miniature of the side menu rather than a flat colour swatch: the thing being
+   chosen is a layout with an active row in it, and a plain square does not show
+   whether the accent will read against the background. */
+.appearance-side-mini {
+  position: relative;
+  height: 54px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 6px;
+}
+
+.appearance-side-mini i {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  width: 76%;
+}
+
+.appearance-side-mini i.on {
+  width: 88%;
+  height: 9px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appearance-side-chip {
+    transition: none;
+  }
+}
+
+/* Explains the automatic light/dark text switch on a custom menu colour. */
+.appearance-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* ---- Company / workspace icons: plain glyph unless an image was uploaded ----
+   A chosen icon is a symbol, not a picture: the tile, border and tinted fill around
+   it were chrome for something that never needed a frame. An uploaded image does
+   need one — it has its own edges, arbitrary colours and an aspect ratio to crop —
+   so `.has-upload` keeps the container and only the glyph case is stripped.
+
+   Scoped to :not(.has-upload) rather than adding a modifier class, so it follows
+   the distinction workspaceIconMarkup already draws and cannot fall out of step. */
+.workspace-icon:not(.has-upload) {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  /* The chosen icon colour, defaulting to Quest orange. Set inline per company by
+     workspaceIconMarkup, so it follows the icon everywhere it is drawn. */
+  color: var(--icon-color, var(--orange));
+}
+
+/* The glyph grows into the space the tile used to occupy, so removing the frame
+   does not also make the icon smaller. Sized in em now that icons are font glyphs
+   rather than inline SVG. */
+
+/* The glyph is sized from its box, not pinned to one pixel value.
+   `.workspace-icon` appears at nine different sizes across the app — 22px in the
+   workspace rail, 52px in the settings preview — and a single font-size that suited
+   the sidebar overflowed the small ones: the icon spilled out of its box and sat on
+   top of the workspace name. Each context declares its box size once, here, and the
+   glyph follows at a fixed proportion of it. */
+.workspace-icon {
+  --wsi-size: 34px;
+}
+
+.workspace-icon.large {
+  --wsi-size: 52px;
+}
+
+.workspace-rail-item .workspace-icon,
+.quest-nav-v2 .company-card .deck-company-select .workspace-icon {
+  --wsi-size: 22px;
+}
+
+.company-account-header > .workspace-icon {
+  --wsi-size: 26px;
+}
+
+.operational-workspace-row .workspace-icon {
+  --wsi-size: 30px;
+}
+
+.workspace-menu-option .workspace-icon,
+.company-card .deck-company-select .workspace-icon {
+  --wsi-size: 42px;
+}
+
+/* 0.78 rather than 1: Tabler glyphs carry their own padding, so a glyph at full box
+   size reads as cramped against whatever sits beside it. */
+.workspace-icon:not(.has-upload) i {
+  font-size: calc(var(--wsi-size, 34px) * 0.78);
+}
+
+/* ---- Icon colour picker (Change icon modal) ---- */
+.workspace-icon-color-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.workspace-icon-color-card strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.workspace-icon-color-card span {
+  display: block;
+  max-width: 46ch;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.icon-color-choices {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.icon-color-swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--swatch) 55%, var(--border));
+  border-radius: 50%;
+  background: var(--swatch);
+  cursor: pointer;
+}
+
+/* A ring rather than a tick: the swatch is small, and a glyph on top of an arbitrary
+   colour cannot be guaranteed readable. */
+.icon-color-swatch.active {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--swatch);
+}
+
+.icon-color-swatch:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 3px;
+}
+
+.icon-color-custom {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 50%;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* The native colour input is the control; it is made invisible rather than hidden so it
+   stays keyboard-reachable and still opens the OS picker on click. */
+.icon-color-custom input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.icon-color-custom i {
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.icon-color-custom:focus-within {
+  outline: 2px solid var(--orange);
+  outline-offset: 3px;
+}
+
+/* Colour input paired with its "Auto" escape hatch. */
+.appearance-field-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- Icon picker: packs and grouped sections ----
+   The library is now ~120 icons, which is far too many for one flat grid to be
+   scannable — so they are grouped by what someone would go looking for, and the
+   pack toggle sits above the whole thing because it restyles every one of them. */
+.workspace-icon-pack-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.workspace-icon-pack-row strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.workspace-icon-pack-row .wb-sub {
+  flex: 1 1 240px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.workspace-icon-group {
+  margin: 14px 0 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.workspace-icon-group:first-child {
+  margin-top: 0;
+}
+
+.workspace-icon-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(94px, 1fr));
+  gap: 8px;
+}
+
+/* Icons render as font glyphs now, not inline SVG. */
+.workspace-icon-choice i {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.workspace-icon-preview-panel .workspace-icon i {
+  font-size: 40px;
+}
+
+/* ---- Side menu: surfaces that were painted before the icons went plain ----
+   These three predate the plain-icon change and the side menu themes, and each
+   pinned a colour that only ever suited the shipped charcoal sidebar. */
+
+/* The workspace rail drew its own tile behind every icon — a light grey chip with a
+   grey glyph — which survived the plain-icon rule purely on specificity. A chosen
+   icon is a symbol; it needs no chip here either. */
+.workspace-rail-item .workspace-icon:not(.has-upload) {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  color: var(--icon-color, var(--orange));
+}
+
+.workspace-rail-item.active .workspace-icon:not(.has-upload) {
+  background: none;
+  color: var(--icon-color, var(--orange));
+}
+
+/* The My work / Company toggle was built from --surface / --ink, which are the page's
+   colours, not the menu's. On a themed side menu it stayed a cream card sitting on
+   navy. It now follows the menu like everything else around it. */
+[data-sidebar-theme] .sidebar-scope-toggle {
+  background: var(--deck-hover);
+}
+
+[data-sidebar-theme] .sidebar-scope-toggle button {
+  color: var(--deck-label);
+}
+
+[data-sidebar-theme] .sidebar-scope-toggle button:hover {
+  color: var(--deck-strong);
+}
+
+[data-sidebar-theme] .sidebar-scope-toggle button.active {
+  border-color: transparent;
+  background: var(--deck-active-bg);
+  color: var(--deck-active-text);
+  box-shadow: none;
+}
+
+/* ---- The Questbase mark ----
+   The white plate behind the logo existed to keep a dark mark legible on the dark
+   sidebar. With a light variant of the mark that plate is unnecessary — and on a
+   light-surfaced preset it was a white square on white. */
+.deck-brand .logo.logo-image-mark {
+  background: none;
+  box-shadow: none;
+}
+
+/* Two <img>s are rendered and CSS picks one, rather than swapping a src in JS: the
+   markup is written long before anyone knows which theme is active, and this way the
+   logo simply follows the menu. */
+.quest-logo-on-dark {
+  display: none;
+}
+
+/* Scoped to the whole .deck, not just .deck-brand: the collapsed rail and anything
+   else placed in the side menu sits on the same surface and needs the same mark.
+   Everywhere else in the app — topbar, client portal, forms, landing — is a light
+   surface and keeps the dark-ink mark by default. */
+[data-sidebar-surface="dark"] .deck .quest-logo-on-light {
+  display: none;
+}
+
+[data-sidebar-surface="dark"] .deck .quest-logo-on-dark {
+  display: block;
+}
+
+/* The shipped default menu is dark too, and sets no theme attribute at all — so keying
+   only on [data-sidebar-surface] would leave the default showing the dark-ink mark on a
+   near-black background, which is where this started. */
+:root:not([data-sidebar-theme]) .deck .quest-logo-on-light {
+  display: none;
+}
+
+:root:not([data-sidebar-theme]) .deck .quest-logo-on-dark {
+  display: block;
+}
+
+/* ---- Floating message dock -------------------------------------------------
+   A circular button pinned bottom-right, with the launcher or an open
+   conversation stacked above it. Fixed rather than absolute so it survives the
+   page scrolling underneath, and inset-anchored so it clears the safe area on
+   phones with a home indicator. */
+.msgdock {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  /* The wrapper spans the panel; only its children should catch clicks, or it
+     would swallow everything in that corner of the page. */
+  pointer-events: none;
+}
+
+.msgdock > * {
+  pointer-events: auto;
+}
+
+.msgdock-fab {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  align-self: flex-end;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border: 0;
+  border-radius: 50%;
+  background: var(--orange);
+  color: #fff;
+  font-size: 23px;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(17, 12, 6, .28);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.msgdock-fab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(17, 12, 6, .34);
+}
+
+.msgdock-fab:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 3px;
+}
+
+.msgdock-fab.open {
+  background: var(--ink);
+}
+
+.msgdock-fab-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid var(--surface);
+  background: #dc2626;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.msgdock-panel,
+.msgdock-chat {
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 18px 48px rgba(17, 12, 6, .22);
+}
+
+.msgdock-loading {
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+}
+
+.msgdock-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.msgdock-head b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.msgdock-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.msgdock-icon:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.msgdock-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 8px 10px 0;
+}
+
+.msgdock-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.msgdock-tab.active {
+  border-bottom-color: var(--orange);
+  color: var(--orange);
+}
+
+.msgdock-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.msgdock-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.msgdock-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 8px 0;
+  font-size: 13px;
+  color: inherit;
+  outline: none;
+}
+
+.msgdock-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.msgdock-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msgdock-row:hover {
+  background: var(--surface-2);
+}
+
+.msgdock-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.msgdock-row-main b {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msgdock-row-main small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msgdock-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.msgdock-online {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+}
+
+.msgdock-unread {
+  flex: none;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--orange);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.msgdock-empty {
+  padding: 26px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.msgdock-empty i {
+  font-size: 26px;
+  opacity: .5;
+}
+
+.msgdock-empty p {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.msgdock-guide-lead {
+  margin: 2px 0 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.msgdock-guide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msgdock-guide-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.msgdock-guide-item b {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 13px;
+}
+
+.msgdock-guide-item p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2, var(--muted));
+}
+
+/* Says plainly where the answers come from, so nobody expects it to reason about
+   things the product cannot do. */
+.msgdock-guide-note {
+  margin-top: 10px;
+  font-size: 11.5px;
+  opacity: .85;
+}
+
+.msgdock-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msgdock-msg {
+  max-width: 84%;
+  align-self: flex-start;
+  padding: 8px 11px;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--surface-2);
+}
+
+.msgdock-msg.mine {
+  align-self: flex-end;
+  border-radius: 12px 12px 4px 12px;
+  background: color-mix(in srgb, var(--orange) 14%, var(--surface));
+}
+
+.msgdock-msg-who {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.msgdock-msg p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.msgdock-msg time {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.msgdock-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.msgdock-composer input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 13px;
+  color: inherit;
+  outline: none;
+}
+
+.msgdock-composer input:focus {
+  border-color: var(--orange);
+}
+
+.msgdock-send {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.msgdock-readonly {
+  margin: 0;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* On a phone the panel takes the width it needs and the button tucks under it. */
+@media (max-width: 520px) {
+  .msgdock-panel,
+  .msgdock-chat {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 140px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msgdock-fab {
+    transition: none;
+  }
+
+  .msgdock-fab:hover {
+    transform: none;
+  }
 }

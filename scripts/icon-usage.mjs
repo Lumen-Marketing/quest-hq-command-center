@@ -26,6 +26,12 @@ export function parseIconFont(cssText) {
 const NAME_CHAR = /[a-z0-9-]/;
 const MAX_VARIANTS = 64; // guard against a pathological cartesian blowup
 
+// Helpers that pick a glyph out of a declared icon table. Their call sites look dynamic,
+// but every name they can return is collected by collectTableIcons, so they must not be
+// treated as unresolvable. Adding a helper here without a matching collector would ship a
+// subset missing its glyphs — the two belong together.
+const TABLE_RESOLVED = ['workspaceIconGlyph'];
+
 /** Values a `${...}` expression can contribute to an icon name. */
 function branchValues(expr) {
   const vals = new Set();
@@ -77,7 +83,15 @@ export function collectCandidates(source, dynamic = new Set()) {
         }
         if (end === -1) break;
 
-        const vals = branchValues(source.slice(i + 2, end));
+        const expr = source.slice(i + 2, end);
+        // Names resolved out of the icon table are covered by collectTableIcons, which
+        // reads the declarations directly. Flagging this site as dynamic would refuse the
+        // whole build for a name that IS known statically — just not from here.
+        if (TABLE_RESOLVED.some((helper) => expr.includes(helper))) {
+          variants = [];
+          break;
+        }
+        const vals = branchValues(expr);
         if (!vals) {
           // Name depends on a runtime value we cannot see — flag it rather than
           // quietly shipping a subset that might be missing the glyph.
@@ -110,10 +124,30 @@ export function collectCandidates(source, dynamic = new Set()) {
  * `unknown` = names referenced in code that the font does not define — these are
  * already-broken icon references, worth surfacing rather than silently dropping.
  */
+/**
+ * Icon names held as data rather than written next to a `ti-` prefix.
+ *
+ * The company/workspace icon library is a table of `{ key, label, line, solid }`, and the
+ * glyph is chosen at runtime from the selected pack — so the name never appears beside
+ * `ti-` in the source and the prefix scanner cannot see it. Left alone, every one of these
+ * would be dropped from the subset and the whole picker would render blank squares.
+ *
+ * Read from the declarations themselves, so adding an icon to that table is enough; there
+ * is no second list here to keep in step.
+ */
+export function collectTableIcons(source) {
+  const found = new Set();
+  for (const m of source.matchAll(/\b(?:line|solid):\s*'([a-z0-9-]+)'/g)) found.add(m[1]);
+  return found;
+}
+
 export function resolveUsedIcons(sources, fontMap) {
   const candidates = new Set();
   const dynamic = new Set();
-  for (const text of sources) for (const n of collectCandidates(text, dynamic)) candidates.add(n);
+  for (const text of sources) {
+    for (const n of collectCandidates(text, dynamic)) candidates.add(n);
+    for (const n of collectTableIcons(text)) candidates.add(n);
+  }
 
   const used = new Map();
   const unknown = new Set();

@@ -32,10 +32,14 @@ export async function syncSpaAssets(outDirArg = 'dist') {
     const taskRuntimeSource = path.join(root, 'taskmanagement');
     const taskRuntimeTarget = path.join(outDir, 'taskmanagement');
     const faviconSource = path.join(root, 'favicon.svg');
+    const faviconDarkSource = path.join(root, 'favicon-dark.svg');
 
     await rm(taskRuntimeTarget, { recursive: true, force: true });
     await cp(taskRuntimeSource, taskRuntimeTarget, { recursive: true });
     await cp(faviconSource, path.join(outDir, 'favicon.svg'));
+    // index.html references both; shipping only one means a 404 for every visitor
+    // whose browser prefers a dark colour scheme.
+    await cp(faviconDarkSource, path.join(outDir, 'favicon-dark.svg'));
 
     // The vendored task module reads its Supabase connection from env.json. Write
     // it from the SAME env vars the host build uses so the two apps can never point

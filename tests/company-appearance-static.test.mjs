@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+// The Appearance panel markup now lives in its own lazily-fetched module. These read
+// both files as one source: the assertions are about what the app renders, not about
+// which file happens to hold it.
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/ui/appearance-panel.js', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202607291400_company_appearance_default.sql', import.meta.url), 'utf8');
 const profileMigration = readFileSync(new URL('../supabase/migrations/202607291200_profile_appearance_sync.sql', import.meta.url), 'utf8');
 

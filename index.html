@@ -4,8 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#e8ebef" />
-    <title>Questbase Operations Command</title>
+    <title>Questbase</title>
+    <!-- The mark sits on a transparent field, so the tab icon needs two versions: its
+         arcs are orange and near-black, and the near-black disappears on a dark tab bar.
+         The dark variant lightens that ink. Browsers that ignore `media` on icon links
+         fall back to the first, which is the light one. All generated from one piece of
+         artwork by scripts/build-brand-icons.py. -->
     <link rel="icon" href="%BASE_URL%favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="%BASE_URL%favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="%BASE_URL%icons/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="%BASE_URL%icons/favicon-32-dark.png" sizes="32x32" type="image/png" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="%BASE_URL%icons/favicon-16.png" sizes="16x16" type="image/png" />
+    <link rel="icon" href="%BASE_URL%icons/favicon-16-dark.png" sizes="16x16" type="image/png" media="(prefers-color-scheme: dark)" />
     <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
     <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
     <meta name="mobile-web-app-capable" content="yes" />

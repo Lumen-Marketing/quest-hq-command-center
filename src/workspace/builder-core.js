@@ -1,48 +1,67 @@
 // Link resolution for the App Builder document.
 //
-// An app can be installed into a second workspace of the same company. What is stored
-// there is a POINTER, never a copy:
+// An app can be installed into another workspace. What is stored there is a POINTER,
+// never a copy:
 //
-//     { id, linked: true, linkedFromWs, installedAt }
+//     { id, linked: true, linkedFromWs, linkedFromCompany?, installedAt }
 //
-// Both workspaces therefore read the one app object, so its fields and its records are
-// genuinely shared — an edit made from either side is the same edit, not a sync that
-// could drift. A copy would diverge the moment either workspace was touched.
+// Both places therefore read the one app object, so its fields and its records are
+// genuinely shared — an edit from either side is the same edit, not a sync that could
+// drift. A copy would diverge the moment either side was touched.
+//
+// `linkedFromCompany` is absent for a link inside one company, which is what every link
+// created before cross-company installs looked like. Absent means "this document", so old
+// entries keep resolving unchanged.
 //
 // Extracted from main.js so it can be imported and tested directly. It previously lived
-// only inside the monolith, which meant its tests had to reimplement the resolver — and
-// a test that reimplements the thing it is testing passes just as happily when the real
+// only inside the monolith, which meant its tests had to reimplement the resolver — and a
+// test that reimplements the thing it is testing passes just as happily when the real
 // implementation breaks.
 //
-// Pure and dependency-free: every function takes the document it should read.
+// Pure and dependency-free: every function is handed the documents it should read.
 
 /**
  * Resolve one entry in a workspace's `apps` list to the app it refers to.
  *
- * Returns `{ app, linked, sourceWsId }`. `app` is null when the entry is a link whose
- * source has since been deleted — callers must treat that as "not present" rather than
- * assuming a link always resolves.
+ * `getDoc(companyId)` supplies another company's document, and is only consulted for a
+ * cross-company link. Returns `{ app, linked, sourceWsId, sourceCompanyId }`; `app` is
+ * null when the link cannot be followed — the source was deleted, or the reader no longer
+ * has access to the company that owns it. Callers must treat null as "not present"
+ * rather than assuming a link always resolves.
  */
-export function resolveAppEntry(doc, entry) {
-  if (!entry) return { app: null, linked: false, sourceWsId: null };
-  if (!entry.linked) return { app: entry, linked: false, sourceWsId: null };
-  const src = doc ? doc.workspaces.find((w) => w.id === entry.linkedFromWs) : null;
+export function resolveAppEntry(doc, entry, getDoc) {
+  const missing = { app: null, linked: false, sourceWsId: null, sourceCompanyId: null };
+  if (!entry) return missing;
+  if (!entry.linked) return { app: entry, linked: false, sourceWsId: null, sourceCompanyId: null };
+
+  const sourceCompanyId = entry.linkedFromCompany || null;
+  // Losing access to the other company is a normal outcome, not an error: the link simply
+  // stops resolving, and the app disappears from this workspace's list.
+  const sourceDoc = sourceCompanyId
+    ? (typeof getDoc === 'function' ? getDoc(sourceCompanyId) : null)
+    : doc;
+
+  const src = sourceDoc && Array.isArray(sourceDoc.workspaces)
+    ? sourceDoc.workspaces.find((w) => w.id === entry.linkedFromWs)
+    : null;
   // `&& !a.linked` guards against a link pointing at another link: only a real app is a
   // valid source, so a chain cannot form and resolution always terminates.
   const app = src ? src.apps.find((a) => a.id === entry.id && !a.linked) || null : null;
-  return { app, linked: true, sourceWsId: entry.linkedFromWs };
+  return { app, linked: true, sourceWsId: entry.linkedFromWs, sourceCompanyId };
 }
 
 /**
  * Every app a workspace should display: its own, plus the ones installed from elsewhere,
- * each tagged so the interface can mark a linked app. Entries whose source has been
- * deleted are dropped rather than rendered as blanks.
+ * each tagged so the interface can mark a linked app and say where it came from. Entries
+ * whose source cannot be reached are dropped rather than rendered as blanks.
  */
-export function workspaceApps(doc, ws) {
+export function workspaceApps(doc, ws, getDoc) {
   if (!ws) return [];
   return (ws.apps || []).map((entry) => {
-    const r = resolveAppEntry(doc, entry);
-    return r.app ? { app: r.app, linked: r.linked, sourceWsId: r.sourceWsId } : null;
+    const r = resolveAppEntry(doc, entry, getDoc);
+    return r.app
+      ? { app: r.app, linked: r.linked, sourceWsId: r.sourceWsId, sourceCompanyId: r.sourceCompanyId }
+      : null;
   }).filter(Boolean);
 }
 
@@ -51,18 +70,42 @@ export function workspaceApps(doc, ws) {
  * linked entry and its source, so matching on "not linked" cannot tell "a different app"
  * apart from "reach this one through the link" — the entry has to be resolved.
  */
-export function tileTargetApp(doc, workspace, appId) {
+export function tileTargetApp(doc, workspace, appId, getDoc) {
   if (!appId || !workspace) return null;
   const entry = (workspace.apps || []).find((x) => x.id === appId);
   if (!entry) return null;
-  return resolveAppEntry(doc, entry).app;
+  return resolveAppEntry(doc, entry, getDoc).app;
 }
 
 /**
- * Whether a workspace already holds this app, by id — true whether it owns the app or
- * has it linked. Used to stop a second install creating two entries with the same id,
- * which the resolver could not distinguish.
+ * Whether a workspace already holds this app, by id — true whether it owns the app or has
+ * it linked. Stops a second install creating two entries with the same id, which the
+ * resolver could not tell apart.
  */
 export function workspaceHasApp(workspace, appId) {
   return !!(workspace && (workspace.apps || []).some((a) => a.id === appId));
+}
+
+/**
+ * Every company whose document may have been changed by editing inside `companyId`.
+ *
+ * This is the part that makes a cross-company link safe. A linked app's data lives in the
+ * document of the company that OWNS it, so an edit made from the borrowing company
+ * mutates the owner's document — and saving only the current company's row would drop
+ * that edit silently, with the change visible on screen until the next reload.
+ *
+ * Returns the current company first, then each distinct company it links out to.
+ */
+export function companiesToSave(companyId, doc) {
+  const out = [companyId];
+  const seen = new Set(out);
+  for (const ws of (doc && doc.workspaces) || []) {
+    for (const entry of ws.apps || []) {
+      if (!entry || !entry.linked || !entry.linkedFromCompany) continue;
+      if (seen.has(entry.linkedFromCompany)) continue;
+      seen.add(entry.linkedFromCompany);
+      out.push(entry.linkedFromCompany);
+    }
+  }
+  return out;
 }

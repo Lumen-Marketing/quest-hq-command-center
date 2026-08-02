@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Questbase — Development Update, 2 August 2026</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 18mm; }
+
+  :root {
+    --ink: #17130f;
+    --muted: #6b6257;
+    --line: #e2d5bf;
+    --orange: #e0552d;
+    --green: #15803d;
+    --amber: #b45309;
+    --red: #b91c1c;
+    --surface: #faf7f1;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Segoe UI", -apple-system, system-ui, sans-serif;
+    font-size: 10.2pt;
+    line-height: 1.5;
+    color: var(--ink);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  h1 { font-size: 21pt; margin: 0 0 2mm; letter-spacing: -.01em; }
+  h2 {
+    font-size: 13pt;
+    margin: 9mm 0 3mm;
+    padding-bottom: 1.5mm;
+    border-bottom: 2px solid var(--orange);
+    break-after: avoid;
+  }
+  h3 { font-size: 11pt; margin: 5mm 0 1.5mm; break-after: avoid; }
+  p { margin: 0 0 2.5mm; }
+  ul { margin: 0 0 3mm; padding-left: 5mm; }
+  li { margin-bottom: 1.2mm; }
+
+  .lede { color: var(--muted); font-size: 10.5pt; margin-bottom: 1mm; }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2mm 6mm;
+    padding: 3mm 4mm;
+    margin: 4mm 0 2mm;
+    border: 1px solid var(--line);
+    border-radius: 2mm;
+    background: var(--surface);
+    font-size: 9pt;
+  }
+  .meta b { display: block; font-size: 8pt; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
+
+  .stats { display: flex; gap: 3mm; margin: 4mm 0 2mm; }
+  .stat {
+    flex: 1;
+    padding: 3mm;
+    border: 1px solid var(--line);
+    border-radius: 2mm;
+    text-align: center;
+  }
+  .stat span { display: block; font-size: 17pt; font-weight: 800; color: var(--orange); line-height: 1.1; }
+  .stat small { font-size: 8pt; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+  table { width: 100%; border-collapse: collapse; margin: 0 0 3mm; font-size: 9.4pt; }
+  th, td { text-align: left; padding: 1.8mm 2mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 8pt; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .feature { break-inside: avoid; margin-bottom: 4mm; }
+  .feature h3 { margin-top: 0; }
+
+  .note {
+    padding: 2.5mm 3mm;
+    border-left: 3px solid var(--line);
+    background: var(--surface);
+    font-size: 9.4pt;
+    margin: 0 0 3mm;
+    break-inside: avoid;
+  }
+  .note.warn { border-left-color: var(--amber); }
+  .note.stop { border-left-color: var(--red); }
+
+  .tag {
+    display: inline-block;
+    padding: .4mm 1.6mm;
+    border-radius: 1mm;
+    font-size: 7.6pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    vertical-align: 1px;
+  }
+  .tag.done { background: #dcfce7; color: var(--green); }
+  .tag.hold { background: #fef3c7; color: var(--amber); }
+
+  code { font-family: Consolas, "Courier New", monospace; font-size: 8.8pt; background: var(--surface); padding: .3mm 1mm; border-radius: .8mm; }
+
+  footer { margin-top: 8mm; padding-top: 2mm; border-top: 1px solid var(--line); font-size: 8.4pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Questbase — Development Update</h1>
+<p class="lede">Pipeline stages, cross-company installs, theming, and a floating message dock.</p>
+
+<div class="meta">
+  <div><b>Date</b>2 August 2026</div>
+  <div><b>Baseline</b>09cd7dd (last pushed)</div>
+  <div><b>Branch</b>main — uncommitted</div>
+  <div><b>Deployed</b>No — local only</div>
+</div>
+
+<div class="stats">
+  <div class="stat"><span>1,188</span><small>Tests passing</small></div>
+  <div class="stat"><span>71</span><small>Files changed</small></div>
+  <div class="stat"><span>15.5 KB</span><small>Moved off first load</small></div>
+  <div class="stat"><span>5</span><small>Bugs fixed</small></div>
+</div>
+
+<h2>What's new</h2>
+
+<div class="feature">
+  <h3>Pipeline stages &amp; board view <span class="tag done">Ready</span></h3>
+  <p>Records can now be worked as a pipeline. A new <b>Board</b> view sits beside Table and Cards, with one column per stage, drag-and-drop between them, and a per-column record count and money total.</p>
+  <ul>
+    <li><b>Manage stages</b> — rename, recolour, reorder and delete. Each stage shows how many records sit on it <i>before</i> you delete it, and deleting asks where those records should go.</li>
+    <li>Stages are an existing <b>Status</b> field read as a sequence, not a new concept. Any app that already had one is already a pipeline, with nothing to migrate.</li>
+    <li>Records whose stage was deleted collect in a leading "No stage" column instead of disappearing — a board that silently drops records is worse than an untidy first column.</li>
+    <li>Dragging a card is treated as an ordinary edit, so automations, timestamps and saving behave exactly as they do on the record form.</li>
+  </ul>
+</div>
+
+<div class="feature">
+  <h3>Stage automations <span class="tag done">Ready</span></h3>
+  <p>New trigger: <b>a record moves between pipeline stages</b>, expressed as <i>from → to</i> with either side left as "any stage". The existing trigger could already say "changes to Won"; this adds "leaves Quoted" and "moves at all".</p>
+  <p>It fires only when the stage genuinely changed — otherwise every save on a record would trip every pipeline rule attached to it.</p>
+</div>
+
+<div class="feature">
+  <h3>Cross-company app install <span class="tag done">Ready</span></h3>
+  <p>An app can now be installed into a workspace in <b>another company you own</b>: pick the company, then the workspace. Records and fields stay shared, and the picker states plainly that deleting a record from either side deletes it for both.</p>
+  <p>Saving writes both companies' documents, because a linked app's data lives with the company that owns it. Saving only one would have shown the edit on screen until the next reload discarded it — silently.</p>
+</div>
+
+<div class="feature">
+  <h3>Floating message dock <span class="tag done">Ready</span></h3>
+  <p>A circular button in the bottom-right corner, with an unread badge, opening three tabs:</p>
+  <ul>
+    <li><b>Recent</b> — conversations with previews and unread counts.</li>
+    <li><b>People</b> — searchable member list showing who is online; click to message.</li>
+    <li><b>Guide</b> — ask a question about Questbase.</li>
+  </ul>
+  <p>Conversations open as a floating window over the page you are on, so you never lose your place. It reuses the existing messaging code for starting and sending, so permissions and attachment rules are unchanged.</p>
+  <div class="note warn">
+    <b>The Guide is not an AI chatbot.</b> It searches Questbase's curated in-product help — the same index behind the command palette. That means it cannot invent a feature that does not exist, it works offline, costs nothing per question, and no user text leaves the app. The trade-off: it only knows what is written in that help index, so a new capability needs a help topic added. The panel says this outright, so an unanswered question reads as "not covered" rather than a broken assistant. Wiring in a real language model is a separate decision — it brings API keys, per-question cost and data-handling questions with it.
+  </div>
+</div>
+
+<div class="feature">
+  <h3>Appearance: side menu themes <span class="tag done">Ready</span></h3>
+  <p>Seven presets — <b>Default, Midnight, Dark, Coffee, Hot, Forest, Light</b> — plus <b>Custom</b> with your own menu and highlight colours, and an optional text colour that defaults to automatic.</p>
+  <ul>
+    <li><b>Settings are per person.</b> Changing your own look never affects your team. "Set as company default" remains a separate, permission-gated action that only reaches members who have not chosen for themselves.</li>
+    <li>"Default" applies no overrides at all, so the shipped look cannot drift as presets are edited.</li>
+    <li>Custom colours pick light or dark text from the background's actual brightness, so a chosen colour cannot end up unreadable.</li>
+  </ul>
+</div>
+
+<div class="feature">
+  <h3>Company &amp; workspace icons <span class="tag done">Ready</span></h3>
+  <ul>
+    <li>A chosen icon now renders as a <b>plain glyph</b> — no tile, no border. Uploaded images keep their container, since an image has its own edges and crop.</li>
+    <li><b>Icon colour</b> picker: nine presets plus any custom colour, defaulting to Quest orange.</li>
+    <li>The library grew from <b>47 to 124 icons</b> in 10 groups, with <b>Solid</b> and <b>Line</b> styles.</li>
+    <li>Two brand marks — dark ink for light sidebars, light ink for dark ones — both generated from the single piece of brand artwork.</li>
+  </ul>
+  <p>Everything ships inside the product. No icons are fetched from Google or any other third party, so the app keeps working offline and nothing about who uses it is sent anywhere.</p>
+</div>
+
+<div class="feature">
+  <h3>Smaller improvements <span class="tag done">Ready</span></h3>
+  <ul>
+    <li>Phone numbers on workspace apps are now dialable.</li>
+    <li>The workspaces rail is collapsible; "+" adds a workspace and a per-row icon edits one.</li>
+    <li>Sidebar collapse uses a single rotating chevron with a smooth transition.</li>
+    <li>A proper loading animation replaces the plain "loading" text.</li>
+    <li>Online/offline rings on chat avatars.</li>
+    <li>Contact labels are stored as durable rows rather than written into the notes field.</li>
+    <li><b>No more jumping to the top of the page</b> when ticking a task, hiding a field, choosing an install company, or moving a card on the board.</li>
+  </ul>
+</div>
+
+<h2>Bugs found and fixed</h2>
+<table>
+  <thead><tr><th style="width:30%">Issue</th><th>Cause and resolution</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Blank page on load</b></td>
+      <td>Twice. First, a function moved into a deferred module was still called while drawing the first screen. Second, two lookup tables were declared below the code that reads them during start-up. Both fixed; automated checks now catch each class of error.</td>
+    </tr>
+    <tr>
+      <td><b>Build reported success while shipping a blank page</b></td>
+      <td>The safety check that exists for exactly this problem detected it, printed a warning, and then reported success anyway. It now fails the build. <b>This is the most significant fix in this batch</b> — a check that detects a fault and passes is worse than no check, because it is trusted.</td>
+    </tr>
+    <tr>
+      <td><b>Unreadable sidebar text</b></td>
+      <td>On dark themes, the product and company names stayed near-black on navy: those elements carry their own colours and were not covered by the theme. Fixed, with a test asserting every colour in that section is theme-driven rather than fixed.</td>
+    </tr>
+    <tr>
+      <td><b>Board jumped to the top on every change</b></td>
+      <td>The scroll-preservation logic refuses to act when it cannot uniquely identify the scrolling area — and a board has one scrolling list per column, all alike. It now identifies each column individually.</td>
+    </tr>
+    <tr>
+      <td><b>Empty chart claimed a total of 1</b></td>
+      <td>A single value served as both the divide-by-zero guard and the printed figure. Found only because the chart code was moved somewhere it could be tested directly.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Under the hood</h2>
+<p>The application's first-load budget was effectively full. Rather than raise the ceiling, six areas were moved to load only when opened:</p>
+<table>
+  <thead><tr><th>Moved off first load</th><th class="num" style="width:22%">Size</th><th style="width:38%">Loads when</th></tr></thead>
+  <tbody>
+    <tr><td>Field editor &amp; record form inputs</td><td class="num">5.3 KB</td><td>A field or record is opened</td></tr>
+    <tr><td>Print, CSV import/export, download</td><td class="num">3.2 KB</td><td>An app view is opened</td></tr>
+    <tr><td>Message dock</td><td class="num">2.1 KB</td><td>The dock is opened</td></tr>
+    <tr><td>Report charts</td><td class="num">2.0 KB</td><td>The Reports tab is opened</td></tr>
+    <tr><td>Appearance settings panel</td><td class="num">1.7 KB</td><td>Settings is opened</td></tr>
+    <tr><td>Board view</td><td class="num">1.2 KB</td><td>Board view is selected</td></tr>
+    <tr><td><b>Total</b></td><td class="num"><b>15.5 KB</b></td><td>—</td></tr>
+  </tbody>
+</table>
+<p>Every new feature in this batch was paid for this way; the first-load budget still passes, with room to spare. Test coverage went from 1,015 to <b>1,188</b> passing tests, including new guards against the two start-up failures above.</p>
+
+<h2>Needs a decision</h2>
+
+<div class="note stop">
+  <b>Database change is written but NOT applied.</b>
+  <code>202608021000_company_icon_color.sql</code> adds storage for the icon colour and style. It has deliberately not been run against the live database, because that is a production schema change and warrants review first.
+  <br /><br />
+  <b>Until it is applied:</b> icon colour and icon style work immediately but reset when the page is reloaded. Everything else in this update is unaffected. The migration is written to be applied safely on its own, ahead of any deployment.
+</div>
+
+<p>Also still open, carried over:</p>
+<ul>
+  <li>Four crew email addresses (Alkeith, Jesus, Manny, Mackenzie) — needed before end-of-day reports can be exercised.</li>
+  <li>Supabase leaked-password protection toggle.</li>
+  <li>Two-identity and email user-acceptance testing.</li>
+  <li>App Builder rename decision.</li>
+  <li>Seven commercial inputs for pricing and packaging.</li>
+</ul>
+
+<h2>Status</h2>
+<p><b>Nothing in this update has been committed, pushed or deployed.</b> It is running locally only. 71 files are changed. The recommended next step is to commit this work to a branch so it is safely stored, then decide separately on deployment and on the database migration above.</p>
+
+<footer>
+  Questbase — internal development update, 2 August 2026. Generated from the working repository; figures verified against the test suite and production build at the time of writing.
+</footer>
+
+</body>
+</html>

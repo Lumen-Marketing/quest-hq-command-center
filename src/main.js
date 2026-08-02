@@ -1,14 +1,28 @@
 import './tabler-icons.css';
 import './styles.css';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
-import { resolveAppEntry, workspaceApps, tileTargetApp } from './workspace/builder-core.js';
+import {
+  companiesToSave, resolveAppEntry, tileTargetApp, workspaceApps,
+} from './workspace/builder-core.js';
+// The pipeline MODEL is eager -- the stage pill, filters and the stage manager all need
+// it. Only the board's rendering is deferred, in ./workspace/board-view.js.
+import {
+  addStage, boardColumns, canDropOn, moveStage, pipelineField, pipelineFields,
+  recolorStage, removeStage, renameStage, stageCounts, stagesOf, summaryField,
+} from './workspace/pipeline-core.js';
 import {
   assignmentRow, assignmentsToCreate, describeAssignment, findLabel,
   isValidLabelName, labelsForContact as labelsForContactRows, newLabelRow,
 } from './crm/contact-labels.js';
+import {
+  isOnline, onlineProfileIds, presenceChannelName, presenceRing, selfPresence,
+} from './messaging/presence.js';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import questLogoMarkUrl from './assets/quest-hq-logo-mark.webp';
-import questbaseModularLogoUrl from './assets/questbase-modular-logo.png';
+import questLogoMarkUrl from './assets/questbase-mark.png';
+// The same mark with its near-black ink lightened, for dark surfaces. Both are rendered
+// and CSS shows one, so the logo follows the side menu theme without JavaScript having to
+// know which theme is active at the moment each <img> is written.
+import questLogoMarkLightUrl from './assets/questbase-mark-light.png';
 import questbaseInteriorJobsUrl from './assets/questbase-interior-jobs.png';
 import { requireOk, settleObserved } from './lib/result.js';
 import { PASSWORD_MIN_LENGTH, passwordPolicy, passwordPolicyAsync, passwordRequirements } from './auth/password-policy.js';
@@ -173,8 +187,34 @@ const ACCENT_OPTIONS = [
   ['green', 'Field Green', '#15803d'],
   ['slate', 'Command Slate', '#475569'],
 ];
+// Side menu presets. 'default' is the shipped charcoal and is deliberately NOT a set of
+// values here: it applies no overrides at all, so the current look cannot drift as these
+// are edited, and choosing it is a true revert rather than an approximation of itself.
+//
+// Each preset supplies a background, the text colours layered on it, and the active-item
+// treatment. `dark: false` tells the stylesheet this is a light surface, which flips the
+// hairlines and hover wash that would otherwise disappear.
+const SIDEBAR_THEMES = [
+  ['default', 'Default', null],
+  ['midnight', 'Midnight', { bg: 'linear-gradient(180deg,#132038 0%,#0d1626 100%)', text: 'rgba(226,236,250,.82)', strong: '#f8fafc', label: 'rgba(148,178,222,.66)', activeBg: 'rgba(224,85,45,.16)', activeText: '#ff8a5c', dark: true }],
+  ['dark', 'Dark', { bg: 'linear-gradient(180deg,#17181b 0%,#101113 100%)', text: 'rgba(228,228,231,.8)', strong: '#fafafa', label: 'rgba(161,161,170,.7)', activeBg: 'rgba(255,255,255,.1)', activeText: '#ffffff', dark: true }],
+  ['coffee', 'Coffee', { bg: 'linear-gradient(180deg,#2c211a 0%,#1d1512 100%)', text: 'rgba(240,226,211,.82)', strong: '#fdf6ee', label: 'rgba(198,166,133,.7)', activeBg: 'rgba(214,158,94,.18)', activeText: '#e8b27a', dark: true }],
+  ['hot', 'Hot', { bg: 'linear-gradient(180deg,#3d1109 0%,#250905 100%)', text: 'rgba(255,231,220,.84)', strong: '#fff5f0', label: 'rgba(240,160,132,.72)', activeBg: 'rgba(255,122,71,.2)', activeText: '#ff9b6a', dark: true }],
+  ['forest', 'Forest', { bg: 'linear-gradient(180deg,#12271d 0%,#0b1a13 100%)', text: 'rgba(219,239,227,.82)', strong: '#f2fbf6', label: 'rgba(141,190,163,.7)', activeBg: 'rgba(74,222,128,.16)', activeText: '#6ee7a0', dark: true }],
+  // The one light surface. Its text and hairlines are darkened rather than lightened,
+  // which is why `dark: false` exists at all.
+  ['light', 'Light', { bg: 'linear-gradient(180deg,#ffffff 0%,#f4f1ea 100%)', text: 'rgba(38,33,28,.78)', strong: '#17130f', label: 'rgba(114,105,93,.85)', activeBg: 'rgba(224,85,45,.12)', activeText: '#c2410c', dark: false }],
+];
+const SIDEBAR_THEME_IDS = SIDEBAR_THEMES.map(([id]) => id);
+
 const APPEARANCE_KEY = 'quest-appearance';
 const APPEARANCE_DEFAULTS = {
+  sidebarTheme: 'default', // one of SIDEBAR_THEME_IDS, or 'custom'
+  sidebarBg: '#132038',    // used only by 'custom'
+  sidebarAccent: '#e0552d',
+  // Empty means "follow the preset", which already picks light or dark text to suit its
+  // background. A value here overrides that for people who want an exact colour.
+  sidebarText: '',
   bgType: 'default',   // 'default' | 'preset' | 'image'
   bgPreset: 'dots',    // one of APPEARANCE_BG_PRESETS
   bgImage: '',         // data URL when bgType === 'image'
@@ -911,106 +951,179 @@ const WORKSPACE_ICON_UPLOAD_MAX_BYTES = 220 * 1024;
 const AVATAR_EDGE_PX = 512;
 const AVATAR_MAX_DATA_URL = 400 * 1024;
 const AVATAR_CROP_SOURCE_PX = 1600;
+// Company / workspace icon library.
+//
+// Rendered with the bundled Tabler font rather than inline SVG paths. The paths that used
+// to live here cost 4.9 KB of the entry chunk for 47 icons; the font is already loaded, is
+// subsetted to exactly what is referenced, and costs the entry chunk nothing per glyph --
+// which is what makes a library this size affordable at all.
+//
+// `line` always exists. `solid` is present only where Tabler ships a filled variant, which
+// is fewer than half of them, so the Solid pack falls back to the line glyph rather than
+// showing a gap. scripts/build-icon-subset.mjs regenerates the font from these names, and
+// tests/icon-subset.test.mjs fails if one is missing.
+//
+// Keys are permanent: they are stored on company rows, so renaming one silently resets
+// every company using it back to the first icon in the list.
 const WORKSPACE_ICON_OPTIONS = [
-  { key: 'home', icon: 'ti-home-filled', label: 'Home' },
-  { key: 'building', icon: 'ti-building-broadcast-tower-filled', label: 'Building' },
-  { key: 'store', icon: 'ti-shopping-cart-filled', label: 'Store' },
-  { key: 'warehouse', icon: 'ti-archive-filled', label: 'Warehouse' },
-  { key: 'briefcase', icon: 'ti-briefcase-filled', label: 'Briefcase' },
-  { key: 'tools', icon: 'ti-settings-filled', label: 'Tools' },
-  { key: 'tool', icon: 'ti-adjustments-filled', label: 'Tool' },
-  { key: 'hammer', icon: 'ti-barrier-block-filled', label: 'Hammer' },
-  { key: 'helmet', icon: 'ti-shield-filled', label: 'Helmet' },
-  { key: 'ruler', icon: 'ti-layout-grid-filled', label: 'Ruler' },
-  { key: 'truck', icon: 'ti-navigation-filled', label: 'Truck' },
-  { key: 'delivery', icon: 'ti-arrow-badge-right-filled', label: 'Delivery' },
-  { key: 'users', icon: 'ti-user-filled', label: 'User' },
-  { key: 'messages', icon: 'ti-message-filled', label: 'Message' },
-  { key: 'calendar', icon: 'ti-calendar-filled', label: 'Calendar' },
-  { key: 'folder', icon: 'ti-folder-filled', label: 'Folder' },
-  { key: 'chart', icon: 'ti-chart-pie-filled', label: 'Chart' },
-  { key: 'shield', icon: 'ti-shield-check-filled', label: 'Shield' },
-  { key: 'star', icon: 'ti-star-filled', label: 'Star' },
-  { key: 'contacts', icon: 'ti-badges-filled', label: 'Contacts' },
-  { key: 'checklist', icon: 'ti-layout-list-filled', label: 'Checklist' },
-  { key: 'approved', icon: 'ti-square-check-filled', label: 'Approved' },
-  { key: 'map-pin', icon: 'ti-map-pin-filled', label: 'Pin' },
-  { key: 'map', icon: 'ti-location-filled', label: 'Map' },
-  { key: 'paint', icon: 'ti-paint-filled', label: 'Paint' },
-  { key: 'plugin', icon: 'ti-puzzle-filled', label: 'Plugin' },
-  { key: 'alerts', icon: 'ti-bell-filled', label: 'Alerts' },
-  { key: 'book', icon: 'ti-book-filled', label: 'Book' },
-  { key: 'receipt', icon: 'ti-cash-banknote-filled', label: 'Receipt' },
-  { key: 'clock', icon: 'ti-clock-filled', label: 'Clock' },
-  { key: 'camera', icon: 'ti-camera-filled', label: 'Camera' },
-  { key: 'photo', icon: 'ti-photo-filled', label: 'Photo' },
-  { key: 'file', icon: 'ti-file-filled', label: 'File' },
-  { key: 'database', icon: 'ti-stack-filled', label: 'Data' },
-  { key: 'lock', icon: 'ti-lock-filled', label: 'Lock' },
-  { key: 'key', icon: 'ti-key-filled', label: 'Key' },
-  { key: 'flag', icon: 'ti-flag-filled', label: 'Flag' },
-  { key: 'partner', icon: 'ti-heart-filled', label: 'Partner' },
-  { key: 'support', icon: 'ti-help-circle-filled', label: 'Support' },
-  { key: 'target', icon: 'ti-circle-dot-filled', label: 'Target' },
-  { key: 'rocket', icon: 'ti-award-filled', label: 'Rocket' },
-  { key: 'bolt', icon: 'ti-sun-filled', label: 'Bolt' },
-  { key: 'package', icon: 'ti-box-align-bottom-filled', label: 'Package' },
-  { key: 'desktop', icon: 'ti-device-mobile-filled', label: 'Desktop' },
-  { key: 'cloud', icon: 'ti-cloud-filled', label: 'Cloud' },
-  { key: 'mail', icon: 'ti-mail-filled', label: 'Mail' },
-  { key: 'phone', icon: 'ti-phone-filled', label: 'Phone' },
-  { key: 'headset', icon: 'ti-headphones-filled', label: 'Headset' },
+  { key: 'home', label: 'Home', line: 'home', solid: 'home-filled', group: 'Places' },
+  { key: 'building', label: 'Building', line: 'building', group: 'Places' },
+  { key: 'office', label: 'Office', line: 'building-skyscraper', group: 'Places' },
+  { key: 'store', label: 'Store', line: 'building-store', group: 'Places' },
+  { key: 'warehouse', label: 'Warehouse', line: 'building-warehouse', group: 'Places' },
+  { key: 'factory', label: 'Factory', line: 'building-factory', group: 'Places' },
+  { key: 'community', label: 'Community', line: 'building-community', group: 'Places' },
+  { key: 'bank', label: 'Bank', line: 'building-bank', group: 'Places' },
+  { key: 'hospital', label: 'Hospital', line: 'building-hospital', group: 'Places' },
+  { key: 'garage', label: 'Garage', line: 'car-garage', group: 'Places' },
+  { key: 'map', label: 'Map', line: 'map', group: 'Places' },
+  { key: 'pin', label: 'Location', line: 'map-pin', solid: 'map-pin-filled', group: 'Places' },
+  { key: 'map-pin', label: 'Map pin', line: 'current-location', group: 'Places' },
+  { key: 'route', label: 'Route', line: 'route', group: 'Places' },
+  { key: 'world', label: 'World', line: 'world', group: 'Places' },
+  { key: 'tools', label: 'Tools', line: 'tools', group: 'Trades' },
+  { key: 'tool', label: 'Wrench', line: 'tool', group: 'Trades' },
+  { key: 'hammer', label: 'Hammer', line: 'hammer', group: 'Trades' },
+  { key: 'screwdriver', label: 'Screwdriver', line: 'settings-automation', group: 'Trades' },
+  { key: 'drill', label: 'Drill', line: 'tools-kitchen-2', group: 'Trades' },
+  { key: 'helmet', label: 'Hard hat', line: 'helmet', group: 'Trades' },
+  { key: 'ruler', label: 'Ruler', line: 'ruler', group: 'Trades' },
+  { key: 'ruler2', label: 'Measure', line: 'ruler-measure', group: 'Trades' },
+  { key: 'paint', label: 'Paint', line: 'paint', solid: 'paint-filled', group: 'Trades' },
+  { key: 'brush', label: 'Brush', line: 'brush', group: 'Trades' },
+  { key: 'bulldozer', label: 'Excavator', line: 'bulldozer', group: 'Trades' },
+  { key: 'crane', label: 'Crane', line: 'crane', group: 'Trades' },
+  { key: 'ladder', label: 'Ladder', line: 'ladder', group: 'Trades' },
+  { key: 'bricks', label: 'Bricks', line: 'wall', group: 'Trades' },
+  { key: 'roof', label: 'Roof', line: 'home-2', group: 'Trades' },
+  { key: 'plug', label: 'Electrical', line: 'plug', group: 'Trades' },
+  { key: 'bolt', label: 'Power', line: 'bolt', group: 'Trades' },
+  { key: 'flame', label: 'Heating', line: 'flame', group: 'Trades' },
+  { key: 'droplet', label: 'Plumbing', line: 'droplet', solid: 'droplet-filled', group: 'Trades' },
+  { key: 'snowflake', label: 'Cooling', line: 'snowflake', group: 'Trades' },
+  { key: 'solar', label: 'Solar', line: 'sun-electricity', group: 'Trades' },
+  { key: 'leaf', label: 'Landscaping', line: 'leaf', group: 'Trades' },
+  { key: 'tree', label: 'Tree', line: 'tree', group: 'Trades' },
+  { key: 'shovel', label: 'Shovel', line: 'shovel', group: 'Trades' },
+  { key: 'truck', label: 'Truck', line: 'truck', group: 'Transport' },
+  { key: 'delivery', label: 'Delivery', line: 'truck-delivery', group: 'Transport' },
+  { key: 'van', label: 'Van', line: 'car', group: 'Transport' },
+  { key: 'trailer', label: 'Trailer', line: 'truck-loading', group: 'Transport' },
+  { key: 'forklift', label: 'Forklift', line: 'forklift', group: 'Transport' },
+  { key: 'plane', label: 'Air', line: 'plane', group: 'Transport' },
+  { key: 'ship', label: 'Sea', line: 'ship', group: 'Transport' },
+  { key: 'package', label: 'Package', line: 'package', group: 'Transport' },
+  { key: 'boxes', label: 'Boxes', line: 'box', group: 'Transport' },
+  { key: 'user', label: 'Person', line: 'user', solid: 'user-filled', group: 'People' },
+  { key: 'users', label: 'Team', line: 'users', group: 'People' },
+  { key: 'messages', label: 'Messages', line: 'messages', group: 'People' },
+  { key: 'contacts', label: 'Contacts', line: 'address-book', group: 'People' },
+  { key: 'partner', label: 'Partner', line: 'heart-handshake', group: 'People' },
+  { key: 'support', label: 'Support', line: 'headphones', solid: 'headphones-filled', group: 'People' },
+  { key: 'headset', label: 'Headset', line: 'headset', group: 'People' },
+  { key: 'id', label: 'ID', line: 'id', group: 'People' },
+  { key: 'crown', label: 'Owner', line: 'crown', group: 'People' },
+  { key: 'star', label: 'Star', line: 'star', solid: 'star-filled', group: 'People' },
+  { key: 'award', label: 'Award', line: 'award', solid: 'award-filled', group: 'People' },
+  { key: 'briefcase', label: 'Briefcase', line: 'briefcase', solid: 'briefcase-filled', group: 'Work' },
+  { key: 'checklist', label: 'Checklist', line: 'list-check', group: 'Work' },
+  { key: 'approved', label: 'Approved', line: 'checkbox', group: 'Work' },
+  { key: 'calendar', label: 'Calendar', line: 'calendar', solid: 'calendar-filled', group: 'Work' },
+  { key: 'clock', label: 'Time', line: 'clock', solid: 'clock-filled', group: 'Work' },
+  { key: 'target', label: 'Target', line: 'target', group: 'Work' },
+  { key: 'flag', label: 'Flag', line: 'flag', solid: 'flag-filled', group: 'Work' },
+  { key: 'rocket', label: 'Launch', line: 'rocket', group: 'Work' },
+  { key: 'bulb', label: 'Ideas', line: 'bulb', solid: 'bulb-filled', group: 'Work' },
+  { key: 'puzzle', label: 'Puzzle', line: 'puzzle', solid: 'puzzle-filled', group: 'Work' },
+  { key: 'plugin', label: 'Plugin', line: 'plug-connected', group: 'Work' },
+  { key: 'settings', label: 'Settings', line: 'settings', solid: 'settings-filled', group: 'Work' },
+  { key: 'adjustments', label: 'Controls', line: 'adjustments', solid: 'adjustments-filled', group: 'Work' },
+  { key: 'file', label: 'File', line: 'file', solid: 'file-filled', group: 'Records' },
+  { key: 'folder', label: 'Folder', line: 'folder', solid: 'folder-filled', group: 'Records' },
+  { key: 'book', label: 'Book', line: 'book', solid: 'book-filled', group: 'Records' },
+  { key: 'notes', label: 'Notes', line: 'notes', group: 'Records' },
+  { key: 'receipt', label: 'Receipt', line: 'receipt', group: 'Records' },
+  { key: 'invoice', label: 'Invoice', line: 'file-invoice', group: 'Records' },
+  { key: 'contract', label: 'Contract', line: 'file-certificate', group: 'Records' },
+  { key: 'clipboard', label: 'Clipboard', line: 'clipboard-text', group: 'Records' },
+  { key: 'archive', label: 'Archive', line: 'archive', solid: 'archive-filled', group: 'Records' },
+  { key: 'database', label: 'Data', line: 'database', group: 'Records' },
+  { key: 'data', label: 'Records', line: 'database-export', group: 'Records' },
+  { key: 'chart', label: 'Chart', line: 'chart-pie', solid: 'chart-pie-filled', group: 'Records' },
+  { key: 'graph', label: 'Trend', line: 'chart-line', group: 'Records' },
+  { key: 'report', label: 'Report', line: 'report-analytics', group: 'Records' },
+  { key: 'calculator', label: 'Calculator', line: 'calculator', solid: 'calculator-filled', group: 'Records' },
+  { key: 'cash', label: 'Cash', line: 'cash', group: 'Records' },
+  { key: 'coin', label: 'Money', line: 'coin', solid: 'coin-filled', group: 'Records' },
+  { key: 'creditcard', label: 'Card', line: 'credit-card', solid: 'credit-card-filled', group: 'Records' },
+  { key: 'wallet', label: 'Wallet', line: 'wallet', group: 'Records' },
+  { key: 'message', label: 'Message', line: 'message', solid: 'message-filled', group: 'Comms' },
+  { key: 'mail', label: 'Mail', line: 'mail', solid: 'mail-filled', group: 'Comms' },
+  { key: 'phone', label: 'Phone', line: 'phone', solid: 'phone-filled', group: 'Comms' },
+  { key: 'bell', label: 'Bell', line: 'bell', solid: 'bell-filled', group: 'Comms' },
+  { key: 'alerts', label: 'Alerts', line: 'alert-circle', solid: 'alert-circle-filled', group: 'Comms' },
+  { key: 'speaker', label: 'Announce', line: 'speakerphone', group: 'Comms' },
+  { key: 'share', label: 'Share', line: 'share', group: 'Comms' },
+  { key: 'link', label: 'Link', line: 'link', group: 'Comms' },
+  { key: 'desktop', label: 'Desktop', line: 'device-desktop', group: 'Devices' },
+  { key: 'laptop', label: 'Laptop', line: 'device-laptop', group: 'Devices' },
+  { key: 'mobile', label: 'Mobile', line: 'device-mobile', solid: 'device-mobile-filled', group: 'Devices' },
+  { key: 'camera', label: 'Camera', line: 'camera', solid: 'camera-filled', group: 'Devices' },
+  { key: 'photo', label: 'Photo', line: 'photo', solid: 'photo-filled', group: 'Devices' },
+  { key: 'printer', label: 'Printer', line: 'printer', group: 'Devices' },
+  { key: 'cloud', label: 'Cloud', line: 'cloud', solid: 'cloud-filled', group: 'Devices' },
+  { key: 'server', label: 'Server', line: 'server', group: 'Devices' },
+  { key: 'cpu', label: 'System', line: 'cpu', group: 'Devices' },
+  { key: 'robot', label: 'Automation', line: 'robot', group: 'Devices' },
+  { key: 'shield', label: 'Shield', line: 'shield', solid: 'shield-filled', group: 'Security' },
+  { key: 'lock', label: 'Lock', line: 'lock', solid: 'lock-filled', group: 'Security' },
+  { key: 'key', label: 'Key', line: 'key', solid: 'key-filled', group: 'Security' },
+  { key: 'eye', label: 'Watch', line: 'eye', solid: 'eye-filled', group: 'Security' },
+  { key: 'alert', label: 'Warning', line: 'alert-triangle', solid: 'alert-triangle-filled', group: 'Security' },
+  { key: 'fire', label: 'Fire safety', line: 'fire-extinguisher', group: 'Security' },
+  { key: 'first-aid', label: 'First aid', line: 'first-aid-kit', group: 'Security' },
+  { key: 'circle', label: 'Circle', line: 'circle', solid: 'circle-filled', group: 'Shapes' },
+  { key: 'square', label: 'Square', line: 'square', solid: 'square-filled', group: 'Shapes' },
+  { key: 'triangle', label: 'Triangle', line: 'triangle', solid: 'triangle-filled', group: 'Shapes' },
+  { key: 'hexagon', label: 'Hexagon', line: 'hexagon', solid: 'hexagon-filled', group: 'Shapes' },
+  { key: 'diamond', label: 'Diamond', line: 'diamond', solid: 'diamond-filled', group: 'Shapes' },
+  { key: 'heart', label: 'Heart', line: 'heart', solid: 'heart-filled', group: 'Shapes' },
+  { key: 'bookmark', label: 'Bookmark', line: 'bookmark', solid: 'bookmark-filled', group: 'Shapes' },
+  { key: 'sparkles', label: 'Sparkle', line: 'sparkles', group: 'Shapes' },
 ];
-const WORKSPACE_ICON_SVG = {
-  home: '<path d="M3 11.2 12 4l9 7.2v8.3a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H4.5A1.5 1.5 0 0 1 3 19.5v-8.3Z" />',
-  building: '<path d="M5 20V6.8L12 3l7 3.8V20h-4v-5H9v5H5Zm4-10h2V8H9v2Zm4 0h2V8h-2v2Z" />',
-  store: '<path d="M5 7h14l1 5H4l1-5Zm1 7h12v6H6v-6Zm2-10h8v2H8V4Z" />',
-  warehouse: '<path d="M4 10.5 12 5l8 5.5V20h-3v-6H7v6H4v-9.5Zm4 5.5v2h8v-2H8Z" />',
-  briefcase: '<path d="M8 6V4h8v2h4v13H4V6h4Zm2 0h4V5h-4v1Zm1 5v2h2v-2h-2Z" />',
-  tools: '<circle cx="12" cy="12" r="3.1" /><path d="M11 2.8h2l.7 3.1 2.8-1.7 1.4 1.4-1.7 2.8 3.1.7v2l-3.1.7 1.7 2.8-1.4 1.4-2.8-1.7-.7 3.1h-2l-.7-3.1-2.8 1.7-1.4-1.4 1.7-2.8-3.1-.7v-2l3.1-.7-1.7-2.8 1.4-1.4 2.8 1.7.7-3.1Z" />',
-  tool: '<path d="M6 4h3v7H6V4Zm5 0h3v16h-3V4Zm5 0h3v10h-3V4ZM5 13h5v7H5v-7Zm10 3h5v4h-5v-4Z" />',
-  hammer: '<path d="M13.5 4 20 10.5l-2.2 2.2-2-2-8.9 8.9-2.5-2.5 8.9-8.9-2-2L13.5 4Z" />',
-  helmet: '<path d="M4 14a8 8 0 0 1 16 0v3H4v-3Zm2 5h12v2H6v-2Z" />',
-  ruler: '<path d="M4 5h16v14H4V5Zm3 3v3h2V8H7Zm4 0v3h2V8h-2Zm4 0v3h2V8h-2ZM7 14v2h10v-2H7Z" />',
-  truck: '<path d="M3 7h11v9H3V7Zm12 3h3.5L21 13v3h-6v-6ZM6.5 20a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm10.5 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z" />',
-  delivery: '<path d="M4 5h9l7 7-7 7H4l6.8-7L4 5Z" />',
-  users: '<circle cx="9" cy="8.5" r="3.2" /><circle cx="16" cy="9.5" r="2.4" /><path d="M3.5 20c.9-3.8 2.7-5.7 5.5-5.7s4.6 1.9 5.5 5.7h-11Zm10.3 0c.6-2.6 1.9-4 4-4 1.4 0 2.4 1.3 2.9 4h-6.9Z" />',
-  messages: '<path d="M4 5h16v11H9l-5 4V5Zm4 4v2h8V9H8Zm0 4v2h5v-2H8Z" />',
-  calendar: '<path d="M5 4h14v16H5V4Zm3-2h2v4H8V2Zm6 0h2v4h-2V2ZM7 9v3h3V9H7Zm5 0v3h3V9h-3Zm-5 5v3h3v-3H7Z" />',
-  folder: '<path d="M3 6h7l2 2h9v11H3V6Z" />',
-  chart: '<path d="M11 3a9 9 0 1 0 9 9h-9V3Zm2 0v7h7a9 9 0 0 0-7-7Z" />',
-  shield: '<path d="M12 3 20 6v5.5c0 4.2-2.7 7.4-8 9.5-5.3-2.1-8-5.3-8-9.5V6l8-3Zm-1 11.3 5-5-1.6-1.6L11 11.1 9.6 9.7 8 11.3l3 3Z" />',
-  star: '<path d="m12 3 2.6 5.3 5.9.9-4.3 4.2 1 5.9L12 16.5l-5.2 2.8 1-5.9-4.3-4.2 5.9-.9L12 3Z" />',
-  contacts: '<path d="M6 4h12v16H6V4Zm3 3v4h6V7H9Zm0 7v2h6v-2H9Z" />',
-  checklist: '<path d="M8 5h12v3H8V5Zm0 5.5h12v3H8v-3ZM8 16h12v3H8v-3ZM4 5.5h2.5V8H4V5.5Zm0 5.5h2.5v2.5H4V11Zm0 5.5h2.5V19H4v-2.5Z" />',
-  approved: '<path d="M5 4h14v16H5V4Zm3 8 3 3.2L16.5 9 15 7.6l-4 4.4-1.6-1.6L8 12Z" />',
-  'map-pin': '<path d="M12 2.8a7 7 0 0 1 7 7c0 5.2-7 11.4-7 11.4S5 15 5 9.8a7 7 0 0 1 7-7Zm0 9.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />',
-  map: '<path d="M4 5.5 9 3l6 2.5 5-2.2v15.2L15 21l-6-2.5-5 2.2V5.5Zm6 .1v11.1l4 1.7V7.3l-4-1.7Z" />',
-  paint: '<path d="M6 3h12v8H6V3Zm2 10h8v3H8v-3Zm2 4h4v4h-4v-4Z" />',
-  plugin: '<path d="M8 4h4v4h4v4h4v4h-4v4h-4v-4H8v4H4v-4h4v-4H4V8h4V4Z" />',
-  alerts: '<path d="M6 10a6 6 0 0 1 12 0v5l2 3H4l2-3v-5Zm4 10h4a2 2 0 0 1-4 0Z" />',
-  book: '<path d="M5 4h7a4 4 0 0 1 4 4v12H9a4 4 0 0 0-4 4V4Zm11 0h3v16h-3V4Z" />',
-  receipt: '<path d="M6 3h12v18l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2L6 21V3Zm3 5v2h6V8H9Zm0 4v2h6v-2H9Z" />',
-  clock: '<path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm1 5v4.4l3.3 2-1.1 1.8L11 13.7V8h2Z" />',
-  camera: '<path d="M7 6h3l1-2h2l1 2h3a3 3 0 0 1 3 3v8H4V9a3 3 0 0 1 3-3Zm5 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />',
-  photo: '<path d="M4 5h16v14H4V5Zm3 10h10l-3.5-4-2.5 3-1.5-1.8L7 15Zm2-5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />',
-  file: '<path d="M7 3h7l4 4v14H7V3Zm7 1v4h4l-4-4Zm-4 9v2h5v-2h-5Z" />',
-  database: '<path d="M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3Zm-8 5c0 1.7 3.6 3 8 3s8-1.3 8-3v4c0 1.7-3.6 3-8 3s-8-1.3-8-3V8Zm0 6c0 1.7 3.6 3 8 3s8-1.3 8-3v4c0 1.7-3.6 3-8 3s-8-1.3-8-3v-4Z" />',
-  lock: '<path d="M7 10V8a5 5 0 0 1 10 0v2h2v10H5V10h2Zm2 0h6V8a3 3 0 0 0-6 0v2Z" />',
-  key: '<path d="M8.5 14a5.5 5.5 0 1 1 4.8-2.8L21 18.9 18.9 21l-2-2H14v-2.9l-2.2-2.2A5.4 5.4 0 0 1 8.5 14Zm0-3a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />',
-  flag: '<path d="M5 3h2v18H5V3Zm4 1h10l-2 5 2 5H9V4Z" />',
-  partner: '<path d="M12 20S4 15.3 4 9.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5C20 15.3 12 20 12 20Z" />',
-  support: '<path d="M12 3a8 8 0 0 1 8 8v4a3 3 0 0 1-3 3h-2v-6h3v-1a6 6 0 0 0-12 0v1h3v6H7a3 3 0 0 1-3-3v-4a8 8 0 0 1 8-8Z" />',
-  target: '<path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" />',
-  rocket: '<path d="M12 3c3 1.3 5.6 3.9 7 7l-4 1 2 2-4 4-2-2-1 4c-3.1-1.4-5.7-4-7-7l5.5-1.5L12 3Z" />',
-  bolt: '<path d="M13 2 5 13h6l-1 9 9-12h-6l1-8Z" />',
-  package: '<path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Zm8 2.5 5-2.8L12 4.5 7 7.2l5 2.8Zm-6 1v4.5l5 2.8V12l-5-2.8Z" />',
-  desktop: '<path d="M4 5h16v11H4V5Zm5 13h6v2H9v-2Z" />',
-  cloud: '<path d="M7.5 18A4.5 4.5 0 0 1 7 9a6 6 0 0 1 11.5 2A3.5 3.5 0 0 1 18 18H7.5Z" />',
-  mail: '<path d="M4 6h16v12H4V6Zm2 2 6 4.5L18 8H6Z" />',
-  phone: '<path d="M7 3h10v18H7V3Zm3 2v12h4V5h-4Zm1 14h2v1h-2v-1Z" />',
-  headset: '<path d="M12 3a8 8 0 0 1 8 8v5a3 3 0 0 1-3 3h-3v-6h4v-2a6 6 0 0 0-12 0v2h4v6H7a3 3 0 0 1-3-3v-5a8 8 0 0 1 8-8Z" />',
-};
+
+// Section order in the picker. Derived from the table rather than listed separately, so
+// adding an icon in a new group cannot leave that group unrendered.
+const WORKSPACE_ICON_GROUPS = [...new Set(WORKSPACE_ICON_OPTIONS.map((item) => item.group))];
+
+// The next four are declared HERE, beside the icon table, and deliberately not next to the
+// functions that read them. normalizeCompany() runs while this module is still evaluating
+// -- the initial `state` object maps it over the fallback companies -- and it calls
+// normalizeIconColor and workspaceIconPack. Declared further down, these consts would
+// still be in their temporal dead zone at that point and the app would never render.
+
+// Quest orange. The default for any account that has not chosen an icon colour, so a new
+// company looks like the product rather than like whatever tint its label happened to get.
+const ICON_COLOR_DEFAULT = '#e0552d';
+// Offered as one-click choices beside the freeform picker; any hex is still allowed.
+const ICON_COLOR_PRESETS = [
+  [ICON_COLOR_DEFAULT, 'Quest orange'],
+  ['#2563eb', 'Blue'],
+  ['#15803d', 'Green'],
+  ['#7c3aed', 'Violet'],
+  ['#d97706', 'Amber'],
+  ['#dc2626', 'Red'],
+  ['#0891b2', 'Teal'],
+  ['#475569', 'Slate'],
+  ['#17130f', 'Ink'],
+];
+
+// The packs on offer. Both ship in the bundled font -- nothing here reaches the network.
+const WORKSPACE_ICON_PACKS = [
+  ['solid', 'Solid'],
+  ['line', 'Line'],
+];
+const WORKSPACE_ICON_PACK_DEFAULT = 'solid';
 
 const MODULE_REGISTRY = [
   { id: 'dashboard', group: 'Workspace', label: 'Dashboard', icon: 'ti-layout-dashboard', symbol: 'q-logo', status: 'live', permission: '' },
@@ -2324,6 +2437,15 @@ const state = {
   // Filter text for the company picker dialog. Cleared each time it opens so a stale
   // search cannot hide the account you are looking for.
   companyPickerQuery: '',
+  // Destination company for a linked app install; '' means the app's own company.
+  wbInstallCompanyId: '',
+  // Re-render scheduled for after the sidebar finishes moving.
+  sidebarSettleTimer: null,
+  // Profile ids currently connected, from the realtime presence channel. Ephemeral by
+  // design: it is rebuilt from the socket and never persisted.
+  onlineProfileIds: new Set(),
+  presenceChannel: null,
+  presenceKey: '',
   recordHistory: {
     companyId: '',
     workspaceId: '',
@@ -2476,6 +2598,9 @@ const state = {
   workspaceMenuOpen: false,
   mobileMenuOpen: false,
   rolePreview: null,
+  // The floating message dock. conversationId non-empty means the chat window is open
+  // instead of the launcher.
+  messageDock: { open: false, tab: 'recent', peopleQuery: '', guideQuery: '', conversationId: '' },
   commandPalette: { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null },
   knowledgeArticles: [],
   automations: readSeededList(AUTOMATION_CACHE_KEY, automationsFallback).map(normalizeAutomation),
@@ -2526,6 +2651,8 @@ function init() {
     rememberSidebarScroll();
     render();
   });
+  ensureIconSprite();
+  trackScrollTargets();
   document.addEventListener('click', (event) => {
     // Capture the trigger before the handler runs: if this click opens a modal, this
     // is the control focus should return to once it closes.
@@ -2724,7 +2851,44 @@ function getAppearance() {
   const merged = { ...APPEARANCE_DEFAULTS, ...(saved && typeof saved === 'object' ? saved : {}) };
   merged.cardOpacity = Math.min(100, Math.max(20, Number(merged.cardOpacity) || APPEARANCE_DEFAULTS.cardOpacity));
   merged.cardBlur = Math.min(40, Math.max(0, Number(merged.cardBlur) || 0));
+  // A theme id saved by a newer build, or hand-edited in storage, falls back rather than
+  // leaving the side menu with a data attribute no stylesheet answers to.
+  if (merged.sidebarTheme !== 'custom' && !SIDEBAR_THEME_IDS.includes(merged.sidebarTheme)) merged.sidebarTheme = 'default';
   return merged;
+}
+
+/**
+ * Relative luminance, used to decide whether text on a custom sidebar colour should be
+ * light or dark. Picking one and hoping is how a custom colour ends up unreadable.
+ */
+function readableOn(hex) {
+  const clean = String(hex || '').replace('#', '').trim();
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean.padEnd(6, '0').slice(0, 6);
+  const n = parseInt(full, 16);
+  if (Number.isNaN(n)) return true;
+  const chan = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  const lum = 0.2126 * chan((n >> 16) & 255) + 0.7152 * chan((n >> 8) & 255) + 0.0722 * chan(n & 255);
+  return lum < 0.5; // true => treat as a dark surface, so text goes light
+}
+
+/** The CSS custom properties for a side menu choice, or null to leave the default alone. */
+function sidebarThemeVars(settings) {
+  const id = settings.sidebarTheme;
+  if (!id || id === 'default') return null;
+  if (id === 'custom') {
+    const dark = readableOn(settings.sidebarBg);
+    const ink = dark ? '255,255,255' : '23,19,15';
+    return {
+      bg: settings.sidebarBg,
+      text: `rgba(${ink},${dark ? 0.8 : 0.78})`,
+      strong: dark ? '#ffffff' : '#17130f',
+      label: `rgba(${ink},${dark ? 0.55 : 0.65})`,
+      activeBg: hexToRgba(settings.sidebarAccent, dark ? 0.18 : 0.13),
+      activeText: settings.sidebarAccent,
+      dark,
+    };
+  }
+  return (SIDEBAR_THEMES.find(([key]) => key === id) || [])[2] || null;
 }
 
 // Writes the appearance choices to CSS custom properties + data-* on <html>. These live on
@@ -2760,6 +2924,36 @@ function applyAppearance(settings = getAppearance()) {
     style.removeProperty('--card-custom-bg');
     style.removeProperty('--card-blur');
   }
+
+  // Side menu. 'default' clears everything rather than writing the shipped colours back,
+  // so the untouched look stays the stylesheet's business and cannot drift.
+  const side = sidebarThemeVars(settings);
+  const SIDE_VARS = ['--deck-bg', '--deck-text', '--deck-strong', '--deck-label', '--deck-active-bg', '--deck-active-text'];
+  if (!side) {
+    delete root.dataset.sidebarTheme;
+    delete root.dataset.sidebarSurface;
+    SIDE_VARS.forEach((name) => style.removeProperty(name));
+  } else {
+    root.dataset.sidebarTheme = settings.sidebarTheme;
+    // Separate from the id so the stylesheet can key hairlines and hover on light-vs-dark
+    // without listing every preset name.
+    root.dataset.sidebarSurface = side.dark ? 'dark' : 'light';
+    style.setProperty('--deck-bg', side.bg);
+    style.setProperty('--deck-text', side.text);
+    style.setProperty('--deck-strong', side.strong);
+    style.setProperty('--deck-label', side.label);
+    style.setProperty('--deck-active-bg', side.activeBg);
+    style.setProperty('--deck-active-text', side.activeText);
+    // An explicit text colour overrides what the preset chose. Applied on top rather than
+    // inside the preset so it survives switching between them, and derived into three
+    // weights so headings, body rows and section labels stay distinguishable.
+    const ink = String(settings.sidebarText || '').trim();
+    if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(ink)) {
+      style.setProperty('--deck-strong', ink);
+      style.setProperty('--deck-text', hexToRgba(ink, 0.82));
+      style.setProperty('--deck-label', hexToRgba(ink, 0.6));
+    }
+  }
 }
 
 function setAppearance(patch = {}) {
@@ -2781,6 +2975,58 @@ function resetAppearance() {
 // Re-render only the appearance control panel in place. The visual change is already applied
 // via CSS variables on <html>, so a full render() (which rebuilds the page and resets the
 // content-pane scroll to the top) is unnecessary here.
+// Delegates to the lazily-fetched Appearance panel. The settings page renders a loader
+// on the first visit and re-renders when the chunk lands; refreshAppearanceControls only
+// ever runs afterwards, so it finds the factory already built.
+// Stays in main.js, unlike the rest of the Appearance panel: the account popover renders
+// this on first paint, so deferring it would leave the top-bar menu briefly themeless.
+function renderAccountThemeControls() {
+  const mode = getThemeMode();
+  const accent = getAccent();
+  return `
+    <div class="account-theme-panel" aria-label="Theme chooser">
+      <div class="account-theme-title"><i class="ti ti-palette"></i><span>Theme</span></div>
+      <div class="account-theme-options" role="group" aria-label="Color mode">
+        ${THEME_OPTIONS.map(([id, label, icon]) => `
+          <button class="${mode === id ? 'active' : ''}" type="button" data-action="set-theme" data-theme="${h(id)}" aria-pressed="${mode === id ? 'true' : 'false'}">
+            <i class="ti ${h(icon)}"></i>${h(label)}
+          </button>
+        `).join('')}
+      </div>
+      <div class="account-accent-row" role="group" aria-label="Accent color">
+        ${ACCENT_OPTIONS.map(([id, label, color]) => `
+          <button class="account-accent-swatch ${accent === id ? 'active' : ''}" type="button" data-action="set-accent" data-accent="${h(id)}" title="${h(label)}" aria-label="${h(label)}" aria-pressed="${accent === id ? 'true' : 'false'}" style="--swatch:${h(color)}"></button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+
+let appearancePanelFn = null;
+let appearancePanelPending = null;
+function loadAppearancePanel() {
+  if (appearancePanelFn) return Promise.resolve(appearancePanelFn);
+  if (!appearancePanelPending) {
+    appearancePanelPending = import('./ui/appearance-panel.js').then((mod) => {
+      appearancePanelFn = mod.createAppearancePanel({
+        h, getAppearance, canManageCompanyAppearance, sidebarThemeVars, renderAccountThemeControls,
+        APPEARANCE_BG_PRESETS, SIDEBAR_THEMES,
+      });
+      return appearancePanelFn;
+    }).catch((error) => {
+      appearancePanelPending = null;
+      throw error;
+    });
+  }
+  return appearancePanelPending;
+}
+
+function renderAppearanceControls() {
+  if (appearancePanelFn) return appearancePanelFn();
+  loadAppearancePanel().then(() => render()).catch((error) => console.error('Appearance panel failed to load', error));
+  return '<div class="appearance-controls" data-appearance-controls></div>';
+}
 function refreshAppearanceControls() {
   const host = document.querySelector('.appearance-controls');
   if (host) host.outerHTML = renderAppearanceControls();
@@ -2931,7 +3177,209 @@ async function fetchSupabaseProfile(user) {
   return normalizeProfile(result.data, fallback);
 }
 
+// Keep the page where the user left it across a re-render.
+//
+// Rendering replaces the whole DOM, so the scrolling element (.work-surface) is a brand
+// new node starting at scrollTop 0. Every state change therefore threw the reader back to
+// the top — ticking a checklist item halfway down a card meant scrolling back to find
+// where you were, on every single tick.
+//
+// Restored only when the page is the same. Navigating somewhere new SHOULD start at the
+// top, so the URL is the key: a checkbox does not change it, following a link does.
+let lastScrollKey = '';
+
+function currentScrollKey() {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+// Identify the focused element well enough to find it again after the DOM is replaced.
+// Data attributes are what identify a control here, so a checkbox keyed by
+// data-wb-card-field is found again even though the node itself is gone.
+// Remember the last container the user scrolled, and where.
+//
+// Rendering replaces the DOM, so every scrolling element is recreated at the top. Which
+// element that matters for is not fixed — the work surface, the builder's field list, a
+// modal body, the message stream — so a hard-coded selector fixes one page and leaves the
+// rest jumping. A scroll listener knows the answer without anyone having to maintain a
+// list.
+let lastScrolled = null;
+
+function scrollTargetSelector(el) {
+  if (!el || el.nodeType !== 1) return '';
+  if (el.id) { try { return `#${CSS.escape(el.id)}`; } catch { return ''; } }
+  const classes = [...el.classList].slice(0, 3).map((c) => {
+    try { return `.${CSS.escape(c)}`; } catch { return ''; }
+  }).join('');
+  if (!classes) return '';
+  // Only usable if it identifies one element; otherwise restoring could scroll the wrong
+  // panel, which is more disorienting than not restoring at all.
+  try {
+    if (document.querySelectorAll(classes).length === 1) return classes;
+  } catch {
+    return '';
+  }
+  // Repeated containers -- a kanban board has one scrolling list PER COLUMN, all sharing a
+  // class -- were previously given up on, so moving a card scrolled the column back to the
+  // top. Qualify with the nearest ancestor that identifies itself and try again.
+  return qualifiedScrollSelector(el, classes);
+}
+
+/**
+ * `<ancestor selector> <classes>` for an element whose own classes repeat.
+ *
+ * Only an id or a data attribute is used to identify the ancestor: those survive a
+ * re-render, where a positional selector (nth-child) would silently point at a different
+ * column the moment one is added, removed or reordered.
+ */
+function qualifiedScrollSelector(el, classes) {
+  // The element's own data attributes first: a repeated container often already labels
+  // itself (each board column's list carries its stage key), and that is both the
+  // cheapest and the most stable thing to key on.
+  for (const attr of el.attributes) {
+    if (!attr.name.startsWith('data-') || !attr.value) continue;
+    try {
+      const candidate = `${classes}[${attr.name}="${CSS.escape(attr.value)}"]`;
+      if (document.querySelectorAll(candidate).length === 1) return candidate;
+    } catch { /* an unusable selector is simply not a candidate */ }
+  }
+  let node = el.parentElement;
+  for (let depth = 0; node && depth < 4; depth += 1, node = node.parentElement) {
+    const bases = [];
+    if (node.id) {
+      try { bases.push(`#${CSS.escape(node.id)}`); } catch { /* unusable id */ }
+    }
+    // Every data attribute, not just the first: the first one present is often the shared
+    // one (every board column carries the same data-drag-kind), and the distinguishing
+    // attribute sits further along.
+    for (const attr of node.attributes) {
+      if (!attr.name.startsWith('data-') || !attr.value) continue;
+      try { bases.push(`[${attr.name}="${CSS.escape(attr.value)}"]`); } catch { /* unusable value */ }
+    }
+    for (const base of bases) {
+      const candidate = `${base} ${classes}`;
+      try {
+        if (document.querySelectorAll(candidate).length === 1) return candidate;
+      } catch { /* an unusable selector is simply not a candidate */ }
+    }
+  }
+  return '';
+}
+
+function trackScrollTargets() {
+  if (typeof document === 'undefined') return;
+  // Capture phase: scroll does not bubble, so a listener on document only sees the page.
+  // Passive: this must never delay a scroll.
+  document.addEventListener('scroll', (event) => {
+    const el = event.target;
+    if (!el || el === document || el === document.documentElement) {
+      lastScrolled = { selector: 'window', top: window.scrollY || 0 };
+      return;
+    }
+    const selector = scrollTargetSelector(el);
+    if (selector) lastScrolled = { selector, top: el.scrollTop };
+  }, { capture: true, passive: true });
+}
+
+function lastScrolledTarget() {
+  if (lastScrolled && lastScrolled.selector === 'window') {
+    return { selector: 'window', top: window.scrollY || 0 };
+  }
+  if (lastScrolled) {
+    let el = null;
+    try { el = document.querySelector(lastScrolled.selector); } catch { el = null; }
+    // Read it fresh: the recorded value can be stale if something scrolled it since.
+    if (el) return { selector: lastScrolled.selector, top: el.scrollTop };
+  }
+  // Nothing recorded yet — the work surface is the common case on first interaction.
+  const surface = document.querySelector('.work-surface');
+  if (surface && surface.scrollTop) return { selector: '.work-surface', top: surface.scrollTop };
+  return window.scrollY ? { selector: 'window', top: window.scrollY } : null;
+}
+
+function focusSelector(el) {
+  if (!el || el === document.body || el === document.documentElement) return '';
+  if (el.id) { try { return `#${CSS.escape(el.id)}`; } catch { return ''; } }
+  const parts = [el.tagName.toLowerCase()];
+  for (const attr of el.attributes) {
+    if (!attr.name.startsWith('data-') || !attr.value || attr.value.length > 80) continue;
+    try { parts.push(`[${attr.name}="${CSS.escape(attr.value)}"]`); } catch { return ''; }
+  }
+  return parts.length > 1 ? parts.join('') : '';
+}
+
+function captureScrollForRender() {
+  const key = currentScrollKey();
+  const samePage = key === lastScrollKey;
+  lastScrollKey = key;
+  // A genuine navigation should start clean: top of the page, nothing focused.
+  if (!samePage) return null;
+
+  // Which container to restore is not knowable from a fixed list: 44 different elements
+  // in this stylesheet scroll, and which one matters depends entirely on where the user
+  // is. So rather than guess, a passive listener records whichever one they last moved.
+  const scrolled = lastScrolledTarget();
+
+  const active = document.activeElement;
+  const selector = focusSelector(active);
+  // Text fields also need the caret, or typing continues from the wrong place.
+  const caret = selector && active && typeof active.selectionStart === 'number'
+    ? { start: active.selectionStart, end: active.selectionEnd }
+    : null;
+
+  return { scrolled, selector, caret };
+}
+
+function restoreScrollAfterRender(kept) {
+  if (!kept) return;
+  // Runs before paint, so the correction is never visible.
+  if (kept.scrolled && kept.scrolled.top) {
+    const { selector, top } = kept.scrolled;
+    if (selector === 'window') {
+      window.scrollTo(0, top);
+    } else {
+      let target = null;
+      try { target = document.querySelector(selector); } catch { target = null; }
+      if (target) target.scrollTop = top;
+    }
+  }
+  if (!kept.selector) return;
+  // Rendering destroys the node the user was interacting with. Without this, ticking a
+  // checkbox drops focus to the body: the next Tab starts from the top of the page, and
+  // a keyboard user cannot work down a list of them at all.
+  let next = null;
+  try { next = document.querySelector(kept.selector); } catch { next = null; }
+  if (!next || next === document.activeElement) return;
+  next.focus({ preventScroll: true });
+  if (kept.caret && typeof next.setSelectionRange === 'function') {
+    try { next.setSelectionRange(kept.caret.start, kept.caret.end); } catch { /* not a text field */ }
+  }
+}
+
+// The icon sprite lives in index.html, which means a document without it renders every
+// icon as empty space — no error, no console message, nothing to point at. A stale
+// dev-server page does exactly that: hot updates replace the script, but index.html is
+// never re-fetched, so the sprite the old document never had simply is not there.
+//
+// Check once at boot. The fallback module is imported only if the check fails, so a
+// healthy page pays nothing for this.
+function ensureIconSprite() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('q-symbol-jobs')) return;
+  console.warn('Icon sprite missing from the document — injecting the fallback copy.');
+  import('./ui/icon-sprite.js')
+    .then(({ SPRITE_MARKUP }) => {
+      const holder = document.createElement('div');
+      holder.innerHTML = SPRITE_MARKUP;
+      const sprite = holder.firstElementChild;
+      // Prepended so its ids win if a partial sprite is somehow already present.
+      if (sprite) document.body.insertBefore(sprite, document.body.firstChild);
+    })
+    .catch((error) => console.error('Icon sprite fallback failed to load', error));
+}
+
 function render() {
+  const keptScroll = captureScrollForRender();
+  queueMicrotask(() => restoreScrollAfterRender(keptScroll));
   queueMicrotask(syncModalFocus);
   wbInvalidateAppIndex(); // rebuild the builder app-index fresh for this render
   state.route = getRoute();
@@ -3044,7 +3492,7 @@ function render() {
   }
   document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Questbase`;
   trackRouteForRecents(state.route);
-  app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette();
+  app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette() + renderMessageDock();
   queueMicrotask(restoreSidebarScroll);
   queueMicrotask(bindTimePickerInputs);
   queueMicrotask(bindGoogleAddressInputs);
@@ -3541,7 +3989,7 @@ function renderWorkspaceLoading(route) {
           <span class="side-mark logo-image-mark">${questLogoImage()}</span>
           <span><strong>Questbase</strong><small>Secure workspace</small></span>
         </div>
-        ${emptyState('Loading workspace data...')}
+        ${questLoader('Loading workspace data...')}
       </section>
     </main>
   `;
@@ -3633,7 +4081,7 @@ function renderAuthLoading() {
           <span class="side-mark logo-image-mark">${questLogoImage()}</span>
           <span><strong>Questbase</strong><small>Secure workspace</small></span>
         </div>
-        ${emptyState('Checking secure session...')}
+        ${questLoader('Checking secure session...')}
       </section>
     </main>
   `;
@@ -4239,7 +4687,9 @@ function svgIcon(id, className = 'symbol-icon') {
 }
 
 function questLogoImage(alt = 'Questbase') {
-  return `<img class="quest-logo-image" src="${h(questLogoMarkUrl)}" alt="${h(alt)}" />`;
+  // Only the first carries the alt text: to a screen reader this is one logo, not two.
+  return `<img class="quest-logo-image quest-logo-on-light" src="${h(questLogoMarkUrl)}" alt="${h(alt)}" />`
+    + `<img class="quest-logo-image quest-logo-on-dark" src="${h(questLogoMarkLightUrl)}" alt="" aria-hidden="true" />`;
 }
 
 function moduleSymbol(section = state.route?.section || 'jobs') {
@@ -4272,8 +4722,9 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
     const visibleWorkspaces = state.workspaceMenuOpen ? workspaces : workspaces.slice(0, WORKSPACE_RAIL_VISIBLE_LIMIT);
     const hasMore = workspaces.length > WORKSPACE_RAIL_VISIBLE_LIMIT;
     const canManageWorkspaces = canManageOperationalWorkspaces(current.id);
+    const workspaceListCollapsed = state.collapsedNavGroups.has('Workspaces');
     return `
-      <section class="workspace-rail workspace-menu ${state.workspaceMenuOpen ? 'open' : ''}" aria-label="${h(companyLabel(current))} workspaces">
+      <section class="workspace-rail workspace-menu ${state.workspaceMenuOpen ? 'open' : ''} ${workspaceListCollapsed ? 'list-collapsed' : ''}" aria-label="${h(companyLabel(current))} workspaces">
         <div class="company-account-header" data-company-account-id="${h(current.id)}">
           ${workspaceIconMarkup(current, 'company-account-icon')}
           <span class="company-account-copy">
@@ -4289,19 +4740,41 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
           ` : ''}
         </div>
         <div class="workspace-rail-head">
-          <strong>Workspaces</strong>
-          <span>${workspaces.length}</span>
+          <button class="workspace-rail-toggle" type="button" data-action="toggle-nav-group" data-group="Workspaces"
+                  aria-expanded="${workspaceListCollapsed ? 'false' : 'true'}"
+                  title="${workspaceListCollapsed ? 'Show workspaces' : 'Hide workspaces'}">
+            <span>Workspaces</span>
+            <span class="workspace-rail-count">${workspaces.length}</span>
+            <i class="ti ti-chevron-down side-label-chevron" aria-hidden="true"></i>
+          </button>
+          ${canManageWorkspaces ? `
+            <button class="workspace-rail-add" type="button"
+                    data-action="open-create-operational-workspace-modal"
+                    aria-haspopup="dialog" title="Add workspace" aria-label="Add a workspace">
+              <i class="ti ti-plus" aria-hidden="true"></i>
+            </button>
+          ` : ''}
         </div>
         <div class="workspace-rail-list">
           ${visibleWorkspaces.map((workspace) => `
-            <button class="workspace-rail-item ${workspace.id === currentWorkspaceId ? 'active' : ''}" type="button" data-action="select-workspace" data-workspace-id="${h(workspace.id)}" aria-label="Open ${h(workspace.name)} workspace" aria-current="${workspace.id === currentWorkspaceId ? 'true' : 'false'}">
-              ${workspaceIconMarkup(workspace)}
-              <span class="workspace-rail-copy">
-                <strong>${h(workspace.name)}</strong>
-                <small>${h(workspaceRoleLabel(workspace.id))}</small>
-              </span>
-              <i class="ti ti-check workspace-rail-check" aria-hidden="true"></i>
-            </button>
+            <div class="workspace-rail-item ${workspace.id === currentWorkspaceId ? 'active' : ''}">
+              <button class="workspace-rail-open" type="button" data-action="select-workspace" data-workspace-id="${h(workspace.id)}" aria-label="Open ${h(workspace.name)} workspace" aria-current="${workspace.id === currentWorkspaceId ? 'true' : 'false'}">
+                ${workspaceIconMarkup(workspace)}
+                <span class="workspace-rail-copy">
+                  <strong>${h(workspace.name)}</strong>
+                  <small>${h(workspaceRoleLabel(workspace.id))}</small>
+                </span>
+                <i class="ti ti-check workspace-rail-check" aria-hidden="true"></i>
+              </button>
+              ${canManageWorkspaces ? `
+                <button class="workspace-rail-settings" type="button"
+                        data-action="open-edit-operational-workspace-modal"
+                        data-workspace-id="${h(workspace.id)}" aria-haspopup="dialog"
+                        title="Workspace settings" aria-label="Settings for ${h(workspace.name)}">
+                  <i class="ti ti-adjustments" aria-hidden="true"></i>
+                </button>
+              ` : ''}
+            </div>
           `).join('') || '<div class="workspace-rail-empty">No workspace assigned</div>'}
         </div>
         ${hasMore ? `
@@ -4309,12 +4782,6 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
             <i class="ti ti-chevron-down" aria-hidden="true"></i>
             <span>${state.workspaceMenuOpen ? 'Show fewer' : 'More workspaces'}</span>
           </button>
-        ` : ''}
-        ${canManageWorkspaces ? `
-          <div class="workspace-rail-actions">
-            <a href="${appHref(companyPath('settings', { tab: 'company', focus: 'create-operational-workspace' }, current.id))}" data-router><i class="ti ti-plus" aria-hidden="true"></i>Create workspace</a>
-            <a href="${appHref(companyPath('settings', { tab: 'company' }, current.id))}" data-router><i class="ti ti-settings" aria-hidden="true"></i>Manage workspaces</a>
-          </div>
         ` : ''}
       </section>
     `;
@@ -4497,79 +4964,16 @@ function mobileTabItem(route, path, icon, label, count, sections) {
   `;
 }
 
-function renderAccountThemeControls() {
-  const mode = getThemeMode();
-  const accent = getAccent();
-  return `
-    <div class="account-theme-panel" aria-label="Theme chooser">
-      <div class="account-theme-title"><i class="ti ti-palette"></i><span>Theme</span></div>
-      <div class="account-theme-options" role="group" aria-label="Color mode">
-        ${THEME_OPTIONS.map(([id, label, icon]) => `
-          <button class="${mode === id ? 'active' : ''}" type="button" data-action="set-theme" data-theme="${h(id)}" aria-pressed="${mode === id ? 'true' : 'false'}">
-            <i class="ti ${h(icon)}"></i>${h(label)}
-          </button>
-        `).join('')}
-      </div>
-      <div class="account-accent-row" role="group" aria-label="Accent color">
-        ${ACCENT_OPTIONS.map(([id, label, color]) => `
-          <button class="account-accent-swatch ${accent === id ? 'active' : ''}" type="button" data-action="set-accent" data-accent="${h(id)}" title="${h(label)}" aria-label="${h(label)}" aria-pressed="${accent === id ? 'true' : 'false'}" style="--swatch:${h(color)}"></button>
-        `).join('')}
-      </div>
-    </div>
-  `;
-}
 
-function renderAppearanceControls() {
-  const a = getAppearance();
-  const bgIs = (type, preset) => a.bgType === type && (type !== 'preset' || a.bgPreset === preset);
-  return `
-    <div class="appearance-controls">
-      ${renderAccountThemeControls()}
-      <div class="appearance-section">
-        <div class="appearance-section-head"><i class="ti ti-photo"></i><span>Background</span></div>
-        <div class="appearance-bg-grid">
-          <button class="appearance-bg-chip ${a.bgType === 'default' ? 'active' : ''}" type="button" data-action="set-appearance-bg" data-bg-type="default">
-            <span class="appearance-bg-swatch bg-default"></span>Default
-          </button>
-          ${APPEARANCE_BG_PRESETS.map(([key, label]) => `
-            <button class="appearance-bg-chip ${bgIs('preset', key) ? 'active' : ''}" type="button" data-action="set-appearance-bg" data-bg-type="preset" data-bg-preset="${h(key)}">
-              <span class="appearance-bg-swatch bg-${h(key)}"></span>${h(label)}
-            </button>
-          `).join('')}
-          <button class="appearance-bg-chip ${a.bgType === 'image' ? 'active' : ''}" type="button" data-action="open-appearance-bg-upload">
-            <span class="appearance-bg-swatch bg-upload"${a.bgType === 'image' && a.bgImage ? ` style="background-image:url('${h(a.bgImage)}');background-size:cover;background-position:center"` : ''}><i class="ti ti-upload"></i></span>${a.bgType === 'image' ? 'Uploaded' : 'Upload image'}
-          </button>
-          <input type="file" accept="image/png,image/jpeg,image/webp" data-appearance-bg-upload hidden />
-        </div>
-      </div>
-      <div class="appearance-section">
-        <div class="appearance-section-head"><i class="ti ti-square-rounded"></i><span>Cards</span></div>
-        <div class="appearance-seg" role="group" aria-label="Card style">
-          ${[['default', 'Default'], ['solid', 'Solid'], ['glass', 'Glass']].map(([id, label]) => `
-            <button class="${a.cardStyle === id ? 'active' : ''}" type="button" data-action="set-appearance-card-style" data-card-style="${id}" aria-pressed="${a.cardStyle === id ? 'true' : 'false'}">${h(label)}</button>
-          `).join('')}
-        </div>
-        ${a.cardStyle === 'solid' ? `
-          <label class="appearance-field"><span>Card color</span><input type="color" value="${h(a.cardColor)}" data-appearance-card-color /></label>
-        ` : ''}
-        ${a.cardStyle === 'glass' ? `
-          <label class="appearance-field"><span>Tint color</span><input type="color" value="${h(a.cardColor)}" data-appearance-card-color /></label>
-          <label class="appearance-range"><span>Opacity <b data-appearance-out="opacity">${a.cardOpacity}%</b></span><input type="range" min="20" max="100" step="1" value="${a.cardOpacity}" data-appearance-range="cardOpacity" /></label>
-          <label class="appearance-range"><span>Blur <b data-appearance-out="blur">${a.cardBlur}px</b></span><input type="range" min="0" max="40" step="1" value="${a.cardBlur}" data-appearance-range="cardBlur" /></label>
-        ` : ''}
-      </div>
-      <div class="appearance-actions">
-        <button class="btn appearance-reset" type="button" data-action="reset-appearance"><i class="ti ti-rotate-2"></i>Reset to default</button>
-        ${canManageCompanyAppearance() ? `
-          <button class="btn btn-primary" type="button" data-action="save-company-appearance"><i class="ti ti-building-community"></i>Set as company default</button>
-        ` : ''}
-      </div>
-      ${canManageCompanyAppearance()
-        ? '<p class="appearance-note">Members who have not chosen their own theme will use the company default. Anyone who sets their own keeps it.</p>'
-        : ''}
-    </div>
-  `;
-}
+/**
+ * A miniature side menu for the preset picker: the background, two quiet rows and one
+ * active row. A flat colour square would not answer the question actually being asked,
+ * which is whether the highlight reads against the background.
+ *
+ * `null` means the shipped default, which has no variables to preview, so its own colours
+ * are named here — the one place they are duplicated, and only at swatch size.
+ */
+
 
 function renderNotificationCenter(companyId) {
   const notifications = companyNotifications(companyId);
@@ -4646,7 +5050,7 @@ function renderDeck(route) {
       </a>
       <span><strong>Questbase</strong><small>workspace</small></span>
       <button class="deck-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}" aria-expanded="${state.sidebarCollapsed ? 'false' : 'true'}">
-        <i class="ti ${state.sidebarCollapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-left-collapse'}"></i>
+        <i class="ti ti-chevron-left" aria-hidden="true"></i>
       </button>
     </div>
     <div class="company-card">
@@ -12824,6 +13228,9 @@ function normalizeWorkspaceBuilderDoc(doc) {
         id: app.id || wbUid(),
         linked: true,
         linkedFromWs: String(app.linkedFromWs || ''),
+        // Absent for a link inside one company, which is what every link looked like
+        // before cross-company installs. Absent means "this document".
+        ...(app.linkedFromCompany ? { linkedFromCompany: String(app.linkedFromCompany) } : {}),
         installedAt: app.installedAt || new Date().toISOString().slice(0, 10),
       } : {
         id: app.id || wbUid(),
@@ -13074,9 +13481,9 @@ async function saveWorkspaceBuilderDoc(companyId) {
 // Link resolution lives in src/workspace/builder-core.js so it can be imported and
 // tested directly rather than reimplemented inside a test. These wrappers keep the
 // existing wb* call sites unchanged.
-function wbResolveAppEntry(doc, entry) { return resolveAppEntry(doc, entry); }
+function wbResolveAppEntry(doc, entry) { return resolveAppEntry(doc, entry, wbDoc); }
 
-function wbWorkspaceApps(doc, ws) { return workspaceApps(doc, ws); }
+function wbWorkspaceApps(doc, ws) { return workspaceApps(doc, ws, wbDoc); }
 
 function wbFind(companyId, workspaceId, appId = '') {
   const doc = wbDoc(companyId);
@@ -13381,7 +13788,7 @@ function wbLayoutTiles() {
 // only an appId, and that id is identical for a linked entry and its source, so the
 // entry has to be resolved rather than matched on `!linked`.
 function wbTileTargetApp(companyId, workspace, appId) {
-  return tileTargetApp(wbDoc(companyId), workspace, appId);
+  return tileTargetApp(wbDoc(companyId), workspace, appId, wbDoc);
 }
 
 // Per-tile display metadata (default title + icon + whether it has a config UI).
@@ -13768,6 +14175,10 @@ function wbScrollTopbar(direction) {
 }
 
 function wbViewApp(route, companyId, workspace, app, appLinked = false) {
+  // Print / Export / Import / Download all live on this view. Fetching now means the
+  // click itself never has to await, which is what keeps window.open out of the pop-up
+  // blocker. Fire-and-forget: a failure just falls back to the async path.
+  wbLoadDataIO().catch(() => null);
   const canManage = can('workspaces.manage', companyId);
   const tabs = ['items', 'fields', 'reports', 'automations', 'settings'];
   const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'items';
@@ -14536,7 +14947,16 @@ function wbFmtVal(ctx, field, value) {
     case 'number': return `${Number(value).toLocaleString()}${field.config.unit ? ` ${h(field.config.unit)}` : ''}`;
     case 'email': return `<a href="mailto:${h(value)}" style="color:var(--info,#2563eb)">${h(value)}</a>`;
     case 'url': { const href = wbUrlHref(value); return `<a class="wb-url-cell" href="${h(href)}" target="_blank" rel="noopener noreferrer" title="${h(href)}"><i class="ti ti-world-www"></i><span class="wb-url-cell-txt">${h(wbUrlLabel(value))}</span></a>`; }
-    case 'phone': return h(formatPhoneNumber(value));
+    case 'phone': {
+      // Dialable, matching how an email field is already a mailto link. The row's own
+      // click handler skips anchors, so tapping the number calls instead of opening
+      // the record.
+      const tel = telHref(value);
+      const shown = formatPhoneNumber(value);
+      return tel
+        ? `<a class="wb-tel-cell" href="${h(tel)}" title="Call ${h(shown)}"><i class="ti ti-phone" aria-hidden="true"></i>${h(shown)}</a>`
+        : h(shown);
+    }
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
     case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; const kind = fileTypeKind({ file_name: fv.name }); return fv.url ? `<button type="button" class="wb-file-icon-btn" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="${h(fv.name)}" aria-label="Open ${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></button>` : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`; }
     case 'relationship': { const ta = wbRelTargetApp(field, ctx.companyId); if (!ta) return field.config.targetCompany && !wbDoc(field.config.targetCompany) ? '<span class="wb-tag wb-rel wb-rel-locked"><i class="ti ti-lock" aria-hidden="true"></i>No access</span>' : h(value); const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbRelLabel(ta, it, field.config.displayField) : '?')}</span>`; }).join(' '); }
@@ -14553,7 +14973,7 @@ function wbFmtVal(ctx, field, value) {
 
 // Per-app, in-memory view state for the Items table (search / sort / filters).
 // Not persisted — it's a transient view preference, reset on reload.
-const WB_VIEW_MODES = [['table', 'Table', 'ti-table'], ['card', 'Cards', 'ti-layout-grid'], ['badge', 'Badges', 'ti-badges'], ['activity', 'Activity', 'ti-timeline']];
+const WB_VIEW_MODES = [['table', 'Table', 'ti-table'], ['card', 'Cards', 'ti-layout-grid'], ['board', 'Board', 'ti-layout-kanban'], ['badge', 'Badges', 'ti-badges'], ['activity', 'Activity', 'ti-timeline']];
 const WB_SORT_PRESETS = [
   ['created_asc', 'Created on, oldest first'],
   ['created_desc', 'Created on, newest first'],
@@ -14566,7 +14986,9 @@ const WB_SORT_PRESETS = [
 ];
 function wbItemsUI(appId) {
   state.wbUI = state.wbUI || {};
-  return state.wbUI[appId] || (state.wbUI[appId] = { q: '', sort: null, filters: [], sel: new Set(), view: 'table', order: 'created_desc', expanded: new Set(), cardConfigOpen: false });
+  // boardFieldId / boardSumId are the user's explicit choices; both fall back rather than
+  // blanking the board if the field they name is later deleted or retyped.
+  return state.wbUI[appId] || (state.wbUI[appId] = { q: '', sort: null, filters: [], sel: new Set(), view: 'table', order: 'created_desc', expanded: new Set(), cardConfigOpen: false, boardFieldId: '', boardSumId: '' });
 }
 // Preset sorts operate on item metadata (timestamps / title), independent of the
 // column-header field sort. createdAt/updatedAt/lastActivityAt fall back to each
@@ -14723,12 +15145,27 @@ function wbFilterRow(companyId, app, flt, i) {
   const valCtrl = needsValue ? wbFilterValueControl(companyId, app, field, kind, flt, i) : '';
   return `<div class="wb-filter-row">${fieldSel}${opSel}${valCtrl}<button class="wb-icon-btn danger" type="button" data-wb-del-filter data-idx="${i}" title="Remove filter"><i class="ti ti-x"></i></button></div>`;
 }
+// Board-only toolbar: which field is the pipeline, what each column totals, and the way
+// in to editing the stages themselves.
+function wbBoardToolbar(app, ui, canManage) {
+  const fields = pipelineFields(app);
+  const active = pipelineField(app, ui.boardFieldId);
+  // Only worth a picker when there is a genuine choice to make.
+  const fieldPick = fields.length > 1 ? `<label class="wb-sort-picker" title="Which field the columns come from"><i class="ti ti-layout-board-split"></i><select class="wb-input" data-wb-board-field>${fields.map((f) => `<option value="${h(f.id)}" ${active && active.id === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select></label>` : '';
+  const numeric = app.fields.filter((f) => ['money', 'number'].includes(f.type));
+  const sum = summaryField(app, ui.boardSumId);
+  const sumPick = numeric.length ? `<label class="wb-sort-picker" title="Totalled at the top of each column"><i class="ti ti-sum"></i><select class="wb-input" data-wb-board-sum><option value="none" ${ui.boardSumId === 'none' ? 'selected' : ''}>No total</option>${numeric.map((f) => `<option value="${h(f.id)}" ${ui.boardSumId !== 'none' && sum && sum.id === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select></label>` : '';
+  const manage = canManage ? `<button class="btn btn-sm" type="button" data-wb-manage-stages><i class="ti ti-adjustments"></i>Manage stages</button>` : '';
+  return `${fieldPick}${sumPick}${manage}`;
+}
+
 function wbItemsToolbar(companyId, app, ui, canManage = false) {
   const filterRows = ui.filters.map((flt, i) => wbFilterRow(companyId, app, flt, i)).join('');
   const colSort = ui.sort && ui.sort.fieldId;
   const viewSwitch = `<div class="wb-view-switch" role="group" aria-label="View">${WB_VIEW_MODES.map(([v, label, icon]) => `<button class="wb-view-btn ${ui.view === v ? 'active' : ''}" type="button" data-wb-set-view="${v}" title="${h(label)} view" aria-pressed="${ui.view === v}"><i class="ti ${icon}"></i><span>${h(label)}</span></button>`).join('')}</div>`;
   const sortSelect = `<label class="wb-sort-picker"><i class="ti ti-arrows-sort"></i><select class="wb-input" data-wb-sort-preset title="Sort records">${colSort ? '<option value="" selected>Custom (column)</option>' : ''}${WB_SORT_PRESETS.map(([k, label]) => `<option value="${k}" ${!colSort && ui.order === k ? 'selected' : ''}>${h(label)}</option>`).join('')}</select></label>`;
   const cardConfigBtn = (ui.view === 'card' && canManage) ? `<button class="btn btn-sm ${ui.cardConfigOpen ? 'btn-primary' : ''}" type="button" data-wb-card-config><i class="ti ti-layout-cards"></i>Card fields</button>` : '';
+  const boardBar = ui.view === 'board' ? wbBoardToolbar(app, ui, canManage) : '';
   return `
     <div class="wb-items-toolbar">
       <div class="wb-search-box"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-search-input value="${h(ui.q || '')}" placeholder="Search ${h(app.name)}…"></div>
@@ -14737,6 +15174,7 @@ function wbItemsToolbar(companyId, app, ui, canManage = false) {
       <button class="btn btn-sm" type="button" data-wb-add-filter><i class="ti ti-filter"></i>Add filter</button>
       ${ui.filters.length ? `<button class="btn btn-sm" type="button" data-wb-clear-filters><i class="ti ti-filter-off"></i>Clear filters</button>` : ''}
       ${cardConfigBtn}
+      ${boardBar}
     </div>
     ${ui.view === 'card' && canManage && ui.cardConfigOpen ? wbCardConfigPanel(app) : ''}
     ${ui.filters.length ? `<div class="wb-filter-rows">${filterRows}</div>` : ''}`;
@@ -14744,7 +15182,9 @@ function wbItemsToolbar(companyId, app, ui, canManage = false) {
 function wbViewItems(companyId, workspace, app) {
   const canManage = can('workspaces.manage', companyId);
   if (!app.fields.length) return `<div class="wb-empty"><i class="ti ti-layout-dashboard"></i><h3>This app has no fields yet</h3><p>Before adding items you need to design the app's structure. Add fields like Text, Status, or Date.</p>${canManage ? '<button class="btn btn-primary" data-tab="fields"><i class="ti ti-tools"></i>Open field builder</button>' : ''}</div>`;
-  if (!app.items.length) return `<div class="wb-empty"><i class="ti ti-inbox"></i><h3>No items yet</h3><p>Add your first record using the form built from your custom fields.</p>${canManage ? '<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>Add item</button>' : ''}</div>`;
+  // The toolbar is not rendered with no records, so this is the only way to reach stage
+  // setup on a new app -- which is exactly when you want to lay the pipeline out first.
+  if (!app.items.length) return `<div class="wb-empty"><i class="ti ti-inbox"></i><h3>No items yet</h3><p>Add your first record using the form built from your custom fields.</p>${canManage ? `<div class="wb-empty-acts"><button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>Add item</button><button class="btn" type="button" data-wb-manage-stages><i class="ti ti-adjustments"></i>${pipelineField(app) ? 'Manage stages' : 'Set up stages'}</button></div>` : ''}</div>`;
   const ui = wbItemsUI(app.id);
   // Hidden fields drop out of the table columns but stay fully editable on each
   // record (the item form iterates every field). Fall back to all fields if the
@@ -14771,6 +15211,7 @@ function wbViewItems(companyId, workspace, app) {
   let listBody;
   if (!rows.length) listBody = `<div class="wb-empty wb-empty-inline"><i class="ti ti-filter-search"></i><h3>No items match</h3><p>No records match your current search or filters. Try adjusting or clearing them.</p></div>`;
   else if (ui.view === 'card') listBody = wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canManage);
+  else if (ui.view === 'board') listBody = wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   else if (ui.view === 'badge') listBody = wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   else if (ui.view === 'activity') listBody = wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   else listBody = wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canManage);
@@ -15031,6 +15472,71 @@ function wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectabl
   }).join('');
   return `<div class="wb-card-grid">${cards}</div>`;
 }
+// ---- Board (pipeline) view ---------------------------------------------------
+// Columns, drop targets and the stage manager live in ./workspace/board-view.js and are
+// fetched on first use: the board is behind the view switch, so none of it is needed to
+// paint the app. The record cards are NOT in that module -- they are passed in, so a
+// record looks the same on the board as it does in Cards.
+let wbBoardModule = null;
+let wbBoardPending = null;
+
+function wbLoadBoard() {
+  if (wbBoardModule) return Promise.resolve(wbBoardModule);
+  if (!wbBoardPending) {
+    wbBoardPending = import('./workspace/board-view.js').then((mod) => {
+      wbBoardModule = mod;
+      return mod;
+    }).catch((error) => {
+      wbBoardPending = null;
+      throw error;
+    });
+  }
+  return wbBoardPending;
+}
+
+// The board groups by a status field. Without one there is no pipeline to draw, so offer
+// to make one rather than showing an empty grid that looks broken.
+function wbBoardSetupPrompt(app, canManage) {
+  return `<div class="wb-empty wb-empty-inline"><i class="ti ti-layout-kanban"></i><h3>No pipeline stages yet</h3>
+    <p>A board needs a <b>Status</b> field — its options are the stages records move through.</p>
+    ${canManage ? `<button class="btn btn-primary" type="button" data-wb-manage-stages><i class="ti ti-adjustments"></i>Set up stages</button>` : '<p class="wb-sub">Ask a workspace manager to add one.</p>'}</div>`;
+}
+
+function wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canManage) {
+  const field = pipelineField(app, ui.boardFieldId);
+  if (!field) return wbBoardSetupPrompt(app, canManage);
+  if (!wbBoardModule) {
+    wbLoadBoard().then(() => render()).catch((error) => console.error('Board failed to load', error));
+    return questLoader('Laying out your pipeline');
+  }
+  // 'none' is an explicit "stop totalling", distinct from "nothing chosen yet".
+  const sumField = ui.boardSumId === 'none' ? null : summaryField(app, ui.boardSumId);
+  const columns = boardColumns(rows, field, sumField);
+  const ctxFor = (item) => ({ companyId, workspace, app, values: item.values, item, canManage });
+  const cardFields = wbCardFields(app, cols);
+  // The same card body as the Cards view, minus the stage pill: the column already says
+  // which stage this is, and repeating it on every card is noise.
+  const cardHtml = (item) => {
+    const titleField = wbTitleField(app, item);
+    const skip = new Set([field.id, titleField && titleField.id].filter(Boolean));
+    const fieldRows = cardFields.filter((f) => !skip.has(f.id)).slice(0, 5).map((f) => wbCardFieldHtml(ctxFor(item), f, ui)).join('');
+    const cCount = (item.comments || []).length;
+    return `<div class="wb-item-card wb-bc ${ui.sel.has(item.id) ? 'sel' : ''}" data-item="${h(item.id)}" data-search="${h(wbItemSearchAttr(companyId, workspace, app, cols, item))}">
+      <div class="wb-ic-head">${wbItemCheckbox(item, ui, selectable)}<div class="wb-ic-titlewrap"><b class="wb-ic-title">${h(wbItemTitle(app, item))}</b></div><div class="wb-spacer"></div>${wbItemActions(item, canManage)}</div>
+      ${fieldRows ? `<div class="wb-ic-fields">${fieldRows}</div>` : ''}
+      <div class="wb-ic-foot"><button class="wb-card-comment ${cCount ? 'has' : ''}" type="button" data-wb-open-comments="${h(item.id)}" title="${cCount ? `${cCount} comment${cCount === 1 ? '' : 's'} — click to add` : 'Add a comment'}"><i class="ti ti-message-circle"></i><span>${cCount}</span></button></div>
+    </div>`;
+  };
+  const currency = sumField && sumField.type === 'money' ? (sumField.config?.currency || '$') : '';
+  const board = wbBoardModule.renderBoard(columns, {
+    cardHtml,
+    canManage,
+    formatTotal: sumField ? (n) => `${currency}${n.toLocaleString()}` : null,
+  });
+  // Carries the coordinates the drop handler needs; the cards themselves only carry an id.
+  return `<div class="wb-board-wrap" data-wb-board data-company="${h(companyId)}" data-workspace="${h(workspace.id)}" data-app="${h(app.id)}" data-field="${h(field.id)}">${board}</div>`;
+}
+
 function wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canManage) {
   const badges = rows.map((item) => {
     const pill = wbItemBadgePill(app, item);
@@ -15176,26 +15682,133 @@ function wbViewBuilder(companyId, workspace, app) {
   return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? 'data-wb-field-dropzone' : ''}><div class="wb-field-count">${app.fields.length} field${app.fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${list}${dropHint}</div>${palette}</div>`;
 }
 
+// Install this app into the chosen workspace as a linked pointer. Extracted so both the
+// first render and an in-place company swap wire up the same behaviour -- a second copy
+// of this logic is how the two paths would quietly drift apart.
+function wbInstallLinkedApp(el, companyId, workspaceId, appId) {
+    if (!wbGuard()) return;
+    const field = el.closest('.wb-field');
+    const targetOpsId = String(field?.querySelector('[data-wb-install-target]')?.value || '');
+    if (!targetOpsId) { showToast('Choose a workspace to install into.', 'error', 'Workspaces'); return; }
+
+    const sourceCompany = canonicalCompanyId(companyId);
+    const targetCompany = canonicalCompanyId(
+      field?.querySelector('[data-wb-install-company]')?.value || sourceCompany,
+    );
+    // Re-check rather than trust the select: the markup was rendered from state that may
+    // have changed, and this crosses a company boundary.
+    if (!canManageOperationalWorkspaces(targetCompany)) {
+      showToast('Workspace admin access is required in that company.', 'error', 'Workspaces');
+      return;
+    }
+
+    const { app } = wbFind(companyId, workspaceId, appId);
+    const targetDoc = wbDoc(targetCompany);
+    if (!app || !targetDoc) return;
+
+    const targetKey = `ws-${targetOpsId}`;
+    let target = targetDoc.workspaces.find((w) => w.id === targetKey);
+    if (!target) {
+      const opsWs = (allowedOperationalWorkspaces(targetCompany) || []).find((w) => w.id === targetOpsId);
+      target = { id: targetKey, name: opsWs?.name || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], feed: [], tiles: null, createdAt: new Date().toISOString().slice(0, 10) };
+      targetDoc.workspaces.push(target);
+    }
+    if (target.apps.some((a) => a.id === app.id)) { showToast(`${target.name} already has "${app.name}".`, 'local', 'Workspaces'); return; }
+
+    // A linked pointer -- the app object itself is never copied, so records and fields
+    // stay shared. linkedFromCompany is written only when the source is a DIFFERENT
+    // company: omitting it for a same-company link keeps those entries byte-identical
+    // to every link made before this feature existed.
+    const entry = { id: app.id, linked: true, linkedFromWs: workspaceId, installedAt: new Date().toISOString().slice(0, 10) };
+    if (targetCompany !== sourceCompany) entry.linkedFromCompany = sourceCompany;
+    target.apps.push(entry);
+
+    // Save the TARGET company: that is the document the new pointer was written into.
+    // wbSave then also writes any company it links out to, which is the source.
+    wbSave(targetCompany);
+    const where = targetCompany === sourceCompany
+      ? target.name
+      : `${target.name} (${companyName(targetCompany) || targetCompany})`;
+    showToast(`Installed "${app.name}" into ${where} — linked, data is shared.`, 'local', 'Workspaces');
+    render();}
+
+// (Re)bind the controls inside the install block after it is replaced in place.
+function wbBindInstallTargets(host, companyId, workspaceId, appId) {
+  const btn = host.querySelector('[data-wb-install-linked]');
+  if (btn) btn.onclick = () => wbInstallLinkedApp(btn, companyId, workspaceId, appId);
+}
 // Source-app only: install this app as a LIVE LINKED mirror into another
 // operational workspace of the same company. Unlike Download (a copy) or the
 // App Market (fields only), a linked install shares the same records + fields,
 // so edits sync both ways. Targets are workspaces the manager can reach.
 function wbInstallToWorkspaceField(companyId, workspace, app) {
   const currentOpsId = String(workspace.id || '').replace(/^ws-/, '');
-  const doc = wbDoc(companyId);
-  const targets = (allowedOperationalWorkspaces(companyId) || []).filter((w) => w.status !== 'archived' && w.id !== currentOpsId);
-  const installedIn = (tId) => { const t = doc && doc.workspaces.find((x) => x.id === `ws-${tId}`); return !!(t && t.apps.some((a) => a.id === app.id)); };
-  if (!targets.length) {
-    return `<div class="wb-field"><label>Install to another workspace</label><div class="wb-sub">This company has only one workspace. Create another to install a linked copy of this app.</div></div>`;
-  }
-  const options = targets.map((w) => `<option value="${h(w.id)}" ${installedIn(w.id) ? 'disabled' : ''}>${h(w.name || 'Workspace')}${installedIn(w.id) ? ' — already installed' : ''}</option>`).join('');
+  const sourceCompany = canonicalCompanyId(companyId);
+  // Any company this person can administer is a valid destination. Cross-company installs
+  // are the reason the company is chosen first: the workspace list depends on it.
+  const companies = (allowedCompanies() || []).filter((c) => canManageOperationalWorkspaces(c.id));
+  const chosenCompany = canonicalCompanyId(state.wbInstallCompanyId || sourceCompany);
+
+  const workspacesFor = (cid) => (allowedOperationalWorkspaces(cid) || [])
+    .filter((w) => w.status !== 'archived')
+    // Only the workspace the app already lives in is excluded, and only in its own company.
+    .filter((w) => !(canonicalCompanyId(cid) === sourceCompany && w.id === currentOpsId));
+
+  const targets = workspacesFor(chosenCompany);
+  const targetDoc = wbDoc(chosenCompany);
+  const installedIn = (tId) => {
+    const t = targetDoc && targetDoc.workspaces.find((x) => x.id === `ws-${tId}`);
+    return !!(t && t.apps.some((a) => a.id === app.id));
+  };
+
+  const companyOptions = companies.map((c) => `<option value="${h(c.id)}" ${canonicalCompanyId(c.id) === chosenCompany ? 'selected' : ''}>${h(companyLabel(c))}${canonicalCompanyId(c.id) === sourceCompany ? ' (this company)' : ''}</option>`).join('');
+
   return `<div class="wb-field"><label>Install to another workspace</label>
-      <div class="wb-sub">Install this app into another workspace you own. It stays <b>linked</b> — the same fields <b>and records</b> — so an edit made from either workspace shows up in the other. (Unlike the App Market, records are shared.)</div>
-      <div class="wb-install-row" style="margin-top:10px">
-        <select class="wb-input" data-wb-install-target><option value="">Choose a workspace…</option>${options}</select>
-        <button class="btn" data-wb-install-linked><i class="ti ti-link"></i>Install linked</button>
-      </div>
+      <div class="wb-sub">Install this app into another workspace you own. It stays <b>linked</b> — the same fields <b>and records</b> — so an edit made from either side shows up in the other. (Unlike the App Market, records are shared.)</div>
+      ${companies.length > 1 ? `
+        <div class="wb-install-row" style="margin-top:10px">
+          <select class="wb-input" data-wb-install-company aria-label="Company to install into">${companyOptions}</select>
+        </div>
+      ` : ''}
+      <div data-wb-install-body>${wbInstallTargetBody(companyId, workspace, app, chosenCompany)}</div>
     </div>`;
+}
+
+/**
+ * The half of the install field that depends on which company is selected: the workspace
+ * picker and the cross-company warning.
+ *
+ * Separate from the rest so choosing a company can replace just this block. Re-rendering
+ * the whole page for a dropdown change threw away the reader's scroll position and sent
+ * them back to the top of a long settings page — for a change that alters one select.
+ */
+function wbInstallTargetBody(companyId, workspace, app, chosenCompanyId) {
+  const currentOpsId = String(workspace.id || '').replace(/^ws-/, '');
+  const sourceCompany = canonicalCompanyId(companyId);
+  const chosenCompany = canonicalCompanyId(chosenCompanyId || sourceCompany);
+  const targets = (allowedOperationalWorkspaces(chosenCompany) || [])
+    .filter((w) => w.status !== 'archived')
+    .filter((w) => !(chosenCompany === sourceCompany && w.id === currentOpsId));
+  const targetDoc = wbDoc(chosenCompany);
+  const installedIn = (tId) => {
+    const t = targetDoc && targetDoc.workspaces.find((x) => x.id === `ws-${tId}`);
+    return !!(t && t.apps.some((a) => a.id === app.id));
+  };
+  const workspaceOptions = targets.map((w) => `<option value="${h(w.id)}" ${installedIn(w.id) ? 'disabled' : ''}>${h(w.name || 'Workspace')}${installedIn(w.id) ? ' — already installed' : ''}</option>`).join('');
+  const crossCompany = chosenCompany !== sourceCompany;
+  return `<div class="wb-install-row" style="margin-top:8px">
+        ${targets.length
+    ? `<select class="wb-input" data-wb-install-target aria-label="Workspace to install into"><option value="">Choose a workspace…</option>${workspaceOptions}</select>
+             <button class="btn" data-wb-install-linked><i class="ti ti-link"></i>Install linked</button>`
+    : '<div class="wb-sub">That company has no other workspace available. Create one to install a linked copy.</div>'}
+      </div>
+      ${crossCompany ? `
+        <div class="wb-sub wb-install-warn" style="margin-top:8px">
+          <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+          This links the app into a <b>different company</b>. Its records become visible and
+          editable there, and deleting a record from either side deletes it for both.
+        </div>
+      ` : ''}`;
 }
 
 function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
@@ -15238,227 +15851,84 @@ function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
 }
 
 // ---- Reports (hand-rolled SVG/CSS charts) ------------------------------------
-function wbDonutSVG(segs, size = 176) {
-  const total = segs.reduce((sum, x) => sum + x.value, 0) || 1;
-  const r = size / 2 - 16; const cx = size / 2; const cy = size / 2; const C = 2 * Math.PI * r; let off = 0;
-  const rings = segs.filter((s) => s.value > 0).map((s) => {
-    const dash = s.value / total * C;
-    const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="20" stroke-dasharray="${dash} ${C - dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"/>`;
-    off += dash; return el;
-  }).join('');
-  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-3,#eef1f5)" stroke-width="20"/>${rings}<text x="${cx}" y="${cy - 3}" text-anchor="middle" font-size="27" font-weight="800" fill="var(--text,#1f2937)">${total}</text><text x="${cx}" y="${cy + 16}" text-anchor="middle" font-size="10.5" letter-spacing="1" fill="var(--text-muted,#6b7280)" font-weight="700">TOTAL</text></svg>`;
+// The charts themselves live in ./workspace/reports-view.js and are fetched on first
+// use. Reports sit behind a tab click and the print view behind a button, so none of
+// that code is needed to paint the app -- keeping it out of the entry bundle is free.
+let wbReportsModule = null;
+let wbReportsPending = null;
+
+function wbLoadReports() {
+  if (wbReportsModule) return Promise.resolve(wbReportsModule);
+  if (!wbReportsPending) {
+    wbReportsPending = import('./workspace/reports-view.js').then((mod) => {
+      wbReportsModule = mod;
+      return mod;
+    }).catch((error) => {
+      // Clear the promise so a later attempt refetches rather than caching the failure.
+      wbReportsPending = null;
+      throw error;
+    });
+  }
+  return wbReportsPending;
 }
-function wbBarsHTML(bars, fmt) {
-  const max = Math.max(...bars.map((b) => b.value), 1);
-  return `<div class="wb-bars">${bars.map((b) => `<div class="wb-bar-row"><div class="wb-bar-label" title="${h(b.label)}">${h(b.label)}</div><div class="wb-bar-track"><div class="wb-bar-fill" style="width:${Math.max(b.value / max * 100, b.value > 0 ? 4 : 0)}%;background:${b.color}"></div></div><div class="wb-bar-val">${fmt ? fmt(b.value) : b.value.toLocaleString()}</div></div>`).join('')}</div>`;
+
+function wbReportContext(companyId) {
+  return { memberById: (id) => wbMemberById(companyId, id), canManage: can('workspaces.manage', companyId) };
 }
-function wbGroupKey(item, field) { let k = item.values[field.id]; if (Array.isArray(k)) k = k[0]; return (k == null || k === '') ? '__none' : k; }
-function wbKeyMeta(companyId, field, key) {
-  if (key === '__none') return { label: '(empty)', color: '#9ca3af' };
-  if (field.type === 'user') { const m = wbMemberById(companyId, key); return { label: m.name, color: m.color }; }
-  if (field.type === 'status' || field.type === 'category') { const o = (field.config.options || []).find((x) => x.id === key); return o ? { label: o.label, color: o.color || '#6b7280' } : { label: String(key), color: '#6b7280' }; }
-  return { label: String(key), color: '#6b7280' };
-}
+
 function wbViewReports(companyId, workspace, app) {
-  const canManage = can('workspaces.manage', companyId);
-  if (!app.fields.length || !app.items.length) return `<div class="wb-empty"><i class="ti ti-chart-donut"></i><h3>Nothing to report yet</h3><p>Add fields and a few items to this app and charts will appear here automatically.</p>${canManage ? `<button class="btn btn-primary" data-tab="${app.fields.length ? 'items' : 'fields'}"><i class="ti ti-plus"></i>${app.fields.length ? 'Add items' : 'Add fields'}</button>` : ''}</div>`;
-  const moneyFields = app.fields.filter((f) => f.type === 'money');
-  const groupField = app.fields.find((f) => f.type === 'status') || app.fields.find((f) => f.type === 'category') || app.fields.find((f) => f.type === 'user');
-  const kpis = [{ v: app.items.length, l: 'Total items', ic: 'ti-database', c: 'var(--primary,#e0552d)' }];
-  moneyFields.slice(0, 2).forEach((mf) => { const sum = app.items.reduce((s, it) => s + Number(it.values[mf.id] || 0), 0); kpis.push({ v: (mf.config.currency || '$') + sum.toLocaleString(), l: `Σ ${mf.label}`, ic: 'ti-currency-dollar', c: '#16a34a' }); });
-  if (groupField && groupField.type === 'status') {
-    const opts = groupField.config.options || []; const last = opts[opts.length - 1];
-    if (last) { const n = app.items.filter((it) => it.values[groupField.id] === last.id).length; kpis.push({ v: n, l: last.label, ic: 'ti-flag', c: last.color }); }
-    const first = opts[0]; if (first) { const n = app.items.filter((it) => it.values[groupField.id] === first.id).length; kpis.push({ v: n, l: first.label, ic: 'ti-sparkles', c: first.color }); }
-  }
-  const kpiHTML = `<div class="wb-kpi-grid">${kpis.slice(0, 5).map((k) => `<div class="wb-kpi"><div class="wb-ki" style="background:${k.c}"><i class="ti ${k.ic}"></i></div><div class="wb-kv">${h(String(k.v))}</div><div class="wb-kl">${h(k.l)}</div></div>`).join('')}</div>`;
-  let donutCard = '';
-  let barCard = '';
-  if (groupField) {
-    const counts = {}; app.items.forEach((it) => { const k = wbGroupKey(it, groupField); counts[k] = (counts[k] || 0) + 1; });
-    const segs = Object.keys(counts).map((k) => ({ ...wbKeyMeta(companyId, groupField, k), value: counts[k] })).sort((x, y) => y.value - x.value);
-    donutCard = `<div class="wb-chart-card"><h4><i class="ti ti-chart-donut"></i>${app.items.length} items by ${h(groupField.label)}</h4><div class="wb-donut-wrap">${wbDonutSVG(segs)}<div class="wb-legend">${segs.map((s) => `<div class="wb-lg"><span class="wb-sw" style="background:${s.color}"></span>${h(s.label)}<span class="wb-lv">${s.value}</span></div>`).join('')}</div></div></div>`;
-    const mf = moneyFields[0]; const agg = {};
-    app.items.forEach((it) => { const k = wbGroupKey(it, groupField); agg[k] = (agg[k] || 0) + (mf ? Number(it.values[mf.id] || 0) : 1); });
-    const bars = Object.keys(agg).map((k) => ({ ...wbKeyMeta(companyId, groupField, k), value: agg[k] })).sort((x, y) => y.value - x.value);
-    barCard = `<div class="wb-chart-card"><h4><i class="ti ti-chart-bar"></i>${mf ? `${h(mf.label)} by ${h(groupField.label)}` : `Count by ${h(groupField.label)}`}</h4>${wbBarsHTML(bars, mf ? (v) => (mf.config.currency || '$') + v.toLocaleString() : null)}</div>`;
-  }
-  const byDate = {}; app.items.forEach((it) => { const d = it.createdAt || '—'; byDate[d] = (byDate[d] || 0) + 1; });
-  const dates = Object.keys(byDate).sort().slice(-10); const dmax = Math.max(...dates.map((d) => byDate[d]), 1);
-  const timeCard = `<div class="wb-chart-card"><h4><i class="ti ti-timeline"></i>Items added over time</h4><div class="wb-spark">${dates.map((d) => `<div class="wb-sb" style="height:${byDate[d] / dmax * 100}%" title="${h(d)}: ${byDate[d]}"></div>`).join('')}</div><div class="wb-spark-x">${dates.map((d) => `<span>${h(String(d).slice(5))}</span>`).join('')}</div></div>`;
-  return kpiHTML + `<div class="wb-report-grid">${donutCard}${barCard}${timeCard}</div>`;
+  if (wbReportsModule) return wbReportsModule.renderReports(app, wbReportContext(companyId));
+  // Render once the chunk arrives. A failure leaves the message in place rather than
+  // looping on render(), and clicking the tab again retries.
+  wbLoadReports().then(() => render()).catch((error) => console.error('Reports failed to load', error));
+  return questLoader('Building your reports');
 }
 
-// Open a print-ready window carrying the app's own stylesheets (so report cards
-// and tables look identical), then auto-invoke the browser print dialog.
-function wbOpenPrintWindow(title, bodyHTML) {
-  const win = window.open('', '_blank', 'width=1100,height=800');
-  if (!win) { showToast('Allow pop-ups for this site to print.', 'local', 'Workspaces'); return; }
-  // Absolute hrefs so root-relative /assets/*.css resolve in the blank window;
-  // inline <style> tags (Vite dev) are copied verbatim.
-  const heads = [...document.querySelectorAll('link[rel="stylesheet"], style')].map((n) => n.tagName === 'LINK' ? `<link rel="stylesheet" href="${n.href}">` : n.outerHTML).join('\n');
-  win.document.open();
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${h(title)}</title>${heads}<style>
-    @page { margin: 14mm; }
-    body { background:#fff !important; padding:22px; color:#111; }
-    .wb-print-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; border-bottom:2px solid #333; padding-bottom:12px; }
-    .wb-print-head h1 { font-size:20px; margin:0 0 4px; }
-    .wb-print-meta { color:#666; font-size:12px; }
-    .wb-print-table { width:100%; border-collapse:collapse; font-size:12px; }
-    .wb-print-table th, .wb-print-table td { border:1px solid #ccc; padding:6px 9px; text-align:left; vertical-align:top; }
-    .wb-print-table thead th { background:#f1f1f1; font-weight:700; white-space:nowrap; }
-    .wb-print-table tbody tr:nth-child(even) { background:#fafafa; }
-    @media print { .wb-report-grid { display:block; } .wb-chart-card { break-inside:avoid; page-break-inside:avoid; margin-bottom:14px; } }
-  </style></head><body>${bodyHTML}<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},350);};<\/script></body></html>`);
-  win.document.close();
-}
-function wbPrintTitleBlock(companyId, app, subtitle) {
-  const when = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  return `<div class="wb-print-head">
-    <div><h1>${h(app.name)}${subtitle ? ` — ${h(subtitle)}` : ''}</h1><div class="wb-print-meta">${app.items.length} item${app.items.length === 1 ? '' : 's'} · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'}</div></div>
-    <div class="wb-print-meta">${h(companyName(companyId) || 'Questbase')}<br>Printed ${h(when)}</div>
-  </div>`;
-}
-// Print items in the app (all fields). With `onlyIds` (a Set), prints just those
-// records; otherwise every item (ignores search/filter — a full export).
-function wbPrintData(companyId, workspaceId, appId, onlyIds) {
-  const { workspace, app } = wbFind(companyId, workspaceId, appId);
-  if (!app) return;
-  const items = onlyIds ? app.items.filter((it) => onlyIds.has(it.id)) : app.items;
-  if (!app.fields.length || !items.length) { showToast('Nothing to print yet — add fields and items first.', 'local', 'Workspaces'); return; }
-  const cols = app.fields;
-  const thead = `<tr><th>#</th>${cols.map((f) => `<th>${h(f.label)}</th>`).join('')}</tr>`;
-  const rows = items.map((it, i) => `<tr><td>${i + 1}</td>${cols.map((f) => `<td>${h(wbPlainVal(companyId, workspace, app, f, it.values[f.id], it.values))}</td>`).join('')}</tr>`).join('');
-  const subtitle = onlyIds ? `${items.length} selected record${items.length === 1 ? '' : 's'}` : 'Data';
-  const body = `${wbPrintTitleBlock(companyId, app, subtitle)}<table class="wb-print-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>`;
-  wbOpenPrintWindow(`${app.name} — ${onlyIds ? 'selected' : 'data'}`, body);
-}
-// Print the Reports tab (KPIs + charts) using the live report markup.
-function wbPrintReports(companyId, workspaceId, appId) {
-  const { workspace, app } = wbFind(companyId, workspaceId, appId);
-  if (!app) return;
-  if (!app.fields.length || !app.items.length) { showToast('No report data yet — add items first.', 'local', 'Workspaces'); return; }
-  const body = `${wbPrintTitleBlock(companyId, app, 'Reports')}<section class="tool-page wb-page">${wbViewReports(companyId, workspace, app)}</section>`;
-  wbOpenPrintWindow(`${app.name} — reports`, body);
-}
+// ---- Data in / out (print, CSV, download) ------------------------------------
+// Bodies live in ./workspace/data-io.js and are fetched on demand. See that file for why
+// the click path must stay synchronous once loaded.
+let wbDataIOModule = null;
+let wbDataIOPending = null;
 
-/* ---- Workspace import / export (CSV) --------------------------------------- */
-function wbCsvEscape(v) {
-  let s = String(v ?? '');
-  // Neutralize spreadsheet formula injection: a cell starting with = + - @ (or tab/CR) is
-  // prefixed with an apostrophe so Excel/Sheets treat it as text, not a live formula.
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-// Export every item to a CSV using field labels as headers (human-friendly text).
-function wbExportCsv(companyId, workspaceId, appId) {
-  const { workspace, app } = wbFind(companyId, workspaceId, appId);
-  if (!app) return;
-  if (!app.fields.length) { showToast('Add fields before exporting.', 'local', 'Workspaces'); return; }
-  const cols = app.fields;
-  const header = cols.map((f) => wbCsvEscape(f.label)).join(',');
-  const lines = app.items.map((it) => cols.map((f) => wbCsvEscape(wbPlainVal(companyId, workspace, app, f, it.values[f.id], it.values))).join(','));
-  const csv = `﻿${[header, ...lines].join('\r\n')}`; // BOM so Excel reads UTF-8
-  const safeName = (app.name || 'app').replace(/[^\w.-]+/g, '_');
-  downloadText(`${safeName}.csv`, csv, 'text/csv;charset=utf-8;');
-  showToast(`Exported ${app.items.length} item${app.items.length === 1 ? '' : 's'} to CSV.`, 'local', 'Workspaces');
-}
-// RFC-4180-ish parser: handles quoted fields with embedded commas/newlines and "" escapes.
-function wbParseCsv(text) {
-  return parseCsvRows(text);
-}
-function wbParseDurationCell(s) {
-  const t = String(s).trim();
-  const hm = t.match(/(\d+)\s*h/i); const mm = t.match(/(\d+)\s*m/i);
-  if (hm || mm) return (hm ? +hm[1] : 0) * 60 + (mm ? +mm[1] : 0);
-  const n = Number(t.replace(/[^0-9.]/g, '')); return Number.isNaN(n) ? '' : Math.round(n);
-}
-function wbParseDateCell(s) {
-  const t = String(s).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
-  const d = new Date(t); return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
-}
-// Coerce a raw CSV cell into the stored value for a given field type.
-function wbCoerceImport(companyId, app, field, cell) {
-  const s = String(cell ?? '').trim();
-  if (s === '') return '';
-  switch (field.type) {
-    case 'number': case 'money': case 'progress': { const n = Number(s.replace(/[^0-9.\-]/g, '')); return Number.isNaN(n) ? '' : n; }
-    case 'duration': return wbParseDurationCell(s);
-    case 'checkbox': return /^(y|yes|true|1|on|✓)$/i.test(s);
-    case 'date': return wbParseDateCell(s);
-    case 'status': case 'category': { const o = (field.config.options || []).find((x) => x.label.toLowerCase() === s.toLowerCase() || x.id === s); return o ? o.id : ''; }
-    case 'user': { const m = wbMembers(companyId).find((x) => x.name.toLowerCase() === s.toLowerCase() || x.id === s); return m ? m.id : ''; }
-    case 'calculation': return undefined; // computed — never imported
-    case 'relationship': case 'file': case 'image': return ''; // not supported via CSV
-    default: return s; // text, textarea, email, phone, location
+function wbLoadDataIO() {
+  if (wbDataIOModule) return Promise.resolve(wbDataIOModule);
+  if (!wbDataIOPending) {
+    wbDataIOPending = import('./workspace/data-io.js').then((mod) => {
+      wbDataIOModule = mod.createDataIO({
+        h, showToast, render, companyName,
+        wbFind, wbPlainVal, wbSave, wbUid, wbLogActivity, wbMembers,
+        wbReportContext, wbLoadReports, wbAssignAutoNumbers,
+      });
+      return wbDataIOModule;
+    }).catch((error) => {
+      wbDataIOPending = null;
+      throw error;
+    });
   }
-}
-function wbImportCsvPrompt(companyId, workspaceId, appId) {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.csv,text/csv,text/plain';
-  input.onchange = async () => {
-    const file = input.files && input.files[0];
-    if (!file) return;
-    if (!(await guardUpload(file, 'csv', 'Workspaces'))) return;
-    let text = '';
-    try { text = await file.text(); } catch { showToast('Could not read that file.', 'local', 'Workspaces'); return; }
-    wbImportCsvText(companyId, workspaceId, appId, text);
-  };
-  input.click();
-}
-function wbImportCsvText(companyId, workspaceId, appId, text) {
-  const { workspace, app } = wbFind(companyId, workspaceId, appId);
-  if (!app) return;
-  const rows = wbParseCsv(text).filter((r) => r.some((c) => String(c).trim() !== ''));
-  if (rows.length < 2) { showToast('That CSV has no data rows. Row 1 must be column headers.', 'local', 'Workspaces'); return; }
-  const headers = rows[0].map((hd) => String(hd).trim().toLowerCase());
-  const fieldForCol = headers.map((hd) => app.fields.find((f) => f.label.toLowerCase() === hd));
-  const matched = fieldForCol.filter(Boolean).length;
-  if (!matched) { showToast('No column headers matched this app\'s field names. Export a CSV first to see the expected headers.', 'local', 'Workspaces'); return; }
-  let added = 0;
-  const today = new Date().toISOString().slice(0, 10);
-  rows.slice(1).forEach((cells) => {
-    const values = {};
-    fieldForCol.forEach((f, i) => { if (!f) return; const v = wbCoerceImport(companyId, app, f, cells[i]); if (v !== undefined && v !== '') values[f.id] = v; });
-    if (!Object.keys(values).length) return;
-    wbAssignAutoNumbers(app, values);
-    app.items.unshift({ id: wbUid(), values, createdAt: today, createdBy: activeSession().profile?.id || '', updatedAt: today, lastActivityAt: today });
-    added++;
-  });
-  if (!added) { showToast('No rows could be imported — check that values line up with the headers.', 'local', 'Workspaces'); return; }
-  const skipped = headers.length - matched;
-  wbLogActivity(workspace, { icon: 'ti-file-import', color: '#16a34a', text: `Imported <b>${added}</b> item${added === 1 ? '' : 's'} into ${h(app.name)} from CSV` });
-  wbSave(companyId);
-  showToast(`Imported ${added} item${added === 1 ? '' : 's'}${skipped ? ` · ${skipped} unmatched column${skipped === 1 ? '' : 's'} skipped` : ''}.`, 'local', 'Workspaces');
-  render();
+  return wbDataIOPending;
 }
 
-/* ---- Whole-app download / install (portable .questapp.json) ----------------- */
-// Serialize a full app — its fields, records and automations — to a portable file.
-function wbDownloadApp(companyId, workspaceId, appId) {
-  const { app } = wbFind(companyId, workspaceId, appId);
-  if (!app) return;
-  const bundle = {
-    format: 'quest-hq-app',
-    version: 1,
-    exported_at: new Date().toISOString(),
-    app: {
-      name: app.name,
-      description: app.description || '',
-      type: app.type || '',
-      icon: app.icon,
-      color: app.color,
-      fields: clone(app.fields || []),
-      items: clone(app.items || []),
-      automations: clone(app.automations || []),
-    },
-  };
-  const safeName = (app.name || 'app').replace(/[^\w.-]+/g, '_');
-  downloadText(`${safeName}.questapp.json`, JSON.stringify(bundle, null, 2), 'application/json');
-  showToast(`Downloaded "${app.name}" (${app.fields.length} fields · ${app.items.length} records · ${app.automations.length} automations).`, 'local', 'Workspaces');
+/**
+ * Run one of the data-in/out actions.
+ *
+ * Synchronous when the module is already loaded, which it will be: an app view prefetches
+ * it on render. That is what keeps window.open inside the click's own task — an await
+ * that resolves immediately still yields, and a browser treats the resulting window as an
+ * unsolicited pop-up.
+ */
+function wbDataIO(name, ...args) {
+  if (wbDataIOModule) return wbDataIOModule[name](...args);
+  return wbLoadDataIO()
+    .then((io) => io[name](...args))
+    .catch(() => showToast('Could not load that yet — check your connection and try again.', 'local', 'Workspaces'));
 }
+
+function wbPrintData(companyId, workspaceId, appId, onlyIds) { return wbDataIO('wbPrintData', companyId, workspaceId, appId, onlyIds); }
+function wbPrintReports(companyId, workspaceId, appId) { return wbDataIO('wbPrintReports', companyId, workspaceId, appId); }
+function wbExportCsv(companyId, workspaceId, appId) { return wbDataIO('wbExportCsv', companyId, workspaceId, appId); }
+function wbImportCsvPrompt(companyId, workspaceId, appId) { return wbDataIO('wbImportCsvPrompt', companyId, workspaceId, appId); }
+function wbDownloadApp(companyId, workspaceId, appId) { return wbDataIO('wbDownloadApp', companyId, workspaceId, appId); }
+
 function wbInstallAppPrompt(companyId, workspaceId) {
   const input = document.createElement('input');
   input.type = 'file';
@@ -15585,6 +16055,11 @@ function wbValLabel(companyId, app, fieldId, val) {
 function wbTriggerText(companyId, app, t) {
   if (t.event === 'created') return '<span class="wb-rule-pill"><i class="ti ti-circle-plus"></i>Item is created</span>';
   if (t.event === 'updated') return '<span class="wb-rule-pill"><i class="ti ti-pencil"></i>Item is updated</span>';
+  if (t.event === 'stage_moves') {
+    const stageField = pipelineField(app, t.fieldId);
+    const name = (id) => { const o = stagesOf(stageField).find((x) => x.id === id); return o ? h(o.label) : 'any stage'; };
+    return `<span class="wb-rule-pill"><i class="ti ti-layout-kanban"></i>Stage ${t.from ? `leaves ${name(t.from)}` : 'moves'}${t.to ? ` to ${name(t.to)}` : ''}</span>`;
+  }
   const field = wbFieldById(app, t.fieldId);
   const numeric = field && ['number', 'money', 'calculation', 'duration', 'progress'].includes(field.type);
   const opSym = (numeric && WB_TRIG_OPS.find(([v]) => v === t.op) || [])[2] || '=';
@@ -15634,7 +16109,23 @@ function wbRunAutomations(companyId, workspace, app, item, event, prev) {
     const t = au.trigger; let fire = false;
     if (t.event === 'created') fire = event === 'created';
     else if (t.event === 'updated') fire = event === 'updated';
-    else if (t.event === 'field_is') {
+    else if (t.event === 'stage_moves') {
+      // "A record moves between stages", expressed as from -> to with either side left as
+      // "any". field_is can already say "changes TO Won"; this adds "LEAVES Quoted" and
+      // "moves at all", which is what a pipeline actually gets asked about.
+      const stageField = pipelineField(app, t.fieldId);
+      if (stageField) {
+        const norm = (v) => (v === undefined || v === null) ? '' : String(v);
+        const now = norm(item.values[stageField.id]);
+        const was = norm(prev ? prev[stageField.id] : undefined);
+        // A move means the value actually changed. Saving a record without touching its
+        // stage must not fire, or every edit would trip every pipeline rule.
+        const moved = (event === 'updated' || event === 'created') && now !== was;
+        const fromOk = !t.from || was === t.from;
+        const toOk = !t.to || now === t.to;
+        fire = moved && fromOk && toOk;
+      }
+    } else if (t.event === 'field_is') {
       const triggerField = (app.fields || []).find((f) => f.id === t.fieldId);
       const isNumeric = triggerField && ['number', 'money', 'calculation', 'duration', 'progress'].includes(triggerField.type) && WB_TRIG_OPS.some(([v]) => v === t.op);
       if (isNumeric) {
@@ -15692,7 +16183,19 @@ function wbCtx() {
   const params = state.route?.params;
   return wbFind(companyId, params?.get('workspace_id') || '', params?.get('app_id') || '');
 }
-function wbSave(companyId) { wbInvalidateAppIndex(); saveWorkspaceBuilderDoc(companyId).catch(() => null); }
+// Editing an app that was linked in from another company mutates THAT company's
+// document, because that is where the app object lives. Saving only the current company's
+// row would drop the edit silently — it would sit on screen looking saved until the next
+// reload threw it away. So every company this one links out to is saved as well.
+//
+// Each write goes through the same guarded update and three-way merge as any other, so a
+// second row is not a second risk.
+function wbSave(companyId) {
+  wbInvalidateAppIndex();
+  for (const target of companiesToSave(canonicalCompanyId(companyId), wbDoc(companyId))) {
+    saveWorkspaceBuilderDoc(target).catch(() => null);
+  }
+}
 function wbGuard() { return requirePermission('workspaces.manage', activeCompanyId(), 'Your role cannot manage workspaces.', 'Workspaces'); }
 
 /* ---- Modal launchers (set state.builderModal, then render) ------------------ */
@@ -15708,8 +16211,11 @@ function openWbAppModal(companyId, workspaceId) {
   const ws = wbFind(companyId, workspaceId).workspace;
   openWbModal({ kind: 'app', companyId, workspaceId, draft: { icon: WB_APP_ICONS[0], color: ws?.color || WB_PALETTE[1] } });
 }
-function openWbFieldModal(companyId, workspaceId, appId, fieldId, fieldType) {
+async function openWbFieldModal(companyId, workspaceId, appId, fieldId, fieldType) {
   const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  // Awaited before the dialog opens, so the configuration panel is never briefly blank.
+  try { await wbLoadFieldUi(); } catch { showToast('Could not open the field editor — check your connection and try again.', 'local', 'Workspaces'); return; }
   const existing = fieldId ? app.fields.find((f) => f.id === fieldId) : null;
   const type = existing ? existing.type : fieldType;
   const draft = existing ? JSON.parse(JSON.stringify(existing)) : { id: wbUid(), type, label: '', required: false, config: {} };
@@ -15720,8 +16226,108 @@ function openWbFieldModal(companyId, workspaceId, appId, fieldId, fieldType) {
   }
   openWbModal({ kind: 'field', companyId, workspaceId, appId, editId: fieldId || '', fieldType: type, draft });
 }
-function openWbItemModal(companyId, workspaceId, appId, itemId, mode, opts) {
+// Default stages for an app that has no status field yet. Same three the field editor
+// offers, so a pipeline created here and one created there start out identical.
+function wbDefaultStages() {
+  return [
+    { id: wbUid(), label: 'To Do', color: '#6b7280' },
+    { id: wbUid(), label: 'In Progress', color: '#d97706' },
+    { id: wbUid(), label: 'Done', color: '#16a34a' },
+  ];
+}
+
+/**
+ * Open the stage manager. Creates the pipeline field first if the app has none — the
+ * button that leads here says "Set up stages" in that case, so creating one is the
+ * requested action rather than a surprise.
+ */
+async function openWbStagesModal(companyId, workspaceId, appId) {
+  if (!can('workspaces.manage', companyId)) return;
   const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  // The manager's markup ships with the board chunk; load it before opening so the modal
+  // never appears empty and then fill in.
+  try { await wbLoadBoard(); } catch { showToast('Could not open stage settings — check your connection and try again.', 'local', 'Workspaces'); return; }
+  let field = pipelineField(app, wbItemsUI(appId).boardFieldId);
+  if (!field) {
+    field = { id: wbUid(), type: 'status', label: 'Stage', required: false, config: { options: wbDefaultStages() } };
+    app.fields.push(field);
+    wbSave(companyId);
+    showToast('Added a Stage field — rename or recolour the stages below.', 'local', 'Workspaces');
+  }
+  openWbModal({
+    kind: 'stages', companyId, workspaceId, appId, fieldId: field.id,
+    draft: stagesOf(field).map((s) => ({ ...s })),
+    // Records to reassign once the change is saved, keyed by record id.
+    moves: {}, del: null, error: '',
+  });
+}
+
+// Read the live inputs back into the draft before any structural change, so a rename
+// typed but not yet blurred is not lost when a row is reordered or deleted.
+function wbCollectStages() {
+  const m = state.builderModal;
+  if (!m || m.kind !== 'stages') return;
+  document.querySelectorAll('.wb-modal-overlay .wb-stage-row').forEach((row) => {
+    const stage = m.draft.find((s) => s.id === row.dataset.stageId);
+    if (!stage) return;
+    const label = row.querySelector('[data-wb-stage-label]');
+    const color = row.querySelector('[data-wb-stage-color]');
+    if (label && label.value.trim()) stage.label = label.value.trim();
+    if (color) stage.color = color.value;
+  });
+}
+
+function wbStagesModalBody() {
+  const m = state.builderModal;
+  const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
+  const field = app && app.fields.find((f) => f.id === m.fieldId);
+  if (!field) return '<div class="wb-sub">That field no longer exists.</div>';
+  const counts = stageCounts({ ...field, config: { options: m.draft } }, app.items);
+  if (m.del) {
+    const stage = m.draft.find((s) => s.id === m.del);
+    if (stage) return wbBoardModule.renderStageDeletePrompt(stage, counts.get(stage.id) || 0, m.draft.filter((s) => s.id !== stage.id));
+  }
+  const pendingCount = Object.keys(m.moves || {}).length;
+  return `
+    ${m.error ? `<div class="wb-modal-error" role="alert">${h(m.error)}</div>` : ''}
+    <div class="wb-sub" style="margin-bottom:10px">Records move through these stages in order, on the board and everywhere <b>${h(field.label)}</b> is shown.</div>
+    ${wbBoardModule.renderStageManager(m.draft, counts, { fieldLabel: field.label })}
+    <button class="btn btn-sm" type="button" data-wb-stage-add style="margin-top:10px"><i class="ti ti-plus"></i>Add stage</button>
+    ${pendingCount ? `<div class="wb-sub" style="margin-top:10px"><i class="ti ti-info-circle"></i> ${pendingCount} record${pendingCount === 1 ? '' : 's'} will be moved when you save.</div>` : ''}`;
+}
+
+function wbSaveStages() {
+  const m = state.builderModal;
+  wbCollectStages();
+  const { workspace, app } = wbFind(m.companyId, m.workspaceId, m.appId);
+  const field = app && app.fields.find((f) => f.id === m.fieldId);
+  if (!field) { state.builderModal = null; render(); return; }
+  // A pipeline with no stages is a board of one empty column and a status field that can
+  // never be set, so this is refused rather than silently allowed.
+  if (!m.draft.length) { m.error = 'Keep at least one stage — a pipeline needs somewhere for records to sit.'; render(); return; }
+  field.config = { ...field.config, options: m.draft.map((s) => ({ ...s })) };
+  // Reassignments are applied as ordinary edits, so automations watching this field fire
+  // exactly as they would if each record had been changed by hand.
+  for (const [itemId, stageId] of Object.entries(m.moves || {})) {
+    const item = app.items.find((i) => i.id === itemId);
+    if (!item) continue;
+    const prev = { ...item.values };
+    item.values = { ...item.values, [field.id]: stageId || '' };
+    const stamp = new Date().toISOString(); item.updatedAt = stamp; item.lastActivityAt = stamp;
+    wbRunAutomations(m.companyId, workspace, app, item, 'updated', prev);
+  }
+  wbSave(m.companyId);
+  state.builderModal = null;
+  render();
+}
+
+async function openWbItemModal(companyId, workspaceId, appId, itemId, mode, opts) {
+  const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  // The record form's inputs ship in the field-UI chunk; awaited here so the form never
+  // opens as an empty shell that fills in a moment later.
+  try { await wbLoadFieldUi(); } catch { showToast('Could not open the record — check your connection and try again.', 'local', 'Workspaces'); return; }
   const item = itemId ? app.items.find((i) => i.id === itemId) : null;
   // Existing records open read-only ("view"); a new record or an explicit edit
   // opens the editable form. The comment thread shows in both modes.
@@ -15845,6 +16451,15 @@ function renderWorkspaceBuilderModal() {
     return wbModalShell('Delete', 'wb-modal-sm', `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Confirm delete</h3>`,
       `<p class="wb-sub">${h(m.confirm.message)}</p>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-confirm><i class="ti ti-trash"></i>Delete</button>`);
+  }
+  if (m.kind === 'stages') {
+    const deleting = !!m.del;
+    return wbModalShell('Pipeline', 'wb-modal-md',
+      `<div class="wb-modal-ic" style="background:#7c3aed"><i class="ti ti-layout-kanban"></i></div><h3>${deleting ? 'Delete stage' : 'Manage stages'}</h3>`,
+      wbStagesModalBody(),
+      deleting
+        ? `<button class="btn" type="button" data-wb-stage-del-cancel>Back</button><button class="btn danger" type="button" data-wb-stage-del-confirm><i class="ti ti-trash"></i>Delete stage</button>`
+        : `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" type="button" data-wb-stages-save><i class="ti ti-device-floppy"></i>Save stages</button>`);
   }
   if (m.kind === 'file-preview') {
     const url = m.url || '';
@@ -16016,6 +16631,7 @@ function renderWorkspaceBuilderModal() {
         <option value="created" ${m.draft.trigger.event === 'created' ? 'selected' : ''}>An item is created</option>
         <option value="updated" ${m.draft.trigger.event === 'updated' ? 'selected' : ''}>An item is updated</option>
         <option value="field_is" ${m.draft.trigger.event === 'field_is' ? 'selected' : ''}>A field changes to a specific value</option>
+        <option value="stage_moves" ${m.draft.trigger.event === 'stage_moves' ? 'selected' : ''}>A record moves between pipeline stages</option>
       </select><div id="wbAuTrigCfg">${wbTrigCfgUI(m.draft, app)}</div></div>
       <div class="wb-field"><label>Then… (actions)</label><div class="wb-action-builder">${wbActionCardsUI(m.companyId, m.draft, app)}</div><button class="btn btn-sm" data-wb-auto-add-action><i class="ti ti-plus"></i>Add action</button></div>`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-check"></i>${m.editId ? 'Save automation' : 'Create automation'}</button>`);
@@ -16099,92 +16715,55 @@ function wbModalShell(eyebrow, extraClass, head, body, foot) {
   // Close button or a footer Cancel/Close dismisses the modal.
   return `<div class="modal-overlay wb-modal-overlay"><div class="wb-modal ${extraClass}" role="dialog" aria-modal="true" tabindex="-1"><div class="wb-modal-head">${head}<button class="btn wb-modal-close-btn" type="button" data-action="wb-modal-close">Close</button></div><div class="wb-modal-body">${body}</div><div class="wb-modal-foot">${foot}</div></div></div>`;
 }
+// Delegates to the lazily-fetched panel. openWbFieldModal guarantees the module is
+// loaded before the dialog opens, so this is only ever called with it in hand.
 function wbFieldConfigUI(fd, app) {
-  const t = fd.type;
-  if (t === 'category' || t === 'status' || t === 'tags') {
-    return `<div class="wb-field"><label>Options</label><div class="wb-opt-list">${(fd.config.options || []).map((o) => wbOptRow(o)).join('')}</div><button class="btn btn-sm" data-wb-add-option><i class="ti ti-plus"></i>Add option</button>${t === 'tags' ? '<div class="wb-sub">Records can hold several of these at once.</div>' : ''}</div>`;
-  }
-  if (t === 'autonumber') {
-    return `<div class="wb-field"><label>Prefix <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbAutoPrefix" value="${h(fd.config.prefix || '')}" placeholder="e.g. INV-" style="max-width:200px"></div>
-      <div class="wb-field"><label>Minimum digits <span class="wb-opt">(zero-pad)</span></label><input type="number" min="0" max="10" class="wb-input" id="wbAutoPad" value="${h(String(fd.config.padding || 0))}" style="max-width:120px"><div class="wb-sub">e.g. 4 shows <b>${h(fd.config.prefix || '')}0007</b>. Numbers count up from the highest existing record.</div></div>`;
-  }
-  if (t === 'rollup') {
-    const relFields = app.fields.filter((f) => f.type === 'relationship');
-    const rel = relFields.find((f) => f.id === fd.config.relField);
-    const ta = rel ? wbRelTargetApp(rel, canonicalCompanyId(state.builderModal.companyId)) : null;
-    const numTargets = ta ? ta.fields.filter((f) => ['number', 'money', 'duration', 'progress', 'calculation', 'rating', 'rollup', 'date', 'created_time', 'updated_time'].includes(f.type)) : [];
-    const AGGS = [['count', 'Count of records'], ['sum', 'Sum'], ['avg', 'Average'], ['min', 'Minimum'], ['max', 'Maximum'], ['earliest', 'Earliest date'], ['latest', 'Latest date']];
-    const agg = fd.config.agg || 'count';
-    if (!relFields.length) return '<div class="wb-field"><div class="wb-sub" style="color:var(--warning,#d97706)">Add a Relationship field first — a rollup summarizes the records it links to.</div></div>';
-    return `<div class="wb-field"><label>Through relationship</label><select class="wb-input" id="wbRollRel" data-wb-rel-refresh><option value="">— Select a relationship —</option>${relFields.map((f) => `<option value="${h(f.id)}" ${fd.config.relField === f.id ? 'selected' : ''}>${h(f.label)}${(f.config.targetCompany && f.config.targetCompany !== canonicalCompanyId(state.builderModal.companyId)) ? ` (${h(companyName(f.config.targetCompany) || 'other workspace')})` : ''}</option>`).join('')}</select><div class="wb-sub">Summarize the records this relationship links to${ta ? ` in <b>${h(ta.name)}</b>` : ''}.</div></div>
-      <div class="wb-field"><label>Summarize</label><select class="wb-input" id="wbRollAgg" data-wb-rel-refresh>${AGGS.map(([v, l]) => `<option value="${h(v)}" ${agg === v ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></div>
-      ${agg !== 'count' ? `<div class="wb-field"><label>Field to summarize</label><select class="wb-input" id="wbRollField"><option value="">— Select field —</option>${numTargets.map((f) => `<option value="${h(f.id)}" ${fd.config.targetField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select>${ta && !numTargets.length ? '<div class="wb-sub" style="color:var(--warning,#d97706)">The linked app has no number or date fields to summarize.</div>' : ''}</div>` : ''}`;
-  }
-  if (t === 'relationship') {
-    const sourceCompany = canonicalCompanyId(state.builderModal.companyId);
-    // Workspaces you can link to = the companies whose App Builder data your
-    // account is allowed to load (workspace_builder_state RLS already gated this).
-    const linkableCompanies = Object.keys(state.workspaceBuilderDocs || {})
-      .map((cid) => ({ id: cid, name: cid === sourceCompany ? `${companyName(cid) || 'This workspace'} (this workspace)` : (companyName(cid) || cid) }))
-      .sort((a, b) => (a.id === sourceCompany ? -1 : b.id === sourceCompany ? 1 : a.name.localeCompare(b.name)));
-    const targetCompany = fd.config.targetCompany || sourceCompany;
-    const apps = wbCompanyApps(targetCompany).map((e) => e.app);
-    const targetApp = wbTargetApp(targetCompany, fd.config.targetApp);
-    const displayFields = targetApp ? targetApp.fields : [];
-    return `${linkableCompanies.length > 1 ? `<div class="wb-field"><label>Workspace <span class="wb-opt">(which workspace's app to link)</span></label><select class="wb-input" id="wbRelWorkspace" data-wb-rel-refresh>${linkableCompanies.map((c) => `<option value="${h(c.id)}" ${targetCompany === c.id ? 'selected' : ''}>${h(c.name)}</option>`).join('')}</select><div class="wb-sub">Pick a workspace you belong to. People who can't see that workspace will see “No access” here.</div></div>` : ''}
-      <div class="wb-field"><label>Linked app</label><select class="wb-input" id="wbRelTarget" data-wb-rel-refresh><option value="">— Select app to link —</option>${apps.map((ap) => `<option value="${h(ap.id)}" ${fd.config.targetApp === ap.id ? 'selected' : ''}>${h(ap.name)}</option>`).join('')}</select><div class="wb-sub">Items in this app can reference — and pull a field from — items in the linked app.</div></div>
-      ${targetApp ? `<div class="wb-field"><label>Show field <span class="wb-opt">(what to display from the linked item)</span></label><select class="wb-input" id="wbRelDisplay"><option value="">Item name (default)</option>${displayFields.map((f) => `<option value="${h(f.id)}" ${fd.config.displayField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select><div class="wb-sub">Pick a field from <b>${h(targetApp.name)}</b> to show instead of the item's name.</div></div>` : ''}
-      ${targetApp ? `<div class="wb-field"><label>Identify by <span class="wb-opt">(how records are labeled when choosing)</span></label><select class="wb-input" id="wbRelIdentify" data-wb-rel-refresh><option value="">Item name (default)</option>${displayFields.map((f) => `<option value="${h(f.id)}" ${fd.config.identifyField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select><div class="wb-sub">Labels each <b>${h(targetApp.name)}</b> record in the pickers below so you can tell them apart — e.g. by <b>Project Name</b> instead of the shown field.</div></div>` : ''}
-      ${targetApp ? `<div class="wb-field"><label>Specific record <span class="wb-opt">(optional — pin one record)</span></label><select class="wb-input" id="wbRelFixed" data-wb-rel-refresh><option value="">Let each item choose</option>${targetApp.items.map((it) => `<option value="${h(it.id)}" ${fd.config.fixedItem === it.id ? 'selected' : ''}>${h(wbRelLabel(targetApp, it, fd.config.identifyField))}</option>`).join('')}</select><div class="wb-sub">Pin every item to one <b>${h(targetApp.name)}</b> record. Leave unset to let each item choose.</div></div>` : ''}
-      <div class="wb-check-row"><label class="wb-switch"><input type="checkbox" id="wbRelMulti" ${fd.config.multiple ? 'checked' : ''} ${fd.config.fixedItem ? 'disabled' : ''}><span class="wb-slider"></span></label><div><b>Allow multiple links</b>${fd.config.fixedItem ? '<div class="wb-sub">Disabled while a specific record is pinned.</div>' : ''}</div></div>`;
-  }
-  if (t === 'calculation') {
-    const numFields = app.fields.filter((f) => ['number', 'money', 'calculation', 'duration', 'progress', 'checklist'].includes(f.type));
-    return `<div class="wb-field"><label>Formula</label><input class="wb-input" id="wbCalcFormula" value="${h(fd.config.formula || '')}" placeholder="e.g. {Quantity} * {Unit Price}"><div class="wb-sub">Reference number, money, progress, or checklist fields by name in {curly braces} — a checklist contributes its % complete. Operators: + - * / ( )</div>${numFields.length ? `<div class="wb-calc-chips">${numFields.map((f) => `<button class="wb-tag wb-calc-chip" data-wb-insert="{${h(f.label)}}">${h(f.label)}</button>`).join('')}</div>` : '<div class="wb-sub" style="color:var(--warning,#d97706)">Add Number or Money fields first to reference them.</div>'}</div>`;
-  }
-  if (t === 'money') return `<div class="wb-field"><label>Currency symbol</label><input class="wb-input" id="wbCurSym" value="${h(fd.config.currency || '$')}" maxlength="3" style="max-width:120px"></div>`;
-  if (t === 'number') return `<div class="wb-field"><label>Unit / suffix <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbNumUnit" value="${h(fd.config.unit || '')}" placeholder="e.g. sq ft, hrs" style="max-width:200px"></div>`;
-  if (t === 'text' || t === 'textarea' || t === 'url') return `<div class="wb-field"><label>Placeholder <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbPhText" value="${h(fd.config.placeholder || '')}" placeholder="${t === 'url' ? 'https://…' : 'Hint shown in the input'}"></div>`;
-  if (t === 'checklist') { const steps = Array.isArray(fd.config.steps) ? fd.config.steps.join('\n') : (fd.config.steps || ''); return `<div class="wb-field"><label>Default steps <span class="wb-opt">(optional, one per line)</span></label><textarea class="wb-input" id="wbClSteps" placeholder="Site inspection&#10;Material order&#10;Install&#10;Final walkthrough">${h(steps)}</textarea><div class="wb-sub">Every new item starts with these steps (all unchecked). Users can add or remove steps per item. Link its % complete into a Progress or Calculation field by referencing <code>{${h(fd.label || 'Checklist')}}</code>.</div></div>`; }
-  if (t === 'progress') {
-    const cfg = fd.config || {};
-    const checklists = app.fields.filter((f) => f.type === 'checklist');
-    // Sources on a linked record (progress or checklist reached via a relationship field).
-    const linkOpts = [];
-    app.fields.filter((f) => f.type === 'relationship' && f.config.targetApp).forEach((rf) => {
-      const ta = wbRelTargetApp(rf, state.builderModal.companyId);
-      if (!ta) return;
-      ta.fields.filter((lf) => lf.type === 'checklist' || lf.type === 'progress').forEach((lf) => {
-        linkOpts.push({ value: `link:${rf.id}:${lf.id}`, label: `${rf.label} → ${lf.label}` });
-      });
+  if (!wbFieldUiModule) return '';
+  return wbFieldUiModule.renderFieldConfig(fd, app, {
+    h, state, canonicalCompanyId, companyName, wbOptRow, wbProgStopRow, wbProgressDisplayHtml,
+    wbRelTargetApp, wbCompanyApps, wbTargetApp, wbRelLabel,
+    WB_PROGRESS_STOPS_DEFAULT, WB_FIELD_TYPES, WB_PROGRESS_DISPLAYS,
+  });
+}
+
+let wbFieldUiModule = null;
+let wbFieldUiPending = null;
+function wbLoadFieldUi() {
+  if (wbFieldUiModule) return Promise.resolve(wbFieldUiModule);
+  if (!wbFieldUiPending) {
+    wbFieldUiPending = import('./workspace/field-config-ui.js').then((mod) => {
+      wbFieldUiModule = mod;
+      return mod;
+    }).catch((error) => {
+      wbFieldUiPending = null;
+      throw error;
     });
-    const display = ['bar', 'ring', 'segments'].includes(cfg.display) ? cfg.display : 'bar';
-    const mode = cfg.colorMode === 'scale' ? 'scale' : 'single';
-    const stops = Array.isArray(cfg.stops) && cfg.stops.length ? cfg.stops : WB_PROGRESS_STOPS_DEFAULT;
-    const previewPct = 65;
-    const colorBlock = mode === 'single'
-      ? `<div class="wb-field"><label>Bar color</label><input type="color" class="wb-stop-color" id="wbProgColor" value="${h(cfg.color || WB_FIELD_TYPES.progress.color)}"></div>`
-      : `<div class="wb-field"><label>Color stops <span class="wb-opt">(value ≤ % uses that color)</span></label>
-          <div class="wb-prog-stops" id="wbProgStops">${stops.map((s) => wbProgStopRow(s)).join('')}</div>
-          <button class="btn btn-sm" data-wb-add-stop type="button"><i class="ti ti-plus"></i>Add color stop</button>
-          <div class="wb-sub">The lowest stop whose % is ≥ the value wins. Example: 0→white, 20→red, 40→yellow, 80→orange, 100→green.</div></div>`;
-    return `
-      <div class="wb-field"><label>Fill from</label><select class="wb-input" id="wbProgSource">
-        <option value="">Manual (drag the slider)</option>
-        ${checklists.length ? `<optgroup label="This app">${checklists.map((f) => `<option value="${h(f.id)}" ${cfg.source === f.id ? 'selected' : ''}>Checklist: ${h(f.label)}</option>`).join('')}</optgroup>` : ''}
-        ${linkOpts.length ? `<optgroup label="Linked record">${linkOpts.map((o) => `<option value="${h(o.value)}" ${cfg.source === o.value ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</optgroup>` : ''}
-      </select><div class="wb-sub">Auto-fill from a checklist in this app, or from a linked record's progress/checklist (via a Relationship field). Multiple links are averaged.</div></div>
-      <div class="wb-field"><label>Display style</label><select class="wb-input" id="wbProgDisplay" data-wb-prog-refresh>${WB_PROGRESS_DISPLAYS.map(([v, l]) => `<option value="${v}" ${display === v ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></div>
-      <div class="wb-field"><label>Color</label><select class="wb-input" id="wbProgColorMode" data-wb-prog-refresh><option value="single" ${mode === 'single' ? 'selected' : ''}>Single color</option><option value="scale" ${mode === 'scale' ? 'selected' : ''}>Change by percentage</option></select></div>
-      ${colorBlock}
-      <div class="wb-field"><label>Preview <span class="wb-opt">at ${previewPct}%</span></label><div class="wb-prog-preview" id="wbProgPreview">${wbProgressDisplayHtml(fd, previewPct)}</div></div>`;
   }
-  return '<div class="wb-sub">No extra configuration needed for this field type.</div>';
+  return wbFieldUiPending;
 }
 function wbOptRow(o) {
   return `<div class="wb-opt-item" data-oid="${h(o.id)}"><input type="color" class="wb-dot-pick" value="${h(o.color || '#2563eb')}"><input class="wb-input wb-opt-label" value="${h(o.label)}" placeholder="Option label"><button class="wb-icon-btn danger" data-wb-del-option type="button" aria-label="Remove option"><i class="ti ti-x"></i></button></div>`;
 }
 function wbTrigCfgUI(draft, app) {
+  if (draft.trigger.event === 'stage_moves') {
+    const fields = pipelineFields(app);
+    if (!fields.length) return '<div class="wb-sub" style="color:var(--warning,#d97706)">This app has no pipeline yet — add a Status field, or use <b>Manage stages</b> on the board.</div>';
+    const field = pipelineField(app, draft.trigger.fieldId);
+    draft.trigger.fieldId = field.id;
+    const stages = stagesOf(field);
+    // "Any" on both sides is the useful default: it fires on every stage change, which is
+    // what someone reaches for first, and narrowing is a second thought.
+    const pick = (attr, chosen, anyLabel) => `<select class="wb-input" data-wb-trig-${attr}><option value="">${h(anyLabel)}</option>${stages.map((s) => `<option value="${h(s.id)}" ${chosen === s.id ? 'selected' : ''}>${h(s.label)}</option>`).join('')}</select>`;
+    const fieldSelect = fields.length > 1
+      ? `<div class="wb-field"><label>Pipeline</label><select class="wb-input" data-wb-trig-field>${fields.map((f) => `<option value="${h(f.id)}" ${f.id === field.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select></div>`
+      : '';
+    return `${fieldSelect}
+      <div class="wb-trig-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="wb-sub">from</span>${pick('from', draft.trigger.from, 'Any stage')}
+        <span class="wb-sub">to</span>${pick('to', draft.trigger.to, 'Any stage')}
+      </div>
+      <div class="wb-sub" style="margin-top:6px">Fires only when the stage actually changes — saving a record without moving it does nothing.</div>`;
+  }
   if (draft.trigger.event !== 'field_is') return '';
   // Any field can trigger this, except file/image uploads (no comparable "value").
   const fields = app.fields.filter((f) => !['file', 'image'].includes(f.type));
@@ -16243,120 +16822,19 @@ function wbActionCardsUI(companyId, draft, app) {
     return `<div class="wb-action-card"><div class="wb-acgrow"><select class="wb-input" data-wb-actype="${i}"><option value="notify" ${ac.type === 'notify' ? 'selected' : ''}>Post a notification</option><option value="set_field" ${ac.type === 'set_field' ? 'selected' : ''}>Set a field value</option><option value="assign" ${ac.type === 'assign' ? 'selected' : ''}>Assign a member</option></select>${cfg}</div><button class="wb-icon-btn danger" data-wb-acdel="${i}" type="button" aria-label="Delete automation"><i class="ti ti-x"></i></button></div>`;
   }).join('');
 }
+// Delegates to the lazily-fetched field UI chunk. openWbItemModal awaits the module
+// before the record form opens, so this is only called with it in hand. The factory is
+// built once and reused; rebuilding it per field would discard the closure each time.
+let wbFieldInputFn = null;
 function wbRenderFieldInput(companyId, workspaceId, f, val) {
-  const meta = WB_FIELD_TYPES[f.type];
-  const lbl = `<label>${h(f.label)}${f.required ? '<span class="wb-req">*</span>' : ''} <span class="wb-opt" style="text-transform:none">${h(meta.label)}</span></label>`;
-  let input = '';
-  switch (f.type) {
-    case 'text': input = `<input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="${h(f.config.placeholder || '')}">`; break;
-    case 'textarea': input = `<textarea class="wb-input" data-f="${h(f.id)}" placeholder="${h(f.config.placeholder || '')}">${h(val || '')}</textarea>`; break;
-    case 'email': input = `<input type="email" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="name@email.com">`; break;
-    case 'url': input = `<input type="url" inputmode="url" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="${h(f.config.placeholder || 'https://…')}">`; break;
-    case 'phone': input = `<input type="tel" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="555 123 4567" inputmode="tel" autocomplete="tel" data-phone-format>`; break;
-    case 'number': input = `<div class="wb-inline"><input type="text" inputmode="numeric" class="wb-input" data-f="${h(f.id)}" data-digits-only value="${h(val ?? '')}" style="max-width:200px">${f.config.unit ? `<span class="wb-sub">${h(f.config.unit)}</span>` : ''}</div>`; break;
-    case 'money': input = `<div class="wb-inline"><span class="wb-cur">${h(f.config.currency || '$')}</span><input type="number" step="0.01" class="wb-input" data-f="${h(f.id)}" value="${h(val ?? '')}" style="max-width:220px"></div>`; break;
-    case 'date': input = `<input type="date" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" style="max-width:220px">`; break;
-    case 'checkbox': input = `<label class="wb-switch"><input type="checkbox" data-f="${h(f.id)}" ${val ? 'checked' : ''}><span class="wb-slider"></span></label>`; break;
-    case 'category': case 'status': input = `<select class="wb-input" data-f="${h(f.id)}"><option value="">— Select —</option>${(f.config.options || []).map((o) => `<option value="${h(o.id)}" ${val === o.id ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</select>`; break;
-    case 'user': {
-      const members = wbMembers(companyId);
-      input = members.length ? `<select class="wb-input" data-f="${h(f.id)}"><option value="">— Unassigned —</option>${members.map((m) => `<option value="${h(m.id)}" ${val === m.id ? 'selected' : ''}>${h(m.name)}</option>`).join('')}</select>` : '<div class="wb-sub" style="color:var(--warning,#d97706)">No company members to assign.</div>'; break;
-    }
-    case 'relationship': {
-      const ta = wbRelTargetApp(f, companyId);
-      if (!ta) { input = `<div class="wb-sub" style="color:var(--warning,#d97706)">${f.config.targetCompany && !wbDoc(f.config.targetCompany) ? 'Linked workspace not available to you.' : 'No linked app configured.'}</div>`; break; }
-      // A pinned record: every item links to the same record — show it read-only.
-      if (f.config.fixedItem) {
-        const fixed = ta.items.find((it) => it.id === f.config.fixedItem);
-        input = `<input type="hidden" data-f="${h(f.id)}" value="${h(f.config.fixedItem)}"><div class="wb-rel-fixed"><span class="wb-tag wb-rel"><i class="ti ti-pin"></i>${h(fixed ? wbRelLabel(ta, fixed, f.config.displayField) : 'Pinned record missing')}</span><span class="wb-sub">Pinned to <b>${h(ta.name)}</b></span></div>`;
-        break;
-      }
-      const cur = Array.isArray(val) ? val : (val ? [val] : []);
-      // Options are labeled by the "Identify by" field so records are easy to
-      // pick apart; cells still display the "Show field" value.
-      input = `<select class="wb-input" data-f="${h(f.id)}" ${f.config.multiple ? 'multiple style="min-height:96px"' : ''}>${f.config.multiple ? '' : '<option value="">— None —</option>'}${ta.items.map((it) => `<option value="${h(it.id)}" ${cur.includes(it.id) ? 'selected' : ''}>${h(wbRelLabel(ta, it, f.config.identifyField))}</option>`).join('')}</select><div class="wb-sub">Linked to <b>${h(ta.name)}</b>${f.config.multiple ? ' · hold Ctrl/Cmd to select multiple' : ''}</div>`; break;
-    }
-    case 'file': input = `
-      <div class="wb-file-field" data-wb-file>
-        <input type="hidden" data-f="${h(f.id)}" value="${h(typeof val === 'object' ? JSON.stringify(val) : (val || ''))}" />
-        <input type="file" hidden accept="${acceptAttr('document')}" data-wb-file-input />
-        <button type="button" class="wb-file-drop" data-wb-file-open>
-          <i class="ti ti-cloud-upload" data-wb-file-ico></i>
-          <span class="wb-file-label" data-wb-file-label></span>
-        </button>
-        <div class="wb-file-actions" data-wb-file-actions hidden>
-          <a class="btn btn-mini" data-wb-file-view target="_blank" rel="noreferrer"><i class="ti ti-eye"></i>View</a>
-          <a class="btn btn-mini" data-wb-file-download><i class="ti ti-download"></i>Download</a>
-          <button type="button" class="btn btn-mini danger" data-wb-file-remove><i class="ti ti-x"></i>Remove</button>
-        </div>
-        <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
-      </div>`; break;
-    case 'calculation': input = `<div class="wb-input wb-calc-display" data-calc="${h(f.id)}">—</div><div class="wb-sub">Auto-calculated: <code>${h(f.config.formula || '(no formula)')}</code></div>`; break;
-    case 'location': input = `<div class="wb-inline"><span class="wb-cur"><i class="ti ti-map-pin"></i></span><input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="Address, city, or place"></div>`; break;
-    case 'duration': {
-      const mins = Math.max(0, Math.round(Number(val) || 0));
-      input = `<div class="wb-inline wb-duration" data-wb-duration>
-        <input type="hidden" data-f="${h(f.id)}" value="${val === '' || val == null ? '' : h(String(mins))}">
-        <input type="number" min="0" class="wb-input" data-wb-dur-h value="${val === '' || val == null ? '' : h(String(Math.floor(mins / 60)))}" placeholder="0" style="max-width:90px"><span class="wb-sub">hrs</span>
-        <input type="number" min="0" max="59" class="wb-input" data-wb-dur-m value="${val === '' || val == null ? '' : h(String(mins % 60))}" placeholder="0" style="max-width:90px"><span class="wb-sub">mins</span>
-      </div>`; break;
-    }
-    case 'progress': {
-      const p = Math.max(0, Math.min(100, Math.round(Number(val) || 0)));
-      const pColor = wbProgressColor(f, p);
-      if (f.config && f.config.source) {
-        // Linked to a checklist — read-only styled bar that recompute() keeps in sync.
-        input = `<div class="wb-inline wb-progress-linked" data-wb-progress-linked>
-          <span data-wb-prog-display style="flex:1">${wbProgressDisplayHtml(f, p)}</span>
-          <input type="hidden" data-f="${h(f.id)}" value="${p}">
-          <span class="wb-sub" style="flex:none"><i class="ti ti-link"></i> from checklist</span>
-        </div>`;
-      } else {
-        input = `<div class="wb-inline wb-progress-edit" data-wb-progress><input type="range" min="0" max="100" step="1" data-f="${h(f.id)}" value="${p}" aria-label="${h(f.label)} percent" style="flex:1;accent-color:${h(pColor)}"><output data-wb-prog-out class="wb-prog-num" style="min-width:48px;text-align:right">${p}%</output></div>`;
-      }
-      break;
-    }
-    case 'checklist': {
-      const items = wbChecklistValue(val, f);
-      input = `<div class="wb-checklist" data-wb-checklist data-color="${h(meta.color)}">
-        <input type="hidden" data-f="${h(f.id)}" value="${h(JSON.stringify(items))}">
-        <div class="wb-cl-body">${wbChecklistBodyHtml(items, meta.color)}</div>
-        <div class="wb-cl-add">
-          <input class="wb-input" data-wb-cl-input placeholder="Add a step and press Enter">
-          <button type="button" class="btn wb-cl-addbtn" data-wb-cl-add><i class="ti ti-plus"></i>Add</button>
-        </div>
-      </div>`; break;
-    }
-    case 'image': input = `
-      <div class="wb-file-field wb-image-field" data-wb-file data-wb-image>
-        <input type="hidden" data-f="${h(f.id)}" value="${h(typeof val === 'object' ? JSON.stringify(val) : (val || ''))}" />
-        <input type="file" hidden accept="${acceptAttr('image')}" data-wb-file-input />
-        <button type="button" class="wb-image-drop" data-wb-file-open>
-          <span class="wb-img-preview" data-wb-img-preview><i class="ti ti-photo" data-wb-file-ico></i></span>
-          <span class="wb-file-label" data-wb-file-label></span>
-        </button>
-        <div class="wb-file-actions" data-wb-file-actions hidden>
-          <a class="btn btn-mini" data-wb-file-view target="_blank" rel="noreferrer"><i class="ti ti-eye"></i>View</a>
-          <button type="button" class="btn btn-mini danger" data-wb-file-remove><i class="ti ti-x"></i>Remove</button>
-        </div>
-        <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
-      </div>`; break;
-    case 'rating': input = wbRatingStars(val, true, f.id); break;
-    case 'tags': {
-      const cur = Array.isArray(val) ? val : (val ? [val] : []);
-      const opts = f.config.options || [];
-      input = opts.length
-        ? `<select class="wb-input" data-f="${h(f.id)}" multiple style="min-height:110px">${opts.map((o) => `<option value="${h(o.id)}" ${cur.includes(o.id) ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</select><div class="wb-sub">Hold Ctrl/Cmd (or drag) to pick several.</div>`
-        : '<div class="wb-sub" style="color:var(--warning,#d97706)">Add options to this field in its settings first.</div>';
-      break;
-    }
-    case 'autonumber': input = `<div class="wb-input wb-auto-readonly">${val ? h(wbAutoNumberText(f, val)) : '<span class="wb-sub">Assigned automatically when saved</span>'}</div>`; break;
-    case 'created_time': input = `<div class="wb-input wb-auto-readonly"><span class="wb-sub">Recorded automatically when the record is created</span></div>`; break;
-    case 'updated_time': input = `<div class="wb-input wb-auto-readonly"><span class="wb-sub">Updates automatically on every save</span></div>`; break;
-    case 'rollup': input = `<div class="wb-input wb-auto-readonly"><i class="ti ti-sum"></i> <span class="wb-sub">Summarizes the linked records automatically</span></div>`; break;
-    default: input = `<input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}">`;
+  if (!wbFieldUiModule) return '';
+  if (!wbFieldInputFn) {
+    wbFieldInputFn = wbFieldUiModule.createFieldInput({
+      h, WB_FIELD_TYPES, wbMembers, wbRelTargetApp, wbDoc, wbRelLabel, wbProgressColor,
+      wbProgressDisplayHtml, wbChecklistValue, wbChecklistBodyHtml, wbRatingStars, wbAutoNumberText,
+    });
   }
-  return `<div class="wb-field">${lbl}${input}</div>`;
+  return wbFieldInputFn(companyId, workspaceId, f, val);
 }
 
 // Parse a stored workspace file value into { name, url }. Supports the current
@@ -16786,6 +17264,10 @@ function wbCollectModalDraft() {
     const tf = document.querySelector('[data-wb-trig-field]'); if (tf) m.draft.trigger.fieldId = tf.value;
     const tv = document.querySelector('[data-wb-trig-val]'); if (tv) m.draft.trigger.value = tv.value;
     const to = document.querySelector('[data-wb-trig-op]'); if (to) m.draft.trigger.op = to.value; else delete m.draft.trigger.op;
+    // Stage moves: empty string means "any stage", which is a real choice, so it is stored
+    // rather than dropped.
+    const tFrom = document.querySelector('[data-wb-trig-from]'); if (tFrom) m.draft.trigger.from = tFrom.value;
+    const tTo = document.querySelector('[data-wb-trig-to]'); if (tTo) m.draft.trigger.to = tTo.value;
     document.querySelectorAll('[data-wb-actype]').forEach((s) => { const i = +s.dataset.wbActype; if (m.draft.actions[i]) m.draft.actions[i].type = s.value; });
     document.querySelectorAll('[data-wb-acfield]').forEach((s) => { const i = +s.dataset.wbAcfield; if (m.draft.actions[i]) m.draft.actions[i].fieldId = s.value; });
     document.querySelectorAll('[data-wb-acval]').forEach((s) => { const i = +s.dataset.wbAcval; let v = s.value; if (v === 'true') v = true; else if (v === 'false') v = false; if (m.draft.actions[i]) m.draft.actions[i].value = v; });
@@ -16879,6 +17361,10 @@ function wbSubmitModal() {
   if (m.kind === 'automation') {
     const name = (m.draft.name || '').trim(); if (!name) { showToast('Name your automation.', 'local', 'Workspaces'); return; }
     if (m.draft.trigger.event === 'field_is' && !m.draft.trigger.value) { showToast('Pick a trigger value.', 'local', 'Workspaces'); return; }
+    // No value is required for a stage move — "any stage to any stage" is a valid rule —
+    // but there does have to be a pipeline for it to watch. Looked up here rather than
+    // reusing the `app` below, which is not declared until after this guard.
+    if (m.draft.trigger.event === 'stage_moves' && !pipelineField(wbFind(companyId, m.workspaceId, m.appId).app, m.draft.trigger.fieldId)) { showToast('This app has no pipeline yet — add a Status field first.', 'local', 'Workspaces'); return; }
     if (!m.draft.actions.length) { showToast('Add at least one action.', 'local', 'Workspaces'); return; }
     m.draft.name = name;
     const { app } = wbFind(companyId, m.workspaceId, m.appId); app.automations = app.automations || [];
@@ -17029,28 +17515,19 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-install-app]', () => wbInstallAppPrompt(companyId, workspaceId));
     bind('[data-wb-download-app]', () => wbDownloadApp(companyId, workspaceId, appId));
     bind('[data-wb-share-app]', () => { if (!wbGuard()) return; const { app } = wbFind(companyId, workspaceId, appId); if (!app) return; app.shared = !app.shared; wbSave(companyId); showToast(app.shared ? `"${app.name}" is now shared to the Quest App Market.` : `"${app.name}" removed from the Quest App Market.`, 'local', 'Workspaces'); render(); });
-    bind('[data-wb-install-linked]', (el) => {
-      if (!wbGuard()) return;
-      const targetOpsId = String(el.closest('.wb-field')?.querySelector('[data-wb-install-target]')?.value || '');
-      if (!targetOpsId) { showToast('Choose a workspace to install into.', 'error', 'Workspaces'); return; }
-      const { app } = wbFind(companyId, workspaceId, appId);
-      const doc = wbDoc(companyId);
-      if (!app || !doc) return;
-      const targetKey = `ws-${targetOpsId}`;
-      let target = doc.workspaces.find((w) => w.id === targetKey);
-      if (!target) {
-        const opsWs = state.operationalWorkspaces.find((w) => w.id === targetOpsId);
-        target = { id: targetKey, name: opsWs?.name || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], feed: [], tiles: null, createdAt: new Date().toISOString().slice(0, 10) };
-        doc.workspaces.push(target);
-      }
-      if (target.apps.some((a) => a.id === app.id)) { showToast(`${target.name} already has "${app.name}".`, 'local', 'Workspaces'); return; }
-      // A linked pointer -- linkedFromWs is the SOURCE (this) workspace; the app
-      // object itself is never copied, so records + fields stay shared.
-      target.apps.push({ id: app.id, linked: true, linkedFromWs: workspaceId, installedAt: new Date().toISOString().slice(0, 10) });
-      wbSave(companyId);
-      showToast(`Installed "${app.name}" into ${target.name} — linked, data is shared.`, 'local', 'Workspaces');
-      render();
-    });
+    // Choosing a company re-renders so its workspaces can be listed.
+    bind('[data-wb-install-company]', (el) => {
+      state.wbInstallCompanyId = el.value || '';
+      // Swap only the dependent block. A full render() would rebuild the settings page and
+      // drop the reader back at the top of it, which is a long way from this control.
+      const host = el.closest('.wb-field')?.querySelector('[data-wb-install-body]');
+      const { workspace, app } = wbFind(companyId, workspaceId, appId);
+      if (!host || !workspace || !app) { render(); return; }
+      host.innerHTML = wbInstallTargetBody(companyId, workspace, app, el.value);
+      // Newly created controls need their handlers; nothing else on the page moved.
+      wbBindInstallTargets(host, companyId, workspaceId, appId);
+    }, 'onchange');
+    bind('[data-wb-install-linked]', (el) => wbInstallLinkedApp(el, companyId, workspaceId, appId));
     bind('[data-wb-remove-linked]', () => {
       if (!wbGuard()) return;
       const { workspace } = wbFind(companyId, workspaceId, appId);
@@ -17086,6 +17563,8 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-clear-sort]', () => { wbItemsUI(appId).sort = null; render(); });
     bind('[data-wb-set-view]', (el) => { wbItemsUI(appId).view = el.dataset.wbSetView; render(); });
     bind('[data-wb-sort-preset]', (el) => { const ui = wbItemsUI(appId); if (el.value) { ui.order = el.value; ui.sort = null; } render(); }, 'onchange');
+    bind('[data-wb-board-field]', (el) => { wbItemsUI(appId).boardFieldId = el.value; render(); }, 'onchange');
+    bind('[data-wb-board-sum]', (el) => { wbItemsUI(appId).boardSumId = el.value; render(); }, 'onchange');
     bind('[data-wb-add-filter]', () => { const { app } = wbFind(companyId, workspaceId, appId); const f0 = app.fields[0]; if (!f0) return; wbItemsUI(appId).filters.push({ fieldId: f0.id, op: wbFilterOps(wbFieldKind(f0))[0][0], value: '' }); render(); });
     bind('[data-wb-del-filter]', (el) => { wbItemsUI(appId).filters.splice(+el.dataset.idx, 1); render(); });
     bind('[data-wb-clear-filters]', () => { wbItemsUI(appId).filters = []; render(); });
@@ -17112,6 +17591,8 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-view-file]', (el, e) => { e.stopPropagation(); openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
     // Checkbox cells toggle inline without opening the item.
     bind('[data-wb-toggle-check]', (el, e) => { e.stopPropagation(); wbToggleItemCheckbox(companyId, workspaceId, appId, el.dataset.itemId, el.dataset.fieldId); });
+    // Board: which field the columns come from, what they total, and editing the stages.
+    bind('[data-wb-manage-stages]', (el, e) => { e.stopPropagation(); openWbStagesModal(companyId, workspaceId, appId); });
     // Card customization: toggle the panel, and pick which fields show on cards.
     bind('[data-wb-card-config]', (el, e) => { e.stopPropagation(); const ui = wbItemsUI(appId); ui.cardConfigOpen = !ui.cardConfigOpen; render(); });
     bind('[data-wb-card-field]', (el, e) => {
@@ -17189,6 +17670,57 @@ function wbMountDnD(companyId, workspaceId, appId) {
   });
 }
 
+// Stage manager wiring. Every structural change collects the live inputs first, so a
+// half-typed rename survives a reorder or a delete on another row.
+function wbMountStagesModal(overlay, m) {
+  const asField = () => ({ id: m.fieldId, config: { options: m.draft } });
+  overlay.querySelectorAll('[data-wb-stage-move]').forEach((b) => {
+    b.onclick = () => {
+      wbCollectStages();
+      const row = b.closest('.wb-stage-row');
+      m.draft = moveStage(asField(), row.dataset.stageId, Number(b.dataset.wbStageMove));
+      render();
+    };
+  });
+  overlay.querySelectorAll('[data-wb-stage-del]').forEach((b) => {
+    b.onclick = () => {
+      wbCollectStages();
+      const stageId = b.closest('.wb-stage-row').dataset.stageId;
+      const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
+      const holding = (app?.items || []).filter((it) => it.values[m.fieldId] === stageId).length;
+      // Only ask where records should go when there are records to place, and somewhere
+      // to put them. Otherwise deleting is unambiguous, so do not add a step.
+      if (holding && m.draft.length > 1) { m.del = stageId; render(); return; }
+      m.draft = removeStage(asField(), stageId, app?.items || []).options;
+      m.error = '';
+      render();
+    };
+  });
+  const cancelDel = overlay.querySelector('[data-wb-stage-del-cancel]');
+  if (cancelDel) cancelDel.onclick = () => { m.del = null; render(); };
+  const confirmDel = overlay.querySelector('[data-wb-stage-del-confirm]');
+  if (confirmDel) confirmDel.onclick = () => {
+    const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
+    const pick = overlay.querySelector('[data-wb-stage-reassign]');
+    const result = removeStage(asField(), m.del, app?.items || [], pick ? pick.value : null);
+    m.draft = result.options;
+    // Recorded, not applied: nothing touches a record until Save, so Cancel really cancels.
+    result.moved.forEach((itemId) => { m.moves[itemId] = result.reassignTo || ''; });
+    m.del = null;
+    m.error = '';
+    render();
+  };
+  const add = overlay.querySelector('[data-wb-stage-add]');
+  if (add) add.onclick = () => {
+    wbCollectStages();
+    m.draft = addStage(asField(), '', '#6b7280', wbUid);
+    m.error = '';
+    render();
+  };
+  const save = overlay.querySelector('[data-wb-stages-save]');
+  if (save) save.onclick = () => wbSaveStages();
+}
+
 function wbMountModal() {
   const m = state.builderModal;
   const overlay = document.querySelector('.wb-modal-overlay');
@@ -17204,6 +17736,7 @@ function wbMountModal() {
     if (m.kind === 'members') { const ws = wbFind(m.companyId, m.workspaceId).workspace; ws.members = ws.members.includes(id) ? ws.members.filter((x) => x !== id) : [...ws.members, id]; wbSave(m.companyId); render(); }
     else { wbCollectModalDraft(); m.draft.members = m.draft.members.includes(id) ? m.draft.members.filter((x) => x !== id) : [...m.draft.members, id]; render(); }
   }; });
+  if (m.kind === 'stages') wbMountStagesModal(overlay, m);
   overlay.querySelectorAll('[data-wb-add-option]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); m.draft.config.options = m.draft.config.options || []; m.draft.config.options.push({ id: wbUid(), label: '', color: WB_PALETTE[m.draft.config.options.length % WB_PALETTE.length] }); render(); }; });
   overlay.querySelectorAll('[data-wb-del-option]').forEach((b) => { b.onclick = () => { if ((m.draft.config.options || []).length <= 1) { showToast('Keep at least one option.', 'local', 'Workspaces'); return; } wbCollectModalDraft(); const oid = b.closest('.wb-opt-item').dataset.oid; m.draft.config.options = m.draft.config.options.filter((o) => o.id !== oid); render(); }; });
   // Progress field appearance: display/color-mode selects re-render; stops add/remove; live preview on color edits.
@@ -17218,6 +17751,7 @@ function wbMountModal() {
   overlay.querySelectorAll('[data-wb-insert]').forEach((b) => { b.onclick = () => { const inp = document.getElementById('wbCalcFormula'); if (inp) { inp.value += (inp.value && !inp.value.endsWith(' ') ? ' ' : '') + b.dataset.wbInsert; inp.focus(); } }; });
   const ev = overlay.querySelector('[data-wb-auto-event]'); if (ev) ev.onchange = () => { wbCollectModalDraft(); m.draft.trigger = { event: ev.value }; render(); };
   const tf = overlay.querySelector('[data-wb-trig-field]'); if (tf) tf.onchange = () => { wbCollectModalDraft(); m.draft.trigger.value = ''; render(); };
+  overlay.querySelectorAll('[data-wb-trig-from], [data-wb-trig-to]').forEach((sel) => { sel.onchange = () => { wbCollectModalDraft(); render(); }; });
   overlay.querySelectorAll('[data-wb-actype]').forEach((s) => { s.onchange = () => { wbCollectModalDraft(); const i = +s.dataset.wbActype; const t = s.value; m.draft.actions[i] = { type: t, ...(t === 'notify' ? { message: '' } : {}) }; render(); }; });
   overlay.querySelectorAll('[data-wb-acfield]').forEach((s) => { s.onchange = () => { wbCollectModalDraft(); render(); }; });
   overlay.querySelectorAll('[data-wb-acdel]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); m.draft.actions.splice(+b.dataset.wbAcdel, 1); render(); }; });
@@ -18367,11 +18901,13 @@ function renderWorkspaceSettings(companyId) {
           <input type="hidden" name="company_id" value="${h(companyId)}" />
           <input type="hidden" name="icon_key" value="${h(iconDraft.icon_key)}" />
           <input type="hidden" name="icon_image" value="${h(iconDraft.icon_image)}" />
+          <input type="hidden" name="icon_color" value="${h(iconDraft.icon_color)}" />
+          <input type="hidden" name="icon_pack" value="${h(iconDraft.icon_pack)}" />
           ${field('Company name', 'workspace_name', companyName(companyId), true, 'text', 'workspace-name-field')}
           <div class="workspace-icon-section">
             <span>Company logo</span>
             <div class="workspace-icon-current">
-              ${workspaceIconMarkup({ ...company, icon_key: iconDraft.icon_key, icon_image: iconDraft.icon_image }, 'large')}
+              ${workspaceIconMarkup({ ...company, icon_key: iconDraft.icon_key, icon_image: iconDraft.icon_image, icon_color: iconDraft.icon_color, icon_pack: iconDraft.icon_pack }, 'large')}
               <div>
                 <strong>${h(iconDraft.icon_image ? 'Uploaded icon' : workspaceIconOption(iconDraft.icon_key).label)}</strong>
                 <small>${h(iconDraft.icon_image ? 'Custom image for this company account.' : 'Built-in icon from the Quest library.')}</small>
@@ -20291,7 +20827,9 @@ function renderConversationIcon(conversation, className) {
     }, className);
   }
   const counterpartId = conversationCounterpartProfileId(conversation);
-  if (counterpartId) return renderAvatar(messageSenderProfile(counterpartId), `avatar ${className}`);
+  if (counterpartId) {
+    return withPresenceRing(renderAvatar(messageSenderProfile(counterpartId), `avatar ${className}`), counterpartId);
+  }
   const last = conversationMessages(conversation.id).at(-1);
   const sender = last ? messageSenderProfile(last.sender_profile_id) : null;
   return renderAvatar(sender || { full_name: conversation.title }, `avatar ${className}`);
@@ -20448,7 +20986,7 @@ function renderMessageBubble(message) {
   const attachments = messageAttachments(message.id);
   return `
     <article class="message-bubble ${own ? 'own' : ''}">
-      ${renderAvatar(sender, 'avatar message-avatar')}
+      ${withPresenceRing(renderAvatar(sender, 'avatar message-avatar'), message.sender_profile_id)}
       <div class="message-card">
         <div class="message-meta">
           <strong>${h(sender.full_name || sender.email || profileName(message.sender_profile_id))}</strong>
@@ -21544,7 +22082,7 @@ function renderLandingPage(forceAuthModal = false) {
       <nav class="qb-landing-nav" aria-label="Main navigation">
         <div class="qb-landing-wrap qb-landing-nav-inner">
           <a class="qb-landing-brand" href="${appHref('/')}" data-router aria-label="Questbase home">
-            <img src="${h(questbaseModularLogoUrl)}" alt="" />
+            <img src="${h(questLogoMarkUrl)}" alt="" />
             <span>Questbase.io</span>
           </a>
           <div class="qb-landing-nav-links">
@@ -21589,7 +22127,7 @@ function renderLandingPage(forceAuthModal = false) {
           <div class="qb-landing-hero-product" id="workspaces">
             <div class="qb-landing-product-window" aria-label="Interactive Questbase workspace preview">
               <div class="qb-landing-window-bar">
-                <div class="qb-landing-window-brand"><img src="${h(questbaseModularLogoUrl)}" alt="" /><span>Questbase command center</span></div>
+                <div class="qb-landing-window-brand"><img src="${h(questLogoMarkUrl)}" alt="" /><span>Questbase command center</span></div>
                 <div class="qb-landing-window-tools" aria-hidden="true">
                   <span><i class="ti ti-search"></i></span>
                   <span><i class="ti ti-bell"></i></span>
@@ -21711,7 +22249,7 @@ function renderLandingPage(forceAuthModal = false) {
 
       <footer class="qb-landing-footer">
         <div class="qb-landing-wrap">
-          <span class="qb-landing-footer-brand"><img src="${h(questbaseModularLogoUrl)}" alt="" />Questbase.io</span>
+          <span class="qb-landing-footer-brand"><img src="${h(questLogoMarkUrl)}" alt="" />Questbase.io</span>
           <span>Every team has a place. Every handoff stays connected.</span>
           <span>© 2026 Questbase</span>
         </div>
@@ -22049,7 +22587,7 @@ function renderWorkspaceIconModal(companyId) {
   return renderModalShell('Workspace', 'Change icon', `
     <div class="workspace-icon-modal">
       <section class="workspace-icon-preview-panel">
-        ${workspaceIconMarkup({ ...(companyById(companyId) || {}), icon_key: draft.icon_key, icon_image: draft.icon_image }, 'large')}
+        ${workspaceIconMarkup({ ...(companyById(companyId) || {}), icon_key: draft.icon_key, icon_image: draft.icon_image, icon_color: draft.icon_color, icon_pack: draft.icon_pack }, 'large')}
         <div>
           <strong>${h(draft.icon_image ? 'Uploaded icon' : workspaceIconOption(selectedKey).label)}</strong>
           <span>${h(draft.icon_image ? 'This image will be saved when you save workspace settings.' : 'Choose an icon or upload a custom image.')}</span>
@@ -22062,19 +22600,51 @@ function renderWorkspaceIconModal(companyId) {
         </div>
         <input type="file" accept="image/png,image/jpeg,image/webp" data-workspace-icon-upload />
       </section>
+      ${draft.icon_image ? '' : `
+        <section class="workspace-icon-color-card" aria-label="Icon color">
+          <div>
+            <strong>Icon color</strong>
+            <span>Applies to the chosen icon wherever it appears. Uploaded images keep their own colours.</span>
+          </div>
+          <div class="icon-color-choices">
+            ${ICON_COLOR_PRESETS.map(([value, label]) => `
+              <button class="icon-color-swatch ${draft.icon_color === value ? 'active' : ''}" type="button" data-action="set-workspace-icon-color" data-icon-color="${h(value)}" style="--swatch:${h(value)}" title="${h(label)}" aria-label="${h(label)}" aria-pressed="${draft.icon_color === value ? 'true' : 'false'}"></button>
+            `).join('')}
+            <label class="icon-color-custom" title="Custom color">
+              <input type="color" value="${h(draft.icon_color)}" data-workspace-icon-color aria-label="Custom icon color" />
+              <i class="ti ti-palette" aria-hidden="true"></i>
+            </label>
+          </div>
+        </section>
+        <section class="workspace-icon-pack-row" aria-label="Icon style">
+          <strong>Icon style</strong>
+          <div class="appearance-seg" role="group" aria-label="Icon style">
+            ${WORKSPACE_ICON_PACKS.map(([id, label]) => `
+              <button class="${draft.icon_pack === id ? 'active' : ''}" type="button" data-action="set-workspace-icon-pack" data-icon-pack="${h(id)}" aria-pressed="${draft.icon_pack === id ? 'true' : 'false'}">${h(label)}</button>
+            `).join('')}
+          </div>
+          <span class="wb-sub">Both styles ship with Questbase — nothing is fetched from the internet. Solid uses the line version for icons that have no filled variant.</span>
+        </section>
+      `}
       <section class="workspace-icon-picker modal-icon-picker" aria-label="Workspace icon choices">
-        ${WORKSPACE_ICON_OPTIONS.map((item) => `
-          <button class="workspace-icon-choice ${!draft.icon_image && item.key === selectedKey ? 'active' : ''}" type="button" data-action="select-workspace-icon" data-icon-key="${h(item.key)}">
-            ${workspaceIconSvgMarkup(item)}
-            <span>${h(item.label)}</span>
-          </button>
+        ${WORKSPACE_ICON_GROUPS.map((group) => `
+          <h4 class="workspace-icon-group">${h(group)}</h4>
+          <div class="workspace-icon-group-grid">
+            ${WORKSPACE_ICON_OPTIONS.filter((item) => item.group === group).map((item) => `
+              <button class="workspace-icon-choice ${!draft.icon_image && item.key === selectedKey ? 'active' : ''}" type="button" data-action="select-workspace-icon" data-icon-key="${h(item.key)}" title="${h(item.label)}">
+                ${workspaceIconSvgMarkup(item, draft.icon_pack)}
+                <span>${h(item.label)}</span>
+              </button>
+            `).join('')}
+          </div>
         `).join('')}
       </section>
-      <div class="form-actions">
-        <button class="btn btn-primary" type="button" data-action="close-modal"><i class="ti ti-check"></i>Done</button>
-      </div>
     </div>
-  `, 'wide-modal workspace-icon-modal-panel');
+  `, 'wide-modal workspace-icon-modal-panel',
+  // Done sits in the header beside Close rather than at the foot of the dialog. The icon
+  // grid is long enough to scroll, so a footer button was often off-screen — and every
+  // choice in here already applies live, which makes Done a way out rather than a submit.
+  `<button class="btn btn-primary" type="button" data-action="close-modal"><i class="ti ti-check"></i>Done</button>`);
 }
 
 // Icon control shared by the operational-workspace create/edit modals: a live preview,
@@ -23917,6 +24487,81 @@ function toggleCommandPalette() {
   else openCommandPalette();
 }
 
+// ---- Floating message dock -------------------------------------------------
+// Only the button is eager. The launcher, people picker, guide and chat window live in
+// ./messaging/dock.js and are fetched the first time it is opened.
+let messageDockModule = null;
+let messageDockPending = null;
+
+function loadMessageDock() {
+  if (messageDockModule) return Promise.resolve(messageDockModule);
+  if (!messageDockPending) {
+    messageDockPending = Promise.all([
+      import('./messaging/dock.js'),
+      // The guide answers out of the same curated index the command palette uses, so the
+      // two can never disagree about what the product does.
+      import('./assistant/help-index.js'),
+    ]).then(([dock, help]) => {
+      // The guide index is handed to the module rather than imported inside it, so the
+      // help topics load once and both the palette and the dock read the same list.
+      dock.useHelpIndex(help.searchHelp, help.HELP_TOPICS);
+      messageDockModule = dock;
+      return messageDockModule;
+    }).catch((error) => {
+      messageDockPending = null;
+      throw error;
+    });
+  }
+  return messageDockPending;
+}
+
+function renderMessageDock() {
+  // Nothing to message on the landing, login or public pages.
+  if (!state.route || state.route.name !== 'company') return '';
+  // Hidden on Messages itself: the dock is a shortcut to that page, and its fixed button
+  // sits exactly on top of the conversation composer's Send control.
+  if (state.route.section === 'messages') return '';
+  const dock = state.messageDock;
+  const unread = companyMessageUnreadCount(activeCompanyId());
+  const button = `<button class="msgdock-fab ${dock.open ? 'open' : ''}" type="button" data-action="msgdock-toggle"
+      aria-expanded="${dock.open ? 'true' : 'false'}" aria-label="${dock.open ? 'Close messages' : 'Messages and help'}">
+      <i class="ti ${dock.open ? 'ti-x' : 'ti-message-circle'}" aria-hidden="true"></i>
+      ${!dock.open && unread ? `<span class="msgdock-fab-badge">${unread > 9 ? '9+' : unread}</span>` : ''}
+    </button>`;
+  if (!dock.open) return `<div class="msgdock">${button}</div>`;
+  if (!messageDockModule) {
+    loadMessageDock().then(() => render()).catch((error) => console.error('Message dock failed to load', error));
+    return `<div class="msgdock"><section class="msgdock-panel msgdock-loading">${questLoader('Opening messages')}</section>${button}</div>`;
+  }
+  return `<div class="msgdock">${messageDockModule.renderDock(dock, messageDockContext())}${button}</div>`;
+}
+
+// Everything the dock is allowed to read, as functions rather than state. It keeps the
+// module unable to reach into application state, and keeps permission and access
+// filtering with the code that already owns it.
+function messageDockContext() {
+  const companyId = activeCompanyId();
+  const selfId = activeSession().profile?.id || '';
+  return {
+    selfId,
+    conversations: () => companyMessageConversations(companyId).slice(0, 12),
+    lastMessage: (id) => conversationMessages(id).slice(-1)[0] || null,
+    unreadFor: (id) => conversationUnreadCount(id),
+    // Presence is ephemeral and may not have connected yet; an empty set just means
+    // nobody shows as online, which is the right default.
+    members: () => companyMembers(companyId),
+    onlineIds: () => (state.onlineProfileIds instanceof Set ? state.onlineProfileIds : new Set()),
+    conversation: (id) => state.messageConversations.find((item) => item.id === id) || null,
+    messages: (id) => conversationMessages(id).slice(-30),
+    canSend: (cid) => can('messages.send', cid),
+    fullHref: (id) => appHref(companyPath('messages', { conversation: id }, companyId)),
+    memberName,
+    timeAgo,
+    initials: wbInitials,
+    titleCase,
+  };
+}
+
 function openCommandPalette(initialQuery = '') {
   // Only meaningful inside a company workspace — there is nothing to jump to on
   // the landing or auth screens.
@@ -25144,7 +25789,22 @@ function handleAction(event, node) {
     event.preventDefault();
     state.sidebarCollapsed = !state.sidebarCollapsed;
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(state.sidebarCollapsed));
-    render();
+    // Toggle the class on the LIVE element rather than re-rendering.
+    //
+    // This is why the panel never animated no matter what the CSS said: render() replaces
+    // .quest-app with a brand new node that already carries the collapsed class, so there
+    // is no previous width for a transition to run from. A transition needs one element
+    // whose value changes — not two elements, one after the other.
+    const shell = document.querySelector('.quest-app');
+    if (!shell) { render(); return; }
+    shell.classList.toggle('sidebar-collapsed', state.sidebarCollapsed);
+    node.setAttribute('aria-label', state.sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation');
+    node.setAttribute('aria-expanded', state.sidebarCollapsed ? 'false' : 'true');
+    // One view (the pipeline stage nav) reads this state while rendering, so a render is
+    // still needed — just after the movement finishes, or it would replace the element
+    // mid-flight and cut the animation short. Scroll position survives it.
+    clearTimeout(state.sidebarSettleTimer);
+    state.sidebarSettleTimer = setTimeout(render, 360);
     return;
   }
   if (action === 'set-sidebar-scope') {
@@ -25293,6 +25953,23 @@ function handleAction(event, node) {
     event.preventDefault();
     const cardStyle = ['default', 'solid', 'glass'].includes(node.dataset.cardStyle) ? node.dataset.cardStyle : 'default';
     setAppearance({ cardStyle });
+    refreshAppearanceControls();
+    return;
+  }
+  if (action === 'set-sidebar-theme') {
+    event.preventDefault();
+    const picked = node.dataset.sidebarTheme;
+    const sidebarTheme = (picked === 'custom' || SIDEBAR_THEME_IDS.includes(picked)) ? picked : 'default';
+    setAppearance({ sidebarTheme });
+    // Re-renders the section so Custom's two colour inputs appear or disappear with it.
+    refreshAppearanceControls();
+    return;
+  }
+  if (action === 'clear-sidebar-text') {
+    event.preventDefault();
+    // Empty restores the preset's own choice rather than writing a colour that merely
+    // looks like the default -- the two diverge as soon as the preset is changed.
+    setAppearance({ sidebarText: '' });
     refreshAppearanceControls();
     return;
   }
@@ -25542,6 +26219,18 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'set-workspace-icon-color') {
+    event.preventDefault();
+    setWorkspaceIconDraft(activeCompanyId(), { icon_color: node.dataset.iconColor });
+    render();
+    return;
+  }
+  if (action === 'set-workspace-icon-pack') {
+    event.preventDefault();
+    setWorkspaceIconDraft(activeCompanyId(), { icon_pack: node.dataset.iconPack });
+    render();
+    return;
+  }
   if (action === 'open-create-operational-workspace-modal') {
     event.preventDefault();
     if (!canManageOperationalWorkspaces(activeCompanyId())) {
@@ -25733,6 +26422,59 @@ function handleAction(event, node) {
     if (!requirePermission('users.manage', companyId, 'Your role cannot manage workspace members.', 'Users')) return;
     state.modal = '';
     navigate(companyPath('users', { tab: 'members' }, companyId));
+    return;
+  }
+  if (action === 'msgdock-toggle') {
+    event.preventDefault();
+    const dock = state.messageDock;
+    // Closing always returns to the launcher, so reopening never drops someone into a
+    // conversation they finished with.
+    state.messageDock = dock.open
+      ? { ...dock, open: false, conversationId: '' }
+      : { ...dock, open: true };
+    if (state.messageDock.open) loadMessageDock().then(() => render()).catch(() => null);
+    render();
+    return;
+  }
+  if (action === 'msgdock-close') {
+    event.preventDefault();
+    state.messageDock = { ...state.messageDock, open: false, conversationId: '' };
+    render();
+    return;
+  }
+  if (action === 'msgdock-back') {
+    event.preventDefault();
+    state.messageDock = { ...state.messageDock, conversationId: '' };
+    render();
+    return;
+  }
+  if (action === 'msgdock-tab') {
+    event.preventDefault();
+    state.messageDock = { ...state.messageDock, tab: node.dataset.tab || 'recent' };
+    render();
+    return;
+  }
+  if (action === 'msgdock-open-conversation') {
+    event.preventDefault();
+    state.messageDock = { ...state.messageDock, conversationId: node.dataset.conversationId || '' };
+    markConversationRead(node.dataset.conversationId);
+    render();
+    return;
+  }
+  if (action === 'msgdock-message-person') {
+    event.preventDefault();
+    if (!requirePermission('messages.send', activeCompanyId(), 'Your role cannot start direct messages.', 'Messages')) return;
+    const profileId = node.dataset.profileId;
+    // Reuses the app's own conversation starter, which finds an existing direct thread
+    // before creating one -- otherwise the dock would spawn duplicates alongside the
+    // Messages page.
+    startDirectMessageWithProfile(activeCompanyId(), profileId, { navigate: false })
+      .then((conversationId) => {
+        if (!conversationId) return;
+        state.messageDock = { ...state.messageDock, conversationId };
+        render();
+      })
+      .catch((error) => showToast(error.message || 'Unable to start direct message.', 'error', 'Messages'));
     return;
   }
   if (action === 'message-direct-member') {
@@ -27419,7 +28161,7 @@ function onPipeDragStart(event) {
 
 function onPipeDragEnd(event) {
   event.target.closest('[data-drag-id]')?.classList.remove('dragging');
-  document.querySelectorAll('.pipe-lane.drag-over').forEach((lane) => lane.classList.remove('drag-over'));
+  document.querySelectorAll('.pipe-lane.drag-over, .wb-board-col.drag-over').forEach((lane) => lane.classList.remove('drag-over'));
   pipeDrag = null;
 }
 
@@ -27437,11 +28179,42 @@ function onPipeDrop(event) {
   event.preventDefault();
   const stage = lane.dataset.dropStage || '';
   const { kind, id } = pipeDrag;
-  document.querySelectorAll('.pipe-lane.drag-over').forEach((item) => item.classList.remove('drag-over'));
+  document.querySelectorAll('.pipe-lane.drag-over, .wb-board-col.drag-over').forEach((item) => item.classList.remove('drag-over'));
   pipeDrag = null;
   if (kind === 'contact') setContactStage(id, stage);
   if (kind === 'deal') setDealStage(id, stage);
   if (kind === 'job') setJobStage(id, stage);
+  // App Builder records carry only their id; which app they belong to comes from the
+  // board they were dropped on, so a second board on screen cannot be confused for this one.
+  if (kind === 'wb-item') {
+    const board = lane.closest('[data-wb-board]');
+    if (board) wbSetItemStage(board.dataset.company, board.dataset.workspace, board.dataset.app, id, board.dataset.field, stage);
+  }
+}
+
+/**
+ * Move a record to a stage by dragging it there. Deliberately goes through the same steps
+ * as editing the field in the record form -- timestamps, automations, save -- because a
+ * drag is an edit, and an automation that fires when a status changes should not care how
+ * the change was made.
+ */
+function wbSetItemStage(companyId, workspaceId, appId, itemId, fieldId, stageId) {
+  if (!can('workspaces.manage', companyId)) return;
+  const { workspace, app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const item = app.items.find((i) => i.id === itemId);
+  const field = app.fields.find((f) => f.id === fieldId);
+  if (!item || !field) return;
+  const next = stageId || '';
+  // Someone else may have deleted the stage since this board was drawn.
+  if (next && !canDropOn(field, next)) { showToast('That stage no longer exists — refreshing the board.', 'local', 'Workspaces'); render(); return; }
+  if ((item.values[fieldId] || '') === next) return;
+  const prev = { ...item.values };
+  item.values = { ...item.values, [fieldId]: next };
+  const stamp = new Date().toISOString(); item.updatedAt = stamp; item.lastActivityAt = stamp;
+  wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
+  wbSave(companyId);
+  render();
 }
 
 async function signOut() {
@@ -28165,6 +28938,8 @@ async function saveWorkspaceSettings(formNode) {
   const workspaceName = String(form.workspace_name || '').trim();
   const iconKey = workspaceIconOption(form.icon_key).key;
   const iconImage = sanitizeWorkspaceIconImage(form.icon_image);
+  const iconColor = normalizeIconColor(form.icon_color);
+  const iconPack = workspaceIconPack(form.icon_pack);
   if (!workspaceName) {
     showToast('Workspace name is required.', 'local', 'Settings');
     return;
@@ -28189,6 +28964,13 @@ async function saveWorkspaceSettings(formNode) {
       label: workspaceName,
       icon_key: iconKey,
       icon_image: iconImage,
+      // Applied immediately, but NOT yet persisted: the RPC call above still passes four
+      // arguments. supabase/migrations/202608021000_company_icon_color.sql adds the column
+      // and a five-argument overload, and is deliberately unapplied pending review of a
+      // production schema change. Once it is live, add `p_icon_color: iconColor` to that
+      // rpc() call and this becomes durable — until then the colour resets on reload.
+      icon_color: iconColor,
+      icon_pack: iconPack,
     })));
   delete state.workspaceIconDrafts[companyId];
   state.modal = '';
@@ -29089,7 +29871,15 @@ async function saveDirectMessage(form) {
   navigate(companyPath('messages', { conversation: conversation.id }, companyId), { replace: true });
 }
 
-async function startDirectMessageWithProfile(companyId, targetId) {
+/**
+ * Open a direct conversation with someone, creating it only if one does not exist.
+ *
+ * Returns the conversation id. `options.navigate === false` suppresses the jump to the
+ * Messages page — the floating dock opens the thread in place, and navigating would throw
+ * away the surface the person is working on, which is the whole point of the dock.
+ */
+async function startDirectMessageWithProfile(companyId, targetId, options = {}) {
+  const goToMessages = options.navigate !== false;
   const cleanTargetId = String(targetId || '').trim();
   const profile = activeSession().profile;
   if (!cleanTargetId) {
@@ -29111,8 +29901,8 @@ async function startDirectMessageWithProfile(companyId, targetId) {
   if (existing) {
     state.selectedConversationId = existing.id;
     state.modal = '';
-    navigate(companyPath('messages', { conversation: existing.id }, companyId), { replace: true });
-    return;
+    if (goToMessages) navigate(companyPath('messages', { conversation: existing.id }, companyId), { replace: true });
+    return existing.id;
   }
   const targetUser = companyAccessUsers(companyId).find((user) => (user.profile_id || user.member_id) === cleanTargetId);
   const now = new Date().toISOString();
@@ -29131,11 +29921,12 @@ async function startDirectMessageWithProfile(companyId, targetId) {
     normalizeMessageAccess({ id: `msg-access-${crypto.randomUUID()}`, company_id: companyId, conversation_id: conversation.id, target_type: 'profile', target_id: cleanTargetId }),
   ];
   const saved = await persistConversation(conversation, accessRows);
-  if (!saved) return;
+  if (!saved) return '';
   state.selectedConversationId = conversation.id;
   state.modal = '';
   notifyLocalEvent('message.direct', 'Direct message started', `${actorName()} started a direct message with ${conversation.title}.`, companyPath('messages', { conversation: conversation.id }, companyId), 'message_conversation', conversation.id, companyId, [cleanTargetId]);
-  navigate(companyPath('messages', { conversation: conversation.id }, companyId), { replace: true });
+  if (goToMessages) navigate(companyPath('messages', { conversation: conversation.id }, companyId), { replace: true });
+  return conversation.id;
 }
 
 async function startSelfMessage(companyId) {
@@ -29498,6 +30289,20 @@ function onDocumentInput(event) {
     setAppearance({ cardColor: event.target.value });
     return;
   }
+  // Live while dragging the picker, so the menu recolours under the cursor. No re-render:
+  // that would tear down the open colour popup mid-drag.
+  if (event.target.matches('[data-appearance-sidebar-bg]')) {
+    setAppearance({ sidebarBg: event.target.value });
+    return;
+  }
+  if (event.target.matches('[data-appearance-sidebar-text]')) {
+    setAppearance({ sidebarText: event.target.value });
+    return;
+  }
+  if (event.target.matches('[data-appearance-sidebar-accent]')) {
+    setAppearance({ sidebarAccent: event.target.value });
+    return;
+  }
   if (event.target.matches('[data-underwriting-field]')) {
     syncUnderwritingForm(event.target.closest('[data-underwriting-form]'));
     return;
@@ -29850,6 +30655,27 @@ function onDocumentChange(event) {
     prepareProfileAvatarCrop(event.target.closest('[data-profile-form]')).catch((error) => {
       showToast(error.message || 'Could not preview that profile picture.', 'local', 'Profile');
     });
+    return;
+  }
+  // Live while the native picker is open. No render(): that would tear the popup down
+  // mid-drag, the same reason the appearance colour inputs mutate in place.
+  // Typing filters in place. A full render() would recreate the input and lose the
+  // caret, which is the same reason the appearance colour pickers mutate rather than
+  // re-render -- here the list below is small enough to replace on its own.
+  if (event.target.matches('[data-msgdock-people-search]')) {
+    state.messageDock = { ...state.messageDock, peopleQuery: event.target.value };
+    render();
+    return;
+  }
+  if (event.target.matches('[data-msgdock-guide-search]')) {
+    state.messageDock = { ...state.messageDock, guideQuery: event.target.value };
+    render();
+    return;
+  }
+  if (event.target.matches('[data-workspace-icon-color]')) {
+    const value = normalizeIconColor(event.target.value);
+    setWorkspaceIconDraft(activeCompanyId(), { icon_color: value });
+    document.querySelectorAll('.workspace-icon-modal .workspace-icon:not(.has-upload)').forEach((el) => el.style.setProperty('--icon-color', value));
     return;
   }
   if (event.target.matches('[data-workspace-icon-upload]')) {
@@ -35609,6 +36435,13 @@ function isMutableAction(action = '') {
     'set-workspace-plugin',
     'apply-workspace-plugin-preset',
     'select-workspace-icon',
+    'msgdock-toggle',
+    'msgdock-close',
+    'msgdock-back',
+    'msgdock-tab',
+    'msgdock-open-conversation',
+    'set-workspace-icon-color',
+    'set-workspace-icon-pack',
     'start-checkout',
     'send-invite-email',
     'review-workspace',
@@ -35727,6 +36560,8 @@ function workspaceIconDraft(companyId) {
   return {
     icon_key: workspaceIconOption(draft.icon_key || company.icon_key).key,
     icon_image: sanitizeWorkspaceIconImage(draft.icon_image ?? company.icon_image),
+    icon_color: normalizeIconColor(draft.icon_color ?? company.icon_color),
+    icon_pack: workspaceIconPack(draft.icon_pack ?? company.icon_pack),
   };
 }
 
@@ -35736,6 +36571,8 @@ function setWorkspaceIconDraft(companyId, patch = {}) {
   state.workspaceIconDrafts[canonical] = {
     icon_key: workspaceIconOption(patch.icon_key || current.icon_key).key,
     icon_image: sanitizeWorkspaceIconImage(patch.icon_image ?? current.icon_image),
+    icon_color: normalizeIconColor(patch.icon_color ?? current.icon_color),
+    icon_pack: workspaceIconPack(patch.icon_pack ?? current.icon_pack),
   };
 }
 
@@ -35929,10 +36766,35 @@ async function setDefaultOperationalWorkspace(workspaceId) {
   render();
 }
 
-function workspaceIconSvgMarkup(iconOption) {
-  const option = workspaceIconOption(iconOption?.key);
-  const shape = WORKSPACE_ICON_SVG[option.key] || WORKSPACE_ICON_SVG.home;
-  return `<svg class="workspace-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${shape}</svg>`;
+function workspaceIconPack(value) {
+  const clean = String(value || '').trim();
+  return WORKSPACE_ICON_PACKS.some(([id]) => id === clean) ? clean : WORKSPACE_ICON_PACK_DEFAULT;
+}
+
+/**
+ * The Tabler glyph for an icon in a given pack.
+ *
+ * Solid falls back to the line glyph where Tabler has no filled variant -- which is most
+ * of the library. Showing a gap, or dropping those icons from the Solid pack, would make
+ * the pack choice silently change which icons exist.
+ */
+function workspaceIconGlyph(option, pack) {
+  const opt = workspaceIconOption(option?.key);
+  return (workspaceIconPack(pack) === 'solid' && opt.solid) ? opt.solid : opt.line;
+}
+
+function workspaceIconSvgMarkup(iconOption, pack) {
+  return `<i class="ti ti-${h(workspaceIconGlyph(iconOption, pack))}" aria-hidden="true"></i>`;
+}
+
+/**
+ * A stored icon colour, or the default. Anything that is not a plain 3- or 6-digit hex is
+ * rejected rather than passed through: this value goes straight into a style attribute,
+ * where an arbitrary string would be an injection point as well as a rendering bug.
+ */
+function normalizeIconColor(value) {
+  const raw = String(value ?? '').trim();
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw) ? raw.toLowerCase() : ICON_COLOR_DEFAULT;
 }
 
 function workspaceIconMarkup(companyOrId, className = '') {
@@ -35942,7 +36804,10 @@ function workspaceIconMarkup(companyOrId, className = '') {
     return `<span class="workspace-icon has-upload ${h(className)}" style="--company-accent:${h(company?.color || companyColor(company?.id))}"><img src="${h(iconImage)}" alt="" /></span>`;
   }
   const icon = workspaceIconOption(company?.icon_key);
-  return `<span class="workspace-icon ${h(className)}" style="--company-accent:${h(company?.color || companyColor(company?.id))}">${workspaceIconSvgMarkup(icon)}</span>`;
+  // A chosen glyph is drawn in the icon colour; the accent stays available for anything
+  // still keyed to it. Unset falls back to Quest orange rather than the company tint, so
+  // an account that never picks one looks like the brand rather than like its label.
+  return `<span class="workspace-icon ${h(className)}" style="--company-accent:${h(company?.color || companyColor(company?.id))};--icon-color:${h(normalizeIconColor(company?.icon_color))}">${workspaceIconSvgMarkup(icon, company?.icon_pack)}</span>`;
 }
 
 function companyIdForJob(jobId) {
@@ -36176,6 +37041,34 @@ function memberName(id) {
   if (profile) return profile?.full_name || profile?.email || id || 'Unassigned';
   const member = state.teamMembers.find((item) => item.id === id);
   return member?.full_name || member?.name || id || 'Unassigned';
+}
+
+// A dialable href for a phone value.
+//
+// The displayed number keeps whatever formatting a person typed; the href must not. A
+// tel: URI carries digits and an optional leading +, so "(602) 750-5678 ext 4" has to
+// become tel:6027505678 or the dialer receives punctuation it cannot use.
+//
+// Returns '' when there is nothing dialable, so the caller can fall back to plain text
+// rather than rendering a link that goes nowhere.
+function telHref(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  // Split an extension off FIRST. Stripping punctuation blindly turns
+  // "(602) 750-5678 ext 4" into 60275056784 — a real, different, wrong number, dialled
+  // silently. RFC 3966 carries an extension as a ;ext= parameter instead.
+  const extMatch = raw.match(/(.*?)(?:\s|^)(?:e?xt?\.?|extension|#)\s*(\d{1,6})\s*$/i);
+  const trunk = extMatch ? extMatch[1] : raw;
+  const extension = extMatch ? extMatch[2] : '';
+
+  const kept = trunk.replace(/[^\d+]/g, '');
+  const digits = kept.replace(/\+/g, '');
+  if (!digits) return '';
+  // A + is only meaningful at the front, where it means "this is an international
+  // number". Anywhere else it is a typo, and the digits are what matter.
+  const number = `${kept.startsWith('+') ? '+' : ''}${digits}`;
+  return `tel:${number}${extension ? `;ext=${extension}` : ''}`;
 }
 
 function formatPhoneNumber(value) {
@@ -36757,6 +37650,10 @@ function normalizeCompany(input) {
     pill: String(input.pill || ''),
     icon_key: workspaceIconOption(input.icon_key).key,
     icon_image: sanitizeWorkspaceIconImage(input.icon_image),
+    // Absent on rows from the database until the column exists, and normalizeIconColor
+    // turns that absence into the default rather than an empty style value.
+    icon_color: normalizeIconColor(input.icon_color),
+    icon_pack: workspaceIconPack(input.icon_pack),
     appearance_prefs: (input.appearance_prefs && typeof input.appearance_prefs === 'object')
       ? input.appearance_prefs
       : {},
@@ -38413,6 +39310,33 @@ function localDateTimeToIso(value) {
   return date.toISOString();
 }
 
+// A loading state that looks like this product rather than like a generic spinner.
+//
+// The Questbase mark is three arcs and a dot arranged as a Q, which is already the shape
+// of a loader — so the indicator echoes that geometry instead of borrowing gears from
+// somewhere else. The arcs counter-rotate at different speeds and the dot pulses, which
+// reads as machinery working without pretending to be a machine.
+//
+// Drawn as SVG rather than animating the logo PNG: a raster cannot have its parts moved
+// independently, and this way the whole thing is a few hundred bytes and stays crisp.
+function questLoader(text) {
+  return `
+    <div class="quest-loader" role="status" aria-live="polite">
+      <svg class="quest-loader-mark" viewBox="0 0 48 48" aria-hidden="true">
+        <g class="quest-loader-outer">
+          <path d="M24 6a18 18 0 0 1 15.6 9" />
+          <path d="M39.6 33A18 18 0 0 1 24 42" />
+        </g>
+        <g class="quest-loader-inner">
+          <path d="M24 13a11 11 0 0 0-9.5 5.5" />
+          <path d="M14.5 29.5A11 11 0 0 0 24 35" />
+        </g>
+        <circle class="quest-loader-dot" cx="33" cy="33" r="3.5" />
+      </svg>
+      <span class="quest-loader-text">${h(text)}</span>
+    </div>`;
+}
+
 function emptyState(text) {
   return `<div class="empty-state">${svgIcon('q-empty', 'empty-symbol')}<span>${h(text)}</span></div>`;
 }
@@ -39071,6 +39995,66 @@ function subscribeToGlobalRealtime() {
   });
   state.globalRealtimeKey = subscriptionKey;
   state.globalRealtimeChannel = channel.subscribe();
+  ensurePresenceChannel(activeCompanyId());
+}
+
+// Join the presence channel for a company and publish this client's own id.
+//
+// Presence rides the realtime connection that already exists, so this costs no table, no
+// migration and no periodic writes. A closed tab removes the entry by itself, which is the
+// property a last_seen_at column cannot offer without a staleness window.
+function ensurePresenceChannel(companyId) {
+  const client = createSupabaseClient();
+  const profileId = activeSession()?.profile?.id;
+  if (!client || !isLiveSupabaseSession() || !profileId || !companyId) return;
+
+  const key = presenceChannelName(companyId);
+  if (state.presenceKey === key && state.presenceChannel) return;
+  teardownPresence();
+
+  const applyState = () => {
+    const next = onlineProfileIds(channel.presenceState());
+    // Re-render only when the set actually changed; presence sync fires on every join and
+    // leave anywhere in the company, and a full re-render per event is wasteful.
+    const changed = next.size !== state.onlineProfileIds.size
+      || [...next].some((id) => !state.onlineProfileIds.has(id));
+    state.onlineProfileIds = next;
+    if (changed) render();
+  };
+
+  const channel = client
+    .channel(key, { config: { presence: { key: String(profileId) } } })
+    .on('presence', { event: 'sync' }, applyState)
+    .on('presence', { event: 'join' }, applyState)
+    .on('presence', { event: 'leave' }, applyState);
+
+  state.presenceKey = key;
+  state.presenceChannel = channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') channel.track(selfPresence(profileId));
+  });
+}
+
+function teardownPresence() {
+  const client = createSupabaseClient();
+  if (state.presenceChannel && client?.removeChannel) client.removeChannel(state.presenceChannel);
+  state.presenceChannel = null;
+  state.presenceKey = '';
+  state.onlineProfileIds = new Set();
+}
+
+// Whether a colleague is connected right now. Your own id always reads as online — you are
+// demonstrably here, and waiting for the round trip makes your own avatar flicker grey.
+function profileIsOnline(profileId) {
+  return isOnline(state.onlineProfileIds, profileId, activeSession()?.profile?.id);
+}
+
+// An avatar wrapped in a status ring. Colour alone cannot carry this, so the ring also
+// carries a title and a screen-reader label.
+function withPresenceRing(avatarMarkup, profileId) {
+  if (!profileId) return avatarMarkup;
+  const ring = presenceRing(profileIsOnline(profileId));
+  return `<span class="presence-ring ${ring.className}" title="${h(ring.label)}">`
+    + `${avatarMarkup}<span class="sr-only">${h(ring.label)}</span></span>`;
 }
 
 function teardownGlobalRealtime() {
@@ -39081,6 +40065,7 @@ function teardownGlobalRealtime() {
   state.globalRealtimeBatcher?.cancel();
   state.globalRealtimeBatcher = null;
   clearTimeout(state.globalRealtimeRetry);
+  teardownPresence();
 }
 
 function runMessageScenario(companyId) {

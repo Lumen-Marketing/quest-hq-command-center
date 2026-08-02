@@ -78,23 +78,36 @@ test('workspace creation allows three self-owned workspaces and platform owner o
   assert.match(quotaMigration, /grant execute on function public\.create_company_workspace\(text, text, text, text\) to authenticated;/);
 });
 
-test('workspace settings can rename and change one of many filled icons', () => {
-  const iconEntryCount = (source.match(/\{ key: '[^']+', icon: 'ti-[^']+', label: '[^']+' \}/g) || []).length;
-  assert.ok(iconEntryCount >= 45, `expected at least 45 workspace icon choices, got ${iconEntryCount}`);
+test('workspace settings can rename and change one of many icons', () => {
+  // The library used to be ~48 entries carrying one `icon: 'ti-…'` each, drawn as inline
+  // SVG. It is now a larger table of line/solid glyph names rendered with the bundled
+  // font — the SVG paths cost entry-chunk bytes per icon, which capped how many there
+  // could be. This still checks the two things that matter: there are plenty, and every
+  // name resolves to a real glyph.
+  const workspaceIconBlock = source.match(/const WORKSPACE_ICON_OPTIONS = \[[\s\S]*?\n\];/)?.[0] || '';
+  const iconEntryCount = (workspaceIconBlock.match(/\{ key: '[^']+'/g) || []).length;
+  assert.ok(iconEntryCount >= 100, `expected at least 100 workspace icon choices, got ${iconEntryCount}`);
   assert.match(source, /const WORKSPACE_ICON_OPTIONS = \[/);
-  assert.match(source, /icon: 'ti-home-filled'/);
-  assert.match(source, /icon: 'ti-settings-filled'/);
-  assert.match(source, /icon: 'ti-building-broadcast-tower-filled'/);
-  const workspaceIconBlock = source.match(/const WORKSPACE_ICON_OPTIONS = \[[\s\S]*?\];/)?.[0] || '';
-  const workspaceIconClasses = [...workspaceIconBlock.matchAll(/icon: '(ti-[^']+)'/g)].map((match) => match[1]);
-  const missingIconClasses = workspaceIconClasses.filter((iconClass) => !tablerIconsCss.includes(`.${iconClass}:before`));
+
+  const glyphs = [...workspaceIconBlock.matchAll(/\b(?:line|solid): '([a-z0-9-]+)'/g)].map((m) => m[1]);
+  const missingIconClasses = glyphs.filter((name) => !tablerIconsCss.includes(`.ti-${name}:before`));
   assert.deepEqual(missingIconClasses, [], `workspace icons missing from bundled Tabler CSS: ${missingIconClasses.join(', ')}`);
+
+  // Every entry needs a line glyph; solid is optional because Tabler only ships filled
+  // variants for some, and the pack falls back rather than showing a gap.
+  const entries = workspaceIconBlock.split('{ key:').slice(1);
+  const withoutLine = entries.filter((e) => !/\bline: '/.test(e));
+  assert.equal(withoutLine.length, 0, 'every icon needs a line glyph');
+
+  // Keys are stored on company rows, so they must be unique or two icons collide.
+  const keys = [...workspaceIconBlock.matchAll(/key: '([^']+)'/g)].map((m) => m[1]);
+  assert.equal(new Set(keys).size, keys.length, 'duplicate icon keys would collide on saved companies');
+
   assert.match(source, /function workspaceIconOption\(key\)/);
-  assert.match(source, /function workspaceIconSvgMarkup\(iconOption\)/);
+  assert.match(source, /function workspaceIconGlyph\(option, pack\)/);
+  assert.match(source, /function workspaceIconSvgMarkup\(iconOption, pack\)/);
   assert.match(source, /function workspaceIconMarkup\(companyOrId, className = ''\)/);
-  assert.match(source, /<svg class="workspace-icon-svg" viewBox="0 0 24 24"/);
-  assert.match(source, /workspaceIconSvgMarkup\(item\)/);
-  assert.match(source, /workspaceIconSvgMarkup\(icon\)/);
+  assert.match(source, /<i class="ti ti-\$\{h\(workspaceIconGlyph\(iconOption, pack\)\)\}"/);
   assert.match(source, /icon_key: workspaceIconOption\(input\.icon_key\)\.key/);
   assert.match(source, /renderWorkspaceSettings\(companyId\)/);
   assert.match(source, /data-workspace-settings-form/);

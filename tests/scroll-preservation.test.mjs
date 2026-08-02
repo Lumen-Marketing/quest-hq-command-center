@@ -1,0 +1,133 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+
+const fn = (name) => {
+  const start = main.indexOf(`function ${name}(`);
+  assert.notEqual(start, -1, `${name} should exist`);
+  return main.slice(start, main.indexOf('\n}\n', start) + 2);
+};
+
+test('scroll is captured before the render and restored after it', () => {
+  // Capturing must read the OLD DOM, so it happens at the top of render, before
+  // innerHTML is replaced.
+  assert.match(main, /function render\(\) \{\n  const keptScroll = captureScrollForRender\(\);/);
+  assert.match(main, /queueMicrotask\(\(\) => restoreScrollAfterRender\(keptScroll\)\);/);
+});
+
+// A hard-coded selector fixes one page and leaves every other one jumping — this
+// stylesheet has more than 40 scrolling containers, and which one matters depends
+// entirely on where the user is.
+test('the container to restore is discovered, not hard-coded', () => {
+  const scrollers = new Set();
+  for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/overflow(-y)?\s*:\s*(auto|scroll)/.test(m[2])) continue;
+    for (const sel of m[1].split(',').map((x) => x.trim())) {
+      if (/^\.[a-z-]+$/.test(sel)) scrollers.add(sel);
+    }
+  }
+  assert.ok(scrollers.size > 20, `expected many scrolling containers, found ${scrollers.size}`);
+  // A passive capture-phase listener records whichever one the user actually moved.
+  const track = fn('trackScrollTargets');
+  assert.match(track, /addEventListener\('scroll'/);
+  assert.match(track, /capture: true, passive: true/, 'must never delay a scroll');
+});
+
+test('an ambiguous selector is never guessed at', () => {
+  // Restoring the wrong panel is more disorienting than not restoring at all. Ambiguity
+  // is now qualified rather than abandoned, but every candidate still has to resolve to
+  // exactly one element before it is used.
+  const sel = fn('scrollTargetSelector');
+  assert.match(sel, /if \(document\.querySelectorAll\(classes\)\.length === 1\) return classes;/);
+  assert.match(sel, /CSS\.escape/);
+  const qualified = fn('qualifiedScrollSelector');
+  const checks = qualified.match(/querySelectorAll\(candidate\)\.length === 1/g) || [];
+  assert.ok(checks.length >= 2, 'each candidate must prove it is unique');
+  assert.match(qualified, /return '';/, 'and giving up is still the fallback');
+});
+
+test('the recorded position is re-read rather than trusted', () => {
+  // Something else may have scrolled the container since the last scroll event.
+  const target = fn('lastScrolledTarget');
+  assert.match(target, /top: el\.scrollTop/);
+  // And there is a sensible answer before any scroll has happened.
+  assert.match(target, /document\.querySelector\('\.work-surface'\)/);
+});
+
+test('the page scroller is handled as well as inner containers', () => {
+  assert.match(fn('trackScrollTargets'), /selector: 'window'/);
+  assert.match(fn('restoreScrollAfterRender'), /window\.scrollTo\(0, top\)/);
+});
+
+test('navigating still starts at the top, with nothing focused', () => {
+  // Preserving either on a genuine page change would land you halfway down a page you
+  // have never seen. The URL is the discriminator: a checkbox does not change it.
+  const capture = fn('captureScrollForRender');
+  assert.match(capture, /const samePage = key === lastScrollKey;/);
+  assert.match(capture, /if \(!samePage\) return null;/);
+  assert.match(fn('currentScrollKey'), /window\.location\.pathname/);
+});
+
+// Rendering destroys the node being interacted with. Without this, ticking a checkbox
+// drops focus to the body: the next Tab starts from the top of the page, so a keyboard
+// user cannot work down a list of them at all.
+test('focus survives the render, keyed on what identifies the control', () => {
+  const sel = fn('focusSelector');
+  assert.match(sel, /attr\.name\.startsWith\('data-'\)/, 'data attributes identify controls here');
+  assert.match(sel, /CSS\.escape/);
+  const restore = fn('restoreScrollAfterRender');
+  assert.match(restore, /next\.focus\(\{ preventScroll: true \}\)/, 'refocusing must not fight the scroll restore');
+});
+
+test('a caret position is restored too, so typing continues where it left off', () => {
+  assert.match(fn('captureScrollForRender'), /typeof active\.selectionStart === 'number'/);
+  assert.match(fn('restoreScrollAfterRender'), /setSelectionRange\(kept\.caret\.start, kept\.caret\.end\)/);
+});
+
+test('the other two scroll regions keep their own handling', () => {
+  assert.match(main, /function wbKeepModalScroll\(\)/);
+  assert.match(main, /SIDEBAR_SCROLL_KEY/);
+});
+
+// A kanban board has one scrolling list PER COLUMN, all sharing a class. The unique-
+// selector rule discarded every one of them, so moving a card scrolled the column back
+// to the top — which is what the rule was supposed to prevent, not cause.
+test('a repeated container is qualified rather than given up on', () => {
+  const body = fn('scrollTargetSelector');
+  assert.match(body, /if \(document\.querySelectorAll\(classes\)\.length === 1\) return classes;/);
+  assert.match(body, /return qualifiedScrollSelector\(el, classes\);/);
+});
+
+test('the qualifier keys on identity, never on position', () => {
+  // nth-child would point at a different column the moment one is added, removed or
+  // reordered — and reordering columns is exactly what the stage manager does.
+  const body = fn('qualifiedScrollSelector');
+  assert.ok(!/nth-child|nth-of-type/.test(body), 'positional selectors do not survive a re-render');
+  assert.match(body, /attr\.name\.startsWith\('data-'\)/);
+  assert.match(body, /node\.id/);
+  assert.match(body, /CSS\.escape/);
+});
+
+test('it tries the element itself before walking up', () => {
+  // The board labels each column list with its stage key, so no ancestor walk is needed.
+  const body = fn('qualifiedScrollSelector');
+  const own = body.indexOf('for (const attr of el.attributes)');
+  const up = body.indexOf('let node = el.parentElement;');
+  assert.ok(own !== -1 && up !== -1 && own < up, 'own attributes should be tried first');
+});
+
+test('every data attribute is tried, not just the first', () => {
+  // Board columns all carry the same data-drag-kind; the distinguishing attribute is
+  // further along the list, so stopping at the first one finds nothing unique.
+  const body = fn('qualifiedScrollSelector');
+  assert.ok(!/\.find\(\(a\) => a\.name\.startsWith\('data-'\)/.test(body), 'must not stop at the first attribute');
+  assert.match(body, /for \(const attr of node\.attributes\)/);
+});
+
+test('the board column carries a stable key for it to use', () => {
+  const board = readFileSync(new URL('../src/workspace/board-view.js', import.meta.url), 'utf8');
+  assert.match(board, /class="wb-board-cards" data-stage-key="\$\{h\(col\.id \?\? '__none'\)\}"/);
+});

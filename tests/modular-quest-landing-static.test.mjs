@@ -4,7 +4,8 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-const logoUrl = new URL('../src/assets/questbase-modular-logo.png', import.meta.url);
+const logoSourceUrl = new URL('../src/assets/questbase-modular-logo.png', import.meta.url);
+const logoUrl = new URL('../src/assets/questbase-mark.png', import.meta.url);
 const productReferenceUrl = new URL('../src/assets/questbase-interior-jobs.png', import.meta.url);
 
 test('public home uses the approved Modular Quest direction', () => {
@@ -43,7 +44,12 @@ test('landing assets and responsive visual system ship with the application', ()
   assert.ok(existsSync(productReferenceUrl), 'expected the selected Questbase interior reference asset');
   assert.ok(statSync(logoUrl).size > 0);
   assert.ok(statSync(productReferenceUrl).size > 0);
-  assert.match(source, /import questbaseModularLogoUrl from '\.\/assets\/questbase-modular-logo\.png'/);
+  // The master artwork stays in the repo as the generator's input, but is no longer
+  // imported: rendering a 1254px, 681 KB PNG at ~28px shipped half a megabyte for
+  // pixels nobody sees. The landing page uses the same generated mark as the shell.
+  assert.ok(existsSync(logoSourceUrl), 'the master artwork is still the generator input');
+  assert.match(source, /import questLogoMarkUrl from '\.\/assets\/questbase-mark\.png'/);
+  assert.ok(!source.includes('questbase-modular-logo.png'), 'the master should not be bundled');
   assert.match(source, /import questbaseInteriorJobsUrl from '\.\/assets\/questbase-interior-jobs\.png'/);
   assert.match(styles, /\.qb-landing-shell\s*\{/);
   assert.match(styles, /\.qb-landing-hero-grid\s*\{[\s\S]*?grid-template-columns:/);
