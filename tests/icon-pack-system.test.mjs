@@ -59,8 +59,17 @@ test('the font is vendored and subsetted, not fetched from a CDN', () => {
 test('selecting Quest costs nothing — the pack is imported only when chosen', () => {
   const body = fn('applyIconPack');
   assert.match(body, /if \(clean === 'quest'\) \{\s*delete root\.dataset\.iconPack;/);
-  assert.match(body, /import\('\.\/lucide-icons\.css'\)/);
-  assert.ok(!/^import .*lucide-icons\.css/m.test(main), 'a static import would load it for everyone');
+  // A table of thunks: the bundler needs literal import paths, so a pack cannot be a
+  // computed import.
+  assert.match(main, /lucide: \(\) => import\('\.\/lucide-icons\.css'\)/);
+  assert.match(main, /phosphor: \(\) => import\('\.\/phosphor-icons\.css'\)/);
+  assert.match(main, /remix: \(\) => import\('\.\/remix-icons\.css'\)/);
+  // Tabler is deliberately a static import — it is the default set and the fallback for
+  // any icon a pack cannot draw, so it is always needed. The selectable packs must not be.
+  assert.match(main, /^import '\.\/tabler-icons\.css';/m, 'the default set is always loaded');
+  for (const pack of ['lucide', 'phosphor', 'remix']) {
+    assert.ok(!new RegExp(`^import '\\./${pack}-icons\\.css'`, 'm').test(main), `${pack} must not be statically imported`);
+  }
 });
 
 test('a failed pack load leaves the icons alone rather than half-applied', () => {
@@ -68,7 +77,7 @@ test('a failed pack load leaves the icons alone rather than half-applied', () =>
   // The attribute is only set after the stylesheet resolves, so a slow or failed import
   // shows Quest icons rather than boxes.
   assert.match(body, /\.then\(\(\) => \{ root\.dataset\.iconPack = clean; \}\)/);
-  assert.match(body, /iconPackStylesheet = null;/, 'a failure must be retryable');
+  assert.match(body, /delete iconPackStylesheets\[clean\];/, 'a failure must be retryable');
   assert.match(body, /console\.error\('Icon pack failed to load', error\)/);
 });
 
@@ -83,7 +92,11 @@ test('the setting is offered, and says what each pack is', () => {
   // The description comes from the pack table, so it cannot drift from what shipped.
   assert.match(panel, /ICON_PACKS\.find\(\(\[id\]\) => id === a\.iconPack\)/);
   assert.match(main, /const ICON_PACKS = \[/);
-  assert.match(main, /A few icons with no Lucide equivalent keep the Quest glyph/);
+  // Each pack states its licence and any icons it cannot draw.
+  for (const pack of ['Lucide', 'Phosphor', 'Remix']) assert.ok(main.includes(pack), 'missing pack: ' + pack);
+  assert.match(main, /MIT licensed/);
+  assert.match(main, /Apache-2.0 licensed/);
+  assert.match(main, /keep the Quest glyph, because Remix does not draw them/);
 });
 
 test('the choice is per account and rides the existing sync', () => {
@@ -91,10 +104,12 @@ test('the choice is per account and rides the existing sync', () => {
   assert.match(main, /setAppearance\(\{ iconPack: node\.dataset\.iconPack \}\)/);
 });
 
-test('the build regenerates both packs together', () => {
+test('the build regenerates every pack together', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.match(pkg.scripts['build:icons'], /build-icon-subset\.mjs/);
-  assert.match(pkg.scripts['build:icons'], /build-lucide-pack\.mjs/);
+  // One builder for every pack now, driven by icon-packs.config.mjs — adding a pack is a
+  // table plus a config entry, not another script.
+  assert.match(pkg.scripts['build:icons'], /build-icon-packs\.mjs/);
   // Pinned, so a future Lucide release cannot silently renumber codepoints.
   assert.match(pkg.devDependencies['lucide-static'], /^\d+\.\d+\.\d+$/);
 });

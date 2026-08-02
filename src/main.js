@@ -215,8 +215,10 @@ const SIDEBAR_THEME_IDS = SIDEBAR_THEMES.map(([id]) => id);
 // nothing at all, and its font is fetched by the browser only once a rule using it
 // matches something on the page.
 const ICON_PACKS = [
-  ['quest', 'Quest', 'The icon set Questbase ships with.'],
-  ['lucide', 'Lucide', 'A lighter, rounder outline set. A few icons with no Lucide equivalent keep the Quest glyph.'],
+  ['quest', 'Quest', 'The icon set Questbase ships with. Tabler Icons, MIT licensed.'],
+  ['lucide', 'Lucide', 'Lighter and rounder. ISC licensed.'],
+  ['phosphor', 'Phosphor', 'Softer, more geometric, and the only set here with an equivalent for every icon in the app. MIT licensed.'],
+  ['remix', 'Remix', 'Tighter and more compact. Apache-2.0 licensed. Six site-trade icons — helmet, ladder, crane and the like — keep the Quest glyph, because Remix does not draw them.'],
 ];
 const ICON_PACK_IDS = ICON_PACKS.map(([id]) => id);
 
@@ -2855,7 +2857,14 @@ async function flushAppearanceSync() {
   if (session?.profile) session.profile.appearance_prefs = prefs;
 }
 
-let iconPackStylesheet = null;
+// One entry per pack. The import paths must be literal for the bundler to see them, so
+// this is a table of thunks rather than a computed import.
+const ICON_PACK_STYLESHEETS = {
+  lucide: () => import('./lucide-icons.css'),
+  phosphor: () => import('./phosphor-icons.css'),
+  remix: () => import('./remix-icons.css'),
+};
+const iconPackStylesheets = {};
 
 /**
  * Point the app at an icon pack.
@@ -2874,16 +2883,19 @@ function applyIconPack(pack) {
   }
   // Set the attribute first: if the import is slow the icons simply stay Quest until it
   // lands, rather than flashing through a half-applied state.
-  if (!iconPackStylesheet) {
-    iconPackStylesheet = import('./lucide-icons.css')
-      .then(() => { root.dataset.iconPack = clean; })
-      .catch((error) => {
-        iconPackStylesheet = null;
-        console.error('Icon pack failed to load', error);
-      });
+  const load = ICON_PACK_STYLESHEETS[clean];
+  if (!load) return;
+  if (iconPackStylesheets[clean]) {
+    root.dataset.iconPack = clean;
     return;
   }
-  root.dataset.iconPack = clean;
+  iconPackStylesheets[clean] = load()
+    .then(() => { root.dataset.iconPack = clean; })
+    .catch((error) => {
+      // Clear it so a later attempt refetches rather than caching the failure.
+      delete iconPackStylesheets[clean];
+      console.error('Icon pack failed to load', error);
+    });
 }
 
 function hexToRgba(hex, alpha = 1) {

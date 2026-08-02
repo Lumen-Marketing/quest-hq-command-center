@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "test": "node --test tests/*.mjs",
-    "build:icons": "node scripts/build-icon-subset.mjs && node scripts/build-lucide-pack.mjs",
+    "build:icons": "node scripts/build-icon-subset.mjs && node scripts/build-icon-packs.mjs",
     "build": "vite build && node scripts/sync-spa-assets.mjs dist && node scripts/check-bundle-budget.mjs dist && node scripts/check-bundle-boots.mjs dist",
     "ai:check": "node scripts/check-ai-context.mjs",
     "check": "npm test && npm run ai:check && npm run tenancy:check && npm run build",
@@ -22,7 +22,9 @@
   },
   "devDependencies": {
     "vite": "^7.3.6",
-    "lucide-static": "1.28.0"
+    "lucide-static": "1.28.0",
+    "remixicon": "4.9.1",
+    "@phosphor-icons/web": "2.1.2"
   },
   "overrides": {
     "esbuild": "0.28.1"
