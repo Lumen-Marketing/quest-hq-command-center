@@ -5,6 +5,7 @@ import { LUCIDE_ALIASES } from '../scripts/lucide-aliases.mjs';
 import { loadUsedIcons } from '../scripts/icon-usage.mjs';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const panel = readFileSync(new URL('../src/ui/appearance-panel.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const packCss = readFileSync(new URL('../src/lucide-icons.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const codepoints = JSON.parse(readFileSync(new URL('../node_modules/lucide-static/font/codepoints.json', import.meta.url), 'utf8'));
@@ -161,3 +162,55 @@ for (const [id, font] of PACKS) {
     }
   });
 }
+
+// --- the pack must reach every icon, not just the font ones -------------------------
+
+test('sprite symbols switch to the pack too', () => {
+  // The sidebar and module chrome use Quest's own SVG sprite. Without this, choosing a
+  // pack restyled the page but left every navigation icon unchanged — the setting looked
+  // half broken.
+  const fn2 = main.slice(main.indexOf('function svgIcon('));
+  const body = fn2.slice(0, fn2.indexOf('\n}\n'));
+  assert.match(body, /activeIconPack !== 'quest' && SYMBOL_ICON_EQUIVALENT\[id\]/);
+  assert.match(body, /<i class="ti \$\{equivalent\}/);
+  // Quest keeps its own sprite: it is the shipped look, not a fallback.
+  assert.match(body, /<use href="#\$\{h\(id\)\}">/);
+});
+
+test('every sprite symbol the app renders has an equivalent', () => {
+  // A symbol with no mapping silently keeps the sprite, so the pack would apply to some
+  // navigation icons and not others — worse than not applying at all.
+  const used = new Set([...main.matchAll(/svgIcon\('([a-z-]+)'/g)].map((m) => m[1]));
+  const at = main.indexOf('const SYMBOL_ICON_EQUIVALENT = {');
+  const table = main.slice(at, main.indexOf('\n};', at));
+  const mapped = new Set([...table.matchAll(/'(q-[a-z-]+)':/g)].map((m) => m[1]));
+  // Brand marks are deliberately excluded — an icon set has no opinion about a logo.
+  const brand = new Set(['q-logo', 'q-company']);
+  const missing = [...used].filter((id) => !mapped.has(id) && !brand.has(id));
+  assert.deepEqual(missing, [], `sprite symbols with no pack equivalent: ${missing.join(', ')}`);
+});
+
+test('the equivalents are real icons the subset ships', () => {
+  const { used } = loadUsedIcons();
+  const at = main.indexOf('const SYMBOL_ICON_EQUIVALENT = {');
+  const table = main.slice(at, main.indexOf('\n};', at));
+  const targets = [...table.matchAll(/'ti-([a-z0-9-]+)'/g)].map((m) => m[1]);
+  assert.ok(targets.length > 20, 'expected the equivalence table');
+  const missing = targets.filter((n) => !used.has(n));
+  assert.deepEqual(missing, [], `not in the icon subset: ${missing.join(', ')}`);
+});
+
+test('the active pack is mirrored rather than read per icon', () => {
+  // svgIcon runs hundreds of times in one render; reading storage or the DOM each time
+  // would be a real cost for a value that changes only when someone picks a pack.
+  assert.match(main, /let activeIconPack = 'quest';/);
+  assert.match(fn('applyIconPack'), /activeIconPack = clean;/);
+});
+
+test('a glyph standing in for a sprite is sized for a font, not an SVG', () => {
+  // .symbol-icon sets width/height/stroke/fill, none of which size a glyph — without its
+  // own rule the sidebar icons would jump when the pack changed.
+  const block = styles.slice(styles.indexOf('/* ---- Sprite symbols rendered as font glyphs'));
+  assert.match(block, /i\.symbol-icon \{[^}]*font-size: 19px;/s);
+  assert.match(block, /\.side-item i\.symbol-icon \{[^}]*font-size: 17px;/s);
+});

@@ -29807,3 +29807,30 @@ html[data-card-style="glass"] .message-context-rail {
   white-space: pre;
   color: var(--ink);
 }
+
+/* ---- Sprite symbols rendered as font glyphs ----
+   Under a non-default icon pack, svgIcon() emits <i class="ti …"> instead of an
+   <svg>, so the pack applies to navigation icons too. The .symbol-icon rules are
+   written for SVG — width/height, stroke, fill — and none of them size a glyph, so
+   the font case needs its own. Kept to the same visual size as the sprite it
+   replaces, or the sidebar would shift when the pack changes. */
+i.symbol-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  font-size: 19px;
+  line-height: 1;
+  /* Stroke and fill mean nothing to a glyph; colour comes from the text colour, which
+     is what the sprite was inheriting through currentColor anyway. */
+  stroke: none;
+  fill: none;
+}
+
+/* The collapsed rail and a few dense lists size the sprite down; match those. */
+.side-item i.symbol-icon {
+  width: 17px;
+  height: 17px;
+  font-size: 17px;
+}

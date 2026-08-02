@@ -2879,6 +2879,7 @@ const iconPackStylesheets = {};
 function applyIconPack(pack) {
   const clean = ICON_PACK_IDS.includes(pack) ? pack : 'quest';
   const root = document.documentElement;
+  activeIconPack = clean;
   if (clean === 'quest') {
     delete root.dataset.iconPack;
     return;
@@ -4749,7 +4750,52 @@ function resetDemoWorkspaceData() {
   state.sync = { label: isReadOnlyDemo() ? 'Read-only demo' : 'Demo mode', mode: 'local' };
 }
 
+// The sidebar and module chrome use Quest's own SVG sprite, not the icon font, so an
+// icon pack could not reach them: choosing Google or Phosphor restyled the page but left
+// every navigation icon as it was, which reads as the setting half working.
+//
+// Each sprite symbol has a Tabler counterpart — the module registry already declares both
+// — so under a non-default pack the sprite is swapped for that class and the pack's own
+// override applies to it like any other icon.
+const SYMBOL_ICON_EQUIVALENT = {
+  'q-symbol-analytics': 'ti-chart-bar',
+  'q-symbol-approvals': 'ti-user-check',
+  'q-symbol-automations': 'ti-automation',
+  'q-symbol-calendar': 'ti-calendar',
+  'q-symbol-clock': 'ti-clock-hour-4',
+  'q-symbol-company-chat': 'ti-users',
+  'q-symbol-crm': 'ti-building-community',
+  'q-symbol-direct-chat': 'ti-user',
+  'q-symbol-files': 'ti-folder',
+  'q-symbol-finance': 'ti-book',
+  'q-symbol-forms': 'ti-clipboard-list',
+  'q-symbol-jobs': 'ti-hammer',
+  'q-symbol-knowledge': 'ti-books',
+  'q-symbol-messages': 'ti-messages',
+  'q-symbol-role-chat': 'ti-users-group',
+  'q-symbol-settings': 'ti-settings',
+  'q-symbol-tasks': 'ti-clipboard-check',
+  'q-symbol-team-chart': 'ti-hierarchy-3',
+  'q-symbol-team-workload': 'ti-users',
+  'q-symbol-templates': 'ti-layout-grid-add',
+  'q-symbol-tickets': 'ti-ticket',
+  'q-symbol-time': 'ti-clock',
+  'q-symbol-users': 'ti-users',
+  'q-search': 'ti-search',
+  'q-empty': 'ti-inbox',
+  'q-message-file': 'ti-file',
+  'q-message-image': 'ti-photo',
+  // q-logo and q-company are brand marks, not iconography. They stay as drawn whichever
+  // pack is chosen — an icon set has no opinion about someone's logo.
+};
+
+// Mirrors the active pack so svgIcon does not read storage or the DOM per icon; there can
+// be hundreds in one render. applyIconPack keeps it current.
+let activeIconPack = 'quest';
+
 function svgIcon(id, className = 'symbol-icon') {
+  const equivalent = activeIconPack !== 'quest' && SYMBOL_ICON_EQUIVALENT[id];
+  if (equivalent) return `<i class="ti ${equivalent} ${h(className)}" aria-hidden="true"></i>`;
   return `<svg class="${h(className)}" aria-hidden="true" focusable="false"><use href="#${h(id)}"></use></svg>`;
 }
 
