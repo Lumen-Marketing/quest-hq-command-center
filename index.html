@@ -1,10 +1,17 @@
 <!doctype html>
 <html lang="en">
-  <head>
+
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#e8ebef" />
-    <title>Questbase</title>
+    <!-- Do not shorten. This exact string is the app-shell marker that
+         scripts/production-smoke.mjs looks for to tell a real page from a redirect, an
+         error shell or an auth wall. Trimming it to "Questbase" failed 28 of 36 production
+         routes while every one of them was serving correctly. The runtime replaces
+         document.title per route anyway, so this text is only ever seen by the smoke
+         check and by a tab opened before the app boots. -->
+    <title>Questbase Operations Command</title>
     <!-- The mark sits on a transparent field, so the tab icon needs two versions: its
          arcs are orange and near-black, and the near-black disappears on a dark tab bar.
          The dark variant lightens that ink. Browsers that ignore `media` on icon links
@@ -25,8 +32,9 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
     <!-- Tabler icons are imported via src/tabler-icons.css (generated subset, ~61 KB
          vs the 799 KB full font). Vite bundles and hashes it with the entry CSS. -->
-  </head>
-  <body>
+</head>
+
+<body>
     <!-- Icon sprite. This lives in the document rather than in main.js because it is
          entirely static: it was being re-serialised into innerHTML on every single
          render, and it sat in the entry chunk purely to emit a constant. Kept OUTSIDE
@@ -164,8 +172,9 @@
         <path d="M5 4.8 3.5 6.3M19 4.8l1.5 1.5" />
       </symbol>
     </svg>
-  
+
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
-  </body>
+</body>
+
 </html>
