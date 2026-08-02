@@ -5491,6 +5491,7 @@ function renderEodPage(route, companyId) {
 // The import must stay dynamic: a static one would be bundled back into the entry chunk.
 let platformPanelApi = null;
 let platformPanelPromise = null;
+let platformPanelError = null;
 
 function renderPlatformMasterPanel(companyId) {
   if (!platformPanelApi) {
@@ -5504,6 +5505,7 @@ function renderPlatformMasterPanel(companyId) {
             companyDirectoryFilters,
             companyName,
             emptyState,
+            filteredPlatformBackupCopies,
             filterCompanyRows,
             h,
             isPluginInstalled,
@@ -5514,8 +5516,10 @@ function renderPlatformMasterPanel(companyId) {
             platformMembersForCompany,
             renderAvatar,
             renderCompanyDirectoryPager,
+            renderPlatformBackupCopyRow,
             renderCompanyDirectoryToolbar,
             shortUserId,
+            state,
             subscriptionLabelForStatus,
             titleCase,
             workspaceIconSelect,
@@ -5523,9 +5527,27 @@ function renderPlatformMasterPanel(companyId) {
           });
           render();
         })
-        .catch(() => { platformPanelPromise = null; });
+        .catch((error) => {
+          // Was: a bare `.catch(() => { platformPanelPromise = null; })`. Any failure --
+          // a chunk that 404s behind a stale cache, a context key that stopped existing,
+          // an error inside the module -- vanished with no console message and no
+          // re-render, leaving "Loading..." on screen permanently. The panel then looked
+          // like a feature that does not work rather than one that failed to load.
+          platformPanelPromise = null;
+          platformPanelError = error;
+          console.error('Master panel failed to load', error);
+          render();
+        });
     }
-    return '<article class="panel span-3"><div class="section-head"><div><h2>Master panel</h2><p>Loading...</p></div></div></article>';
+    return '<article class="panel span-3"><div class="section-head"><div><h2>Master panel</h2><p>Loading…</p></div></div></article>';
+  }
+  if (platformPanelError) {
+    // Says what happened and offers a way out; clicking clears the error so the next
+    // render retries the import.
+    return `<article class="panel span-3"><div class="section-head"><div><h2>Master panel</h2><p>This panel could not be loaded.</p></div></div>
+      <p class="detail-copy">${h(platformPanelError.message || 'The admin panel failed to load.')}</p>
+      <div class="form-actions"><button class="btn btn-primary" type="button" data-action="retry-master-panel"><i class="ti ti-refresh"></i>Try again</button></div>
+    </article>`;
   }
   return platformPanelApi.renderPlatformMasterPanel(companyId);
 }
@@ -25971,6 +25993,12 @@ function handleAction(event, node) {
     // looks like the default -- the two diverge as soon as the preset is changed.
     setAppearance({ sidebarText: '' });
     refreshAppearanceControls();
+    return;
+  }
+  if (action === 'retry-master-panel') {
+    event.preventDefault();
+    platformPanelError = null;
+    render();
     return;
   }
   if (action === 'reset-appearance') {
