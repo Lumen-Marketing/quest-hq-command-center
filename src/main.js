@@ -210,11 +210,22 @@ const SIDEBAR_THEMES = [
 ];
 const SIDEBAR_THEME_IDS = SIDEBAR_THEMES.map(([id]) => id);
 
+// Icon packs. Both are vendored and subsetted -- nothing is fetched from a CDN.
+// The Lucide stylesheet is imported only when it is selected, so the default costs
+// nothing at all, and its font is fetched by the browser only once a rule using it
+// matches something on the page.
+const ICON_PACKS = [
+  ['quest', 'Quest', 'The icon set Questbase ships with.'],
+  ['lucide', 'Lucide', 'A lighter, rounder outline set. A few icons with no Lucide equivalent keep the Quest glyph.'],
+];
+const ICON_PACK_IDS = ICON_PACKS.map(([id]) => id);
+
 const APPEARANCE_KEY = 'quest-appearance';
 const APPEARANCE_DEFAULTS = {
   // The light side menu ships as the default so the brand mark reads in its full-colour
   // form rather than the lightened one. Anyone who explicitly picked a theme keeps it --
   // only an account that never chose follows this.
+  iconPack: 'quest', // one of ICON_PACK_IDS
   sidebarTheme: 'light', // one of SIDEBAR_THEME_IDS, or 'custom'
   sidebarBg: '#132038',    // used only by 'custom'
   sidebarAccent: '#e0552d',
@@ -2844,6 +2855,37 @@ async function flushAppearanceSync() {
   if (session?.profile) session.profile.appearance_prefs = prefs;
 }
 
+let iconPackStylesheet = null;
+
+/**
+ * Point the app at an icon pack.
+ *
+ * The pack is a stylesheet that overrides `content` on the same ti-* classes the app
+ * already writes, so nothing about the markup changes. Quest's icons are in the main
+ * stylesheet, so selecting it only means removing the attribute; Lucide is imported the
+ * first time it is chosen and stays loaded after that.
+ */
+function applyIconPack(pack) {
+  const clean = ICON_PACK_IDS.includes(pack) ? pack : 'quest';
+  const root = document.documentElement;
+  if (clean === 'quest') {
+    delete root.dataset.iconPack;
+    return;
+  }
+  // Set the attribute first: if the import is slow the icons simply stay Quest until it
+  // lands, rather than flashing through a half-applied state.
+  if (!iconPackStylesheet) {
+    iconPackStylesheet = import('./lucide-icons.css')
+      .then(() => { root.dataset.iconPack = clean; })
+      .catch((error) => {
+        iconPackStylesheet = null;
+        console.error('Icon pack failed to load', error);
+      });
+    return;
+  }
+  root.dataset.iconPack = clean;
+}
+
 function hexToRgba(hex, alpha = 1) {
   const clean = String(hex || '').replace('#', '').trim();
   const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean.padEnd(6, '0').slice(0, 6);
@@ -2859,6 +2901,7 @@ function getAppearance() {
   merged.cardBlur = Math.min(40, Math.max(0, Number(merged.cardBlur) || 0));
   // A theme id saved by a newer build, or hand-edited in storage, falls back rather than
   // leaving the side menu with a data attribute no stylesheet answers to.
+  if (!ICON_PACK_IDS.includes(merged.iconPack)) merged.iconPack = 'quest';
   if (merged.sidebarTheme !== 'custom' && !SIDEBAR_THEME_IDS.includes(merged.sidebarTheme)) merged.sidebarTheme = 'default';
   return merged;
 }
@@ -2930,6 +2973,8 @@ function applyAppearance(settings = getAppearance()) {
     style.removeProperty('--card-custom-bg');
     style.removeProperty('--card-blur');
   }
+
+  applyIconPack(settings.iconPack);
 
   // Side menu. 'default' clears everything rather than writing the shipped colours back,
   // so the untouched look stays the stylesheet's business and cannot drift.
@@ -3017,6 +3062,7 @@ function loadAppearancePanel() {
     appearancePanelPending = import('./ui/appearance-panel.js').then((mod) => {
       appearancePanelFn = mod.createAppearancePanel({
         h, getAppearance, canManageCompanyAppearance, sidebarThemeVars, renderAccountThemeControls,
+        ICON_PACKS,
         APPEARANCE_BG_PRESETS, SIDEBAR_THEMES,
       });
       return appearancePanelFn;
@@ -25981,6 +26027,13 @@ function handleAction(event, node) {
     event.preventDefault();
     const cardStyle = ['default', 'solid', 'glass'].includes(node.dataset.cardStyle) ? node.dataset.cardStyle : 'default';
     setAppearance({ cardStyle });
+    refreshAppearanceControls();
+    return;
+  }
+  if (action === 'set-icon-pack') {
+    event.preventDefault();
+    setAppearance({ iconPack: node.dataset.iconPack });
+    // Re-renders so the hint under the buttons describes the pack now selected.
     refreshAppearanceControls();
     return;
   }

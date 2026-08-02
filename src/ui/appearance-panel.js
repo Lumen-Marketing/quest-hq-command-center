@@ -13,6 +13,7 @@
 export function createAppearancePanel(ctx) {
   const {
     h, getAppearance, canManageCompanyAppearance, sidebarThemeVars, renderAccountThemeControls,
+    ICON_PACKS,
     APPEARANCE_BG_PRESETS, SIDEBAR_THEMES,
   } = ctx;
 
@@ -47,6 +48,15 @@ export function createAppearancePanel(ctx) {
             </button>
             <input type="file" accept="image/png,image/jpeg,image/webp" data-appearance-bg-upload hidden />
           </div>
+        </div>
+        <div class="appearance-section">
+          <div class="appearance-section-head"><i class="ti ti-sparkles"></i><span>Icons</span></div>
+          <div class="appearance-seg" role="group" aria-label="Icon set">
+            ${ICON_PACKS.map(([id, label]) => `
+              <button class="${a.iconPack === id ? 'active' : ''}" type="button" data-action="set-icon-pack" data-icon-pack="${h(id)}" aria-pressed="${a.iconPack === id ? 'true' : 'false'}">${h(label)}</button>
+            `).join('')}
+          </div>
+          <div class="appearance-hint">${h((ICON_PACKS.find(([id]) => id === a.iconPack) || ICON_PACKS[0])[2])}</div>
         </div>
         <div class="appearance-section">
           <div class="appearance-section-head"><i class="ti ti-layout-sidebar-left-collapse"></i><span>Side menu</span></div>
