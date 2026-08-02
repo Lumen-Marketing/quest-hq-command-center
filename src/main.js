@@ -3544,7 +3544,8 @@ function render() {
   }
   document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Questbase`;
   trackRouteForRecents(state.route);
-  app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette() + renderMessageDock();
+  app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette() + renderMessageDock() + renderLayoutDiagnostic();
+  mountLayoutDiagnosticIfRequested();
   queueMicrotask(restoreSidebarScroll);
   queueMicrotask(bindTimePickerInputs);
   queueMicrotask(bindGoogleAddressInputs);
@@ -24587,6 +24588,28 @@ function loadMessageDock() {
     });
   }
   return messageDockPending;
+}
+
+// ---- Layout readout (?diag=layout) -----------------------------------------
+// Which element overflows is a runtime question, and Chrome blocks pasting a snippet
+// into the console. This puts the same measurements on screen instead, behind a flag,
+// so nothing is shown or loaded unless the flag is present.
+function layoutDiagnosticRequested() {
+  return state.route?.params?.get('diag') === 'layout';
+}
+
+function renderLayoutDiagnostic() {
+  return layoutDiagnosticRequested() ? '<aside class="layout-diag" data-layout-diagnostic></aside>' : '';
+}
+
+function mountLayoutDiagnosticIfRequested() {
+  if (!layoutDiagnosticRequested()) return;
+  // After paint: heights are meaningless until the browser has laid the page out.
+  requestAnimationFrame(() => {
+    import('./ui/layout-diagnostic.js')
+      .then((mod) => mod.mountLayoutDiagnostic())
+      .catch((error) => console.error('Layout diagnostic failed to load', error));
+  });
 }
 
 function renderMessageDock() {
