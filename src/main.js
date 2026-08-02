@@ -29034,7 +29034,7 @@ async function saveWorkspaceSettings(formNode) {
   const client = createSupabaseClient();
   let live = false;
   if (client && isLiveSupabaseSession()) {
-    const result = await safeSupabaseQuery(client.rpc('update_company_workspace', { target_company_id: companyId, workspace_name: workspaceName, icon_key: iconKey, icon_image: iconImage }));
+    const result = await safeSupabaseQuery(client.rpc('update_company_workspace', { target_company_id: companyId, workspace_name: workspaceName, icon_key: iconKey, icon_image: iconImage, p_icon_color: iconColor }));
     if (result.error) {
       showToast(result.error.message || 'Workspace update failed.', 'local', 'Settings');
       return;
@@ -29051,11 +29051,9 @@ async function saveWorkspaceSettings(formNode) {
       label: workspaceName,
       icon_key: iconKey,
       icon_image: iconImage,
-      // Applied immediately, but NOT yet persisted: the RPC call above still passes four
-      // arguments. supabase/migrations/202608021000_company_icon_color.sql adds the column
-      // and a five-argument overload, and is deliberately unapplied pending review of a
-      // production schema change. Once it is live, add `p_icon_color: iconColor` to that
-      // rpc() call and this becomes durable — until then the colour resets on reload.
+      // Persisted: the RPC above passes p_icon_color, and the five-argument overload is
+      // live (migration 202608021000). The four-argument function is still granted, so an
+      // older client mid-rollout keeps working and simply leaves the colour unchanged.
       icon_color: iconColor,
       icon_pack: iconPack,
     })));

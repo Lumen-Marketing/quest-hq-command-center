@@ -130,7 +130,10 @@ test('workspace settings can rename and change one of many icons', () => {
   assert.match(source, /compressCanvasToBudget\(canvas, WORKSPACE_ICON_UPLOAD_MAX_BYTES\)/);
   assert.match(source, /if \(output\.length <= budget\) return output;/);
   assert.match(source, /async function saveWorkspaceSettings\(formNode\)/);
-  assert.match(source, /client\.rpc\('update_company_workspace', \{ target_company_id: companyId, workspace_name: workspaceName, icon_key: iconKey, icon_image: iconImage \}\)/);
+  // Five arguments now: the colour joined the call when migration 202608021000 added the
+  // column and a five-argument overload. The four-argument function is still granted, so
+  // an older client mid-rollout keeps working and simply leaves the colour unchanged.
+  assert.match(source, /client\.rpc\('update_company_workspace', \{ target_company_id: companyId, workspace_name: workspaceName, icon_key: iconKey, icon_image: iconImage, p_icon_color: iconColor \}\)/);
   assert.match(styles, /\.workspace-icon i::before,\s*\.workspace-icon-choice i::before\s*\{/);
   assert.match(styles, /\.workspace-icon-current\s*\{/);
   assert.match(styles, /\.workspace-icon-modal\s*\{/);

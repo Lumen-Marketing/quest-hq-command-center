@@ -63,14 +63,14 @@ test('dragging the custom picker repaints without a re-render', () => {
   assert.ok(!/\brender\(\)/.test(body), 'must not re-render while the picker is open');
 });
 
-test('the choice reaches the save, and its storage limit is stated', () => {
+test('the choice reaches the save and is persisted', () => {
   assert.match(main, /const iconColor = normalizeIconColor\(form\.icon_color\);/);
   assert.match(main, /<input type="hidden" name="icon_color"/);
   assert.match(main, /icon_color: iconColor,/);
-  // The gap is recorded where someone would hit it, not left to be discovered, and it
-  // names the migration that closes it.
-  assert.match(main, /supabase\/migrations\/202608021000_company_icon_color\.sql/);
-  assert.match(main, /add `p_icon_color: iconColor` to that/);
+  // It used to stop at local state; the RPC now carries it, so the colour survives a
+  // reload rather than resetting.
+  assert.match(main, /rpc\('update_company_workspace',[^)]*p_icon_color: iconColor/);
+  assert.match(main, /migration 202608021000/, 'the code should name the migration it depends on');
 });
 
 test('the active swatch is marked without putting a glyph on an unknown colour', () => {

@@ -80,19 +80,6 @@ the original tenant/workspace, and the source module's current permission check.
 ## Maps
 
 - [Schema](schema.md)
-## Committed but NOT applied
-
-`supabase/migrations/202608021000_company_icon_color.sql` is in the repository and is the
-newest migration by filename, but it has **not been run against the live project**. It was
-written for review first because it changes a production schema and adds an overload of
-`update_company_workspace`.
-
-Do not treat the repository's latest migration filename as the live schema state here. The
-live database has no `companies.icon_color` column, and the client still calls the
-four-argument RPC — the icon colour applies immediately in the UI and resets on reload
-until this is applied. Applying it is safe on its own; the four-argument function is left
-in place so a client rollback needs no database rollback.
-
 - [Relationships](relationships.md)
 - [Functions](functions.md)
 - [Security](security.md)
