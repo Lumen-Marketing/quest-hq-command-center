@@ -29762,21 +29762,4 @@ html[data-card-style="glass"] .message-context-rail {
   }
 }
 
-/* ---- One scrollbar, not two ----------------------------------------------
-   The app shell owns scrolling: .quest-app is exactly the viewport height with
-   overflow hidden, and .work-surface scrolls inside it. The document is not
-   supposed to scroll at all here — when it does, the browser draws a second
-   scrollbar beside the first and the page can be nudged a few pixels for no
-   reason.
 
-   Scoped three ways on purpose:
-     :has(.quest-app)  leaves the landing page, client portals and public forms
-                       alone — those legitimately scroll the document.
-     min-width: 981px  below this the shell deliberately switches to
-                       overflow: auto and the document scroll IS the real one.
-     overflow-y only   horizontal clipping is already handled above. */
-@media (min-width: 981px) {
-  body:has(.quest-app) {
-    overflow-y: hidden;
-  }
-}

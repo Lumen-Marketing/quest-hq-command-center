@@ -261,12 +261,3 @@ test('an account that already chose a theme is not moved to the new default', ()
   assert.match(fn.slice(0, fn.indexOf('\n}\n')), /\{ \.\.\.APPEARANCE_DEFAULTS, \.\.\.\(saved/);
 });
 
-test('the document does not scroll behind the app shell', () => {
-  // Two scrollbars: .quest-app is viewport-height with overflow hidden and .work-surface
-  // scrolls inside it, so a scrollable document is a second, redundant scrollbar.
-  const block = css.slice(css.indexOf('/* ---- One scrollbar, not two'));
-  assert.match(block, /body:has\(\.quest-app\)/, 'must not affect the landing page or portals');
-  assert.match(block, /@media \(min-width: 981px\)/, 'below this the shell scrolls on purpose');
-  assert.match(block, /overflow-y: hidden;/);
-  assert.ok(!/overflow: hidden;/.test(block), 'horizontal clipping is already handled elsewhere');
-});
