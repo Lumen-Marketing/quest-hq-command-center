@@ -24,7 +24,8 @@
     "vite": "^7.3.6",
     "lucide-static": "1.28.0",
     "remixicon": "4.9.1",
-    "@phosphor-icons/web": "2.1.2"
+    "@phosphor-icons/web": "2.1.2",
+    "material-icons": "1.13.14"
   },
   "overrides": {
     "esbuild": "0.28.1"

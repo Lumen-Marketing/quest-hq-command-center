@@ -64,10 +64,11 @@ test('selecting Quest costs nothing — the pack is imported only when chosen', 
   assert.match(main, /lucide: \(\) => import\('\.\/lucide-icons\.css'\)/);
   assert.match(main, /phosphor: \(\) => import\('\.\/phosphor-icons\.css'\)/);
   assert.match(main, /remix: \(\) => import\('\.\/remix-icons\.css'\)/);
+  assert.match(main, /material: \(\) => import\('\.\/material-icons\.css'\)/);
   // Tabler is deliberately a static import — it is the default set and the fallback for
   // any icon a pack cannot draw, so it is always needed. The selectable packs must not be.
   assert.match(main, /^import '\.\/tabler-icons\.css';/m, 'the default set is always loaded');
-  for (const pack of ['lucide', 'phosphor', 'remix']) {
+  for (const pack of ['lucide', 'phosphor', 'remix', 'material']) {
     assert.ok(!new RegExp(`^import '\\./${pack}-icons\\.css'`, 'm').test(main), `${pack} must not be statically imported`);
   }
 });
@@ -93,7 +94,7 @@ test('the setting is offered, and says what each pack is', () => {
   assert.match(panel, /ICON_PACKS\.find\(\(\[id\]\) => id === a\.iconPack\)/);
   assert.match(main, /const ICON_PACKS = \[/);
   // Each pack states its licence and any icons it cannot draw.
-  for (const pack of ['Lucide', 'Phosphor', 'Remix']) assert.ok(main.includes(pack), 'missing pack: ' + pack);
+  for (const pack of ['Lucide', 'Phosphor', 'Remix', 'Google']) assert.ok(main.includes(pack), 'missing pack: ' + pack);
   assert.match(main, /MIT licensed/);
   assert.match(main, /Apache-2.0 licensed/);
   assert.match(main, /keep the Quest glyph, because Remix does not draw them/);
@@ -110,6 +111,53 @@ test('the build regenerates every pack together', () => {
   // One builder for every pack now, driven by icon-packs.config.mjs — adding a pack is a
   // table plus a config entry, not another script.
   assert.match(pkg.scripts['build:icons'], /build-icon-packs\.mjs/);
-  // Pinned, so a future Lucide release cannot silently renumber codepoints.
-  assert.match(pkg.devDependencies['lucide-static'], /^\d+\.\d+\.\d+$/);
+  // Pinned, so an upstream release cannot silently renumber codepoints underneath the
+  // generated CSS.
+  for (const dep of ['lucide-static', 'remixicon', '@phosphor-icons/web', 'material-icons']) {
+    assert.match(pkg.devDependencies[dep], /^\d+\.\d+\.\d+$/, `${dep} must be pinned to an exact version`);
+  }
 });
+
+// --- every pack, not just the first one ---------------------------------------------
+
+const PACKS = [
+  ['lucide', 'lucide-subset.woff2'],
+  ['phosphor', 'phosphor-subset.woff2'],
+  ['remix', 'remix-subset.woff2'],
+  ['material', 'material-subset.woff2'],
+];
+
+for (const [id, font] of PACKS) {
+  const css = readFileSync(new URL(`../src/${id}-icons.css`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+
+  test(`${id}: every rule is scoped, so no other pack is affected`, () => {
+    const selectors = [...css.matchAll(/^(\[[^{]+)\{/gm)].map((m) => m[1]);
+    assert.ok(selectors.length > 0, 'expected generated rules');
+    for (const sel of selectors) {
+      assert.match(sel, new RegExp(`\\[data-icon-pack="${id}"\\]`), `unscoped: ${sel.trim().slice(0, 70)}`);
+    }
+  });
+
+  test(`${id}: the font is vendored, never fetched from a CDN`, () => {
+    // Local-only was an explicit decision — it keeps the app working offline and sends
+    // nothing about who uses it to a third party. That matters most for the Google pack.
+    assert.ok(!/fonts\.googleapis|gstatic|cdn\.|unpkg|jsdelivr/i.test(css), 'no external font source');
+    assert.ok(css.includes(`./assets/fonts/${font}`), 'should reference the local subset');
+    assert.ok(existsSync(new URL(`../src/assets/fonts/${font}`, import.meta.url)), 'subset should be committed');
+  });
+
+  test(`${id}: covers the app, and anything it cannot draw keeps Tabler`, () => {
+    const { used } = loadUsedIcons();
+    const mapped = new Set([...css.matchAll(/\.ti-([a-z0-9-]+):before\{content/g)].map((m) => m[1]));
+    const kept = [...used.keys()].filter((n) => !mapped.has(n));
+    // A pack is only worth offering if it covers nearly everything; a third of the icons
+    // falling back would read as broken rather than as a style.
+    assert.ok(mapped.size / used.size > 0.95, `${id} covers only ${Math.round(mapped.size / used.size * 100)}%`);
+    // Whatever it cannot draw must NOT take the pack's font-family, or it renders a blank
+    // box: the class would use this font while its codepoint still belongs to Tabler.
+    const familyRule = css.slice(0, css.indexOf('{\n  font-family:'));
+    for (const name of kept) {
+      assert.ok(!familyRule.includes(`.ti-${name},`) && !familyRule.endsWith(`.ti-${name}`), `${name} must keep the Tabler family`);
+    }
+  });
+}

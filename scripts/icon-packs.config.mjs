@@ -9,6 +9,7 @@
 //   Lucide   ISC              lucide-static
 //   Phosphor MIT              @phosphor-icons/web
 //   Remix    Apache-2.0       remixicon
+//   Material Apache-2.0       material-icons (Google Material Icons)
 //
 // Deliberately NOT included, and why:
 //   Hugeicons Pro     a paid commercial licence. Not vendorable without buying it.
@@ -24,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { LUCIDE_ALIASES } from './lucide-aliases.mjs';
 import { PHOSPHOR_ALIASES } from './aliases/phosphor.mjs';
 import { REMIX_ALIASES } from './aliases/remix.mjs';
+import { MATERIAL_ALIASES } from './aliases/material.mjs';
 
 const json = (path) => JSON.parse(readFileSync(path, 'utf8'));
 
@@ -31,6 +33,27 @@ const json = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const base = (name) => name.replace(/-filled$/, '');
 
 export const ICON_PACKS = [
+  {
+    id: 'material',
+    label: 'Google',
+    ttf: 'node_modules/material-icons/iconfont/material-icons-outlined.woff2',
+    outFont: 'src/assets/fonts/material-subset.woff2',
+    outCss: 'src/material-icons.css',
+    fontFamily: 'material-icons',
+    aliases: MATERIAL_ALIASES,
+    glyphs: () => {
+      // Material ships its map as a Sass map, not JSON.
+      const scss = readFileSync('node_modules/material-icons/css/_codepoints.scss', 'utf8');
+      const map = {};
+      for (const m of scss.matchAll(/"([^"]+)":\s*([0-9a-f]{4,5})/g)) map[m[1]] = parseInt(m[2], 16);
+      return map;
+    },
+    // Material separates words with underscores where every other set uses hyphens.
+    lookup: (glyphs, name) => {
+      const snake = name.replace(/-/g, '_');
+      return snake in glyphs ? glyphs[snake] : null;
+    },
+  },
   {
     id: 'lucide',
     label: 'Lucide',

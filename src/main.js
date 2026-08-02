@@ -216,6 +216,7 @@ const SIDEBAR_THEME_IDS = SIDEBAR_THEMES.map(([id]) => id);
 // matches something on the page.
 const ICON_PACKS = [
   ['quest', 'Quest', 'The icon set Questbase ships with. Tabler Icons, MIT licensed.'],
+  ['material', 'Google', 'Google Material Icons. Apache-2.0 licensed, vendored here rather than loaded from Google, so nothing about who uses the app is sent to them.'],
   ['lucide', 'Lucide', 'Lighter and rounder. ISC licensed.'],
   ['phosphor', 'Phosphor', 'Softer, more geometric, and the only set here with an equivalent for every icon in the app. MIT licensed.'],
   ['remix', 'Remix', 'Tighter and more compact. Apache-2.0 licensed. Six site-trade icons — helmet, ladder, crane and the like — keep the Quest glyph, because Remix does not draw them.'],
@@ -2860,6 +2861,7 @@ async function flushAppearanceSync() {
 // One entry per pack. The import paths must be literal for the bundler to see them, so
 // this is a table of thunks rather than a computed import.
 const ICON_PACK_STYLESHEETS = {
+  material: () => import('./material-icons.css'),
   lucide: () => import('./lucide-icons.css'),
   phosphor: () => import('./phosphor-icons.css'),
   remix: () => import('./remix-icons.css'),
