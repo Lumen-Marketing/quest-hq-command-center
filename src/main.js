@@ -3406,8 +3406,7 @@ function currentScrollKey() {
 // element that matters for is not fixed — the work surface, the builder's field list, a
 // modal body, the message stream — so a hard-coded selector fixes one page and leaves the
 // rest jumping. A scroll listener knows the answer without anyone having to maintain a
-// list.
-let lastScrolled = null;
+// list. See scrolledTargets below for what it records.
 
 function scrollTargetSelector(el) {
   if (!el || el.nodeType !== 1) return '';
@@ -3476,29 +3475,45 @@ function trackScrollTargets() {
   // Passive: this must never delay a scroll.
   document.addEventListener('scroll', (event) => {
     const el = event.target;
-    if (!el || el === document || el === document.documentElement) {
-      lastScrolled = { selector: 'window', top: window.scrollY || 0 };
-      return;
-    }
+    if (!el || el === document || el === document.documentElement) return;
     const selector = scrollTargetSelector(el);
-    if (selector) lastScrolled = { selector, top: el.scrollTop };
+    // Bounded: a long session touching many panels should not grow this without limit.
+    // Insertion order is preserved, so the oldest goes first.
+    if (!selector) return;
+    scrolledTargets.set(selector, true);
+    if (scrolledTargets.size > 24) scrolledTargets.delete(scrolledTargets.keys().next().value);
   }, { capture: true, passive: true });
 }
 
+/**
+ * Every container this session has scrolled, not just the last one.
+ *
+ * Remembering only the most recent one had a bug with a simple recipe: scroll the sidebar
+ * nav, scroll it back to the top, then scroll the page and press a button. The recorded
+ * element was the sidebar, its scrollTop was 0, and the restore -- which skips a zero --
+ * did nothing at all, so the page jumped to the top. Two scrolling regions are on screen
+ * at once here, so tracking one of them was never going to hold.
+ *
+ * Selectors, not nodes: the nodes are destroyed by the render this exists to survive.
+ */
+const scrolledTargets = new Map();
+
 function lastScrolledTarget() {
-  if (lastScrolled && lastScrolled.selector === 'window') {
-    return { selector: 'window', top: window.scrollY || 0 };
-  }
-  if (lastScrolled) {
+  const kept = [];
+  if (window.scrollY) kept.push({ selector: 'window', top: window.scrollY });
+  for (const selector of scrolledTargets.keys()) {
     let el = null;
-    try { el = document.querySelector(lastScrolled.selector); } catch { el = null; }
-    // Read it fresh: the recorded value can be stale if something scrolled it since.
-    if (el) return { selector: lastScrolled.selector, top: el.scrollTop };
+    try { el = document.querySelector(selector); } catch { el = null; }
+    // Read fresh: the recorded value goes stale as soon as anything else moves it.
+    if (el && el.scrollTop) kept.push({ selector, top: el.scrollTop });
   }
-  // Nothing recorded yet — the work surface is the common case on first interaction.
-  const surface = document.querySelector('.work-surface');
-  if (surface && surface.scrollTop) return { selector: '.work-surface', top: surface.scrollTop };
-  return window.scrollY ? { selector: 'window', top: window.scrollY } : null;
+  // The work surface is the common case, and on the very first interaction nothing has been
+  // recorded yet because no scroll event has fired.
+  if (!kept.some((entry) => entry.selector === '#workspace' || entry.selector === '.work-surface')) {
+    const surface = document.querySelector('.work-surface');
+    if (surface && surface.scrollTop) kept.push({ selector: '.work-surface', top: surface.scrollTop });
+  }
+  return kept.length ? kept : null;
 }
 
 function focusSelector(el) {
@@ -3537,15 +3552,16 @@ function captureScrollForRender() {
 function restoreScrollAfterRender(kept) {
   if (!kept) return;
   // Runs before paint, so the correction is never visible.
-  if (kept.scrolled && kept.scrolled.top) {
-    const { selector, top } = kept.scrolled;
+  // Every region that was scrolled, so the sidebar and the page both come back where they
+  // were rather than one of them winning.
+  for (const { selector, top } of kept.scrolled || []) {
     if (selector === 'window') {
       window.scrollTo(0, top);
-    } else {
-      let target = null;
-      try { target = document.querySelector(selector); } catch { target = null; }
-      if (target) target.scrollTop = top;
+      continue;
     }
+    let target = null;
+    try { target = document.querySelector(selector); } catch { target = null; }
+    if (target) target.scrollTop = top;
   }
   if (!kept.selector) return;
   // Rendering destroys the node the user was interacting with. Without this, ticking a
@@ -13229,7 +13245,10 @@ function renderUsersPage(route, companyId) {
           ${users.map((user) => renderUserAccessRow(companyId, user, canManageUsers)).join('') || emptyState('No users assigned to this company yet.')}
         </div>
       </article>
-      <article class="panel">
+      <!-- Both full width, stacked. An invite row carries an email, a code, an expiry and
+           three actions; in half a grid the email truncated mid-address and the buttons
+           crowded the code. Join requests is a short list and reads fine underneath. -->
+      <article class="panel span-2">
         <div class="section-head">
           <div><h2>Invites</h2><p>Copy a secure invite code or link for a specific email address.</p></div>
           <button class="btn btn-primary" type="button" data-action="open-invite-form" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-user-plus"></i>Invite</button>
@@ -13238,7 +13257,7 @@ function renderUsersPage(route, companyId) {
           ${companyInvites(companyId).map((invite) => renderInviteRow(invite, canManageUsers)).join('') || emptyState('No pending invites.')}
         </div>
       </article>
-      <article class="panel">
+      <article class="panel span-2">
         <div class="section-head"><div><h2>Join requests</h2><p>Approve requests into this company workspace or reject them.</p></div></div>
         <div class="access-request-list">
           ${pendingRequests.map((request) => renderJoinRequestRow(request, canManageUsers)).join('') || emptyState('No pending join requests.')}
@@ -33685,7 +33704,12 @@ function updateWorkspaceOnly() {
   const workspace = document.getElementById('workspace');
   if (!workspace) return;
   reconcileSelection(state.route);
+  // Assigning innerHTML empties the element first, so the browser clamps scrollTop to zero
+  // before the new content arrives. The node survives, but the reading position does not --
+  // this path skips the full render's scroll restore, so it has to do its own.
+  const top = workspace.scrollTop;
   workspace.innerHTML = renderWorkspace(state.route);
+  if (top) workspace.scrollTop = top;
 }
 
 // Modals are rebuilt by the full render(), so the same focus/caret restore is needed

@@ -58,8 +58,38 @@ test('the recorded position is re-read rather than trusted', () => {
 });
 
 test('the page scroller is handled as well as inner containers', () => {
-  assert.match(fn('trackScrollTargets'), /selector: 'window'/);
+  assert.match(fn('lastScrolledTarget'), /if \(window\.scrollY\) kept\.push\(\{ selector: 'window', top: window\.scrollY \}\)/);
   assert.match(fn('restoreScrollAfterRender'), /window\.scrollTo\(0, top\)/);
+});
+
+test('every scrolled region is restored, not only the most recent one', () => {
+  // Remembering one had a reproducible failure: scroll the sidebar nav, scroll it back to
+  // the top, scroll the page, press a button. The recorded element was the sidebar with a
+  // scrollTop of 0, the restore skips a zero, and the page jumped to the top. Two scrolling
+  // regions are on screen at once, so tracking one of them was never going to hold.
+  assert.match(main, /const scrolledTargets = new Map\(\);/);
+  assert.match(fn('trackScrollTargets'), /scrolledTargets\.set\(selector, true\)/);
+  assert.match(fn('lastScrolledTarget'), /for \(const selector of scrolledTargets\.keys\(\)\)/);
+  assert.match(fn('restoreScrollAfterRender'), /for \(const \{ selector, top \} of kept\.scrolled \|\| \[\]\)/);
+});
+
+test('a zero scroll position is skipped rather than recorded as a target', () => {
+  // Restoring a zero is a no-op, but keeping it in the list was what let one container at
+  // the top hide another that was not.
+  assert.match(fn('lastScrolledTarget'), /if \(el && el\.scrollTop\) kept\.push/);
+});
+
+test('the tracked set is bounded', () => {
+  // A long session touching many panels should not grow it without limit.
+  assert.match(fn('trackScrollTargets'), /if \(scrolledTargets\.size > 24\) scrolledTargets\.delete/);
+});
+
+test('the partial workspace re-render restores its own scroll', () => {
+  // Assigning innerHTML empties the element first, so the browser clamps scrollTop to zero
+  // before the new content arrives. That path skips the full render's restore entirely.
+  const body = fn('updateWorkspaceOnly');
+  assert.match(body, /const top = workspace\.scrollTop;/);
+  assert.match(body, /if \(top\) workspace\.scrollTop = top;/);
 });
 
 test('navigating still starts at the top, with nothing focused', () => {
