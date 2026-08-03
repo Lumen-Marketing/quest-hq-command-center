@@ -10,7 +10,7 @@ import {
   addStage, boardColumns, canDropOn, moveStage, pipelineField, pipelineFields,
   recolorStage, removeStage, renameStage, stageCounts, stagesOf, summaryField,
 } from './workspace/pipeline-core.js';
-import { clearableCount, clearedActivity } from './workspace/activity-log.js';
+import { clearableCount, clearedActivity, matchBuilderWorkspace } from './workspace/activity-log.js';
 import {
   assignmentRow, assignmentsToCreate, describeAssignment, findLabel,
   isValidLabelName, labelsForContact as labelsForContactRows, newLabelRow,
@@ -22903,8 +22903,21 @@ function renderOperationalWorkspaceEditModal(companyId) {
       <div class="modal-actions"><button class="btn btn-primary" type="button" data-action="close-modal">Close</button></div>
     `, 'ows-modal-panel');
   }
+  // Save sits in the header beside Close, so it is reachable without scrolling past the icon
+  // grid. It stays a submit button -- the form attribute is what lets it live outside the
+  // <form> -- so Enter in a text field still saves and the browser still validates.
+  // Clearing acts on the App Builder workspace of the same name -- the record that actually
+  // owns an activity log. Offered only when exactly one matches; see matchBuilderWorkspace.
+  const builderWs = canManage
+    ? matchBuilderWorkspace(loadWorkspaceBuilderState(companyId).workspaces, workspace.name)
+    : null;
+  const clearCount = clearableCount(builderWs);
+  const headerActions = `
+    ${builderWs ? `<button class="btn danger" type="button" data-action="open-clear-workspace-activity" data-workspace-id="${h(builderWs.id)}" ${clearCount ? '' : 'disabled'} title="${clearCount ? `Clear ${clearCount} logged action${clearCount === 1 ? '' : 's'}` : 'Nothing logged yet'}"><i class="ti ti-eraser"></i>Clear log</button>` : ''}
+    ${canManage ? `<button class="btn btn-primary" type="submit" form="operationalWorkspaceForm"><i class="ti ti-device-floppy"></i>Save workspace</button>` : ''}
+  `;
   return renderModalShell('Workspaces', 'Configure workspace', `
-    <form class="ows-modal-form" data-operational-workspace-settings-form>
+    <form class="ows-modal-form" id="operationalWorkspaceForm" data-operational-workspace-settings-form>
       <input type="hidden" name="workspace_id" value="${h(workspace.id)}" />
       ${field('Workspace name', 'workspace_name', workspace.name, true, 'text')}
       <label>Description<textarea name="workspace_description" rows="3" placeholder="What this team handles">${h(workspace.description)}</textarea></label>
@@ -22916,12 +22929,8 @@ function renderOperationalWorkspaceEditModal(companyId) {
         </select>
       </label>
       ${workspace.is_default ? '<p class="form-note">Default workspace cannot be archived.</p>' : ''}
-      <div class="modal-actions">
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-        <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save workspace</button>
-      </div>
     </form>
-  `, 'ows-modal-panel');
+  `, 'ows-modal-panel', headerActions);
 }
 
 // Switching company is a consequential move -- it changes which customers, jobs and
@@ -26484,6 +26493,14 @@ function handleAction(event, node) {
     state.operationalWorkspaceModalIcon = { icon_key: workspaceIconOption(target.icon_key).key, icon_image: sanitizeWorkspaceIconImage(target.icon_image) || '' };
     state.modal = 'operational-workspace-edit';
     render();
+    return;
+  }
+  if (action === 'open-clear-workspace-activity') {
+    event.preventDefault();
+    // state.builderModal renders ahead of state.modal, so the confirm sits on top of the
+    // Configure workspace dialog and cancelling drops straight back into it -- no returnTo
+    // needed, because the dialog underneath was never closed.
+    openWbModal({ kind: 'clear-activity', companyId: activeCompanyId(), workspaceId: node.dataset.workspaceId, error: '' });
     return;
   }
   if (action === 'set-operational-workspace-modal-icon') {

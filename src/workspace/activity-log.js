@@ -16,6 +16,23 @@
 // anyone covering their tracks would do is exactly this, and the absence of evidence would
 // look identical to a quiet week.
 
+/**
+ * Find the App Builder workspace that a sidebar ("operational") workspace stands for.
+ *
+ * These are two separate records that people read as one thing: the sidebar rail lists
+ * operational workspaces, the activity log belongs to the App Builder workspace, and no id
+ * links them. Name is the only bridge there is.
+ *
+ * Deliberately strict. An ambiguous match returns null and the caller offers nothing, because
+ * the alternative is clearing the log of a workspace nobody pointed at.
+ */
+export function matchBuilderWorkspace(workspaces, name) {
+  const wanted = String(name || '').trim().toLowerCase();
+  if (!wanted || !Array.isArray(workspaces)) return null;
+  const hits = workspaces.filter((w) => String(w?.name || '').trim().toLowerCase() === wanted);
+  return hits.length === 1 ? hits[0] : null;
+}
+
 /** How many entries a clear would remove. Shown before the action, not after. */
 export function clearableCount(workspace) {
   return Array.isArray(workspace?.activity) ? workspace.activity.length : 0;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { clearableCount, clearedActivity } from '../src/workspace/activity-log.js';
+import { clearableCount, clearedActivity, matchBuilderWorkspace } from '../src/workspace/activity-log.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const log = readFileSync(new URL('../src/workspace/activity-log.js', import.meta.url), 'utf8');
@@ -120,4 +120,35 @@ test('opening the dialog keeps the workspace edits typed behind it', () => {
 
 test('the clear is saved, not just held in memory', () => {
   assert.match(fn('wbClearWorkspaceActivity'), /wbSave\(m\.companyId\);/);
+});
+
+// --- reaching it from the sidebar workspace dialog ---------------------------------------
+
+test('a sidebar workspace is matched to its App Builder twin by name only when unambiguous', () => {
+  // Two separate records with no id linking them; name is the only bridge. An ambiguous
+  // match must offer nothing rather than clear a log nobody pointed at.
+  const list = [{ id: 'a', name: 'Main' }, { id: 'b', name: 'Field crew' }];
+  assert.equal(matchBuilderWorkspace(list, 'Main').id, 'a');
+  assert.equal(matchBuilderWorkspace(list, '  main  ').id, 'a', 'case and padding should not matter');
+  assert.equal(matchBuilderWorkspace(list, 'Ops'), null);
+  assert.equal(matchBuilderWorkspace([{ id: 'a', name: 'Main' }, { id: 'b', name: 'main' }], 'Main'), null, 'two matches is no match');
+  assert.equal(matchBuilderWorkspace(list, ''), null);
+  assert.equal(matchBuilderWorkspace(undefined, 'Main'), null);
+});
+
+test('Configure workspace offers the clear only when there is a log to clear', () => {
+  const modal = main.slice(main.indexOf('function renderOperationalWorkspaceEditModal('));
+  const body = modal.slice(0, modal.indexOf('\n}\n'));
+  assert.match(body, /const builderWs = canManage\s*\n\s*\? matchBuilderWorkspace\(/, 'no match, no button, and no button without permission');
+  assert.match(body, /data-action="open-clear-workspace-activity"/);
+  assert.match(body, /\$\{clearCount \? '' : 'disabled'\}/);
+});
+
+test('the confirm opens over the dialog rather than replacing it', () => {
+  // renderActiveModal checks state.builderModal before state.modal, so the Configure
+  // workspace dialog stays mounted underneath and cancelling lands back on it.
+  assert.match(main, /if \(state\.builderModal\) return renderWorkspaceBuilderModal\(\);/);
+  const handler = main.slice(main.indexOf("if (action === 'open-clear-workspace-activity')"));
+  assert.match(handler.slice(0, 600), /openWbModal\(\{ kind: 'clear-activity'/);
+  assert.ok(!/state\.modal = ''/.test(handler.slice(0, 600)), 'the dialog underneath must not be torn down');
 });
