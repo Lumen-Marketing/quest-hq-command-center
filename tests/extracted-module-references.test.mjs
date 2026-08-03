@@ -115,7 +115,28 @@ const FACTORY_MODULES = [
   ['src/workspace/data-io.js', 'createDataIO'],
   ['src/workspace/field-config-ui.js', 'renderFieldConfig'],
   ['src/ui/appearance-panel.js', 'createAppearancePanel'],
+  ['src/workspace/automations-ui.js', 'createAutomationsUI'],
+  ['src/messaging/dock-fields.js', 'createDockFields'],
+  ['src/crm/job-record.js', 'createJobRecord'],
 ];
+
+test('the list above covers every factory module there is', () => {
+  // Hand-maintained lists rot. This is the check that the rot gets noticed: any module
+  // exporting a create*/render* factory that takes a ctx has to be in FACTORY_MODULES.
+  const listed = new Set(FACTORY_MODULES.map(([file]) => file));
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(join(srcDir, dir), { withFileTypes: true })) {
+      const rel = dir ? `${dir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) { walk(rel); continue; }
+      if (!entry.name.endsWith('.js')) continue;
+      const text = readFileSync(join(srcDir, rel), 'utf8');
+      if (/export function \w+\(ctx\)[\s\S]{0,200}const \{/.test(text)) found.push(`src/${rel}`);
+    }
+  };
+  walk('');
+  for (const file of found) assert.ok(listed.has(file), `${file} takes a ctx but is not in FACTORY_MODULES`);
+});
 
 for (const [file, factory] of FACTORY_MODULES) {
   test(`${file.split('/').pop()}: main.js passes every key it destructures`, () => {

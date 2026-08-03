@@ -67,17 +67,24 @@ test('only workspace.activity is replaced', () => {
 test('a live session must re-enter its password', () => {
   const body = fn('wbClearWorkspaceActivity');
   assert.match(body, /if \(isLiveSupabaseSession\(\)\) \{/);
-  assert.match(body, /client\.auth\.signInWithPassword\(\{ email, password \}\)/);
-  assert.match(body, /if \(reauth\.error\) \{ m\.error = 'Incorrect password\.'/);
+  assert.match(body, /await confirmAccountPassword\(document\.getElementById\('wbClearPw'\)\?\.value \|\| ''\)/);
+  assert.match(body, /if \(!auth\.ok\) \{ m\.error = auth\.error;/);
   // Refused before anything is written.
   assert.ok(
-    body.indexOf('reauth.error') < body.indexOf('workspace.activity = clearedActivity'),
+    body.indexOf('!auth.ok') < body.indexOf('workspace.activity = clearedActivity'),
     'the password check must gate the clear, not follow it',
   );
 });
 
-test('an empty password is refused without a round trip', () => {
-  assert.match(fn('wbClearWorkspaceActivity'), /if \(!password\) \{ m\.error = 'Enter your password to confirm\.'/);
+test('the shared re-auth actually checks the password against the account', () => {
+  // Two destructive actions use it now, so it is worth pinning down in one place.
+  const body = fn('confirmAccountPassword');
+  assert.match(body, /if \(!password\) return \{ ok: false, error: 'Enter your password to confirm\.' \};/, 'no round trip for a blank field');
+  assert.match(body, /client\.auth\.signInWithPassword\(\{ email, password \}\)/);
+  assert.match(body, /if \(reauth\.error\) return \{ ok: false, error: 'Incorrect password\.' \};/);
+  // Falls back to the auth user when the cached profile has no email.
+  assert.match(body, /await client\.auth\.getUser\(\)/);
+  assert.match(body, /if \(!client \|\| !email\) return \{ ok: false, error: 'Could not verify your account\. Try again\.' \};/);
 });
 
 test('the permission is checked too, not just the password', () => {
@@ -105,7 +112,7 @@ test('the confirm dialog states the count before you agree to it', () => {
   assert.match(body, /One entry is kept/);
   assert.match(body, /Posts and files in the feed are not touched/);
   // Local demo sessions have no password to check, so they are not asked for one.
-  assert.match(body, /\$\{isLiveSupabaseSession\(\) \? `<div class="wb-field">\s*\n\s*<label for="wbClearPw">Confirm your password<\/label>/);
+  assert.match(body, /\$\{isLiveSupabaseSession\(\) \? reauthPasswordField\('wbClearPw'\) : ''\}/);
 });
 
 test('opening the dialog keeps the workspace edits typed behind it', () => {
@@ -180,15 +187,30 @@ test('the palette refuses to open over a dialog at all', () => {
 
 test('the password field names the account, so managers do not fill the topbar search', () => {
   // The trigger for the whole bug: a lone current-password field with no username sibling.
-  const modal = main.slice(main.indexOf("if (m.kind === 'clear-activity') {"));
-  const body = modal.slice(0, modal.indexOf("if (m.kind === 'app-chooser')"));
+  // Now shared, so every re-auth dialog gets it and none can be built without one.
+  const body = fn('reauthPasswordField');
   assert.match(body, /autocomplete="username"/);
   assert.match(body, /readonly/);
-  assert.ok(!/hidden/.test(body.slice(body.indexOf('autocomplete="username"') - 260, body.indexOf('autocomplete="username"') + 60)), 'display:none username fields get skipped');
+  assert.ok(!/\bhidden\b/.test(body), 'display:none username fields get skipped by some managers');
   assert.ok(
     body.indexOf('autocomplete="username"') < body.indexOf('autocomplete="current-password"'),
     'the username comes first, as managers expect',
   );
+  assert.match(body, /value="\$\{h\(activeSession\(\)\?\.profile\?\.email \|\| ''\)\}"/);
+});
+
+test('re-authentication prompts go through the shared field, not hand-rolled inputs', () => {
+  // A new destructive dialog that rolls its own password input walks straight back into the
+  // autofill trap. Sign-in forms are a different thing -- they collect a password rather than
+  // re-check one, and they already carry their own username field.
+  const inputs = main
+    .split('\n')
+    .filter((line) => line.includes('<input') && line.includes('autocomplete="current-password"'));
+  assert.equal(inputs.length, 3, inputs.join('\n'));
+  assert.ok(inputs.some((line) => line.includes('id="${h(inputId)}"')), 'one of them is the shared helper');
+  // The other two are the client-portal login and the local sign-in form.
+  const signIns = inputs.filter((line) => line.includes('name="password"'));
+  assert.equal(signIns.length, 2, 'anything else asking for a password should reuse reauthPasswordField');
 });
 
 // --- timestamps ---------------------------------------------------------------------------

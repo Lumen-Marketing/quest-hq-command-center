@@ -29931,3 +29931,95 @@ i.symbol-icon {
   content: "·";
   margin-right: 8px;
 }
+
+/* Jobs list selection. The shared `.table-head` grid is used by several tables, so the extra
+   checkbox column is added here rather than there -- .jobs-table raises the specificity. */
+.jobs-table .table-head,
+.jobs-table .table-row {
+  grid-template-columns: 34px minmax(220px, 1.3fr) minmax(210px, 1fr) 100px 110px 120px 100px 110px;
+}
+
+.jobs-table .select-cell {
+  cursor: pointer;
+  padding: 6px;
+  margin: -6px;
+  border-radius: 6px;
+}
+
+.jobs-table .table-row.selected {
+  background: var(--accent-soft, rgba(233, 101, 22, .08));
+}
+
+.jobs-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* One job per line, so a delete list of eight stays readable. */
+.jobs-delete-list {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.jobs-delete-list li { margin: 2px 0; }
+
+@media (max-width: 980px) {
+  .jobs-table .table-head,
+  .jobs-table .table-row { grid-template-columns: 34px minmax(220px, 1fr) repeat(3, auto); }
+  /* One further along than the old rule, because the checkbox is now child 1. */
+  .jobs-table .table-head span:nth-child(n+6),
+  .jobs-table .table-row span:nth-child(n+6) { display: none; }
+}
+
+/* Progress while a batch of jobs is deleted. Real progress, not a spinner alone: the deletes
+   run one at a time, so the count is something the person can actually read. */
+.jobs-delete-progress {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 18px 4px 8px;
+  text-align: center;
+}
+
+.jobs-delete-spinner {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid var(--border, #e2d5bf);
+  border-top-color: var(--danger, #d64545);
+  animation: jobs-delete-spin .8s linear infinite;
+}
+
+@keyframes jobs-delete-spin { to { transform: rotate(360deg); } }
+
+.jobs-delete-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border, #e2d5bf);
+  overflow: hidden;
+}
+
+.jobs-delete-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--danger, #d64545);
+  transition: width .25s ease;
+}
+
+.jobs-delete-count {
+  font-variant-numeric: tabular-nums;
+  opacity: .75;
+}
+
+/* Nothing to click while it runs, so the header Close button would be a lie. */
+.jobs-delete-busy .modal-head-actions { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .jobs-delete-spinner { animation-duration: 2.4s; }
+  .jobs-delete-bar span { transition: none; }
+}

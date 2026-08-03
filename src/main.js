@@ -2548,6 +2548,8 @@ const state = {
   contactQuoteConversionInFlight: {},
   contactPrefill: null,
   selectedJobId: '',
+  selectedJobIds: [],
+  jobBulkDelete: null,
   selectedTaskId: '',
   selectedFileId: '',
   jobPhotoJobId: '',
@@ -12027,15 +12029,65 @@ function renderJobBoard(companyId) {
   `;
 }
 
+// Which of the jobs on screen are ticked. Filtered against the visible rows every render, so
+// a selection cannot survive into a view that no longer shows those jobs and then delete
+// something the person cannot see.
+function selectedJobRows(companyId = activeCompanyId()) {
+  const picked = new Set(state.selectedJobIds || []);
+  return filteredJobs(companyId).filter((job) => picked.has(job.id));
+}
+
+// ---- Job record page --------------------------------------------------------
+// Body lives in ./crm/job-record.js and is fetched the first time a job is opened.
+let jobRecordModule = null;
+let jobRecordPending = null;
+
+function loadJobRecord() {
+  if (jobRecordModule) return Promise.resolve(jobRecordModule);
+  if (!jobRecordPending) {
+    jobRecordPending = import('./crm/job-record.js').then((mod) => {
+      jobRecordModule = mod.createJobRecord({
+        h, can, state, emptyState, pipelineStages, resolvePipelineStage, guidanceForJobStage,
+    activitiesFor, filteredActivitiesFor, accountById, dealById, appHref, companyPath,
+    activeWorkspaceId, money, renderActivityFilterBar, sfFeedItem, renderSfTaskRow,
+      });
+      return jobRecordModule;
+    }).catch((error) => {
+      jobRecordPending = null;
+      throw error;
+    });
+  }
+  return jobRecordPending;
+}
+
+function renderJobRecord(companyId, job) {
+  if (jobRecordModule) return jobRecordModule.renderJobRecord(companyId, job);
+  loadJobRecord().then(() => render()).catch((error) => console.error('Job record failed to load', error));
+  return questLoader('Loading job');
+}
+
 function renderJobList(companyId) {
   const rows = filteredJobs(companyId);
+  const selected = new Set(selectedJobRows(companyId).map((job) => job.id));
+  const allSelected = rows.length > 0 && rows.every((job) => selected.has(job.id));
+  const canDelete = can('jobs.manage', companyId);
   return `
     <section class="panel">
-      <div class="section-head"><div><h2>Jobs</h2><p>${rows.length} visible job${rows.length === 1 ? '' : 's'}</p></div></div>
+      <div class="section-head">
+        <div><h2>Jobs</h2><p>${rows.length} visible job${rows.length === 1 ? '' : 's'}</p></div>
+        ${selected.size ? `
+          <div class="jobs-bulk-actions">
+            <span class="contact-sel-count">${selected.size} selected</span>
+            <button class="btn btn-compact" type="button" data-action="jobs-clear-selection"><i class="ti ti-x"></i>Clear</button>
+            ${canDelete ? `<button class="btn btn-compact danger" type="button" data-action="jobs-bulk-delete"><i class="ti ti-trash"></i>Delete ${selected.size}</button>` : ''}
+          </div>
+        ` : ''}
+      </div>
       <div class="data-table jobs-table">
-        <div class="table-head"><span>Job</span><span>What's next</span><span>Type</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Value</span></div>
+        <div class="table-head"><span class="select-cell" data-action="toggle-job-select-all"><input type="checkbox" ${allSelected ? 'checked' : ''} aria-label="Select all jobs" /></span><span>Job</span><span>What's next</span><span>Type</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Value</span></div>
         ${rows.map((job) => `
-          <div class="table-row ${job.id === state.selectedJobId ? 'active' : ''}" role="button" tabindex="0" data-action="open-job" data-job-id="${h(job.id)}">
+          <div class="table-row ${selected.has(job.id) ? 'selected ' : ''}${job.id === state.selectedJobId ? 'active' : ''}" role="button" tabindex="0" data-action="open-job" data-job-id="${h(job.id)}">
+            <span class="select-cell" data-action="toggle-job-select" data-job-id="${h(job.id)}"><input type="checkbox" ${selected.has(job.id) ? 'checked' : ''} aria-label="Select ${h(job.name)}" /></span>
             <span class="cell-lead">${pipelineDot(pipelineStageColor('jobs', resolvePipelineStage('jobs', job.stage, companyId), companyId))}<span><strong>${h(job.name)}</strong><small>${h(job.client_name || 'No client')} - ${h(job.site_address || 'No address')}</small></span></span>
             ${renderPipelineNextAction('job', job, { compact: true })}
             <span>${h(job.job_type || '—')}</span>
@@ -12103,158 +12155,6 @@ function guidanceForJobStage(name) {
   return { t: 'Move the job forward.', b: ['Confirm the next operational step.', 'Assign the responsible person.', 'Log the latest customer or field update.'] };
 }
 
-function renderJobRecord(companyId, job) {
-  if (!job) return emptyState('Create a job to see the record workspace.');
-  const stages = pipelineStages('jobs', companyId);
-  const currentStage = resolvePipelineStage('jobs', job.stage, companyId);
-  const ci = stages.findIndex((stage) => stage.name === currentStage);
-  const currentIndex = ci >= 0 ? ci : 0;
-  const g = guidanceForJobStage(currentStage);
-  const activeTab = state.jobActivityTab || 'Note';
-  const totalFeed = activitiesFor('job', job.id);
-  const feed = filteredActivitiesFor('job', job.id);
-  const tasks = state.tasks
-    .filter((task) => task.project_id === job.id)
-    .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || String(a.due).localeCompare(String(b.due)));
-  const account = accountById(job.account_id);
-  const deal = dealById(job.deal_id);
-  const showCrm = can('crm.view', companyId);
-  const fieldRow = (label, content, editKey = '') => `
-    <div class="sf-field">
-      <div class="sf-field-label">
-        ${h(label)}
-        ${editKey
-          ? `<button class="sf-pencil" type="button" data-job-edit="${h(editKey)}" data-job-id="${h(job.id)}" aria-label="Edit ${h(label)}"><i class="ti ti-pencil"></i></button>`
-          : `<button class="sf-pencil" type="button" data-action="open-job-form" data-mode="edit" data-job-id="${h(job.id)}" aria-label="Edit ${h(label)}"><i class="ti ti-pencil"></i></button>`}
-      </div>
-      <div class="sf-field-value">${content}</div>
-    </div>
-  `;
-  const ed = (key, opts = {}) => {
-    const display = (job[key] === '' || job[key] == null) ? '-' : job[key];
-    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : ''].filter(Boolean).join(' ');
-    return `<span class="${cls}" data-job-edit="${h(key)}" data-job-id="${h(job.id)}" title="Click to edit">${h(String(display))}</span>`;
-  };
-  const headerActions = [
-    ['New Task', 'ti-checkbox'],
-    ...(can('files.view', companyId) ? [['Photos', 'ti-camera']] : []),
-    ['Log a Call', 'ti-phone'],
-    ['New Estimate', 'ti-calculator'],
-    ['Proposal', 'ti-file-text'],
-    ['Add Note', 'ti-note'],
-    ...(can('files.view', companyId) ? [['Open Files', 'ti-folder']] : []),
-    ['Edit', 'ti-pencil'],
-  ];
-  const activityTabs = [['Note', 'ti-note'], ['New Task', 'ti-checkbox'], ['New Event', 'ti-calendar'], ['Log a Call', 'ti-phone']];
-  const quickTiles = [
-    ['Task', 'ti-checkbox'],
-    ...(can('files.view', companyId) ? [['Photos', 'ti-camera']] : []),
-    ['Estimate', 'ti-calculator'],
-    ['Proposal', 'ti-file-text'],
-    ...(can('files.view', companyId) ? [['Files', 'ti-folder']] : []),
-    ...(can('forms.view', companyId) ? [['Form', 'ti-clipboard-list']] : []),
-    ...(can('finance.view', companyId) ? [['Invoice', 'ti-receipt-dollar']] : []),
-    ['Note', 'ti-note'],
-    ...(can('team.view', companyId) ? [['Analytics', 'ti-chart-bar']] : []),
-  ];
-
-  return `
-    <div class="sf-record job-record">
-      <div class="sf-object-tabs">
-        <a class="sf-object-tab" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router>Dashboard</a>
-        <a class="sf-object-tab" href="${appHref(companyPath('jobs', {}, companyId))}" data-router>All Jobs <span class="sf-tab-kind">| Jobs</span></a>
-        <span class="sf-object-tab on">${h(job.name)} <span class="sf-tab-kind">| Job</span></span>
-      </div>
-
-      <div class="sf-record-head">
-        <span class="sf-record-icon"><i class="ti ti-briefcase"></i></span>
-        <div><div class="sf-record-label">Job</div><div class="sf-record-name">${h(job.name)}</div></div>
-        <div class="sf-actions">
-          <button class="sf-btn" type="button" data-action="open-record-history" data-record-type="job" data-record-id="${h(job.id)}" data-record-label="${h(job.name)}" data-company-id="${h(job.company_id || companyId)}" data-workspace-id="${h(job.workspace_id || activeWorkspaceId())}"><i class="ti ti-history"></i>History</button>
-          ${headerActions.map(([label, ico]) => label === 'Edit'
-            ? `<button class="sf-btn" type="button" data-action="open-job-form" data-mode="edit" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`
-            : label === 'Photos'
-              ? `<button class="sf-btn" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`
-              : `<button class="sf-btn" type="button" data-action="job-quick" data-kind="${h(label)}" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
-        </div>
-      </div>
-
-      <div class="sf-path-wrap">
-        <div class="sf-path-row">
-          <div class="sf-stage-track">
-            ${stages.map((stage, i) => {
-              const cls = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'future';
-              return `<button class="sf-stage ${cls}" type="button" data-action="set-job-stage" data-job-id="${h(job.id)}" data-stage="${h(stage.name)}" title="Move to ${h(stage.name)}">${i < currentIndex ? '<i class="ti ti-check"></i>' : h(stage.name)}</button>`;
-            }).join('')}
-          </div>
-          <button class="sf-mark-btn" type="button" data-action="job-mark-next" data-job-id="${h(job.id)}">Mark as Current Stage</button>
-        </div>
-        <div class="sf-guidance">
-          <div class="sf-guidance-label">Guidance for Success</div>
-          <div class="sf-guidance-title">${h(g.t)}</div>
-          <div class="sf-guidance-lines">${g.b.map((line) => `<div>- ${h(line)}</div>`).join('')}</div>
-        </div>
-      </div>
-
-      <div class="sf-three-col">
-        <div class="sf-col">
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>Job Details</div><div class="sf-card-body">
-            ${fieldRow('Client', ed('client_name', { blue: true }), 'client_name')}
-            ${fieldRow('Contact', ed('contact_name', { blue: true }), 'contact_name')}
-            ${fieldRow('Site Address', `${ed('site_address')}${job.site_address ? `<button class="sf-field-action" type="button" data-action="open-location-picker" data-location-kind="job" data-location-id="${h(job.id)}" data-location-field="site_address" data-address="${h(job.site_address)}"><i class="ti ti-map-pin"></i>Map pin</button>` : ''}`, 'site_address')}
-            ${fieldRow('Job Type', `<span class="sf-pill sf-edit" data-job-edit="job_type" data-job-id="${h(job.id)}" title="Click to edit">${h(job.job_type || '-')}</span>`, 'job_type')}
-            ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
-            ${fieldRow('Priority', `<span class="sf-pill sf-edit" data-job-edit="priority" data-job-id="${h(job.id)}" title="Click to edit">${h(job.priority || 'Medium')}</span>`, 'priority')}
-          </div></div>
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
-            ${fieldRow('Stage', `<span>${h(job.stage)}</span>`, 'stage')}
-            ${fieldRow('Estimate Total', `<span class="sf-money"><span class="sf-edit mono" data-job-edit="estimate_total" data-job-id="${h(job.id)}" title="Click to edit">${money(job.estimate_total || 0)}</span></span>`, 'estimate_total')}
-            ${fieldRow('Invoice Total', `<span class="sf-money"><span class="sf-edit mono" data-job-edit="invoice_total" data-job-id="${h(job.id)}" title="Click to edit">${money(job.invoice_total || 0)}</span></span>`, 'invoice_total')}
-            ${fieldRow('Account', account ? (showCrm ? `<button class="link-button" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(account.name)}</button>` : `<span>${h(account.name)}</span>`) : '<span>-</span>')}
-            ${fieldRow('Deal', deal ? (showCrm ? `<button class="link-button" type="button" data-action="open-deal" data-deal-id="${h(deal.id)}">${h(deal.name)}</button>` : `<span>${h(deal.name)}</span>`) : '<span>-</span>')}
-          </div></div>
-        </div>
-
-        <div class="sf-col">
-          <div class="sf-card">
-            <div class="sf-activity-tabs">${activityTabs.map(([label, ico]) => `<button class="sf-activity-tab ${activeTab === label ? 'active' : ''}" type="button" data-action="open-docked-activity" data-related-type="job" data-related-id="${h(job.id)}" data-kind="${h(label)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}</div>
-            <form class="sf-note-box" data-job-note-form autocomplete="off">
-              <input type="hidden" name="job_id" value="${h(job.id)}" />
-              <input name="body" placeholder="Write a note or @mention..." />
-              <span class="sf-note-tools"><i class="ti ti-paperclip"></i><i class="ti ti-at"></i></span>
-              <button class="sf-btn" type="submit">Post</button>
-            </form>
-            ${renderActivityFilterBar(totalFeed.length, feed.length)}
-            <div class="sf-feed">
-              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : `<div class="sf-feed-empty">${totalFeed.length ? 'No activity matches this filter.' : 'No job activity yet. Log a note, call, or meeting.'}</div>`}
-            </div>
-          </div>
-        </div>
-
-        <div class="sf-col">
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-bolt"></i>Quick Create</div>
-            <div class="sf-quick-grid">${quickTiles.map(([label, ico]) => label === 'Photos'
-              ? `<button class="sf-quick-tile" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i><span>${h(label)}</span></button>`
-              : `<button class="sf-quick-tile" type="button" data-action="job-quick" data-kind="${h(label)}" data-job-id="${h(job.id)}"><i class="ti ${ico}"></i><span>${h(label)}</span></button>`).join('')}</div>
-          </div>
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-apps"></i>Linked Workspace</div>
-            <div class="sf-quick-grid">
-              <a class="sf-quick-tile" href="${appHref(companyPath('tasks', { job_id: job.id }, companyId))}" data-router><i class="ti ti-checkbox"></i><span>Open Tasks</span></a>
-              ${can('files.view', companyId) ? `<a class="sf-quick-tile" href="${appHref(companyPath('files', { folder: 'jobs', job_id: job.id }, companyId))}" data-router><i class="ti ti-folder"></i><span>Files</span></a>` : ''}
-              ${can('forms.view', companyId) ? `<a class="sf-quick-tile" href="${appHref(companyPath('forms', { job_id: job.id }, companyId))}" data-router><i class="ti ti-clipboard-list"></i><span>Forms</span></a>` : ''}
-              ${can('team.view', companyId) ? `<a class="sf-quick-tile" href="${appHref(companyPath('analytics', { job_id: job.id }, companyId))}" data-router><i class="ti ti-chart-bar"></i><span>Analytics</span></a>` : ''}
-            </div>
-          </div>
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-checkbox"></i>Open Tasks<span class="sf-connect"><i class="ti ti-plug"></i>Connect</span></div>
-            <div class="sf-tasks">
-              ${tasks.map((task) => renderSfTaskRow(task, { checkMode: 'open' })).join('') || '<div class="sf-task-empty">No tasks yet.</div>'}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
 
 function renderJobEditor(companyId, job) {
   const edit = job || blankJob(companyId);
@@ -16380,6 +16280,42 @@ function closeWbModal() { state.builderModal = null; render(); }
  * history, and a signed-in session left open on someone's desk should not be enough. It
  * mirrors the workspace-delete flow, which does the same for the same reason.
  */
+/**
+ * The password field for a destructive action, plus the account it belongs to.
+ *
+ * The account name is not decoration. A lone autocomplete="current-password" input sends
+ * password managers looking for somewhere to put the username, and Chrome picked the topbar
+ * search -- which opens the command palette, which then owned the keyboard and made the
+ * password field impossible to type into. Naming the account here gives the manager the pair
+ * it wants. Readonly and visible, because display:none username fields get skipped and
+ * saying whose password is being asked for belongs in a re-authentication dialog anyway.
+ */
+function reauthPasswordField(inputId, label = 'Confirm your password') {
+  return `<div class="wb-field">
+    <label for="${h(inputId)}">${h(label)}</label>
+    <input class="wb-input" type="text" name="username" value="${h(activeSession()?.profile?.email || '')}" autocomplete="username" readonly aria-label="Signed in as" />
+    <input class="wb-input" type="password" id="${h(inputId)}" autocomplete="current-password" placeholder="Your account password" />
+  </div>`;
+}
+
+/**
+ * Re-check the signed-in person's password.
+ *
+ * Being signed in is not enough for something that destroys data: a session left open on
+ * someone's desk should not be. Returns a message rather than throwing, because every caller
+ * shows it in the dialog the person is already looking at.
+ */
+async function confirmAccountPassword(password) {
+  if (!password) return { ok: false, error: 'Enter your password to confirm.' };
+  const client = createSupabaseClient();
+  let email = activeSession()?.profile?.email || '';
+  if (!email && client) { try { email = (await client.auth.getUser())?.data?.user?.email || ''; } catch { /* fall through */ } }
+  if (!client || !email) return { ok: false, error: 'Could not verify your account. Try again.' };
+  const reauth = await client.auth.signInWithPassword({ email, password });
+  if (reauth.error) return { ok: false, error: 'Incorrect password.' };
+  return { ok: true, error: '' };
+}
+
 async function wbClearWorkspaceActivity(button) {
   const m = state.builderModal;
   if (!m || m.kind !== 'clear-activity') return;
@@ -16392,16 +16328,10 @@ async function wbClearWorkspaceActivity(button) {
   if (!workspace) { state.builderModal = null; render(); return; }
 
   if (isLiveSupabaseSession()) {
-    const password = document.getElementById('wbClearPw')?.value || '';
-    if (!password) { m.error = 'Enter your password to confirm.'; render(); return; }
-    const client = createSupabaseClient();
-    let email = activeSession()?.profile?.email || '';
-    if (!email && client) { try { email = (await client.auth.getUser())?.data?.user?.email || ''; } catch { /* fall through */ } }
-    if (!client || !email) { m.error = 'Could not verify your account. Try again.'; render(); return; }
     if (button) button.disabled = true;
-    const reauth = await client.auth.signInWithPassword({ email, password });
+    const auth = await confirmAccountPassword(document.getElementById('wbClearPw')?.value || '');
     if (button) button.disabled = false;
-    if (reauth.error) { m.error = 'Incorrect password.'; render(); return; }
+    if (!auth.ok) { m.error = auth.error; render(); return; }
   }
 
   workspace.activity = clearedActivity(workspace, {
@@ -16793,18 +16723,7 @@ function renderWorkspaceBuilderModal() {
       `${m.error ? `<div class="wb-modal-error" role="alert">${h(m.error)}</div>` : ''}
       <p class="wb-sub">This removes <b>${count}</b> logged ${count === 1 ? 'action' : 'actions'} from <b>${h(ws?.name || 'this workspace')}</b>. It cannot be undone.</p>
       <p class="wb-sub">One entry is kept, recording that you cleared the log and how many entries went. Posts and files in the feed are not touched, and neither is the company audit trail.</p>
-      ${isLiveSupabaseSession() ? `<div class="wb-field">
-        <label for="wbClearPw">Confirm your password</label>
-        <!-- A lone current-password field sends password managers hunting for a username
-             elsewhere on the page. Chrome found the topbar search, typed the account email
-             into it, and that input opens the command palette -- which then owned the
-             keyboard, so this field could not be typed into at all. Naming the account here
-             gives the manager the pair it wants. Readonly and visible rather than hidden:
-             display:none fields are skipped by some managers, and saying whose password is
-             being asked for belongs in a re-authentication dialog anyway. -->
-        <input class="wb-input" type="text" name="username" value="${h(activeSession()?.profile?.email || '')}" autocomplete="username" readonly aria-label="Signed in as" />
-        <input class="wb-input" type="password" id="wbClearPw" autocomplete="current-password" placeholder="Your account password" />
-      </div>` : ''}`,
+      ${isLiveSupabaseSession() ? reauthPasswordField('wbClearPw') : ''}`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" type="button" data-wb-confirm-clear-activity><i class="ti ti-eraser"></i>Clear log</button>`);
   }
   if (m.kind === 'app-chooser') {
@@ -23013,6 +22932,7 @@ function renderCompanyPickerModal() {
 function renderActiveModal(route, session) {
   if (state.builderModal) return renderWorkspaceBuilderModal();
   if (state.modal === 'record-history') return renderRecordHistoryModal();
+  if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
   if (state.modal === 'contacts-dedupe') return renderContactsDedupeModal();
   if (state.modal === 'task-delete') return renderTaskDeleteModal();
@@ -27207,6 +27127,51 @@ function handleAction(event, node) {
     navigate(companyPath('contacts', { contact_id: node.dataset.contactId }, activeCompanyId()));
     return;
   }
+  if (action === 'toggle-job-select') {
+    event.preventDefault();
+    // Stop the row's own open-job handler: ticking a box should not also navigate.
+    event.stopPropagation();
+    const set = new Set(state.selectedJobIds || []);
+    const id = node.dataset.jobId;
+    if (set.has(id)) set.delete(id); else set.add(id);
+    state.selectedJobIds = [...set];
+    render();
+    return;
+  }
+  if (action === 'toggle-job-select-all') {
+    event.preventDefault();
+    const rows = filteredJobs(activeCompanyId());
+    const already = new Set(state.selectedJobIds || []);
+    // Selects what is on screen, and clears only that -- a filter narrowing the view must
+    // not silently drop a selection made in a wider one.
+    state.selectedJobIds = rows.length && rows.every((job) => already.has(job.id))
+      ? (state.selectedJobIds || []).filter((id) => !rows.some((job) => job.id === id))
+      : [...new Set([...(state.selectedJobIds || []), ...rows.map((job) => job.id)])];
+    render();
+    return;
+  }
+  if (action === 'jobs-clear-selection') {
+    event.preventDefault();
+    state.selectedJobIds = [];
+    render();
+    return;
+  }
+  if (action === 'jobs-bulk-delete') {
+    event.preventDefault();
+    const targets = selectedJobRows();
+    if (!targets.length) return;
+    if (!requirePermission('jobs.manage', activeCompanyId(), 'Your role cannot delete jobs.', 'Jobs')) return;
+    state.jobBulkDelete = { count: targets.length, error: '', busy: false };
+    state.modal = 'jobs-bulk-delete';
+    render();
+    queueMicrotask(() => document.getElementById('jobsDeletePw')?.focus());
+    return;
+  }
+  if (action === 'jobs-bulk-delete-confirm') {
+    event.preventDefault();
+    deleteSelectedJobs(node);
+    return;
+  }
   if (action === 'toggle-contact-select') {
     event.preventDefault();
     const id = node.dataset.contactId;
@@ -31056,6 +31021,86 @@ async function saveJob(form) {
   return true;
 }
 
+function renderJobsBulkDeleteModal() {
+  const ctx = state.jobBulkDelete || { count: 0, error: '' };
+  const targets = selectedJobRows();
+  const n = targets.length;
+  const s = n === 1 ? '' : 's';
+
+  // Deletes run one at a time, so there is real progress to show rather than an indefinite
+  // spinner that says only "something is happening". The count is the honest version.
+  if (ctx.busy) {
+    const total = ctx.total || n || 1;
+    const done = Math.min(ctx.done || 0, total);
+    const pct = Math.round((done / total) * 100);
+    return renderModalShell('Jobs', `Deleting ${total} job${total === 1 ? '' : 's'}`, `
+      <div class="jobs-delete-progress" role="status" aria-live="polite">
+        <div class="jobs-delete-spinner" aria-hidden="true"></div>
+        <p class="wb-sub">${ctx.label ? h(ctx.label) : `Moving ${done + 1} of ${total} to the Recycle Bin…`}</p>
+        <div class="jobs-delete-bar"><span style="width:${pct}%"></span></div>
+        <p class="wb-sub jobs-delete-count">${done} of ${total} done</p>
+      </div>
+    `, 'wb-modal-sm jobs-delete-busy');
+  }
+
+  return renderModalShell('Jobs', `Delete ${n} job${s}`, `
+    ${ctx.error ? `<div class="wb-modal-error" role="alert">${h(ctx.error)}</div>` : ''}
+    <p class="wb-sub">This moves <b>${n}</b> job${s} to the Recycle Bin, along with what each one carries.</p>
+    <ul class="wb-sub jobs-delete-list">${targets.slice(0, 8).map((job) => `<li>${h(job.name)}${job.client_name ? ` — ${h(job.client_name)}` : ''}</li>`).join('')}</ul>
+    ${n > 8 ? `<p class="wb-sub">…and ${n - 8} more.</p>` : ''}
+    <p class="wb-sub">Deleted jobs can be restored from the Recycle Bin, so this is reversible — but everyone else loses sight of them straight away.</p>
+    ${isLiveSupabaseSession() ? reauthPasswordField('jobsDeletePw', 'Confirm your password') : ''}
+    <div class="modal-actions">
+      <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      <button class="btn danger" type="button" data-action="jobs-bulk-delete-confirm" ${n ? '' : 'disabled'}><i class="ti ti-trash"></i>Delete ${n} job${s}</button>
+    </div>
+  `, 'wb-modal-sm');
+}
+
+/**
+ * Move every selected job to the Recycle Bin, after confirming the password.
+ *
+ * Deletes go one at a time and silently, then a single toast reports the total: the per-item
+ * toast and redirect that recycleDeleteRecord does on its own would fire once per job.
+ */
+async function deleteSelectedJobs(button) {
+  const companyId = activeCompanyId();
+  const targets = selectedJobRows(companyId);
+  if (!targets.length) { state.modal = ''; state.jobBulkDelete = null; render(); return; }
+  if (!requirePermission('jobs.manage', companyId, 'Your role cannot delete jobs.', 'Jobs')) return;
+
+  if (isLiveSupabaseSession()) {
+    if (button) button.disabled = true;
+    const auth = await confirmAccountPassword(document.getElementById('jobsDeletePw')?.value || '');
+    if (button) button.disabled = false;
+    if (!auth.ok) { state.jobBulkDelete = { ...(state.jobBulkDelete || {}), error: auth.error }; render(); return; }
+  }
+
+  let removed = 0;
+  const failed = [];
+  state.jobBulkDelete = { busy: true, done: 0, total: targets.length, label: '', error: '' };
+  render();
+
+  for (const job of targets) {
+    // Sequential on purpose: each delete is an RPC that writes the recycle bin, and a failure
+    // partway has to leave the rest of the selection intact rather than half-applied in
+    // parallel with no way to say which went. It also means the progress shown is real.
+    state.jobBulkDelete = { ...state.jobBulkDelete, label: `Moving “${job.name}” to the Recycle Bin…` };
+    updateModalOnly();
+    const ok = await recycleDeleteRecord({ type: 'job', id: job.id, options: { silent: true } });
+    if (ok) removed += 1; else failed.push(job.name);
+    state.jobBulkDelete = { ...state.jobBulkDelete, done: removed + failed.length, label: '' };
+    updateModalOnly();
+  }
+
+  state.selectedJobIds = (state.selectedJobIds || []).filter((id) => failed.length && targets.some((job) => job.name && failed.includes(job.name) && job.id === id));
+  state.modal = '';
+  state.jobBulkDelete = null;
+  if (removed) showToast(`${removed} job${removed === 1 ? '' : 's'} moved to Recycle Bin.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
+  if (failed.length) showToast(`${failed.length} job${failed.length === 1 ? '' : 's'} could not be deleted.`, 'error', 'Jobs');
+  render();
+}
+
 async function deleteJob(id) {
   if (!id) return;
   const companyId = activeCompanyId();
@@ -33394,6 +33439,15 @@ function syncJobInvoiceTotal(jobId) {
   upsertJob(job);
 }
 
+// Repaint just the open dialog. Used while a batch runs: a full render() per item would
+// rebuild the page behind the modal a dozen times over, and the rows being deleted are
+// disappearing from underneath it as it goes.
+function updateModalOnly() {
+  const overlay = document.querySelector('.modal-overlay');
+  if (!overlay) return;
+  overlay.outerHTML = renderActiveModal(state.route, activeSession());
+}
+
 function updateWorkspaceOnly() {
   const workspace = document.getElementById('workspace');
   if (!workspace) return;
@@ -34724,6 +34778,35 @@ function minimizeDockedActivityComposer(composerId) {
   render();
 }
 
+// ---- Docked composer fields -------------------------------------------------
+// Body lives in ./messaging/dock-fields.js and is fetched the first time a composer opens.
+let dockFieldsModule = null;
+let dockFieldsPending = null;
+
+function loadDockFields() {
+  if (dockFieldsModule) return Promise.resolve(dockFieldsModule);
+  if (!dockFieldsPending) {
+    dockFieldsPending = import('./messaging/dock-fields.js').then((mod) => {
+      dockFieldsModule = mod.createDockFields({
+        h, activityRelatedLabel, activityRelatedEmail, activeCompanyId, workdayRecordOwnerId,
+        taskAssigneeId, activeTaskCreatorId, companyTaskAssignees, memberName, isoDate,
+      });
+      return dockFieldsModule;
+    }).catch((error) => {
+      dockFieldsPending = null;
+      throw error;
+    });
+  }
+  return dockFieldsPending;
+}
+
+function renderDockedActivityFields(composer, record, config) {
+  if (dockFieldsModule) return dockFieldsModule.renderDockedActivityFields(composer, record, config);
+  // The composer window itself is already on screen; only its fields arrive a moment later.
+  loadDockFields().then(() => render()).catch((error) => console.error('Composer fields failed to load', error));
+  return questLoader('Loading');
+}
+
 function renderDockedActivityComposers() {
   if (!state.dockedActivityComposers.length) return '';
   const items = state.dockedActivityComposers.map((composer) => {
@@ -34760,143 +34843,6 @@ function renderDockedActivityComposers() {
   return `<div class="activity-dock" aria-live="polite">${items}</div>`;
 }
 
-function renderDockedActivityFields(composer, record, config) {
-  const label = activityRelatedLabel(record);
-  const subject = `${config.subject}: ${label}`;
-  if (config.type === 'email') {
-    return `
-      <label class="activity-dock-field">
-        <span>To</span>
-        <input name="email_to" value="${h(activityRelatedEmail(composer.related_type, record))}" placeholder="name@example.com" aria-label="Email to" />
-      </label>
-      <label class="activity-dock-field">
-        <span>Subject</span>
-        <input name="subject" value="${h(subject)}" aria-label="Subject" />
-      </label>
-      <label class="activity-dock-field">
-        <span>Email body</span>
-        <textarea name="email_body" rows="7" placeholder="Write the email message..." aria-label="Email body"></textarea>
-      </label>
-      <div class="activity-dock-toolbar" aria-label="Email tools">
-        <button type="button" title="Attach file"><i class="ti ti-paperclip"></i></button>
-        <button type="button" title="Insert template"><i class="ti ti-template"></i></button>
-        <button type="button" title="Add merge field"><i class="ti ti-braces"></i></button>
-      </div>
-    `;
-  }
-  if (config.type === 'task') {
-    const companyId = record.company_id || activeCompanyId();
-    const recordOwnerId = workdayRecordOwnerId(record, companyId);
-    const assigneeId = taskAssigneeId(recordOwnerId, companyId) || activeTaskCreatorId(companyId);
-    const members = companyTaskAssignees(companyId);
-    return `
-      <label class="activity-dock-field">
-        <span>Subject</span>
-        <input name="subject" value="${h(subject)}" aria-label="Subject" />
-      </label>
-      <div class="activity-dock-grid">
-        <label class="activity-dock-field">
-          <span>Assigned to</span>
-          <select name="assignee_id" aria-label="Assigned to">
-            ${members.map((member) => `<option value="${h(member.id)}" ${member.id === assigneeId ? 'selected' : ''}>${h(memberName(member.id))}</option>`).join('')}
-          </select>
-        </label>
-        <label class="activity-dock-field">
-          <span>Due date</span>
-          <input name="due_date" type="date" value="${h(isoDate(1))}" aria-label="Due date" />
-        </label>
-        <label class="activity-dock-field">
-          <span>Due time</span>
-          <input name="due_time" type="time" value="" aria-label="Due time" />
-        </label>
-        <label class="activity-dock-field">
-          <span>Priority</span>
-          <select name="priority" aria-label="Priority">
-            <option value="medium">Normal</option>
-            <option value="high">High</option>
-            <option value="low">Low</option>
-          </select>
-        </label>
-      </div>
-      <label class="activity-dock-field">
-        <span>Task details</span>
-        <textarea name="task_notes" rows="5" placeholder="Add task details..." aria-label="Task details"></textarea>
-      </label>
-    `;
-  }
-  if (config.type === 'meeting') {
-    return `
-      <label class="activity-dock-field">
-        <span>Subject</span>
-        <input name="subject" value="${h(subject)}" aria-label="Subject" />
-      </label>
-      <div class="activity-dock-grid">
-        <label class="activity-dock-field">
-          <span>Date</span>
-          <input name="event_date" type="date" value="${h(isoDate(1))}" aria-label="Event date" />
-        </label>
-        <label class="activity-dock-field">
-          <span>Start</span>
-          <input name="start_time" type="time" value="09:00" aria-label="Start time" />
-        </label>
-        <label class="activity-dock-field">
-          <span>End</span>
-          <input name="end_time" type="time" value="09:30" aria-label="End time" />
-        </label>
-      </div>
-      <label class="activity-dock-field">
-        <span>Location</span>
-        <input name="event_location" value="${h(record.location || record.site_address || '')}" placeholder="Address or call link" aria-label="Event location" />
-      </label>
-      <label class="activity-dock-field">
-        <span>Event notes</span>
-        <textarea name="event_notes" rows="4" placeholder="Add meeting details..." aria-label="Event notes"></textarea>
-      </label>
-    `;
-  }
-  if (config.type === 'call') {
-    return `
-      <label class="activity-dock-field">
-        <span>Subject</span>
-        <input name="subject" value="${h(subject)}" aria-label="Subject" />
-      </label>
-      <div class="activity-dock-grid">
-        <label class="activity-dock-field">
-          <span>Outcome</span>
-          <select name="call_outcome" aria-label="Call outcome">
-            <option>Connected</option>
-            <option>Left voicemail</option>
-            <option>No answer</option>
-            <option>Bad number</option>
-          </select>
-        </label>
-        <label class="activity-dock-field">
-          <span>Next step</span>
-          <select name="follow_up" aria-label="Follow up">
-            <option>None</option>
-            <option>Follow up tomorrow</option>
-            <option>Schedule meeting</option>
-            <option>Send quote</option>
-          </select>
-        </label>
-      </div>
-      <label class="activity-dock-field">
-        <span>Call notes</span>
-        <textarea name="call_notes" rows="5" placeholder="Summarize the call..." aria-label="Call notes"></textarea>
-      </label>
-    `;
-  }
-  return `
-    <label class="activity-dock-field">
-      <span>Subject</span>
-      <input name="subject" value="${h(subject)}" aria-label="Subject" />
-    </label>
-    <label class="activity-dock-field">
-      <span>Note</span>
-      <textarea name="body" rows="6" placeholder="${h(config.placeholder)}" aria-label="Note"></textarea>
-    </label>
-  `;
-}
 
 function serializeDockedActivityBody(composer, formData) {
   const config = ACTIVITY_COMPOSER_CONFIG[composer.kind] || ACTIVITY_COMPOSER_CONFIG.Note;

@@ -5,7 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const source = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8')
+  // The docked composer's fields are fetched on demand now; they are still part of the
+  // surface these tests describe, so both files are read as one.
+  + fs.readFileSync(path.join(root, 'src', 'messaging', 'dock-fields.js'), 'utf8');
 const migrationPath = path.join(root, 'supabase', 'migrations', '202607171500_task_deal_next_actions.sql');
 const handleActionSource = source.slice(source.indexOf('function handleAction('), source.indexOf('function onDocumentSubmit('));
 const submitSource = source.slice(source.indexOf('function onDocumentSubmit('), source.indexOf('function onDocumentInput('));
