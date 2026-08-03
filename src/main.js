@@ -29133,7 +29133,11 @@ async function saveOperationalWorkspaceSettings(formNode) {
   state.selectedOperationalWorkspaceId = '';
   state.operationalWorkspaceModalIcon = null;
   showToast('Workspace settings saved.', live ? 'live' : 'local', 'Workspaces');
-  navigate(companyPath('settings', { tab: 'company' }, saved.company_id), { replace: true });
+  // Stay on whatever page the dialog was opened over. This used to navigate to Settings,
+  // which was invisible back when the only way in was the workspace list on that very page.
+  // The sidebar rail opens the same dialog from anywhere now, so renaming a workspace while
+  // reading the activity feed threw you out to Settings.
+  render();
 }
 
 async function createPlatformWorkspace(formNode) {

@@ -16848,6 +16848,14 @@ body {
   --sidebar-width: 248px;
   height: 100vh;
   height: 100dvh;
+  /* Overrides the min-height: 100vh the pre-app-shell layout left on .quest-app. min-height
+     beats height, so the shell was really 100vh tall while the visible viewport is 100dvh —
+     equal on desktop, but shorter than 100vh on any phone showing its address bar. The shell
+     then hung below the fold and the document scrolled, which is the second scrollbar that
+     used to appear next to .work-surface's own. Kept as a vh/dvh pair for the same reason
+     height is: browsers without dvh fall back to the first. */
+  min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -17986,7 +17994,11 @@ textarea:focus {
   }
 
   .work-surface {
-    min-height: calc(100dvh - 58px);
+    /* Was calc(100dvh - 58px), from a layout whose topbar was 58px tall. The topbar is 64px
+       now and there is a status rail under it, so that figure guaranteed the surface was
+       taller than the row it sits in — permanent overflow, and a scrollbar on pages with
+       nothing to scroll. The row is minmax(0, 1fr), so it already fills what is left. */
+    min-height: 0;
     padding: 16px 12px 92px;
   }
 
@@ -23226,7 +23238,9 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
     grid-row: 3;
     width: 100%;
     max-width: 100vw;
-    min-height: calc(100dvh - 58px);
+    /* See the note on the same declaration at (max-width: 900px) above: row 3 is
+       minmax(0, 1fr) and fills by itself; a fixed floor only forces overflow. */
+    min-height: 0;
     overflow-x: hidden;
   }
 
