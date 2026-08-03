@@ -14271,54 +14271,16 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
 let wbTopbarScrollLeft = 0;
 
 /**
- * Drag the app strip sideways with the RIGHT mouse button held down.
+ * Drag the app strip sideways by holding the left mouse button.
  *
- * The right button on purpose: the left one belongs to the tabs, and a left-drag would
- * either swallow clicks or fire them by accident. The context menu is suppressed only
- * when a drag actually happened, so a plain right-click still opens it.
+ * The left button is also how a tab is opened, so the two are told apart by distance:
+ * nothing happens until the pointer has moved past DRAG_SLOP, and once it has, the click
+ * that the browser fires on release is swallowed. Without that, every drag would also
+ * open whichever app you happened to start on.
+ *
+ * Releasing mid-movement carries on with the momentum it had, decaying to a stop. That is
+ * what makes a strip this wide feel like something you are pushing rather than nudging.
  */
-function wbBindTopbarDrag(track) {
-  let dragging = false;
-  let moved = false;
-  let startX = 0;
-  let startScroll = 0;
-
-  track.addEventListener('pointerdown', (event) => {
-    if (event.button !== 2) return;
-    dragging = true;
-    moved = false;
-    startX = event.clientX;
-    startScroll = track.scrollLeft;
-    // Capture so the drag survives the pointer leaving the strip, which it will.
-    try { track.setPointerCapture(event.pointerId); } catch { /* capture is best effort */ }
-    track.classList.add('wb-topbar-dragging');
-  });
-
-  track.addEventListener('pointermove', (event) => {
-    if (!dragging) return;
-    const dx = event.clientX - startX;
-    // A few pixels of slack, so a right-click with a shaky hand is still a right-click.
-    if (Math.abs(dx) > 3) moved = true;
-    track.scrollLeft = startScroll - dx;
-    event.preventDefault();
-  });
-
-  const end = (event) => {
-    if (!dragging) return;
-    dragging = false;
-    track.classList.remove('wb-topbar-dragging');
-    try { track.releasePointerCapture(event.pointerId); } catch { /* already released */ }
-  };
-  track.addEventListener('pointerup', end);
-  track.addEventListener('pointercancel', end);
-
-  track.addEventListener('contextmenu', (event) => {
-    if (!moved) return;
-    // Only after a real drag: otherwise the menu would be unreachable on the strip.
-    event.preventDefault();
-    moved = false;
-  });
-}
 
 // Wire the app strip as a scrollable track: keep the open app in view, and show the
 // arrows only when there is something to scroll to. Re-runs after each render, so the
@@ -14351,7 +14313,11 @@ function wbMountTopbar() {
       if (track.scrollLeft !== before) event.preventDefault();
     }, { passive: false });
     window.addEventListener('resize', sync);
-    wbBindTopbarDrag(track);
+    // Fetched on demand: the strip already scrolls by arrow, wheel and touch, so drag
+    // arriving a moment later is invisible, and it keeps the code out of the entry chunk.
+    import('./workspace/topbar-drag.js')
+      .then((mod) => mod.bindTopbarDrag(track))
+      .catch((error) => console.error('App strip drag failed to load', error));
   }
 
   // Restore the remembered position BEFORE deciding whether the open app needs scrolling

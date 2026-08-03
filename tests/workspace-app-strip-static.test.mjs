@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const drag = readFileSync(new URL('../src/workspace/topbar-drag.js', import.meta.url), 'utf8');
 const header = source.match(/function wbWorkspaceHeader\([\s\S]*?\n\}/)[0];
 
 // The strip used to be a pager: it sliced the app list and re-rendered, so reaching a
@@ -61,24 +62,43 @@ test('the strip holds its place when opening an app re-renders it', () => {
   );
 });
 
-test('the strip pans with the right mouse button held down', () => {
-  // The right button on purpose: the left one belongs to the tabs, and a left-drag would
-  // either swallow clicks or fire them by accident.
-  const fn = source.slice(source.indexOf('function wbBindTopbarDrag('));
-  const body = fn.slice(0, fn.indexOf('\n}\n'));
-  assert.match(body, /if \(event\.button !== 2\) return;/);
+test('the strip pans while the left button is held', () => {
+  const fn = drag.slice(drag.indexOf('export function bindTopbarDrag('));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /if \(event\.button !== 0\) return;/);
   assert.match(body, /track\.scrollLeft = startScroll - dx;/);
   // Capture, or the drag dies the moment the pointer leaves the strip — which it will.
   assert.match(body, /setPointerCapture/);
   assert.match(body, /releasePointerCapture/);
 });
 
-test('a plain right-click still opens the context menu', () => {
-  // Suppressing it unconditionally would make the menu unreachable on the strip.
-  const fn = source.slice(source.indexOf('function wbBindTopbarDrag('));
-  const body = fn.slice(0, fn.indexOf('\n}\n'));
-  assert.match(body, /if \(!moved\) return;\s*\n\s*\/\/[^\n]*\n\s*event\.preventDefault\(\);/);
-  assert.match(body, /if \(Math\.abs\(dx\) > 3\) moved = true;/, 'a shaky hand is still a click');
+test('a drag is told apart from a tab click by distance', () => {
+  // The left button also opens apps. Without a threshold every drag would open whichever
+  // tab it started on, and without swallowing the click, so would every successful drag.
+  const fn = drag.slice(drag.indexOf('export function bindTopbarDrag('));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /const DRAG_SLOP = 5;/);
+  assert.match(body, /if \(Math\.abs\(dx\) < DRAG_SLOP\) return;/);
+  // Capture phase, so the tab's own handler never sees the click that ended a drag.
+  assert.match(body, /addEventListener\('click',[\s\S]{0,220}stopPropagation\(\);[\s\S]{0,60}\}, true\)/);
+});
+
+test('releasing mid-movement glides to a stop', () => {
+  const fn = drag.slice(drag.indexOf('export function bindTopbarDrag('));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /velocity \*= FRICTION;/);
+  assert.match(body, /requestAnimationFrame\(glide\)/);
+  // Stop at the ends rather than spinning against the edge.
+  assert.match(body, /if \(track\.scrollLeft === before\) \{ stopMomentum\(\); return; \}/);
+  // Parking the strip and then letting go should not fling it.
+  assert.match(body, /const stale = event\.timeStamp - lastTime > 100;/);
+});
+
+test('momentum respects the motion preference', () => {
+  // The stylesheet cannot switch off a scroll driven by requestAnimationFrame, so this is
+  // the one piece of motion that has to ask in JavaScript.
+  assert.match(drag, /function prefersReducedMotion\(\)/);
+  assert.match(drag, /!prefersReducedMotion\(\) && Math\.abs\(velocity\) > MIN_VELOCITY/);
 });
 
 test('smooth scrolling is disabled while dragging', () => {
@@ -101,4 +121,25 @@ test('a vertical wheel scrolls the strip sideways without hijacking the page', (
 
 test('reduced-motion users do not get smooth scrolling', () => {
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{\s*\.wb-topbar-apps \{ scroll-behavior: auto; \}/);
+});
+
+test('drag is fetched on demand, not carried by every page', () => {
+  // The strip already scrolls by arrow, wheel and touch, so drag arriving a moment after
+  // first paint is invisible — and keeping it out of the entry chunk is what paid for it.
+  assert.match(source, /import\('\.\/workspace\/topbar-drag\.js'\)/);
+  assert.ok(!/^import .*topbar-drag/m.test(source), 'a static import would defeat the split');
+  // Bound once, inside the same guard as the other listeners.
+  const mount = source.slice(source.indexOf('function wbMountTopbar('));
+  const body = mount.slice(0, mount.indexOf('\n}\n'));
+  assert.ok(
+    body.indexOf("import('./workspace/topbar-drag.js')") > body.indexOf('track.dataset.wbScrollBound'),
+    'the import must sit inside the bind-once guard, or every render adds another listener set',
+  );
+});
+
+test('the drag module needs nothing from main.js', () => {
+  // No context object means nothing to keep in step — the failure mode that shipped twice
+  // in the extracted panels cannot happen here.
+  assert.ok(!/\bctx\b/.test(drag), 'it should take no context');
+  assert.match(drag, /export function bindTopbarDrag\(track\)/);
 });

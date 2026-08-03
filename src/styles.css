@@ -29835,9 +29835,9 @@ i.symbol-icon {
   font-size: 17px;
 }
 
-/* ---- App strip: right-drag to pan ----
-   The strip scrolls horizontally and is often wider than the screen. Holding the
-   right button and moving pans it; the left button stays with the tabs. */
+/* ---- App strip: drag to pan ----
+   The strip scrolls horizontally and is often wider than the screen. Hold the left
+   button and move to pan it; a drag is told apart from a tab click by distance. */
 .wb-topbar-apps {
   scroll-behavior: smooth;
   /* Right-drag pans, so the browser must not also start a text selection. */
@@ -29850,6 +29850,12 @@ i.symbol-icon {
   /* Smooth scrolling fights a drag: the strip would ease toward each position instead
      of tracking the pointer. Off for the duration of the drag only. */
   scroll-behavior: auto;
+}
+
+.wb-topbar-apps.wb-topbar-dragging {
+  /* Only while dragging: the strip should not look grabbable when a click would just
+     open a tab. */
+  cursor: grabbing;
 }
 
 .wb-topbar-apps.wb-topbar-dragging * {
