@@ -29913,3 +29913,21 @@ i.symbol-icon {
   cursor: default;
   margin-bottom: 8px;
 }
+
+/* Activity log timestamps: the exact moment leads, "2h ago" trails it as a hint. Wrapping so
+   a narrow feed drops the relative part onto its own line rather than truncating the date. */
+.wb-act-time {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.wb-act-time .wb-act-rel {
+  opacity: .72;
+}
+
+.wb-act-time .wb-act-rel::before {
+  content: "·";
+  margin-right: 8px;
+}

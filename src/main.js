@@ -10,7 +10,7 @@ import {
   addStage, boardColumns, canDropOn, moveStage, pipelineField, pipelineFields,
   recolorStage, removeStage, renameStage, stageCounts, stagesOf, summaryField,
 } from './workspace/pipeline-core.js';
-import { clearableCount, clearedActivity, matchBuilderWorkspace } from './workspace/activity-log.js';
+import { clearableCount, clearedActivity, logStamp, matchBuilderWorkspace } from './workspace/activity-log.js';
 import {
   assignmentRow, assignmentsToCreate, describeAssignment, findLabel,
   isValidLabelName, labelsForContact as labelsForContactRows, newLabelRow,
@@ -13792,7 +13792,14 @@ function wbFeedStream(companyId, workspace) {
 }
 
 function wbActivityRow(ev) {
-  return `<div class="wb-act-item"><span class="wb-act-ic" style="background:${h(ev.color || '#6b7280')}"><i class="ti ${h(ev.icon || 'ti-point')}"></i></span><div><div class="wb-act-text">${ev.text}</div><div class="wb-act-time">${wbTimeAgo(ev.ts)}</div></div></div>`;
+  // Both stamps: "2h ago" reads faster, the absolute one is what you quote when something
+  // has to be pinned down. A real <time> element so the machine-readable value is the exact
+  // instant rather than the rounded label.
+  const stamp = logStamp(ev.ts);
+  const when = stamp
+    ? `<time datetime="${h(ev.ts)}">${h(stamp)}</time>${wbTimeAgo(ev.ts) ? `<span class="wb-act-rel">${h(wbTimeAgo(ev.ts))}</span>` : ''}`
+    : h(wbTimeAgo(ev.ts) || '');
+  return `<div class="wb-act-item"><span class="wb-act-ic" style="background:${h(ev.color || '#6b7280')}"><i class="ti ${h(ev.icon || 'ti-point')}"></i></span><div><div class="wb-act-text">${ev.text}</div><div class="wb-act-time">${when}</div></div></div>`;
 }
 
 // Turn free text into safe HTML: escape, highlight @mentions of known members,

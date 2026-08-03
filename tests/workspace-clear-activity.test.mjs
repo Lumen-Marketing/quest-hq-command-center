@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { clearableCount, clearedActivity, matchBuilderWorkspace } from '../src/workspace/activity-log.js';
+import { clearableCount, clearedActivity, logStamp, matchBuilderWorkspace } from '../src/workspace/activity-log.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const log = readFileSync(new URL('../src/workspace/activity-log.js', import.meta.url), 'utf8');
@@ -189,4 +189,33 @@ test('the password field names the account, so managers do not fill the topbar s
     body.indexOf('autocomplete="username"') < body.indexOf('autocomplete="current-password"'),
     'the username comes first, as managers expect',
   );
+});
+
+// --- timestamps ---------------------------------------------------------------------------
+
+test('a log entry carries the actual date and time, not only "2h ago"', () => {
+  // "1h ago" is not evidence: it drifts with every render, and two entries an hour apart can
+  // both say it.
+  const stamp = logStamp('2026-08-03T10:52:00.000Z');
+  assert.match(stamp, /Aug 3, 2026/);
+  assert.match(stamp, /\d{1,2}:\d{2}\s?(AM|PM)/);
+  assert.match(stamp, / · /);
+});
+
+test('the year is included, because the log has no time limit', () => {
+  // 60 entries deep with no age cap, so "Aug 3" read in February is a question.
+  assert.match(logStamp('2024-01-09T23:05:00.000Z'), /2024/);
+});
+
+test('a missing or broken stamp degrades instead of printing Invalid Date', () => {
+  assert.equal(logStamp(''), '');
+  assert.equal(logStamp(undefined), '');
+  assert.equal(logStamp('not a date'), '');
+});
+
+test('the row keeps the relative time and marks up the exact instant', () => {
+  const row = fn('wbActivityRow');
+  assert.match(row, /<time datetime="\$\{h\(ev\.ts\)\}">/, 'machine-readable value is the instant, not the rounded label');
+  assert.match(row, /wb-act-rel/);
+  assert.match(row, /: h\(wbTimeAgo\(ev\.ts\) \|\| ''\)/, 'an unparseable stamp still falls back');
 });
