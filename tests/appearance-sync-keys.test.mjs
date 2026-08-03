@@ -81,3 +81,41 @@ test('an empty sidebar text colour is stored, not stripped', () => {
   // jsonb_strip_nulls keeps it; the branch has to exist for it to survive validation.
   assert.match(sql, /when p_prefs->>'sidebarText' = '' then ''/);
 });
+
+// --- read before write ---------------------------------------------------------------------
+
+test('a device does not sync appearance until it has received the profile', () => {
+  // The payload is built from this device's localStorage and replaces the stored record
+  // outright. A browser that has not loaded the profile yet holds defaults, and nothing in
+  // the payload distinguishes "I chose light" from "I have not loaded yet" -- so pushing
+  // from that state overwrites a theme chosen on another device with defaults.
+  const push = main.slice(main.indexOf('function pushAppearanceSync()'));
+  const body = push.slice(0, push.indexOf('\n}\n'));
+  assert.match(body, /if \(!appearanceSyncLoaded\) return;/);
+  assert.ok(
+    body.indexOf('appearanceSyncLoaded') < body.indexOf('appearanceSyncPending = true'),
+    'the guard must come before the write is scheduled',
+  );
+});
+
+test('the flag is set even when nothing was stored', () => {
+  // Otherwise a brand-new account, which has no saved prefs, could never save its first one.
+  const fn = main.slice(main.indexOf('function refreshResolvedAppearance()'));
+  const body = fn.slice(0, fn.indexOf('\n}\n'));
+  assert.match(body, /applySyncedAppearance\(resolvedAppearancePrefs\(\)\);/);
+  assert.match(body, /appearanceSyncLoaded = true;/);
+  assert.ok(
+    body.indexOf('applySyncedAppearance') < body.indexOf('appearanceSyncLoaded = true'),
+    'apply first, then allow writes',
+  );
+});
+
+test('the profile is consulted at sign-in, bootstrap and company switch', () => {
+  // Three moments feed the resolution; losing any of them means a device that never reads.
+  assert.equal((main.match(/^\s*refreshResolvedAppearance\(\);/gm) || []).length, 3);
+});
+
+test('the profile row is fetched whole, so appearance_prefs comes with it', () => {
+  // A column list here would drop the prefs silently and look exactly like this bug.
+  assert.match(main, /client\.from\('profiles'\)\.select\('\*'\)\.eq\('id', user\.id\)/);
+});

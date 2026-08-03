@@ -2777,11 +2777,23 @@ function resolvedAppearancePrefs() {
   return hasPrefs(company) ? company : null;
 }
 
+// A device must read before it writes.
+//
+// The sync payload is built from this device's localStorage and replaces the stored record
+// outright. A browser that has not yet received the profile holds defaults -- so changing
+// one setting there would push those defaults over a theme chosen on another device and
+// silently undo it. Nothing in the payload distinguishes "I chose light" from "I have not
+// loaded yet", so the only safe rule is not to write until the profile has been consulted.
+let appearanceSyncLoaded = false;
+
 // Re-resolve after the pieces that feed it change: the profile lands at sign-in,
 // companies arrive with the bootstrap load, and switching company can bring a
 // different default.
 function refreshResolvedAppearance() {
   applySyncedAppearance(resolvedAppearancePrefs());
+  // Set even when nothing was found: a first-time account has no stored prefs and must
+  // still be able to save its first choice.
+  appearanceSyncLoaded = true;
 }
 
 function canManageCompanyAppearance(companyId = activeCompanyId()) {
@@ -2838,6 +2850,10 @@ let appearanceSyncPending = false;
 // pixel of drag would hammer the RPC for no benefit.
 function pushAppearanceSync() {
   if (!isLiveSupabaseSession()) return;
+  // Read before write -- see appearanceSyncLoaded. Without this, the first appearance
+  // change on a freshly signed-in device overwrites the saved look with that device's
+  // defaults, which is exactly how a theme set on one machine disappears on the next.
+  if (!appearanceSyncLoaded) return;
   appearanceSyncPending = true;
   clearTimeout(appearanceSyncTimer);
   appearanceSyncTimer = setTimeout(() => {
