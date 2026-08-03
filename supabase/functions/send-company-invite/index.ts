@@ -18,6 +18,17 @@ const PRODUCTION_ORIGINS = [
   "https://www.questbase.io",
 ];
 
+// Where an invitation link points.
+//
+// Deliberately NOT the same list as PRODUCTION_ORIGINS above. That list says which sites may
+// call this endpoint, which reasonably includes deployment hosts. This is the address that
+// goes into someone's inbox and may be clicked days later, so it has to be the product's
+// permanent home.
+const CANONICAL_APP_URL = "https://www.questbase.io";
+// Vercel gives every deployment its own hostname. They rotate, they outlive nothing, and an
+// invite sent against one is a link to a build rather than to the product.
+const DEPLOYMENT_HOST_RE = /(^|\.)vercel\.app$/i;
+
 interface InvitePayload {
   invite_id?: unknown;
 }
@@ -143,7 +154,7 @@ Deno.serve(async (req: Request) => {
 
     const resendKey = Deno.env.get("RESEND_API_KEY") ?? "";
     const from = Deno.env.get("EMAIL_FROM") ?? "";
-    const appUrlRaw = Deno.env.get("APP_URL") ?? "https://questbase.io";
+    const appUrlRaw = Deno.env.get("APP_URL") ?? CANONICAL_APP_URL;
     if (!resendKey || !from) {
       await recordFailure(admin, invite.id, "email_not_configured");
       return json(req, { error: "Invite email is not configured. Copy the invite link instead." }, 503);
@@ -157,6 +168,13 @@ Deno.serve(async (req: Request) => {
       console.error("[send-company-invite] invalid APP_URL", error);
       await recordFailure(admin, invite.id, "invalid_app_url");
       return json(req, { error: "Invite email is not configured. Copy the invite link instead." }, 503);
+    }
+    // APP_URL was pointing at the Vercel deployment host, so invited people landed on an old
+    // build instead of Questbase. A dashboard field being wrong should not be able to send
+    // the wrong address to a customer, so this is enforced here rather than trusted.
+    if (DEPLOYMENT_HOST_RE.test(appUrl.hostname)) {
+      console.warn("[send-company-invite] APP_URL points at a deployment host; using", CANONICAL_APP_URL);
+      appUrl = new URL(CANONICAL_APP_URL);
     }
 
     const [{ data: company }, { data: role }] = await Promise.all([

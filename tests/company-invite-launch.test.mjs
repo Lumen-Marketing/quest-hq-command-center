@@ -86,3 +86,44 @@ test('invite email status is persisted without invalidating the invite on provid
   assert.match(migrations, /email_last_error text/);
   assert.match(MAIN, /email_status:\s*String\(input\.email_status/);
 });
+
+// --- where the invitation actually points -------------------------------------------------
+
+test('an invitation can never link to a deployment host', () => {
+  // APP_URL was set to the Vercel deployment address, so invited people opened an old build
+  // instead of Questbase. Those hostnames rotate with every deploy and an invite may be
+  // clicked days later, so the link has to be the product's permanent home. A field in a
+  // dashboard being wrong must not be able to send a customer the wrong address.
+  const fn = readFileSync(new URL('../supabase/functions/send-company-invite/index.ts', import.meta.url), 'utf8');
+  assert.match(fn, /const CANONICAL_APP_URL = "https:\/\/www\.questbase\.io";/);
+  assert.match(fn, /const DEPLOYMENT_HOST_RE = \/\(\^\|\\.\)vercel\\.app\$\/i;/);
+  assert.match(fn, /if \(DEPLOYMENT_HOST_RE\.test\(appUrl\.hostname\)\) \{/);
+  assert.match(fn, /appUrl = new URL\(CANONICAL_APP_URL\);/);
+  // The override has to happen before the link is built, not after.
+  assert.ok(
+    fn.indexOf('DEPLOYMENT_HOST_RE.test(appUrl.hostname)') < fn.indexOf('const loginUrl = new URL("/login", appUrl)'),
+    'the host check must run before the login URL is constructed',
+  );
+});
+
+test('the fallback when APP_URL is unset is the canonical domain', () => {
+  const fn = readFileSync(new URL('../supabase/functions/send-company-invite/index.ts', import.meta.url), 'utf8');
+  assert.match(fn, /Deno\.env\.get\("APP_URL"\) \?\? CANONICAL_APP_URL/);
+});
+
+test('the deployment host is still allowed to CALL the endpoint', () => {
+  // Two different questions: which sites may call this, and where the email points. Only the
+  // second is pinned -- collapsing them would break the endpoint for the gamma deployment.
+  const fn = readFileSync(new URL('../supabase/functions/send-company-invite/index.ts', import.meta.url), 'utf8');
+  const origins = fn.slice(fn.indexOf('const PRODUCTION_ORIGINS'), fn.indexOf('const CANONICAL_APP_URL'));
+  assert.match(origins, /quest-hq-command-center-gamma\.vercel\.app/);
+});
+
+test('the host check matches subdomains but not a lookalike domain', () => {
+  const RE = /(^|\.)vercel\.app$/i;
+  assert.ok(RE.test('quest-hq-command-center-gamma.vercel.app'));
+  assert.ok(RE.test('vercel.app'));
+  assert.ok(!RE.test('notvercel.app'), 'a different registrable domain must not be caught');
+  assert.ok(!RE.test('vercel.app.example.com'), 'only the suffix counts');
+  assert.ok(!RE.test('www.questbase.io'));
+});
