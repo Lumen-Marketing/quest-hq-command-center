@@ -31025,9 +31025,15 @@ async function saveJob(form) {
   const client = createSupabaseClient();
 
   if (client) {
+    // Through jobSupabaseRow, as persistJob already does. It trims the payload to the
+    // table's columns and -- the part that matters here -- turns an empty account_id,
+    // contact_id, deal_id or site_id into null. A job created without a client was sending
+    // account_id: '', which is not "no account" to Postgres but a link to an account whose
+    // id is the empty string, so every such save died on jobs_account_id_fkey.
+    const row = jobSupabaseRow(payload);
     const result = await safeSupabaseQuery(existing
-      ? client.from('jobs').update(payload).eq('id', payload.id).select().single()
-      : client.from('jobs').insert(payload).select().single());
+      ? client.from('jobs').update(row).eq('id', payload.id).select().single()
+      : client.from('jobs').insert(row).select().single());
     if (!result.error && result.data) {
       upsertJob(normalizeJob(result.data));
       state.sync = { label: 'Quest Supabase live', mode: 'live' };
