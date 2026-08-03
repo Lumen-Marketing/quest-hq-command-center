@@ -46,12 +46,18 @@ export async function syncSpaAssets(outDirArg = 'dist') {
     // at different projects — if they do, they hold different login sessions on one
     // origin and the embedded module bounces to the host login forever.
     // Defaults mirror src/main.js CONFIG; publishable/anon key only, never a secret.
+    // Trimmed, every one of them. A value pasted into a hosting dashboard picks up a
+    // trailing newline easily and it is invisible in the UI. It then rides into env.json as
+    // part of the string: REST survives it, but Realtime puts the key in the WebSocket query
+    // string where it becomes a literal %0A and the server returns 401. Production shipped
+    // exactly that until 2026-08-04 -- every request worked and only the socket failed.
+    const env = (name, fallback) => String(process.env[name] || fallback).trim();
     const taskRuntimeEnv = {
-        supabaseUrl: process.env.VITE_SUPABASE_URL || 'https://rqundirizvojpzhljtdn.supabase.co',
-        supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U',
-        sentryDsn: process.env.VITE_SENTRY_DSN || '',
-        release: process.env.VERCEL_GIT_COMMIT_SHA || '',
-        turnstileSiteKey: process.env.VITE_TURNSTILE_SITE_KEY || '',
+        supabaseUrl: env('VITE_SUPABASE_URL', 'https://rqundirizvojpzhljtdn.supabase.co'),
+        supabaseAnonKey: env('VITE_SUPABASE_ANON_KEY', 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U'),
+        sentryDsn: env('VITE_SENTRY_DSN', ''),
+        release: env('VERCEL_GIT_COMMIT_SHA', ''),
+        turnstileSiteKey: env('VITE_TURNSTILE_SITE_KEY', ''),
     };
     if (/^sb_secret_|service_role/i.test(taskRuntimeEnv.supabaseAnonKey)) {
         throw new Error('Refusing to write a service-role key into taskmanagement/env.json.');

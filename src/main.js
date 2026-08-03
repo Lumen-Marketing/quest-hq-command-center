@@ -97,8 +97,14 @@ const CONFIG = {
   // No baked-in default credentials — must be supplied via env when used in dev.
   localUsername: import.meta.env.VITE_LOCAL_LOGIN_USERNAME || '',
   localPassword: import.meta.env.VITE_LOCAL_LOGIN_PASSWORD || '',
-  supabaseUrl: import.meta.env.VITE_SUPABASE_URL || 'https://rqundirizvojpzhljtdn.supabase.co',
-  supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U',
+  // Trimmed. A key pasted into a hosting dashboard picks up a trailing newline easily, and
+  // it survives all the way into the bundle. REST tolerates it -- the header gets cleaned up
+  // in transit -- but Realtime puts the key in the WebSocket query string, where it becomes
+  // a literal %0A on the end and the server rejects it as an unknown key. The result is a
+  // 401 on the socket only, with every other request working, which is a miserable thing to
+  // diagnose. Production carried exactly this until 2026-08-04.
+  supabaseUrl: String(import.meta.env.VITE_SUPABASE_URL || 'https://rqundirizvojpzhljtdn.supabase.co').trim(),
+  supabaseKey: String(import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2WrlRVv2obg2N5g7ifl7Rg_wxGjs29U').trim(),
   stripePriceId: import.meta.env.VITE_STRIPE_PRICE_ID || '',
   supportEmail: import.meta.env.VITE_SUPPORT_EMAIL || 'info@lumenmarketingusa.com',
 };

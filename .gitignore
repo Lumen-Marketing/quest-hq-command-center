@@ -65,3 +65,6 @@ desktop.ini
 
 # TWA / Android APK build (contains signing keystore — never commit)
 twa/
+
+# Office lock files, created whenever a workbook in reports/ is open.
+~$*
