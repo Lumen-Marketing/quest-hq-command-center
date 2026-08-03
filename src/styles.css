@@ -5773,14 +5773,29 @@ textarea:focus {
 .access-request-row,
 .access-invite-row {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) minmax(280px, .95fr);
-  align-items: center;
-  gap: 12px;
+  grid-template-columns: 42px minmax(0, 1fr) minmax(300px, 1.05fr);
+  align-items: start;
+  gap: 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface-2);
-  padding: 10px;
+  padding: 14px;
 }
+
+/* The member row stacks instead of sitting side by side.
+   The controls -- role, status, every workspace assignment, and the save button -- are four
+   or five rows tall, while the person is two lines. Beside each other that left a block of
+   empty row under the name on every member, and squeezed the selects into a third of the
+   width. Identity on top, controls beneath it at full width: nothing is cramped and there is
+   no dead space. */
+.access-user-row {
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px 14px;
+}
+
+.access-user-row > .avatar { grid-area: 1 / 1; }
+.access-user-main { grid-area: 1 / 2; }
+.access-role-form { grid-area: 2 / 2; }
 
 .access-user-row.muted {
   background: #f7f1e7;
@@ -5807,31 +5822,64 @@ textarea:focus {
   white-space: nowrap;
 }
 
+/* Was 12px at weight 800 in --muted: tiny, bold and low-contrast all at once, which is the
+   combination that makes an email address hard to actually read. Normal weight, a step up in
+   size, and a colour with real contrast against the row. */
 .access-user-main span,
 .access-request-row span,
 .access-invite-row span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  margin-top: 2px;
 }
 
+/* A warning, so it reads as one rather than as red shouting inside a list row. */
 .access-note {
   display: block;
+  margin-top: 6px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, #9a3412 24%, transparent);
+  background: color-mix(in srgb, #9a3412 7%, transparent);
   color: #9a3412;
-  font-size: 11px;
-  font-weight: 900;
-  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  /* It is a full sentence, so it wraps instead of being clipped like the lines above it. */
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .access-role-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px auto;
+  /* Capped rather than 1fr. Stretched across a full-width panel, a two-word role sat alone
+     in a control the width of the page. */
+  grid-template-columns: minmax(0, 340px) 118px;
+  justify-content: start;
   gap: 8px;
   align-items: center;
 }
 
+/* These do want the full width -- one row per workspace, each with its own role. */
+.access-role-form > .workspace-access-grid {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
 .access-role-form select {
   min-width: 0;
+  padding: 8px 10px;
+  font-size: 13.5px;
+}
+
+/* Its own row, full width. As a third grid column it was squeezed against the status select
+   and the label wrapped; there is nothing else competing for the width down here. */
+.access-role-form > button[type="submit"] {
+  grid-column: 1 / -1;
+  justify-self: start;
+  min-width: 200px;
 }
 
 .workspace-access-grid {
@@ -5882,9 +5930,14 @@ textarea:focus {
   font-size: 10px;
 }
 
+/* A fixed height fought the base select's 10px padding and inherited 15px text: the content
+   was taller than the box, so the chosen role was sliced through the middle and unreadable.
+   Size it by its own padding and let the height follow. */
 .workspace-access-assignment select {
   min-width: 0;
-  height: 32px;
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 .invite-workspace-grid {

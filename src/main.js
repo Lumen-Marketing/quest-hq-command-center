@@ -13161,7 +13161,7 @@ function renderJobPhotosModal(companyId, job) {
 
 function renderUsersPage(route, companyId) {
   const users = companyAccessUsers(companyId);
-  const tab = ['members', 'access'].includes(route.params.get('tab')) ? route.params.get('tab') : 'members';
+  const tab = ['members', 'access', 'invites'].includes(route.params.get('tab')) ? route.params.get('tab') : 'members';
   const pendingRequests = state.joinRequests.filter((item) => item.company_id === companyId && item.status === 'pending');
   const canManageUsers = can('users.manage', companyId);
   const activeUsers = users.filter((user) => user.status === 'active');
@@ -13175,6 +13175,10 @@ function renderUsersPage(route, companyId) {
     ${compactTabs('Users sections', [
       [companyPath('users', { tab: 'members' }, companyId), 'Members', tab === 'members'],
       [companyPath('users', { tab: 'access' }, companyId), 'Access', tab === 'access'],
+      // Counted in the label: an invitation nobody has accepted and a request nobody has
+      // answered are both things waiting on someone here, and a tab you have to open to
+      // discover that is a tab you forget to open.
+      [companyPath('users', { tab: 'invites' }, companyId), `Invites${companyInvites(companyId).length + pendingRequests.length ? ` (${companyInvites(companyId).length + pendingRequests.length})` : ''}`, tab === 'invites'],
     ])}
     ${tab === 'members' ? `
       <section class="metric-grid operations-metrics">
@@ -13196,6 +13200,27 @@ function renderUsersPage(route, companyId) {
           </article>
         `).join('') || emptyState('No users assigned to this company yet.')}
       </section>
+    ` : tab === 'invites' ? `
+      <!-- Getting someone in: an invitation goes out, or a request comes in. Two halves of
+           one job, which is why they share a tab rather than sitting under Access -- that
+           one is about people who are already here. -->
+      <section class="dashboard-grid compact-settings-grid">
+        <article class="panel span-2">
+          <div class="section-head">
+            <div><h2>Invites</h2><p>Copy a secure invite code or link for a specific email address.</p></div>
+            <button class="btn btn-primary" type="button" data-action="open-invite-form" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-user-plus"></i>Invite</button>
+          </div>
+          <div class="access-invite-list">
+            ${companyInvites(companyId).map((invite) => renderInviteRow(invite, canManageUsers)).join('') || emptyState('No pending invites.')}
+          </div>
+        </article>
+        <article class="panel span-2">
+          <div class="section-head"><div><h2>Join requests</h2><p>Approve requests into this company workspace or reject them.</p></div></div>
+          <div class="access-request-list">
+            ${pendingRequests.map((request) => renderJoinRequestRow(request, canManageUsers)).join('') || emptyState('No pending join requests.')}
+          </div>
+        </article>
+      </section>
     ` : `
     <section class="dashboard-grid compact-settings-grid">
       <article class="panel span-2">
@@ -13206,25 +13231,7 @@ function renderUsersPage(route, companyId) {
           ${users.map((user) => renderUserAccessRow(companyId, user, canManageUsers)).join('') || emptyState('No users assigned to this company yet.')}
         </div>
       </article>
-      <!-- Both full width, stacked. An invite row carries an email, a code, an expiry and
-           three actions; in half a grid the email truncated mid-address and the buttons
-           crowded the code. Join requests is a short list and reads fine underneath. -->
       <article class="panel span-2">
-        <div class="section-head">
-          <div><h2>Invites</h2><p>Copy a secure invite code or link for a specific email address.</p></div>
-          <button class="btn btn-primary" type="button" data-action="open-invite-form" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-user-plus"></i>Invite</button>
-        </div>
-        <div class="access-invite-list">
-          ${companyInvites(companyId).map((invite) => renderInviteRow(invite, canManageUsers)).join('') || emptyState('No pending invites.')}
-        </div>
-      </article>
-      <article class="panel span-2">
-        <div class="section-head"><div><h2>Join requests</h2><p>Approve requests into this company workspace or reject them.</p></div></div>
-        <div class="access-request-list">
-          ${pendingRequests.map((request) => renderJoinRequestRow(request, canManageUsers)).join('') || emptyState('No pending join requests.')}
-        </div>
-      </article>
-      <article class="panel span-3">
         <div class="section-head"><div><h2>Access model</h2><p>Membership is company-scoped; UI hiding is convenience, RLS is the real privacy layer.</p></div></div>
         ${contractRows([
           ['Tenant key', 'company_id on jobs, tasks, files, forms, users, settings'],
