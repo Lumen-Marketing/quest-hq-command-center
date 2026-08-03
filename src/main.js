@@ -33872,6 +33872,7 @@ function normalizeJobTab(value) {
 
 function labelForTab(tab) {
   return {
+    dashboard: 'Dashboard',
     pipeline: 'Pipeline',
     list: 'List',
     profile: 'Profile',
