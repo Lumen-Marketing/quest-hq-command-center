@@ -22679,10 +22679,16 @@ function renderSupabaseAuthForm(returnUrl) {
           <strong>Reset your password</strong>
           <span>We will email a secure reset link if the account exists.</span>
         </div>
+        ${inviteToken ? `
+          <!-- Reached from an invitation. Say the invite survives this, or it looks like
+               leaving the page abandons it. -->
+          <p class="auth-note">Your invitation is still waiting. Reset your password, then
+          sign in here to join.</p>
+        ` : ''}
         <label>Email<input name="email" type="email" autocomplete="email" required /></label>
         ${authSubmitButton('Send reset link', 'Sending reset link...')}
         ${authStatusMessage('The message is the same whether or not that email has an account.')}
-        <button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="signin">Back to sign in</button>
+        <button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="signin">${inviteToken ? 'Back to sign in and join' : 'Back to sign in'}</button>
       </form>
     `;
   }
@@ -22765,7 +22771,12 @@ function renderSupabaseAuthForm(returnUrl) {
       <input type="hidden" name="invite_token" value="${h(inviteToken)}" />
       <input type="hidden" name="return_url" value="${h(returnUrl)}" />
       ${authSubmitButton(inviteToken ? 'Sign in and join' : 'Sign in', 'Signing in...')}
-      ${inviteToken ? '' : '<button class="auth-text-action" type="button" data-action="set-auth-mode" data-auth-mode="forgot">Forgot password?</button>'}
+      <!-- Offered on the invite flow too. Someone accepting an invite with an existing
+           account is exactly the person most likely to have forgotten its password -- they
+           may not have signed in for months, which is why they were invited again. Hiding it
+           here left "Invalid login credentials" as a dead end. The invite token lives in the
+           URL, so it survives the trip to the reset form and back. -->
+      <button class="auth-text-action" type="button" data-action="set-auth-mode" data-auth-mode="forgot">Forgot password?</button>
       ${authStatusMessage(inviteToken ? 'If you do not have an account yet, create an invited worker account.' : 'Business owners and workers use the same sign in after access is created.')}
       ${inviteToken ? '<button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="register">Create invited account</button>' : ''}
     </form>

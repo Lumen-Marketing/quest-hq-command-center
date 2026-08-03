@@ -30165,3 +30165,16 @@ html:has(.quest-app) {
   .jd-tile { border-right: 0; border-bottom: 1px solid var(--border); }
   .jd-tile:last-child { border-bottom: 0; }
 }
+
+/* Context on the reset form when it was reached from an invitation, so leaving the sign-in
+   step does not look like abandoning the invite. */
+.auth-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
