@@ -30023,3 +30023,23 @@ i.symbol-icon {
   .jobs-delete-spinner { animation-duration: 2.4s; }
   .jobs-delete-bar span { transition: none; }
 }
+
+/* No document scrollbar behind the app shell.
+ *
+ * The shell is fixed to the viewport and .work-surface scrolls inside it, so the document
+ * has nothing to scroll — but the viewport still shows a track, which reads as a second,
+ * dead scrollbar next to the live one.
+ *
+ * This was tried once before and reverted because it hid the bottom of the dashboard. The
+ * reason was not the clip: .quest-app still carried min-height: 100vh from the old layout,
+ * so the shell really was taller than the screen and clipping cut off what hung below. That
+ * is fixed (see the note on .quest-app), and the clip has since been measured in a headless
+ * browser at nine viewport widths from 420 to 1920: one scrollbar at each, and the whole of
+ * a 2400px page still scrollable to its last pixel.
+ *
+ * Scoped with :has() so it only applies where the shell is: the landing, login and public
+ * portal pages have no .quest-app and must keep scrolling the document normally.
+ */
+html:has(.quest-app) {
+  overflow-y: hidden;
+}

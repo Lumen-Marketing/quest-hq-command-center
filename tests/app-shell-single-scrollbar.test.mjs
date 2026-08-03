@@ -82,3 +82,16 @@ test('the readout finds scrolling elements anywhere, not just in the shell', () 
   // Each hit needs an ancestor path; "a div scrolls" is not actionable on its own.
   assert.match(diag, /const path = \(n\) =>/);
 });
+
+test('the document does not keep a scrollbar behind the shell', () => {
+  // Verified in a headless browser at 420-1920px: one scrollbar at every width, and a
+  // 2400px page still reaches its last pixel. The earlier attempt at this clipped a shell
+  // that was genuinely taller than the viewport; that cause is gone.
+  assert.match(css, /html:has\(\.quest-app\) \{\n  overflow-y: hidden;\n\}/);
+});
+
+test('pages without the shell still scroll normally', () => {
+  // Landing, login and the public portal have no .quest-app and are ordinary documents.
+  assert.ok(!/^html \{[^}]*overflow-y: hidden/m.test(css), 'the clip must stay scoped to the shell');
+  assert.ok(!/^body \{[^}]*overflow-y: hidden/m.test(css));
+});
