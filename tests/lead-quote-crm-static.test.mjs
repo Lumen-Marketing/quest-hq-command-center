@@ -5,7 +5,8 @@ import test from 'node:test';
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   // Composer fields live in their own fetched-on-demand module; same surface, two files.
   + readFileSync(new URL('../src/messaging/dock-fields.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/crm/job-record.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/crm/job-record.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8');
 const contactQuoteWorkflow = readFileSync(new URL('../src/crm/contact-to-quote.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
@@ -90,7 +91,8 @@ test('graduate action remains visible in compact contact record layouts', () => 
 });
 
 test('contact entry formats phone, suggests addresses, links maps, and selects owners from members', () => {
-  const editorSource = source.match(/function renderContactEditor\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  // The whole module is the editor now; slicing `source` would match the eager delegator.
+  const editorSource = readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8');
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /function formatPhoneNumber\(value\)/);
   // Contact fields are auto-formatted through a single shared formatter so the

@@ -175,15 +175,17 @@ test('a refused revoke is surfaced, not left in the status pill', () => {
   assert.match(body, /showToast\(result\.error\.message \|\| 'Could not revoke this invite\.', 'error', 'Users'\)/);
 });
 
-test('revoking marks the invite revoked rather than deleting the row', () => {
-  // Deliberate: the audit trail keeps who invited whom and who withdrew it. The list filters
-  // to pending, so a revoked invite disappears from the UI either way.
+test('revoking removes the invite so the same person can be invited again', () => {
+  // Revoking withdraws the invitation entirely. Keeping a revoked row meant every re-invite
+  // of the same address had to squeeze past a unique index; deleting removes the class of
+  // bug. What happened is kept in audit_events, which exists to be permanent.
   // MAIN is read raw, and this repo checks out CRLF, so '\n}\n' would never terminate.
   const src = MAIN.replace(/\r\n/g, '\n');
   const at = src.indexOf('async function revokeInvite(');
   const body = src.slice(at, src.indexOf('\n}\n', at));
-  assert.match(body, /status: 'revoked'/);
-  assert.ok(!/\.delete\(\)/.test(body), 'the row is kept for the audit trail');
+  assert.match(body, /state\.companyInvites = state\.companyInvites\.filter\(\(item\) => item\.id !== invite\.id\)/);
+  assert.match(body, /recordAuditEvent\(invite\.company_id, 'invite\.revoked'/, 'history is still recorded');
+  assert.ok(!/status: 'revoked'/.test(body), 'the row is removed, not parked');
 });
 
 test('the invite list only shows pending ones', () => {
@@ -191,4 +193,32 @@ test('the invite list only shows pending ones', () => {
   const at = MAIN.indexOf('function companyInvites(');
   const body = MAIN.slice(at, MAIN.indexOf('\n}\n', at));
   assert.match(body, /invite\.status === 'pending'/);
+});
+
+test('the revoke RPC deletes the row and audits before it does', () => {
+  // Audit first: a recorded revocation that did not happen is investigable, a silent
+  // deletion with no record is not.
+  const migration = readFileSync(
+    new URL('../supabase/migrations/202608042200_revoke_invite_deletes_row.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(migration, /delete from public\.company_invites\s*\n\s*where id = invite_row\.id\s*\n\s*returning \* into invite_row;/);
+  assert.ok(
+    migration.indexOf('insert into public.audit_events') < migration.indexOf('delete from public.company_invites'),
+    'the audit row must be written before the invite disappears',
+  );
+  assert.match(migration, /app_private\.is_company_admin\(invite_row\.company_id\)/, 'still admin-only');
+  assert.match(migration, /raise exception 'Invite could not be revoked'/, 'a delete that matched nothing must not report success');
+});
+
+test('a failed invite email says why', () => {
+  // The provider rejecting a message is recorded server-side; a request that never arrives
+  // leaves no trace at all, so the row stayed "not sent" while the screen said "delivery
+  // failed" -- which is how this became impossible to diagnose.
+  const src = MAIN.replace(/\r\n/g, '\n');
+  const at = src.indexOf('async function sendCompanyInviteEmail(');
+  const body = src.slice(at, src.indexOf('\n}\n', at));
+  assert.match(body, /const reason = sent \? '' : \(error\?\.message \|\| data\?\.error \|\| 'The request did not reach the mail service\.'\)/);
+  assert.match(body, /email_last_error: reason,/);
+  assert.match(body, /if \(!sent\) showToast\(`Could not email \$\{invite\.email\}: \$\{reason\}`/);
 });

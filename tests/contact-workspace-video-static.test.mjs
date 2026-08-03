@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  // The contact form is fetched on demand now; same surface, two files.
+  + readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const migrationUrl = new URL('../supabase/migrations/202607020945_contact_workspace_intake_fields.sql', import.meta.url);
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';
@@ -32,7 +34,9 @@ test('contact SMS stays disabled until workspace backend readiness is verified',
 });
 
 test('contact intake fields have real suggestions and constrained source options', () => {
-  const editorSource = source.match(/function renderContactEditor\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  // The whole module is the editor now. Slicing it out of `source` would match the eager
+  // delegator main.js keeps, whose body is a loader rather than the form.
+  const editorSource = readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8');
   const inlineSource = source.match(/function contactInlineOptions\(contact, key\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /const CONTACT_JOB_TYPE_OPTIONS = \[/);
   assert.match(source, /const CONTACT_ROOF_SYSTEM_OPTIONS = \[/);
@@ -54,7 +58,9 @@ test('contact intake fields have real suggestions and constrained source options
 });
 
 test('contact locations support google maps autocomplete and pin links', () => {
-  const editorSource = source.match(/function renderContactEditor\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  // The whole module is the editor now. Slicing it out of `source` would match the eager
+  // delegator main.js keeps, whose body is a loader rather than the form.
+  const editorSource = readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8');
   const jobEditorSource = source.match(/function renderJobEditor\(companyId, job\) \{[\s\S]*?\n\}/)?.[0] || '';
   const accountEditorSource = source.match(/function renderAccountEditor\(companyId, account\) \{[\s\S]*?\n\}/)?.[0] || '';
   const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
