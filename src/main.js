@@ -22738,6 +22738,25 @@ function renderSupabaseAuthForm(returnUrl) {
     `;
   }
   if (state.authMode === 'recovery') {
+    // A reset link is single-use. Clicking it again -- or reloading this page, which
+    // re-requests it -- spends nothing, because the token is already gone: the server answers
+    // "One-time token not found" and no session is created. This screen used to claim "your
+    // recovery link has been verified" purely because ?auth=recovery was in the URL, so the
+    // only sign anything was wrong came from "Auth session missing!" after typing a new
+    // password twice. Check for the session that the link was supposed to produce.
+    if (!isLiveSupabaseSession()) {
+      return `
+        <div class="auth-form-compact">
+          <div class="auth-form-title">
+            <strong>This reset link has expired</strong>
+            <span>Reset links work once. If you opened it twice, or reloaded this page, the first use was the one that counted.</span>
+          </div>
+          <p class="auth-note">Request a new link and open it once. It stays valid for one hour.</p>
+          <button class="btn btn-primary full" type="button" data-action="set-auth-mode" data-auth-mode="forgot">Send a new reset link</button>
+          <button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="signin">Back to sign in</button>
+        </div>
+      `;
+    }
     return `
       <form class="auth-form-compact" data-auth-update-password-form>
         <div class="auth-form-title">
