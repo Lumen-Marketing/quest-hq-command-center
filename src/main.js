@@ -2784,16 +2784,17 @@ function resolvedAppearancePrefs() {
 // one setting there would push those defaults over a theme chosen on another device and
 // silently undo it. Nothing in the payload distinguishes "I chose light" from "I have not
 // loaded yet", so the only safe rule is not to write until the profile has been consulted.
-let appearanceSyncLoaded = false;
+let profilePrefsLoaded = false;
 
 // Re-resolve after the pieces that feed it change: the profile lands at sign-in,
 // companies arrive with the bootstrap load, and switching company can bring a
 // different default.
 function refreshResolvedAppearance() {
   applySyncedAppearance(resolvedAppearancePrefs());
+  applySyncedUiPrefs(activeSession()?.profile?.ui_prefs);
   // Set even when nothing was found: a first-time account has no stored prefs and must
   // still be able to save its first choice.
-  appearanceSyncLoaded = true;
+  profilePrefsLoaded = true;
 }
 
 function canManageCompanyAppearance(companyId = activeCompanyId()) {
@@ -2850,10 +2851,10 @@ let appearanceSyncPending = false;
 // pixel of drag would hammer the RPC for no benefit.
 function pushAppearanceSync() {
   if (!isLiveSupabaseSession()) return;
-  // Read before write -- see appearanceSyncLoaded. Without this, the first appearance
+  // Read before write -- see profilePrefsLoaded. Without this, the first appearance
   // change on a freshly signed-in device overwrites the saved look with that device's
   // defaults, which is exactly how a theme set on one machine disappears on the next.
-  if (!appearanceSyncLoaded) return;
+  if (!profilePrefsLoaded) return;
   appearanceSyncPending = true;
   clearTimeout(appearanceSyncTimer);
   appearanceSyncTimer = setTimeout(() => {
@@ -2875,6 +2876,118 @@ async function flushAppearanceSync() {
   }
   const session = activeSession();
   if (session?.profile) session.profile.appearance_prefs = prefs;
+}
+
+// ---------------------------------------------------------------------------
+// Per-account UI preferences
+//
+// Appearance covers how the app looks. This covers how someone has arranged it: their
+// dashboard widgets and layout, the navigation state, and whether each list opens as a
+// table or a board. Both follow the account rather than the browser.
+//
+// Not synced, deliberately: the active company and workspace (that is where you are, not
+// how you like things -- two machines open on two companies should not fight), the sidebar
+// scroll position, and every quest-hq-*-cache-v1 key, which mirrors server rows and is
+// re-fetched anyway.
+//
+// Table-driven on purpose. The appearance bug was a hand-maintained list that went stale;
+// here each preference is declared once and a test walks this table to prove it round-trips.
+const UI_PREF_SLOTS = [
+  { group: 'dashboard', name: 'layouts', store: DASHBOARD_LAYOUT_CACHE_KEY, json: true,
+    get: () => state.dashboardLayouts,
+    set: (v) => { if (v && typeof v === 'object') state.dashboardLayouts = v; } },
+  { group: 'dashboard', name: 'roleViews', store: DASHBOARD_ROLE_VIEW_CACHE_KEY, json: true,
+    get: () => state.dashboardRoleViews,
+    set: (v) => { if (Array.isArray(v)) state.dashboardRoleViews = v; } },
+  // Without this, a widget someone removed reappears on the other device: "seen" is what
+  // stops the registry re-offering it.
+  { group: 'dashboard', name: 'seenWidgets', store: DASHBOARD_SEEN_WIDGETS_CACHE_KEY, json: true,
+    get: () => state.dashboardSeenWidgets,
+    set: (v) => { if (v && typeof v === 'object') state.dashboardSeenWidgets = v; } },
+  { group: 'dashboard', name: 'appWidgets', store: DASHBOARD_APP_WIDGET_CACHE_KEY, json: true,
+    get: () => state.dashboardAppWidgets,
+    set: (v) => { if (v && typeof v === 'object') state.dashboardAppWidgets = v; } },
+
+  { group: 'nav', name: 'sidebarCollapsed', store: SIDEBAR_COLLAPSED_KEY, json: false,
+    get: () => String(!!state.sidebarCollapsed),
+    set: (v) => { state.sidebarCollapsed = v === 'true' || v === true; } },
+  { group: 'nav', name: 'expanded', store: NAV_EXPANDED_KEY, json: true,
+    get: () => [...state.expandedNav],
+    set: (v) => { if (Array.isArray(v)) state.expandedNav = new Set(v); } },
+  { group: 'nav', name: 'collapsedGroups', store: NAV_GROUP_COLLAPSED_KEY, json: true,
+    get: () => [...state.collapsedNavGroups],
+    set: (v) => { if (Array.isArray(v)) state.collapsedNavGroups = new Set(v); } },
+
+  { group: 'views', name: 'contacts', store: CONTACT_BOARD_VIEW_KEY, json: false,
+    get: () => state.contactBoardView, set: (v) => { if (v) state.contactBoardView = String(v); } },
+  { group: 'views', name: 'deals', store: DEAL_BOARD_VIEW_KEY, json: false,
+    get: () => state.dealBoardView, set: (v) => { if (v) state.dealBoardView = String(v); } },
+  { group: 'views', name: 'jobs', store: JOB_BOARD_VIEW_KEY, json: false,
+    get: () => state.jobBoardView, set: (v) => { if (v) state.jobBoardView = String(v); } },
+  { group: 'views', name: 'drive', store: DRIVE_VIEW_KEY, json: false,
+    get: () => state.driveView, set: (v) => { if (v) state.driveView = String(v); } },
+  { group: 'views', name: 'tasks', store: TASK_VIEW_KEY, json: false,
+    get: () => state.taskView, set: (v) => { if (v) state.taskView = String(v); } },
+];
+
+function uiPrefsPayload() {
+  const out = {};
+  for (const slot of UI_PREF_SLOTS) {
+    out[slot.group] = out[slot.group] || {};
+    out[slot.group][slot.name] = slot.get();
+  }
+  return out;
+}
+
+// Applied when the profile lands. Written through to localStorage as well as state, so the
+// next cold start on this device paints correctly before auth resolves.
+function applySyncedUiPrefs(prefs) {
+  if (!prefs || typeof prefs !== 'object') return;
+  if (uiPrefsSyncPending) return;
+  for (const slot of UI_PREF_SLOTS) {
+    const value = prefs[slot.group]?.[slot.name];
+    if (value === undefined) continue;
+    slot.set(value);
+    if (slot.json) writeJson(slot.store, value);
+    else localStorage.setItem(slot.store, String(value));
+  }
+}
+
+let uiPrefsSyncTimer = null;
+let uiPrefsSyncPending = false;
+let uiPrefsLastPushed = '';
+
+// Snapshot-and-compare rather than a call at each of the dozen places these change. One hook
+// cannot be forgotten when the thirteenth is added, and the comparison means an idle session
+// never writes. Debounced well past a drag, which fires continuously.
+function scheduleUiPrefsSync() {
+  if (!isLiveSupabaseSession() || !profilePrefsLoaded) return;
+  if (uiPrefsSyncTimer) return;
+  uiPrefsSyncTimer = setTimeout(() => {
+    uiPrefsSyncTimer = null;
+    const payload = uiPrefsPayload();
+    const json = JSON.stringify(payload);
+    if (json === uiPrefsLastPushed) return;
+    uiPrefsLastPushed = json;
+    uiPrefsSyncPending = true;
+    flushUiPrefsSync(payload).finally(() => { uiPrefsSyncPending = false; });
+  }, 1500);
+}
+
+async function flushUiPrefsSync(payload) {
+  const client = createSupabaseClient();
+  if (!client) return;
+  const result = await client.rpc('update_own_ui_prefs', { p_prefs: payload });
+  // Same stance as appearance: a preference that failed to save must never interrupt
+  // anyone. It is already applied and stored locally either way.
+  if (result?.error) {
+    // Let the next change try again rather than believing this one landed.
+    uiPrefsLastPushed = '';
+    console.warn('UI preference sync failed', result.error.message);
+    return;
+  }
+  const session = activeSession();
+  if (session?.profile) session.profile.ui_prefs = payload;
 }
 
 // One entry per pack. The import paths must be literal for the bundler to see them, so
@@ -3583,6 +3696,9 @@ function render() {
   // both open you could see a dialog but not type into it. Dozens of paths set state.modal;
   // reconciling here catches every one of them, and only ever turns the flag off.
   if (state.commandPalette.open && (state.modal || state.builderModal)) resetCommandPalette();
+  // Cheap: sets a timer if one is not already pending. The snapshot comparison that decides
+  // whether anything actually changed happens once, when it fires.
+  scheduleUiPrefsSync();
   app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette() + renderMessageDock() + renderLayoutDiagnostic();
   mountLayoutDiagnosticIfRequested();
   queueMicrotask(restoreSidebarScroll);
@@ -39364,6 +39480,10 @@ function normalizeProfile(input, fallback = {}) {
     appearance_prefs: (input.appearance_prefs && typeof input.appearance_prefs === 'object')
       ? input.appearance_prefs
       : (fallback.appearance_prefs || {}),
+    // Dropped here and the saved dashboard never reaches the device that asked for it.
+    ui_prefs: (input.ui_prefs && typeof input.ui_prefs === 'object')
+      ? input.ui_prefs
+      : (fallback.ui_prefs || {}),
   };
 }
 

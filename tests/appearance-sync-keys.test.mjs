@@ -91,9 +91,9 @@ test('a device does not sync appearance until it has received the profile', () =
   // from that state overwrites a theme chosen on another device with defaults.
   const push = main.slice(main.indexOf('function pushAppearanceSync()'));
   const body = push.slice(0, push.indexOf('\n}\n'));
-  assert.match(body, /if \(!appearanceSyncLoaded\) return;/);
+  assert.match(body, /if \(!profilePrefsLoaded\) return;/);
   assert.ok(
-    body.indexOf('appearanceSyncLoaded') < body.indexOf('appearanceSyncPending = true'),
+    body.indexOf('profilePrefsLoaded') < body.indexOf('appearanceSyncPending = true'),
     'the guard must come before the write is scheduled',
   );
 });
@@ -103,9 +103,9 @@ test('the flag is set even when nothing was stored', () => {
   const fn = main.slice(main.indexOf('function refreshResolvedAppearance()'));
   const body = fn.slice(0, fn.indexOf('\n}\n'));
   assert.match(body, /applySyncedAppearance\(resolvedAppearancePrefs\(\)\);/);
-  assert.match(body, /appearanceSyncLoaded = true;/);
+  assert.match(body, /profilePrefsLoaded = true;/);
   assert.ok(
-    body.indexOf('applySyncedAppearance') < body.indexOf('appearanceSyncLoaded = true'),
+    body.indexOf('applySyncedAppearance') < body.indexOf('profilePrefsLoaded = true'),
     'apply first, then allow writes',
   );
 });
