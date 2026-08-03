@@ -127,3 +127,68 @@ test('the host check matches subdomains but not a lookalike domain', () => {
   assert.ok(!RE.test('vercel.app.example.com'), 'only the suffix counts');
   assert.ok(!RE.test('www.questbase.io'));
 });
+
+test('the invite arrives from Questbase, whatever EMAIL_FROM is named', () => {
+  // EMAIL_FROM was configured as "Notification", so the invite came from a sender nobody
+  // recognised -- which is how a legitimate email gets deleted unread. The address stays
+  // configurable; the display name does not.
+  const fn = readFileSync(new URL('../supabase/functions/send-company-invite/index.ts', import.meta.url), 'utf8');
+  assert.match(fn, /const SENDER_NAME = "Questbase";/);
+  assert.match(fn, /function senderFrom\(raw: string\): string \{/);
+  assert.match(fn, /from: senderFrom\(from\),/, 'the raw value must not reach the provider');
+});
+
+test('senderFrom handles both shapes of address', () => {
+  const SENDER_NAME = 'Questbase';
+  const senderFrom = (raw) => {
+    const match = raw.match(/<([^>]+)>/);
+    const address = (match ? match[1] : raw).trim();
+    return address ? `${SENDER_NAME} <${address}>` : '';
+  };
+  assert.equal(senderFrom('Notification <no-reply@questbase.io>'), 'Questbase <no-reply@questbase.io>');
+  assert.equal(senderFrom('no-reply@questbase.io'), 'Questbase <no-reply@questbase.io>');
+  assert.equal(senderFrom('  no-reply@questbase.io  '), 'Questbase <no-reply@questbase.io>');
+  assert.equal(senderFrom(''), '', 'an empty setting is still caught by the configuration check');
+});
+
+// --- revoking ------------------------------------------------------------------------------
+
+test('only PENDING invites are unique per address, not every status', () => {
+  // The old constraint was UNIQUE (company_id, email, status). It stopped two live invites --
+  // correct -- but it also allowed exactly one REVOKED row per address, so revoking a second
+  // invite for someone previously invited and revoked collided and failed.
+  const migration = readFileSync(
+    new URL('../supabase/migrations/202608042000_invite_unique_pending_only.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(migration, /drop constraint if exists company_invites_company_id_email_status_key/);
+  assert.match(migration, /create unique index if not exists company_invites_one_pending_per_email/);
+  assert.match(migration, /where status = 'pending'/, 'the index has to be partial, or the bug returns');
+  assert.match(migration, /\(company_id, lower\(email\)\)/, 'one person, one live invite, whatever the casing');
+});
+
+test('a refused revoke is surfaced, not left in the status pill', () => {
+  // It failed for weeks looking like "nothing happens" because the reason only went somewhere
+  // easy to miss.
+  const at = MAIN.indexOf('async function revokeInvite(');
+  const body = MAIN.slice(at, MAIN.indexOf('\n}\n', at));
+  assert.match(body, /showToast\(result\.error\.message \|\| 'Could not revoke this invite\.', 'error', 'Users'\)/);
+});
+
+test('revoking marks the invite revoked rather than deleting the row', () => {
+  // Deliberate: the audit trail keeps who invited whom and who withdrew it. The list filters
+  // to pending, so a revoked invite disappears from the UI either way.
+  // MAIN is read raw, and this repo checks out CRLF, so '\n}\n' would never terminate.
+  const src = MAIN.replace(/\r\n/g, '\n');
+  const at = src.indexOf('async function revokeInvite(');
+  const body = src.slice(at, src.indexOf('\n}\n', at));
+  assert.match(body, /status: 'revoked'/);
+  assert.ok(!/\.delete\(\)/.test(body), 'the row is kept for the audit trail');
+});
+
+test('the invite list only shows pending ones', () => {
+  // Which is what makes a successful revoke visibly remove the row.
+  const at = MAIN.indexOf('function companyInvites(');
+  const body = MAIN.slice(at, MAIN.indexOf('\n}\n', at));
+  assert.match(body, /invite\.status === 'pending'/);
+});

@@ -25,6 +25,20 @@ const PRODUCTION_ORIGINS = [
 // goes into someone's inbox and may be clicked days later, so it has to be the product's
 // permanent home.
 const CANONICAL_APP_URL = "https://www.questbase.io";
+
+// The name in the recipient's inbox. EMAIL_FROM was configured as "Notification", so the
+// invite arrived from a sender nobody recognised -- which is how a legitimate email gets
+// deleted unread. The address stays configurable; who it is from does not.
+const SENDER_NAME = "Questbase";
+
+/** Rebuild the From header as `Questbase <address>`, whatever shape EMAIL_FROM is in. */
+function senderFrom(raw: string): string {
+  // Accepts both "Some Name <a@b.co>" and a bare "a@b.co".
+  const match = raw.match(/<([^>]+)>/);
+  const address = (match ? match[1] : raw).trim();
+  return address ? `${SENDER_NAME} <${address}>` : "";
+}
+
 // Vercel gives every deployment its own hostname. They rotate, they outlive nothing, and an
 // invite sent against one is a link to a build rather than to the product.
 const DEPLOYMENT_HOST_RE = /(^|\.)vercel\.app$/i;
@@ -239,7 +253,7 @@ This link is tied to ${String(invite.email).trim()} and expires ${new Date(invit
         "Idempotency-Key": `questbase-company-invite-${invite.id}`,
       },
       body: JSON.stringify({
-        from,
+        from: senderFrom(from),
         to: [String(invite.email).trim().toLowerCase()],
         subject,
         text,

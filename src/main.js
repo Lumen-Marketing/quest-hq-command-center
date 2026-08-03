@@ -27005,7 +27005,18 @@ function handleAction(event, node) {
   if (action === 'send-invite-email') {
     event.preventDefault();
     if (!requirePermission('users.manage', activeCompanyId(), 'Your role cannot send invite emails.', 'Users')) return;
-    sendCompanyInviteEmail(node.dataset.inviteId);
+    // Same wait as creating one: an email provider round trip behind a button that otherwise
+    // looks untouched. A second press would send the invite twice.
+    if (node.disabled) return;
+    const label = node.innerHTML;
+    node.disabled = true;
+    node.setAttribute('aria-busy', 'true');
+    node.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>Sending…';
+    sendCompanyInviteEmail(node.dataset.inviteId).finally(() => {
+      node.disabled = false;
+      node.removeAttribute('aria-busy');
+      node.innerHTML = label;
+    });
     return;
   }
   if (action === 'copy-invite-link') {
@@ -29907,7 +29918,38 @@ async function deleteRole(roleId) {
   render();
 }
 
+/**
+ * Put a form's submit button into a working state, and hand back the undo.
+ *
+ * For submits that wait on something slow enough to look broken -- sending an invite goes
+ * through an insert, an audit write and an email provider before anything changes on screen.
+ * Without this the button looks untouched, so people press it again and get two of whatever
+ * they asked for.
+ *
+ * Returns a no-op when there is no submit button, so callers never have to check.
+ */
+function beginSubmitting(formNode, label = 'Working…') {
+  const button = formNode?.querySelector?.('button[type="submit"]');
+  if (!button || button.disabled) return null;
+  const original = button.innerHTML;
+  button.disabled = true;
+  // Announced rather than only drawn: a disabled button with a spinner says nothing to a
+  // screen reader on its own.
+  button.setAttribute('aria-busy', 'true');
+  button.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span>${h(label)}`;
+  return () => {
+    // The form is often gone by now -- a successful save closes the modal -- and writing to a
+    // detached node is harmless, so there is nothing to check for.
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    button.innerHTML = original;
+  };
+}
+
 async function saveInvite(formNode) {
+  // Already in flight. Enter in a text field can submit a form whose button is disabled, so
+  // the guard belongs here rather than relying on the button alone.
+  if (formNode?.querySelector?.('button[type="submit"]')?.disabled) return;
   const data = new FormData(formNode);
   const companyId = canonicalCompanyId(data.get('company_id') || activeCompanyId());
   if (!requirePermission('users.manage', companyId, 'Your role cannot invite users.', 'Users')) return;
@@ -29949,35 +29991,43 @@ async function saveInvite(formNode) {
     created_at: new Date().toISOString(),
   });
   const client = createSupabaseClient();
+  // Everything below here waits on the network. The button says so until it is done.
+  const doneSubmitting = beginSubmitting(formNode, 'Sending invite…');
 
-  if (isLiveSupabaseSession() && client) {
-    const payload = {
-      company_id: invite.company_id,
-      email: invite.email,
-      role_id: invite.role_id || null,
-      workspace_ids: invite.workspace_ids,
-      token: invite.token,
-      status: 'pending',
-      invited_by: activeSession().profile.id,
-    };
-    const result = await client.from('company_invites').insert(payload).select().single();
-    if (result.error) {
-      state.sync = { label: result.error.message || 'Invite save failed', mode: 'local' };
-      render();
-      return;
+  try {
+    if (isLiveSupabaseSession() && client) {
+      const payload = {
+        company_id: invite.company_id,
+        email: invite.email,
+        role_id: invite.role_id || null,
+        workspace_ids: invite.workspace_ids,
+        token: invite.token,
+        status: 'pending',
+        invited_by: activeSession().profile.id,
+      };
+      const result = await client.from('company_invites').insert(payload).select().single();
+      if (result.error) {
+        state.sync = { label: result.error.message || 'Invite save failed', mode: 'local' };
+        render();
+        return;
+      }
+      state.companyInvites.unshift(normalizeCompanyInvite(result.data));
+      await recordAuditEvent(invite.company_id, 'invite.created', 'company_invite', result.data.id, { email: invite.email }, true);
+      await sendCompanyInviteEmail(result.data.id, { renderAfter: false });
+    } else {
+      state.companyInvites.unshift(invite);
+      recordAuditEvent(invite.company_id, 'invite.created', 'company_invite', invite.id, { email: invite.email });
+      state.sync = { label: 'Invite created locally. Copy its link to share it.', mode: 'local' };
     }
-    state.companyInvites.unshift(normalizeCompanyInvite(result.data));
-    await recordAuditEvent(invite.company_id, 'invite.created', 'company_invite', result.data.id, { email: invite.email }, true);
-    await sendCompanyInviteEmail(result.data.id, { renderAfter: false });
-  } else {
-    state.companyInvites.unshift(invite);
-    recordAuditEvent(invite.company_id, 'invite.created', 'company_invite', invite.id, { email: invite.email });
-    state.sync = { label: 'Invite created locally. Copy its link to share it.', mode: 'local' };
-  }
 
-  notifyLocalEvent('access.invite', 'Teammate invited', `${actorName()} invited ${invite.email}.`, companyPath('settings', { tab: 'access' }, invite.company_id), 'invite', invite.id, invite.company_id);
-  state.modal = '';
-  render();
+    notifyLocalEvent('access.invite', 'Teammate invited', `${actorName()} invited ${invite.email}.`, companyPath('settings', { tab: 'access' }, invite.company_id), 'invite', invite.id, invite.company_id);
+    state.modal = '';
+    render();
+  } finally {
+    // Restored on every path, including the early return above and an unexpected throw --
+    // otherwise a failed invite leaves a permanently dead button behind.
+    if (doneSubmitting) doneSubmitting();
+  }
 }
 
 async function sendCompanyInviteEmail(inviteId, { renderAfter = true } = {}) {
@@ -30083,7 +30133,11 @@ async function revokeInvite(inviteId) {
   if (isLiveSupabaseSession() && client) {
     const result = await client.rpc('revoke_company_invite', { target_invite_id: invite.id });
     if (result.error) {
+      // This failed silently for a while: the reason went into the sync pill, which is easy
+      // to miss, so revoking looked like it simply did nothing. A refusal to revoke is worth
+      // interrupting for.
       state.sync = { label: result.error.message || 'Invite revoke failed', mode: 'local' };
+      showToast(result.error.message || 'Could not revoke this invite.', 'error', 'Users');
       render();
       return;
     }
