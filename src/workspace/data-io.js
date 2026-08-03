@@ -17,6 +17,7 @@ export function createDataIO(ctx) {
     h, showToast, render, companyName,
     wbFind, wbPlainVal, wbSave, wbUid, wbLogActivity, wbMembers,
     wbReportContext, wbLoadReports, wbAssignAutoNumbers,
+    clone, downloadText, guardUpload, activeSession,
   } = ctx;
 
   // Open a print-ready window carrying the app's own stylesheets (so report cards

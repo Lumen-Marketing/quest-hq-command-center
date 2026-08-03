@@ -16033,6 +16033,7 @@ function wbLoadDataIO() {
         h, showToast, render, companyName,
         wbFind, wbPlainVal, wbSave, wbUid, wbLogActivity, wbMembers,
         wbReportContext, wbLoadReports, wbAssignAutoNumbers,
+        clone, downloadText, guardUpload, activeSession,
       });
       return wbDataIOModule;
     }).catch((error) => {

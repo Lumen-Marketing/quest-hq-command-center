@@ -99,3 +99,57 @@ test('what the account popover paints stays out of the settings-only chunk', () 
   // The panel embeds it, so it is handed in rather than imported back from main.js.
   assert.match(panel, /renderAccountThemeControls,/);
 });
+
+// A module that takes a context object is the other half of the same problem: main.js can
+// omit a key the module destructures, and nothing static notices because every name is
+// spelled correctly and looks defined. It throws the first time a user clicks the thing.
+//
+// This shipped twice — the Master panel (state, filteredPlatformBackupCopies,
+// renderPlatformBackupCopyRow) and the print/CSV module (clone, downloadText, guardUpload,
+// activeSession). Both context lists were written by hand from the code being moved.
+//
+// This compares every factory's destructure against what main.js actually passes.
+
+const FACTORY_MODULES = [
+  ['src/platform/master-panel.js', 'createPlatformPanel'],
+  ['src/workspace/data-io.js', 'createDataIO'],
+  ['src/workspace/field-config-ui.js', 'renderFieldConfig'],
+  ['src/ui/appearance-panel.js', 'createAppearancePanel'],
+];
+
+for (const [file, factory] of FACTORY_MODULES) {
+  test(`${file.split('/').pop()}: main.js passes every key it destructures`, () => {
+    const module = readFileSync(join(srcDir, file.replace(/^src\//, '')), 'utf8').replace(/\r\n/g, '\n');
+    const at = module.indexOf(`function ${factory}`);
+    assert.notEqual(at, -1, `${factory} should exist in ${file}`);
+    const open = module.indexOf('const {', at);
+    const close = module.indexOf('} = ctx;', open);
+    assert.ok(open !== -1 && close !== -1, `${factory} should destructure from ctx`);
+
+    const wanted = [...module.slice(open, close).matchAll(/([A-Za-z_$][\w$]*)\s*,/g)].map((m) => m[1]);
+    assert.ok(wanted.length > 3, `expected a context list, parsed ${wanted.length}`);
+
+    // The call site in main.js. The context is not always the first argument —
+    // renderFieldConfig takes (fd, app, ctx) — so this finds the call, then the object
+    // literal inside it, and reads to that object's closing brace.
+    const callAt = main.indexOf(`${factory}(`);
+    assert.notEqual(callAt, -1, `main.js should call ${factory}`);
+    const objectAt = main.indexOf('{', callAt);
+    assert.notEqual(objectAt, -1, `${factory} should be passed an object`);
+    let depth = 0;
+    let end = objectAt;
+    for (; end < main.length; end += 1) {
+      if (main[end] === '{') depth += 1;
+      else if (main[end] === '}' && (depth -= 1) === 0) break;
+    }
+    const passed = main.slice(objectAt, end + 1);
+
+    const missing = wanted.filter((key) => !new RegExp(`\\b${key}\\b`).test(passed));
+    assert.deepEqual(
+      missing,
+      [],
+      `${file} destructures ${missing.join(', ')} but main.js never passes ${missing.length === 1 ? 'it' : 'them'} — `
+      + 'these throw a ReferenceError the first time the feature is used',
+    );
+  });
+}
