@@ -14265,6 +14265,61 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps">${homeTab}<div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0">${appTabs}</div><div class="wb-topbar-spacer"></div>${nav}${addBtn}</nav>`;
 }
 
+// Where the app strip was scrolled to. Kept in a variable rather than on the element:
+// render() replaces the strip's markup, so anything stored on the node is lost with it,
+// which is why opening an app used to send the strip back to the start.
+let wbTopbarScrollLeft = 0;
+
+/**
+ * Drag the app strip sideways with the RIGHT mouse button held down.
+ *
+ * The right button on purpose: the left one belongs to the tabs, and a left-drag would
+ * either swallow clicks or fire them by accident. The context menu is suppressed only
+ * when a drag actually happened, so a plain right-click still opens it.
+ */
+function wbBindTopbarDrag(track) {
+  let dragging = false;
+  let moved = false;
+  let startX = 0;
+  let startScroll = 0;
+
+  track.addEventListener('pointerdown', (event) => {
+    if (event.button !== 2) return;
+    dragging = true;
+    moved = false;
+    startX = event.clientX;
+    startScroll = track.scrollLeft;
+    // Capture so the drag survives the pointer leaving the strip, which it will.
+    try { track.setPointerCapture(event.pointerId); } catch { /* capture is best effort */ }
+    track.classList.add('wb-topbar-dragging');
+  });
+
+  track.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    const dx = event.clientX - startX;
+    // A few pixels of slack, so a right-click with a shaky hand is still a right-click.
+    if (Math.abs(dx) > 3) moved = true;
+    track.scrollLeft = startScroll - dx;
+    event.preventDefault();
+  });
+
+  const end = (event) => {
+    if (!dragging) return;
+    dragging = false;
+    track.classList.remove('wb-topbar-dragging');
+    try { track.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+  };
+  track.addEventListener('pointerup', end);
+  track.addEventListener('pointercancel', end);
+
+  track.addEventListener('contextmenu', (event) => {
+    if (!moved) return;
+    // Only after a real drag: otherwise the menu would be unreachable on the strip.
+    event.preventDefault();
+    moved = false;
+  });
+}
+
 // Wire the app strip as a scrollable track: keep the open app in view, and show the
 // arrows only when there is something to scroll to. Re-runs after each render, so the
 // listeners are attached once per element via a data flag.
@@ -14282,7 +14337,11 @@ function wbMountTopbar() {
   };
   if (!track.dataset.wbScrollBound) {
     track.dataset.wbScrollBound = '1';
-    track.addEventListener('scroll', sync, { passive: true });
+    track.addEventListener('scroll', () => {
+      // Remembered so the strip holds its place when opening an app re-renders it.
+      wbTopbarScrollLeft = track.scrollLeft;
+      sync();
+    }, { passive: true });
     // A vertical wheel over a horizontal strip should move it sideways; without this the
     // page scrolls instead and the strip feels stuck on a trackpad or mouse.
     track.addEventListener('wheel', (event) => {
@@ -14292,12 +14351,24 @@ function wbMountTopbar() {
       if (track.scrollLeft !== before) event.preventDefault();
     }, { passive: false });
     window.addEventListener('resize', sync);
+    wbBindTopbarDrag(track);
   }
-  // Bring the open app into view without yanking the page around it.
+
+  // Restore the remembered position BEFORE deciding whether the open app needs scrolling
+  // into view — otherwise every render starts at zero and the strip appears to reset.
+  if (wbTopbarScrollLeft > 0) track.scrollLeft = wbTopbarScrollLeft;
+
+  // Bring the open app into view, but only if it is not already there: correcting a
+  // position that was already fine is what makes a strip feel like it jumps.
   const active = track.querySelector('[data-wb-topbar-active]');
-  if (active && !track.dataset.wbCenteredFor) {
-    active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    track.dataset.wbCenteredFor = active.getAttribute('href') || '1';
+  if (active) {
+    const left = active.offsetLeft;
+    const right = left + active.offsetWidth;
+    const viewLeft = track.scrollLeft;
+    const viewRight = viewLeft + track.clientWidth;
+    if (left < viewLeft || right > viewRight) {
+      active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    }
   }
   sync();
 }
