@@ -3307,6 +3307,10 @@ async function initializeAuth() {
         if (signature === lastAuthSignature) return;
         lastAuthSignature = signature;
         setSupabaseSession(session || null).finally(() => {
+          // Coming back from Google with an invitation still on the URL. Signing in was only
+          // half of what they set out to do, and there is no button left to press: the auth
+          // modal belongs to the signed-out page they have just left.
+          if (session && acceptInviteFromUrl()) return;
           render();
         });
       }, 0);
@@ -3315,8 +3319,39 @@ async function initializeAuth() {
     state.loginError = error.message || 'Unable to initialize Supabase auth.';
   } finally {
     state.authReady = true;
-    render();
+    // The redirect can land with the session already restored, before any auth event fires.
+    if (!acceptInviteFromUrl()) render();
   }
+}
+
+// Guards against a second attempt: onAuthStateChange can fire more than once for one
+// sign-in, and accept_company_invite raises "already an active company member" the second
+// time -- an error message for something that worked.
+let invitePickedUp = '';
+
+/**
+ * Accept an invitation that is still sitting on the URL, now that a session exists.
+ *
+ * The redirect flows -- OAuth, and email confirmation -- leave someone signed in on a page
+ * with no way back to the invitation they were acting on. Password sign-in does not need
+ * this: that form submits the token itself.
+ *
+ * Returns true when it took over, so the caller does not also render.
+ */
+function acceptInviteFromUrl() {
+  if (!isLiveSupabaseSession()) return false;
+  const token = String(getRoute().params.get('invite') || '').trim();
+  if (!token || token === invitePickedUp) return false;
+  invitePickedUp = token;
+  acceptCompanyInvite(token).catch((error) => {
+    // Left on screen rather than swallowed: the usual cause is signing in with a different
+    // account than the one invited, and the person needs to be told which.
+    state.loginError = error?.message || 'Unable to accept invite.';
+    state.authMessage = '';
+    invitePickedUp = '';
+    render();
+  });
+  return true;
 }
 
 // Identity of a Supabase session for change detection. The access token is part
@@ -22646,7 +22681,11 @@ async function startOAuthSignIn(provider) {
   if (!client) { showToast('Sign-in is unavailable in this mode.', 'error', 'Account'); return; }
   const label = provider === 'apple' ? 'Apple' : 'Google';
   try {
-    const redirectTo = `${window.location.origin}${BASE_PATH || ''}/`;
+    // The provider sends the browser away and brings it back, and anything not in redirectTo
+    // is gone by then. Without the invite riding along, someone joining by invitation would
+    // return signed in but with no invitation to accept -- and no way back to it.
+    const inviteToken = String(state.route?.params?.get('invite') || '').trim();
+    const redirectTo = `${window.location.origin}${BASE_PATH || ''}/${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''}`;
     const { error } = await client.auth.signInWithOAuth({ provider, options: { redirectTo } });
     if (error) throw error;
     // Success redirects the browser to the provider — nothing more to do here.
@@ -22660,13 +22699,19 @@ async function startOAuthSignIn(provider) {
 // Social sign-on buttons for the auth modal. One provider button both registers
 // a new user and signs in a returning one (Supabase resolves which). Hidden when
 // no providers are configured.
-function renderAuthOAuthButtons() {
+function renderAuthOAuthButtons(invitedEmail = '') {
   const providers = CONFIG.oauthProviders.filter((p) => OAUTH_PROVIDER_META[p]);
   if (!providers.length) return '';
   return `
     <div class="auth-sso-group">
       ${providers.map((p) => `<button class="auth-sso auth-sso-${p}" type="button" data-action="oauth-signin" data-provider="${p}">${OAUTH_PROVIDER_META[p].logo}<span>${h(OAUTH_PROVIDER_META[p].label)}</span></button>`).join('')}
     </div>
+    ${invitedEmail ? `
+      <!-- The invitation is bound to one address and the database enforces it, so say which
+           one before they pick an account rather than after: "Invite was sent to a different
+           email address" is a poor way to learn you chose the wrong Google profile. -->
+      <p class="auth-sso-note">Use <b>${h(invitedEmail)}</b> — the invitation is tied to that address.</p>
+    ` : ''}
     <div class="auth-sso-divider"><span>or with email</span></div>`;
 }
 
@@ -22714,7 +22759,7 @@ function renderSupabaseAuthForm(returnUrl) {
           <strong>${inviteToken ? 'Create invited worker account' : 'Create business workspace'}</strong>
           <span>${inviteToken ? 'Email must match the invite.' : 'Workspace opens after Quest approval.'}</span>
         </div>
-        ${inviteToken ? '' : renderAuthOAuthButtons()}
+        ${renderAuthOAuthButtons(inviteToken ? (inviteLookupForToken(inviteToken)?.email || '') : '')}
         <label>${inviteToken ? 'Display name / username' : 'Full name'}<input name="full_name" autocomplete="name" required /></label>
         <label>Email<input name="email" type="email" autocomplete="email" required /></label>
         ${renderPasswordField({ autocomplete: 'new-password' })}
@@ -22765,7 +22810,7 @@ function renderSupabaseAuthForm(returnUrl) {
         <strong>${inviteToken ? 'Sign in and accept invite' : 'Sign in'}</strong>
         <span>${inviteToken ? 'Use the invited email account.' : 'Use your company account.'}</span>
       </div>
-      ${inviteToken ? '' : renderAuthOAuthButtons()}
+      ${renderAuthOAuthButtons(inviteToken ? (inviteLookupForToken(inviteToken)?.email || '') : '')}
       <label>Email<input name="email" type="email" autocomplete="email" required /></label>
       ${renderPasswordField()}
       <input type="hidden" name="invite_token" value="${h(inviteToken)}" />

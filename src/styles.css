@@ -30178,3 +30178,19 @@ html:has(.quest-app) {
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* Which address the invitation is bound to, shown beside the social buttons. The database
+   enforces the match, so this is the difference between choosing the right Google profile
+   and being told afterwards that it was the wrong one. */
+.auth-sso-note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: center;
+}
+
+.auth-sso-note b {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
