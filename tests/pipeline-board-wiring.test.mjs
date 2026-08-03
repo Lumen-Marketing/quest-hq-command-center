@@ -5,6 +5,9 @@ import { renderBoard, renderStageDeletePrompt, renderStageManager } from '../src
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The Automations tab and its rule editor are fetched on demand now, so the stage-trigger
+// UI is read from its own module rather than from main.js.
+const automations = readFileSync(new URL('../src/workspace/automations-ui.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const fn = (name) => {
   const at = main.indexOf(`function ${name}(`);
   assert.notEqual(at, -1, `${name} should exist`);
@@ -177,13 +180,13 @@ test('an empty from/to means "any stage", which is a real choice', () => {
   const collect = main.slice(main.indexOf("const tFrom = document.querySelector('[data-wb-trig-from]')"));
   assert.match(collect.slice(0, 260), /m\.draft\.trigger\.from = tFrom\.value/);
   assert.match(collect.slice(0, 260), /m\.draft\.trigger\.to = tTo\.value/);
-  const ui = fn('wbTrigCfgUI');
+  const ui = automations.slice(automations.indexOf('function wbTrigCfgUI('));
   assert.match(ui, /<option value="">\$\{h\(anyLabel\)\}<\/option>/);
 });
 
 test('the trigger is offered, described, and refused without a pipeline', () => {
   assert.match(main, /<option value="stage_moves"[^>]*>A record moves between pipeline stages<\/option>/);
   assert.match(fn('wbTriggerText'), /if \(t\.event === 'stage_moves'\)/);
-  assert.match(fn('wbTrigCfgUI'), /This app has no pipeline yet/);
+  assert.match(automations, /This app has no pipeline yet/);
   assert.match(main, /trigger\.event === 'stage_moves' && !pipelineField\(/, 'saving must be gated too');
 });

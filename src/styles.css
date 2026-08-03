@@ -29868,3 +29868,25 @@ i.symbol-icon {
     scroll-behavior: auto;
   }
 }
+
+/* ---- Destructive field inside a workspace modal ----
+   Set apart from the fields above it, so "clear the log" is never mistaken for another
+   setting on the way to Save. */
+.wb-danger-field {
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.wb-danger-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.wb-danger-note i {
+  flex: none;
+  margin-top: 1px;
+}

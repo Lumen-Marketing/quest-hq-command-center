@@ -18,6 +18,8 @@ export const MATERIAL_ALIASES = {
   minus: 'remove',
   trash: 'delete',
   'trash-x': 'delete',
+  // Material has no eraser; 'clear_all' is the closest in meaning for wiping a list.
+  eraser: 'clear_all',
   pencil: 'edit',
   'pencil-plus': 'edit_note',
   user: 'person',

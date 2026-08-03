@@ -10,6 +10,7 @@ import {
   addStage, boardColumns, canDropOn, moveStage, pipelineField, pipelineFields,
   recolorStage, removeStage, renameStage, stageCounts, stagesOf, summaryField,
 } from './workspace/pipeline-core.js';
+import { clearableCount, clearedActivity } from './workspace/activity-log.js';
 import {
   assignmentRow, assignmentsToCreate, describeAssignment, findLabel,
   isValidLabelName, labelsForContact as labelsForContactRows, newLabelRow,
@@ -16243,21 +16244,6 @@ function wbActionText(companyId, app, ac) {
   if (ac.type === 'assign') { const field = wbFieldById(app, ac.fieldId); return `<span class="wb-rule-pill"><i class="ti ti-user"></i>Assign ${h(wbMemberById(companyId, ac.value).name)}${field ? ` as ${h(field.label)}` : ''}</span>`; }
   return '<span class="wb-rule-pill"><i class="ti ti-bell"></i>Notify</span>';
 }
-function wbViewAutomations(companyId, workspace, app) {
-  const canManage = can('workspaces.manage', companyId);
-  const list = app.automations || [];
-  const banner = '<div class="wb-auto-banner"><i class="ti ti-bolt"></i>Automations run rules automatically when items are created, updated, or reach a status — no code required.</div>';
-  if (!list.length) return banner + `<div class="wb-empty"><i class="ti ti-bolt"></i><h3>No automations yet</h3><p>Create rules like "When Stage is Won, assign the Account Manager and post to the activity feed."</p>${canManage ? '<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>Create your first automation</button>' : ''}</div>`;
-  const rows = list.map((au) => `<div class="wb-auto-row ${au.enabled ? '' : 'off'}">
-    <div class="wb-ai"><i class="ti ti-bolt"></i></div>
-    <div class="wb-am"><b>${h(au.name)}</b><div class="wb-rule">When ${wbTriggerText(companyId, app, au.trigger)} <i class="ti ti-arrow-right wb-rule-arrow"></i> ${au.actions.map((ac) => wbActionText(companyId, app, ac)).join(' ')}</div></div>
-    ${canManage ? `<label class="wb-switch" title="Enable/disable"><input type="checkbox" ${au.enabled ? 'checked' : ''} data-toggle-auto="${h(au.id)}"><span class="wb-slider"></span></label>
-    <button class="wb-icon-btn" data-dupe-auto="${h(au.id)}" title="Duplicate"><i class="ti ti-copy"></i></button>
-    <button class="wb-icon-btn" data-edit-auto="${h(au.id)}" title="Configure"><i class="ti ti-adjustments"></i></button>
-    <button class="wb-icon-btn danger" data-del-auto="${h(au.id)}" title="Delete"><i class="ti ti-trash"></i></button>` : `<span class="wb-sub">${au.enabled ? 'Enabled' : 'Disabled'}</span>`}
-  </div>`).join('');
-  return banner + `<div class="wb-auto-list">${rows}</div>`;
-}
 // A "Set field value" that starts with an operator does math on the current value
 // (a trailing % makes the operand a percentage of it); anything else is a literal.
 //   -10%  → current − 10% of current      +20  → current + 20
@@ -16374,6 +16360,49 @@ function wbGuard() { return requirePermission('workspaces.manage', activeCompany
 /* ---- Modal launchers (set state.builderModal, then render) ------------------ */
 function openWbModal(modal) { state.builderModal = modal; render(); }
 function closeWbModal() { state.builderModal = null; render(); }
+
+/**
+ * Clear a workspace's activity log, after confirming the person's password.
+ *
+ * The password is re-checked even though they are already signed in: this destroys
+ * history, and a signed-in session left open on someone's desk should not be enough. It
+ * mirrors the workspace-delete flow, which does the same for the same reason.
+ */
+async function wbClearWorkspaceActivity(button) {
+  const m = state.builderModal;
+  if (!m || m.kind !== 'clear-activity') return;
+  if (!can('workspaces.manage', m.companyId)) {
+    m.error = 'Your role cannot clear this log.';
+    render();
+    return;
+  }
+  const { workspace } = wbFind(m.companyId, m.workspaceId);
+  if (!workspace) { state.builderModal = null; render(); return; }
+
+  if (isLiveSupabaseSession()) {
+    const password = document.getElementById('wbClearPw')?.value || '';
+    if (!password) { m.error = 'Enter your password to confirm.'; render(); return; }
+    const client = createSupabaseClient();
+    let email = activeSession()?.profile?.email || '';
+    if (!email && client) { try { email = (await client.auth.getUser())?.data?.user?.email || ''; } catch { /* fall through */ } }
+    if (!client || !email) { m.error = 'Could not verify your account. Try again.'; render(); return; }
+    if (button) button.disabled = true;
+    const reauth = await client.auth.signInWithPassword({ email, password });
+    if (button) button.disabled = false;
+    if (reauth.error) { m.error = 'Incorrect password.'; render(); return; }
+  }
+
+  workspace.activity = clearedActivity(workspace, {
+    actorName: actorName(),
+    at: new Date().toISOString(),
+    id: wbUid(),
+  });
+  wbSave(m.companyId);
+  // Back to the workspace modal the clear was started from, with its draft intact.
+  state.builderModal = m.returnTo ? { ...m.returnTo } : null;
+  showToast('Activity log cleared.', isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
+  render();
+}
 
 function openWbWorkspaceModal(companyId, editId) {
   const ws = editId ? wbFind(companyId, editId).workspace : null;
@@ -16507,7 +16536,47 @@ async function openWbItemModal(companyId, workspaceId, appId, itemId, mode, opts
   const resolved = mode || (itemId ? 'view' : 'edit');
   openWbModal({ kind: 'item', companyId, workspaceId, appId, editId: itemId || '', mode: resolved, focusComment: !!(opts && opts.focusComment), draft: { values: item ? { ...item.values } : {} } });
 }
-function openWbAutoModal(companyId, workspaceId, appId, autoId) {
+// ---- Automations UI (tab + rule editor) --------------------------------------
+// Bodies live in ./workspace/automations-ui.js and are fetched on demand.
+let wbAutomationsUI = null;
+let wbAutomationsPending = null;
+
+function wbLoadAutomationsUI() {
+  if (wbAutomationsUI) return Promise.resolve(wbAutomationsUI);
+  if (!wbAutomationsPending) {
+    wbAutomationsPending = import('./workspace/automations-ui.js').then((mod) => {
+      wbAutomationsUI = mod.createAutomationsUI({
+        h, can, state, WB_TRIG_OPS,
+        wbTriggerText, wbActionText, wbMembers, wbRelTargetApp, wbRelLabel,
+      });
+      return wbAutomationsUI;
+    }).catch((error) => {
+      wbAutomationsPending = null;
+      throw error;
+    });
+  }
+  return wbAutomationsPending;
+}
+
+function wbViewAutomations(companyId, workspace, app) {
+  if (wbAutomationsUI) return wbAutomationsUI.wbViewAutomations(companyId, workspace, app);
+  wbLoadAutomationsUI().then(() => render()).catch((error) => console.error('Automations failed to load', error));
+  return questLoader('Loading automations');
+}
+
+// The dialog awaits the module before opening (see openWbAutoModal), so these are only
+// ever reached with it in hand.
+function wbTrigCfgUI(draft, app) {
+  return wbAutomationsUI ? wbAutomationsUI.wbTrigCfgUI(draft, app) : '';
+}
+
+function wbActionCardsUI(companyId, draft, app) {
+  return wbAutomationsUI ? wbAutomationsUI.wbActionCardsUI(companyId, draft, app) : '';
+}
+
+async function openWbAutoModal(companyId, workspaceId, appId, autoId) {
+  // Awaited so the rule editor never opens as an empty shell that fills in a moment later.
+  try { await wbLoadAutomationsUI(); } catch { showToast('Could not open the automation editor — check your connection and try again.', 'local', 'Workspaces'); return; }
   const { app } = wbFind(companyId, workspaceId, appId);
   const existing = autoId ? (app.automations || []).find((a) => a.id === autoId) : null;
   const draft = existing ? JSON.parse(JSON.stringify(existing)) : { id: wbUid(), name: '', enabled: true, trigger: { event: 'created' }, actions: [{ type: 'notify', message: '' }] };
@@ -16690,8 +16759,30 @@ function renderWorkspaceBuilderModal() {
       <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbWsDesc" placeholder="What is this workspace for?">${h(m.draft.description ?? editing?.description ?? '')}</textarea></div>
       <div class="wb-row2"><div class="wb-field"><label>Icon</label><div class="wb-emoji-pick">${WB_WS_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" type="button" data-wb-pick-icon="${icon}" aria-pressed="${icon === m.draft.icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('')}</div></div>
       <div class="wb-field"><label>Color</label>${wbColorSwatches(m.draft.color)}</div></div>
-      <div class="wb-field"><label>${editing ? 'Members' : 'Invite members'} <span class="wb-opt">(who collaborates here)</span></label><div class="wb-member-pick">${wbMembers(m.companyId).map((member) => `<button class="wb-member-opt ${m.draft.members.includes(member.id) ? 'on' : ''}" data-wb-toggle-member="${h(member.id)}">${wbAvatar(member, 30)}<div class="wb-mo-info"><b>${h(member.name)}</b><span>${h(member.role)} · ${h(member.email)}</span></div><span class="wb-ck"><i class="ti ti-check"></i></span></button>`).join('') || '<div class="wb-sub">No company members found.</div>'}</div></div>`,
+      <div class="wb-field"><label>${editing ? 'Members' : 'Invite members'} <span class="wb-opt">(who collaborates here)</span></label><div class="wb-member-pick">${wbMembers(m.companyId).map((member) => `<button class="wb-member-opt ${m.draft.members.includes(member.id) ? 'on' : ''}" data-wb-toggle-member="${h(member.id)}">${wbAvatar(member, 30)}<div class="wb-mo-info"><b>${h(member.name)}</b><span>${h(member.role)} · ${h(member.email)}</span></div><span class="wb-ck"><i class="ti ti-check"></i></span></button>`).join('') || '<div class="wb-sub">No company members found.</div>'}</div></div>
+      ${editing && can('workspaces.manage', m.companyId) ? `
+        <div class="wb-field wb-danger-field">
+          <label>Activity log</label>
+          <div class="wb-sub">This workspace has ${clearableCount(editing)} logged ${clearableCount(editing) === 1 ? 'action' : 'actions'}. Clearing removes them and leaves one entry recording that you did it.</div>
+          <div class="wb-sub wb-danger-note"><i class="ti ti-info-circle" aria-hidden="true"></i> Posts and files in the feed are kept, and so is the company audit trail — this only clears this workspace's action log.</div>
+          <div class="wb-settings-actions" style="margin-top:10px">
+            <button class="btn danger" type="button" data-wb-clear-activity ${clearableCount(editing) ? '' : 'disabled'}><i class="ti ti-eraser"></i>Clear activity log</button>
+          </div>
+        </div>
+      ` : ''}
+`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-check"></i>${editing ? 'Save changes' : 'Create workspace'}</button>`);
+  }
+  if (m.kind === 'clear-activity') {
+    const ws = wbFind(m.companyId, m.workspaceId).workspace;
+    const count = clearableCount(ws);
+    return wbModalShell('Workspace', 'wb-modal-sm',
+      `<div class="wb-modal-ic danger"><i class="ti ti-eraser"></i></div><h3>Clear activity log</h3>`,
+      `${m.error ? `<div class="wb-modal-error" role="alert">${h(m.error)}</div>` : ''}
+      <p class="wb-sub">This removes <b>${count}</b> logged ${count === 1 ? 'action' : 'actions'} from <b>${h(ws?.name || 'this workspace')}</b>. It cannot be undone.</p>
+      <p class="wb-sub">One entry is kept, recording that you cleared the log and how many entries went. Posts and files in the feed are not touched, and neither is the company audit trail.</p>
+      ${isLiveSupabaseSession() ? `<div class="wb-field"><label>Confirm your password</label><input class="wb-input" type="password" id="wbClearPw" autocomplete="current-password" placeholder="Your account password" /></div>` : ''}`,
+      `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" type="button" data-wb-confirm-clear-activity><i class="ti ti-eraser"></i>Clear log</button>`);
   }
   if (m.kind === 'app-chooser') {
     if (m.step === 'detail') {
@@ -16916,84 +17007,6 @@ function wbLoadFieldUi() {
 }
 function wbOptRow(o) {
   return `<div class="wb-opt-item" data-oid="${h(o.id)}"><input type="color" class="wb-dot-pick" value="${h(o.color || '#2563eb')}"><input class="wb-input wb-opt-label" value="${h(o.label)}" placeholder="Option label"><button class="wb-icon-btn danger" data-wb-del-option type="button" aria-label="Remove option"><i class="ti ti-x"></i></button></div>`;
-}
-function wbTrigCfgUI(draft, app) {
-  if (draft.trigger.event === 'stage_moves') {
-    const fields = pipelineFields(app);
-    if (!fields.length) return '<div class="wb-sub" style="color:var(--warning,#d97706)">This app has no pipeline yet — add a Status field, or use <b>Manage stages</b> on the board.</div>';
-    const field = pipelineField(app, draft.trigger.fieldId);
-    draft.trigger.fieldId = field.id;
-    const stages = stagesOf(field);
-    // "Any" on both sides is the useful default: it fires on every stage change, which is
-    // what someone reaches for first, and narrowing is a second thought.
-    const pick = (attr, chosen, anyLabel) => `<select class="wb-input" data-wb-trig-${attr}><option value="">${h(anyLabel)}</option>${stages.map((s) => `<option value="${h(s.id)}" ${chosen === s.id ? 'selected' : ''}>${h(s.label)}</option>`).join('')}</select>`;
-    const fieldSelect = fields.length > 1
-      ? `<div class="wb-field"><label>Pipeline</label><select class="wb-input" data-wb-trig-field>${fields.map((f) => `<option value="${h(f.id)}" ${f.id === field.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select></div>`
-      : '';
-    return `${fieldSelect}
-      <div class="wb-trig-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span class="wb-sub">from</span>${pick('from', draft.trigger.from, 'Any stage')}
-        <span class="wb-sub">to</span>${pick('to', draft.trigger.to, 'Any stage')}
-      </div>
-      <div class="wb-sub" style="margin-top:6px">Fires only when the stage actually changes — saving a record without moving it does nothing.</div>`;
-  }
-  if (draft.trigger.event !== 'field_is') return '';
-  // Any field can trigger this, except file/image uploads (no comparable "value").
-  const fields = app.fields.filter((f) => !['file', 'image'].includes(f.type));
-  if (!fields.length) return '<div class="wb-sub" style="color:var(--warning,#d97706)">Add a field to use this trigger.</div>';
-  const fid = fields.some((f) => f.id === draft.trigger.fieldId) ? draft.trigger.fieldId : fields[0].id;
-  draft.trigger.fieldId = fid;
-  const field = app.fields.find((f) => f.id === fid);
-  const val = draft.trigger.value == null ? '' : String(draft.trigger.value);
-  const opt = (value, label) => `<option value="${h(value)}" ${val === String(value) ? 'selected' : ''}>${h(label)}</option>`;
-  const fieldSelect = `<select class="wb-input" data-wb-trig-field>${fields.map((x) => `<option value="${h(x.id)}" ${x.id === fid ? 'selected' : ''}>${h(x.label)}</option>`).join('')}</select>`;
-  // The value control adapts to the chosen field's type.
-  let valueControl;
-  if (field.type === 'status' || field.type === 'category') {
-    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${(field.config.options || []).map((o) => opt(o.id, o.label)).join('')}</select>`;
-  } else if (field.type === 'checkbox') {
-    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${opt('true', 'Yes (checked)')}${opt('false', 'No (unchecked)')}</select>`;
-  } else if (field.type === 'user') {
-    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${wbMembers(state.builderModal?.companyId).map((mem) => opt(mem.id, mem.name)).join('')}</select>`;
-  } else if (field.type === 'relationship') {
-    const ta = wbRelTargetApp(field, state.builderModal?.companyId);
-    valueControl = `<select class="wb-input" data-wb-trig-val><option value="">— value —</option>${(ta?.items || []).map((it) => opt(it.id, wbRelLabel(ta, it, field.config.identifyField || field.config.displayField))).join('')}</select>`;
-  } else if (['number', 'money', 'calculation', 'duration', 'progress'].includes(field.type)) {
-    // Numeric fields (including calculation results, durations in minutes, and
-    // progress %) compare by operator so the rule can fire on a range,
-    // not just an exact match (e.g. Manhour >= 40, Progress >= 100).
-    const op = WB_TRIG_OPS.some(([v]) => v === draft.trigger.op) ? draft.trigger.op : '==';
-    draft.trigger.op = op;
-    const opSelect = `<select class="wb-input" data-wb-trig-op style="flex:0 0 128px">${WB_TRIG_OPS.map(([v, l]) => `<option value="${h(v)}" ${op === v ? 'selected' : ''}>${h(l)}</option>`).join('')}</select>`;
-    valueControl = `<div style="display:flex;gap:8px">${opSelect}<input class="wb-input" data-wb-trig-val type="number" step="any" value="${h(val)}" placeholder="Value" style="flex:1;min-width:0"></div>`;
-  } else {
-    const inputType = field.type === 'date' ? 'date' : field.type === 'email' ? 'email' : 'text';
-    valueControl = `<input class="wb-input" data-wb-trig-val type="${inputType}" value="${h(val)}" placeholder="Exact value to match">`;
-  }
-  return `<div class="wb-row2">${fieldSelect}${valueControl}</div>`;
-}
-function wbActionCardsUI(companyId, draft, app) {
-  return draft.actions.map((ac, i) => {
-    let cfg = '';
-    if (ac.type === 'set_field') {
-      const setable = app.fields.filter((f) => ['text', 'textarea', 'status', 'category', 'date', 'number', 'money', 'email', 'phone', 'checkbox', 'location', 'duration', 'progress'].includes(f.type));
-      const fid = ac.fieldId || (setable[0] && setable[0].id);
-      const field = app.fields.find((f) => f.id === fid);
-      let valInput = '';
-      if (field && (field.type === 'status' || field.type === 'category')) valInput = `<select class="wb-input" data-wb-acval="${i}"><option value="">— value —</option>${(field.config.options || []).map((o) => `<option value="${h(o.id)}" ${ac.value === o.id ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</select>`;
-      else if (field && field.type === 'checkbox') valInput = `<select class="wb-input" data-wb-acval="${i}"><option value="true" ${ac.value === true ? 'selected' : ''}>Yes</option><option value="false" ${ac.value === false ? 'selected' : ''}>No</option></select>`;
-      else valInput = `<input class="wb-input" data-wb-acval="${i}" value="${h(ac.value ?? '')}" placeholder="Value to set">`;
-      const numericHint = field && ['number', 'money', 'duration', 'progress'].includes(field.type) ? '<div class="wb-sub" style="margin-top:4px">Tip: start with <b>+ − × ÷</b> to do math on the current value — e.g. <code>-10%</code>, <code>+20</code>, <code>*2</code>. A plain number sets it exactly.</div>' : '';
-      cfg = `<select class="wb-input" data-wb-acfield="${i}">${setable.map((x) => `<option value="${h(x.id)}" ${x.id === fid ? 'selected' : ''}>${h(x.label)}</option>`).join('')}</select>${valInput}${numericHint}`;
-    } else if (ac.type === 'assign') {
-      const userFields = app.fields.filter((f) => f.type === 'user');
-      const members = wbMembers(companyId);
-      cfg = `<select class="wb-input" data-wb-acfield="${i}">${userFields.length ? userFields.map((x) => `<option value="${h(x.id)}" ${x.id === ac.fieldId ? 'selected' : ''}>${h(x.label)}</option>`).join('') : '<option value="">(add a User field)</option>'}</select><select class="wb-input" data-wb-acval="${i}"><option value="">— member —</option>${members.map((member) => `<option value="${h(member.id)}" ${ac.value === member.id ? 'selected' : ''}>${h(member.name)}</option>`).join('')}</select>`;
-    } else {
-      cfg = `<input class="wb-input" data-wb-acmsg="${i}" value="${h(ac.message || '')}" placeholder="Message for the activity feed">`;
-    }
-    return `<div class="wb-action-card"><div class="wb-acgrow"><select class="wb-input" data-wb-actype="${i}"><option value="notify" ${ac.type === 'notify' ? 'selected' : ''}>Post a notification</option><option value="set_field" ${ac.type === 'set_field' ? 'selected' : ''}>Set a field value</option><option value="assign" ${ac.type === 'assign' ? 'selected' : ''}>Assign a member</option></select>${cfg}</div><button class="wb-icon-btn danger" data-wb-acdel="${i}" type="button" aria-label="Delete automation"><i class="ti ti-x"></i></button></div>`;
-  }).join('');
 }
 // Delegates to the lazily-fetched field UI chunk. openWbItemModal awaits the module
 // before the record form opens, so this is only called with it in hand. The factory is
@@ -17916,6 +17929,15 @@ function wbMountModal() {
   overlay.querySelectorAll('[data-wb-prog-refresh]').forEach((s) => { s.onchange = () => { wbCollectModalDraft(); render(); }; });
   // Relationship: changing the linked app re-renders so its fields fill the "Show field" picker.
   overlay.querySelectorAll('[data-wb-rel-refresh]').forEach((s) => { s.onchange = () => { wbCollectModalDraft(); render(); }; });
+  const clearActivity = overlay.querySelector('[data-wb-clear-activity]');
+  if (clearActivity) clearActivity.onclick = () => {
+    // Opened from inside the workspace modal, so the draft is collected first: cancelling
+    // the clear must not also throw away a rename typed a moment earlier.
+    wbCollectModalDraft();
+    openWbModal({ kind: 'clear-activity', companyId: m.companyId, workspaceId: m.editId, returnTo: { ...m }, error: '' });
+  };
+  const confirmClear = overlay.querySelector('[data-wb-confirm-clear-activity]');
+  if (confirmClear) confirmClear.onclick = () => wbClearWorkspaceActivity(confirmClear);
   const wbAddStop = overlay.querySelector('[data-wb-add-stop]');
   if (wbAddStop) wbAddStop.onclick = () => { wbCollectModalDraft(); const cur = (m.draft.config.stops && m.draft.config.stops.length) ? m.draft.config.stops : WB_PROGRESS_STOPS_DEFAULT.slice(); m.draft.config.stops = cur.concat({ upto: 100, color: '#16a34a' }); render(); };
   overlay.querySelectorAll('[data-wb-del-stop]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); const row = b.closest('.wb-stop-item'); const idx = [...row.parentElement.children].indexOf(row); m.draft.config.stops = (m.draft.config.stops || []).filter((_, i) => i !== idx); render(); }; });
