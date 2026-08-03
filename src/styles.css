@@ -30043,3 +30043,119 @@ i.symbol-icon {
 html:has(.quest-app) {
   overflow-y: hidden;
 }
+
+/* ---- Jobs dashboard -------------------------------------------------------------------
+   The production view: what is live, what is billable, what has gone quiet. Laid out as a
+   figure row over two panels so the numbers read before the detail. */
+.jd { display: grid; gap: 18px; }
+
+.jd-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.jd-eyebrow {
+  margin: 0 0 2px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.jd-head h1 { margin: 0; font-size: 1.7rem; font-weight: 900; letter-spacing: -.02em; }
+.jd-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* One row on a wide screen, wrapping to two on a laptop rather than shrinking to unreadable. */
+.jd-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.jd-tile {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  padding: 14px 18px;
+  border-right: 1px solid var(--border);
+}
+
+.jd-tile:last-child { border-right: 0; }
+
+.jd-tile-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.jd-tile strong { font-size: 1.6rem; font-weight: 900; letter-spacing: -.02em; line-height: 1.15; }
+.jd-tile-caption { font-size: .78rem; color: var(--muted); }
+
+/* Semantic, and separate from the brand accent: these say healthy / needs looking at. */
+.jd-good strong { color: var(--success, #15803d); }
+.jd-warn strong { color: var(--orange); }
+
+.jd-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+
+.jd-panel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 16px 18px 18px;
+}
+
+.jd-panel h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 800; }
+
+.jd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+
+.jd-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.jd-list li:last-child { border-bottom: 0; }
+
+.jd-list li > a:first-child {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.jd-list b { font-weight: 700; }
+.jd-sep { color: var(--muted); }
+.jd-stage { font-weight: 600; }
+.jd-list small { color: var(--muted); font-size: .8rem; }
+.jd-list li > a:first-child:hover b { color: var(--orange); }
+
+/* Progress through the pipeline, one dot per stage. Colour comes from the stage itself, so
+   the board and this row cannot disagree about what a stage looks like. */
+.jd-dots { display: inline-flex; gap: 3px; flex: none; }
+.jd-dots i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border);
+  display: block;
+}
+
+.jd-amount { font-variant-numeric: tabular-nums; font-weight: 700; flex: none; }
+.jd-flags li { gap: 12px; }
+.jd-more { display: inline-block; margin-top: 10px; font-size: .82rem; color: var(--orange); }
+
+@media (max-width: 720px) {
+  .jd-tile { border-right: 0; border-bottom: 1px solid var(--border); }
+  .jd-tile:last-child { border-bottom: 0; }
+}

@@ -118,6 +118,7 @@ const FACTORY_MODULES = [
   ['src/workspace/automations-ui.js', 'createAutomationsUI'],
   ['src/messaging/dock-fields.js', 'createDockFields'],
   ['src/crm/job-record.js', 'createJobRecord'],
+  ['src/jobs/dashboard-view.js', 'createJobsDashboard'],
 ];
 
 test('the list above covers every factory module there is', () => {

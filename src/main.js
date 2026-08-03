@@ -1439,7 +1439,7 @@ function persistDealStages() { DEAL_STAGES = DEAL_STAGES.filter((stage) => stage
 
 const ACCOUNT_TYPES = ['Customer', 'Prospect', 'Partner', 'Vendor'];
 const ACTIVITY_TYPES = ['note', 'call', 'email', 'meeting', 'task', 'stage_change', 'system'];
-const JOB_TABS = ['pipeline', 'list', 'profile'];
+const JOB_TABS = ['dashboard', 'pipeline', 'list', 'profile'];
 const TASK_STATUSES = ['todo', 'pending', 'hold', 'review', 'done'];
 const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
 const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
@@ -12113,6 +12113,14 @@ function renderJobsPage(route, companyId) {
   if (stageParam) state.stageFilter = jobStageNames().includes(stageParam) ? stageParam : 'all';
   const job = selectedJob();
   const showFiles = can('files.view', companyId);
+  // The dashboard carries its own header -- the generic one above it would repeat the title
+  // and push the figures below the fold.
+  if (tab === 'dashboard') {
+    return `${renderJobsDashboard(companyId)}
+      <nav class="tabbar" aria-label="Job sections">
+        ${JOB_TABS.map((item) => `<a class="${item === tab ? 'active' : ''}" href="${appHref(companyPath('jobs', { tab: item, ...(job ? { job_id: job.id } : {}) }, companyId))}" data-router>${h(labelForTab(item))}</a>`).join('')}
+      </nav>`;
+  }
   return `
     ${workspaceHeader('Jobs', 'Production pipeline - every job type, from intake to paid.', `
       ${showFiles ? `<a class="btn" href="${appHref(companyPath('files', job ? { job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-folder"></i>Drive</a>` : ''}
@@ -12126,7 +12134,40 @@ function renderJobsPage(route, companyId) {
   `;
 }
 
+// The production view: what is live right now, what is billable, and what has gone quiet.
+// Every figure comes from the job rows themselves -- see jobs/dashboard-model.js for why
+// there is no spend, draw or daily-report figure here yet.
+
+// ---- Jobs dashboard ---------------------------------------------------------
+// Body lives in ./jobs/dashboard-view.js and is fetched the first time Jobs is opened.
+let jobsDashboardModule = null;
+let jobsDashboardPending = null;
+
+function loadJobsDashboard() {
+  if (jobsDashboardModule) return Promise.resolve(jobsDashboardModule);
+  if (!jobsDashboardPending) {
+    jobsDashboardPending = import('./jobs/dashboard-view.js').then((mod) => {
+      jobsDashboardModule = mod.createJobsDashboard({
+        h, can, money, emptyState, appHref, companyPath, companyJobs,
+    pipelineStages, pipelineStageColor, resolvePipelineStage,
+      });
+      return jobsDashboardModule;
+    }).catch((error) => {
+      jobsDashboardPending = null;
+      throw error;
+    });
+  }
+  return jobsDashboardPending;
+}
+
+function renderJobsDashboard(companyId) {
+  if (jobsDashboardModule) return jobsDashboardModule.renderJobsDashboard(companyId);
+  loadJobsDashboard().then(() => render()).catch((error) => console.error('Jobs dashboard failed to load', error));
+  return questLoader('Loading jobs');
+}
+
 function renderJobPanel(tab, companyId, job) {
+  if (tab === 'dashboard') return '';
   if (tab === 'pipeline') return renderPipeline(companyId);
   if (tab === 'list') return renderJobList(companyId);
   if (tab === 'profile') return renderJobRecord(companyId, job);
@@ -33826,7 +33867,7 @@ function isActiveNav(route, path) {
 }
 
 function normalizeJobTab(value) {
-  return JOB_TABS.includes(value) ? value : 'pipeline';
+  return JOB_TABS.includes(value) ? value : 'dashboard';
 }
 
 function labelForTab(tab) {
