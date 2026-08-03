@@ -3560,6 +3560,11 @@ function render() {
   }
   document.title = `${routeTitle(state.route)} | ${companyName(activeCompanyId())} | Questbase`;
   trackRouteForRecents(state.route);
+  // A dialog is modal, so the palette cannot stay behind one. It is painted outside
+  // renderActiveModal and takes the keyboard ahead of modals in onDocumentKeydown, so with
+  // both open you could see a dialog but not type into it. Dozens of paths set state.modal;
+  // reconciling here catches every one of them, and only ever turns the flag off.
+  if (state.commandPalette.open && (state.modal || state.builderModal)) resetCommandPalette();
   app.innerHTML = shellTemplate(state.route, renderWorkspace(state.route)) + renderCommandPalette() + renderMessageDock() + renderLayoutDiagnostic();
   mountLayoutDiagnosticIfRequested();
   queueMicrotask(restoreSidebarScroll);
@@ -16781,7 +16786,18 @@ function renderWorkspaceBuilderModal() {
       `${m.error ? `<div class="wb-modal-error" role="alert">${h(m.error)}</div>` : ''}
       <p class="wb-sub">This removes <b>${count}</b> logged ${count === 1 ? 'action' : 'actions'} from <b>${h(ws?.name || 'this workspace')}</b>. It cannot be undone.</p>
       <p class="wb-sub">One entry is kept, recording that you cleared the log and how many entries went. Posts and files in the feed are not touched, and neither is the company audit trail.</p>
-      ${isLiveSupabaseSession() ? `<div class="wb-field"><label>Confirm your password</label><input class="wb-input" type="password" id="wbClearPw" autocomplete="current-password" placeholder="Your account password" /></div>` : ''}`,
+      ${isLiveSupabaseSession() ? `<div class="wb-field">
+        <label for="wbClearPw">Confirm your password</label>
+        <!-- A lone current-password field sends password managers hunting for a username
+             elsewhere on the page. Chrome found the topbar search, typed the account email
+             into it, and that input opens the command palette -- which then owned the
+             keyboard, so this field could not be typed into at all. Naming the account here
+             gives the manager the pair it wants. Readonly and visible rather than hidden:
+             display:none fields are skipped by some managers, and saying whose password is
+             being asked for belongs in a re-authentication dialog anyway. -->
+        <input class="wb-input" type="text" name="username" value="${h(activeSession()?.profile?.email || '')}" autocomplete="username" readonly aria-label="Signed in as" />
+        <input class="wb-input" type="password" id="wbClearPw" autocomplete="current-password" placeholder="Your account password" />
+      </div>` : ''}`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" type="button" data-wb-confirm-clear-activity><i class="ti ti-eraser"></i>Clear log</button>`);
   }
   if (m.kind === 'app-chooser') {
@@ -24662,7 +24678,10 @@ function onDocumentKeydown(event) {
     toggleCommandPalette();
     return;
   }
-  if (state.commandPalette.open && commandPaletteKeydown(event)) return;
+  // ...but not over an open dialog. A dialog is modal; the palette behind it is not, and a
+  // palette that keeps the keyboard there swallows every keystroke meant for the dialog --
+  // which is how a password field became impossible to type into.
+  if (state.commandPalette.open && !(state.builderModal || state.modal) && commandPaletteKeydown(event)) return;
 
   // Modal keyboard support: Esc dismisses, Tab is trapped within the modal.
   if ((state.builderModal || state.modal) && activeModalOverlay()) {
@@ -24792,6 +24811,9 @@ function openCommandPalette(initialQuery = '') {
   // Only meaningful inside a company workspace — there is nothing to jump to on
   // the landing or auth screens.
   if (!state.route || state.route.name !== 'company') return;
+  // Not over a dialog. The topbar search opens the palette on any input event, including one
+  // a password manager caused, so this refuses before anything is painted or focused.
+  if (state.modal || state.builderModal) return;
   state.commandPalette = { open: true, query: initialQuery, index: 0, answer: null, taskDraft: null, contactDraft: null };
   if (!helpModulePromise) {
     helpModulePromise = Promise.all([
@@ -24815,9 +24837,14 @@ function openCommandPalette(initialQuery = '') {
   });
 }
 
+/** Clear the palette without rendering, for callers that are about to render anyway. */
+function resetCommandPalette() {
+  state.commandPalette = { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null };
+}
+
 function closeCommandPalette() {
   if (!state.commandPalette.open) return;
-  state.commandPalette = { open: false, query: '', index: 0, answer: null, taskDraft: null, contactDraft: null };
+  resetCommandPalette();
   render();
 }
 

@@ -29904,3 +29904,12 @@ i.symbol-icon {
   flex: none;
   margin-top: 1px;
 }
+
+/* The account a re-authentication dialog is asking about: present for the password manager
+   and for the reader, but plainly not something to type in. */
+.wb-field input.wb-input[readonly] {
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: default;
+  margin-bottom: 8px;
+}

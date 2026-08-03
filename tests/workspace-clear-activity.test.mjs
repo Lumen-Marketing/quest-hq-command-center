@@ -105,7 +105,7 @@ test('the confirm dialog states the count before you agree to it', () => {
   assert.match(body, /One entry is kept/);
   assert.match(body, /Posts and files in the feed are not touched/);
   // Local demo sessions have no password to check, so they are not asked for one.
-  assert.match(body, /\$\{isLiveSupabaseSession\(\) \? `<div class="wb-field"><label>Confirm your password<\/label>/);
+  assert.match(body, /\$\{isLiveSupabaseSession\(\) \? `<div class="wb-field">\s*\n\s*<label for="wbClearPw">Confirm your password<\/label>/);
 });
 
 test('opening the dialog keeps the workspace edits typed behind it', () => {
@@ -151,4 +151,42 @@ test('the confirm opens over the dialog rather than replacing it', () => {
   const handler = main.slice(main.indexOf("if (action === 'open-clear-workspace-activity')"));
   assert.match(handler.slice(0, 600), /openWbModal\(\{ kind: 'clear-activity'/);
   assert.ok(!/state\.modal = ''/.test(handler.slice(0, 600)), 'the dialog underneath must not be torn down');
+});
+
+// --- the command palette must not sit behind it -------------------------------------------
+
+test('the palette closes rather than lingering behind a dialog', () => {
+  // It is painted outside renderActiveModal, so nothing else reconciles the two. Dozens of
+  // paths set state.modal; the render path catches all of them.
+  assert.match(main, /if \(state\.commandPalette\.open && \(state\.modal \|\| state\.builderModal\)\) resetCommandPalette\(\);/);
+  const at = main.indexOf('resetCommandPalette();');
+  assert.ok(at < main.indexOf('app.innerHTML = shellTemplate('), 'reconcile before painting');
+});
+
+test('a dialog owns the keyboard, not the palette', () => {
+  // This is what made the password field impossible to type into: the palette answered the
+  // keydown first and returned, so the dialog never saw a keystroke.
+  assert.match(main, /if \(state\.commandPalette\.open && !\(state\.builderModal \|\| state\.modal\) && commandPaletteKeydown\(event\)\) return;/);
+});
+
+test('the palette refuses to open over a dialog at all', () => {
+  const body = fn('openCommandPalette');
+  assert.match(body, /if \(state\.modal \|\| state\.builderModal\) return;/);
+  assert.ok(
+    body.indexOf('state.modal || state.builderModal') < body.indexOf('state.commandPalette = { open: true'),
+    'refuse before opening',
+  );
+});
+
+test('the password field names the account, so managers do not fill the topbar search', () => {
+  // The trigger for the whole bug: a lone current-password field with no username sibling.
+  const modal = main.slice(main.indexOf("if (m.kind === 'clear-activity') {"));
+  const body = modal.slice(0, modal.indexOf("if (m.kind === 'app-chooser')"));
+  assert.match(body, /autocomplete="username"/);
+  assert.match(body, /readonly/);
+  assert.ok(!/hidden/.test(body.slice(body.indexOf('autocomplete="username"') - 260, body.indexOf('autocomplete="username"') + 60)), 'display:none username fields get skipped');
+  assert.ok(
+    body.indexOf('autocomplete="username"') < body.indexOf('autocomplete="current-password"'),
+    'the username comes first, as managers expect',
+  );
 });
