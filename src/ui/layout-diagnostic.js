@@ -62,6 +62,28 @@ export function collectLayoutReport() {
     .map((n) => `  ${n.tagName.toLowerCase()}.${[...n.classList].slice(0, 3).join('.') || '(none)'} = ${px(n.offsetHeight)}px`);
   lines.push('', 'taller than viewport:', ...(tall.length ? tall : ['  (none)']));
 
+  // Every element that is actually scrolling, wherever it is. The fixed list above covers
+  // the shell, and measuring the shell in a headless browser cleared it at every width from
+  // 600 to 1920 — so a second scrollbar now has to be coming from page content, which only
+  // a full walk will find. Each one is reported with its ancestor path, because "some div
+  // scrolls" is not actionable without knowing which.
+  const path = (n) => {
+    const parts = [];
+    for (let el = n; el && el !== document.body && parts.length < 4; el = el.parentElement) {
+      parts.unshift(el.tagName.toLowerCase() + (el.classList.length ? `.${[...el.classList].slice(0, 2).join('.')}` : ''));
+    }
+    return parts.join(' > ');
+  };
+  const scrollers = [...document.querySelectorAll('body *')]
+    .filter((n) => {
+      const cs = getComputedStyle(n);
+      if (!/(auto|scroll)/.test(cs.overflowY) && !/(auto|scroll)/.test(cs.overflowX)) return false;
+      return n.scrollHeight > n.clientHeight + 1 || n.scrollWidth > n.clientWidth + 1;
+    })
+    .slice(0, 14)
+    .map((n) => `  ${path(n)}\n      client=${px(n.clientHeight)} scroll=${px(n.scrollHeight)} y=${getComputedStyle(n).overflowY} x=${getComputedStyle(n).overflowX}`);
+  lines.push('', `SCROLLING ELEMENTS (${scrollers.length}):`, ...(scrollers.length ? scrollers : ['  (none)']));
+
   lines.push('', `route  ${location.pathname}${location.search}`);
   return lines.join('\n');
 }

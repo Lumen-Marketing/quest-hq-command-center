@@ -68,3 +68,17 @@ test('the document is not made a scroll container behind the shell', () => {
   assert.match(root.slice(0, 400), /overflow-x: hidden;/, 'horizontal clipping at the viewport stays');
   assert.ok(!/overflow-y: hidden;/.test(root.slice(0, 400)), 'vertical clipping at the viewport does not');
 });
+
+// --- the diagnostic ------------------------------------------------------------------------
+
+test('the readout finds scrolling elements anywhere, not just in the shell', () => {
+  // The shell was measured in a headless browser across 600-1920px and produced exactly one
+  // scrollbar at every width. So a second one has to come from page content, and a fixed
+  // list of four shell selectors cannot find it.
+  const diag = readFileSync(new URL('../src/ui/layout-diagnostic.js', import.meta.url), 'utf8');
+  assert.match(diag, /SCROLLING ELEMENTS/);
+  assert.match(diag, /document\.querySelectorAll\('body \*'\)/);
+  assert.match(diag, /n\.scrollHeight > n\.clientHeight \+ 1 \|\| n\.scrollWidth > n\.clientWidth \+ 1/);
+  // Each hit needs an ancestor path; "a div scrolls" is not actionable on its own.
+  assert.match(diag, /const path = \(n\) =>/);
+});

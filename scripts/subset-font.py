@@ -28,6 +28,7 @@ for tag in ("GSUB", "GPOS", "GDEF"):
         del font[tag]
 
 options = Options()
+
 options.flavor = "woff2"
 options.notdef_outline = True          # keep .notdef so a missing glyph is visible, not invisible
 options.drop_tables += ["DSIG"]
