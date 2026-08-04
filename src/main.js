@@ -5786,6 +5786,33 @@ function renderCallsPage(route, companyId) {
   return questLoader('Loading');
 }
 
+// ---- renderWorkdayPage ---------------------------------------------------------
+// Body lives in ./ops/workday-page.js and is fetched on first use.
+let renderWorkdayPageModule = null;
+let renderWorkdayPagePending = null;
+
+function loadRenderWorkdayPage() {
+  if (renderWorkdayPageModule) return Promise.resolve(renderWorkdayPageModule);
+  if (!renderWorkdayPagePending) {
+    renderWorkdayPagePending = import('./ops/workday-page.js').then((mod) => {
+      renderWorkdayPageModule = mod.createWorkdayPage({
+        appHref, companyPath, emptyState, h, renderWorkdayManagerView, renderWorkdayModeTabs, renderWorkdayPanel, renderWorkdayQueueItem, workdayManagerMetrics, workdayMetricCard, workdayQueueItems, workdayQueueTone, workspaceHeader, state,
+      });
+      return renderWorkdayPageModule;
+    }).catch((error) => {
+      renderWorkdayPagePending = null;
+      throw error;
+    });
+  }
+  return renderWorkdayPagePending;
+}
+
+function renderWorkdayPage(companyId) {
+  if (renderWorkdayPageModule) return renderWorkdayPageModule.renderWorkdayPage(companyId);
+  loadRenderWorkdayPage().then(() => render()).catch((error) => console.error('renderWorkdayPage failed to load', error));
+  return questLoader('Loading');
+}
+
 function navGroup(label, items) {
   if (!items.length) return '';
   const collapsed = state.collapsedNavGroups.has(label);
@@ -8872,50 +8899,6 @@ function renderWorkdayModeTabs() {
   `;
 }
 
-function renderWorkdayPage(companyId) {
-  const metrics = workdayManagerMetrics(companyId);
-  const items = workdayQueueItems(companyId);
-  const active = items.find((item) => item.id === state.selectedWorkdayItemId) || items[0] || null;
-  if (active && state.selectedWorkdayItemId !== active.id) state.selectedWorkdayItemId = active.id;
-  const urgentItems = items.filter((item) => ['critical', 'warning'].includes(workdayQueueTone(item))).length;
-  const ownedItems = items.filter((item) => item.owner && item.owner !== 'Unassigned').length;
-  return `
-    <section class="workday-page">
-      ${workspaceHeader('Workday', 'Daily CRM queue for calls, follow-ups, quotes, jobs, and form responses.', `
-        <a class="btn" href="${appHref(companyPath('contacts', {}, companyId))}" data-router><i class="ti ti-id-badge-2"></i>Contacts</a>
-        <a class="btn" href="${appHref(companyPath('deals', {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Quotes</a>
-        <a class="btn btn-primary" href="${appHref(companyPath('forms', {}, companyId))}" data-router><i class="ti ti-clipboard-list"></i>Forms</a>
-      `)}
-      ${renderWorkdayModeTabs()}
-      ${state.workdayMode === 'manager' ? renderWorkdayManagerView(companyId) : `
-        <div class="workday-manager-grid">
-          ${workdayMetricCard('Calls today', metrics.callsToday, 'Logged call activity', 'ti-phone-call')}
-          ${workdayMetricCard('Touched today', metrics.touchedToday, 'Contacts, quotes, and jobs worked', 'ti-activity')}
-          ${workdayMetricCard('Untouched leads', metrics.untouchedLeads, 'Need a first touch', 'ti-user-question')}
-          ${workdayMetricCard('Overdue follow-ups', metrics.overdueFollowups, 'Open tasks past due', 'ti-alert-circle')}
-          ${workdayMetricCard('No next step', metrics.noNextStep, 'Records missing an open task', 'ti-route')}
-          ${workdayMetricCard('Form responses', metrics.formResponsesNeedingAction, 'Need CRM action', 'ti-clipboard-list')}
-        </div>
-        <div class="workday-shell">
-          <section class="workday-queue panel">
-            <div class="section-head">
-              <div><h2>Command queue</h2><p>${items.length} item${items.length === 1 ? '' : 's'} needing work</p></div>
-            </div>
-            <div class="workday-queue-summary" aria-label="My Queue summary">
-              <span><strong>${h(String(items.length))}</strong><small>Total</small></span>
-              <span><strong>${h(String(urgentItems))}</strong><small>Priority</small></span>
-              <span><strong>${h(String(ownedItems))}</strong><small>Assigned</small></span>
-            </div>
-            <div class="workday-queue-list">
-              ${items.map((item) => renderWorkdayQueueItem(item, active?.id === item.id)).join('') || emptyState('No urgent Workday items.')}
-            </div>
-          </section>
-          ${renderWorkdayPanel(active, companyId)}
-        </div>
-      `}
-    </section>
-  `;
-}
 
 function renderWorkdayManagerView(companyId) {
   const metrics = workdayManagerMetrics(companyId);
@@ -14625,13 +14608,48 @@ function wbScrollTopbar(direction) {
   track.scrollBy({ left: direction * Math.max(120, track.clientWidth * 0.8), behavior: 'smooth' });
 }
 
+// ---- App dashboard and calendar ---------------------------------------------------------
+// Bodies live in ./workspace/app-views.js and are fetched when their tab is opened.
+let appViewsModule = null;
+let appViewsPending = null;
+
+function loadAppViews() {
+  if (appViewsModule) return Promise.resolve(appViewsModule);
+  if (!appViewsPending) {
+    appViewsPending = import('./workspace/app-views.js').then((mod) => {
+      appViewsModule = mod.createAppViews({
+        h, can, money, emptyState, appHref, companyPath, wbItemTitle, wbTimeAgo,
+      });
+      return appViewsModule;
+    }).catch((error) => {
+      appViewsPending = null;
+      throw error;
+    });
+  }
+  return appViewsPending;
+}
+
+function renderAppDashboard(companyId, app) {
+  if (appViewsModule) return appViewsModule.renderAppDashboard(companyId, app);
+  loadAppViews().then(() => render()).catch((error) => console.error('App dashboard failed to load', error));
+  return questLoader('Loading');
+}
+
+function renderAppCalendar(companyId, app, anchorIso, fieldId) {
+  if (appViewsModule) return appViewsModule.renderAppCalendar(companyId, app, anchorIso, fieldId);
+  loadAppViews().then(() => render()).catch((error) => console.error('App calendar failed to load', error));
+  return questLoader('Loading');
+}
+
 function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   // Print / Export / Import / Download all live on this view. Fetching now means the
   // click itself never has to await, which is what keeps window.open out of the pop-up
   // blocker. Fire-and-forget: a failure just falls back to the async path.
   wbLoadDataIO().catch(() => null);
   const canManage = can('workspaces.manage', companyId);
-  const tabs = ['items', 'fields', 'reports', 'automations', 'settings'];
+  // Dashboard and Calendar lead: they answer "how is this app doing" and "what is coming",
+  // which you want before you start reading rows.
+  const tabs = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'settings'];
   const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'items';
   const tabPath = (next) => appHref(companyPath('workspaces', { app_id: app.id, tab: next }, companyId));
   let headBtn = '';
@@ -14643,9 +14661,11 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button>`;
   else if (canManage && tab === 'fields') headBtn += `<button class="btn btn-primary" data-add-field><i class="ti ti-plus"></i>Add field</button>`;
   else if (canManage && tab === 'automations') headBtn += `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
-  const tabLabel = { items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, settings: 'Settings' };
+  const tabLabel = { dashboard: 'Dashboard', calendar: 'Calendar', items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, settings: 'Settings' };
   let body = '';
-  if (tab === 'items') body = wbViewItems(companyId, workspace, app);
+  if (tab === 'dashboard') body = renderAppDashboard(companyId, app);
+  else if (tab === 'calendar') body = renderAppCalendar(companyId, app, route.params.get('on') || '', route.params.get('field') || '');
+  else if (tab === 'items') body = wbViewItems(companyId, workspace, app);
   else if (tab === 'fields') body = wbViewBuilder(companyId, workspace, app);
   else if (tab === 'reports') body = wbViewReports(companyId, workspace, app);
   else if (tab === 'automations') body = wbViewAutomations(companyId, workspace, app);
@@ -18352,6 +18372,12 @@ function mountWorkspaceBuilder() {
     // would match nothing, leaving an empty list with no chip highlighted to explain it.
     bind('[data-wb-chip]', (el) => { const ui = wbItemsUI(appId); const next = el.dataset.wbChip || ''; ui.chipValue = ui.chipValue === next ? '' : next; wbRememberItemsUI(appId); render(); });
     bind('[data-wb-chip-field]', (el) => { const ui = wbItemsUI(appId); ui.chipFieldId = el.value; ui.chipValue = ''; wbRememberItemsUI(appId); render(); }, 'onchange');
+    // Switching the calendar's date field is a route change so the month you are on, and the
+    // field you picked, are both in the URL and survive a refresh or a shared link.
+    bind('[data-wb-cal-field]', (el) => {
+      const params = state.route?.params;
+      nav({ app_id: appId, tab: 'calendar', field: el.value, ...(params?.get('on') ? { on: params.get('on') } : {}) });
+    }, 'onchange');
     bind('[data-wb-board-field]', (el) => { wbItemsUI(appId).boardFieldId = el.value; render(); }, 'onchange');
     bind('[data-wb-board-sum]', (el) => { wbItemsUI(appId).boardSumId = el.value; render(); }, 'onchange');
     bind('[data-wb-add-filter]', () => { const { app } = wbFind(companyId, workspaceId, appId); const f0 = app.fields[0]; if (!f0) return; wbItemsUI(appId).filters.push({ fieldId: f0.id, op: wbFilterOps(wbFieldKind(f0))[0][0], value: '' }); render(); });

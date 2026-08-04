@@ -169,6 +169,8 @@ const FACTORY_MODULES = [
   ['src/team/workload-page.js', 'createTeamWorkloadPage'],
   ['src/ops/eod-page.js', 'createEodPage'],
   ['src/ops/calls-page.js', 'createCallsPage'],
+  ['src/workspace/app-views.js', 'createAppViews'],
+  ['src/ops/workday-page.js', 'createWorkdayPage'],
   ['src/ui/landing-page.js', 'createLandingPage'],
   ['src/ui/auth-form.js', 'createAuthForm'],
 ];

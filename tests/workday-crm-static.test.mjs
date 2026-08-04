@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+// The Workday page is fetched on demand now; same surface, two files.
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/ops/workday-page.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const smoke = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import.meta.url), 'utf8');
 
