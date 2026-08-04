@@ -202,3 +202,31 @@ test('a date field still drives the calendar once it exists', () => {
 test('the url carries no field when there is none to carry', () => {
   assert.match(views, /\.\.\.\(field \? \{ field: field\.id \} : \{\}\)/);
 });
+
+// --- where an app opens ----------------------------------------------------------------------
+
+test('opening an app lands on its dashboard', () => {
+  assert.match(main, /const tab = tabs\.includes\(route\.params\.get\('tab'\)\) \? route\.params\.get\('tab'\) : 'dashboard';/);
+});
+
+test('every "open this app" link follows that default rather than naming a tab', () => {
+  // One place decides where an app opens. A link that hardcodes tab: 'items' would quietly
+  // opt itself out of the setting.
+  for (const link of [
+    "const openHref = appHref(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId));",
+    "href=\"${appHref(companyPath('workspaces', { app_id: app.id }, companyId))}\" data-router>Open ${h(app.name)}",
+    "const href = appHref(companyPath('workspaces', { app_id: a.id }, companyId));",
+    "bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp }));",
+    "navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId));",
+  ]) {
+    assert.ok(main.includes(link), `still names a tab: ${link.slice(0, 60)}`);
+  }
+});
+
+test('links that mean something more specific keep their tab', () => {
+  // A stage, a record, and "back to the list" are not "open the app".
+  assert.match(main, /const appHome = appHref\(companyPath\('workspaces', \{ app_id: app\.id \}, companyId\)\);/);
+  assert.match(main, /app_id: app\.id, tab: 'items', \.\.\.\(stageId \? \{ stage: stageId \} : \{\}\),/, 'deck stage rows');
+  assert.match(main, /app_id: appId, tab: 'items', item_id: el\.dataset\.item/, 'opening a record');
+  assert.match(main, /data-router><i class="ti ti-arrow-left"><\/i>All \$\{h\(app\.name\)\}/, 'the record page back link');
+});

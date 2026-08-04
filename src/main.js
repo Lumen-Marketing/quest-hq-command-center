@@ -5536,11 +5536,14 @@ function navItemApp(route, app, companyId) {
   const href = (stageId) => appHref(companyPath('workspaces', {
     app_id: app.id, tab: 'items', ...(stageId ? { stage: stageId } : {}),
   }, companyId));
+  // The app's own row opens its dashboard; the rows underneath are stages, and a stage only
+  // means anything on the list.
+  const appHome = appHref(companyPath('workspaces', { app_id: app.id }, companyId));
   const allOn = onApp && !stage;
   return `
     <div class="side-pipe ${expanded ? 'expanded' : ''}">
       <div class="side-pipe-head">
-        <a class="side-item ${allOn ? 'active' : ''}" href="${href('')}" data-router title="${h(app.name)}" aria-label="${h(app.name)}" aria-current="${allOn ? 'page' : 'false'}">
+        <a class="side-item ${allOn ? 'active' : ''}" href="${appHome}" data-router title="${h(app.name)}" aria-label="${h(app.name)}" aria-current="${allOn ? 'page' : 'false'}">
           <i class="ti ${h(app.icon || 'ti-apps')}" aria-hidden="true"></i>
           <span>${h(app.name)}</span>
           ${total ? `<b>${h(String(total))}</b>` : ''}
@@ -7960,7 +7963,7 @@ function dashboardAppWidgets(companyId) {
         appId: app.id,
         sub: app.description || `${app.type ? `${app.type} · ` : ''}${app.items.length} record${app.items.length === 1 ? '' : 's'}`,
         render: () => {
-          const openHref = appHref(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
+          const openHref = appHref(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId));
           const cfg = dashboardAppWidgetConfig(companyId, app.id);
           const body = dashboardAppWidgetBody(app, dashboardAppResolvedReport(app, cfg));
           return `
@@ -7983,7 +7986,7 @@ function dashboardAppWidgets(companyId) {
         span: true,
         sub: 'Several field reports side by side.',
         render: () => {
-          const openHref = appHref(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
+          const openHref = appHref(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId));
           const cfg = dashboardAppMultiConfig(companyId, app.id);
           const body = dashboardAppMultiBody(app, dashboardAppResolvedMultiFields(app, cfg));
           return `
@@ -14288,7 +14291,7 @@ function wbTileApp(companyId, workspace, tile, meta) {
       <button class="wb-tile-mbtn" type="button" data-wb-tile-page="${h(tile.id)}:${clamped + 1}" ${clamped >= pages - 1 ? 'disabled' : ''} aria-label="Next"><i class="ti ti-chevron-right"></i></button>
     </div>` : '';
   return `<div class="wb-tile-recs">${rows}</div>${pager}
-    <div class="wb-tile-foot"><a class="wb-tile-link" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'items' }, companyId))}" data-router>Open ${h(app.name)} <i class="ti ti-arrow-up-right"></i></a></div>`;
+    <div class="wb-tile-foot"><a class="wb-tile-link" href="${appHref(companyPath('workspaces', { app_id: app.id }, companyId))}" data-router>Open ${h(app.name)} <i class="ti ti-arrow-up-right"></i></a></div>`;
 }
 
 function wbTileReport(companyId, workspace, tile, meta) {
@@ -14519,7 +14522,7 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   const homeTab = `<a class="wb-topbar-tab wb-topbar-home ${homeActive ? 'active' : ''}" href="${homeHref}" data-router aria-current="${homeActive ? 'page' : 'false'}"><span class="wb-topbar-ic wb-topbar-ic-home"><i class="ti ti-activity" aria-hidden="true"></i></span><span class="wb-topbar-label">Activity</span></a>`;
   const appTabs = apps.map(({ app: a, linked }) => {
     const active = a.id === activeAppId;
-    const href = appHref(companyPath('workspaces', { app_id: a.id, tab: 'items' }, companyId));
+    const href = appHref(companyPath('workspaces', { app_id: a.id }, companyId));
     const linkMark = linked ? '<span class="wb-topbar-link" title="Linked app — shares data with another workspace"><i class="ti ti-link" aria-hidden="true"></i></span>' : '';
     return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router title="${h(a.name)}${linked ? ' (linked)' : ''}" aria-current="${active ? 'page' : 'false'}"${active ? ' data-wb-topbar-active' : ''}><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
   }).join('');
@@ -14658,7 +14661,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   // Dashboard and Calendar lead: they answer "how is this app doing" and "what is coming",
   // which you want before you start reading rows.
   const tabs = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'settings'];
-  const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'items';
+  const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'dashboard';
   const tabPath = (next) => appHref(companyPath('workspaces', { app_id: app.id, tab: next }, companyId));
   let headBtn = '';
   // Print/Export are read-only and available to all roles; Import writes data.
@@ -16132,7 +16135,7 @@ function wbNotifyWorkspace(companyId, workspace, app, title, body) {
   try {
     const recipients = wbNotifyAudience(companyId, workspace);
     if (!recipients.length) return;
-    const href = companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId);
+    const href = companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId);
     notifyEvent({ companyId, recipients, type: 'workspace', title, body, href, sourceType: 'workspace_app', sourceId: app.id, excludeActor: true }).catch(() => { /* ignore */ });
   } catch { /* ignore */ }
 }
@@ -16746,7 +16749,7 @@ function wbInstallAppFromJson(companyId, workspaceId, text) {
   wbLogActivity(workspace, { icon: 'ti-package-import', color: '#16a34a', text: `Installed app <b>${h(app.name)}</b> (${app.fields.length} fields · ${app.items.length} records · ${app.automations.length} automations)` });
   wbSave(companyId);
   showToast(`Installed "${app.name}" — ${app.fields.length} fields · ${app.items.length} records · ${app.automations.length} automations.`, 'local', 'Workspaces');
-  navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
+  navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId));
 }
 // Every app across every workspace loaded in this session (fallback for local /
 // demo sessions where the system-wide RPC isn't available).
@@ -16792,7 +16795,7 @@ function wbInstallLibraryApp(companyId, workspaceId, appId) {
   state.builderModal = null;
   wbSave(companyId);
   showToast(`Installed "${app.name}" — fields & automations copied (no records).`, 'local', 'Workspaces');
-  navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id, tab: 'items' }, companyId));
+  navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId));
 }
 function openWbAppChooser(companyId, workspaceId) {
   if (!wbGuard()) return;
@@ -18349,7 +18352,7 @@ function mountWorkspaceBuilder() {
   if (!state.wbTopbarResizeBound) { state.wbTopbarResizeBound = true; window.addEventListener('resize', () => { if (state.route?.section === 'workspaces') { wbMountTopbar(); wbLayoutTiles(); } }); }
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-wb-topbar-scroll]', (el) => wbScrollTopbar(Number(el.dataset.wbTopbarScroll) || 1));
-    bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp, tab: 'items' }));
+    bind('[data-open-app]', (el) => nav({ app_id: el.dataset.openApp }));
     bind('[data-new-app]', () => openWbAppChooser(companyId, workspaceId));
     // Workspace activity feed (dashboard home): publisher + posts.
     wbMountComposer(companyId);
