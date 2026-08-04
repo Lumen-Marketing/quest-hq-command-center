@@ -72,6 +72,13 @@ export function createJobFile(ctx) {
     const struggling = isStruggling(data.dailies);
     const latest = sortDailies(data.dailies)[0];
     return `
+      <article class="jf-card jf-attention">
+        <h3>Needs attention</h3>
+        <!-- The next action moved here from the jobs list. The v1 structure has no column for
+             it, but this is the slot it describes -- and dropping a working prompt to make
+             room for a layout would be a downgrade. -->
+        ${ctx.renderPipelineNextAction('job', job, { compact: true })}
+      </article>
       <div class="jf-cards">
         <article class="jf-card">
           <h3>Client</h3>

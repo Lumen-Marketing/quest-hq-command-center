@@ -25,11 +25,13 @@ test('all three funnel cards render the shared What\'s next field', () => {
 
 test('all three funnel table and list views render an actionable What\'s next field', () => {
   const contactTable = source.slice(source.indexOf('function renderContactTable('), source.indexOf('function selectedContactRows('));
-  const jobList = source.slice(source.indexOf('function renderJobList('), source.indexOf('function renderJobProfile('));
+  // The jobs list follows the v1 structure now and has no column for it, so the job's next
+  // action lives on the job file's Needs attention card -- the slot that design describes.
+  const jobFile = fs.readFileSync(path.join(root, 'src', 'jobs', 'job-file.js'), 'utf8');
   const dealRow = source.slice(source.indexOf('function dealRow('), source.indexOf('function dealKpiRow('));
 
   assert.match(contactTable, /renderPipelineNextAction\('contact', contact, \{ compact: true \}\)/);
-  assert.match(jobList, /renderPipelineNextAction\('job', job, \{ compact: true \}\)/);
+  assert.match(jobFile, /renderPipelineNextAction\('job', job, \{ compact: true \}\)/);
   assert.match(dealRow, /renderPipelineNextAction\('deal', deal, \{ compact: true \}\)/);
   assert.match(source, /data-action="open-pipeline-task"/, 'an existing next action must remain clickable inside a clickable table row');
   assert.match(handleActionSource, /action === 'open-pipeline-task'/);

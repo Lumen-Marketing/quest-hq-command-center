@@ -30386,3 +30386,74 @@ html:has(.quest-app) {
   display: inline-flex; gap: 6px; align-items: center; font-size: .8rem; font-weight: 600;
   border: 1px solid var(--border); border-radius: 99px; padding: 4px 11px; background: var(--surface);
 }
+
+/* ---- All jobs ---------------------------------------------------------------------------
+   One row per job, answering "is this moving" without opening it. The spine is the trade,
+   the dots are the last four worked days. */
+.jl { display: grid; gap: 14px; }
+.jl-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.jl-head h1 { margin: 0; font-size: 1.5rem; font-weight: 900; letter-spacing: -.02em; }
+.jl-count {
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: .78rem; font-weight: 600;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2);
+  padding: 2px 10px; border-radius: 99px; vertical-align: 4px;
+}
+.jl-head-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.jl-selected { font-size: .82rem; font-weight: 700; color: var(--ink-2); }
+
+.jl-filters { display: flex; gap: 7px; flex-wrap: wrap; }
+.jl-chip {
+  display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: .82rem;
+  font-weight: 600; border: 1px solid var(--border); border-radius: 99px;
+  padding: 5px 14px; background: var(--surface); color: var(--ink-2); cursor: pointer;
+}
+.jl-chip:hover { border-color: var(--orange); }
+.jl-chip.on { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.jl-chip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.jl-chip span { font-family: var(--font-mono, ui-monospace, monospace); font-size: .72rem; opacity: .7; }
+
+/* Jobs that were reporting and stopped. Above the table because it is the reason to look. */
+.jl-band {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  border: 1px solid color-mix(in srgb, var(--orange) 30%, transparent);
+  background: color-mix(in srgb, var(--orange) 7%, transparent);
+  border-radius: 10px; padding: 10px 14px; font-size: .84rem;
+}
+.jl-band > b { color: var(--orange); text-transform: uppercase; font-size: .72rem; letter-spacing: .1em; }
+.jl-band a { color: var(--ink); }
+.jl-band a:hover { color: var(--orange); }
+
+.jl-table {
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden;
+}
+.jl-row {
+  display: grid;
+  grid-template-columns: 4px 34px minmax(180px, 2fr) minmax(0, 1.1fr) minmax(0, .8fr) minmax(0, 1.1fr) 56px 92px minmax(0, .8fr);
+  align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.jl-row:last-child { border-bottom: 0; }
+.jl-header {
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: .66rem;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--muted); background: var(--surface-2);
+}
+.jl-header > span { padding: 8px 0; }
+.jl-row.selected { background: color-mix(in srgb, var(--orange) 6%, var(--surface)); }
+.jl-spine { align-self: stretch; }
+.jl-select { display: flex; justify-content: center; }
+.jl-name { display: grid; gap: 1px; padding: 11px 0; min-width: 0; }
+.jl-name b { font-size: .95rem; }
+.jl-name small { color: var(--muted); font-size: .76rem; }
+.jl-name:hover b { color: var(--orange); }
+.jl-cell { padding: 11px 0; font-size: .85rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jl-stage { display: flex; align-items: center; gap: 7px; }
+.jl-num { font-variant-numeric: tabular-nums; }
+.jl-dots { display: inline-flex; gap: 3px; align-items: center; }
+.jl-dots-none { color: var(--muted); }
+
+@media (max-width: 1100px) {
+  .jl-row { grid-template-columns: 4px 34px minmax(160px, 2fr) minmax(0, 1fr) 56px 92px; }
+  .jl-row > span:nth-child(5),
+  .jl-row > span:nth-child(6),
+  .jl-row > span:nth-child(9) { display: none; }
+}

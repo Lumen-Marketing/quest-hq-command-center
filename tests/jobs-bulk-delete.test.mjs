@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The list follows the v1 structure now and lives in its own fetched-on-demand module.
+const jobList = readFileSync(new URL('../src/jobs/job-list.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const fn = (name) => {
   const at = main.indexOf(`function ${name}(`);
   assert.notEqual(at, -1, `${name} should exist`);
@@ -38,15 +40,13 @@ test('select-all covers what is on screen and clears only that', () => {
 
 test('one job or many, the same path handles it', () => {
   // "Delete 1" is as valid as "Delete 12"; nothing gates on a minimum.
-  const list = fn('renderJobList');
-  assert.match(list, /Delete \$\{selected\.size\}/);
-  assert.ok(!/selected\.size > 1/.test(list), 'single selection must not be excluded');
+  assert.match(jobList, /Delete \$\{selected\.size\}/);
+  assert.ok(!/selected\.size > 1/.test(jobList), 'single selection must not be excluded');
 });
 
 test('the delete button is hidden from someone who cannot delete', () => {
-  const list = fn('renderJobList');
-  assert.match(list, /const canDelete = can\('jobs\.manage', companyId\)/);
-  assert.match(list, /\$\{canDelete \? `<button[^`]*data-action="jobs-bulk-delete"/);
+  assert.match(jobList, /const canManage = can\('jobs\.manage', companyId\)/);
+  assert.match(jobList, /\$\{canManage \? `<button[^`]*data-action="jobs-bulk-delete"/);
 });
 
 // --- the password gate --------------------------------------------------------------------

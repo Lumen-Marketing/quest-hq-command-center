@@ -10,6 +10,35 @@ export const DRAW_STATUSES = ['locked', 'unlocked', 'paid'];
 /** In order. The gap between "sent" and "acknowledged" is where change-order money is lost. */
 export const CO_STEPS = ['requested', 'priced', 'sent', 'accepted', 'acknowledged'];
 
+/**
+ * The colour a trade is drawn in — the spine down the left of every row.
+ *
+ * Named trades are fixed so roofing is the same blue on every screen and in every company.
+ * Anything else is assigned from the same palette by hashing the name, which is stable
+ * across reloads and companies without anyone having to configure it. Random-per-render
+ * would make the spine meaningless; a single grey would make it decoration.
+ */
+const TRADE_PALETTE = ['#2472e8', '#c47a10', '#3f7a4f', '#7c3aed', '#0f766e', '#b45309', '#4b5563', '#9d174d'];
+const TRADE_COLOURS = {
+  roofing: '#2472e8',
+  framing: '#c47a10',
+  siding: '#3f7a4f',
+  concrete: '#7c3aed',
+  demo: '#4b5563',
+  demolition: '#4b5563',
+  plumbing: '#0f766e',
+  electrical: '#b45309',
+};
+
+export function tradeColor(trade) {
+  const key = String(trade || '').trim().toLowerCase();
+  if (!key) return '#94a3b8';
+  if (TRADE_COLOURS[key]) return TRADE_COLOURS[key];
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) hash = (hash * 31 + key.charCodeAt(i)) % 100000;
+  return TRADE_PALETTE[hash % TRADE_PALETTE.length];
+}
+
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const text = (v) => String(v ?? '').trim();
 const list = (v) => (Array.isArray(v) ? v.map(text).filter(Boolean) : []);

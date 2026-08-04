@@ -2568,6 +2568,7 @@ const state = {
   selectedJobIds: [],
   jobBulkDelete: null,
   jobDailyDraft: null,
+  jobTradeFilter: 'all',
   selectedTaskId: '',
   selectedFileId: '',
   jobPhotoJobId: '',
@@ -12156,7 +12157,7 @@ function loadJobFile() {
         h, can, money, emptyState, appHref, companyPath, formatDate,
         pipelineStageColor, resolvePipelineStage,
         productionFor: productionForJob,
-        renderJobRecord,
+        renderJobRecord, renderPipelineNextAction,
       });
       return jobFileModule;
     }).catch((error) => {
@@ -12290,40 +12291,38 @@ function renderJobRecord(companyId, job) {
   return questLoader('Loading job');
 }
 
+// ---- All jobs ---------------------------------------------------------------
+// Body lives in ./jobs/job-list.js and is fetched on first use -- Jobs opens on the
+// dashboard, so the list is always behind a click.
+let jobListModule = null;
+let jobListPending = null;
+
+function loadJobList() {
+  if (jobListModule) return Promise.resolve(jobListModule);
+  if (!jobListPending) {
+    jobListPending = import('./jobs/job-list.js').then((mod) => {
+      jobListModule = mod.createJobList({
+        h, can, money, emptyState, appHref, companyPath,
+        pipelineDot, pipelineStageColor, resolvePipelineStage,
+        filteredJobs, selectedJobRows, productionFor: productionForJob, state,
+        todayIso: () => new Date().toISOString().slice(0, 10),
+      });
+      return jobListModule;
+    }).catch((error) => {
+      jobListPending = null;
+      throw error;
+    });
+  }
+  return jobListPending;
+}
+
 function renderJobList(companyId) {
-  const rows = filteredJobs(companyId);
-  const selected = new Set(selectedJobRows(companyId).map((job) => job.id));
-  const allSelected = rows.length > 0 && rows.every((job) => selected.has(job.id));
-  const canDelete = can('jobs.manage', companyId);
-  return `
-    <section class="panel">
-      <div class="section-head">
-        <div><h2>Jobs</h2><p>${rows.length} visible job${rows.length === 1 ? '' : 's'}</p></div>
-        ${selected.size ? `
-          <div class="jobs-bulk-actions">
-            <span class="contact-sel-count">${selected.size} selected</span>
-            <button class="btn btn-compact" type="button" data-action="jobs-clear-selection"><i class="ti ti-x"></i>Clear</button>
-            ${canDelete ? `<button class="btn btn-compact danger" type="button" data-action="jobs-bulk-delete"><i class="ti ti-trash"></i>Delete ${selected.size}</button>` : ''}
-          </div>
-        ` : ''}
-      </div>
-      <div class="data-table jobs-table">
-        <div class="table-head"><span class="select-cell" data-action="toggle-job-select-all"><input type="checkbox" ${allSelected ? 'checked' : ''} aria-label="Select all jobs" /></span><span>Job</span><span>What's next</span><span>Type</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Value</span></div>
-        ${rows.map((job) => `
-          <div class="table-row ${selected.has(job.id) ? 'selected ' : ''}${job.id === state.selectedJobId ? 'active' : ''}" role="button" tabindex="0" data-action="open-job" data-job-id="${h(job.id)}">
-            <span class="select-cell" data-action="toggle-job-select" data-job-id="${h(job.id)}"><input type="checkbox" ${selected.has(job.id) ? 'checked' : ''} aria-label="Select ${h(job.name)}" /></span>
-            <span class="cell-lead">${pipelineDot(pipelineStageColor('jobs', resolvePipelineStage('jobs', job.stage, companyId), companyId))}<span><strong>${h(job.name)}</strong><small>${h(job.client_name || 'No client')} - ${h(job.site_address || 'No address')}</small></span></span>
-            ${renderPipelineNextAction('job', job, { compact: true })}
-            <span>${h(job.job_type || '—')}</span>
-            <span>${stageTagPipe('jobs', job.stage, companyId)}</span>
-            <span>${priorityPill(job.priority)}</span>
-            <span>${h(job.owner_name || 'Unassigned')}</span>
-            <span>${money(job.estimate_total)}</span>
-          </div>
-        `).join('') || emptyState('No jobs match this view.')}
-      </div>
-    </section>
-  `;
+  // The streak and day columns come from the production records, so the list waits for them
+  // exactly as the job file does.
+  if (!ensureDomainLoaded('production')) return questLoader('Loading jobs');
+  if (jobListModule) return jobListModule.renderJobList(companyId);
+  loadJobList().then(() => render()).catch((error) => console.error('Job list failed to load', error));
+  return questLoader('Loading jobs');
 }
 
 function renderJobProfile(companyId, job) {
@@ -27218,6 +27217,12 @@ function handleAction(event, node) {
     state.selectedJobIds = rows.length && rows.every((job) => already.has(job.id))
       ? (state.selectedJobIds || []).filter((id) => !rows.some((job) => job.id === id))
       : [...new Set([...(state.selectedJobIds || []), ...rows.map((job) => job.id)])];
+    render();
+    return;
+  }
+  if (action === 'jobs-trade-filter') {
+    event.preventDefault();
+    state.jobTradeFilter = node.dataset.trade || 'all';
     render();
     return;
   }
