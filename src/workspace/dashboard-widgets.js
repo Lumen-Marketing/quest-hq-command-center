@@ -36,6 +36,32 @@ export const optionFields = (app) => (app?.fields || []).filter((f) => OPTION_FI
 export const dateFieldsOf = (app) => (app?.fields || []).filter((f) => f.type === 'date');
 export const numberFields = (app) => (app?.fields || []).filter((f) => ['money', 'number'].includes(f.type));
 
+/**
+ * A sub-item field, addressed from the app.
+ *
+ * A number card totals ONE field, and the field can now live on a sub-item list rather than
+ * on the record -- an app whose money is all in its Dailies had nothing to total otherwise.
+ * The two live in different id spaces, so a collection field is addressed by a composite key
+ * rather than by a bare id that could collide with one of the app's own.
+ */
+export const COLLECTION_FIELD_PREFIX = 'col:';
+
+export function parseTotalField(id) {
+  const raw = String(id || '');
+  if (!raw.startsWith(COLLECTION_FIELD_PREFIX)) return { collectionId: '', fieldId: raw };
+  const [, collectionId = '', fieldId = ''] = raw.split(':');
+  return { collectionId, fieldId };
+}
+
+/** Everything a number card can total: the app's own number fields, then every list's. */
+export function totalableFields(app) {
+  const own = numberFields(app).map((f) => ({ id: f.id, label: f.label }));
+  const sub = (app?.collections || []).flatMap((c) => (c.fields || [])
+    .filter((f) => ['money', 'number'].includes(f.type))
+    .map((f) => ({ id: `${COLLECTION_FIELD_PREFIX}${c.id}:${f.id}`, label: `${c.name} · ${f.label}` })));
+  return [...own, ...sub];
+}
+
 /** Whether the app has what this widget needs to show anything. */
 export function widgetSupported(app, type) {
   const meta = widgetMeta(type);
@@ -164,8 +190,24 @@ export function metricValue(app, config = {}, todayIso = '') {
   };
   switch (config.metric) {
     case 'sum': {
-      const field = (app?.fields || []).find((f) => f.id === config.fieldId);
-      const total = items.reduce((n, it) => n + (Number(it.values?.[config.fieldId]) || 0), 0);
+      const { collectionId, fieldId } = parseTotalField(config.fieldId);
+      if (collectionId) {
+        // Every sub-item of that list, across every record -- the caption says how many, so a
+        // total of zero can be told apart from a list nobody has filled in.
+        const collection = (app?.collections || []).find((c) => c.id === collectionId);
+        const field = (collection?.fields || []).find((f) => f.id === fieldId);
+        let total = 0;
+        let rows = 0;
+        items.forEach((it) => (Array.isArray(it.children) ? it.children : []).forEach((child) => {
+          if (!child || child.collection !== collectionId) return;
+          rows += 1;
+          total += Number(child.values?.[fieldId]) || 0;
+        }));
+        const name = collection ? `${collection.name} · ${field?.label || 'Total'}` : 'Total';
+        return { value: total, money: true, label: name, caption: `across ${rows} ${rows === 1 ? 'sub-item' : 'sub-items'}` };
+      }
+      const field = (app?.fields || []).find((f) => f.id === fieldId);
+      const total = items.reduce((n, it) => n + (Number(it.values?.[fieldId]) || 0), 0);
       return { value: total, money: true, label: field?.label || 'Total', caption: `across ${items.length} record${items.length === 1 ? '' : 's'}` };
     }
     case 'added': {

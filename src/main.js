@@ -18529,7 +18529,9 @@ async function openWbDashConfig(companyId, workspaceId, appId, widgetId) {
     widget,
     optionFields: mod.optionFields(app).map((f) => ({ id: f.id, label: f.label, options: f.config?.options || [] })),
     dateFields: mod.dateFieldsOf(app).map((f) => ({ id: f.id, label: f.label })),
-    numberFields: mod.numberFields(app).map((f) => ({ id: f.id, label: f.label })),
+    // The app's own number fields AND every sub-item list's, so a card can total money that
+    // lives on the dailies rather than on the job.
+    numberFields: mod.totalableFields(app),
   });
 }
 

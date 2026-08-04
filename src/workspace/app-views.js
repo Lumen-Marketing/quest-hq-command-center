@@ -368,7 +368,7 @@ export function createAppViews(ctx) {
     { id: 'added', label: 'Added in the last seven days' },
     { id: 'touched', label: 'Edited in the last seven days' },
   ], cfg.metric || 'count')}
-        ${pick('fieldId', 'Field to total', m.numberFields, cfg.fieldId, m.numberFields.length ? 'Pick a field' : 'No number fields yet')}`;
+        ${pick('fieldId', 'Field to total', m.numberFields, cfg.fieldId, m.numberFields.length ? 'Pick a field' : 'No number fields — add one to the app or a sub-item list')}`;
     } else if (w.type === 'stages') {
       fields = `${pick('fieldId', 'Group by', m.optionFields, cfg.fieldId)}
         ${pick('sumId', 'Also total (optional)', m.numberFields, cfg.sumId, 'Count only')}`;
