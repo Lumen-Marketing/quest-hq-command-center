@@ -61,6 +61,7 @@ import {
 import { resolveTenantRoute } from './workspaces/tenant-route.js';
 import { smsUiCapabilities } from './communications/sms-readiness.js';
 import { analyticsJobChoiceLabel, compactContactFilterValues } from './ui/audit-hardening.js';
+import { remapApp, remapChildren } from './workspace/app-portability.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -16863,12 +16864,12 @@ function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
       <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}<label class="wb-swatch wb-swatch-custom ${isCustomColor ? 'sel' : ''}" data-color="${h(app.color)}" title="Custom color"${isCustomColor ? ` style="background:${h(app.color)}"` : ''}><input type="color" id="wbSetCustomColor" value="${h(isCustomColor ? app.color : '#000000')}" aria-label="Custom color" ${canManage ? '' : 'disabled'}><i class="ti ${isCustomColor ? 'ti-check' : 'ti-plus'}"></i></label></div>
     </div>
     <div class="wb-field"><label>Portability</label>
-      <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — including all fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'} and ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'} — to back it up or install it into another workspace.</div>
+      <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — its fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'}, ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'}, and how it is arranged: card layout, sub-item lists, record layout, dashboard and saved views. Back it up, or install it into another workspace.</div>
       <div class="wb-settings-actions" style="margin-top:10px"><button class="btn" data-wb-download-app><i class="ti ti-download"></i>Download app</button></div>
     </div>
     ${canManage ? wbInstallToWorkspaceField(companyId, workspace, app) : ''}
     <div class="wb-field"><label>Quest App Market</label>
-      <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Questbase can install its fields &amp; automations from the Quest App Market. Your records are never shared.' : 'Share this app so anyone on Questbase can install its fields &amp; automations from the Quest App Market. Your records are never shared.'}</div>
+      <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.' : 'Share this app so anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.'}</div>
       ${canManage ? `<div class="wb-settings-actions" style="margin-top:10px"><button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share this app'}</button></div>` : ''}
     </div>
     ${canManage ? `<div class="wb-settings-actions"><button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save changes</button><button class="btn danger" data-del-app><i class="ti ti-trash"></i>Delete app</button></div>` : ''}
@@ -16988,11 +16989,26 @@ function wbBuildInstalledApp(workspace, src, includeItems) {
       f.config.source = fieldIdMap[f.config.source];
     }
   });
+  // The arrangement comes across too -- card layout, sub-item lists, record layout, dashboard
+  // and saved views. Every one refers to fields BY ID, and the ids were just reminted above,
+  // so they are remapped rather than copied: carried verbatim they would point at the SOURCE
+  // app's fields and render as empty cards.
+  const { extras, collectionIdMap, childFieldIdMap } = remapApp(src, fieldIdMap, wbUid);
   const stamp = new Date().toISOString();
   const items = includeItems ? (Array.isArray(src.items) ? src.items : []).map((it) => {
     const values = {};
     Object.keys(it.values || {}).forEach((oldFid) => { const nf = fieldIdMap[oldFid]; if (nf) values[nf] = it.values[oldFid]; });
-    return { id: wbUid(), values, createdAt: it.createdAt || stamp, updatedAt: it.updatedAt || it.createdAt || stamp, lastActivityAt: it.lastActivityAt || it.updatedAt || it.createdAt || stamp, comments: [] };
+    return {
+      id: wbUid(),
+      values,
+      // Sub-item records, pointed at the new lists and their new fields. Without this a
+      // restored app has the lists but nothing in them, which is data loss.
+      children: remapChildren(it.children, collectionIdMap, childFieldIdMap, wbUid),
+      createdAt: it.createdAt || stamp,
+      updatedAt: it.updatedAt || it.createdAt || stamp,
+      lastActivityAt: it.lastActivityAt || it.updatedAt || it.createdAt || stamp,
+      comments: [],
+    };
   }) : [];
   const automations = (Array.isArray(src.automations) ? src.automations : []).map((au) => {
     const trigger = au.trigger && typeof au.trigger === 'object' ? { ...au.trigger } : { event: 'created' };
@@ -17002,7 +17018,7 @@ function wbBuildInstalledApp(workspace, src, includeItems) {
   });
   let name = String(src.name || 'Imported app').trim() || 'Imported app';
   if (workspace.apps.some((a) => a.name === name)) { let n = 2; while (workspace.apps.some((a) => a.name === `${name} (${n})`)) n += 1; name = `${name} (${n})`; }
-  return { id: wbUid(), name, description: String(src.description || ''), type: String(src.type || ''), icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0], color: safeHexColor(src.color, WB_PALETTE[1]), fields, items, automations };
+  return { id: wbUid(), name, description: String(src.description || ''), type: String(src.type || ''), icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0], color: safeHexColor(src.color, WB_PALETTE[1]), fields, items, automations, ...extras };
 }
 function wbInstallAppFromJson(companyId, workspaceId, text) {
   let bundle;
@@ -17063,7 +17079,7 @@ function wbInstallLibraryApp(companyId, workspaceId, appId) {
   wbLogActivity(workspace, { icon: 'ti-package-import', color: '#16a34a', text: `Installed app <b>${h(app.name)}</b> from the library (${app.fields.length} fields · ${app.automations.length} automations)` });
   state.builderModal = null;
   wbSave(companyId);
-  showToast(`Installed "${app.name}" — fields & automations copied (no records).`, 'local', 'Workspaces');
+  showToast(`Installed "${app.name}" — structure and layout copied (no records).`, 'local', 'Workspaces');
   navigate(companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId));
 }
 function openWbAppChooser(companyId, workspaceId) {

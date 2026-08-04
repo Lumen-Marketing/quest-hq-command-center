@@ -13,6 +13,7 @@
 // helpers closed over once. The bodies are unchanged from where they lived in main.js.
 
 import { parseCsvRows } from '../data/csv.js';
+import { describeExtras, portableExtras } from './app-portability.js';
 
 export function createDataIO(ctx) {
   const {
@@ -198,11 +199,17 @@ export function createDataIO(ctx) {
         fields: clone(app.fields || []),
         items: clone(app.items || []),
         automations: clone(app.automations || []),
+        // The arrangement travels too: card layout, sub-item lists, record layout, dashboard
+        // and saved views. Without these a downloaded app reinstalls as a bare field list,
+        // which is what it used to do.
+        ...portableExtras(app),
       },
     };
     const safeName = (app.name || 'app').replace(/[^\w.-]+/g, '_');
     downloadText(`${safeName}.questapp.json`, JSON.stringify(bundle, null, 2), 'application/json');
-    showToast(`Downloaded "${app.name}" (${app.fields.length} fields · ${app.items.length} records · ${app.automations.length} automations).`, 'local', 'Workspaces');
+    const extras = describeExtras(bundle.app);
+    const summary = [`${app.fields.length} fields`, `${app.items.length} records`, `${app.automations.length} automations`, ...extras].join(' · ');
+    showToast(`Downloaded "${app.name}" (${summary}).`, 'local', 'Workspaces');
   }
 
   return {
