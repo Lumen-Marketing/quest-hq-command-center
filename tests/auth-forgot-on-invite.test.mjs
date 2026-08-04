@@ -39,7 +39,14 @@ test('the invite token is carried on the URL, so it survives the mode change', (
 test('the reset link returns to the host the person is actually on', () => {
   // Unlike the invitation email, this one is built in the browser, so the current origin is
   // the right answer rather than a hard-coded domain.
-  assert.match(main, /const redirectTo = `\$\{window\.location\.origin\}\$\{appHref\('\/\?auth=recovery'\)\}`;/);
+  //
+  // Narrowed since: authOrigin() IS the current origin for every real host, including
+  // localhost and any custom domain. The single exception is a *.vercel.app deployment
+  // hostname, which is not a site anyone uses -- and a reset link is the worst place to
+  // learn that, because it arrives by email and outlives the tab that asked for it.
+  assert.match(main, /const redirectTo = `\$\{authOrigin\(\)\}\$\{appHref\('\/\?auth=recovery'\)\}`;/);
+  const fn = main.match(/function authOrigin\(\) \{[\s\S]*?\n\}/)[0];
+  assert.match(fn, /return here;/, 'a real host still returns to itself');
 });
 
 test('the reset response does not reveal whether the account exists', () => {

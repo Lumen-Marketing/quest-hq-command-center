@@ -116,6 +116,33 @@ const CONFIG = {
 const INVITE_BLOCKED_ROLE_NAMES = new Set(['owner', 'admin', 'developer']);
 
 const BASE_PATH = new URL(import.meta.env.BASE_URL || '/', window.location.origin).pathname.replace(/\/$/, '');
+
+/**
+ * Where an auth round trip has to come back to.
+ *
+ * Every Vercel deployment also answers on its own *.vercel.app hostname, and that is a
+ * DIFFERENT ORIGIN. Start Google sign-in from one of those and the provider dutifully
+ * returns you to it: the session is stored against a host nobody uses, so on the real site
+ * you still look signed out. Same for a password-reset link, which is worse -- it arrives by
+ * email and outlives the tab it was requested from.
+ *
+ * So auth redirects are pinned to the canonical host rather than to wherever the flow
+ * happened to start. Localhost is exempt or local sign-in would be impossible, and the whole
+ * thing is overridable for anyone who genuinely needs to test auth on a preview.
+ *
+ * NOTE: this only decides what we ASK for. Supabase ignores a redirectTo that is not in its
+ * "Redirect URLs" allowlist and silently uses the project's Site URL instead -- which is the
+ * other half of this bug and lives in the dashboard, not here.
+ */
+const CANONICAL_ORIGIN = String(import.meta.env.VITE_CANONICAL_ORIGIN || 'https://www.questbase.io').replace(/\/$/, '');
+
+function authOrigin() {
+  const here = window.location.origin;
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return here;
+  // Only deployment hostnames are redirected. A custom domain is already the real thing.
+  return /\.vercel\.app$/i.test(host) ? CANONICAL_ORIGIN : here;
+}
 const SESSION_KEY = 'quest-hq-local-session';
 const PROFILE_KEY = 'quest-hq-local-profile';
 const JOB_CACHE_KEY = 'quest-hq-job-cache-v2';
@@ -23245,7 +23272,7 @@ async function startOAuthSignIn(provider) {
     // is gone by then. Without the invite riding along, someone joining by invitation would
     // return signed in but with no invitation to accept -- and no way back to it.
     const inviteToken = String(state.route?.params?.get('invite') || '').trim();
-    const redirectTo = `${window.location.origin}${BASE_PATH || ''}/${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''}`;
+    const redirectTo = `${authOrigin()}${BASE_PATH || ''}/${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''}`;
     const { error } = await client.auth.signInWithOAuth({ provider, options: { redirectTo } });
     if (error) throw error;
     // Success redirects the browser to the provider — nothing more to do here.
@@ -29639,7 +29666,7 @@ async function requestPasswordReset(formNode) {
   state.loginError = '';
   state.authMessage = 'Sending reset link...';
   render();
-  const redirectTo = `${window.location.origin}${appHref('/?auth=recovery')}`;
+  const redirectTo = `${authOrigin()}${appHref('/?auth=recovery')}`;
   const result = await client.auth.resetPasswordForEmail(email, { redirectTo });
   state.authBusy = false;
   if (result.error) {
