@@ -122,7 +122,9 @@ test('the model does not invent figures the data cannot support', () => {
 // --- wiring ---------------------------------------------------------------------------------
 
 test('the dashboard is the default Jobs tab', () => {
-  assert.match(main, /const JOB_TABS = \['dashboard', 'pipeline', 'list', 'profile'\];/);
+  // Ordered the way the work reads: the day's summary, the full list, what is booked, the
+  // board, then one job. Profile stays last because it is reached from the others.
+  assert.match(main, /const JOB_TABS = \['dashboard', 'list', 'calendar', 'pipeline', 'profile'\];/);
   assert.match(main, /return JOB_TABS\.includes\(value\) \? value : 'dashboard';/);
 });
 

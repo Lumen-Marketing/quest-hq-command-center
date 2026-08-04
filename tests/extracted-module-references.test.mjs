@@ -122,6 +122,9 @@ const FACTORY_MODULES = [
   ['src/crm/contact-editor.js', 'createContactEditor'],
   ['src/jobs/job-file.js', 'createJobFile'],
   ['src/jobs/job-list.js', 'createJobList'],
+  ['src/jobs/job-calendar.js', 'createJobCalendar'],
+  ['src/crm/deal-detail.js', 'createDealDetail'],
+  ['src/crm/underwriter-page.js', 'createUnderwriterPage'],
   ['src/ui/landing-page.js', 'createLandingPage'],
   ['src/ui/auth-form.js', 'createAuthForm'],
 ];

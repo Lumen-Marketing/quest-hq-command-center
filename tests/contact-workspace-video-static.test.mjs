@@ -4,7 +4,9 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   // The contact form is fetched on demand now; same surface, two files.
-  + readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8')
+  // Quote detail is fetched on demand too; same surface, more files.
+  + readFileSync(new URL('../src/crm/deal-detail.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const migrationUrl = new URL('../supabase/migrations/202607020945_contact_workspace_intake_fields.sql', import.meta.url);
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';

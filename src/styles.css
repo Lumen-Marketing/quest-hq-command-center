@@ -30457,3 +30457,69 @@ html:has(.quest-app) {
   .jl-row > span:nth-child(6),
   .jl-row > span:nth-child(9) { display: none; }
 }
+
+/* ---- Jobs calendar ----------------------------------------------------------------------
+   Month shows the shape of the weeks; week shows one lane per crew, which is the view that
+   answers "who is free on Wednesday". Bars are positioned by CSS custom properties so the
+   markup carries only the numbers. */
+.jc { display: grid; gap: 14px; }
+.jc-month { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.jc-dow {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  background: var(--ink); color: var(--surface);
+  font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+}
+.jc-dow span { padding: 7px 10px; }
+
+.jc-week { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--border); }
+.jc-week:last-child { border-bottom: 0; }
+.jc-day { border-right: 1px solid var(--border); position: relative; }
+.jc-day:last-child { border-right: 0; }
+.jc-dim { background: var(--surface-2); }
+.jc-daynum { position: absolute; top: 5px; right: 8px; font-size: .72rem; font-weight: 700; color: var(--ink-2); }
+.jc-dim .jc-daynum { color: var(--muted); }
+.jc-today { background: color-mix(in srgb, var(--orange) 8%, var(--surface)); }
+.jc-today .jc-daynum { color: var(--orange); }
+
+/* One bar per job per week, stacked by row so overlapping jobs never collide. */
+.jc-bar {
+  position: absolute;
+  top: calc(26px + var(--jc-row) * 22px);
+  left: calc(var(--jc-offset) / 7 * 100% + 3px);
+  width: calc(var(--jc-span) / 7 * 100% - 6px);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: .72rem; font-weight: 700; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.jc-bar:hover { filter: brightness(.96); }
+.jc-clip { color: var(--muted); font-weight: 900; }
+
+.jc-week-view { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px 14px; display: grid; gap: 6px; }
+.jc-week-head { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 8px; }
+.jc-week-days { display: grid; grid-template-columns: repeat(7, 1fr); font-size: .72rem; font-weight: 700; color: var(--muted); }
+.jc-today-label { color: var(--orange); }
+.jc-crew-row { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 8px; align-items: start; }
+.jc-crew-name { font-size: .8rem; font-weight: 800; padding-top: 6px; }
+.jc-unassigned { color: var(--muted); }
+.jc-crew-lane { position: relative; border-top: 1px solid var(--border); }
+.jc-crew-lane .jc-bar { top: calc(5px + var(--jc-row) * 26px); padding: 5px 10px; font-size: .78rem; }
+
+.jc-unscheduled { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 13px 16px; }
+.jc-unscheduled h3 { margin: 0 0 8px; font-size: .84rem; font-weight: 800; display: flex; gap: 8px; align-items: baseline; }
+.jc-unscheduled-list { display: flex; gap: 7px; flex-wrap: wrap; }
+.jc-unscheduled-list a {
+  display: inline-flex; align-items: center; gap: 7px; font-size: .8rem; font-weight: 600;
+  border: 1px dashed var(--border-strong); border-radius: 99px; padding: 4px 12px; color: var(--ink-2);
+}
+.jc-unscheduled-list a:hover { border-color: var(--orange); color: var(--orange); }
+.jc-unscheduled-list i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+@media (max-width: 760px) {
+  .jc-week-head, .jc-crew-row { grid-template-columns: 84px minmax(0, 1fr); }
+  .jc-bar { font-size: .66rem; padding: 2px 5px; }
+}
+
+/* The attention card on the job file overview, which now carries the next action. */
+.jf-attention { border-left: 3px solid var(--orange); }

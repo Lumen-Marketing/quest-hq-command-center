@@ -6,7 +6,9 @@ import {
   WORKSPACE_PLUGIN_REGISTRY,
 } from '../src/workspaces/plugin-catalog.js';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  // The underwriter page is fetched on demand now; same surface, two files.
+  + readFileSync(new URL('../src/crm/underwriter-page.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const workspaceMigration = readFileSync(new URL('../supabase/migrations/202607211200_company_operational_workspaces.sql', import.meta.url), 'utf8');
 const migrationDir = new URL('../supabase/migrations/', import.meta.url);

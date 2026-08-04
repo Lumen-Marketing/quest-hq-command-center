@@ -17,7 +17,9 @@ const fn = (name) => {
 
 test('jobSupabaseRow nulls every link column, not just some', () => {
   const body = fn('jobSupabaseRow');
-  assert.match(body, /emptyToNull\(supabaseRow\(job, JOB_COLS\), \['account_id', 'contact_id', 'deal_id', 'site_id'\]\)/);
+  // The two date columns are here for the same reason as the ids: '' is not a valid date,
+  // and a job left unscheduled would fail the write rather than save with no dates.
+  assert.match(body, /emptyToNull\(supabaseRow\(job, JOB_COLS\), \['account_id', 'contact_id', 'deal_id', 'site_id', 'starts_on', 'ends_on'\]\)/);
 });
 
 test('saveJob writes the prepared row, never the raw payload', () => {

@@ -1442,7 +1442,7 @@ function persistDealStages() { DEAL_STAGES = DEAL_STAGES.filter((stage) => stage
 
 const ACCOUNT_TYPES = ['Customer', 'Prospect', 'Partner', 'Vendor'];
 const ACTIVITY_TYPES = ['note', 'call', 'email', 'meeting', 'task', 'stage_change', 'system'];
-const JOB_TABS = ['dashboard', 'pipeline', 'list', 'profile'];
+const JOB_TABS = ['dashboard', 'list', 'calendar', 'pipeline', 'profile'];
 const TASK_STATUSES = ['todo', 'pending', 'hold', 'review', 'done'];
 const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
 const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
@@ -2568,7 +2568,10 @@ const state = {
   selectedJobIds: [],
   jobBulkDelete: null,
   jobDailyDraft: null,
+  jobRecordDraft: null,
   jobTradeFilter: 'all',
+  jobCalendarMode: 'month',
+  jobCalendarAnchor: '',
   selectedTaskId: '',
   selectedFileId: '',
   jobPhotoJobId: '',
@@ -9351,87 +9354,6 @@ function renderUnderwritingResults(result) {
   `;
 }
 
-function renderUnderwriterPage(route, companyId) {
-  const requestedStageAliases = { prospect: 'prospects', lead: 'leads', nurturing: 'followup' };
-  const requestedStageRaw = route.params.get('stage') || 'all';
-  const requestedStage = requestedStageAliases[requestedStageRaw] || requestedStageRaw;
-  const stageKeys = new Set(CRM2_UNDERWRITER_STAGES.map((stage) => stage.key));
-  const activeStage = stageKeys.has(requestedStage) ? requestedStage : 'all';
-  const contacts = companyContacts(companyId)
-    .map((contact) => ({ ...contact, underwriter_stage: underwriterStageForContact(contact) }))
-    .sort((a, b) => CRM2_UNDERWRITER_STAGES.findIndex((stage) => stage.key === a.underwriter_stage.key) - CRM2_UNDERWRITER_STAGES.findIndex((stage) => stage.key === b.underwriter_stage.key));
-  const visible = activeStage === 'all' ? contacts : contacts.filter((contact) => contact.underwriter_stage.key === activeStage);
-  const underwriting = contacts.filter((contact) => contact.underwriter_stage.key === 'underwriting');
-  const estimates = contacts.filter((contact) => ['estimate', 'negotiating'].includes(contact.underwriter_stage.key));
-  const requestedContactId = route.params.get('contact_id') || state.underwritingContactId;
-  const selectedContact = contacts.find((contact) => contact.id === requestedContactId) || underwriting[0] || contacts[0] || null;
-  state.underwritingContactId = selectedContact?.id || '';
-  const draft = underwritingDraftForContact(selectedContact, companyId);
-  const calculation = calculateUnderwriting(draft || {});
-  return `
-    <section class="tool-page underwriter-page underwriter-ledger">
-      <section class="metric-grid underwriter-summary">
-        ${metricCard('Underwriting', underwriting.length)}
-        ${metricCard('Estimate queue', estimates.length)}
-        ${metricCard('Pipeline value', money(sum(visible, 'value')))}
-        ${metricCard('Quest CRM stage', activeStage === 'all' ? 'All' : underwriterStageByKey(activeStage).name)}
-      </section>
-      <section class="pipe-toolbar">
-        <div class="pipe-chips" role="group" aria-label="Quest CRM underwriter stage">
-          <a class="pipe-chip ${activeStage === 'all' ? 'on' : ''}" href="${appHref(companyPath('underwriter', {}, companyId))}" data-router>All<b>${h(String(contacts.length))}</b></a>
-          ${CRM2_UNDERWRITER_STAGES.map((stage) => {
-            const count = contacts.filter((contact) => contact.underwriter_stage.key === stage.key).length;
-            return `<a class="pipe-chip ${activeStage === stage.key ? 'on' : ''}" href="${appHref(companyPath('underwriter', { stage: stage.key }, companyId))}" data-router>${pipelineDot(stage.color)}${h(stage.name)}<b>${h(String(count))}</b></a>`;
-          }).join('')}
-        </div>
-      </section>
-      <section class="panel underwriting-calculator underwriter-workbench">
-        <div class="section-head">
-          <div><h2>Underwriting calculator</h2><p>Price the scope, protect the margin, and save one current case per contact.</p></div>
-          ${selectedContact && underwritingCaseForContact(selectedContact.id, companyId) ? '<span class="underwriting-saved"><i class="ti ti-check"></i>Saved case</span>' : ''}
-        </div>
-        ${selectedContact ? `
-          <form id="underwriting-form" data-underwriting-form>
-            ${renderProtectedFormDraftStrip(protectedFormDraftAttributes('underwriter', selectedContact.id, companyId, selectedContact.workspace_id || activeWorkspaceId()))}
-            <div class="underwriting-form-side">
-              <label class="underwriting-field span-2"><span>Contact</span><select name="contact_id" data-underwriting-contact data-draft-ignore>
-                ${contacts.map((contact) => `<option value="${h(contact.id)}" ${contact.id === selectedContact.id ? 'selected' : ''}>${h(contact.name)} - ${h(contact.pay_type || 'Retail')}</option>`).join('')}
-              </select></label>
-              ${underwritingNumberField('Contract price', 'contractPrice', draft.contractPrice)}
-              ${underwritingNumberField('Target margin', 'targetMarginPercent', draft.targetMarginPercent, '%')}
-              ${underwritingNumberField('Material', 'materialCost', draft.materialCost)}
-              ${underwritingNumberField('Labor', 'laborCost', draft.laborCost)}
-              ${underwritingNumberField('Permits and fees', 'permitCost', draft.permitCost)}
-              ${underwritingNumberField('Disposal', 'disposalCost', draft.disposalCost)}
-              ${underwritingNumberField('Other direct cost', 'otherCost', draft.otherCost)}
-              ${underwritingNumberField('Overhead', 'overheadPercent', draft.overheadPercent, '%')}
-              ${underwritingNumberField('Commission', 'commissionPercent', draft.commissionPercent, '%')}
-              ${underwritingNumberField('Contingency', 'contingencyPercent', draft.contingencyPercent, '%')}
-              <label class="underwriting-field span-2"><span>Decision notes</span><textarea name="notes" rows="1" data-underwriting-field placeholder="Scope risks, exclusions, or pricing decision">${h(draft.notes || '')}</textarea></label>
-              <div class="form-actions span-2">
-                <span class="form-note">Percent costs are calculated from contract price.</span>
-              </div>
-            </div>
-            <aside class="underwriting-results">
-              <div class="underwriting-results-head">
-                <span class="underwriting-results-icon">${svgIcon('q-symbol-crm')}</span>
-                <div><h3>Decision summary</h3><p>Review profitability outcomes before saving your decision.</p></div>
-              </div>
-              <div data-underwriting-results aria-live="polite">${renderUnderwritingResults(calculation)}</div>
-            </aside>
-          </form>
-        ` : emptyState('Add a contact to start an underwriting case.')}
-      </section>
-      <section class="panel underwriter-ledger-queue">
-        <div class="section-head"><div><h2>Estimate queue</h2><p>${visible.length} contact${visible.length === 1 ? '' : 's'} in this Quest CRM view.</p></div></div>
-        <div class="data-table underwriter-table">
-          <div class="table-head"><span>Contact</span><span>Stage</span><span>Owner</span><span>Pay type</span><span>Value</span></div>
-          ${visible.map(renderUnderwriterQueueRow).join('') || emptyState('No contacts match this underwriter stage.')}
-        </div>
-      </section>
-    </section>
-  `;
-}
 
 function renderUnderwriterQueueRow(lead) {
   return `
@@ -11002,7 +10924,7 @@ async function toggleContactTask(taskId) {
 }
 
 function jobSupabaseRow(job) {
-  return emptyToNull(supabaseRow(job, JOB_COLS), ['account_id', 'contact_id', 'deal_id', 'site_id']);
+  return emptyToNull(supabaseRow(job, JOB_COLS), ['account_id', 'contact_id', 'deal_id', 'site_id', 'starts_on', 'ends_on']);
 }
 
 async function persistJob(job, label = 'Job saved locally') {
@@ -12209,6 +12131,7 @@ function renderJobPanel(tab, companyId, job) {
   if (tab === 'dashboard') return '';
   if (tab === 'pipeline') return renderPipeline(companyId);
   if (tab === 'list') return renderJobList(companyId);
+  if (tab === 'calendar') return renderJobCalendar(companyId);
   if (tab === 'profile') {
     if (!job) return emptyState('Pick a job to open its file.');
     // `jt` is the tab WITHIN the job file, kept separate from `tab` so a link can point at
@@ -12289,6 +12212,33 @@ function renderJobRecord(companyId, job) {
   if (jobRecordModule) return jobRecordModule.renderJobRecord(companyId, job);
   loadJobRecord().then(() => render()).catch((error) => console.error('Job record failed to load', error));
   return questLoader('Loading job');
+}
+
+// ---- Jobs calendar ----------------------------------------------------------
+// Body lives in ./jobs/job-calendar.js and is fetched the first time the tab is opened.
+let jobCalendarModule = null;
+let jobCalendarPending = null;
+
+function loadJobCalendar() {
+  if (jobCalendarModule) return Promise.resolve(jobCalendarModule);
+  if (!jobCalendarPending) {
+    jobCalendarPending = import('./jobs/job-calendar.js').then((mod) => {
+      jobCalendarModule = mod.createJobCalendar({
+        h, can, emptyState, appHref, companyPath, filteredJobs, state,
+      });
+      return jobCalendarModule;
+    }).catch((error) => {
+      jobCalendarPending = null;
+      throw error;
+    });
+  }
+  return jobCalendarPending;
+}
+
+function renderJobCalendar(companyId) {
+  if (jobCalendarModule) return jobCalendarModule.renderJobCalendar(companyId);
+  loadJobCalendar().then(() => render()).catch((error) => console.error('Jobs calendar failed to load', error));
+  return questLoader('Loading calendar');
 }
 
 // ---- All jobs ---------------------------------------------------------------
@@ -20472,6 +20422,33 @@ function renderAccountEditor(companyId, account) {
 }
 
 // ---- Deals (pipeline) -----------------------------------------------------
+// ---- renderDealDetail ---------------------------------------------------------
+// Body lives in ./crm/deal-detail.js and is fetched on first use.
+let renderDealDetailModule = null;
+let renderDealDetailPending = null;
+
+function loadRenderDealDetail() {
+  if (renderDealDetailModule) return Promise.resolve(renderDealDetailModule);
+  if (!renderDealDetailPending) {
+    renderDealDetailPending = import('./crm/deal-detail.js').then((mod) => {
+      renderDealDetailModule = mod.createDealDetail({
+        accountById, activeWorkspaceId, activitiesFor, appHref, companyPath, contactById, filteredActivitiesFor, googleMapsPlaceSearchUrl, guidanceForStage, h, jobById, money, pipelineStages, renderActivityFilterBar, renderDealLineItems, renderSfTaskRow, resolvePipelineStage, sfFeedItem, tasksForDeal, state, EMPTY_FIELD_PLACEHOLDER,
+      });
+      return renderDealDetailModule;
+    }).catch((error) => {
+      renderDealDetailPending = null;
+      throw error;
+    });
+  }
+  return renderDealDetailPending;
+}
+
+function renderDealDetail(companyId, deal) {
+  if (renderDealDetailModule) return renderDealDetailModule.renderDealDetail(companyId, deal);
+  loadRenderDealDetail().then(() => render()).catch((error) => console.error('renderDealDetail failed to load', error));
+  return questLoader('Loading');
+}
+
 function dealRow(deal, companyId = activeCompanyId()) {
   return `
     <div class="table-row ${deal.id === state.selectedDealId ? 'active' : ''}" role="button" tabindex="0" data-action="open-deal" data-deal-id="${h(deal.id)}">
@@ -20812,126 +20789,6 @@ function renderDealTable(companyId) {
     </section>`;
 }
 
-function renderDealDetail(companyId, deal) {
-  const account = accountById(deal.account_id);
-  const contact = contactById(deal.primary_contact_id);
-  const job = deal.job_id ? jobById(deal.job_id) : null;
-  const quoteAddress = job?.site_address || account?.address || contact?.location || '';
-  const stages = pipelineStages('deals', companyId);
-  const currentStage = resolvePipelineStage('deals', deal.stage, companyId);
-  const ci = stages.findIndex((s) => s.name === currentStage);
-  const g = guidanceForStage(currentStage);
-  const activeTab = state.dealActivityTab || 'Email';
-  const totalFeed = activitiesFor('deal', deal.id);
-  const feed = filteredActivitiesFor('deal', deal.id);
-  const tasks = tasksForDeal(deal);
-  const ed = (key, opts = {}) => {
-    const isEmpty = deal[key] === '' || deal[key] == null;
-    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : '', isEmpty ? 'sf-empty' : ''].filter(Boolean).join(' ');
-    const inner = isEmpty ? EMPTY_FIELD_PLACEHOLDER : h(String(deal[key]));
-    return `<span class="${cls}" data-deal-edit="${h(key)}" data-deal-id="${h(deal.id)}" title="Click to edit">${inner}</span>`;
-  };
-  const fieldRow = (label, content, editKey = '') => `
-    <div class="sf-field">
-      <div class="sf-field-label">
-        ${h(label)}
-        ${editKey
-          ? `<button class="sf-pencil" type="button" data-deal-edit="${h(editKey)}" data-deal-id="${h(deal.id)}" aria-label="Edit ${h(label)}"><i class="ti ti-pencil"></i></button>`
-          : `<button class="sf-pencil" type="button" data-action="open-deal-form" data-mode="edit" data-deal-id="${h(deal.id)}" aria-label="Edit ${h(label)}"><i class="ti ti-pencil"></i></button>`}
-      </div>
-      <div class="sf-field-value">${content}</div>
-    </div>
-  `;
-  const headerActions = [['Follow', 'ti-plus'], ['New Task', 'ti-checkbox'], ['Log a Call', 'ti-phone'], ['New Estimate', 'ti-calculator'], ['Edit', 'ti-pencil']];
-  const quickTiles = [['Task', 'ti-checkbox'], ['Meeting', 'ti-calendar'], ['Estimate', 'ti-calculator'], ['Proposal', 'ti-file-text'], ['Note', 'ti-note'], ['Call Log', 'ti-phone']];
-  const activityTabs = [['Email', 'ti-mail'], ['New Task', 'ti-checkbox'], ['New Event', 'ti-calendar'], ['Log a Call', 'ti-phone']];
-  return `
-    <div class="sf-record">
-      <div class="sf-object-tabs">
-        <a class="sf-object-tab" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router>Dashboard</a>
-        <a class="sf-object-tab" href="${appHref(companyPath('deals', {}, companyId))}" data-router>All Quotes <span class="sf-tab-kind">| Quotes</span></a>
-        <span class="sf-object-tab on">${h(deal.name)} <span class="sf-tab-kind">| Quote</span></span>
-      </div>
-
-      <div class="sf-record-head">
-        <span class="sf-record-icon"><i class="ti ti-briefcase"></i></span>
-        <div><div class="sf-record-label">Quote</div><div class="sf-record-name">${h(deal.name)}</div></div>
-        <div class="sf-actions">
-          <button class="sf-btn" type="button" data-action="open-record-history" data-record-type="deal" data-record-id="${h(deal.id)}" data-record-label="${h(deal.name)}" data-company-id="${h(deal.company_id || companyId)}" data-workspace-id="${h(deal.workspace_id || activeWorkspaceId())}"><i class="ti ti-history"></i>History</button>
-          ${headerActions.map(([label, ico]) => label === 'Edit'
-            ? `<button class="sf-btn" type="button" data-action="open-deal-form" data-mode="edit" data-deal-id="${h(deal.id)}"><i class="ti ${ico}"></i>${label}</button>`
-            : `<button class="sf-btn" type="button" data-action="deal-quick" data-kind="${h(label)}" data-deal-id="${h(deal.id)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}
-        </div>
-      </div>
-
-      <div class="sf-path-wrap">
-        <div class="sf-path-row">
-          <div class="sf-stage-track">
-            ${stages.map((s, i) => {
-              const cls = i < ci ? 'done' : i === ci ? 'current' : 'future';
-              return `<button class="sf-stage ${cls}" type="button" data-action="set-deal-stage" data-deal-id="${h(deal.id)}" data-stage="${h(s.name)}" title="Move to ${h(s.name)}">${i < ci ? '<i class="ti ti-check"></i>' : h(s.name)}</button>`;
-            }).join('')}
-          </div>
-          <button class="sf-mark-btn" type="button" data-action="deal-mark-next" data-deal-id="${h(deal.id)}">Mark as Current Stage</button>
-        </div>
-        <div class="sf-guidance">
-          <div class="sf-guidance-label">Guidance for Success</div>
-          <div class="sf-guidance-title">${h(g.t)}</div>
-          <div class="sf-guidance-lines">${g.b.map((x) => `<div><span class="sf-guidance-bullet">•</span> ${h(x)}</div>`).join('')}</div>
-        </div>
-      </div>
-
-      <div class="sf-three-col">
-        <div class="sf-col">
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
-            ${fieldRow('Phone', contact?.phone ? h(contact.phone) : '<span class="muted-dash">—</span>')}
-            ${fieldRow('Email', contact?.email ? `<span class="sf-edit blue">${h(contact.email)}</span>` : '<span class="muted-dash">—</span>')}
-            ${fieldRow('Location', quoteAddress ? `${h(quoteAddress)}<a class="sf-field-action" href="${h(googleMapsPlaceSearchUrl(quoteAddress))}" target="_blank" rel="noreferrer"><i class="ti ti-map-pin"></i>Map pin</a>` : '<span class="muted-dash">—</span>')}
-            ${fieldRow('Job Type', `<span class="sf-pill">${h(deal.source || 'Re-roof')}</span>`)}
-            ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
-            ${fieldRow('Account', account ? `<button class="link-button" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(account.name)}</button>` : '<span class="muted-dash">—</span>')}
-          </div></div>
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
-            ${fieldRow('Funnel', '<span>Quotes (bottom of funnel)</span>')}
-            ${fieldRow('Stage', `<span>${h(deal.stage)}</span>`, 'stage')}
-            ${fieldRow('Est. Value', `<span class="sf-money"><span class="sf-edit mono" data-deal-edit="value" data-deal-id="${h(deal.id)}" title="Click to edit">${money(deal.value || 0)}</span></span>`, 'value')}
-            ${fieldRow('Probability', `<span class="sf-edit mono" data-deal-edit="probability" data-deal-id="${h(deal.id)}" title="Click to edit">${h(String(deal.probability || 0))}</span>%`, 'probability')}
-            ${fieldRow('Pay Type', `<span>${h(deal.status === 'won' ? 'Won' : 'Retail')}</span>`)}
-            ${fieldRow('Linked Job', job ? `<a class="link-button" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router>${h(job.name)}</a>` : '<span class="muted-dash">—</span>')}
-          </div></div>
-        </div>
-
-        <div class="sf-col">
-          ${renderDealLineItems(deal, companyId)}
-          <div class="sf-card">
-            <div class="sf-activity-tabs">${activityTabs.map(([label, ico]) => `<button class="sf-activity-tab ${activeTab === label ? 'active' : ''}" type="button" data-action="open-docked-activity" data-related-type="deal" data-related-id="${h(deal.id)}" data-kind="${h(label)}" data-tab="${h(label)}"><i class="ti ${ico}"></i>${label}</button>`).join('')}</div>
-            <form class="sf-note-box" data-deal-note-form autocomplete="off">
-              <input type="hidden" name="deal_id" value="${h(deal.id)}" />
-              <input name="body" placeholder="Write a note or @mention..." />
-              <span class="sf-note-tools"><i class="ti ti-paperclip"></i><i class="ti ti-at"></i></span>
-            </form>
-            ${renderActivityFilterBar(totalFeed.length, feed.length)}
-            <div class="sf-feed">
-              ${feed.length ? feed.map((a) => sfFeedItem(a)).join('') : `<div class="sf-feed-empty">${totalFeed.length ? 'No activity matches this filter.' : 'No activity yet. Log a note, call, or meeting.'}</div>`}
-            </div>
-          </div>
-        </div>
-
-        <div class="sf-col">
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-bolt"></i>Quick Create</div>
-            <div class="sf-quick-grid">${quickTiles.map(([label, ico]) => `<button class="sf-quick-tile" type="button" data-action="deal-quick" data-kind="${h(label)}" data-deal-id="${h(deal.id)}"><i class="ti ${ico}"></i><span>${label}</span></button>`).join('')}</div>
-            <button class="sf-convert-btn" type="button" data-action="convert-deal" data-deal-id="${h(deal.id)}"><i class="ti ti-arrow-right"></i>Convert to Job</button>
-          </div>
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-checkbox"></i>Open Tasks<span class="sf-connect"><i class="ti ti-plug"></i>Connect</span></div>
-            <div class="sf-tasks">
-              ${tasks.map((t) => renderSfTaskRow(t)).join('') || '<div class="sf-task-empty">No tasks yet.</div>'}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
 function blankDeal(companyId = activeCompanyId()) {
   const pf = state.dealPrefill || {};
   return normalizeDeal({ id: '', company_id: companyId, name: '', stage: pf.stage || dealStageNames()[0], account_id: pf.account_id || '', primary_contact_id: pf.primary_contact_id || '' });
@@ -22940,6 +22797,7 @@ function renderActiveModal(route, session) {
   if (state.builderModal) return renderWorkspaceBuilderModal();
   if (state.modal === 'record-history') return renderRecordHistoryModal();
   if (state.modal === 'job-daily') return renderJobDailyModal();
+  if (state.modal === 'job-record-new') return renderJobRecordModal();
   if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
   if (state.modal === 'contacts-dedupe') return renderContactsDedupeModal();
@@ -27192,9 +27050,14 @@ function handleAction(event, node) {
   }
   if (['job-change-order-new', 'job-bucket-new', 'job-draw-new'].includes(action)) {
     event.preventDefault();
-    // Named honestly rather than opening an empty dialog: these are the next phase, and a
-    // form that saves nothing is worse than saying so.
-    showToast('Coming in the next phase — the records and the tabs that show them are live now.', 'local', 'Jobs');
+    if (!requirePermission('jobs.manage', activeCompanyId(), 'Your role cannot add job records.', 'Jobs')) return;
+    state.jobRecordDraft = {
+      kind: { 'job-bucket-new': 'bucket', 'job-draw-new': 'draw', 'job-change-order-new': 'change-order' }[action],
+      jobId: selectedJob()?.id || '',
+      error: '',
+    };
+    state.modal = 'job-record-new';
+    render();
     return;
   }
   if (action === 'toggle-job-select') {
@@ -27217,6 +27080,28 @@ function handleAction(event, node) {
     state.selectedJobIds = rows.length && rows.every((job) => already.has(job.id))
       ? (state.selectedJobIds || []).filter((id) => !rows.some((job) => job.id === id))
       : [...new Set([...(state.selectedJobIds || []), ...rows.map((job) => job.id)])];
+    render();
+    return;
+  }
+  if (action === 'jobs-cal-mode') {
+    event.preventDefault();
+    state.jobCalendarMode = node.dataset.mode === 'week' ? 'week' : 'month';
+    render();
+    return;
+  }
+  if (action === 'jobs-cal-move') {
+    event.preventDefault();
+    const step = Number(node.dataset.step || 0);
+    const from = state.jobCalendarAnchor ? new Date(`${state.jobCalendarAnchor}T00:00:00`) : new Date();
+    // Step 0 is "today", which is a jump home rather than a move.
+    if (!step) state.jobCalendarAnchor = '';
+    else {
+      // A month view moves by months and a week view by weeks, so Next means what it says
+      // whichever mode you are in.
+      if (state.jobCalendarMode === 'week') from.setDate(from.getDate() + step * 7);
+      else from.setMonth(from.getMonth() + step);
+      state.jobCalendarAnchor = from.toISOString().slice(0, 10);
+    }
     render();
     return;
   }
@@ -28128,6 +28013,12 @@ function onDocumentSubmit(event) {
     saveProfile(event.target).catch((error) => {
       showToast(error.message || 'Profile save failed.', 'local', 'Profile');
     });
+    return;
+  }
+
+  if (event.target.matches('[data-job-record-form]')) {
+    event.preventDefault();
+    submitJobRecord(event.target);
     return;
   }
 
@@ -31159,6 +31050,33 @@ async function saveJob(form) {
   return true;
 }
 
+// ---- renderUnderwriterPage ---------------------------------------------------------
+// Body lives in ./crm/underwriter-page.js and is fetched on first use.
+let renderUnderwriterPageModule = null;
+let renderUnderwriterPagePending = null;
+
+function loadRenderUnderwriterPage() {
+  if (renderUnderwriterPageModule) return Promise.resolve(renderUnderwriterPageModule);
+  if (!renderUnderwriterPagePending) {
+    renderUnderwriterPagePending = import('./crm/underwriter-page.js').then((mod) => {
+      renderUnderwriterPageModule = mod.createUnderwriterPage({
+        activeWorkspaceId, appHref, companyContacts, companyPath, emptyState, h, metricCard, money, pipelineDot, protectedFormDraftAttributes, renderProtectedFormDraftStrip, renderUnderwritingResults, sum, svgIcon, underwriterStageByKey, underwriterStageForContact, underwritingCaseForContact, underwritingDraftForContact, underwritingNumberField, state, CRM2_UNDERWRITER_STAGES,
+      });
+      return renderUnderwriterPageModule;
+    }).catch((error) => {
+      renderUnderwriterPagePending = null;
+      throw error;
+    });
+  }
+  return renderUnderwriterPagePending;
+}
+
+function renderUnderwriterPage(route, companyId) {
+  if (renderUnderwriterPageModule) return renderUnderwriterPageModule.renderUnderwriterPage(route, companyId);
+  loadRenderUnderwriterPage().then(() => render()).catch((error) => console.error('renderUnderwriterPage failed to load', error));
+  return questLoader('Loading');
+}
+
 function renderJobsBulkDeleteModal() {
   const ctx = state.jobBulkDelete || { count: 0, error: '' };
   const targets = selectedJobRows();
@@ -31350,6 +31268,126 @@ async function submitJobDaily(formNode) {
     state.jobDailyDraft = null;
     showToast('Daily submitted.', isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
     navigate(companyPath('jobs', { tab: 'profile', job_id: job.id, jt: 'dailies' }, job.company_id), { replace: true });
+  } finally {
+    if (done) done();
+  }
+}
+
+/**
+ * One dialog for the three things a job file collects: a cost bucket, a draw, or a change
+ * order. They differ by three or four fields, and three near-identical dialogs would drift
+ * apart the first time one of them gained a field.
+ */
+const JOB_RECORD_FORMS = {
+  bucket: {
+    title: 'Cost bucket',
+    blurb: 'What you expect to spend on one part of this job. Marking it done buying is what turns the projected net into a real one.',
+    table: 'job_cost_buckets',
+    fields: [
+      ['name', 'What is it', 'text', 'e.g. Labor, Material, Equipment', true],
+      ['expected', 'Expected', 'number', '0', true],
+      ['note', 'Note', 'text', 'anything worth remembering later', false],
+    ],
+  },
+  draw: {
+    title: 'Draw',
+    blurb: 'A point in the contract where the client owes you. Locked until the milestone is reached, then unlock it to invoice.',
+    table: 'job_draws',
+    fields: [
+      ['label', 'What earns it', 'text', 'e.g. Draw 3 — strap & shear', true],
+      ['amount', 'Amount', 'number', '0', true],
+    ],
+  },
+  'change-order': {
+    title: 'Change order',
+    blurb: 'Anything the client asked for after signing. Track it from requested through to the crew acknowledging it.',
+    table: 'job_change_orders',
+    fields: [
+      ['title', 'What changed', 'text', 'e.g. Move laundry walls 12", frame 4 windows', true],
+      ['price', 'Price to the client', 'number', '0', true],
+      ['cost', 'Your cost', 'number', '0', false],
+      ['requested_by', 'Who asked', 'text', 'e.g. Kevin Henderson', false],
+    ],
+  },
+};
+
+function renderJobRecordModal() {
+  const draft = state.jobRecordDraft;
+  const spec = draft && JOB_RECORD_FORMS[draft.kind];
+  const job = draft ? jobById(draft.jobId) : null;
+  if (!spec || !job) return renderModalShell('Jobs', 'Add', emptyState('That job is no longer available.'), 'wb-modal-sm');
+  return renderModalShell('Jobs', spec.title, `
+    <form class="jd-form" data-job-record-form>
+      <p class="jd-job"><b>${h(job.name)}</b></p>
+      <p class="jf-sub">${h(spec.blurb)}</p>
+      ${draft.error ? `<div class="wb-modal-error" role="alert">${h(draft.error)}</div>` : ''}
+      ${spec.fields.map(([name, label, type, placeholder, required]) => `
+        <label class="jd-why">${h(label)}${required ? '' : ' <span class="jf-sub">(optional)</span>'}
+          <input class="wb-input" name="${h(name)}" type="${h(type)}" ${type === 'number' ? 'step="0.01" min="0"' : ''}
+                 placeholder="${h(placeholder)}" ${required ? 'required' : ''} />
+        </label>`).join('')}
+      ${draft.kind === 'draw' ? `
+        <label class="jd-why">Status
+          <select class="wb-input" name="status">
+            <option value="locked">Locked — milestone not reached</option>
+            <option value="unlocked">Unlocked — ready to invoice</option>
+            <option value="paid">Already paid</option>
+          </select>
+        </label>` : ''}
+      <div class="modal-actions">
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+        <button class="btn btn-primary" type="submit">Add ${h(spec.title.toLowerCase())}</button>
+      </div>
+    </form>
+  `, 'wb-modal-sm');
+}
+
+async function submitJobRecord(formNode) {
+  const draft = state.jobRecordDraft;
+  const spec = draft && JOB_RECORD_FORMS[draft.kind];
+  const job = draft ? jobById(draft.jobId) : null;
+  if (!spec || !job) return;
+  if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot add job records.', 'Jobs')) return;
+
+  const data = new FormData(formNode);
+  const payload = { company_id: job.company_id, job_id: job.id };
+  for (const [name, label, type, , required] of spec.fields) {
+    const raw = String(data.get(name) || '').trim();
+    if (required && !raw) {
+      draft.error = `${label} is required.`;
+      render();
+      return;
+    }
+    payload[name] = type === 'number' ? Number(raw || 0) : raw;
+  }
+  if (draft.kind === 'draw') payload.status = String(data.get('status') || 'locked');
+  // Newest last, so the order on screen matches the order they were added.
+  const siblings = draft.kind === 'bucket' ? state.jobCostBuckets : draft.kind === 'draw' ? state.jobDraws : [];
+  if (draft.kind !== 'change-order') {
+    payload.sort_order = siblings.filter((r) => r.job_id === job.id).length;
+  }
+
+  const done = beginSubmitting(formNode, 'Adding…');
+  try {
+    const client = createSupabaseClient();
+    let row = { ...payload, id: crypto.randomUUID() };
+    if (isLiveSupabaseSession() && client) {
+      const result = await client.from(spec.table).insert(payload).select().single();
+      if (result.error) {
+        draft.error = result.error.message || 'Could not save that.';
+        render();
+        return;
+      }
+      row = result.data;
+    }
+    if (draft.kind === 'bucket') state.jobCostBuckets = [...state.jobCostBuckets, normalizeCostBucket(row)];
+    if (draft.kind === 'draw') state.jobDraws = [...state.jobDraws, normalizeDraw(row)];
+    if (draft.kind === 'change-order') state.jobChangeOrders = [normalizeChangeOrder(row), ...state.jobChangeOrders];
+    state.modal = '';
+    state.jobRecordDraft = null;
+    showToast(`${spec.title} added.`, isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
+    const tab = draft.kind === 'bucket' ? 'numbers' : draft.kind === 'draw' ? 'contract' : 'changes';
+    navigate(companyPath('jobs', { tab: 'profile', job_id: job.id, jt: tab }, job.company_id), { replace: true });
   } finally {
     if (done) done();
   }
@@ -34002,7 +34040,8 @@ function labelForTab(tab) {
   return {
     dashboard: 'Dashboard',
     pipeline: 'Pipeline',
-    list: 'List',
+    list: 'All jobs',
+    calendar: 'Calendar',
     profile: 'Profile',
   }[tab] || tab;
 }
@@ -35984,7 +36023,7 @@ async function permanentlyDeleteRecycleBinItem(itemId, options = {}) {
 const ACCOUNT_COLS = ['id', 'company_id', 'workspace_id', 'name', 'type', 'industry', 'website', 'phone', 'email', 'address', 'owner_name', 'status', 'notes', 'updated_at'];
 const SITE_COLS = ['id', 'company_id', 'workspace_id', 'contact_id', 'account_id', 'label', 'address', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'notes', 'updated_at'];
 const DEAL_COLS = ['id', 'company_id', 'workspace_id', 'account_id', 'primary_contact_id', 'site_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'line_items', 'notes', 'updated_at'];
-const JOB_COLS = ['id', 'company_id', 'workspace_id', 'name', 'client_name', 'contact_name', 'site_address', 'job_type', 'stage', 'priority', 'owner_name', 'scope', 'notes', 'estimate_total', 'invoice_total', 'account_id', 'contact_id', 'deal_id', 'site_id', 'updated_at'];
+const JOB_COLS = ['id', 'company_id', 'workspace_id', 'name', 'client_name', 'contact_name', 'site_address', 'job_type', 'stage', 'priority', 'owner_name', 'scope', 'notes', 'estimate_total', 'invoice_total', 'account_id', 'contact_id', 'deal_id', 'site_id', 'starts_on', 'ends_on', 'updated_at'];
 const PROPOSAL_COLS = ['id', 'company_id', 'workspace_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
 const ACTIVITY_COLS = ['id', 'company_id', 'workspace_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
 const CONTACT_COLS = ['id', 'company_id', 'workspace_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'last_activity_at', 'notes', 'country_code', 'country', 'province', 'city', 'barangay', 'street', 'block_no', 'zip', 'lat', 'lng', 'updated_at'];
@@ -38279,6 +38318,8 @@ function normalizeJob(input) {
     contact_id: input.contact_id ? String(input.contact_id) : '',
     deal_id: input.deal_id ? String(input.deal_id) : '',
     site_id: input.site_id ? String(input.site_id) : '',
+    starts_on: input.starts_on ? String(input.starts_on).slice(0, 10) : '',
+    ends_on: input.ends_on ? String(input.ends_on).slice(0, 10) : '',
     scope: String(input.scope || '').trim(),
     notes: String(input.notes || '').trim(),
     estimate_total: number(input.estimate_total),
