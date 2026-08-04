@@ -3,7 +3,7 @@
 
 export function createEodPage(ctx) {
   const {
-    activeSession, can, companyEodReports, companyName, loadEodModule, render, state,
+    activeSession, can, companyEodReports, companyName, loadEodModule, render, state, eodBody,
   } = ctx;
 
   function renderEodPage(route, companyId) {
@@ -11,11 +11,12 @@ export function createEodPage(ctx) {
     if (state.eodEditingId && !companyEodReports(companyId).some((row) => row.id === state.eodEditingId)) {
       state.eodEditingId = '';
     }
-    if (!eodPageModule) {
+    const body = eodBody();
+    if (!body) {
       loadEodModule().then(() => render()).catch(() => null);
       return `<section class="tool-page eod-page"><div class="workspace-head"><div><h1>EOD reports</h1><p>Loading...</p></div></div></section>`;
     }
-    return eodPageModule.renderEodPage({
+    return body.renderEodPage({
       companyLabel: companyName(companyId),
       rows: companyEodReports(companyId),
       canManage: can('eod.manage', companyId),

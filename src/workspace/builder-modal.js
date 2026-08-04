@@ -7,7 +7,7 @@ import { acceptAttr } from '../security/upload-policy.js';
 export function createBuilderModal(ctx) {
   const {
     WB_WS_ICONS, WB_APP_ICONS, WB_FIELD_TYPES, WB_PALETTE, clearableCount,
-    can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAppReportOptions, wbAvatar, wbColorSwatches, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbIconLabel, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, state,
+    can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAppReportOptions, wbAvatar, wbColorSwatches, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbIconLabel, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
   } = ctx;
 
   function renderWorkspaceBuilderModal() {
@@ -336,7 +336,7 @@ export function createBuilderModal(ctx) {
     // the dashboard tab, which has already fetched that module, so their markup rides along
     // with it instead of sitting in the entry chunk for everyone.
     if (m.kind === 'dash-add' || m.kind === 'dash-config') {
-      return appViewsModule ? appViewsModule.renderDashModal(m) : questLoader('Loading');
+      return renderDashModal(m);
     }
     if (m.kind === 'automation') {
       const { app } = wbFind(m.companyId, m.workspaceId, m.appId);

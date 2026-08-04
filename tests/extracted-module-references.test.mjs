@@ -86,7 +86,13 @@ test('no extracted module uses a binding nobody handed it', () => {
   // exactly what a lifted function keeps reaching for after the lift.
   const mainImports = importedInto(main);
   const mainConsts = new Set([...stripComments(main).matchAll(/^(?:export\s+)?const\s+([A-Z][A-Z0-9_]*)\s*=/gm)].map((m) => m[1]));
-  const candidates = new Set([...mainImports, ...mainConsts]);
+  // Module-level `let`s too. These are the lazy-module holders -- appViewsModule,
+  // savedViewsModule, memoRuntime -- and they are exactly what a lifted function keeps
+  // reaching for. builder-modal.js referenced main.js's `appViewsModule` directly: spelled
+  // correctly, looked defined, threw a ReferenceError the moment anyone opened a dashboard
+  // card's settings, and this check walked straight past it because the name is lowercase.
+  const mainLets = new Set([...stripComments(main).matchAll(/^let\s+([a-zA-Z_$][\w$]*)\s*=/gm)].map((m) => m[1]));
+  const candidates = new Set([...mainImports, ...mainConsts, ...mainLets]);
 
   const orphans = [];
   for (const file of moduleFiles) {
@@ -162,6 +168,7 @@ const FACTORY_MODULES = [
   ['src/jobs/change-order-wizard.js', 'createChangeOrderWizard'],
   ['src/workspace/memo-runtime.js', 'createMemoRuntime'],
   ['src/jobs/voice-note.js', 'createJobWalk'],
+  ['src/jobs/job-expense.js', 'createJobExpense'],
   ['src/crm/deal-detail.js', 'createDealDetail'],
   ['src/crm/underwriter-page.js', 'createUnderwriterPage'],
   ['src/knowledge/knowledge-page.js', 'createKnowledgePage'],
@@ -238,3 +245,24 @@ for (const [file, factory] of FACTORY_MODULES) {
     );
   });
 }
+
+test('the dashboard card dialogs are handed in, not reached across modules', () => {
+  // builder-modal.js read main.js's `appViewsModule` directly. The name is spelled correctly
+  // and looks defined, so nothing static caught it -- but it is a different module, so
+  // opening a dashboard card's settings threw a ReferenceError and the dialog never appeared.
+  const modal = readFileSync(join(srcDir, 'workspace', 'builder-modal.js'), 'utf8');
+  assert.ok(!/appViewsModule/.test(modal), 'it must not reach for main.js internals');
+  assert.match(modal, /return renderDashModal\(m\);/);
+  assert.match(main, /wbWorkspaceApps, renderDashModal, state,/, 'and main.js must pass it');
+});
+
+test('lazily-loaded module holders are reached through a getter, not captured', () => {
+  // The holder is null until its fetch resolves, so handing over the value would capture null
+  // for the life of the app. eod-page.js and data-io.js both take a function.
+  assert.match(main, /eodBody: \(\) => eodPageModule,/);
+  assert.match(main, /loadedReports: \(\) => wbReportsModule,/);
+  const eod = readFileSync(join(srcDir, 'ops', 'eod-page.js'), 'utf8');
+  const io = readFileSync(join(srcDir, 'workspace', 'data-io.js'), 'utf8');
+  assert.ok(!/eodPageModule/.test(eod), 'eod-page must not reach across');
+  assert.ok(!/wbReportsModule/.test(io), 'data-io must not reach across');
+});

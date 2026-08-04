@@ -5814,6 +5814,9 @@ function loadRenderEodPage() {
     renderEodPagePending = import('./ops/eod-page.js').then((mod) => {
       renderEodPageModule = mod.createEodPage({
         activeSession, can, companyEodReports, companyName, loadEodModule, render, state,
+        // A getter, not the value: the holder is null until the fetch resolves, so passing it
+        // by value would capture null forever.
+        eodBody: () => eodPageModule,
       });
       return renderEodPageModule;
     }).catch((error) => {
@@ -6235,7 +6238,7 @@ function loadRenderWorkspaceBuilderModal() {
   if (!renderWorkspaceBuilderModalPending) {
     renderWorkspaceBuilderModalPending = import('./workspace/builder-modal.js').then((mod) => {
       renderWorkspaceBuilderModalModule = mod.createBuilderModal({
-        WB_WS_ICONS, WB_APP_ICONS, WB_FIELD_TYPES, WB_PALETTE, clearableCount, can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAppReportOptions, wbAvatar, wbColorSwatches, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbIconLabel, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, state,
+        WB_WS_ICONS, WB_APP_ICONS, WB_FIELD_TYPES, WB_PALETTE, clearableCount, can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAppReportOptions, wbAvatar, wbColorSwatches, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbIconLabel, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
       });
       return renderWorkspaceBuilderModalModule;
     }).catch((error) => {
@@ -14752,6 +14755,18 @@ function renderAppDashboard(companyId, app, manageMode) {
   return questLoader('Loading');
 }
 
+/**
+ * The Add-card and card-settings dialogs, which live in the app-views chunk.
+ *
+ * A delegator rather than the module variable itself: builder-modal.js referenced
+ * `appViewsModule` directly, which is declared HERE. Nothing static caught it -- the name is
+ * spelled correctly and looks defined -- so opening a card's settings threw a ReferenceError
+ * and the dialog simply never appeared.
+ */
+const renderDashModal = (m) => (appViewsModule
+  ? appViewsModule.renderDashModal(m)
+  : (loadAppViews().then(render).catch(() => null), questLoader('Loading')));
+
 function renderAppCalendar(companyId, app, anchorIso, fieldId, view) {
   if (appViewsModule) return appViewsModule.renderAppCalendar(companyId, app, anchorIso, fieldId, view);
   loadAppViews().then(() => render()).catch((error) => console.error('App calendar failed to load', error));
@@ -16939,6 +16954,7 @@ function wbLoadDataIO() {
         h, showToast, render, companyName,
         wbFind, wbPlainVal, wbSave, wbUid, wbLogActivity, wbMembers,
         wbReportContext, wbLoadReports, wbAssignAutoNumbers,
+        loadedReports: () => wbReportsModule,
         clone, downloadText, guardUpload, activeSession,
       });
       return wbDataIOModule;
@@ -23726,7 +23742,7 @@ function renderActiveModal(route, session) {
       ? changeOrderWizardModule.renderChangeOrderWizard(state.coWizard ? jobById(state.coWizard.jobId) : null)
       : renderModalShell('Jobs', 'Change order', questLoader('Loading'), 'wb-modal-sm');
   }
-  if (state.modal === 'job-expense') return renderJobExpenseModal();
+  if (state.modal === 'job-expense') return jobExpenseModule ? jobExpenseModule.renderModal() : renderModalShell('Jobs', 'Log spend', questLoader('Loading'), 'wb-modal-sm');
   if (state.modal === 'job-walk') return jobWalkModule ? jobWalkModule.renderModal() : renderModalShell('Jobs', 'Job walk', questLoader('Loading'), 'wb-modal-sm');
   if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
@@ -28030,6 +28046,7 @@ function handleAction(event, node) {
     state.jobExpenseDraft = { jobId: job.id, error: '' };
     state.modal = 'job-expense';
     render();
+    loadJobExpense().then(render).catch(() => showToast('Could not open the form.', 'local', 'Jobs'));
     return;
   }
   if (action === 'job-photo-filter') {
@@ -29190,7 +29207,7 @@ function onDocumentSubmit(event) {
 
   if (event.target.matches('[data-job-expense-form]')) {
     event.preventDefault();
-    submitJobExpense(event.target);
+    if (jobExpenseModule) jobExpenseModule.submit(event.target);
     return;
   }
   if (event.target.matches('[data-task-form]')) {
@@ -32421,94 +32438,20 @@ async function submitJobRecord(formNode) {
   }
 }
 
-/**
- * Log a spend against a cost bucket.
- *
- * An expense is not a row of its own -- it is money added to a bucket, which is what moves
- * the projected net. Recording it anywhere else would mean the Numbers tab and the receipts
- * disagreed, and the Numbers tab is the one people make decisions on.
- *
- * The receipt is optional but goes through the same upload path as job photos, so it lands
- * in the job's files where anyone chasing the number later will look for it.
- */
-function renderJobExpenseModal() {
-  const draft = state.jobExpenseDraft;
-  const job = draft ? jobById(draft.jobId) : null;
-  if (!job) return renderModalShell('Jobs', 'Log spend', emptyState('That job is no longer available.'), 'wb-modal-sm');
-  const buckets = state.jobCostBuckets.filter((b) => b.job_id === job.id && b.status !== 'final');
-  if (!buckets.length) {
-    return renderModalShell('Jobs', 'Log spend',
-      emptyState('This job has no open cost buckets. Add one first — a spend has to land somewhere, or it cannot show up in the net.'),
-      'wb-modal-sm');
-  }
-  return renderModalShell('Jobs', 'Log spend', `
-    <form class="jd-form" data-job-expense-form>
-      <p class="jd-job"><b>${h(job.name)}</b></p>
-      <p class="jf-sub">Adds to what that bucket has spent, which is what moves the projected net.</p>
-      ${draft.error ? `<div class="wb-modal-error" role="alert">${h(draft.error)}</div>` : ''}
-      <label class="jd-why">Which bucket
-        <select class="wb-input" name="bucket_id" required>
-          ${buckets.map((b) => `<option value="${h(b.id)}">${h(b.name)} — ${h(money(b.spent))} of ${h(money(b.expected))}</option>`).join('')}
-        </select>
-      </label>
-      <label class="jd-why">Amount
-        <input class="wb-input" name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
-      </label>
-      <label class="jd-why">What was it <span class="jf-sub">(optional)</span>
-        <input class="wb-input" name="note" type="text" placeholder="e.g. 2x6 from the lumber yard" />
-      </label>
-      <label class="jd-why">Receipt <span class="jf-sub">(optional)</span>
-        <input class="wb-input" name="receipt" type="file" accept="${acceptAttr('image')}" capture="environment" />
-      </label>
-      <div class="modal-actions">
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-        <button class="btn btn-primary" type="submit">Log spend</button>
-      </div>
-    </form>`, 'wb-modal-sm');
-}
+// ---- Expense ---------------------------------------------------------------
+// The dialog lives in ./jobs/job-expense.js, fetched the first time one is opened.
+let jobExpenseModule = null;
 
-async function submitJobExpense(formNode) {
-  const draft = state.jobExpenseDraft;
-  const job = draft ? jobById(draft.jobId) : null;
-  if (!job) return;
-  if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot log spend.', 'Jobs')) return;
-
-  const data = new FormData(formNode);
-  const bucket = state.jobCostBuckets.find((b) => b.id === String(data.get('bucket_id') || ''));
-  const amount = Number(data.get('amount') || 0);
-  if (!bucket) { draft.error = 'Pick a bucket.'; render(); return; }
-  if (!(amount > 0)) { draft.error = 'Enter an amount greater than zero.'; render(); return; }
-
-  const note = String(data.get('note') || '').trim();
-  const next = Number(bucket.spent || 0) + amount;
-  const done = beginSubmitting(formNode, 'Logging…');
-  try {
-    const client = createSupabaseClient();
-    if (isLiveSupabaseSession() && client) {
-      const result = await client.from('job_cost_buckets')
-        .update({ spent: next, updated_at: new Date().toISOString() }).eq('id', bucket.id);
-      if (result.error) { draft.error = result.error.message || 'Could not log that.'; render(); return; }
-    }
-    state.jobCostBuckets = state.jobCostBuckets.map((b) => (b.id === bucket.id ? { ...b, spent: next } : b));
-
-    // The receipt is a bonus, not the point. If it fails the spend still stands, and saying so
-    // is better than rolling back a number the user watched go in.
-    const receipt = data.get('receipt');
-    if (receipt && receipt.size) {
-      try {
-        await uploadJobFile(job, receipt, note || `${bucket.name} spend`, 'Receipt', 'image');
-      } catch (error) {
-        showToast('Spend logged, but the receipt did not upload.', 'error', 'Jobs');
-      }
-    }
-
-    state.modal = '';
-    state.jobExpenseDraft = null;
-    showToast(`${money(amount)} logged to ${bucket.name}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
-    navigate(companyPath('jobs', { tab: 'profile', job_id: job.id, jt: 'numbers' }, job.company_id), { replace: true });
-  } finally {
-    if (done) done();
-  }
+function loadJobExpense() {
+  if (jobExpenseModule) return Promise.resolve(jobExpenseModule);
+  return import('./jobs/job-expense.js').then((mod) => {
+    jobExpenseModule = mod.createJobExpense({
+      h, money, state, render, renderModalShell, emptyState, showToast, jobById,
+      requirePermission, createSupabaseClient, isLiveSupabaseSession, beginSubmitting,
+      navigate, companyPath, acceptAttr, uploadJobFile,
+    });
+    return jobExpenseModule;
+  });
 }
 
 // ---- Job walk (voice note) ---------------------------------------------------------------

@@ -149,7 +149,11 @@ test('printing never renders the loading placeholder', () => {
   assert.notEqual(at, -1, 'wbPrintReports should live in the data-io chunk');
   const body = io.slice(at, io.indexOf('\n  }\n', at));
   assert.ok(!/wbViewReports/.test(body), 'calling the view could print a spinner');
-  assert.match(body, /if \(wbReportsModule\) \{ print\(wbReportsModule\); return; \}/);
+  // It used to read main.js's `wbReportsModule` directly from in here, which is a
+  // ReferenceError -- the variable is declared in main.js and this is a different module.
+  // A getter is handed in instead; the important property is unchanged, in that the loaded
+  // module is reached synchronously.
+  assert.match(body, /const charts = loadedReports\(\);\n\s*if \(charts\) \{ print\(charts\); return; \}/);
   assert.ok(!/await /.test(body), 'an await would risk the pop-up blocker');
 
   // And main.js only awaits when the prefetch has not landed yet.

@@ -19,7 +19,7 @@ export function createDataIO(ctx) {
   const {
     h, showToast, render, companyName,
     wbFind, wbPlainVal, wbSave, wbUid, wbLogActivity, wbMembers,
-    wbReportContext, wbLoadReports, wbAssignAutoNumbers,
+    wbReportContext, wbLoadReports, wbAssignAutoNumbers, loadedReports,
     clone, downloadText, guardUpload, activeSession,
   } = ctx;
 
@@ -82,7 +82,8 @@ export function createDataIO(ctx) {
       const reports = charts.renderReports(app, wbReportContext(companyId));
       wbOpenPrintWindow(`${app.name} — reports`, `${wbPrintTitleBlock(companyId, app, 'Reports')}<section class="tool-page wb-page">${reports}</section>`);
     };
-    if (wbReportsModule) { print(wbReportsModule); return; }
+    const charts = loadedReports();
+    if (charts) { print(charts); return; }
     // Only reachable if the fetch failed while the tab was open. Retry, and accept that the
     // pop-up may need allowing, rather than printing nothing.
     wbLoadReports().then(print).catch(() => showToast('Could not load the report charts — check your connection and try again.', 'local', 'Workspaces'));

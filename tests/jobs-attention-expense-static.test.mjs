@@ -7,6 +7,7 @@ const jobFile = readFileSync(new URL('../src/jobs/job-file.js', import.meta.url)
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const policy = readFileSync(new URL('../src/security/upload-policy.js', import.meta.url), 'utf8');
 const walk = readFileSync(new URL('../src/jobs/voice-note.js', import.meta.url), 'utf8');
+const expense = readFileSync(new URL('../src/jobs/job-expense.js', import.meta.url), 'utf8');
 
 // ---- needs attention -----------------------------------------------------------------------
 
@@ -53,23 +54,23 @@ test('a viewer cannot tick or add', () => {
 test('a spend moves the bucket, because that is what moves the net', () => {
   // Recording it anywhere else would let the Numbers tab and the receipts disagree, and the
   // Numbers tab is the one people decide on.
-  assert.match(main, /from\('job_cost_buckets'\)\s*\n?\s*\.update\(\{ spent: next/);
-  assert.match(main, /const next = Number\(bucket\.spent \|\| 0\) \+ amount;/);
+  assert.match(expense, /from\('job_cost_buckets'\)\s*\n?\s*\.update\(\{ spent: next/);
+  assert.match(expense, /const next = Number\(bucket\.spent \|\| 0\) \+ amount;/);
 });
 
 test('a spend of zero or less is refused', () => {
-  assert.match(main, /if \(!\(amount > 0\)\) \{ draft\.error = 'Enter an amount greater than zero\.'/);
+  assert.match(expense, /if \(!\(amount > 0\)\) \{ draft\.error = 'Enter an amount greater than zero\.'/);
 });
 
 test('final buckets are not offered', () => {
   // Closing a bucket is what firms up the net; adding to a closed one would un-firm it
   // silently.
-  assert.match(main, /state\.jobCostBuckets\.filter\(\(b\) => b\.job_id === job\.id && b\.status !== 'final'\)/);
-  assert.match(main, /This job has no open cost buckets/);
+  assert.match(expense, /state\.jobCostBuckets\.filter\(\(b\) => b\.job_id === job\.id && b\.status !== 'final'\)/);
+  assert.match(expense, /This job has no open cost buckets/);
 });
 
 test('a failed receipt does not roll back a spend the user watched go in', () => {
-  const fn = main.slice(main.indexOf('async function submitJobExpense('));
+  const fn = expense.slice(expense.indexOf('async function submit('));
   assert.match(fn.slice(0, 3000), /Spend logged, but the receipt did not upload\./);
 });
 
