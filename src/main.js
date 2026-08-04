@@ -3623,16 +3623,29 @@ function restoreScrollAfterRender(kept) {
   // Runs before paint, so the correction is never visible.
   // Every region that was scrolled, so the sidebar and the page both come back where they
   // were rather than one of them winning.
+  applyKeptScroll(kept, true);
+  // …and again after layout.
+  //
+  // A microtask runs before the browser has measured the new DOM. While it is still the
+  // size of whatever came before, a scrollTop past the old maximum is CLAMPED, and the
+  // clamped value is what survives once the real content arrives. Any render that briefly
+  // shortens the page -- a panel that paints on the second pass once its module loads --
+  // therefore lands you back at the top. Re-applying after layout costs nothing when the
+  // first attempt already worked, because the value is then already correct.
+  requestAnimationFrame(() => applyKeptScroll(kept, false));
+}
+
+function applyKeptScroll(kept, restoreFocus) {
   for (const { selector, top } of kept.scrolled || []) {
     if (selector === 'window') {
-      window.scrollTo(0, top);
+      if (window.scrollY !== top) window.scrollTo(0, top);
       continue;
     }
     let target = null;
     try { target = document.querySelector(selector); } catch { target = null; }
-    if (target) target.scrollTop = top;
+    if (target && target.scrollTop !== top) target.scrollTop = top;
   }
-  if (!kept.selector) return;
+  if (!restoreFocus || !kept.selector) return;
   // Rendering destroys the node the user was interacting with. Without this, ticking a
   // checkbox drops focus to the body: the next Tab starts from the top of the page, and
   // a keyboard user cannot work down a list of them at all.

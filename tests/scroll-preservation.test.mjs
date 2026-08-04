@@ -59,7 +59,7 @@ test('the recorded position is re-read rather than trusted', () => {
 
 test('the page scroller is handled as well as inner containers', () => {
   assert.match(fn('lastScrolledTarget'), /if \(window\.scrollY\) kept\.push\(\{ selector: 'window', top: window\.scrollY \}\)/);
-  assert.match(fn('restoreScrollAfterRender'), /window\.scrollTo\(0, top\)/);
+  assert.match(fn('applyKeptScroll'), /window\.scrollTo\(0, top\)/);
 });
 
 test('every scrolled region is restored, not only the most recent one', () => {
@@ -70,7 +70,7 @@ test('every scrolled region is restored, not only the most recent one', () => {
   assert.match(main, /const scrolledTargets = new Map\(\);/);
   assert.match(fn('trackScrollTargets'), /scrolledTargets\.set\(selector, true\)/);
   assert.match(fn('lastScrolledTarget'), /for \(const selector of scrolledTargets\.keys\(\)\)/);
-  assert.match(fn('restoreScrollAfterRender'), /for \(const \{ selector, top \} of kept\.scrolled \|\| \[\]\)/);
+  assert.match(fn('applyKeptScroll'), /for \(const \{ selector, top \} of kept\.scrolled \|\| \[\]\)/);
 });
 
 test('a zero scroll position is skipped rather than recorded as a target', () => {
@@ -108,13 +108,13 @@ test('focus survives the render, keyed on what identifies the control', () => {
   const sel = fn('focusSelector');
   assert.match(sel, /attr\.name\.startsWith\('data-'\)/, 'data attributes identify controls here');
   assert.match(sel, /CSS\.escape/);
-  const restore = fn('restoreScrollAfterRender');
+  const restore = fn('applyKeptScroll');
   assert.match(restore, /next\.focus\(\{ preventScroll: true \}\)/, 'refocusing must not fight the scroll restore');
 });
 
 test('a caret position is restored too, so typing continues where it left off', () => {
   assert.match(fn('captureScrollForRender'), /typeof active\.selectionStart === 'number'/);
-  assert.match(fn('restoreScrollAfterRender'), /setSelectionRange\(kept\.caret\.start, kept\.caret\.end\)/);
+  assert.match(fn('applyKeptScroll'), /setSelectionRange\(kept\.caret\.start, kept\.caret\.end\)/);
 });
 
 test('the other two scroll regions keep their own handling', () => {
@@ -160,4 +160,29 @@ test('every data attribute is tried, not just the first', () => {
 test('the board column carries a stable key for it to use', () => {
   const board = readFileSync(new URL('../src/workspace/board-view.js', import.meta.url), 'utf8');
   assert.match(board, /class="wb-board-cards" data-stage-key="\$\{h\(col\.id \?\? '__none'\)\}"/);
+});
+
+test('the restore is re-applied after layout, not only before it', () => {
+  // A microtask runs before the browser has measured the new DOM. While it is still the size
+  // of whatever came before, a scrollTop past the old maximum is CLAMPED, and the clamped
+  // value survives once the real content arrives. Any render that briefly shortens the page —
+  // a panel that paints on a second pass once its module loads — therefore lands you back at
+  // the top, which is exactly what "it goes to top on every click" looks like.
+  const restore = main.match(/function restoreScrollAfterRender\(kept\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(restore, /applyKeptScroll\(kept, true\);/);
+  assert.match(restore, /requestAnimationFrame\(\(\) => applyKeptScroll\(kept, false\)\);/);
+});
+
+test('the second pass does not fight a user who moved focus in between', () => {
+  // A frame is long enough for a keystroke. Only the first pass restores focus.
+  const apply = main.match(/function applyKeptScroll\(kept, restoreFocus\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(apply, /if \(!restoreFocus \|\| !kept\.selector\) return;/);
+});
+
+test('the restore writes only when the value actually differs', () => {
+  // Assigning an unchanged scrollTop is not free — it can cancel a smooth scroll in progress
+  // — and the second pass is a no-op in the common case where the first one worked.
+  const apply = main.match(/function applyKeptScroll\(kept, restoreFocus\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(apply, /if \(window\.scrollY !== top\) window\.scrollTo\(0, top\);/);
+  assert.match(apply, /if \(target && target\.scrollTop !== top\) target\.scrollTop = top;/);
 });
