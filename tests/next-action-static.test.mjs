@@ -8,7 +8,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8')
   // The docked composer's fields are fetched on demand now; they are still part of the
   // surface these tests describe, so both files are read as one.
-  + fs.readFileSync(path.join(root, 'src', 'messaging', 'dock-fields.js'), 'utf8');
+  + fs.readFileSync(path.join(root, 'src', 'messaging', 'dock-fields.js'), 'utf8')
+  // The contacts table is fetched on demand too; same surface, more files.
+  + fs.readFileSync(path.join(root, 'src', 'crm', 'contact-table.js'), 'utf8');
 const migrationPath = path.join(root, 'supabase', 'migrations', '202607171500_task_deal_next_actions.sql');
 const handleActionSource = source.slice(source.indexOf('function handleAction('), source.indexOf('function onDocumentSubmit('));
 const submitSource = source.slice(source.indexOf('function onDocumentSubmit('), source.indexOf('function onDocumentInput('));
@@ -24,7 +26,8 @@ test('all three funnel cards render the shared What\'s next field', () => {
 });
 
 test('all three funnel table and list views render an actionable What\'s next field', () => {
-  const contactTable = source.slice(source.indexOf('function renderContactTable('), source.indexOf('function selectedContactRows('));
+  // The whole module is the table now; slicing `source` would match the loader shim.
+  const contactTable = fs.readFileSync(path.join(root, 'src', 'crm', 'contact-table.js'), 'utf8');
   // The jobs list follows the v1 structure now and has no column for it, so the job's next
   // action lives on the job file's Needs attention card -- the slot that design describes.
   const jobFile = fs.readFileSync(path.join(root, 'src', 'jobs', 'job-file.js'), 'utf8');

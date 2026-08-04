@@ -2471,6 +2471,7 @@ const state = {
   // comment thread renders in two places now -- the item modal and the full record page --
   // and only one of those has a modal behind it.
   wbEditingCommentId: null,
+  wbDashManage: false,
   roles: [],
   rolePermissions: [],
   roleAssignments: [],
@@ -5813,6 +5814,230 @@ function renderWorkdayPage(companyId) {
   return questLoader('Loading');
 }
 
+// ---- renderProposalPublicPage ---------------------------------------------------------
+// Body lives in ./proposals/public-page.js and is fetched on first use.
+let renderProposalPublicPageModule = null;
+let renderProposalPublicPagePending = null;
+
+function loadRenderProposalPublicPage() {
+  if (renderProposalPublicPageModule) return Promise.resolve(renderProposalPublicPageModule);
+  if (!renderProposalPublicPagePending) {
+    renderProposalPublicPagePending = import('./proposals/public-page.js').then((mod) => {
+      renderProposalPublicPageModule = mod.createProposalPublicPage({
+        emptyState, formatDate, h, money, proposalDraftFromRecord, questLogoImage, renderProposalPreview, state,
+      });
+      return renderProposalPublicPageModule;
+    }).catch((error) => {
+      renderProposalPublicPagePending = null;
+      throw error;
+    });
+  }
+  return renderProposalPublicPagePending;
+}
+
+function renderProposalPublicPage(route) {
+  if (renderProposalPublicPageModule) return renderProposalPublicPageModule.renderProposalPublicPage(route);
+  loadRenderProposalPublicPage().then(() => render()).catch((error) => console.error('renderProposalPublicPage failed to load', error));
+  return questLoader('Loading');
+}
+
+// ---- renderClientPortalPublicPage ---------------------------------------------------------
+// Body lives in ./portals/public-page.js and is fetched on first use.
+let renderClientPortalPublicPageModule = null;
+let renderClientPortalPublicPagePending = null;
+
+function loadRenderClientPortalPublicPage() {
+  if (renderClientPortalPublicPageModule) return Promise.resolve(renderClientPortalPublicPageModule);
+  if (!renderClientPortalPublicPagePending) {
+    renderClientPortalPublicPagePending = import('./portals/public-page.js').then((mod) => {
+      renderClientPortalPublicPageModule = mod.createClientPortalPublicPage({
+        ensureClientPortalAnnotateState, h, questLogoImage, renderClientPortalAnnotate, renderClientPortalPasswordGate, state,
+      });
+      return renderClientPortalPublicPageModule;
+    }).catch((error) => {
+      renderClientPortalPublicPagePending = null;
+      throw error;
+    });
+  }
+  return renderClientPortalPublicPagePending;
+}
+
+function renderClientPortalPublicPage(route) {
+  if (renderClientPortalPublicPageModule) return renderClientPortalPublicPageModule.renderClientPortalPublicPage(route);
+  loadRenderClientPortalPublicPage().then(() => render()).catch((error) => console.error('renderClientPortalPublicPage failed to load', error));
+  return questLoader('Loading');
+}
+
+function renderContactRecord(companyId, contact) {
+  const stages = contactStages();
+  const ci = stages.findIndex((s) => s.name === contact.stage);
+  const g = guidanceForStage(contact.stage);
+  const tempColor = contact.temperature === 'Hot' ? '#C2410C' : contact.temperature === 'Warm' ? '#B07A12' : '#2E72B8';
+  const smsCapabilities = contactSmsCapabilities(contact.id);
+  const requestedWorkspaceTab = state.contactWorkspaceTab || 'Notes';
+  const activeWorkspaceTab = requestedWorkspaceTab === 'Messages' && !smsCapabilities.canMountThread
+    ? 'Notes'
+    : requestedWorkspaceTab;
+  const tasks = tasksForContact(contact.id);
+  const totalFeed = activitiesFor('contact', contact.id);
+  const feed = filteredActivitiesFor('contact', contact.id);
+  const contactQuotes = companyDeals(companyId)
+    .filter((deal) => deal.primary_contact_id === contact.id)
+    .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
+  const latestContactQuote = contactQuotes[0] || null;
+  const canManageContactQuotes = can('crm.manage', companyId, contact.workspace_id);
+  const canGraduateContactToQuote = canManageContactQuotes
+    && resolvePipelineStage('contacts', contact.stage, companyId) === 'Nurturing';
+  const quoteInFlight = Boolean(state.contactQuoteConversionInFlight?.[contact.id]);
+
+  const ed = (key, opts = {}) => {
+    const isEmpty = contact[key] === '' || contact[key] == null;
+    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : '', isEmpty ? 'sf-empty' : ''].filter(Boolean).join(' ');
+    const inner = isEmpty ? EMPTY_FIELD_PLACEHOLDER : h(String(contact[key]));
+    return `<span class="${cls}" data-contact-edit="${h(key)}" data-contact-id="${h(contact.id)}" title="Click to edit">${inner}</span>`;
+  };
+  const fieldRow = (label, content, editKey = '') => `
+    <div class="sf-field">
+      <div class="sf-field-label">
+        ${h(label)}
+        ${editKey
+          ? `<button class="sf-pencil" type="button" data-contact-edit="${h(editKey)}" data-contact-id="${h(contact.id)}" aria-label="Edit ${h(label)}"><i class="ti ti-pencil"></i></button>`
+          : ''}
+      </div>
+      <div class="sf-field-value">${content}</div>
+    </div>
+  `;
+
+  const workspaceTabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Messages', 'ti-message'], ['Activity', 'ti-activity']];
+  const quickTiles = [['Task', 'ti-checkbox'], ['Meeting', 'ti-calendar'], ['Estimate', 'ti-calculator'], ['Proposal', 'ti-file-text'], ['Email', 'ti-mail'], ['Call Log', 'ti-phone']];
+
+  return `
+    <div class="sf-record">
+      <div class="sf-object-tabs">
+        <a class="sf-object-tab" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router>Dashboard</a>
+        <a class="sf-object-tab" href="${appHref(companyPath('contacts', {}, companyId))}" data-router>All Contacts <span class="sf-tab-kind">| Contacts</span></a>
+        <span class="sf-object-tab on">${h(contact.name)} <span class="sf-tab-kind">| Contact</span></span>
+      </div>
+
+      <div class="sf-record-head">
+        <span class="sf-record-icon"><i class="ti ti-user"></i></span>
+        <div><div class="sf-record-label">Contact</div><div class="sf-record-name">${h(contact.name)}</div></div>
+        <div class="sf-actions">
+          ${workspaceTabs.map(([label, ico]) => {
+            const smsDisabled = label === 'Messages' && !smsCapabilities.canMountThread;
+            return `<button class="sf-btn ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"${smsDisabled ? ` disabled aria-disabled="true" title="${h(smsCapabilities.message)}"` : ''}><i class="ti ${ico}"></i>${label}${smsDisabled ? '<i class="ti ti-lock sf-tab-lock" aria-hidden="true"></i>' : ''}</button>`;
+          }).join('')}
+          <button class="sf-btn" type="button" data-action="open-record-history" data-record-type="contact" data-record-id="${h(contact.id)}" data-record-label="${h(contact.name)}" data-company-id="${h(contact.company_id || companyId)}" data-workspace-id="${h(contact.workspace_id || activeWorkspaceId())}"><i class="ti ti-history"></i>History</button>
+          <button class="sf-btn" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit</button>
+        </div>
+      </div>
+
+      ${renderContactLabelStrip(companyId, contact)}
+
+      <div class="sf-path-wrap">
+        <div class="sf-path-row">
+          <div class="sf-stage-track">
+            ${stages.map((s, i) => {
+              const cls = i < ci ? 'done' : i === ci ? 'current' : 'future';
+              return `<button class="sf-stage ${cls}" type="button" data-action="set-contact-stage" data-contact-id="${h(contact.id)}" data-stage="${h(s.name)}" title="Move to ${h(s.name)}">${i < ci ? '<i class="ti ti-check"></i>' : h(s.name)}</button>`;
+            }).join('')}
+          </div>
+          <button class="sf-mark-btn" type="button" data-action="contact-mark-next" data-contact-id="${h(contact.id)}">Mark as Current Stage</button>
+          ${canGraduateContactToQuote
+            ? latestContactQuote
+              ? `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="open-contact-quote" data-deal-id="${h(latestContactQuote.id)}"><i class="ti ti-file-text"></i>Open latest Quote</button>`
+              : `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-file-text"></i>${quoteInFlight ? 'Creating Quote…' : 'Graduate to Quote'}</button>`
+            : ''}
+        </div>
+        <div class="sf-guidance">
+          <div class="sf-guidance-label">Guidance for Success</div>
+          <div class="sf-guidance-title">${h(g.t)}</div>
+          <div class="sf-guidance-lines">${g.b.map((x) => `<div><span class="sf-guidance-bullet">•</span> ${h(x)}</div>`).join('')}</div>
+        </div>
+      </div>
+
+      <div class="sf-three-col">
+        <div class="sf-col">
+          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
+            ${fieldRow('Phone', ed('phone'), 'phone')}
+            ${fieldRow('Email', ed('email', { blue: true }), 'email')}
+            ${fieldRow('Location', ed('location'), 'location')}
+            ${fieldRow('Job Type', `<span class="sf-pill sf-edit${contact.title ? '' : ' sf-empty'}" data-contact-edit="title" data-contact-id="${h(contact.id)}" title="Click to edit">${contact.title ? h(contact.title) : EMPTY_FIELD_PLACEHOLDER}</span>`, 'title')}
+            ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
+            ${fieldRow('Source', ed('source'), 'source')}
+          </div></div>
+          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
+            ${fieldRow('Stage', ed('stage'), 'stage')}
+            ${fieldRow('Est. Value', `<span class="sf-money"><span class="sf-edit mono" data-contact-edit="value" data-contact-id="${h(contact.id)}" title="Click to edit">${money(contact.value || 0)}</span></span>`, 'value')}
+            ${fieldRow('Temperature', `<span class="sf-edit" data-contact-edit="temperature" data-contact-id="${h(contact.id)}" style="color:${tempColor}" title="Click to edit">${h(contact.temperature)}</span>`, 'temperature')}
+            ${fieldRow('Pay Type', ed('pay_type'), 'pay_type')}
+            ${fieldRow('Roof System', ed('roof_system'), 'roof_system')}
+            ${contact.has_multiple_roof_systems || contact.secondary_roof_system ? fieldRow('Second Roof System', ed('secondary_roof_system'), 'secondary_roof_system') : ''}
+          </div></div>
+        </div>
+
+        <div class="sf-col">
+          ${renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities)}
+        </div>
+
+        <div class="sf-col">
+          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-bolt"></i>Quick Create</div>
+            <div class="sf-quick-grid">${quickTiles.map(([label, ico]) => `<button class="sf-quick-tile" type="button" data-action="contact-quick" data-kind="${h(label)}" data-contact-id="${h(contact.id)}"><i class="ti ${ico}"></i><span>${label}</span></button>`).join('')}</div>
+            ${latestContactQuote
+              ? `
+                <button class="sf-convert-btn" type="button" data-action="open-contact-quote" data-deal-id="${h(latestContactQuote.id)}"><i class="ti ti-external-link"></i>Open latest Quote</button>
+                ${canManageContactQuotes ? `<button class="sf-convert-btn sf-convert-secondary" type="button" data-action="contact-create-another-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-copy"></i>${quoteInFlight ? 'Creating Quote…' : 'Create another Quote'}</button>` : ''}
+              `
+              : canManageContactQuotes
+                ? `<button class="sf-convert-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-arrow-right"></i>${quoteInFlight ? 'Creating Quote…' : 'Convert to Quote'}</button>`
+                : ''}
+          </div>
+          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-checkbox"></i>Open Tasks<span class="sf-connect"><i class="ti ti-plug"></i>Connect</span></div>
+            <div class="sf-tasks">
+              ${tasks.map((t) => renderSfTaskRow(t)).join('') || '<div class="sf-task-empty">No tasks yet.</div>'}
+            </div>
+            <form class="sf-task-add sf-task-add-rich" data-contact-task-form autocomplete="off">
+              <input type="hidden" name="contact_id" value="${h(contact.id)}" />
+              <i class="ti ti-plus"></i>
+              <input name="title" placeholder="Add a task?" />
+              <input name="due" type="date" value="${h(isoDate(1))}" aria-label="Due date" />
+              <input name="due_time" type="time" aria-label="Due time" />
+              <button type="submit" title="Save task" aria-label="Save task"><i class="ti ti-check"></i></button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ---- renderContactTable ---------------------------------------------------------
+// Body lives in ./crm/contact-table.js and is fetched on first use.
+let renderContactTableModule = null;
+let renderContactTablePending = null;
+
+function loadRenderContactTable() {
+  if (renderContactTableModule) return Promise.resolve(renderContactTableModule);
+  if (!renderContactTablePending) {
+    renderContactTablePending = import('./crm/contact-table.js').then((mod) => {
+      renderContactTableModule = mod.createContactTable({
+        CONTACT_SORT_OPTIONS, QUEST_SALES_LIFECYCLE_STAGES, accountName, contactStageColor, emptyState, filteredContacts, h, personOwnerDisplayName, pipelineDot, renderContactFilterBar, renderPipelineNextAction, sortedContacts, timeAgo, state,
+      });
+      return renderContactTableModule;
+    }).catch((error) => {
+      renderContactTablePending = null;
+      throw error;
+    });
+  }
+  return renderContactTablePending;
+}
+
+function renderContactTable(companyId) {
+  if (renderContactTableModule) return renderContactTableModule.renderContactTable(companyId);
+  loadRenderContactTable().then(() => render()).catch((error) => console.error('renderContactTable failed to load', error));
+  return questLoader('Loading');
+}
+
 function navGroup(label, items) {
   if (!items.length) return '';
   const collapsed = state.collapsedNavGroups.has(label);
@@ -8357,6 +8582,7 @@ function dashboardInRange(item, window, fields = ['created_at', 'updated_at', 'c
   return date >= window.start && date < window.end;
 }
 
+
 function renderCompanyHomePage(companyId) {
   return renderCompanyDashboard(companyId);
 }
@@ -9617,84 +9843,6 @@ function renderContactEditor(companyId, contact) {
   return questLoader('Loading form');
 }
 
-function renderContactTable(companyId) {
-  const rows = sortedContacts(filteredContacts(companyId));
-  const sort = CONTACT_SORT_OPTIONS.find((option) => option.id === state.contactSort) || CONTACT_SORT_OPTIONS[0];
-  const lifecycleStage = QUEST_SALES_LIFECYCLE_STAGES.find((stage) => stage.key === state.contactLifecycleFilter);
-  const listLabel = lifecycleStage?.name || (state.contactStageFilter === 'all' ? 'All Contacts' : `${state.contactStageFilter} Contacts`);
-  const lastUpdated = rows[0]?.updated_at ? timeAgo(rows[0].updated_at) : 'no recent updates';
-  const selected = new Set((state.selectedContactIds || []).filter((id) => rows.some((r) => r.id === id)));
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
-  const selCount = selected.size;
-  const headerSort = (label, sortId) => `
-    <button class="contact-header-sort ${state.contactSort === sortId ? 'active' : ''}" type="button" data-action="set-contact-sort" data-sort="${h(sortId)}">
-      ${h(label)} <i class="ti ${state.contactSort === sortId ? 'ti-chevron-up' : 'ti-chevron-down'}"></i>
-    </button>
-  `;
-  return `
-    <section class="panel contact-list-view">
-      <div class="contact-list-head">
-        <div class="contact-list-title">
-          <span class="contact-object-icon"><i class="ti ti-id-badge-2"></i></span>
-          <div>
-            <span class="contact-object-label">Contacts</span>
-            <h2>${h(listLabel)} <i class="ti ti-chevron-down"></i></h2>
-            <p>${rows.length} item${rows.length === 1 ? '' : 's'} - Sorted by ${h(sort.label)} - Filtered by ${h(listLabel)} - Updated ${h(lastUpdated)}</p>
-          </div>
-        </div>
-        <div class="contact-list-actions">
-          ${selCount ? `<span class="contact-sel-count">${selCount} selected</span><button class="btn btn-compact" type="button" data-action="contacts-clear-selection"><i class="ti ti-x"></i>Clear</button>` : ''}
-          <button class="btn btn-compact" type="button" data-action="contacts-import"><i class="ti ti-upload"></i>Import</button>
-          <button class="btn btn-compact" type="button" data-action="contacts-dedupe"><i class="ti ti-git-merge"></i>Find duplicates</button>
-          <button class="btn btn-compact" type="button" data-action="contacts-campaign"><i class="ti ti-speakerphone"></i>Add to Campaign</button>
-          <button class="btn btn-compact danger" type="button" data-action="contacts-delete"><i class="ti ti-trash"></i>Delete</button>
-          <button class="btn btn-compact" type="button" data-action="contacts-email"><i class="ti ti-mail"></i>Send Email</button>
-          <button class="btn btn-compact btn-primary" type="button" data-action="open-contact-form" data-mode="new"><i class="ti ti-plus"></i>New</button>
-          <button class="btn btn-compact" type="button" data-action="contacts-label"><i class="ti ti-tag"></i>Assign Label</button>
-        </div>
-      </div>
-      <div class="contact-list-toolbar">
-        <label class="contact-list-search">
-          <i class="ti ti-search"></i>
-          <input type="search" data-contact-search value="${h(state.contactQuery)}" placeholder="Search this list..." aria-label="Search this list" />
-        </label>
-        <div class="contact-list-tools">
-          <button class="icon-btn ${state.contactBoardView === 'table' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="contacts" data-view="table" title="Table view" aria-label="Table view"><i class="ti ti-table"></i></button>
-          <button class="icon-btn ${state.contactBoardView === 'board' ? 'active' : ''}" type="button" data-action="set-pipeline-view" data-module="contacts" data-view="board" title="Board view" aria-label="Board view"><i class="ti ti-layout-kanban"></i></button>
-          <button class="icon-btn" type="button" data-action="open-stage-manager" data-module="contacts" title="Manage stages" aria-label="Manage stages"><i class="ti ti-adjustments-horizontal"></i></button>
-          <button class="icon-btn" type="button" data-action="refresh-data" title="Refresh" aria-label="Refresh contacts"><i class="ti ti-refresh"></i></button>
-        </div>
-      </div>
-      ${renderContactFilterBar(companyId)}
-      <div class="data-table contacts-table">
-        <div class="table-head">
-          <span class="select-cell" data-action="toggle-contact-select-all"><input type="checkbox" ${allSelected ? 'checked' : ''} aria-label="Select all contacts" /></span>
-          <span>${headerSort('Name', 'name')}</span>
-          <span>What's next</span>
-          <span>${headerSort('Account Name', 'owner')}</span>
-          <span>${headerSort('Title', 'stage')}</span>
-          <span>Phone</span>
-          <span>Email</span>
-          <span>Contact Owner Alias</span>
-          <span></span>
-        </div>
-        ${rows.map((contact) => `
-          <div class="table-row ${selected.has(contact.id) ? 'selected ' : ''}${contact.id === state.selectedContactId ? 'active' : ''}" role="button" tabindex="0" data-action="open-contact" data-contact-id="${h(contact.id)}">
-            <span class="select-cell" data-action="toggle-contact-select" data-contact-id="${h(contact.id)}"><input type="checkbox" ${selected.has(contact.id) ? 'checked' : ''} aria-label="Select ${h(contact.name)}" /></span>
-            <span class="cell-lead">${pipelineDot(contactStageColor(contact.stage))}<span><strong>${h(contact.name)}</strong><small>${h(contact.stage || 'No stage')}</small></span></span>
-            ${renderPipelineNextAction('contact', contact, { compact: true })}
-            <span>${contact.account_id ? h(accountName(contact.account_id) || '-') : '<span class="muted-dash">-</span>'}</span>
-            <span>${contact.title ? h(contact.title) : '<span class="muted-dash">-</span>'}</span>
-            <span>${contact.phone ? h(contact.phone) : '<span class="muted-dash">-</span>'}</span>
-            <span>${contact.email ? h(contact.email) : '<span class="muted-dash">-</span>'}</span>
-            <span>${personOwnerDisplayName(contact.owner_name, companyId) ? h(personOwnerDisplayName(contact.owner_name, companyId)) : '<span class="muted-dash">-</span>'}</span>
-            <span class="row-menu"><i class="ti ti-dots"></i></span>
-          </div>
-        `).join('') || emptyState('No contacts in this view yet.')}
-      </div>
-    </section>
-  `;
-}
 
 // Contacts the bulk actions apply to: the current selection, or (optionally) all
 // contacts in the filtered view when nothing is selected.
@@ -10156,148 +10304,6 @@ function renderContactLabelStrip(companyId, contact) {
     </div>`;
 }
 
-function renderContactRecord(companyId, contact) {
-  const stages = contactStages();
-  const ci = stages.findIndex((s) => s.name === contact.stage);
-  const g = guidanceForStage(contact.stage);
-  const tempColor = contact.temperature === 'Hot' ? '#C2410C' : contact.temperature === 'Warm' ? '#B07A12' : '#2E72B8';
-  const smsCapabilities = contactSmsCapabilities(contact.id);
-  const requestedWorkspaceTab = state.contactWorkspaceTab || 'Notes';
-  const activeWorkspaceTab = requestedWorkspaceTab === 'Messages' && !smsCapabilities.canMountThread
-    ? 'Notes'
-    : requestedWorkspaceTab;
-  const tasks = tasksForContact(contact.id);
-  const totalFeed = activitiesFor('contact', contact.id);
-  const feed = filteredActivitiesFor('contact', contact.id);
-  const contactQuotes = companyDeals(companyId)
-    .filter((deal) => deal.primary_contact_id === contact.id)
-    .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
-  const latestContactQuote = contactQuotes[0] || null;
-  const canManageContactQuotes = can('crm.manage', companyId, contact.workspace_id);
-  const canGraduateContactToQuote = canManageContactQuotes
-    && resolvePipelineStage('contacts', contact.stage, companyId) === 'Nurturing';
-  const quoteInFlight = Boolean(state.contactQuoteConversionInFlight?.[contact.id]);
-
-  const ed = (key, opts = {}) => {
-    const isEmpty = contact[key] === '' || contact[key] == null;
-    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : '', isEmpty ? 'sf-empty' : ''].filter(Boolean).join(' ');
-    const inner = isEmpty ? EMPTY_FIELD_PLACEHOLDER : h(String(contact[key]));
-    return `<span class="${cls}" data-contact-edit="${h(key)}" data-contact-id="${h(contact.id)}" title="Click to edit">${inner}</span>`;
-  };
-  const fieldRow = (label, content, editKey = '') => `
-    <div class="sf-field">
-      <div class="sf-field-label">
-        ${h(label)}
-        ${editKey
-          ? `<button class="sf-pencil" type="button" data-contact-edit="${h(editKey)}" data-contact-id="${h(contact.id)}" aria-label="Edit ${h(label)}"><i class="ti ti-pencil"></i></button>`
-          : ''}
-      </div>
-      <div class="sf-field-value">${content}</div>
-    </div>
-  `;
-
-  const workspaceTabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Messages', 'ti-message'], ['Activity', 'ti-activity']];
-  const quickTiles = [['Task', 'ti-checkbox'], ['Meeting', 'ti-calendar'], ['Estimate', 'ti-calculator'], ['Proposal', 'ti-file-text'], ['Email', 'ti-mail'], ['Call Log', 'ti-phone']];
-
-  return `
-    <div class="sf-record">
-      <div class="sf-object-tabs">
-        <a class="sf-object-tab" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router>Dashboard</a>
-        <a class="sf-object-tab" href="${appHref(companyPath('contacts', {}, companyId))}" data-router>All Contacts <span class="sf-tab-kind">| Contacts</span></a>
-        <span class="sf-object-tab on">${h(contact.name)} <span class="sf-tab-kind">| Contact</span></span>
-      </div>
-
-      <div class="sf-record-head">
-        <span class="sf-record-icon"><i class="ti ti-user"></i></span>
-        <div><div class="sf-record-label">Contact</div><div class="sf-record-name">${h(contact.name)}</div></div>
-        <div class="sf-actions">
-          ${workspaceTabs.map(([label, ico]) => {
-            const smsDisabled = label === 'Messages' && !smsCapabilities.canMountThread;
-            return `<button class="sf-btn ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"${smsDisabled ? ` disabled aria-disabled="true" title="${h(smsCapabilities.message)}"` : ''}><i class="ti ${ico}"></i>${label}${smsDisabled ? '<i class="ti ti-lock sf-tab-lock" aria-hidden="true"></i>' : ''}</button>`;
-          }).join('')}
-          <button class="sf-btn" type="button" data-action="open-record-history" data-record-type="contact" data-record-id="${h(contact.id)}" data-record-label="${h(contact.name)}" data-company-id="${h(contact.company_id || companyId)}" data-workspace-id="${h(contact.workspace_id || activeWorkspaceId())}"><i class="ti ti-history"></i>History</button>
-          <button class="sf-btn" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit</button>
-        </div>
-      </div>
-
-      ${renderContactLabelStrip(companyId, contact)}
-
-      <div class="sf-path-wrap">
-        <div class="sf-path-row">
-          <div class="sf-stage-track">
-            ${stages.map((s, i) => {
-              const cls = i < ci ? 'done' : i === ci ? 'current' : 'future';
-              return `<button class="sf-stage ${cls}" type="button" data-action="set-contact-stage" data-contact-id="${h(contact.id)}" data-stage="${h(s.name)}" title="Move to ${h(s.name)}">${i < ci ? '<i class="ti ti-check"></i>' : h(s.name)}</button>`;
-            }).join('')}
-          </div>
-          <button class="sf-mark-btn" type="button" data-action="contact-mark-next" data-contact-id="${h(contact.id)}">Mark as Current Stage</button>
-          ${canGraduateContactToQuote
-            ? latestContactQuote
-              ? `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="open-contact-quote" data-deal-id="${h(latestContactQuote.id)}"><i class="ti ti-file-text"></i>Open latest Quote</button>`
-              : `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-file-text"></i>${quoteInFlight ? 'Creating Quote…' : 'Graduate to Quote'}</button>`
-            : ''}
-        </div>
-        <div class="sf-guidance">
-          <div class="sf-guidance-label">Guidance for Success</div>
-          <div class="sf-guidance-title">${h(g.t)}</div>
-          <div class="sf-guidance-lines">${g.b.map((x) => `<div><span class="sf-guidance-bullet">•</span> ${h(x)}</div>`).join('')}</div>
-        </div>
-      </div>
-
-      <div class="sf-three-col">
-        <div class="sf-col">
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
-            ${fieldRow('Phone', ed('phone'), 'phone')}
-            ${fieldRow('Email', ed('email', { blue: true }), 'email')}
-            ${fieldRow('Location', ed('location'), 'location')}
-            ${fieldRow('Job Type', `<span class="sf-pill sf-edit${contact.title ? '' : ' sf-empty'}" data-contact-edit="title" data-contact-id="${h(contact.id)}" title="Click to edit">${contact.title ? h(contact.title) : EMPTY_FIELD_PLACEHOLDER}</span>`, 'title')}
-            ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
-            ${fieldRow('Source', ed('source'), 'source')}
-          </div></div>
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
-            ${fieldRow('Stage', ed('stage'), 'stage')}
-            ${fieldRow('Est. Value', `<span class="sf-money"><span class="sf-edit mono" data-contact-edit="value" data-contact-id="${h(contact.id)}" title="Click to edit">${money(contact.value || 0)}</span></span>`, 'value')}
-            ${fieldRow('Temperature', `<span class="sf-edit" data-contact-edit="temperature" data-contact-id="${h(contact.id)}" style="color:${tempColor}" title="Click to edit">${h(contact.temperature)}</span>`, 'temperature')}
-            ${fieldRow('Pay Type', ed('pay_type'), 'pay_type')}
-            ${fieldRow('Roof System', ed('roof_system'), 'roof_system')}
-            ${contact.has_multiple_roof_systems || contact.secondary_roof_system ? fieldRow('Second Roof System', ed('secondary_roof_system'), 'secondary_roof_system') : ''}
-          </div></div>
-        </div>
-
-        <div class="sf-col">
-          ${renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities)}
-        </div>
-
-        <div class="sf-col">
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-bolt"></i>Quick Create</div>
-            <div class="sf-quick-grid">${quickTiles.map(([label, ico]) => `<button class="sf-quick-tile" type="button" data-action="contact-quick" data-kind="${h(label)}" data-contact-id="${h(contact.id)}"><i class="ti ${ico}"></i><span>${label}</span></button>`).join('')}</div>
-            ${latestContactQuote
-              ? `
-                <button class="sf-convert-btn" type="button" data-action="open-contact-quote" data-deal-id="${h(latestContactQuote.id)}"><i class="ti ti-external-link"></i>Open latest Quote</button>
-                ${canManageContactQuotes ? `<button class="sf-convert-btn sf-convert-secondary" type="button" data-action="contact-create-another-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-copy"></i>${quoteInFlight ? 'Creating Quote…' : 'Create another Quote'}</button>` : ''}
-              `
-              : canManageContactQuotes
-                ? `<button class="sf-convert-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-arrow-right"></i>${quoteInFlight ? 'Creating Quote…' : 'Convert to Quote'}</button>`
-                : ''}
-          </div>
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-checkbox"></i>Open Tasks<span class="sf-connect"><i class="ti ti-plug"></i>Connect</span></div>
-            <div class="sf-tasks">
-              ${tasks.map((t) => renderSfTaskRow(t)).join('') || '<div class="sf-task-empty">No tasks yet.</div>'}
-            </div>
-            <form class="sf-task-add sf-task-add-rich" data-contact-task-form autocomplete="off">
-              <input type="hidden" name="contact_id" value="${h(contact.id)}" />
-              <i class="ti ti-plus"></i>
-              <input name="title" placeholder="Add a task?" />
-              <input name="due" type="date" value="${h(isoDate(1))}" aria-label="Due date" />
-              <input name="due_time" type="time" aria-label="Due time" />
-              <button type="submit" title="Save task" aria-label="Save task"><i class="ti ti-check"></i></button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
 
 function renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities = contactSmsCapabilities(contact.id)) {
   const tabs = [
@@ -13619,6 +13625,8 @@ function normalizeWorkspaceBuilderDoc(doc) {
         description: app.description || '',
         type: app.type || '',
         recordName: app.recordName || '',
+        // null means "never arranged", which is different from "arranged to be empty".
+        dashboard: Array.isArray(app.dashboard) ? app.dashboard : null,
         icon: app.icon || WB_APP_ICONS[0],
         color: safeHexColor(app.color, safeHexColor(ws.color, WB_PALETTE[1])),
         shared: !!app.shared,
@@ -14618,7 +14626,7 @@ function loadAppViews() {
   if (!appViewsPending) {
     appViewsPending = import('./workspace/app-views.js').then((mod) => {
       appViewsModule = mod.createAppViews({
-        h, can, money, emptyState, appHref, companyPath, wbItemTitle, wbTimeAgo,
+        h, can, money, emptyState, appHref, companyPath, wbItemTitle, wbTimeAgo, wbModalShell,
       });
       return appViewsModule;
     }).catch((error) => {
@@ -14629,8 +14637,8 @@ function loadAppViews() {
   return appViewsPending;
 }
 
-function renderAppDashboard(companyId, app) {
-  if (appViewsModule) return appViewsModule.renderAppDashboard(companyId, app);
+function renderAppDashboard(companyId, app, manageMode) {
+  if (appViewsModule) return appViewsModule.renderAppDashboard(companyId, app, manageMode);
   loadAppViews().then(() => render()).catch((error) => console.error('App dashboard failed to load', error));
   return questLoader('Loading');
 }
@@ -14663,7 +14671,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   else if (canManage && tab === 'automations') headBtn += `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
   const tabLabel = { dashboard: 'Dashboard', calendar: 'Calendar', items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, settings: 'Settings' };
   let body = '';
-  if (tab === 'dashboard') body = renderAppDashboard(companyId, app);
+  if (tab === 'dashboard') body = renderAppDashboard(companyId, app, state.wbDashManage);
   else if (tab === 'calendar') body = renderAppCalendar(companyId, app, route.params.get('on') || '', route.params.get('field') || '', route.params.get('view') || '');
   else if (tab === 'items') body = wbViewItems(companyId, workspace, app);
   else if (tab === 'fields') body = wbViewBuilder(companyId, workspace, app);
@@ -17490,6 +17498,12 @@ function renderWorkspaceBuilderModal() {
       `<div class="wb-field-hint">Every field below is editable — change anything and press Save.</div><div id="wbItemForm">${body}</div>${meta}${comments}`,
       `<button class="btn" ${m.editId ? 'data-wb-item-view' : 'data-action="wb-modal-close"'}>Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-check"></i>${m.editId ? 'Save' : h(addRecordLabel(app))}</button>`);
   }
+  // The two dashboard dialogs are drawn by ./workspace/app-views.js. They only open from
+  // the dashboard tab, which has already fetched that module, so their markup rides along
+  // with it instead of sitting in the entry chunk for everyone.
+  if (m.kind === 'dash-add' || m.kind === 'dash-config') {
+    return appViewsModule ? appViewsModule.renderDashModal(m) : questLoader('Loading');
+  }
   if (m.kind === 'automation') {
     const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
     return wbModalShell('Automation', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:#7c3aed"><i class="ti ti-bolt"></i></div><h3>${m.editId ? 'Edit' : 'New'} automation</h3>`,
@@ -18241,6 +18255,76 @@ function wbConfirmDelete() {
   state.builderModal = null; wbSave(companyId); showToast('Deleted.', 'local', 'Workspaces'); render();
 }
 
+// ---- App dashboard arrangement ----------------------------------------------------------
+// The widget model is pure and lives in ./workspace/dashboard-widgets.js. These are the four
+// things that write it, all through one save so a half-applied arrangement cannot persist.
+
+/**
+ * Keep every clock widget on the page ticking.
+ *
+ * One interval for all of them, cleared and restarted per render: render() rebuilds the DOM
+ * wholesale, so a timer holding a reference to the old nodes would tick into nothing forever.
+ */
+function mountWbClocks() {
+  if (state.wbClockTimer) clearInterval(state.wbClockTimer);
+  const paint = () => {
+    const nodes = document.querySelectorAll('[data-wb-clock]');
+    if (!nodes.length) { clearInterval(state.wbClockTimer); state.wbClockTimer = null; return; }
+    const now = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    nodes.forEach((node) => { node.textContent = now; });
+  };
+  paint();
+  state.wbClockTimer = setInterval(paint, 1000);
+}
+
+/** The card catalogue. Cards the app cannot support yet say why instead of being hidden. */
+async function openWbDashAdd(companyId, workspaceId, appId) {
+  const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const mod = await import('./workspace/dashboard-widgets.js');
+  openWbModal({
+    kind: 'dash-add', companyId, workspaceId, appId,
+    options: mod.WIDGET_TYPES.map((meta) => ({
+      ...meta,
+      supported: mod.widgetSupported(app, meta.type),
+      blocked: meta.needs === 'date' ? 'Needs a Date field' : meta.needs === 'option' ? 'Needs a Status or Category field' : '',
+    })),
+  });
+}
+
+async function openWbDashConfig(companyId, workspaceId, appId, widgetId) {
+  const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const mod = await import('./workspace/dashboard-widgets.js');
+  const widget = mod.dashboardFor(app).find((w) => w.id === widgetId);
+  if (!widget) return;
+  openWbModal({
+    kind: 'dash-config', companyId, workspaceId, appId, widgetId,
+    widget,
+    optionFields: mod.optionFields(app).map((f) => ({ id: f.id, label: f.label, options: f.config?.options || [] })),
+    dateFields: mod.dateFieldsOf(app).map((f) => ({ id: f.id, label: f.label })),
+    numberFields: mod.numberFields(app).map((f) => ({ id: f.id, label: f.label })),
+  });
+}
+
+async function wbDashEdit(companyId, workspaceId, appId, change) {
+  const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app || !can('workspaces.manage', companyId)) return;
+  const mod = await import('./workspace/dashboard-widgets.js');
+  // Reading through dashboardFor means the first edit to a never-arranged app starts from
+  // what it was already showing, rather than from nothing.
+  app.dashboard = change(mod.dashboardFor(app), mod);
+  wbSave(companyId);
+  render();
+}
+
+function wbDashAddWidget(companyId, workspaceId, appId, type) {
+  return wbDashEdit(companyId, workspaceId, appId, (widgets, mod) => {
+    const { app } = wbFind(companyId, workspaceId, appId);
+    return mod.addWidget(widgets, type, app);
+  });
+}
+
 function wbSaveAppSettings(companyId, workspaceId, appId) {
   const { app } = wbFind(companyId, workspaceId, appId);
   app.name = (document.getElementById('wbSetName')?.value || '').trim() || app.name;
@@ -18374,6 +18458,29 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-chip-field]', (el) => { const ui = wbItemsUI(appId); ui.chipFieldId = el.value; ui.chipValue = ''; wbRememberItemsUI(appId); render(); }, 'onchange');
     // Switching the calendar's date field is a route change so the month you are on, and the
     // field you picked, are both in the URL and survive a refresh or a shared link.
+    // Dashboard arrangement. Same shape as the workspace tiles so the two feel like one
+    // feature: a Customize toggle, then per-card controls on the card itself.
+    bind('[data-wb-dash-manage]', () => { state.wbDashManage = !state.wbDashManage; render(); });
+    bind('[data-wb-dash-add]', () => openWbDashAdd(companyId, workspaceId, appId));
+    bind('[data-wb-dash-config]', (el) => openWbDashConfig(companyId, workspaceId, appId, el.dataset.wbDashConfig));
+    bind('[data-wb-dash-move]', (el) => {
+      const [id, dir] = String(el.dataset.wbDashMove).split(':');
+      wbDashEdit(companyId, workspaceId, appId, (w, mod) => mod.moveWidget(w, id, dir));
+    });
+    bind('[data-wb-dash-size]', (el) => {
+      const [id, size] = String(el.dataset.wbDashSize).split(':');
+      wbDashEdit(companyId, workspaceId, appId, (w, mod) => mod.resizeWidget(w, id, Number(size)));
+    });
+    bind('[data-wb-dash-remove]', (el) => {
+      wbDashEdit(companyId, workspaceId, appId, (w, mod) => mod.removeWidget(w, el.dataset.wbDashRemove));
+    });
+    // Reset restores the default arrangement rather than emptying the board, because an empty
+    // dashboard looks broken and "reset" should mean "how it came".
+    bind('[data-wb-dash-reset]', () => {
+      wbDashEdit(companyId, workspaceId, appId, (_w, mod) => mod.defaultDashboard(wbFind(companyId, workspaceId, appId).app));
+    });
+    // A live clock cannot come from markup rendered once.
+    if (document.querySelector('[data-wb-clock]')) mountWbClocks();
     bind('[data-wb-cal-field]', (el) => {
       const params = state.route?.params;
       nav({ app_id: appId, tab: 'calendar', field: el.value, ...(params?.get('view') ? { view: params.get('view') } : {}), ...(params?.get('on') ? { on: params.get('on') } : {}) });
@@ -18642,6 +18749,41 @@ function wbMountModal() {
   }
   // Item detail modal: view/edit toggle, file previews, and the comment box work
   // in both modes; the field-input wiring only runs when actually editing.
+  if (m.kind === 'dash-add') {
+    overlay.querySelectorAll('[data-wb-dash-pick]').forEach((b) => {
+      b.onclick = () => {
+        const type = b.dataset.wbDashPick;
+        state.builderModal = null;
+        wbDashAddWidget(m.companyId, m.workspaceId, m.appId, type)
+          .catch((error) => showToast(error.message || 'Could not add the card.', 'error', 'Workspaces'));
+      };
+    });
+  }
+  if (m.kind === 'dash-config') {
+    // Re-render on change so dependent choices appear: picking a status field reveals its
+    // values, and choosing "total of a field" reveals which field.
+    overlay.querySelectorAll('[data-wb-dashcfg]').forEach((el) => {
+      el.onchange = () => {
+        const key = el.dataset.wbDashcfg;
+        const draft = { ...(state.builderModal.widget.config || {}) };
+        draft[key] = el.value;
+        state.builderModal.widget = { ...state.builderModal.widget, config: draft };
+        if (key === 'fieldId') delete draft.value;
+        render();
+      };
+    });
+    const save = overlay.querySelector('[data-wb-dashcfg-save]');
+    if (save) {
+      save.onclick = () => {
+        const config = { ...(state.builderModal.widget.config || {}) };
+        overlay.querySelectorAll('[data-wb-dashcfg]').forEach((el) => { config[el.dataset.wbDashcfg] = el.value; });
+        const { companyId, workspaceId, appId, widgetId } = state.builderModal;
+        state.builderModal = null;
+        wbDashEdit(companyId, workspaceId, appId, (widgets) => widgets.map((w) => (w.id === widgetId ? { ...w, config } : w)))
+          .catch((error) => showToast(error.message || 'Could not save the card.', 'error', 'Workspaces'));
+      };
+    }
+  }
   if (m.kind === 'item') {
     const editBtn = overlay.querySelector('[data-wb-item-edit]');
     if (editBtn) editBtn.onclick = () => { state.builderModal.mode = 'edit'; render(); };
@@ -18956,27 +19098,6 @@ function renderWorkspaceBackupRestoreModal() {
   `, 'task-modal');
 }
 
-function renderClientPortalPublicPage(route) {
-  const portal = state.clientPortalPublic;
-  const token = route.token || '';
-  if (!portal?.session || portal.token !== token) {
-    if (portal?.token === token && portal.passwordRequired) {
-      return renderClientPortalPasswordGate(token, portal);
-    }
-    return `
-      <main class="client-portal-public">
-        <section class="client-portal-gate ${portal?.loading ? 'loading' : ''}">
-          <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Client Portal')}</span><span><strong>Quest Client Portal</strong><small>Plan review</small></span></div>
-          <h1>${portal?.error ? 'Could not open portal' : 'Opening plan portal'}</h1>
-          <p>${portal?.error ? 'This public portal link could not be opened. Ask the workspace team to confirm the link is active.' : 'Checking this link. If no password was set, the plan review will open automatically.'}</p>
-          ${portal?.error ? `<div class="form-message error">${h(portal.error)}</div>` : '<div class="client-portal-status">Opening...</div>'}
-        </section>
-      </main>
-    `;
-  }
-  ensureClientPortalAnnotateState('guest', portal.portal?.id || token, portal.documentId || '');
-  return `<main class="client-portal-public open">${renderClientPortalAnnotate('guest')}</main>`;
-}
 
 function renderClientPortalFormModal(companyId, portal = null) {
   return renderModalShell('Client Portal', portal ? 'Edit portal' : 'New portal link', `
@@ -20953,46 +21074,6 @@ function renderProposalDetail(proposal) {
   `;
 }
 
-function renderProposalPublicPage(route) {
-  const proposal = state.proposalPublic?.proposal;
-  const error = state.proposalPublic?.error;
-  const draft = proposal ? proposalDraftFromRecord(proposal) : null;
-  return `
-    <main class="proposal-public-shell">
-      <section class="proposal-public-brand">
-        <span class="side-mark logo-image-mark">${questLogoImage()}</span>
-        <span><strong>Quest Roofing</strong><small>Customer proposal</small></span>
-      </section>
-      ${error ? `
-        <section class="panel proposal-public-card">${emptyState(error)}</section>
-      ` : !proposal ? `
-        <section class="panel proposal-public-card">${emptyState('Opening proposal...')}</section>
-      ` : `
-        <section class="proposal-public-layout">
-          <div class="proposal-public-preview">${renderProposalPreview(draft)}</div>
-          <aside class="proposal-acceptance-panel panel">
-            <span class="eyebrow">${h(proposal.status)}</span>
-            <h1>${h(proposal.title)}</h1>
-            <p>${h(proposal.client.name || 'Customer')} - ${h(money(proposal.total))}</p>
-            ${proposal.status === 'Accepted' ? `<div class="form-message success">Accepted by ${h(proposal.accepted_by || 'customer')} on ${h(formatDate(proposal.accepted_at))}.</div>` : ''}
-            ${proposal.status === 'Declined' ? `<div class="form-message error">This proposal was declined on ${h(formatDate(proposal.declined_at))}.</div>` : ''}
-            ${['Accepted', 'Declined'].includes(proposal.status) ? `
-              <button class="btn full" type="button" data-action="export-public-proposal"><i class="ti ti-download"></i>Download PDF</button>
-            ` : `
-              <form class="proposal-public-form" data-proposal-public-form>
-                <input type="hidden" name="token" value="${h(route.token || '')}" />
-                <label><span>Your name</span><input name="signer_name" required autocomplete="name" /></label>
-                <label><span>Email</span><input name="signer_email" type="email" value="${h(proposal.client.email || '')}" autocomplete="email" /></label>
-                <button class="btn btn-primary full" type="submit" name="decision" value="accept"><i class="ti ti-signature"></i>Approve proposal</button>
-                <button class="btn full" type="submit" name="decision" value="decline">Decline</button>
-              </form>
-            `}
-          </aside>
-        </section>
-      `}
-    </main>
-  `;
-}
 
 async function ensureProposalPublicOpen(token) {
   ensureDomainLoaded('proposals');

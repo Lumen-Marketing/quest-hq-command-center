@@ -7,8 +7,11 @@
 //
 // Fetched on demand — you have to click the tab, and nothing else needs them to paint.
 
-import { boardColumns, pipelineField, stagesOf, summaryField } from './pipeline-core.js';
+import { boardColumns } from './pipeline-core.js';
 import { addDays, iso, monthGrid, mondayIndex, startOfWeek } from '../jobs/job-calendar.js';
+import {
+  dashboardFor, metricValue, numberFields, optionFields, widgetMeta, widgetRecords,
+} from './dashboard-widgets.js';
 
 /** Month is the default: it is the view you can orient yourself in without scrolling. */
 export const CAL_VIEWS = ['month', 'week', 'day'];
@@ -38,7 +41,9 @@ export function recordsByDay(app, field) {
 }
 
 export function createAppViews(ctx) {
-  const { h, can, money, emptyState, appHref, companyPath, wbItemTitle, wbTimeAgo } = ctx;
+  const {
+    h, can, money, emptyState, appHref, companyPath, wbItemTitle, wbTimeAgo, wbModalShell,
+  } = ctx;
 
   const itemHref = (companyId, app, item) => appHref(companyPath('workspaces', {
     app_id: app.id, tab: 'items', item_id: item.id,
@@ -46,67 +51,134 @@ export function createAppViews(ctx) {
 
   // ---- Dashboard --------------------------------------------------------------------------
 
-  function renderAppDashboard(companyId, app) {
-    if (!app.items.length) {
-      return `<div class="wb-empty"><i class="ti ti-chart-donut"></i><h3>Nothing to summarise yet</h3><p>Add a few records and this fills in on its own.</p></div>`;
+  /**
+   * The dashboard, as whatever arrangement the app carries.
+   *
+   * Customise mode adds a row of controls to each widget rather than a separate editor: the
+   * thing you are moving is the thing you are looking at, and a preview that lives somewhere
+   * else is a second thing to keep in step.
+   */
+  function renderAppDashboard(companyId, app, manageMode = false) {
+    const widgets = dashboardFor(app);
+    const canManage = can('workspaces.manage', companyId);
+    const editing = manageMode && canManage;
+    const todayIso = iso(new Date());
+
+    if (!widgets.length) {
+      return `${dashControls(canManage, editing)}<div class="wb-empty"><i class="ti ti-layout-dashboard"></i><h3>This dashboard is empty</h3><p>Add a card to start building it.</p></div>`;
     }
-    const field = pipelineField(app);
-    const sum = summaryField(app);
-    const columns = field ? boardColumns(app.items, field, sum) : [];
-    const total = app.items.length;
-    const grandTotal = sum ? app.items.reduce((n, it) => n + (Number(it.values?.[sum.id]) || 0), 0) : null;
 
-    const tiles = [
-      { label: 'Records', value: String(total), caption: field ? `across ${columns.length} ${columns.length === 1 ? 'stage' : 'stages'}` : 'no stages set up' },
-      ...(sum ? [{ label: sum.label, value: money(grandTotal), caption: `total across ${total} ${total === 1 ? 'record' : 'records'}` }] : []),
-      { label: 'Added this week', value: String(addedSince(app, 7)), caption: 'in the last seven days' },
-      { label: 'Touched this week', value: String(touchedSince(app, 7)), caption: 'edited in the last seven days' },
-    ];
+    const body = widgets.map((widget, i) => {
+      const meta = widgetMeta(widget.type);
+      const controls = editing ? `
+        <div class="wb-w-tools">
+          <button class="wb-w-btn" type="button" data-wb-dash-move="${h(widget.id)}:up" ${i === 0 ? 'disabled' : ''} title="Move earlier" aria-label="Move earlier"><i class="ti ti-chevron-left"></i></button>
+          <button class="wb-w-btn" type="button" data-wb-dash-move="${h(widget.id)}:down" ${i === widgets.length - 1 ? 'disabled' : ''} title="Move later" aria-label="Move later"><i class="ti ti-chevron-right"></i></button>
+          <span class="wb-w-sizes" role="group" aria-label="Width">
+            ${[1, 2, 3, 4].map((n) => `<button class="wb-w-size ${widget.size === n ? 'on' : ''}" type="button" data-wb-dash-size="${h(widget.id)}:${n}" title="${n} column${n === 1 ? '' : 's'}" aria-pressed="${widget.size === n}">${n}</button>`).join('')}
+          </span>
+          ${meta?.config ? `<button class="wb-w-btn" type="button" data-wb-dash-config="${h(widget.id)}" title="Settings" aria-label="Settings"><i class="ti ti-settings"></i></button>` : ''}
+          <button class="wb-w-btn danger" type="button" data-wb-dash-remove="${h(widget.id)}" title="Remove" aria-label="Remove"><i class="ti ti-x"></i></button>
+        </div>` : '';
+      return `<section class="wb-w wb-w-${h(widget.type)} ${editing ? 'editing' : ''}" style="--w-span:${widget.size}">
+        ${controls}
+        ${widgetBody(companyId, app, widget, todayIso)}
+      </section>`;
+    }).join('');
 
-    // Newest first, which is what "what has been happening" means on a record list.
-    const recent = [...app.items]
-      .sort((a, b) => String(b.lastActivityAt || b.updatedAt || b.createdAt || '')
-        .localeCompare(String(a.lastActivityAt || a.updatedAt || a.createdAt || '')))
-      .slice(0, 6);
-
-    return `
-      <div class="wb-dash">
-        <div class="wb-dash-tiles">
-          ${tiles.map((tile) => `
-            <div class="wb-dash-tile">
-              <span class="wb-dash-label">${h(tile.label)}</span>
-              <strong>${h(tile.value)}</strong>
-              <span class="wb-dash-caption">${h(tile.caption)}</span>
-            </div>`).join('')}
-        </div>
-        <div class="wb-dash-panels">
-          <article class="panel wb-dash-panel">
-            <h3>By ${h(field ? field.label : 'stage')}</h3>
-            ${field ? `<div class="wb-dash-bars">${columns.map((col) => `
-              <div class="wb-dash-bar">
-                <span class="wb-dash-bar-name"><i style="background:${h(col.color)}"></i>${h(col.label)}</span>
-                <span class="wb-dash-bar-track"><span style="width:${total ? Math.round((col.count / total) * 100) : 0}%;background:${h(col.color)}"></span></span>
-                <span class="wb-dash-bar-n">${h(String(col.count))}${col.total != null && sum ? ` · ${h(money(col.total))}` : ''}</span>
-              </div>`).join('')}</div>`
-    : emptyState('Add a Status field and its options become the stages here, on the board, and in the sidebar.')}
-          </article>
-          <article class="panel wb-dash-panel">
-            <h3>Recently active</h3>
-            <ul class="wb-dash-recent">
-              ${recent.map((item) => `
-                <li>
-                  <a href="${itemHref(companyId, app, item)}" data-router>${h(wbItemTitle(app, item)) || 'Untitled'}</a>
-                  <span>${h(wbTimeAgo(item.lastActivityAt || item.updatedAt || item.createdAt || ''))}</span>
-                </li>`).join('')}
-            </ul>
-          </article>
-        </div>
-      </div>`;
+    return `${dashControls(canManage, editing)}<div class="wb-dash-grid">${body}</div>`;
   }
 
-  const daysAgoIso = (n) => iso(addDays(new Date(), -n));
-  const addedSince = (app, days) => app.items.filter((it) => String(it.createdAt || '').slice(0, 10) >= daysAgoIso(days)).length;
-  const touchedSince = (app, days) => app.items.filter((it) => String(it.lastActivityAt || it.updatedAt || '').slice(0, 10) >= daysAgoIso(days)).length;
+  function dashControls(canManage, editing) {
+    if (!canManage) return '';
+    return `<div class="wb-dash-controls">
+      <button class="btn btn-sm ${editing ? 'btn-primary' : ''}" type="button" data-wb-dash-manage>${editing ? '<i class="ti ti-check"></i>Done' : '<i class="ti ti-adjustments"></i>Customize'}</button>
+      ${editing ? '<button class="btn btn-sm" type="button" data-wb-dash-add><i class="ti ti-plus"></i>Add card</button><button class="btn btn-sm" type="button" data-wb-dash-reset><i class="ti ti-rotate"></i>Reset</button>' : ''}
+    </div>`;
+  }
+
+  /** One widget's contents. Everything it needs comes from the app; nothing is stored twice. */
+  function widgetBody(companyId, app, widget, todayIso) {
+    const cfg = widget.config || {};
+    const fieldById = (id) => (app.fields || []).find((f) => f.id === id) || null;
+
+    if (widget.type === 'clock') {
+      // The date is rendered; the time is filled in by a ticking script, because markup
+      // written once cannot show a clock.
+      return `<div class="wb-w-clock">
+        <span class="wb-w-label">${h(new Date().toLocaleDateString(undefined, { weekday: 'long' }))}</span>
+        <strong data-wb-clock>--:--</strong>
+        <span class="wb-w-caption">${h(new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }))}</span>
+      </div>`;
+    }
+
+    if (widget.type === 'note') {
+      const text = String(cfg.text || '').trim();
+      return `<div class="wb-w-note">${text ? h(text) : emptyState('Add a note in this card’s settings.')}</div>`;
+    }
+
+    if (widget.type === 'metric') {
+      const m = metricValue(app, cfg, todayIso);
+      return `<div class="wb-w-metric">
+        <span class="wb-w-label">${h(m.label)}</span>
+        <strong>${m.money ? h(money(m.value)) : h(String(m.value))}</strong>
+        <span class="wb-w-caption">${h(m.caption)}</span>
+      </div>`;
+    }
+
+    if (widget.type === 'stages') {
+      const field = fieldById(cfg.fieldId) || optionFields(app)[0] || null;
+      if (!field) return widgetSetup('Add a Status or Category field, and its options become the bars here.');
+      const sum = numberFields(app).find((f) => f.id === cfg.sumId) || null;
+      const columns = boardColumns(app.items || [], field, sum);
+      const total = (app.items || []).length;
+      return `<h3 class="wb-w-title">By ${h(field.label)}</h3>
+        <div class="wb-dash-bars">${columns.map((col) => `
+          <div class="wb-dash-bar">
+            <span class="wb-dash-bar-name"><i style="background:${h(col.color)}"></i>${h(col.label)}</span>
+            <span class="wb-dash-bar-track"><span style="width:${total ? Math.round((col.count / total) * 100) : 0}%;background:${h(col.color)}"></span></span>
+            <span class="wb-dash-bar-n">${h(String(col.count))}${col.total != null && sum ? ` · ${h(money(col.total))}` : ''}</span>
+          </div>`).join('')}</div>`;
+    }
+
+    if (widget.type === 'calendar') {
+      const field = fieldById(cfg.fieldId) || dateFields(app)[0] || null;
+      if (!field) return widgetSetup('Add a Date field, and this shows the month with its records on it.');
+      const anchor = new Date();
+      const { byDay } = recordsByDay(app, field);
+      return `<h3 class="wb-w-title">${h(anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))} · ${h(field.label)}</h3>
+        <div class="wb-cal-grid wb-cal-mini">
+          ${DOW.map((d) => `<span class="wb-cal-dow">${d[0]}</span>`).join('')}
+          ${monthGrid(anchor).flat().map((day) => {
+    const key = iso(day);
+    const n = (byDay.get(key) || []).length;
+    return `<div class="wb-cal-day ${day.getMonth() !== anchor.getMonth() ? 'dim' : ''} ${key === todayIso ? 'today' : ''}">
+              <span class="wb-cal-num">${day.getDate()}</span>
+              ${n ? `<a class="wb-cal-count" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'calendar', view: 'day', on: key, field: field.id }, companyId))}" data-router style="background:${h(app.color)}">${n}</a>` : ''}
+            </div>`;
+  }).join('')}
+        </div>`;
+    }
+
+    // records and recent are the same list with a different question behind it.
+    const isRecent = widget.type === 'recent';
+    const field = isRecent ? null : fieldById(cfg.fieldId);
+    const { rows, total } = widgetRecords(app, isRecent ? { limit: cfg.limit } : cfg);
+    const chosen = field && cfg.value
+      ? (field.config?.options || []).find((o) => o.id === cfg.value)
+      : null;
+    const title = isRecent
+      ? 'Recently active'
+      : `${field ? h(field.label) : 'Records'}${chosen ? ` · ${h(chosen.label)}` : ''}`;
+    return `<h3 class="wb-w-title">${title}<span class="wb-w-count">${h(String(total))}</span></h3>
+      ${rows.length ? `<ul class="wb-dash-recent">${rows.map((item) => `
+        <li>
+          <a href="${itemHref(companyId, app, item)}" data-router>${h(wbItemTitle(app, item)) || 'Untitled'}</a>
+          <span>${h(wbTimeAgo(item.lastActivityAt || item.updatedAt || item.createdAt || ''))}</span>
+        </li>`).join('')}</ul>` : emptyState('Nothing matches this card yet.')}`;
+  }
+
+  const widgetSetup = (message) => `<div class="wb-w-setup"><i class="ti ti-settings"></i><span>${message}</span></div>`;
 
   // ---- Calendar ---------------------------------------------------------------------------
 
@@ -210,5 +282,66 @@ export function createAppViews(ctx) {
       </div>`;
   }
 
-  return { renderAppDashboard, renderAppCalendar, mondayIndex };
+
+  /**
+   * The two dialogs the customiser opens.
+   *
+   * They live here rather than in main.js's modal renderer because they only ever open from
+   * the dashboard tab, which has already fetched this module. Putting them in the eager
+   * renderer taxed every page load for markup almost nobody opens.
+   */
+  function renderDashModal(m) {
+  if (m.kind === 'dash-add') {
+    return wbModalShell('Add card', 'wb-modal-wide',
+      '<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-layout-dashboard"></i></div><h3>Add a card</h3>',
+      `<div class="wb-catalog">${m.options.map((opt) => `
+        <button class="wb-catalog-item ${opt.supported ? '' : 'blocked'}" type="button" ${opt.supported ? `data-wb-dash-pick="${h(opt.type)}"` : 'disabled'}>
+          <i class="ti ${h(opt.icon)}"></i>
+          <span><b>${h(opt.label)}</b><small>${opt.supported ? h(opt.desc) : h(opt.blocked)}</small></span>
+        </button>`).join('')}</div>`,
+      '<button class="btn" data-action="wb-modal-close">Close</button>');
+  }
+  if (m.kind === 'dash-config') {
+    const w = m.widget;
+    const cfg = w.config || {};
+    const pick = (name, label, list, selected, allowNone = '') => `<div class="wb-field"><label>${h(label)}</label>
+      <select class="wb-input" data-wb-dashcfg="${h(name)}">
+        ${allowNone ? `<option value="">${h(allowNone)}</option>` : ''}
+        ${list.map((o) => `<option value="${h(o.id)}" ${String(selected) === String(o.id) ? 'selected' : ''}>${h(o.label)}</option>`).join('')}
+      </select></div>`;
+    let fields = '';
+    if (w.type === 'metric') {
+      fields = `${pick('metric', 'Show', [
+    { id: 'count', label: 'Number of records' },
+    { id: 'sum', label: 'Total of a number field' },
+    { id: 'added', label: 'Added in the last seven days' },
+    { id: 'touched', label: 'Edited in the last seven days' },
+  ], cfg.metric || 'count')}
+        ${pick('fieldId', 'Field to total', m.numberFields, cfg.fieldId, m.numberFields.length ? 'Pick a field' : 'No number fields yet')}`;
+    } else if (w.type === 'stages') {
+      fields = `${pick('fieldId', 'Group by', m.optionFields, cfg.fieldId)}
+        ${pick('sumId', 'Also total (optional)', m.numberFields, cfg.sumId, 'Count only')}`;
+    } else if (w.type === 'calendar') {
+      fields = pick('fieldId', 'Date field', m.dateFields, cfg.fieldId);
+    } else if (w.type === 'note') {
+      fields = `<div class="wb-field"><label>Text</label><textarea class="wb-input" data-wb-dashcfg="text" rows="3">${h(cfg.text || '')}</textarea></div>`;
+    } else if (w.type === 'recent') {
+      fields = `<div class="wb-field"><label>How many</label><input class="wb-input" type="number" min="1" max="50" data-wb-dashcfg="limit" value="${h(String(cfg.limit || 6))}"></div>`;
+    } else {
+      // records: pick the field, then optionally one of its values -- "jobs at QC" is the
+      // whole point of this card.
+      const chosen = m.optionFields.find((f) => f.id === cfg.fieldId);
+      fields = `${pick('fieldId', 'Filter by', m.optionFields, cfg.fieldId, 'No filter — all records')}
+        ${chosen ? pick('value', 'Showing', chosen.options.map((o) => ({ id: o.id, label: o.label })), cfg.value, 'Any value') : ''}
+        <div class="wb-field"><label>How many</label><input class="wb-input" type="number" min="1" max="50" data-wb-dashcfg="limit" value="${h(String(cfg.limit || 6))}"></div>`;
+    }
+    return wbModalShell('Card settings', '',
+      `<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-settings"></i></div><h3>${h(w.type === 'metric' ? 'Number' : w.type)} card</h3>`,
+      fields,
+      '<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-dashcfg-save><i class="ti ti-check"></i>Save</button>');
+  }
+    return '';
+  }
+
+  return { renderAppDashboard, renderAppCalendar, renderDashModal, mondayIndex };
 }

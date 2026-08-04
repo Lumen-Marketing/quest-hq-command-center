@@ -30691,3 +30691,78 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 /* The attention card on the job file overview, which now carries the next action. */
 .jf-attention { border-left: 3px solid var(--orange); }
+
+/* ---- App dashboard: a grid the user arranges ---------------------------------------------
+   Four columns; each card declares its span. Customize mode adds controls to the card itself
+   rather than a separate editor, so the thing you are moving is the thing you are looking
+   at. */
+.wb-dash-controls { display: flex; gap: 8px; padding: 12px 0 2px; }
+.wb-dash-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px;
+  padding-top: 12px; align-items: start;
+}
+.wb-w {
+  grid-column: span min(var(--w-span, 1), 4);
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  padding: 13px 16px; position: relative; min-width: 0;
+}
+.wb-w.editing { border-style: dashed; border-color: var(--border-strong); padding-top: 40px; }
+.wb-w-title { margin: 0 0 9px; font-size: .86rem; font-weight: 800; display: flex; gap: 8px; align-items: baseline; }
+.wb-w-count { font-size: .72rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+.wb-w-tools {
+  position: absolute; inset: 6px 6px auto 6px;
+  display: flex; gap: 4px; align-items: center; flex-wrap: wrap;
+  background: var(--surface-2); border-radius: 8px; padding: 4px 6px;
+}
+.wb-w-btn {
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ink-2); cursor: pointer; font-size: .8rem; flex: none;
+}
+.wb-w-btn:hover:not(:disabled) { border-color: var(--orange); color: var(--orange); }
+.wb-w-btn:disabled { opacity: .35; cursor: default; }
+.wb-w-btn.danger:hover { border-color: var(--red, #dc2626); color: var(--red, #dc2626); }
+.wb-w-sizes { display: inline-flex; margin-left: auto; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.wb-w-size {
+  width: 22px; height: 24px; border: 0; background: var(--surface);
+  font-size: .7rem; font-weight: 800; color: var(--muted); cursor: pointer;
+}
+.wb-w-size + .wb-w-size { border-left: 1px solid var(--border); }
+.wb-w-size.on { background: var(--ink); color: var(--surface); }
+
+.wb-w-metric, .wb-w-clock { display: grid; gap: 2px; }
+.wb-w-label { font-size: .66rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.wb-w-metric strong, .wb-w-clock strong { font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.wb-w-caption { font-size: .76rem; color: var(--muted); }
+.wb-w-note { font-size: .86rem; color: var(--ink-2); white-space: pre-wrap; }
+.wb-w-setup {
+  display: flex; gap: 8px; align-items: center; font-size: .8rem; color: var(--muted);
+  padding: 6px 0;
+}
+.wb-w-setup i { color: var(--orange); }
+
+/* The mini calendar inside a card: same grid, smaller, a count instead of pills. */
+.wb-cal-mini .wb-cal-day { min-height: 42px; padding: 3px 4px; }
+.wb-cal-mini .wb-cal-num { font-size: .64rem; }
+.wb-cal-mini .wb-cal-dow { padding: 3px 5px; font-size: .58rem; }
+.wb-cal-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 17px; height: 17px; border-radius: 99px; padding: 0 5px;
+  color: #fff; font-size: .64rem; font-weight: 800; justify-self: start;
+}
+
+.wb-catalog { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 9px; }
+.wb-catalog-item {
+  display: flex; gap: 11px; align-items: flex-start; text-align: left;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  padding: 11px 13px; cursor: pointer;
+}
+.wb-catalog-item:hover:not(.blocked) { border-color: var(--orange); }
+.wb-catalog-item.blocked { opacity: .5; cursor: default; }
+.wb-catalog-item i { font-size: 1.1rem; color: var(--orange); margin-top: 1px; }
+.wb-catalog-item b { display: block; font-size: .86rem; }
+.wb-catalog-item small { display: block; font-size: .74rem; color: var(--muted); margin-top: 1px; }
+
+@media (max-width: 900px) { .wb-dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .wb-dash-grid { grid-template-columns: minmax(0, 1fr); } .wb-w { grid-column: span 1; } }

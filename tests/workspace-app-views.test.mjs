@@ -68,16 +68,16 @@ test('a timestamp is read as the day it starts, not rejected', () => {
 
 // --- what the views are built from --------------------------------------------------------
 
-test('both views read the app own fields rather than new configuration', () => {
-  // The status field is the pipeline, a money field is the total, a date field is the
-  // calendar. A second place to configure the same thing is a second place to drift.
-  assert.match(views, /import \{ boardColumns, pipelineField, stagesOf, summaryField \} from '\.\/pipeline-core\.js';/);
-  assert.match(views, /const field = pipelineField\(app\);/);
-  assert.match(views, /const sum = summaryField\(app\);/);
+test('the dashboard renders an arrangement rather than a fixed layout', () => {
+  // Which cards, in what order, at what width now comes from the app. The widget model owns
+  // the shapes and the arithmetic; this file only draws them.
+  assert.match(views, /from '\.\/dashboard-widgets\.js'/);
+  assert.match(views, /const widgets = dashboardFor\(app\);/);
+  assert.match(views, /style="--w-span:\$\{widget\.size\}"/);
 });
 
 test('an app missing the field a view needs is told which one to add', () => {
-  assert.match(views, /Add a Status field and its options become the stages here/);
+  assert.match(views, /Add a Status or Category field, and its options become the bars here./);
   assert.match(views, /This app has no <b>Date<\/b> field yet/);
 });
 

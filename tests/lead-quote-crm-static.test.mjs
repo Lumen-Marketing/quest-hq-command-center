@@ -8,7 +8,8 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/job-record.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8')
   // Quote detail is fetched on demand too; same surface, more files.
-  + readFileSync(new URL('../src/crm/deal-detail.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/crm/deal-detail.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/crm/contact-table.js', import.meta.url), 'utf8');
 const contactQuoteWorkflow = readFileSync(new URL('../src/crm/contact-to-quote.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
@@ -204,7 +205,8 @@ test('roof system options use Quest Roofing service roof types instead of saved 
 
 test('contacts list uses a searchable table with the active field-group filter rail', () => {
   const pageSource = source.match(/function renderContactsPage\(route, companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
-  const tableSource = source.match(/function renderContactTable\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  // The whole module is the table now; slicing `source` would match the loader shim.
+  const tableSource = readFileSync(new URL('../src/crm/contact-table.js', import.meta.url), 'utf8');
   const sidebarSource = source.match(/function renderContactFieldGroupsSidebar\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.match(source, /contactSort: 'name'/);
   assert.match(source, /const CONTACT_SORT_OPTIONS = \[/);
