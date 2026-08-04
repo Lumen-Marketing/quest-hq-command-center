@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// Workspace settings is fetched on demand now; same surface, two files.
+const main = (readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const fn = (name) => {
   const at = main.indexOf(`function ${name}(`);

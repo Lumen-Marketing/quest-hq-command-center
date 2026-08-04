@@ -30210,6 +30210,34 @@ html:has(.quest-app) {
   display: block;
 }
 
+/* ---- App Builder quick filter chips ----------------------------------------------------
+   One chip per value of a chosen field, the way the Jobs trade spine reads. Scrolls sideways
+   in its own container rather than wrapping to four lines on an app with many options. */
+.wb-chip-bar {
+  display: flex; align-items: center; gap: 7px;
+  padding: 10px 0 2px;
+  overflow-x: auto; scrollbar-width: thin;
+}
+.wb-chip {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  border: 1px solid var(--border); border-radius: 99px; background: var(--surface);
+  padding: 5px 14px; font-size: .8rem; font-weight: 600; color: var(--ink-2);
+  cursor: pointer; white-space: nowrap;
+}
+.wb-chip:hover { border-color: var(--border-strong); color: var(--ink); }
+.wb-chip.on { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.wb-chip-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.wb-chip-n { font-variant-numeric: tabular-nums; font-size: .72rem; color: var(--muted); font-weight: 700; }
+.wb-chip.on .wb-chip-n { color: color-mix(in srgb, var(--surface) 70%, transparent); }
+.wb-chip-off { font-size: .8rem; color: var(--muted); flex: none; }
+.wb-chip-manage { margin-left: auto; flex: none; padding-left: 8px; }
+.wb-chip-select {
+  border: 1px solid var(--border); border-radius: 99px; background: var(--surface);
+  padding: 5px 12px; font: inherit; font-size: .8rem; font-weight: 600; color: var(--ink-2);
+  cursor: pointer;
+}
+.wb-chip-select:hover { border-color: var(--border-strong); }
+
 /* Four days of production, one dot per day, worst crew of the day winning. Green/amber/red
    is the site's own vocabulary, so it is read at a glance and never needs a legend. */
 .jd-streak { display: inline-flex; gap: 4px; flex: none; align-items: center; }

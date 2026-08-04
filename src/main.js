@@ -5551,6 +5551,33 @@ function renderKnowledgePage(route, companyId) {
   return questLoader('Loading');
 }
 
+// ---- renderWorkspaceSettings ---------------------------------------------------------
+// Body lives in ./settings/workspace-settings.js and is fetched on first use.
+let renderWorkspaceSettingsModule = null;
+let renderWorkspaceSettingsPending = null;
+
+function loadRenderWorkspaceSettings() {
+  if (renderWorkspaceSettingsModule) return Promise.resolve(renderWorkspaceSettingsModule);
+  if (!renderWorkspaceSettingsPending) {
+    renderWorkspaceSettingsPending = import('./settings/workspace-settings.js').then((mod) => {
+      renderWorkspaceSettingsModule = mod.createWorkspaceSettings({
+        activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, canManageOperationalWorkspaces, companyById, companyJobs, companyName, contractRows, emptyState, field, h, isPluginInstalled, normalizeCompany, renderAppearanceControls, titleCase, workspaceIconDraft, workspaceIconMarkup, workspaceIconOption, workspaceMemberCount, workspaceRoleLabel, state,
+      });
+      return renderWorkspaceSettingsModule;
+    }).catch((error) => {
+      renderWorkspaceSettingsPending = null;
+      throw error;
+    });
+  }
+  return renderWorkspaceSettingsPending;
+}
+
+function renderWorkspaceSettings(companyId) {
+  if (renderWorkspaceSettingsModule) return renderWorkspaceSettingsModule.renderWorkspaceSettings(companyId);
+  loadRenderWorkspaceSettings().then(() => render()).catch((error) => console.error('renderWorkspaceSettings failed to load', error));
+  return questLoader('Loading');
+}
+
 function navGroup(label, items) {
   if (!items.length) return '';
   const collapsed = state.collapsedNavGroups.has(label);
@@ -15342,6 +15369,90 @@ function wbNavStage(app) {
   return route.params?.get('stage') || '';
 }
 
+// ---- Quick filter chips ---------------------------------------------------------------
+// One chip per value of a field the user picks, with a live count, the way the Jobs trade
+// spine works. It sits above the list because narrowing by "which kind" is the filter people
+// reach for constantly, and burying that in the Add-filter panel makes a two-second question
+// take six clicks.
+
+/**
+ * Fields whose values are a short, bounded list.
+ *
+ * A text, date or money field would produce roughly one chip per record, which is not a
+ * filter bar -- it is the list again, wrapped onto four lines.
+ */
+const WB_CHIP_FIELD_TYPES = ['status', 'category', 'user', 'checkbox'];
+const WB_CHIP_OFF = '__off';
+
+function wbChipFields(app) {
+  return (app?.fields || []).filter((f) => WB_CHIP_FIELD_TYPES.includes(f.type));
+}
+
+/**
+ * The field driving the chips: the user's pick, else the pipeline field, else the first
+ * eligible one. Falls back rather than blanking when the chosen field is later deleted.
+ */
+function wbChipField(app, ui) {
+  const candidates = wbChipFields(app);
+  if (!candidates.length || ui.chipFieldId === WB_CHIP_OFF) return null;
+  return candidates.find((f) => f.id === ui.chipFieldId) || pipelineField(app) || candidates[0];
+}
+
+/**
+ * The chips for a field, with counts over the rows given.
+ *
+ * Status and category keep the field's own option ORDER -- those options are a sequence the
+ * user arranged, and sorting them by count would reshuffle the bar every time a record
+ * moved. A user field has no such order, so it sorts by count, busiest first.
+ */
+function wbChipOptions(companyId, app, field, items) {
+  const valueOf = (item) => item.values?.[field.id];
+  const tally = (predicate) => items.filter(predicate).length;
+  const isOn = (v) => v === true || v === 'true';
+
+  if (field.type === 'checkbox') {
+    return [
+      { id: 'true', label: 'Yes', color: '#16a34a', count: tally((it) => isOn(valueOf(it))) },
+      { id: 'false', label: 'No', color: '#9ca3af', count: tally((it) => !isOn(valueOf(it))) },
+    ].filter((chip) => chip.count);
+  }
+
+  if (field.type === 'user') {
+    const loc = wbLocateApp(app);
+    const ids = [...new Set(items.map(valueOf).filter((v) => v != null && v !== ''))];
+    const named = ids.map((id) => ({
+      id: String(id),
+      label: wbMemberById(loc.companyId, id)?.name || 'Unknown',
+      color: '#6b7280',
+      count: tally((it) => String(valueOf(it)) === String(id)),
+    })).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    const unassigned = tally((it) => { const v = valueOf(it); return v == null || v === ''; });
+    return unassigned ? [...named, { id: NAV_STAGE_NONE, label: 'Unassigned', color: '#9ca3af', count: unassigned }] : named;
+  }
+
+  const options = (field.config?.options || []).filter(Boolean);
+  const known = new Set(options.map((o) => o.id));
+  const chips = options.map((o) => ({
+    id: o.id, label: o.label, color: o.color || '#6b7280', count: tally((it) => valueOf(it) === o.id),
+  }));
+  // Unset AND pointing at a deleted option share one chip, so every record is reachable and
+  // the chip counts add up to the total.
+  const unset = tally((it) => { const v = valueOf(it); return v == null || v === '' || !known.has(v); });
+  return unset ? [...chips, { id: NAV_STAGE_NONE, label: 'Unset', color: '#9ca3af', count: unset }] : chips;
+}
+
+/** Whether a record belongs to a chip. */
+function wbItemInChip(field, item, chipId) {
+  const value = item.values?.[field.id];
+  if (field.type === 'checkbox') return (value === true || value === 'true') === (chipId === 'true');
+  if (chipId !== NAV_STAGE_NONE) return String(value) === String(chipId);
+  if (value == null || value === '') return true;
+  if (field.type === 'status' || field.type === 'category') {
+    return !(field.config?.options || []).some((o) => o.id === value);
+  }
+  return false;
+}
+
 /** The human label for a deck stage id, for the footer and the empty state. */
 function wbNavStageLabel(app, stageId) {
   if (stageId === NAV_STAGE_NONE) return 'No stage';
@@ -15364,7 +15475,9 @@ function wbItemsUI(appId) {
   state.wbUI = state.wbUI || {};
   // boardFieldId / boardSumId are the user's explicit choices; both fall back rather than
   // blanking the board if the field they name is later deleted or retyped.
-  return state.wbUI[appId] || (state.wbUI[appId] = { q: '', sort: null, filters: [], sel: new Set(), view: 'table', order: 'created_desc', expanded: new Set(), cardConfigOpen: false, boardFieldId: '', boardSumId: '' });
+  // chipFieldId '' means "pick a sensible default"; WB_CHIP_OFF means the user turned the
+  // quick filters off, which is different and must survive a re-render.
+  return state.wbUI[appId] || (state.wbUI[appId] = { q: '', sort: null, filters: [], sel: new Set(), view: 'table', order: 'created_desc', expanded: new Set(), cardConfigOpen: false, boardFieldId: '', boardSumId: '', chipFieldId: '', chipValue: '' });
 }
 // Preset sorts operate on item metadata (timestamps / title), independent of the
 // column-header field sort. createdAt/updatedAt/lastActivityAt fall back to each
@@ -15555,6 +15668,40 @@ function wbItemsToolbar(companyId, app, ui, canManage = false) {
     ${ui.view === 'card' && canManage && ui.cardConfigOpen ? wbCardConfigPanel(app) : ''}
     ${ui.filters.length ? `<div class="wb-filter-rows">${filterRows}</div>` : ''}`;
 }
+/**
+ * The chip row: every value of the chosen field, with counts, plus the picker that chooses
+ * which field it is.
+ *
+ * Counts are taken BEFORE the chip itself is applied, so picking one does not collapse every
+ * other chip to zero -- you need to see what else is there to move between them.
+ */
+function wbItemsChipBar(companyId, app, ui, rows) {
+  const candidates = wbChipFields(app);
+  if (!candidates.length) return '';
+  const field = wbChipField(app, ui);
+  const active = ui.chipValue || '';
+  const chips = field ? wbChipOptions(companyId, app, field, rows) : [];
+  const picker = `<label class="wb-chip-manage" title="Which field the quick filters use">
+      <select class="wb-chip-select" data-wb-chip-field aria-label="Quick filter field">
+        ${candidates.map((f) => `<option value="${h(f.id)}" ${field && field.id === f.id ? 'selected' : ''}>By ${h(f.label)}</option>`).join('')}
+        <option value="${WB_CHIP_OFF}" ${field ? '' : 'selected'}>Off</option>
+      </select>
+    </label>`;
+  if (!field) return `<div class="wb-chip-bar"><span class="wb-chip-off">Quick filters off</span>${picker}</div>`;
+  return `
+    <div class="wb-chip-bar" role="group" aria-label="Filter by ${h(field.label)}">
+      <button class="wb-chip ${active ? '' : 'on'}" type="button" data-wb-chip="" aria-pressed="${active ? 'false' : 'true'}">
+        All<span class="wb-chip-n">${h(String(rows.length))}</span>
+      </button>
+      ${chips.map((chip) => `
+        <button class="wb-chip ${active === chip.id ? 'on' : ''}" type="button" data-wb-chip="${h(chip.id)}" aria-pressed="${active === chip.id ? 'true' : 'false'}">
+          <span class="wb-chip-dot" style="background:${h(chip.color)}"></span>${h(chip.label)}<span class="wb-chip-n">${h(String(chip.count))}</span>
+        </button>
+      `).join('')}
+      ${picker}
+    </div>`;
+}
+
 function wbViewItems(companyId, workspace, app) {
   const canManage = can('workspaces.manage', companyId);
   if (!app.fields.length) return `<div class="wb-empty"><i class="ti ti-layout-dashboard"></i><h3>This app has no fields yet</h3><p>Before adding items you need to design the app's structure. Add fields like Text, Status, or Date.</p>${canManage ? '<button class="btn btn-primary" data-tab="fields"><i class="ti ti-tools"></i>Open field builder</button>' : ''}</div>`;
@@ -15577,6 +15724,11 @@ function wbViewItems(companyId, workspace, app) {
   // replacing them, so going back to "All items" restores exactly what the user configured.
   const navStage = wbNavStage(app);
   if (navStage) rows = rows.filter((it) => wbItemInNavStage(app, it, navStage));
+  // The chip bar counts what is left after search, filters and the deck stage, then narrows
+  // on top of them. Built before the chip is applied so the other chips keep their counts.
+  const chipField = wbChipField(app, ui);
+  const chipBar = wbItemsChipBar(companyId, app, ui, rows);
+  if (chipField && ui.chipValue) rows = rows.filter((it) => wbItemInChip(chipField, it, ui.chipValue));
   if (ui.sort && ui.sort.fieldId) { const sf = app.fields.find((x) => x.id === ui.sort.fieldId); if (sf) rows = wbSortItems(companyId, workspace, app, rows, sf, ui.sort.dir); }
   else rows = wbApplyPresetSort(app, rows, ui.order || 'created_desc');
   const selectable = canManage;
@@ -15592,17 +15744,23 @@ function wbViewItems(companyId, workspace, app) {
   // Name the stage when one is on: "nothing matches your filters" sends you hunting through
   // a filter panel that is empty, when the real cause is the row you clicked in the deck.
   const navStageLabel = navStage ? wbNavStageLabel(app, navStage) : '';
-  if (!rows.length) listBody = `<div class="wb-empty wb-empty-inline"><i class="ti ti-filter-search"></i><h3>No items match</h3><p>${navStage
-    ? `Nothing in this app is at <b>${h(navStageLabel)}</b> right now.`
-    : 'No records match your current search or filters. Try adjusting or clearing them.'}</p>${navStage
-    ? `<div class="wb-empty-acts"><a class="btn" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'items' }, companyId))}" data-router><i class="ti ti-list"></i>Show all items</a></div>` : ''}</div>`;
+  const chipLabel = (chipField && ui.chipValue)
+    ? (wbChipOptions(companyId, app, chipField, app.items).find((c) => c.id === ui.chipValue)?.label || '')
+    : '';
+  if (!rows.length) listBody = `<div class="wb-empty wb-empty-inline"><i class="ti ti-filter-search"></i><h3>No items match</h3><p>${chipLabel
+    ? `Nothing here is <b>${h(chipLabel)}</b>${navStage ? ` and at <b>${h(navStageLabel)}</b>` : ''} right now.`
+    : navStage
+      ? `Nothing in this app is at <b>${h(navStageLabel)}</b> right now.`
+      : 'No records match your current search or filters. Try adjusting or clearing them.'}</p>${(navStage || chipLabel)
+    ? `<div class="wb-empty-acts">${chipLabel ? '<button class="btn" type="button" data-wb-chip=""><i class="ti ti-filter-off"></i>Clear quick filter</button>' : ''}${navStage
+      ? `<a class="btn" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'items' }, companyId))}" data-router><i class="ti ti-list"></i>Show all items</a>` : ''}</div>` : ''}</div>`;
   else if (ui.view === 'card') listBody = wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   else if (ui.view === 'board') listBody = wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   else if (ui.view === 'badge') listBody = wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   else if (ui.view === 'activity') listBody = wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   else listBody = wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   const viewLabel = (WB_VIEW_MODES.find(([v]) => v === ui.view) || [])[1] || 'Table';
-  return `${toolbar}${bulkBar}<div id="wbItemsList">${listBody}</div>
+  return `${toolbar}${chipBar}${bulkBar}<div id="wbItemsList">${listBody}</div>
     <div class="wb-table-foot"><span data-wb-items-count>${rows.length} item${rows.length === 1 ? '' : 's'}</span>${navStage
     ? ` at <b>${h(navStageLabel)}</b> of ${app.items.length}` : ''} · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'} · ${h(viewLabel)} view</div>`;
 }
@@ -17993,6 +18151,10 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-clear-sort]', () => { wbItemsUI(appId).sort = null; render(); });
     bind('[data-wb-set-view]', (el) => { wbItemsUI(appId).view = el.dataset.wbSetView; render(); });
     bind('[data-wb-sort-preset]', (el) => { const ui = wbItemsUI(appId); if (el.value) { ui.order = el.value; ui.sort = null; } render(); }, 'onchange');
+    // Changing the chip field clears the chosen chip: its id belongs to the old field and
+    // would match nothing, leaving an empty list with no chip highlighted to explain it.
+    bind('[data-wb-chip]', (el) => { const ui = wbItemsUI(appId); const next = el.dataset.wbChip || ''; ui.chipValue = ui.chipValue === next ? '' : next; render(); });
+    bind('[data-wb-chip-field]', (el) => { const ui = wbItemsUI(appId); ui.chipFieldId = el.value; ui.chipValue = ''; render(); }, 'onchange');
     bind('[data-wb-board-field]', (el) => { wbItemsUI(appId).boardFieldId = el.value; render(); }, 'onchange');
     bind('[data-wb-board-sum]', (el) => { wbItemsUI(appId).boardSumId = el.value; render(); }, 'onchange');
     bind('[data-wb-add-filter]', () => { const { app } = wbFind(companyId, workspaceId, appId); const f0 = app.fields[0]; if (!f0) return; wbItemsUI(appId).filters.push({ fieldId: f0.id, op: wbFilterOps(wbFieldKind(f0))[0][0], value: '' }); render(); });
@@ -19317,109 +19479,6 @@ function renderClientPortalMarkModal() {
   return renderModalShell('Guest markup', 'Markup details', content, '');
 }
 
-function renderWorkspaceSettings(companyId) {
-  const company = companyById(companyId) || normalizeCompany({ id: companyId });
-  const iconDraft = workspaceIconDraft(companyId);
-  const canManage = canManageOperationalWorkspaces(companyId);
-  const workspace = activeWorkspace();
-  const companyWorkspaces = state.operationalWorkspaces
-    .filter((item) => item.company_id === companyId)
-    .sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name));
-  const connectionMode = state.sync.mode === 'live' ? 'live' : state.sync.mode === 'loading' ? 'loading' : 'local';
-  const connectionLabel = connectionMode === 'live' ? 'Live database' : connectionMode === 'loading' ? 'Checking connection' : 'Local fallback';
-  const connectionDescription = connectionMode === 'live'
-    ? 'Company and workspace changes are saving to the live database.'
-    : connectionMode === 'loading'
-      ? 'Questbase is checking the workspace data connection.'
-      : 'This company account is using local fallback data. Changes may not persist for the team.';
-  return `
-    <div class="settings-col">
-      <article class="panel">
-        <div class="section-head"><div><h2>Company account</h2><p>The customer, billing, and security boundary above every operational workspace.</p></div></div>
-        <form class="workspace-settings-form" data-workspace-settings-form>
-          <input type="hidden" name="company_id" value="${h(companyId)}" />
-          <input type="hidden" name="icon_key" value="${h(iconDraft.icon_key)}" />
-          <input type="hidden" name="icon_image" value="${h(iconDraft.icon_image)}" />
-          <input type="hidden" name="icon_color" value="${h(iconDraft.icon_color)}" />
-          <input type="hidden" name="icon_pack" value="${h(iconDraft.icon_pack)}" />
-          ${field('Company name', 'workspace_name', companyName(companyId), true, 'text', 'workspace-name-field')}
-          <div class="workspace-icon-section">
-            <span>Company logo</span>
-            <div class="workspace-icon-current">
-              ${workspaceIconMarkup({ ...company, icon_key: iconDraft.icon_key, icon_image: iconDraft.icon_image, icon_color: iconDraft.icon_color, icon_pack: iconDraft.icon_pack }, 'large')}
-              <div>
-                <strong>${h(iconDraft.icon_image ? 'Uploaded icon' : workspaceIconOption(iconDraft.icon_key).label)}</strong>
-                <small>${h(iconDraft.icon_image ? 'Custom image for this company account.' : 'Built-in icon from the Quest library.')}</small>
-              </div>
-              <button class="btn" type="button" data-action="open-workspace-icon-modal" ${canManage ? '' : 'disabled'}><i class="ti ti-photo-edit"></i>Change icon</button>
-            </div>
-          </div>
-          <div class="form-actions">
-            <button class="btn btn-primary" type="submit" ${canManage ? '' : 'disabled'}><i class="ti ti-device-floppy"></i>Save company</button>
-          </div>
-        </form>
-      </article>
-      <article class="panel">
-        <div class="section-head">
-          <div><h2>Workspace directory</h2><p>${companyWorkspaces.length} operational workspace${companyWorkspaces.length === 1 ? '' : 's'} under this company account. Click one to configure it.</p></div>
-          <button class="btn btn-primary" type="button" data-action="open-create-operational-workspace-modal" ${canManage ? '' : 'disabled'}><i class="ti ti-plus"></i>Create workspace</button>
-        </div>
-        <div class="operational-workspace-directory">
-          ${companyWorkspaces.map((item) => {
-            const isActive = item.id === activeWorkspaceId();
-            const memberLabel = `${workspaceMemberCount(item.id)} assigned`;
-            return `
-            <div class="operational-workspace-row ${isActive ? 'active' : ''} ${item.status === 'archived' ? 'muted' : ''}">
-              <button class="ows-open" type="button" data-action="open-edit-operational-workspace-modal" data-workspace-id="${h(item.id)}" aria-label="Configure ${h(item.name)}">
-                ${workspaceIconMarkup(item)}
-                <span class="ows-open-text"><strong>${h(item.name)}</strong><small>${item.is_default ? '<span class="ows-default-flag">Default</span>' : h(titleCase(item.status))} · ${h(memberLabel)}</small></span>
-                <i class="ti ti-settings ows-open-hint" aria-hidden="true"></i>
-              </button>
-              <div class="ows-actions">
-                ${isActive
-                  ? '<span class="ows-tag open"><i class="ti ti-check" aria-hidden="true"></i>Open</span>'
-                  : `<button class="btn ows-action" type="button" data-action="select-workspace" data-workspace-id="${h(item.id)}" ${item.status === 'archived' ? 'disabled' : ''}><i class="ti ti-arrow-right"></i>Open</button>`}
-                ${item.is_default
-                  ? '<span class="ows-tag default"><i class="ti ti-star-filled" aria-hidden="true"></i>Default</span>'
-                  : `<button class="btn ows-action" type="button" data-action="set-default-workspace" data-workspace-id="${h(item.id)}" ${canManage && item.status !== 'archived' ? '' : 'disabled'}><i class="ti ti-star"></i>Set default</button>`}
-              </div>
-            </div>
-          `;
-          }).join('') || emptyState('No workspaces have been created.')}
-        </div>
-      </article>
-      <article class="panel">
-        <div class="section-head"><div><h2>Appearance</h2><p>Theme, background, and card style. Your choice follows you to any device you sign in on.</p></div></div>
-        <div class="theme-toggle-row">${renderAppearanceControls()}</div>
-      </article>
-    </div>
-    <div class="settings-col">
-      <article class="panel settings-workspace-data-card">
-        <div class="section-head"><div><h2>Workspace data</h2><p>Pipeline records, stages, members, and plugins are isolated here.</p></div></div>
-        ${contractRows([
-          ['Company ID', companyId],
-          ['Workspace ID', workspace?.id || 'Not assigned'],
-          ['Workspace role', workspace ? workspaceRoleLabel(workspace.id) : 'No access'],
-          ['Visible jobs', companyJobs(companyId).length],
-          ['Installed plugins', availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id)).length],
-        ])}
-      </article>
-      <article class="panel settings-connection-card">
-        <div class="section-head"><div><h2>Data connection</h2><p>Admin-only health check for where workspace changes are being saved.</p></div></div>
-        <div class="settings-connection-status">
-          <span class="sync-pill ${h(connectionMode)}" data-sync-state><i class="ti ti-database"></i>${h(connectionLabel)}</span>
-          <p>${h(connectionDescription)}</p>
-        </div>
-        ${contractRows([
-          ['Company account', companyName(companyId)],
-          ['Workspace', workspace?.name || 'Not assigned'],
-          ['Current status', state.sync.label],
-          ['Storage mode', connectionMode === 'live' ? 'Quest cloud database' : connectionMode === 'loading' ? 'Checking' : 'This browser only'],
-        ])}
-      </article>
-    </div>
-  `;
-}
 
 function renderPluginsSettings(companyId) {
   const workspaceId = activeWorkspaceId();

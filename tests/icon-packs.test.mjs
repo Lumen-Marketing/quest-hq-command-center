@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { collectTableIcons, parseIconFont } from '../scripts/icon-usage.mjs';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// Workspace settings is fetched on demand now; same surface, two files.
+const main = (readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const subset = readFileSync(new URL('../src/tabler-icons.css', import.meta.url), 'utf8');
 const upstream = readFileSync(new URL('../taskmanagement/vendor/tabler-icons/tabler-icons.min.css', import.meta.url), 'utf8');
 const fn = (name) => {

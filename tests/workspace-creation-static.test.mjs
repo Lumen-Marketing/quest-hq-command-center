@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  // Workspace settings is fetched on demand now; same surface, two files.
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const tablerIconsCss = readFileSync(new URL('../taskmanagement/vendor/tabler-icons/tabler-icons.min.css', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202606251230_idempotent_workspace_creation.sql', import.meta.url), 'utf8');
@@ -203,7 +205,9 @@ test('technical data connection status lives in settings, not the topbar', () =>
 });
 
 test('workspace data summary rows keep a readable horizontal inset', () => {
-  const settingsBlock = source.match(/function renderWorkspaceSettings\(companyId\) \{[\s\S]*?function renderPluginsSettings/)?.[0] || '';
+  // The whole module is the settings page now. Slicing it out of `source` would match the
+  // loader shim main.js keeps, whose body fetches rather than renders.
+  const settingsBlock = readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8');
   assert.ok(settingsBlock, 'Expected workspace settings block');
   assert.match(settingsBlock, /<article class="panel settings-workspace-data-card">/);
 
