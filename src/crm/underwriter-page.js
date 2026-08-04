@@ -1,6 +1,8 @@
 // Moved out of main.js and fetched on demand: it is behind a click, and nothing that paints
 // before the click needs it. The body is unchanged from where it lived.
 
+import { calculateUnderwriting } from '../underwriting/calculator.js';
+
 export function createUnderwriterPage(ctx) {
   const {
     activeWorkspaceId, appHref, companyContacts, companyPath, emptyState, h, metricCard, money, pipelineDot, protectedFormDraftAttributes, renderProtectedFormDraftStrip, renderUnderwritingResults, sum, svgIcon, underwriterStageByKey, underwriterStageForContact, underwritingCaseForContact, underwritingDraftForContact, underwritingNumberField, state, CRM2_UNDERWRITER_STAGES,

@@ -12,6 +12,8 @@
 // A factory so the functions can keep calling each other by name, with the main.js
 // helpers closed over once. The bodies are unchanged from where they lived in main.js.
 
+import { parseCsvRows } from '../data/csv.js';
+
 export function createDataIO(ctx) {
   const {
     h, showToast, render, companyName,

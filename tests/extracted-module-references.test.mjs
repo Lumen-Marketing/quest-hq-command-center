@@ -52,6 +52,9 @@ const declaredIn = (text) => {
   };
   for (const m of code.matchAll(/(?:const|let|var)\s*\{([^}]+)\}\s*=/g)) addAll(m[1]);
   for (const m of code.matchAll(/\(\s*\{([^}]+)\}\s*\)\s*=>/g)) addAll(m[1]);
+  // …or straight into a function parameter, which is how the support controller takes its
+  // context: `export function createSupportController({ state, CONFIG, … })`.
+  for (const m of code.matchAll(/function\s+[A-Za-z_$][\w$]*\s*\(\s*\{([^}]+)\}/g)) addAll(m[1]);
   return names;
 };
 
@@ -71,6 +74,34 @@ const importedInto = (text) => {
 
 const moduleFiles = walk(srcDir).filter((f) => !f.endsWith(`${'main'}.js`));
 const mainDeclares = new Set([...declaredIn(main), ...importedInto(main)]);
+
+test('no extracted module uses a binding nobody handed it', () => {
+  // How the signed-out landing page broke: it was moved into its own factory still
+  // referencing `questbaseInteriorJobsUrl`, an image import that stayed behind in main.js
+  // and was never added to the ctx. Nothing failed at build time -- the module only threw
+  // when it ran, part-way through painting, leaving the loading spinner on screen with the
+  // error swallowed. Anyone signed out got a permanent spinner.
+  //
+  // Scoped to names main.js imports or declares as top-level constants, because those are
+  // exactly what a lifted function keeps reaching for after the lift.
+  const mainImports = importedInto(main);
+  const mainConsts = new Set([...stripComments(main).matchAll(/^(?:export\s+)?const\s+([A-Z][A-Z0-9_]*)\s*=/gm)].map((m) => m[1]));
+  const candidates = new Set([...mainImports, ...mainConsts]);
+
+  const orphans = [];
+  for (const file of moduleFiles) {
+    const text = readFileSync(file, 'utf8');
+    const rel = file.slice(srcDir.length).replace(/\\/g, '/');
+    const code = stripComments(text);
+    const own = new Set([...declaredIn(text), ...importedInto(text)]);
+    const used = new Set([...code.matchAll(/(?:^|[^\w$.'"`])([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
+    for (const name of used) {
+      if (!candidates.has(name) || own.has(name)) continue;
+      orphans.push(`${rel} uses ${name}, which main.js owns but never passes it`);
+    }
+  }
+  assert.deepEqual(orphans, [], orphans.join('\n'));
+});
 
 test('every module function called from main.js is also defined there', () => {
   // Names main.js calls directly: `foo(` not preceded by a dot.
@@ -135,6 +166,7 @@ const FACTORY_MODULES = [
   ['src/portals/client-portals-page.js', 'createClientPortalsPage'],
   ['src/forms/forms-page.js', 'createFormsPage'],
   ['src/ops/price-book-page.js', 'createPriceBookPage'],
+  ['src/team/workload-page.js', 'createTeamWorkloadPage'],
   ['src/ui/landing-page.js', 'createLandingPage'],
   ['src/ui/auth-form.js', 'createAuthForm'],
 ];

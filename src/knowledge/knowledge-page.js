@@ -1,6 +1,8 @@
 // Moved out of main.js and fetched on demand: it is behind a click, and nothing that paints
 // before the click needs it. The body is unchanged from where it lived.
 
+import { filterKnowledgeArticles } from '../data/knowledge.js';
+
 export function createKnowledgePage(ctx) {
   const {
     can, companyKnowledgeArticles, formatDate, h, knowledgeById, loadKnowledgeArticles, renderKnowledgeArticleForm, state,

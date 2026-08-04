@@ -4357,6 +4357,29 @@ function needsLocalLogin(route) {
   return !state.session;
 }
 
+/**
+ * The last resort when a view cannot paint itself.
+ *
+ * A blank page or a spinner that never resolves gives somebody nothing to act on and nothing
+ * to report. This at least names the failure and offers a reload, and puts the message
+ * somewhere a screenshot will capture it.
+ */
+function renderFatalPage(headline, error) {
+  const detail = error?.message || String(error || 'Unknown error');
+  return `
+    <main class="login-shell">
+      <section class="login-panel">
+        <div class="login-brand">
+          <span class="side-mark logo-image-mark">${questLogoImage()}</span>
+          <span><strong>Questbase</strong><small>Something went wrong</small></span>
+        </div>
+        <h1>${h(headline)}</h1>
+        <p class="form-message error">${h(detail)}</p>
+        <button class="btn btn-primary" type="button" onclick="location.reload()">Reload</button>
+      </section>
+    </main>`;
+}
+
 function renderAuthLoading() {
   document.title = 'Loading | Questbase';
   app.innerHTML = `
@@ -5663,6 +5686,33 @@ function renderPriceBookPage(route, companyId) {
   return questLoader('Loading');
 }
 
+// ---- renderTeamWorkloadPage ---------------------------------------------------------
+// Body lives in ./team/workload-page.js and is fetched on first use.
+let renderTeamWorkloadPageModule = null;
+let renderTeamWorkloadPagePending = null;
+
+function loadRenderTeamWorkloadPage() {
+  if (renderTeamWorkloadPageModule) return Promise.resolve(renderTeamWorkloadPageModule);
+  if (!renderTeamWorkloadPagePending) {
+    renderTeamWorkloadPagePending = import('./team/workload-page.js').then((mod) => {
+      renderTeamWorkloadPageModule = mod.createTeamWorkloadPage({
+        appHref, companyAccessUsers, companyPath, companyTasks, emptyState, h, state,
+      });
+      return renderTeamWorkloadPageModule;
+    }).catch((error) => {
+      renderTeamWorkloadPagePending = null;
+      throw error;
+    });
+  }
+  return renderTeamWorkloadPagePending;
+}
+
+function renderTeamWorkloadPage(companyId) {
+  if (renderTeamWorkloadPageModule) return renderTeamWorkloadPageModule.renderTeamWorkloadPage(companyId);
+  loadRenderTeamWorkloadPage().then(() => render()).catch((error) => console.error('renderTeamWorkloadPage failed to load', error));
+  return questLoader('Loading');
+}
+
 function navGroup(label, items) {
   if (!items.length) return '';
   const collapsed = state.collapsedNavGroups.has(label);
@@ -6192,43 +6242,6 @@ function renderWorkspace(route) {
   return renderPlannedPage(route.section);
 }
 
-function renderTeamWorkloadPage(companyId) {
-  const members = companyAccessUsers(companyId)
-    .filter((user) => user.status === 'active')
-    .map((user) => ({ id: user.profile_id || user.member_id, name: user.name }))
-    .filter((user) => user.id && user.name);
-  const now = new Date();
-  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const wl = computeTeamWorkload({ members, tasks: companyTasks(companyId), todayIso });
-
-  const rows = wl.rows.map((r) => {
-    const pct = wl.maxOpen ? Math.max(r.open ? 6 : 0, Math.round((r.open / wl.maxOpen) * 100)) : 0;
-    return `
-      <div class="tw-row${r.overloaded ? ' overloaded' : ''}">
-        <div class="tw-name">${h(r.name)}${r.overloaded ? '<span class="tw-badge over">Overloaded</span>' : ''}</div>
-        <div class="tw-bar"><span class="tw-bar-fill" style="width:${pct}%"></span></div>
-        <div class="tw-count"><b>${r.open}</b> open${r.overdue ? ` <span class="tw-badge due">${r.overdue} overdue</span>` : ''}</div>
-      </div>`;
-  }).join('');
-
-  return `
-    <section class="tw-page">
-      <div class="tw-head">
-        <div>
-          <h1>Team workload</h1>
-          <p class="muted">Open tasks per person right now — busiest first.</p>
-        </div>
-        <a class="btn" href="${appHref(companyPath('tasks', {}, companyId))}" data-router><i class="ti ti-list-check" aria-hidden="true"></i>Open tasks</a>
-      </div>
-      <div class="tw-stats">
-        <div class="tw-stat"><b>${wl.totalOpen}</b><span>Open tasks</span></div>
-        <div class="tw-stat ${wl.totalOverdue ? 'warn' : ''}"><b>${wl.totalOverdue}</b><span>Overdue</span></div>
-        <div class="tw-stat ${wl.unassignedOpen ? 'warn' : ''}"><b>${wl.unassignedOpen}</b><span>Unassigned</span></div>
-        <div class="tw-stat"><b>${wl.rows.length}</b><span>People</span></div>
-      </div>
-      ${wl.rows.length ? `<div class="tw-board panel">${rows}</div>` : emptyState('No active team members to show workload for.')}
-    </section>`;
-}
 
 // ── Calls (RingCentral) ──────────────────────────────────────────────────────
 // Two surfaces, both deliberately thin: who is on the phone right now, and how
@@ -22730,7 +22743,7 @@ function loadLandingPage() {
     landingPending = import('./ui/landing-page.js').then((mod) => {
       landingModule = mod.createLandingPage({
         activeCompanyId, appHref, companyPath, defaultCompanyId, getRoute, h, normalizeAuthMode, renderAuthModal, renderLandingWorkspaceBoard, safeReturnUrl,
-    CONFIG, state, questLogoMarkUrl, app,
+    CONFIG, state, questLogoMarkUrl, questbaseInteriorJobsUrl, app,
       });
       return landingModule;
     }).catch((error) => {
@@ -22742,7 +22755,19 @@ function loadLandingPage() {
 }
 
 function renderLandingPage(forceAuthModal = false) {
-  if (landingModule) return landingModule.renderLandingPage(forceAuthModal);
+  if (landingModule) {
+    // The landing page paints into #app itself rather than returning markup, so a throw
+    // part-way through leaves whatever was there before -- the loader -- on screen forever,
+    // with no error anywhere the user or a log can see it. Signed-out visitors got a
+    // permanent spinner. Say what happened instead.
+    try {
+      return landingModule.renderLandingPage(forceAuthModal);
+    } catch (error) {
+      console.error('Landing page render failed', error);
+      app.innerHTML = renderFatalPage('We could not load the sign-in page.', error);
+      return undefined;
+    }
+  }
   // Paints into #app itself, so the placeholder has to as well.
   app.innerHTML = questLoader('Loading Questbase');
   loadLandingPage().then(() => render()).catch((error) => console.error('Landing page failed to load', error));

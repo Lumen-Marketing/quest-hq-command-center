@@ -10,6 +10,8 @@
 //
 // The body is unchanged from where it lived in main.js. Everything it calls is
 // destructured from `ctx` under the original names, so this is a move, not a rewrite.
+import { acceptAttr } from '../security/upload-policy.js';
+
 export function renderFieldConfig(fd, app, ctx) {
   const {
     h, state, canonicalCompanyId, companyName, wbOptRow, wbProgStopRow, wbProgressDisplayHtml,

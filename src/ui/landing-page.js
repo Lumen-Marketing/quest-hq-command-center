@@ -10,7 +10,7 @@
 export function createLandingPage(ctx) {
   const {
     activeCompanyId, appHref, companyPath, defaultCompanyId, getRoute, h, normalizeAuthMode, renderAuthModal, renderLandingWorkspaceBoard, safeReturnUrl,
-    CONFIG, state, questLogoMarkUrl, app,
+    CONFIG, state, questLogoMarkUrl, questbaseInteriorJobsUrl, app,
   } = ctx;
 
   function renderLandingPage(forceAuthModal = false) {
