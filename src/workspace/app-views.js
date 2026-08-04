@@ -11,7 +11,8 @@ import { boardColumns } from './pipeline-core.js';
 import { memosByDay } from './calendar-memos.js';
 import { addDays, iso, monthGrid, mondayIndex, startOfWeek } from '../jobs/job-calendar.js';
 import {
-  dashboardFor, metricValue, numberFields, optionFields, widgetMeta, widgetRecords,
+  COLLECTION_FIELD_PREFIX, dashboardFor, metricValue, numberFields, optionFields, widgetMeta,
+  widgetRecords,
 } from './dashboard-widgets.js';
 
 /** Month is the default: it is the view you can orient yourself in without scrolling. */
@@ -24,28 +25,63 @@ export function dateFields(app) {
 }
 
 /**
- * Records placed on a day by ANY of several date fields.
+ * Everything that can put something on this app's calendar.
  *
- * A job with a start date and a due date belongs on both days, and which field put it there
- * is what the pill has to say -- otherwise the same record appears twice with no explanation.
- * Picking one field and ignoring the rest made the calendar quietly incomplete: the dates
- * were in the app, just not on the screen.
+ * The app's own date fields, then every sub-item list's -- an app whose dates live on its
+ * Dailies rather than on the job had an empty calendar and a banner telling it to add a Date
+ * field it already had, one level down.
+ *
+ * Collection fields and app fields are separate id spaces, so a sub-item field is addressed
+ * by the same composite key the number card uses rather than a bare id that could collide.
  */
-export function recordsByDates(app, fields) {
-  const list = (fields || []).filter(Boolean);
+export function calendarSources(app) {
+  const own = dateFields(app).map((f) => ({ id: f.id, label: f.label, field: f, collection: null }));
+  const sub = (app?.collections || []).flatMap((c) => (c.fields || [])
+    .filter((f) => f.type === 'date')
+    .map((f) => ({
+      id: `${COLLECTION_FIELD_PREFIX}${c.id}:${f.id}`,
+      label: `${c.name} · ${f.label}`,
+      field: f,
+      collection: c,
+    })));
+  return [...own, ...sub];
+}
+
+/**
+ * What each source puts on which day.
+ *
+ * A record lands on every day any of its date fields names, and a sub-item lands on the day
+ * ITS date names -- carrying the record it belongs to, because a sub-item has no page of its
+ * own and clicking it should open the record that holds it.
+ */
+export function recordsByDates(app, sources) {
+  const list = (sources || []).filter(Boolean);
   const byDay = new Map();
   const placed = new Set();
+  const put = (day, entry) => {
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(entry);
+  };
   for (const item of app?.items || []) {
-    for (const field of list) {
-      const raw = String(item.values?.[field.id] ?? '').slice(0, 10);
+    for (const source of list) {
+      if (source.collection) {
+        for (const child of (Array.isArray(item.children) ? item.children : [])) {
+          if (!child || child.collection !== source.collection.id) continue;
+          const raw = String(child.values?.[source.field.id] ?? '').slice(0, 10);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) continue;
+          put(raw, { item, source, child });
+          placed.add(item.id);
+        }
+        continue;
+      }
+      const raw = String(item.values?.[source.field.id] ?? '').slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) continue;
-      if (!byDay.has(raw)) byDay.set(raw, []);
-      byDay.get(raw).push({ item, field });
+      put(raw, { item, source, child: null });
       placed.add(item.id);
     }
   }
-  // Undated counts RECORDS with no date in any of these fields, not empty field values --
-  // otherwise an app with three date fields reports three times the misses it has.
+  // Undated counts RECORDS that landed nowhere, not empty field values -- otherwise an app
+  // with three date fields reports three times the misses it has.
   const undated = (app?.items || []).filter((it) => !placed.has(it.id)).length;
   return { byDay, undated };
 }
@@ -212,7 +248,7 @@ export function createAppViews(ctx) {
   // ---- Calendar ---------------------------------------------------------------------------
 
   function renderAppCalendar(companyId, app, anchorIso, fieldId, viewMode) {
-    const candidates = dateFields(app);
+    const candidates = calendarSources(app);
     const canManage = can('workspaces.manage', companyId);
     // The calendar renders whether or not the app has a date field yet. Replacing it with an
     // empty state hid the whole feature behind a setup step, so you could not see what you
@@ -222,7 +258,7 @@ export function createAppViews(ctx) {
     // 'all' is the default and the useful one: every dated record on the calendar, whichever
     // field carries its date. Narrowing to one field is a filter you choose, not the starting
     // point -- starting there hid records that were already dated.
-    const chosen = candidates.find((f) => f.id === fieldId) || null;
+    const chosen = candidates.find((c) => c.id === fieldId) || null;
     const field = chosen;
     const active = chosen ? [chosen] : candidates;
     const anchor = /^\d{4}-\d{2}-\d{2}$/.test(String(anchorIso || '')) ? new Date(`${anchorIso}T12:00:00`) : new Date();
@@ -246,7 +282,15 @@ export function createAppViews(ctx) {
     // pill names the field that put it there. With one field that would be noise, so it is
     // only shown when it actually disambiguates.
     const many = active.length > 1;
-    const pill = ({ item, field: on }) => `<a class="wb-cal-pill" href="${itemHref(companyId, app, item)}" data-router style="border-left-color:${h(app.color)}" title="${h(wbItemTitle(app, item))}${on ? ` — ${h(on.label)}` : ''}">${many && on ? `<b class="wb-cal-why">${h(on.label)}</b>` : ''}${h(wbItemTitle(app, item)) || 'Untitled'}</a>`;
+    // A sub-item opens the record that holds it -- it has no page of its own -- and says
+    // which list it came from, or a Daily and its Job would look like the same thing.
+    const pill = ({ item, source, child }) => {
+      const name = wbItemTitle(app, item) || 'Untitled';
+      const why = child ? source.collection.name : source.label;
+      return `<a class="wb-cal-pill ${child ? 'wb-cal-sub' : ''}" href="${itemHref(companyId, app, item)}" data-router
+        style="border-left-color:${h(app.color)}" title="${h(name)} — ${h(source.label)}">${
+  many || child ? `<b class="wb-cal-why">${h(why)}</b>` : ''}${h(name)}</a>`;
+    };
     const memoPill = (memo) => `<button type="button" class="wb-cal-memo ${memo.done ? 'done' : ''}" data-wb-memo-open="${h(memo.id)}" title="${h(memo.note || memo.title)}">
       <i class="ti ti-${memo.remindMinutes == null ? 'note' : 'bell'}"></i>${memo.time ? `<b>${h(memo.time)}</b>` : ''}${h(memo.title)}
     </button>`;
@@ -325,7 +369,7 @@ export function createAppViews(ctx) {
         </div>
         ${candidates.length ? '' : `<p class="wb-cal-setup">
           <i class="ti ti-calendar"></i>
-          <span>This app has no <b>Date</b> field yet, so nothing can be placed on the calendar.</span>
+          <span>Nothing here has a <b>Date</b> field yet — not the app, and not its sub-item lists — so nothing can be placed on the calendar.</span>
           ${can('workspaces.manage', companyId) ? `<a class="btn btn-sm btn-primary" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'fields' }, companyId))}" data-router><i class="ti ti-plus"></i>Add field</a>` : ''}
         </p>`}
         ${grid}

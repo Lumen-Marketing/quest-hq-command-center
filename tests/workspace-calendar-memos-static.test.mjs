@@ -19,9 +19,17 @@ test('the calendar shows every date field by default, not just the first', () =>
 });
 
 test('a record on two dates says which field put it on each', () => {
-  // Otherwise the same record appears twice with no explanation.
+  // Otherwise the same record appears twice with no explanation. A sub-item always says which
+  // list it came from, even when it is the only source, or a Daily and its Job look alike.
   assert.match(views, /const many = active\.length > 1;/);
-  assert.match(views, /\$\{many && on \? `<b class="wb-cal-why">\$\{h\(on\.label\)\}<\/b>` : ''\}/);
+  assert.match(views, /many \|\| child \? `<b class="wb-cal-why">\$\{h\(why\)\}<\/b>` : ''/);
+});
+
+test('a sub-item lands on its own date and opens the record holding it', () => {
+  // A sub-item has no page of its own, so the pill has to point at its parent.
+  assert.match(views, /export function calendarSources\(app\)/);
+  assert.match(views, /put\(raw, \{ item, source, child \}\);/);
+  assert.match(views, /href="\$\{itemHref\(companyId, app, item\)\}"/);
 });
 
 test('undated counts records, not empty field values', () => {

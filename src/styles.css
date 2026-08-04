@@ -30652,6 +30652,9 @@ a.wb-cal-more:hover { color: var(--orange); }
 @media (hover: none) { .wb-cal-add { opacity: .6; } }
 
 /* Which date field put a record on this day, when more than one could have. */
+/* A sub-item reads as belonging to the record above it, not as a record of its own. */
+.wb-cal-sub { border-left-style: dashed; }
+
 .wb-cal-why {
   font-size: .6rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
   color: var(--muted); margin-right: 4px;

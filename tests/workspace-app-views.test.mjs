@@ -78,7 +78,8 @@ test('the dashboard renders an arrangement rather than a fixed layout', () => {
 
 test('an app missing the field a view needs is told which one to add', () => {
   assert.match(views, /Add a Status or Category field, and its options become the bars here./);
-  assert.match(views, /This app has no <b>Date<\/b> field yet/);
+  // The banner names both places a Date field can live: the app, and its sub-item lists.
+  assert.match(views, /Nothing here has a <b>Date<\/b> field yet/);
 });
 
 test('the calendar reuses the date maths rather than repeating it', () => {
@@ -171,7 +172,7 @@ test('the calendar draws even before the app has a date field', () => {
   // bug: with "All dates" chosen nothing is selected, so an app with three date fields was
   // told to go and add one.
   assert.match(views, /\$\{candidates\.length \? '' : `<p class="wb-cal-setup">/, 'the notice sits above the grid');
-  assert.match(views, /const chosen = candidates\.find\(\(f\) => f\.id === fieldId\) \|\| null;/);
+  assert.match(views, /const chosen = candidates\.find\(\(c\) => c\.id === fieldId\) \|\| null;/);
   assert.match(views, /const active = chosen \? \[chosen\] : candidates;/, 'no selection means every date field');
 });
 
