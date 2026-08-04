@@ -15556,9 +15556,16 @@ async function wbRecordEdit(companyId, workspaceId, appId, change) {
 
 async function openWbRecordAdd(companyId, workspaceId, appId) {
   const mod = await loadRecordLayout();
+  const { app } = wbFind(companyId, workspaceId, appId);
   openWbModal({
     kind: 'record-add', companyId, workspaceId, appId,
-    options: mod.BLOCK_TYPES.map((meta) => ({ ...meta, supported: true, blocked: '' })),
+    // A Sub-items card with no list to point at is a dead card. Offer it as blocked with the
+    // reason, so the catalogue says what to do rather than what not to.
+    options: mod.BLOCK_TYPES.map((meta) => ({
+      ...meta,
+      supported: mod.blockSupported(app, meta.type),
+      blocked: "Add a sub-item list in this app's Settings first",
+    })),
   });
 }
 
@@ -15572,6 +15579,7 @@ async function openWbRecordConfig(companyId, workspaceId, appId, blockId) {
     kind: 'record-config', companyId, workspaceId, appId, blockId,
     block,
     fields: (app.fields || []).map((f) => ({ id: f.id, label: f.label })),
+    collections: (app.collections || []).map((c) => ({ id: c.id, name: c.name })),
   });
 }
 

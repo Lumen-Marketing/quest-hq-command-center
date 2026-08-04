@@ -307,3 +307,33 @@ test('focus is not handed back to a control behind an open modal', () => {
   // It breaks the dialog's focus trap and scrolls the page under it.
   assert.match(main, /if \(!restoreFocus \|\| !kept\.selector \|\| activeModalOverlay\(\)\) return;/);
 });
+
+// --- getting a Sub-items card onto a record ---------------------------------------------------
+
+test('a Sub-items card lands pointing at a list, not at nothing', () => {
+  // Otherwise it renders "pick a list in settings" and needs a second trip before it is
+  // anything at all — which reads as the feature not working.
+  const layout = readFileSync(new URL('../src/workspace/record-layout.js', import.meta.url), 'utf8');
+  assert.match(layout, /if \(type === 'collection'\) config\.collectionId = \(app\?\.collections \|\| \[\]\)\[0\]\?\.id \|\| '';/);
+});
+
+test('the card is offered as blocked when the app has no lists yet', () => {
+  const layout = readFileSync(new URL('../src/workspace/record-layout.js', import.meta.url), 'utf8');
+  assert.match(layout, /export function blockSupported\(app, type\)/);
+  assert.match(main, /supported: mod\.blockSupported\(app, meta\.type\),/);
+  assert.match(main, /Add a sub-item list in this app's Settings first/);
+  // And the catalogue actually honours it rather than rendering a dead button.
+  assert.match(main, /class="wb-catalog-item \$\{opt\.supported \? '' : 'blocked'\}" type="button" \$\{opt\.supported \? `data-wb-rec-pick/);
+  assert.match(main, /\$\{opt\.supported \? h\(opt\.desc\) : h\(opt\.blocked\)\}/);
+});
+
+test('its settings pick a list, not a set of fields', () => {
+  // It used to fall through to the FIELD checkbox list, which cannot pick a list at all.
+  assert.match(main, /if \(block\.type === 'collection'\) \{/);
+  assert.match(main, /<select class="wb-input" data-wb-reccfg="collectionId">/);
+  assert.match(main, /collections: \(app\.collections \|\| \[\]\)\.map\(\(c\) => \(\{ id: c\.id, name: c\.name \}\)\),/);
+});
+
+test('with no lists the settings dialog says so instead of offering an empty select', () => {
+  assert.match(main, /This app has no sub-item lists yet\. Add one in Settings, then come back\./);
+});

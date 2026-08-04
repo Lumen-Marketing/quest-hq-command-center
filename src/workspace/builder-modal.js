@@ -93,15 +93,28 @@ export function createBuilderModal(ctx) {
       return wbModalShell('Add card', 'wb-modal-wide',
         '<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-list-details"></i></div><h3>Add a card to every record</h3>',
         `<div class="wb-catalog">${m.options.map((opt) => `
-          <button class="wb-catalog-item" type="button" data-wb-rec-pick="${h(opt.type)}">
+          <button class="wb-catalog-item ${opt.supported ? '' : 'blocked'}" type="button" ${opt.supported ? `data-wb-rec-pick="${h(opt.type)}"` : 'disabled'}>
             <i class="ti ${h(opt.icon)}"></i>
-            <span><b>${h(opt.label)}</b><small>${h(opt.desc)}</small></span>
+            <span><b>${h(opt.label)}</b><small>${opt.supported ? h(opt.desc) : h(opt.blocked)}</small></span>
           </button>`).join('')}</div>`,
         '<button class="btn" data-action="wb-modal-close">Close</button>');
     }
     if (m.kind === 'record-config') {
       const block = m.block;
       const cfg = block.config || {};
+      if (block.type === 'collection') {
+        // Without this the card fell through to the FIELD checkbox list below, which cannot
+        // pick a sub-item list and offers something else entirely.
+        return wbModalShell('Card settings', '',
+          '<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-settings"></i></div><h3>Sub-items</h3>',
+          m.collections.length
+            ? `<div class="wb-field"><label>Which list</label>
+                <select class="wb-input" data-wb-reccfg="collectionId">
+                  ${m.collections.map((c) => `<option value="${h(c.id)}" ${c.id === cfg.collectionId ? 'selected' : ''}>${h(c.name)}</option>`).join('')}
+                </select></div>`
+            : '<p class="wb-sub">This app has no sub-item lists yet. Add one in Settings, then come back.</p>',
+          `<button class="btn" data-action="wb-modal-close">Cancel</button>${m.collections.length ? '<button class="btn btn-primary" data-wb-reccfg-save><i class="ti ti-check"></i>Save</button>' : ''}`);
+      }
       if (block.type === 'note') {
         return wbModalShell('Card settings', '',
           '<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-settings"></i></div><h3>Note</h3>',

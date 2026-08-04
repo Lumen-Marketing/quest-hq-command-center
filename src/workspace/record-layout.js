@@ -75,7 +75,16 @@ export function addBlock(blocks, type, app, makeId = nextId) {
   // alongside one that already shows them, and two panels listing the same fields is the
   // confusing outcome, not the helpful one.
   if (type === 'fields') { config.title = ''; config.fieldIds = []; }
+  // A Sub-items card picks the app's first list, so it shows something the moment it lands
+  // instead of needing a second trip through its settings to become anything at all.
+  if (type === 'collection') config.collectionId = (app?.collections || [])[0]?.id || '';
   return [...blocks, normalizeBlock({ type, size: meta.size, config }, makeId)];
+}
+
+/** Whether the app has what a block needs. A Sub-items card needs a list to point at. */
+export function blockSupported(app, type) {
+  if (type !== 'collection') return true;
+  return (app?.collections || []).length > 0;
 }
 
 /**
