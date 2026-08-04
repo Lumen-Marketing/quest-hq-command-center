@@ -12051,6 +12051,17 @@ function renderJobsPage(route, companyId) {
 // there is no spend, draw or daily-report figure here yet.
 
 /** Every production record belonging to one job, in the shape the job file expects. */
+/**
+ * Today as YYYY-MM-DD in the viewer's own timezone.
+ *
+ * Not toISOString(): that is UTC, so from late afternoon in Arizona onwards it returns
+ * tomorrow's date. A daily submitted this afternoon would then look like it never arrived,
+ * and the dashboard would raise a missing-daily flag against a crew that did report.
+ */
+function localIsoDate(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function productionForJob(jobId) {
   const id = String(jobId || '');
   const dailies = state.jobDailies.filter((row) => row.job_id === id);
@@ -12110,7 +12121,7 @@ function loadJobsDashboard() {
     jobsDashboardPending = import('./jobs/dashboard-view.js').then((mod) => {
       jobsDashboardModule = mod.createJobsDashboard({
         h, can, money, emptyState, appHref, companyPath, companyJobs,
-    pipelineStages, pipelineStageColor, resolvePipelineStage,
+        resolvePipelineStage, productionForJob, todayIso: localIsoDate,
       });
       return jobsDashboardModule;
     }).catch((error) => {
@@ -12255,7 +12266,7 @@ function loadJobList() {
         h, can, money, emptyState, appHref, companyPath,
         pipelineDot, pipelineStageColor, resolvePipelineStage,
         filteredJobs, selectedJobRows, productionFor: productionForJob, state,
-        todayIso: () => new Date().toISOString().slice(0, 10),
+        todayIso: () => localIsoDate(),
       });
       return jobListModule;
     }).catch((error) => {

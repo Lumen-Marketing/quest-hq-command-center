@@ -162,11 +162,27 @@ export function isStruggling(dailies) {
   return streak.length === 2 && streak.every((r) => r !== 'good');
 }
 
-/** No daily on the last working day, for a job that is supposed to be running. */
+/** The day before the given YYYY-MM-DD, month and year rollovers included. */
+export function previousDay(iso) {
+  const at = new Date(`${iso}T12:00:00Z`);
+  if (Number.isNaN(at.getTime())) return iso;
+  at.setUTCDate(at.getUTCDate() - 1);
+  return at.toISOString().slice(0, 10);
+}
+
+/**
+ * A crew was on site and nothing came back.
+ *
+ * Measured against yesterday, not today: today is not over, and a job whose last daily is
+ * this morning's has missed nothing. Comparing against today would flag every running job
+ * every morning until its crew knocked off, which is an alarm nobody would keep reading.
+ *
+ * A job with no dailies at all is not "missing" one -- nobody has started reporting on it,
+ * which is a different thing and is flagged separately.
+ */
 export function missedDaily(dailies, todayIso) {
   if (!dailies.length) return false;
-  const latest = sortDailies(dailies)[0].report_date;
-  return latest < todayIso;
+  return sortDailies(dailies)[0].report_date < previousDay(todayIso);
 }
 
 /**

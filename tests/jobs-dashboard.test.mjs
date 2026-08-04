@@ -70,30 +70,57 @@ test('a job with no or unreadable timestamp is not flagged', () => {
 
 // --- the figures ------------------------------------------------------------------------------
 
+// Villa Ct reported yesterday. 209th last reported four days ago and so has missed one.
+// Onyx has never reported at all, which is a different thing.
+const TODAY = '2026-08-04';
+const PRODUCTION = {
+  1: {
+    dailies: [{ report_date: '2026-08-03', production: 'good', crew_label: 'A' }],
+    buckets: [{ spent: 3200, expected: 4000, status: 'open' }],
+    draws: [{ id: 'd1', label: 'Completion', amount: 8400, status: 'unlocked' }],
+  },
+  2: {
+    dailies: [{ report_date: '2026-07-31', production: 'ok', crew_label: 'Sub' }],
+    buckets: [{ spent: 1400, expected: 1400, status: 'final' }],
+    draws: [{ id: 'd2', label: 'Start', amount: 5000, status: 'paid' }],
+  },
+  3: { dailies: [], buckets: [], draws: [] },
+};
+const production = (id) => PRODUCTION[id] || { dailies: [], buckets: [], draws: [] };
+const tilesNow = (jobs, prod = production) => Object.fromEntries(
+  dashboardTiles(jobs, stageOf, prod, TODAY, NOW).map((t) => [t.id, t]),
+);
+
 test('the tiles report what they say they report', () => {
-  const tiles = dashboardTiles(JOBS, stageOf, NOW);
-  const by = Object.fromEntries(tiles.map((t) => [t.id, t]));
+  const by = tilesNow(JOBS);
   assert.equal(by.working.value, '3 jobs');
-  assert.equal(by.working.caption, '2 assigned · 1 unassigned');
-  // Invoice total wins over estimate when both exist.
-  assert.equal(by.billing.value, 10500);
-  assert.equal(by.value.value, 24000, 'live estimates only, not the closed or invoiced ones');
+  assert.equal(by.working.caption, '2 own crew · 1 unassigned');
+  assert.equal(by.draws.value, 8400, 'only the unlocked draw');
+  assert.equal(by.spend.value, 4600, 'spend on live jobs, from their buckets');
   assert.equal(by.health.value, '1 flag');
+  assert.match(by.health.caption, /missing daily · 209th Ave/);
+});
+
+test('a sub crew is counted separately from our own', () => {
+  // "Who is actually mine today" is the first thing this screen has to answer.
+  const jobs = [{ ...JOBS[0], owner_name: 'Sub crew' }, { ...JOBS[1], owner_name: 'Alkeith' }];
+  assert.equal(tilesNow(jobs).working.caption, '1 own crew · 1 sub');
 });
 
 test('an empty company reads as empty, not as broken', () => {
-  const tiles = dashboardTiles([], stageOf, NOW);
-  const by = Object.fromEntries(tiles.map((t) => [t.id, t]));
+  const by = tilesNow([]);
   assert.equal(by.working.value, '0 jobs');
   assert.equal(by.working.caption, 'nothing in production');
+  assert.equal(by.draws.caption, 'nothing unlocked');
   assert.equal(by.health.caption, 'every live job is current');
   assert.equal(by.health.tone, 'good', 'no flags is good news, not a warning');
 });
 
 test('singular and plural are both handled', () => {
-  const one = dashboardTiles([JOBS[0]], stageOf, NOW);
-  assert.equal(one[0].value, '1 job');
-  assert.match(one[1].caption, /0 jobs at invoicing/);
+  const by = tilesNow([JOBS[0]]);
+  assert.equal(by.working.value, '1 job');
+  assert.match(by.draws.caption, /1 draw unlocked/);
+  assert.match(by.spend.caption, /across 1 live job\b/);
 });
 
 // --- progress dots -----------------------------------------------------------------------------
@@ -110,13 +137,20 @@ test('an unknown stage shows no progress rather than guessing', () => {
 
 // --- honesty about what does not exist ------------------------------------------------------
 
-test('the model does not invent figures the data cannot support', () => {
-  // There is no cost ledger, draw schedule or daily report table in this product. A tile
-  // labelled "spent this week" would be a number with nothing behind it.
-  for (const word of ['spend', 'spent', 'draw', 'changeOrder', 'change_order']) {
-    assert.ok(!new RegExp(`\\b${word}\\b`, 'i').test(model.replace(/\/\/[^\n]*/g, '')),
-      `the model refers to "${word}", which has no data behind it`);
+test('the spend tile is not labelled as a week', () => {
+  // Dailies, buckets and draws are real tables now, so the model may cite them -- but spend
+  // is a running total on a bucket with no date on it. There is no dated expense ledger to
+  // take a week out of, so "spent this week" would be a wrong number in a confident font.
+  const labels = [...model.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
+  assert.ok(labels.includes('Spent to date'), 'the label must say what the figure is');
+  for (const label of labels) {
+    assert.doesNotMatch(label, /this week|weekly|today's spend/i, `"${label}" claims a window the data has not got`);
   }
+});
+
+test('the tiles are the four the production team asked for, in order', () => {
+  const ids = dashboardTiles(JOBS, stageOf, production, TODAY, NOW).map((t) => t.id);
+  assert.deepEqual(ids, ['working', 'draws', 'spend', 'health']);
 });
 
 // --- wiring ---------------------------------------------------------------------------------
@@ -139,10 +173,16 @@ test('the dashboard renders its own header instead of doubling the page title', 
   assert.match(view, /Jobs Dashboard<\/h1>/);
 });
 
-test('Add job is hidden from someone who cannot create one', () => {
-  assert.match(view, /can\('jobs\.manage', companyId\) \? '<button[^']*data-action="open-job-form"/);
+test('Add job and Request are hidden from someone who cannot manage jobs', () => {
+  assert.match(view, /const canBill = can\('jobs\.manage', companyId\);/);
+  assert.match(view, /canBill \? '<button[^']*data-action="open-job-form"/);
+  // Requesting a draw sends an invoice. It must not render for a viewer.
+  assert.match(view, /\$\{canBill\s*\n?\s*\? `<button[^`]*data-action="job-draw-invoice"/);
 });
 
-test('the stage colour comes from the pipeline, not a second palette', () => {
-  assert.match(view, /pipelineStageColor\('jobs', stageOf\(job\), companyId\)/);
+test('the dashboard shows production days, not pipeline position', () => {
+  // The stage is already on the row and in the deck. Four days of dailies is the thing you
+  // cannot get anywhere else on this screen.
+  assert.match(view, /jobStreak\(job, productionForJob\)/);
+  assert.ok(!view.includes('pipelineStageColor'), 'the progress dots were replaced, not doubled up');
 });

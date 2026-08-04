@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   CO_STEPS, bucketProgress, coStepIndex, dailyStreak, daysWorked, drawTotals, isStruggling,
-  missedDaily, normalizeChangeOrder, normalizeDaily, normalizeDraw, projectedNet, sortDailies,
+  missedDaily,
+  previousDay, normalizeChangeOrder, normalizeDaily, normalizeDraw, projectedNet, sortDailies,
   stalledChangeOrders, ticketWithChangeOrders,
 } from '../src/jobs/production-model.js';
 
@@ -68,8 +69,21 @@ test('two poor days in a row is the signal, one is not', () => {
 test('a job with no dailies at all is not reported as having missed one', () => {
   // It may not have started. Only a job that was reporting and then stopped is a flag.
   assert.equal(missedDaily([], '2026-08-05'), false);
-  assert.equal(missedDaily([daily('2026-08-04', 'good')], '2026-08-05'), true);
   assert.equal(missedDaily([daily('2026-08-05', 'good')], '2026-08-05'), false);
+});
+
+test('the missing-daily line is measured against yesterday, not today', () => {
+  // Today is not over. Measuring against today would flag every running job every morning
+  // until its crew knocked off, which is an alarm nobody would keep reading.
+  assert.equal(missedDaily([daily('2026-08-04', 'good')], '2026-08-05'), false, 'reported yesterday');
+  assert.equal(missedDaily([daily('2026-08-03', 'good')], '2026-08-05'), true, 'skipped yesterday');
+});
+
+test('yesterday is computed across month and year boundaries', () => {
+  assert.equal(previousDay('2026-08-01'), '2026-07-31');
+  assert.equal(previousDay('2026-01-01'), '2025-12-31');
+  assert.equal(previousDay('2028-03-01'), '2028-02-29', 'leap year');
+  assert.equal(previousDay('not a date'), 'not a date', 'garbage in, no crash out');
 });
 
 test('dailies sort newest first', () => {

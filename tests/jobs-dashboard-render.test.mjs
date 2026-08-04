@@ -10,30 +10,45 @@ import { createJobsDashboard } from '../src/jobs/dashboard-view.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
-const NOW = Date.now();
+const NOW = Date.parse('2026-08-04T18:00:00.000Z');
 const day = (n) => new Date(NOW - n * 86400000).toISOString();
-
-const STAGES = [
-  { name: 'Unscheduled', color: '#9AA0A8' },
-  { name: 'Scheduled', color: '#378ADD' },
-  { name: 'Material ordered', color: '#3C7BD0' },
-  { name: 'In production', color: '#BA7517' },
-  { name: 'QC / punch list', color: '#C08A2B' },
-  { name: 'Invoiced', color: '#7F77DD' },
-  { name: 'Paid / closed', color: '#639922' },
-];
+const TODAY = '2026-08-04';
+const dayIso = (n) => new Date(NOW - n * 86400000).toISOString().slice(0, 10);
 
 const JOBS = [
-  { id: 'j1', name: 'Villa Ct', stage: 'In production', owner_name: 'Alkeith', estimate_total: 12000, updated_at: day(0) },
-  { id: 'j2', name: '209th Ave', stage: 'Scheduled', owner_name: '', estimate_total: 4000, updated_at: day(6) },
-  { id: 'j3', name: 'Onyx Ave', stage: 'QC / punch list', owner_name: 'Crew B', estimate_total: 8000, updated_at: day(1) },
-  { id: 'j4', name: '58th Pl', stage: 'Invoiced', owner_name: 'Alkeith', estimate_total: 10000, invoice_total: 10500, updated_at: day(2) },
+  { id: 'j1', name: 'Villa Ct — Roofing', stage: 'In production', owner_name: 'Alkeith', estimate_total: 12000, updated_at: day(0) },
+  { id: 'j2', name: '209th Ave — Roofing', stage: 'Scheduled', owner_name: 'Sub crew', estimate_total: 4000, updated_at: day(6) },
+  { id: 'j3', name: 'Onyx Ave — Demo', stage: 'QC / punch list', owner_name: '', estimate_total: 8000, updated_at: day(1) },
+  { id: 'j4', name: '58th Pl — Framing', stage: 'Invoiced', owner_name: 'Alkeith', estimate_total: 10000, invoice_total: 10500, updated_at: day(2) },
 ];
+
+// Villa Ct reported yesterday; 209th last reported three days ago, so it is the missing
+// daily. Onyx has never reported at all, which is a different flag.
+const PRODUCTION = {
+  j1: {
+    dailies: [
+      { job_id: 'j1', report_date: dayIso(1), crew_label: 'Alkeith', production: 'good' },
+      { job_id: 'j1', report_date: dayIso(2), crew_label: 'Alkeith', production: 'ok' },
+    ],
+    buckets: [{ spent: 3200 }, { spent: 900 }],
+    draws: [
+      { id: 'd1', label: 'Completion', amount: 8400, status: 'unlocked' },
+      { id: 'd2', label: 'Start', amount: 8400, status: 'paid' },
+    ],
+  },
+  j2: {
+    dailies: [{ job_id: 'j2', report_date: dayIso(3), crew_label: 'Sub crew', production: 'good' }],
+    buckets: [{ spent: 500 }],
+    draws: [{ id: 'd3', label: 'Upon completion', amount: 7250, status: 'locked' }],
+  },
+  j3: { dailies: [], buckets: [], draws: [{ id: 'd4', label: 'Draw 3', amount: 10000, status: 'unlocked' }] },
+  j4: { dailies: [], buckets: [{ spent: 9999 }], draws: [{ id: 'd5', label: 'Final', amount: 100, status: 'unlocked' }] },
+};
 
 const escape = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function build(jobs = JOBS, { canDo = () => true } = {}) {
+function build(jobs = JOBS, { canDo = () => true, production = PRODUCTION } = {}) {
   const { renderJobsDashboard } = createJobsDashboard({
     h: escape,
     can: canDo,
@@ -45,9 +60,9 @@ function build(jobs = JOBS, { canDo = () => true } = {}) {
       return `/c/lumen/${section}${q ? `?${q}` : ''}`;
     },
     companyJobs: () => jobs,
-    pipelineStages: () => STAGES,
-    pipelineStageColor: (kind, name) => (STAGES.find((s) => s.name === name) || {}).color || '#9AA0A8',
     resolvePipelineStage: (kind, value) => value,
+    productionForJob: (id) => production[id] || { dailies: [], buckets: [], draws: [] },
+    todayIso: () => TODAY,
   });
   return renderJobsDashboard('lumen');
 }
@@ -64,32 +79,66 @@ test('every template placeholder was substituted', () => {
   assert.ok(!html.includes('${'), html.slice(Math.max(0, html.indexOf('${') - 80), html.indexOf('${') + 80));
 });
 
-test('the four tiles render with their captions', () => {
+test('the four tiles are the ones the production team asked for', () => {
   const html = build();
-  for (const label of ['Working now', 'Ready to invoice', 'Active value', 'Needs attention']) {
+  for (const label of ['Working today', 'Draws ready', 'Spent to date', 'Production health']) {
     assert.ok(html.includes(label), `missing tile: ${label}`);
   }
   assert.ok(html.includes('3 jobs'), 'three live jobs');
-  assert.ok(html.includes('2 assigned · 1 unassigned'));
-  assert.ok(html.includes('$10,500'), 'invoice total formatted through money()');
-  assert.ok(html.includes('$24,000'), 'live estimate total');
-  assert.ok(html.includes('1 flag'));
+  assert.ok(html.includes('1 own crew · 1 sub · 1 unassigned'), 'the crew split names all three');
+  // Only the two unlocked draws on live jobs: 8,400 + 10,000. The invoiced job's draw is
+  // still counted -- it is money owed regardless of stage.
+  assert.ok(html.includes('$18,500'), 'unlocked draws, summed');
+  assert.ok(html.includes('2 draws unlocked') || html.includes('3 draws unlocked'));
+  assert.ok(html.includes('$4,600'), 'spend across live jobs only, not the invoiced one');
+});
+
+test('a job whose crew went quiet mid-run is flagged by name', () => {
+  const html = build();
+  assert.ok(html.includes('missing daily · 209th Ave'), 'the tile names the job, not just a count');
+  assert.ok(html.includes('Missing daily yesterday'), 'and the chase line repeats it where you act');
+});
+
+test('a job that never reported is not called a missing daily', () => {
+  // Onyx has no dailies at all. That is "nobody has started reporting", not "a crew was on
+  // site and nothing came back" -- conflating them would cry wolf on every new job.
+  const html = build();
+  assert.ok(!html.includes('missing daily · Onyx'));
 });
 
 test('live jobs are listed and linked to their record', () => {
   const html = build();
   for (const name of ['Villa Ct', '209th Ave', 'Onyx Ave']) assert.ok(html.includes(name), `missing ${name}`);
   assert.ok(html.includes('tab=profile&amp;job_id=j1') || html.includes('tab=profile&job_id=j1'), 'job link');
-  // An invoiced job is not "working now".
-  const working = html.slice(html.indexOf('Working now</h2>'), html.indexOf('Needs attention</h2>'));
+  // An invoiced job is not "working today".
+  const working = html.slice(html.indexOf('Working today</h2>'), html.indexOf('Draws ready</h2>'));
   assert.ok(!working.includes('58th Pl'));
 });
 
-test('the flagged job says how long it has been quiet', () => {
+test('the draws card offers to bill each one, deep-linked to the contract tab', () => {
   const html = build();
-  const flags = html.slice(html.indexOf('Needs attention</h2>'));
-  assert.ok(flags.includes('209th Ave'));
-  assert.ok(/no update in 6 days/.test(flags), 'should name the idle time');
+  const draws = html.slice(html.indexOf('Draws ready</h2>'));
+  assert.ok(draws.includes('data-action="job-draw-invoice"'), 'Request must call the real write path');
+  assert.ok(draws.includes('data-draw-id="d1"'), 'and identify which draw');
+  assert.ok(/jt=contract/.test(draws), 'the row opens the tab that shows the draw');
+  // Richest first: a limited afternoon should spend itself on the biggest one.
+  assert.ok(draws.indexOf('$10,000') < draws.indexOf('$8,400'));
+});
+
+test('somebody who cannot bill sees the draws but not the buttons', () => {
+  const html = build(JOBS, { canDo: () => false });
+  assert.ok(html.includes('Draws ready'));
+  assert.ok(!html.includes('job-draw-invoice'), 'the button is a write action');
+});
+
+test('production streaks are drawn per day, and absent when nobody has reported', () => {
+  const html = build();
+  const panel = html.slice(html.indexOf('Working today</h2>'), html.indexOf('Draws ready</h2>'));
+  const villa = panel.slice(panel.indexOf('Villa Ct'), panel.indexOf('209th Ave'));
+  assert.ok(villa.includes('jd-good'), 'yesterday was a good day');
+  assert.ok(villa.includes('jd-ok'), 'the day before was not');
+  const onyx = panel.slice(panel.indexOf('Onyx Ave'));
+  assert.ok(onyx.includes('jd-streak-none'), 'a job with no dailies shows a dash, not fake dots');
 });
 
 test('an unassigned job reads as Unassigned rather than blank', () => {
@@ -99,16 +148,26 @@ test('an unassigned job reads as Unassigned rather than blank', () => {
 test('a company with no jobs gets empty states, not a broken page', () => {
   const html = build([]);
   assert.ok(html.includes('No jobs are in production right now'));
-  assert.ok(html.includes('Every live job has been updated recently'));
+  assert.ok(html.includes('No draws are unlocked'));
   assert.ok(html.includes('0 jobs'));
+  assert.ok(html.includes('nothing in production'));
   assert.ok(!/undefined|NaN/.test(html));
 });
 
 test('job names from users are escaped', () => {
   const evil = [{ id: 'x', name: '<img src=x onerror=alert(1)>', stage: 'In production', owner_name: '"><b>bad', estimate_total: 1, updated_at: day(0) }];
-  const html = build(evil);
+  const html = build(evil, { production: {} });
   assert.ok(!html.includes('<img src=x'), 'job name must be escaped');
   assert.ok(!html.includes('"><b>bad'), 'owner name must be escaped');
+});
+
+test('a draw label from a user is escaped too', () => {
+  const jobs = [{ id: 'x', name: 'J', stage: 'In production', owner_name: 'A', updated_at: day(0) }];
+  const html = build(jobs, {
+    production: { x: { dailies: [], buckets: [], draws: [{ id: '"><script>', label: '<b>boom</b>', amount: 1, status: 'unlocked' }] } },
+  });
+  assert.ok(!html.includes('<b>boom</b>'), 'draw label must be escaped');
+  assert.ok(!html.includes('data-draw-id=""><script>'), 'draw id must be escaped');
 });
 
 test('Add job disappears without permission', () => {
@@ -116,24 +175,26 @@ test('Add job disappears without permission', () => {
   assert.ok(!build(JOBS, { canDo: () => false }).includes('open-job-form'));
 });
 
-test('progress dots are drawn one per stage, filled to the current one', () => {
-  const html = build([JOBS[0]]);
-  const li = html.slice(html.indexOf('Villa Ct'));
-  const dots = li.slice(li.indexOf('jd-dots'), li.indexOf('</span>', li.indexOf('jd-dots')) + 300);
-  // "In production" is stage 4 of 7.
-  assert.equal((dots.match(/<i /g) || []).length, 7, 'one dot per stage');
-  assert.equal((dots.match(/class="on"/g) || []).length, 4, 'filled up to the current stage');
-  assert.ok(dots.includes('#BA7517'), 'filled dots take the stage colour');
-});
-
 test('the long list is capped and says so', () => {
   const many = Array.from({ length: 12 }, (_, i) => ({
     id: `m${i}`, name: `Job ${i}`, stage: 'In production', owner_name: 'A', estimate_total: 100, updated_at: day(0),
   }));
-  const html = build(many);
+  const html = build(many, { production: {} });
   assert.ok(html.includes('4 more in the full list'), 'silently truncating would misrepresent the day');
+});
+
+test('the header sends you to the calendar tab, not a section that does not exist', () => {
+  assert.ok(/tab=calendar/.test(build()), 'Calendar is a Jobs tab');
 });
 
 test('the tab is labelled properly, not left as a raw id', () => {
   assert.match(main, /dashboard: 'Dashboard',/);
+});
+
+test('today is read in local time, not UTC', () => {
+  // toISOString() rolls over to tomorrow from mid-afternoon in Arizona, which would make a
+  // daily submitted this afternoon look like it never arrived.
+  assert.match(main, /function localIsoDate\(date = new Date\(\)\)/);
+  assert.match(main, /todayIso: localIsoDate,/);
+  assert.ok(!/todayIso: \(\) => new Date\(\)\.toISOString\(\)/.test(main));
 });
