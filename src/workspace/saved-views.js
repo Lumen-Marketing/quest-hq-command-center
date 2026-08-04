@@ -108,9 +108,9 @@ export function renderViewsRail({ h, can, companyId, app, ui, state, privateView
     const shownAll = state.wbViewExpanded?.[view.id];
     const visible = groups ? (shownAll ? groups : groups.slice(0, 5)) : [];
     const field = (app.fields || []).find((f) => f.id === view.fieldId) || null;
-    // Two views can carry any names and split by different fields. Without saying which,
-    // they look identical, there is no way to tell them apart, and a view saved against the
-    // wrong field can only be fixed by deleting it and starting again.
+    // What a view splits by is chosen when it is created and stays chosen. The rows below
+    // already name the field's own values, so a label repeating it earned no space, and a
+    // control to change it invited editing a decision that was already made.
     const editable = view.scope === 'private' || canManage;
     return `<div class="wb-vrow">
       <div class="wb-vhead">
@@ -118,9 +118,6 @@ export function renderViewsRail({ h, can, companyId, app, ui, state, privateView
         <span class="wb-vcount">${h(String(viewTotal(app, view)))}</span>
         ${editable ? `<button class="wb-vdel" type="button" data-wb-view-del="${h(view.id)}" title="Delete view" aria-label="Delete ${h(view.title)}"><i class="ti ti-x"></i></button>` : ''}
       </div>
-      ${editable
-    ? `<label class="wb-vsplit"><span class="wb-vsplit-lead">by</span><select data-wb-view-split="${h(view.id)}" aria-label="Split ${h(view.title)} by"><option value="" ${view.fieldId ? '' : 'selected'}>nothing</option>${fields.map((f) => `<option value="${h(f.id)}" ${f.id === view.fieldId ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select></label>`
-    : `<p class="wb-vsplit"><span class="wb-vsplit-lead">by</span>${h(field ? field.label : 'nothing')}</p>`}
       ${view.fieldId && !groups ? `<p class="wb-vhint">${field ? `<b>${h(field.label)}</b> has no options yet, so there is nothing to split by.` : 'That field was deleted, so this view now shows everything.'}</p>` : ''}
       ${visible.map((g) => {
     const id = g.id == null ? noneKey : g.id;

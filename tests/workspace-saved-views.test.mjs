@@ -120,10 +120,35 @@ test('partitioning keeps the scope tag out of what gets stored', () => {
   assert.deepEqual(split.private, [{ id: 'p', title: 'P', appId: 'a1' }]);
 });
 
-test('deleting a private view never needs a permission, a team one always does', () => {
+test('deleting a view asks first', () => {
+  // The X sits beside the row you click to USE the view, so a slip is easy and there is no
+  // undo. The dialog is plain — no typing the name, no password, unlike deleting an app —
+  // because a view holds no records and rebuilding one is a name and a dropdown.
   const handler = main.match(/bind\('\[data-wb-view-del\]'[\s\S]*?\n {4}\}\);/)?.[0] || '';
-  assert.match(handler, /if \(priv\.some\(\(v\) => v\.id === id\)\)/, 'private is checked first');
-  assert.match(handler, /if \(!can\('workspaces\.manage', companyId\)\) return;/);
+  assert.match(handler, /openWbModal\(\{\n\s*kind: 'delete-view'/);
+  assert.ok(!/app\.views = /.test(handler), 'the click must not delete anything itself');
+  assert.match(main, /Your records are not touched\./);
+});
+
+test('the confirm honours who may delete what', () => {
+  const confirm = main.match(/const delViewBtn = overlay\.querySelector[\s\S]*?\n {2}\}/)?.[0] || '';
+  assert.match(confirm, /if \(priv\.some\(\(v\) => v\.id === viewId\)\)/, 'private is checked first');
+  assert.match(confirm, /else if \(can\('workspaces\.manage', companyId\)\)/);
+  assert.match(confirm, /state\.builderModal = null;/, 'and the dialog closes either way');
+});
+
+test('the dialog says who loses the view', () => {
+  // Deleting a team view takes it from everybody; a private one only from this browser.
+  assert.match(main, /m\.viewScope === 'team' \? ' for everybody on the team' : ' from this browser'/);
+});
+
+test('what a view splits by is fixed at creation', () => {
+  // It is chosen in the Add form and stays chosen. The rows below already name the field's
+  // own values, so a label repeating it earned no space — and a control to change it invited
+  // editing a decision that was already made.
+  assert.ok(!/data-wb-view-split/.test(main), 'no control');
+  assert.ok(!/wb-vsplit/.test(mod), 'and no label repeating the field name');
+  assert.match(mod, /<option value="">None<\/option>/, 'the choice still lives in the Add form');
 });
 
 // --- the rail ------------------------------------------------------------------------------
@@ -203,22 +228,7 @@ test('the chosen field is the field that splits, among several', () => {
   assert.deepEqual(viewGroups(two, { fieldId: 'stage' }).map((g) => g.label), ['Unscheduled']);
 });
 
-test('a view says which field it splits by', () => {
-  const html = rail();
-  assert.match(html, /class="wb-vsplit"/);
-  assert.match(html, /data-wb-view-split="tv1"/);
-  // The current field is the one selected, so the label doubles as the control.
-  assert.match(html, /<option value="f2" selected>Lead Status<\/option>/);
-});
 
-test('the split field can be changed without recreating the view', () => {
-  // Recreating it to correct the field would lose its name and its place in the list.
-  const handler = main.match(/bind\('\[data-wb-view-split\]'[\s\S]*?'onchange'\);/)?.[0] || '';
-  assert.match(handler, /app\.views = \(app\.views \|\| \[\]\)\.map\(\(v\) => \(v\.id === id \? \{ \.\.\.v, fieldId \} : v\)\)/);
-  assert.match(handler, /wbSavePrivateViews\(priv\.map\(\(v\) => \(v\.id === id \? \{ \.\.\.v, fieldId \} : v\)\)\)/);
-  // And the old field's value must not stay selected, or the list empties for no visible reason.
-  assert.match(handler, /ui\.chipFieldId = '';\n\s*ui\.chipValue = '';/);
-});
 
 test('a field with no options says so instead of rendering a silent blank', () => {
   const bare = {

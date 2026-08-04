@@ -17293,6 +17293,15 @@ function renderWorkspaceBuilderModal() {
       ${m.error ? `<div class="wb-form-error">${h(m.error)}</div>` : ''}`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-delete-ws-confirm><i class="ti ti-trash"></i>Delete workspace</button>`);
   }
+  if (m.kind === 'delete-view') {
+    // No typing the name and no password, unlike deleting an app: a view holds no records,
+    // and rebuilding one is a name and a dropdown. The confirmation exists because the X sat
+    // next to the row you click to use the view, not because the loss is grave.
+    return wbModalShell('Delete view', 'wb-modal-sm',
+      '<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Delete this view</h3>',
+      `<p class="wb-sub">This removes <b>${h(m.viewTitle || 'this view')}</b>${m.viewScope === 'team' ? ' for everybody on the team' : ' from this browser'}. Your records are not touched.</p>`,
+      '<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-delete-view-confirm><i class="ti ti-trash"></i>Delete view</button>');
+  }
   if (m.kind === 'delete-app') {
     return wbModalShell('Delete app', 'wb-modal-sm', `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Delete this app</h3>`,
       `<p class="wb-sub">This permanently removes <b>${h(m.appName || 'this app')}</b> and all ${m.itemCount || 0} record(s), plus its fields, reports and automations. This cannot be undone.</p>
@@ -18468,37 +18477,17 @@ function mountWorkspaceBuilder() {
       wbRememberItemsUI(appId);
       render();
     });
-    // Change what a view splits by, in place. Recreating it just to correct the field would
-    // lose its name and its position in the list.
-    bind('[data-wb-view-split]', (el) => {
-      const id = el.dataset.wbViewSplit;
-      const fieldId = el.value;
-      const priv = wbPrivateViews();
-      if (priv.some((v) => v.id === id)) {
-        wbSavePrivateViews(priv.map((v) => (v.id === id ? { ...v, fieldId } : v)));
-      } else {
-        if (!can('workspaces.manage', companyId)) return;
-        const { app } = wbFind(companyId, workspaceId, appId);
-        app.views = (app.views || []).map((v) => (v.id === id ? { ...v, fieldId } : v));
-        wbSave(companyId);
-      }
-      // The chip was pointing at a value of the OLD field, which the new one has no idea
-      // about, so the list would show nothing with no visible reason.
-      const ui = wbItemsUI(appId);
-      ui.chipFieldId = '';
-      ui.chipValue = '';
-      wbRememberItemsUI(appId);
-      render();
-    }, 'onchange');
+    // Ask first. The X sits beside the row you click to USE the view, so a slip is easy and
+    // there is no undo.
     bind('[data-wb-view-del]', (el) => {
       const id = el.dataset.wbViewDel;
-      const priv = wbPrivateViews();
-      if (priv.some((v) => v.id === id)) { wbSavePrivateViews(priv.filter((v) => v.id !== id)); render(); return; }
-      if (!can('workspaces.manage', companyId)) return;
       const { app } = wbFind(companyId, workspaceId, appId);
-      app.views = (app.views || []).filter((v) => v.id !== id);
-      wbSave(companyId);
-      render();
+      const view = savedViewsModule?.allViews(app, wbPrivateViews()).find((v) => v.id === id);
+      if (!view) return;
+      openWbModal({
+        kind: 'delete-view', companyId, workspaceId, appId,
+        viewId: id, viewTitle: view.title, viewScope: view.scope,
+      });
     });
     // Dashboard arrangement. Same shape as the workspace tiles so the two feel like one
     // feature: a Customize toggle, then per-card controls on the card itself.
@@ -18763,6 +18752,24 @@ function wbMountModal() {
   };
   const confirmBtn = overlay.querySelector('[data-wb-confirm]'); if (confirmBtn) confirmBtn.onclick = () => wbConfirmDelete();
   const delWsBtn = overlay.querySelector('[data-wb-delete-ws-confirm]'); if (delWsBtn) delWsBtn.onclick = () => wbConfirmDeleteWorkspace();
+  const delViewBtn = overlay.querySelector('[data-wb-delete-view-confirm]');
+  if (delViewBtn) {
+    delViewBtn.onclick = () => {
+      const { companyId, workspaceId, appId, viewId } = state.builderModal;
+      state.builderModal = null;
+      const priv = wbPrivateViews();
+      if (priv.some((v) => v.id === viewId)) {
+        wbSavePrivateViews(priv.filter((v) => v.id !== viewId));
+      } else if (can('workspaces.manage', companyId)) {
+        const { app } = wbFind(companyId, workspaceId, appId);
+        if (app) {
+          app.views = (app.views || []).filter((v) => v.id !== viewId);
+          wbSave(companyId);
+        }
+      }
+      render();
+    };
+  }
   const delAppBtn = overlay.querySelector('[data-wb-delete-app-confirm]'); if (delAppBtn) delAppBtn.onclick = () => wbConfirmDeleteApp();
   // Add-app chooser: three paths + the available-apps library.
   overlay.querySelectorAll('[data-wb-choose]').forEach((b) => { b.onclick = () => {
