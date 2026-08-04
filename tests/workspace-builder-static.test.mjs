@@ -49,7 +49,8 @@ test('workspace builder supports working no-code workspace app flows inside a co
   assert.match(source, /data-save-app/);
   assert.match(source, /function openWbWorkspaceModal\(companyId, editId\)/);
   assert.match(source, /function openWbAppModal\(companyId, workspaceId\)/);
-  assert.match(source, /function openWbFieldModal\(companyId, workspaceId, appId, fieldId, fieldType\)/);
+  // One dialog, two owners: the app's own fields, or a sub-item list's.
+  assert.match(source, /function openWbFieldModal\(companyId, workspaceId, appId, fieldId, fieldType, collectionId = ''\)/);
   assert.match(source, /function openWbItemModal\(companyId, workspaceId, appId, itemId, mode, opts\)/);
   assert.match(source, /function openWbAutoModal\(companyId, workspaceId, appId, autoId\)/);
   assert.match(source, /function wbMountDnD\(companyId, workspaceId, appId\)/);

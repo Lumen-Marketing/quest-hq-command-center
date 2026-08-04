@@ -2475,6 +2475,7 @@ const state = {
   wbEditingCommentId: null,
   wbDashManage: false,
   wbRecordManage: false,
+  wbCollectionOpen: '',
   wbDashDragId: '',
   wbViewScope: 'team',
   wbViewAdding: false,
@@ -16504,24 +16505,29 @@ function wbAddFieldInstant(companyId, workspaceId, appId, type, index) {
   showToast(`Added "${label}" — use the sliders to configure it.`, 'local', 'Workspaces');
   render();
 }
-function wbViewBuilder(companyId, workspace, app) {
-  const canManage = can('workspaces.manage', companyId);
-  const list = app.fields.length ? app.fields.map((field) => {
+function wbFieldBuilderMarkup(companyId, fields, canManage, scope = '') {
+  const key = (id) => (scope ? `${scope}:${id}` : id);
+  const list = fields.length ? fields.map((field) => {
     const meta = WB_FIELD_TYPES[field.type];
     let extra = '';
     if ((field.type === 'category' || field.type === 'status') && field.config.options) extra = ` · ${field.config.options.length} options`;
     if (field.type === 'relationship' && field.config.targetApp) { const ta = wbRelTargetApp(field, companyId); const wsName = field.config.targetCompany && field.config.targetCompany !== canonicalCompanyId(companyId) ? `${h(companyName(field.config.targetCompany) || 'workspace')} · ` : ''; extra = ta ? ` · → ${wsName}${h(ta.name)}` : ' · (no target)'; }
     if (field.type === 'calculation' && field.config.formula) extra = ` · ${h(field.config.formula)}`;
-    return `<div class="wb-field-row ${field.hidden ? 'wb-field-hidden' : ''}" ${canManage ? 'draggable="true"' : ''} data-fid="${h(field.id)}">
+    return `<div class="wb-field-row ${field.hidden ? 'wb-field-hidden' : ''}" ${canManage ? 'draggable="true"' : ''} data-fid="${h(key(field.id))}">
       ${canManage ? '<span class="wb-grip"><i class="ti ti-grip-vertical"></i></span>' : ''}
       <div class="wb-field-ic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></div>
       <div class="wb-field-meta"><b>${h(field.label)}${field.required ? '<span class="wb-req">*</span>' : ''}${field.hidden ? '<span class="wb-hidden-tag"><i class="ti ti-eye-off"></i>Hidden in table</span>' : ''}</b><div class="wb-field-type">${h(meta.label)}${extra}</div></div>
-      ${canManage ? `<div class="wb-field-acts"><button class="wb-icon-btn ${field.hidden ? 'active' : ''}" data-hide-field="${h(field.id)}" title="${field.hidden ? 'Show this field in the items table' : 'Hide this field from the items table (still editable on each record)'}"><i class="ti ti-${field.hidden ? 'eye-off' : 'eye'}"></i></button><button class="wb-icon-btn" data-edit-field="${h(field.id)}" title="Configure"><i class="ti ti-adjustments"></i></button><button class="wb-icon-btn danger" data-del-field="${h(field.id)}" title="Delete"><i class="ti ti-trash"></i></button></div>` : ''}
+      ${canManage ? `<div class="wb-field-acts"><button class="wb-icon-btn ${field.hidden ? 'active' : ''}" data-hide-field="${h(key(field.id))}" title="${field.hidden ? 'Show this field in the items table' : 'Hide this field from the items table (still editable on each record)'}"><i class="ti ti-${field.hidden ? 'eye-off' : 'eye'}"></i></button><button class="wb-icon-btn" data-edit-field="${h(key(field.id))}" title="Configure"><i class="ti ti-adjustments"></i></button><button class="wb-icon-btn danger" data-del-field="${h(key(field.id))}" title="Delete"><i class="ti ti-trash"></i></button></div>` : ''}
     </div>`;
   }).join('') : '<div class="wb-empty wb-empty-dashed"><i class="ti ti-layout-dashboard"></i><h3>Design your app</h3><p>Add fields from the palette to shape what data this app stores. Drag to reorder anytime.</p></div>';
-  const palette = canManage ? `<div class="wb-palette"><h4>Add a field</h4><div class="wb-sub" style="margin:-4px 0 10px">Click to configure, or <b>drag one into your app</b> to add it instantly.</div>${WB_FIELD_ORDER.map((type) => { const meta = WB_FIELD_TYPES[type]; return `<button class="wb-palette-item" draggable="true" data-add-type="${type}" data-wb-palette-type="${type}"><span class="wb-pic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-palette-text">${h(meta.label)}<small>${h(meta.desc)}</small></span><i class="ti ti-grip-vertical wb-palette-grip"></i></button>`; }).join('')}</div>` : '';
+  const palette = canManage ? `<div class="wb-palette"><h4>Add a field</h4><div class="wb-sub" style="margin:-4px 0 10px">Click to configure, or <b>drag one into your app</b> to add it instantly.</div>${WB_FIELD_ORDER.map((type) => { const meta = WB_FIELD_TYPES[type]; return `<button class="wb-palette-item" draggable="true" data-add-type="${scope ? `${scope}:${type}` : type}" data-wb-palette-type="${scope ? `${scope}:${type}` : type}"><span class="wb-pic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-palette-text">${h(meta.label)}<small>${h(meta.desc)}</small></span><i class="ti ti-grip-vertical wb-palette-grip"></i></button>`; }).join('')}</div>` : '';
   const dropHint = canManage ? '<div class="wb-drop-hint"><i class="ti ti-arrow-down-to-arc"></i>Drag a field type here to add it</div>' : '';
-  return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? 'data-wb-field-dropzone' : ''}><div class="wb-field-count">${app.fields.length} field${app.fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${list}${dropHint}</div>${palette}</div>`;
+  return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? 'data-wb-field-dropzone="${h(scope)}"' : ''}><div class="wb-field-count">${fields.length} field${fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${list}${dropHint}</div>${palette}</div>`;
+}
+
+/** The app's own fields, on the Fields tab. */
+function wbViewBuilder(companyId, workspace, app) {
+  return wbFieldBuilderMarkup(companyId, app.fields, can('workspaces.manage', companyId));
 }
 
 // Install this app into the chosen workspace as a linked pointer. Extracted so both the
@@ -16676,7 +16682,7 @@ function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
     <div class="wb-field"><label>What one record is called</label><input class="wb-input" id="wbSetRecordName" value="${h(app.recordName || '')}" placeholder="${h(singularize(app.name))}" ${canManage ? '' : 'disabled'}><small class="wb-hint">Names the buttons — "${h(addRecordLabel(app))}". Left blank it follows the app name.</small></div>
     <div class="wb-field"><label>Description</label><textarea class="wb-input" id="wbSetDesc" ${canManage ? '' : 'disabled'}>${h(app.description || '')}</textarea></div>
     <div class="wb-field"><label>Type</label><input class="wb-input" id="wbSetType" value="${h(app.type || '')}" placeholder="e.g. Contacts, Tasks, Projects" ${canManage ? '' : 'disabled'}></div>
-    ${wbCollectionsSettings(app, canManage)}
+    ${wbCollectionsSettings(companyId, app, canManage)}
     <div class="wb-field"><label>Icon &amp; color</label>
       <div class="wb-emoji-pick" id="wbSetIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${app.icon === icon ? 'sel' : ''}" type="button" data-icon="${icon}" aria-pressed="${app.icon === icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('')}</div>
       <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}<label class="wb-swatch wb-swatch-custom ${isCustomColor ? 'sel' : ''}" data-color="${h(app.color)}" title="Custom color"${isCustomColor ? ` style="background:${h(app.color)}"` : ''}><input type="color" id="wbSetCustomColor" value="${h(isCustomColor ? app.color : '#000000')}" aria-label="Custom color" ${canManage ? '' : 'disabled'}><i class="ti ${isCustomColor ? 'ti-check' : 'ti-plus'}"></i></label></div>
@@ -17121,26 +17127,27 @@ function openWbAppModal(companyId, workspaceId) {
  * are separate little apps that live inside each record, and mixing them into the same list
  * would make "add a field" ambiguous.
  */
-function wbCollectionsSettings(app, canManage) {
+function wbCollectionsSettings(companyId, app, canManage) {
   const list = childCollectionsModule ? childCollectionsModule.collectionsFor(app) : null;
   if (!list) {
     loadChildCollections().then(() => render()).catch((error) => console.error('Child collections failed to load', error));
     return '';
   }
+  const open = state.wbCollectionOpen || '';
   return `<div class="wb-field">
     <label>Sub-item lists</label>
     <p class="wb-sub">Records that live inside each ${h(singularize(app.name).toLowerCase())} — dailies, line items, visits. Add one here, then add a <b>Sub-items</b> card on the record layout to show it.</p>
     ${list.map((c) => `<div class="wb-collection">
       <div class="wb-collection-head">
-        <b>${h(c.name)}</b>
+        <button class="wb-collection-toggle" type="button" data-wb-collection-open="${h(c.id)}" aria-expanded="${open === c.id}">
+          <i class="ti ti-chevron-${open === c.id ? 'down' : 'right'}"></i><b>${h(c.name)}</b>
+        </button>
         <span class="wb-sub">${c.fields.length} field${c.fields.length === 1 ? '' : 's'}</span>
         ${canManage ? `<button class="wb-w-btn danger" type="button" data-wb-collection-del="${h(c.id)}" title="Delete list" aria-label="Delete ${h(c.name)}"><i class="ti ti-trash"></i></button>` : ''}
       </div>
-      <div class="wb-collection-fields">
-        ${c.fields.map((f) => `<span class="wb-collection-field">${h(f.label)}<small>${h(WB_FIELD_TYPES[f.type]?.label || f.type)}</small>${canManage ? `<button type="button" data-wb-collection-field-del="${h(c.id)}:${h(f.id)}" aria-label="Remove ${h(f.label)}"><i class="ti ti-x"></i></button>` : ''}</span>`).join('')
-    || '<span class="wb-sub">No fields yet.</span>'}
-      </div>
-      ${canManage ? `<button class="btn btn-sm" type="button" data-wb-collection-field-add="${h(c.id)}"><i class="ti ti-plus"></i>Add field</button>` : ''}
+      ${open === c.id
+    ? wbFieldBuilderMarkup(companyId, c.fields, canManage, c.id)
+    : `<div class="wb-collection-fields">${c.fields.map((f) => `<span class="wb-collection-field">${h(f.label)}<small>${h(WB_FIELD_TYPES[f.type]?.label || f.type)}</small></span>`).join('') || '<span class="wb-sub">No fields yet.</span>'}</div>`}
     </div>`).join('')}
     ${canManage ? `<div class="wb-collection-new">
       <input class="wb-input" data-wb-collection-name placeholder="e.g. Dailies">
@@ -17149,25 +17156,16 @@ function wbCollectionsSettings(app, canManage) {
   </div>`;
 }
 
-/** A field on a sub-item list. Same types as an app field, stored on the collection. */
-async function openWbCollectionField(companyId, workspaceId, appId, collectionId) {
-  const mod = await loadChildCollections();
-  const { app } = wbFind(companyId, workspaceId, appId);
-  const collection = mod.findCollection(app, collectionId);
-  if (!collection) return;
-  openWbModal({
-    kind: 'collection-field', companyId, workspaceId, appId, collectionId,
-    collectionName: collection.name,
-    types: Object.entries(WB_FIELD_TYPES).map(([type, meta]) => ({ type, label: meta.label, icon: meta.icon })),
-  });
-}
 
-async function openWbFieldModal(companyId, workspaceId, appId, fieldId, fieldType) {
+async function openWbFieldModal(companyId, workspaceId, appId, fieldId, fieldType, collectionId = '') {
   const { app } = wbFind(companyId, workspaceId, appId);
   if (!app) return;
   // Awaited before the dialog opens, so the configuration panel is never briefly blank.
   try { await wbLoadFieldUi(); } catch { showToast('Could not open the field editor — check your connection and try again.', 'local', 'Workspaces'); return; }
-  const existing = fieldId ? app.fields.find((f) => f.id === fieldId) : null;
+  // Same dialog, different owner: a sub-item list's fields, or the app's own.
+  const owner = collectionId ? (app.collections || []).find((c) => c.id === collectionId) : app;
+  if (!owner) return;
+  const existing = fieldId ? (owner.fields || []).find((f) => f.id === fieldId) : null;
   const type = existing ? existing.type : fieldType;
   const draft = existing ? JSON.parse(JSON.stringify(existing)) : { id: wbUid(), type, label: '', required: false, config: {} };
   if ((type === 'category' || type === 'status') && !draft.config.options) {
@@ -17175,7 +17173,7 @@ async function openWbFieldModal(companyId, workspaceId, appId, fieldId, fieldTyp
       ? [{ id: wbUid(), label: 'To Do', color: '#6b7280' }, { id: wbUid(), label: 'In Progress', color: '#d97706' }, { id: wbUid(), label: 'Done', color: '#16a34a' }]
       : [{ id: wbUid(), label: 'Option 1', color: '#2563eb' }, { id: wbUid(), label: 'Option 2', color: '#7c3aed' }];
   }
-  openWbModal({ kind: 'field', companyId, workspaceId, appId, editId: fieldId || '', fieldType: type, draft });
+  openWbModal({ kind: 'field', companyId, workspaceId, appId, collectionId, ownerName: collectionId ? owner.name : '', editId: fieldId || '', fieldType: type, draft });
 }
 // Default stages for an app that has no status field yet. Same three the field editor
 // offers, so a pipeline created here and one created there start out identical.
@@ -17986,7 +17984,18 @@ function wbSubmitModal() {
     const meta = WB_FIELD_TYPES[m.draft.type];
     m.draft.label = (m.draft.label || '').trim() || `Untitled ${meta.label} field`;
     const { app } = wbFind(companyId, m.workspaceId, m.appId);
-    if (m.editId) { const i = app.fields.findIndex((f) => f.id === m.editId); app.fields[i] = m.draft; } else app.fields.push(m.draft);
+    // A sub-item list's fields go on the collection; everything else about the dialog — the
+    // type palette, the option editor, required, the lot — is identical, so it is the same
+    // dialog with a different destination rather than a second one to keep in step.
+    const target = m.collectionId
+      ? (app.collections || []).find((c) => c.id === m.collectionId)
+      : app;
+    if (!target) { state.builderModal = null; render(); return; }
+    if (!Array.isArray(target.fields)) target.fields = [];
+    if (m.editId) {
+      const i = target.fields.findIndex((f) => f.id === m.editId);
+      if (i === -1) target.fields.push(m.draft); else target.fields[i] = m.draft;
+    } else target.fields.push(m.draft);
     state.builderModal = null; wbSave(companyId); showToast(m.editId ? 'Field updated.' : 'Field added.', 'local', 'Workspaces'); render();
     return;
   }
@@ -18101,7 +18110,20 @@ function wbConfirmDelete() {
   if (c.op === 'del-ws') { doc.workspaces = doc.workspaces.filter((w) => w.id !== c.workspaceId); state.builderModal = null; wbSave(companyId); showToast('Workspace deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
   const { workspace, app } = wbFind(companyId, c.workspaceId, c.appId);
   if (c.op === 'del-app') { if (workspace && app) { wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted app <b>${h(app.name)}</b>` }); wbNotifyWorkspace(companyId, workspace, app, `App deleted: ${app.name}`, `${actorName()} deleted the ${app.name} app.`); } workspace.apps = workspace.apps.filter((a) => a.id !== c.appId); state.builderModal = null; wbSave(companyId); showToast('App deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
-  if (c.op === 'del-field') { app.fields = app.fields.filter((f) => f.id !== c.fieldId); app.items.forEach((it) => { delete it.values[c.fieldId]; }); }
+  if (c.op === 'del-field') {
+    // A sub-item list's field lives on the collection, and its data lives on the children of
+    // every record — not on the records themselves.
+    if (c.collectionId) {
+      const collection = (app.collections || []).find((x) => x.id === c.collectionId);
+      if (collection) collection.fields = (collection.fields || []).filter((f) => f.id !== c.fieldId);
+      app.items.forEach((it) => {
+        (it.children || []).forEach((child) => { if (child.collection === c.collectionId) delete child.values[c.fieldId]; });
+      });
+    } else {
+      app.fields = app.fields.filter((f) => f.id !== c.fieldId);
+      app.items.forEach((it) => { delete it.values[c.fieldId]; });
+    }
+  }
   else if (c.op === 'del-item') {
     const gone = app.items.find((i) => i.id === c.itemId);
     if (gone) { const title = wbItemTitle(app, gone); wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted <b>${h(title)}</b> from ${h(app.name)}` }); wbNotifyItem(companyId, workspace, app, gone, `Deleted: ${title}`, `${actorName()} deleted ${title} from ${app.name}`); }
@@ -18330,10 +18352,49 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-delete-workspace]', () => { const ws = wbCompanyWorkspace(companyId); if (ws) openWbDeleteWorkspace(companyId, ws); });
     bind('[data-tab]', (el) => nav({ app_id: appId, tab: el.dataset.tab }));
     bind('[data-add-field]', () => nav({ app_id: appId, tab: 'fields' }));
-    bind('[data-add-type]', (el) => openWbFieldModal(companyId, workspaceId, appId, '', el.dataset.addType));
-    bind('[data-edit-field]', (el) => openWbFieldModal(companyId, workspaceId, appId, el.dataset.editField));
-    bind('[data-hide-field]', (el) => { const { app } = wbFind(companyId, workspaceId, appId); const f = app.fields.find((x) => x.id === el.dataset.hideField); if (f) { f.hidden = !f.hidden; wbSave(companyId); showToast(f.hidden ? `"${f.label}" hidden from the items table.` : `"${f.label}" shown in the items table.`, 'local', 'Workspaces'); render(); } });
-    bind('[data-del-field]', (el) => { const { app } = wbFind(companyId, workspaceId, appId); const f = app.fields.find((x) => x.id === el.dataset.delField); openWbConfirm(companyId, 'del-field', `"${f.label}" and its data in all ${app.items.length} item(s) will be removed.`, { workspaceId, appId, fieldId: el.dataset.delField }); });
+    // "<collectionId>:<id>" means a sub-item list's field; a bare id means the app's own.
+    const splitScope = (raw) => {
+      const value = String(raw || '');
+      const at = value.indexOf(':');
+      return at === -1 ? { collectionId: '', id: value } : { collectionId: value.slice(0, at), id: value.slice(at + 1) };
+    };
+    const fieldOwner = (collectionId) => {
+      const { app } = wbFind(companyId, workspaceId, appId);
+      if (!app) return null;
+      return collectionId ? (app.collections || []).find((c) => c.id === collectionId) || null : app;
+    };
+    bind('[data-add-type]', (el) => {
+      const { collectionId, id } = splitScope(el.dataset.addType);
+      openWbFieldModal(companyId, workspaceId, appId, '', id, collectionId);
+    });
+    bind('[data-edit-field]', (el) => {
+      const { collectionId, id } = splitScope(el.dataset.editField);
+      openWbFieldModal(companyId, workspaceId, appId, id, undefined, collectionId);
+    });
+    bind('[data-hide-field]', (el) => {
+      const { collectionId, id } = splitScope(el.dataset.hideField);
+      const owner = fieldOwner(collectionId);
+      const f = (owner?.fields || []).find((x) => x.id === id);
+      if (!f) return;
+      f.hidden = !f.hidden;
+      wbSave(companyId);
+      showToast(f.hidden ? `"${f.label}" hidden from the table.` : `"${f.label}" shown in the table.`, 'local', 'Workspaces');
+      render();
+    });
+    bind('[data-del-field]', (el) => {
+      const { collectionId, id } = splitScope(el.dataset.delField);
+      const owner = fieldOwner(collectionId);
+      const f = (owner?.fields || []).find((x) => x.id === id);
+      if (!f) return;
+      const { app } = wbFind(companyId, workspaceId, appId);
+      // Say how much data goes with it. For a sub-item field that is every child record in
+      // that list, across every record of the app.
+      const affected = collectionId
+        ? app.items.reduce((n, it) => n + (it.children || []).filter((c) => c.collection === collectionId).length, 0)
+        : app.items.length;
+      const noun = collectionId ? `${owner.name} record` : 'item';
+      openWbConfirm(companyId, 'del-field', `"${f.label}" and its data in all ${affected} ${noun}(s) will be removed.`, { workspaceId, appId, fieldId: id, collectionId });
+    });
     bind('[data-add-item]', () => openWbItemModal(companyId, workspaceId, appId, ''));
     bind('[data-edit-item]', (el, e) => { e.stopPropagation(); openWbItemModal(companyId, workspaceId, appId, el.dataset.editItem, 'edit'); });
     bind('[data-del-item]', (el, e) => { e.stopPropagation(); openWbConfirm(companyId, 'del-item', 'This record will be permanently removed.', { workspaceId, appId, itemId: el.dataset.delItem }); });
@@ -18406,12 +18467,10 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-collection-del]', (el) => {
       wbCollectionEdit(companyId, workspaceId, appId, (list, mod) => mod.removeCollection(list, el.dataset.wbCollectionDel));
     });
-    bind('[data-wb-collection-field-add]', (el) => openWbCollectionField(companyId, workspaceId, appId, el.dataset.wbCollectionFieldAdd));
-    bind('[data-wb-collection-field-del]', (el) => {
-      const [collectionId, fieldId] = String(el.dataset.wbCollectionFieldDel).split(':');
-      wbCollectionEdit(companyId, workspaceId, appId, (list) => list.map((c) => (c.id === collectionId
-        ? { ...c, fields: c.fields.filter((f) => f.id !== fieldId) }
-        : c)));
+    bind('[data-wb-collection-open]', (el) => {
+      const id = el.dataset.wbCollectionOpen;
+      state.wbCollectionOpen = state.wbCollectionOpen === id ? '' : id;
+      render();
     });
     mountWbRecordDrag(companyId, workspaceId, appId);
     bind('[data-wb-add-comment]', () => { wbAddItemComment().catch(commentFail); });
@@ -18769,23 +18828,6 @@ function wbMountModal() {
   }
   // Item detail modal: view/edit toggle, file previews, and the comment box work
   // in both modes; the field-input wiring only runs when actually editing.
-  if (m.kind === 'collection-field') {
-    const save = overlay.querySelector('[data-wb-collection-field-save]');
-    if (save) {
-      save.onclick = () => {
-        const label = (overlay.querySelector('#wbColFieldLabel')?.value || '').trim();
-        if (!label) { showToast('Name the field first.', 'local', 'Workspaces'); return; }
-        const type = overlay.querySelector('#wbColFieldType')?.value || 'text';
-        const required = !!overlay.querySelector('#wbColFieldReq')?.checked;
-        const { companyId, workspaceId, appId, collectionId } = state.builderModal;
-        state.builderModal = null;
-        wbCollectionEdit(companyId, workspaceId, appId, (list) => list.map((c) => (c.id === collectionId
-          ? { ...c, fields: [...c.fields, { id: wbUid(), label, type, required, config: {} }] }
-          : c)))
-          .catch((error) => showToast(error.message || 'Could not add the field.', 'error', 'Workspaces'));
-      };
-    }
-  }
   if (m.kind === 'child-item') {
     const submit = overlay.querySelector('[data-wb-child-submit]');
     if (submit) {

@@ -170,3 +170,50 @@ test('child values are formatted without the parent app field list', () => {
   assert.match(page, /function childValueText\(field, value\)/);
   assert.match(page, /\(field\.config\?\.options \|\| \[\]\)\.find\(\(o\) => o\.id === value\)\?\.label/);
 });
+
+// --- the field builder, shared ----------------------------------------------------------------
+
+test('a sub-item list gets the real field builder, not a lesser one', () => {
+  // The same markup the app's Fields tab uses — palette, drag handles, configure, hide,
+  // delete — so there is one builder to learn and one to keep working.
+  assert.match(main, /function wbFieldBuilderMarkup\(companyId, fields, canManage, scope = ''\)/);
+  assert.match(main, /function wbViewBuilder\(companyId, workspace, app\) \{\n\s*return wbFieldBuilderMarkup\(companyId, app\.fields, can\('workspaces\.manage', companyId\)\);/);
+  assert.match(main, /wbFieldBuilderMarkup\(companyId, c\.fields, canManage, c\.id\)/);
+});
+
+test('one dialog configures both, so option editors cannot drift apart', () => {
+  assert.match(main, /function openWbFieldModal\(companyId, workspaceId, appId, fieldId, fieldType, collectionId = ''\)/);
+  assert.match(main, /const owner = collectionId \? \(app\.collections \|\| \[\]\)\.find\(\(c\) => c\.id === collectionId\) : app;/);
+  // And the stopgap it replaced is gone rather than left to rot beside it.
+  assert.ok(!/kind: 'collection-field'/.test(main));
+});
+
+test('a scoped id tells an app field from a sub-item field', () => {
+  assert.match(main, /const key = \(id\) => \(scope \? `\$\{scope\}:\$\{id\}` : id\);/);
+  const split = main.match(/const splitScope = \(raw\) => \{[\s\S]*?\n {4}\};/)?.[0] || '';
+  assert.match(split, /at === -1 \? \{ collectionId: '', id: value \}/, 'a bare id is the app own');
+  // Sanity-check the parse itself, including a value that contains no colon.
+  const parse = (raw) => { const at = String(raw).indexOf(':'); return at === -1 ? { collectionId: '', id: String(raw) } : { collectionId: String(raw).slice(0, at), id: String(raw).slice(at + 1) }; };
+  assert.deepEqual(parse('f1'), { collectionId: '', id: 'f1' });
+  assert.deepEqual(parse('c1:f1'), { collectionId: 'c1', id: 'f1' });
+});
+
+test('deleting a sub-item field counts the children it will empty, not the records', () => {
+  // "and its data in all 5 item(s)" would be wrong: the data lives on the child records,
+  // and there can be many per record.
+  const handler = main.match(/bind\('\[data-del-field\]'[\s\S]*?\n {4}\}\);/)?.[0] || '';
+  assert.match(handler, /app\.items\.reduce\(\(n, it\) => n \+ \(it\.children \|\| \[\]\)\.filter\(\(c\) => c\.collection === collectionId\)\.length, 0\)/);
+  assert.match(handler, /const noun = collectionId \? `\$\{owner\.name\} record` : 'item';/);
+});
+
+test('deleting a sub-item field clears it from the children, not the records', () => {
+  const del = main.match(/if \(c\.op === 'del-field'\) \{[\s\S]*?\n {2}\}/)?.[0] || '';
+  assert.match(del, /if \(child\.collection === c\.collectionId\) delete child\.values\[c\.fieldId\]/);
+  assert.match(del, /collection\.fields = \(collection\.fields \|\| \[\]\)\.filter\(\(f\) => f\.id !== c\.fieldId\)/);
+  assert.match(del, /app\.fields = app\.fields\.filter/, 'the app path still works');
+});
+
+test('only one list opens its builder at a time', () => {
+  // Two palettes side by side is a lot of screen for one decision.
+  assert.match(main, /state\.wbCollectionOpen = state\.wbCollectionOpen === id \? '' : id;/);
+});
