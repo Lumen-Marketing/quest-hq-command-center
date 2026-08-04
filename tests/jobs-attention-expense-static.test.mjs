@@ -132,3 +132,26 @@ test('with no rail the content takes the width instead of leaving a hole', () =>
   assert.match(jobFile, /class="jf-body \$\{showRail \? '' : 'jf-body-wide'\}"/);
   assert.match(css, /\.jf-body-wide \{ grid-template-columns: minmax\(0, 1fr\); \}/);
 });
+
+test('the attention card reads like the design: flame, sync note, blue owner pills', () => {
+  // It is the one card on the page asking for something, and the warm border says so before
+  // any of the words are read.
+  assert.match(jobFile, /<i class="ti ti-flame jf-attn-flame" aria-hidden="true"><\/i>Needs attention/);
+  assert.match(jobFile, /<i class="ti ti-refresh" aria-hidden="true"><\/i>synced to My Queue/);
+  assert.match(css, /\.jf-attention \{ border-color: color-mix/);
+  // The owner reads as a person, so the pill takes the informational blue rather than grey.
+  assert.match(css, /\.jf-attn-who \{[^}]*var\(--info/s);
+});
+
+test('the card colours come from tokens, so dark mode is not a hard-coded light blue', () => {
+  // The design's #eaf2fe is a light-theme value; mixed against the token it follows the theme.
+  const rule = css.slice(css.indexOf('.jf-attn-who {'), css.indexOf('.jf-attn-tick {'));
+  assert.ok(!/#eaf2fe/i.test(rule), 'no baked-in light-theme background');
+  assert.match(rule, /color-mix\(in srgb, var\(--info/);
+});
+
+test('the tick reads as a checkbox, not as a custom control', () => {
+  const rule = css.slice(css.indexOf('.jf-attn-tick {'), css.indexOf('.jf-attn-tick:hover'));
+  assert.match(rule, /border-radius: 4px/);
+  assert.match(rule, /1\.5px solid/);
+});

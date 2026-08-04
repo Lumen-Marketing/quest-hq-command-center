@@ -30571,7 +30571,7 @@ a.wb-cal-more:hover { color: var(--orange); }
 .jf-attn { list-style: none; margin: 6px 0 0; padding: 0; }
 .jf-attn-row {
   display: flex; gap: 10px; align-items: center; padding: 7px 0;
-  border-bottom: 1px solid var(--border); font-size: .86rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); font-size: .86rem;
 }
 .jf-attn-row:last-child { border-bottom: 0; }
 /* The title takes the slack, so the date and the owner sit on the right edge whether or not
@@ -30581,11 +30581,12 @@ a.wb-cal-more:hover { color: var(--orange); }
 .jf-attn-row.overdue .jf-attn-due { color: var(--danger, #b91c1c); font-weight: 700; }
 .jf-attn-who {
   flex: none; padding: 2px 9px; border-radius: 999px; white-space: nowrap;
-  background: var(--surface-2); color: var(--ink-2); font-size: .72rem; font-weight: 700;
+  background: color-mix(in srgb, var(--info, #2563eb) 12%, transparent);
+  color: var(--info, #2563eb); font-size: .72rem; font-weight: 700;
 }
 .jf-attn-tick {
-  flex: none; width: 19px; height: 19px; display: grid; place-items: center; cursor: pointer;
-  border: 2px solid var(--border); border-radius: 6px; background: transparent;
+  flex: none; width: 17px; height: 17px; display: grid; place-items: center; cursor: pointer;
+  border: 1.5px solid color-mix(in srgb, var(--ink-2) 45%, transparent); border-radius: 4px; background: transparent;
   color: transparent; font-size: .68rem; transition: background .12s, border-color .12s, color .12s;
 }
 .jf-attn-tick:hover:not(:disabled) { border-color: var(--success, #15803d); color: var(--success, #15803d); }
@@ -30906,7 +30907,12 @@ a.wb-cal-more:hover { color: var(--orange); }
 }
 
 /* The attention card on the job file overview, which now carries the next action. */
-.jf-attention { border-left: 3px solid var(--orange); }
+/* Warm all round rather than a left stripe: this is the one card on the page that is asking
+   for something, and the border is what says so before any of the words are read. */
+.jf-attention { border-color: color-mix(in srgb, var(--orange) 38%, var(--border)); }
+.jf-attn-flame { color: var(--orange); margin-right: 2px; }
+.jf-attn-sync { display: inline-flex; align-items: center; gap: 3px; font-size: .72rem; font-weight: 600; }
+.jf-attn-sync i { font-size: .8rem; }
 
 /* ---- App dashboard: a grid the user arranges ---------------------------------------------
    Four columns; each card declares its span. Customize mode adds controls to the card itself

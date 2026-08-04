@@ -86,8 +86,8 @@ export function createJobFile(ctx) {
     const canManage = can('jobs.manage', companyId);
     return `
       <article class="jf-card jf-attention">
-        <h3>Needs attention
-          <span class="jf-sub">synced to My Queue</span>
+        <h3><i class="ti ti-flame jf-attn-flame" aria-hidden="true"></i>Needs attention
+          <span class="jf-sub jf-attn-sync"><i class="ti ti-refresh" aria-hidden="true"></i>synced to My Queue</span>
           ${canManage ? `<button class="btn btn-sm" type="button" data-action="job-attention-new" data-job-id="${h(job.id)}"><i class="ti ti-plus"></i>Add</button>` : ''}
         </h3>
         ${open.length ? `<ul class="jf-attn">${open.map((task) => `
