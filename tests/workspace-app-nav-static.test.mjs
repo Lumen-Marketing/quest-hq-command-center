@@ -39,6 +39,27 @@ test('the deck never writes to the document it is describing', () => {
   assert.ok(!/push\(|\.name =/.test(peek), 'the peek must not create or rename anything');
 });
 
+test('the deck lists the apps that have a tile on the workspace home', () => {
+  // One control in the place you are already arranging things, rather than a second list to
+  // keep in step by hand. Add the tile, the app appears in the deck; remove it, it goes.
+  const source = slice('navItemsForApps');
+  assert.match(source, /wbSidebarTiles\(workspace\)/);
+  assert.match(source, /\.filter\(\(tile\) => tile\.type === 'app'\)/);
+  assert.match(source, /byId\.get\(tile\.config\?\.appId\)/);
+});
+
+test('a tile pointing at a deleted app, or two tiles pointing at one app, do not break the deck', () => {
+  const source = slice('navItemsForApps');
+  assert.match(source, /\.filter\(\(app\) => app && !seen\.has\(app\.id\) && seen\.add\(app\.id\)\)/);
+  // Sanity-check the idiom itself: Set.add returns the set, which is truthy.
+  const seen = new Set();
+  const apps = [{ id: 'a' }, null, { id: 'a' }, { id: 'b' }];
+  assert.deepEqual(
+    apps.filter((app) => app && !seen.has(app.id) && seen.add(app.id)).map((a) => a.id),
+    ['a', 'b'],
+  );
+});
+
 test('the deck does not trigger a fetch to decide what to draw', () => {
   const source = slice('navItemsForApps');
   assert.match(source, /const doc = wbDoc\(companyId\);/);

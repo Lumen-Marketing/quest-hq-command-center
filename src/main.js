@@ -5496,7 +5496,19 @@ function navItemsForApps(route, companyId) {
   const doc = wbDoc(companyId);
   const workspace = doc ? wbCompanyWorkspacePeek(companyId) : null;
   if (!workspace) return [];
-  return wbWorkspaceApps(doc, workspace).map(({ app }) => navItemApp(route, app, companyId));
+  const byId = new Map(wbWorkspaceApps(doc, workspace).map(({ app }) => [app.id, app]));
+  // The deck mirrors the workspace home: an app is in the sidebar exactly when it has a
+  // tile there. Putting the tile on the page puts the app in the deck, and taking the tile
+  // off takes it out again -- one control, in the place you were already arranging things,
+  // rather than a second list to keep in step by hand.
+  const seen = new Set();
+  return wbSidebarTiles(workspace)
+    .filter((tile) => tile.type === 'app')
+    .map((tile) => byId.get(tile.config?.appId))
+    // A tile can point at an app that has since been deleted, and nothing stops two tiles
+    // pointing at the same one. Neither should put a broken or a doubled row in the deck.
+    .filter((app) => app && !seen.has(app.id) && seen.add(app.id))
+    .map((app) => navItemApp(route, app, companyId));
 }
 
 /** The unset-stage bucket needs a routable id; a bare '' would read as "no filter". */
