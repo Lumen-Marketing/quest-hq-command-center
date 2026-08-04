@@ -9,7 +9,7 @@
 
 import {
   CO_STEPS, bucketProgress, coStepIndex, dailyStreak, daysWorked, drawTotals,
-  isStruggling, projectedNet, sortDailies, ticketWithChangeOrders,
+  isStruggling, projectedNet, sortDailies, ticketWithChangeOrders, tradeColor,
 } from './production-model.js';
 import { groupLines, lineAmount, methodLabel } from './change-order-model.js';
 import {
@@ -371,14 +371,16 @@ export function createJobFile(ctx) {
     return `
       <section class="jf">
         <header class="jf-head">
-          <div>
+          <!-- The trade badge: the design leads with the trade, because on a board of jobs the
+               trade is what you scan for before the address. -->
+          <span class="jf-trade" style="background:${h(tradeColor(job.job_type))}" aria-hidden="true">${h((job.job_type || '?').trim().charAt(0).toUpperCase())}</span>
+          <div class="jf-head-main">
             <p class="jf-eyebrow">${h([job.client_name, job.site_address].filter(Boolean).join(' · ') || 'Job')}</p>
-            <h1>${h(job.name)}</h1>
-            <p class="jf-head-meta">
-              <span class="jf-stage-dot" style="background:${h(pipelineStageColor('jobs', stage, companyId))}"></span>${h(stage)}
-              ${worked ? ` · day ${worked}` : ''}
-              ${streakDots(data.dailies)}
-            </p>
+            <h1>${h(job.name)}
+              <!-- Stage and day sit ON the title line in the design, as one chip, rather than
+                   on a line of their own -- it is the job's state, not a separate fact. -->
+              <span class="jf-stage-chip" style="color:${h(pipelineStageColor('jobs', stage, companyId))};background:${h(pipelineStageColor('jobs', stage, companyId))}1f">${h(stage)}${worked ? ` · day ${worked}` : ''}</span>
+            </h1>
           </div>
           <div class="jf-head-actions">
             <a class="btn" href="${appHref(companyPath('jobs', { tab: 'list' }, companyId))}" data-router>All jobs</a>
@@ -398,13 +400,13 @@ export function createJobFile(ctx) {
           ${showRail ? `
             <aside class="jf-rail" aria-label="Quick create">
               <p class="jf-label">Quick create</p>
-              <button class="jf-quick" type="button" data-action="job-daily-new"><b>Daily report</b><span>How the day went</span></button>
-              <button class="jf-quick" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}"><b>Photos</b><span>Camera or device</span></button>
-              <button class="jf-quick" type="button" data-action="job-change-order-new"><b>Change order</b><span>Client asked for more</span></button>
-              <button class="jf-quick" type="button" data-action="job-bucket-new"><b>Cost bucket</b><span>Track a spend line</span></button>
-              <button class="jf-quick" type="button" data-action="job-draw-new"><b>Draw</b><span>When they owe you</span></button>
-              <button class="jf-quick" type="button" data-action="job-expense-new" data-job-id="${h(job.id)}"><b>Expense</b><span>Receipt to a bucket</span></button>
-              <button class="jf-quick" type="button" data-action="job-walk-new" data-job-id="${h(job.id)}"><b>Job walk</b><span>Record a voice note</span></button>
+              <button class="jf-quick" type="button" data-action="job-daily-new"><i class="ti ti-clipboard-text" aria-hidden="true"></i><span>Daily report</span></button>
+              <button class="jf-quick" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}"><i class="ti ti-camera" aria-hidden="true"></i><span>Photos</span></button>
+              <button class="jf-quick" type="button" data-action="job-change-order-new"><i class="ti ti-file-diff" aria-hidden="true"></i><span>Change order</span></button>
+              <button class="jf-quick" type="button" data-action="job-bucket-new"><i class="ti ti-wallet" aria-hidden="true"></i><span>Cost bucket</span></button>
+              <button class="jf-quick" type="button" data-action="job-draw-new"><i class="ti ti-cash" aria-hidden="true"></i><span>Draw</span></button>
+              <button class="jf-quick" type="button" data-action="job-expense-new" data-job-id="${h(job.id)}"><i class="ti ti-receipt" aria-hidden="true"></i><span>Expense</span></button>
+              <button class="jf-quick" type="button" data-action="job-walk-new" data-job-id="${h(job.id)}"><i class="ti ti-microphone" aria-hidden="true"></i><span>Job walk</span></button>
             </aside>` : ''}
         </div>
       </section>`;

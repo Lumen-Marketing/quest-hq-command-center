@@ -155,3 +155,31 @@ test('the tick reads as a checkbox, not as a custom control', () => {
   assert.match(rule, /border-radius: 4px/);
   assert.match(rule, /1\.5px solid/);
 });
+
+test('the job header leads with the trade, as the design does', () => {
+  // On a board of jobs the trade is what you scan for before the address.
+  assert.match(jobFile, /<span class="jf-trade" style="background:\$\{h\(tradeColor\(job\.job_type\)\)\}"/);
+  assert.match(jobFile, /\(job\.job_type \|\| '\?'\)\.trim\(\)\.charAt\(0\)\.toUpperCase\(\)/);
+  assert.match(css, /\.jf-trade \{/);
+});
+
+test('stage and day sit on the title line as one chip', () => {
+  // It is the job's state, not a separate fact on a line of its own.
+  assert.match(jobFile, /<span class="jf-stage-chip"/);
+  assert.match(jobFile, /\$\{worked \? ` · day \$\{worked\}` : ''\}<\/span>/);
+  assert.match(css, /\.jf-stage-chip \{/);
+});
+
+test('the streak is not repeated in the header', () => {
+  // "How it is going" already carries it; in the header it read as an orphaned dot.
+  assert.ok(!/jf-head-meta/.test(jobFile), 'the header meta line is gone');
+  assert.match(jobFile, /<h3>How it is going<\/h3>[\s\S]{0,200}streakDots\(data\.dailies\)/);
+});
+
+test('the quick-create rail is a narrow column of icons', () => {
+  assert.match(css, /\.jf-body \{[^}]*minmax\(0, 1fr\) 126px/);
+  assert.match(css, /\.jf-quick \{[^}]*justify-items: center/s);
+  // The descriptions said the same thing twice — "How the day went" beside "Daily report".
+  assert.ok(!/<b>Daily report<\/b><span>How the day went<\/span>/.test(jobFile));
+  assert.match(jobFile, /<i class="ti ti-clipboard-text" aria-hidden="true"><\/i><span>Daily report<\/span>/);
+});
