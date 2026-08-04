@@ -146,3 +146,16 @@ test('the drag module needs nothing from main.js', () => {
   assert.ok(!/\bctx\b/.test(drag), 'it should take no context');
   assert.match(drag, /export function bindTopbarDrag\(track\)/);
 });
+
+test('the field palette scrolls itself instead of setting the builder height', () => {
+  // It lists every field type, which is taller than most screens. Left unbounded it made the
+  // whole builder that tall and pushed everything below it off the page.
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const rule = styles.match(/\.wb-palette \{([\s\S]*?)\}/)?.[1] || '';
+  assert.match(rule, /max-height: calc\(100vh - 140px\)/);
+  assert.match(rule, /overflow-y: auto/);
+  // Sticky, so the types stay reachable however far down the field list you are.
+  assert.match(rule, /position: sticky/);
+  // And a scroll that reaches its end must not carry on into the page behind it.
+  assert.match(rule, /overscroll-behavior: contain/);
+});
