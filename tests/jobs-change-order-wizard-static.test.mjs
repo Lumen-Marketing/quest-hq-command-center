@@ -43,7 +43,7 @@ test('documenting without charging is a first-class outcome', () => {
 test('the change order is saved before its lines, and outlives them', () => {
   // A priced change order with no working is still worth having; losing the whole thing
   // because one line was rejected would throw away the part that matters.
-  const save = main.slice(main.indexOf('async function saveChangeOrderWizard('));
+  const save = wizard.slice(wizard.indexOf('async function saveWizard('));
   const body = save.slice(0, save.indexOf('\n}\n'));
   assert.ok(
     body.indexOf("from('job_change_orders').insert") < body.indexOf("from('job_change_order_lines').insert"),
@@ -53,7 +53,7 @@ test('the change order is saved before its lines, and outlives them', () => {
 });
 
 test('saving checks the permission on the job, not the active company', () => {
-  const save = main.slice(main.indexOf('async function saveChangeOrderWizard('));
+  const save = wizard.slice(wizard.indexOf('async function saveWizard('));
   assert.match(save.slice(0, 900), /requirePermission\('jobs\.manage', job\.company_id/);
 });
 

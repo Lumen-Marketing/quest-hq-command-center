@@ -4520,6 +4520,9 @@ function applyWorkspaceBuilderRows(rows) {
   });
   // Preserve any local-only docs (unsaved companies) the server didn't return.
   if (holdLocalWb) Object.keys(prevDocs).forEach((cid) => { if (!state.workspaceBuilderDocs[cid]) state.workspaceBuilderDocs[cid] = prevDocs[cid]; });
+  // Arm calendar-memo alarms for whatever just loaded. Fetching the tiny model only when a
+  // memo actually exists keeps it off the path of every company that has none.
+  if (anyMemos()) scheduleMemoAlarms();
 }
 
 // Datasets that no first-paint screen needs. Each already had a loader, written for
@@ -12329,7 +12332,8 @@ function loadChangeOrderWizard() {
     changeOrderWizardPending = import('./jobs/change-order-wizard.js').then((mod) => {
       changeOrderWizardModule = mod.createChangeOrderWizard({
         h, money, state, render, renderModalShell, showToast, uid: wbUid,
-        saveWizard: saveChangeOrderWizard,
+        jobById, requirePermission, createSupabaseClient, isLiveSupabaseSession,
+        navigate, companyPath, normalizeChangeOrder, normalizeChangeOrderLine,
       });
       return changeOrderWizardModule;
     }).catch((error) => {
@@ -12341,89 +12345,13 @@ function loadChangeOrderWizard() {
 }
 
 function openChangeOrderWizard(jobId) {
-  state.coWizard = {
-    jobId,
-    step: 1,
-    what: '',
-    requestedBy: '',
-    askedVia: 'in_person',
-    laborMode: 'crew_days',
-    lines: [],
-    method: 'lines',
-    // The default the v1 design prices at. It is a starting point, not a rule -- the field is
-    // editable and the summary recomputes as it changes.
-    marginPct: 45,
-    flatPrice: 0,
-    sentVia: 'text',
-    executeWhen: 'on_acceptance',
-    error: '',
-  };
+  state.coWizard = { jobId, step: 1, error: '' };
   state.modal = 'co-wizard';
   render();
-  loadChangeOrderWizard().then(() => render())
+  loadChangeOrderWizard().then((wiz) => { state.coWizard = { ...wiz.blankDraft(), jobId }; render(); })
     .catch((error) => console.error('Change-order wizard failed to load', error));
 }
 
-function renderChangeOrderWizardModal() {
-  const job = state.coWizard ? jobById(state.coWizard.jobId) : null;
-  if (!changeOrderWizardModule) return renderModalShell('Jobs', 'Change order', questLoader('Loading'), 'wb-modal-sm');
-  return changeOrderWizardModule.renderChangeOrderWizard(job);
-}
-
-/**
- * Write the change order, then its lines.
- *
- * The lines go in second and are allowed to fail on their own: a change order with a price
- * and no working is still worth having, and losing the whole thing because one line was
- * rejected would throw away the part that matters.
- */
-async function saveChangeOrderWizard(draft, { documentOnly }) {
-  const job = jobById(draft.jobId);
-  if (!job || !changeOrderWizardModule) return;
-  if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot add job records.', 'Jobs')) return;
-  const { changeOrder, lines } = changeOrderWizardModule.wizardPayload(draft, job, documentOnly);
-  if (!changeOrder.title) {
-    draft.error = 'Say what the client wants changed first.';
-    render();
-    return;
-  }
-
-  const client = createSupabaseClient();
-  let row = { ...changeOrder, id: crypto.randomUUID() };
-  if (isLiveSupabaseSession() && client) {
-    const result = await client.from('job_change_orders').insert(changeOrder).select().single();
-    if (result.error) {
-      draft.error = result.error.message || 'Could not save that change order.';
-      render();
-      return;
-    }
-    row = result.data;
-    if (lines.length) {
-      const withParent = lines.map((line) => ({ ...line, change_order_id: row.id }));
-      const lineResult = await client.from('job_change_order_lines').insert(withParent).select();
-      if (lineResult.error) {
-        showToast('Change order saved, but its pricing lines did not. Open it to re-enter them.', 'error', 'Jobs');
-      } else {
-        state.jobChangeOrderLines = [...state.jobChangeOrderLines, ...(lineResult.data || []).map(normalizeChangeOrderLine)];
-      }
-    }
-  } else if (lines.length) {
-    state.jobChangeOrderLines = [
-      ...state.jobChangeOrderLines,
-      ...lines.map((line) => normalizeChangeOrderLine({ ...line, id: crypto.randomUUID(), change_order_id: row.id })),
-    ];
-  }
-
-  state.jobChangeOrders = [normalizeChangeOrder(row), ...state.jobChangeOrders];
-  state.modal = '';
-  state.coWizard = null;
-  showToast(
-    documentOnly ? 'Documented — no charge. The crew still has to acknowledge it.' : 'Change order saved.',
-    isLiveSupabaseSession() ? 'live' : 'local',
-    'Jobs',
-  );
-  navigate(companyPath('jobs', { tab: 'profile', job_id: job.id, jt: 'changes' }, job.company_id), { replace: true });
-}
 
 function renderJobFile(companyId, job, tab) {
   // The records are per-job detail: fetched when a job is first opened rather than at
@@ -15687,6 +15615,46 @@ function loadChildCollections() {
   return childCollectionsPending;
 }
 
+// ---- Calendar memos ---------------------------------------------------------
+// The dialog and the alarm both live in ./workspace/memo-runtime.js, fetched on demand and,
+// for the alarm, only when a memo exists at all -- most companies have none, and the entry
+// bundle should not carry an alarm clock for them.
+let memoRuntime = null;
+let memoRuntimePending = null;
+
+function loadMemoRuntime() {
+  if (memoRuntime) return Promise.resolve(memoRuntime);
+  if (!memoRuntimePending) {
+    memoRuntimePending = import('./workspace/memo-runtime.js').then((mod) => {
+      memoRuntime = mod.createMemoRuntime({
+        state, render, showToast, formatDate, wbSave, wbFind, can, openWbModal,
+      });
+      return memoRuntime;
+    }).catch((error) => {
+      memoRuntimePending = null;
+      throw error;
+    });
+  }
+  return memoRuntimePending;
+}
+
+/** Only a boolean is needed here -- the runtime does the real walk when it arms. */
+const anyMemos = () => Object.values(state.workspaceBuilderDocs || {})
+  .some((doc) => (doc?.workspaces || []).some((ws) => (ws.apps || []).some((a) => a.memos?.length)));
+
+function scheduleMemoAlarms() {
+  if (memoRuntime) { memoRuntime.schedule(); return; }
+  if (!anyMemos()) return;
+  loadMemoRuntime().then((rt) => rt.schedule()).catch((error) => console.warn('Memo alarms failed to load', error));
+}
+
+async function openWbMemoModal(companyId, workspaceId, appId, memoId, onDate) {
+  if (!wbGuard()) return;
+  const rt = await loadMemoRuntime().catch(() => null);
+  if (!rt) { showToast('Could not open the memo form — check your connection.', 'local', 'Workspaces'); return; }
+  rt.openMemoModal(companyId, workspaceId, appId, memoId, onDate);
+}
+
 /** Every write to a record's children goes through one save. */
 async function wbChildEdit(companyId, workspaceId, appId, itemId, change) {
   const { app } = wbFind(companyId, workspaceId, appId);
@@ -17049,7 +17017,12 @@ function wbBuildInstalledApp(workspace, src, includeItems) {
   });
   let name = String(src.name || 'Imported app').trim() || 'Imported app';
   if (workspace.apps.some((a) => a.name === name)) { let n = 2; while (workspace.apps.some((a) => a.name === `${name} (${n})`)) n += 1; name = `${name} (${n})`; }
-  return { id: wbUid(), name, description: String(src.description || ''), type: String(src.type || ''), icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0], color: safeHexColor(src.color, WB_PALETTE[1]), fields, items, automations, ...extras };
+  // Memos follow items: a restore keeps them, a structure-only market install does not. They
+  // reference no field, so unlike the layouts there is nothing in them to remap.
+  const memos = includeItems && Array.isArray(src.memos)
+    ? src.memos.filter(Boolean).map((m) => ({ ...m, id: wbUid(), notifiedAt: '' }))
+    : [];
+  return { id: wbUid(), name, description: String(src.description || ''), type: String(src.type || ''), icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0], color: safeHexColor(src.color, WB_PALETTE[1]), fields, items, automations, ...extras, ...(memos.length ? { memos } : {}) };
 }
 function wbInstallAppFromJson(companyId, workspaceId, text) {
   let bundle;
@@ -18797,6 +18770,8 @@ function mountWorkspaceBuilder() {
       const params = state.route?.params;
       nav({ app_id: appId, tab: 'calendar', field: el.value, ...(params?.get('view') ? { view: params.get('view') } : {}), ...(params?.get('on') ? { on: params.get('on') } : {}) });
     }, 'onchange');
+    bind('[data-wb-memo-new]', (el) => openWbMemoModal(companyId, workspaceId, appId, '', el.dataset.wbMemoNew));
+    bind('[data-wb-memo-open]', (el) => openWbMemoModal(companyId, workspaceId, appId, el.dataset.wbMemoOpen, ''));
     bind('[data-wb-board-field]', (el) => { wbItemsUI(appId).boardFieldId = el.value; render(); }, 'onchange');
     bind('[data-wb-board-sum]', (el) => { wbItemsUI(appId).boardSumId = el.value; render(); }, 'onchange');
     bind('[data-wb-add-filter]', () => { const { app } = wbFind(companyId, workspaceId, appId); const f0 = app.fields[0]; if (!f0) return; wbItemsUI(appId).filters.push({ fieldId: f0.id, op: wbFilterOps(wbFieldKind(f0))[0][0], value: '' }); render(); });
@@ -19113,6 +19088,7 @@ function wbMountModal() {
   }
   // Item detail modal: view/edit toggle, file previews, and the comment box work
   // in both modes; the field-input wiring only runs when actually editing.
+  if (m.kind === 'memo' && memoRuntime) memoRuntime.mountMemoModal(overlay);
   if (m.kind === 'child-item') {
     // The same mounts the app's own record form gets. Without them a checklist field in a
     // sub-item rendered its steps but bound nothing, so the boxes could not be ticked at all —
@@ -23663,7 +23639,11 @@ function renderActiveModal(route, session) {
   if (state.modal === 'record-history') return renderRecordHistoryModal();
   if (state.modal === 'job-daily') return renderJobDailyModal();
   if (state.modal === 'job-record-new') return renderJobRecordModal();
-  if (state.modal === 'co-wizard') return renderChangeOrderWizardModal();
+  if (state.modal === 'co-wizard') {
+    return changeOrderWizardModule
+      ? changeOrderWizardModule.renderChangeOrderWizard(state.coWizard ? jobById(state.coWizard.jobId) : null)
+      : renderModalShell('Jobs', 'Change order', questLoader('Loading'), 'wb-modal-sm');
+  }
   if (state.modal === 'job-expense') return renderJobExpenseModal();
   if (state.modal === 'job-walk') return renderJobWalkModal();
   if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();

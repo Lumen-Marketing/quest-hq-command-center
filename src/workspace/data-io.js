@@ -203,6 +203,9 @@ export function createDataIO(ctx) {
         // and saved views. Without these a downloaded app reinstalls as a bare field list,
         // which is what it used to do.
         ...portableExtras(app),
+        // Memos are content, like records -- a backup that silently dropped them would lose
+        // work. They ride with items, so the structure-only market share never carries them.
+        ...(Array.isArray(app.memos) && app.memos.length ? { memos: clone(app.memos) } : {}),
       },
     };
     const safeName = (app.name || 'app').replace(/[^\w.-]+/g, '_');

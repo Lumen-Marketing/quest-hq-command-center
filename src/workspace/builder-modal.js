@@ -89,6 +89,41 @@ export function createBuilderModal(ctx) {
         '<p class="wb-sub">This removes it from this record. It cannot be undone.</p>',
         '<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-child-del-confirm><i class="ti ti-trash"></i>Delete</button>');
     }
+    if (m.kind === 'memo') {
+      const d = m.draft || {};
+      // A memo with no reminder is a note on a day, which is a legitimate thing to want. The
+      // reminder is opt-in rather than a default, so nothing starts alarming by surprise.
+      const remind = d.remindMinutes;
+      return wbModalShell('Memo', 'wb-modal-sm',
+        `<div class="wb-modal-ic" style="background:#d97706"><i class="ti ti-bell"></i></div><h3>${m.memoId ? 'Edit memo' : 'New memo'}</h3>`,
+        `<div class="wb-field"><label>What is it</label>
+          <input class="wb-input" data-wb-memo-field="title" value="${h(d.title || '')}" placeholder="e.g. Call the inspector" autofocus />
+        </div>
+        <div class="wb-field"><label>Note <span class="wb-sub">(optional)</span></label>
+          <textarea class="wb-input" rows="2" data-wb-memo-field="note" placeholder="Anything worth remembering">${h(d.note || '')}</textarea>
+        </div>
+        <div class="wb-row2">
+          <div class="wb-field"><label>Date</label>
+            <input class="wb-input" type="date" data-wb-memo-field="date" value="${h(d.date || '')}" />
+          </div>
+          <div class="wb-field"><label>Time <span class="wb-sub">(optional)</span></label>
+            <input class="wb-input" type="time" data-wb-memo-field="time" value="${h(d.time || '')}" />
+          </div>
+        </div>
+        <div class="wb-field"><label>Remind me</label>
+          <select class="wb-input" data-wb-memo-field="remindMinutes">
+            <option value="" ${remind == null ? 'selected' : ''}>Don't remind me</option>
+            ${m.remindChoices.map(([mins, label]) => `<option value="${mins}" ${String(remind) === String(mins) ? 'selected' : ''}>${h(label)}</option>`).join('')}
+          </select>
+        </div>
+        <p class="wb-sub">A reminder shows while Questbase is open in a tab, and as a desktop
+          notification if you allow it. Nothing is sent by email or push.</p>
+        ${d.done ? '<p class="wb-sub"><b>Marked done.</b></p>' : ''}`,
+        `${m.memoId ? '<button class="btn danger" data-wb-memo-delete><i class="ti ti-trash"></i>Delete</button>' : ''}
+         <button class="btn" data-action="wb-modal-close">Cancel</button>
+         ${m.memoId && !d.done ? '<button class="btn" data-wb-memo-done><i class="ti ti-check"></i>Mark done</button>' : ''}
+         <button class="btn btn-primary" data-wb-memo-save><i class="ti ti-check"></i>${m.memoId ? 'Save' : 'Add memo'}</button>`);
+    }
     if (m.kind === 'record-add') {
       return wbModalShell('Add card', 'wb-modal-wide',
         '<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-list-details"></i></div><h3>Add a card to every record</h3>',

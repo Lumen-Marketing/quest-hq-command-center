@@ -204,7 +204,7 @@ test('the installer actually calls all of this', () => {
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   assert.match(main, /const \{ extras, collectionIdMap, childFieldIdMap \} = remapApp\(src, fieldIdMap, wbUid\);/);
   assert.match(main, /children: remapChildren\(it\.children, collectionIdMap, childFieldIdMap, wbUid\),/);
-  assert.match(main, /automations, \.\.\.extras \};/);
+  assert.match(main, /automations, \.\.\.extras, /, 'the remapped extras are spread onto the installed app');
 });
 
 test('the download bundle carries the extras', () => {

@@ -8,6 +8,7 @@
 // Fetched on demand — you have to click the tab, and nothing else needs them to paint.
 
 import { boardColumns } from './pipeline-core.js';
+import { memosByDay } from './calendar-memos.js';
 import { addDays, iso, monthGrid, mondayIndex, startOfWeek } from '../jobs/job-calendar.js';
 import {
   dashboardFor, metricValue, numberFields, optionFields, widgetMeta, widgetRecords,
@@ -23,7 +24,34 @@ export function dateFields(app) {
 }
 
 /**
- * Records grouped by the day they fall on.
+ * Records placed on a day by ANY of several date fields.
+ *
+ * A job with a start date and a due date belongs on both days, and which field put it there
+ * is what the pill has to say -- otherwise the same record appears twice with no explanation.
+ * Picking one field and ignoring the rest made the calendar quietly incomplete: the dates
+ * were in the app, just not on the screen.
+ */
+export function recordsByDates(app, fields) {
+  const list = (fields || []).filter(Boolean);
+  const byDay = new Map();
+  const placed = new Set();
+  for (const item of app?.items || []) {
+    for (const field of list) {
+      const raw = String(item.values?.[field.id] ?? '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) continue;
+      if (!byDay.has(raw)) byDay.set(raw, []);
+      byDay.get(raw).push({ item, field });
+      placed.add(item.id);
+    }
+  }
+  // Undated counts RECORDS with no date in any of these fields, not empty field values --
+  // otherwise an app with three date fields reports three times the misses it has.
+  const undated = (app?.items || []).filter((it) => !placed.has(it.id)).length;
+  return { byDay, undated };
+}
+
+/**
+ * The same for a single field. Kept for the dashboard's mini calendar, which shows one.
  *
  * A record with no date is not placed rather than dropped: the calendar reports how many are
  * missing one, so a month that looks empty can be told apart from a month nobody has dated.
@@ -185,14 +213,21 @@ export function createAppViews(ctx) {
 
   function renderAppCalendar(companyId, app, anchorIso, fieldId, viewMode) {
     const candidates = dateFields(app);
+    const canManage = can('workspaces.manage', companyId);
     // The calendar renders whether or not the app has a date field yet. Replacing it with an
     // empty state hid the whole feature behind a setup step, so you could not see what you
     // were being asked to set up. With no field it draws the month you are on, empty, and
     // says what to add above it.
     const view = CAL_VIEWS.includes(viewMode) ? viewMode : 'month';
-    const field = candidates.find((f) => f.id === fieldId) || candidates[0] || null;
+    // 'all' is the default and the useful one: every dated record on the calendar, whichever
+    // field carries its date. Narrowing to one field is a filter you choose, not the starting
+    // point -- starting there hid records that were already dated.
+    const chosen = candidates.find((f) => f.id === fieldId) || null;
+    const field = chosen;
+    const active = chosen ? [chosen] : candidates;
     const anchor = /^\d{4}-\d{2}-\d{2}$/.test(String(anchorIso || '')) ? new Date(`${anchorIso}T12:00:00`) : new Date();
-    const { byDay, undated } = recordsByDay(app, field);
+    const { byDay, undated } = recordsByDates(app, active);
+    const memoDays = memosByDay(app);
     const todayIso = iso(new Date());
     const link = (params) => appHref(companyPath('workspaces', {
       app_id: app.id, tab: 'calendar', ...(field ? { field: field.id } : {}), ...params,
@@ -207,13 +242,23 @@ export function createAppViews(ctx) {
       return iso(next);
     };
 
-    const pill = (item) => `<a class="wb-cal-pill" href="${itemHref(companyId, app, item)}" data-router style="border-left-color:${h(app.color)}" title="${h(wbItemTitle(app, item))}">${h(wbItemTitle(app, item)) || 'Untitled'}</a>`;
+    // With several date fields in play the same record lands on more than one day, so the
+    // pill names the field that put it there. With one field that would be noise, so it is
+    // only shown when it actually disambiguates.
+    const many = active.length > 1;
+    const pill = ({ item, field: on }) => `<a class="wb-cal-pill" href="${itemHref(companyId, app, item)}" data-router style="border-left-color:${h(app.color)}" title="${h(wbItemTitle(app, item))}${on ? ` — ${h(on.label)}` : ''}">${many && on ? `<b class="wb-cal-why">${h(on.label)}</b>` : ''}${h(wbItemTitle(app, item)) || 'Untitled'}</a>`;
+    const memoPill = (memo) => `<button type="button" class="wb-cal-memo ${memo.done ? 'done' : ''}" data-wb-memo-open="${h(memo.id)}" title="${h(memo.note || memo.title)}">
+      <i class="ti ti-${memo.remindMinutes == null ? 'note' : 'bell'}"></i>${memo.time ? `<b>${h(memo.time)}</b>` : ''}${h(memo.title)}
+    </button>`;
     const dayCell = (day, { dim = false, cap = 0 } = {}) => {
       const key = iso(day);
       const items = byDay.get(key) || [];
+      const memos = memoDays.get(key) || [];
       const shown = cap ? items.slice(0, cap) : items;
       return `<div class="wb-cal-day ${dim ? 'dim' : ''} ${key === todayIso ? 'today' : ''}">
         <span class="wb-cal-num">${day.getDate()}</span>
+        ${canManage ? `<button type="button" class="wb-cal-add" data-wb-memo-new="${h(key)}" title="Add a memo on ${h(key)}" aria-label="Add a memo on ${h(key)}"><i class="ti ti-plus"></i></button>` : ''}
+        ${memos.map(memoPill).join('')}
         ${shown.map(pill).join('')}
         ${cap && items.length > cap ? `<a class="wb-cal-more" href="${link({ view: 'day', on: key })}" data-router>+${items.length - cap} more</a>` : ''}
       </div>`;
@@ -247,12 +292,16 @@ export function createAppViews(ctx) {
         ${days.map((day) => dayCell(day)).join('')}
       </div>`;
     } else {
-      const items = byDay.get(iso(anchor)) || [];
+      const key = iso(anchor);
+      const items = byDay.get(key) || [];
+      const memos = memoDays.get(key) || [];
       label = anchor.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-      grid = `<div class="wb-cal-single ${iso(anchor) === todayIso ? 'today' : ''}">
+      grid = `<div class="wb-cal-single ${key === todayIso ? 'today' : ''}">
+        ${canManage ? `<button class="btn btn-sm" type="button" data-wb-memo-new="${h(key)}"><i class="ti ti-plus"></i>Add memo</button>` : ''}
+        ${memos.length ? `<ul class="wb-cal-daylist">${memos.map((m) => `<li>${memoPill(m)}</li>`).join('')}</ul>` : ''}
         ${items.length
-    ? `<ul class="wb-cal-daylist">${items.map((item) => `<li>${pill(item)}</li>`).join('')}</ul>`
-    : emptyState(field ? `Nothing is set to ${h(field.label.toLowerCase())} on this day.` : 'No records to show yet.')}
+    ? `<ul class="wb-cal-daylist">${items.map((entry) => `<li>${pill(entry)}</li>`).join('')}</ul>`
+    : memos.length ? '' : emptyState(field ? `Nothing is set to ${h(field.label.toLowerCase())} on this day.` : 'Nothing on this day yet.')}
       </div>`;
     }
 
@@ -270,10 +319,11 @@ export function createAppViews(ctx) {
           </div>
           ${candidates.length > 1 ? `<label class="wb-chip-manage" title="Which date field the calendar uses">
             <select class="wb-chip-select" data-wb-cal-field aria-label="Calendar date field">
-              ${candidates.map((f) => `<option value="${h(f.id)}" ${f.id === field.id ? 'selected' : ''}>By ${h(f.label)}</option>`).join('')}
-            </select></label>` : field ? `<span class="wb-cal-by">By ${h(field.label)}</span>` : ''}
+              <option value="" ${chosen ? '' : 'selected'}>All dates</option>
+              ${candidates.map((f) => `<option value="${h(f.id)}" ${chosen && f.id === chosen.id ? 'selected' : ''}>By ${h(f.label)}</option>`).join('')}
+            </select></label>` : candidates.length === 1 ? `<span class="wb-cal-by">By ${h(candidates[0].label)}</span>` : ''}
         </div>
-        ${field ? '' : `<p class="wb-cal-setup">
+        ${candidates.length ? '' : `<p class="wb-cal-setup">
           <i class="ti ti-calendar"></i>
           <span>This app has no <b>Date</b> field yet, so nothing can be placed on the calendar.</span>
           ${can('workspaces.manage', companyId) ? `<a class="btn btn-sm btn-primary" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'fields' }, companyId))}" data-router><i class="ti ti-plus"></i>Add field</a>` : ''}

@@ -15,7 +15,11 @@ import {
 } from './change-order-model.js';
 
 export function createChangeOrderWizard(ctx) {
-  const { h, money, state, render, renderModalShell, showToast, uid } = ctx;
+  const {
+    h, money, state, render, renderModalShell, showToast, uid,
+    jobById, requirePermission, createSupabaseClient, isLiveSupabaseSession,
+    navigate, companyPath, normalizeChangeOrder, normalizeChangeOrderLine,
+  } = ctx;
 
   const draft = () => state.coWizard;
 
@@ -236,12 +240,12 @@ export function createChangeOrderWizard(ctx) {
       d.method = 'flat';
       d.flatPrice = 0;
       d.lines = [];
-      ctx.saveWizard(d, { documentOnly: true });
+      saveWizard(d, true);
       return true;
     }
     if (action === 'co-wizard-save') {
       collect(root);
-      ctx.saveWizard(d, { documentOnly: false });
+      saveWizard(d, false);
       return true;
     }
     return false;
@@ -283,5 +287,79 @@ export function createChangeOrderWizard(ctx) {
     };
   }
 
-  return { renderChangeOrderWizard, handleWizardAction, wizardPayload, groupLines, blankLine };
+  /**
+   * Write the change order, then its lines.
+   *
+   * The lines go in second and are allowed to fail on their own: a change order with a price
+   * and no working is still worth having, and losing the whole thing because one line was
+   * rejected would throw away the part that matters.
+   */
+  async function saveWizard(d, documentOnly) {
+    const job = jobById(d.jobId);
+    if (!job) return;
+    if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot add job records.', 'Jobs')) return;
+    const { changeOrder, lines } = wizardPayload(d, job, documentOnly);
+    if (!changeOrder.title) {
+      d.error = 'Say what the client wants changed first.';
+      render();
+      return;
+    }
+
+    const client = createSupabaseClient();
+    let row = { ...changeOrder, id: crypto.randomUUID() };
+    if (isLiveSupabaseSession() && client) {
+      const result = await client.from('job_change_orders').insert(changeOrder).select().single();
+      if (result.error) {
+        d.error = result.error.message || 'Could not save that change order.';
+        render();
+        return;
+      }
+      row = result.data;
+      if (lines.length) {
+        const withParent = lines.map((line) => ({ ...line, change_order_id: row.id }));
+        const lineResult = await client.from('job_change_order_lines').insert(withParent).select();
+        if (lineResult.error) {
+          showToast('Change order saved, but its pricing lines did not. Open it to re-enter them.', 'error', 'Jobs');
+        } else {
+          state.jobChangeOrderLines = [...state.jobChangeOrderLines, ...(lineResult.data || []).map(normalizeChangeOrderLine)];
+        }
+      }
+    } else if (lines.length) {
+      state.jobChangeOrderLines = [
+        ...state.jobChangeOrderLines,
+        ...lines.map((line) => normalizeChangeOrderLine({ ...line, id: crypto.randomUUID(), change_order_id: row.id })),
+      ];
+    }
+
+    state.jobChangeOrders = [normalizeChangeOrder(row), ...state.jobChangeOrders];
+    state.modal = '';
+    state.coWizard = null;
+    showToast(
+      documentOnly ? 'Documented — no charge. The crew still has to acknowledge it.' : 'Change order saved.',
+      isLiveSupabaseSession() ? 'live' : 'local',
+      'Jobs',
+    );
+    navigate(companyPath('jobs', { tab: 'profile', job_id: job.id, jt: 'changes' }, job.company_id), { replace: true });
+  }
+
+  /** A fresh draft. Lives here so the defaults sit beside the steps that read them. */
+  const blankDraft = () => ({
+    jobId: '',
+    step: 1,
+    what: '',
+    requestedBy: '',
+    askedVia: 'in_person',
+    laborMode: 'crew_days',
+    lines: [],
+    method: 'lines',
+    // The default the v1 design prices at -- a starting point, not a rule. The field is
+    // editable and the summary recomputes as it changes.
+    marginPct: 45,
+    flatPrice: 0,
+    sentVia: 'text',
+    executeWhen: 'on_acceptance',
+    error: '',
+  });
+
+  return { renderChangeOrderWizard, handleWizardAction, wizardPayload, blankDraft, groupLines, blankLine };
 }

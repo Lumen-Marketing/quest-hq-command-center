@@ -30591,6 +30591,39 @@ a.wb-cal-more:hover { color: var(--orange); }
 .jf-attn-tick:hover:not(:disabled) { border-color: var(--success, #15803d); color: var(--success, #15803d); }
 .jf-attn-tick:disabled { cursor: default; opacity: .5; }
 
+/* ---- Calendar memos ------------------------------------------------------------------------- */
+.wb-cal-memo {
+  display: flex; align-items: center; gap: 5px; width: 100%; cursor: pointer; text-align: left;
+  border: 1px solid #f0e0c0; border-left: 3px solid #d97706; border-radius: 6px;
+  background: #fdf6e3; color: #7c4a03; padding: 2px 6px; margin-bottom: 2px;
+  font-size: .72rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wb-cal-memo:hover { border-color: #d97706; }
+.wb-cal-memo i { flex: none; font-size: .78rem; }
+.wb-cal-memo b { font-variant-numeric: tabular-nums; font-weight: 800; }
+.wb-cal-memo.done { opacity: .55; text-decoration: line-through; }
+
+/* The add button only appears on the day you are pointing at -- one per cell, always visible,
+   would turn the month into a grid of plus signs. */
+.wb-cal-add {
+  position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; padding: 0;
+  display: grid; place-items: center; opacity: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface);
+  color: var(--muted); font-size: .68rem;
+}
+.wb-cal-day { position: relative; }
+.wb-cal-day:hover .wb-cal-add, .wb-cal-add:focus-visible { opacity: 1; }
+.wb-cal-add:hover { border-color: var(--orange); color: var(--orange); }
+/* Touch has no hover, so it stays visible there rather than being unreachable. */
+@media (hover: none) { .wb-cal-add { opacity: .6; } }
+
+/* Which date field put a record on this day, when more than one could have. */
+.wb-cal-why {
+  font-size: .6rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); margin-right: 4px;
+}
+
 /* ---- Photos tab ---------------------------------------------------------------------------- */
 .jf-photo-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .jf-photo-chips { display: flex; gap: 6px; flex-wrap: wrap; }

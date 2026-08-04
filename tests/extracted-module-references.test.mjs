@@ -160,6 +160,7 @@ const FACTORY_MODULES = [
   ['src/jobs/job-list.js', 'createJobList'],
   ['src/jobs/job-calendar.js', 'createJobCalendar'],
   ['src/jobs/change-order-wizard.js', 'createChangeOrderWizard'],
+  ['src/workspace/memo-runtime.js', 'createMemoRuntime'],
   ['src/crm/deal-detail.js', 'createDealDetail'],
   ['src/crm/underwriter-page.js', 'createUnderwriterPage'],
   ['src/knowledge/knowledge-page.js', 'createKnowledgePage'],

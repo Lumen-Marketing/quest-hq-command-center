@@ -166,9 +166,13 @@ test('a calendar day is the viewer own day, not a UTC one', () => {
 test('the calendar draws even before the app has a date field', () => {
   // Replacing it with an empty state hid the whole feature behind a setup step, so you could
   // not see what you were being asked to set up.
-  assert.match(views, /const field = candidates\.find\(\(f\) => f\.id === fieldId\) \|\| candidates\[0\] \|\| null;/);
   assert.ok(!/if \(!candidates\.length\) \{\s*return/.test(views), 'no early return may remain');
-  assert.match(views, /\$\{field \? '' : `<p class="wb-cal-setup">/, 'the notice sits above the grid');
+  // The notice is about having NO date field at all. Keying it on the SELECTED field was a
+  // bug: with "All dates" chosen nothing is selected, so an app with three date fields was
+  // told to go and add one.
+  assert.match(views, /\$\{candidates\.length \? '' : `<p class="wb-cal-setup">/, 'the notice sits above the grid');
+  assert.match(views, /const chosen = candidates\.find\(\(f\) => f\.id === fieldId\) \|\| null;/);
+  assert.match(views, /const active = chosen \? \[chosen\] : candidates;/, 'no selection means every date field');
 });
 
 test('an app with no date field renders every view instead of throwing', () => {
