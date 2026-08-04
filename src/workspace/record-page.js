@@ -33,26 +33,14 @@ function childValueHtml(ctxFns, companyId, app, cols, child, field) {
   );
 }
 
-// Which field names the row. A sub-item reads as a line of text first and a set of columns
-// second, so the first plainly-readable field carrying anything becomes the title and the
-// rest trail behind it.
-//
-// The order matters: these are the types that render as words rather than as a chip, a bar
-// or a swatch, and a title made of a widget reads as decoration rather than as a name.
-const CHILD_TITLE_TYPES = ['text', 'longtext', 'textarea', 'email', 'phone', 'url', 'autonumber', 'date'];
-// Types that never make a sensible title, whatever else is missing.
-const CHILD_TITLE_NEVER = ['checklist', 'checkbox', 'progress', 'file', 'image', 'rating'];
+// Whether a field has anything in it. Empty fields are left out of a card rather than shown
+// as a dash: a sub-item is usually a partial record, and a column of dashes buries the half
+// that was filled in.
 const filled = (child, field) => {
   const v = child.values?.[field.id];
   if (v == null || v === '') return false;
   return Array.isArray(v) ? v.length > 0 : String(v).trim() !== '';
 };
-
-function childTitleField(fields, child) {
-  return fields.find((f) => CHILD_TITLE_TYPES.includes(f.type) && filled(child, f))
-    || fields.find((f) => !CHILD_TITLE_NEVER.includes(f.type) && filled(child, f))
-    || null;
-}
 
 export function createRecordPage(ctx) {
   const {
@@ -60,27 +48,30 @@ export function createRecordPage(ctx) {
     wbItemTitle, wbTimeAgo, wbUrlControl, state,
   } = ctx;
 
-  // One sub-item, as a line you can tick rather than a row of table cells. Anything checkable
-  // is checkable here: a lone checkbox field becomes the row's own tick, and a checklist field
-  // opens out into its steps. Both write straight through, so working a list never means
-  // opening a dialog per step.
+  /**
+   * One sub-item, as a small card of labelled lines.
+   *
+   * It used to be a single row: one field promoted to a title, the rest crammed into chips
+   * that repeated their own field name. That fell apart the moment two sub-items shared a
+   * title -- two Dailies both reading "Lumen Marketing Account" told you nothing and gave you
+   * no way to tell them apart -- and it meant guessing which field deserved to be the name.
+   *
+   * Stacked, there is nothing to guess: every field says what it is and shows its value, the
+   * way the fields on the record above already read.
+   */
   function childRow(companyId, app, collection, cols, child, one, canManage) {
-    const titleField = childTitleField(cols, child);
     const val = (field) => childValueHtml(ctx, companyId, app, cols, child, field);
-    const title = titleField ? val(titleField) : h(one);
-    // Exactly one checkbox reads as "this sub-item is done". Two or more is a form, not a
-    // checklist, so those stay in the meta line where they keep their labels.
+    // Exactly one checkbox reads as "this sub-item is done", so it also strikes the card
+    // through. Two or more is a form, and each keeps its own line.
     const boxes = cols.filter((f) => f.type === 'checkbox');
     const box = boxes.length === 1 ? boxes[0] : null;
     const done = box ? child.values[box.id] === true || child.values[box.id] === 'true' : false;
-    const meta = cols
-      .filter((f) => f !== titleField && f !== box && f.type !== 'checklist')
-      .filter((f) => filled(child, f))
-      .map((f) => ({ f, html: val(f) }));
+
     const tick = (attr, on, label) => `<button type="button" class="wb-child-tick${on ? ' on' : ''}" role="checkbox"
       aria-checked="${on ? 'true' : 'false'}" aria-label="${h(label)}" title="${h(label)}"
       ${attr}${canManage ? '' : ' disabled'}><i class="ti ti-check"></i></button>`;
-    const steps = cols.filter((f) => f.type === 'checklist').map((f) => {
+
+    const checklistBlock = (f) => {
       const list = (Array.isArray(child.values?.[f.id]) ? child.values[f.id] : []).filter(Boolean);
       if (!list.length) return '';
       return `<div class="wb-child-steps">
@@ -90,18 +81,28 @@ export function createRecordPage(ctx) {
           <span class="wb-child-step-label">${h(s.label || 'Step')}</span>
         </li>`).join('')}</ul>
       </div>`;
-    }).join('');
-    return `<li class="wb-child-row${done ? ' done' : ''}">
-      <div class="wb-child-line">
-        ${box ? tick(`data-wb-child-check="${h(collection.id)}:${h(child.id)}:${h(box.id)}"`, done, box.label) : ''}
-        <span class="wb-child-name">${title}</span>
-        <span class="wb-child-meta">${meta.map((x) => `<span class="wb-child-pill"><b>${h(x.f.label)}</b>${x.html}</span>`).join('')}</span>
-        ${canManage ? `<span class="wb-child-acts">
-          <button class="wb-w-btn" type="button" data-wb-child-edit="${h(collection.id)}:${h(child.id)}" title="Edit" aria-label="Edit"><i class="ti ti-pencil"></i></button>
-          <button class="wb-w-btn danger" type="button" data-wb-child-del="${h(collection.id)}:${h(child.id)}" title="Delete" aria-label="Delete"><i class="ti ti-trash"></i></button>
-        </span>` : ''}
-      </div>
-      ${steps}
+    };
+
+    // Empty fields are left out rather than shown as a dash. A sub-item is usually a partial
+    // record -- a daily filled in at lunchtime has half its fields blank -- and a column of
+    // dashes buries the half that was filled in.
+    const lines = cols.map((f) => {
+      if (f.type === 'checklist') return checklistBlock(f);
+      if (f === box) {
+        return `<div class="wb-child-field"><span class="wb-child-flabel">${h(f.label)}</span>
+          <span class="wb-child-fval">${tick(`data-wb-child-check="${h(collection.id)}:${h(child.id)}:${h(box.id)}"`, done, box.label)}</span></div>`;
+      }
+      if (!filled(child, f)) return '';
+      return `<div class="wb-child-field"><span class="wb-child-flabel">${h(f.label)}</span>
+        <span class="wb-child-fval">${val(f)}</span></div>`;
+    }).filter(Boolean).join('');
+
+    return `<li class="wb-child-card${done ? ' done' : ''}">
+      ${canManage ? `<span class="wb-child-acts">
+        <button class="wb-w-btn" type="button" data-wb-child-edit="${h(collection.id)}:${h(child.id)}" title="Edit" aria-label="Edit"><i class="ti ti-pencil"></i></button>
+        <button class="wb-w-btn danger" type="button" data-wb-child-del="${h(collection.id)}:${h(child.id)}" title="Delete" aria-label="Delete"><i class="ti ti-trash"></i></button>
+      </span>` : ''}
+      ${lines || `<p class="wb-sub">Nothing filled in on this ${h(one.toLowerCase())} yet.</p>`}
     </li>`;
   }
 

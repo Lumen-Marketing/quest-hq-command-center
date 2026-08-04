@@ -395,29 +395,23 @@ test('a step that is not there changes nothing', () => {
   assert.equal(toggleChildStep(item, 'nope', 'steps', 's1'), item.children);
 });
 
-test('a checklist renders its steps as ticks, not as [object Object]', () => {
+test('a checklist opens out into tickable steps, never [object Object]', () => {
   // A checklist value is an array of {id, label, done}, so a plain join printed
-  // "[object Object], [object Object], [object Object]" in the sub-item row. The shared
-  // formatter renders it as a done/total bar, and the row opens the steps out below.
+  // "[object Object], [object Object], [object Object]".
   assert.doesNotMatch(page, /value\.join\(', '\)/);
-  assert.match(page, /cols\.filter\(\(f\) => f\.type === 'checklist'\)\.map/);
+  assert.match(page, /if \(f\.type === 'checklist'\) return checklistBlock\(f\);/);
   assert.match(page, /data-wb-child-step=/);
 });
 
-test('sub-items render as a list, not a table', () => {
+test('a sub-item is a card of labelled lines, not a row with a promoted title', () => {
+  // One-line rows had to promote a field to a title, and two sub-items sharing that field's
+  // value became indistinguishable -- two Dailies both reading "Lumen Marketing Account".
   assert.match(page, /<ul class="wb-child-list">/);
   assert.ok(!/wb-child-table|<thead>/.test(page), 'the table markup must be gone');
-  assert.match(page, /function childRow\(companyId, app, collection, cols, child, one, canManage\)/);
+  assert.ok(!/childTitleField|CHILD_TITLE_TYPES/.test(page), 'nothing picks a title any more');
+  assert.match(page, /class="wb-child-field"><span class="wb-child-flabel">/);
 });
 
-test('the row names itself from a plainly-readable field, not from a widget', () => {
-  // A title made of a chip, a bar or a swatch reads as decoration rather than as a name — and
-  // one made of an unresolved id reads as nothing at all, which is what a User field did.
-  assert.match(page, /const CHILD_TITLE_TYPES = \['text', 'longtext', 'textarea', 'email', 'phone', 'url', 'autonumber', 'date'\];/);
-  assert.match(page, /const CHILD_TITLE_NEVER = \['checklist', 'checkbox', 'progress', 'file', 'image', 'rating'\];/);
-  const fn = page.slice(page.indexOf('function childTitleField('));
-  assert.match(fn.slice(0, fn.indexOf('\n}')), /\|\| fields\.find\(\(f\) => !CHILD_TITLE_NEVER\.includes\(f\.type\) && filled\(child, f\)\)/);
-});
 
 test('one checkbox becomes the row tick; several stay labelled in the meta line', () => {
   // Two checkboxes is a form, not a checklist — a bare tick would not say which one it was.
