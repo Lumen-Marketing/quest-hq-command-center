@@ -1287,3 +1287,25 @@ The resolution is a prefetch plus a synchronous path:
 The same rule already applied to the Reports print path; this generalises it. Any future
 chunk containing `window.open`, a download anchor, or clipboard access needs the same
 treatment, and a test pins the synchronous branch.
+
+## App Builder records move from the workspace JSON to rows
+
+Decided 2026-08-04. Approved, phase 1 not yet applied.
+
+Every App Builder app, field, record and comment for a company lives in one `doc jsonb`
+value on `workspace_builder_state`. That is why an App Builder app cannot reach the depth of
+the native Jobs module: no child records, no enforceable rules, no aggregation, and the whole
+document is rewritten on every edit.
+
+The strain is already visible in the codebase: `wb_add_item_comment` and
+`wb_modify_item_comment` exist only so a comment does not rewrite the document, and
+`src/workspace/builder-merge.js` is a 148-line three-way merge that exists only because the
+unit of change is the whole company workspace.
+
+Records move to `public.wb_items`, with `parent_id` + `collection` giving child collections
+and one partial unique index serving every app uniqueness rule. Apps, fields and automations
+stay in the document: they are small, change rarely, and one owner edits them at a time.
+
+Full plan and phases: [app-builder-records-as-rows](plans/app-builder-records-as-rows.md). The
+proposed phase-1 migration is parked beside it as `.proposed.sql`, deliberately outside
+`supabase/migrations/`, because it must land in the same change as the dual-write code.
