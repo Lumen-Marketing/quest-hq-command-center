@@ -175,6 +175,7 @@ const FACTORY_MODULES = [
   ['src/portals/public-page.js', 'createClientPortalPublicPage'],
   ['src/crm/contact-table.js', 'createContactTable'],
   ['src/home/widget-registry.js', 'createWidgetRegistry'],
+  ['src/workspace/record-page.js', 'createRecordPage'],
   ['src/ui/landing-page.js', 'createLandingPage'],
   ['src/ui/auth-form.js', 'createAuthForm'],
 ];

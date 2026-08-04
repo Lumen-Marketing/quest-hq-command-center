@@ -2474,6 +2474,7 @@ const state = {
   // and only one of those has a modal behind it.
   wbEditingCommentId: null,
   wbDashManage: false,
+  wbRecordManage: false,
   wbDashDragId: '',
   wbViewScope: 'team',
   wbViewAdding: false,
@@ -6147,6 +6148,33 @@ function loadDashboardWidgetRegistry() {
 function dashboardWidgetRegistry(companyId, ctx) {
   if (dashboardWidgetRegistryModule) return dashboardWidgetRegistryModule.dashboardWidgetRegistry(companyId, ctx);
   loadDashboardWidgetRegistry().then(() => render()).catch((error) => console.error('dashboardWidgetRegistry failed to load', error));
+  return questLoader('Loading');
+}
+
+// ---- wbViewItemPage ---------------------------------------------------------
+// Body lives in ./workspace/record-page.js and is fetched on first use.
+let wbViewItemPageModule = null;
+let wbViewItemPagePending = null;
+
+function loadWbViewItemPage() {
+  if (wbViewItemPageModule) return Promise.resolve(wbViewItemPageModule);
+  if (!wbViewItemPagePending) {
+    wbViewItemPagePending = import('./workspace/record-page.js').then((mod) => {
+      wbViewItemPageModule = mod.createRecordPage({
+        appHref, can, companyPath, emptyState, formatDate, h, wbFmtVal, wbItemCommentsHtml, wbItemTitle, wbTimeAgo, wbUrlControl, state
+      });
+      return wbViewItemPageModule;
+    }).catch((error) => {
+      wbViewItemPagePending = null;
+      throw error;
+    });
+  }
+  return wbViewItemPagePending;
+}
+
+function wbViewItemPage(route, companyId, workspace, app, item) {
+  if (wbViewItemPageModule) return wbViewItemPageModule.wbViewItemPage(route, companyId, workspace, app, item);
+  loadWbViewItemPage().then(() => render()).catch((error) => console.error('wbViewItemPage failed to load', error));
   return questLoader('Loading');
 }
 
@@ -13554,6 +13582,8 @@ function normalizeWorkspaceBuilderDoc(doc) {
         recordName: app.recordName || '',
         // null means "never arranged", which is different from "arranged to be empty".
         dashboard: Array.isArray(app.dashboard) ? app.dashboard : null,
+        // null means never arranged, which is different from arranged to be empty.
+        recordLayout: Array.isArray(app.recordLayout) ? app.recordLayout : null,
         views: Array.isArray(app.views) ? app.views : [],
         icon: app.icon || WB_APP_ICONS[0],
         color: safeHexColor(app.color, safeHexColor(ws.color, WB_PALETTE[1])),
@@ -15397,6 +15427,58 @@ const WB_SORT_PRESETS = [
  * Only honoured when the route is actually pointing at this app, so a stale `stage` left in
  * the URL by a different app cannot silently empty the list.
  */
+// ---- Record layout -----------------------------------------------------------------------
+// The model is pure and lives in ./workspace/record-layout.js, fetched with the first record.
+let recordLayoutModule = null;
+let recordLayoutPending = null;
+
+function loadRecordLayout() {
+  if (recordLayoutModule) return Promise.resolve(recordLayoutModule);
+  if (!recordLayoutPending) {
+    recordLayoutPending = import('./workspace/record-layout.js').then((mod) => {
+      recordLayoutModule = mod;
+      return mod;
+    }).catch((error) => {
+      recordLayoutPending = null;
+      throw error;
+    });
+  }
+  return recordLayoutPending;
+}
+
+/** Every write to the arrangement goes through one save, so a half-applied one cannot stick. */
+async function wbRecordEdit(companyId, workspaceId, appId, change) {
+  const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app || !can('workspaces.manage', companyId)) return;
+  const mod = await loadRecordLayout();
+  // Reading through layoutFor means the first edit to a never-arranged app starts from what
+  // it was already showing, rather than from nothing.
+  app.recordLayout = change(mod.layoutFor(app), mod);
+  wbSave(companyId);
+  render();
+}
+
+async function openWbRecordAdd(companyId, workspaceId, appId) {
+  const mod = await loadRecordLayout();
+  openWbModal({
+    kind: 'record-add', companyId, workspaceId, appId,
+    options: mod.BLOCK_TYPES.map((meta) => ({ ...meta, supported: true, blocked: '' })),
+  });
+}
+
+async function openWbRecordConfig(companyId, workspaceId, appId, blockId) {
+  const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const mod = await loadRecordLayout();
+  const block = mod.layoutFor(app).find((b) => b.id === blockId);
+  if (!block) return;
+  openWbModal({
+    kind: 'record-config', companyId, workspaceId, appId, blockId,
+    block,
+    fields: (app.fields || []).map((f) => ({ id: f.id, label: f.label })),
+  });
+}
+
 // ---- Saved views -------------------------------------------------------------------------
 // The model is pure and lives in ./workspace/saved-views.js, fetched with the list.
 let savedViewsModule = null;
@@ -15835,36 +15917,6 @@ function wbItemsChipBar(companyId, app, ui, rows) {
  * Editing still opens the form as a modal. Editing IS a task performed on a record, it has
  * a cancel, and keeping one form definition means the create and edit paths cannot drift.
  */
-function wbViewItemPage(route, companyId, workspace, app, item) {
-  const canManage = can('workspaces.manage', companyId);
-  // Carry the deck stage back with you, so returning lands on the filtered list you left
-  // rather than dumping you at the top of everything.
-  const stage = route.params.get('stage') || '';
-  const backHref = appHref(companyPath('workspaces', {
-    app_id: app.id, tab: 'items', ...(stage ? { stage } : {}),
-  }, companyId));
-  const ctx = { companyId, workspace, app, values: item.values, item: null, canManage: false };
-  const rows = app.fields.length
-    ? app.fields.map((f) => `<div class="wb-view-row"><span class="wb-view-label">${h(f.label)}</span><span class="wb-view-val">${f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(ctx, f, item.values[f.id])}</span></div>`).join('')
-    : '<div class="wb-sub">This app has no fields yet.</div>';
-  const count = (item.comments || []).length;
-  return `
-    <div class="wb-record">
-      <a class="wb-record-back" href="${backHref}" data-router><i class="ti ti-arrow-left"></i>All ${h(app.name)}</a>
-      <header class="wb-record-head">
-        <div class="wb-record-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></div>
-        <div class="wb-record-title">
-          <h1>${h(wbItemTitle(app, item)) || 'Item'}</h1>
-          <p class="wb-record-meta">${item.createdAt ? `Created ${h(formatDate(item.createdAt))}` : ''}${item.updatedAt && item.updatedAt !== item.createdAt ? ` · edited ${h(wbTimeAgo(item.updatedAt))}` : ''}${count ? ` · ${count} comment${count === 1 ? '' : 's'}` : ''}</p>
-        </div>
-        ${canManage ? `<button class="btn btn-primary" type="button" data-wb-record-edit="${h(item.id)}"><i class="ti ti-pencil"></i>Edit</button>` : ''}
-      </header>
-      <div class="wb-record-body">
-        <article class="panel wb-record-fields"><div class="wb-view-fields">${rows}</div></article>
-        <article class="panel wb-record-comments">${wbItemCommentsHtml(companyId, item)}</article>
-      </div>
-    </div>`;
-}
 
 /** A record that has been deleted, or an id that never existed. */
 function wbRecordMissing(companyId, app) {
@@ -17293,6 +17345,40 @@ function renderWorkspaceBuilderModal() {
       ${m.error ? `<div class="wb-form-error">${h(m.error)}</div>` : ''}`,
       `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-delete-ws-confirm><i class="ti ti-trash"></i>Delete workspace</button>`);
   }
+  if (m.kind === 'record-add') {
+    return wbModalShell('Add card', 'wb-modal-wide',
+      '<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-list-details"></i></div><h3>Add a card to every record</h3>',
+      `<div class="wb-catalog">${m.options.map((opt) => `
+        <button class="wb-catalog-item" type="button" data-wb-rec-pick="${h(opt.type)}">
+          <i class="ti ${h(opt.icon)}"></i>
+          <span><b>${h(opt.label)}</b><small>${h(opt.desc)}</small></span>
+        </button>`).join('')}</div>`,
+      '<button class="btn" data-action="wb-modal-close">Close</button>');
+  }
+  if (m.kind === 'record-config') {
+    const block = m.block;
+    const cfg = block.config || {};
+    if (block.type === 'note') {
+      return wbModalShell('Card settings', '',
+        '<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-settings"></i></div><h3>Note</h3>',
+        `<div class="wb-field"><label>Text shown on every record</label><textarea class="wb-input" data-wb-reccfg="text" rows="3">${h(cfg.text || '')}</textarea></div>`,
+        '<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-reccfg-save><i class="ti ti-check"></i>Save</button>');
+    }
+    // null means "every field", so a field added later shows up without anyone revisiting
+    // the layout. Ticking any box turns that into an explicit list.
+    const all = !Array.isArray(cfg.fieldIds);
+    const chosen = new Set(Array.isArray(cfg.fieldIds) ? cfg.fieldIds : m.fields.map((f) => f.id));
+    return wbModalShell('Card settings', '',
+      '<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-settings"></i></div><h3>Field group</h3>',
+      `<div class="wb-field"><label>Heading (optional)</label><input class="wb-input" data-wb-reccfg="title" value="${h(cfg.title || '')}" placeholder="e.g. Client details"></div>
+      <div class="wb-field"><label>Fields in this group</label>
+        <label class="wb-check-row"><input type="checkbox" data-wb-reccfg-all ${all ? 'checked' : ''}> <span>Every field, including ones added later</span></label>
+        <div class="wb-check-list" ${all ? 'hidden' : ''}>
+          ${m.fields.map((f) => `<label class="wb-check-row"><input type="checkbox" data-wb-reccfg-field="${h(f.id)}" ${chosen.has(f.id) ? 'checked' : ''}> <span>${h(f.label)}</span></label>`).join('') || '<p class="wb-sub">This app has no fields yet.</p>'}
+        </div>
+      </div>`,
+      '<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-reccfg-save><i class="ti ti-check"></i>Save</button>');
+  }
   if (m.kind === 'delete-view') {
     // No typing the name and no password, unlike deleting an app: a view holds no records,
     // and rebuilding one is a name and a dropdown. The confirmation exists because the X sat
@@ -18229,23 +18315,36 @@ function wbConfirmDelete() {
  * Bound per render because render() rebuilds these nodes; the listeners go with the old ones.
  */
 function mountWbDashDrag(companyId, workspaceId, appId) {
-  const grid = document.querySelector('[data-wb-dash-grid]');
+  mountWbGridDrag('[data-wb-dash-grid]', 'data-wb-dash-id', 'wbDashId', (moved, target) => {
+    wbDashEdit(companyId, workspaceId, appId, (widgets, mod) => mod.reorderWidget(widgets, moved, target));
+  });
+}
+
+/** The record page's cards drag the same way; only the attributes and the writer differ. */
+function mountWbRecordDrag(companyId, workspaceId, appId) {
+  mountWbGridDrag('[data-wb-rec-grid]', 'data-wb-rec-id', 'wbRecId', (moved, target) => {
+    wbRecordEdit(companyId, workspaceId, appId, (blocks, mod) => mod.reorderBlock(blocks, moved, target));
+  });
+}
+
+function mountWbGridDrag(gridSelector, idAttr, idKey, commit) {
+  const grid = document.querySelector(gridSelector);
   if (!grid) return;
   const clear = () => grid.querySelectorAll('.wb-w').forEach((n) => n.classList.remove('dragging', 'drop-target'));
-  grid.querySelectorAll('[data-wb-dash-id]').forEach((card) => {
+  grid.querySelectorAll(`[${idAttr}]`).forEach((card) => {
     card.addEventListener('dragstart', (event) => {
-      state.wbDashDragId = card.dataset.wbDashId;
+      state.wbDashDragId = card.dataset[idKey];
       card.classList.add('dragging');
       if (event.dataTransfer) {
         event.dataTransfer.effectAllowed = 'move';
         // Firefox refuses to start a drag unless some data is set.
-        try { event.dataTransfer.setData('text/plain', card.dataset.wbDashId); } catch { /* ignore */ }
+        try { event.dataTransfer.setData('text/plain', card.dataset[idKey]); } catch { /* ignore */ }
       }
     });
     card.addEventListener('dragend', () => { state.wbDashDragId = ''; clear(); });
     card.addEventListener('dragover', (event) => {
       const from = state.wbDashDragId;
-      if (!from || from === card.dataset.wbDashId) return;
+      if (!from || from === card.dataset[idKey]) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
       card.classList.add('drop-target');
@@ -18254,11 +18353,11 @@ function mountWbDashDrag(companyId, workspaceId, appId) {
     card.addEventListener('drop', (event) => {
       event.preventDefault();
       const from = state.wbDashDragId || event.dataTransfer?.getData('text/plain') || '';
-      const to = card.dataset.wbDashId;
+      const to = card.dataset[idKey];
       state.wbDashDragId = '';
       clear();
       if (!from || from === to) return;
-      wbDashEdit(companyId, workspaceId, appId, (widgets, mod) => mod.reorderWidget(widgets, from, to));
+      commit(from, to);
     });
   });
 }
@@ -18444,6 +18543,26 @@ function mountWorkspaceBuilder() {
     // overlay; the handlers resolve their target through wbCommentContext either way.
     const commentFail = (error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces');
     bind('[data-wb-record-edit]', (el) => { openWbItemModal(companyId, workspaceId, appId, el.dataset.wbRecordEdit, 'edit'); });
+    // Record layout. Same vocabulary as the dashboard, because it is the same idea applied to
+    // a different page: one arrangement, owned by the app, shown on every record.
+    bind('[data-wb-rec-manage]', () => { state.wbRecordManage = !state.wbRecordManage; render(); });
+    bind('[data-wb-rec-add]', () => openWbRecordAdd(companyId, workspaceId, appId));
+    bind('[data-wb-rec-config]', (el) => openWbRecordConfig(companyId, workspaceId, appId, el.dataset.wbRecConfig));
+    bind('[data-wb-rec-move]', (el) => {
+      const [id, dir] = String(el.dataset.wbRecMove).split(':');
+      wbRecordEdit(companyId, workspaceId, appId, (b, mod) => mod.moveBlock(b, id, dir));
+    });
+    bind('[data-wb-rec-size]', (el) => {
+      const [id, size] = String(el.dataset.wbRecSize).split(':');
+      wbRecordEdit(companyId, workspaceId, appId, (b, mod) => mod.resizeBlock(b, id, Number(size)));
+    });
+    bind('[data-wb-rec-remove]', (el) => {
+      wbRecordEdit(companyId, workspaceId, appId, (b, mod) => mod.removeBlock(b, el.dataset.wbRecRemove));
+    });
+    bind('[data-wb-rec-reset]', () => {
+      wbRecordEdit(companyId, workspaceId, appId, (_b, mod) => mod.defaultLayout(wbFind(companyId, workspaceId, appId).app));
+    });
+    mountWbRecordDrag(companyId, workspaceId, appId);
     bind('[data-wb-add-comment]', () => { wbAddItemComment().catch(commentFail); });
     bind('[data-wb-comment-edit]', (el) => { state.wbEditingCommentId = el.dataset.wbCommentEdit; render(); });
     bind('[data-wb-comment-cancel]', () => { state.wbEditingCommentId = null; render(); });
@@ -18799,6 +18918,38 @@ function wbMountModal() {
   }
   // Item detail modal: view/edit toggle, file previews, and the comment box work
   // in both modes; the field-input wiring only runs when actually editing.
+  if (m.kind === 'record-add') {
+    overlay.querySelectorAll('[data-wb-rec-pick]').forEach((b) => {
+      b.onclick = () => {
+        const type = b.dataset.wbRecPick;
+        const { companyId, workspaceId, appId } = state.builderModal;
+        state.builderModal = null;
+        wbRecordEdit(companyId, workspaceId, appId, (blocks, mod) => mod.addBlock(blocks, type, wbFind(companyId, workspaceId, appId).app))
+          .catch((error) => showToast(error.message || 'Could not add the card.', 'error', 'Workspaces'));
+      };
+    });
+  }
+  if (m.kind === 'record-config') {
+    const allBox = overlay.querySelector('[data-wb-reccfg-all]');
+    const list = overlay.querySelector('.wb-check-list');
+    if (allBox && list) allBox.onchange = () => { list.hidden = allBox.checked; };
+    const save = overlay.querySelector('[data-wb-reccfg-save]');
+    if (save) {
+      save.onclick = () => {
+        const config = { ...(state.builderModal.block.config || {}) };
+        overlay.querySelectorAll('[data-wb-reccfg]').forEach((el) => { config[el.dataset.wbReccfg] = el.value; });
+        if (allBox) {
+          config.fieldIds = allBox.checked
+            ? null
+            : [...overlay.querySelectorAll('[data-wb-reccfg-field]')].filter((el) => el.checked).map((el) => el.dataset.wbReccfgField);
+        }
+        const { companyId, workspaceId, appId, blockId } = state.builderModal;
+        state.builderModal = null;
+        wbRecordEdit(companyId, workspaceId, appId, (blocks) => blocks.map((b) => (b.id === blockId ? { ...b, config } : b)))
+          .catch((error) => showToast(error.message || 'Could not save the card.', 'error', 'Workspaces'));
+      };
+    }
+  }
   if (m.kind === 'dash-add') {
     overlay.querySelectorAll('[data-wb-dash-pick]').forEach((b) => {
       b.onclick = () => {

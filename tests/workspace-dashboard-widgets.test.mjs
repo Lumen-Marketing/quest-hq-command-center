@@ -219,11 +219,19 @@ test('the arrow buttons survive alongside the drag', () => {
 });
 
 test('the drag sets transfer data, which Firefox requires to start one at all', () => {
-  assert.match(main, /event\.dataTransfer\.setData\('text\/plain', card\.dataset\.wbDashId\)/);
+  assert.match(main, /event\.dataTransfer\.setData\('text\/plain', card\.dataset\[idKey\]\)/);
   assert.match(main, /event\.dataTransfer\?\.getData\('text\/plain'\)/, 'and reads it back as the fallback');
 });
 
 test('the drag is re-bound each render, because render replaces the nodes', () => {
   assert.match(main, /mountWbDashDrag\(companyId, workspaceId, appId\);/);
-  assert.match(main, /const grid = document\.querySelector\('\[data-wb-dash-grid\]'\);\n\s*if \(!grid\) return;/);
+  assert.match(main, /const grid = document\.querySelector\(gridSelector\);\n\s*if \(!grid\) return;/);
+});
+
+test('one drag mount serves both grids rather than a copy each', () => {
+  // The record layout drags identically; only the attributes and the writer differ. A second
+  // copy would drift the first time one of them was fixed.
+  assert.match(main, /mountWbGridDrag\('\[data-wb-dash-grid\]', 'data-wb-dash-id', 'wbDashId'/);
+  assert.match(main, /mountWbGridDrag\('\[data-wb-rec-grid\]', 'data-wb-rec-id', 'wbRecId'/);
+  assert.match(main, /function mountWbGridDrag\(gridSelector, idAttr, idKey, commit\)/);
 });

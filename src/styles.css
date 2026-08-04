@@ -30848,3 +30848,8 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 /* A view whose field cannot split anything says why. */
 .wb-vhint { margin: 2px 0 4px; padding-left: 6px; font-size: .72rem; color: var(--amber-ink, #92600a); }
+
+/* The record layout reuses the dashboard's card chrome; only these are its own. */
+.wb-rec-note { font-size: .78rem; color: var(--muted); align-self: center; }
+.wb-check-row { display: flex; gap: 8px; align-items: center; font-size: .84rem; padding: 4px 0; cursor: pointer; }
+.wb-check-list { display: grid; gap: 1px; margin-top: 4px; padding-left: 4px; border-left: 2px solid var(--border); }
