@@ -41,10 +41,13 @@ test('arrows are hidden unless the strip actually overflows', () => {
 
 test('the open app is scrolled into view, but only when it is not already', () => {
   assert.match(header, /data-wb-topbar-active/);
-  assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', behavior: 'smooth' \}\)/);
+  // The strip moves ITSELF. scrollIntoView reveals an element in every scrollable ancestor,
+  // and the outermost one is the page — measured at 900px scrolled, it left the page at 0.
+  assert.match(source, /if \(left < viewLeft\) track\.scrollLeft = Math\.max\(0, left - pad\);/);
+  assert.match(source, /else if \(right > viewRight\) track\.scrollLeft = right - track\.clientWidth \+ pad;/);
   // Correcting a position that was already fine is what made the strip appear to jump on
-  // every click, so the correction is now conditional on the tab being out of view.
-  assert.match(source, /if \(left < viewLeft \|\| right > viewRight\)/);
+  // every click, so the correction still only happens when the tab is out of view.
+  assert.match(source, /const viewRight = viewLeft \+ track\.clientWidth;/);
 });
 
 test('the strip holds its place when opening an app re-renders it', () => {

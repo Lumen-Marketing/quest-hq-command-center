@@ -188,3 +188,17 @@ test('the restore writes only when the value actually differs', () => {
   assert.match(apply, /if \(window\.scrollY !== top\) window\.scrollTo\(0, top\);/);
   assert.match(apply, /if \(target && target\.scrollTop !== top\) target\.scrollTop = top;/);
 });
+
+test('the app strip scrolls itself, never via scrollIntoView', () => {
+  // scrollIntoView asks the browser to reveal an element in EVERY scrollable ancestor, and
+  // the outermost one is the page. The app strip sits at the top, so revealing it dragged a
+  // scrolled-down page back to the top — on every render of the workspaces section, which
+  // is every save: adding a sub-item list, adding a field, opening a dialog.
+  //
+  // Measured in a browser on the same markup: with the page at 900px, scrollIntoView left it
+  // at 0 while assigning scrollLeft left it at 900. Both moved the strip.
+  const mount = main.match(/function wbMountTopbar\(\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.ok(!/\.scrollIntoView\(/.test(mount), 'the strip must move itself');
+  assert.match(mount, /if \(left < viewLeft\) track\.scrollLeft = Math\.max\(0, left - pad\);/);
+  assert.match(mount, /else if \(right > viewRight\) track\.scrollLeft = right - track\.clientWidth \+ pad;/);
+});

@@ -14592,9 +14592,13 @@ function wbMountTopbar() {
     const right = left + active.offsetWidth;
     const viewLeft = track.scrollLeft;
     const viewRight = viewLeft + track.clientWidth;
-    if (left < viewLeft || right > viewRight) {
-      active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-    }
+    // Move the STRIP, never scrollIntoView. That asks the browser to reveal the element in
+    // every scrollable ancestor, and the outermost one is the page — so on a long settings
+    // page, scrolled down, this quietly dragged the whole page back to the top on every
+    // render. Which is every save: adding a sub-item list, adding a field, opening a dialog.
+    const pad = 12;
+    if (left < viewLeft) track.scrollLeft = Math.max(0, left - pad);
+    else if (right > viewRight) track.scrollLeft = right - track.clientWidth + pad;
   }
   sync();
 }
