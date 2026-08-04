@@ -11,8 +11,10 @@ import { boardColumns, pipelineField } from '../src/workspace/pipeline-core.js';
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const slice = (name) => main.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`))?.[0] || '';
 
-test('apps are listed in the same group as the builder that made them', () => {
-  assert.match(main, /if \(group\.label === 'Workspace'\) items\.push\(\.\.\.navItemsForApps\(route, companyId\)\);/);
+test('apps lead the group the builder that made them sits in', () => {
+  // unshift, not push: what somebody built for their own work is opened far more often than
+  // the seven built-in modules it would otherwise sit below.
+  assert.match(main, /if \(group\.label === 'Workspace'\) items\.unshift\(\.\.\.navItemsForApps\(route, companyId\)\);/);
   assert.match(main, /\{ label: 'Workspace', ids: \['workspaces',/);
 });
 

@@ -5400,8 +5400,10 @@ function renderDeck(route) {
             if (module.id === 'jobs' || module.id === 'deals') return navItemPipeline(route, module, companyId);
             return navItem(route, companyPath(module.id, {}, companyId), module.symbol, navLabel, moduleBadgeCount(module.id, companyId));
           });
-        // Apps built in the workspace sit in the same group as the builder that made them.
-        if (group.label === 'Workspace') items.push(...navItemsForApps(route, companyId));
+        // Apps built in the workspace sit in the same group as the builder that made them,
+        // and they lead it: what somebody built for their own work is opened far more often
+        // than the builder they built it with.
+        if (group.label === 'Workspace') items.unshift(...navItemsForApps(route, companyId));
         return navGroup(group.label, items);
       }).join('')}
     </div>
