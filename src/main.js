@@ -2476,6 +2476,7 @@ const state = {
   wbDashManage: false,
   wbRecordManage: false,
   wbCollectionOpen: '',
+  wbSettingsDraft: {},
   wbDashDragId: '',
   wbViewScope: 'team',
   wbViewAdding: false,
@@ -16662,6 +16663,9 @@ function wbInstallTargetBody(companyId, workspace, app, chosenCompanyId) {
 function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
   const canManage = can('workspaces.manage', companyId);
   const isCustomColor = !WB_PALETTE.includes(app.color);
+  // Unsaved edits, so a render triggered by something else on this page does not discard
+  // them. Cleared once Save writes them through.
+  const draft = state.wbSettingsDraft?.[app.id] || {};
   // A linked app is a live mirror installed from another workspace. Its fields,
   // records, name and icon belong to the source and are managed there; here we
   // only explain the link and offer to remove it from this workspace.
@@ -16678,11 +16682,10 @@ function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
   }
   return `<div class="wb-settings card">
     <h3 class="wb-settings-title">App settings</h3>
-    <div class="wb-field"><label>App name</label><input class="wb-input" id="wbSetName" value="${h(app.name)}" ${canManage ? '' : 'disabled'}></div>
-    <div class="wb-field"><label>What one record is called</label><input class="wb-input" id="wbSetRecordName" value="${h(app.recordName || '')}" placeholder="${h(singularize(app.name))}" ${canManage ? '' : 'disabled'}><small class="wb-hint">Names the buttons — "${h(addRecordLabel(app))}". Left blank it follows the app name.</small></div>
-    <div class="wb-field"><label>Description</label><textarea class="wb-input" id="wbSetDesc" ${canManage ? '' : 'disabled'}>${h(app.description || '')}</textarea></div>
-    <div class="wb-field"><label>Type</label><input class="wb-input" id="wbSetType" value="${h(app.type || '')}" placeholder="e.g. Contacts, Tasks, Projects" ${canManage ? '' : 'disabled'}></div>
-    ${wbCollectionsSettings(companyId, app, canManage)}
+    <div class="wb-field"><label>App name</label><input class="wb-input" id="wbSetName" data-wb-setting="name" value="${h(draft.name ?? app.name)}" ${canManage ? '' : 'disabled'}></div>
+    <div class="wb-field"><label>What one record is called</label><input class="wb-input" id="wbSetRecordName" data-wb-setting="recordName" value="${h(draft.recordName ?? app.recordName ?? '')}" placeholder="${h(singularize(app.name))}" ${canManage ? '' : 'disabled'}><small class="wb-hint">Names the buttons — "${h(addRecordLabel(app))}". Left blank it follows the app name.</small></div>
+    <div class="wb-field"><label>Description</label><textarea class="wb-input" id="wbSetDesc" data-wb-setting="description" ${canManage ? '' : 'disabled'}>${h(draft.description ?? app.description ?? '')}</textarea></div>
+    <div class="wb-field"><label>Type</label><input class="wb-input" id="wbSetType" data-wb-setting="type" value="${h(draft.type ?? app.type ?? '')}" placeholder="e.g. Contacts, Tasks, Projects" ${canManage ? '' : 'disabled'}></div>
     <div class="wb-field"><label>Icon &amp; color</label>
       <div class="wb-emoji-pick" id="wbSetIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${app.icon === icon ? 'sel' : ''}" type="button" data-icon="${icon}" aria-pressed="${app.icon === icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('')}</div>
       <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}<label class="wb-swatch wb-swatch-custom ${isCustomColor ? 'sel' : ''}" data-color="${h(app.color)}" title="Custom color"${isCustomColor ? ` style="background:${h(app.color)}"` : ''}><input type="color" id="wbSetCustomColor" value="${h(isCustomColor ? app.color : '#000000')}" aria-label="Custom color" ${canManage ? '' : 'disabled'}><i class="ti ${isCustomColor ? 'ti-check' : 'ti-plus'}"></i></label></div>
@@ -16697,7 +16700,8 @@ function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
       ${canManage ? `<div class="wb-settings-actions" style="margin-top:10px"><button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share this app'}</button></div>` : ''}
     </div>
     ${canManage ? `<div class="wb-settings-actions"><button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save changes</button><button class="btn danger" data-del-app><i class="ti ti-trash"></i>Delete app</button></div>` : ''}
-  </div>`;
+  </div>
+  ${wbCollectionsSettings(companyId, app, canManage)}`;
 }
 
 // ---- Reports (hand-rolled SVG/CSS charts) ------------------------------------
@@ -17134,7 +17138,7 @@ function wbCollectionsSettings(companyId, app, canManage) {
     return '';
   }
   const open = state.wbCollectionOpen || '';
-  return `<div class="wb-field">
+  return `<div class="wb-field wb-collections">
     <label>Sub-item lists</label>
     <p class="wb-sub">Records that live inside each ${h(singularize(app.name).toLowerCase())} — dailies, line items, visits. Add one here, then add a <b>Sub-items</b> card on the record layout to show it.</p>
     ${list.map((c) => `<div class="wb-collection">
@@ -18271,6 +18275,7 @@ function wbSaveAppSettings(companyId, workspaceId, appId) {
   app.recordName = (document.getElementById('wbSetRecordName')?.value || '').trim();
   const icon = document.querySelector('#wbSetIcons .wb-emoji-opt.sel'); if (icon) app.icon = icon.dataset.icon;
   const color = document.querySelector('#wbSetColors .wb-swatch.sel'); if (color) app.color = color.dataset.color;
+  if (state.wbSettingsDraft) delete state.wbSettingsDraft[appId];
   wbSave(companyId); showToast('App settings saved.', 'local', 'Workspaces'); render();
 }
 
@@ -18597,6 +18602,10 @@ function mountWorkspaceBuilder() {
       el.addEventListener('change', (e) => { e.stopPropagation(); const [itemId, fieldId] = String(el.dataset.wbCardProgress).split(':'); wbSetItemProgressInline(companyId, workspaceId, appId, itemId, fieldId, el.value); });
       el.addEventListener('click', (e) => e.stopPropagation());
     });
+    bind('[data-wb-setting]', (el) => {
+      state.wbSettingsDraft = state.wbSettingsDraft || {};
+      state.wbSettingsDraft[appId] = { ...(state.wbSettingsDraft[appId] || {}), [el.dataset.wbSetting]: el.value };
+    }, 'oninput');
     bind('[data-save-app]', () => wbSaveAppSettings(companyId, workspaceId, appId));
     bind('[data-del-app]', () => { const { app } = wbFind(companyId, workspaceId, appId); if (app) openWbDeleteApp(companyId, workspaceId, app); });
     bind('[data-add-auto]', () => openWbAutoModal(companyId, workspaceId, appId, ''));

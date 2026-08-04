@@ -30885,3 +30885,21 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-collection-field button:hover { color: var(--red, #dc2626); }
 .wb-collection-new { display: flex; gap: 7px; }
 .wb-collection-new .wb-input { flex: 1; }
+
+/* Sub-item lists sit below the settings card, not inside it: the field builder is itself a
+   two-column layout and cannot fit in a 560px column without losing two thirds of its width. */
+.wb-collections { margin-top: 18px; max-width: 1100px; }
+.wb-collections > label {
+  display: block; font-size: .8rem; font-weight: 800; margin-bottom: 3px;
+}
+.wb-collection { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.wb-collection-toggle {
+  display: inline-flex; align-items: center; gap: 7px; border: 0; background: none;
+  font: inherit; cursor: pointer; padding: 2px 0; color: var(--ink);
+}
+.wb-collection-toggle b { font-size: .92rem; }
+.wb-collection-toggle:hover { color: var(--orange); }
+/* Inside a collection the builder gets the full width, and its palette stays a sane size. */
+.wb-collection .wb-builder-grid { grid-template-columns: minmax(0, 1fr) 260px; margin-top: 10px; }
+.wb-collection .wb-field-list { min-width: 0; }
+@media (max-width: 860px) { .wb-collection .wb-builder-grid { grid-template-columns: minmax(0, 1fr); } }

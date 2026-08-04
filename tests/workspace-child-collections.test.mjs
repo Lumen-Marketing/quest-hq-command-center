@@ -217,3 +217,35 @@ test('only one list opens its builder at a time', () => {
   // Two palettes side by side is a lot of screen for one decision.
   assert.match(main, /state\.wbCollectionOpen = state\.wbCollectionOpen === id \? '' : id;/);
 });
+
+// --- the settings page ------------------------------------------------------------------------
+
+test('unsaved settings text survives a render somebody else caused', () => {
+  // The form only commits on "Save changes", so any render before that threw the typing
+  // away — and adding a sub-item list, adding a field to one, and expanding one all render.
+  assert.match(main, /const draft = state\.wbSettingsDraft\?\.\[app\.id\] \|\| \{\};/);
+  for (const key of ['name', 'recordName', 'description', 'type']) {
+    assert.match(main, new RegExp(`data-wb-setting="${key}"`), `${key} must read through the draft`);
+  }
+  assert.match(main, /value="\$\{h\(draft\.name \?\? app\.name\)\}"/);
+});
+
+test('recording a keystroke does not itself re-render', () => {
+  // The point is to survive somebody else's render, not to cause one per character.
+  const handler = main.match(/bind\('\[data-wb-setting\]'[\s\S]*?'oninput'\);/)?.[0] || '';
+  assert.match(handler, /state\.wbSettingsDraft\[appId\] = \{ \.\.\./);
+  assert.ok(!/render\(\)/.test(handler), 'no render per keystroke');
+});
+
+test('saving clears the draft, so the saved value is what shows next', () => {
+  assert.match(main, /if \(state\.wbSettingsDraft\) delete state\.wbSettingsDraft\[appId\];/);
+});
+
+test('the field builder is not squeezed into the settings column', () => {
+  // It is a two-column layout itself; inside a 560px card it loses two thirds of its width.
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(main, /<\/div>\n\s*\$\{wbCollectionsSettings\(companyId, app, canManage\)\}/, 'it renders below the card');
+  assert.match(styles, /\.wb-settings\.card \{ max-width: 560px/);
+  assert.match(styles, /\.wb-collections \{ margin-top: 18px; max-width: 1100px; \}/);
+  assert.match(styles, /\.wb-collection \.wb-builder-grid \{ grid-template-columns: minmax\(0, 1fr\) 260px/);
+});
