@@ -5,7 +5,8 @@ import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 // The calls page is fetched on demand now; same surface, two files.
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/ops/calls-page.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/ops/calls-page.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/home/widget-registry.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('the calls plugin is registered and maps to the calls module', () => {

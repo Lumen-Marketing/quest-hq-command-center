@@ -174,6 +174,7 @@ const FACTORY_MODULES = [
   ['src/proposals/public-page.js', 'createProposalPublicPage'],
   ['src/portals/public-page.js', 'createClientPortalPublicPage'],
   ['src/crm/contact-table.js', 'createContactTable'],
+  ['src/home/widget-registry.js', 'createWidgetRegistry'],
   ['src/ui/landing-page.js', 'createLandingPage'],
   ['src/ui/auth-form.js', 'createAuthForm'],
 ];

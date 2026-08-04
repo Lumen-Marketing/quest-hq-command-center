@@ -1,0 +1,187 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import {
+  SPLIT_FIELD_TYPES, addView, allViews, normalizeView, partitionViews, removeView,
+  renderViewsRail, splitFields, viewGroups, viewTotal,
+} from '../src/workspace/saved-views.js';
+
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const mod = readFileSync(new URL('../src/workspace/saved-views.js', import.meta.url), 'utf8');
+const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+
+const ids = () => { let n = 0; return () => `v${(n += 1)}`; };
+const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const app = {
+  id: 'a1',
+  name: 'Jobs',
+  fields: [
+    { id: 'f1', type: 'text', label: 'Job' },
+    { id: 'f2', type: 'status', label: 'Lead Status', config: { options: [
+      { id: 's1', label: 'New Untouched', color: '#e0552d' },
+      { id: 's2', label: 'Discovery', color: '#7c3aed' },
+      { id: 's3', label: 'In Progress', color: '#16a34a' },
+    ] } },
+    { id: 'f3', type: 'date', label: 'Start' },
+  ],
+  items: [
+    { id: 'i1', values: { f2: 's1' } },
+    { id: 'i2', values: { f2: 's1' } },
+    { id: 'i3', values: { f2: 's2' } },
+    { id: 'i4', values: {} },
+  ],
+  views: [{ id: 'tv1', title: 'Lead Status', fieldId: 'f2' }],
+};
+
+// --- shape ---------------------------------------------------------------------------------
+
+test('only a named, ordered, bounded field can split a view', () => {
+  // A date or text field would give one group per record, which is the list again.
+  assert.deepEqual(SPLIT_FIELD_TYPES, ['status', 'category']);
+  assert.deepEqual(splitFields(app).map((f) => f.id), ['f2']);
+  assert.deepEqual(splitFields({ fields: [] }), []);
+});
+
+test('a view without a title is not saved', () => {
+  assert.deepEqual(addView([], { title: '   ' }, ids()), []);
+  assert.equal(addView([], { title: 'Mine' }, ids()).length, 1);
+});
+
+test('a view normalises rather than rejecting', () => {
+  assert.equal(normalizeView({}).title, 'Untitled view');
+  assert.equal(normalizeView({ scope: 'nonsense' }).scope, 'team');
+  assert.equal(normalizeView({ title: ' Spaced ' }).title, 'Spaced');
+  assert.ok(normalizeView({}).id, 'it must be addressable to be picked or deleted');
+});
+
+// --- counts ---------------------------------------------------------------------------------
+
+test('a view splits into one row per value, with counts', () => {
+  const groups = viewGroups(app, { fieldId: 'f2' });
+  assert.deepEqual(groups.map((g) => [g.label, g.count]), [
+    ['No stage', 1], ['New Untouched', 2], ['Discovery', 1], ['In Progress', 0],
+  ]);
+});
+
+test('the counts add up to the total, so no record is unreachable', () => {
+  assert.equal(viewTotal(app, { fieldId: 'f2' }), app.items.length);
+});
+
+test('a view with no split, or a deleted field, degrades to a shortcut', () => {
+  // Returning null is how the renderer knows to draw a plain row rather than an empty group.
+  assert.equal(viewGroups(app, { fieldId: '' }), null);
+  assert.equal(viewGroups(app, { fieldId: 'gone' }), null);
+  assert.equal(viewTotal(app, { fieldId: 'gone' }), 4, 'it still covers everything');
+});
+
+test('counting reuses the board grouping rather than a second implementation', () => {
+  assert.match(mod, /import \{ boardColumns, stagesOf \} from '\.\/pipeline-core\.js';/);
+  assert.ok(!/function boardColumns/.test(mod), 'a second copy would let counts disagree');
+});
+
+// --- team vs private ---------------------------------------------------------------------------
+
+test('team and private views come back together, each tagged with where it lives', () => {
+  const list = allViews(app, [{ id: 'pv1', title: 'Mine', fieldId: 'f2', appId: 'a1' }]);
+  assert.deepEqual(list.map((v) => [v.title, v.scope]), [['Lead Status', 'team'], ['Mine', 'private']]);
+});
+
+test('one browser can hold private views for many apps', () => {
+  const list = allViews(app, [
+    { id: 'p1', title: 'Mine', appId: 'a1' },
+    { id: 'p2', title: 'Someone else app', appId: 'a2' },
+  ]);
+  assert.deepEqual(list.filter((v) => v.scope === 'private').map((v) => v.title), ['Mine']);
+});
+
+test('private views are stored in the browser, not the shared document', () => {
+  // The workspace document is one JSON value every member can read. A "private" flag in it
+  // would hide a view in the UI while leaving it in plain sight in the data.
+  assert.match(main, /const WB_PRIVATE_VIEWS_KEY = 'quest-hq-wb-private-views-v1';/);
+  assert.match(main, /function wbPrivateViews\(\) \{\n\s*const saved = readJson\(WB_PRIVATE_VIEWS_KEY, \[\]\);/);
+  const save = main.match(/async function saveWbView\(form\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(save, /wbSavePrivateViews\(\[\.\.\.wbPrivateViews\(\), \{ \.\.\.view, appId \}\]\)/);
+  // And the UI says so rather than implying a privacy the storage cannot keep.
+  assert.match(mod, /Private views are saved in this browser only\./);
+});
+
+test('a team view needs the permission to change the app, and falls back rather than refusing', () => {
+  const save = main.match(/async function saveWbView\(form\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(save, /data\.scope === 'team' && can\('workspaces\.manage', companyId\) \? 'team' : 'private'/);
+});
+
+test('partitioning keeps the scope tag out of what gets stored', () => {
+  const split = partitionViews([
+    { id: 't', title: 'T', scope: 'team' },
+    { id: 'p', title: 'P', scope: 'private' },
+  ], 'a1');
+  assert.deepEqual(split.team, [{ id: 't', title: 'T' }]);
+  assert.deepEqual(split.private, [{ id: 'p', title: 'P', appId: 'a1' }]);
+});
+
+test('deleting a private view never needs a permission, a team one always does', () => {
+  const handler = main.match(/bind\('\[data-wb-view-del\]'[\s\S]*?\n {4}\}\);/)?.[0] || '';
+  assert.match(handler, /if \(priv\.some\(\(v\) => v\.id === id\)\)/, 'private is checked first');
+  assert.match(handler, /if \(!can\('workspaces\.manage', companyId\)\) return;/);
+});
+
+// --- the rail ------------------------------------------------------------------------------
+
+const rail = (overrides = {}) => renderViewsRail({
+  h: esc,
+  can: () => true,
+  companyId: 'c1',
+  app,
+  ui: { chipFieldId: '', chipValue: '' },
+  state: { wbViewScope: 'team', wbViewAdding: false, wbViewExpanded: {} },
+  privateViews: [],
+  noneKey: '__none',
+  ...overrides,
+});
+
+test('the rail renders the view, its rows, and the counts', () => {
+  const html = rail();
+  assert.ok(html.includes('All Jobs'));
+  assert.ok(html.includes('Lead Status'));
+  assert.ok(html.includes('New Untouched'));
+  assert.ok(!/undefined|NaN|\[object Object\]/.test(html));
+  assert.ok(!html.includes('${'), 'a stray placeholder means a template literal broke');
+});
+
+test('a long split is capped until Show more', () => {
+  const many = { ...app, fields: [{ id: 'f2', type: 'status', label: 'Stage', config: { options: Array.from({ length: 9 }, (_, i) => ({ id: `s${i}`, label: `S${i}` })) } }] };
+  const html = rail({ app: { ...many, name: 'Jobs', items: [], views: [{ id: 'v', title: 'Stage', fieldId: 'f2' }] } });
+  assert.ok(html.includes('Show more'));
+  assert.equal((html.match(/wb-vopt/g) || []).length, 5);
+});
+
+test('a view title clears the filter; a value sets it', () => {
+  // The heading means "the whole of this view", which is the same as no filter.
+  assert.match(rail(), /data-wb-view-pick="tv1:"/);
+  assert.match(rail(), /data-wb-view-pick="tv1:s1"/);
+  const handler = main.match(/bind\('\[data-wb-view-pick\]'[\s\S]*?\n {4}\}\);/)?.[0] || '';
+  assert.match(handler, /ui\.chipFieldId = value && view\?\.fieldId \? view\.fieldId : '';/);
+});
+
+test('picking a view drives the quick-filter state rather than a second filter path', () => {
+  // Two filtering paths could disagree about what is on screen.
+  const handler = main.match(/bind\('\[data-wb-view-pick\]'[\s\S]*?\n {4}\}\);/)?.[0] || '';
+  assert.match(handler, /wbRememberItemsUI\(appId\)/, 'and it survives a refresh like a chip does');
+});
+
+test('a scope with no views says so instead of rendering blank', () => {
+  assert.ok(rail({ app: { ...app, views: [] } }).includes('No team views yet'));
+});
+
+test('the rail stacks above the list on a narrow screen', () => {
+  assert.match(styles, /\.wb-items-layout \{[^}]*grid-template-columns: 232px minmax\(0, 1fr\)/);
+  assert.match(styles, /@media \(max-width: 1020px\) \{\s*\.wb-items-layout \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+});
+
+test('the rail is fetched with its model, not carried by every page', () => {
+  assert.ok(!/^import .*saved-views/m.test(main), 'a static import would defeat the split');
+  assert.match(main, /import\('\.\/workspace\/saved-views\.js'\)/);
+  assert.match(main, /savedViewsPending = null;/, 'a failed fetch must be retryable');
+  assert.match(main, /if \(!savedViewsModule\) \{\n\s*loadSavedViews\(\)/, 'the list must not wait for the rail');
+});

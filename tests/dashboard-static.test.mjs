@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  // The widget registry is fetched on demand now; same surface, two files.
+  + readFileSync(new URL('../src/home/widget-registry.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const smokeScript = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import.meta.url), 'utf8');
 const dashboardRepOptionsBody = source.slice(source.indexOf('function dashboardRepOptions(companyId)'), source.indexOf('function dashboardOwnerKey'));

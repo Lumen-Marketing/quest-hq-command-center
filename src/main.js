@@ -164,6 +164,8 @@ const NAV_EXPANDED_KEY = 'quest-hq-nav-expanded-v1';
 // doc on purpose -- this is how ONE person is looking at the list right now, and pushing it
 // into shared state would rearrange everybody else's screen.
 const WB_ITEMS_UI_KEY = 'quest-hq-wb-items-ui-v1';
+// Private saved views. Deliberately not in the workspace document -- see wbPrivateViews.
+const WB_PRIVATE_VIEWS_KEY = 'quest-hq-wb-private-views-v1';
 const JOB_BOARD_VIEW_KEY = 'quest-hq-job-board-view';
 const CONTACT_BOARD_VIEW_KEY = 'quest-hq-contact-board-view';
 const THEME_KEY = 'quest-theme';
@@ -2472,6 +2474,9 @@ const state = {
   // and only one of those has a modal behind it.
   wbEditingCommentId: null,
   wbDashManage: false,
+  wbViewScope: 'team',
+  wbViewAdding: false,
+  wbViewExpanded: {},
   roles: [],
   rolePermissions: [],
   roleAssignments: [],
@@ -6041,6 +6046,96 @@ function renderContactTable(companyId) {
   return questLoader('Loading');
 }
 
+function wbViewItems(companyId, workspace, app) {
+  const canManage = can('workspaces.manage', companyId);
+  if (!app.fields.length) return `<div class="wb-empty"><i class="ti ti-layout-dashboard"></i><h3>This app has no fields yet</h3><p>Before adding items you need to design the app's structure. Add fields like Text, Status, or Date.</p>${canManage ? '<button class="btn btn-primary" data-tab="fields"><i class="ti ti-tools"></i>Open field builder</button>' : ''}</div>`;
+  // The toolbar is not rendered with no records, so this is the only way to reach stage
+  // setup on a new app -- which is exactly when you want to lay the pipeline out first.
+  if (!app.items.length) return `<div class="wb-empty"><i class="ti ti-inbox"></i><h3>No items yet</h3><p>Add your first record using the form built from your custom fields.</p>${canManage ? `<div class="wb-empty-acts"><button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button><button class="btn" type="button" data-wb-manage-stages><i class="ti ti-adjustments"></i>${pipelineField(app) ? 'Manage stages' : 'Set up stages'}</button></div>` : ''}</div>`;
+  const ui = wbItemsUI(app.id);
+  // Hidden fields drop out of the table columns but stay fully editable on each
+  // record (the item form iterates every field). Fall back to all fields if the
+  // user has hidden every one, so the table never renders empty.
+  const visibleCols = app.fields.filter((f) => !f.hidden);
+  const cols = visibleCols.length ? visibleCols : app.fields;
+  // Drop any selected ids that no longer exist (e.g. deleted since selection).
+  if (ui.sel.size) { const live = new Set(app.items.map((i) => i.id)); ui.sel.forEach((id) => { if (!live.has(id)) ui.sel.delete(id); }); }
+  const toolbar = wbItemsToolbar(companyId, app, ui, canManage);
+  // Filter, then sort. A column-header sort (ui.sort) wins; otherwise the toolbar
+  // preset (ui.order) orders by created/edited/activity/title.
+  let rows = ui.filters.length ? app.items.filter((it) => ui.filters.every((flt) => wbEvalFilter(companyId, workspace, app, it, flt))) : app.items.slice();
+  // A stage picked in the deck narrows the list on top of the app's own filters rather than
+  // replacing them, so going back to "All items" restores exactly what the user configured.
+  const navStage = wbNavStage(app);
+  if (navStage) rows = rows.filter((it) => wbItemInNavStage(app, it, navStage));
+  // The chip bar counts what is left after search, filters and the deck stage, then narrows
+  // on top of them. Built before the chip is applied so the other chips keep their counts.
+  const chipField = wbChipField(app, ui);
+  const chipBar = wbItemsChipBar(companyId, app, ui, rows);
+  if (chipField && ui.chipValue) rows = rows.filter((it) => wbItemInChip(chipField, it, ui.chipValue));
+  if (ui.sort && ui.sort.fieldId) { const sf = app.fields.find((x) => x.id === ui.sort.fieldId); if (sf) rows = wbSortItems(companyId, workspace, app, rows, sf, ui.sort.dir); }
+  else rows = wbApplyPresetSort(app, rows, ui.order || 'created_desc');
+  const selectable = canManage;
+  const bulkBar = (selectable && ui.sel.size) ? `<div class="wb-bulk-bar">
+      <span class="wb-bulk-count"><i class="ti ti-checkbox"></i><b>${ui.sel.size}</b> selected</span>
+      <div class="wb-spacer"></div>
+      <button class="btn btn-sm" type="button" data-wb-select-all-btn><i class="ti ti-checks"></i>Select all</button>
+      <button class="btn btn-sm" type="button" data-wb-clear-sel><i class="ti ti-square-x"></i>Clear</button>
+      <button class="btn btn-sm" type="button" data-wb-print-sel><i class="ti ti-printer"></i>Print selected</button>
+      <button class="btn btn-sm danger" type="button" data-wb-del-sel><i class="ti ti-trash"></i>Delete selected</button>
+    </div>` : '';
+  let listBody;
+  // Name the stage when one is on: "nothing matches your filters" sends you hunting through
+  // a filter panel that is empty, when the real cause is the row you clicked in the deck.
+  const navStageLabel = navStage ? wbNavStageLabel(app, navStage) : '';
+  const chipLabel = (chipField && ui.chipValue)
+    ? (wbChipOptions(companyId, app, chipField, app.items).find((c) => c.id === ui.chipValue)?.label || '')
+    : '';
+  if (!rows.length) listBody = `<div class="wb-empty wb-empty-inline"><i class="ti ti-filter-search"></i><h3>No items match</h3><p>${chipLabel
+    ? `Nothing here is <b>${h(chipLabel)}</b>${navStage ? ` and at <b>${h(navStageLabel)}</b>` : ''} right now.`
+    : navStage
+      ? `Nothing in this app is at <b>${h(navStageLabel)}</b> right now.`
+      : 'No records match your current search or filters. Try adjusting or clearing them.'}</p>${(navStage || chipLabel)
+    ? `<div class="wb-empty-acts">${chipLabel ? '<button class="btn" type="button" data-wb-chip=""><i class="ti ti-filter-off"></i>Clear quick filter</button>' : ''}${navStage
+      ? `<a class="btn" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'items' }, companyId))}" data-router><i class="ti ti-list"></i>Show all items</a>` : ''}</div>` : ''}</div>`;
+  else if (ui.view === 'card') listBody = wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canManage);
+  else if (ui.view === 'board') listBody = wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canManage);
+  else if (ui.view === 'badge') listBody = wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canManage);
+  else if (ui.view === 'activity') listBody = wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, selectable, canManage);
+  else listBody = wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canManage);
+  const viewLabel = (WB_VIEW_MODES.find(([v]) => v === ui.view) || [])[1] || 'Table';
+  return `<div class="wb-items-layout">${wbViewsRail(companyId, app, ui)}<div class="wb-items-main">${toolbar}${chipBar}${bulkBar}<div id="wbItemsList">${listBody}</div>
+    <div class="wb-table-foot"><span data-wb-items-count>${rows.length} item${rows.length === 1 ? '' : 's'}</span>${navStage
+    ? ` at <b>${h(navStageLabel)}</b> of ${app.items.length}` : ''} · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'} · ${h(viewLabel)} view</div></div></div>`;
+}
+
+// ---- dashboardWidgetRegistry ---------------------------------------------------------
+// Body lives in ./home/widget-registry.js and is fetched on first use.
+let dashboardWidgetRegistryModule = null;
+let dashboardWidgetRegistryPending = null;
+
+function loadDashboardWidgetRegistry() {
+  if (dashboardWidgetRegistryModule) return Promise.resolve(dashboardWidgetRegistryModule);
+  if (!dashboardWidgetRegistryPending) {
+    dashboardWidgetRegistryPending = import('./home/widget-registry.js').then((mod) => {
+      dashboardWidgetRegistryModule = mod.createWidgetRegistry({
+        accountName, companyFinanceInvoices, companyTasks, dashboardAppWidgets, dashboardAverage, dashboardEmptyNote, dashboardGroupCounts, dashboardGroupSums, dashboardMetricTile, dashboardMonthlyValues, dashboardNeedsDataWidget, daysPastDue, h, invoiceBalance, isoDate, memberName, money, number, renderCallsWidget, renderDashboardDayBars, renderDashboardHorizontalBars, renderDashboardLeaderboard, resolvePipelineStage, startOfToday, sum, state,
+      });
+      return dashboardWidgetRegistryModule;
+    }).catch((error) => {
+      dashboardWidgetRegistryPending = null;
+      throw error;
+    });
+  }
+  return dashboardWidgetRegistryPending;
+}
+
+function dashboardWidgetRegistry(companyId, ctx) {
+  if (dashboardWidgetRegistryModule) return dashboardWidgetRegistryModule.dashboardWidgetRegistry(companyId, ctx);
+  loadDashboardWidgetRegistry().then(() => render()).catch((error) => console.error('dashboardWidgetRegistry failed to load', error));
+  return questLoader('Loading');
+}
+
 function navGroup(label, items) {
   if (!items.length) return '';
   const collapsed = state.collapsedNavGroups.has(label);
@@ -7756,191 +7851,6 @@ function dashboardContext(companyId) {
   return { companyId, window, contacts, deals, jobs, tasks, openTasks, activities, invoices, payments, fin, wonDeals, openDeals };
 }
 
-function dashboardWidgetRegistry(companyId, ctx) {
-  const openPipeline = ctx.openDeals.reduce((total, deal) => total + number(deal.value), 0);
-  const jobsInProduction = ctx.jobs.filter((job) => /production|material/i.test(String(job.stage || ''))).length;
-  const overdueTasks = ctx.openTasks.filter((task) => task.due && new Date(task.due) < startOfToday()).length;
-  const periodRevenue = sum(ctx.payments, 'amount') || ctx.wonDeals.reduce((total, deal) => total + number(deal.value), 0);
-  const callCount = ctx.activities.filter((activity) => /call/i.test(String(activity.type || activity.subject || ''))).length;
-  const proposalCount = ctx.deals.length;
-  const leadCount = ctx.contacts.length;
-  const wonRevenue = ctx.wonDeals.reduce((total, deal) => total + number(deal.value), 0);
-  const avgTicket = dashboardAverage(ctx.jobs.map((job) => number(job.estimate_total || job.invoice_total)).filter(Boolean));
-  const residentialJobs = ctx.jobs.filter((job) => /residential|home|roof/i.test(String(job.job_type || job.name || '')) && !/commercial/i.test(String(job.job_type || job.name || '')));
-  const commercialJobs = ctx.jobs.filter((job) => /commercial|storage|office|retail/i.test(String(job.job_type || job.name || '')));
-  const collectedPct = ctx.fin.invoiced ? Math.round((ctx.fin.collected / ctx.fin.invoiced) * 100) : 0;
-  const widgets = {
-    calls: {
-      title: 'Phones right now',
-      group: 'Operations',
-      span: true,
-      sub: 'Live RingCentral status, and conversations over 60 seconds today.',
-      render: () => renderCallsWidget(companyId),
-    },
-    kpis: {
-      title: 'Activity totals',
-      group: 'Sales',
-      span: true,
-      sub: 'Calls, leads, proposals, and won revenue.',
-      render: () => `
-        <section class="dash-kpis dash-widget-kpis">
-          ${dashboardMetricTile('ti-phone', callCount, 'Calls logged', `${ctx.activities.length} activities`)}
-          ${dashboardMetricTile('ti-users', leadCount, 'Leads', `${ctx.contacts.length} contacts`)}
-          ${dashboardMetricTile('ti-file-text', proposalCount, 'Proposals sent', `avg ${money(dashboardAverage(ctx.deals.map((deal) => number(deal.value)).filter(Boolean)))}`)}
-          ${dashboardMetricTile('ti-trophy', money(wonRevenue), 'Won revenue', `${ctx.wonDeals.length} won`)}
-        </section>`,
-    },
-    leaderboard: {
-      title: 'Rep leaderboard',
-      group: 'Sales',
-      span: true,
-      sub: 'Revenue and conversion by owner.',
-      render: () => renderDashboardLeaderboard(companyId, ctx),
-    },
-    callsTrend: {
-      title: 'Calls logged',
-      group: 'Sales',
-      sub: 'Activity by day in selected range.',
-      render: () => renderDashboardDayBars(ctx.activities.filter((activity) => /call/i.test(String(activity.type || activity.subject || ''))), 'created_at'),
-    },
-    sources: {
-      title: 'Leads by source',
-      group: 'Sales',
-      render: () => renderDashboardHorizontalBars(dashboardGroupCounts(ctx.contacts, (contact) => contact.source || 'Unknown')),
-    },
-    funnel: {
-      title: 'Sales funnel',
-      group: 'Sales',
-      sub: 'Lead to won, with conversion.',
-      render: () => {
-        const rows = [
-          ['Leads', leadCount],
-          ['Proposals', proposalCount],
-          ['Won', ctx.wonDeals.length],
-        ];
-        return renderDashboardHorizontalBars(rows.map(([name, count]) => ({ name, count, value: count })));
-      },
-    },
-    speed: dashboardNeedsDataWidget('Speed-to-lead', 'Sales', 'Needs first_contact_at timestamps on leads.'),
-    jobs: {
-      title: 'Jobs by stage',
-      group: 'Operations',
-      sub: 'Active production board.',
-      render: () => {
-        const rows = dashboardGroupCounts(ctx.jobs, (job) => resolvePipelineStage('jobs', job.stage, companyId) || job.stage || 'Unstaged');
-        return `<h3 class="dash-hidden-copy">Jobs in production</h3>${renderDashboardHorizontalBars(rows)}`;
-      },
-    },
-    dispatch: {
-      title: "Today's dispatch",
-      group: 'Operations',
-      sub: 'Due tasks and scheduled work today.',
-      render: () => {
-        const today = isoDate(0);
-        const due = companyTasks(companyId).filter((task) => task.due === today).slice(0, 5);
-        return due.length ? `<div class="dash-mini-list">${due.map((task) => `<div><b>${h(task.title)}</b><span>${h(memberName(task.assignee_id) || 'Unassigned')}</span></div>`).join('')}</div>` : dashboardEmptyNote('No dispatch items due today.');
-      },
-    },
-    weather: dashboardNeedsDataWidget('5-day field forecast', 'Operations', 'Needs weather API and company service area.'),
-    revenue: {
-      title: 'Revenue & Receivables',
-      group: 'Finance',
-      sub: 'Invoiced vs collected.',
-      render: () => `
-        <div class="cash-figs">
-          <div><span>Invoiced</span><b>${h(money(ctx.fin.invoiced))}</b></div>
-          <div><span>Collected</span><b class="pos">${h(money(ctx.fin.collected))}</b></div>
-          <div><span>Outstanding</span><b class="warn">${h(money(ctx.fin.outstanding))}</b></div>
-        </div>
-        <div class="cash-bar"><i style="width:${h(collectedPct)}%"></i></div>
-        <p class="cash-note">${h(collectedPct)}% of invoiced has been collected.</p>`,
-    },
-    reviews: dashboardNeedsDataWidget('Reviews & reputation', 'Reputation', 'Needs Google/GHL review integration.'),
-    avgTicket: {
-      title: 'Avg ticket',
-      group: 'Value drivers',
-      sub: 'Average job contract total',
-      render: () => `
-        <div class="dash-big-metric">
-          <strong>${h(money(avgTicket))}</strong>
-          <span>Residential ${h(money(dashboardAverage(residentialJobs.map((job) => number(job.estimate_total)).filter(Boolean))))} - Commercial ${h(money(dashboardAverage(commercialJobs.map((job) => number(job.estimate_total)).filter(Boolean))))}</span>
-          <div class="dash-spark">${[35, 45, 55, 62, 70, 78].map((height) => `<i style="height:${height}%"></i>`).join('')}</div>
-          <small>trailing 6 months</small>
-        </div>`,
-    },
-    grossMargin: dashboardNeedsDataWidget('Gross margin', 'Value drivers', 'Needs actual job cost capture.'),
-    ebitda: dashboardNeedsDataWidget('EBITDA', 'Value drivers', 'Needs GL/QBO integration.'),
-    revGrowth: {
-      title: 'Revenue growth',
-      group: 'Value drivers',
-      sub: 'Collected revenue in selected range.',
-      render: () => `<div class="dash-big-metric"><strong>${h(money(periodRevenue))}</strong><span>${h(ctx.payments.length)} payments in range</span><div class="dash-spark">${dashboardMonthlyValues(ctx.payments, 'received_at', 'amount').map((value) => `<i style="height:${value}%"></i>`).join('')}</div></div>`,
-    },
-    revPerCrew: dashboardNeedsDataWidget('Revenue per crew', 'Value drivers', 'Needs crew capacity/headcount settings.'),
-    marketing: dashboardNeedsDataWidget('Marketing efficiency', 'Value drivers', 'Needs ad spend and lead attribution.'),
-    backlog: {
-      title: 'Backlog',
-      group: 'Value drivers',
-      sub: 'Signed/open job value not complete.',
-      render: () => {
-        const activeJobs = ctx.jobs.filter((job) => !/complete|done|closed/i.test(String(job.stage || job.status || '')));
-        return `<div class="dash-big-metric"><strong>${h(money(sum(activeJobs, 'estimate_total')))}</strong><span>${h(activeJobs.length)} active jobs</span></div>`;
-      },
-    },
-    recurring: dashboardNeedsDataWidget('Recurring revenue', 'Value drivers', 'Needs membership/subscription plans.'),
-    goalPacing: {
-      title: 'Goal pacing',
-      group: 'Value drivers',
-      sub: 'Revenue pace using current collected revenue.',
-      render: () => `<div class="dash-big-metric"><strong>${h(money(periodRevenue))}</strong><span>Set a monthly target to calculate pacing percentage.</span></div>`,
-    },
-    concentration: {
-      title: 'Customer concentration',
-      group: 'Value drivers',
-      render: () => renderDashboardHorizontalBars(dashboardGroupSums(ctx.invoices, (invoice) => accountName(invoice.account_id) || 'Unknown', 'total').slice(0, 5)),
-    },
-    pipelineCoverage: {
-      title: 'Sales pipeline',
-      group: 'Growth',
-      sub: 'Open pipeline coverage and quote value.',
-      render: () => `<div class="dash-big-metric"><strong>${h(money(openPipeline))}</strong><span>${h(ctx.openDeals.length)} active quotes. Add a sales target for coverage ratio.</span></div>`,
-    },
-    utilization: dashboardNeedsDataWidget('Crew utilization', 'Capacity', 'Needs schedule and crew capacity.'),
-    recruiting: dashboardNeedsDataWidget('Recruiting funnel', 'People', 'Needs hiring pipeline.'),
-    turnover: dashboardNeedsDataWidget('Turnover & labor cost', 'People', 'Needs HR/payroll data.'),
-    quota: dashboardNeedsDataWidget('Quota attainment', 'People', 'Needs rep quota settings.'),
-    cash13: dashboardNeedsDataWidget('13-week cash flow', 'Cash flow', 'Needs cash forecast data.'),
-    dso: {
-      title: 'Collections (DSO)',
-      group: 'Cash flow',
-      sub: 'Average days outstanding on unpaid invoices.',
-      render: () => {
-        const openInvoices = companyFinanceInvoices(companyId).filter((invoice) => invoiceBalance(invoice.id) > 0);
-        const avgDays = dashboardAverage(openInvoices.map((invoice) => Math.max(0, daysPastDue(invoice.due_date))));
-        return `<div class="dash-big-metric"><strong>${h(Math.round(avgDays))} days</strong><span>${h(openInvoices.length)} invoices with open balance</span></div>`;
-      },
-    },
-    jobCostVariance: dashboardNeedsDataWidget('Job-cost variance', 'Cash flow', 'Needs actual job costing.'),
-    ltvCac: dashboardNeedsDataWidget('LTV : CAC', 'Strategy', 'Needs lifetime value and marketing spend model.'),
-    ownerScore: dashboardNeedsDataWidget('Owner-dependency score', 'Strategy', 'Needs manual owner-dependency checklist.'),
-    serviceMix: {
-      title: 'Revenue by service line',
-      group: 'Strategy',
-      render: () => renderDashboardHorizontalBars(dashboardGroupSums(ctx.jobs, (job) => job.job_type || 'Unclassified', 'estimate_total')),
-    },
-    rocks: dashboardNeedsDataWidget('Quarterly Rocks', 'EOS', 'Needs EOS rocks table.'),
-    scorecard: dashboardNeedsDataWidget('Company scorecard', 'EOS', 'Needs weekly scorecard metrics.'),
-    oneYearPlan: dashboardNeedsDataWidget('1-Year Plan', 'EOS', 'Needs VTO / annual plan settings.'),
-    l10pulse: dashboardNeedsDataWidget('L10 meeting pulse', 'EOS', 'Needs L10 meeting records.'),
-    issues: dashboardNeedsDataWidget('Issues list (IDS)', 'EOS', 'Needs EOS issues table.'),
-    todos: dashboardNeedsDataWidget('To-dos (7-day)', 'EOS', 'Needs EOS to-do table.'),
-    peopleAnalyzer: dashboardNeedsDataWidget('People Analyzer (GWC)', 'EOS', 'Needs people analyzer records.'),
-    eosComponents: dashboardNeedsDataWidget('EOS components checkup', 'EOS', 'Needs EOS checkup survey.'),
-    coreValues: dashboardNeedsDataWidget('Core values', 'EOS', 'Needs core values settings.'),
-  };
-  Object.assign(widgets, dashboardAppWidgets(companyId));
-  return widgets;
-}
 
 // Surface each Workspace-builder app as an addable dashboard widget so users can
 // pin a live summary of any custom app (records, status mix, latest items) onto
@@ -13630,6 +13540,7 @@ function normalizeWorkspaceBuilderDoc(doc) {
         recordName: app.recordName || '',
         // null means "never arranged", which is different from "arranged to be empty".
         dashboard: Array.isArray(app.dashboard) ? app.dashboard : null,
+        views: Array.isArray(app.views) ? app.views : [],
         icon: app.icon || WB_APP_ICONS[0],
         color: safeHexColor(app.color, safeHexColor(ws.color, WB_PALETTE[1])),
         shared: !!app.shared,
@@ -15472,6 +15383,68 @@ const WB_SORT_PRESETS = [
  * Only honoured when the route is actually pointing at this app, so a stale `stage` left in
  * the URL by a different app cannot silently empty the list.
  */
+// ---- Saved views -------------------------------------------------------------------------
+// The model is pure and lives in ./workspace/saved-views.js, fetched with the list.
+let savedViewsModule = null;
+let savedViewsPending = null;
+
+function loadSavedViews() {
+  if (savedViewsModule) return Promise.resolve(savedViewsModule);
+  if (!savedViewsPending) {
+    savedViewsPending = import('./workspace/saved-views.js').then((mod) => {
+      savedViewsModule = mod;
+      return mod;
+    }).catch((error) => {
+      savedViewsPending = null;
+      throw error;
+    });
+  }
+  return savedViewsPending;
+}
+
+/**
+ * Private views, per browser.
+ *
+ * This is the only place they are actually private. The workspace document is one JSON value
+ * every member can read, so a "private" flag stored in it would hide a view in the UI while
+ * leaving it in plain sight in the data -- a promise the storage cannot keep.
+ */
+function wbPrivateViews() {
+  const saved = readJson(WB_PRIVATE_VIEWS_KEY, []);
+  return Array.isArray(saved) ? saved : [];
+}
+
+function wbSavePrivateViews(list) {
+  writeJson(WB_PRIVATE_VIEWS_KEY, list);
+}
+
+/** Save the view the Add form describes, to the team's app or to this browser. */
+async function saveWbView(form) {
+  const companyId = activeCompanyId();
+  const appId = state.route?.params?.get('app_id') || '';
+  const workspaceId = wbCompanyWorkspace(companyId)?.id || '';
+  const { app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const data = Object.fromEntries(new FormData(form).entries());
+  const title = String(data.title || '').trim();
+  if (!title) { showToast('Give the view a name first.', 'local', 'Workspaces'); return; }
+  const mod = await loadSavedViews();
+  // A team view is a change to the app, so it needs the permission to make one. Falling back
+  // to private rather than refusing keeps the view the user just described.
+  const scope = data.scope === 'team' && can('workspaces.manage', companyId) ? 'team' : 'private';
+  const view = mod.normalizeView({ title, fieldId: data.fieldId || '', scope });
+  if (scope === 'team') {
+    app.views = [...(app.views || []), { id: view.id, title: view.title, fieldId: view.fieldId }];
+    wbSave(companyId);
+  } else {
+    wbSavePrivateViews([...wbPrivateViews(), { ...view, appId }]);
+  }
+  state.wbViewAdding = false;
+  state.wbViewScope = scope;
+  showToast(`View "${view.title}" saved.`, 'local', 'Workspaces');
+  render();
+}
+
 function wbNavStage(app) {
   const route = state.route;
   if (!route || route.name !== 'company' || route.section !== 'workspaces') return '';
@@ -15888,67 +15861,22 @@ function wbRecordMissing(companyId, app) {
     </div>`;
 }
 
-function wbViewItems(companyId, workspace, app) {
-  const canManage = can('workspaces.manage', companyId);
-  if (!app.fields.length) return `<div class="wb-empty"><i class="ti ti-layout-dashboard"></i><h3>This app has no fields yet</h3><p>Before adding items you need to design the app's structure. Add fields like Text, Status, or Date.</p>${canManage ? '<button class="btn btn-primary" data-tab="fields"><i class="ti ti-tools"></i>Open field builder</button>' : ''}</div>`;
-  // The toolbar is not rendered with no records, so this is the only way to reach stage
-  // setup on a new app -- which is exactly when you want to lay the pipeline out first.
-  if (!app.items.length) return `<div class="wb-empty"><i class="ti ti-inbox"></i><h3>No items yet</h3><p>Add your first record using the form built from your custom fields.</p>${canManage ? `<div class="wb-empty-acts"><button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button><button class="btn" type="button" data-wb-manage-stages><i class="ti ti-adjustments"></i>${pipelineField(app) ? 'Manage stages' : 'Set up stages'}</button></div>` : ''}</div>`;
-  const ui = wbItemsUI(app.id);
-  // Hidden fields drop out of the table columns but stay fully editable on each
-  // record (the item form iterates every field). Fall back to all fields if the
-  // user has hidden every one, so the table never renders empty.
-  const visibleCols = app.fields.filter((f) => !f.hidden);
-  const cols = visibleCols.length ? visibleCols : app.fields;
-  // Drop any selected ids that no longer exist (e.g. deleted since selection).
-  if (ui.sel.size) { const live = new Set(app.items.map((i) => i.id)); ui.sel.forEach((id) => { if (!live.has(id)) ui.sel.delete(id); }); }
-  const toolbar = wbItemsToolbar(companyId, app, ui, canManage);
-  // Filter, then sort. A column-header sort (ui.sort) wins; otherwise the toolbar
-  // preset (ui.order) orders by created/edited/activity/title.
-  let rows = ui.filters.length ? app.items.filter((it) => ui.filters.every((flt) => wbEvalFilter(companyId, workspace, app, it, flt))) : app.items.slice();
-  // A stage picked in the deck narrows the list on top of the app's own filters rather than
-  // replacing them, so going back to "All items" restores exactly what the user configured.
-  const navStage = wbNavStage(app);
-  if (navStage) rows = rows.filter((it) => wbItemInNavStage(app, it, navStage));
-  // The chip bar counts what is left after search, filters and the deck stage, then narrows
-  // on top of them. Built before the chip is applied so the other chips keep their counts.
-  const chipField = wbChipField(app, ui);
-  const chipBar = wbItemsChipBar(companyId, app, ui, rows);
-  if (chipField && ui.chipValue) rows = rows.filter((it) => wbItemInChip(chipField, it, ui.chipValue));
-  if (ui.sort && ui.sort.fieldId) { const sf = app.fields.find((x) => x.id === ui.sort.fieldId); if (sf) rows = wbSortItems(companyId, workspace, app, rows, sf, ui.sort.dir); }
-  else rows = wbApplyPresetSort(app, rows, ui.order || 'created_desc');
-  const selectable = canManage;
-  const bulkBar = (selectable && ui.sel.size) ? `<div class="wb-bulk-bar">
-      <span class="wb-bulk-count"><i class="ti ti-checkbox"></i><b>${ui.sel.size}</b> selected</span>
-      <div class="wb-spacer"></div>
-      <button class="btn btn-sm" type="button" data-wb-select-all-btn><i class="ti ti-checks"></i>Select all</button>
-      <button class="btn btn-sm" type="button" data-wb-clear-sel><i class="ti ti-square-x"></i>Clear</button>
-      <button class="btn btn-sm" type="button" data-wb-print-sel><i class="ti ti-printer"></i>Print selected</button>
-      <button class="btn btn-sm danger" type="button" data-wb-del-sel><i class="ti ti-trash"></i>Delete selected</button>
-    </div>` : '';
-  let listBody;
-  // Name the stage when one is on: "nothing matches your filters" sends you hunting through
-  // a filter panel that is empty, when the real cause is the row you clicked in the deck.
-  const navStageLabel = navStage ? wbNavStageLabel(app, navStage) : '';
-  const chipLabel = (chipField && ui.chipValue)
-    ? (wbChipOptions(companyId, app, chipField, app.items).find((c) => c.id === ui.chipValue)?.label || '')
-    : '';
-  if (!rows.length) listBody = `<div class="wb-empty wb-empty-inline"><i class="ti ti-filter-search"></i><h3>No items match</h3><p>${chipLabel
-    ? `Nothing here is <b>${h(chipLabel)}</b>${navStage ? ` and at <b>${h(navStageLabel)}</b>` : ''} right now.`
-    : navStage
-      ? `Nothing in this app is at <b>${h(navStageLabel)}</b> right now.`
-      : 'No records match your current search or filters. Try adjusting or clearing them.'}</p>${(navStage || chipLabel)
-    ? `<div class="wb-empty-acts">${chipLabel ? '<button class="btn" type="button" data-wb-chip=""><i class="ti ti-filter-off"></i>Clear quick filter</button>' : ''}${navStage
-      ? `<a class="btn" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'items' }, companyId))}" data-router><i class="ti ti-list"></i>Show all items</a>` : ''}</div>` : ''}</div>`;
-  else if (ui.view === 'card') listBody = wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canManage);
-  else if (ui.view === 'board') listBody = wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canManage);
-  else if (ui.view === 'badge') listBody = wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canManage);
-  else if (ui.view === 'activity') listBody = wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, selectable, canManage);
-  else listBody = wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canManage);
-  const viewLabel = (WB_VIEW_MODES.find(([v]) => v === ui.view) || [])[1] || 'Table';
-  return `${toolbar}${chipBar}${bulkBar}<div id="wbItemsList">${listBody}</div>
-    <div class="wb-table-foot"><span data-wb-items-count>${rows.length} item${rows.length === 1 ? '' : 's'}</span>${navStage
-    ? ` at <b>${h(navStageLabel)}</b> of ${app.items.length}` : ''} · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'} · ${h(viewLabel)} view</div>`;
+
+/**
+ * The saved-views rail beside the list.
+ *
+ * Drawn by ./workspace/saved-views.js, which also owns the model. It cannot render before
+ * that module has loaded anyway, so keeping its markup there costs nothing and keeps a
+ * couple of kilobytes of panel out of every page load.
+ */
+function wbViewsRail(companyId, app, ui) {
+  if (!savedViewsModule) {
+    loadSavedViews().then(() => render()).catch((error) => console.error('Saved views failed to load', error));
+    return '';
+  }
+  return savedViewsModule.renderViewsRail({
+    h, can, companyId, app, ui, state, privateViews: wbPrivateViews(), noneKey: NAV_STAGE_NONE,
+  });
 }
 // Shared per-item bits for the non-table views.
 function wbItemSearchAttr(companyId, workspace, app, cols, item) {
@@ -18461,6 +18389,37 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-chip-field]', (el) => { const ui = wbItemsUI(appId); ui.chipFieldId = el.value; ui.chipValue = ''; wbRememberItemsUI(appId); render(); }, 'onchange');
     // Switching the calendar's date field is a route change so the month you are on, and the
     // field you picked, are both in the URL and survive a refresh or a shared link.
+    // Saved views. Picking one drives the existing quick-filter state rather than adding a
+    // second filtering path, so a view and a chip cannot disagree about what is on screen.
+    bind('[data-wb-view-scope]', (el) => { state.wbViewScope = el.dataset.wbViewScope; render(); });
+    bind('[data-wb-view-add]', () => { state.wbViewAdding = true; render(); });
+    bind('[data-wb-view-cancel]', () => { state.wbViewAdding = false; render(); });
+    bind('[data-wb-view-more]', (el) => {
+      state.wbViewExpanded = { ...state.wbViewExpanded, [el.dataset.wbViewMore]: true };
+      render();
+    });
+    bind('[data-wb-view-pick]', (el) => {
+      const raw = String(el.dataset.wbViewPick);
+      const [viewId, value] = [raw.slice(0, raw.indexOf(':')), raw.slice(raw.indexOf(':') + 1)];
+      const ui = wbItemsUI(appId);
+      const { app } = wbFind(companyId, workspaceId, appId);
+      const view = savedViewsModule?.allViews(app, wbPrivateViews()).find((v) => v.id === viewId);
+      // A view heading with no value clears the filter: it means "the whole of this view".
+      ui.chipFieldId = value && view?.fieldId ? view.fieldId : '';
+      ui.chipValue = value && view?.fieldId ? value : '';
+      wbRememberItemsUI(appId);
+      render();
+    });
+    bind('[data-wb-view-del]', (el) => {
+      const id = el.dataset.wbViewDel;
+      const priv = wbPrivateViews();
+      if (priv.some((v) => v.id === id)) { wbSavePrivateViews(priv.filter((v) => v.id !== id)); render(); return; }
+      if (!can('workspaces.manage', companyId)) return;
+      const { app } = wbFind(companyId, workspaceId, appId);
+      app.views = (app.views || []).filter((v) => v.id !== id);
+      wbSave(companyId);
+      render();
+    });
     // Dashboard arrangement. Same shape as the workspace tiles so the two feel like one
     // feature: a Customize toggle, then per-card controls on the card itself.
     bind('[data-wb-dash-manage]', () => { state.wbDashManage = !state.wbDashManage; render(); });
@@ -28249,6 +28208,12 @@ function onDocumentSubmit(event) {
   if (isReadOnlyDemo() && isMutableFormSubmit(event.target)) {
     event.preventDefault();
     requireMutableWorkspace();
+    return;
+  }
+
+  if (event.target.matches('[data-wb-view-form]')) {
+    event.preventDefault();
+    saveWbView(event.target);
     return;
   }
 
