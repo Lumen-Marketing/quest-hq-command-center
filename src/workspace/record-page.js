@@ -9,44 +9,48 @@ import * as recordLayout from './record-layout.js';
 import * as children from './child-collections.js';
 
 /**
- * A child value as plain text.
+ * One sub-item field, rendered by the APP'S OWN formatter.
  *
- * Deliberately not the app's own formatter: that resolves relationships and members against
- * the parent app's field list, which a child field is not part of. Options are looked up on
- * the child field itself.
+ * There used to be a small formatter here that knew about text, money and options. Anything
+ * it had not been taught fell through to String(value) -- so a User field printed the
+ * member's raw UUID as the row title, and every other id-carrying type would have done the
+ * same.
+ *
+ * The reason it was written separately was that the shared formatter resolves things against
+ * the PARENT app's fields. That is true of exactly three computed types -- calculation,
+ * rollup and progress, which read config.source and friends out of app.fields -- so the app
+ * handed over here carries the COLLECTION's fields instead. User and relationship were never
+ * affected: they resolve through companyId and the field's own config.
+ *
+ * canManage is deliberately NOT passed. The checkbox branch renders a live toggle wired to
+ * data-item-id, and a child is not an app item -- that toggle would write to the wrong row.
  */
-function childValueText(field, value) {
-  if (value == null || value === '') return '—';
-  if (field.type === 'checkbox') return value === true || value === 'true' ? 'Yes' : 'No';
-  if (field.type === 'status' || field.type === 'category') {
-    return (field.config?.options || []).find((o) => o.id === value)?.label || String(value);
-  }
-  if (field.type === 'money') return `${field.config?.currency || '$'}${value}`;
-  if (Array.isArray(value)) {
-    // A checklist holds {id, label, done} objects, so a plain join printed "[object Object]"
-    // once per step. Every array type gets the same guard: read a label off an object rather
-    // than stringifying it.
-    if (field.type === 'checklist') {
-      const steps = value.filter(Boolean);
-      return steps.length ? `${steps.filter((s) => s.done).length}/${steps.length}` : '—';
-    }
-    const parts = value
-      .map((v) => (v && typeof v === 'object' ? String(v.label ?? v.name ?? v.id ?? '') : String(v)))
-      .filter(Boolean);
-    return parts.length ? parts.join(', ') : '—';
-  }
-  return String(value);
+function childValueHtml(ctxFns, companyId, app, cols, child, field) {
+  return ctxFns.wbFmtVal(
+    { companyId, app: { ...app, fields: cols }, item: child, values: child.values || {} },
+    field,
+    child.values?.[field.id],
+  );
 }
 
 // Which field names the row. A sub-item reads as a line of text first and a set of columns
-// second, so the first text-ish field carrying anything becomes the title and the rest trail
-// behind it.
-const CHILD_TITLE_TYPES = ['text', 'longtext', 'email', 'phone', 'url', 'autonumber'];
-const filled = (child, field) => String(child.values?.[field.id] ?? '').trim() !== '';
+// second, so the first plainly-readable field carrying anything becomes the title and the
+// rest trail behind it.
+//
+// The order matters: these are the types that render as words rather than as a chip, a bar
+// or a swatch, and a title made of a widget reads as decoration rather than as a name.
+const CHILD_TITLE_TYPES = ['text', 'longtext', 'textarea', 'email', 'phone', 'url', 'autonumber', 'date'];
+// Types that never make a sensible title, whatever else is missing.
+const CHILD_TITLE_NEVER = ['checklist', 'checkbox', 'progress', 'file', 'image', 'rating'];
+const filled = (child, field) => {
+  const v = child.values?.[field.id];
+  if (v == null || v === '') return false;
+  return Array.isArray(v) ? v.length > 0 : String(v).trim() !== '';
+};
 
 function childTitleField(fields, child) {
   return fields.find((f) => CHILD_TITLE_TYPES.includes(f.type) && filled(child, f))
-    || fields.find((f) => f.type !== 'checklist' && f.type !== 'checkbox' && filled(child, f))
+    || fields.find((f) => !CHILD_TITLE_NEVER.includes(f.type) && filled(child, f))
     || null;
 }
 
@@ -60,9 +64,10 @@ export function createRecordPage(ctx) {
   // is checkable here: a lone checkbox field becomes the row's own tick, and a checklist field
   // opens out into its steps. Both write straight through, so working a list never means
   // opening a dialog per step.
-  function childRow(collection, cols, child, one, canManage) {
+  function childRow(companyId, app, collection, cols, child, one, canManage) {
     const titleField = childTitleField(cols, child);
-    const title = titleField ? childValueText(titleField, child.values[titleField.id]) : one;
+    const val = (field) => childValueHtml(ctx, companyId, app, cols, child, field);
+    const title = titleField ? val(titleField) : h(one);
     // Exactly one checkbox reads as "this sub-item is done". Two or more is a form, not a
     // checklist, so those stay in the meta line where they keep their labels.
     const boxes = cols.filter((f) => f.type === 'checkbox');
@@ -70,8 +75,8 @@ export function createRecordPage(ctx) {
     const done = box ? child.values[box.id] === true || child.values[box.id] === 'true' : false;
     const meta = cols
       .filter((f) => f !== titleField && f !== box && f.type !== 'checklist')
-      .map((f) => ({ f, text: childValueText(f, child.values[f.id]) }))
-      .filter((x) => x.text && x.text !== '—');
+      .filter((f) => filled(child, f))
+      .map((f) => ({ f, html: val(f) }));
     const tick = (attr, on, label) => `<button type="button" class="wb-child-tick${on ? ' on' : ''}" role="checkbox"
       aria-checked="${on ? 'true' : 'false'}" aria-label="${h(label)}" title="${h(label)}"
       ${attr}${canManage ? '' : ' disabled'}><i class="ti ti-check"></i></button>`;
@@ -89,8 +94,8 @@ export function createRecordPage(ctx) {
     return `<li class="wb-child-row${done ? ' done' : ''}">
       <div class="wb-child-line">
         ${box ? tick(`data-wb-child-check="${h(collection.id)}:${h(child.id)}:${h(box.id)}"`, done, box.label) : ''}
-        <span class="wb-child-name">${h(title)}</span>
-        <span class="wb-child-meta">${meta.map((x) => `<span class="wb-child-pill"><b>${h(x.f.label)}</b>${h(x.text)}</span>`).join('')}</span>
+        <span class="wb-child-name">${title}</span>
+        <span class="wb-child-meta">${meta.map((x) => `<span class="wb-child-pill"><b>${h(x.f.label)}</b>${x.html}</span>`).join('')}</span>
         ${canManage ? `<span class="wb-child-acts">
           <button class="wb-w-btn" type="button" data-wb-child-edit="${h(collection.id)}:${h(child.id)}" title="Edit" aria-label="Edit"><i class="ti ti-pencil"></i></button>
           <button class="wb-w-btn danger" type="button" data-wb-child-del="${h(collection.id)}:${h(child.id)}" title="Delete" aria-label="Delete"><i class="ti ti-trash"></i></button>
@@ -147,7 +152,7 @@ export function createRecordPage(ctx) {
         ${!cols.length
     ? emptyState(`${collection.name} has no fields yet. Add them in the app's Settings.`)
     : rows.length
-      ? `<ul class="wb-child-list">${rows.map((child) => childRow(collection, cols, child, one, canManage)).join('')}</ul>`
+      ? `<ul class="wb-child-list">${rows.map((child) => childRow(companyId, app, collection, cols, child, one, canManage)).join('')}</ul>`
       : emptyState(`No ${h(collection.name.toLowerCase())} yet.`)}`;
       }
       const title = String(block.config?.title || '').trim();

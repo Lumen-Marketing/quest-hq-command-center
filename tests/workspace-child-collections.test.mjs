@@ -164,11 +164,17 @@ test('a card pointing at nothing, and a collection with no fields, both explain 
   assert.match(page, /has no fields yet\. Add them in the app's Settings\./);
 });
 
-test('child values are formatted without the parent app field list', () => {
-  // The app's own formatter resolves relationships and members against the PARENT's fields,
-  // which a child field is not one of.
-  assert.match(page, /function childValueText\(field, value\)/);
-  assert.match(page, /\(field\.config\?\.options \|\| \[\]\)\.find\(\(o\) => o\.id === value\)\?\.label/);
+test('child values are formatted against the COLLECTION field list, not the parent app', () => {
+  // This used to be a separate formatter here, to keep the parent's fields out of it. The
+  // separation was the bug: anything the local one had not been taught fell through to
+  // String(value), so a User field printed the member's raw UUID as the row title.
+  //
+  // Only three types ever actually needed the parent kept out -- calculation, rollup and
+  // progress read config.source out of app.fields -- so the app handed to the shared
+  // formatter carries the collection's fields. User and relationship resolve through
+  // companyId and the field's own config, and were never affected.
+  assert.match(page, /app: \{ \.\.\.app, fields: cols \}/);
+  assert.ok(!/function childValueText\(/.test(page), 'the second formatter must be gone');
 });
 
 // --- the field builder, shared ----------------------------------------------------------------
@@ -390,23 +396,27 @@ test('a step that is not there changes nothing', () => {
 });
 
 test('a checklist renders its steps as ticks, not as [object Object]', () => {
-  // A checklist value is an array of {id, label, done}, so the old `value.join(', ')` printed
-  // "[object Object], [object Object], [object Object]" in the sub-item row.
-  assert.doesNotMatch(page, /if \(Array\.isArray\(value\)\) return value\.join/);
-  assert.match(page, /if \(field\.type === 'checklist'\) \{/);
-  assert.match(page, /String\(v\.label \?\? v\.name \?\? v\.id \?\? ''\)/, 'every array type needs the guard, not just checklists');
+  // A checklist value is an array of {id, label, done}, so a plain join printed
+  // "[object Object], [object Object], [object Object]" in the sub-item row. The shared
+  // formatter renders it as a done/total bar, and the row opens the steps out below.
+  assert.doesNotMatch(page, /value\.join\(', '\)/);
+  assert.match(page, /cols\.filter\(\(f\) => f\.type === 'checklist'\)\.map/);
+  assert.match(page, /data-wb-child-step=/);
 });
 
 test('sub-items render as a list, not a table', () => {
   assert.match(page, /<ul class="wb-child-list">/);
   assert.ok(!/wb-child-table|<thead>/.test(page), 'the table markup must be gone');
-  assert.match(page, /function childRow\(collection, cols, child, one, canManage\)/);
+  assert.match(page, /function childRow\(companyId, app, collection, cols, child, one, canManage\)/);
 });
 
-test('the row names itself from a text field, falling back rather than showing nothing', () => {
-  assert.match(page, /const CHILD_TITLE_TYPES = \['text', 'longtext', 'email', 'phone', 'url', 'autonumber'\];/);
+test('the row names itself from a plainly-readable field, not from a widget', () => {
+  // A title made of a chip, a bar or a swatch reads as decoration rather than as a name — and
+  // one made of an unresolved id reads as nothing at all, which is what a User field did.
+  assert.match(page, /const CHILD_TITLE_TYPES = \['text', 'longtext', 'textarea', 'email', 'phone', 'url', 'autonumber', 'date'\];/);
+  assert.match(page, /const CHILD_TITLE_NEVER = \['checklist', 'checkbox', 'progress', 'file', 'image', 'rating'\];/);
   const fn = page.slice(page.indexOf('function childTitleField('));
-  assert.match(fn.slice(0, fn.indexOf('\n}')), /\|\| fields\.find\(\(f\) => f\.type !== 'checklist' && f\.type !== 'checkbox' && filled\(child, f\)\)/);
+  assert.match(fn.slice(0, fn.indexOf('\n}')), /\|\| fields\.find\(\(f\) => !CHILD_TITLE_NEVER\.includes\(f\.type\) && filled\(child, f\)\)/);
 });
 
 test('one checkbox becomes the row tick; several stay labelled in the meta line', () => {
