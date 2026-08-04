@@ -5400,6 +5400,8 @@ function renderDeck(route) {
             if (module.id === 'jobs' || module.id === 'deals') return navItemPipeline(route, module, companyId);
             return navItem(route, companyPath(module.id, {}, companyId), module.symbol, navLabel, moduleBadgeCount(module.id, companyId));
           });
+        // Apps built in the workspace sit in the same group as the builder that made them.
+        if (group.label === 'Workspace') items.push(...navItemsForApps(route, companyId));
         return navGroup(group.label, items);
       }).join('')}
     </div>
@@ -5426,6 +5428,121 @@ function sidebarGroupsForScope(route) {
   }
   const allowedGroups = SIDEBAR_SCOPE_GROUPS[state.sidebarScope] || SIDEBAR_SCOPE_GROUPS['my-work'];
   return NAV_GROUPS.filter((group) => allowedGroups.has(group.label));
+}
+
+/**
+ * The builder entry for the active operational workspace, WITHOUT creating one.
+ *
+ * wbCompanyWorkspace() pushes an entry and renames it to match the operational workspace.
+ * That is right on the builder page, which is about to render it, and wrong in the deck,
+ * which paints on every route: navigation must not write to the document it describes.
+ */
+function wbCompanyWorkspacePeek(companyId) {
+  const doc = wbDoc(companyId);
+  if (!doc) return null;
+  const canonical = canonicalCompanyId(companyId);
+  const opsId = workspaceIdForCompany(companyId);
+  return doc.workspaces.find((ws) => ws.id === (opsId ? `ws-${opsId}` : `ws-${canonical}`))
+    || doc.workspaces.find((ws) => ws.id === `ws-${canonical}`)
+    || null;
+}
+
+/**
+ * One deck entry per app in the current workspace, stages nested underneath.
+ *
+ * An app somebody built is a section of the product to them, so it belongs in the deck
+ * beside the built-in modules rather than behind a tile. The rows underneath are the
+ * options of the app's own status field -- the same field the board, the table and the
+ * status pill already read -- so these counts cannot drift from what the app shows.
+ *
+ * Silent when the builder document has not loaded. The deck paints on every route, and
+ * deciding what to draw must never trigger a fetch.
+ */
+function navItemsForApps(route, companyId) {
+  if (!can('workspaces.view', companyId)) return [];
+  const doc = wbDoc(companyId);
+  const workspace = doc ? wbCompanyWorkspacePeek(companyId) : null;
+  if (!workspace) return [];
+  return wbWorkspaceApps(doc, workspace).map(({ app }) => navItemApp(route, app, companyId));
+}
+
+/** The unset-stage bucket needs a routable id; a bare '' would read as "no filter". */
+const NAV_STAGE_NONE = '__none';
+
+function navItemApp(route, app, companyId) {
+  const key = `app:${app.id}`;
+  const expanded = state.expandedNav.has(key);
+  const onApp = route.name === 'company' && route.section === 'workspaces'
+    && route.params.get('app_id') === app.id;
+  const stage = onApp ? (route.params.get('stage') || '') : '';
+  // An app with no status field still gets its row -- just no disclosure, because it would
+  // open onto nothing.
+  const field = pipelineField(app);
+  const columns = field ? boardColumns(app.items || [], field, null) : [];
+  const total = (app.items || []).length;
+  const href = (stageId) => appHref(companyPath('workspaces', {
+    app_id: app.id, tab: 'items', ...(stageId ? { stage: stageId } : {}),
+  }, companyId));
+  const allOn = onApp && !stage;
+  return `
+    <div class="side-pipe ${expanded ? 'expanded' : ''}">
+      <div class="side-pipe-head">
+        <a class="side-item ${allOn ? 'active' : ''}" href="${href('')}" data-router title="${h(app.name)}" aria-label="${h(app.name)}" aria-current="${allOn ? 'page' : 'false'}">
+          <i class="ti ${h(app.icon || 'ti-apps')}" aria-hidden="true"></i>
+          <span>${h(app.name)}</span>
+          ${total ? `<b>${h(String(total))}</b>` : ''}
+        </a>
+        ${columns.length ? `<button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${h(key)}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(app.name)} stages">
+          <i class="ti ti-chevron-down" aria-hidden="true"></i>
+        </button>` : ''}
+      </div>
+      ${expanded && columns.length ? `
+        <div class="side-sub">
+          <a class="side-sub-link ${allOn ? 'active' : ''}" href="${href('')}" data-router aria-current="${allOn ? 'page' : 'false'}">
+            <span class="side-sub-dot all"></span>
+            <span class="side-sub-name">All items</span>
+            <span class="side-sub-ct">${h(String(total))}</span>
+          </a>
+          ${columns.map((col) => {
+    const id = col.id == null ? NAV_STAGE_NONE : col.id;
+    const on = onApp && stage === id;
+    return `<a class="side-sub-link ${on ? 'active' : ''}" href="${href(id)}" data-router aria-current="${on ? 'page' : 'false'}">
+              <span class="side-sub-dot" style="background:${h(col.color)}"></span>
+              <span class="side-sub-name">${h(col.label)}</span>
+              <span class="side-sub-ct">${h(String(col.count))}</span>
+            </a>`;
+  }).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ---- renderKnowledgePage ---------------------------------------------------------
+// Body lives in ./knowledge/knowledge-page.js and is fetched on first use.
+let renderKnowledgePageModule = null;
+let renderKnowledgePagePending = null;
+
+function loadRenderKnowledgePage() {
+  if (renderKnowledgePageModule) return Promise.resolve(renderKnowledgePageModule);
+  if (!renderKnowledgePagePending) {
+    renderKnowledgePagePending = import('./knowledge/knowledge-page.js').then((mod) => {
+      renderKnowledgePageModule = mod.createKnowledgePage({
+        can, companyKnowledgeArticles, formatDate, h, knowledgeById, loadKnowledgeArticles, renderKnowledgeArticleForm, state,
+      });
+      return renderKnowledgePageModule;
+    }).catch((error) => {
+      renderKnowledgePagePending = null;
+      throw error;
+    });
+  }
+  return renderKnowledgePagePending;
+}
+
+function renderKnowledgePage(route, companyId) {
+  if (renderKnowledgePageModule) return renderKnowledgePageModule.renderKnowledgePage(route, companyId);
+  loadRenderKnowledgePage().then(() => render()).catch((error) => console.error('renderKnowledgePage failed to load', error));
+  return questLoader('Loading');
 }
 
 function navGroup(label, items) {
@@ -6508,63 +6625,6 @@ function renderKnowledgeArticleForm(companyId, article) {
     </form>`;
 }
 
-function renderKnowledgePage(route, companyId) {
-  if (!knowledgeLoadedCompanies.has(companyId)) queueMicrotask(() => loadKnowledgeArticles(companyId).catch(() => {}));
-  const canManage = can('files.manage', companyId);
-  const all = companyKnowledgeArticles(companyId);
-  const ui = state.knowledgeUi;
-  const filtered = filterKnowledgeArticles(all, ui.query);
-  const activeId = ui.selectedId && filtered.some((a) => a.id === ui.selectedId) ? ui.selectedId : (filtered[0] && filtered[0].id) || '';
-
-  let detail;
-  if (canManage && (ui.creating || ui.editingId)) {
-    detail = renderKnowledgeArticleForm(companyId, ui.editingId ? knowledgeById(ui.editingId) : null);
-  } else {
-    const selected = knowledgeById(activeId);
-    if (selected) {
-      detail = `
-        <article class="kb-article panel">
-          <div class="kb-article-head">
-            <div>
-              <span class="kb-cat-tag">${h(selected.category)}</span>
-              <h2>${h(selected.title)}</h2>
-              <p class="kb-meta">Updated ${h(formatDate(selected.updated_at))}</p>
-            </div>
-            ${canManage ? `<div class="kb-article-acts">
-              <button class="btn" type="button" data-action="kb-edit" data-id="${h(selected.id)}"><i class="ti ti-pencil" aria-hidden="true"></i>Edit</button>
-              <button class="btn danger" type="button" data-action="kb-delete" data-id="${h(selected.id)}" aria-label="Delete article"><i class="ti ti-trash" aria-hidden="true"></i></button>
-            </div>` : ''}
-          </div>
-          <div class="kb-body">${h(selected.body).replace(/\n/g, '<br>') || '<span class="muted">No content yet.</span>'}</div>
-        </article>`;
-    } else {
-      detail = `<div class="kb-empty panel">${all.length ? 'No articles match your search.' : ('No articles yet.' + (canManage ? ' Create the first one with “New article”.' : ' Check back soon.'))}</div>`;
-    }
-  }
-
-  const list = filtered.map((a) => `
-    <button type="button" class="kb-list-item${a.id === activeId && !ui.creating && !ui.editingId ? ' active' : ''}" data-action="kb-select" data-id="${h(a.id)}">
-      <span class="kb-list-title">${h(a.title)}</span>
-      <span class="kb-list-cat">${h(a.category)}</span>
-    </button>`).join('');
-  // The detail panel already states why the list is empty, so the sidebar stays quiet
-  // rather than repeating it next to itself.
-
-  return `
-    <section class="kb-page">
-      <div class="kb-head">
-        <div><h1>Knowledge Base</h1><p class="muted">Company SOPs, processes and reference articles.</p></div>
-        ${canManage ? `<button class="btn btn-primary" type="button" data-action="kb-new"><i class="ti ti-plus" aria-hidden="true"></i>New article</button>` : ''}
-      </div>
-      <div class="kb-grid">
-        <aside class="kb-sidebar">
-          <div class="kb-search"><i class="ti ti-search" aria-hidden="true"></i><input type="search" data-knowledge-search value="${h(ui.query)}" placeholder="Search articles…" aria-label="Search knowledge base" /></div>
-          <div class="kb-list">${list}</div>
-        </aside>
-        <div class="kb-detail">${detail}</div>
-      </div>
-    </section>`;
-}
 
 const PB_STALE_DAYS = 45;
 const PB_VENDOR_TYPES = [['supply_house', 'Supply House'], ['lumber_yard', 'Lumber Yard'], ['distributor', 'Distributor'], ['manufacturer', 'Manufacturer']];
@@ -15263,6 +15323,37 @@ const WB_SORT_PRESETS = [
   ['title_az', 'Title, A–Z'],
   ['title_za', 'Title, Z–A'],
 ];
+/**
+ * The stage the deck is currently filtered to, or '' for none.
+ *
+ * Only honoured when the route is actually pointing at this app, so a stale `stage` left in
+ * the URL by a different app cannot silently empty the list.
+ */
+function wbNavStage(app) {
+  const route = state.route;
+  if (!route || route.name !== 'company' || route.section !== 'workspaces') return '';
+  if (route.params?.get('app_id') !== app.id) return '';
+  return route.params?.get('stage') || '';
+}
+
+/** The human label for a deck stage id, for the footer and the empty state. */
+function wbNavStageLabel(app, stageId) {
+  if (stageId === NAV_STAGE_NONE) return 'No stage';
+  const field = pipelineField(app);
+  return stagesOf(field).find((s) => s.id === stageId)?.label || 'Unknown stage';
+}
+
+/** Whether a record belongs to the deck's chosen stage bucket. */
+function wbItemInNavStage(app, item, stageId) {
+  const field = pipelineField(app);
+  if (!field) return true;
+  const value = item.values?.[field.id];
+  if (stageId !== NAV_STAGE_NONE) return value === stageId;
+  // Unset AND pointing at a deleted stage both belong in the "no stage" bucket, matching
+  // how the board places them -- otherwise those records would be unreachable from the deck.
+  return value == null || value === '' || !stagesOf(field).some((s) => s.id === value);
+}
+
 function wbItemsUI(appId) {
   state.wbUI = state.wbUI || {};
   // boardFieldId / boardSumId are the user's explicit choices; both fall back rather than
@@ -15476,6 +15567,10 @@ function wbViewItems(companyId, workspace, app) {
   // Filter, then sort. A column-header sort (ui.sort) wins; otherwise the toolbar
   // preset (ui.order) orders by created/edited/activity/title.
   let rows = ui.filters.length ? app.items.filter((it) => ui.filters.every((flt) => wbEvalFilter(companyId, workspace, app, it, flt))) : app.items.slice();
+  // A stage picked in the deck narrows the list on top of the app's own filters rather than
+  // replacing them, so going back to "All items" restores exactly what the user configured.
+  const navStage = wbNavStage(app);
+  if (navStage) rows = rows.filter((it) => wbItemInNavStage(app, it, navStage));
   if (ui.sort && ui.sort.fieldId) { const sf = app.fields.find((x) => x.id === ui.sort.fieldId); if (sf) rows = wbSortItems(companyId, workspace, app, rows, sf, ui.sort.dir); }
   else rows = wbApplyPresetSort(app, rows, ui.order || 'created_desc');
   const selectable = canManage;
@@ -15488,7 +15583,13 @@ function wbViewItems(companyId, workspace, app) {
       <button class="btn btn-sm danger" type="button" data-wb-del-sel><i class="ti ti-trash"></i>Delete selected</button>
     </div>` : '';
   let listBody;
-  if (!rows.length) listBody = `<div class="wb-empty wb-empty-inline"><i class="ti ti-filter-search"></i><h3>No items match</h3><p>No records match your current search or filters. Try adjusting or clearing them.</p></div>`;
+  // Name the stage when one is on: "nothing matches your filters" sends you hunting through
+  // a filter panel that is empty, when the real cause is the row you clicked in the deck.
+  const navStageLabel = navStage ? wbNavStageLabel(app, navStage) : '';
+  if (!rows.length) listBody = `<div class="wb-empty wb-empty-inline"><i class="ti ti-filter-search"></i><h3>No items match</h3><p>${navStage
+    ? `Nothing in this app is at <b>${h(navStageLabel)}</b> right now.`
+    : 'No records match your current search or filters. Try adjusting or clearing them.'}</p>${navStage
+    ? `<div class="wb-empty-acts"><a class="btn" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'items' }, companyId))}" data-router><i class="ti ti-list"></i>Show all items</a></div>` : ''}</div>`;
   else if (ui.view === 'card') listBody = wbRenderItemsCards(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   else if (ui.view === 'board') listBody = wbRenderItemsBoard(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   else if (ui.view === 'badge') listBody = wbRenderItemsBadges(companyId, workspace, app, rows, cols, ui, selectable, canManage);
@@ -15496,7 +15597,8 @@ function wbViewItems(companyId, workspace, app) {
   else listBody = wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canManage);
   const viewLabel = (WB_VIEW_MODES.find(([v]) => v === ui.view) || [])[1] || 'Table';
   return `${toolbar}${bulkBar}<div id="wbItemsList">${listBody}</div>
-    <div class="wb-table-foot"><span data-wb-items-count>${rows.length} item${rows.length === 1 ? '' : 's'}</span> · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'} · ${h(viewLabel)} view</div>`;
+    <div class="wb-table-foot"><span data-wb-items-count>${rows.length} item${rows.length === 1 ? '' : 's'}</span>${navStage
+    ? ` at <b>${h(navStageLabel)}</b> of ${app.items.length}` : ''} · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'} · ${h(viewLabel)} view</div>`;
 }
 // Shared per-item bits for the non-table views.
 function wbItemSearchAttr(companyId, workspace, app, cols, item) {

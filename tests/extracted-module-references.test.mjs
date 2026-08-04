@@ -125,6 +125,7 @@ const FACTORY_MODULES = [
   ['src/jobs/job-calendar.js', 'createJobCalendar'],
   ['src/crm/deal-detail.js', 'createDealDetail'],
   ['src/crm/underwriter-page.js', 'createUnderwriterPage'],
+  ['src/knowledge/knowledge-page.js', 'createKnowledgePage'],
   ['src/ui/landing-page.js', 'createLandingPage'],
   ['src/ui/auth-form.js', 'createAuthForm'],
 ];
