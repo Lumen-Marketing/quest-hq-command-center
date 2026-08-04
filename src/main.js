@@ -18477,6 +18477,21 @@ function mountWorkspaceBuilder() {
       const itemId = state.route?.params?.get('item_id') || '';
       openWbChildModal(companyId, workspaceId, appId, itemId, collectionId, childId);
     });
+    // Ticking on the record page itself, so working a list of steps is not one dialog per step.
+    bind('[data-wb-child-check]', (el) => {
+      const [collectionId, childId, fieldId] = String(el.dataset.wbChildCheck).split(':');
+      const itemId = state.route?.params?.get('item_id') || '';
+      wbChildEdit(companyId, workspaceId, appId, itemId, (item, mod) => {
+        const child = mod.childrenOf(item, collectionId).find((c) => c.id === childId);
+        const on = child?.values?.[fieldId] === true || child?.values?.[fieldId] === 'true';
+        return mod.setChildValue(item, childId, fieldId, !on);
+      });
+    });
+    bind('[data-wb-child-step]', (el) => {
+      const [, childId, fieldId, stepId] = String(el.dataset.wbChildStep).split(':');
+      const itemId = state.route?.params?.get('item_id') || '';
+      wbChildEdit(companyId, workspaceId, appId, itemId, (item, mod) => mod.toggleChildStep(item, childId, fieldId, stepId));
+    });
     bind('[data-wb-child-del]', (el) => {
       const [, childId] = String(el.dataset.wbChildDel).split(':');
       const itemId = state.route?.params?.get('item_id') || '';
@@ -18898,6 +18913,13 @@ function wbMountModal() {
   // Item detail modal: view/edit toggle, file previews, and the comment box work
   // in both modes; the field-input wiring only runs when actually editing.
   if (m.kind === 'child-item') {
+    // The same mounts the app's own record form gets. Without them a checklist field in a
+    // sub-item rendered its steps but bound nothing, so the boxes could not be ticked at all —
+    // and a file, duration or progress field was just as inert.
+    wbMountFileFields(overlay);
+    wbMountDurationFields(overlay);
+    wbMountProgressFields(overlay);
+    wbMountChecklistFields(overlay);
     const submit = overlay.querySelector('[data-wb-child-submit]');
     if (submit) {
       submit.onclick = () => {

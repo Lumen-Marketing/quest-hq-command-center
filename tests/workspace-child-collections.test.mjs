@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   addChild, addCollection, childCount, childrenOf, collectionsFor, findCollection,
   normalizeCollection, orphanedChildren, removeChild, removeCollection, renameCollection,
-  updateChild,
+  setChildValue, toggleChildStep, updateChild,
 } from '../src/workspace/child-collections.js';
 
 // The builder's dialogs are their own fetched-on-demand module; same surface, two files.
@@ -336,4 +336,100 @@ test('its settings pick a list, not a set of fields', () => {
 
 test('with no lists the settings dialog says so instead of offering an empty select', () => {
   assert.match(main, /This app has no sub-item lists yet\. Add one in Settings, then come back\./);
+});
+
+// ---- Ticking, on the record page rather than in a dialog ---------------------------------
+
+const ticked = () => ({
+  children: [
+    { id: 'c1', collection: 'k1', values: { name: 'Needs attention', done: false, steps: [
+      { id: 's1', label: 'Call Kevin', done: false },
+      { id: 's2', label: 'Order 2x6', done: true },
+    ] } },
+    { id: 'c2', collection: 'k1', values: { name: 'Other', done: true } },
+  ],
+});
+
+test('setting one field leaves the rest of the sub-item alone', () => {
+  // updateChild REPLACES values. Routing an inline tick through it would have blanked the
+  // name and the steps every time someone checked a box.
+  const out = setChildValue(ticked(), 'c1', 'done', true);
+  const c1 = out.find((c) => c.id === 'c1');
+  assert.equal(c1.values.done, true);
+  assert.equal(c1.values.name, 'Needs attention');
+  assert.equal(c1.values.steps.length, 2);
+  // And no other sub-item moves.
+  assert.deepEqual(out.find((c) => c.id === 'c2').values, { name: 'Other', done: true });
+});
+
+test('a tick stamps the sub-item as edited', () => {
+  assert.match(setChildValue(ticked(), 'c1', 'done', true).find((c) => c.id === 'c1').updatedAt, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('toggling a step flips that step and only that step', () => {
+  const out = toggleChildStep(ticked(), 'c1', 'steps', 's1');
+  const steps = out.find((c) => c.id === 'c1').values.steps;
+  assert.equal(steps.find((s) => s.id === 's1').done, true);
+  assert.equal(steps.find((s) => s.id === 's2').done, true, 's2 was already done and must stay done');
+  // Order is what the user sees; a toggle must not reshuffle the list under their cursor.
+  assert.deepEqual(steps.map((s) => s.id), ['s1', 's2']);
+});
+
+test('toggling an unchecked step back off works too', () => {
+  assert.equal(
+    toggleChildStep(ticked(), 'c1', 'steps', 's2').find((c) => c.id === 'c1').values.steps.find((s) => s.id === 's2').done,
+    false,
+  );
+});
+
+test('a step that is not there changes nothing', () => {
+  // Stale markup from a render that raced a delete must not stamp updatedAt for no change.
+  const item = ticked();
+  assert.equal(toggleChildStep(item, 'c1', 'steps', 'gone'), item.children);
+  assert.equal(toggleChildStep(item, 'nope', 'steps', 's1'), item.children);
+});
+
+test('a checklist renders its steps as ticks, not as [object Object]', () => {
+  // A checklist value is an array of {id, label, done}, so the old `value.join(', ')` printed
+  // "[object Object], [object Object], [object Object]" in the sub-item row.
+  assert.doesNotMatch(page, /if \(Array\.isArray\(value\)\) return value\.join/);
+  assert.match(page, /if \(field\.type === 'checklist'\) \{/);
+  assert.match(page, /String\(v\.label \?\? v\.name \?\? v\.id \?\? ''\)/, 'every array type needs the guard, not just checklists');
+});
+
+test('sub-items render as a list, not a table', () => {
+  assert.match(page, /<ul class="wb-child-list">/);
+  assert.ok(!/wb-child-table|<thead>/.test(page), 'the table markup must be gone');
+  assert.match(page, /function childRow\(collection, cols, child, one, canManage\)/);
+});
+
+test('the row names itself from a text field, falling back rather than showing nothing', () => {
+  assert.match(page, /const CHILD_TITLE_TYPES = \['text', 'longtext', 'email', 'phone', 'url', 'autonumber'\];/);
+  const fn = page.slice(page.indexOf('function childTitleField('));
+  assert.match(fn.slice(0, fn.indexOf('\n}')), /\|\| fields\.find\(\(f\) => f\.type !== 'checklist' && f\.type !== 'checkbox' && filled\(child, f\)\)/);
+});
+
+test('one checkbox becomes the row tick; several stay labelled in the meta line', () => {
+  // Two checkboxes is a form, not a checklist — a bare tick would not say which one it was.
+  assert.match(page, /const box = boxes\.length === 1 \? boxes\[0\] : null;/);
+});
+
+test('the ticks are wired to the model, and are dead for a viewer', () => {
+  assert.match(page, /data-wb-child-check="\$\{h\(collection\.id\)\}:\$\{h\(child\.id\)\}:\$\{h\(box\.id\)\}"/);
+  assert.match(page, /data-wb-child-step="\$\{h\(collection\.id\)\}:\$\{h\(child\.id\)\}:\$\{h\(f\.id\)\}:\$\{h\(s\.id\)\}"/);
+  assert.match(page, /\$\{canManage \? '' : ' disabled'\}/);
+  assert.match(main, /bind\('\[data-wb-child-check\]'/);
+  assert.match(main, /bind\('\[data-wb-child-step\]'/);
+  assert.match(main, /mod\.toggleChildStep\(item, childId, fieldId, stepId\)/);
+  assert.match(main, /mod\.setChildValue\(item, childId, fieldId, !on\)/);
+});
+
+test('the sub-item dialog mounts its field controls', () => {
+  // It rendered a checklist field's steps but bound nothing to them, so the boxes in the
+  // dialog could not be ticked at all — and file, duration and progress were just as inert.
+  const branch = main.slice(main.indexOf("if (m.kind === 'child-item') {"));
+  const body = branch.slice(0, branch.indexOf('[data-wb-child-submit]'));
+  for (const mount of ['wbMountFileFields', 'wbMountDurationFields', 'wbMountProgressFields', 'wbMountChecklistFields']) {
+    assert.ok(body.includes(`${mount}(overlay);`), `${mount} must run for a sub-item too`);
+  }
 });

@@ -22,8 +22,32 @@ function childValueText(field, value) {
     return (field.config?.options || []).find((o) => o.id === value)?.label || String(value);
   }
   if (field.type === 'money') return `${field.config?.currency || '$'}${value}`;
-  if (Array.isArray(value)) return value.join(', ');
+  if (Array.isArray(value)) {
+    // A checklist holds {id, label, done} objects, so a plain join printed "[object Object]"
+    // once per step. Every array type gets the same guard: read a label off an object rather
+    // than stringifying it.
+    if (field.type === 'checklist') {
+      const steps = value.filter(Boolean);
+      return steps.length ? `${steps.filter((s) => s.done).length}/${steps.length}` : '—';
+    }
+    const parts = value
+      .map((v) => (v && typeof v === 'object' ? String(v.label ?? v.name ?? v.id ?? '') : String(v)))
+      .filter(Boolean);
+    return parts.length ? parts.join(', ') : '—';
+  }
   return String(value);
+}
+
+// Which field names the row. A sub-item reads as a line of text first and a set of columns
+// second, so the first text-ish field carrying anything becomes the title and the rest trail
+// behind it.
+const CHILD_TITLE_TYPES = ['text', 'longtext', 'email', 'phone', 'url', 'autonumber'];
+const filled = (child, field) => String(child.values?.[field.id] ?? '').trim() !== '';
+
+function childTitleField(fields, child) {
+  return fields.find((f) => CHILD_TITLE_TYPES.includes(f.type) && filled(child, f))
+    || fields.find((f) => f.type !== 'checklist' && f.type !== 'checkbox' && filled(child, f))
+    || null;
 }
 
 export function createRecordPage(ctx) {
@@ -31,6 +55,50 @@ export function createRecordPage(ctx) {
     appHref, can, companyPath, emptyState, formatDate, h, wbFmtVal, wbItemCommentsHtml,
     wbItemTitle, wbTimeAgo, wbUrlControl, state,
   } = ctx;
+
+  // One sub-item, as a line you can tick rather than a row of table cells. Anything checkable
+  // is checkable here: a lone checkbox field becomes the row's own tick, and a checklist field
+  // opens out into its steps. Both write straight through, so working a list never means
+  // opening a dialog per step.
+  function childRow(collection, cols, child, one, canManage) {
+    const titleField = childTitleField(cols, child);
+    const title = titleField ? childValueText(titleField, child.values[titleField.id]) : one;
+    // Exactly one checkbox reads as "this sub-item is done". Two or more is a form, not a
+    // checklist, so those stay in the meta line where they keep their labels.
+    const boxes = cols.filter((f) => f.type === 'checkbox');
+    const box = boxes.length === 1 ? boxes[0] : null;
+    const done = box ? child.values[box.id] === true || child.values[box.id] === 'true' : false;
+    const meta = cols
+      .filter((f) => f !== titleField && f !== box && f.type !== 'checklist')
+      .map((f) => ({ f, text: childValueText(f, child.values[f.id]) }))
+      .filter((x) => x.text && x.text !== '—');
+    const tick = (attr, on, label) => `<button type="button" class="wb-child-tick${on ? ' on' : ''}" role="checkbox"
+      aria-checked="${on ? 'true' : 'false'}" aria-label="${h(label)}" title="${h(label)}"
+      ${attr}${canManage ? '' : ' disabled'}><i class="ti ti-check"></i></button>`;
+    const steps = cols.filter((f) => f.type === 'checklist').map((f) => {
+      const list = (Array.isArray(child.values?.[f.id]) ? child.values[f.id] : []).filter(Boolean);
+      if (!list.length) return '';
+      return `<div class="wb-child-steps">
+        <div class="wb-child-steps-head">${h(f.label)}<span>${list.filter((s) => s.done).length}/${list.length}</span></div>
+        <ul>${list.map((s) => `<li class="${s.done ? 'done' : ''}">
+          ${tick(`data-wb-child-step="${h(collection.id)}:${h(child.id)}:${h(f.id)}:${h(s.id)}"`, !!s.done, s.label || 'Step')}
+          <span class="wb-child-step-label">${h(s.label || 'Step')}</span>
+        </li>`).join('')}</ul>
+      </div>`;
+    }).join('');
+    return `<li class="wb-child-row${done ? ' done' : ''}">
+      <div class="wb-child-line">
+        ${box ? tick(`data-wb-child-check="${h(collection.id)}:${h(child.id)}:${h(box.id)}"`, done, box.label) : ''}
+        <span class="wb-child-name">${h(title)}</span>
+        <span class="wb-child-meta">${meta.map((x) => `<span class="wb-child-pill"><b>${h(x.f.label)}</b>${h(x.text)}</span>`).join('')}</span>
+        ${canManage ? `<span class="wb-child-acts">
+          <button class="wb-w-btn" type="button" data-wb-child-edit="${h(collection.id)}:${h(child.id)}" title="Edit" aria-label="Edit"><i class="ti ti-pencil"></i></button>
+          <button class="wb-w-btn danger" type="button" data-wb-child-del="${h(collection.id)}:${h(child.id)}" title="Delete" aria-label="Delete"><i class="ti ti-trash"></i></button>
+        </span>` : ''}
+      </div>
+      ${steps}
+    </li>`;
+  }
 
   function wbViewItemPage(route, companyId, workspace, app, item) {
     const canManage = can('workspaces.manage', companyId);
@@ -79,16 +147,7 @@ export function createRecordPage(ctx) {
         ${!cols.length
     ? emptyState(`${collection.name} has no fields yet. Add them in the app's Settings.`)
     : rows.length
-      ? `<div class="wb-child-scroll"><table class="wb-child-table">
-            <thead><tr>${cols.map((f) => `<th>${h(f.label)}</th>`).join('')}${canManage ? '<th class="wb-child-acts"></th>' : ''}</tr></thead>
-            <tbody>${rows.map((child) => `<tr>
-              ${cols.map((f) => `<td>${h(childValueText(f, child.values[f.id]))}</td>`).join('')}
-              ${canManage ? `<td class="wb-child-acts">
-                <button class="wb-w-btn" type="button" data-wb-child-edit="${h(collection.id)}:${h(child.id)}" title="Edit" aria-label="Edit"><i class="ti ti-pencil"></i></button>
-                <button class="wb-w-btn danger" type="button" data-wb-child-del="${h(collection.id)}:${h(child.id)}" title="Delete" aria-label="Delete"><i class="ti ti-trash"></i></button>
-              </td>` : ''}
-            </tr>`).join('')}</tbody>
-          </table></div>`
+      ? `<ul class="wb-child-list">${rows.map((child) => childRow(collection, cols, child, one, canManage)).join('')}</ul>`
       : emptyState(`No ${h(collection.name.toLowerCase())} yet.`)}`;
       }
       const title = String(block.config?.title || '').trim();

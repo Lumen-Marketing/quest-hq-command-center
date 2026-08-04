@@ -92,6 +92,33 @@ export function updateChild(item, childId, values) {
     : c));
 }
 
+/**
+ * Merge ONE field into one child, leaving the rest of its values alone.
+ *
+ * Ticking a box on the record page has to go through this rather than updateChild: that one
+ * replaces the whole values object, so an inline toggle written with it would blank every
+ * other field on the sub-item.
+ */
+export function setChildValue(item, childId, fieldId, value) {
+  const all = Array.isArray(item?.children) ? item.children : [];
+  const now = new Date().toISOString().slice(0, 10);
+  return all.map((c) => {
+    if (c?.id !== childId) return c;
+    const norm = normalizeChild(c);
+    return { ...norm, values: { ...norm.values, [fieldId]: value }, updatedAt: now };
+  });
+}
+
+/** Flip one step of a checklist field, in place, without touching the others. */
+export function toggleChildStep(item, childId, fieldId, stepId) {
+  const all = Array.isArray(item?.children) ? item.children : [];
+  const child = all.find((c) => c?.id === childId);
+  const steps = Array.isArray(child?.values?.[fieldId]) ? child.values[fieldId] : [];
+  // Nothing to flip: return the list untouched rather than stamping updatedAt for no change.
+  if (!steps.some((s) => s && s.id === stepId)) return all;
+  return setChildValue(item, childId, fieldId, steps.map((s) => (s && s.id === stepId ? { ...s, done: !s.done } : s)));
+}
+
 export const removeChild = (item, childId) => (Array.isArray(item?.children) ? item.children : []).filter((c) => c?.id !== childId);
 
 /**

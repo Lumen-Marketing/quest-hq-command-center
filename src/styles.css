@@ -30865,18 +30865,46 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-check-list { display: grid; gap: 1px; margin-top: 4px; padding-left: 4px; border-left: 2px solid var(--border); }
 
 /* ---- Sub-items: records inside a record ------------------------------------------------- */
-.wb-child-scroll { overflow-x: auto; }
-.wb-child-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
-.wb-child-table th {
-  text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border);
-  font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
-  white-space: nowrap;
+/* A list, not a table. Sub-items are read down the left edge — name first, everything else
+   trailing — and the ones that can be ticked are ticked here rather than in a dialog. */
+.wb-child-list { list-style: none; margin: 0; padding: 0; font-size: .84rem; }
+.wb-child-row { border-bottom: 1px solid var(--border); }
+.wb-child-row:last-child { border-bottom: 0; }
+.wb-child-line { display: flex; align-items: center; gap: 10px; padding: 9px 4px; }
+.wb-child-line:hover { background: var(--surface-2); }
+.wb-child-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.wb-child-row.done .wb-child-name { color: var(--muted); text-decoration: line-through; }
+.wb-child-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.wb-child-pill {
+  display: inline-flex; gap: 5px; align-items: baseline; white-space: nowrap;
+  padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: .76rem;
 }
-.wb-child-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
-.wb-child-table tr:last-child td { border-bottom: 0; }
-.wb-child-table tr:hover td { background: var(--surface-2); }
-.wb-child-acts { width: 1%; white-space: nowrap; text-align: right; }
+.wb-child-pill b { font-size: .64rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.wb-child-acts { white-space: nowrap; flex: none; }
+.wb-child-meta:empty + .wb-child-acts { margin-left: auto; }
 .wb-child-acts .wb-w-btn + .wb-w-btn { margin-left: 4px; }
+
+/* The tick itself: an empty ring until it is checked, so a glance down the list reads as
+   done / not done without having to read any of the words. */
+.wb-child-tick {
+  flex: none; width: 20px; height: 20px; display: grid; place-items: center; cursor: pointer;
+  border: 2px solid var(--border); border-radius: 6px; background: transparent;
+  color: transparent; font-size: .72rem; transition: background .12s, border-color .12s, color .12s;
+}
+.wb-child-tick:hover:not(:disabled) { border-color: var(--accent, #ea580c); }
+.wb-child-tick.on { background: #16a34a; border-color: #16a34a; color: #fff; }
+.wb-child-tick:disabled { cursor: default; opacity: .55; }
+
+.wb-child-steps { padding: 0 4px 10px 30px; }
+.wb-child-steps-head {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 4px;
+  font-size: .64rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+}
+.wb-child-steps-head span { font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.wb-child-steps ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.wb-child-steps li { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+.wb-child-steps li.done .wb-child-step-label { color: var(--muted); text-decoration: line-through; }
+.wb-child-step-label { min-width: 0; overflow-wrap: anywhere; }
 .wb-w-collection .wb-w-title { align-items: center; }
 .wb-w-collection .wb-w-title .btn { margin-left: auto; }
 
