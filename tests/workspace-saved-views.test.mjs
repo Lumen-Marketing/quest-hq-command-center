@@ -185,3 +185,53 @@ test('the rail is fetched with its model, not carried by every page', () => {
   assert.match(main, /savedViewsPending = null;/, 'a failed fetch must be retryable');
   assert.match(main, /if \(!savedViewsModule\) \{\n\s*loadSavedViews\(\)/, 'the list must not wait for the rail');
 });
+
+// --- which field a view splits by --------------------------------------------------------
+
+test('the chosen field is the field that splits, among several', () => {
+  // The complaint that started this: picking Trade and appearing to get the status field.
+  const two = {
+    id: 'a1',
+    name: 'Jobs',
+    fields: [
+      { id: 'trade', type: 'category', label: 'Trade', config: { options: [{ id: 't1', label: 'Roofing' }, { id: 't2', label: 'Siding' }] } },
+      { id: 'stage', type: 'status', label: 'Untitled Status field', config: { options: [{ id: 's1', label: 'Unscheduled' }] } },
+    ],
+    items: [{ id: 'i1', values: { trade: 't1', stage: 's1' } }, { id: 'i2', values: { trade: 't2', stage: 's1' } }],
+  };
+  assert.deepEqual(viewGroups(two, { fieldId: 'trade' }).map((g) => g.label), ['Roofing', 'Siding']);
+  assert.deepEqual(viewGroups(two, { fieldId: 'stage' }).map((g) => g.label), ['Unscheduled']);
+});
+
+test('a view says which field it splits by', () => {
+  const html = rail();
+  assert.match(html, /class="wb-vsplit"/);
+  assert.match(html, /data-wb-view-split="tv1"/);
+  // The current field is the one selected, so the label doubles as the control.
+  assert.match(html, /<option value="f2" selected>Lead Status<\/option>/);
+});
+
+test('the split field can be changed without recreating the view', () => {
+  // Recreating it to correct the field would lose its name and its place in the list.
+  const handler = main.match(/bind\('\[data-wb-view-split\]'[\s\S]*?'onchange'\);/)?.[0] || '';
+  assert.match(handler, /app\.views = \(app\.views \|\| \[\]\)\.map\(\(v\) => \(v\.id === id \? \{ \.\.\.v, fieldId \} : v\)\)/);
+  assert.match(handler, /wbSavePrivateViews\(priv\.map\(\(v\) => \(v\.id === id \? \{ \.\.\.v, fieldId \} : v\)\)\)/);
+  // And the old field's value must not stay selected, or the list empties for no visible reason.
+  assert.match(handler, /ui\.chipFieldId = '';\n\s*ui\.chipValue = '';/);
+});
+
+test('a field with no options says so instead of rendering a silent blank', () => {
+  const bare = {
+    id: 'a1', name: 'Jobs',
+    fields: [{ id: 'c', type: 'category', label: 'Trade', config: {} }],
+    items: [{ id: 'i1', values: {} }],
+    views: [{ id: 'v', title: 'By trade', fieldId: 'c' }],
+  };
+  const html = rail({ app: bare });
+  assert.match(html, /has no options yet, so there is nothing to split by/);
+});
+
+test('a view whose field was deleted explains itself rather than vanishing', () => {
+  const html = rail({ app: { ...app, views: [{ id: 'v', title: 'Old', fieldId: 'gone' }] } });
+  assert.match(html, /That field was deleted, so this view now shows everything\./);
+});

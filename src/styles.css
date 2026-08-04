@@ -30845,3 +30845,15 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-w.drop-target { border-color: var(--orange); border-style: solid; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--orange) 35%, transparent); }
 .wb-w-grip { display: inline-flex; align-items: center; color: var(--muted); cursor: grab; padding: 0 2px; }
 .wb-w.dragging .wb-w-grip { cursor: grabbing; }
+
+/* Which field a view splits by, said out loud and changeable in place. Two views split by
+   different fields otherwise look identical. */
+.wb-vsplit { display: flex; align-items: center; gap: 5px; margin: 1px 0 3px; padding-left: 6px; font-size: .72rem; color: var(--muted); }
+.wb-vsplit-lead { flex: none; }
+.wb-vsplit select {
+  border: 1px solid transparent; border-radius: 5px; background: none;
+  font: inherit; font-size: .72rem; color: var(--ink-2); padding: 1px 3px; cursor: pointer;
+  max-width: 140px;
+}
+.wb-vsplit select:hover, .wb-vsplit select:focus { border-color: var(--border); background: var(--surface); }
+.wb-vhint { margin: 2px 0 4px; padding-left: 6px; font-size: .72rem; color: var(--amber-ink, #92600a); }

@@ -18468,6 +18468,28 @@ function mountWorkspaceBuilder() {
       wbRememberItemsUI(appId);
       render();
     });
+    // Change what a view splits by, in place. Recreating it just to correct the field would
+    // lose its name and its position in the list.
+    bind('[data-wb-view-split]', (el) => {
+      const id = el.dataset.wbViewSplit;
+      const fieldId = el.value;
+      const priv = wbPrivateViews();
+      if (priv.some((v) => v.id === id)) {
+        wbSavePrivateViews(priv.map((v) => (v.id === id ? { ...v, fieldId } : v)));
+      } else {
+        if (!can('workspaces.manage', companyId)) return;
+        const { app } = wbFind(companyId, workspaceId, appId);
+        app.views = (app.views || []).map((v) => (v.id === id ? { ...v, fieldId } : v));
+        wbSave(companyId);
+      }
+      // The chip was pointing at a value of the OLD field, which the new one has no idea
+      // about, so the list would show nothing with no visible reason.
+      const ui = wbItemsUI(appId);
+      ui.chipFieldId = '';
+      ui.chipValue = '';
+      wbRememberItemsUI(appId);
+      render();
+    }, 'onchange');
     bind('[data-wb-view-del]', (el) => {
       const id = el.dataset.wbViewDel;
       const priv = wbPrivateViews();
