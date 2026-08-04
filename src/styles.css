@@ -30545,6 +30545,42 @@ a.wb-cal-more:hover { color: var(--orange); }
 }
 .jf-co-line b { font-variant-numeric: tabular-nums; }
 
+/* ---- Photos tab ---------------------------------------------------------------------------- */
+.jf-photo-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.jf-photo-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.jf-photo-chip {
+  border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; background: var(--surface);
+  font-size: .78rem; font-weight: 600; color: var(--ink-2); cursor: pointer;
+}
+.jf-photo-chip span { font-variant-numeric: tabular-nums; color: var(--muted); margin-left: 4px; }
+.jf-photo-chip:hover { border-color: var(--orange); color: var(--orange); }
+.jf-photo-chip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.jf-photo-chip.on span { color: #cbd5e1; }
+.jf-photo-head .btn { margin-left: auto; }
+
+.jf-photo-day { margin-bottom: 18px; }
+.jf-photo-day-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin: 0 0 8px; font-size: .88rem; }
+.jf-photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+.jf-photo {
+  position: relative; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden; background: var(--surface-2); cursor: pointer; padding: 0; display: block;
+}
+.jf-photo:hover { border-color: var(--orange); }
+.jf-photo img, .jf-photo video { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The shared thumbnail helper wraps its image; make the wrapper fill the tile too. */
+.jf-photo > span:first-child { display: block; width: 100%; height: 100%; }
+.jf-photo-flag {
+  position: absolute; top: 5px; left: 5px; background: #fdecec; color: #b91c1c;
+  font-size: .6rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px;
+}
+.jf-photo-cap {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 7px;
+  background: linear-gradient(transparent, rgba(15, 23, 42, .82));
+  color: #fff; font-size: .68rem; text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
 /* ---- Change-order wizard ------------------------------------------------------------------ */
 .cow { display: grid; gap: 12px; }
 .cow-eyebrow {

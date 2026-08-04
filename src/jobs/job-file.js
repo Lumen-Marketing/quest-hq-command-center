@@ -12,6 +12,9 @@ import {
   isStruggling, projectedNet, sortDailies, ticketWithChangeOrders,
 } from './production-model.js';
 import { groupLines, lineAmount, methodLabel } from './change-order-model.js';
+import {
+  ISSUE_CATEGORY, categoryLabel, filterByCategory, photosByDay, undatedCount, usedCategories,
+} from './photo-model.js';
 
 export const JOB_FILE_TABS = [
   ['overview', 'Overview'],
@@ -59,7 +62,9 @@ export function createJobFile(ctx) {
       dailies: data.dailies.length,
       changes: data.changeOrders.length,
       plans: data.plans.length,
-      photos: data.photoCount,
+      // The real files, not the count a foreman typed into a daily. Those two disagreed the
+      // moment anybody uploaded from the drive instead of from the daily form.
+      photos: (data.photos || []).length,
     };
     const n = counts[key];
     if (!n) return '';
@@ -122,6 +127,65 @@ export function createJobFile(ctx) {
         ${d.crew_names.length ? `<p class="jf-sub">On site: ${h(d.crew_names.join(', '))}</p>` : ''}
         ${d.photo_count ? `<p class="jf-sub">${d.photo_count} photo${d.photo_count === 1 ? '' : 's'}</p>` : ''}
       </article>`).join('');
+  }
+
+  /**
+   * Photos, by the day they were taken, with that day's daily beside them.
+   *
+   * Capture and upload already existed as a modal reachable from the jobs board; this tab is
+   * where the design puts them, so the button opens the same one rather than a second
+   * uploader that would drift from it.
+   */
+  function photosTab(job, data, companyId) {
+    const all = data.photos || [];
+    const canManage = can('files.manage', companyId);
+    const filter = ctx.photoFilter() || 'All';
+    const shown = filterByCategory(all, filter);
+    const cats = usedCategories(all);
+    const orphans = undatedCount(all);
+
+    const capture = canManage
+      ? `<button class="btn btn-primary" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}"><i class="ti ti-camera"></i>Add photos</button>`
+      : '';
+
+    if (!all.length) {
+      return `<div class="jf-photo-head">${capture}</div>
+        ${emptyState('No photos on this job yet. They attach to the day they were taken, so the day\'s report and its evidence stay together.')}`;
+    }
+
+    const groups = photosByDay(shown, data.dailies);
+    return `
+      <div class="jf-photo-head">
+        <div class="jf-photo-chips" role="group" aria-label="Photo type">
+          <button class="jf-photo-chip ${filter === 'All' ? 'on' : ''}" type="button"
+                  data-action="job-photo-filter" data-category="All">All <span>${all.length}</span></button>
+          ${cats.map((c) => `
+            <button class="jf-photo-chip ${filter === c.value ? 'on' : ''}" type="button"
+                    data-action="job-photo-filter" data-category="${h(c.value)}">${h(c.label)} <span>${c.count}</span></button>`).join('')}
+        </div>
+        ${capture}
+      </div>
+      ${groups.length ? groups.map((group) => `
+        <section class="jf-photo-day">
+          <p class="jf-photo-day-head">
+            <b>${h(formatDate(group.day))}</b>
+            <span class="jf-sub">${group.photos.length} photo${group.photos.length === 1 ? '' : 's'}</span>
+            ${group.daily
+    ? `<span class="jf-chip jf-chip-ok">Attached to that day's daily</span>`
+    : '<span class="jf-sub">No daily for this day</span>'}
+          </p>
+          <div class="jf-photo-grid">
+            ${group.photos.map((photo) => `
+              <button type="button" class="jf-photo" data-action="select-file" data-file-id="${h(photo.id)}"
+                      title="${h(photo.notes || photo.file_name || 'Photo')}">
+                ${ctx.fileThumb(photo)}
+                ${photo.category === ISSUE_CATEGORY ? '<span class="jf-photo-flag">Issue</span>' : ''}
+                ${photo.notes ? `<span class="jf-photo-cap">${h(photo.notes)}</span>` : ''}
+              </button>`).join('')}
+          </div>
+        </section>`).join('')
+    : emptyState(`No ${h(categoryLabel(filter).toLowerCase())} photos. Pick another type above.`)}
+      ${orphans ? `<p class="jf-sub">${orphans} photo${orphans === 1 ? '' : 's'} have no date recorded and are not shown above.</p>` : ''}`;
   }
 
   function numbersTab(job, data) {
@@ -268,8 +332,7 @@ export function createJobFile(ctx) {
             : active === 'changes' ? changesTab(job, data)
               : active === 'plans' ? plansTab(job, data)
                 : active === 'activity' ? ctx.renderJobRecord(companyId, job)
-                  : active === 'photos'
-                    ? emptyState('Photos attach to the daily they were taken on. Photo upload lands with the next phase.')
+                  : active === 'photos' ? photosTab(job, data, companyId)
                     : emptyState('Email threads for this job land with the next phase.');
 
     return `
@@ -303,6 +366,7 @@ export function createJobFile(ctx) {
             <aside class="jf-rail" aria-label="Quick create">
               <p class="jf-label">Quick create</p>
               <button class="jf-quick" type="button" data-action="job-daily-new"><b>Daily report</b><span>How the day went</span></button>
+              <button class="jf-quick" type="button" data-action="open-job-photos" data-job-id="${h(job.id)}"><b>Photos</b><span>Camera or device</span></button>
               <button class="jf-quick" type="button" data-action="job-change-order-new"><b>Change order</b><span>Client asked for more</span></button>
               <button class="jf-quick" type="button" data-action="job-bucket-new"><b>Cost bucket</b><span>Track a spend line</span></button>
               <button class="jf-quick" type="button" data-action="job-draw-new"><b>Draw</b><span>When they owe you</span></button>

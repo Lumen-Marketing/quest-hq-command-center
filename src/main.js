@@ -1459,7 +1459,9 @@ const CALENDAR_EVENT_TYPES = ['Company event', 'Job visit / inspection', 'Estima
 const CALENDAR_FILTER_TYPES = ['Task due', 'Invoice due', 'Approval', 'Time'].concat(CALENDAR_EVENT_TYPES);
 const FILE_ICON_ASSET_BASE = 'https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons/';
 const FILE_CATEGORIES = ['All categories', 'Shared', 'Jobs', 'Forms', 'Photos', 'Permits', 'Contracts', 'Archive'];
-const JOB_PHOTO_CATEGORIES = ['Before', 'Inspection', 'Damage', 'Progress', 'After', 'Other'];
+// 'Delivery' is the one the v1 design asks for that was missing. The rest keep their stored
+// spelling -- job_files already holds these values, and renaming would orphan existing rows.
+const JOB_PHOTO_CATEGORIES = ['Before', 'Inspection', 'Damage', 'Delivery', 'Progress', 'After', 'Other'];
 const DRIVE_FOLDERS = [
   ['jobs', 'Jobs', 'Job-linked folders and deliverables', 'ti-folders'],
   ['shared', 'Shared', 'Company-wide files', 'ti-folder-share'],
@@ -2599,6 +2601,7 @@ const state = {
   selectedFileId: '',
   jobPhotoJobId: '',
   jobPhotoCategory: 'All',
+  jobFilePhotoCategory: 'All',
   underwritingContactId: '',
   underwritingDraft: null,
   selectedFormId: '',
@@ -12212,8 +12215,11 @@ function productionForJob(jobId) {
     changeOrders: state.jobChangeOrders.filter((row) => row.job_id === id),
     changeOrderLines: state.jobChangeOrderLines.filter((row) => row.job_id === id),
     plans: state.jobPlans.filter((row) => row.job_id === id),
-    // Photos live on the dailies until the photo phase lands, so the count comes from there
-    // rather than from a table that does not exist yet.
+    // Real photo rows out of job_files -- the same table, bucket and upload path the drive
+    // uses, so a photo added from either place shows up in both.
+    photos: jobPhotosFor(id),
+    // Still exposed: a foreman types this into the daily, and it can legitimately differ from
+    // the files uploaded (photos texted to the office, say). Shown on the daily, not the tab.
     photoCount: dailies.reduce((sum, row) => sum + row.photo_count, 0),
   };
 }
@@ -12232,6 +12238,7 @@ function loadJobFile() {
         pipelineStageColor, resolvePipelineStage,
         productionFor: productionForJob,
         renderJobRecord, renderPipelineNextAction,
+        fileThumb, photoFilter: () => state.jobFilePhotoCategory,
       });
       return jobFileModule;
     }).catch((error) => {
@@ -27818,6 +27825,14 @@ function handleAction(event, node) {
   if (action === 'job-draw-invoice') {
     event.preventDefault();
     requestJobDraw(node.dataset.drawId);
+    return;
+  }
+  // The tab keeps its own filter, separate from the capture modal's: narrowing the tab to
+  // Issues should not silently narrow what the uploader shows next time it opens.
+  if (action === 'job-photo-filter') {
+    event.preventDefault();
+    state.jobFilePhotoCategory = node.dataset.category || 'All';
+    render();
     return;
   }
   if (action === 'job-change-order-step') {
