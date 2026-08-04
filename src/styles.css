@@ -30456,6 +30456,8 @@ a.wb-cal-more:hover { color: var(--orange); }
 }
 
 .jf-body { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 16px; align-items: start; }
+/* No rail: the content takes the whole width rather than leaving a 190px hole where it was. */
+.jf-body-wide { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 900px) { .jf-body { grid-template-columns: 1fr; } }
 .jf-main { display: grid; gap: 12px; min-width: 0; }
 

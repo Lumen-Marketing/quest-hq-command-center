@@ -118,3 +118,17 @@ test('the quick-create rail offers everything the design lists that can work', (
     assert.ok(jobFile.includes(`data-action="${action}"`), `${action} missing from the rail`);
   }
 });
+
+test('Activity does not get a second Quick Create', () => {
+  // The Activity tab renders the job record, which brings its own Quick Create panel. Showing
+  // the rail there put two lists of the same idea on one screen, overlapping, with different
+  // contents in each.
+  assert.match(jobFile, /const showRail = canManage && active !== 'activity';/);
+  assert.match(jobFile, /\$\{showRail \? `\s*\n\s*<aside class="jf-rail"/);
+  assert.ok(!/\$\{canManage \? `\s*\n\s*<aside class="jf-rail"/.test(jobFile), 'the rail must key on showRail');
+});
+
+test('with no rail the content takes the width instead of leaving a hole', () => {
+  assert.match(jobFile, /class="jf-body \$\{showRail \? '' : 'jf-body-wide'\}"/);
+  assert.match(css, /\.jf-body-wide \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+});

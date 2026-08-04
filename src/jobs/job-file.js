@@ -353,6 +353,10 @@ export function createJobFile(ctx) {
     const stage = resolvePipelineStage('jobs', job.stage, companyId);
     const worked = daysWorked(data.dailies);
     const canManage = can('jobs.manage', companyId);
+    // Activity brings its own Quick Create panel, so the rail would be a second one on the
+    // same screen -- two lists of the same idea, overlapping, with different contents. The
+    // tab that already has the control keeps it.
+    const showRail = canManage && active !== 'activity';
 
     const body = active === 'overview' ? overviewTab(job, data, companyId)
       : active === 'dailies' ? dailiesTab(job, data, companyId)
@@ -389,9 +393,9 @@ export function createJobFile(ctx) {
                data-router>${h(label)}${tabCount(key, data)}</a>`).join('')}
         </nav>
 
-        <div class="jf-body">
+        <div class="jf-body ${showRail ? '' : 'jf-body-wide'}">
           <div class="jf-main">${body}</div>
-          ${canManage ? `
+          ${showRail ? `
             <aside class="jf-rail" aria-label="Quick create">
               <p class="jf-label">Quick create</p>
               <button class="jf-quick" type="button" data-action="job-daily-new"><b>Daily report</b><span>How the day went</span></button>
