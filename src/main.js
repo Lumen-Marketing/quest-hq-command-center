@@ -5390,20 +5390,24 @@ function renderDeck(route) {
     </div>
     <div class="deck-scroll">
       ${groups.map((group) => {
-        const items = group.ids
+        const visible = group.ids
           .map((id) => modulesById.get(id))
-          .filter((module) => module && canViewModule(module, companyId))
-          .map((module) => {
-            const navLabel = navigationLabel(module.id, module.label);
-            if (module.status === 'planned') return plannedNavItem(module.symbol, navLabel);
-            if (module.id === 'contacts') return navItemSalesLifecycle(route, module, companyId);
-            if (module.id === 'jobs' || module.id === 'deals') return navItemPipeline(route, module, companyId);
-            return navItem(route, companyPath(module.id, {}, companyId), module.symbol, navLabel, moduleBadgeCount(module.id, companyId));
-          });
-        // Apps built in the workspace sit in the same group as the builder that made them,
-        // and they lead it: what somebody built for their own work is opened far more often
-        // than the builder they built it with.
-        if (group.label === 'Workspace') items.unshift(...navItemsForApps(route, companyId));
+          .filter((module) => module && canViewModule(module, companyId));
+        const items = visible.map((module) => {
+          const navLabel = navigationLabel(module.id, module.label);
+          if (module.status === 'planned') return plannedNavItem(module.symbol, navLabel);
+          if (module.id === 'contacts') return navItemSalesLifecycle(route, module, companyId);
+          if (module.id === 'jobs' || module.id === 'deals') return navItemPipeline(route, module, companyId);
+          return navItem(route, companyPath(module.id, {}, companyId), module.symbol, navLabel, moduleBadgeCount(module.id, companyId));
+        });
+        // Apps sit directly beneath the Workspaces row that built them, so the deck reads
+        // the way the product does: the builder, then what it produced. Anything else in
+        // the group is unrelated to either and follows.
+        if (group.label === 'Workspace') {
+          const at = visible.findIndex((module) => module.id === 'workspaces');
+          // -1 + 1 = 0: with the builder itself hidden, apps lead rather than vanish.
+          items.splice(at + 1, 0, ...navItemsForApps(route, companyId));
+        }
         return navGroup(group.label, items);
       }).join('')}
     </div>

@@ -11,11 +11,21 @@ import { boardColumns, pipelineField } from '../src/workspace/pipeline-core.js';
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const slice = (name) => main.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`))?.[0] || '';
 
-test('apps lead the group the builder that made them sits in', () => {
-  // unshift, not push: what somebody built for their own work is opened far more often than
-  // the seven built-in modules it would otherwise sit below.
-  assert.match(main, /if \(group\.label === 'Workspace'\) items\.unshift\(\.\.\.navItemsForApps\(route, companyId\)\);/);
+test('apps sit directly beneath the Workspaces row that built them', () => {
+  // The deck reads the way the product does: the builder, then what it produced. Appending
+  // them put an app seven rows down, below every unrelated module in the group.
+  assert.match(main, /const at = visible\.findIndex\(\(module\) => module\.id === 'workspaces'\);/);
+  assert.match(main, /items\.splice\(at \+ 1, 0, \.\.\.navItemsForApps\(route, companyId\)\);/);
   assert.match(main, /\{ label: 'Workspace', ids: \['workspaces',/);
+});
+
+test('a hidden Workspaces row does not send apps to a negative index', () => {
+  // findIndex returns -1 when the builder itself is not visible. -1 + 1 = 0 puts the apps
+  // first; splice(-1) would instead drop them in before the LAST item.
+  assert.match(main, /-1 \+ 1 = 0/, 'the fallback deserves saying out loud');
+  const items = ['a', 'b', 'c'];
+  items.splice(-1 + 1, 0, 'app');
+  assert.deepEqual(items, ['app', 'a', 'b', 'c']);
 });
 
 test('the deck never writes to the document it is describing', () => {
