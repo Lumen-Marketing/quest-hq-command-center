@@ -215,7 +215,21 @@ test('deleting a sub-item field clears it from the children, not the records', (
 
 test('only one list opens its builder at a time', () => {
   // Two palettes side by side is a lot of screen for one decision.
-  assert.match(main, /state\.wbCollectionOpen = state\.wbCollectionOpen === id \? '' : id;/);
+  const handler = main.match(/bind\('\[data-wb-collection-open\]'[\s\S]*?\n {4}\}\);/)?.[0] || '';
+  assert.match(handler, /const on = opening && node\.dataset\.wbCollection === id;/, 'every other one closes');
+  assert.match(handler, /state\.wbCollectionOpen = opening \? id : '';/);
+});
+
+test('opening a list does not re-render the page', () => {
+  // Every builder is already in the DOM; opening one is a visibility flip. Re-rendering a
+  // long settings page is what threw you back to the top each time.
+  const handler = main.match(/bind\('\[data-wb-collection-open\]'[\s\S]*?\n {4}\}\);/)?.[0] || '';
+  assert.ok(!/render\(\)/.test(handler), 'no render, so nothing can jump');
+  assert.match(handler, /\.wb-collection-body'\)\.hidden = !on;/);
+  assert.match(main, /<div class="wb-collection-body" id="wbCol-\$\{h\(c\.id\)\}"/);
+  // And it stays announced correctly for a screen reader.
+  assert.match(handler, /toggle\.setAttribute\('aria-expanded', on \? 'true' : 'false'\)/);
+  assert.match(main, /aria-controls="wbCol-\$\{h\(c\.id\)\}"/);
 });
 
 // --- the settings page ------------------------------------------------------------------------

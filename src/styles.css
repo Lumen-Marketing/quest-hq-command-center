@@ -30903,3 +30903,6 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-collection .wb-builder-grid { grid-template-columns: minmax(0, 1fr) 260px; margin-top: 10px; }
 .wb-collection .wb-field-list { min-width: 0; }
 @media (max-width: 860px) { .wb-collection .wb-builder-grid { grid-template-columns: minmax(0, 1fr); } }
+.wb-collection-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.wb-collection-summary[hidden], .wb-collection-body[hidden] { display: none; }
+.wb-collection-toggle[aria-expanded="true"] i { transform: none; }

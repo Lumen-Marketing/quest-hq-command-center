@@ -17137,21 +17137,23 @@ function wbCollectionsSettings(companyId, app, canManage) {
     loadChildCollections().then(() => render()).catch((error) => console.error('Child collections failed to load', error));
     return '';
   }
+  // Every list's builder is in the DOM; only its visibility differs. Expanding one is then a
+  // class flip rather than a render, and a render is what threw you back to the top of a
+  // long settings page every time you opened a list.
   const open = state.wbCollectionOpen || '';
   return `<div class="wb-field wb-collections">
     <label>Sub-item lists</label>
     <p class="wb-sub">Records that live inside each ${h(singularize(app.name).toLowerCase())} — dailies, line items, visits. Add one here, then add a <b>Sub-items</b> card on the record layout to show it.</p>
-    ${list.map((c) => `<div class="wb-collection">
+    ${list.map((c) => `<div class="wb-collection" data-wb-collection="${h(c.id)}">
       <div class="wb-collection-head">
-        <button class="wb-collection-toggle" type="button" data-wb-collection-open="${h(c.id)}" aria-expanded="${open === c.id}">
-          <i class="ti ti-chevron-${open === c.id ? 'down' : 'right'}"></i><b>${h(c.name)}</b>
+        <button class="wb-collection-toggle" type="button" data-wb-collection-open="${h(c.id)}" aria-expanded="${open === c.id}" aria-controls="wbCol-${h(c.id)}">
+          <i class="ti ti-chevron-right"></i><b>${h(c.name)}</b>
         </button>
         <span class="wb-sub">${c.fields.length} field${c.fields.length === 1 ? '' : 's'}</span>
         ${canManage ? `<button class="wb-w-btn danger" type="button" data-wb-collection-del="${h(c.id)}" title="Delete list" aria-label="Delete ${h(c.name)}"><i class="ti ti-trash"></i></button>` : ''}
       </div>
-      ${open === c.id
-    ? wbFieldBuilderMarkup(companyId, c.fields, canManage, c.id)
-    : `<div class="wb-collection-fields">${c.fields.map((f) => `<span class="wb-collection-field">${h(f.label)}<small>${h(WB_FIELD_TYPES[f.type]?.label || f.type)}</small></span>`).join('') || '<span class="wb-sub">No fields yet.</span>'}</div>`}
+      <div class="wb-collection-summary" ${open === c.id ? 'hidden' : ''}>${c.fields.map((f) => `<span class="wb-collection-field">${h(f.label)}<small>${h(WB_FIELD_TYPES[f.type]?.label || f.type)}</small></span>`).join('') || '<span class="wb-sub">No fields yet.</span>'}</div>
+      <div class="wb-collection-body" id="wbCol-${h(c.id)}" ${open === c.id ? '' : 'hidden'}>${wbFieldBuilderMarkup(companyId, c.fields, canManage, c.id)}</div>
     </div>`).join('')}
     ${canManage ? `<div class="wb-collection-new">
       <input class="wb-input" data-wb-collection-name placeholder="e.g. Dailies">
@@ -18472,10 +18474,20 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-collection-del]', (el) => {
       wbCollectionEdit(companyId, workspaceId, appId, (list, mod) => mod.removeCollection(list, el.dataset.wbCollectionDel));
     });
+    // No render: every builder is already in the DOM, so opening one is a visibility flip.
+    // Re-rendering a long settings page is what threw you back to the top each time.
     bind('[data-wb-collection-open]', (el) => {
       const id = el.dataset.wbCollectionOpen;
-      state.wbCollectionOpen = state.wbCollectionOpen === id ? '' : id;
-      render();
+      const opening = state.wbCollectionOpen !== id;
+      state.wbCollectionOpen = opening ? id : '';
+      document.querySelectorAll('[data-wb-collection]').forEach((node) => {
+        const on = opening && node.dataset.wbCollection === id;
+        node.querySelector('.wb-collection-body').hidden = !on;
+        node.querySelector('.wb-collection-summary').hidden = on;
+        const toggle = node.querySelector('[data-wb-collection-open]');
+        toggle.setAttribute('aria-expanded', on ? 'true' : 'false');
+        toggle.querySelector('i').className = `ti ti-chevron-${on ? 'down' : 'right'}`;
+      });
     });
     mountWbRecordDrag(companyId, workspaceId, appId);
     bind('[data-wb-add-comment]', () => { wbAddItemComment().catch(commentFail); });
