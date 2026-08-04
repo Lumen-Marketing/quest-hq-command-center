@@ -112,16 +112,17 @@ export function createAppViews(ctx) {
 
   function renderAppCalendar(companyId, app, anchorIso, fieldId, viewMode) {
     const candidates = dateFields(app);
-    if (!candidates.length) {
-      return `<div class="wb-empty"><i class="ti ti-calendar"></i><h3>No date field yet</h3><p>Add a Date field to this app and its records appear on a calendar.</p>${can('workspaces.manage', companyId) ? '<div class="wb-empty-acts"><a class="btn btn-primary" href="' + appHref(companyPath('workspaces', { app_id: app.id, tab: 'fields' }, companyId)) + '" data-router><i class="ti ti-plus"></i>Add field</a></div>' : ''}</div>`;
-    }
+    // The calendar renders whether or not the app has a date field yet. Replacing it with an
+    // empty state hid the whole feature behind a setup step, so you could not see what you
+    // were being asked to set up. With no field it draws the month you are on, empty, and
+    // says what to add above it.
     const view = CAL_VIEWS.includes(viewMode) ? viewMode : 'month';
-    const field = candidates.find((f) => f.id === fieldId) || candidates[0];
+    const field = candidates.find((f) => f.id === fieldId) || candidates[0] || null;
     const anchor = /^\d{4}-\d{2}-\d{2}$/.test(String(anchorIso || '')) ? new Date(`${anchorIso}T12:00:00`) : new Date();
     const { byDay, undated } = recordsByDay(app, field);
     const todayIso = iso(new Date());
     const link = (params) => appHref(companyPath('workspaces', {
-      app_id: app.id, tab: 'calendar', field: field.id, ...params,
+      app_id: app.id, tab: 'calendar', ...(field ? { field: field.id } : {}), ...params,
     }, companyId));
 
     // Step by whatever the view shows. A "next" that jumps a month while you are looking at
@@ -178,7 +179,7 @@ export function createAppViews(ctx) {
       grid = `<div class="wb-cal-single ${iso(anchor) === todayIso ? 'today' : ''}">
         ${items.length
     ? `<ul class="wb-cal-daylist">${items.map((item) => `<li>${pill(item)}</li>`).join('')}</ul>`
-    : emptyState(`Nothing is set to ${h(field.label.toLowerCase())} on this day.`)}
+    : emptyState(field ? `Nothing is set to ${h(field.label.toLowerCase())} on this day.` : 'No records to show yet.')}
       </div>`;
     }
 
@@ -197,10 +198,15 @@ export function createAppViews(ctx) {
           ${candidates.length > 1 ? `<label class="wb-chip-manage" title="Which date field the calendar uses">
             <select class="wb-chip-select" data-wb-cal-field aria-label="Calendar date field">
               ${candidates.map((f) => `<option value="${h(f.id)}" ${f.id === field.id ? 'selected' : ''}>By ${h(f.label)}</option>`).join('')}
-            </select></label>` : `<span class="wb-cal-by">By ${h(field.label)}</span>`}
+            </select></label>` : field ? `<span class="wb-cal-by">By ${h(field.label)}</span>` : ''}
         </div>
+        ${field ? '' : `<p class="wb-cal-setup">
+          <i class="ti ti-calendar"></i>
+          <span>This app has no <b>Date</b> field yet, so nothing can be placed on the calendar.</span>
+          ${can('workspaces.manage', companyId) ? `<a class="btn btn-sm btn-primary" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'fields' }, companyId))}" data-router><i class="ti ti-plus"></i>Add field</a>` : ''}
+        </p>`}
         ${grid}
-        ${undated ? `<p class="wb-cal-undated">${undated} record${undated === 1 ? '' : 's'} ${undated === 1 ? 'has' : 'have'} no <b>${h(field.label)}</b> yet, so ${undated === 1 ? 'it is' : 'they are'} not shown here.</p>` : ''}
+        ${field && undated ? `<p class="wb-cal-undated">${undated} record${undated === 1 ? '' : 's'} ${undated === 1 ? 'has' : 'have'} no <b>${h(field.label)}</b> yet, so ${undated === 1 ? 'it is' : 'they are'} not shown here.</p>` : ''}
       </div>`;
   }
 

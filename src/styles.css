@@ -30288,6 +30288,19 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-cal-daylist { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
 .wb-cal-daylist .wb-cal-pill { font-size: .86rem; padding: 9px 12px; border-left-width: 4px; }
 .wb-cal-undated { font-size: .78rem; color: var(--muted); }
+
+/* Sits above the grid rather than replacing it: you can see the thing you are being asked
+   to set up, which is the whole reason to show an empty calendar. */
+.wb-cal-setup {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0; padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--orange) 30%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--orange) 6%, var(--surface));
+  font-size: .82rem; color: var(--ink-2);
+}
+.wb-cal-setup i.ti-calendar { color: var(--orange); font-size: 1rem; }
+.wb-cal-setup span { flex: 1; min-width: 200px; }
 @media (max-width: 720px) { .wb-cal-day { min-height: 64px; } .wb-cal-pill { font-size: .62rem; } }
 
 /* ---- App Builder record page -----------------------------------------------------------

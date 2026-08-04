@@ -1,10 +1,24 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { dateFields, recordsByDay } from '../src/workspace/app-views.js';
+import { createAppViews, dateFields, recordsByDay } from '../src/workspace/app-views.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const views = readFileSync(new URL('../src/workspace/app-views.js', import.meta.url), 'utf8');
+
+const esc = (v) => String(v ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const build = () => createAppViews({
+  h: esc,
+  can: () => true,
+  money: (n) => `${Number(n || 0).toLocaleString('en-US')}`,
+  emptyState: (m) => `<div class="empty">${esc(m)}</div>`,
+  appHref: (path) => `#${path}`,
+  companyPath: (section, params = {}) => `/c/x/${section}?${new URLSearchParams(params)}`,
+  wbItemTitle: (a, item) => item.values?.f1 || '',
+  wbTimeAgo: () => '2h ago',
+});
 
 const app = {
   id: 'a1',
@@ -64,7 +78,7 @@ test('both views read the app own fields rather than new configuration', () => {
 
 test('an app missing the field a view needs is told which one to add', () => {
   assert.match(views, /Add a Status field and its options become the stages here/);
-  assert.match(views, /Add a Date field to this app and its records appear on a calendar\./);
+  assert.match(views, /This app has no <b>Date<\/b> field yet/);
 });
 
 test('the calendar reuses the date maths rather than repeating it', () => {
@@ -121,7 +135,7 @@ test('the view rides in the url alongside the month and the field', () => {
   // So a refresh keeps it and "week of Aug 3, by Due date" is a shareable link.
   assert.match(main, /route\.params\.get\('view'\) \|\| ''\)/);
   assert.match(main, /\.\.\.\(params\?\.get\('view'\) \? \{ view: params\.get\('view'\) \} : \{\}\)/, 'the field picker must keep the view');
-  assert.match(views, /app_id: app\.id, tab: 'calendar', field: field\.id, \.\.\.params,/);
+  assert.match(views, /app_id: app\.id, tab: 'calendar', \.\.\.\(field \? \{ field: field\.id \} : \{\}\), \.\.\.params,/);
 });
 
 test('the week label does not repeat the month when it does not change', () => {
@@ -147,4 +161,44 @@ test('a calendar day is the viewer own day, not a UTC one', () => {
   assert.match(cal, /export const iso = \(date\) => \{/);
   assert.match(cal, /d\.getFullYear\(\)\}-\$\{String\(d\.getMonth\(\) \+ 1\)/);
   assert.ok(!/toISOString\(\)\.slice\(0, 10\)/.test(cal), 'no UTC reading may remain');
+});
+
+test('the calendar draws even before the app has a date field', () => {
+  // Replacing it with an empty state hid the whole feature behind a setup step, so you could
+  // not see what you were being asked to set up.
+  assert.match(views, /const field = candidates\.find\(\(f\) => f\.id === fieldId\) \|\| candidates\[0\] \|\| null;/);
+  assert.ok(!/if \(!candidates\.length\) \{\s*return/.test(views), 'no early return may remain');
+  assert.match(views, /\$\{field \? '' : `<p class="wb-cal-setup">/, 'the notice sits above the grid');
+});
+
+test('an app with no date field renders every view instead of throwing', () => {
+  // Actually running it beats grepping for guarded field reads: the whole risk of dropping
+  // the early return is a `field.label` somewhere that nobody thought about.
+  const bare = { id: 'a1', name: 'Jobs', color: '#ED4E0D', fields: [{ id: 'f1', type: 'text', label: 'Job' }], items: [{ id: 'i1', values: { f1: 'Pima St' } }] };
+  for (const view of ['month', 'week', 'day', '', 'nonsense']) {
+    const html = build().renderAppCalendar('c1', bare, '', '', view);
+    assert.ok(html.includes('wb-cal-setup'), `${view || '(default)'}: the notice must show`);
+    assert.ok(!/undefined|NaN|\[object Object\]/.test(html), `${view || '(default)'}: ${html.match(/.{0,50}(undefined|NaN).{0,50}/)?.[0]}`);
+    assert.ok(!html.includes('${'), 'a stray placeholder means a template literal broke');
+  }
+  // Month and week still draw their grid, so you can see what you are setting up.
+  assert.ok(build().renderAppCalendar('c1', bare, '', '', 'month').includes('wb-cal-grid'));
+  assert.ok(build().renderAppCalendar('c1', bare, '', '', 'week').includes('wb-cal-week'));
+});
+
+test('with no date field the url carries none, and no "By ..." label is invented', () => {
+  const bare = { id: 'a1', name: 'Jobs', color: '#ED4E0D', fields: [], items: [] };
+  const html = build().renderAppCalendar('c1', bare, '', '', 'month');
+  assert.ok(!/field=/.test(html), 'nothing to point at');
+  assert.ok(!html.includes('wb-cal-by'), 'no field to name');
+});
+
+test('a date field still drives the calendar once it exists', () => {
+  const html = build().renderAppCalendar('c1', { ...app, id: 'a1', name: 'Jobs', color: '#ED4E0D' }, '2026-08-04', 'f2', 'day');
+  assert.ok(!html.includes('wb-cal-setup'), 'the setup notice must be gone');
+  assert.ok(html.includes('field=f2'));
+});
+
+test('the url carries no field when there is none to carry', () => {
+  assert.match(views, /\.\.\.\(field \? \{ field: field\.id \} : \{\}\)/);
 });
