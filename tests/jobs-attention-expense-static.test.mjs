@@ -6,6 +6,7 @@ const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').re
 const jobFile = readFileSync(new URL('../src/jobs/job-file.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const policy = readFileSync(new URL('../src/security/upload-policy.js', import.meta.url), 'utf8');
+const walk = readFileSync(new URL('../src/jobs/voice-note.js', import.meta.url), 'utf8');
 
 // ---- needs attention -----------------------------------------------------------------------
 
@@ -76,27 +77,28 @@ test('a failed receipt does not roll back a spend the user watched go in', () =>
 
 test('audio has an upload policy, or every voice note is rejected', () => {
   assert.match(policy, /audio: \{ exts: \['webm', 'm4a', 'mp4', 'ogg', 'oga', 'mp3', 'wav'\]/);
-  assert.match(main, /'Job walk', 'audio'\)/);
+  assert.match(walk, /'Job walk', 'audio'\)/);
 });
 
 test('closing the recorder stops the hardware', () => {
   // Otherwise the browser keeps showing the recording indicator after the dialog is gone.
   const at = main.indexOf("action === 'job-walk-cancel'");
-  assert.match(main.slice(at, at + 400), /activeRecorder\.cancel\(\); activeRecorder = null;/);
+  assert.match(main.slice(at, at + 400), /jobWalkModule\.cancel\(\)/);
+  assert.match(walk, /const cancel = \(\) => \{ if \(recorder\) \{ recorder\.cancel\(\); recorder = null; \} \};/);
 });
 
 test('the clock does not repaint the whole app twice a second', () => {
-  assert.match(main, /const el = document\.querySelector\('\.jw-time'\);/);
+  assert.match(walk, /const el = document\.querySelector\('\.jw-time'\);/);
 });
 
 test('a browser that cannot record says so instead of failing silently', () => {
-  assert.match(main, /if \(!mod\.canRecord\(\)\)/);
-  assert.match(main, /This browser cannot record audio/);
+  assert.match(walk, /if \(!canRecord\(\)\)/);
+  assert.match(walk, /This browser cannot record audio/);
 });
 
 test('a blocked microphone names the actual cause', () => {
-  assert.match(main, /error\?\.name === 'NotAllowedError'/);
-  assert.match(main, /Microphone access was blocked/);
+  assert.match(walk, /error\?\.name === 'NotAllowedError'/);
+  assert.match(walk, /Microphone access was blocked/);
 });
 
 // ---- sidebar -------------------------------------------------------------------------------

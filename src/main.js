@@ -2623,6 +2623,7 @@ const state = {
   jobRecordDraft: null,
   coWizard: null,
   jobExpenseDraft: null,
+  wbChildTab: '',
   jobWalk: null,
   jobTradeFilter: 'all',
   jobCalendarMode: 'month',
@@ -18770,6 +18771,7 @@ function mountWorkspaceBuilder() {
       const params = state.route?.params;
       nav({ app_id: appId, tab: 'calendar', field: el.value, ...(params?.get('view') ? { view: params.get('view') } : {}), ...(params?.get('on') ? { on: params.get('on') } : {}) });
     }, 'onchange');
+    bind('[data-wb-child-tab]', (el) => { state.wbChildTab = el.dataset.wbChildTab; render(); });
     bind('[data-wb-memo-new]', (el) => openWbMemoModal(companyId, workspaceId, appId, '', el.dataset.wbMemoNew));
     bind('[data-wb-memo-open]', (el) => openWbMemoModal(companyId, workspaceId, appId, el.dataset.wbMemoOpen, ''));
     bind('[data-wb-board-field]', (el) => { wbItemsUI(appId).boardFieldId = el.value; render(); }, 'onchange');
@@ -23645,7 +23647,7 @@ function renderActiveModal(route, session) {
       : renderModalShell('Jobs', 'Change order', questLoader('Loading'), 'wb-modal-sm');
   }
   if (state.modal === 'job-expense') return renderJobExpenseModal();
-  if (state.modal === 'job-walk') return renderJobWalkModal();
+  if (state.modal === 'job-walk') return jobWalkModule ? jobWalkModule.renderModal() : renderModalShell('Jobs', 'Job walk', questLoader('Loading'), 'wb-modal-sm');
   if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
   if (state.modal === 'contacts-dedupe') return renderContactsDedupeModal();
@@ -27929,12 +27931,12 @@ function handleAction(event, node) {
     openJobWalk(job);
     return;
   }
-  if (action === 'job-walk-start') { event.preventDefault(); startJobWalk(); return; }
-  if (action === 'job-walk-stop') { event.preventDefault(); if (activeRecorder) activeRecorder.stop(); return; }
+  if (action === 'job-walk-start') { event.preventDefault(); if (jobWalkModule) jobWalkModule.start(); return; }
+  if (action === 'job-walk-stop') { event.preventDefault(); if (jobWalkModule) jobWalkModule.stop(); return; }
   if (action === 'job-walk-cancel') {
     event.preventDefault();
     // Closing must stop the hardware, or the browser keeps showing that we are listening.
-    if (activeRecorder) { activeRecorder.cancel(); activeRecorder = null; }
+    if (jobWalkModule) jobWalkModule.cancel();
     state.jobWalk = null;
     state.modal = '';
     render();
@@ -32449,99 +32451,29 @@ function loadVoiceNote() {
 }
 
 async function openJobWalk(job) {
-  const mod = await loadVoiceNote().catch(() => null);
-  if (!mod) { showToast('Could not open the recorder — check your connection and try again.', 'local', 'Jobs'); return; }
-  if (!mod.canRecord()) {
-    showToast('This browser cannot record audio. Use a phone, or add the note as a file.', 'local', 'Jobs');
-    return;
-  }
-  state.jobWalk = { jobId: job.id, phase: 'idle', elapsed: 0, error: '' };
-  state.modal = 'job-walk';
-  render();
+  const rt = await loadJobWalk().catch(() => null);
+  if (!rt) { showToast('Could not open the recorder — check your connection and try again.', 'local', 'Jobs'); return; }
+  rt.open(job);
 }
 
-function renderJobWalkModal() {
-  const walk = state.jobWalk;
-  const job = walk ? jobById(walk.jobId) : null;
-  const mod = voiceNoteModule;
-  if (!job || !mod) return renderModalShell('Jobs', 'Job walk', emptyState('That job is no longer available.'), 'wb-modal-sm');
-  const recording = walk.phase === 'recording';
-  return renderModalShell('Jobs', 'Job walk', `
-    <div class="jw">
-      <p class="jd-job"><b>${h(job.name)}</b></p>
-      ${walk.error ? `<div class="wb-modal-error" role="alert">${h(walk.error)}</div>` : ''}
-      <div class="jw-stage ${recording ? 'on' : ''}">
-        <span class="jw-dot" aria-hidden="true"></span>
-        <strong class="jw-time">${h(mod.formatElapsed(walk.elapsed))}</strong>
-        <span class="jf-sub">${recording ? 'Recording — talk the walk' : walk.phase === 'saving' ? 'Attaching…' : 'Ready'}</span>
-      </div>
-      <p class="jf-sub">The recording attaches to this job's files. It is not transcribed —
-        nothing is connected that can do that yet, so the audio is the record.</p>
-      <div class="modal-actions">
-        ${recording
-    ? `<button class="btn" type="button" data-action="job-walk-cancel">Discard</button>
-           <button class="btn btn-primary" type="button" data-action="job-walk-stop"><i class="ti ti-check"></i>Finish &amp; attach</button>`
-    : `<button class="btn" type="button" data-action="job-walk-cancel">Close</button>
-           <button class="btn btn-primary" type="button" data-action="job-walk-start" ${walk.phase === 'saving' ? 'disabled' : ''}><i class="ti ti-microphone"></i>Start recording</button>`}
-      </div>
-    </div>`, 'wb-modal-sm');
-}
+let jobWalkModule = null;
+let jobWalkPending = null;
 
-function startJobWalk() {
-  const walk = state.jobWalk;
-  const job = walk ? jobById(walk.jobId) : null;
-  if (!walk || !job || !voiceNoteModule) return;
-  activeRecorder = voiceNoteModule.createRecorder({
-    // Repainting the whole app twice a second to move a clock is wasteful; the timer element
-    // is the only thing that changes, so it is written directly.
-    onTick: (ms) => {
-      walk.elapsed = ms;
-      const el = document.querySelector('.jw-time');
-      if (el) el.textContent = voiceNoteModule.formatElapsed(ms);
-    },
-    onStop: (blob, elapsed) => { activeRecorder = null; saveJobWalk(job, blob, elapsed); },
-    onError: (error) => {
-      activeRecorder = null;
-      walk.phase = 'idle';
-      walk.error = error?.message || 'Recording failed.';
-      render();
-    },
-  });
-  activeRecorder.start().then(() => {
-    walk.phase = 'recording';
-    walk.error = '';
-    render();
-  }).catch((error) => {
-    activeRecorder = null;
-    walk.phase = 'idle';
-    // The overwhelmingly common cause is a denied permission prompt, so name it.
-    walk.error = error?.name === 'NotAllowedError'
-      ? 'Microphone access was blocked. Allow it in your browser, then try again.'
-      : (error?.message || 'Could not start recording.');
-    render();
-  });
-}
-
-async function saveJobWalk(job, blob, elapsed) {
-  const walk = state.jobWalk;
-  if (!blob) {
-    if (walk) { walk.phase = 'idle'; walk.error = 'Nothing was recorded.'; render(); }
-    return;
+function loadJobWalk() {
+  if (jobWalkModule) return Promise.resolve(jobWalkModule);
+  if (!jobWalkPending) {
+    jobWalkPending = import('./jobs/voice-note.js').then((mod) => {
+      jobWalkModule = mod.createJobWalk({
+        state, render, showToast, renderModalShell, emptyState, h, jobById,
+        isLiveSupabaseSession, uploadJobFile,
+      });
+      return jobWalkModule;
+    }).catch((error) => {
+      jobWalkPending = null;
+      throw error;
+    });
   }
-  if (walk) { walk.phase = 'saving'; render(); }
-  const extension = voiceNoteModule.extensionFor(blob.type);
-  const name = voiceNoteModule.voiceNoteName(new Date(), extension);
-  const file = new File([blob], name, { type: blob.type || 'audio/webm' });
-  try {
-    await uploadJobFile(job, file, `Job walk · ${voiceNoteModule.formatElapsed(elapsed)}`, 'Job walk', 'audio');
-    state.modal = '';
-    state.jobWalk = null;
-    showToast('Job walk attached to this job.', isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
-    render();
-  } catch (error) {
-    if (walk) { walk.phase = 'idle'; walk.error = error?.message || 'Could not attach the recording.'; }
-    render();
-  }
+  return jobWalkPending;
 }
 
 /**

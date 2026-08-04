@@ -437,3 +437,33 @@ test('the sub-item dialog mounts its field controls', () => {
     assert.ok(body.includes(`${mount}(overlay);`), `${mount} must run for a sub-item too`);
   }
 });
+
+test('sub-item lists are one strip of tabs, not a stack of cards', () => {
+  // Stacked, a record with three lists was three headings and three Add buttons deep before
+  // the first row. The job file reads them as tabs because that is how they are used: one
+  // list at a time, switching between them.
+  assert.match(page, /<nav class="wb-child-tabs" aria-label="Sub-item lists">/);
+  assert.match(page, /data-wb-child-tab="\$\{h\(c\.id\)\}"/);
+  assert.match(main, /bind\('\[data-wb-child-tab\]'/);
+});
+
+test('the strip is drawn once, however many collection cards are placed', () => {
+  // Two sub-item cards on a layout must not draw two identical strips.
+  assert.match(page, /if \(placed\.length && placed\[0\]\.id !== block\.id\) return '';/);
+});
+
+test('an absorbed card takes no space, except while arranging', () => {
+  // An empty bordered box reads as a broken card -- but in customise mode it has to stay, or
+  // there is no way to move or remove it.
+  assert.match(page, /if \(!body && !editing\) return '';/);
+});
+
+test('each tab carries its own count, and the Add button follows the selected one', () => {
+  assert.match(page, /const n = children\.childCount\(item, c\.id\);/);
+  assert.match(page, /data-wb-child-add="\$\{h\(collection\.id\)\}"><i class="ti ti-plus"><\/i>Add \$\{h\(one\)\}/);
+});
+
+test('a remembered tab that no longer exists falls back rather than showing nothing', () => {
+  // Deleting a list while it is selected must not leave the strip pointing at a ghost.
+  assert.match(page, /tabs\.some\(\(c\) => c\.id === state\.wbChildTab\) \? state\.wbChildTab : tabs\[0\]\.id/);
+});

@@ -31097,6 +31097,29 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-check-list { display: grid; gap: 1px; margin-top: 4px; padding-left: 4px; border-left: 2px solid var(--border); }
 
 /* ---- Sub-items: records inside a record ------------------------------------------------- */
+/* The sub-item lists, as one strip of tabs with their counts -- the same shape the job file
+   uses, because it is the same job: several lists on one record, read one at a time. Stacked
+   cards put three headings and three Add buttons between you and the first row. */
+.wb-child-tabs {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  border-bottom: 2px solid var(--border); margin-bottom: 12px;
+}
+.wb-child-tab {
+  padding: 8px 12px; margin-bottom: -2px; cursor: pointer; background: none;
+  border: 0; border-bottom: 2px solid transparent;
+  font-size: .87rem; font-weight: 700; color: var(--ink-2);
+  display: inline-flex; gap: 6px; align-items: center;
+}
+.wb-child-tab:hover { color: var(--orange); }
+.wb-child-tab.on { color: var(--orange); border-bottom-color: var(--orange); }
+.wb-child-tab-n {
+  font-size: .68rem; font-weight: 800; padding: 1px 7px; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-2); font-variant-numeric: tabular-nums;
+}
+.wb-child-tab.on .wb-child-tab-n { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
+/* The Add button follows the selected tab, so it always says what it will add. */
+.wb-child-tabs-add { margin-left: auto; margin-bottom: 4px; }
+
 /* Sub-items are small cards of labelled lines, not one-line rows. A row had to promote one
    field to a title, and two sub-items sharing that field's value became indistinguishable. */
 .wb-child-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
