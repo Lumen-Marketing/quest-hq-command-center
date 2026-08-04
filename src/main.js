@@ -15546,7 +15546,16 @@ function wbFmtVal(ctx, field, value) {
         : h(shown);
     }
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
-    case 'file': { const fv = wbFileValue(value); if (!fv) return '<span class="wb-cell-empty">—</span>'; const kind = fileTypeKind({ file_name: fv.name }); return fv.url ? `<button type="button" class="wb-file-icon-btn" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="${h(fv.name)}" aria-label="Open ${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></button>` : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`; }
+    case 'file': {
+      const list = wbFileValues(value);
+      if (!list.length) return '<span class="wb-cell-empty">—</span>';
+      return `<span class="wb-file-cells">${list.map((fv) => {
+        const kind = fileTypeKind({ file_name: fv.name });
+        return fv.url
+          ? `<button type="button" class="wb-file-icon-btn" data-wb-view-file data-file-url="${h(fv.url)}" data-file-name="${h(fv.name)}" title="${h(fv.name)}" aria-label="Open ${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></button>`
+          : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`;
+      }).join('')}</span>`;
+    }
     case 'relationship': { const ta = wbRelTargetApp(field, ctx.companyId); if (!ta) return field.config.targetCompany && !wbDoc(field.config.targetCompany) ? '<span class="wb-tag wb-rel wb-rel-locked"><i class="ti ti-lock" aria-hidden="true"></i>No access</span>' : h(value); const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbRelLabel(ta, it, field.config.displayField) : '?')}</span>`; }).join(' '); }
     case 'location': return `<a class="wb-loc" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(value))}" target="_blank" rel="noreferrer" title="Open in Google Maps"><i class="ti ti-map-pin"></i>${h(value)}</a>`;
     case 'duration': return h(wbFmtDuration(value));
@@ -17714,6 +17723,25 @@ function wbFileValue(val) {
   if (isUrl) { try { name = decodeURIComponent(new URL(s).pathname.split('/').pop() || s).replace(/^[0-9a-f-]{36}-/i, ''); } catch { name = 'Attached file'; } }
   return { name: name || 'Attached file', url: isUrl ? s : '' };
 }
+/**
+ * Every file on a field, as a list.
+ *
+ * A file field held exactly one file, stored as an object or a JSON string. It can now hold
+ * several, stored as an array -- so both shapes have to read, or every file attached before
+ * this becomes invisible the moment the field is switched to multiple.
+ */
+function wbFileValues(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.map(wbFileValue).filter(Boolean);
+  if (typeof val === 'string') {
+    const s = val.trim();
+    if (s[0] === '[') {
+      try { const a = JSON.parse(s); if (Array.isArray(a)) return a.map(wbFileValue).filter(Boolean); } catch { /* fall through to single */ }
+    }
+  }
+  const one = wbFileValue(val);
+  return one ? [one] : [];
+}
 function wbFileDisplay(val) { return wbFileValue(val)?.name || ''; }
 
 // --- Checklist field -------------------------------------------------------
@@ -17885,7 +17913,34 @@ function wbMountFileFields(overlay) {
     const label = zone.querySelector('[data-wb-file-label]');
     const isImage = zone.hasAttribute('data-wb-image');
     const preview = zone.querySelector('[data-wb-img-preview]');
+    const multi = zone.hasAttribute('data-wb-file-multi');
+    const list = zone.querySelector('[data-wb-file-list]');
+    const readAll = () => wbFileValues(hidden.value);
+    const writeAll = (files) => {
+      // One file still stores as one object, so switching a field to multiple and back does
+      // not rewrite records that only ever had one.
+      hidden.value = files.length ? JSON.stringify(files.length === 1 && !multi ? files[0] : files) : '';
+      hidden.dispatchEvent(new Event('input', { bubbles: true }));
+      paint();
+    };
+    const paintList = () => {
+      const files = readAll();
+      label.innerHTML = files.length
+        ? `<strong>Add another file</strong><small>${files.length} attached</small>`
+        : '<strong>Click or drop files</strong><small>Several at once is fine</small>';
+      openBtn.classList.toggle('has-file', files.length > 0);
+      list.innerHTML = files.map((fv, i) => `<li class="wb-file-row">
+        <i class="ti ${h(wbFileIcon(fileTypeKind({ file_name: fv.name })))}" aria-hidden="true"></i>
+        <span class="wb-file-row-name" title="${h(fv.name)}">${h(fv.name)}</span>
+        ${fv.url ? `<a class="btn btn-mini" href="${h(fv.url)}" target="_blank" rel="noreferrer" title="View"><i class="ti ti-eye"></i></a>` : ''}
+        <button type="button" class="btn btn-mini danger" data-wb-file-drop-one="${i}" title="Remove ${h(fv.name)}" aria-label="Remove ${h(fv.name)}"><i class="ti ti-x"></i></button>
+      </li>`).join('');
+      list.querySelectorAll('[data-wb-file-drop-one]').forEach((btn) => {
+        btn.onclick = () => writeAll(readAll().filter((_, i) => i !== Number(btn.dataset.wbFileDropOne)));
+      });
+    };
     const paint = () => {
+      if (multi) { paintList(); return; }
       const fv = wbFileValue(hidden.value);
       if (fv) {
         if (isImage && preview) preview.innerHTML = fv.url ? `<img src="${h(fv.url)}" alt="${h(fv.name || 'image')}">` : '<i class="ti ti-photo"></i>';
@@ -17952,21 +18007,33 @@ function wbMountFileFields(overlay) {
         return;
       }
       bar.style.width = '100%';
-      hidden.value = JSON.stringify({ name: file.name, url, path: objectPath });
-      hidden.dispatchEvent(new Event('input', { bubbles: true }));
+      const attached = { name: file.name, url, path: objectPath };
+      // Appended, not assigned: dropping three files at once must end with three, and each
+      // upload finishes on its own schedule.
+      if (multi) writeAll([...readAll(), attached]);
+      else {
+        hidden.value = JSON.stringify(attached);
+        hidden.dispatchEvent(new Event('input', { bubbles: true }));
+        paint();
+      }
       openBtn.disabled = false;
-      paint();
       setTimeout(() => { progress.hidden = true; bar.style.width = '0%'; }, 400);
       // Mirror the upload into Company Drive under App > (App) > (Field).
       const mirrored = objectPath ? wbMirrorFileToDrive(file, objectPath, companyId, hidden.getAttribute('data-f')) : '';
       showToast(mirrored ? `File attached and saved to Company Drive → ${mirrored}.` : 'File attached.', live ? 'live' : 'local', 'Workspaces');
     };
+    // One at a time rather than in parallel: each upload owns the progress bar, and three
+    // racing each other drive it backwards.
+    const uploadAll = async (files) => {
+      const picked = [...(files || [])];
+      for (const file of (multi ? picked : picked.slice(0, 1))) await upload(file);
+    };
     openBtn.onclick = () => fileInput.click();
-    removeBtn.onclick = () => { hidden.value = ''; hidden.dispatchEvent(new Event('input', { bubbles: true })); fileInput.value = ''; paint(); };
-    fileInput.onchange = () => upload(fileInput.files?.[0]);
+    if (removeBtn) removeBtn.onclick = () => { hidden.value = ''; hidden.dispatchEvent(new Event('input', { bubbles: true })); fileInput.value = ''; paint(); };
+    fileInput.onchange = () => { uploadAll(fileInput.files); fileInput.value = ''; };
     zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragging'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('dragging'));
-    zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('dragging'); upload(e.dataTransfer?.files?.[0]); });
+    zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('dragging'); uploadAll(e.dataTransfer?.files); });
     paint();
   });
 }
@@ -18088,6 +18155,7 @@ function wbCollectModalDraft() {
     m.draft.required = !!checked('wbFReq');
     const t = m.draft.type; m.draft.config = m.draft.config || {};
     if (t === 'category' || t === 'status' || t === 'tags') m.draft.config.options = [...document.querySelectorAll('.wb-opt-item')].map((r) => ({ id: r.dataset.oid, label: r.querySelector('.wb-opt-label').value.trim() || 'Untitled', color: r.querySelector('.wb-dot-pick').value })).filter((o) => o.label);
+    if (t === 'file') m.draft.config.multiple = !!checked('wbFileMulti');
     if (t === 'relationship') {
       const prevTarget = m.draft.config.targetApp;
       const prevCompany = m.draft.config.targetCompany || canonicalCompanyId(state.builderModal.companyId);

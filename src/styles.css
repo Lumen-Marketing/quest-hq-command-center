@@ -22805,6 +22805,21 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .wb-file-progress { height: 6px; margin-top: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .wb-file-bar { height: 100%; width: 0; background: var(--orange); border-radius: 999px; transition: width .3s ease; }
 .wb-file-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* A multiple-file field lists what is attached, each row removable on its own. A single file
+   keeps the one row of actions it always had -- a list of one is just a row. */
+.wb-file-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.wb-file-row {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px;
+  background: var(--surface); font-size: .82rem;
+}
+.wb-file-row > i { flex: none; color: var(--muted); }
+.wb-file-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-file-row .btn-mini { flex: none; text-decoration: none; }
+
+/* Several files in one cell wrap rather than stretching the column. */
+.wb-file-cells { display: inline-flex; flex-wrap: wrap; gap: 3px; }
 .wb-file-actions .btn-mini { text-decoration: none; }
 .wb-input:focus { outline: none; border-color: #e0552d; box-shadow: 0 0 0 3px var(--ring, rgba(224, 85, 45, .22)); }
 .wb-emoji-pick { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }

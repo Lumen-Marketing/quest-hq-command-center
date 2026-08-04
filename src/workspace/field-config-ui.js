@@ -38,6 +38,10 @@ export function renderFieldConfig(fd, app, ctx) {
       <div class="wb-field"><label>Summarize</label><select class="wb-input" id="wbRollAgg" data-wb-rel-refresh>${AGGS.map(([v, l]) => `<option value="${h(v)}" ${agg === v ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></div>
       ${agg !== 'count' ? `<div class="wb-field"><label>Field to summarize</label><select class="wb-input" id="wbRollField"><option value="">— Select field —</option>${numTargets.map((f) => `<option value="${h(f.id)}" ${fd.config.targetField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select>${ta && !numTargets.length ? '<div class="wb-sub" style="color:var(--warning,#d97706)">The linked app has no number or date fields to summarize.</div>' : ''}</div>` : ''}`;
   }
+  if (t === 'file') {
+    return `<div class="wb-check-row"><label class="wb-switch"><input type="checkbox" id="wbFileMulti" ${fd.config.multiple ? 'checked' : ''}><span class="wb-slider"></span></label>
+      <div><b>Allow multiple files</b><div class="wb-sub">Attach several files to one record. Turning this off later keeps every file that is already attached — it only stops new ones being added.</div></div></div>`;
+  }
   if (t === 'relationship') {
     const sourceCompany = canonicalCompanyId(state.builderModal.companyId);
     // Workspaces you can link to = the companies whose App Builder data your
@@ -147,18 +151,20 @@ export function createFieldInput(ctx) {
         input = `<select class="wb-input" data-f="${h(f.id)}" ${f.config.multiple ? 'multiple style="min-height:96px"' : ''}>${f.config.multiple ? '' : '<option value="">— None —</option>'}${ta.items.map((it) => `<option value="${h(it.id)}" ${cur.includes(it.id) ? 'selected' : ''}>${h(wbRelLabel(ta, it, f.config.identifyField))}</option>`).join('')}</select><div class="wb-sub">Linked to <b>${h(ta.name)}</b>${f.config.multiple ? ' · hold Ctrl/Cmd to select multiple' : ''}</div>`; break;
       }
       case 'file': input = `
-        <div class="wb-file-field" data-wb-file>
+        <div class="wb-file-field" data-wb-file ${f.config.multiple ? 'data-wb-file-multi' : ''}>
           <input type="hidden" data-f="${h(f.id)}" value="${h(typeof val === 'object' ? JSON.stringify(val) : (val || ''))}" />
-          <input type="file" hidden accept="${acceptAttr('document')}" data-wb-file-input />
+          <input type="file" hidden accept="${acceptAttr('document')}" data-wb-file-input ${f.config.multiple ? 'multiple' : ''} />
           <button type="button" class="wb-file-drop" data-wb-file-open>
             <i class="ti ti-cloud-upload" data-wb-file-ico></i>
             <span class="wb-file-label" data-wb-file-label></span>
           </button>
-          <div class="wb-file-actions" data-wb-file-actions hidden>
+          <!-- Multiple files get a list with a remove on each; a single file keeps the one
+               row of actions it always had, because a list of one is just a row. -->
+          ${f.config.multiple ? '<ul class="wb-file-list" data-wb-file-list></ul>' : `<div class="wb-file-actions" data-wb-file-actions hidden>
             <a class="btn btn-mini" data-wb-file-view target="_blank" rel="noreferrer"><i class="ti ti-eye"></i>View</a>
             <a class="btn btn-mini" data-wb-file-download><i class="ti ti-download"></i>Download</a>
             <button type="button" class="btn btn-mini danger" data-wb-file-remove><i class="ti ti-x"></i>Remove</button>
-          </div>
+          </div>`}
           <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
         </div>`; break;
       case 'calculation': input = `<div class="wb-input wb-calc-display" data-calc="${h(f.id)}">—</div><div class="wb-sub">Auto-calculated: <code>${h(f.config.formula || '(no formula)')}</code></div>`; break;
