@@ -53,7 +53,8 @@ test('every deferred domain has a loader to defer to', () => {
   const list = main.match(/const DEFERRED_DOMAINS = \[([^\]]*)\]/);
   assert.ok(list, 'DEFERRED_DOMAINS should exist');
   const domains = [...list[1].matchAll(/'([a-z]+)'/g)].map((x) => x[1]);
-  assert.deepEqual(domains, ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals', 'labels']);
+  // 'production' is the job file's records -- per-job detail, fetched when a job is opened.
+  assert.deepEqual(domains, ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals', 'labels', 'production']);
   for (const domain of domains) {
     assert.ok(
       new RegExp(`domain === '${domain}'`).test(main),

@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import test from 'node:test';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  // The landing page is fetched on demand now — nobody signed in ever sees it, so it stopped
+  // earning its place in the entry chunk. Same surface, two files.
+  + readFileSync(new URL('../src/ui/landing-page.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const logoSourceUrl = new URL('../src/assets/questbase-modular-logo.png', import.meta.url);
 const logoUrl = new URL('../src/assets/questbase-mark.png', import.meta.url);

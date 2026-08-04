@@ -4,11 +4,8 @@ import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
-const authForm = (() => {
-  const at = main.indexOf('function renderSupabaseAuthForm(');
-  assert.notEqual(at, -1);
-  return main.slice(at, main.indexOf('\nfunction renderLocalLoginForm(', at));
-})();
+// The auth forms are their own fetched-on-demand module now; the whole file is them.
+const authForm = readFileSync(new URL('../src/ui/auth-form.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 // Comments stripped: the block carries a note explaining the old wording, and asserting that
 // the wording is gone would otherwise match the explanation of why it went.

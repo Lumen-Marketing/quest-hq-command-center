@@ -12,6 +12,9 @@ import {
 } from './workspace/pipeline-core.js';
 import { clearableCount, clearedActivity, logStamp, matchBuilderWorkspace } from './workspace/activity-log.js';
 import {
+  CO_STEPS, normalizeChangeOrder, normalizeCostBucket, normalizeDaily, normalizeDraw, normalizePlan,
+} from './jobs/production-model.js';
+import {
   assignmentRow, assignmentsToCreate, describeAssignment, findLabel,
   isValidLabelName, labelsForContact as labelsForContactRows, newLabelRow,
 } from './crm/contact-labels.js';
@@ -2350,6 +2353,14 @@ const state = {
   authMode: 'signin',
   authBusy: false,
   jobs: activeRows(readSeededList(JOB_CACHE_KEY, jobsFallback)).map(normalizeJob),
+  // The job file's production records. Fetched with the 'production' domain the first time a
+  // job is opened -- they are per-job detail, and loading every daily for every job at
+  // bootstrap would be the largest query the app makes for the least-viewed screen.
+  jobDailies: [],
+  jobCostBuckets: [],
+  jobDraws: [],
+  jobChangeOrders: [],
+  jobPlans: [],
   contacts: activeRows(readSeededList(CONTACT_CACHE_KEY, contactsFallback)).map(normalizeContact),
   accounts: activeRows(readSeededList(ACCOUNT_CACHE_KEY, accountsFallback)).map(normalizeAccount),
   deals: activeRows(readSeededList(DEAL_CACHE_KEY, dealsFallback)).map(normalizeDeal),
@@ -2556,6 +2567,7 @@ const state = {
   selectedJobId: '',
   selectedJobIds: [],
   jobBulkDelete: null,
+  jobDailyDraft: null,
   selectedTaskId: '',
   selectedFileId: '',
   jobPhotoJobId: '',
@@ -4416,7 +4428,7 @@ function applyWorkspaceBuilderRows(rows) {
 // of change produces empty screens: some widget on an unrelated page reads the data,
 // nobody remembers to list that route, and the screen renders blank with no error.
 // Every read goes through these accessors, so hooking them cannot miss a caller.
-const DEFERRED_DOMAINS = ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals', 'labels'];
+const DEFERRED_DOMAINS = ['finance', 'forms', 'pricebook', 'portals', 'recycle', 'audit', 'underwriting', 'proposals', 'labels', 'production'];
 
 // Deliberately NOT deferred, having checked: company_invites and company_join_requests
 // feed the dashboard's pending-invite widget, which renders on first paint. Deferring
@@ -12115,6 +12127,55 @@ function renderJobsPage(route, companyId) {
 // Every figure comes from the job rows themselves -- see jobs/dashboard-model.js for why
 // there is no spend, draw or daily-report figure here yet.
 
+/** Every production record belonging to one job, in the shape the job file expects. */
+function productionForJob(jobId) {
+  const id = String(jobId || '');
+  const dailies = state.jobDailies.filter((row) => row.job_id === id);
+  return {
+    dailies,
+    buckets: state.jobCostBuckets.filter((row) => row.job_id === id),
+    draws: state.jobDraws.filter((row) => row.job_id === id),
+    changeOrders: state.jobChangeOrders.filter((row) => row.job_id === id),
+    plans: state.jobPlans.filter((row) => row.job_id === id),
+    // Photos live on the dailies until the photo phase lands, so the count comes from there
+    // rather than from a table that does not exist yet.
+    photoCount: dailies.reduce((sum, row) => sum + row.photo_count, 0),
+  };
+}
+
+// ---- Job file ---------------------------------------------------------------
+// Body lives in ./jobs/job-file.js and is fetched the first time a job is opened.
+let jobFileModule = null;
+let jobFilePending = null;
+
+function loadJobFile() {
+  if (jobFileModule) return Promise.resolve(jobFileModule);
+  if (!jobFilePending) {
+    jobFilePending = import('./jobs/job-file.js').then((mod) => {
+      jobFileModule = mod.createJobFile({
+        h, can, money, emptyState, appHref, companyPath, formatDate,
+        pipelineStageColor, resolvePipelineStage,
+        productionFor: productionForJob,
+        renderJobRecord,
+      });
+      return jobFileModule;
+    }).catch((error) => {
+      jobFilePending = null;
+      throw error;
+    });
+  }
+  return jobFilePending;
+}
+
+function renderJobFile(companyId, job, tab) {
+  // The records are per-job detail: fetched when a job is first opened rather than at
+  // bootstrap, where they would be the largest query the app makes for its least-seen screen.
+  if (!ensureDomainLoaded('production')) return questLoader('Loading job');
+  if (jobFileModule) return jobFileModule.renderJobFile(companyId, job, tab);
+  loadJobFile().then(() => render()).catch((error) => console.error('Job file failed to load', error));
+  return questLoader('Loading job');
+}
+
 // ---- Jobs dashboard ---------------------------------------------------------
 // Body lives in ./jobs/dashboard-view.js and is fetched the first time Jobs is opened.
 let jobsDashboardModule = null;
@@ -12147,7 +12208,12 @@ function renderJobPanel(tab, companyId, job) {
   if (tab === 'dashboard') return '';
   if (tab === 'pipeline') return renderPipeline(companyId);
   if (tab === 'list') return renderJobList(companyId);
-  if (tab === 'profile') return renderJobRecord(companyId, job);
+  if (tab === 'profile') {
+    if (!job) return emptyState('Pick a job to open its file.');
+    // `jt` is the tab WITHIN the job file, kept separate from `tab` so a link can point at
+    // one job's Numbers without the two tab params fighting over the same name.
+    return renderJobFile(companyId, job, state.route?.params?.get('jt') || 'overview');
+  }
   return renderPipeline(companyId);
 }
 
@@ -12194,7 +12260,9 @@ function selectedJobRows(companyId = activeCompanyId()) {
 }
 
 // ---- Job record page --------------------------------------------------------
-// Body lives in ./crm/job-record.js and is fetched the first time a job is opened.
+// The activity feed, tasks and record history for a job. Kept as its own tab inside the
+// job file: the v1 structure has no home for them yet, and removing working features to
+// make room for stubs would be a straight downgrade.
 let jobRecordModule = null;
 let jobRecordPending = null;
 
@@ -12204,8 +12272,8 @@ function loadJobRecord() {
     jobRecordPending = import('./crm/job-record.js').then((mod) => {
       jobRecordModule = mod.createJobRecord({
         h, can, state, emptyState, pipelineStages, resolvePipelineStage, guidanceForJobStage,
-    activitiesFor, filteredActivitiesFor, accountById, dealById, appHref, companyPath,
-    activeWorkspaceId, money, renderActivityFilterBar, sfFeedItem, renderSfTaskRow,
+        activitiesFor, filteredActivitiesFor, accountById, dealById, appHref, companyPath,
+        activeWorkspaceId, money, renderActivityFilterBar, sfFeedItem, renderSfTaskRow,
       });
       return jobRecordModule;
     }).catch((error) => {
@@ -22368,199 +22436,6 @@ function renderLandingWorkspacePreview(workspaceKey = 'sales') {
   });
 }
 
-function renderLandingPage(forceAuthModal = false) {
-  document.title = 'Questbase.io | Connected workspaces for service teams';
-  const route = state.route || getRoute();
-  const returnUrl = safeReturnUrl(route.params.get('return_url') || appHref(companyPath('jobs', {}, defaultCompanyId())));
-  const authEnabled = CONFIG.questAuthEnabled;
-  const inviteToken = String(route.params.get('invite') || '').trim();
-  const authParam = String(route.params.get('auth') || '').trim();
-  const requestedMode = normalizeAuthMode(route.params.get('mode') || authParam, inviteToken);
-  if (requestedMode && state.authMode !== requestedMode) state.authMode = requestedMode;
-  if (inviteToken && !['signin', 'register'].includes(state.authMode)) state.authMode = 'register';
-  const showAuthModal = forceAuthModal || Boolean(inviteToken || authParam);
-  const session = state.session;
-  app.innerHTML = `
-    <main class="qb-landing-shell" data-workspace="sales">
-      <nav class="qb-landing-nav" aria-label="Main navigation">
-        <div class="qb-landing-wrap qb-landing-nav-inner">
-          <a class="qb-landing-brand" href="${appHref('/')}" data-router aria-label="Questbase home">
-            <img src="${h(questLogoMarkUrl)}" alt="" />
-            <span>Questbase.io</span>
-          </a>
-          <div class="qb-landing-nav-links">
-            <a href="#product">Product</a>
-            <a href="#workspaces">Workspaces</a>
-            <a href="#features">Why Questbase</a>
-          </div>
-          <div class="qb-landing-nav-actions">
-            ${session ? `
-              <a class="qb-landing-button qb-landing-button-primary" href="${appHref(companyPath('jobs', {}, activeCompanyId()))}" data-router>
-                Open workspace<i class="ti ti-arrow-right" aria-hidden="true"></i>
-              </a>
-            ` : `
-              <button class="qb-landing-button qb-landing-button-primary" type="button" data-action="open-auth-modal" data-auth-mode="signin">
-                <i class="ti ti-login" aria-hidden="true"></i>Business login
-              </button>
-            `}
-          </div>
-        </div>
-      </nav>
-
-      <section class="qb-landing-hero" id="product">
-        <div class="qb-landing-wrap qb-landing-hero-grid">
-          <div class="qb-landing-hero-copy">
-            <span class="qb-landing-eyebrow"><i class="ti ti-sparkles" aria-hidden="true"></i>The operating base for service teams</span>
-            <h1>Run every team from one connected base.</h1>
-            <p>Give sales, underwriting, production, and management their own focused workspace—without breaking the pipeline that connects the work.</p>
-            <div class="qb-landing-hero-actions">
-              <button class="qb-landing-button qb-landing-button-primary" type="button" data-action="open-auth-modal" data-auth-mode="register">
-                Start workspace<i class="ti ti-arrow-right" aria-hidden="true"></i>
-              </button>
-              <a class="qb-landing-button qb-landing-button-secondary" href="#workspaces">
-                <i class="ti ti-player-play-filled" aria-hidden="true"></i>See how it works
-              </a>
-            </div>
-            <div class="qb-landing-proof">
-              <div class="qb-landing-avatars" aria-hidden="true"><span>AM</span><span>JS</span><span>RP</span></div>
-              <p>Built with operators who already run the work every day.</p>
-            </div>
-          </div>
-
-          <div class="qb-landing-hero-product" id="workspaces">
-            <div class="qb-landing-product-window" aria-label="Interactive Questbase workspace preview">
-              <div class="qb-landing-window-bar">
-                <div class="qb-landing-window-brand"><img src="${h(questLogoMarkUrl)}" alt="" /><span>Questbase command center</span></div>
-                <div class="qb-landing-window-tools" aria-hidden="true">
-                  <span><i class="ti ti-search"></i></span>
-                  <span><i class="ti ti-bell"></i></span>
-                  <b><i class="ti ti-plus"></i>Add job</b>
-                </div>
-              </div>
-              <div class="qb-landing-product-layout">
-                <aside class="qb-landing-product-sidebar" aria-label="Product preview navigation">
-                  <div class="qb-landing-company-select">
-                    <span><i class="ti ti-building" aria-hidden="true"></i></span>
-                    <div><strong>Quest Roofing</strong><small>Main workspace</small></div>
-                    <i class="ti ti-chevron-down" aria-hidden="true"></i>
-                  </div>
-                  <p>Work</p>
-                  <span class="qb-landing-side-link"><i class="ti ti-home"></i>Home</span>
-                  <span class="qb-landing-side-link"><i class="ti ti-list-check"></i>My tasks<b>3</b></span>
-                  <p>Pipeline</p>
-                  <span class="qb-landing-side-link"><i class="ti ti-users"></i>Contacts</span>
-                  <span class="qb-landing-side-link active"><i class="ti ti-briefcase"></i>Jobs</span>
-                  <span class="qb-landing-side-link"><i class="ti ti-calculator"></i>Underwriter</span>
-                  <p>Production</p>
-                  <span class="qb-landing-side-link"><i class="ti ti-calendar-event"></i>Schedule</span>
-                  <span class="qb-landing-side-link"><i class="ti ti-plug"></i>Apps</span>
-                </aside>
-                <section class="qb-landing-product-main">
-                  <div class="qb-landing-product-heading">
-                    <div>
-                      <h2 data-landing-workspace-title>Sales workspace</h2>
-                      <p data-landing-workspace-description>Track every opportunity from lead to signed job.</p>
-                    </div>
-                    <span aria-hidden="true"><i class="ti ti-dots"></i></span>
-                  </div>
-                  <div class="qb-landing-workspace-switcher" role="tablist" aria-label="Preview a workspace">
-                    ${[
-                      ['cold-calling', 'ti-phone', 'Cold calling'],
-                      ['sales', 'ti-handshake', 'Sales'],
-                      ['underwriting', 'ti-calculator', 'Underwriting'],
-                      ['production', 'ti-hammer', 'Production'],
-                    ].map(([key, icon, label]) => `
-                      <button class="qb-landing-workspace-pill ${key === 'sales' ? 'active' : ''}" type="button" role="tab" aria-selected="${key === 'sales'}" data-action="landing-preview-workspace" data-workspace="${h(key)}">
-                        <i class="ti ${h(icon)}" aria-hidden="true"></i>${h(label)}
-                      </button>
-                    `).join('')}
-                  </div>
-                  <div class="qb-landing-board" data-landing-workspace-board aria-live="polite">${renderLandingWorkspaceBoard('sales')}</div>
-                </section>
-              </div>
-            </div>
-            <div class="qb-landing-live-badge">
-              <i class="ti ti-circle-check" aria-hidden="true"></i>
-              <span><strong>One live record</strong><small>Every team stays in sync</small></span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="qb-landing-signal" aria-label="Product benefits">
-        <div class="qb-landing-wrap qb-landing-signal-grid">
-          <article class="qb-landing-signal-copy"><strong>Not another disconnected tool.</strong><p>Questbase changes shape around the work while the customer record stays whole.</p></article>
-          <article><strong>1 company</strong><p>Shared identity and controls</p></article>
-          <article><strong>∞ workspaces</strong><p>Configured per team or pipeline</p></article>
-          <article><strong>1 source</strong><p>Every handoff remains visible</p></article>
-        </div>
-      </section>
-
-      <section class="qb-landing-inside">
-        <div class="qb-landing-wrap">
-          <div class="qb-landing-section-head">
-            <div><span class="qb-landing-eyebrow"><i class="ti ti-device-desktop" aria-hidden="true"></i>Product first by design</span><h2>The landing page speaks the same language as the app.</h2></div>
-            <p>Light operational surfaces, compact controls, clear hierarchy, and the same warm orange action system users see after sign-in.</p>
-          </div>
-          <div class="qb-landing-reference-card">
-            <div class="qb-landing-reference-bar"><span><i class="ti ti-lock" aria-hidden="true"></i>Questbase workspace · Jobs</span><span>Live product language</span></div>
-            <div class="qb-landing-reference-image"><img src="${h(questbaseInteriorJobsUrl)}" alt="Questbase jobs workspace showing its navigation, pipeline lanes, and job cards" loading="lazy" /></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="qb-landing-features" id="features">
-        <div class="qb-landing-wrap">
-          <div class="qb-landing-section-head">
-            <div><span class="qb-landing-eyebrow"><i class="ti ti-plug" aria-hidden="true"></i>One connected system</span><h2>Focused for each role. Connected for the company.</h2></div>
-            <p>Teams get the controls they need, owners keep visibility, and records move forward without copy-and-paste handoffs.</p>
-          </div>
-          <div class="qb-landing-feature-grid">
-            ${[
-              ['ti-adjustments-horizontal', 'Configure the workspace', 'Choose the pipeline, fields, permissions, and installed apps that fit how each team works.'],
-              ['ti-route', 'Connect the handoff', 'Carry the same customer and job context from the first call through production and closeout.'],
-              ['ti-eye', 'Keep company visibility', 'Give operators a focused view while management sees progress across every workspace.'],
-            ].map(([icon, title, body]) => `
-              <article class="qb-landing-feature-card">
-                <span><i class="ti ${h(icon)}" aria-hidden="true"></i></span>
-                <h3>${h(title)}</h3>
-                <p>${h(body)}</p>
-              </article>
-            `).join('')}
-          </div>
-        </div>
-      </section>
-
-      <section class="qb-landing-cta" id="access">
-        <div class="qb-landing-wrap qb-landing-cta-box">
-          <div>
-            <span class="qb-landing-eyebrow"><i class="ti ti-rocket" aria-hidden="true"></i>Ready to work</span>
-            <h2>Build the base your company runs on.</h2>
-            <p>Create a company workspace, sign into an existing one, or join the workspace your team invited you to.</p>
-          </div>
-          <div class="qb-landing-access-actions">
-            ${session ? `
-              <a class="qb-landing-button qb-landing-button-primary" href="${appHref(companyPath('jobs', {}, activeCompanyId()))}" data-router>Open workspace<i class="ti ti-arrow-right" aria-hidden="true"></i></a>
-            ` : `
-              <button class="qb-landing-button qb-landing-button-primary" type="button" data-action="open-auth-modal" data-auth-mode="register">Start workspace<i class="ti ti-arrow-right" aria-hidden="true"></i></button>
-              <button class="qb-landing-button qb-landing-button-secondary" type="button" data-action="open-auth-modal" data-auth-mode="signin"><i class="ti ti-login" aria-hidden="true"></i>Business login</button>
-              <button class="qb-landing-text-action" type="button" data-action="open-auth-modal" data-auth-mode="invite"><i class="ti ti-user-plus" aria-hidden="true"></i>Join by invite</button>
-            `}
-          </div>
-        </div>
-      </section>
-
-      <footer class="qb-landing-footer">
-        <div class="qb-landing-wrap">
-          <span class="qb-landing-footer-brand"><img src="${h(questLogoMarkUrl)}" alt="" />Questbase.io</span>
-          <span>Every team has a place. Every handoff stays connected.</span>
-          <span>© 2026 Questbase</span>
-        </div>
-      </footer>
-      ${showAuthModal ? renderAuthModal(returnUrl, inviteToken, authEnabled) : ''}
-    </main>
-  `;
-}
 
 function renderAuthModal(returnUrl, inviteToken, authEnabled) {
   const inviteLookup = inviteLookupForToken(inviteToken);
@@ -22722,136 +22597,63 @@ function renderAuthOAuthButtons(invitedEmail = '') {
     <div class="auth-sso-divider"><span>or with email</span></div>`;
 }
 
+// ---- Landing page -----------------------------------------------------------
+// Body lives in ./ui/landing-page.js and is fetched on the first signed-out paint.
+let landingModule = null;
+let landingPending = null;
+
+function loadLandingPage() {
+  if (landingModule) return Promise.resolve(landingModule);
+  if (!landingPending) {
+    landingPending = import('./ui/landing-page.js').then((mod) => {
+      landingModule = mod.createLandingPage({
+        activeCompanyId, appHref, companyPath, defaultCompanyId, getRoute, h, normalizeAuthMode, renderAuthModal, renderLandingWorkspaceBoard, safeReturnUrl,
+    CONFIG, state, questLogoMarkUrl, app,
+      });
+      return landingModule;
+    }).catch((error) => {
+      landingPending = null;
+      throw error;
+    });
+  }
+  return landingPending;
+}
+
+function renderLandingPage(forceAuthModal = false) {
+  if (landingModule) return landingModule.renderLandingPage(forceAuthModal);
+  // Paints into #app itself, so the placeholder has to as well.
+  app.innerHTML = questLoader('Loading Questbase');
+  loadLandingPage().then(() => render()).catch((error) => console.error('Landing page failed to load', error));
+  return undefined;
+}
+
+// ---- Auth forms -------------------------------------------------------------
+// Bodies live in ./ui/auth-form.js, fetched with the first signed-out paint.
+let authFormModule = null;
+let authFormPending = null;
+
+function loadAuthForm() {
+  if (authFormModule) return Promise.resolve(authFormModule);
+  if (!authFormPending) {
+    authFormPending = import('./ui/auth-form.js').then((mod) => {
+      authFormModule = mod.createAuthForm({
+        h, state, authStatusMessage, authSubmitButton, inviteLookupForToken,
+    isLiveSupabaseSession, renderAuthOAuthButtons, renderPasswordField,
+    renderPasswordRequirements, workspacePresetSelect,
+      });
+      return authFormModule;
+    }).catch((error) => {
+      authFormPending = null;
+      throw error;
+    });
+  }
+  return authFormPending;
+}
+
 function renderSupabaseAuthForm(returnUrl) {
-  const inviteToken = String(state.route?.params?.get('invite') || '').trim();
-  if (state.authMode === 'forgot') {
-    return `
-      <form class="auth-form-compact" data-auth-forgot-form>
-        <div class="auth-form-title">
-          <strong>Reset your password</strong>
-          <span>We will email a secure reset link if the account exists.</span>
-        </div>
-        ${inviteToken ? `
-          <!-- Reached from an invitation. Say the invite survives this, or it looks like
-               leaving the page abandons it. -->
-          <p class="auth-note">Your invitation is still waiting. Reset your password, then
-          sign in here to join.</p>
-        ` : ''}
-        <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-        ${authSubmitButton('Send reset link', 'Sending reset link...')}
-        ${authStatusMessage('The message is the same whether or not that email has an account.')}
-        <button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="signin">${inviteToken ? 'Back to sign in and join' : 'Back to sign in'}</button>
-      </form>
-    `;
-  }
-  if (state.authMode === 'recovery') {
-    // A reset link is single-use. Clicking it again -- or reloading this page, which
-    // re-requests it -- spends nothing, because the token is already gone: the server answers
-    // "One-time token not found" and no session is created. This screen used to claim "your
-    // recovery link has been verified" purely because ?auth=recovery was in the URL, so the
-    // only sign anything was wrong came from "Auth session missing!" after typing a new
-    // password twice. Check for the session that the link was supposed to produce.
-    if (!isLiveSupabaseSession()) {
-      return `
-        <div class="auth-form-compact">
-          <div class="auth-form-title">
-            <strong>This reset link has expired</strong>
-            <span>Reset links work once. If you opened it twice, or reloaded this page, the first use was the one that counted.</span>
-          </div>
-          <p class="auth-note">Request a new link and open it once. It stays valid for one hour.</p>
-          <button class="btn btn-primary full" type="button" data-action="set-auth-mode" data-auth-mode="forgot">Send a new reset link</button>
-          <button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="signin">Back to sign in</button>
-        </div>
-      `;
-    }
-    return `
-      <form class="auth-form-compact" data-auth-update-password-form>
-        <div class="auth-form-title">
-          <strong>Choose a new password</strong>
-          <span>Your recovery link has been verified.</span>
-        </div>
-        ${renderPasswordField({ label: 'New password', autocomplete: 'new-password' })}
-        ${renderPasswordField({ label: 'Confirm new password', autocomplete: 'new-password', confirm: true })}
-        ${renderPasswordRequirements()}
-        ${authSubmitButton('Update password', 'Updating password...')}
-        ${authStatusMessage('Use a password you have not used for this account before.')}
-      </form>
-    `;
-  }
-  if (state.authMode === 'register') {
-    return `
-      <form class="auth-form-compact" data-auth-register-form>
-        <div class="auth-form-title">
-          <strong>${inviteToken ? 'Create invited worker account' : 'Create business workspace'}</strong>
-          <span>${inviteToken ? 'Email must match the invite.' : 'Workspace opens after Quest approval.'}</span>
-        </div>
-        ${renderAuthOAuthButtons(inviteToken ? (inviteLookupForToken(inviteToken)?.email || '') : '')}
-        <label>${inviteToken ? 'Display name / username' : 'Full name'}<input name="full_name" autocomplete="name" required /></label>
-        <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-        ${renderPasswordField({ autocomplete: 'new-password' })}
-        ${renderPasswordRequirements()}
-        ${inviteToken ? '' : `<label>Company workspace<input name="company_name" placeholder="Example Roofing LLC" required /></label>${workspacePresetSelect()}`}
-        <input type="hidden" name="invite_token" value="${h(inviteToken)}" />
-        <input type="hidden" name="return_url" value="${h(returnUrl)}" />
-        ${authSubmitButton(inviteToken ? 'Create account and join' : 'Create secure workspace', 'Creating account...')}
-        ${authStatusMessage(inviteToken ? 'Workers cannot create access without a valid invite code.' : 'You become Owner, then Quest approves billing/access before the workspace opens.')}
-        ${inviteToken ? '<button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="signin">I already have an account</button>' : ''}
-      </form>
-    `;
-  }
-  if (state.authMode === 'invite') {
-    return `
-      <form class="auth-form-compact" data-auth-invite-code-form>
-        <div class="auth-form-title">
-          <strong>Join with invite code</strong>
-          <span>Workers need a code from their company admin.</span>
-        </div>
-        <label>Invite code<input name="invite_code" autocomplete="one-time-code" required placeholder="Paste the code from your admin" /></label>
-        <input type="hidden" name="return_url" value="${h(returnUrl)}" />
-        <button class="btn btn-primary full" type="submit">Continue with invite code</button>
-        ${authStatusMessage('Invite codes are shared by your Owner/Admin. No email delivery required.')}
-      </form>
-    `;
-  }
-  if (state.authMode === 'request') {
-    return `
-      <form class="auth-form-compact" data-auth-request-form>
-        <div class="auth-form-title">
-          <strong>Request access</strong>
-          <span>This is for existing accounts only. New workers should use an admin invite.</span>
-        </div>
-        <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-        ${renderPasswordField()}
-        <label>Company ID<input name="company_id" placeholder="company-workspace-id" required /></label>
-        <label>Message<input name="message" placeholder="Tell the admin why you need access" /></label>
-        <input type="hidden" name="return_url" value="${h(returnUrl)}" />
-        ${authSubmitButton('Request company access', 'Requesting access...')}
-        ${authStatusMessage('Requests stay pending until a company Owner/Admin approves them.')}
-      </form>
-    `;
-  }
-  return `
-    <form class="auth-form-compact" data-auth-sign-in-form>
-      <div class="auth-form-title">
-        <strong>${inviteToken ? 'Sign in and accept invite' : 'Sign in'}</strong>
-        <span>${inviteToken ? 'Use the invited email account.' : 'Use your company account.'}</span>
-      </div>
-      ${renderAuthOAuthButtons(inviteToken ? (inviteLookupForToken(inviteToken)?.email || '') : '')}
-      <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-      ${renderPasswordField()}
-      <input type="hidden" name="invite_token" value="${h(inviteToken)}" />
-      <input type="hidden" name="return_url" value="${h(returnUrl)}" />
-      ${authSubmitButton(inviteToken ? 'Sign in and join' : 'Sign in', 'Signing in...')}
-      <!-- Offered on the invite flow too. Someone accepting an invite with an existing
-           account is exactly the person most likely to have forgotten its password -- they
-           may not have signed in for months, which is why they were invited again. Hiding it
-           here left "Invalid login credentials" as a dead end. The invite token lives in the
-           URL, so it survives the trip to the reset form and back. -->
-      <button class="auth-text-action" type="button" data-action="set-auth-mode" data-auth-mode="forgot">Forgot password?</button>
-      ${authStatusMessage(inviteToken ? 'If you do not have an account yet, create an invited worker account.' : 'Business owners and workers use the same sign in after access is created.')}
-      ${inviteToken ? '<button class="btn full" type="button" data-action="set-auth-mode" data-auth-mode="register">Create invited account</button>' : ''}
-    </form>
-  `;
+  if (authFormModule) return authFormModule.renderSupabaseAuthForm(returnUrl);
+  loadAuthForm().then(() => render()).catch((error) => console.error('Auth form failed to load', error));
+  return questLoader('Loading');
 }
 
 function renderLocalLoginForm(returnUrl) {
@@ -23138,6 +22940,7 @@ function renderCompanyPickerModal() {
 function renderActiveModal(route, session) {
   if (state.builderModal) return renderWorkspaceBuilderModal();
   if (state.modal === 'record-history') return renderRecordHistoryModal();
+  if (state.modal === 'job-daily') return renderJobDailyModal();
   if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
   if (state.modal === 'contacts-dedupe') return renderContactsDedupeModal();
@@ -27344,6 +27147,57 @@ function handleAction(event, node) {
     navigate(companyPath('contacts', { contact_id: node.dataset.contactId }, activeCompanyId()));
     return;
   }
+  if (action === 'job-daily-new') {
+    event.preventDefault();
+    if (!requirePermission('jobs.manage', activeCompanyId(), 'Your role cannot submit daily reports.', 'Jobs')) return;
+    state.jobDailyDraft = {
+      jobId: selectedJob()?.id || '',
+      crew: [],
+      crewLabel: '',
+      production: '',
+      productionNote: '',
+      cleaned: null,
+      materialsOk: null,
+      notes: '',
+      error: '',
+    };
+    state.modal = 'job-daily';
+    render();
+    return;
+  }
+  if (action === 'job-daily-set') {
+    event.preventDefault();
+    const draft = state.jobDailyDraft;
+    if (!draft) return;
+    const { field, value } = node.dataset;
+    if (field === 'production') draft.production = value;
+    if (field === 'cleaned') draft.cleaned = value === 'yes';
+    if (field === 'materials') draft.materialsOk = value === 'yes';
+    render();
+    return;
+  }
+  if (action === 'job-bucket-final') {
+    event.preventDefault();
+    setCostBucketFinal(node.dataset.bucketId);
+    return;
+  }
+  if (action === 'job-draw-invoice') {
+    event.preventDefault();
+    requestJobDraw(node.dataset.drawId);
+    return;
+  }
+  if (action === 'job-change-order-step') {
+    event.preventDefault();
+    advanceChangeOrder(node.dataset.coId, node.dataset.coStep);
+    return;
+  }
+  if (['job-change-order-new', 'job-bucket-new', 'job-draw-new'].includes(action)) {
+    event.preventDefault();
+    // Named honestly rather than opening an empty dialog: these are the next phase, and a
+    // form that saves nothing is worse than saying so.
+    showToast('Coming in the next phase — the records and the tabs that show them are live now.', 'local', 'Jobs');
+    return;
+  }
   if (action === 'toggle-job-select') {
     event.preventDefault();
     // Stop the row's own open-job handler: ticking a box should not also navigate.
@@ -28269,6 +28123,12 @@ function onDocumentSubmit(event) {
     saveProfile(event.target).catch((error) => {
       showToast(error.message || 'Profile save failed.', 'local', 'Profile');
     });
+    return;
+  }
+
+  if (event.target.matches('[data-job-daily-form]')) {
+    event.preventDefault();
+    submitJobDaily(event.target);
     return;
   }
 
@@ -31371,6 +31231,170 @@ async function deleteSelectedJobs(button) {
   state.jobBulkDelete = null;
   if (removed) showToast(`${removed} job${removed === 1 ? '' : 's'} moved to Recycle Bin.`, isLiveSupabaseSession() ? 'live' : 'local', 'Recycle Bin');
   if (failed.length) showToast(`${failed.length} job${failed.length === 1 ? '' : 's'} could not be deleted.`, 'error', 'Jobs');
+  render();
+}
+
+/**
+ * The daily report.
+ *
+ * Three words rather than a slider, because a foreman answers "good / ok / rough" honestly
+ * and rounds a percentage up. The reason is only asked for when the answer was not good --
+ * which is exactly when it is worth having, and the rest of the time it is one less field
+ * between someone on a roof and a submitted report.
+ */
+function renderJobDailyModal() {
+  const draft = state.jobDailyDraft;
+  const job = draft ? jobById(draft.jobId) : null;
+  if (!job) return renderModalShell('Jobs', 'Daily report', emptyState('That job is no longer available.'), 'wb-modal-sm');
+  const crew = companyTaskAssignees(job.company_id).slice(0, 12);
+  const pick = (field, value, label, tone = '') => `
+    <button class="jd-opt ${draft[field === 'production' ? 'production' : field === 'cleaned' ? 'cleaned' : 'materialsOk'] === (field === 'production' ? value : value === 'yes') ? `on ${tone}` : ''}"
+            type="button" data-action="job-daily-set" data-field="${h(field)}" data-value="${h(value)}">${h(label)}</button>`;
+
+  return renderModalShell('Jobs', 'Daily report', `
+    <form class="jd-form" data-job-daily-form>
+      <p class="jd-job"><b>${h(job.name)}</b><span>${h(formatDate(new Date().toISOString()))}</span></p>
+      ${draft.error ? `<div class="wb-modal-error" role="alert">${h(draft.error)}</div>` : ''}
+
+      <p class="jd-q">How was production?</p>
+      <div class="jd-seg">
+        ${pick('production', 'good', 'Good', 'good')}
+        ${pick('production', 'ok', 'OK', 'ok')}
+        ${pick('production', 'rough', 'Rough', 'rough')}
+      </div>
+      ${draft.production && draft.production !== 'good' ? `
+        <label class="jd-why">Roughly what happened?
+          <input class="wb-input" name="production_note" value="${h(draft.productionNote)}" placeholder="e.g. 80% — concrete crew in the way" />
+        </label>` : ''}
+
+      <p class="jd-q">Who was on site?</p>
+      <input class="wb-input" name="crew_label" value="${h(draft.crewLabel)}" placeholder="e.g. Alkeith + 4" />
+      ${crew.length ? `<div class="jd-crew">${crew.map((m) => `
+        <label class="jd-crew-pick"><input type="checkbox" name="crew_names" value="${h(memberName(m) || '')}" /> ${h(memberName(m) || 'Member')}</label>`).join('')}</div>` : ''}
+
+      <div class="jd-row">
+        <p class="jd-q">Site cleaned up?</p>
+        <div class="jd-yn">${pick('cleaned', 'yes', 'Yes')}${pick('cleaned', 'no', 'No', 'warn')}</div>
+      </div>
+      <div class="jd-row">
+        <p class="jd-q">Enough material to finish?</p>
+        <div class="jd-yn">${pick('materials', 'yes', 'Yes')}${pick('materials', 'no', 'No', 'warn')}</div>
+      </div>
+      ${draft.materialsOk === false ? `
+        <label class="jd-why">What is needed?
+          <input class="wb-input" name="materials_needed" placeholder="e.g. 2x6 (40), fascia" />
+        </label>` : ''}
+
+      <label class="jd-why">Notes
+        <textarea class="wb-input" name="notes" rows="3" placeholder="What got done, what is in the way">${h(draft.notes)}</textarea>
+      </label>
+
+      <div class="modal-actions">
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+        <button class="btn btn-primary" type="submit">Submit daily</button>
+      </div>
+    </form>
+  `, 'wb-modal-sm');
+}
+
+async function submitJobDaily(formNode) {
+  const draft = state.jobDailyDraft;
+  const job = draft ? jobById(draft.jobId) : null;
+  if (!job) return;
+  if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot submit daily reports.', 'Jobs')) return;
+  if (!draft.production) {
+    draft.error = 'Say how production went first — good, OK or rough.';
+    render();
+    return;
+  }
+  const data = new FormData(formNode);
+  const done = beginSubmitting(formNode, 'Submitting…');
+  const payload = {
+    company_id: job.company_id,
+    job_id: job.id,
+    report_date: new Date().toISOString().slice(0, 10),
+    crew_label: String(data.get('crew_label') || '').trim(),
+    crew_names: data.getAll('crew_names').map(String).filter(Boolean),
+    production: draft.production,
+    production_note: String(data.get('production_note') || '').trim(),
+    site_cleaned: draft.cleaned,
+    materials_ok: draft.materialsOk,
+    materials_needed: String(data.get('materials_needed') || '').split(',').map((s) => s.trim()).filter(Boolean),
+    notes: String(data.get('notes') || '').trim(),
+    created_by: activeSession().profile.id,
+  };
+
+  try {
+    const client = createSupabaseClient();
+    if (isLiveSupabaseSession() && client) {
+      // One daily per crew per day is a unique index, so a second submission for the same
+      // crew is an edit of that day rather than a duplicate.
+      const result = await client.from('job_dailies')
+        .upsert(payload, { onConflict: 'job_id,report_date,crew_label' })
+        .select().single();
+      if (result.error) {
+        draft.error = result.error.message || 'Could not save the daily report.';
+        render();
+        return;
+      }
+      state.jobDailies = [normalizeDaily(result.data), ...state.jobDailies.filter((d) => d.id !== result.data.id)];
+    } else {
+      state.jobDailies = [normalizeDaily({ ...payload, id: crypto.randomUUID() }), ...state.jobDailies];
+    }
+    state.modal = '';
+    state.jobDailyDraft = null;
+    showToast('Daily submitted.', isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
+    navigate(companyPath('jobs', { tab: 'profile', job_id: job.id, jt: 'dailies' }, job.company_id), { replace: true });
+  } finally {
+    if (done) done();
+  }
+}
+
+/** Closing a bucket is what turns a projected net into a real one, so it is one click. */
+async function setCostBucketFinal(bucketId) {
+  const bucket = state.jobCostBuckets.find((b) => b.id === bucketId);
+  if (!bucket) return;
+  if (!requirePermission('jobs.manage', bucket.company_id, 'Your role cannot change job costs.', 'Jobs')) return;
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await client.from('job_cost_buckets').update({ status: 'final', updated_at: new Date().toISOString() }).eq('id', bucketId);
+    if (result.error) { showToast(result.error.message || 'Could not close that bucket.', 'error', 'Jobs'); return; }
+  }
+  state.jobCostBuckets = state.jobCostBuckets.map((b) => (b.id === bucketId ? { ...b, status: 'final' } : b));
+  showToast(`${bucket.name} closed — the net just firmed up.`, isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
+  render();
+}
+
+async function requestJobDraw(drawId) {
+  const draw = state.jobDraws.find((d) => d.id === drawId);
+  if (!draw) return;
+  if (!requirePermission('jobs.manage', draw.company_id, 'Your role cannot invoice draws.', 'Jobs')) return;
+  const now = new Date().toISOString();
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await client.from('job_draws').update({ status: 'paid', invoiced_at: now, updated_at: now }).eq('id', drawId);
+    if (result.error) { showToast(result.error.message || 'Could not request that draw.', 'error', 'Jobs'); return; }
+  }
+  state.jobDraws = state.jobDraws.map((d) => (d.id === drawId ? { ...d, status: 'paid', invoiced_at: now } : d));
+  showToast(`Invoice requested for ${draw.label}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
+  render();
+}
+
+async function advanceChangeOrder(coId, step) {
+  const co = state.jobChangeOrders.find((c) => c.id === coId);
+  if (!co || !CO_STEPS.includes(step)) return;
+  if (!requirePermission('jobs.manage', co.company_id, 'Your role cannot change these.', 'Jobs')) return;
+  const patch = { step, updated_at: new Date().toISOString() };
+  if (step === 'accepted') patch.accepted_at = patch.updated_at;
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await client.from('job_change_orders').update(patch).eq('id', coId);
+    if (result.error) { showToast(result.error.message || 'Could not update that change order.', 'error', 'Jobs'); return; }
+  }
+  state.jobChangeOrders = state.jobChangeOrders.map((c) => (c.id === coId ? { ...c, ...patch } : c));
+  showToast(step === 'acknowledged'
+    ? 'Crew acknowledged — they are building to it.'
+    : `Marked ${step}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
   render();
 }
 
@@ -40249,6 +40273,23 @@ function subscribeToMessageRealtime(companyId, conversationId) {
 }
 
 async function loadRealtimeDomain(client, domain) {
+  if (domain === 'production') {
+    // The five child tables of a job file. Fetched together because opening a job shows all
+    // of them: five sequential round trips would be five visible gaps in one screen.
+    const [dailies, buckets, draws, changeOrders, plans] = await Promise.all([
+      safeSupabaseQuery(client.from('job_dailies').select('*').order('report_date', { ascending: false })),
+      safeSupabaseQuery(client.from('job_cost_buckets').select('*').order('sort_order', { ascending: true })),
+      safeSupabaseQuery(client.from('job_draws').select('*').order('sort_order', { ascending: true })),
+      safeSupabaseQuery(client.from('job_change_orders').select('*').order('created_at', { ascending: false })),
+      safeSupabaseQuery(client.from('job_plans').select('*').order('created_at', { ascending: false })),
+    ]);
+    if (!dailies.error) state.jobDailies = (dailies.data || []).map(normalizeDaily);
+    if (!buckets.error) state.jobCostBuckets = (buckets.data || []).map(normalizeCostBucket);
+    if (!draws.error) state.jobDraws = (draws.data || []).map(normalizeDraw);
+    if (!changeOrders.error) state.jobChangeOrders = (changeOrders.data || []).map(normalizeChangeOrder);
+    if (!plans.error) state.jobPlans = (plans.data || []).map(normalizePlan);
+    return;
+  }
   if (domain === 'operations') {
     const [jobs, tasks, calendar] = await Promise.all([
       client.from('jobs').select('*').order('updated_at', { ascending: false }),

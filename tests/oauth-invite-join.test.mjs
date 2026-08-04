@@ -4,6 +4,9 @@ import test from 'node:test';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The forms that call the buttons moved to their own fetched-on-demand module; the button
+// builder itself stayed in main.js.
+const authForm = readFileSync(new URL('../src/ui/auth-form.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const fn = (name) => {
   const at = main.indexOf(`function ${name}(`);
   assert.notEqual(at, -1, `${name} should exist`);
@@ -15,9 +18,9 @@ const fn = (name) => {
 // one flow that forced them to invent a password.
 
 test('social sign-in is offered on both invite forms', () => {
-  const calls = [...main.matchAll(/renderAuthOAuthButtons\(inviteToken \? \(inviteLookupForToken\(inviteToken\)\?\.email \|\| ''\) : ''\)/g)];
+  const calls = [...authForm.matchAll(/renderAuthOAuthButtons\(inviteToken \? \(inviteLookupForToken\(inviteToken\)\?\.email \|\| ''\) : ''\)/g)];
   assert.equal(calls.length, 2, 'sign-in and create-account both need it');
-  assert.ok(!/inviteToken \? '' : renderAuthOAuthButtons/.test(main), 'the old suppression must be gone');
+  assert.ok(!/inviteToken \? '' : renderAuthOAuthButtons/.test(authForm), 'the old suppression must be gone');
 });
 
 test('the invite rides along through the provider redirect', () => {

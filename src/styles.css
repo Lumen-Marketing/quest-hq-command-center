@@ -30247,3 +30247,142 @@ html:has(.quest-app) {
   color: var(--ink);
   overflow-wrap: anywhere;
 }
+
+/* ---- Job file -------------------------------------------------------------------------
+   One job, eight tabs, quick-create beside them. Figures first, detail under. */
+.jf { display: grid; gap: 16px; }
+.jf-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.jf-eyebrow {
+  margin: 0 0 2px; font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--muted);
+}
+.jf-head h1 { margin: 0; font-size: 1.55rem; font-weight: 900; letter-spacing: -.02em; }
+.jf-head-meta { margin: 4px 0 0; display: flex; align-items: center; gap: 8px; font-size: .86rem; color: var(--ink-2); flex-wrap: wrap; }
+.jf-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.jf-stage-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+
+.jf-tabs { display: flex; gap: 2px; border-bottom: 2px solid var(--border); flex-wrap: wrap; }
+.jf-tabs a {
+  padding: 8px 12px; font-size: .87rem; font-weight: 700; color: var(--ink-2);
+  border-bottom: 2px solid transparent; margin-bottom: -2px; display: inline-flex; gap: 6px; align-items: center;
+}
+.jf-tabs a:hover { color: var(--orange); }
+.jf-tabs a.active { color: var(--orange); border-bottom-color: var(--orange); }
+.jf-badge {
+  font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 99px;
+  background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border);
+}
+
+.jf-body { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .jf-body { grid-template-columns: 1fr; } }
+.jf-main { display: grid; gap: 12px; min-width: 0; }
+
+.jf-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.jf-card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 14px 16px; }
+.jf-card h3 { margin: 0 0 6px; font-size: .82rem; font-weight: 800; }
+.jf-card p { margin: 0 0 4px; font-size: .9rem; }
+.jf-sub { color: var(--muted); font-size: .82rem; }
+.jf-warn { color: var(--orange); font-weight: 600; font-size: .82rem; }
+.jf-ok { color: var(--success, #15803d); font-weight: 600; font-size: .82rem; }
+.jf-pin { border-left: 3px solid var(--orange); }
+
+/* One dot per worked day, worst rating of the day. */
+.jf-dots { display: inline-flex; gap: 3px; align-items: center; }
+.jf-dots-none { color: var(--muted); }
+.jf-dot { width: 8px; height: 8px; border-radius: 50%; display: block; }
+.jf-dot-good { background: #15803d; }
+.jf-dot-ok { background: #d9a441; }
+.jf-dot-rough { background: #c1352b; }
+
+.jf-chip {
+  font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: 99px;
+  background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border);
+}
+.jf-chip-ok { color: #15803d; background: #e7f8ec; border-color: #bfe6cb; }
+.jf-chip-warn { color: #92600a; background: #fdf3df; border-color: #ecd9a8; }
+.jf-chip-final { color: #15803d; background: #e7f8ec; border-color: #bfe6cb; }
+.jf-chip-later { color: var(--muted); }
+
+.jf-daily-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+
+.jf-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.jf-figure {
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  padding: 14px 16px; display: grid; gap: 3px;
+}
+.jf-figure strong { font-size: 1.5rem; font-weight: 900; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.jf-figure.jf-good strong { color: var(--success, #15803d); }
+.jf-figure.jf-bad strong { color: var(--danger, #c1352b); }
+.jf-label {
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+}
+
+.jf-buckets { display: grid; gap: 10px; }
+.jf-bucket { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px 15px; }
+.jf-bucket-head { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; margin-bottom: 7px; }
+.jf-bucket-money { margin-left: auto; font-variant-numeric: tabular-nums; font-size: .84rem; color: var(--ink-2); }
+.jf-bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.jf-bar span { display: block; height: 100%; border-radius: inherit; background: var(--ink-2); }
+.jf-bar-over span { background: var(--danger, #c1352b); }
+
+.jf-contract-sum { margin: 0 0 8px; }
+.jf-draws { display: grid; gap: 2px; }
+.jf-draw {
+  display: flex; gap: 10px; align-items: center; padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.jf-draw:last-child { border-bottom: 0; }
+.jf-draw-label { flex: 1; min-width: 0; }
+.jf-draw-amount { font-variant-numeric: tabular-nums; }
+.jf-draw-mark { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--border-strong); }
+.jf-draw-paid { background: #15803d; }
+.jf-draw-unlocked { background: var(--orange); }
+
+.jf-steps { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
+.jf-step {
+  font-size: 10px; font-weight: 800; padding: 2px 9px; border-radius: 99px;
+  background: var(--surface-2); color: var(--muted); text-transform: capitalize;
+}
+.jf-step-done { background: #e7f8ec; color: #15803d; }
+.jf-step-now { background: var(--ink); color: var(--surface); }
+.jf-co-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.jf-co-price { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--success, #15803d); }
+
+.jf-plans { display: grid; gap: 2px; }
+.jf-plan { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.jf-plan:last-child { border-bottom: 0; }
+.jf-plan-name { flex: 1; min-width: 0; }
+
+.jf-rail { display: grid; gap: 6px; align-content: start; }
+.jf-quick {
+  display: grid; gap: 1px; text-align: left; width: 100%;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  padding: 9px 11px; cursor: pointer;
+}
+.jf-quick:hover { border-color: var(--orange); }
+.jf-quick b { font-size: .84rem; }
+.jf-quick span { font-size: .74rem; color: var(--muted); }
+
+/* ---- Daily report form ------------------------------------------------------------------ */
+.jd-form { display: grid; gap: 10px; }
+.jd-job { display: flex; justify-content: space-between; gap: 10px; margin: 0; font-size: .9rem; }
+.jd-job span { color: var(--muted); }
+.jd-q { margin: 0; font-size: .82rem; font-weight: 700; color: var(--ink-2); }
+.jd-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.jd-yn { display: flex; gap: 6px; }
+.jd-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.jd-opt {
+  border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface);
+  padding: 9px 12px; font: inherit; font-size: .84rem; font-weight: 700; cursor: pointer; color: var(--ink-2);
+}
+.jd-opt.on { border-width: 2px; background: #e7f8ec; border-color: #15803d; color: #15803d; }
+.jd-opt.on.ok { background: #fdf3df; border-color: #d9a441; color: #92600a; }
+.jd-opt.on.rough { background: #fdecec; border-color: #c1352b; color: #b91c1c; }
+.jd-opt.on.warn { background: #fdf3df; border-color: #d9a441; color: #92600a; }
+.jd-why { display: grid; gap: 4px; font-size: .82rem; font-weight: 700; color: var(--ink-2); }
+.jd-crew { display: flex; gap: 6px; flex-wrap: wrap; }
+.jd-crew-pick {
+  display: inline-flex; gap: 6px; align-items: center; font-size: .8rem; font-weight: 600;
+  border: 1px solid var(--border); border-radius: 99px; padding: 4px 11px; background: var(--surface);
+}
