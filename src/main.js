@@ -37,6 +37,7 @@ import { COMPANY_STATUS_FILTERS, INACTIVE_COMPANY_STATUSES, filterCompanyRows, p
 import { parseTaskInstruction, matchPerson, matchContactInText } from './assistant/task-parser.js';
 import { parseContactInstruction, looksLikeContactInstruction } from './assistant/contact-parser.js';
 import { computeTeamWorkload } from './data/team-workload.js';
+import { addRecordLabel, newRecordLabel, singularize } from './workspace/naming.js';
 import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.js';
 import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDueDate } from './data/recurrence.js';
 import { collectAutomationActions, buildTaskFromAction, describeAutomation, AUTOMATION_OBJECTS } from './data/automations.js';
@@ -157,6 +158,12 @@ const DRIVE_VIEW_KEY = 'quest-hq-drive-view';
 const SIDEBAR_COLLAPSED_KEY = 'quest-hq-sidebar-collapsed';
 const NAV_GROUP_COLLAPSED_KEY = 'quest-hq-nav-groups-collapsed';
 const NAV_EXPANDED_KEY = 'quest-hq-nav-expanded-v1';
+// How each app's list is currently being looked at: which field drives the quick filter
+// chips, and which chip is on. A filter you set and then lose to a refresh is worse than no
+// filter, because you have to notice it went. Kept in localStorage rather than the workspace
+// doc on purpose -- this is how ONE person is looking at the list right now, and pushing it
+// into shared state would rearrange everybody else's screen.
+const WB_ITEMS_UI_KEY = 'quest-hq-wb-items-ui-v1';
 const JOB_BOARD_VIEW_KEY = 'quest-hq-job-board-view';
 const CONTACT_BOARD_VIEW_KEY = 'quest-hq-contact-board-view';
 const THEME_KEY = 'quest-theme';
@@ -5725,6 +5732,60 @@ function renderTeamWorkloadPage(companyId) {
   return questLoader('Loading');
 }
 
+// ---- renderEodPage ---------------------------------------------------------
+// Body lives in ./ops/eod-page.js and is fetched on first use.
+let renderEodPageModule = null;
+let renderEodPagePending = null;
+
+function loadRenderEodPage() {
+  if (renderEodPageModule) return Promise.resolve(renderEodPageModule);
+  if (!renderEodPagePending) {
+    renderEodPagePending = import('./ops/eod-page.js').then((mod) => {
+      renderEodPageModule = mod.createEodPage({
+        activeSession, can, companyEodReports, companyName, loadEodModule, render, state,
+      });
+      return renderEodPageModule;
+    }).catch((error) => {
+      renderEodPagePending = null;
+      throw error;
+    });
+  }
+  return renderEodPagePending;
+}
+
+function renderEodPage(route, companyId) {
+  if (renderEodPageModule) return renderEodPageModule.renderEodPage(route, companyId);
+  loadRenderEodPage().then(() => render()).catch((error) => console.error('renderEodPage failed to load', error));
+  return questLoader('Loading');
+}
+
+// ---- renderCallsPage ---------------------------------------------------------
+// Body lives in ./ops/calls-page.js and is fetched on first use.
+let renderCallsPageModule = null;
+let renderCallsPagePending = null;
+
+function loadRenderCallsPage() {
+  if (renderCallsPageModule) return Promise.resolve(renderCallsPageModule);
+  if (!renderCallsPagePending) {
+    renderCallsPagePending = import('./ops/calls-page.js').then((mod) => {
+      renderCallsPageModule = mod.createCallsPage({
+        CALLS_RANGE_OPTIONS, appHref, callsBoardMarkup, callsNotConnectedMarkup, callsRangeKey, companyPath, emptyState, ensureCallsData, h, timeAgo, state,
+      });
+      return renderCallsPageModule;
+    }).catch((error) => {
+      renderCallsPagePending = null;
+      throw error;
+    });
+  }
+  return renderCallsPagePending;
+}
+
+function renderCallsPage(route, companyId) {
+  if (renderCallsPageModule) return renderCallsPageModule.renderCallsPage(route, companyId);
+  loadRenderCallsPage().then(() => render()).catch((error) => console.error('renderCallsPage failed to load', error));
+  return questLoader('Loading');
+}
+
 function navGroup(label, items) {
   if (!items.length) return '';
   const collapsed = state.collapsedNavGroups.has(label);
@@ -6088,27 +6149,6 @@ function runEodAction(name, ...args) {
     .catch((error) => showToast(error.message || 'EOD action failed.', 'error', 'EOD'));
 }
 
-function renderEodPage(route, companyId) {
-  // A stale editing id would silently reopen an old report the next time the page loads.
-  if (state.eodEditingId && !companyEodReports(companyId).some((row) => row.id === state.eodEditingId)) {
-    state.eodEditingId = '';
-  }
-  if (!eodPageModule) {
-    loadEodModule().then(() => render()).catch(() => null);
-    return `<section class="tool-page eod-page"><div class="workspace-head"><div><h1>EOD reports</h1><p>Loading...</p></div></div></section>`;
-  }
-  return eodPageModule.renderEodPage({
-    companyLabel: companyName(companyId),
-    rows: companyEodReports(companyId),
-    canManage: can('eod.manage', companyId),
-    editingId: state.eodEditingId,
-    profileId: activeSession().profile.id,
-    h,
-    metricCard,
-    emptyState,
-    titleCase,
-  });
-}
 
 // Admin-only surface, loaded on demand so non-admin sessions never download it.
 // The import must stay dynamic: a static one would be bundled back into the entry chunk.
@@ -6517,56 +6557,6 @@ function renderCallsWidget(companyId) {
     </div>`;
 }
 
-function renderCallsPage(route, companyId) {
-  const rangeKey = callsRangeKey(route);
-  const key = `${companyId}|${rangeKey}`;
-  ensureCallsData(companyId, rangeKey);
-
-  const rows = state.callsStats.key === key ? state.callsStats.rows : [];
-  const sync = state.callsStats.sync;
-  const stale = Number(sync?.consecutive_failures || 0) >= 3;
-
-  const table = state.callsStats.unavailable
-    ? callsNotConnectedMarkup()
-    : rows.length
-    ? `<table class="calls-table">
-        <thead><tr><th>Name</th><th>Ext</th><th>Total calls</th><th>Calls &gt; 60s</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr>
-          <td>${h(row.extension_name || 'Unknown')}</td>
-          <td>${h(row.extension_number || '')}</td>
-          <td>${Number(row.total_calls || 0)}</td>
-          <td class="calls-conversations">${Number(row.conversations || 0)}</td>
-        </tr>`).join('')}</tbody>
-      </table>`
-    : emptyState(`No calls in this range. If you expected to see your own, we couldn't match you to a RingCentral extension — ask your admin to check that your RingCentral email matches your Command Center login.`);
-
-  return `
-    <section class="calls-page">
-      <div class="calls-head">
-        <div>
-          <h1>Calls</h1>
-          <p class="muted">Who is on the phone right now, and how many real conversations each person is having.</p>
-        </div>
-        <p class="calls-sync${stale ? ' is-stale' : ''}">${sync?.last_sync_at ? `Synced ${h(timeAgo(sync.last_sync_at))}` : 'Not synced yet'}</p>
-      </div>
-
-      ${state.callsPresence.forbidden ? '' : `
-      <section class="panel calls-live">
-        <h2>Right now</h2>
-        ${callsBoardMarkup()}
-        <p class="calls-note">Durations are measured from when this dashboard first saw the status, so they are accurate to about 15 seconds.</p>
-      </section>`}
-
-      <section class="panel calls-conversations-panel">
-        <div class="calls-panel-head">
-          <h2>Calls over 60 seconds</h2>
-          <nav class="calls-ranges">${CALLS_RANGE_OPTIONS.map(([rangeId, label]) =>
-            `<a class="calls-range${rangeId === rangeKey ? ' is-active' : ''}" href="${appHref(companyPath('calls', { range: rangeId }, companyId))}" data-router>${h(label)}</a>`).join('')}</nav>
-        </div>
-        ${table}
-      </section>
-    </section>`;
-}
 
 // ── Knowledge Base ───────────────────────────────────────────────────────────
 // Loaded on demand per company (kept out of the main data-load Promise.all).
@@ -10754,7 +10744,7 @@ async function createContactTask(contactId, taskInput) {
   const payload = normalizeTask({
     id: `task-${crypto.randomUUID()}`,
     company_id: companyId,
-    workspace_id: contact.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(contact.company_id, contact.workspace_id),
     title: clean.title,
     description: clean.description,
     contact_id: contactId,
@@ -11004,7 +10994,7 @@ async function persistContact(contact) {
   const previous = contactById(contact.id);
   const payload = normalizeContact({
     ...contact,
-    workspace_id: contact.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(contact.company_id, contact.workspace_id),
     updated_at: new Date().toISOString(),
   });
   upsertContact(payload);
@@ -11103,7 +11093,7 @@ function jobSupabaseRow(job) {
 async function persistJob(job, label = 'Job saved locally') {
   const payload = normalizeJob({
     ...job,
-    workspace_id: job.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(job.company_id, job.workspace_id),
     updated_at: new Date().toISOString(),
   });
   const previous = jobById(payload.id);
@@ -11181,7 +11171,7 @@ async function createJobTask(jobId, taskInput) {
   const payload = normalizeTask({
     id: `task-${crypto.randomUUID()}`,
     company_id: job.company_id,
-    workspace_id: job.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(job.company_id, job.workspace_id),
     project_id: job.id,
     contact_id: job.contact_id || '',
     deal_id: job.deal_id || '',
@@ -11924,7 +11914,7 @@ async function saveContact(form) {
   if (!validation.ok) return;
   const payload = normalizeContact(validation.data);
   payload.id = payload.id || `contact-${crypto.randomUUID()}`;
-  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
+  payload.workspace_id = workspaceIdForRecord(payload.company_id, payload.workspace_id);
   payload.updated_at = new Date().toISOString();
   const client = createSupabaseClient();
   if (client) {
@@ -13645,6 +13635,7 @@ function normalizeWorkspaceBuilderDoc(doc) {
         name: app.name || 'Untitled app',
         description: app.description || '',
         type: app.type || '',
+        recordName: app.recordName || '',
         icon: app.icon || WB_APP_ICONS[0],
         color: safeHexColor(app.color, safeHexColor(ws.color, WB_PALETTE[1])),
         shared: !!app.shared,
@@ -14649,7 +14640,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn" data-wb-import><i class="ti ti-file-import"></i>Import</button>`;
   if (tab === 'items' && app.items.length) headBtn += `<button class="btn" data-wb-print-data><i class="ti ti-printer"></i>Print</button>`;
   if (tab === 'reports' && app.fields.length && app.items.length) headBtn += `<button class="btn" data-wb-print-reports><i class="ti ti-printer"></i>Print</button>`;
-  if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>Add item</button>`;
+  if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button>`;
   else if (canManage && tab === 'fields') headBtn += `<button class="btn btn-primary" data-add-field><i class="ti ti-plus"></i>Add field</button>`;
   else if (canManage && tab === 'automations') headBtn += `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
   const tabLabel = { items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, settings: 'Settings' };
@@ -15563,9 +15554,34 @@ function wbItemsUI(appId) {
   state.wbUI = state.wbUI || {};
   // boardFieldId / boardSumId are the user's explicit choices; both fall back rather than
   // blanking the board if the field they name is later deleted or retyped.
+  if (state.wbUI[appId]) return state.wbUI[appId];
   // chipFieldId '' means "pick a sensible default"; WB_CHIP_OFF means the user turned the
   // quick filters off, which is different and must survive a re-render.
-  return state.wbUI[appId] || (state.wbUI[appId] = { q: '', sort: null, filters: [], sel: new Set(), view: 'table', order: 'created_desc', expanded: new Set(), cardConfigOpen: false, boardFieldId: '', boardSumId: '', chipFieldId: '', chipValue: '' });
+  const saved = wbSavedItemsUI()[appId] || {};
+  return (state.wbUI[appId] = {
+    q: '', sort: null, filters: [], sel: new Set(), view: 'table', order: 'created_desc',
+    expanded: new Set(), cardConfigOpen: false, boardFieldId: '', boardSumId: '',
+    // Restored across refreshes. The search box and the row selection deliberately are not:
+    // a search you cannot see the text of, or a selection you cannot see the ticks of, would
+    // silently hide records.
+    chipFieldId: typeof saved.chipFieldId === 'string' ? saved.chipFieldId : '',
+    chipValue: typeof saved.chipValue === 'string' ? saved.chipValue : '',
+    view: typeof saved.view === 'string' ? saved.view : 'table',
+  });
+}
+
+function wbSavedItemsUI() {
+  const saved = readJson(WB_ITEMS_UI_KEY, {});
+  return saved && typeof saved === 'object' ? saved : {};
+}
+
+/** Remember how this app's list is being looked at, so a refresh does not undo it. */
+function wbRememberItemsUI(appId) {
+  const ui = state.wbUI?.[appId];
+  if (!ui) return;
+  const all = wbSavedItemsUI();
+  all[appId] = { chipFieldId: ui.chipFieldId || '', chipValue: ui.chipValue || '', view: ui.view || 'table' };
+  writeJson(WB_ITEMS_UI_KEY, all);
 }
 // Preset sorts operate on item metadata (timestamps / title), independent of the
 // column-header field sort. createdAt/updatedAt/lastActivityAt fall back to each
@@ -15846,7 +15862,7 @@ function wbViewItems(companyId, workspace, app) {
   if (!app.fields.length) return `<div class="wb-empty"><i class="ti ti-layout-dashboard"></i><h3>This app has no fields yet</h3><p>Before adding items you need to design the app's structure. Add fields like Text, Status, or Date.</p>${canManage ? '<button class="btn btn-primary" data-tab="fields"><i class="ti ti-tools"></i>Open field builder</button>' : ''}</div>`;
   // The toolbar is not rendered with no records, so this is the only way to reach stage
   // setup on a new app -- which is exactly when you want to lay the pipeline out first.
-  if (!app.items.length) return `<div class="wb-empty"><i class="ti ti-inbox"></i><h3>No items yet</h3><p>Add your first record using the form built from your custom fields.</p>${canManage ? `<div class="wb-empty-acts"><button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>Add item</button><button class="btn" type="button" data-wb-manage-stages><i class="ti ti-adjustments"></i>${pipelineField(app) ? 'Manage stages' : 'Set up stages'}</button></div>` : ''}</div>`;
+  if (!app.items.length) return `<div class="wb-empty"><i class="ti ti-inbox"></i><h3>No items yet</h3><p>Add your first record using the form built from your custom fields.</p>${canManage ? `<div class="wb-empty-acts"><button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button><button class="btn" type="button" data-wb-manage-stages><i class="ti ti-adjustments"></i>${pipelineField(app) ? 'Manage stages' : 'Set up stages'}</button></div>` : ''}</div>`;
   const ui = wbItemsUI(app.id);
   // Hidden fields drop out of the table columns but stay fully editable on each
   // record (the item form iterates every field). Fall back to all fields if the
@@ -16540,6 +16556,7 @@ function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
   return `<div class="wb-settings card">
     <h3 class="wb-settings-title">App settings</h3>
     <div class="wb-field"><label>App name</label><input class="wb-input" id="wbSetName" value="${h(app.name)}" ${canManage ? '' : 'disabled'}></div>
+    <div class="wb-field"><label>What one record is called</label><input class="wb-input" id="wbSetRecordName" value="${h(app.recordName || '')}" placeholder="${h(singularize(app.name))}" ${canManage ? '' : 'disabled'}><small class="wb-hint">Names the buttons — "${h(addRecordLabel(app))}". Left blank it follows the app name.</small></div>
     <div class="wb-field"><label>Description</label><textarea class="wb-input" id="wbSetDesc" ${canManage ? '' : 'disabled'}>${h(app.description || '')}</textarea></div>
     <div class="wb-field"><label>Type</label><input class="wb-input" id="wbSetType" value="${h(app.type || '')}" placeholder="e.g. Contacts, Tasks, Projects" ${canManage ? '' : 'disabled'}></div>
     <div class="wb-field"><label>Icon &amp; color</label>
@@ -17439,7 +17456,7 @@ function renderWorkspaceBuilderModal() {
     const cCount = (item?.comments || []).length;
     const meta = item ? `<div class="wb-item-meta">${item.createdAt ? `Created ${h(formatDate(item.createdAt))}` : ''}${item.updatedAt && item.updatedAt !== item.createdAt ? ` · edited ${h(wbTimeAgo(item.updatedAt))}` : ''}${cCount ? ` · ${cCount} comment${cCount === 1 ? '' : 's'}` : ''}</div>` : '';
     const comments = item ? wbItemCommentsHtml(m.companyId, item) : '';
-    const header = `<div class="wb-modal-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></div><h3>${m.editId ? (h(wbItemTitle(app, item)) || 'Item') : `New ${h(app.name.replace(/s$/, ''))}`}</h3>`;
+    const header = `<div class="wb-modal-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></div><h3>${m.editId ? (h(wbItemTitle(app, item)) || 'Item') : h(newRecordLabel(app))}</h3>`;
     // View mode: read-only field list + comment thread. Edit only on request.
     if (m.mode === 'view' && item) {
       const ctx = { companyId: m.companyId, workspace, app, values: item.values, item: null, canManage: false };
@@ -17451,7 +17468,7 @@ function renderWorkspaceBuilderModal() {
     const body = app.fields.map((f) => wbRenderFieldInput(m.companyId, m.workspaceId, f, m.draft.values[f.id])).join('') || '<div class="wb-sub">This app has no fields yet.</div>';
     return wbModalShell('Item', 'wb-modal-wide', header,
       `<div class="wb-field-hint">Every field below is editable — change anything and press Save.</div><div id="wbItemForm">${body}</div>${meta}${comments}`,
-      `<button class="btn" ${m.editId ? 'data-wb-item-view' : 'data-action="wb-modal-close"'}>Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-check"></i>${m.editId ? 'Save' : 'Add item'}</button>`);
+      `<button class="btn" ${m.editId ? 'data-wb-item-view' : 'data-action="wb-modal-close"'}>Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-check"></i>${m.editId ? 'Save' : h(addRecordLabel(app))}</button>`);
   }
   if (m.kind === 'automation') {
     const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
@@ -18103,7 +18120,7 @@ function wbSubmitModal() {
       wbAssignAutoNumbers(app, values);
       const item = { id: wbUid(), values, createdAt: nowStamp, createdBy: activeSession().profile?.id || '', updatedAt: nowStamp, lastActivityAt: nowStamp }; app.items.unshift(item);
       wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Added <b>${h(wbItemTitle(app, item))}</b> to ${h(app.name)}` });
-      wbNotifyItem(companyId, workspace, app, item, `New ${app.name.replace(/s$/, '')}: ${wbItemTitle(app, item)}`, `${actorName()} added ${wbItemTitle(app, item)} to ${app.name}`);
+      wbNotifyItem(companyId, workspace, app, item, `${newRecordLabel(app)}: ${wbItemTitle(app, item)}`, `${actorName()} added ${wbItemTitle(app, item)} to ${app.name}`);
       wbRunAutomations(companyId, workspace, app, item, 'created', null);
       state.builderModal = null;
     }
@@ -18209,6 +18226,7 @@ function wbSaveAppSettings(companyId, workspaceId, appId) {
   app.name = (document.getElementById('wbSetName')?.value || '').trim() || app.name;
   app.description = (document.getElementById('wbSetDesc')?.value || '').trim();
   app.type = (document.getElementById('wbSetType')?.value || '').trim();
+  app.recordName = (document.getElementById('wbSetRecordName')?.value || '').trim();
   const icon = document.querySelector('#wbSetIcons .wb-emoji-opt.sel'); if (icon) app.icon = icon.dataset.icon;
   const color = document.querySelector('#wbSetColors .wb-swatch.sel'); if (color) app.color = color.dataset.color;
   wbSave(companyId); showToast('App settings saved.', 'local', 'Workspaces'); render();
@@ -18318,7 +18336,7 @@ function mountWorkspaceBuilder() {
     // Items table: sort (header click), filters, and live search.
     bind('[data-wb-sort]', (el) => { const ui = wbItemsUI(appId); const fid = el.dataset.wbSort; if (ui.sort && ui.sort.fieldId === fid) ui.sort.dir = ui.sort.dir === 'asc' ? 'desc' : 'asc'; else ui.sort = { fieldId: fid, dir: 'asc' }; render(); });
     bind('[data-wb-clear-sort]', () => { wbItemsUI(appId).sort = null; render(); });
-    bind('[data-wb-set-view]', (el) => { wbItemsUI(appId).view = el.dataset.wbSetView; render(); });
+    bind('[data-wb-set-view]', (el) => { wbItemsUI(appId).view = el.dataset.wbSetView; wbRememberItemsUI(appId); render(); });
     bind('[data-wb-sort-preset]', (el) => { const ui = wbItemsUI(appId); if (el.value) { ui.order = el.value; ui.sort = null; } render(); }, 'onchange');
     // Record page. The same comment thread as the modal, bound to the page instead of an
     // overlay; the handlers resolve their target through wbCommentContext either way.
@@ -18332,8 +18350,8 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-view-file]', (el) => { openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
     // Changing the chip field clears the chosen chip: its id belongs to the old field and
     // would match nothing, leaving an empty list with no chip highlighted to explain it.
-    bind('[data-wb-chip]', (el) => { const ui = wbItemsUI(appId); const next = el.dataset.wbChip || ''; ui.chipValue = ui.chipValue === next ? '' : next; render(); });
-    bind('[data-wb-chip-field]', (el) => { const ui = wbItemsUI(appId); ui.chipFieldId = el.value; ui.chipValue = ''; render(); }, 'onchange');
+    bind('[data-wb-chip]', (el) => { const ui = wbItemsUI(appId); const next = el.dataset.wbChip || ''; ui.chipValue = ui.chipValue === next ? '' : next; wbRememberItemsUI(appId); render(); });
+    bind('[data-wb-chip-field]', (el) => { const ui = wbItemsUI(appId); ui.chipFieldId = el.value; ui.chipValue = ''; wbRememberItemsUI(appId); render(); }, 'onchange');
     bind('[data-wb-board-field]', (el) => { wbItemsUI(appId).boardFieldId = el.value; render(); }, 'onchange');
     bind('[data-wb-board-sum]', (el) => { wbItemsUI(appId).boardSumId = el.value; render(); }, 'onchange');
     bind('[data-wb-add-filter]', () => { const { app } = wbFind(companyId, workspaceId, appId); const f0 = app.fields[0]; if (!f0) return; wbItemsUI(appId).filters.push({ fieldId: f0.id, op: wbFilterOps(wbFieldKind(f0))[0][0], value: '' }); render(); });
@@ -24160,7 +24178,7 @@ function proposalRecordFromDraft(ctx, draft, existing = null) {
     ...(existing || {}),
     id: existing?.id || `proposal-${crypto.randomUUID()}`,
     company_id: ctx.company_id || existing?.company_id || activeCompanyId(),
-    workspace_id: existing?.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(ctx.company_id || existing?.company_id, existing?.workspace_id),
     proposal_no: draft.proposalNo,
     title: draft.jobTitle || existing?.title || 'Proposal',
     status: existing?.status || 'Draft',
@@ -31312,7 +31330,7 @@ async function saveJob(form) {
   const payload = normalizeJob(validation.data);
   payload.id = payload.id || crypto.randomUUID();
   payload.company_id = payload.company_id || activeCompanyId();
-  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
+  payload.workspace_id = workspaceIdForRecord(payload.company_id, payload.workspace_id);
   if (!requirePermission('jobs.manage', payload.company_id, 'Your role can view jobs but cannot create or edit them.', 'Jobs')) return;
   payload.estimate_total = Number(payload.estimate_total || 0);
   payload.invoice_total = Number(payload.invoice_total || 0);
@@ -31786,7 +31804,7 @@ async function saveTask(form) {
     ...formData,
     id: taskId || `task-${crypto.randomUUID()}`,
     company_id: companyId,
-    workspace_id: activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(companyId, previous?.workspace_id),
     project_id: linkedJob?.id || linkedDeal?.job_id || '',
     contact_id: linkedContact?.id || linkedJob?.contact_id || linkedDeal?.primary_contact_id || '',
     deal_id: linkedDeal?.id || linkedJob?.deal_id || '',
@@ -31877,7 +31895,7 @@ async function saveUnderwritingCase(form) {
   const item = normalizeUnderwritingCase({
     ...(existing || {}),
     company_id: companyId,
-    workspace_id: contact.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(contact.company_id, contact.workspace_id),
     contact_id: contact.id,
     contract_price: input.contractPrice,
     material_cost: input.materialCost,
@@ -36341,7 +36359,7 @@ function emptyToNull(row, keys) {
 async function saveAccount(form) {
   const payload = normalizeAccount(Object.fromEntries(new FormData(form).entries()));
   payload.id = payload.id || `account-${crypto.randomUUID()}`;
-  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
+  payload.workspace_id = workspaceIdForRecord(payload.company_id, payload.workspace_id);
   payload.updated_at = new Date().toISOString();
   const { ok, data } = await supabaseWrite('accounts', supabaseRow(payload, ACCOUNT_COLS));
   if (!ok) return false;
@@ -36362,7 +36380,7 @@ async function deleteAccount(id) {
 async function saveDeal(form) {
   const payload = normalizeDeal(Object.fromEntries(new FormData(form).entries()));
   payload.id = payload.id || `deal-${crypto.randomUUID()}`;
-  payload.workspace_id = payload.workspace_id || activeWorkspaceId();
+  payload.workspace_id = workspaceIdForRecord(payload.company_id, payload.workspace_id);
   // Keep status in sync with terminal stage names so KPIs / badges stay correct.
   if (/^won/i.test(payload.stage)) payload.status = 'won';
   else if (/^lost/i.test(payload.stage)) payload.status = 'lost';
@@ -36389,7 +36407,7 @@ async function persistDeal(deal, label = 'Quote saved.') {
   const before = dealById(deal.id) ? { ...dealById(deal.id) } : null;
   const payload = normalizeDeal({
     ...deal,
-    workspace_id: deal.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(deal.company_id, deal.workspace_id),
     updated_at: new Date().toISOString(),
   });
   if (/^won/i.test(payload.stage)) payload.status = 'won';
@@ -36544,7 +36562,7 @@ async function removeQuoteLineItem(dealId, lineId) {
 async function persistProposal(proposal, label = 'Proposal saved.') {
   const payload = normalizeProposal({
     ...proposal,
-    workspace_id: proposal.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(proposal.company_id, proposal.workspace_id),
     updated_at: new Date().toISOString(),
   });
   const row = emptyToNull(supabaseRow(payload, PROPOSAL_COLS), ['contact_id', 'deal_id', 'job_id', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at']);
@@ -36624,7 +36642,7 @@ async function createDealTask(dealId, taskInput) {
   const payload = normalizeTask({
     id: `task-${crypto.randomUUID()}`,
     company_id: deal.company_id,
-    workspace_id: deal.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(deal.company_id, deal.workspace_id),
     project_id: deal.job_id || '',
     title: clean.title,
     description: clean.description,
@@ -36730,7 +36748,7 @@ async function logActivity(input) {
     ...input,
     id: input.id || `activity-${crypto.randomUUID()}`,
     company_id: activeCompanyId(),
-    workspace_id: input.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(input.company_id, input.workspace_id),
     account_id: accountId,
     contact_id: contactId,
     site_id: siteId,
@@ -36792,7 +36810,7 @@ async function convertDealToJob(dealId) {
   const job = normalizeJob({
     id: '',
     company_id: companyId,
-    workspace_id: deal.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(deal.company_id, deal.workspace_id),
     name: deal.name,
     client_name: account?.name || '',
     contact_name: contact?.name || '',
@@ -38151,7 +38169,7 @@ async function mountLocationPicker() {
 async function persistCrmSite(site) {
   const payload = normalizeCrmSite({
     ...site,
-    workspace_id: site.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(site.company_id, site.workspace_id),
     updated_at: new Date().toISOString(),
   });
   const { ok, data } = await supabaseWrite('crm_sites', emptyToNull(supabaseRow(payload, SITE_COLS), ['contact_id', 'account_id']));
@@ -38386,6 +38404,31 @@ function workspaceIdForCompany(companyId = activeCompanyId()) {
 
 function activeWorkspaceId() {
   return workspaceIdForCompany(activeCompanyId());
+}
+
+/**
+ * The workspace a record must be written to.
+ *
+ * The database refuses any row whose workspace belongs to a different company than the row
+ * does, and rightly: that is exactly how a record becomes readable from the wrong account.
+ *
+ * The active workspace is the right default only while you are looking at the record's OWN
+ * company. Open a record belonging to another company -- or switch company with an editor
+ * open -- and it names somebody else's workspace, the write is rejected, and the save fails
+ * with "Workspace does not belong to record company" after the edit already looked applied.
+ *
+ * A workspace already on the record wins, but only while it still belongs to that company;
+ * a legacy or moved row can carry one that does not.
+ */
+function workspaceIdForRecord(companyId, current = '') {
+  const owner = canonicalCompanyId(companyId || activeCompanyId());
+  const belongs = (id) => !!id && state.operationalWorkspaces.some(
+    (workspace) => workspace.id === id && canonicalCompanyId(workspace.company_id) === owner,
+  );
+  if (belongs(current)) return current;
+  // Falling back to `current` rather than '' keeps a save that used to work working: the
+  // column is NOT NULL, so an empty string would trade a clear error for a confusing one.
+  return workspaceIdForCompany(owner) || current || '';
 }
 
 function activeWorkspace() {
@@ -39810,7 +39853,7 @@ function taskPayload(task) {
     label: task.label,
     bid_status: task.bid_status,
     company_id: task.company_id,
-    workspace_id: task.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(task.company_id, task.workspace_id),
     creator_id: task.creator_id,
     assignee_id: task.assignee_id,
     project_id: task.project_id || null,
@@ -39833,7 +39876,7 @@ function taskPayload(task) {
 function filePayload(file) {
   return {
     company_id: file.company_id,
-    workspace_id: file.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(file.company_id, file.workspace_id),
     job_id: file.job_id || null,
     bucket_id: file.bucket_id,
     object_path: file.object_path,
@@ -39850,7 +39893,7 @@ function filePayload(file) {
 function underwritingCasePayload(item) {
   return {
     company_id: item.company_id,
-    workspace_id: item.workspace_id || activeWorkspaceId(),
+    workspace_id: workspaceIdForRecord(item.company_id, item.workspace_id),
     contact_id: item.contact_id,
     contract_price: item.contract_price,
     material_cost: item.material_cost,

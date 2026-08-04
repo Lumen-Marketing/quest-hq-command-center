@@ -56,19 +56,19 @@ test('workspace-owned table payloads always include workspace_id', () => {
   assert.match(source, /const PROPOSAL_COLS = \['id', 'company_id', 'workspace_id'/);
   assert.match(source, /const ACTIVITY_COLS = \['id', 'company_id', 'workspace_id'/);
   assert.match(source, /const CONTACT_COLS = \['id', 'company_id', 'workspace_id'/);
-  assert.match(functionSource('taskPayload'), /workspace_id: task\.workspace_id \|\| activeWorkspaceId\(\)/);
-  assert.match(functionSource('filePayload'), /workspace_id: file\.workspace_id \|\| activeWorkspaceId\(\)/);
-  assert.match(functionSource('underwritingCasePayload'), /workspace_id: item\.workspace_id \|\| activeWorkspaceId\(\)/);
+  assert.match(functionSource('taskPayload'), /workspace_id: workspaceIdForRecord\(task\.company_id, task\.workspace_id\)/);
+  assert.match(functionSource('filePayload'), /workspace_id: workspaceIdForRecord\(file\.company_id, file\.workspace_id\)/);
+  assert.match(functionSource('underwritingCasePayload'), /workspace_id: workspaceIdForRecord\(item\.company_id, item\.workspace_id\)/);
 });
 
 test('new records and CRM conversions inherit the active or source workspace', () => {
-  assert.match(functionSource('saveJob'), /payload\.workspace_id = payload\.workspace_id \|\| activeWorkspaceId\(\)/);
-  assert.match(functionSource('saveTask'), /workspace_id: activeWorkspaceId\(\)/);
-  assert.match(functionSource('saveAccount'), /payload\.workspace_id = payload\.workspace_id \|\| activeWorkspaceId\(\)/);
-  assert.match(functionSource('saveDeal'), /payload\.workspace_id = payload\.workspace_id \|\| activeWorkspaceId\(\)/);
-  assert.match(functionSource('proposalRecordFromDraft'), /workspace_id: existing\?\.workspace_id \|\| activeWorkspaceId\(\)/);
-  assert.match(functionSource('logActivity'), /workspace_id: input\.workspace_id \|\| activeWorkspaceId\(\)/);
-  assert.match(functionSource('convertDealToJob'), /workspace_id: deal\.workspace_id \|\| activeWorkspaceId\(\)/);
+  assert.match(functionSource('saveJob'), /payload\.workspace_id = workspaceIdForRecord\(payload\.company_id, payload\.workspace_id\)/);
+  assert.match(functionSource('saveTask'), /workspace_id: workspaceIdForRecord\(companyId, previous\?\.workspace_id\)/);
+  assert.match(functionSource('saveAccount'), /payload\.workspace_id = workspaceIdForRecord\(payload\.company_id, payload\.workspace_id\)/);
+  assert.match(functionSource('saveDeal'), /payload\.workspace_id = workspaceIdForRecord\(payload\.company_id, payload\.workspace_id\)/);
+  assert.match(functionSource('proposalRecordFromDraft'), /workspace_id: workspaceIdForRecord\(ctx\.company_id \|\| existing\?\.company_id, existing\?\.workspace_id\)/);
+  assert.match(functionSource('logActivity'), /workspace_id: workspaceIdForRecord\(input\.company_id, input\.workspace_id\)/);
+  assert.match(functionSource('convertDealToJob'), /workspace_id: workspaceIdForRecord\(deal\.company_id, deal\.workspace_id\)/);
 });
 
 test('pipeline stages are loaded and replaced per operational workspace', () => {

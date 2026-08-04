@@ -29,6 +29,8 @@ function h(value) {
  * Zero-value segments are dropped: a zero-length dash still paints its round cap, so an
  * empty category would show as a stray tick on the ring.
  */
+import { addRecordLabel } from './naming.js';
+
 export function donutSVG(segs, size = 176) {
   const total = segs.reduce((sum, x) => sum + x.value, 0);
   // Separate from `total` on purpose. Sharing one `|| 1` between the divisor and the
@@ -77,7 +79,7 @@ export function keyMeta(field, key, memberById) {
  * `canManage` decides whether the empty state offers a way out of itself.
  */
 export function renderReports(app, { memberById, canManage } = {}) {
-  if (!app.fields.length || !app.items.length) return `<div class="wb-empty"><i class="ti ti-chart-donut"></i><h3>Nothing to report yet</h3><p>Add fields and a few items to this app and charts will appear here automatically.</p>${canManage ? `<button class="btn btn-primary" data-tab="${app.fields.length ? 'items' : 'fields'}"><i class="ti ti-plus"></i>${app.fields.length ? 'Add items' : 'Add fields'}</button>` : ''}</div>`;
+  if (!app.fields.length || !app.items.length) return `<div class="wb-empty"><i class="ti ti-chart-donut"></i><h3>Nothing to report yet</h3><p>Add fields and a few items to this app and charts will appear here automatically.</p>${canManage ? `<button class="btn btn-primary" data-tab="${app.fields.length ? 'items' : 'fields'}"><i class="ti ti-plus"></i>${app.fields.length ? h(addRecordLabel(app)) : 'Add fields'}</button>` : ''}</div>`;
   const moneyFields = app.fields.filter((f) => f.type === 'money');
   // Status first, then category, then user: the earlier the field type, the more likely it
   // describes progress, which is what someone opening Reports is usually after.

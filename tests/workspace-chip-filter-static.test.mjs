@@ -26,7 +26,7 @@ test('off is a real choice, distinct from having no preference', () => {
   // collapsing the two would switch the bar back on at every render.
   assert.match(main, /const WB_CHIP_OFF = '__off';/);
   assert.match(slice('wbChipField'), /ui\.chipFieldId === WB_CHIP_OFF/);
-  assert.match(main, /chipFieldId: '', chipValue: ''/);
+  assert.match(main, /chipFieldId: typeof saved\.chipFieldId === 'string' \? saved\.chipFieldId : '',/);
 });
 
 test('counts are taken before the chip is applied', () => {
@@ -51,7 +51,7 @@ test('clicking the active chip clears it', () => {
 test('changing the field clears the chosen chip', () => {
   // The chip id belongs to the old field and would match nothing, leaving an empty list
   // with no chip highlighted to explain why.
-  assert.match(main, /ui\.chipFieldId = el\.value; ui\.chipValue = ''; render\(\);/);
+  assert.match(main, /ui\.chipFieldId = el\.value; ui\.chipValue = ''; wbRememberItemsUI\(appId\); render\(\);/);
 });
 
 test('an empty result names the chip and offers to clear it', () => {
@@ -89,4 +89,39 @@ test('a checkbox chip that matches nothing is not rendered', () => {
   // Yes/No are the only two possible values, so an empty one is dead weight on every app
   // that happens to have all records on one side.
   assert.match(slice('wbChipOptions'), /\]\.filter\(\(chip\) => chip\.count\);/);
+});
+
+// --- surviving a refresh ------------------------------------------------------------------
+
+test('the chip choice is remembered across a refresh', () => {
+  // A filter you set and then lose to a refresh is worse than no filter, because you have to
+  // notice it went before you can set it again.
+  assert.match(main, /const WB_ITEMS_UI_KEY = 'quest-hq-wb-items-ui-v1';/);
+  assert.match(main, /const saved = wbSavedItemsUI\(\)\[appId\] \|\| \{\};/);
+  assert.match(main, /chipFieldId: typeof saved\.chipFieldId === 'string' \? saved\.chipFieldId : '',/);
+  assert.match(main, /chipValue: typeof saved\.chipValue === 'string' \? saved\.chipValue : '',/);
+  // Every control that changes it writes it back.
+  for (const attr of ['data-wb-chip', 'data-wb-chip-field', 'data-wb-set-view']) {
+    const line = main.match(new RegExp(`bind\\('\\[${attr}\\]'[^\\n]*`))?.[0] || '';
+    assert.match(line, /wbRememberItemsUI\(appId\)/, `${attr} must persist its change`);
+  }
+});
+
+test('it is stored per browser, not pushed into the shared workspace doc', () => {
+  // This is how ONE person is looking at the list right now. Writing it to the doc would
+  // rearrange everybody else's screen.
+  assert.match(main, /writeJson\(WB_ITEMS_UI_KEY, all\);/);
+  const remember = main.match(/function wbRememberItemsUI\(appId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.ok(!/wbSave\(/.test(remember), 'it must not write to the workspace document');
+});
+
+test('the search box and row selection are deliberately not restored', () => {
+  // A search whose text you cannot see, or a selection whose ticks you cannot see, would
+  // silently hide or act on records.
+  const remember = main.match(/function wbRememberItemsUI\(appId\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.ok(!/\bq\b:/.test(remember) && !/sel/.test(remember), 'only the visible view state persists');
+});
+
+test('a corrupt or hand-edited storage entry cannot break the list', () => {
+  assert.match(main, /const saved = readJson\(WB_ITEMS_UI_KEY, \{\}\);\n\s*return saved && typeof saved === 'object' \? saved : \{\};/);
 });

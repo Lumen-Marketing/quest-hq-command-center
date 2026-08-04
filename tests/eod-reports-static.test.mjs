@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { EOD_TEAM_MEMBERS, EOD_WEEKLY_QUOTE_TARGET, eodWeekStart, normalizeEodReport } from '../src/eod/eod-page.js';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+// The EOD page is fetched on demand now; same surface, two files.
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/ops/eod-page.js', import.meta.url), 'utf8');
 const page = readFileSync(new URL('../src/eod/eod-page.js', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202607301200_eod_reports.sql', import.meta.url), 'utf8');
 

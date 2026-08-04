@@ -54,15 +54,15 @@ test('task detail and forms expose job, contact, and deal business context', () 
 
 test('record-created tasks preserve workspace and all available business links', () => {
   const contactCreate = sourceBetween('async function createContactTask', 'async function spawnNextRecurrence');
-  assert.match(contactCreate, /workspace_id: contact\.workspace_id \|\| activeWorkspaceId\(\)/);
+  assert.match(contactCreate, /workspace_id: workspaceIdForRecord\(contact\.company_id, contact\.workspace_id\)/);
 
   const jobCreate = sourceBetween('async function createJobTask', 'function jobQuickCreate');
-  assert.match(jobCreate, /workspace_id: job\.workspace_id \|\| activeWorkspaceId\(\)/);
+  assert.match(jobCreate, /workspace_id: workspaceIdForRecord\(job\.company_id, job\.workspace_id\)/);
   assert.match(jobCreate, /contact_id: job\.contact_id \|\| ''/);
   assert.match(jobCreate, /deal_id: job\.deal_id \|\| ''/);
 
   const dealCreate = sourceBetween('async function createDealTask', 'async function logDealActivity');
-  assert.match(dealCreate, /workspace_id: deal\.workspace_id \|\| activeWorkspaceId\(\)/);
+  assert.match(dealCreate, /workspace_id: workspaceIdForRecord\(deal\.company_id, deal\.workspace_id\)/);
   assert.match(dealCreate, /project_id: deal\.job_id \|\| ''/);
 });
 

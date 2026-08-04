@@ -167,6 +167,8 @@ const FACTORY_MODULES = [
   ['src/forms/forms-page.js', 'createFormsPage'],
   ['src/ops/price-book-page.js', 'createPriceBookPage'],
   ['src/team/workload-page.js', 'createTeamWorkloadPage'],
+  ['src/ops/eod-page.js', 'createEodPage'],
+  ['src/ops/calls-page.js', 'createCallsPage'],
   ['src/ui/landing-page.js', 'createLandingPage'],
   ['src/ui/auth-form.js', 'createAuthForm'],
 ];
