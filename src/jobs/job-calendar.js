@@ -28,7 +28,18 @@ export function addDays(date, n) {
   return d;
 }
 
-export const iso = (date) => new Date(date).toISOString().slice(0, 10);
+/**
+ * A date as YYYY-MM-DD in the viewer's own timezone.
+ *
+ * Not toISOString(): that converts to UTC first, so from late afternoon in Arizona onwards
+ * it returns tomorrow. That put the "today" highlight on the wrong square every evening, and
+ * made the day view open on tomorrow. The stored dates these are compared against are plain
+ * calendar days with no timezone, so local is the only reading that matches them.
+ */
+export const iso = (date) => {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 /** The six-week grid a month view needs, always starting on a Monday. */
 export function monthGrid(anchor) {

@@ -14635,8 +14635,8 @@ function renderAppDashboard(companyId, app) {
   return questLoader('Loading');
 }
 
-function renderAppCalendar(companyId, app, anchorIso, fieldId) {
-  if (appViewsModule) return appViewsModule.renderAppCalendar(companyId, app, anchorIso, fieldId);
+function renderAppCalendar(companyId, app, anchorIso, fieldId, view) {
+  if (appViewsModule) return appViewsModule.renderAppCalendar(companyId, app, anchorIso, fieldId, view);
   loadAppViews().then(() => render()).catch((error) => console.error('App calendar failed to load', error));
   return questLoader('Loading');
 }
@@ -14664,7 +14664,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   const tabLabel = { dashboard: 'Dashboard', calendar: 'Calendar', items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, settings: 'Settings' };
   let body = '';
   if (tab === 'dashboard') body = renderAppDashboard(companyId, app);
-  else if (tab === 'calendar') body = renderAppCalendar(companyId, app, route.params.get('on') || '', route.params.get('field') || '');
+  else if (tab === 'calendar') body = renderAppCalendar(companyId, app, route.params.get('on') || '', route.params.get('field') || '', route.params.get('view') || '');
   else if (tab === 'items') body = wbViewItems(companyId, workspace, app);
   else if (tab === 'fields') body = wbViewBuilder(companyId, workspace, app);
   else if (tab === 'reports') body = wbViewReports(companyId, workspace, app);
@@ -18376,7 +18376,7 @@ function mountWorkspaceBuilder() {
     // field you picked, are both in the URL and survive a refresh or a shared link.
     bind('[data-wb-cal-field]', (el) => {
       const params = state.route?.params;
-      nav({ app_id: appId, tab: 'calendar', field: el.value, ...(params?.get('on') ? { on: params.get('on') } : {}) });
+      nav({ app_id: appId, tab: 'calendar', field: el.value, ...(params?.get('view') ? { view: params.get('view') } : {}), ...(params?.get('on') ? { on: params.get('on') } : {}) });
     }, 'onchange');
     bind('[data-wb-board-field]', (el) => { wbItemsUI(appId).boardFieldId = el.value; render(); }, 'onchange');
     bind('[data-wb-board-sum]', (el) => { wbItemsUI(appId).boardSumId = el.value; render(); }, 'onchange');

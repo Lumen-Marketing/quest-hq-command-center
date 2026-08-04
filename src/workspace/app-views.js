@@ -8,7 +8,11 @@
 // Fetched on demand — you have to click the tab, and nothing else needs them to paint.
 
 import { boardColumns, pipelineField, stagesOf, summaryField } from './pipeline-core.js';
-import { addDays, iso, monthGrid, mondayIndex } from '../jobs/job-calendar.js';
+import { addDays, iso, monthGrid, mondayIndex, startOfWeek } from '../jobs/job-calendar.js';
+
+/** Month is the default: it is the view you can orient yourself in without scrolling. */
+export const CAL_VIEWS = ['month', 'week', 'day'];
+const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /** Fields that can put a record on a calendar. */
 export function dateFields(app) {
@@ -106,51 +110,96 @@ export function createAppViews(ctx) {
 
   // ---- Calendar ---------------------------------------------------------------------------
 
-  function renderAppCalendar(companyId, app, anchorIso, fieldId) {
+  function renderAppCalendar(companyId, app, anchorIso, fieldId, viewMode) {
     const candidates = dateFields(app);
     if (!candidates.length) {
       return `<div class="wb-empty"><i class="ti ti-calendar"></i><h3>No date field yet</h3><p>Add a Date field to this app and its records appear on a calendar.</p>${can('workspaces.manage', companyId) ? '<div class="wb-empty-acts"><a class="btn btn-primary" href="' + appHref(companyPath('workspaces', { app_id: app.id, tab: 'fields' }, companyId)) + '" data-router><i class="ti ti-plus"></i>Add field</a></div>' : ''}</div>`;
     }
+    const view = CAL_VIEWS.includes(viewMode) ? viewMode : 'month';
     const field = candidates.find((f) => f.id === fieldId) || candidates[0];
     const anchor = /^\d{4}-\d{2}-\d{2}$/.test(String(anchorIso || '')) ? new Date(`${anchorIso}T12:00:00`) : new Date();
     const { byDay, undated } = recordsByDay(app, field);
-    const weeks = monthGrid(anchor);
     const todayIso = iso(new Date());
-    const monthLabel = anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-    const move = (delta) => {
+    const link = (params) => appHref(companyPath('workspaces', {
+      app_id: app.id, tab: 'calendar', field: field.id, ...params,
+    }, companyId));
+
+    // Step by whatever the view shows. A "next" that jumps a month while you are looking at
+    // a week is the kind of thing you only notice after losing your place.
+    const step = (delta) => {
       const next = new Date(anchor);
-      next.setMonth(next.getMonth() + delta);
+      if (view === 'month') next.setMonth(next.getMonth() + delta);
+      else return iso(addDays(anchor, delta * (view === 'week' ? 7 : 1)));
       return iso(next);
     };
-    const link = (params) => appHref(companyPath('workspaces', { app_id: app.id, tab: 'calendar', ...params }, companyId));
+
+    const pill = (item) => `<a class="wb-cal-pill" href="${itemHref(companyId, app, item)}" data-router style="border-left-color:${h(app.color)}" title="${h(wbItemTitle(app, item))}">${h(wbItemTitle(app, item)) || 'Untitled'}</a>`;
+    const dayCell = (day, { dim = false, cap = 0 } = {}) => {
+      const key = iso(day);
+      const items = byDay.get(key) || [];
+      const shown = cap ? items.slice(0, cap) : items;
+      return `<div class="wb-cal-day ${dim ? 'dim' : ''} ${key === todayIso ? 'today' : ''}">
+        <span class="wb-cal-num">${day.getDate()}</span>
+        ${shown.map(pill).join('')}
+        ${cap && items.length > cap ? `<a class="wb-cal-more" href="${link({ view: 'day', on: key })}" data-router>+${items.length - cap} more</a>` : ''}
+      </div>`;
+    };
+
+    let label = '';
+    let grid = '';
+    if (view === 'month') {
+      label = anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      grid = `<div class="wb-cal-grid">
+        ${DOW.map((d) => `<span class="wb-cal-dow">${d}</span>`).join('')}
+        ${monthGrid(anchor).flat().map((day) => dayCell(day, { dim: day.getMonth() !== anchor.getMonth(), cap: 3 })).join('')}
+      </div>`;
+    } else if (view === 'week') {
+      const start = startOfWeek(anchor);
+      const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+      const end = days[6];
+      // Built by parts rather than by passing a partial option set to toLocaleDateString:
+      // asking for { day, year } produced "2026 (day: 9)", because dropping the month leaves
+      // the formatter to invent a shape for what is left.
+      const md = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      label = start.getFullYear() !== end.getFullYear()
+        ? `${md(start)}, ${start.getFullYear()} – ${md(end)}, ${end.getFullYear()}`
+        : start.getMonth() === end.getMonth()
+          ? `${md(start)} – ${end.getDate()}, ${end.getFullYear()}`
+          : `${md(start)} – ${md(end)}, ${end.getFullYear()}`;
+      // No cap in week view: there is room, and the reason to leave the month is to see
+      // everything on a day rather than "+4 more".
+      grid = `<div class="wb-cal-grid wb-cal-week">
+        ${days.map((day, i) => `<span class="wb-cal-dow">${DOW[i]} ${day.getDate()}</span>`).join('')}
+        ${days.map((day) => dayCell(day)).join('')}
+      </div>`;
+    } else {
+      const items = byDay.get(iso(anchor)) || [];
+      label = anchor.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      grid = `<div class="wb-cal-single ${iso(anchor) === todayIso ? 'today' : ''}">
+        ${items.length
+    ? `<ul class="wb-cal-daylist">${items.map((item) => `<li>${pill(item)}</li>`).join('')}</ul>`
+    : emptyState(`Nothing is set to ${h(field.label.toLowerCase())} on this day.`)}
+      </div>`;
+    }
 
     return `
       <div class="wb-cal">
         <div class="wb-cal-head">
-          <h3>${h(monthLabel)}</h3>
+          <h3>${h(label)}</h3>
           <div class="wb-cal-nav">
-            <a class="btn btn-sm" href="${link({ on: move(-1), field: field.id })}" data-router aria-label="Previous month"><i class="ti ti-chevron-left"></i></a>
-            <a class="btn btn-sm" href="${link({ field: field.id })}" data-router>Today</a>
-            <a class="btn btn-sm" href="${link({ on: move(1), field: field.id })}" data-router aria-label="Next month"><i class="ti ti-chevron-right"></i></a>
+            <a class="btn btn-sm" href="${link({ view, on: step(-1) })}" data-router aria-label="Previous ${view}"><i class="ti ti-chevron-left"></i></a>
+            <a class="btn btn-sm" href="${link({ view })}" data-router>Today</a>
+            <a class="btn btn-sm" href="${link({ view, on: step(1) })}" data-router aria-label="Next ${view}"><i class="ti ti-chevron-right"></i></a>
+          </div>
+          <div class="wb-cal-views" role="group" aria-label="Calendar view">
+            ${CAL_VIEWS.map((mode) => `<a class="wb-cal-view ${view === mode ? 'on' : ''}" href="${link({ view: mode, ...(anchorIso ? { on: anchorIso } : {}) })}" data-router aria-current="${view === mode ? 'page' : 'false'}">${mode[0].toUpperCase()}${mode.slice(1)}</a>`).join('')}
           </div>
           ${candidates.length > 1 ? `<label class="wb-chip-manage" title="Which date field the calendar uses">
             <select class="wb-chip-select" data-wb-cal-field aria-label="Calendar date field">
               ${candidates.map((f) => `<option value="${h(f.id)}" ${f.id === field.id ? 'selected' : ''}>By ${h(f.label)}</option>`).join('')}
             </select></label>` : `<span class="wb-cal-by">By ${h(field.label)}</span>`}
         </div>
-        <div class="wb-cal-grid">
-          ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => `<span class="wb-cal-dow">${d}</span>`).join('')}
-          ${weeks.flat().map((day) => {
-    const key = iso(day);
-    const items = byDay.get(key) || [];
-    const outside = day.getMonth() !== anchor.getMonth();
-    return `<div class="wb-cal-day ${outside ? 'dim' : ''} ${key === todayIso ? 'today' : ''}">
-              <span class="wb-cal-num">${day.getDate()}</span>
-              ${items.slice(0, 3).map((item) => `<a class="wb-cal-pill" href="${itemHref(companyId, app, item)}" data-router style="border-left-color:${h(app.color)}" title="${h(wbItemTitle(app, item))}">${h(wbItemTitle(app, item)) || 'Untitled'}</a>`).join('')}
-              ${items.length > 3 ? `<span class="wb-cal-more">+${items.length - 3} more</span>` : ''}
-            </div>`;
-  }).join('')}
-        </div>
+        ${grid}
         ${undated ? `<p class="wb-cal-undated">${undated} record${undated === 1 ? '' : 's'} ${undated === 1 ? 'has' : 'have'} no <b>${h(field.label)}</b> yet, so ${undated === 1 ? 'it is' : 'they are'} not shown here.</p>` : ''}
       </div>`;
   }

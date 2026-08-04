@@ -30265,6 +30265,28 @@ html:has(.quest-app) {
 }
 .wb-cal-pill:hover { background: var(--border); }
 .wb-cal-more { font-size: .68rem; color: var(--muted); font-weight: 700; padding-left: 4px; }
+a.wb-cal-more:hover { color: var(--orange); }
+
+/* Month / Week / Day. A segmented control rather than a select: three options that are
+   switched constantly should be one click, not two. */
+.wb-cal-views { display: inline-flex; border: 1px solid var(--border); border-radius: 99px; overflow: hidden; flex: none; }
+.wb-cal-view { padding: 5px 14px; font-size: .78rem; font-weight: 700; color: var(--ink-2); background: var(--surface); }
+.wb-cal-view + .wb-cal-view { border-left: 1px solid var(--border); }
+.wb-cal-view:hover { background: var(--surface-2); }
+.wb-cal-view.on { background: var(--ink); color: var(--surface); }
+
+/* Week: seven full-height columns, no "+N more" — seeing everything on a day is the reason
+   to leave the month view. */
+.wb-cal-week .wb-cal-day { min-height: 260px; align-content: start; }
+
+/* Day: one column, the records at full width. */
+.wb-cal-single {
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  padding: 14px 16px; min-height: 180px;
+}
+.wb-cal-single.today { border-color: color-mix(in srgb, var(--orange) 45%, var(--border)); }
+.wb-cal-daylist { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.wb-cal-daylist .wb-cal-pill { font-size: .86rem; padding: 9px 12px; border-left-width: 4px; }
 .wb-cal-undated { font-size: .78rem; color: var(--muted); }
 @media (max-width: 720px) { .wb-cal-day { min-height: 64px; } .wb-cal-pill { font-size: .62rem; } }
 
