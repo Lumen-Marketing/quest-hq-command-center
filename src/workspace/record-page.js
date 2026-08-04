@@ -140,20 +140,21 @@ export function createRecordPage(ctx) {
         </div>`;
       }
       if (block.type === 'collection') {
-        // Every sub-item list this record shows, as one strip of tabs.
+        // The lists THIS card was told to show, as one strip of tabs with their counts.
         //
-        // They used to stack: one card per list, each repeating its own heading and Add
-        // button, so a record with three lists was three headings deep before the first row.
-        // Tabs put the names side by side with their counts, which is how the job file reads
-        // them and how you actually use them -- one list at a time, switching between them.
-        const placed = blocks.filter((b) => b.type === 'collection'
-          && children.findCollection(app, b.config?.collectionId));
-        // The strip is drawn once, by the first collection card. Any others are absorbed into
-        // it rather than drawing a second identical strip.
-        if (placed.length && placed[0].id !== block.id) return '';
-        const tabs = placed.map((b) => children.findCollection(app, b.config?.collectionId));
+        // They used to be one card per list, each repeating its own heading and Add button, so
+        // a record with three lists was three headings deep before the first row. Tabs put the
+        // names side by side, which is how the job file reads them and how they are used --
+        // one list at a time, switching between them.
+        //
+        // Reading collectionIds AND the older single collectionId means cards saved before the
+        // card could show more than one keep working with no migration.
+        const wanted = Array.isArray(block.config?.collectionIds) && block.config.collectionIds.length
+          ? block.config.collectionIds
+          : [block.config?.collectionId].filter(Boolean);
+        const tabs = wanted.map((id) => children.findCollection(app, id)).filter(Boolean);
         if (!tabs.length) {
-          return `<h3 class="wb-w-title">Sub-items</h3>${emptyState('Pick which sub-items this card shows in its settings.')}`;
+          return `<h3 class="wb-w-title">Sub-items</h3>${emptyState('Tick which sub-item lists this card shows in its settings.')}`;
         }
         const activeId = tabs.some((c) => c.id === state.wbChildTab) ? state.wbChildTab : tabs[0].id;
         const collection = tabs.find((c) => c.id === activeId);
@@ -161,7 +162,7 @@ export function createRecordPage(ctx) {
         const cols = collection.fields;
         const one = collection.recordName || collection.name;
         return `
-          <nav class="wb-child-tabs" aria-label="Sub-item lists">
+          ${tabs.length > 1 ? `<nav class="wb-child-tabs" aria-label="Sub-item lists">
             ${tabs.map((c) => {
     const n = children.childCount(item, c.id);
     const on = c.id === activeId;
@@ -169,7 +170,10 @@ export function createRecordPage(ctx) {
               aria-current="${on ? 'page' : 'false'}">${h(c.name)}${n ? `<span class="wb-child-tab-n">${n}</span>` : ''}</button>`;
   }).join('')}
             ${canManage ? `<button class="btn btn-sm btn-primary wb-child-tabs-add" type="button" data-wb-child-add="${h(collection.id)}"><i class="ti ti-plus"></i>Add ${h(one)}</button>` : ''}
-          </nav>
+          </nav>`
+    : `<h3 class="wb-w-title">${h(collection.name)}<span class="wb-w-count">${rows.length}</span>
+            ${canManage ? `<button class="btn btn-sm btn-primary" type="button" data-wb-child-add="${h(collection.id)}"><i class="ti ti-plus"></i>Add ${h(one)}</button>` : ''}
+          </h3>`}
           ${!cols.length
     ? emptyState(`${collection.name} has no fields yet. Add them in the app's Settings.`)
     : rows.length
@@ -194,12 +198,7 @@ export function createRecordPage(ctx) {
             ${meta?.config ? `<button class="wb-w-btn" type="button" data-wb-rec-config="${h(block.id)}" title="Settings" aria-label="Settings"><i class="ti ti-settings"></i></button>` : ''}
             <button class="wb-w-btn danger" type="button" data-wb-rec-remove="${h(block.id)}" title="Remove" aria-label="Remove"><i class="ti ti-x"></i></button>
           </div>` : '';
-        const body = blockBody(block);
-        // A card absorbed into the sub-item tab strip renders nothing. Outside customise mode
-        // it should take no space at all -- an empty bordered box reads as a broken card. In
-        // customise mode it keeps its place, or there would be no way to move or remove it.
-        if (!body && !editing) return '';
-        return `<section class="wb-w wb-w-${h(block.type)} ${editing ? 'editing' : ''}" style="--w-span:${block.size}" data-wb-rec-id="${h(block.id)}" ${editing ? 'draggable="true"' : ''}>${tools}${body || `<p class="wb-sub">Shown in the ${h('sub-items')} tabs above.</p>`}</section>`;
+        return `<section class="wb-w wb-w-${h(block.type)} ${editing ? 'editing' : ''}" style="--w-span:${block.size}" data-wb-rec-id="${h(block.id)}" ${editing ? 'draggable="true"' : ''}>${tools}${blockBody(block)}</section>`;
       }).join('')}</div>`;
 
     // Fields nobody placed would otherwise just be missing from every record, with no hint.

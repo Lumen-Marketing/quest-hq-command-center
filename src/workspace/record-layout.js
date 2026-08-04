@@ -77,7 +77,13 @@ export function addBlock(blocks, type, app, makeId = nextId) {
   if (type === 'fields') { config.title = ''; config.fieldIds = []; }
   // A Sub-items card picks the app's first list, so it shows something the moment it lands
   // instead of needing a second trip through its settings to become anything at all.
-  if (type === 'collection') config.collectionId = (app?.collections || [])[0]?.id || '';
+  if (type === 'collection') {
+    // A new card starts on the first list. It can show several -- the settings are checkboxes
+    // -- but one is the only sensible default, and none would be a blank card.
+    const first = (app?.collections || [])[0]?.id || '';
+    config.collectionIds = first ? [first] : [];
+    config.collectionId = first;
+  }
   return [...blocks, normalizeBlock({ type, size: meta.size, config }, makeId)];
 }
 

@@ -15739,6 +15739,11 @@ async function openWbRecordConfig(companyId, workspaceId, appId, blockId) {
     block,
     fields: (app.fields || []).map((f) => ({ id: f.id, label: f.label })),
     collections: (app.collections || []).map((c) => ({ id: c.id, name: c.name })),
+    // Cards written before the card could show more than one list carry a single
+    // collectionId. Reading both means those keep working without a migration.
+    chosenCollections: Array.isArray(block.config?.collectionIds)
+      ? block.config.collectionIds
+      : [block.config?.collectionId].filter(Boolean),
   });
 }
 
@@ -19156,6 +19161,13 @@ function wbMountModal() {
           config.fieldIds = allBox.checked
             ? null
             : [...overlay.querySelectorAll('[data-wb-reccfg-field]')].filter((el) => el.checked).map((el) => el.dataset.wbReccfgField);
+        }
+        const collectionBoxes = [...overlay.querySelectorAll('[data-wb-reccfg-collection]')];
+        if (collectionBoxes.length) {
+          config.collectionIds = collectionBoxes.filter((el) => el.checked).map((el) => el.dataset.wbReccfgCollection);
+          // The old single-list key is kept in step rather than left behind, so anything still
+          // reading it sees the first tab rather than a list nobody ticked.
+          config.collectionId = config.collectionIds[0] || '';
         }
         const { companyId, workspaceId, appId, blockId } = state.builderModal;
         state.builderModal = null;

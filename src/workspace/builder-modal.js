@@ -143,10 +143,12 @@ export function createBuilderModal(ctx) {
         return wbModalShell('Card settings', '',
           '<div class="wb-modal-ic" style="background:#2563eb"><i class="ti ti-settings"></i></div><h3>Sub-items</h3>',
           m.collections.length
-            ? `<div class="wb-field"><label>Which list</label>
-                <select class="wb-input" data-wb-reccfg="collectionId">
-                  ${m.collections.map((c) => `<option value="${h(c.id)}" ${c.id === cfg.collectionId ? 'selected' : ''}>${h(c.name)}</option>`).join('')}
-                </select></div>`
+            ? `<div class="wb-field"><label>Which lists to show</label>
+                <div class="wb-check-list">
+                  ${m.collections.map((c) => `<label class="wb-check-row"><input type="checkbox" data-wb-reccfg-collection="${h(c.id)}" ${m.chosenCollections.includes(c.id) ? 'checked' : ''}> <span>${h(c.name)}</span></label>`).join('')}
+                </div>
+                <p class="wb-sub">Each ticked list becomes a tab on this card. Untick them all and
+                  the card shows nothing, so leave at least one.</p></div>`
             : '<p class="wb-sub">This app has no sub-item lists yet. Add one in Settings, then come back.</p>',
           `<button class="btn" data-action="wb-modal-close">Cancel</button>${m.collections.length ? '<button class="btn btn-primary" data-wb-reccfg-save><i class="ti ti-check"></i>Save</button>' : ''}`);
       }

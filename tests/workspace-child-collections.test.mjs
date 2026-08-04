@@ -160,7 +160,7 @@ test('deleting a sub-item asks first', () => {
 });
 
 test('a card pointing at nothing, and a collection with no fields, both explain themselves', () => {
-  assert.match(page, /Pick which sub-items this card shows in its settings\./);
+  assert.match(page, /Tick which sub-item lists this card shows in its settings\./);
   assert.match(page, /has no fields yet\. Add them in the app's Settings\./);
 });
 
@@ -320,7 +320,8 @@ test('a Sub-items card lands pointing at a list, not at nothing', () => {
   // Otherwise it renders "pick a list in settings" and needs a second trip before it is
   // anything at all — which reads as the feature not working.
   const layout = readFileSync(new URL('../src/workspace/record-layout.js', import.meta.url), 'utf8');
-  assert.match(layout, /if \(type === 'collection'\) config\.collectionId = \(app\?\.collections \|\| \[\]\)\[0\]\?\.id \|\| '';/);
+  assert.match(layout, /config\.collectionIds = first \? \[first\] : \[\];/);
+  assert.match(layout, /config\.collectionId = first;/, 'and the older single key stays in step');
 });
 
 test('the card is offered as blocked when the app has no lists yet', () => {
@@ -333,11 +334,27 @@ test('the card is offered as blocked when the app has no lists yet', () => {
   assert.match(main, /\$\{opt\.supported \? h\(opt\.desc\) : h\(opt\.blocked\)\}/);
 });
 
-test('its settings pick a list, not a set of fields', () => {
-  // It used to fall through to the FIELD checkbox list, which cannot pick a list at all.
+test('its settings tick which lists to show, not one from a dropdown', () => {
+  // A single-select dropdown meant one card could only ever show one list, so a second list
+  // needed a second card -- which is what "I cannot add any other sub-items" was.
   assert.match(main, /if \(block\.type === 'collection'\) \{/);
-  assert.match(main, /<select class="wb-input" data-wb-reccfg="collectionId">/);
+  assert.match(main, /data-wb-reccfg-collection="\$\{h\(c\.id\)\}"/);
+  assert.ok(!/data-wb-reccfg="collectionId"/.test(main), 'the single-select must be gone');
   assert.match(main, /collections: \(app\.collections \|\| \[\]\)\.map\(\(c\) => \(\{ id: c\.id, name: c\.name \}\)\),/);
+});
+
+test('ticking lists writes an array, and keeps the old single key in step', () => {
+  // Cards saved before the card could show more than one carry collectionId. Both are read
+  // and both are written, so nothing needs migrating.
+  assert.match(main, /config\.collectionIds = collectionBoxes\.filter\(\(el\) => el\.checked\)/);
+  assert.match(main, /config\.collectionId = config\.collectionIds\[0\] \|\| '';/);
+  assert.match(page, /Array\.isArray\(block\.config\?\.collectionIds\) && block\.config\.collectionIds\.length/);
+  assert.match(page, /: \[block\.config\?\.collectionId\]\.filter\(Boolean\);/);
+});
+
+test('one list shows a heading; several show tabs', () => {
+  // A tab strip with a single tab is a heading wearing a costume.
+  assert.match(page, /\$\{tabs\.length > 1 \? `<nav class="wb-child-tabs"/);
 });
 
 test('with no lists the settings dialog says so instead of offering an empty select', () => {
@@ -447,16 +464,7 @@ test('sub-item lists are one strip of tabs, not a stack of cards', () => {
   assert.match(main, /bind\('\[data-wb-child-tab\]'/);
 });
 
-test('the strip is drawn once, however many collection cards are placed', () => {
-  // Two sub-item cards on a layout must not draw two identical strips.
-  assert.match(page, /if \(placed\.length && placed\[0\]\.id !== block\.id\) return '';/);
-});
 
-test('an absorbed card takes no space, except while arranging', () => {
-  // An empty bordered box reads as a broken card -- but in customise mode it has to stay, or
-  // there is no way to move or remove it.
-  assert.match(page, /if \(!body && !editing\) return '';/);
-});
 
 test('each tab carries its own count, and the Add button follows the selected one', () => {
   assert.match(page, /const n = children\.childCount\(item, c\.id\);/);
