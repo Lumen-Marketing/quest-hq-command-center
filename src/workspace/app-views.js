@@ -72,6 +72,7 @@ export function createAppViews(ctx) {
       const meta = widgetMeta(widget.type);
       const controls = editing ? `
         <div class="wb-w-tools">
+          <span class="wb-w-grip" title="Drag to reorder" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>
           <button class="wb-w-btn" type="button" data-wb-dash-move="${h(widget.id)}:up" ${i === 0 ? 'disabled' : ''} title="Move earlier" aria-label="Move earlier"><i class="ti ti-chevron-left"></i></button>
           <button class="wb-w-btn" type="button" data-wb-dash-move="${h(widget.id)}:down" ${i === widgets.length - 1 ? 'disabled' : ''} title="Move later" aria-label="Move later"><i class="ti ti-chevron-right"></i></button>
           <span class="wb-w-sizes" role="group" aria-label="Width">
@@ -80,13 +81,13 @@ export function createAppViews(ctx) {
           ${meta?.config ? `<button class="wb-w-btn" type="button" data-wb-dash-config="${h(widget.id)}" title="Settings" aria-label="Settings"><i class="ti ti-settings"></i></button>` : ''}
           <button class="wb-w-btn danger" type="button" data-wb-dash-remove="${h(widget.id)}" title="Remove" aria-label="Remove"><i class="ti ti-x"></i></button>
         </div>` : '';
-      return `<section class="wb-w wb-w-${h(widget.type)} ${editing ? 'editing' : ''}" style="--w-span:${widget.size}">
+      return `<section class="wb-w wb-w-${h(widget.type)} ${editing ? 'editing' : ''}" style="--w-span:${widget.size}" data-wb-dash-id="${h(widget.id)}" ${editing ? 'draggable="true"' : ''}>
         ${controls}
         ${widgetBody(companyId, app, widget, todayIso)}
       </section>`;
     }).join('');
 
-    return `${dashControls(canManage, editing)}<div class="wb-dash-grid">${body}</div>`;
+    return `${dashControls(canManage, editing)}<div class="wb-dash-grid" data-wb-dash-grid>${body}</div>`;
   }
 
   function dashControls(canManage, editing) {

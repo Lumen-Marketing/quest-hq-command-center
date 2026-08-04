@@ -109,6 +109,24 @@ export function moveWidget(widgets, id, direction) {
   return list;
 }
 
+/**
+ * Move a widget to where another one sits — what a drag-and-drop does.
+ *
+ * A move, not a swap: dragging a card past three others should leave those three in order,
+ * shifted by one. Swapping would scramble them, which is only invisible when the two cards
+ * happen to be neighbours.
+ */
+export function reorderWidget(widgets, id, targetId) {
+  const list = [...widgets];
+  if (id === targetId) return list;
+  const from = list.findIndex((w) => w.id === id);
+  const to = list.findIndex((w) => w.id === targetId);
+  if (from === -1 || to === -1) return list;
+  const [moved] = list.splice(from, 1);
+  list.splice(to, 0, moved);
+  return list;
+}
+
 export function resizeWidget(widgets, id, size) {
   return widgets.map((w) => (w.id === id ? normalizeWidget({ ...w, size }) : w));
 }

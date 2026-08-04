@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   DASH_COLUMNS, WIDGET_TYPES, addWidget, dashboardFor, defaultDashboard, metricValue,
-  moveWidget, normalizeWidget, optionFields, removeWidget, resizeWidget, widgetRecords,
+  moveWidget, normalizeWidget, optionFields, removeWidget, reorderWidget, resizeWidget, widgetRecords,
   widgetSupported,
 } from '../src/workspace/dashboard-widgets.js';
 
@@ -177,4 +177,53 @@ test('option fields are the ones a stage or filter card can use', () => {
 test('changing the field clears the value chosen under the old one', () => {
   // The value id belongs to the previous field and would match nothing.
   assert.match(main, /if \(key === 'fieldId'\) delete draft\.value;/);
+});
+
+// --- drag to reorder -------------------------------------------------------------------------
+
+test('dragging moves a card to where another sits, it does not swap them', () => {
+  // Dragging past three cards should leave those three in order, shifted by one. Swapping
+  // scrambles them, which is only invisible when the two happen to be neighbours.
+  const list = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+  assert.deepEqual(reorderWidget(list, 'a', 'd').map((w) => w.id), ['b', 'c', 'd', 'a']);
+  assert.deepEqual(reorderWidget(list, 'd', 'a').map((w) => w.id), ['d', 'a', 'b', 'c']);
+  assert.deepEqual(reorderWidget(list, 'b', 'c').map((w) => w.id), ['a', 'c', 'b', 'd'], 'neighbours read as a swap');
+});
+
+test('a drag that lands on itself or on nothing changes nothing', () => {
+  const list = [{ id: 'a' }, { id: 'b' }];
+  assert.deepEqual(reorderWidget(list, 'a', 'a').map((w) => w.id), ['a', 'b']);
+  assert.deepEqual(reorderWidget(list, 'a', 'gone').map((w) => w.id), ['a', 'b']);
+  assert.deepEqual(reorderWidget(list, 'gone', 'a').map((w) => w.id), ['a', 'b']);
+});
+
+test('reordering does not mutate the arrangement it was given', () => {
+  const list = [{ id: 'a' }, { id: 'b' }];
+  reorderWidget(list, 'a', 'b');
+  assert.deepEqual(list.map((w) => w.id), ['a', 'b']);
+});
+
+test('cards only drag while customising', () => {
+  const views = readFileSync(new URL('../src/workspace/app-views.js', import.meta.url), 'utf8');
+  assert.match(views, /data-wb-dash-id="\$\{h\(widget\.id\)\}" \$\{editing \? 'draggable="true"' : ''\}/);
+  assert.match(views, /<span class="wb-w-grip"/, 'a grip, so the gesture is discoverable');
+  assert.match(views, /<div class="wb-dash-grid" data-wb-dash-grid>/);
+});
+
+test('the arrow buttons survive alongside the drag', () => {
+  // HTML5 drag never fires on touch, and the buttons are the keyboard-reachable path.
+  const views = readFileSync(new URL('../src/workspace/app-views.js', import.meta.url), 'utf8');
+  assert.match(views, /data-wb-dash-move="\$\{h\(widget\.id\)\}:up"/);
+  assert.match(views, /data-wb-dash-move="\$\{h\(widget\.id\)\}:down"/);
+  assert.match(main, /HTML5 drag-and-drop does not fire on touch/);
+});
+
+test('the drag sets transfer data, which Firefox requires to start one at all', () => {
+  assert.match(main, /event\.dataTransfer\.setData\('text\/plain', card\.dataset\.wbDashId\)/);
+  assert.match(main, /event\.dataTransfer\?\.getData\('text\/plain'\)/, 'and reads it back as the fallback');
+});
+
+test('the drag is re-bound each render, because render replaces the nodes', () => {
+  assert.match(main, /mountWbDashDrag\(companyId, workspaceId, appId\);/);
+  assert.match(main, /const grid = document\.querySelector\('\[data-wb-dash-grid\]'\);\n\s*if \(!grid\) return;/);
 });

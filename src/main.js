@@ -2474,6 +2474,7 @@ const state = {
   // and only one of those has a modal behind it.
   wbEditingCommentId: null,
   wbDashManage: false,
+  wbDashDragId: '',
   wbViewScope: 'team',
   wbViewAdding: false,
   wbViewExpanded: {},
@@ -18196,6 +18197,50 @@ function wbConfirmDelete() {
  * One interval for all of them, cleared and restarted per render: render() rebuilds the DOM
  * wholesale, so a timer holding a reference to the old nodes would tick into nothing forever.
  */
+/**
+ * Drag a dashboard card onto another to move it there.
+ *
+ * The arrow buttons stay. HTML5 drag-and-drop does not fire on touch at all, so a phone or a
+ * tablet would be left with no way to reorder if this replaced them — and the buttons are
+ * also the keyboard-reachable path.
+ *
+ * Bound per render because render() rebuilds these nodes; the listeners go with the old ones.
+ */
+function mountWbDashDrag(companyId, workspaceId, appId) {
+  const grid = document.querySelector('[data-wb-dash-grid]');
+  if (!grid) return;
+  const clear = () => grid.querySelectorAll('.wb-w').forEach((n) => n.classList.remove('dragging', 'drop-target'));
+  grid.querySelectorAll('[data-wb-dash-id]').forEach((card) => {
+    card.addEventListener('dragstart', (event) => {
+      state.wbDashDragId = card.dataset.wbDashId;
+      card.classList.add('dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        // Firefox refuses to start a drag unless some data is set.
+        try { event.dataTransfer.setData('text/plain', card.dataset.wbDashId); } catch { /* ignore */ }
+      }
+    });
+    card.addEventListener('dragend', () => { state.wbDashDragId = ''; clear(); });
+    card.addEventListener('dragover', (event) => {
+      const from = state.wbDashDragId;
+      if (!from || from === card.dataset.wbDashId) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      card.classList.add('drop-target');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
+    card.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const from = state.wbDashDragId || event.dataTransfer?.getData('text/plain') || '';
+      const to = card.dataset.wbDashId;
+      state.wbDashDragId = '';
+      clear();
+      if (!from || from === to) return;
+      wbDashEdit(companyId, workspaceId, appId, (widgets, mod) => mod.reorderWidget(widgets, from, to));
+    });
+  });
+}
+
 function mountWbClocks() {
   if (state.wbClockTimer) clearInterval(state.wbClockTimer);
   const paint = () => {
@@ -18443,6 +18488,7 @@ function mountWorkspaceBuilder() {
     });
     // A live clock cannot come from markup rendered once.
     if (document.querySelector('[data-wb-clock]')) mountWbClocks();
+    mountWbDashDrag(companyId, workspaceId, appId);
     bind('[data-wb-cal-field]', (el) => {
       const params = state.route?.params;
       nav({ app_id: appId, tab: 'calendar', field: el.value, ...(params?.get('view') ? { view: params.get('view') } : {}), ...(params?.get('on') ? { on: params.get('on') } : {}) });
