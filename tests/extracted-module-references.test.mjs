@@ -25,7 +25,12 @@ const walk = (dir) => readdirSync(dir).flatMap((entry) => {
   return full.endsWith('.js') ? [full] : [];
 });
 
-const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/[^\n]*$/gm, '');
+// Line comments go FIRST. A `//` comment mentioning a path like /api/* contains the two
+// characters `/*`, which opened a fake block comment that ran to the next real `*/` and hid
+// ninety thousand characters of main.js from every check below -- including the declarations
+// this file exists to find, which is how it came to report a function as missing that was
+// sitting in plain sight.
+const stripComments = (text) => text.replace(/^\s*\/\/[^\n]*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
 
 const declaredIn = (text) => {
   const names = new Set();
@@ -127,6 +132,9 @@ const FACTORY_MODULES = [
   ['src/crm/underwriter-page.js', 'createUnderwriterPage'],
   ['src/knowledge/knowledge-page.js', 'createKnowledgePage'],
   ['src/settings/workspace-settings.js', 'createWorkspaceSettings'],
+  ['src/portals/client-portals-page.js', 'createClientPortalsPage'],
+  ['src/forms/forms-page.js', 'createFormsPage'],
+  ['src/ops/price-book-page.js', 'createPriceBookPage'],
   ['src/ui/landing-page.js', 'createLandingPage'],
   ['src/ui/auth-form.js', 'createAuthForm'],
 ];

@@ -30210,6 +30210,30 @@ html:has(.quest-app) {
   display: block;
 }
 
+/* ---- App Builder record page -----------------------------------------------------------
+   A record is a place, not a popup: it has a URL, browser-back works, and a long field list
+   next to a comment thread has room to breathe. */
+.wb-record { display: grid; gap: 14px; }
+.wb-record-back {
+  display: inline-flex; align-items: center; gap: 7px; justify-self: start;
+  font-size: .82rem; font-weight: 700; color: var(--ink-2);
+  border: 1px solid var(--border); border-radius: 99px; padding: 5px 14px 5px 11px;
+  background: var(--surface);
+}
+.wb-record-back:hover { border-color: var(--orange); color: var(--orange); }
+.wb-record-head { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
+.wb-record-ic {
+  width: 42px; height: 42px; border-radius: 11px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 1.1rem;
+}
+.wb-record-title { flex: 1; min-width: 180px; }
+.wb-record-title h1 { margin: 0; font-size: 1.4rem; font-weight: 800; letter-spacing: -.02em; text-wrap: balance; }
+.wb-record-meta { margin: 2px 0 0; font-size: .78rem; color: var(--muted); }
+.wb-record-body { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.wb-record-fields, .wb-record-comments { padding: 14px 18px; }
+@media (max-width: 900px) { .wb-record-body { grid-template-columns: minmax(0, 1fr); } }
+
 /* ---- App Builder quick filter chips ----------------------------------------------------
    One chip per value of a chosen field, the way the Jobs trade spine reads. Scrolls sideways
    in its own container rather than wrapping to four lines on an app with many options. */

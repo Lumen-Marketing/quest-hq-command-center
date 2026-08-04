@@ -2460,6 +2460,10 @@ const state = {
   // wholesale, so the original element is gone by the time the modal is dismissed.
   focusReturn: '',
   builderModal: null,
+  // Which comment is being edited. Lives here rather than on builderModal because the
+  // comment thread renders in two places now -- the item modal and the full record page --
+  // and only one of those has a modal behind it.
+  wbEditingCommentId: null,
   roles: [],
   rolePermissions: [],
   roleAssignments: [],
@@ -5578,6 +5582,87 @@ function renderWorkspaceSettings(companyId) {
   return questLoader('Loading');
 }
 
+// ---- renderClientPortalsPage ---------------------------------------------------------
+// Body lives in ./portals/client-portals-page.js and is fetched on first use.
+let renderClientPortalsPageModule = null;
+let renderClientPortalsPagePending = null;
+
+function loadRenderClientPortalsPage() {
+  if (renderClientPortalsPageModule) return Promise.resolve(renderClientPortalsPageModule);
+  if (!renderClientPortalsPagePending) {
+    renderClientPortalsPagePending = import('./portals/client-portals-page.js').then((mod) => {
+      renderClientPortalsPageModule = mod.createClientPortalsPage({
+        can, clientPortalById, emptyState, ensureClientPortalAnnotateState, filteredClientPortals, h, renderClientPortalAnnotate, renderClientPortalDetail, renderClientPortalListItem, workspaceHeader, state,
+      });
+      return renderClientPortalsPageModule;
+    }).catch((error) => {
+      renderClientPortalsPagePending = null;
+      throw error;
+    });
+  }
+  return renderClientPortalsPagePending;
+}
+
+function renderClientPortalsPage(route, companyId) {
+  if (renderClientPortalsPageModule) return renderClientPortalsPageModule.renderClientPortalsPage(route, companyId);
+  loadRenderClientPortalsPage().then(() => render()).catch((error) => console.error('renderClientPortalsPage failed to load', error));
+  return questLoader('Loading');
+}
+
+// ---- renderFormsPage ---------------------------------------------------------
+// Body lives in ./forms/forms-page.js and is fetched on first use.
+let renderFormsPageModule = null;
+let renderFormsPagePending = null;
+
+function loadRenderFormsPage() {
+  if (renderFormsPageModule) return Promise.resolve(renderFormsPageModule);
+  if (!renderFormsPagePending) {
+    renderFormsPagePending = import('./forms/forms-page.js').then((mod) => {
+      renderFormsPageModule = mod.createFormsPage({
+        filteredForms, h, isLiveSupabaseSession, renderFormsBuilder, renderFormsLibrary, renderFormsResponses, selectedForm, titleCase, state,
+      });
+      return renderFormsPageModule;
+    }).catch((error) => {
+      renderFormsPagePending = null;
+      throw error;
+    });
+  }
+  return renderFormsPagePending;
+}
+
+function renderFormsPage(companyId) {
+  if (renderFormsPageModule) return renderFormsPageModule.renderFormsPage(companyId);
+  loadRenderFormsPage().then(() => render()).catch((error) => console.error('renderFormsPage failed to load', error));
+  return questLoader('Loading');
+}
+
+// ---- renderPriceBookPage ---------------------------------------------------------
+// Body lives in ./ops/price-book-page.js and is fetched on first use.
+let renderPriceBookPageModule = null;
+let renderPriceBookPagePending = null;
+
+function loadRenderPriceBookPage() {
+  if (renderPriceBookPageModule) return Promise.resolve(renderPriceBookPageModule);
+  if (!renderPriceBookPagePending) {
+    renderPriceBookPagePending = import('./ops/price-book-page.js').then((mod) => {
+      renderPriceBookPageModule = mod.createPriceBookPage({
+        can, pbCompanyVendors, pbDate, pbIsStale, pbRows, renderPriceBookMaterialsTable, renderPriceBookVendorDetail, renderPriceBookVendorGrid, workspaceHeader, state,
+      });
+      return renderPriceBookPageModule;
+    }).catch((error) => {
+      renderPriceBookPagePending = null;
+      throw error;
+    });
+  }
+  return renderPriceBookPagePending;
+}
+
+function renderPriceBookPage(route, companyId) {
+  if (renderPriceBookPageModule) return renderPriceBookPageModule.renderPriceBookPage(route, companyId);
+  loadRenderPriceBookPage().then(() => render()).catch((error) => console.error('renderPriceBookPage failed to load', error));
+  return questLoader('Loading');
+}
+
 function navGroup(label, items) {
   if (!items.length) return '';
   const collapsed = state.collapsedNavGroups.has(label);
@@ -6744,36 +6829,6 @@ function pbSortRows(rows) {
   });
 }
 
-function renderPriceBookPage(route, companyId) {
-  const canManage = can('price_book.manage', companyId);
-  const rows = pbRows(companyId);
-  const vendors = pbCompanyVendors(companyId);
-  const stale = rows.filter((row) => pbIsStale(row.updated)).length;
-  const onAccount = vendors.filter((vendor) => vendor.on_account).length;
-  const lastSynced = vendors.filter((vendor) => vendor.last_synced_at).sort((a, b) => new Date(b.last_synced_at) - new Date(a.last_synced_at))[0];
-  const view = state.pricebookVendorId ? 'detail' : state.pricebookTab === 'all' ? 'all' : 'vendors';
-  return `
-    <section class="tool-page price-book-page">
-      ${workspaceHeader('Price Book', 'Vendor cost catalog for estimating. Costs stay here; sell price and margin stay on quotes.', `
-        ${canManage ? '<button class="btn" type="button" data-action="pb-import"><i class="ti ti-file-import"></i>Import prices</button>' : ''}
-        ${canManage ? '<button class="btn" type="button" data-action="pb-add-material"><i class="ti ti-plus"></i>Add material</button>' : ''}
-        ${canManage ? '<button class="btn btn-primary" type="button" data-action="pb-add-vendor"><i class="ti ti-building-store"></i>Add vendor</button>' : ''}
-      `)}
-      <div class="pb-stats">
-        <div class="pb-stat"><span>Vendors</span><strong>${vendors.length}</strong></div>
-        <div class="pb-stat"><span>Material prices</span><strong>${rows.length}</strong></div>
-        <div class="pb-stat"><span>Last import</span><strong>${lastSynced ? pbDate(lastSynced.last_synced_at) : '-'}</strong></div>
-        <div class="pb-stat ${stale ? 'warn' : ''}"><span>Stale prices</span><strong>${stale}</strong></div>
-        <div class="pb-stat"><span>On account</span><strong>${onAccount}<em> / ${vendors.length}</em></strong></div>
-      </div>
-      <div class="pb-tabs">
-        <button class="pb-tab ${view !== 'all' ? 'active' : ''}" type="button" data-action="pb-tab" data-tab="vendors">Vendors <span>${vendors.length}</span></button>
-        <button class="pb-tab ${view === 'all' ? 'active' : ''}" type="button" data-action="pb-tab" data-tab="all">All materials <span>${rows.length}</span></button>
-      </div>
-      ${view === 'detail' ? renderPriceBookVendorDetail(companyId, canManage) : view === 'all' ? renderPriceBookMaterialsTable(companyId, canManage) : renderPriceBookVendorGrid(companyId, canManage)}
-    </section>
-  `;
-}
 
 function renderPriceBookVendorGrid(companyId, canManage) {
   const rows = pbRows(companyId);
@@ -13882,6 +13937,14 @@ function renderWorkspaceBuilderPage(route, companyId) {
   // Linked apps resolve to their source object in another workspace, so the view
   // renders (and edits) the shared app; appLinked drives the "linked" UI.
   const { app, linked: appLinked } = wbResolveAppEntry(wbDoc(companyId), appEntry);
+  // A record is its own page, so it is linkable and browser-back returns to the list.
+  const itemId = route.params.get('item_id') || '';
+  if (app && itemId) {
+    const item = app.items.find((entry) => entry.id === itemId);
+    return `<section class="tool-page wb-page">${item
+      ? wbViewItemPage(route, companyId, workspace, app, item)
+      : wbRecordMissing(companyId, app)}</section>`;
+  }
   if (app) return `<section class="tool-page wb-page">${wbViewApp(route, companyId, workspace, app, appLinked)}</section>`;
   return `<section class="tool-page wb-page">${wbViewCompanyHome(companyId, workspace)}</section>`;
 }
@@ -15702,6 +15765,57 @@ function wbItemsChipBar(companyId, app, ui, rows) {
     </div>`;
 }
 
+/**
+ * One record, as a page rather than a modal.
+ *
+ * A record is somewhere you go, not something that pops up over where you were: it can be
+ * linked to, bookmarked, opened in a tab, and browser-back returns to the list. A modal has
+ * none of that, and on a record with a long field list and a comment thread it also fights
+ * the viewport.
+ *
+ * Editing still opens the form as a modal. Editing IS a task performed on a record, it has
+ * a cancel, and keeping one form definition means the create and edit paths cannot drift.
+ */
+function wbViewItemPage(route, companyId, workspace, app, item) {
+  const canManage = can('workspaces.manage', companyId);
+  // Carry the deck stage back with you, so returning lands on the filtered list you left
+  // rather than dumping you at the top of everything.
+  const stage = route.params.get('stage') || '';
+  const backHref = appHref(companyPath('workspaces', {
+    app_id: app.id, tab: 'items', ...(stage ? { stage } : {}),
+  }, companyId));
+  const ctx = { companyId, workspace, app, values: item.values, item: null, canManage: false };
+  const rows = app.fields.length
+    ? app.fields.map((f) => `<div class="wb-view-row"><span class="wb-view-label">${h(f.label)}</span><span class="wb-view-val">${f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(ctx, f, item.values[f.id])}</span></div>`).join('')
+    : '<div class="wb-sub">This app has no fields yet.</div>';
+  const count = (item.comments || []).length;
+  return `
+    <div class="wb-record">
+      <a class="wb-record-back" href="${backHref}" data-router><i class="ti ti-arrow-left"></i>All ${h(app.name)}</a>
+      <header class="wb-record-head">
+        <div class="wb-record-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></div>
+        <div class="wb-record-title">
+          <h1>${h(wbItemTitle(app, item)) || 'Item'}</h1>
+          <p class="wb-record-meta">${item.createdAt ? `Created ${h(formatDate(item.createdAt))}` : ''}${item.updatedAt && item.updatedAt !== item.createdAt ? ` · edited ${h(wbTimeAgo(item.updatedAt))}` : ''}${count ? ` · ${count} comment${count === 1 ? '' : 's'}` : ''}</p>
+        </div>
+        ${canManage ? `<button class="btn btn-primary" type="button" data-wb-record-edit="${h(item.id)}"><i class="ti ti-pencil"></i>Edit</button>` : ''}
+      </header>
+      <div class="wb-record-body">
+        <article class="panel wb-record-fields"><div class="wb-view-fields">${rows}</div></article>
+        <article class="panel wb-record-comments">${wbItemCommentsHtml(companyId, item)}</article>
+      </div>
+    </div>`;
+}
+
+/** A record that has been deleted, or an id that never existed. */
+function wbRecordMissing(companyId, app) {
+  return `
+    <div class="wb-record">
+      <a class="wb-record-back" href="${appHref(companyPath('workspaces', { app_id: app.id, tab: 'items' }, companyId))}" data-router><i class="ti ti-arrow-left"></i>All ${h(app.name)}</a>
+      <div class="wb-empty"><i class="ti ti-trash"></i><h3>This record is gone</h3><p>It was deleted, or the link points at something that never existed.</p></div>
+    </div>`;
+}
+
 function wbViewItems(companyId, workspace, app) {
   const canManage = can('workspaces.manage', companyId);
   if (!app.fields.length) return `<div class="wb-empty"><i class="ti ti-layout-dashboard"></i><h3>This app has no fields yet</h3><p>Before adding items you need to design the app's structure. Add fields like Text, Status, or Date.</p>${canManage ? '<button class="btn btn-primary" data-tab="fields"><i class="ti ti-tools"></i>Open field builder</button>' : ''}</div>`;
@@ -15775,10 +15889,35 @@ function wbItemActions(item, canManage) {
   return canManage ? `<button class="wb-icon-btn" data-edit-item="${h(item.id)}" title="Open"><i class="ti ti-pencil"></i></button><button class="wb-icon-btn danger" data-del-item="${h(item.id)}" title="Delete"><i class="ti ti-trash"></i></button>` : '';
 }
 // Comment thread shown inside the item detail modal.
+/**
+ * Which record the comment actions act on.
+ *
+ * The thread renders in the item modal and on the full record page, so the handlers resolve
+ * their target from whichever is open instead of assuming a modal is there. The modal wins
+ * when both are: opening one over the page means the modal is what you are looking at.
+ */
+function wbCommentContext() {
+  // Shaped as { companyId, workspaceId, appId, editId } so it drops straight into
+  // wbPersistCommentChange, which already took the modal.
+  const m = state.builderModal;
+  if (m && m.kind === 'item' && m.editId) {
+    return { companyId: m.companyId, workspaceId: m.workspaceId, appId: m.appId, editId: m.editId };
+  }
+  const route = state.route;
+  if (route?.name !== 'company' || route.section !== 'workspaces') return null;
+  const editId = route.params?.get('item_id') || '';
+  if (!editId) return null;
+  const companyId = activeCompanyId();
+  // The page route carries no workspace_id -- it renders the company's current workspace --
+  // so resolve it the same way the page does rather than handing wbFind an empty id.
+  const workspaceId = route.params.get('workspace_id') || wbCompanyWorkspace(companyId)?.id || '';
+  return { companyId, workspaceId, appId: route.params.get('app_id') || '', editId };
+}
+
 function wbItemCommentsHtml(companyId, item) {
   const comments = Array.isArray(item.comments) ? item.comments : [];
   const myId = activeSession().profile?.id || '';
-  const editingId = state.builderModal?.editingCommentId || null;
+  const editingId = state.wbEditingCommentId || null;
   const list = comments.length
     ? comments.map((c) => {
       // Resolve the author's CURRENT profile name/color from their id so a later
@@ -15804,8 +15943,8 @@ function wbItemCommentsHtml(companyId, item) {
     </div>`;
 }
 async function wbAddItemComment() {
-  const m = state.builderModal;
-  if (!m || m.kind !== 'item' || !m.editId) return;
+  const m = wbCommentContext();
+  if (!m) return;
   const input = document.getElementById('wbCommentInput');
   const text = (input?.value || '').trim();
   if (!text) { showToast('Write a comment first.', 'local', 'Workspaces'); return; }
@@ -15867,8 +16006,8 @@ async function wbPersistCommentChange(m, action, commentId, text, previousCommen
   return true;
 }
 async function wbDeleteItemComment(commentId) {
-  const m = state.builderModal;
-  if (!m || m.kind !== 'item' || !m.editId) return;
+  const m = wbCommentContext();
+  if (!m) return;
   const { app } = wbFind(m.companyId, m.workspaceId, m.appId);
   const item = app.items.find((i) => i.id === m.editId);
   const c = item && Array.isArray(item.comments) ? item.comments.find((x) => x.id === commentId) : null;
@@ -15876,14 +16015,14 @@ async function wbDeleteItemComment(commentId) {
   if (c.authorId !== (activeSession().profile?.id || '')) { showToast('You can only delete your own comments.', 'local', 'Workspaces'); return; }
   const previousComments = item.comments.map((comment) => ({ ...comment }));
   item.comments = item.comments.filter((x) => x.id !== commentId);
-  if (m.editingCommentId === commentId) m.editingCommentId = null;
+  if (state.wbEditingCommentId === commentId) state.wbEditingCommentId = null;
   await wbPersistCommentChange(m, 'delete', commentId, '', previousComments);
   wbKeepModalScroll();
   render();
 }
 async function wbSaveEditedComment(commentId) {
-  const m = state.builderModal;
-  if (!m || m.kind !== 'item' || !m.editId) return;
+  const m = wbCommentContext();
+  if (!m) return;
   const ta = document.getElementById(`wbEditComment-${commentId}`);
   const text = (ta && ta.value ? ta.value : '').trim();
   if (!text) { showToast('Comment can\'t be empty.', 'local', 'Workspaces'); return; }
@@ -15894,7 +16033,7 @@ async function wbSaveEditedComment(commentId) {
   if (c.authorId !== (activeSession().profile?.id || '')) { showToast('You can only edit your own comments.', 'local', 'Workspaces'); return; }
   const previousComments = item.comments.map((comment) => ({ ...comment }));
   c.text = text; c.editedAt = new Date().toISOString();
-  m.editingCommentId = null;
+  state.wbEditingCommentId = null;
   await wbPersistCommentChange(m, 'edit', commentId, text, previousComments);
   wbKeepModalScroll();
   render();
@@ -18143,7 +18282,12 @@ function mountWorkspaceBuilder() {
     document.querySelectorAll('#wbItemsList [data-item]').forEach((el) => {
       el.addEventListener('click', (e) => {
         if (e.target.closest('a, button, input, select, textarea, label, .wb-check-toggle')) return;
-        openWbItemModal(companyId, workspaceId, appId, el.dataset.item);
+        // Navigate rather than open a modal: a record is a place, so it gets a URL and
+        // browser-back. The deck stage rides along so Back lands on the list you left.
+        const stage = state.route?.params?.get('stage') || '';
+        navigate(companyPath('workspaces', {
+          app_id: appId, tab: 'items', item_id: el.dataset.item, ...(stage ? { stage } : {}),
+        }, companyId));
       });
     });
     // Items table: sort (header click), filters, and live search.
@@ -18151,6 +18295,16 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-clear-sort]', () => { wbItemsUI(appId).sort = null; render(); });
     bind('[data-wb-set-view]', (el) => { wbItemsUI(appId).view = el.dataset.wbSetView; render(); });
     bind('[data-wb-sort-preset]', (el) => { const ui = wbItemsUI(appId); if (el.value) { ui.order = el.value; ui.sort = null; } render(); }, 'onchange');
+    // Record page. The same comment thread as the modal, bound to the page instead of an
+    // overlay; the handlers resolve their target through wbCommentContext either way.
+    const commentFail = (error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces');
+    bind('[data-wb-record-edit]', (el) => { openWbItemModal(companyId, workspaceId, appId, el.dataset.wbRecordEdit, 'edit'); });
+    bind('[data-wb-add-comment]', () => { wbAddItemComment().catch(commentFail); });
+    bind('[data-wb-comment-edit]', (el) => { state.wbEditingCommentId = el.dataset.wbCommentEdit; render(); });
+    bind('[data-wb-comment-cancel]', () => { state.wbEditingCommentId = null; render(); });
+    bind('[data-wb-comment-save]', (el) => { wbSaveEditedComment(el.dataset.wbCommentSave).catch(commentFail); });
+    bind('[data-wb-comment-del]', (el) => { wbDeleteItemComment(el.dataset.wbCommentDel).catch(commentFail); });
+    bind('[data-wb-view-file]', (el) => { openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
     // Changing the chip field clears the chosen chip: its id belongs to the old field and
     // would match nothing, leaving an empty list with no chip highlighted to explain it.
     bind('[data-wb-chip]', (el) => { const ui = wbItemsUI(appId); const next = el.dataset.wbChip || ''; ui.chipValue = ui.chipValue === next ? '' : next; render(); });
@@ -18439,8 +18593,8 @@ function wbMountModal() {
     }; });
     const addComment = overlay.querySelector('[data-wb-add-comment]');
     if (addComment) addComment.onclick = () => { wbAddItemComment().catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); };
-    overlay.querySelectorAll('[data-wb-comment-edit]').forEach((b) => { b.onclick = () => { state.builderModal.editingCommentId = b.dataset.wbCommentEdit; wbKeepModalScroll(); render(); }; });
-    overlay.querySelectorAll('[data-wb-comment-cancel]').forEach((b) => { b.onclick = () => { state.builderModal.editingCommentId = null; wbKeepModalScroll(); render(); }; });
+    overlay.querySelectorAll('[data-wb-comment-edit]').forEach((b) => { b.onclick = () => { state.wbEditingCommentId = b.dataset.wbCommentEdit; wbKeepModalScroll(); render(); }; });
+    overlay.querySelectorAll('[data-wb-comment-cancel]').forEach((b) => { b.onclick = () => { state.wbEditingCommentId = null; wbKeepModalScroll(); render(); }; });
     overlay.querySelectorAll('[data-wb-comment-save]').forEach((b) => { b.onclick = () => { wbSaveEditedComment(b.dataset.wbCommentSave).catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); }; });
     overlay.querySelectorAll('[data-wb-comment-del]').forEach((b) => { b.onclick = () => { wbDeleteItemComment(b.dataset.wbCommentDel).catch((error) => showToast(error.message || 'Comment delete failed.', 'error', 'Workspaces')); }; });
     if (m.focusComment) { const ci = overlay.querySelector('#wbCommentInput'); if (ci) { ci.focus(); ci.scrollIntoView({ block: 'center' }); } m.focusComment = false; }
@@ -19269,39 +19423,6 @@ function renderClientPortalAnnoCard(annotation) {
   `;
 }
 
-function renderClientPortalsPage(route, companyId) {
-  // Owner annotate sub-view: ?portal_id=…&document_id=…&annotate=1
-  if (route.params.get('annotate') === '1' && route.params.get('portal_id')) {
-    const portalId = route.params.get('portal_id');
-    if (clientPortalById(portalId)) {
-      ensureClientPortalAnnotateState('owner', portalId, route.params.get('document_id') || '');
-      return renderClientPortalAnnotate('owner');
-    }
-  }
-  state.clientPortalAnnotate = null;
-  const portals = filteredClientPortals(companyId);
-  const selectedId = route.params.get('portal_id') || portals[0]?.id || '';
-  const selected = clientPortalById(selectedId);
-  const canManagePortals = can('client_portals.manage', companyId);
-  return `
-    <section class="tool-page client-portals-page">
-      ${workspaceHeader('Client portals', 'Share plan sets with password-protected markup links.', `
-        ${canManagePortals ? `<button class="btn btn-primary" type="button" data-action="open-client-portal-form"><i class="ti ti-world-plus"></i>New portal</button>` : ''}
-      `)}
-      <section class="client-portal-layout">
-        <aside class="panel client-portal-list-panel">
-          <label class="crm-search"><i class="ti ti-search"></i><input data-client-portal-search value="${h(state.clientPortalQuery)}" placeholder="Search portals" /></label>
-          <div class="client-portal-list">
-            ${portals.map((portal) => renderClientPortalListItem(portal, portal.id === selectedId)).join('') || emptyState('No client portals yet.')}
-          </div>
-        </aside>
-        <section class="panel client-portal-detail-panel">
-          ${selected ? renderClientPortalDetail(selected, canManagePortals) : emptyState('Create a portal to share PDF plans and markups.')}
-        </section>
-      </section>
-    </section>
-  `;
-}
 
 function renderClientPortalListItem(portal, active) {
   const groups = portalDocumentGroups(portal.id);
@@ -19981,39 +20102,6 @@ function renderInviteFormModal(companyId) {
   `, 'finance-modal');
 }
 
-function renderFormsPage(companyId) {
-  const routeTab = state.route?.params?.get('tab');
-  if (routeTab === 'responses') state.formsTab = 'responses';
-  if (routeTab === 'library') state.formsTab = 'library';
-  const forms = filteredForms(companyId);
-  const current = selectedForm(companyId);
-  const activeTab = state.formsTab === 'builder' && current ? 'builder' : state.formsTab === 'responses' ? 'responses' : 'library';
-  const formsSyncLabel = state.sync?.label || (isLiveSupabaseSession() ? 'Supabase live' : 'Local draft');
-  const formsSyncMode = state.sync?.mode || (isLiveSupabaseSession() ? 'live' : 'local');
-  return `
-    <section class="tool-page forms-center">
-      <div class="forms-command panel">
-        <span class="sync-pill ${h(formsSyncMode)}"><i class="ti ti-device-floppy"></i>${h(formsSyncLabel)}</span>
-        <label>
-          <span>Search</span>
-          <input data-form-search value="${h(state.formQuery)}" placeholder="Find form, audience, or job" />
-        </label>
-        <button class="btn" type="button" data-action="open-forms-tools"><i class="ti ti-adjustments"></i>Tools</button>
-        <button class="btn btn-primary" type="button" data-action="new-form"><i class="ti ti-plus"></i>New form</button>
-      </div>
-      ${activeTab === 'builder' ? '' : `
-        <nav class="tabbar forms-tabs" aria-label="Forms workspace">
-          ${['library', 'responses'].map((tab) => `
-            <button class="${activeTab === tab ? 'active' : ''}" type="button" data-action="set-forms-tab" data-tab="${h(tab)}">${h(titleCase(tab))}</button>
-          `).join('')}
-        </nav>
-      `}
-      ${activeTab === 'library' ? renderFormsLibrary(companyId, forms, current) : ''}
-      ${activeTab === 'builder' ? renderFormsBuilder(companyId, current) : ''}
-      ${activeTab === 'responses' ? renderFormsResponses(companyId, current) : ''}
-    </section>
-  `;
-}
 
 function renderFormsLibrary(companyId, forms, current) {
   return `
