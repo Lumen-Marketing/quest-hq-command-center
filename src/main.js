@@ -29869,7 +29869,15 @@ async function registerWorkspace(formNode) {
   const signUp = await client.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName } },
+    options: {
+      data: { full_name: fullName },
+      // Without this, the confirmation email has nowhere to point except the project's Site
+      // URL -- which is a deployment host, so confirming an account dropped people on a
+      // *.vercel.app copy of the app instead of on questbase.io. Passing it explicitly makes
+      // the link go where the person actually signed up, and the invite rides along or it is
+      // lost by the time they click it.
+      emailRedirectTo: `${authOrigin()}${BASE_PATH || ''}/${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''}`,
+    },
   });
   if (signUp.error) {
     state.authBusy = false;

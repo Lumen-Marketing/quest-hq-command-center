@@ -67,3 +67,23 @@ test('the comment says where the other half of the fix lives', () => {
   // the app-side fix alone does not close this.
   assert.match(main, /Supabase ignores a redirectTo that is not in its/);
 });
+
+test('the sign-up confirmation email points at the canonical site', () => {
+  // With no emailRedirectTo, Supabase has nowhere to send a confirmation except the project's
+  // Site URL -- and that was a deployment host, so confirming an account landed people on a
+  // *.vercel.app copy of the app.
+  assert.match(main, /emailRedirectTo: `\$\{authOrigin\(\)\}\$\{BASE_PATH \|\| ''\}\//);
+});
+
+test('an invitation survives the confirmation round trip', () => {
+  // The email outlives the tab, so anything not on the URL is gone by the time it is clicked.
+  const at = main.indexOf('emailRedirectTo:');
+  assert.match(main.slice(at, at + 200), /inviteToken \? `\?invite=\$\{encodeURIComponent\(inviteToken\)\}` : ''/);
+});
+
+test('password sign-in has no redirect to get wrong', () => {
+  // signInWithPassword is a plain API call: it cannot move you between hosts, which is what
+  // rules it out when someone reports landing on the wrong domain after "logging in".
+  const at = main.indexOf('const result = await client.auth.signInWithPassword({');
+  assert.ok(!/redirectTo/.test(main.slice(at, at + 300)), 'no redirect option belongs here');
+});
