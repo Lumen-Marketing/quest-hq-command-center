@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { resolveAppEntry, tileTargetApp, workspaceApps, workspaceHasApp } from '../src/workspace/builder-core.js';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
 
 // Installing an app into a second workspace stores a POINTER, never a copy. That is the
 // whole basis of "one app, two workspaces, shared data" — a copy would diverge the moment

@@ -26,6 +26,7 @@ export const BLOCK_TYPES = [
   { type: 'comments', label: 'Comments', icon: 'ti-message', desc: 'The conversation on this record', size: 2, config: false },
   { type: 'meta', label: 'Details', icon: 'ti-info-circle', desc: 'Created and last edited', size: 1, config: false },
   { type: 'note', label: 'Note', icon: 'ti-note', desc: 'A line of text on every record', size: 2, config: true },
+  { type: 'collection', label: 'Sub-items', icon: 'ti-list-check', desc: 'Records inside this record — dailies, line items, visits', size: 4, config: true },
 ];
 
 const TYPE_BY_NAME = new Map(BLOCK_TYPES.map((t) => [t.type, t]));

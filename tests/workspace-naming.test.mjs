@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { addRecordLabel, newRecordLabel, singularize } from '../src/workspace/naming.js';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
 
 test('the common case: an app named for the collection, one record out of it', () => {
   assert.equal(singularize('Jobs'), 'Job');

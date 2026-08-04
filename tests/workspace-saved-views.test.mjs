@@ -6,7 +6,8 @@ import {
   renderViewsRail, splitFields, viewGroups, viewTotal,
 } from '../src/workspace/saved-views.js';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
 const mod = readFileSync(new URL('../src/workspace/saved-views.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 

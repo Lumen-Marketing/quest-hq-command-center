@@ -6,6 +6,25 @@
 // null the way a fetched one can.
 
 import * as recordLayout from './record-layout.js';
+import * as children from './child-collections.js';
+
+/**
+ * A child value as plain text.
+ *
+ * Deliberately not the app's own formatter: that resolves relationships and members against
+ * the parent app's field list, which a child field is not part of. Options are looked up on
+ * the child field itself.
+ */
+function childValueText(field, value) {
+  if (value == null || value === '') return '—';
+  if (field.type === 'checkbox') return value === true || value === 'true' ? 'Yes' : 'No';
+  if (field.type === 'status' || field.type === 'category') {
+    return (field.config?.options || []).find((o) => o.id === value)?.label || String(value);
+  }
+  if (field.type === 'money') return `${field.config?.currency || '$'}${value}`;
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
+}
 
 export function createRecordPage(ctx) {
   const {
@@ -45,6 +64,32 @@ export function createRecordPage(ctx) {
           <div class="wb-view-row"><span class="wb-view-label">Last edited</span><span class="wb-view-val">${item.updatedAt ? h(wbTimeAgo(item.updatedAt)) : '—'}</span></div>
           <div class="wb-view-row"><span class="wb-view-label">Comments</span><span class="wb-view-val">${count}</span></div>
         </div>`;
+      }
+      if (block.type === 'collection') {
+        const collection = children.findCollection(app, block.config?.collectionId);
+        if (!collection) {
+          return `<h3 class="wb-w-title">Sub-items</h3>${emptyState('Pick which sub-items this card shows in its settings.')}`;
+        }
+        const rows = children.childrenOf(item, collection.id);
+        const cols = collection.fields;
+        const one = collection.recordName || collection.name;
+        return `<h3 class="wb-w-title">${h(collection.name)}<span class="wb-w-count">${rows.length}</span>
+          ${canManage ? `<button class="btn btn-sm btn-primary" type="button" data-wb-child-add="${h(collection.id)}"><i class="ti ti-plus"></i>Add ${h(one)}</button>` : ''}
+        </h3>
+        ${!cols.length
+    ? emptyState(`${collection.name} has no fields yet. Add them in the app's Settings.`)
+    : rows.length
+      ? `<div class="wb-child-scroll"><table class="wb-child-table">
+            <thead><tr>${cols.map((f) => `<th>${h(f.label)}</th>`).join('')}${canManage ? '<th class="wb-child-acts"></th>' : ''}</tr></thead>
+            <tbody>${rows.map((child) => `<tr>
+              ${cols.map((f) => `<td>${h(childValueText(f, child.values[f.id]))}</td>`).join('')}
+              ${canManage ? `<td class="wb-child-acts">
+                <button class="wb-w-btn" type="button" data-wb-child-edit="${h(collection.id)}:${h(child.id)}" title="Edit" aria-label="Edit"><i class="ti ti-pencil"></i></button>
+                <button class="wb-w-btn danger" type="button" data-wb-child-del="${h(collection.id)}:${h(child.id)}" title="Delete" aria-label="Delete"><i class="ti ti-trash"></i></button>
+              </td>` : ''}
+            </tr>`).join('')}</tbody>
+          </table></div>`
+      : emptyState(`No ${h(collection.name.toLowerCase())} yet.`)}`;
       }
       const title = String(block.config?.title || '').trim();
       const fields = recordLayout.blockFields(app, block);

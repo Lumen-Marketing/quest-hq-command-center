@@ -4,7 +4,8 @@ import test from 'node:test';
 
 // Normalised: the working tree is CRLF, so \n-anchored slices would run past the end
 // of whatever they are meant to bound.
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
 
 const fn = (name) => {
   const start = main.indexOf(`function ${name}(`);

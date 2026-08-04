@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { renderBoard, renderStageDeletePrompt, renderStageManager } from '../src/workspace/board-view.js';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 // The Automations tab and its rule editor are fetched on demand now, so the stage-trigger
 // UI is read from its own module rather than from main.js.

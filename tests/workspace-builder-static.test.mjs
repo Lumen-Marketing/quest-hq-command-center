@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const migrationUrl = new URL('../supabase/migrations/202606270800_workspace_builder_plugin.sql', import.meta.url);
 const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';

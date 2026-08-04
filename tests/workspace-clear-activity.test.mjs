@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { clearableCount, clearedActivity, logStamp, matchBuilderWorkspace } from '../src/workspace/activity-log.js';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
 const log = readFileSync(new URL('../src/workspace/activity-log.js', import.meta.url), 'utf8');
 const fn = (name) => {
   const at = main.indexOf(`function ${name}(`);

@@ -30853,3 +30853,35 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-rec-note { font-size: .78rem; color: var(--muted); align-self: center; }
 .wb-check-row { display: flex; gap: 8px; align-items: center; font-size: .84rem; padding: 4px 0; cursor: pointer; }
 .wb-check-list { display: grid; gap: 1px; margin-top: 4px; padding-left: 4px; border-left: 2px solid var(--border); }
+
+/* ---- Sub-items: records inside a record ------------------------------------------------- */
+.wb-child-scroll { overflow-x: auto; }
+.wb-child-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.wb-child-table th {
+  text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border);
+  font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+  white-space: nowrap;
+}
+.wb-child-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.wb-child-table tr:last-child td { border-bottom: 0; }
+.wb-child-table tr:hover td { background: var(--surface-2); }
+.wb-child-acts { width: 1%; white-space: nowrap; text-align: right; }
+.wb-child-acts .wb-w-btn + .wb-w-btn { margin-left: 4px; }
+.wb-w-collection .wb-w-title { align-items: center; }
+.wb-w-collection .wb-w-title .btn { margin-left: auto; }
+
+.wb-collection { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.wb-collection-head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+.wb-collection-head b { font-size: .88rem; }
+.wb-collection-head .wb-w-btn { margin-left: auto; }
+.wb-collection-fields { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.wb-collection-field {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: 99px; padding: 3px 5px 3px 11px;
+  font-size: .78rem; font-weight: 600;
+}
+.wb-collection-field small { color: var(--muted); font-weight: 500; }
+.wb-collection-field button { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 3px; }
+.wb-collection-field button:hover { color: var(--red, #dc2626); }
+.wb-collection-new { display: flex; gap: 7px; }
+.wb-collection-new .wb-input { flex: 1; }
