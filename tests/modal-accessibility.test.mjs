@@ -30,15 +30,17 @@ test('both modal shells are announced as dialogs', () => {
 test('an open modal takes focus instead of leaving it on a destroyed trigger', () => {
   const sync = fn('syncModalFocus');
   assert.match(sync, /activeModalOverlay\(\)/);
-  assert.match(sync, /panel\.focus\(\)/, 'the dialog container should take focus so its title is read');
-  assert.match(sync, /first\?\.focus\(\)/, 'and fall back to the first control');
+  // preventScroll on all of them: focusing scrolls the element into view, and what moves is
+  // the page BEHIND the modal — so opening one from halfway down threw that page to the top.
+  assert.match(sync, /panel\.focus\(\{ preventScroll: true \}\)/, 'the dialog container should take focus so its title is read');
+  assert.match(sync, /first\?\.focus\(\{ preventScroll: true \}\)/, 'and fall back to the first control');
 });
 
 test('closing a modal returns focus to whatever opened it', () => {
   const sync = fn('syncModalFocus');
   assert.match(sync, /state\.focusReturn/);
   assert.match(sync, /state\.focusReturn = ''/, 'the pending restore must be cleared so it fires once');
-  assert.match(sync, /querySelector\(selector\)\?\.focus\(\)/);
+  assert.match(sync, /querySelector\(selector\)\?\.focus\(\{ preventScroll: true \}\)/);
 });
 
 test('the trigger is recorded as a selector, because the node does not survive a render', () => {

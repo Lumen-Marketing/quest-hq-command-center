@@ -263,3 +263,47 @@ test('the field builder is not squeezed into the settings column', () => {
   assert.match(styles, /\.wb-collections \{ margin-top: 18px; max-width: 1100px; \}/);
   assert.match(styles, /\.wb-collection \.wb-builder-grid \{ grid-template-columns: minmax\(0, 1fr\) 260px/);
 });
+
+// --- drag and drop, and the jump ------------------------------------------------------------
+
+test('every builder on the page gets its dropzone bound, not just the first', () => {
+  // The settings page carries one per sub-item list. querySelector left every other inert,
+  // which is what "drag and drop is not working" was.
+  assert.match(main, /document\.querySelectorAll\('\[data-wb-field-dropzone\]'\)\.forEach\(\(dropzone\) => \{/);
+  assert.match(main, /const scope = dropzone\.getAttribute\('data-wb-field-dropzone'\) \|\| '';/);
+});
+
+test('a dragged field lands in the list it was dragged in, not in the app', () => {
+  assert.match(main, /function wbAddFieldInstant\(companyId, workspaceId, appId, type, index, collectionId = ''\)/);
+  assert.match(main, /const owner = collectionId \? \(app\.collections \|\| \[\]\)\.find\(\(c\) => c\.id === collectionId\) : app;/);
+  assert.match(main, /owner\.fields\.splice\(at, 0, field\);/);
+  assert.ok(!/app\.fields\.splice\(at, 0, field\)/.test(main), 'it must not write to the app regardless of scope');
+});
+
+test('reordering moves a field within its own owner', () => {
+  const drop = main.match(/row\.ondrop = \(e\) => \{[\s\S]*?\n {4}\};/)?.[0] || '';
+  assert.match(drop, /const owner = target\.scope \? \(app\.collections \|\| \[\]\)\.find\(\(c\) => c\.id === target\.scope\) : app;/);
+  assert.match(drop, /owner\.fields\.splice\(from, 1\); owner\.fields\.splice\(to, 0, moved\);/);
+});
+
+test('a field cannot be dragged from one list into another', () => {
+  // They are different shapes of record, and the values already stored under it have
+  // nowhere to go.
+  const drop = main.match(/row\.ondrop = \(e\) => \{[\s\S]*?\n {4}\};/)?.[0] || '';
+  assert.match(drop, /if \(source\.scope !== target\.scope\) return;/);
+});
+
+test('opening a dialog does not scroll the page behind it', () => {
+  // Focusing an element makes the browser scroll it into view, and what moves is the page
+  // BEHIND the modal — so opening one from halfway down threw that page to the top.
+  const sync = main.match(/function syncModalFocus\(\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(sync, /panel\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(sync, /first\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(sync, /document\.querySelector\(selector\)\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.ok(!/\.focus\(\);/.test(sync), 'no bare focus() may remain');
+});
+
+test('focus is not handed back to a control behind an open modal', () => {
+  // It breaks the dialog's focus trap and scrolls the page under it.
+  assert.match(main, /if \(!restoreFocus \|\| !kept\.selector \|\| activeModalOverlay\(\)\) return;/);
+});

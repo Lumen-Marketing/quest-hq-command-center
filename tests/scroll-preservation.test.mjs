@@ -176,7 +176,9 @@ test('the restore is re-applied after layout, not only before it', () => {
 test('the second pass does not fight a user who moved focus in between', () => {
   // A frame is long enough for a keystroke. Only the first pass restores focus.
   const apply = main.match(/function applyKeptScroll\(kept, restoreFocus\) \{[\s\S]*?\n\}/)?.[0] || '';
-  assert.match(apply, /if \(!restoreFocus \|\| !kept\.selector\) return;/);
+  // …and never into a control that now sits behind an open modal: that breaks the dialog's
+  // focus trap and scrolls the page under it.
+  assert.match(apply, /if \(!restoreFocus \|\| !kept\.selector \|\| activeModalOverlay\(\)\) return;/);
 });
 
 test('the restore writes only when the value actually differs', () => {

@@ -3648,7 +3648,9 @@ function applyKeptScroll(kept, restoreFocus) {
     try { target = document.querySelector(selector); } catch { target = null; }
     if (target && target.scrollTop !== top) target.scrollTop = top;
   }
-  if (!restoreFocus || !kept.selector) return;
+  // Not while a modal is open: the control is behind it, and focusing it both breaks the
+  // dialog's focus trap and scrolls the page under it.
+  if (!restoreFocus || !kept.selector || activeModalOverlay()) return;
   // Rendering destroys the node the user was interacting with. Without this, ticking a
   // checkbox drops focus to the body: the next Tab starts from the top of the page, and
   // a keyboard user cannot work down a list of them at all.
@@ -16489,19 +16491,23 @@ function wbRollupValue(companyId, app, field, values) {
 // Add a field of the given type instantly (drag-and-drop from the palette), at an
 // optional index. Sensible defaults are filled so it works immediately; the user
 // can refine it with the configure (sliders) button afterwards.
-function wbAddFieldInstant(companyId, workspaceId, appId, type, index) {
+function wbAddFieldInstant(companyId, workspaceId, appId, type, index, collectionId = '') {
   if (!wbGuard()) return;
   const { app } = wbFind(companyId, workspaceId, appId);
   if (!app || !WB_FIELD_TYPES[type]) return;
+  // The owner is the app, or one of its sub-item lists.
+  const owner = collectionId ? (app.collections || []).find((c) => c.id === collectionId) : app;
+  if (!owner) return;
+  if (!Array.isArray(owner.fields)) owner.fields = [];
   let label = WB_FIELD_DEFAULT_LABEL[type] || WB_FIELD_TYPES[type].label;
-  if (app.fields.some((f) => f.label === label)) { let n = 2; while (app.fields.some((f) => f.label === `${label} ${n}`)) n += 1; label = `${label} ${n}`; }
+  if (owner.fields.some((f) => f.label === label)) { let n = 2; while (owner.fields.some((f) => f.label === `${label} ${n}`)) n += 1; label = `${label} ${n}`; }
   const config = {};
   if (type === 'status') config.options = [{ id: wbUid(), label: 'To Do', color: '#6b7280' }, { id: wbUid(), label: 'In Progress', color: '#d97706' }, { id: wbUid(), label: 'Done', color: '#16a34a' }];
   else if (type === 'category') config.options = [{ id: wbUid(), label: 'Option 1', color: WB_PALETTE[1] }, { id: wbUid(), label: 'Option 2', color: WB_PALETTE[2] }];
   else if (type === 'money') config.currency = '$';
   const field = { id: wbUid(), type, label, required: false, hidden: false, config };
-  const at = (typeof index === 'number' && index >= 0 && index <= app.fields.length) ? index : app.fields.length;
-  app.fields.splice(at, 0, field);
+  const at = (typeof index === 'number' && index >= 0 && index <= owner.fields.length) ? index : owner.fields.length;
+  owner.fields.splice(at, 0, field);
   wbSave(companyId);
   showToast(`Added "${label}" — use the sliders to configure it.`, 'local', 'Workspaces');
   render();
@@ -18650,12 +18656,26 @@ function wbMountDnD(companyId, workspaceId, appId) {
     item.ondragstart = (e) => { state.wbPaletteDragType = item.dataset.wbPaletteType; item.classList.add('dragging'); if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', item.dataset.wbPaletteType); } catch { /* ignore */ } } };
     item.ondragend = () => { state.wbPaletteDragType = null; item.classList.remove('dragging'); document.querySelectorAll('.drop-target, .wb-drop-active').forEach((r) => r.classList.remove('drop-target', 'wb-drop-active')); };
   });
-  const dropzone = document.querySelector('[data-wb-field-dropzone]');
-  if (dropzone) {
+  // querySelectorAll, not querySelector: the settings page carries one dropzone per
+  // sub-item list, and binding only the first left every other one inert.
+  document.querySelectorAll('[data-wb-field-dropzone]').forEach((dropzone) => {
+    const scope = dropzone.getAttribute('data-wb-field-dropzone') || '';
     dropzone.ondragover = (e) => { if (state.wbPaletteDragType) { e.preventDefault(); dropzone.classList.add('wb-drop-active'); } };
     dropzone.ondragleave = (e) => { if (e.target === dropzone) dropzone.classList.remove('wb-drop-active'); };
-    dropzone.ondrop = (e) => { if (!state.wbPaletteDragType) return; e.preventDefault(); dropzone.classList.remove('wb-drop-active'); const type = state.wbPaletteDragType; state.wbPaletteDragType = null; wbAddFieldInstant(companyId, workspaceId, appId, type); };
-  }
+    dropzone.ondrop = (e) => {
+      if (!state.wbPaletteDragType) return;
+      e.preventDefault();
+      dropzone.classList.remove('wb-drop-active');
+      const raw = state.wbPaletteDragType;
+      state.wbPaletteDragType = null;
+      // The palette item carries its own scope, so a type dragged out of a sub-item list's
+      // palette lands in that list rather than in the app.
+      const at = raw.indexOf(':');
+      const type = at === -1 ? raw : raw.slice(at + 1);
+      const from = at === -1 ? '' : raw.slice(0, at);
+      wbAddFieldInstant(companyId, workspaceId, appId, type, undefined, from || scope);
+    };
+  });
   document.querySelectorAll('.wb-field-row[draggable]').forEach((row) => {
     row.ondragstart = () => { dragId = row.dataset.fid; row.classList.add('dragging'); };
     row.ondragend = () => { row.classList.remove('dragging'); document.querySelectorAll('.wb-field-row').forEach((r) => r.classList.remove('drop-target')); };
@@ -18664,12 +18684,28 @@ function wbMountDnD(companyId, workspaceId, appId) {
     row.ondrop = (e) => {
       e.preventDefault(); e.stopPropagation(); row.classList.remove('drop-target');
       const { app } = wbFind(companyId, workspaceId, appId);
-      const to = app.fields.findIndex((f) => f.id === row.dataset.fid);
+      if (!app) return;
+      // "<collectionId>:<fieldId>" is a sub-item list's field; a bare id is the app's own.
+      const cut = (raw) => { const at = String(raw || '').indexOf(':'); return at === -1 ? { scope: '', id: String(raw || '') } : { scope: String(raw).slice(0, at), id: String(raw).slice(at + 1) }; };
+      const target = cut(row.dataset.fid);
+      const owner = target.scope ? (app.collections || []).find((c) => c.id === target.scope) : app;
+      if (!owner || !Array.isArray(owner.fields)) return;
+      const to = owner.fields.findIndex((f) => f.id === target.id);
       // A palette drag lands as an insert-at-position; a row drag is a reorder.
-      if (state.wbPaletteDragType) { const type = state.wbPaletteDragType; state.wbPaletteDragType = null; wbAddFieldInstant(companyId, workspaceId, appId, type, to); return; }
-      const from = app.fields.findIndex((f) => f.id === dragId);
+      if (state.wbPaletteDragType) {
+        const raw = state.wbPaletteDragType;
+        state.wbPaletteDragType = null;
+        const at = raw.indexOf(':');
+        wbAddFieldInstant(companyId, workspaceId, appId, at === -1 ? raw : raw.slice(at + 1), to, target.scope);
+        return;
+      }
+      const source = cut(dragId);
+      // A field cannot be dragged from one list into another: they are different shapes of
+      // record, and the values already stored under it have nowhere to go.
+      if (source.scope !== target.scope) return;
+      const from = owner.fields.findIndex((f) => f.id === source.id);
       if (from < 0 || to < 0 || from === to) return;
-      const [moved] = app.fields.splice(from, 1); app.fields.splice(to, 0, moved); wbSave(companyId); render();
+      const [moved] = owner.fields.splice(from, 1); owner.fields.splice(to, 0, moved); wbSave(companyId); render();
     };
   });
 }
@@ -25018,12 +25054,14 @@ function syncModalFocus() {
   if (overlay) {
     if (overlay.contains(document.activeElement)) return;
     const panel = overlay.querySelector('[role="dialog"]');
-    // Prefer the dialog container so assistive tech reads its title before its
-    // contents; fall back to the first real control if the panel can't take focus.
-    if (panel && panel.tabIndex === -1) { panel.focus(); return; }
+    // preventScroll on every one of these. Focusing an element makes the browser scroll it
+    // into view, and the page BEHIND the modal is what moves -- so opening a dialog from
+    // halfway down a long settings page threw that page back to the top, which is what you
+    // saw the moment the dialog closed again.
+    if (panel && panel.tabIndex === -1) { panel.focus({ preventScroll: true }); return; }
     const first = [...overlay.querySelectorAll(FOCUSABLE_SELECTOR)]
       .find((el) => !el.hidden && (el.offsetWidth + el.offsetHeight) > 0);
-    first?.focus();
+    first?.focus({ preventScroll: true });
     return;
   }
   const selector = state.focusReturn;
@@ -25031,7 +25069,7 @@ function syncModalFocus() {
   state.focusReturn = '';
   // The trigger may legitimately be gone -- deleted, or on a page we navigated away
   // from. Nothing to restore in that case, and nothing worth reporting either.
-  try { document.querySelector(selector)?.focus(); } catch { /* selector no longer resolves */ }
+  try { document.querySelector(selector)?.focus({ preventScroll: true }); } catch { /* selector no longer resolves */ }
 }
 
 function activeModalOverlay() {
