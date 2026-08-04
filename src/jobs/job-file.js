@@ -11,6 +11,7 @@ import {
   CO_STEPS, bucketProgress, coStepIndex, dailyStreak, daysWorked, drawTotals,
   isStruggling, projectedNet, sortDailies, ticketWithChangeOrders,
 } from './production-model.js';
+import { groupLines, lineAmount, methodLabel } from './change-order-model.js';
 
 export const JOB_FILE_TABS = [
   ['overview', 'Overview'],
@@ -180,6 +181,40 @@ export function createJobFile(ctx) {
         </div>`).join('')}</div>`;
   }
 
+  /**
+   * The working behind the price: what it was costed from, and what margin that left.
+   *
+   * Collapsed by default. The price is the answer most of the time; the lines matter when
+   * somebody asks how it was arrived at, which is usually months later in an argument.
+   */
+  function pricingBreakdown(co, data) {
+    const lines = (data.changeOrderLines || []).filter((l) => l.change_order_id === co.id);
+    if (!lines.length) {
+      // A flat-priced change order is legitimate, but it should say so rather than look like
+      // one whose lines failed to load.
+      return co.pricing_method === 'flat' && co.price > 0
+        ? '<p class="jf-sub jf-co-flat">Priced as a flat fee.</p>' : '';
+    }
+    const groups = groupLines(lines);
+    const margin = Number(co.margin_pct) || 0;
+    return `
+      <details class="jf-co-lines">
+        <summary>Cost ${h(money(co.cost))}${margin ? ` · margin ${margin.toFixed(1)}%` : ''} — how this was priced</summary>
+        ${groups.map((group) => `
+          <div class="jf-co-group">
+            <p class="jf-label">${h(methodLabel(group.kind))}<span>${h(money(group.cost))}</span></p>
+            ${group.lines.map((line) => `
+              <div class="jf-co-line">
+                <span>${h(line.label)}</span>
+                <span class="jf-sub">${line.kind === 'labor'
+    ? `${h(line.qty)} × ${h(line.days)} day${line.days === 1 ? '' : 's'} × ${h(money(line.unitCost))}`
+    : `${h(line.qty)} × ${h(money(line.unitCost))}`}</span>
+                <b>${h(money(lineAmount(line)))}</b>
+              </div>`).join('')}
+          </div>`).join('')}
+      </details>`;
+  }
+
   function changesTab(job, data) {
     const canManage = can('jobs.manage', job.company_id);
     const newButton = canManage
@@ -196,6 +231,7 @@ export function createJobFile(ctx) {
       <article class="jf-card jf-co">
         <div class="jf-co-head"><b>${h(co.title)}</b><b class="jf-co-price">${h(money(co.price))}</b></div>
         ${co.description ? `<p class="jf-sub">${h(co.description)}</p>` : ''}
+        ${pricingBreakdown(co, data)}
         <div class="jf-steps">${CO_STEPS.map((step, i) => `
           <span class="jf-step ${i < at ? 'jf-step-done' : i === at ? 'jf-step-now' : ''}">${h(step)}</span>`).join('')}</div>
         ${co.requested_by ? `<p class="jf-sub">Asked by ${h(co.requested_by)}</p>` : ''}

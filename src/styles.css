@@ -30527,6 +30527,97 @@ a.wb-cal-more:hover { color: var(--orange); }
 .jf-co-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .jf-co-price { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--success, #15803d); }
 
+/* The working behind the price. Shut by default — the price is the answer; the lines are for
+   the conversation months later about how it was arrived at. */
+.jf-co-flat { margin-top: 6px; }
+.jf-co-lines { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+.jf-co-lines summary {
+  cursor: pointer; font-size: .8rem; font-weight: 700; color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.jf-co-lines summary:hover { color: var(--orange); }
+.jf-co-group { margin-top: 10px; }
+.jf-co-group .jf-label { display: flex; margin-bottom: 3px; }
+.jf-co-group .jf-label span { margin-left: auto; font-variant-numeric: tabular-nums; }
+.jf-co-line {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 10px; align-items: baseline; padding: 3px 0; font-size: .83rem;
+}
+.jf-co-line b { font-variant-numeric: tabular-nums; }
+
+/* ---- Change-order wizard ------------------------------------------------------------------ */
+.cow { display: grid; gap: 12px; }
+.cow-eyebrow {
+  margin: 0; font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600;
+}
+.cow-job { margin: 0; font-size: 1rem; }
+.cow-label { margin: 0; font-size: .8rem; font-weight: 700; color: var(--ink-2); }
+.cow-field { display: grid; gap: 5px; font-size: .8rem; font-weight: 700; color: var(--ink-2); }
+.cow-field .wb-input { font-weight: 400; }
+
+.cow-steps { display: flex; gap: 6px; }
+.cow-step {
+  width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%;
+  font-size: .72rem; font-weight: 800; background: var(--surface-2); color: var(--muted);
+}
+.cow-step.done { background: var(--success, #15803d); color: #fff; }
+.cow-step.now { background: var(--ink); color: #fff; }
+
+.cow-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cow-chip {
+  border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px;
+  font-size: .78rem; font-weight: 600; color: var(--ink-2); background: var(--surface); cursor: pointer;
+}
+.cow-chip:hover { border-color: var(--orange); color: var(--orange); }
+.cow-chip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+.cow-group { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.cow-group-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.cow-group-cost { margin-left: auto; font-size: .82rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cow-line {
+  display: grid; gap: 6px; align-items: center; margin-bottom: 5px;
+  grid-template-columns: minmax(0, 1fr) 74px 74px 92px 84px 32px;
+}
+.cow-line-3, .cow-group .cow-line:not(:has(> [data-co-line="days"])) {
+  grid-template-columns: minmax(0, 1fr) 74px 92px 84px 32px;
+}
+.cow-line-head {
+  font-size: .64rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 2px;
+}
+.cow-line .wb-input { padding: 6px 9px; font-size: .82rem; }
+.cow-line-num { text-align: right; font-variant-numeric: tabular-nums; }
+.cow-line-amt { text-align: right; font-size: .84rem; font-variant-numeric: tabular-nums; }
+.cow-add {
+  border: 1px dashed var(--border); border-radius: 9px; padding: 5px 12px; background: transparent;
+  font-size: .78rem; font-weight: 600; color: var(--ink-2); cursor: pointer;
+  display: inline-flex; gap: 5px; align-items: center;
+}
+.cow-add:hover { border-color: var(--orange); color: var(--orange); }
+
+.cow-price {
+  display: grid; gap: 10px; align-items: end; grid-template-columns: auto minmax(0, 1fr) auto;
+  border: 1.5px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--surface-2);
+}
+.cow-margin-row { display: flex; gap: 6px; align-items: center; }
+.cow-margin .wb-input { width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
+.cow-total { text-align: right; }
+.cow-total p { margin: 2px 0; }
+.cow-total strong { display: block; font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cow-good { color: var(--success, #15803d); }
+.cow-bad { color: var(--danger, #b91c1c); }
+
+.cow-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cow-actions .btn { flex: 1; justify-content: center; }
+
+@media (max-width: 720px) {
+  .cow-line, .cow-line-3 { grid-template-columns: minmax(0, 1fr) 64px 74px 32px; }
+  .cow-line-head { display: none; }
+  .cow-price { grid-template-columns: 1fr; }
+  .cow-total { text-align: left; }
+}
+
 .jf-plans { display: grid; gap: 2px; }
 .jf-plan { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .jf-plan:last-child { border-bottom: 0; }

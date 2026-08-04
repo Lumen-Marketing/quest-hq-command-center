@@ -112,6 +112,30 @@ export function normalizeChangeOrder(row = {}) {
   };
 }
 
+/**
+ * One pricing line of a change order.
+ *
+ * Kept in the database's own snake_case shape rather than the wizard's camelCase, because
+ * this is what the Change Orders tab reads back. The wizard converts on the way in; nothing
+ * converts on the way out.
+ */
+export function normalizeChangeOrderLine(row = {}) {
+  const n = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  return {
+    id: row.id || '',
+    company_id: row.company_id || '',
+    job_id: row.job_id || '',
+    change_order_id: row.change_order_id || '',
+    kind: ['labor', 'material', 'hardware', 'equipment'].includes(row.kind) ? row.kind : 'material',
+    label: String(row.label || ''),
+    qty: Math.max(0, n(row.qty, 1)),
+    days: Math.max(0, n(row.days, 1)),
+    unit_cost: Math.max(0, n(row.unit_cost, 0)),
+    material_id: row.material_id || '',
+    sort_order: n(row.sort_order, 0),
+  };
+}
+
 export function normalizePlan(row = {}) {
   return {
     id: text(row.id),

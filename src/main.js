@@ -12,7 +12,7 @@ import {
 } from './workspace/pipeline-core.js';
 import { clearableCount, clearedActivity, logStamp, matchBuilderWorkspace } from './workspace/activity-log.js';
 import {
-  CO_STEPS, normalizeChangeOrder, normalizeCostBucket, normalizeDaily, normalizeDraw, normalizePlan,
+  CO_STEPS, normalizeChangeOrder, normalizeChangeOrderLine, normalizeCostBucket, normalizeDaily, normalizeDraw, normalizePlan,
 } from './jobs/production-model.js';
 import {
   assignmentRow, assignmentsToCreate, describeAssignment, findLabel,
@@ -2369,6 +2369,7 @@ const state = {
   jobCostBuckets: [],
   jobDraws: [],
   jobChangeOrders: [],
+  jobChangeOrderLines: [],
   jobPlans: [],
   contacts: activeRows(readSeededList(CONTACT_CACHE_KEY, contactsFallback)).map(normalizeContact),
   accounts: activeRows(readSeededList(ACCOUNT_CACHE_KEY, accountsFallback)).map(normalizeAccount),
@@ -2590,6 +2591,7 @@ const state = {
   jobBulkDelete: null,
   jobDailyDraft: null,
   jobRecordDraft: null,
+  coWizard: null,
   jobTradeFilter: 'all',
   jobCalendarMode: 'month',
   jobCalendarAnchor: '',
@@ -12208,6 +12210,7 @@ function productionForJob(jobId) {
     buckets: state.jobCostBuckets.filter((row) => row.job_id === id),
     draws: state.jobDraws.filter((row) => row.job_id === id),
     changeOrders: state.jobChangeOrders.filter((row) => row.job_id === id),
+    changeOrderLines: state.jobChangeOrderLines.filter((row) => row.job_id === id),
     plans: state.jobPlans.filter((row) => row.job_id === id),
     // Photos live on the dailies until the photo phase lands, so the count comes from there
     // rather than from a table that does not exist yet.
@@ -12237,6 +12240,113 @@ function loadJobFile() {
     });
   }
   return jobFilePending;
+}
+
+// ---- Change-order wizard ----------------------------------------------------
+// Three steps in their own module, fetched the first time one is opened.
+let changeOrderWizardModule = null;
+let changeOrderWizardPending = null;
+
+function loadChangeOrderWizard() {
+  if (changeOrderWizardModule) return Promise.resolve(changeOrderWizardModule);
+  if (!changeOrderWizardPending) {
+    changeOrderWizardPending = import('./jobs/change-order-wizard.js').then((mod) => {
+      changeOrderWizardModule = mod.createChangeOrderWizard({
+        h, money, state, render, renderModalShell, showToast, uid: wbUid,
+        saveWizard: saveChangeOrderWizard,
+      });
+      return changeOrderWizardModule;
+    }).catch((error) => {
+      changeOrderWizardPending = null;
+      throw error;
+    });
+  }
+  return changeOrderWizardPending;
+}
+
+function openChangeOrderWizard(jobId) {
+  state.coWizard = {
+    jobId,
+    step: 1,
+    what: '',
+    requestedBy: '',
+    askedVia: 'in_person',
+    laborMode: 'crew_days',
+    lines: [],
+    method: 'lines',
+    // The default the v1 design prices at. It is a starting point, not a rule -- the field is
+    // editable and the summary recomputes as it changes.
+    marginPct: 45,
+    flatPrice: 0,
+    sentVia: 'text',
+    executeWhen: 'on_acceptance',
+    error: '',
+  };
+  state.modal = 'co-wizard';
+  render();
+  loadChangeOrderWizard().then(() => render())
+    .catch((error) => console.error('Change-order wizard failed to load', error));
+}
+
+function renderChangeOrderWizardModal() {
+  const job = state.coWizard ? jobById(state.coWizard.jobId) : null;
+  if (!changeOrderWizardModule) return renderModalShell('Jobs', 'Change order', questLoader('Loading'), 'wb-modal-sm');
+  return changeOrderWizardModule.renderChangeOrderWizard(job);
+}
+
+/**
+ * Write the change order, then its lines.
+ *
+ * The lines go in second and are allowed to fail on their own: a change order with a price
+ * and no working is still worth having, and losing the whole thing because one line was
+ * rejected would throw away the part that matters.
+ */
+async function saveChangeOrderWizard(draft, { documentOnly }) {
+  const job = jobById(draft.jobId);
+  if (!job || !changeOrderWizardModule) return;
+  if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot add job records.', 'Jobs')) return;
+  const { changeOrder, lines } = changeOrderWizardModule.wizardPayload(draft, job, documentOnly);
+  if (!changeOrder.title) {
+    draft.error = 'Say what the client wants changed first.';
+    render();
+    return;
+  }
+
+  const client = createSupabaseClient();
+  let row = { ...changeOrder, id: crypto.randomUUID() };
+  if (isLiveSupabaseSession() && client) {
+    const result = await client.from('job_change_orders').insert(changeOrder).select().single();
+    if (result.error) {
+      draft.error = result.error.message || 'Could not save that change order.';
+      render();
+      return;
+    }
+    row = result.data;
+    if (lines.length) {
+      const withParent = lines.map((line) => ({ ...line, change_order_id: row.id }));
+      const lineResult = await client.from('job_change_order_lines').insert(withParent).select();
+      if (lineResult.error) {
+        showToast('Change order saved, but its pricing lines did not. Open it to re-enter them.', 'error', 'Jobs');
+      } else {
+        state.jobChangeOrderLines = [...state.jobChangeOrderLines, ...(lineResult.data || []).map(normalizeChangeOrderLine)];
+      }
+    }
+  } else if (lines.length) {
+    state.jobChangeOrderLines = [
+      ...state.jobChangeOrderLines,
+      ...lines.map((line) => normalizeChangeOrderLine({ ...line, id: crypto.randomUUID(), change_order_id: row.id })),
+    ];
+  }
+
+  state.jobChangeOrders = [normalizeChangeOrder(row), ...state.jobChangeOrders];
+  state.modal = '';
+  state.coWizard = null;
+  showToast(
+    documentOnly ? 'Documented — no charge. The crew still has to acknowledge it.' : 'Change order saved.',
+    isLiveSupabaseSession() ? 'live' : 'local',
+    'Jobs',
+  );
+  navigate(companyPath('jobs', { tab: 'profile', job_id: job.id, jt: 'changes' }, job.company_id), { replace: true });
 }
 
 function renderJobFile(companyId, job, tab) {
@@ -23462,6 +23572,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'record-history') return renderRecordHistoryModal();
   if (state.modal === 'job-daily') return renderJobDailyModal();
   if (state.modal === 'job-record-new') return renderJobRecordModal();
+  if (state.modal === 'co-wizard') return renderChangeOrderWizardModal();
   if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
   if (state.modal === 'contacts-dedupe') return renderContactsDedupeModal();
@@ -27714,11 +27825,25 @@ function handleAction(event, node) {
     advanceChangeOrder(node.dataset.coId, node.dataset.coStep);
     return;
   }
-  if (['job-change-order-new', 'job-bucket-new', 'job-draw-new'].includes(action)) {
+  // The change order gets a wizard rather than a form: capture, price, send. Its own step is
+  // where the money leaks, so each one is asked for separately.
+  if (action === 'job-change-order-new') {
+    event.preventDefault();
+    if (!requirePermission('jobs.manage', activeCompanyId(), 'Your role cannot add job records.', 'Jobs')) return;
+    openChangeOrderWizard(selectedJob()?.id || '');
+    return;
+  }
+  if (action.startsWith('co-wizard-')) {
+    event.preventDefault();
+    const wizard = changeOrderWizardModule;
+    if (wizard) wizard.handleWizardAction(action, node, node.closest('.cow') || document);
+    return;
+  }
+  if (['job-bucket-new', 'job-draw-new'].includes(action)) {
     event.preventDefault();
     if (!requirePermission('jobs.manage', activeCompanyId(), 'Your role cannot add job records.', 'Jobs')) return;
     state.jobRecordDraft = {
-      kind: { 'job-bucket-new': 'bucket', 'job-draw-new': 'draw', 'job-change-order-new': 'change-order' }[action],
+      kind: { 'job-bucket-new': 'bucket', 'job-draw-new': 'draw' }[action],
       jobId: selectedJob()?.id || '',
       error: '',
     };
@@ -41019,17 +41144,19 @@ async function loadRealtimeDomain(client, domain) {
   if (domain === 'production') {
     // The five child tables of a job file. Fetched together because opening a job shows all
     // of them: five sequential round trips would be five visible gaps in one screen.
-    const [dailies, buckets, draws, changeOrders, plans] = await Promise.all([
+    const [dailies, buckets, draws, changeOrders, coLines, plans] = await Promise.all([
       safeSupabaseQuery(client.from('job_dailies').select('*').order('report_date', { ascending: false })),
       safeSupabaseQuery(client.from('job_cost_buckets').select('*').order('sort_order', { ascending: true })),
       safeSupabaseQuery(client.from('job_draws').select('*').order('sort_order', { ascending: true })),
       safeSupabaseQuery(client.from('job_change_orders').select('*').order('created_at', { ascending: false })),
+      safeSupabaseQuery(client.from('job_change_order_lines').select('*').order('sort_order', { ascending: true })),
       safeSupabaseQuery(client.from('job_plans').select('*').order('created_at', { ascending: false })),
     ]);
     if (!dailies.error) state.jobDailies = (dailies.data || []).map(normalizeDaily);
     if (!buckets.error) state.jobCostBuckets = (buckets.data || []).map(normalizeCostBucket);
     if (!draws.error) state.jobDraws = (draws.data || []).map(normalizeDraw);
     if (!changeOrders.error) state.jobChangeOrders = (changeOrders.data || []).map(normalizeChangeOrder);
+    if (!coLines.error) state.jobChangeOrderLines = (coLines.data || []).map(normalizeChangeOrderLine);
     if (!plans.error) state.jobPlans = (plans.data || []).map(normalizePlan);
     return;
   }

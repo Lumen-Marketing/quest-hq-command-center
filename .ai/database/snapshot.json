@@ -3911,6 +3911,608 @@
       ]
     },
     {
+      "name": "job_change_order_lines",
+      "schema": "public",
+      "rls_enabled": true,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "position": 1,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "company_id",
+          "position": 2,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "job_id",
+          "position": 3,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "change_order_id",
+          "position": 4,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "kind",
+          "position": 5,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "'material'::text"
+        },
+        {
+          "name": "label",
+          "position": 6,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "qty",
+          "position": 7,
+          "data_type": "numeric",
+          "udt_name": "numeric",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "days",
+          "position": 8,
+          "data_type": "numeric",
+          "udt_name": "numeric",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "unit_cost",
+          "position": 9,
+          "data_type": "numeric",
+          "udt_name": "numeric",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "material_id",
+          "position": 10,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "sort_order",
+          "position": 11,
+          "data_type": "integer",
+          "udt_name": "int4",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "created_at",
+          "position": 12,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "position": 13,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        }
+      ]
+    },
+    {
+      "name": "job_change_orders",
+      "schema": "public",
+      "rls_enabled": true,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "position": 1,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "company_id",
+          "position": 2,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "job_id",
+          "position": 3,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "title",
+          "position": 4,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "description",
+          "position": 5,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "''::text"
+        },
+        {
+          "name": "price",
+          "position": 6,
+          "data_type": "numeric",
+          "udt_name": "numeric",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "cost",
+          "position": 7,
+          "data_type": "numeric",
+          "udt_name": "numeric",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "step",
+          "position": 8,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "'requested'::text"
+        },
+        {
+          "name": "requested_by",
+          "position": 9,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "''::text"
+        },
+        {
+          "name": "asked_via",
+          "position": 10,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "''::text"
+        },
+        {
+          "name": "sent_via",
+          "position": 11,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "''::text"
+        },
+        {
+          "name": "execute_when",
+          "position": 12,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "'on_acceptance'::text"
+        },
+        {
+          "name": "accepted_at",
+          "position": 13,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_by",
+          "position": 14,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "position": 15,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "position": 16,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "pricing_method",
+          "position": 17,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "'lines'::text"
+        },
+        {
+          "name": "margin_pct",
+          "position": 18,
+          "data_type": "numeric",
+          "udt_name": "numeric",
+          "nullable": false,
+          "default": "0"
+        }
+      ]
+    },
+    {
+      "name": "job_cost_buckets",
+      "schema": "public",
+      "rls_enabled": true,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "position": 1,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "company_id",
+          "position": 2,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "job_id",
+          "position": 3,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "position": 4,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "expected",
+          "position": 5,
+          "data_type": "numeric",
+          "udt_name": "numeric",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "spent",
+          "position": 6,
+          "data_type": "numeric",
+          "udt_name": "numeric",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "status",
+          "position": 7,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "'open'::text"
+        },
+        {
+          "name": "note",
+          "position": 8,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "''::text"
+        },
+        {
+          "name": "sort_order",
+          "position": 9,
+          "data_type": "integer",
+          "udt_name": "int4",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "created_at",
+          "position": 10,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "position": 11,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        }
+      ]
+    },
+    {
+      "name": "job_dailies",
+      "schema": "public",
+      "rls_enabled": true,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "position": 1,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "company_id",
+          "position": 2,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "job_id",
+          "position": 3,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "report_date",
+          "position": 4,
+          "data_type": "date",
+          "udt_name": "date",
+          "nullable": false,
+          "default": "CURRENT_DATE"
+        },
+        {
+          "name": "crew_label",
+          "position": 5,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "''::text"
+        },
+        {
+          "name": "crew_names",
+          "position": 6,
+          "data_type": "ARRAY",
+          "udt_name": "_text",
+          "nullable": false,
+          "default": "'{}'::text[]"
+        },
+        {
+          "name": "production",
+          "position": 7,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "production_note",
+          "position": 8,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "''::text"
+        },
+        {
+          "name": "site_cleaned",
+          "position": 9,
+          "data_type": "boolean",
+          "udt_name": "bool",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "materials_ok",
+          "position": 10,
+          "data_type": "boolean",
+          "udt_name": "bool",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "materials_needed",
+          "position": 11,
+          "data_type": "ARRAY",
+          "udt_name": "_text",
+          "nullable": false,
+          "default": "'{}'::text[]"
+        },
+        {
+          "name": "notes",
+          "position": 12,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "''::text"
+        },
+        {
+          "name": "photo_count",
+          "position": 13,
+          "data_type": "integer",
+          "udt_name": "int4",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "created_by",
+          "position": 14,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "position": 15,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "position": 16,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        }
+      ]
+    },
+    {
+      "name": "job_draws",
+      "schema": "public",
+      "rls_enabled": true,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "position": 1,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "company_id",
+          "position": 2,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "job_id",
+          "position": 3,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "label",
+          "position": 4,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "amount",
+          "position": 5,
+          "data_type": "numeric",
+          "udt_name": "numeric",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "status",
+          "position": 6,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "'locked'::text"
+        },
+        {
+          "name": "invoiced_at",
+          "position": 7,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "paid_at",
+          "position": 8,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "sort_order",
+          "position": 9,
+          "data_type": "integer",
+          "udt_name": "int4",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "created_at",
+          "position": 10,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "position": 11,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        }
+      ]
+    },
+    {
       "name": "job_files",
       "schema": "public",
       "rls_enabled": true,
@@ -4053,6 +4655,88 @@
           "udt_name": "uuid",
           "nullable": false,
           "default": null
+        }
+      ]
+    },
+    {
+      "name": "job_plans",
+      "schema": "public",
+      "rls_enabled": true,
+      "primary_key": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "position": 1,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "company_id",
+          "position": 2,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "job_id",
+          "position": 3,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "position": 4,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "version",
+          "position": 5,
+          "data_type": "text",
+          "udt_name": "text",
+          "nullable": false,
+          "default": "'v1'::text"
+        },
+        {
+          "name": "is_current",
+          "position": 6,
+          "data_type": "boolean",
+          "udt_name": "bool",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "file_id",
+          "position": 7,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "position": 8,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "position": 9,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": false,
+          "default": "now()"
         }
       ]
     },
@@ -10770,6 +11454,146 @@
       "roles": "{authenticated}"
     },
     {
+      "table": "job_change_order_lines",
+      "name": "job_change_order_lines delete",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_change_order_lines",
+      "name": "job_change_order_lines insert",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_change_order_lines",
+      "name": "job_change_order_lines read",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_change_order_lines",
+      "name": "job_change_order_lines update",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_change_orders",
+      "name": "job_change_orders delete",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_change_orders",
+      "name": "job_change_orders insert",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_change_orders",
+      "name": "job_change_orders read",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_change_orders",
+      "name": "job_change_orders update",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_cost_buckets",
+      "name": "job_cost_buckets delete",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_cost_buckets",
+      "name": "job_cost_buckets insert",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_cost_buckets",
+      "name": "job_cost_buckets read",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_cost_buckets",
+      "name": "job_cost_buckets update",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_dailies",
+      "name": "job_dailies delete",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_dailies",
+      "name": "job_dailies insert",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_dailies",
+      "name": "job_dailies read",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_dailies",
+      "name": "job_dailies update",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_draws",
+      "name": "job_draws delete",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_draws",
+      "name": "job_draws insert",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_draws",
+      "name": "job_draws read",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_draws",
+      "name": "job_draws update",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
       "table": "job_files",
       "name": "job_files workspace delete",
       "command": "DELETE",
@@ -10793,6 +11617,34 @@
     {
       "table": "job_files",
       "name": "job_files workspace update",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_plans",
+      "name": "job_plans delete",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_plans",
+      "name": "job_plans insert",
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_plans",
+      "name": "job_plans read",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "roles": "{authenticated}"
+    },
+    {
+      "table": "job_plans",
+      "name": "job_plans update",
       "command": "UPDATE",
       "permissive": "PERMISSIVE",
       "roles": "{authenticated}"
