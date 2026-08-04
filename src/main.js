@@ -3740,7 +3740,11 @@ function render() {
     // routing lands them on their workspace or the no-company screen. The
     // password-recovery sub-flow keeps the landing page -- its form lives there.
     if (state.session?.auth === 'supabase' && state.authMode !== 'recovery') {
-      navigate(appHref(companyPath('jobs', {}, defaultCompanyId())), { replace: true });
+      // The Dashboard, not Jobs. Landing straight in one module made the whole product look
+      // like that module, and Jobs is a permissioned section -- somebody without jobs.view
+      // was dropped on a screen they could not use. The Dashboard needs no permission, so it
+      // is the one page every signed-in user can be sent to.
+      navigate(appHref(companyPath('dashboard', {}, defaultCompanyId())), { replace: true });
       return;
     }
     renderLandingPage(false);
