@@ -73,18 +73,47 @@ export function createJobFile(ctx) {
 
   // ---- tabs ---------------------------------------------------------------------------
 
+  /**
+   * Needs attention: what is outstanding on this job, each line owned by somebody.
+   *
+   * These are real tasks with a job_id, which is what makes the design's "synced to My Queue"
+   * true rather than a label -- ticking one here clears it in the assignee's queue, because
+   * it is the same row. A separate job-only checklist would have been a second list of work
+   * that nobody looks at, which is the problem this panel exists to solve.
+   */
+  function attentionCard(job, data, companyId) {
+    const open = (data.tasks || []).filter((t) => t.status !== 'done');
+    const canManage = can('jobs.manage', companyId);
+    return `
+      <article class="jf-card jf-attention">
+        <h3>Needs attention
+          <span class="jf-sub">synced to My Queue</span>
+          ${canManage ? `<button class="btn btn-sm" type="button" data-action="job-attention-new" data-job-id="${h(job.id)}"><i class="ti ti-plus"></i>Add</button>` : ''}
+        </h3>
+        ${open.length ? `<ul class="jf-attn">${open.map((task) => `
+          <li class="jf-attn-row ${task.overdue ? 'overdue' : ''}">
+            <button type="button" class="jf-attn-tick" role="checkbox" aria-checked="false"
+                    aria-label="Mark done: ${h(task.title)}"
+                    data-action="job-attention-done" data-task-id="${h(task.id)}"${canManage ? '' : ' disabled'}>
+              <i class="ti ti-check"></i>
+            </button>
+            <span class="jf-attn-title">${h(task.title)}</span>
+            ${task.due ? `<span class="jf-attn-due">${h(formatDate(task.due))}</span>` : ''}
+            <span class="jf-attn-who">${h(ctx.memberName(task.assignee_id) || 'Unassigned')}</span>
+          </li>`).join('')}</ul>`
+    : `<p class="jf-sub">Nothing outstanding.</p>
+           <!-- The pipeline prompt still has a home: with no explicit items, the next action is
+                the most useful thing this card can say. -->
+           ${ctx.renderPipelineNextAction('job', job, { compact: true })}`}
+      </article>`;
+  }
+
   function overviewTab(job, data, companyId) {
     const stage = resolvePipelineStage('jobs', job.stage, companyId);
     const struggling = isStruggling(data.dailies);
     const latest = sortDailies(data.dailies)[0];
     return `
-      <article class="jf-card jf-attention">
-        <h3>Needs attention</h3>
-        <!-- The next action moved here from the jobs list. The v1 structure has no column for
-             it, but this is the slot it describes -- and dropping a working prompt to make
-             room for a layout would be a downgrade. -->
-        ${ctx.renderPipelineNextAction('job', job, { compact: true })}
-      </article>
+      ${attentionCard(job, data, companyId)}
       <div class="jf-cards">
         <article class="jf-card">
           <h3>Client</h3>
@@ -370,6 +399,8 @@ export function createJobFile(ctx) {
               <button class="jf-quick" type="button" data-action="job-change-order-new"><b>Change order</b><span>Client asked for more</span></button>
               <button class="jf-quick" type="button" data-action="job-bucket-new"><b>Cost bucket</b><span>Track a spend line</span></button>
               <button class="jf-quick" type="button" data-action="job-draw-new"><b>Draw</b><span>When they owe you</span></button>
+              <button class="jf-quick" type="button" data-action="job-expense-new" data-job-id="${h(job.id)}"><b>Expense</b><span>Receipt to a bucket</span></button>
+              <button class="jf-quick" type="button" data-action="job-walk-new" data-job-id="${h(job.id)}"><b>Job walk</b><span>Record a voice note</span></button>
             </aside>` : ''}
         </div>
       </section>`;

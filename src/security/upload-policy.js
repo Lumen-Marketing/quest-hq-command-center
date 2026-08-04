@@ -62,6 +62,11 @@ export const UPLOAD_POLICIES = {
   // Profile pictures are re-encoded to a 512px square before upload, so the source
   // file's weight is irrelevant here too. Same decode-guard reasoning as above.
   avatarimage: { exts: ['png', 'jpg', 'jpeg', 'webp', 'gif'], max: 64 * MB, label: 'image' },
+  // Voice notes recorded in the browser. The container is whatever MediaRecorder chose --
+  // webm on Chrome and Android, mp4/m4a on Safari -- so all of them are allowed or the
+  // feature silently fails on half the phones on site. 40MB is roughly an hour of Opus,
+  // far past any job walk.
+  audio: { exts: ['webm', 'm4a', 'mp4', 'ogg', 'oga', 'mp3', 'wav'], max: 40 * MB, label: 'audio' },
   document: { exts: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'csv'], max: 25 * MB, label: 'document' },
   csv: { exts: ['csv', 'tsv', 'txt'], max: 10 * MB, label: 'spreadsheet' },
   backup: { exts: ['zip'], max: 50 * MB, label: 'backup archive' },

@@ -18254,6 +18254,10 @@ textarea:focus {
   color: #c93b08;
 }
 
+/* The Jobs views sit in the same list as the stage buckets, so their icon occupies the slot
+   the stage dot would, at the same width -- otherwise the two kinds of row do not line up. */
+.side-sub-icon { flex: none; width: 8px; font-size: 11px; display: grid; place-items: center; opacity: .8; }
+
 .side-sub-dot {
   flex: none;
   width: 8px;
@@ -30544,6 +30548,46 @@ a.wb-cal-more:hover { color: var(--orange); }
   gap: 10px; align-items: baseline; padding: 3px 0; font-size: .83rem;
 }
 .jf-co-line b { font-variant-numeric: tabular-nums; }
+
+/* ---- Job walk ------------------------------------------------------------------------------ */
+.jw { display: grid; gap: 12px; }
+.jw-stage {
+  display: flex; gap: 10px; align-items: center; padding: 14px 16px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2);
+}
+.jw-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex: none; }
+.jw-stage.on .jw-dot { background: var(--danger, #dc2626); animation: jw-pulse 1.4s ease-in-out infinite; }
+.jw-time { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+@keyframes jw-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+/* A blinking dot is exactly what a motion-sensitive user does not want; the colour alone
+   still says recording. */
+@media (prefers-reduced-motion: reduce) { .jw-stage.on .jw-dot { animation: none; } }
+
+/* ---- Needs attention ------------------------------------------------------------------------ */
+.jf-attention h3 { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.jf-attention h3 .btn { margin-left: auto; }
+.jf-attn { list-style: none; margin: 6px 0 0; padding: 0; }
+.jf-attn-row {
+  display: flex; gap: 10px; align-items: center; padding: 7px 0;
+  border-bottom: 1px solid var(--border); font-size: .86rem;
+}
+.jf-attn-row:last-child { border-bottom: 0; }
+/* The title takes the slack, so the date and the owner sit on the right edge whether or not
+   there is a date. Putting margin-left:auto on the date left the owner mid-row without one. */
+.jf-attn-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.jf-attn-due { font-size: .76rem; color: var(--muted); white-space: nowrap; }
+.jf-attn-row.overdue .jf-attn-due { color: var(--danger, #b91c1c); font-weight: 700; }
+.jf-attn-who {
+  flex: none; padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+  background: var(--surface-2); color: var(--ink-2); font-size: .72rem; font-weight: 700;
+}
+.jf-attn-tick {
+  flex: none; width: 19px; height: 19px; display: grid; place-items: center; cursor: pointer;
+  border: 2px solid var(--border); border-radius: 6px; background: transparent;
+  color: transparent; font-size: .68rem; transition: background .12s, border-color .12s, color .12s;
+}
+.jf-attn-tick:hover:not(:disabled) { border-color: var(--success, #15803d); color: var(--success, #15803d); }
+.jf-attn-tick:disabled { cursor: default; opacity: .5; }
 
 /* ---- Photos tab ---------------------------------------------------------------------------- */
 .jf-photo-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }

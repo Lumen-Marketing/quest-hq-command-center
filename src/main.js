@@ -2594,6 +2594,8 @@ const state = {
   jobDailyDraft: null,
   jobRecordDraft: null,
   coWizard: null,
+  jobExpenseDraft: null,
+  jobWalk: null,
   jobTradeFilter: 'all',
   jobCalendarMode: 'month',
   jobCalendarAnchor: '',
@@ -6320,6 +6322,31 @@ function navItemSalesLifecycle(route, module, companyId) {
   `;
 }
 
+/**
+ * Dashboard and Calendar, above the status buckets.
+ *
+ * Jobs is the one pipeline with screens that are not a filtered list, and the v1 design puts
+ * them here rather than making you open the module first and then find a tab. Stages stay
+ * below, because they answer a different question -- these are places, those are filters.
+ */
+function jobsNavViews(route, companyId) {
+  const onJobs = route.name === 'company' && route.section === 'jobs';
+  const tab = onJobs ? (route.params.get('tab') || 'dashboard') : '';
+  const rows = [
+    ['dashboard', 'Dashboard', 'ti-layout-dashboard'],
+    ['calendar', 'Calendar', 'ti-calendar'],
+  ];
+  return rows.map(([key, label, icon]) => {
+    // The dashboard is the module's own home, so it has no tab parameter of its own.
+    const path = companyPath('jobs', key === 'dashboard' ? {} : { tab: key }, companyId);
+    const on = onJobs && tab === key;
+    return `<a class="side-sub-link ${on ? 'active' : ''}" href="${appHref(path)}" data-router aria-current="${on ? 'page' : 'false'}">
+      <i class="ti ${h(icon)} side-sub-icon" aria-hidden="true"></i>
+      <span class="side-sub-name">${h(label)}</span>
+    </a>`;
+  }).join('');
+}
+
 function navItemPipeline(route, module, companyId) {
   const kind = module.id;
   const navLabel = navigationLabel(module.id, module.label);
@@ -6345,6 +6372,7 @@ function navItemPipeline(route, module, companyId) {
       </div>
       ${expanded ? `
         <div class="side-sub">
+          ${kind === 'jobs' ? jobsNavViews(route, companyId) : ''}
           <button class="side-sub-link ${onSection && filter === 'all' ? 'active' : ''}" type="button" data-action="pipeline-stage" data-module="${kind}" data-stage="all" aria-current="${onSection && filter === 'all' ? 'page' : 'false'}">
             <span class="side-sub-dot all"></span>
             <span class="side-sub-name">All ${h(navLabel.toLowerCase())}</span>
@@ -12218,6 +12246,14 @@ function productionForJob(jobId) {
     // Real photo rows out of job_files -- the same table, bucket and upload path the drive
     // uses, so a photo added from either place shows up in both.
     photos: jobPhotosFor(id),
+    // Real tasks carrying this job's id. Ticking one here is the same row the assignee sees
+    // in My Queue, which is what makes the panel's promise true rather than decorative.
+    tasks: state.tasks
+      // Either link: job_id is the real column, project_id is what the task form has always
+      // written. Reading both means nothing created before this becomes invisible.
+      .filter((task) => task.job_id === id || (!task.job_id && task.project_id === id))
+      .map((task) => ({ ...task, overdue: task.status !== 'done' && task.due && task.due < localIsoDate() }))
+      .sort((a, b) => String(a.due).localeCompare(String(b.due))),
     // Still exposed: a foreman types this into the daily, and it can legitimately differ from
     // the files uploaded (photos texted to the office, say). Shown on the daily, not the tab.
     photoCount: dailies.reduce((sum, row) => sum + row.photo_count, 0),
@@ -12239,6 +12275,7 @@ function loadJobFile() {
         productionFor: productionForJob,
         renderJobRecord, renderPipelineNextAction,
         fileThumb, photoFilter: () => state.jobFilePhotoCategory,
+        memberName,
       });
       return jobFileModule;
     }).catch((error) => {
@@ -23580,6 +23617,8 @@ function renderActiveModal(route, session) {
   if (state.modal === 'job-daily') return renderJobDailyModal();
   if (state.modal === 'job-record-new') return renderJobRecordModal();
   if (state.modal === 'co-wizard') return renderChangeOrderWizardModal();
+  if (state.modal === 'job-expense') return renderJobExpenseModal();
+  if (state.modal === 'job-walk') return renderJobWalkModal();
   if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
   if (state.modal === 'contacts-dedupe') return renderContactsDedupeModal();
@@ -24969,6 +25008,18 @@ async function exportProposalPdf(proposalId) {
   ].filter(Boolean).join('\n');
   pdf.text(pdf.splitTextToSize(terms, pageWidth - margin * 2), margin, y);
   pdf.save(`Quest-Proposal-${slugify(proposal.proposal_no || proposal.id)}.pdf`);
+}
+
+/**
+ * Open the task composer already pointed at this job.
+ *
+ * It reuses the tasks route rather than raising a job-local form, so an item added from the
+ * job file is the same kind of thing as one added anywhere else -- same fields, same
+ * assignee list, same validation, and it lands in the assignee's queue without anything
+ * extra having to happen.
+ */
+function openTaskComposerForJob(job) {
+  navigate(companyPath('tasks', { new: '1', job_id: job.id }, job.company_id));
 }
 
 function renderTaskRouteModal(route, companyId) {
@@ -27829,6 +27880,49 @@ function handleAction(event, node) {
   }
   // The tab keeps its own filter, separate from the capture modal's: narrowing the tab to
   // Issues should not silently narrow what the uploader shows next time it opens.
+  // Ticking clears it in My Queue too -- same row, so there is nothing to keep in step.
+  if (action === 'job-attention-done') {
+    event.preventDefault();
+    toggleContactTask(node.dataset.taskId);
+    return;
+  }
+  if (action === 'job-attention-new') {
+    event.preventDefault();
+    const job = jobById(node.dataset.jobId);
+    if (!job) return;
+    if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot add job tasks.', 'Jobs')) return;
+    openTaskComposerForJob(job);
+    return;
+  }
+  if (action === 'job-walk-new') {
+    event.preventDefault();
+    const job = jobById(node.dataset.jobId) || selectedJob();
+    if (!job) return;
+    if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot add to this job.', 'Jobs')) return;
+    openJobWalk(job);
+    return;
+  }
+  if (action === 'job-walk-start') { event.preventDefault(); startJobWalk(); return; }
+  if (action === 'job-walk-stop') { event.preventDefault(); if (activeRecorder) activeRecorder.stop(); return; }
+  if (action === 'job-walk-cancel') {
+    event.preventDefault();
+    // Closing must stop the hardware, or the browser keeps showing that we are listening.
+    if (activeRecorder) { activeRecorder.cancel(); activeRecorder = null; }
+    state.jobWalk = null;
+    state.modal = '';
+    render();
+    return;
+  }
+  if (action === 'job-expense-new') {
+    event.preventDefault();
+    const job = jobById(node.dataset.jobId) || selectedJob();
+    if (!job) return;
+    if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot log spend.', 'Jobs')) return;
+    state.jobExpenseDraft = { jobId: job.id, error: '' };
+    state.modal = 'job-expense';
+    render();
+    return;
+  }
   if (action === 'job-photo-filter') {
     event.preventDefault();
     state.jobFilePhotoCategory = node.dataset.category || 'All';
@@ -28985,6 +29079,11 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-job-expense-form]')) {
+    event.preventDefault();
+    submitJobExpense(event.target);
+    return;
+  }
   if (event.target.matches('[data-task-form]')) {
     event.preventDefault();
     saveTask(event.target);
@@ -32205,6 +32304,247 @@ async function submitJobRecord(formNode) {
   }
 }
 
+/**
+ * Log a spend against a cost bucket.
+ *
+ * An expense is not a row of its own -- it is money added to a bucket, which is what moves
+ * the projected net. Recording it anywhere else would mean the Numbers tab and the receipts
+ * disagreed, and the Numbers tab is the one people make decisions on.
+ *
+ * The receipt is optional but goes through the same upload path as job photos, so it lands
+ * in the job's files where anyone chasing the number later will look for it.
+ */
+function renderJobExpenseModal() {
+  const draft = state.jobExpenseDraft;
+  const job = draft ? jobById(draft.jobId) : null;
+  if (!job) return renderModalShell('Jobs', 'Log spend', emptyState('That job is no longer available.'), 'wb-modal-sm');
+  const buckets = state.jobCostBuckets.filter((b) => b.job_id === job.id && b.status !== 'final');
+  if (!buckets.length) {
+    return renderModalShell('Jobs', 'Log spend',
+      emptyState('This job has no open cost buckets. Add one first — a spend has to land somewhere, or it cannot show up in the net.'),
+      'wb-modal-sm');
+  }
+  return renderModalShell('Jobs', 'Log spend', `
+    <form class="jd-form" data-job-expense-form>
+      <p class="jd-job"><b>${h(job.name)}</b></p>
+      <p class="jf-sub">Adds to what that bucket has spent, which is what moves the projected net.</p>
+      ${draft.error ? `<div class="wb-modal-error" role="alert">${h(draft.error)}</div>` : ''}
+      <label class="jd-why">Which bucket
+        <select class="wb-input" name="bucket_id" required>
+          ${buckets.map((b) => `<option value="${h(b.id)}">${h(b.name)} — ${h(money(b.spent))} of ${h(money(b.expected))}</option>`).join('')}
+        </select>
+      </label>
+      <label class="jd-why">Amount
+        <input class="wb-input" name="amount" type="number" step="0.01" min="0" placeholder="0.00" required />
+      </label>
+      <label class="jd-why">What was it <span class="jf-sub">(optional)</span>
+        <input class="wb-input" name="note" type="text" placeholder="e.g. 2x6 from the lumber yard" />
+      </label>
+      <label class="jd-why">Receipt <span class="jf-sub">(optional)</span>
+        <input class="wb-input" name="receipt" type="file" accept="${acceptAttr('image')}" capture="environment" />
+      </label>
+      <div class="modal-actions">
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+        <button class="btn btn-primary" type="submit">Log spend</button>
+      </div>
+    </form>`, 'wb-modal-sm');
+}
+
+async function submitJobExpense(formNode) {
+  const draft = state.jobExpenseDraft;
+  const job = draft ? jobById(draft.jobId) : null;
+  if (!job) return;
+  if (!requirePermission('jobs.manage', job.company_id, 'Your role cannot log spend.', 'Jobs')) return;
+
+  const data = new FormData(formNode);
+  const bucket = state.jobCostBuckets.find((b) => b.id === String(data.get('bucket_id') || ''));
+  const amount = Number(data.get('amount') || 0);
+  if (!bucket) { draft.error = 'Pick a bucket.'; render(); return; }
+  if (!(amount > 0)) { draft.error = 'Enter an amount greater than zero.'; render(); return; }
+
+  const note = String(data.get('note') || '').trim();
+  const next = Number(bucket.spent || 0) + amount;
+  const done = beginSubmitting(formNode, 'Logging…');
+  try {
+    const client = createSupabaseClient();
+    if (isLiveSupabaseSession() && client) {
+      const result = await client.from('job_cost_buckets')
+        .update({ spent: next, updated_at: new Date().toISOString() }).eq('id', bucket.id);
+      if (result.error) { draft.error = result.error.message || 'Could not log that.'; render(); return; }
+    }
+    state.jobCostBuckets = state.jobCostBuckets.map((b) => (b.id === bucket.id ? { ...b, spent: next } : b));
+
+    // The receipt is a bonus, not the point. If it fails the spend still stands, and saying so
+    // is better than rolling back a number the user watched go in.
+    const receipt = data.get('receipt');
+    if (receipt && receipt.size) {
+      try {
+        await uploadJobFile(job, receipt, note || `${bucket.name} spend`, 'Receipt', 'image');
+      } catch (error) {
+        showToast('Spend logged, but the receipt did not upload.', 'error', 'Jobs');
+      }
+    }
+
+    state.modal = '';
+    state.jobExpenseDraft = null;
+    showToast(`${money(amount)} logged to ${bucket.name}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
+    navigate(companyPath('jobs', { tab: 'profile', job_id: job.id, jt: 'numbers' }, job.company_id), { replace: true });
+  } finally {
+    if (done) done();
+  }
+}
+
+// ---- Job walk (voice note) ---------------------------------------------------------------
+let voiceNoteModule = null;
+let voiceNotePending = null;
+let activeRecorder = null;
+
+function loadVoiceNote() {
+  if (voiceNoteModule) return Promise.resolve(voiceNoteModule);
+  if (!voiceNotePending) {
+    voiceNotePending = import('./jobs/voice-note.js').then((mod) => {
+      voiceNoteModule = mod;
+      return mod;
+    }).catch((error) => {
+      voiceNotePending = null;
+      throw error;
+    });
+  }
+  return voiceNotePending;
+}
+
+async function openJobWalk(job) {
+  const mod = await loadVoiceNote().catch(() => null);
+  if (!mod) { showToast('Could not open the recorder — check your connection and try again.', 'local', 'Jobs'); return; }
+  if (!mod.canRecord()) {
+    showToast('This browser cannot record audio. Use a phone, or add the note as a file.', 'local', 'Jobs');
+    return;
+  }
+  state.jobWalk = { jobId: job.id, phase: 'idle', elapsed: 0, error: '' };
+  state.modal = 'job-walk';
+  render();
+}
+
+function renderJobWalkModal() {
+  const walk = state.jobWalk;
+  const job = walk ? jobById(walk.jobId) : null;
+  const mod = voiceNoteModule;
+  if (!job || !mod) return renderModalShell('Jobs', 'Job walk', emptyState('That job is no longer available.'), 'wb-modal-sm');
+  const recording = walk.phase === 'recording';
+  return renderModalShell('Jobs', 'Job walk', `
+    <div class="jw">
+      <p class="jd-job"><b>${h(job.name)}</b></p>
+      ${walk.error ? `<div class="wb-modal-error" role="alert">${h(walk.error)}</div>` : ''}
+      <div class="jw-stage ${recording ? 'on' : ''}">
+        <span class="jw-dot" aria-hidden="true"></span>
+        <strong class="jw-time">${h(mod.formatElapsed(walk.elapsed))}</strong>
+        <span class="jf-sub">${recording ? 'Recording — talk the walk' : walk.phase === 'saving' ? 'Attaching…' : 'Ready'}</span>
+      </div>
+      <p class="jf-sub">The recording attaches to this job's files. It is not transcribed —
+        nothing is connected that can do that yet, so the audio is the record.</p>
+      <div class="modal-actions">
+        ${recording
+    ? `<button class="btn" type="button" data-action="job-walk-cancel">Discard</button>
+           <button class="btn btn-primary" type="button" data-action="job-walk-stop"><i class="ti ti-check"></i>Finish &amp; attach</button>`
+    : `<button class="btn" type="button" data-action="job-walk-cancel">Close</button>
+           <button class="btn btn-primary" type="button" data-action="job-walk-start" ${walk.phase === 'saving' ? 'disabled' : ''}><i class="ti ti-microphone"></i>Start recording</button>`}
+      </div>
+    </div>`, 'wb-modal-sm');
+}
+
+function startJobWalk() {
+  const walk = state.jobWalk;
+  const job = walk ? jobById(walk.jobId) : null;
+  if (!walk || !job || !voiceNoteModule) return;
+  activeRecorder = voiceNoteModule.createRecorder({
+    // Repainting the whole app twice a second to move a clock is wasteful; the timer element
+    // is the only thing that changes, so it is written directly.
+    onTick: (ms) => {
+      walk.elapsed = ms;
+      const el = document.querySelector('.jw-time');
+      if (el) el.textContent = voiceNoteModule.formatElapsed(ms);
+    },
+    onStop: (blob, elapsed) => { activeRecorder = null; saveJobWalk(job, blob, elapsed); },
+    onError: (error) => {
+      activeRecorder = null;
+      walk.phase = 'idle';
+      walk.error = error?.message || 'Recording failed.';
+      render();
+    },
+  });
+  activeRecorder.start().then(() => {
+    walk.phase = 'recording';
+    walk.error = '';
+    render();
+  }).catch((error) => {
+    activeRecorder = null;
+    walk.phase = 'idle';
+    // The overwhelmingly common cause is a denied permission prompt, so name it.
+    walk.error = error?.name === 'NotAllowedError'
+      ? 'Microphone access was blocked. Allow it in your browser, then try again.'
+      : (error?.message || 'Could not start recording.');
+    render();
+  });
+}
+
+async function saveJobWalk(job, blob, elapsed) {
+  const walk = state.jobWalk;
+  if (!blob) {
+    if (walk) { walk.phase = 'idle'; walk.error = 'Nothing was recorded.'; render(); }
+    return;
+  }
+  if (walk) { walk.phase = 'saving'; render(); }
+  const extension = voiceNoteModule.extensionFor(blob.type);
+  const name = voiceNoteModule.voiceNoteName(new Date(), extension);
+  const file = new File([blob], name, { type: blob.type || 'audio/webm' });
+  try {
+    await uploadJobFile(job, file, `Job walk · ${voiceNoteModule.formatElapsed(elapsed)}`, 'Job walk', 'audio');
+    state.modal = '';
+    state.jobWalk = null;
+    showToast('Job walk attached to this job.', isLiveSupabaseSession() ? 'live' : 'local', 'Jobs');
+    render();
+  } catch (error) {
+    if (walk) { walk.phase = 'idle'; walk.error = error?.message || 'Could not attach the recording.'; }
+    render();
+  }
+}
+
+/**
+ * Attach a file to a job -- a receipt, a voice note, anything.
+ *
+ * Same bucket and same table as job photos, so whatever is attached here shows up in the
+ * job's files and the drive without a second code path.
+ */
+async function uploadJobFile(job, file, note, category = 'Receipt', policy = 'image') {
+  const client = createSupabaseClient();
+  // Same validator the other uploads use: type and size are checked before anything is sent.
+  if (!(await guardUpload(file, policy, 'Jobs'))) throw new Error('That file was not accepted');
+  const path = `${canonicalCompanyId(job.company_id)}/job-files/${crypto.randomUUID()}-${slugify(file.name || 'attachment')}`;
+  if (client && isLiveSupabaseSession()) {
+    const up = await client.storage.from('quest-job-files').upload(path, file, { cacheControl: '3600', contentType: contentTypeFor(file) });
+    if (up.error) throw up.error;
+  }
+  const row = normalizeFile({
+    company_id: job.company_id,
+    workspace_id: activeWorkspaceId(),
+    job_id: job.id,
+    bucket_id: 'quest-job-files',
+    object_path: path,
+    file_name: file.name || 'receipt.jpg',
+    mime_type: contentTypeFor(file),
+    size_bytes: file.size || 0,
+    category,
+    notes: note,
+  });
+  if (client && isLiveSupabaseSession()) {
+    const result = await client.from('job_files').insert(filePayload(row)).select().single();
+    if (result.error) throw result.error;
+    state.files = [normalizeFile(result.data), ...state.files];
+    return;
+  }
+  state.files = [row, ...state.files];
+}
+
 /** Closing a bucket is what turns a projected net into a real one, so it is one click. */
 async function setCostBucketFinal(bucketId) {
   const bucket = state.jobCostBuckets.find((b) => b.id === bucketId);
@@ -32296,7 +32636,11 @@ async function saveTask(form) {
     id: taskId || `task-${crypto.randomUUID()}`,
     company_id: companyId,
     workspace_id: workspaceIdForRecord(companyId, previous?.workspace_id),
+    // project_id has carried the job id since before tasks had a real job column -- it is
+    // free text, so nothing stopped it. Both are written now: the FK is the one to trust, and
+    // the old field keeps every existing reader working.
     project_id: linkedJob?.id || linkedDeal?.job_id || '',
+    job_id: linkedJob?.id || linkedDeal?.job_id || previous?.job_id || '',
     contact_id: linkedContact?.id || linkedJob?.contact_id || linkedDeal?.primary_contact_id || '',
     deal_id: linkedDeal?.id || linkedJob?.deal_id || '',
     creator_id: previous?.creator_id || creatorId,
@@ -39406,6 +39750,7 @@ function normalizeTask(input) {
     creator_id: String(input.creator_id || ''),
     assignee_id: String(input.assignee_id || input.creator_id || ''),
     project_id: String(input.project_id || ''),
+    job_id: String(input.job_id || ''),
     contact_id: String(input.contact_id || ''),
     deal_id: String(input.deal_id || ''),
     due: String(input.due || isoDate(1)).slice(0, 10),
@@ -40348,6 +40693,7 @@ function taskPayload(task) {
     creator_id: task.creator_id,
     assignee_id: task.assignee_id,
     project_id: task.project_id || null,
+    job_id: task.job_id || null,
     contact_id: task.contact_id || null,
     deal_id: task.deal_id || null,
     due: task.due,

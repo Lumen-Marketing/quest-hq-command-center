@@ -7884,6 +7884,14 @@
           "udt_name": "jsonb",
           "nullable": true,
           "default": null
+        },
+        {
+          "name": "job_id",
+          "position": 35,
+          "data_type": "uuid",
+          "udt_name": "uuid",
+          "nullable": true,
+          "default": null
         }
       ]
     },
