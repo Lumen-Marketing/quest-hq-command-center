@@ -275,7 +275,7 @@ const APPEARANCE_DEFAULTS = {
   // The light side menu ships as the default so the brand mark reads in its full-colour
   // form rather than the lightened one. Anyone who explicitly picked a theme keeps it --
   // only an account that never chose follows this.
-  iconPack: 'quest', // one of ICON_PACK_IDS
+  iconPack: 'material', // one of ICON_PACK_IDS -- Google Material, vendored, not fetched
   sidebarTheme: 'light', // one of SIDEBAR_THEME_IDS, or 'custom'
   sidebarBg: '#132038',    // used only by 'custom'
   sidebarAccent: '#e0552d',
@@ -31193,45 +31193,37 @@ async function saveDirectMessage(form) {
     showToast('Choose a person first.', 'local', 'Messages');
     return;
   }
-  const conversation = normalizeMessageConversation({
-    id: crypto.randomUUID(),
-    company_id: companyId,
-    title: profileName(targetId),
-    type: 'direct',
-    created_by: activeSession().profile.id,
-    last_message_at: new Date().toISOString(),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  });
-  const accessRows = [
-    normalizeMessageAccess({ id: `msg-access-${crypto.randomUUID()}`, company_id: companyId, conversation_id: conversation.id, target_type: 'profile', target_id: activeSession().profile.id }),
-    normalizeMessageAccess({ id: `msg-access-${crypto.randomUUID()}`, company_id: companyId, conversation_id: conversation.id, target_type: 'profile', target_id: targetId }),
-  ];
-  const saved = await persistConversation(conversation, accessRows);
-  if (!saved) return;
-  state.selectedConversationId = conversation.id;
-  state.modal = '';
-  const body = String(data.get('body') || '').trim();
-  if (body) await createMessageRecord(conversation, body, []);
-  notifyLocalEvent('message.direct', 'Direct message started', `${actorName()} started a direct message with ${conversation.title}.`, companyPath('messages', { conversation: conversation.id }, companyId), 'message_conversation', conversation.id, companyId, [targetId]);
-  navigate(companyPath('messages', { conversation: conversation.id }, companyId), { replace: true });
+  // beginSubmitting returns null for a button it has already disabled, so a second click
+  // while the first is still working stops right here rather than starting another chat.
+  const done = beginSubmitting(form, 'Starting…');
+  if (!done) return;
+  try {
+    const body = String(data.get('body') || '').trim();
+    // Ask the starter rather than building a conversation outright. It finds an existing chat
+    // with this person, joins one already being created, and only makes a new one when there
+    // genuinely is none. Creating one unconditionally -- which is what this did -- is why
+    // picking the same person again produced a second chat every time.
+    const conversationId = await startDirectMessageWithProfile(companyId, targetId, { navigate: false });
+    if (!conversationId) return;
+    const conversation = state.messageConversations.find((item) => item.id === conversationId);
+    // The first message goes into whichever conversation that turned out to be, so writing to
+    // somebody you already talk to continues that thread instead of forking it.
+    if (body && conversation) await createMessageRecord(conversation, body, []);
+    state.selectedConversationId = conversationId;
+    state.modal = '';
+    navigate(companyPath('messages', { conversation: conversationId }, companyId), { replace: true });
+  } finally {
+    done();
+  }
 }
 
-/**
- * Open a direct conversation with someone, creating it only if one does not exist.
- *
- * Returns the conversation id. `options.navigate === false` suppresses the jump to the
- * Messages page — the floating dock opens the thread in place, and navigating would throw
- * away the surface the person is working on, which is the whole point of the dock.
- */
 /**
  * Direct-message creates that are already running, keyed by company + the pair of profiles.
  *
  * The "do we already have this chat?" check reads local state, but state does not carry the
  * new conversation until persistConversation has finished two network round-trips. A second
  * click inside that window saw nothing and started another chat. Three clicks inside 1.1
- * seconds produced three identical conversations with the same person in production, which
- * is exactly what was reported. Callers now join the first create instead of racing it.
+ * seconds produced three identical conversations with the same person in production.
  */
 const directMessageInFlight = new Map();
 

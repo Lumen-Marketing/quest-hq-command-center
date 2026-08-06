@@ -102,7 +102,9 @@ test('the setting is offered, and says what each pack is', () => {
 });
 
 test('the choice is per account and rides the existing sync', () => {
-  assert.match(main, /iconPack: 'quest',/, 'must be in APPEARANCE_DEFAULTS to sync');
+  // Google Material is what a new account gets. The pack is vendored, so this default
+  // still fetches nothing from Google.
+  assert.match(main, /iconPack: 'material',/, 'must be in APPEARANCE_DEFAULTS to sync');
   assert.match(main, /setAppearance\(\{ iconPack: node\.dataset\.iconPack \}\)/);
 });
 

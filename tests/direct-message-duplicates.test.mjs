@@ -98,3 +98,32 @@ test('an unread badge does not change when somebody types in the chat search', (
   const fn = slice('function companyMessageUnreadCount(', '\n}');
   assert.match(fn, /allCompanyConversations\(companyId\)/);
 });
+
+// The New direct message dialog is a THIRD entry point, and the one that was actually
+// duplicating: saveDirectMessage built a conversation outright and never looked for an
+// existing one, so "Start chat" with the same person always made another chat.
+
+test('Start chat asks the starter instead of creating a conversation itself', () => {
+  const fn = slice('async function saveDirectMessage(form)', '\n/**');
+  assert.match(fn, /await startDirectMessageWithProfile\(companyId, targetId, \{ navigate: false \}\)/);
+  // The tell-tale of the old version: minting an id and access rows right here.
+  assert.ok(!/normalizeMessageConversation\(/.test(fn), 'it must not build its own conversation');
+  assert.ok(!/normalizeMessageAccess\(/.test(fn), 'nor its own access rows');
+  assert.ok(!/persistConversation\(/.test(fn), 'nor persist one directly');
+});
+
+test('the first message lands in whichever conversation that turned out to be', () => {
+  const fn = slice('async function saveDirectMessage(form)', '\n/**');
+  assert.match(fn, /const conversation = state\.messageConversations\.find\(\(item\) => item\.id === conversationId\)/);
+  assert.match(fn, /if \(body && conversation\) await createMessageRecord\(conversation, body, \[\]\)/);
+  assert.match(fn, /navigate\(companyPath\('messages', \{ conversation: conversationId \}/, 'and you land in it');
+});
+
+test('Start chat shows it is working, and a second click does nothing', () => {
+  const fn = slice('async function saveDirectMessage(form)', '\n/**');
+  assert.match(fn, /const done = beginSubmitting\(form, 'Starting…'\);/);
+  // beginSubmitting returns null for an already-disabled button: that is the guard.
+  assert.match(fn, /if \(!done\) return;/);
+  // Released even when the send throws, or the dialog is stuck on "Starting…" forever.
+  assert.match(fn, /\} finally \{[\s\S]{0,60}?done\(\);/);
+});
