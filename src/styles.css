@@ -12542,7 +12542,12 @@ button.side-item {
   align-self: flex-end;
 }
 
-.message-bubble.own .message-avatar {
+/* Your own bubble hides the avatar. The presence ring WRAPS that avatar, so hiding only the
+   avatar left the wrapper behind: an empty span that stretched to the row width and drew its
+   green status ring and corner dot as a bar under the message. Hide the wrapper -- it is the
+   element that actually carries the ring. */
+.message-bubble.own .message-avatar,
+.message-bubble.own .presence-ring {
   display: none;
 }
 
@@ -31244,3 +31249,18 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-jobs-row:last-child { border-bottom: 0; }
 .wb-jobs-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; color: inherit; }
 .wb-jobs-row-amt { font-variant-numeric: tabular-nums; }
+
+/* Who is in a chat, and who is here right now. The presence ring on each avatar is the same
+   one the message list uses, so the two screens cannot disagree about who is online. */
+.chat-people-note { margin: 0 0 8px; font-size: .82rem; color: var(--muted); }
+.chat-people { display: grid; gap: 2px; margin-bottom: 14px; }
+.chat-person { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
+.chat-person:last-child { border-bottom: 0; }
+.chat-person-avatar { width: 30px; height: 30px; font-size: .72rem; }
+.chat-person-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+.chat-person-status { font-size: .74rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.chat-person-status.is-online { color: #16a34a; font-weight: 600; }
+
+.chat-leave { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.chat-leave .btn { width: 100%; justify-content: center; }
+.chat-leave .chat-people-note { margin: 8px 0 0; }

@@ -97,6 +97,9 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 
 - Plugins are installed per company rather than only by the platform. `set_workspace_plugin` now accepts a platform admin directly (they are not a member of most companies, so `has_workspace_permission` could never be true for them) and lets a company admin self-entitle a plugin that has no `company_plugins` row -- absence means nobody has decided, not no. An explicit `disabled` row is still a wall and reads as "Withheld for your company". `set_company_plugin` now cascades to that company's active workspaces, so the platform panel switch is the thing that takes effect; the panel also reads the company entitlement it writes instead of the workspace status it cannot set. Migration `202608071000_per_company_plugin_install.sql`.
 
+- Chats show who is in them and who is online: the details dialog lists each named member with the same presence ring the message list uses, online first, above a "N of M online" count. It also carries a delete-for-me action backed by `leave_message_conversation`, which removes only the caller own access row -- never the conversation, its messages, or anyone else access. The DELETE policy on `message_conversation_access` requires a manager permission, so without the RPC a member could not leave a chat and a manager leaving would have been able to remove others too. Migration `202608071200_leave_message_conversation.sql`.
+- Starting a direct message joins any create already in flight for the same pair, so repeated clicks open one chat instead of creating several. Notes-to-self shares the guard.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.

@@ -158,6 +158,7 @@ const FACTORY_MODULES = [
   ['src/workspace/field-config-ui.js', 'renderFieldConfig'],
   ['src/ui/appearance-panel.js', 'createAppearancePanel'],
   ['src/workspace/automations-ui.js', 'createAutomationsUI'],
+  ['src/messaging/chat-modals.js', 'createChatModals'],
   ['src/messaging/dock-fields.js', 'createDockFields'],
   ['src/crm/job-record.js', 'createJobRecord'],
   ['src/jobs/dashboard-view.js', 'createJobsDashboard'],

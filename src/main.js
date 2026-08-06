@@ -22438,49 +22438,6 @@ function directMessageCandidates(companyId) {
   return { users, query, matches };
 }
 
-function renderDirectMessageModal(companyId) {
-  const { query, matches } = directMessageCandidates(companyId);
-  const idOf = (user) => user.profile_id || user.member_id;
-  // Keep the pick only while it is still in the visible results, so the hidden field
-  // can never submit someone the user has since filtered away.
-  const selectedId = matches.some((user) => idOf(user) === state.directMessageTargetId)
-    ? state.directMessageTargetId
-    : (matches.length === 1 ? idOf(matches[0]) : '');
-  return renderModalShell('Messages', 'New direct message', `
-    <form class="message-modal-form" data-direct-message-form>
-      <input type="hidden" name="profile_id" value="${h(selectedId)}" />
-      <label class="dm-person-field">
-        <span>Person</span>
-        <span class="dm-person-search">
-          <i class="ti ti-search" aria-hidden="true"></i>
-          <input type="search" value="${h(query)}" placeholder="Search by name, email, or role"
-            data-direct-message-search aria-label="Search people" autocomplete="off" />
-        </span>
-      </label>
-      <div class="dm-person-results" role="listbox" aria-label="People">
-        ${matches.slice(0, 8).map((user) => `
-          <button class="dm-person ${idOf(user) === selectedId ? 'active' : ''}" type="button" role="option"
-            aria-selected="${idOf(user) === selectedId ? 'true' : 'false'}"
-            data-action="select-direct-message-person" data-profile-id="${h(idOf(user))}">
-            ${renderAvatar({ ...user, full_name: user.name }, 'avatar tiny')}
-            <span class="dm-person-copy">
-              <strong>${h(user.name || 'Teammate')}</strong>
-              <small>${h(user.email || user.role_label || user.role || '')}</small>
-            </span>
-            <i class="ti ti-check dm-person-check" aria-hidden="true"></i>
-          </button>
-        `).join('') || `<p class="dm-person-empty">No one matches "${h(query)}".</p>`}
-      </div>
-      ${matches.length > 8 ? `<p class="dm-person-more">${matches.length - 8} more — keep typing to narrow.</p>` : ''}
-      <label><span>First message</span><textarea name="body" rows="3" placeholder="Start with a short note"></textarea></label>
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit">Start chat</button>
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `, 'message-modal');
-}
-
 function renderMessageAccessModal(companyId, conversationId) {
   const conversation = state.messageConversations.find((item) => item.id === conversationId);
   if (!conversation) return renderModalShell('Messages', 'Chat access', emptyState('Conversation not found.'));
@@ -22561,36 +22518,49 @@ function renderMessagePeoplePicker(users, selectedProfileIds = []) {
   `;
 }
 
+// ---- Messages dialogs ---------------------------------------------------------
+// Bodies live in ./messaging/chat-modals.js and are fetched on first use.
+let chatModalsModule = null;
+let chatModalsPending = null;
+
+function loadChatModals() {
+  if (chatModalsModule) return Promise.resolve(chatModalsModule);
+  if (!chatModalsPending) {
+    chatModalsPending = import('./messaging/chat-modals.js').then((mod) => {
+      chatModalsModule = mod.createChatModals({
+        contractRows, conversationAccessRows, conversationAttachments, conversationMessages,
+        emptyState, formatDate, h, messageSenderProfile, profileIsOnline, profileName,
+        renderModalShell, roleById, timeAgo, titleCase, withPresenceRing,
+        directMessageCandidates, renderAvatar,
+        appHref, companyMessageConversations, companyPath, state,
+      });
+      return chatModalsModule;
+    }).catch((error) => {
+      chatModalsPending = null;
+      throw error;
+    });
+  }
+  return chatModalsPending;
+}
+
+function renderDirectMessageModal(companyId) {
+  if (chatModalsModule) return chatModalsModule.renderDirectMessageModal(companyId);
+  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  return questLoader('Loading');
+}
+
 function renderMessageDetailsModal(companyId, conversationId) {
-  const conversation = state.messageConversations.find((item) => item.id === conversationId);
-  if (!conversation) return renderModalShell('Messages', 'Chat details', emptyState('Conversation not found.'));
-  return renderModalShell('Messages', conversation.title, `
-    ${contractRows([
-      ['Type', titleCase(conversation.type)],
-      ['Access', accessSummary(conversation)],
-      ['Messages', String(conversationMessages(conversation.id).length)],
-      ['Attachments', String(conversationAttachments(conversation.id).length)],
-      ['Last message', formatDate(conversation.last_message_at)],
-    ])}
-  `, 'message-modal');
+  if (chatModalsModule) return chatModalsModule.renderMessageDetailsModal(companyId, conversationId);
+  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  return questLoader('Loading');
 }
 
 function renderMessageSearchModal(companyId) {
-  const query = state.messageQuery.trim().toLowerCase();
-  const rows = companyMessageConversations(companyId).flatMap((conversation) => conversationMessages(conversation.id)
-    .filter((message) => !query || message.body.toLowerCase().includes(query))
-    .map((message) => ({ conversation, message })));
-  return renderModalShell('Messages', 'Search results', `
-    <div class="queue-list">
-      ${rows.slice(0, 30).map(({ conversation, message }) => `
-        <a class="queue-row" href="${appHref(companyPath('messages', { conversation: conversation.id }, companyId))}" data-router>
-          <span><strong>${h(conversation.title)}</strong><small>${h(message.body || 'Attachment')}</small></span>
-          <em>${timeAgo(message.created_at)}</em>
-        </a>
-      `).join('') || emptyState('No matching messages. Type in the Messages search box first.')}
-    </div>
-  `, 'message-modal');
+  if (chatModalsModule) return chatModalsModule.renderMessageSearchModal(companyId);
+  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  return questLoader('Loading');
 }
+
 
 function renderFinancePage(route, companyId) {
   const summary = financeSummary(companyId);
@@ -27590,6 +27560,11 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'leave-conversation') {
+    event.preventDefault();
+    leaveConversation(node.dataset.conversationId || '');
+    return;
+  }
   if (action === 'delete-message') {
     event.preventDefault();
     deleteMessage(node.dataset.messageId);
@@ -31644,6 +31619,43 @@ async function persistConversation(conversation, accessRows, update = false) {
   markConversationRead(conversation.id, false);
   persistMessages();
   return true;
+}
+
+/**
+ * Remove a chat from your own list without touching anybody else's.
+ *
+ * Deletes the caller's access row and nothing more -- not the conversation, not its messages,
+ * not another person's access. The RPC exists because the DELETE policy on
+ * message_conversation_access requires a manager permission, so a member could not leave a
+ * chat at all, and anyone who could would have been able to remove other people with it.
+ */
+async function leaveConversation(conversationId) {
+  const conversation = state.messageConversations.find((item) => item.id === conversationId);
+  if (!conversation) return;
+  const isDirect = conversation.type === 'direct';
+  const question = isDirect
+    ? `Delete "${conversation.title}" from your chats? The other person keeps it.`
+    : `Leave "${conversation.title}"? It disappears from your list; everyone else keeps it.`;
+  if (!window.confirm(question)) return;
+  const profileId = activeSession().profile.id;
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await safeSupabaseQuery(client.rpc('leave_message_conversation', { target_conversation_id: conversationId }));
+    if (result.error) {
+      showToast(result.error.message || 'Could not remove that chat.', 'local', 'Messages');
+      return;
+    }
+  }
+  state.messageAccess = state.messageAccess.filter((row) => !(
+    row.conversation_id === conversationId && row.target_type === 'profile' && row.target_id === profileId
+  ));
+  state.messageConversations = state.messageConversations.filter((item) => item.id !== conversationId);
+  if (state.selectedConversationId === conversationId) state.selectedConversationId = '';
+  state.modal = '';
+  persistMessages();
+  showToast(isDirect ? 'Chat removed from your list.' : 'You left the chat.', isLiveSupabaseSession() ? 'live' : 'local', 'Messages');
+  navigate(companyPath('messages', {}, conversation.company_id), { replace: true });
+  render();
 }
 
 async function deleteMessage(messageId) {
