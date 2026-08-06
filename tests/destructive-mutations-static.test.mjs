@@ -11,7 +11,7 @@ test('pipeline replacement uses one atomic RPC and checks returned errors', () =
 });
 
 test('role save and delete use transactional RPCs', () => {
-  assert.match(source, /client\.rpc\('save_company_role', \{ p_role: role, p_permissions: permissions \}\)/);
+  assert.match(source, /client\.rpc\('save_company_role', \{[\s\S]{0,160}?p_permissions: permissions,/);
   assert.match(source, /client\.rpc\('delete_company_role', \{ p_role_id: role\.id \}\)/);
 });
 

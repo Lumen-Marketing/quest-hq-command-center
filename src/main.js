@@ -30698,9 +30698,19 @@ async function saveRole(formNode) {
   };
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
-    const result = await client.rpc('save_company_role', { p_role: role, p_permissions: permissions });
+    // save_company_role reads a present id as "update the row with this id". The locally
+    // minted one belongs to no row, so a new role took the update branch, matched nothing and
+    // raised 'role not found' -- no custom role could be created at all. Send the id only
+    // when there is a row behind it and let the database mint the rest.
+    const result = await client.rpc('save_company_role', {
+      p_role: existing ? role : { ...role, id: '' },
+      p_permissions: permissions,
+    });
     if (result.error) {
+      // This used to set the sync chip and nothing else, so a failed save looked like a
+      // save: the modal closed on the next render and the role was simply absent.
       state.sync = { label: result.error.message || 'Role save failed', mode: 'local' };
+      showToast(result.error.message || 'Role save failed.', 'local', 'Roles');
       render();
       return;
     }

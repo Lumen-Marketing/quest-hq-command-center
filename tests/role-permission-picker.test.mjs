@@ -36,7 +36,7 @@ test('filtered-out selections are resubmitted as hidden inputs', () => {
 
 test('the save path still replaces the full set, which is why the guard above matters', () => {
   assert.match(source, /const permissions = data\.getAll\('permissions'\)/);
-  assert.match(source, /client\.rpc\('save_company_role', \{ p_role: role, p_permissions: permissions \}\)/);
+  assert.match(source, /client\.rpc\('save_company_role', \{[\s\S]{0,160}?p_permissions: permissions,/);
 });
 
 test('the filter resets when either role modal opens', () => {
