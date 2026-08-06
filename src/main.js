@@ -22278,46 +22278,9 @@ function renderMessageScenarioButton(companyId) {
 }
 
 function renderMessageGroupModal(companyId) {
-  const users = companyAccessUsers(companyId);
-  const activeProfileId = activeSession().profile.id;
-  const teammates = users.filter((user) => (user.profile_id || user.member_id) !== activeProfileId && user.status !== 'disabled');
-  if (!teammates.length) {
-    return renderModalShell('Messages', 'New group chat', `
-      <section class="message-modal-solo">
-        <span class="message-solo-badge"><i class="ti ti-user-minus"></i></span>
-        <h3>It's just you so far</h3>
-        <p>A group needs at least one other person. Invite a teammate, then start the chat.</p>
-        <div class="message-you-row">
-          ${renderAvatar(activeSession().profile, 'avatar message-person-avatar')}
-          <span><strong>${h(activeSession().profile.full_name || 'Lumen Marketing')} <b>You</b></strong><small>${h(activeSession().profile.email || '')}</small></span>
-        </div>
-        <button class="btn btn-primary full" type="button" data-action="open-message-workspace-members"><i class="ti ti-users"></i>Workspace members</button>
-        <button class="btn btn-ghost full" type="button" data-action="message-self"><i class="ti ti-notes"></i>Message myself instead</button>
-      </section>
-    `, 'message-modal message-create-modal');
-  }
-  return renderModalShell('Messages', 'New group chat', `
-    <div class="message-modal-team">
-      <form class="message-modal-form" data-message-group-form>
-        <label class="message-field">
-          <span>Chat name <small>(optional)</small></span>
-          <input name="title" placeholder="e.g. Roof crew - Maple St." />
-        </label>
-        <input type="hidden" name="type" value="custom" />
-        ${renderMessageGroupIconControl()}
-        ${renderMessagePeoplePicker(teammates, [])}
-        <details class="message-role-disclosure">
-          <summary data-message-role-toggle>Adding a whole team? Pick by role instead <i class="ti ti-chevron-down"></i></summary>
-          ${renderMessageRolePicker(companyId, [])}
-        </details>
-        <div class="message-modal-foot">
-          <span class="foot-note">Add a name and 1 person to start</span>
-          <button class="btn btn-ghost" type="button" data-action="close-modal">Cancel</button>
-          <button class="btn btn-primary" type="submit">Create group</button>
-        </div>
-      </form>
-    </div>
-  `, 'message-modal message-create-modal');
+  if (chatModalsModule) return chatModalsModule.renderMessageGroupModal(companyId);
+  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  return questLoader('Loading');
 }
 
 // Group chat icon: a built-in glyph or an uploaded image, reusing the same option set
@@ -22493,7 +22456,11 @@ function renderMessagePeoplePicker(users, selectedProfileIds = []) {
         <span>Find person</span>
         <input data-message-access-filter placeholder="Search name, email, or role" />
       </label>
-      <div class="message-picker-count" data-message-filter-count>${sorted.length} member${sorted.length === 1 ? '' : 's'}</div>
+      <div class="message-picker-bar">
+        <span class="message-picker-count" data-message-filter-count>${sorted.length} member${sorted.length === 1 ? '' : 's'}</span>
+        <b class="message-picked-count" data-message-selected-count>${selected.size} selected</b>
+        <button class="btn btn-sm" type="button" data-message-select-all data-mode="select">Select all</button>
+      </div>
       <div class="message-selected-strip">
         ${sorted.filter((user) => selected.has(user.profile_id || user.member_id)).slice(0, 8).map((user) => `
           <span>${renderAvatar(accessUserProfile(user), 'avatar tiny-avatar')} ${h(accessUserName(user))}</span>
@@ -22532,6 +22499,8 @@ function loadChatModals() {
         emptyState, formatDate, h, messageSenderProfile, profileIsOnline, profileName,
         renderModalShell, roleById, timeAgo, titleCase, withPresenceRing,
         directMessageCandidates, renderAvatar,
+        companyAccessUsers, activeSession, renderMessageGroupIconControl,
+        renderMessagePeoplePicker, renderMessageRolePicker,
         appHref, companyMessageConversations, companyPath, state,
       });
       return chatModalsModule;
@@ -27560,6 +27529,11 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (node.matches('[data-message-select-all]')) {
+    event.preventDefault();
+    toggleMessagePeopleSelectAll(node);
+    return;
+  }
   if (action === 'leave-conversation') {
     event.preventDefault();
     leaveConversation(node.dataset.conversationId || '');
@@ -31158,6 +31132,18 @@ async function saveMessageGroup(form) {
     showToast('Your role cannot create group chats.', 'local', 'Messages');
     return;
   }
+  // beginSubmitting returns null for a button it has already disabled, so a second click
+  // while the first is still in flight stops here instead of creating another group.
+  const done = beginSubmitting(form, 'Creating…');
+  if (!done) return;
+  try {
+    await createMessageGroup(form, companyId);
+  } finally {
+    done();
+  }
+}
+
+async function createMessageGroup(form, companyId) {
   const data = new FormData(form);
   const type = ['company', 'role', 'custom'].includes(data.get('type')) ? String(data.get('type')) : 'custom';
   const conversation = normalizeMessageConversation({
@@ -31794,27 +31780,27 @@ function onDocumentInput(event) {
   }
   if (event.target.matches('[data-file-search]')) {
     state.fileQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-file-search]');
     return;
   }
   if (event.target.matches('[data-form-search]')) {
     state.formQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-form-search]');
     return;
   }
   if (event.target.matches('[data-client-portal-search]')) {
     state.clientPortalQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-client-portal-search]');
     return;
   }
   if (event.target.matches('[data-crm-search]')) {
     state.crmQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-crm-search]');
     return;
   }
   if (event.target.matches('[data-account-search]')) {
     state.accountQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-account-search]');
     return;
   }
   if (event.target.matches('[data-contact-search]')) {
@@ -31842,17 +31828,17 @@ function onDocumentInput(event) {
   }
   if (event.target.matches('[data-deal-search]')) {
     state.dealQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-deal-search]');
     return;
   }
   if (event.target.matches('[data-proposal-search]')) {
     state.proposalQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-proposal-search]');
     return;
   }
   if (event.target.matches('[data-pb-search]')) {
     state.pricebookQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-pb-search]');
     return;
   }
   if (event.target.matches('[data-location-picker-search]')) {
@@ -31862,16 +31848,20 @@ function onDocumentInput(event) {
   }
   if (event.target.matches('[data-message-search]')) {
     state.messageQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-message-search]');
     return;
   }
   if (event.target.matches('[data-calendar-search]')) {
     state.calendarQuery = event.target.value;
-    updateWorkspaceOnly();
+    updateWorkspacePreservingFocus('[data-calendar-search]');
     return;
   }
   if (event.target.matches('[data-message-access-filter]')) {
     filterMessagePeopleList(event.target);
+    return;
+  }
+  if (event.target.matches('input[name="profile_ids"]')) {
+    syncMessagePeopleSelection(event.target);
     return;
   }
   if (event.target.matches('[data-estimate-field]')) {
@@ -35067,6 +35057,10 @@ function rerenderPreservingFocus(selector) {
 
 // Replacing the workspace innerHTML drops focus, which would eject the user from a
 // search box on every keystroke. Re-focus the same control and restore the caret.
+//
+// Every search box that re-renders on input has to come through here. Most of them used
+// updateWorkspaceOnly() directly, so typing one letter into Chats, Files, Quotes, Calendar
+// and the rest threw you out of the field and you had to click back in for the next one.
 function updateWorkspacePreservingFocus(selector) {
   const before = document.querySelector(selector);
   const start = before?.selectionStart ?? null;
@@ -41528,6 +41522,41 @@ function accessUserProfile(user) {
   };
 }
 
+/**
+ * Keep the "N selected" count and the Select all / Clear all toggle in step with the boxes.
+ *
+ * Done against the DOM rather than through render(), because re-rendering the dialog would
+ * throw away what has been typed into the person search -- the same trap the workspace search
+ * boxes fell into.
+ */
+function syncMessagePeopleSelection(scope) {
+  const form = scope?.closest?.('.message-modal-form');
+  if (!form) return;
+  const boxes = Array.from(form.querySelectorAll('input[name="profile_ids"]'));
+  const chosen = boxes.filter((box) => box.checked);
+  const count = form.querySelector('[data-message-selected-count]');
+  if (count) count.textContent = `${chosen.length} selected`;
+  const toggle = form.querySelector('[data-message-select-all]');
+  if (!toggle) return;
+  // "Select all" means the people you can currently see. With a search term typed, ticking
+  // everything in the company would be a nasty surprise.
+  const visible = boxes.filter((box) => !box.closest('[data-message-person-row]')?.hidden);
+  const allOn = visible.length > 0 && visible.every((box) => box.checked);
+  toggle.dataset.mode = allOn ? 'clear' : 'select';
+  toggle.textContent = allOn ? 'Clear all' : 'Select all';
+}
+
+function toggleMessagePeopleSelectAll(button) {
+  const form = button.closest('.message-modal-form');
+  if (!form) return;
+  const select = button.dataset.mode !== 'clear';
+  form.querySelectorAll('input[name="profile_ids"]').forEach((box) => {
+    if (box.closest('[data-message-person-row]')?.hidden) return;
+    box.checked = select;
+  });
+  syncMessagePeopleSelection(button);
+}
+
 function filterMessagePeopleList(input) {
   const query = String(input.value || '').trim().toLowerCase();
   const modal = input.closest('.message-modal-form');
@@ -41542,6 +41571,7 @@ function filterMessagePeopleList(input) {
   });
   const count = modal?.querySelector('[data-message-filter-count]');
   if (count) count.textContent = query ? `${visible} match${visible === 1 ? '' : 'es'}` : `${rows.length} member${rows.length === 1 ? '' : 's'}`;
+  syncMessagePeopleSelection(input);
 }
 
 function messageTypeSymbol(type) {

@@ -239,7 +239,9 @@ test('creating a group chat still navigates, and knows nothing about goToMessage
   // no such variable, so it threw the moment anyone created a group chat.
   // Bounded by the function's own closing brace: messageAccessFromForm is ~10,000 lines
   // further down, so slicing to it would sweep in the DM starter and pass vacuously.
-  const at = main.indexOf('async function saveMessageGroup(form) {');
+  // saveMessageGroup is now just the double-submit guard; the work moved into
+  // createMessageGroup so the guard can wrap it in a try/finally.
+  const at = main.indexOf('async function createMessageGroup(form, companyId) {');
   const fn = main.slice(at, main.indexOf('\n}\n', at));
   assert.ok(!/goToMessages/.test(fn), 'this function has no such variable');
   assert.match(fn, /\n  navigate\(companyPath\('messages', \{ conversation: conversation\.id \}, companyId\), \{ replace: true \}\);/);

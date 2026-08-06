@@ -9,6 +9,8 @@ export function createChatModals(ctx) {
     emptyState, formatDate, h, messageSenderProfile, profileIsOnline, profileName,
     renderModalShell, roleById, timeAgo, titleCase, withPresenceRing,
     directMessageCandidates, renderAvatar,
+    companyAccessUsers, activeSession, renderMessageGroupIconControl,
+    renderMessagePeoplePicker, renderMessageRolePicker,
     appHref, companyMessageConversations, companyPath, state,
   } = ctx;
 
@@ -133,5 +135,48 @@ export function createChatModals(ctx) {
     `, 'message-modal');
   }
 
-  return { renderDirectMessageModal, renderMessageDetailsModal, renderMessageSearchModal };
+  function renderMessageGroupModal(companyId) {
+    const users = companyAccessUsers(companyId);
+    const activeProfileId = activeSession().profile.id;
+    const teammates = users.filter((user) => (user.profile_id || user.member_id) !== activeProfileId && user.status !== 'disabled');
+    if (!teammates.length) {
+      return renderModalShell('Messages', 'New group chat', `
+        <section class="message-modal-solo">
+          <span class="message-solo-badge"><i class="ti ti-user-minus"></i></span>
+          <h3>It's just you so far</h3>
+          <p>A group needs at least one other person. Invite a teammate, then start the chat.</p>
+          <div class="message-you-row">
+            ${renderAvatar(activeSession().profile, 'avatar message-person-avatar')}
+            <span><strong>${h(activeSession().profile.full_name || 'Lumen Marketing')} <b>You</b></strong><small>${h(activeSession().profile.email || '')}</small></span>
+          </div>
+          <button class="btn btn-primary full" type="button" data-action="open-message-workspace-members"><i class="ti ti-users"></i>Workspace members</button>
+          <button class="btn btn-ghost full" type="button" data-action="message-self"><i class="ti ti-notes"></i>Message myself instead</button>
+        </section>
+      `, 'message-modal message-create-modal');
+    }
+    return renderModalShell('Messages', 'New group chat', `
+      <div class="message-modal-team">
+        <form class="message-modal-form" data-message-group-form>
+          <label class="message-field">
+            <span>Chat name <small>(optional)</small></span>
+            <input name="title" placeholder="e.g. Roof crew - Maple St." />
+          </label>
+          <input type="hidden" name="type" value="custom" />
+          ${renderMessageGroupIconControl()}
+          ${renderMessagePeoplePicker(teammates, [])}
+          <details class="message-role-disclosure">
+            <summary data-message-role-toggle>Adding a whole team? Pick by role instead <i class="ti ti-chevron-down"></i></summary>
+            ${renderMessageRolePicker(companyId, [])}
+          </details>
+          <div class="message-modal-foot">
+            <span class="foot-note">Add a name and 1 person to start</span>
+            <button class="btn btn-ghost" type="button" data-action="close-modal">Cancel</button>
+            <button class="btn btn-primary" type="submit">Create group</button>
+          </div>
+        </form>
+      </div>
+    `, 'message-modal message-create-modal');
+  }
+
+  return { renderMessageGroupModal, renderDirectMessageModal, renderMessageDetailsModal, renderMessageSearchModal };
 }

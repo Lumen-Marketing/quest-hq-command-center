@@ -31264,3 +31264,11 @@ a.wb-cal-more:hover { color: var(--orange); }
 .chat-leave { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .chat-leave .btn { width: 100%; justify-content: center; }
 .chat-leave .chat-people-note { margin: 8px 0 0; }
+
+/* Picking people for a chat: the tick has to be visible, the count has to be live, and
+   "Select all" has to be reachable without scrolling the list. */
+.message-picker-bar { display: flex; align-items: center; gap: 10px; margin: 8px 0 6px; }
+.message-picker-bar .message-picker-count { margin: 0; flex: 1; }
+.message-picked-count { font-size: .8rem; color: var(--accent, #e0552d); font-variant-numeric: tabular-nums; }
+.message-person-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent, #e0552d); flex: none; cursor: pointer; }
+.message-person-row:has(input[type="checkbox"]:checked) { border-color: var(--accent, #e0552d); background: color-mix(in srgb, var(--accent, #e0552d) 8%, transparent); }
