@@ -61,3 +61,40 @@ test('both creators hand back the id so a joining caller can open the same chat'
   const self = slice('async function createSelfConversation(', '\nasync function saveMessageAccess');
   assert.match(self, /return conversation\.id;/);
 });
+
+// The race guard above only stops SIMULTANEOUS creates. A second, separate bug created a
+// duplicate minutes later: the "do we already have this chat?" check read
+// companyMessageConversations(), which is the DISPLAY list -- it applies state.messageQuery
+// (the "Find a chat or person" box) and state.messageFilter (the All/Unread/Groups chips).
+// With anything typed, or Unread active, the existing chat was filtered out of the check and
+// a brand-new one was created. Production held five direct chats with the same person.
+
+test('the uniqueness check reads every conversation, not the filtered view', () => {
+  const direct = slice('async function startDirectMessageWithProfile(', '\nasync function createDirectConversation');
+  assert.match(direct, /allCompanyConversations\(companyId\)\.find\(/);
+  assert.ok(!/companyMessageConversations\(companyId\)\.find\(/.test(direct), 'the display list must not decide this');
+
+  const self = slice('async function startSelfMessage(', '\nasync function createSelfConversation');
+  assert.match(self, /allCompanyConversations\(companyId\)\.find\(/);
+  assert.ok(!/companyMessageConversations\(companyId\)\.find\(/.test(self));
+});
+
+test('the unfiltered list applies neither the search box nor the filter chips', () => {
+  const fn = slice('function allCompanyConversations(', '\nfunction companyMessageConversations');
+  assert.match(fn, /conversation\.company_id === companyId && canAccessConversation\(conversation\)/);
+  for (const leak of ['messageQuery', 'messageFilter', 'conversationUnreadCount']) {
+    assert.ok(!fn.includes(leak), `${leak} would make a uniqueness check depend on the view`);
+  }
+});
+
+test('the display list still filters, because that is its job', () => {
+  const fn = slice('function companyMessageConversations(', '\nfunction companyMessageUnreadCount');
+  assert.match(fn, /state\.messageQuery/);
+  assert.match(fn, /state\.messageFilter/);
+});
+
+test('an unread badge does not change when somebody types in the chat search', () => {
+  // Same root cause, smaller blast radius: counts were taken from the filtered view.
+  const fn = slice('function companyMessageUnreadCount(', '\n}');
+  assert.match(fn, /allCompanyConversations\(companyId\)/);
+});

@@ -6595,7 +6595,7 @@ function moduleBadgeCount(moduleId, companyId = activeCompanyId()) {
   if (moduleId === 'users') return companyAccessUsers(companyId).filter((user) => user.status === 'active').length;
   if (moduleId === 'messages') {
     const unread = companyMessageUnreadCount(companyId);
-    return unread || companyMessageConversations(companyId).length;
+    return unread || allCompanyConversations(companyId).length;
   }
   if (moduleId === 'calendar') return calendarUpcomingItems(companyId).length;
   if (moduleId === 'time') return timeSummary(companyId).focus.length;
@@ -31273,7 +31273,7 @@ async function startDirectMessageWithProfile(companyId, targetId, options = {}) 
     await startSelfMessage(companyId);
     return;
   }
-  const existing = companyMessageConversations(companyId).find((conversation) => {
+  const existing = allCompanyConversations(companyId).find((conversation) => {
     if (conversation.type !== 'direct') return false;
     const rowIds = conversationAccessRows(conversation.id)
       .filter((row) => row.target_type === 'profile')
@@ -31321,7 +31321,7 @@ async function createDirectConversation(companyId, cleanTargetId, profile, goToM
 
 async function startSelfMessage(companyId) {
   const profile = activeSession().profile;
-  const existing = companyMessageConversations(companyId).find((conversation) => {
+  const existing = allCompanyConversations(companyId).find((conversation) => {
     if (conversation.type !== 'direct') return false;
     const rows = conversationAccessRows(conversation.id).filter((row) => row.target_type === 'profile');
     return rows.length === 1 && rows[0].target_id === profile.id;
@@ -35477,6 +35477,22 @@ function companyNotifications(companyId = activeCompanyId()) {
     .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0));
 }
 
+/**
+ * Every conversation in this company the user can see -- ignoring the search box and the
+ * filter chips.
+ *
+ * companyMessageConversations() below is the DISPLAY list: it applies state.messageQuery and
+ * state.messageFilter. Using it to answer "do we already have a chat with this person?" meant
+ * that anything typed in "Find a chat or person", or the Unread/Groups chip being active, hid
+ * the existing chat from the check -- so a brand-new one was created instead, over and over,
+ * for the same person. A uniqueness check has to see everything, not the current view.
+ */
+function allCompanyConversations(companyId = activeCompanyId()) {
+  return state.messageConversations.filter((conversation) => (
+    conversation.company_id === companyId && canAccessConversation(conversation)
+  ));
+}
+
 function companyMessageConversations(companyId = activeCompanyId()) {
   const query = state.messageQuery.trim().toLowerCase();
   const filter = state.messageFilter || 'all';
@@ -35492,7 +35508,7 @@ function companyMessageConversations(companyId = activeCompanyId()) {
 }
 
 function companyMessageUnreadCount(companyId = activeCompanyId()) {
-  return companyMessageConversations(companyId).reduce((sum, conversation) => sum + conversationUnreadCount(conversation.id), 0);
+  return allCompanyConversations(companyId).reduce((sum, conversation) => sum + conversationUnreadCount(conversation.id), 0);
 }
 
 function selectedConversation(companyId = activeCompanyId()) {
