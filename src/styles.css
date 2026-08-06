@@ -12441,12 +12441,24 @@ button.side-item {
   font-weight: 600;
 }
 
+/* Timestamp and unread count share the last column: the time sits at the top of the cell,
+   the pill under it. Placed explicitly so the badge -- a fifth child against four columns --
+   cannot displace the timestamp into a second row. */
 .conversation-meta {
   min-width: 52px;
+  grid-column: 4;
+  grid-row: 1;
+  align-self: start;
+  justify-self: end;
 }
 
+/* The unread count is the row's fifth child against four columns, so on its own it wrapped
+   to a second line under the avatar. It shares the last column with the timestamp instead. */
 .conversation-row b {
   position: static;
+  grid-column: 4;
+  grid-row: 1;
+  align-self: end;
   justify-self: end;
   min-width: 18px;
   height: 18px;
@@ -12925,8 +12937,12 @@ button.side-item {
     max-height: none;
   }
 
+  /* Four columns, because the row has four visible children: the workspace chip is
+     display:none above. Declaring a fifth column for it shifted every later item one place
+     left -- the title landed in the 28px chip slot and was clipped to "N...", while the
+     timestamp took the width meant for the name. */
   .conversation-row {
-    grid-template-columns: 8px 34px 28px minmax(0, 1fr) auto;
+    grid-template-columns: 8px 34px minmax(0, 1fr) auto;
     gap: 8px;
     padding: 10px 12px 10px 8px;
   }
