@@ -5651,7 +5651,7 @@ function loadRenderKnowledgePage() {
   if (!renderKnowledgePagePending) {
     renderKnowledgePagePending = import('./knowledge/knowledge-page.js').then((mod) => {
       renderKnowledgePageModule = mod.createKnowledgePage({
-        can, companyKnowledgeArticles, formatDate, h, knowledgeById, loadKnowledgeArticles, renderKnowledgeArticleForm, state,
+        can, companyKnowledgeArticles, formatDate, h, knowledgeById, knowledgeLoadedCompanies, loadKnowledgeArticles, renderKnowledgeArticleForm, state,
       });
       return renderKnowledgePageModule;
     }).catch((error) => {
@@ -9785,24 +9785,8 @@ function renderUnderwritingResults(result) {
 }
 
 
-function renderUnderwriterQueueRow(lead) {
-  return `
-    <button class="table-row" type="button" data-action="open-contact" data-contact-id="${h(lead.id)}">
-      <span class="cell-lead">${pipelineDot(lead.underwriter_stage.color)}<span><strong>${h(lead.name)}</strong><small>${h(lead.location || lead.phone || lead.email || 'No details')}</small></span></span>
-      <span>${underwriterStageTag(lead.underwriter_stage)}</span>
-      <span>${h(lead.owner_name || 'Unassigned')}</span>
-      <span>${h(lead.pay_type || 'Retail')}</span>
-      <span>${lead.value ? money(lead.value) : '<span class="muted-dash">-</span>'}</span>
-    </button>
-  `;
-}
-
 function underwriterStageByKey(key) {
   return CRM2_UNDERWRITER_STAGES.find((stage) => stage.key === key) || CRM2_UNDERWRITER_STAGES[1];
-}
-
-function underwriterStageTag(stage) {
-  return `<span class="stage-tag">${pipelineDot(stage.color)}${h(stage.name)}</span>`;
 }
 
 function underwriterStageForContact(contact) {

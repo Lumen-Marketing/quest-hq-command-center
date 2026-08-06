@@ -5,7 +5,7 @@ import { filterKnowledgeArticles } from '../data/knowledge.js';
 
 export function createKnowledgePage(ctx) {
   const {
-    can, companyKnowledgeArticles, formatDate, h, knowledgeById, loadKnowledgeArticles, renderKnowledgeArticleForm, state,
+    can, companyKnowledgeArticles, formatDate, h, knowledgeById, knowledgeLoadedCompanies, loadKnowledgeArticles, renderKnowledgeArticleForm, state,
   } = ctx;
 
   function renderKnowledgePage(route, companyId) {

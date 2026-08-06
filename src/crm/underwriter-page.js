@@ -8,6 +8,25 @@ export function createUnderwriterPage(ctx) {
     activeWorkspaceId, appHref, companyContacts, companyPath, emptyState, h, metricCard, money, pipelineDot, protectedFormDraftAttributes, renderProtectedFormDraftStrip, renderUnderwritingResults, sum, svgIcon, underwriterStageByKey, underwriterStageForContact, underwritingCaseForContact, underwritingDraftForContact, underwritingNumberField, state, CRM2_UNDERWRITER_STAGES,
   } = ctx;
 
+  // The queue row and its stage tag were left behind in main.js when this page moved, and
+  // the page reached across for them -- a ReferenceError, since they are another module's
+  // scope. Nothing else uses either, so they live here now.
+  function underwriterStageTag(stage) {
+    return `<span class="stage-tag">${pipelineDot(stage.color)}${h(stage.name)}</span>`;
+  }
+
+  function renderUnderwriterQueueRow(lead) {
+    return `
+      <button class="table-row" type="button" data-action="open-contact" data-contact-id="${h(lead.id)}">
+        <span class="cell-lead">${pipelineDot(lead.underwriter_stage.color)}<span><strong>${h(lead.name)}</strong><small>${h(lead.location || lead.phone || lead.email || 'No details')}</small></span></span>
+        <span>${underwriterStageTag(lead.underwriter_stage)}</span>
+        <span>${h(lead.owner_name || 'Unassigned')}</span>
+        <span>${h(lead.pay_type || 'Retail')}</span>
+        <span>${lead.value ? money(lead.value) : '<span class="muted-dash">-</span>'}</span>
+      </button>
+    `;
+  }
+
   function renderUnderwriterPage(route, companyId) {
     const requestedStageAliases = { prospect: 'prospects', lead: 'leads', nurturing: 'followup' };
     const requestedStageRaw = route.params.get('stage') || 'all';
