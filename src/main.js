@@ -3721,12 +3721,34 @@ function ensureIconSprite() {
     .catch((error) => console.error('Icon sprite fallback failed to load', error));
 }
 
+/**
+ * Enter password-recovery mode from the URL, not only from the auth event.
+ *
+ * requestPasswordReset sends users to `/?auth=recovery`, but the app only ever set
+ * `authMode = 'recovery'` when GoTrue emitted PASSWORD_RECOVERY. Recovery links that arrive
+ * as a code exchange emit SIGNED_IN instead, so the event never fired: the link signed the
+ * user in and dropped them on the dashboard with no way to choose a new password -- which is
+ * exactly what the reset flow is for. The URL we asked to be redirected to is the reliable
+ * signal, so it is read here too.
+ */
+function adoptRecoveryModeFromUrl() {
+  if (state.authMode === 'recovery') return;
+  const params = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(String(window.location.hash || '').replace(/^#/, ''));
+  if (params.get('auth') !== 'recovery' && hash.get('type') !== 'recovery') return;
+  state.authMode = 'recovery';
+  state.authBusy = false;
+  state.loginError = '';
+  state.authMessage = 'Choose a new password for your account.';
+}
+
 function render() {
   const keptScroll = captureScrollForRender();
   queueMicrotask(() => restoreScrollAfterRender(keptScroll));
   queueMicrotask(syncModalFocus);
   wbInvalidateAppIndex(); // rebuild the builder app-index fresh for this render
   state.route = getRoute();
+  adoptRecoveryModeFromUrl();
 
   if (CONFIG.questAuthEnabled && !state.authReady) {
     renderAuthLoading();
@@ -9728,15 +9750,23 @@ function underwritingInputFromCase(item, contact) {
 
 function underwritingDraftForContact(contact, companyId) {
   if (!contact) return null;
-  if (state.underwritingDraft?.contactId === contact.id && state.underwritingDraft?.companyId === companyId) {
-    return state.underwritingDraft;
-  }
+  // The cases are fetched on demand, so on a fresh load or a return to this screen they have
+  // not arrived yet and there is nothing to build a draft from. Caching that empty draft was
+  // the bug: the early return below then served zeros for the rest of the session, and a
+  // decision that had saved perfectly well looked like it had never been saved at all.
+  const ready = ensureDomainLoaded('underwriting');
+  const draft = state.underwritingDraft;
+  const matches = draft?.contactId === contact.id && draft?.companyId === companyId;
+  // `hydrated` means this draft is the user's: either built from loaded cases, or typed into.
+  // Either way it must never be replaced underneath them.
+  if (matches && (draft.hydrated || !ready)) return draft;
   const saved = underwritingCaseForContact(contact.id, companyId);
   state.underwritingDraft = {
     companyId,
     contactId: contact.id,
     ...underwritingInputFromCase(saved, contact),
     notes: saved?.notes || '',
+    hydrated: ready,
   };
   return state.underwritingDraft;
 }
@@ -32721,7 +32751,7 @@ function syncUnderwritingForm(form) {
   if (!form) return;
   const input = underwritingInputFromForm(form);
   state.underwritingContactId = input.contactId;
-  state.underwritingDraft = { companyId: activeCompanyId(), ...input };
+  state.underwritingDraft = { companyId: activeCompanyId(), ...input, hydrated: true };
   const results = form.querySelector('[data-underwriting-results]');
   if (results) results.innerHTML = renderUnderwritingResults(calculateUnderwriting(input));
 }
@@ -32766,7 +32796,7 @@ async function saveUnderwritingCase(form) {
     saved = normalizeUnderwritingCase(result.data);
   }
   state.underwritingCases = [saved, ...state.underwritingCases.filter((entry) => !(entry.company_id === companyId && entry.contact_id === contact.id))];
-  state.underwritingDraft = { companyId, ...input };
+  state.underwritingDraft = { companyId, ...input, hydrated: true };
   clearProtectedFormDraft(form);
   showToast(`Underwriting saved for ${contact.name}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Underwriter');
   render();

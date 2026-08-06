@@ -38,7 +38,11 @@ const pluginById = (id) => WORKSPACE_PLUGIN_REGISTRY.find((plugin) => plugin.id 
 test('plugin registry maps every non-core route to a workspace plugin', () => {
   assert.match(source, /const CORE_MODULE_IDS = new Set\(\['dashboard', 'jobs', 'users', 'settings', 'automations'\]\);/);
   assert.match(source, /const WORKSPACE_PLUGIN_REGISTRY = \[/);
-  assert.deepEqual(pluginById('crm').module_ids, ['crm', 'contacts', 'deals']);
+  // Workday is a generic 'today's work' queue over contacts, quotes, jobs and tasks. It was
+  // declared only by crm_2, and the two CRM plugins are mutually exclusive, so every company
+  // on the standard CRM had no Workday at all -- absent from the rail and the palette, with
+  // nothing to explain it. QA reported it as missing; it was never reachable for them.
+  assert.deepEqual(pluginById('crm').module_ids, ['crm', 'contacts', 'deals', 'workday']);
   assert.deepEqual(pluginById('crm_2').module_ids, ['workday', 'contacts', 'deals', 'proposals', 'jobs']);
   assert.deepEqual(pluginById('underwriter').module_ids, ['underwriter']);
   assert.deepEqual(pluginById('time_clock').module_ids, ['time', 'clock']);

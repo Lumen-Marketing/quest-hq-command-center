@@ -29,7 +29,7 @@ export function pluginDataScopeDetails(scope) {
 }
 
 export const WORKSPACE_PLUGIN_REGISTRY = [
-  { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals'], permissions: ['crm.view'], exclusiveGroup: 'crm', dataScope: PLUGIN_DATA_SCOPES.WORKSPACE_PRIVATE },
+  { id: 'crm', label: 'CRM', summary: 'Accounts, contacts, quotes, and customer activity.', icon: 'ti-building-community', module_ids: ['crm', 'contacts', 'deals', 'workday'], permissions: ['crm.view'], exclusiveGroup: 'crm', dataScope: PLUGIN_DATA_SCOPES.WORKSPACE_PRIVATE },
   { id: 'crm_2', label: 'Quest CRM', summary: 'Private contacts, quotes, estimates, proposals, and production jobs workspace.', icon: 'ti-id-badge-2', module_ids: ['workday', 'contacts', 'deals', 'proposals', 'jobs'], permissions: ['crm.view'], exclusiveGroup: 'crm', private: true, dataScope: PLUGIN_DATA_SCOPES.WORKSPACE_PRIVATE },
   { id: 'tasks', label: 'Tasks', summary: 'Workspace task execution, timers, reminders, and team follow-through.', icon: 'ti-list-check', module_ids: ['tasks'], permissions: ['tasks.view', 'tasks.manage'], dataScope: PLUGIN_DATA_SCOPES.WORKSPACE_PRIVATE },
   { id: 'underwriter', label: 'Underwriter', summary: 'Qualification, scope, pricing, and handoff readiness queue.', icon: 'ti-clipboard-check', module_ids: ['underwriter'], permissions: ['underwriter.view', 'underwriter.manage'], recommendedWith: ['crm_2'], dataScope: PLUGIN_DATA_SCOPES.WORKSPACE_PRIVATE },
