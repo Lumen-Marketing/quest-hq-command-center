@@ -20338,75 +20338,36 @@ function renderClientPortalMarkModal() {
 }
 
 
-function renderPluginsSettings(companyId) {
-  const workspaceId = activeWorkspaceId();
-  const workspace = activeWorkspace();
-  const canManagePlugins = can('plugins.manage', companyId);
-  const installedCount = availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id, workspaceId)).length;
-  if (!workspace) return `<article class="panel span-3">${emptyState('No operational workspace is assigned to your user.')}</article>`;
-  return `
-    <article class="panel span-3 plugins-settings-panel">
-      <div class="section-head">
-        <div><h2>${h(workspace.name)} plugins</h2><p>${installedCount} active plugin${installedCount === 1 ? '' : 's'} in this workspace. Company entitlements set what can be activated here.</p></div>
-      </div>
-      <div class="plugin-preset-row">
-        ${Object.entries(WORKSPACE_PLUGIN_PRESETS).map(([presetCode, pluginIds]) => `
-          <button class="btn" type="button" data-action="apply-workspace-plugin-preset" data-workspace-id="${h(workspaceId)}" data-preset-code="${h(presetCode)}" ${canManagePlugins ? '' : 'disabled'}>
-            <i class="ti ti-layout-grid-add"></i>${h(WORKSPACE_PLUGIN_PRESET_LABELS[presetCode] || titleCase(presetCode))}
-            <small>${pluginIds.length} plugins</small>
-          </button>
-        `).join('')}
-      </div>
-      <div class="plugin-card-grid">
-        ${WORKSPACE_PLUGIN_REGISTRY.map((plugin) => renderPluginCard(companyId, workspaceId, plugin, canManagePlugins)).join('')}
-      </div>
-    </article>
-  `;
+// ---- renderPluginsSettings ---------------------------------------------------------
+// Body lives in ./settings/plugins-panel.js and is fetched on first use.
+let pluginsPanelModule = null;
+let pluginsPanelPending = null;
+
+function loadPluginsPanel() {
+  if (pluginsPanelModule) return Promise.resolve(pluginsPanelModule);
+  if (!pluginsPanelPending) {
+    pluginsPanelPending = import('./settings/plugins-panel.js').then((mod) => {
+      pluginsPanelModule = mod.createPluginsPanel({
+        LAUNCH_HIDE_FUTURE_MODULES, MODULE_REGISTRY, WORKSPACE_PLUGIN_PRESETS,
+        WORKSPACE_PLUGIN_PRESET_LABELS, WORKSPACE_PLUGIN_REGISTRY,
+        activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, can,
+        canManageOperationalWorkspaces, companyPluginStatus, conflictingPluginIds, emptyState, h,
+        isPluginInstalled, pluginById, pluginDataScopeDetails, pluginPrerequisiteNote,
+        pluginStatusLabel, titleCase, workspacePluginStatus,
+      });
+      return pluginsPanelModule;
+    }).catch((error) => {
+      pluginsPanelPending = null;
+      throw error;
+    });
+  }
+  return pluginsPanelPending;
 }
 
-function renderPluginCard(companyId, workspaceId, plugin, canManagePlugins) {
-  // 'installed' is entitled, 'disabled' is a platform decision to withhold, and anything
-  // else means nobody has decided -- which the company may now decide for itself.
-  const entitlement = companyPluginStatus(companyId, plugin.id);
-  const withheld = entitlement === 'disabled';
-  const entitled = entitlement === 'installed';
-  const status = workspacePluginStatus(companyId, plugin.id, workspaceId);
-  plugin.status = status;
-  if (LAUNCH_HIDE_FUTURE_MODULES && plugin.status === 'coming_soon') return '';
-  const installed = status === 'installed';
-  const disabled = status === 'disabled';
-  const available = status === 'available' && !withheld;
-  const unavailable = status === 'available' && withheld;
-  const comingSoon = status === 'coming_soon';
-  const prerequisiteNote = pluginPrerequisiteNote(companyId, plugin);
-  const conflictIds = conflictingPluginIds(companyId, plugin.id, 'installed');
-  const conflictLabels = conflictIds.map((conflictId) => pluginById(conflictId)?.label || conflictId).join(', ');
-  const moduleLabels = plugin.module_ids
-    .map((moduleId) => MODULE_REGISTRY.find((module) => module.id === moduleId)?.label || titleCase(moduleId))
-    .join(', ');
-  const scope = pluginDataScopeDetails(plugin.dataScope);
-  return `
-    <article class="plugin-card ${installed ? 'installed' : disabled ? 'disabled' : comingSoon ? 'coming-soon' : unavailable ? 'unavailable' : 'available'}">
-      <div class="plugin-card-icon"><i class="ti ${h(plugin.icon)}"></i></div>
-      <div class="plugin-card-copy">
-        <strong>${h(plugin.label)}</strong>
-        <span>${h(plugin.summary)}</span>
-        <small>${h(moduleLabels)}</small>
-        <small class="plugin-scope-badge ${h(plugin.dataScope)}"><i class="ti ti-database" aria-hidden="true"></i>${h(scope.label)}</small>
-        <small class="plugin-scope-description">${h(scope.description)}</small>
-        ${unavailable ? '<small class="plugin-card-note">Withheld for your company. Ask Quest to turn it on.</small>' : ''}
-        ${prerequisiteNote ? `<small class="plugin-card-note">${h(prerequisiteNote)}</small>` : ''}
-        ${conflictLabels && !installed ? `<small class="plugin-card-note warning">Installing ${h(plugin.label)} disables ${h(conflictLabels)}.</small>` : ''}
-      </div>
-      <b class="status-pill ${installed ? 'active' : comingSoon || unavailable ? 'muted' : disabled ? 'pending' : ''}">${h(unavailable ? 'Withheld' : pluginStatusLabel(status))}</b>
-      <div class="plugin-card-actions">
-        ${installed ? `<button class="btn" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="disabled" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-power"></i>Disable</button>` : ''}
-        ${available || disabled ? `<button class="btn btn-primary" type="button" data-action="set-workspace-plugin" data-workspace-id="${h(workspaceId)}" data-plugin-id="${h(plugin.id)}" data-status="installed" ${canManagePlugins ? '' : 'disabled'}><i class="ti ti-download"></i>${disabled ? 'Re-enable' : 'Activate'}</button>` : ''}
-        ${unavailable ? '<button class="btn" type="button" disabled><i class="ti ti-lock"></i>Withheld by Quest</button>' : ''}
-        ${comingSoon ? '<button class="btn" type="button" disabled><i class="ti ti-clock"></i>Coming soon</button>' : ''}
-      </div>
-    </article>
-  `;
+function renderPluginsSettings(companyId) {
+  if (pluginsPanelModule) return pluginsPanelModule.renderPluginsSettings(companyId);
+  loadPluginsPanel().then(() => render()).catch((error) => console.error('Plugins panel failed to load', error));
+  return questLoader('Loading');
 }
 
 function conflictingPluginIds(companyId, pluginId, nextStatus, workspaceId = workspaceIdForCompany(companyId)) {

@@ -8,7 +8,8 @@ import {
   pluginDataScopeDetails,
 } from '../src/workspaces/plugin-catalog.js';
 
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/settings/plugins-panel.js', import.meta.url), 'utf8');
 
 test('every plugin tells customers where its records are visible', () => {
   const validScopes = new Set(Object.values(PLUGIN_DATA_SCOPES));

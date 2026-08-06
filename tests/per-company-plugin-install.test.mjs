@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+const panelBody = readFileSync(join(root, 'src', 'settings', 'plugins-panel.js'), 'utf8');
 const panel = readFileSync(join(root, 'src', 'platform', 'master-panel.js'), 'utf8');
 const migration = readFileSync(
   join(root, 'supabase', 'migrations', '202608071000_per_company_plugin_install.sql'),
@@ -58,8 +59,8 @@ test('the platform panel reads the entitlement it writes', () => {
 });
 
 test('a company admin can activate a plugin that has no entitlement yet', () => {
-  const card = main.slice(main.indexOf('function renderPluginCard('));
-  const body = card.slice(0, card.indexOf('\nfunction '));
+  const card = panelBody.slice(panelBody.indexOf('function renderPluginCard('));
+  const body = card.slice(0, card.length);
   assert.match(body, /const withheld = entitlement === 'disabled';/);
   assert.match(body, /const available = status === 'available' && !withheld;/);
   assert.match(body, /const unavailable = status === 'available' && withheld;/);
