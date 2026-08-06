@@ -12,7 +12,7 @@ export function createWidgetRegistry(ctx) {
   // tile, over the same list, so the two cannot drift apart.
   function renderJobsConfigModal(companyId) {
     const chosen = dashboardJobsParts(companyId);
-    return renderModalShell('Widget details', 'Jobs production', `
+    return renderModalShell('Widget details', 'Jobs', `
       <div class="dash-modal-summary">
         <div><b>What should this widget show?</b><span>Tick any number. Each figure and list is independent, so the card carries only what you watch.</span></div>
       </div>
@@ -97,7 +97,7 @@ export function createWidgetRegistry(ctx) {
       // is per company, chosen through the widget's own settings, so one dashboard can carry
       // draws and another the crew's day without either carrying both.
       jobsProduction: {
-        title: 'Jobs production',
+        title: 'Jobs',
         group: 'Operations',
         span: true,
         configurable: true,

@@ -189,7 +189,7 @@ test('the parts are defined once, beside the arithmetic that produces them', () 
 });
 
 test('the tile is offered in the workspace catalogue and configured by tick-box', () => {
-  assert.match(modal, /\['jobs', 'ti-hammer', 'Jobs production'/, 'you have to be able to add it');
+  assert.match(modal, /\['jobs', 'ti-hammer', 'Jobs'/, 'you have to be able to add it');
   assert.match(modal, /tile\.type === 'jobs'/, 'and choose what it shows');
   assert.match(modal, /data-wb-tilecfg-part=/);
   // Saving has to read those boxes back, or every tile keeps the defaults forever.

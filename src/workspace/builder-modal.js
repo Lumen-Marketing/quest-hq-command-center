@@ -359,7 +359,7 @@ export function createBuilderModal(ctx) {
         ['tasks', 'ti-checklist', 'Workspace tasks', 'Open tasks across the workspace'],
         ['calendar', 'ti-calendar', 'Calendar', 'Upcoming events and due dates'],
         ['contacts', 'ti-address-book', 'Contacts', 'Directory of company contacts'],
-        ['jobs', 'ti-hammer', 'Jobs production', 'The production figures, and which of them you want'],
+        ['jobs', 'ti-hammer', 'Jobs', 'The production figures, and which of them you want'],
         ['apps', 'ti-apps', 'Apps list', 'Quick links to every app'],
         ['text', 'ti-align-left', 'Text / Banner', 'A custom note or greeting'],
         ['image', 'ti-photo', 'Image', 'A logo or graphic (opens in a lightbox)'],
