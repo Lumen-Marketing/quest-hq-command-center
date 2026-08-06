@@ -1228,6 +1228,9 @@ const MODULE_REGISTRY = [
 
 const NAVIGATION_LABELS = {
   dashboard: 'Home',
+  // 'Workspaces' sat inside the group already called WORKSPACE, so the rail read as though
+  // it repeated itself. What the module actually holds is the apps you build.
+  workspaces: 'Apps',
   messages: 'Inbox',
   underwriter: 'Estimator',
   analytics: 'Reports',
@@ -22195,9 +22198,37 @@ function renderMessageAttachment(attachment) {
   `;
 }
 
+/**
+ * Files chosen in the composer, per conversation.
+ *
+ * The <input type="file"> alone was not enough. Picking a file changed nothing on screen, so
+ * it read as broken -- and because a re-render rebuilds the composer, any incoming message or
+ * presence tick between picking and sending threw the choice away without a word. Holding
+ * them here means the chips survive a render and the user can see what is attached.
+ */
+const messageDraftFiles = new Map();
+
+function messageComposerFiles(conversationId) {
+  return messageDraftFiles.get(conversationId) || [];
+}
+
+function renderMessageAttachDraft(conversationId) {
+  const files = messageComposerFiles(conversationId);
+  if (!files.length) return '';
+  return `<div class="message-attach-draft">
+    ${files.map((file, index) => `
+      <span class="message-attach-chip">
+        <i class="ti ti-paperclip" aria-hidden="true"></i>
+        <b>${h(file.name)}</b><small>${h(fileSize(file.size))}</small>
+        <button type="button" data-action="drop-message-attachment" data-conversation-id="${h(conversationId)}" data-index="${index}" aria-label="Remove ${h(file.name)}"><i class="ti ti-x"></i></button>
+      </span>`).join('')}
+  </div>`;
+}
+
 function renderMessageComposer(conversation) {
   const canAttach = can('messages.attach_files', conversation.company_id);
   return `
+    ${renderMessageAttachDraft(conversation.id)}
     <form class="message-composer" data-message-form data-conversation-id="${h(conversation.id)}">
       <button class="icon-button message-attach-button" type="button" data-action="pick-message-attachments" title="Attach files" aria-label="Attach files" ${canAttach ? '' : 'disabled'}><i class="ti ti-paperclip"></i></button>
       <input class="message-attachment-input" name="attachments" type="file" multiple accept="${acceptAttr('document')}" ${canAttach ? '' : 'disabled'} />
@@ -22343,46 +22374,9 @@ async function prepareMessageGroupIconUpload(file) {
 }
 
 function renderMessageWorkspaceMembersModal(companyId) {
-  const users = companyAccessUsers(companyId);
-  const activeProfileId = activeSession().profile.id;
-  const activeUsers = users.filter((user) => user.status !== 'disabled' && user.status !== 'left');
-  const teammates = activeUsers.filter((user) => (user.profile_id || user.member_id) !== activeProfileId);
-  const pendingInvites = companyInvites(companyId).slice(0, 4);
-  const canManageUsers = can('users.manage', companyId);
-  return renderModalShell('Messages', 'Workspace members', `
-    <section class="message-workspace-members">
-      <div class="message-member-summary">
-        <span class="message-solo-badge"><i class="ti ti-users"></i></span>
-        <div>
-          <h3>${teammates.length ? `${teammates.length} teammate${teammates.length === 1 ? '' : 's'} available` : 'No teammates available yet'}</h3>
-          <p>Messages are for active members of this workspace. Add people from Users, then start direct or group chats here.</p>
-        </div>
-      </div>
-      <div class="message-workspace-member-list">
-        ${teammates.map((user) => {
-          const userId = user.profile_id || user.member_id;
-          return `
-            <article class="message-workspace-member-row">
-              ${renderAvatar({ full_name: user.name, email: user.email, avatar_url: user.avatar_url }, 'avatar message-person-avatar')}
-              <span><strong>${h(user.name || 'Workspace member')}</strong><small>${h(user.email || user.role_label || titleCase(user.role || 'member'))}</small></span>
-              <button class="btn btn-primary btn-sm" type="button" data-action="message-direct-member" data-profile-id="${h(userId)}"><i class="ti ti-message"></i>Message</button>
-            </article>
-          `;
-        }).join('') || emptyState('Only you are active in this workspace right now.')}
-      </div>
-      ${pendingInvites.length ? `
-        <div class="message-pending-invites">
-          <strong>Pending access</strong>
-          ${pendingInvites.map((invite) => `<span>${h(invite.email)} · ${h(titleCase(invite.status))}</span>`).join('')}
-        </div>
-      ` : ''}
-      <div class="message-modal-foot">
-        <span class="foot-note">${canManageUsers ? 'Manage invites and roles from Users.' : 'Ask an Owner/Admin to add workspace members.'}</span>
-        <button class="btn btn-ghost" type="button" data-action="close-modal">Close</button>
-        <button class="btn btn-primary" type="button" data-action="go-workspace-members" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-users-plus"></i>Open Users</button>
-      </div>
-    </section>
-  `, 'message-modal message-create-modal message-workspace-members-modal');
+  if (chatModalsModule) return chatModalsModule.renderMessageWorkspaceMembersModal(companyId);
+  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  return questLoader('Loading');
 }
 
 // Recipient is chosen by searching rather than scrolling a <select>: a company with
@@ -22498,7 +22492,7 @@ function loadChatModals() {
         contractRows, conversationAccessRows, conversationAttachments, conversationMessages,
         emptyState, formatDate, h, messageSenderProfile, profileIsOnline, profileName,
         renderModalShell, roleById, timeAgo, titleCase, withPresenceRing,
-        directMessageCandidates, renderAvatar,
+        directMessageCandidates, renderAvatar, companyAccessUsers, activeSession,
         companyAccessUsers, activeSession, renderMessageGroupIconControl,
         renderMessagePeoplePicker, renderMessageRolePicker,
         appHref, companyMessageConversations, companyPath, state,
@@ -27517,6 +27511,16 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'drop-message-attachment') {
+    event.preventDefault();
+    const conversationId = node.dataset.conversationId || '';
+    const index = Number(node.dataset.index);
+    const rest = messageComposerFiles(conversationId).filter((_file, at) => at !== index);
+    if (rest.length) messageDraftFiles.set(conversationId, rest);
+    else messageDraftFiles.delete(conversationId);
+    render();
+    return;
+  }
   if (action === 'pick-message-attachments') {
     event.preventDefault();
     const input = node.closest('[data-message-form]')?.querySelector('input[name="attachments"]');
@@ -31380,7 +31384,9 @@ async function sendMessage(form) {
   }
   const data = new FormData(form);
   const body = String(data.get('body') || '').trim();
-  const files = Array.from(form.elements.attachments?.files || []);
+  // The chips are the source of truth: the input is cleared on every pick so the same file
+  // can be chosen twice, and a re-render would have emptied it anyway.
+  const files = messageComposerFiles(conversation.id).concat(Array.from(form.elements.attachments?.files || []));
   if (!body && !files.length) {
     showToast('Type a message or attach a file.', 'local', 'Messages');
     return;
@@ -31399,6 +31405,7 @@ async function sendMessage(form) {
   try {
     for (const file of files) { if (!(await guardUpload(file, 'document', 'Messages'))) return; }
     await createMessageRecord(conversation, body, files);
+    messageDraftFiles.delete(conversation.id);
     form.reset();
     render();
   } finally {
@@ -31862,6 +31869,17 @@ function onDocumentInput(event) {
   }
   if (event.target.matches('input[name="profile_ids"]')) {
     syncMessagePeopleSelection(event.target);
+    return;
+  }
+  if (event.target.matches('.message-composer input[name="attachments"]')) {
+    const conversationId = event.target.closest('[data-message-form]')?.dataset.conversationId || '';
+    const picked = Array.from(event.target.files || []);
+    if (conversationId && picked.length) {
+      messageDraftFiles.set(conversationId, messageComposerFiles(conversationId).concat(picked));
+      // The input is cleared so picking the same file twice still fires a change event.
+      event.target.value = '';
+      render();
+    }
     return;
   }
   if (event.target.matches('[data-estimate-field]')) {

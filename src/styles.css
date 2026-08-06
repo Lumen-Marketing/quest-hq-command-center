@@ -31272,3 +31272,12 @@ a.wb-cal-more:hover { color: var(--orange); }
 .message-picked-count { font-size: .8rem; color: var(--accent, #e0552d); font-variant-numeric: tabular-nums; }
 .message-person-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent, #e0552d); flex: none; cursor: pointer; }
 .message-person-row:has(input[type="checkbox"]:checked) { border-color: var(--accent, #e0552d); background: color-mix(in srgb, var(--accent, #e0552d) 8%, transparent); }
+
+/* Files chosen in the composer. Without these chips picking a file changed nothing on
+   screen, so the paperclip read as broken. */
+.message-attach-draft { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; }
+.message-attach-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: .78rem; max-width: 260px; }
+.message-attach-chip b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.message-attach-chip small { color: var(--muted); flex: none; }
+.message-attach-chip button { border: 0; background: none; padding: 0 0 0 2px; cursor: pointer; color: var(--muted); display: inline-flex; }
+.message-attach-chip button:hover { color: var(--danger, #c0392b); }
