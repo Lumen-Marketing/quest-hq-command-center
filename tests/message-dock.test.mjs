@@ -228,7 +228,8 @@ test('the starter returns the conversation id on both paths', () => {
   assert.match(fn, /const goToMessages = options\.navigate !== false;/);
   assert.match(fn, /return existing\.id;/);
   assert.match(fn, /return conversation\.id;/);
-  // Both navigations are gated; neither is unconditional any more.
+  // Both navigations are gated; neither is unconditional any more. (A third path — joining
+  // a create already in flight — navigates from openOrCreateDirect, outside this slice.)
   assert.equal((fn.match(/if \(goToMessages\) navigate\(/g) || []).length, 2);
   assert.ok(!/^\s{2}navigate\(companyPath\('messages'/m.test(fn), 'no ungated navigate left');
 });

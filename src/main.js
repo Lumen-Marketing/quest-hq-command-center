@@ -31249,6 +31249,43 @@ async function saveDirectMessage(form) {
  * Messages page — the floating dock opens the thread in place, and navigating would throw
  * away the surface the person is working on, which is the whole point of the dock.
  */
+/**
+ * Direct-message creates that are already running, keyed by company + the pair of profiles.
+ *
+ * The "do we already have this chat?" check reads local state, but state does not carry the
+ * new conversation until persistConversation has finished two network round-trips. A second
+ * click inside that window saw nothing and started another chat. Three clicks inside 1.1
+ * seconds produced three identical conversations with the same person in production, which
+ * is exactly what was reported. Callers now join the first create instead of racing it.
+ */
+const directMessageInFlight = new Map();
+
+function directMessagePairKey(companyId, profileId, targetId) {
+  return `${companyId}:${[String(profileId), String(targetId)].sort().join('|')}`;
+}
+
+/** Join the create already running for this pair, or start it and hold the slot. */
+async function openOrCreateDirect(flightKey, companyId, goToMessages, make) {
+  const inFlight = directMessageInFlight.get(flightKey);
+  if (inFlight) {
+    const existingId = await inFlight;
+    if (existingId) {
+      state.selectedConversationId = existingId;
+      state.modal = '';
+      if (goToMessages) navigate(companyPath('messages', { conversation: existingId }, companyId), { replace: true });
+    }
+    return existingId;
+  }
+  const create = make();
+  directMessageInFlight.set(flightKey, create);
+  try {
+    return await create;
+  } finally {
+    // Cleared even when the create throws, or the pair stays wedged for the whole session.
+    directMessageInFlight.delete(flightKey);
+  }
+}
+
 async function startDirectMessageWithProfile(companyId, targetId, options = {}) {
   const goToMessages = options.navigate !== false;
   const cleanTargetId = String(targetId || '').trim();
@@ -31275,6 +31312,13 @@ async function startDirectMessageWithProfile(companyId, targetId, options = {}) 
     if (goToMessages) navigate(companyPath('messages', { conversation: existing.id }, companyId), { replace: true });
     return existing.id;
   }
+  const flightKey = directMessagePairKey(companyId, profile.id, cleanTargetId);
+  return openOrCreateDirect(flightKey, companyId, goToMessages, () => (
+    createDirectConversation(companyId, cleanTargetId, profile, goToMessages)
+  ));
+}
+
+async function createDirectConversation(companyId, cleanTargetId, profile, goToMessages) {
   const targetUser = companyAccessUsers(companyId).find((user) => (user.profile_id || user.member_id) === cleanTargetId);
   const now = new Date().toISOString();
   const conversation = normalizeMessageConversation({
@@ -31313,6 +31357,12 @@ async function startSelfMessage(companyId) {
     navigate(companyPath('messages', { conversation: existing.id }, companyId), { replace: true });
     return;
   }
+  // Same race as the two-person case: the note above directMessageInFlight applies here too.
+  const flightKey = directMessagePairKey(companyId, profile.id, profile.id);
+  await openOrCreateDirect(flightKey, companyId, true, () => createSelfConversation(companyId, profile));
+}
+
+async function createSelfConversation(companyId, profile) {
   const now = new Date().toISOString();
   const conversation = normalizeMessageConversation({
     id: crypto.randomUUID(),
@@ -31332,6 +31382,7 @@ async function startSelfMessage(companyId) {
   state.selectedConversationId = conversation.id;
   state.modal = '';
   navigate(companyPath('messages', { conversation: conversation.id }, companyId), { replace: true });
+  return conversation.id;
 }
 
 async function saveMessageAccess(form) {
