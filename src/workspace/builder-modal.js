@@ -3,6 +3,7 @@
 
 import { addRecordLabel, newRecordLabel } from './naming.js';
 import { acceptAttr } from '../security/upload-policy.js';
+import { JOB_TILE_PARTS } from '../jobs/dashboard-model.js';
 
 export function createBuilderModal(ctx) {
   const {
@@ -391,7 +392,7 @@ export function createBuilderModal(ctx) {
             <input class="wb-input" data-wb-tilecfg-title value="${h(m.draft.title || '')}" placeholder="e.g. Production"></div>
           <div class="wb-field"><label>What this tile shows</label>
             <div class="wb-check-list">
-              ${m.jobsParts.map(([key, label, why]) => `<label class="wb-check-row">
+              ${JOB_TILE_PARTS.map(([key, label, why]) => `<label class="wb-check-row">
                 <input type="checkbox" data-wb-tilecfg-part="${h(key)}" ${chosen.includes(key) ? 'checked' : ''}>
                 <span><b>${h(label)}</b><br><span class="wb-sub">${h(why)}</span></span>
               </label>`).join('')}

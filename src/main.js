@@ -6184,7 +6184,7 @@ function loadDashboardWidgetRegistry() {
   if (!dashboardWidgetRegistryPending) {
     dashboardWidgetRegistryPending = import('./home/widget-registry.js').then((mod) => {
       dashboardWidgetRegistryModule = mod.createWidgetRegistry({
-        accountName, companyFinanceInvoices, companyTasks, dashboardAppWidgets, dashboardAverage, dashboardEmptyNote, dashboardGroupCounts, dashboardGroupSums, dashboardMetricTile, dashboardMonthlyValues, dashboardNeedsDataWidget, daysPastDue, h, invoiceBalance, isoDate, memberName, money, number, renderCallsWidget, renderDashboardDayBars, renderDashboardHorizontalBars, renderDashboardLeaderboard, resolvePipelineStage, startOfToday, sum, state,
+        accountName, companyFinanceInvoices, companyTasks, dashboardJobsParts, renderModalShell, dashboardAppWidgets, dashboardAverage, dashboardEmptyNote, dashboardGroupCounts, dashboardGroupSums, dashboardMetricTile, dashboardMonthlyValues, dashboardNeedsDataWidget, daysPastDue, h, invoiceBalance, isoDate, memberName, money, number, renderCallsWidget, renderDashboardDayBars, renderDashboardHorizontalBars, renderDashboardJobsWidget, renderDashboardLeaderboard, resolvePipelineStage, startOfToday, sum, state,
       });
       return dashboardWidgetRegistryModule;
     }).catch((error) => {
@@ -6332,8 +6332,7 @@ function navItemSalesLifecycle(route, module, companyId) {
   // Jobs stays open. Its stages are the way people navigate production -- collapsing them
   // means one extra click before every single move, and there is nothing else competing for
   // the room. The other pipelines keep their disclosure.
-  const alwaysOpen = kind === 'jobs';
-  const expanded = alwaysOpen || state.expandedNav.has(kind);
+  const expanded = state.expandedNav.has(kind);
   const count = moduleBadgeCount(kind, companyId);
   const activeLifecycle = route.name === 'company' && route.section === 'contacts' ? route.params.get('lifecycle') || '' : '';
   const counts = salesLifecycleStageCounts(companyId);
@@ -6345,9 +6344,9 @@ function navItemSalesLifecycle(route, module, companyId) {
           <span>${h(navLabel)}</span>
           ${count !== '' ? `<b>${h(String(count))}</b>` : ''}
         </a>
-        ${alwaysOpen ? '' : `<button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(navLabel)} stages">
+        <button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(navLabel)} stages">
           <i class="ti ti-chevron-down" aria-hidden="true"></i>
-        </button>`}
+        </button>
       </div>
       ${expanded ? `
         <div class="side-sub">
@@ -6389,7 +6388,10 @@ function navItemPipeline(route, module, companyId) {
   const navLabel = navigationLabel(module.id, module.label);
   const path = companyPath(kind, {}, companyId);
   const active = isActiveNav(route, path);
-  const expanded = state.expandedNav.has(kind);
+  // Production is the section people live in, and its sub-views are the whole point of the
+  // rail. Collapsing them behind a chevron was a click for nothing, so Jobs stays open.
+  const alwaysOpen = kind === 'jobs';
+  const expanded = alwaysOpen || state.expandedNav.has(kind);
   const count = moduleBadgeCount(kind, companyId);
   const onSection = route.name === 'company' && route.section === kind;
   const filter = kind === 'contacts' ? state.contactStageFilter : kind === 'deals' ? state.stageFilterDeals : state.stageFilter;
@@ -6403,9 +6405,9 @@ function navItemPipeline(route, module, companyId) {
           <span>${h(navLabel)}</span>
           ${count !== '' ? `<b>${h(String(count))}</b>` : ''}
         </a>
-        <button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(navLabel)} stages">
+        ${alwaysOpen ? '' : `<button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(navLabel)} stages">
           <i class="ti ti-chevron-down" aria-hidden="true"></i>
-        </button>
+        </button>`}
       </div>
       ${expanded ? `
         <div class="side-sub">
@@ -8291,7 +8293,7 @@ function renderDashboardWidgetCard(widget, id, index, total) {
         <div class="dash-widget-title">${state.dashboardCustomize ? '<span class="dash-widget-grip" title="Drag to reorder" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>' : ''}<div><h2>${h(widget.title)}</h2>${widget.sub ? `<p>${h(widget.sub)}</p>` : ''}</div></div>
         ${state.dashboardCustomize ? `
           <div class="dash-widget-tools">
-            ${widget.configurable ? `<button type="button" data-action="dashboard-config-widget" data-widget-id="${h(id)}" title="Choose report" aria-label="Choose report for ${h(widget.title)}"><i class="ti ti-adjustments"></i></button>` : ''}
+            ${widget.configurable ? `<button type="button" data-action="dashboard-config-widget" data-widget-id="${h(id)}" title="Choose what this shows" aria-label="Choose what ${h(widget.title)} shows"><i class="ti ti-adjustments"></i></button>` : ''}
             <button type="button" data-action="dashboard-move-widget" data-widget-id="${h(id)}" data-direction="-1" ${index <= 0 ? 'disabled' : ''} title="Move left" aria-label="Move ${h(widget.title)} left"><i class="ti ti-arrow-left"></i></button>
             <button type="button" data-action="dashboard-move-widget" data-widget-id="${h(id)}" data-direction="1" ${index >= total - 1 ? 'disabled' : ''} title="Move right" aria-label="Move ${h(widget.title)} right"><i class="ti ti-arrow-right"></i></button>
             <button type="button" data-action="dashboard-remove-widget" data-widget-id="${h(id)}" title="Remove" aria-label="Remove ${h(widget.title)}"><i class="ti ti-x"></i></button>
@@ -13766,14 +13768,6 @@ const WB_TILE_TYPES = ['apps', 'app', 'report', 'tasks', 'calendar', 'contacts',
  * the workspace home beside everything else and you choose which of them you actually watch --
  * the same idea as an app's dashboard cards, sized to a tile.
  */
-const WB_JOBS_PARTS = [
-  ['working', 'Working today', 'How many jobs are on site, split by own crew and subs'],
-  ['draws', 'Draws ready', 'Money that can be invoiced right now'],
-  ['spend', 'Spent to date', 'Across the jobs currently in production'],
-  ['health', 'Production health', 'Missing dailies and jobs having a bad run'],
-  ['workingList', 'Working today — the list', 'Each job with its last four days'],
-  ['drawsList', 'Draws ready — the list', 'Each draw, with a Request button'],
-];
 const WB_JOBS_DEFAULT_PARTS = ['working', 'draws', 'spend', 'health', 'drawsList'];
 function normalizeWorkspaceTile(t) {
   const tile = t && typeof t === 'object' ? t : {};
@@ -14520,10 +14514,39 @@ function wbCalMon(dateKey) { const d = new Date(`${dateKey}T00:00:00`); return N
  * mean two different things. It is fetched on demand: a workspace with no Jobs tile never
  * carries it.
  */
-function wbTileJobs(companyId, tile) {
+function renderJobsFigures(companyId, config) {
   if (!ensureDomainLoaded('production')) return questLoader('Loading');
-  if (jobsDashboardModule) return jobsDashboardModule.renderJobsTile(companyId, tile.config, WB_JOBS_DEFAULT_PARTS);
-  loadJobsDashboard().then(() => render()).catch((error) => console.error('Jobs tile failed to load', error));
+  if (jobsDashboardModule) return jobsDashboardModule.renderJobsTile(companyId, config, WB_JOBS_DEFAULT_PARTS);
+  loadJobsDashboard().then(() => render()).catch((error) => console.error('Jobs figures failed to load', error));
+  return questLoader('Loading');
+}
+
+function wbTileJobs(companyId, tile) {
+  return renderJobsFigures(companyId, tile.config);
+}
+
+// The same figures on the company home dashboard, where the parts are stored per company
+// rather than per tile -- there is only one home dashboard to configure.
+const JOBS_WIDGET_KEY = 'jobs:production';
+
+function dashboardJobsParts(companyId) {
+  const saved = state.dashboardAppWidgets?.[companyId]?.[JOBS_WIDGET_KEY]?.parts;
+  return Array.isArray(saved) ? saved : [...WB_JOBS_DEFAULT_PARTS];
+}
+
+function toggleDashboardJobsPart(companyId, part) {
+  const parts = dashboardJobsParts(companyId);
+  const next = parts.includes(part) ? parts.filter((key) => key !== part) : [...parts, part];
+  saveDashboardAppWidgetConfig(companyId, JOBS_WIDGET_KEY, { parts: next });
+}
+
+function renderDashboardJobsWidget(companyId) {
+  return renderJobsFigures(companyId, { parts: dashboardJobsParts(companyId) });
+}
+
+function renderDashboardJobsConfigModal(companyId) {
+  if (dashboardWidgetRegistryModule) return dashboardWidgetRegistryModule.renderJobsConfigModal(companyId);
+  loadDashboardWidgetRegistry().then(() => render()).catch((error) => console.error('Jobs widget settings failed to load', error));
   return questLoader('Loading');
 }
 
@@ -15208,7 +15231,6 @@ function openWbTileConfig(companyId, tileId) {
   openWbModal({
     kind: 'tile-config', companyId, tileId,
     draft: JSON.parse(JSON.stringify(tile.config || {})),
-    jobsParts: WB_JOBS_PARTS,
     jobsDefaultParts: WB_JOBS_DEFAULT_PARTS,
   });
 }
@@ -23791,6 +23813,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'dashboard-widget-library') return renderDashboardWidgetLibraryModal(activeCompanyId());
   if (state.modal === 'dashboard-view-manager') return renderDashboardViewManagerModal(activeCompanyId());
   if (state.modal === 'dashboard-app-widget-config') return renderDashboardAppWidgetConfigModal(activeCompanyId());
+  if (state.modal === 'dashboard-jobs-widget-config') return renderDashboardJobsConfigModal(activeCompanyId());
   if (state.modal === 'dashboard-activity') return renderDashboardActivityModal(activeCompanyId());
   if (state.modal === 'workday-next-step') return renderWorkdayNextStepModal();
   if (state.modal === 'file-upload') return renderFileUploadModal();
@@ -26563,9 +26586,16 @@ function handleAction(event, node) {
   if (action === 'dashboard-config-widget') {
     event.preventDefault();
     const id = node.dataset.widgetId || '';
+    if (id === 'jobsProduction') { state.modal = 'dashboard-jobs-widget-config'; render(); return; }
     state.dashboardConfigMulti = id.startsWith('app-multi:');
     state.dashboardConfigAppId = id.replace(/^app-multi:/, '').replace(/^app:/, '');
     state.modal = 'dashboard-app-widget-config';
+    render();
+    return;
+  }
+  if (action === 'dashboard-jobs-widget-part') {
+    event.preventDefault();
+    toggleDashboardJobsPart(activeCompanyId(), node.dataset.part || '');
     render();
     return;
   }

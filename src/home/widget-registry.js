@@ -1,10 +1,31 @@
 // Moved out of main.js and fetched on demand: it is behind a click, and nothing that paints
 // before the click needs it. The body is unchanged from where it lived.
 
+import { JOB_TILE_PARTS } from '../jobs/dashboard-model.js';
+
 export function createWidgetRegistry(ctx) {
   const {
-    accountName, companyFinanceInvoices, companyTasks, dashboardAppWidgets, dashboardAverage, dashboardEmptyNote, dashboardGroupCounts, dashboardGroupSums, dashboardMetricTile, dashboardMonthlyValues, dashboardNeedsDataWidget, daysPastDue, h, invoiceBalance, isoDate, memberName, money, number, renderCallsWidget, renderDashboardDayBars, renderDashboardHorizontalBars, renderDashboardLeaderboard, resolvePipelineStage, startOfToday, sum, state,
+    accountName, companyFinanceInvoices, companyTasks, dashboardJobsParts, renderModalShell, dashboardAppWidgets, dashboardAverage, dashboardEmptyNote, dashboardGroupCounts, dashboardGroupSums, dashboardMetricTile, dashboardMonthlyValues, dashboardNeedsDataWidget, daysPastDue, h, invoiceBalance, isoDate, memberName, money, number, renderCallsWidget, renderDashboardDayBars, renderDashboardJobsWidget, renderDashboardHorizontalBars, renderDashboardLeaderboard, resolvePipelineStage, startOfToday, sum, state,
   } = ctx;
+
+  // Which parts the home dashboard's Jobs card shows. Same tick-boxes as the workspace
+  // tile, over the same list, so the two cannot drift apart.
+  function renderJobsConfigModal(companyId) {
+    const chosen = dashboardJobsParts(companyId);
+    return renderModalShell('Widget details', 'Jobs production', `
+      <div class="dash-modal-summary">
+        <div><b>What should this widget show?</b><span>Tick any number. Each figure and list is independent, so the card carries only what you watch.</span></div>
+      </div>
+      <div class="dash-report-picker">
+        ${JOB_TILE_PARTS.map(([key, label, why]) => `
+          <button type="button" class="dash-report-opt dash-report-check ${chosen.includes(key) ? 'active' : ''}" data-action="dashboard-jobs-widget-part" data-part="${h(key)}">
+            <span class="dro-check"><i class="ti ti-check"></i></span>
+            <span class="dro-text"><b>${h(label)}</b><small>${h(why)}</small></span>
+          </button>`).join('')}
+      </div>
+      <div class="modal-actions"><button class="btn" type="button" data-action="close-modal">Done</button></div>
+    `, 'dashboard-app-widget-modal');
+  }
 
   function dashboardWidgetRegistry(companyId, ctx) {
     const openPipeline = ctx.openDeals.reduce((total, deal) => total + number(deal.value), 0);
@@ -72,6 +93,17 @@ export function createWidgetRegistry(ctx) {
         },
       },
       speed: dashboardNeedsDataWidget('Speed-to-lead', 'Sales', 'Needs first_contact_at timestamps on leads.'),
+      // Production, the way the old Jobs dashboard showed it. Which figures and lists appear
+      // is per company, chosen through the widget's own settings, so one dashboard can carry
+      // draws and another the crew's day without either carrying both.
+      jobsProduction: {
+        title: 'Jobs production',
+        group: 'Operations',
+        span: true,
+        configurable: true,
+        sub: 'Working today, draws ready, spend and production health — pick which.',
+        render: () => renderDashboardJobsWidget(companyId),
+      },
       jobs: {
         title: 'Jobs by stage',
         group: 'Operations',
@@ -192,5 +224,5 @@ export function createWidgetRegistry(ctx) {
     return widgets;
   }
 
-  return { dashboardWidgetRegistry };
+  return { dashboardWidgetRegistry, renderJobsConfigModal };
 }

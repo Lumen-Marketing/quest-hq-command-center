@@ -1,3 +1,14 @@
+// Which figures the Jobs production card can show. The label and the reason live beside the
+// arithmetic that produces them, so a new figure cannot be added without a way to tick it on.
+export const JOB_TILE_PARTS = [
+  ['working', 'Working today', 'How many jobs are on site, split by own crew and subs'],
+  ['draws', 'Draws ready', 'Money that can be invoiced right now'],
+  ['spend', 'Spent to date', 'Across the jobs currently in production'],
+  ['health', 'Production health', 'Missing dailies and jobs having a bad run'],
+  ['workingList', 'Working today — the list', 'Each job with its last four days'],
+  ['drawsList', 'Draws ready — the list', 'Each draw, with a Request button'],
+];
+
 // What the Jobs dashboard shows, as pure functions over the job list and its production
 // records.
 //

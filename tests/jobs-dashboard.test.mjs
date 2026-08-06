@@ -7,7 +7,7 @@ import {
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const view = readFileSync(new URL('../src/jobs/dashboard-view.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const model = readFileSync(new URL('../src/jobs/dashboard-model.js', import.meta.url), 'utf8');
+const modelSrc = readFileSync(new URL('../src/jobs/dashboard-model.js', import.meta.url), 'utf8');
 
 const NOW = Date.parse('2026-08-04T12:00:00.000Z');
 const day = (n) => new Date(NOW - n * 86400000).toISOString();
@@ -173,14 +173,49 @@ test('the Jobs sub-menu stays open and offers only the calendar', () => {
   assert.ok(!nav.includes("tab: 'dashboard'"), 'Dashboard does not');
 });
 
+const model = readFileSync(new URL('../src/jobs/dashboard-model.js', import.meta.url), 'utf8');
+const registry = readFileSync(new URL('../src/home/widget-registry.js', import.meta.url), 'utf8');
+const modal = readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
+
+test('the parts are defined once, beside the arithmetic that produces them', () => {
+  assert.match(modelSrc, /export const JOB_TILE_PARTS = \[/);
+  for (const key of ['working', 'draws', 'spend', 'health', 'workingList', 'drawsList']) {
+    assert.ok(modelSrc.includes(`'${key}'`), `missing part: ${key}`);
+  }
+  // Two hand-kept copies would drift the first time a figure was added.
+  assert.ok(!/const WB_JOBS_PARTS = \[/.test(main), 'main.js must not keep its own copy');
+  assert.match(modal, /import \{ JOB_TILE_PARTS \} from '\.\.\/jobs\/dashboard-model\.js'/);
+  assert.match(registry, /import \{ JOB_TILE_PARTS \} from '\.\.\/jobs\/dashboard-model\.js'/);
+});
+
 test('the tile is offered in the workspace catalogue and configured by tick-box', () => {
-  const modal = readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
   assert.match(modal, /\['jobs', 'ti-hammer', 'Jobs production'/, 'you have to be able to add it');
   assert.match(modal, /tile\.type === 'jobs'/, 'and choose what it shows');
   assert.match(modal, /data-wb-tilecfg-part=/);
   // Saving has to read those boxes back, or every tile keeps the defaults forever.
   assert.match(main, /\[\.\.\.document\.querySelectorAll\('\[data-wb-tilecfg-part\]'\)\]/);
-  assert.match(main, /WB_JOBS_PARTS/, 'the parts list is shared with the modal, not retyped');
+});
+
+test('the same figures are a widget on the company home dashboard', () => {
+  // The workspace tile is not the home dashboard. This is the one the user asked for: it has
+  // to appear in Add widget, carry the settings cog, and persist what was ticked.
+  assert.match(registry, /jobsProduction: \{/);
+  assert.match(registry, /configurable: true,/);
+  assert.match(registry, /render: \(\) => renderDashboardJobsWidget\(companyId\)/);
+  assert.match(registry, /function renderJobsConfigModal\(companyId\)/);
+  assert.match(registry, /data-action="dashboard-jobs-widget-part"/);
+  // The cog routes to the parts picker rather than the app-report picker.
+  assert.match(main, /if \(id === 'jobsProduction'\) \{ state\.modal = 'dashboard-jobs-widget-config'/);
+  assert.match(main, /action === 'dashboard-jobs-widget-part'/);
+  assert.match(main, /function toggleDashboardJobsPart\(companyId, part\)/);
+  // Ticking a box has to survive a reload, so it goes through the persisted widget store.
+  assert.match(main, /saveDashboardAppWidgetConfig\(companyId, JOBS_WIDGET_KEY, \{ parts: next \}\)/);
+});
+
+test('both surfaces render the one tile function, not two lookalikes', () => {
+  assert.match(main, /function renderJobsFigures\(companyId, config\)/);
+  assert.match(main, /function wbTileJobs\(companyId, tile\) \{\n\s*return renderJobsFigures\(companyId, tile\.config\);/);
+  assert.match(main, /return renderJobsFigures\(companyId, \{ parts: dashboardJobsParts\(companyId\) \}\)/);
 });
 
 test('it is fetched on use, not carried by every page', () => {
