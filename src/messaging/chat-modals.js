@@ -221,5 +221,34 @@ export function createChatModals(ctx) {
     `, 'message-modal message-create-modal message-workspace-members-modal');
   }
 
-  return { renderMessageWorkspaceMembersModal, renderMessageGroupModal, renderDirectMessageModal, renderMessageDetailsModal, renderMessageSearchModal };
+  /**
+   * Confirming a leave, in the app rather than through window.confirm.
+   *
+   * The browser's own dialog is stamped with the origin ("127.0.0.1:5173 says"), cannot carry
+   * the chat's name in the app's own voice, and blocks the page while it is up. This one says
+   * plainly what is about to happen and, just as importantly, what is not.
+   */
+  function renderLeaveConversationModal(companyId, conversationId) {
+    const conversation = state.messageConversations.find((item) => item.id === conversationId);
+    if (!conversation) return renderModalShell('Messages', 'Chat', emptyState('Conversation not found.'));
+    const isDirect = conversation.type === 'direct';
+    return renderModalShell('Messages', isDirect ? 'Delete this chat for you' : 'Leave this chat', `
+      <p class="chat-leave-lead">${h(isDirect
+    ? `“${conversation.title}” disappears from your list.`
+    : `“${conversation.title}” disappears from your list.`)}</p>
+      <ul class="chat-leave-points">
+        <li><i class="ti ti-check" aria-hidden="true"></i>${h(isDirect ? 'The other person keeps the chat and every message in it.' : 'Everyone else keeps the chat and every message in it.')}</li>
+        <li><i class="ti ti-check" aria-hidden="true"></i>${h('Nothing is deleted for anybody but you.')}</li>
+        <li><i class="ti ti-alert-triangle" aria-hidden="true"></i>${h(isDirect ? 'Message them again and a fresh chat starts.' : 'You will need to be added back to rejoin.')}</li>
+      </ul>
+      <div class="modal-actions">
+        <button class="btn" type="button" data-action="cancel-leave-conversation">Cancel</button>
+        <button class="btn danger" type="button" data-action="confirm-leave-conversation" data-conversation-id="${h(conversation.id)}">
+          <i class="ti ti-trash"></i>${h(isDirect ? 'Delete for me' : 'Leave chat')}
+        </button>
+      </div>
+    `, 'message-modal');
+  }
+
+  return { renderLeaveConversationModal, renderMessageWorkspaceMembersModal, renderMessageGroupModal, renderDirectMessageModal, renderMessageDetailsModal, renderMessageSearchModal };
 }

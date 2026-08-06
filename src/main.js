@@ -2662,6 +2662,7 @@ const state = {
   messageQuery: '',
   messageFilter: 'all',
   selectedConversationId: '',
+  leavingConversationId: '',
   messageRealtimeChannel: null,
   messageRealtimeKey: '',
   calendarScope: 'company',
@@ -22373,6 +22374,12 @@ async function prepareMessageGroupIconUpload(file) {
   render();
 }
 
+function renderLeaveConversationModal(companyId, conversationId) {
+  if (chatModalsModule) return chatModalsModule.renderLeaveConversationModal(companyId, conversationId);
+  loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
+  return questLoader('Loading');
+}
+
 function renderMessageWorkspaceMembersModal(companyId) {
   if (chatModalsModule) return chatModalsModule.renderMessageWorkspaceMembersModal(companyId);
   loadChatModals().then(() => render()).catch((error) => console.error('Chat dialogs failed to load', error));
@@ -23779,6 +23786,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'message-direct-new') return renderDirectMessageModal(activeCompanyId());
   if (state.modal === 'message-access') return renderMessageAccessModal(activeCompanyId(), state.selectedConversationId);
   if (state.modal === 'message-details') return renderMessageDetailsModal(activeCompanyId(), state.selectedConversationId);
+  if (state.modal === 'chat-leave-confirm') return renderLeaveConversationModal(activeCompanyId(), state.leavingConversationId);
   if (state.modal === 'message-search') return renderMessageSearchModal(activeCompanyId());
   if (state.modal === 'calendar-event-detail') return renderCalendarEventDetailModal(activeCompanyId());
   if (state.modal === 'calendar-event-new') return renderCalendarEventFormModal(activeCompanyId(), null);
@@ -27539,6 +27547,20 @@ function handleAction(event, node) {
     return;
   }
   if (action === 'leave-conversation') {
+    event.preventDefault();
+    state.leavingConversationId = node.dataset.conversationId || '';
+    state.modal = 'chat-leave-confirm';
+    render();
+    return;
+  }
+  if (action === 'cancel-leave-conversation') {
+    event.preventDefault();
+    // Back to the details it was opened from, rather than dumping the user on the chat.
+    state.modal = 'message-details';
+    render();
+    return;
+  }
+  if (action === 'confirm-leave-conversation') {
     event.preventDefault();
     leaveConversation(node.dataset.conversationId || '');
     return;
@@ -31618,10 +31640,7 @@ async function leaveConversation(conversationId) {
   const conversation = state.messageConversations.find((item) => item.id === conversationId);
   if (!conversation) return;
   const isDirect = conversation.type === 'direct';
-  const question = isDirect
-    ? `Delete "${conversation.title}" from your chats? The other person keeps it.`
-    : `Leave "${conversation.title}"? It disappears from your list; everyone else keeps it.`;
-  if (!window.confirm(question)) return;
+  // The confirmation is renderLeaveConversationModal, which is what got the user here.
   const profileId = activeSession().profile.id;
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
@@ -31636,6 +31655,7 @@ async function leaveConversation(conversationId) {
   ));
   state.messageConversations = state.messageConversations.filter((item) => item.id !== conversationId);
   if (state.selectedConversationId === conversationId) state.selectedConversationId = '';
+  state.leavingConversationId = '';
   state.modal = '';
   persistMessages();
   showToast(isDirect ? 'Chat removed from your list.' : 'You left the chat.', isLiveSupabaseSession() ? 'live' : 'local', 'Messages');
