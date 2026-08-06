@@ -42,7 +42,7 @@ import { filterKnowledgeArticles, knowledgeCategories } from './data/knowledge.j
 import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDueDate } from './data/recurrence.js';
 import { collectAutomationActions, buildTaskFromAction, describeAutomation, AUTOMATION_OBJECTS } from './data/automations.js';
 import { findDuplicateGroups, mergeContactFields, partitionImport } from './data/dedupe.js';
-import { parseContactsCsv, parseCsvRows } from './data/csv.js';
+import { parseCsvRows } from './data/csv.js';
 import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
 import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
 import { safeHexColor, sanitizeColorConfig } from './security/color.js';
@@ -7688,13 +7688,10 @@ async function importPricebookRows(form) {
   const file = pbImportFile || form.elements.file?.files?.[0];
   if (file) { if (!(await guardUpload(file, 'csv', 'Price Book'))) return; text = String(await file.text().catch(() => text)).trim(); }
   if (!text) return showToast('Paste CSV rows or choose a CSV file.', 'local', 'Price Book');
-  const delimiter = (text.split(/\r?\n/)[0] || '').includes('\t') ? '\t' : ',';
-  // Comma files go through the shared RFC-4180 parser so quoted multi-line/embedded-comma
-  // cells import correctly; tab files keep the simple split (tab data rarely quotes newlines).
-  const rows = (delimiter === '\t'
-    ? text.split(/\r?\n/).map((line) => line.split('\t'))
-    : parseCsvRows(text)
-  ).filter((cells) => cells.some((cell) => String(cell || '').trim()));
+  // One parser for every delimiter: it sniffs comma, semicolon or tab off the header row, so
+  // quoted multi-line and embedded-separator cells survive whichever one Excel wrote.
+  const rows = parseCsvRows(text)
+    .filter((cells) => cells.some((cell) => String(cell || '').trim()));
   if (rows[0]) {
     const header = rows[0].join(' ');
     if (/material|name/i.test(header) && /cost|price/i.test(header)) rows.shift();
@@ -10217,27 +10214,48 @@ async function performBulkContactsDelete(targets) {
 function importContactsFromFile() {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.csv,text/csv,text/plain';
-  input.addEventListener('change', async () => {
+  // Excel is what most people export from, so .xlsx is accepted directly rather than asking
+  // them to go back and "save as CSV" first.
+  input.accept = '.csv,.tsv,.txt,.xlsx';
+  input.addEventListener('change', () => {
     const file = input.files && input.files[0];
     if (!file) return;
-    if (!(await guardUpload(file, 'csv', 'Contacts'))) return;
-    let text = '';
-    try { text = await file.text(); } catch { showToast('Could not read that file.', 'local', 'Contacts'); return; }
-    const parsed = parseContactsCsv(text);
-    if (!parsed.length) { showToast('No contacts found. Use a CSV with a header row (Name, Email, Phone).', 'local', 'Contacts'); return; }
-    const companyId = activeCompanyId();
-    // Skip rows that match a contact already here (by email/phone), and collapse
-    // repeats within the file, so import doesn't manufacture duplicates.
-    const { toImport, duplicates } = partitionImport(parsed, companyContacts(companyId));
-    for (const c of toImport) {
-      await persistContact(normalizeContact({ id: `contact-${crypto.randomUUID()}`, company_id: companyId, name: c.name, email: c.email, phone: c.phone, title: c.title, stage: contactStageNames()[0], value: 0 }));
-    }
-    const skipped = duplicates.length ? `, skipped ${duplicates.length} already in your contacts` : '';
-    showToast(`Imported ${toImport.length} contact${toImport.length === 1 ? '' : 's'}${skipped}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+    loadContactsIo()
+      .then((mod) => mod.importContactsFile(file))
+      .catch((error) => showToast(error.message || 'Could not read that file.', 'local', 'Contacts'));
   });
   input.click();
 }
+
+// ---- Contacts import/export ---------------------------------------------------------
+// Bodies live in ./crm/contacts-io.js and are fetched on first use.
+let contactsIoModule = null;
+let contactsIoPending = null;
+
+function loadContactsIo() {
+  if (contactsIoModule) return Promise.resolve(contactsIoModule);
+  if (!contactsIoPending) {
+    contactsIoPending = import('./crm/contacts-io.js').then((mod) => {
+      contactsIoModule = mod.createContactsIo({
+        activeCompanyId, companyContacts, contactStageNames, downloadText, filteredContacts,
+        guardUpload, isLiveSupabaseSession, localIsoDate, normalizeContact, partitionImport,
+        persistContact, render, showToast,
+      });
+      return contactsIoModule;
+    }).catch((error) => {
+      contactsIoPending = null;
+      throw error;
+    });
+  }
+  return contactsIoPending;
+}
+
+function exportContactsToFile() {
+  loadContactsIo()
+    .then((mod) => mod.exportContactsToFile())
+    .catch((error) => showToast(error.message || 'Export failed.', 'local', 'Contacts'));
+}
+
 
 function renderContactFieldGroupsSidebar(companyId) {
   const contacts = companyContacts(companyId);
@@ -28264,6 +28282,11 @@ function handleAction(event, node) {
   if (action === 'contacts-import') {
     event.preventDefault();
     importContactsFromFile();
+    return;
+  }
+  if (action === 'contacts-export') {
+    event.preventDefault();
+    exportContactsToFile();
     return;
   }
   if (action === 'contacts-dedupe') {

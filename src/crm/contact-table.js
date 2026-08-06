@@ -36,6 +36,7 @@ export function createContactTable(ctx) {
           <div class="contact-list-actions">
             ${selCount ? `<span class="contact-sel-count">${selCount} selected</span><button class="btn btn-compact" type="button" data-action="contacts-clear-selection"><i class="ti ti-x"></i>Clear</button>` : ''}
             <button class="btn btn-compact" type="button" data-action="contacts-import"><i class="ti ti-upload"></i>Import</button>
+            <button class="btn btn-compact" type="button" data-action="contacts-export"><i class="ti ti-download"></i>Export</button>
             <button class="btn btn-compact" type="button" data-action="contacts-dedupe"><i class="ti ti-git-merge"></i>Find duplicates</button>
             <button class="btn btn-compact" type="button" data-action="contacts-campaign"><i class="ti ti-speakerphone"></i>Add to Campaign</button>
             <button class="btn btn-compact danger" type="button" data-action="contacts-delete"><i class="ti ti-trash"></i>Delete</button>

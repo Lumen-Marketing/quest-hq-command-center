@@ -69,6 +69,9 @@ export const UPLOAD_POLICIES = {
   audio: { exts: ['webm', 'm4a', 'mp4', 'ogg', 'oga', 'mp3', 'wav'], max: 40 * MB, label: 'audio' },
   document: { exts: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'csv'], max: 25 * MB, label: 'document' },
   csv: { exts: ['csv', 'tsv', 'txt'], max: 10 * MB, label: 'spreadsheet' },
+  // .xlsx is a zip, so it stays a kind of its own rather than widening 'csv' -- the
+  // dangerous-extension backstop should keep treating archives with suspicion by default.
+  xlsx: { exts: ['xlsx'], max: 10 * MB, label: 'Excel workbook' },
   backup: { exts: ['zip'], max: 50 * MB, label: 'backup archive' },
   formfile: { exts: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'csv'], max: 15 * MB, label: 'file' },
 };
