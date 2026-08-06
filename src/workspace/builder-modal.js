@@ -358,6 +358,7 @@ export function createBuilderModal(ctx) {
         ['tasks', 'ti-checklist', 'Workspace tasks', 'Open tasks across the workspace'],
         ['calendar', 'ti-calendar', 'Calendar', 'Upcoming events and due dates'],
         ['contacts', 'ti-address-book', 'Contacts', 'Directory of company contacts'],
+        ['jobs', 'ti-hammer', 'Jobs production', 'The production figures, and which of them you want'],
         ['apps', 'ti-apps', 'Apps list', 'Quick links to every app'],
         ['text', 'ti-align-left', 'Text / Banner', 'A custom note or greeting'],
         ['image', 'ti-photo', 'Image', 'A logo or graphic (opens in a lightbox)'],
@@ -382,6 +383,21 @@ export function createBuilderModal(ctx) {
         const reportOpts = app ? wbAppReportOptions(app) : [];
         form = `<div class="wb-field"><label>App</label>${appSelect(m.draft.appId || apps[0]?.id)}</div>
           <div class="wb-field"><label>Report</label><select class="wb-input" data-wb-tilecfg-report>${reportOpts.map(([id, label]) => `<option value="${h(id)}" ${id === m.draft.reportId ? 'selected' : ''}>${h(label)}</option>`).join('')}</select><div class="wb-sub">Change the app and reopen to see its reports.</div></div>`;
+      } else if (tile.type === 'jobs') {
+        // The Jobs dashboard was a fixed page. Here it is parts you tick, so the tile shows
+        // what you actually watch rather than everything anyone might.
+        const chosen = Array.isArray(m.draft.parts) ? m.draft.parts : m.jobsDefaultParts;
+        form = `<div class="wb-field"><label>Title <span class="wb-opt">(optional)</span></label>
+            <input class="wb-input" data-wb-tilecfg-title value="${h(m.draft.title || '')}" placeholder="e.g. Production"></div>
+          <div class="wb-field"><label>What this tile shows</label>
+            <div class="wb-check-list">
+              ${m.jobsParts.map(([key, label, why]) => `<label class="wb-check-row">
+                <input type="checkbox" data-wb-tilecfg-part="${h(key)}" ${chosen.includes(key) ? 'checked' : ''}>
+                <span><b>${h(label)}</b><br><span class="wb-sub">${h(why)}</span></span>
+              </label>`).join('')}
+            </div>
+            <p class="wb-sub">Untick everything and the tile says so rather than rendering an empty box.</p>
+          </div>`;
       } else if (tile.type === 'text') form = `<div class="wb-field"><label>Title <span class="wb-opt">(optional)</span></label><input class="wb-input" data-wb-tilecfg-title value="${h(m.draft.title || '')}" placeholder="e.g. Welcome"></div><div class="wb-field"><label>Text</label><textarea class="wb-input" data-wb-tilecfg-body rows="5" placeholder="Write a note, greeting, or announcement…">${h(m.draft.body || '')}</textarea></div>`;
       else if (tile.type === 'image') {
         const uploaded = !!m.draft.objectPath || String(m.draft.url || '').startsWith('data:');

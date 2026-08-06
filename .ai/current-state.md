@@ -93,6 +93,8 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Contacts, Jobs, Quotes, and Underwriter forms protect unfinished work with browser-local autosave, explicit Restore or Discard recovery, seven-day expiry, and profile/company/workspace/record scoping. Sensitive credential-like fields and files are excluded, drafts survive failed saves, successful saves clear them, and sign-out purges the departing profile's drafts. This recovery is browser-local by design and does not require a database migration.
 - Saved Contacts, Quotes, Jobs, and Tasks now write created, updated, deleted, and restored events to a shared append-only, workspace-scoped history ledger. Contact, Quote, and Job forms expose history on demand; tracked values use a strict business-field allowlist that excludes contact details, addresses, notes, and descriptions. A single safe delete offers immediate same-actor Undo, while the existing 30-day Recycle Bin remains the durable restore path.
 
+- Production > Jobs no longer has a Dashboard tab. Its sub-menu is pinned open and lists only Calendar, and the production figures moved to a "Jobs production" workspace tile that each owner composes: Working today, Draws ready, Spent to date, Production health, and either list can be ticked on or off in the tile settings. `JOB_TABS` dropped `dashboard`, so an old `?tab=dashboard` bookmark falls through to the list. The markup and the arithmetic both live in `src/jobs/dashboard-view.js`, fetched only by a workspace that carries the tile.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.

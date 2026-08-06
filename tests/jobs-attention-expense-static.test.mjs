@@ -104,11 +104,18 @@ test('a blocked microphone names the actual cause', () => {
 
 // ---- sidebar -------------------------------------------------------------------------------
 
-test('Jobs gets Dashboard and Calendar above its status buckets', () => {
+test('the Jobs sub-menu is a fixed list, with Calendar and no Dashboard', () => {
+  // The stages are how production is navigated, so collapsing them costs a click on every
+  // move and nothing else is competing for the room. The Dashboard row is gone because the
+  // dashboard moved to the workspace home as a tile — there is no page left to link to.
+  assert.match(main, /const alwaysOpen = kind === 'jobs';/);
+  assert.match(main, /const expanded = alwaysOpen \|\| state\.expandedNav\.has\(kind\);/);
+  assert.match(main, /\$\{alwaysOpen \? '' : `<button class="side-pipe-toggle"/, 'no chevron on Jobs');
   assert.match(main, /function jobsNavViews\(route, companyId\)/);
-  assert.match(main, /\$\{kind === 'jobs' \? jobsNavViews\(route, companyId\) : ''\}/);
-  // The dashboard is the module home, so it carries no tab of its own.
-  assert.match(main, /key === 'dashboard' \? \{\} : \{ tab: key \}/);
+  const fn = main.slice(main.indexOf('function jobsNavViews('));
+  const body = fn.slice(0, fn.indexOf(String.fromCharCode(10) + '}'));
+  assert.match(body, /tab: 'calendar'/);
+  assert.ok(!/dashboard/i.test(body), 'the Dashboard row must be gone');
 });
 
 test('the view rows line up with the stage rows', () => {

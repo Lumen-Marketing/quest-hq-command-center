@@ -7,6 +7,9 @@ import { createJobsDashboard } from '../src/jobs/dashboard-view.js';
 // Neither actually runs the view. This does: it builds the real factory with a stub context
 // and renders real HTML, which is the only way a missing context key, a bad template literal
 // or an unescaped value shows up before a user finds it.
+//
+// The figures are a workspace tile now rather than a page, so every render here goes through
+// renderJobsTile with a chosen set of parts.
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
@@ -48,12 +51,13 @@ const PRODUCTION = {
 const escape = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-function build(jobs = JOBS, { canDo = () => true, production = PRODUCTION } = {}) {
-  const { renderJobsDashboard } = createJobsDashboard({
+const ALL_PARTS = ['working', 'draws', 'spend', 'health', 'workingList', 'drawsList'];
+
+function build(jobs = JOBS, { canDo = () => true, production = PRODUCTION, parts = ALL_PARTS } = {}) {
+  const { renderJobsTile } = createJobsDashboard({
     h: escape,
     can: canDo,
     money: (n) => `$${Number(n || 0).toLocaleString('en-US')}`,
-    emptyState: (msg) => `<div class="empty">${escape(msg)}</div>`,
     appHref: (path) => `#${path}`,
     companyPath: (section, params = {}) => {
       const q = new URLSearchParams(params).toString();
@@ -64,12 +68,12 @@ function build(jobs = JOBS, { canDo = () => true, production = PRODUCTION } = {}
     productionForJob: (id) => production[id] || { dailies: [], buckets: [], draws: [] },
     todayIso: () => TODAY,
   });
-  return renderJobsDashboard('lumen');
+  return renderJobsTile('lumen', { parts }, ALL_PARTS);
 }
 
 test('it renders without throwing, and produces real markup', () => {
   const html = build();
-  assert.ok(html.length > 500, 'expected a full page of markup');
+  assert.ok(html.length > 500, 'expected a full tile of markup');
   assert.ok(!/undefined|NaN|\[object Object\]/.test(html), html.match(/.{0,60}(undefined|NaN|\[object Object\]).{0,60}/)?.[0]);
 });
 
@@ -96,7 +100,6 @@ test('the four tiles are the ones the production team asked for', () => {
 test('a job whose crew went quiet mid-run is flagged by name', () => {
   const html = build();
   assert.ok(html.includes('missing daily · 209th Ave'), 'the tile names the job, not just a count');
-  assert.ok(html.includes('Missing daily yesterday'), 'and the chase line repeats it where you act');
 });
 
 test('a job that never reported is not called a missing daily', () => {
@@ -111,13 +114,13 @@ test('live jobs are listed and linked to their record', () => {
   for (const name of ['Villa Ct', '209th Ave', 'Onyx Ave']) assert.ok(html.includes(name), `missing ${name}`);
   assert.ok(html.includes('tab=profile&amp;job_id=j1') || html.includes('tab=profile&job_id=j1'), 'job link');
   // An invoiced job is not "working today".
-  const working = html.slice(html.indexOf('Working today</h2>'), html.indexOf('Draws ready</h2>'));
+  const working = html.slice(html.indexOf('Working today</p>'), html.indexOf('Draws ready</p>'));
   assert.ok(!working.includes('58th Pl'));
 });
 
 test('the draws card offers to bill each one, deep-linked to the contract tab', () => {
   const html = build();
-  const draws = html.slice(html.indexOf('Draws ready</h2>'));
+  const draws = html.slice(html.indexOf('Draws ready</p>'));
   assert.ok(draws.includes('data-action="job-draw-invoice"'), 'Request must call the real write path');
   assert.ok(draws.includes('data-draw-id="d1"'), 'and identify which draw');
   assert.ok(/jt=contract/.test(draws), 'the row opens the tab that shows the draw');
@@ -126,14 +129,14 @@ test('the draws card offers to bill each one, deep-linked to the contract tab', 
 });
 
 test('somebody who cannot bill sees the draws but not the buttons', () => {
-  const html = build(JOBS, { canDo: () => false });
+  const html = build(JOBS, { canDo: (key) => key !== 'jobs.manage' });
   assert.ok(html.includes('Draws ready'));
   assert.ok(!html.includes('job-draw-invoice'), 'the button is a write action');
 });
 
 test('production streaks are drawn per day, and absent when nobody has reported', () => {
   const html = build();
-  const panel = html.slice(html.indexOf('Working today</h2>'), html.indexOf('Draws ready</h2>'));
+  const panel = html.slice(html.indexOf('Working today</p>'), html.indexOf('Draws ready</p>'));
   const villa = panel.slice(panel.indexOf('Villa Ct'), panel.indexOf('209th Ave'));
   assert.ok(villa.includes('jd-good'), 'yesterday was a good day');
   assert.ok(villa.includes('jd-ok'), 'the day before was not');
@@ -141,17 +144,34 @@ test('production streaks are drawn per day, and absent when nobody has reported'
   assert.ok(onyx.includes('jd-streak-none'), 'a job with no dailies shows a dash, not fake dots');
 });
 
-test('an unassigned job reads as Unassigned rather than blank', () => {
-  assert.ok(build().includes('Unassigned'));
-});
-
-test('a company with no jobs gets empty states, not a broken page', () => {
+test('a company with no jobs still renders its figures rather than breaking', () => {
   const html = build([]);
-  assert.ok(html.includes('No jobs are in production right now'));
-  assert.ok(html.includes('No draws are unlocked'));
   assert.ok(html.includes('0 jobs'));
   assert.ok(html.includes('nothing in production'));
   assert.ok(!/undefined|NaN/.test(html));
+});
+
+test('the tile shows only the parts that were ticked', () => {
+  const html = build(JOBS, { parts: ['draws'] });
+  assert.ok(html.includes('Draws ready'), 'the ticked figure is there');
+  assert.ok(!html.includes('Spent to date'), 'an unticked figure is not');
+  assert.ok(!html.includes('wb-jobs-list'), 'and neither list was asked for');
+});
+
+test('ticking nothing says so rather than drawing an empty box', () => {
+  const html = build(JOBS, { parts: [] });
+  assert.ok(html.includes('Nothing ticked for this tile yet'));
+});
+
+test('a tile with no saved parts falls back to the defaults', () => {
+  const html = build(JOBS, { parts: undefined });
+  assert.ok(html.includes('Working today'), 'an undefined parts list must not blank the tile');
+});
+
+test('somebody who cannot see jobs gets a reason, not figures', () => {
+  const html = build(JOBS, { canDo: (key) => key !== 'jobs.view' });
+  assert.ok(html.includes('Your role cannot see jobs'));
+  assert.ok(!html.includes('Villa Ct'));
 });
 
 test('job names from users are escaped', () => {
@@ -170,25 +190,17 @@ test('a draw label from a user is escaped too', () => {
   assert.ok(!html.includes('data-draw-id=""><script>'), 'draw id must be escaped');
 });
 
-test('Add job disappears without permission', () => {
-  assert.ok(build(JOBS).includes('open-job-form'));
-  assert.ok(!build(JOBS, { canDo: () => false }).includes('open-job-form'));
-});
-
-test('the long list is capped and says so', () => {
+test('a tile keeps to five rows so it does not swamp the workspace', () => {
   const many = Array.from({ length: 12 }, (_, i) => ({
     id: `m${i}`, name: `Job ${i}`, stage: 'In production', owner_name: 'A', estimate_total: 100, updated_at: day(0),
   }));
   const html = build(many, { production: {} });
-  assert.ok(html.includes('4 more in the full list'), 'silently truncating would misrepresent the day');
+  const list = html.slice(html.indexOf('Working today</p>'));
+  assert.equal((list.match(/class="wb-jobs-row"/g) || []).length, 5);
 });
 
-test('the header sends you to the calendar tab, not a section that does not exist', () => {
-  assert.ok(/tab=calendar/.test(build()), 'Calendar is a Jobs tab');
-});
-
-test('the tab is labelled properly, not left as a raw id', () => {
-  assert.match(main, /dashboard: 'Dashboard',/);
+test('Add job belongs to the Jobs page, not to a workspace tile', () => {
+  assert.ok(!build().includes('open-job-form'), 'the tile is a read-out, and links to the list to act');
 });
 
 test('today is read in local time, not UTC', () => {

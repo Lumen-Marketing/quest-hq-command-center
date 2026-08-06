@@ -1479,7 +1479,7 @@ function persistDealStages() { DEAL_STAGES = DEAL_STAGES.filter((stage) => stage
 
 const ACCOUNT_TYPES = ['Customer', 'Prospect', 'Partner', 'Vendor'];
 const ACTIVITY_TYPES = ['note', 'call', 'email', 'meeting', 'task', 'stage_change', 'system'];
-const JOB_TABS = ['dashboard', 'list', 'calendar', 'pipeline', 'profile'];
+const JOB_TABS = ['list', 'calendar', 'pipeline', 'profile'];
 const TASK_STATUSES = ['todo', 'pending', 'hold', 'review', 'done'];
 const TASK_PRIORITIES = ['critical', 'urgent', 'high', 'medium', 'low'];
 const TASK_TYPES = ['lead', 'bid', 'admin', 'invoicing', 'ar', 'meeting', 'web_dev'];
@@ -6329,7 +6329,11 @@ function navItemSalesLifecycle(route, module, companyId) {
   const navLabel = navigationLabel(module.id, module.label);
   const path = companyPath(kind, {}, companyId);
   const active = isActiveNav(route, path);
-  const expanded = state.expandedNav.has(kind);
+  // Jobs stays open. Its stages are the way people navigate production -- collapsing them
+  // means one extra click before every single move, and there is nothing else competing for
+  // the room. The other pipelines keep their disclosure.
+  const alwaysOpen = kind === 'jobs';
+  const expanded = alwaysOpen || state.expandedNav.has(kind);
   const count = moduleBadgeCount(kind, companyId);
   const activeLifecycle = route.name === 'company' && route.section === 'contacts' ? route.params.get('lifecycle') || '' : '';
   const counts = salesLifecycleStageCounts(companyId);
@@ -6341,9 +6345,9 @@ function navItemSalesLifecycle(route, module, companyId) {
           <span>${h(navLabel)}</span>
           ${count !== '' ? `<b>${h(String(count))}</b>` : ''}
         </a>
-        <button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(navLabel)} stages">
+        ${alwaysOpen ? '' : `<button class="side-pipe-toggle" type="button" data-action="toggle-nav-expand" data-module="${kind}" aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${h(navLabel)} stages">
           <i class="ti ti-chevron-down" aria-hidden="true"></i>
-        </button>
+        </button>`}
       </div>
       ${expanded ? `
         <div class="side-sub">
@@ -6362,28 +6366,22 @@ function navItemSalesLifecycle(route, module, companyId) {
 }
 
 /**
- * Dashboard and Calendar, above the status buckets.
+ * Calendar, above the status buckets.
  *
- * Jobs is the one pipeline with screens that are not a filtered list, and the v1 design puts
- * them here rather than making you open the module first and then find a tab. Stages stay
- * below, because they answer a different question -- these are places, those are filters.
+ * Jobs is the one pipeline with a screen that is not a filtered list, and it belongs here
+ * rather than behind opening the module first and then finding a tab.
+ *
+ * The Dashboard is deliberately NOT here: it moved to the workspace home as a tile you
+ * arrange yourself, so there is no separate page of it to link to.
  */
 function jobsNavViews(route, companyId) {
   const onJobs = route.name === 'company' && route.section === 'jobs';
-  const tab = onJobs ? (route.params.get('tab') || 'dashboard') : '';
-  const rows = [
-    ['dashboard', 'Dashboard', 'ti-layout-dashboard'],
-    ['calendar', 'Calendar', 'ti-calendar'],
-  ];
-  return rows.map(([key, label, icon]) => {
-    // The dashboard is the module's own home, so it has no tab parameter of its own.
-    const path = companyPath('jobs', key === 'dashboard' ? {} : { tab: key }, companyId);
-    const on = onJobs && tab === key;
-    return `<a class="side-sub-link ${on ? 'active' : ''}" href="${appHref(path)}" data-router aria-current="${on ? 'page' : 'false'}">
-      <i class="ti ${h(icon)} side-sub-icon" aria-hidden="true"></i>
-      <span class="side-sub-name">${h(label)}</span>
-    </a>`;
-  }).join('');
+  const on = onJobs && route.params.get('tab') === 'calendar';
+  const path = companyPath('jobs', { tab: 'calendar' }, companyId);
+  return `<a class="side-sub-link ${on ? 'active' : ''}" href="${appHref(path)}" data-router aria-current="${on ? 'page' : 'false'}">
+    <i class="ti ti-calendar side-sub-icon" aria-hidden="true"></i>
+    <span class="side-sub-name">Calendar</span>
+  </a>`;
 }
 
 function navItemPipeline(route, module, companyId) {
@@ -12235,14 +12233,6 @@ function renderJobsPage(route, companyId) {
   if (stageParam) state.stageFilter = jobStageNames().includes(stageParam) ? stageParam : 'all';
   const job = selectedJob();
   const showFiles = can('files.view', companyId);
-  // The dashboard carries its own header -- the generic one above it would repeat the title
-  // and push the figures below the fold.
-  if (tab === 'dashboard') {
-    return `${renderJobsDashboard(companyId)}
-      <nav class="tabbar" aria-label="Job sections">
-        ${JOB_TABS.map((item) => `<a class="${item === tab ? 'active' : ''}" href="${appHref(companyPath('jobs', { tab: item, ...(job ? { job_id: job.id } : {}) }, companyId))}" data-router>${h(labelForTab(item))}</a>`).join('')}
-      </nav>`;
-  }
   return `
     ${workspaceHeader('Jobs', 'Production pipeline - every job type, from intake to paid.', `
       ${showFiles ? `<a class="btn" href="${appHref(companyPath('files', job ? { job_id: job.id } : {}, companyId))}" data-router><i class="ti ti-folder"></i>Drive</a>` : ''}
@@ -12366,8 +12356,9 @@ function renderJobFile(companyId, job, tab) {
   return questLoader('Loading job');
 }
 
-// ---- Jobs dashboard ---------------------------------------------------------
-// Body lives in ./jobs/dashboard-view.js and is fetched the first time Jobs is opened.
+// ---- Jobs production ---------------------------------------------------------
+// The figures live in ./jobs/dashboard-view.js and are fetched the first time a workspace
+// shows a Jobs tile. They were a page of their own until the tile replaced it.
 let jobsDashboardModule = null;
 let jobsDashboardPending = null;
 
@@ -12376,7 +12367,7 @@ function loadJobsDashboard() {
   if (!jobsDashboardPending) {
     jobsDashboardPending = import('./jobs/dashboard-view.js').then((mod) => {
       jobsDashboardModule = mod.createJobsDashboard({
-        h, can, money, emptyState, appHref, companyPath, companyJobs,
+        h, can, money, appHref, companyPath, companyJobs,
         resolvePipelineStage, productionForJob, todayIso: localIsoDate,
       });
       return jobsDashboardModule;
@@ -12388,14 +12379,7 @@ function loadJobsDashboard() {
   return jobsDashboardPending;
 }
 
-function renderJobsDashboard(companyId) {
-  if (jobsDashboardModule) return jobsDashboardModule.renderJobsDashboard(companyId);
-  loadJobsDashboard().then(() => render()).catch((error) => console.error('Jobs dashboard failed to load', error));
-  return questLoader('Loading jobs');
-}
-
 function renderJobPanel(tab, companyId, job) {
-  if (tab === 'dashboard') return '';
   if (tab === 'pipeline') return renderPipeline(companyId);
   if (tab === 'list') return renderJobList(companyId);
   if (tab === 'calendar') return renderJobCalendar(companyId);
@@ -13774,12 +13758,30 @@ function normalizeFeedPost(p) {
 
 // A dashboard sidebar tile. Types: apps, app (dynamic records), report (pinned
 // chart), tasks, calendar, contacts, text, image, links. `config` is per-type.
-const WB_TILE_TYPES = ['apps', 'app', 'report', 'tasks', 'calendar', 'contacts', 'text', 'image', 'links'];
+const WB_TILE_TYPES = ['apps', 'app', 'report', 'tasks', 'calendar', 'contacts', 'jobs', 'text', 'image', 'links'];
+/**
+ * What a Jobs tile can show, and what each part is for.
+ *
+ * The Jobs dashboard used to be a fixed page. It is these parts on a tile now, so it sits on
+ * the workspace home beside everything else and you choose which of them you actually watch --
+ * the same idea as an app's dashboard cards, sized to a tile.
+ */
+const WB_JOBS_PARTS = [
+  ['working', 'Working today', 'How many jobs are on site, split by own crew and subs'],
+  ['draws', 'Draws ready', 'Money that can be invoiced right now'],
+  ['spend', 'Spent to date', 'Across the jobs currently in production'],
+  ['health', 'Production health', 'Missing dailies and jobs having a bad run'],
+  ['workingList', 'Working today — the list', 'Each job with its last four days'],
+  ['drawsList', 'Draws ready — the list', 'Each draw, with a Request button'],
+];
+const WB_JOBS_DEFAULT_PARTS = ['working', 'draws', 'spend', 'health', 'drawsList'];
 function normalizeWorkspaceTile(t) {
   const tile = t && typeof t === 'object' ? t : {};
   const type = WB_TILE_TYPES.includes(tile.type) ? tile.type : 'text';
   const config = tile.config && typeof tile.config === 'object' ? tile.config : {};
   if (type === 'links' && !Array.isArray(config.links)) config.links = [];
+  // A Jobs tile with nothing ticked is a blank box; an unset one means "the useful default".
+  if (type === 'jobs' && !Array.isArray(config.parts)) config.parts = [...WB_JOBS_DEFAULT_PARTS];
   return { id: tile.id || wbUid(), type, config };
 }
 
@@ -14316,6 +14318,7 @@ function wbTileMeta(companyId, workspace, tile) {
     case 'tasks': return { title: 'Workspace tasks', icon: 'ti-checklist', config: false };
     case 'calendar': return { title: 'Calendar', icon: 'ti-calendar', config: false };
     case 'contacts': return { title: 'Contacts', icon: 'ti-address-book', config: false };
+    case 'jobs': return { title: tile.config.title || 'Jobs', icon: 'ti-hammer', config: true };
     case 'text': return { title: tile.config.title || 'Note', icon: 'ti-align-left', config: true };
     case 'image': return { title: tile.config.caption || 'Image', icon: 'ti-photo', config: true };
     case 'links': return { title: tile.config.title || 'Links', icon: 'ti-link', config: true };
@@ -14357,6 +14360,7 @@ function wbTileBody(companyId, workspace, tile, meta) {
     case 'tasks': return wbTileTasks(companyId);
     case 'calendar': return wbTileCalendar(companyId);
     case 'contacts': return wbTileContacts(companyId);
+    case 'jobs': return wbTileJobs(companyId, tile);
     case 'text': return wbTileText(tile);
     case 'image': return wbTileImage(tile);
     case 'links': return wbTileLinks(tile);
@@ -14508,6 +14512,20 @@ function wbMiniCalendarGrid(cursor, eventsByDay, canManage) {
 
 function wbCalDay(dateKey) { const d = new Date(`${dateKey}T00:00:00`); return Number.isNaN(d.getTime()) ? '' : String(d.getDate()); }
 function wbCalMon(dateKey) { const d = new Date(`${dateKey}T00:00:00`); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-US', { month: 'short' }); }
+
+/**
+ * Production, as a tile you arrange rather than a page you navigate to.
+ *
+ * The figures are the Jobs dashboard's own -- same module, so "working today" cannot come to
+ * mean two different things. It is fetched on demand: a workspace with no Jobs tile never
+ * carries it.
+ */
+function wbTileJobs(companyId, tile) {
+  if (!ensureDomainLoaded('production')) return questLoader('Loading');
+  if (jobsDashboardModule) return jobsDashboardModule.renderJobsTile(companyId, tile.config, WB_JOBS_DEFAULT_PARTS);
+  loadJobsDashboard().then(() => render()).catch((error) => console.error('Jobs tile failed to load', error));
+  return questLoader('Loading');
+}
 
 function wbTileContacts(companyId) {
   const addForm = (can('contacts.manage', companyId) && state.wbContactAddOpen) ? wbTileContactAddForm() : '';
@@ -15109,7 +15127,7 @@ function wbAddTile(companyId, type) {
   workspace.tiles.push(tile);
   wbSave(companyId);
   state.builderModal = null;
-  if (['app', 'report', 'text', 'image', 'links'].includes(type)) { openWbTileConfig(companyId, tile.id); return; }
+  if (['app', 'report', 'text', 'image', 'links', 'jobs'].includes(type)) { openWbTileConfig(companyId, tile.id); return; }
   render();
 }
 function wbRemoveTile(companyId, tileId) {
@@ -15187,7 +15205,12 @@ function openWbTileConfig(companyId, tileId) {
   const workspace = wbEnsureTiles(companyId);
   const tile = workspace ? workspace.tiles.find((t) => t.id === tileId) : null;
   if (!tile) return;
-  openWbModal({ kind: 'tile-config', companyId, tileId, draft: JSON.parse(JSON.stringify(tile.config || {})) });
+  openWbModal({
+    kind: 'tile-config', companyId, tileId,
+    draft: JSON.parse(JSON.stringify(tile.config || {})),
+    jobsParts: WB_JOBS_PARTS,
+    jobsDefaultParts: WB_JOBS_DEFAULT_PARTS,
+  });
 }
 // Save the tile-config form. Reads DOM inputs by tile type, writes config, saves.
 function wbSaveTileConfig(companyId) {
@@ -15200,6 +15223,11 @@ function wbSaveTileConfig(companyId) {
   if (tile.type === 'app') { tile.config.appId = val('[data-wb-tilecfg-app]'); }
   else if (tile.type === 'report') { tile.config.appId = val('[data-wb-tilecfg-app]'); tile.config.reportId = val('[data-wb-tilecfg-report]') || 'recent'; }
   else if (tile.type === 'text') { tile.config.title = val('[data-wb-tilecfg-title]'); tile.config.body = document.querySelector('[data-wb-tilecfg-body]')?.value || ''; }
+  else if (tile.type === 'jobs') {
+    tile.config.title = val('[data-wb-tilecfg-title]');
+    tile.config.parts = [...document.querySelectorAll('[data-wb-tilecfg-part]')]
+      .filter((el) => el.checked).map((el) => el.getAttribute('data-wb-tilecfg-part'));
+  }
   else if (tile.type === 'image') {
     if (m.draft.objectPath) {
       tile.config.objectPath = m.draft.objectPath;
@@ -35181,7 +35209,9 @@ function isActiveNav(route, path) {
 }
 
 function normalizeJobTab(value) {
-  return JOB_TABS.includes(value) ? value : 'dashboard';
+  // 'dashboard' used to be the landing tab. It is a workspace tile now, so an old bookmark
+  // pointing at it lands on the list rather than on nothing.
+  return JOB_TABS.includes(value) ? value : 'list';
 }
 
 function labelForTab(tab) {

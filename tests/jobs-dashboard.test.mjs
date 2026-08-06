@@ -155,11 +155,32 @@ test('the tiles are the four the production team asked for, in order', () => {
 
 // --- wiring ---------------------------------------------------------------------------------
 
-test('the dashboard is the default Jobs tab', () => {
-  // Ordered the way the work reads: the day's summary, the full list, what is booked, the
-  // board, then one job. Profile stays last because it is reached from the others.
-  assert.match(main, /const JOB_TABS = \['dashboard', 'list', 'calendar', 'pipeline', 'profile'\];/);
-  assert.match(main, /return JOB_TABS\.includes\(value\) \? value : 'dashboard';/);
+test('the list is the default Jobs tab, and an old dashboard link still lands somewhere', () => {
+  // The dashboard is a workspace tile now, so it is no longer a tab at all. A bookmark
+  // pointing at ?tab=dashboard has to fall through to the list rather than render nothing.
+  assert.match(main, /const JOB_TABS = \['list', 'calendar', 'pipeline', 'profile'\];/);
+  assert.match(main, /return JOB_TABS\.includes\(value\) \? value : 'list';/);
+  assert.ok(!/renderJobsDashboard/.test(main), 'the page renderer went with the tab');
+});
+
+test('the Jobs sub-menu stays open and offers only the calendar', () => {
+  // Production is the section people live in; collapsing its one sub-view behind a chevron
+  // was a click for nothing. The dashboard row left when the tile replaced it.
+  assert.match(main, /const alwaysOpen = kind === 'jobs';/);
+  assert.match(main, /const expanded = alwaysOpen \|\| state\.expandedNav\.has\(kind\);/);
+  const nav = main.slice(main.indexOf('function jobsNavViews'), main.indexOf('function navItemPipeline'));
+  assert.ok(nav.includes("tab: 'calendar'"), 'Calendar stays');
+  assert.ok(!nav.includes("tab: 'dashboard'"), 'Dashboard does not');
+});
+
+test('the tile is offered in the workspace catalogue and configured by tick-box', () => {
+  const modal = readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
+  assert.match(modal, /\['jobs', 'ti-hammer', 'Jobs production'/, 'you have to be able to add it');
+  assert.match(modal, /tile\.type === 'jobs'/, 'and choose what it shows');
+  assert.match(modal, /data-wb-tilecfg-part=/);
+  // Saving has to read those boxes back, or every tile keeps the defaults forever.
+  assert.match(main, /\[\.\.\.document\.querySelectorAll\('\[data-wb-tilecfg-part\]'\)\]/);
+  assert.match(main, /WB_JOBS_PARTS/, 'the parts list is shared with the modal, not retyped');
 });
 
 test('it is fetched on use, not carried by every page', () => {
@@ -168,19 +189,14 @@ test('it is fetched on use, not carried by every page', () => {
   assert.match(main, /jobsDashboardPending = null;/, 'a failed fetch must be retryable');
 });
 
-test('the dashboard renders its own header instead of doubling the page title', () => {
-  assert.match(main, /if \(tab === 'dashboard'\) \{\n\s*return `\$\{renderJobsDashboard\(companyId\)\}/);
-  assert.match(view, /Jobs Dashboard<\/h1>/);
-});
-
-test('Add job and Request are hidden from someone who cannot manage jobs', () => {
+test('the tile respects both job permissions', () => {
+  assert.match(view, /can\('jobs\.view', companyId\)/, 'a role without Jobs sees no figures');
   assert.match(view, /const canBill = can\('jobs\.manage', companyId\);/);
-  assert.match(view, /canBill \? '<button[^']*data-action="open-job-form"/);
   // Requesting a draw sends an invoice. It must not render for a viewer.
-  assert.match(view, /\$\{canBill\s*\n?\s*\? `<button[^`]*data-action="job-draw-invoice"/);
+  assert.match(view, /\$\{canBill \? `<button[^`]*data-action="job-draw-invoice"/);
 });
 
-test('the dashboard shows production days, not pipeline position', () => {
+test('the tile shows production days, not pipeline position', () => {
   // The stage is already on the row and in the deck. Four days of dailies is the thing you
   // cannot get anywhere else on this screen.
   assert.match(view, /jobStreak\(job, productionForJob\)/);

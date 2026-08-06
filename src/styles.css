@@ -31227,3 +31227,20 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-collection-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .wb-collection-summary[hidden], .wb-collection-body[hidden] { display: none; }
 .wb-collection-toggle[aria-expanded="true"] i { transform: none; }
+
+/* Jobs production tile -- the old fixed Jobs dashboard, now a tile you compose yourself. */
+.wb-jobs-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
+.wb-jobs-fig { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); text-decoration: none; color: inherit; }
+.wb-jobs-fig:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.wb-jobs-fig strong { font-size: 1.35rem; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.wb-jobs-fig-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.wb-jobs-fig-cap { font-size: .74rem; color: var(--muted); }
+.wb-jobs-fig.jd-warn strong { color: var(--warning, #b8791f); }
+.wb-jobs-fig.jd-bad strong { color: var(--danger, #c0392b); }
+.wb-jobs-fig.jd-good strong { color: var(--success, #1f8a55); }
+.wb-jobs-list { margin-top: 12px; display: grid; gap: 2px; }
+.wb-jobs-list-head { margin: 0 0 2px; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.wb-jobs-row { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); text-decoration: none; color: inherit; font-size: .86rem; }
+.wb-jobs-row:last-child { border-bottom: 0; }
+.wb-jobs-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; color: inherit; }
+.wb-jobs-row-amt { font-variant-numeric: tabular-nums; }
