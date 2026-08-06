@@ -11,6 +11,7 @@ export function createPlatformPanel(ctx) {
   const {
     availableWorkspacePlugins,
     companyColor,
+    companyPluginStatus,
     companyDirectoryEmptyState,
     companyDirectoryFilters,
     companyName,
@@ -18,7 +19,6 @@ export function createPlatformPanel(ctx) {
     filteredPlatformBackupCopies,
     filterCompanyRows,
     h,
-    isPluginInstalled,
     metricCard,
     number,
     paginate,
@@ -148,13 +148,17 @@ export function createPlatformPanel(ctx) {
   }
 
   function renderPlatformPluginStrip(companyId) {
-    const installed = availableWorkspacePlugins().filter((plugin) => isPluginInstalled(companyId, plugin.id));
+    // This strip writes the company entitlement, so it reads the company entitlement. It used
+    // to read the workspace-level status, which the platform master cannot set for a company
+    // they are not a member of -- so the button never changed and the install looked ignored.
+    const entitled = (plugin) => companyPluginStatus(companyId, plugin.id) === 'installed';
+    const installed = availableWorkspacePlugins().filter(entitled);
     return `
       <details class="platform-plugins">
         <summary>${installed.length}/${availableWorkspacePlugins().length} plugins installed</summary>
         <div class="platform-plugin-list">
           ${availableWorkspacePlugins().map((plugin) => {
-            const active = isPluginInstalled(companyId, plugin.id);
+            const active = entitled(plugin);
             return `
               <span class="${active ? 'active' : 'muted'}">
                 <b>${h(plugin.label)}</b>

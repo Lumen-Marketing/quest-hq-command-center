@@ -95,6 +95,8 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 
 - Production > Jobs no longer has a Dashboard tab. Its sub-menu is pinned open and lists only Calendar, and the production figures moved to a "Jobs" card that each owner composes -- available both as a company home-dashboard widget (Add widget > Operations, with a settings cog in Customize layout) and as a workspace tile: Working today, Draws ready, Spent to date, Production health, and either list can be ticked on or off in the tile settings. `JOB_TABS` dropped `dashboard`, so an old `?tab=dashboard` bookmark falls through to the list. The markup lives in `src/jobs/dashboard-view.js` and the tickable part list in `src/jobs/dashboard-model.js`, imported by both settings dialogs so they cannot drift; neither is fetched until a card is drawn. Home-dashboard choices persist per company through the existing widget-config store.
 
+- Plugins are installed per company rather than only by the platform. `set_workspace_plugin` now accepts a platform admin directly (they are not a member of most companies, so `has_workspace_permission` could never be true for them) and lets a company admin self-entitle a plugin that has no `company_plugins` row -- absence means nobody has decided, not no. An explicit `disabled` row is still a wall and reads as "Withheld for your company". `set_company_plugin` now cascades to that company's active workspaces, so the platform panel switch is the thing that takes effect; the panel also reads the company entitlement it writes instead of the workspace status it cannot set. Migration `202608071000_per_company_plugin_install.sql`.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.
