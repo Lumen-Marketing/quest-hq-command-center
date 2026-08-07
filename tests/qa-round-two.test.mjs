@@ -181,3 +181,29 @@ test('the stored order keeps entries the strip never showed', () => {
   assert.match(body, /if \(next\.every\(\(entry, at\) => entry === entries\[at\]\)\) return;/);
   assert.match(body, /wbSave\(companyId\);/);
 });
+
+// "After clicking the link and making an account, when I log in it says invalid login
+// credentials." I could not reproduce it and auth.users holds no unconfirmed account, so
+// there is no orphaned sign-up to repair. What is real is the message: Supabase returns
+// "Invalid login credentials" for a wrong password, an unknown address AND an unconfirmed
+// account, and both call sites passed it straight through.
+
+test('a sign-up with no session names the confirmation step', () => {
+  const fn = main.slice(main.indexOf('async function registerWorkspace(formNode)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /state\.authMessage = `Account created\. Check \$\{email\} for a confirmation link, then sign in\.`;/);
+  assert.match(body, /state\.authMode = 'signin';/);
+  // Telling somebody to sign in is what sent them into the refusal they reported.
+  assert.ok(!/Please sign in to finish workspace setup/.test(body));
+  // It is not an error -- the account exists -- so it must not paint as one.
+  assert.match(body, /state\.loginError = '';/);
+});
+
+test('the sign-in refusal says what else it can mean', () => {
+  const fn = main.slice(main.indexOf('async function signInWithSupabase'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /const generic = \/invalid login credentials\/i\.test\(result\.error\.message \|\| ''\);/);
+  assert.match(body, /confirm it from the email we sent first/);
+  // Any other error is still reported verbatim; only the ambiguous one is expanded.
+  assert.match(body, /: result\.error\.message \|\| 'Unable to sign in\.';/);
+});

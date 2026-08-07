@@ -19605,77 +19605,32 @@ function renderWorkspaceBackupRow(backup) {
   `;
 }
 
-function renderRecycleBinSettings(companyId) {
-  const items = recycleBinItemsForCompany(companyId);
-  const filters = state.recycleFilters || { type: 'all', status: 'active' };
-  const typeOptions = Object.values(RECYCLE_BIN_TYPES).map((config) => [config.type, config.label]).sort((a, b) => a[1].localeCompare(b[1]));
-  const filtered = items.filter((item) => {
-    const days = recycleDaysLeft(item);
-    const statusMatch = filters.status === 'all'
-      || (filters.status === 'active' && days >= 0)
-      || (filters.status === 'expiring' && days >= 0 && days <= 7)
-      || (filters.status === 'expired' && days < 0);
-    const typeMatch = filters.type === 'all' || item.source_type === filters.type;
-    return statusMatch && typeMatch;
-  });
-  const counts = [
-    ['Items', String(items.length)],
-    ['Expiring soon', String(items.filter((item) => recycleDaysLeft(item) >= 0 && recycleDaysLeft(item) <= 7).length)],
-    ['Expired', String(items.filter((item) => recycleDaysLeft(item) < 0).length)],
-  ];
-  const expiredCount = items.filter((item) => recycleDaysLeft(item) < 0).length;
-  return `
-    <article class="panel span-3 recycle-bin-panel">
-      <div class="section-head">
-        <div>
-          <h2>Recycle Bin</h2>
-          <p>Deleted workspace items stay recoverable for 30 days before permanent cleanup.</p>
-        </div>
-        <div class="backup-record-counts">${counts.map(([label, value]) => `<span>${h(label)}: ${h(value)}</span>`).join('')}</div>
-      </div>
-      <div class="recycle-toolbar">
-        <label><span>Type</span><select data-recycle-filter="type">
-          <option value="all" ${filters.type === 'all' ? 'selected' : ''}>All types</option>
-          ${typeOptions.map(([value, label]) => `<option value="${h(value)}" ${filters.type === value ? 'selected' : ''}>${h(label)}</option>`).join('')}
-        </select></label>
-        <label><span>Status</span><select data-recycle-filter="status">
-          ${[
-            ['active', 'Active'],
-            ['expiring', 'Expiring soon'],
-            ['expired', 'Expired'],
-            ['all', 'All'],
-          ].map(([value, label]) => `<option value="${value}" ${filters.status === value ? 'selected' : ''}>${label}</option>`).join('')}
-        </select></label>
-        <button class="btn danger" type="button" data-action="open-empty-expired-recycle-bin" ${expiredCount ? '' : 'disabled'}>
-          <i class="ti ti-trash-x"></i>Empty expired items${expiredCount ? ` (${expiredCount})` : ''}
-        </button>
-      </div>
-      <div class="recycle-list">
-        ${filtered.map(renderRecycleBinRow).join('') || emptyState('Recycle Bin is empty. Deleted items will appear here.')}
-      </div>
-    </article>
-  `;
+// ---- Settings > Recycle Bin ------------------------------------------------------
+// Body lives in ./settings/recycle-bin-panel.js and is fetched on first use.
+let recycleBinPanelModule = null;
+let recycleBinPanelPending = null;
+
+function loadRecycleBinPanel() {
+  if (recycleBinPanelModule) return Promise.resolve(recycleBinPanelModule);
+  if (!recycleBinPanelPending) {
+    recycleBinPanelPending = import('./settings/recycle-bin-panel.js').then((mod) => {
+      recycleBinPanelModule = mod.createRecycleBinPanel({
+        RECYCLE_BIN_TYPES, emptyState, formatDateTime, h, recycleBinItemsForCompany,
+        recycleDaysLeft, recycleTypeConfig, state, titleCase,
+      });
+      return recycleBinPanelModule;
+    }).catch((error) => {
+      recycleBinPanelPending = null;
+      throw error;
+    });
+  }
+  return recycleBinPanelPending;
 }
 
-function renderRecycleBinRow(item) {
-  const typeConfig = recycleTypeConfig(item.source_type);
-  const days = recycleDaysLeft(item);
-  const dayLabel = days < 0 ? `${Math.abs(days)}d expired` : `${days}d left`;
-  const statusClass = days < 0 ? 'danger' : days <= 7 ? 'warning' : 'active';
-  return `
-    <article class="recycle-row ${statusClass}">
-      <div class="recycle-icon"><i class="ti ti-recycle"></i></div>
-      <div>
-        <strong>${h(item.item_label)}</strong>
-        <small>${h(typeConfig?.label || titleCase(item.source_type))} / Deleted by ${h(item.deleted_by_label || 'Unknown')} / ${formatDateTime(item.deleted_at)}</small>
-      </div>
-      <b class="status-pill ${statusClass}">${h(dayLabel)}</b>
-      <div class="recycle-actions">
-        <button class="btn" type="button" data-action="restore-recycle-item" data-recycle-id="${h(item.id)}" ${days < 0 ? 'disabled title="Restore window expired"' : ''}><i class="ti ti-restore"></i>Restore</button>
-        <button class="btn danger" type="button" data-action="open-permanent-delete-recycle-item" data-recycle-id="${h(item.id)}"><i class="ti ti-trash"></i>Delete forever</button>
-      </div>
-    </article>
-  `;
+function renderRecycleBinSettings(companyId) {
+  if (recycleBinPanelModule) return recycleBinPanelModule.renderRecycleBinSettings(companyId);
+  loadRecycleBinPanel().then(() => render()).catch((error) => console.error('Recycle Bin panel failed to load', error));
+  return questLoader('Loading Recycle Bin');
 }
 
 function renderWorkspaceBackupRestoreModal() {
@@ -29847,7 +29802,13 @@ async function signInWithSupabase(formNode) {
   });
   if (result.error) {
     state.authBusy = false;
-    state.loginError = result.error.message || 'Unable to sign in.';
+    // Supabase answers "Invalid login credentials" for a wrong password, an address with no
+    // account, AND an account whose email is not confirmed yet. Passed through raw it reads
+    // as "your password is wrong", which is why a fresh sign-up looked broken.
+    const generic = /invalid login credentials/i.test(result.error.message || '');
+    state.loginError = generic
+      ? 'That email and password did not match. If you just created this account, confirm it from the email we sent first — the link expires after 24 hours.'
+      : result.error.message || 'Unable to sign in.';
     state.authMessage = '';
     render();
     return;
@@ -30009,12 +29970,16 @@ async function registerWorkspace(formNode) {
   }
   let session = signUp.data.session;
   if (!session) {
+    // No session on a successful sign-up means the project requires email confirmation.
+    // Signing in now is refused with "Invalid login credentials" -- the same words Supabase
+    // uses for a wrong password -- so telling somebody to sign in sends them into a message
+    // they cannot act on. Name the actual next step instead.
     const signIn = await client.auth.signInWithPassword({ email, password });
     if (signIn.error) {
       state.authBusy = false;
-      state.loginError = 'Account created. Please sign in to finish workspace setup.';
+      state.loginError = '';
+      state.authMessage = `Account created. Check ${email} for a confirmation link, then sign in.`;
       state.authMode = 'signin';
-      state.authMessage = '';
       render();
       return;
     }
