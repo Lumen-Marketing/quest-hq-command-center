@@ -35,12 +35,29 @@ for (const m of main.matchAll(/^(?:const|let|var) ([A-Za-z_$][\w$]*)/gm)) mainNa
 function codeOnly(text) {
   let out = '';
   let i = 0;
-  const depth = []; // open template literals, so a nested `${`...`}` unwinds correctly
+  // A stack of open contexts. An 'expr' (`${ ... }`) counts its own braces, because an
+  // object literal inside an interpolation would otherwise close the interpolation early
+  // and let the rest of the template's markup leak out as if it were code.
+  const depth = [];
+  const top = () => depth[depth.length - 1];
   while (i < text.length) {
     const two = text.slice(i, i + 2);
+    const ch = text[i];
+
+    // Template TEXT is checked before anything else. Handling quotes first meant an
+    // apostrophe or an HTML attribute inside a template -- class="wb-field" -- was read as
+    // the start of a string literal, which threw the scanner out of step and let the rest of
+    // the markup through as if it were code.
+    if (top()?.kind === 'tpl') {
+      if (ch === '\\') { i += 2; continue; }
+      if (two === '${') { depth.push({ kind: 'expr', braces: 0 }); i += 2; out += ' '; continue; }
+      if (ch === '`') { depth.pop(); i += 1; out += ' '; continue; }
+      i += 1;
+      continue;
+    }
+
     if (two === '//') { while (i < text.length && text[i] !== '\n') i += 1; continue; }
     if (two === '/*') { const end = text.indexOf('*/', i); i = end === -1 ? text.length : end + 2; continue; }
-    const ch = text[i];
     if (ch === "'" || ch === '"') {
       const quote = ch;
       i += 1;
@@ -49,16 +66,13 @@ function codeOnly(text) {
       out += '""';
       continue;
     }
-    if (ch === '`') { depth.push('tpl'); i += 1; out += ' '; continue; }
-    if (depth.length && depth[depth.length - 1] === 'tpl') {
-      // Inside template text: keep nothing but the interpolations.
-      if (two === '${') { depth.push('expr'); i += 2; out += ' '; continue; }
-      if (ch === '`') { depth.pop(); i += 1; out += ' '; continue; }
-      if (ch === '\\') { i += 2; continue; }
-      i += 1;
-      continue;
+    if (ch === '`') { depth.push({ kind: 'tpl' }); i += 1; out += ' '; continue; }
+    if (top()?.kind === 'expr') {
+      if (ch === '{') { top().braces += 1; } else if (ch === '}') {
+        if (top().braces === 0) { depth.pop(); i += 1; out += ' '; continue; }
+        top().braces -= 1;
+      }
     }
-    if (ch === '}' && depth[depth.length - 1] === 'expr') { depth.pop(); i += 1; out += ' '; continue; }
     // A regex literal, distinguished from division by what precedes it.
     if (ch === '/') {
       const before = out.replace(/\s+$/, '').slice(-1);
@@ -92,8 +106,15 @@ function ownBindings(raw) {
   for (const m of raw.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)) own.add(m[1]);
   for (const m of raw.matchAll(/import[\s\S]*?from\s*['"][^'"]*['"]/g)) add(m[0]);
   for (const m of raw.matchAll(/catch\s*\(([^)]*)\)/g)) add(m[1]);
-  // Destructuring patterns, including the multi-line ctx lists these factories use.
-  for (const m of raw.matchAll(/\{([^{}]*)\}\s*(?:=|\)|,|=>)/g)) add(m[1]);
+  // Destructuring patterns only -- a `{ ... } =` on the left of a declaration or assignment.
+  //
+  // This deliberately does NOT match `{ ... })` or `{ ... },`. An object literal passed as an
+  // argument looks identical to a destructuring pattern, but its shorthand properties are
+  // REFERENCES, not bindings: `render({ h, metricCard })` uses h, it does not declare it.
+  // Treating those as bindings is what let ops/eod-page.js ship reaching for four names it
+  // never received, leaving the EOD screen stuck on its loading placeholder. Function
+  // parameters -- the other place a pattern legitimately appears -- are collected below.
+  for (const m of raw.matchAll(/\{([^{}]*)\}\s*=[^=>]/g)) add(m[1]);
   // Parameter lists of every function shape in use.
   for (const m of raw.matchAll(/function\s*[\w$]*\s*\(([\s\S]*?)\)\s*\{/g)) add(m[1]);
   for (const m of raw.matchAll(/\(([^()]*)\)\s*=>/g)) add(m[1]);
@@ -124,7 +145,9 @@ for (const rel of files) {
     const own = ownBindings(raw);
     const reached = [...mainNames]
       .filter((name) => !own.has(name))
-      .filter((name) => new RegExp(`(?<![.\\w$])${name}(?![\\w$])`).test(code));
+      // Not a property access, and not a property KEY: in `{ companyLabel: x }` the name is
+      // being defined, not read. Shorthand (`{ h, metricCard }`) has no colon and still counts.
+      .filter((name) => new RegExp(`(?<![.\\w$])${name}(?![\\w$])(?!\\s*:)`).test(code));
     assert.deepEqual(
       reached,
       [],

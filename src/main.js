@@ -5840,6 +5840,7 @@ function loadRenderEodPage() {
     renderEodPagePending = import('./ops/eod-page.js').then((mod) => {
       renderEodPageModule = mod.createEodPage({
         activeSession, can, companyEodReports, companyName, loadEodModule, render, state,
+        h, metricCard, emptyState, titleCase,
         // A getter, not the value: the holder is null until the fetch resolves, so passing it
         // by value would capture null forever.
         eodBody: () => eodPageModule,
@@ -22499,6 +22500,7 @@ function loadChatModals() {
         emptyState, formatDate, h, messageSenderProfile, profileIsOnline, profileName,
         renderModalShell, roleById, timeAgo, titleCase, withPresenceRing,
         directMessageCandidates, renderAvatar, companyAccessUsers, activeSession,
+        can, companyInvites,
         companyAccessUsers, activeSession, renderMessageGroupIconControl,
         renderMessagePeoplePicker, renderMessageRolePicker,
         appHref, companyMessageConversations, companyPath, state,

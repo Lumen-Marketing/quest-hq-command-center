@@ -1,9 +1,14 @@
 // Moved out of main.js and fetched on demand: it is behind a click, and nothing that paints
 // before the click needs it. The body is unchanged from where it lived.
 
+// h, metricCard, emptyState and titleCase are handed straight through to the inner page.
+// They were used below without ever being received -- a ReferenceError the moment this
+// rendered, and because the screen is fetched behind a "Loading..." placeholder the throw
+// simply left that placeholder on screen.
 export function createEodPage(ctx) {
   const {
     activeSession, can, companyEodReports, companyName, loadEodModule, render, state, eodBody,
+    h, metricCard, emptyState, titleCase,
   } = ctx;
 
   function renderEodPage(route, companyId) {

@@ -9,6 +9,7 @@ export function createChatModals(ctx) {
     emptyState, formatDate, h, messageSenderProfile, profileIsOnline, profileName,
     renderModalShell, roleById, timeAgo, titleCase, withPresenceRing,
     directMessageCandidates, renderAvatar, companyAccessUsers, activeSession,
+    can, companyInvites,
     renderMessageGroupIconControl,
     renderMessagePeoplePicker, renderMessageRolePicker,
     appHref, companyMessageConversations, companyPath, state,
