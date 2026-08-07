@@ -175,6 +175,7 @@ const FACTORY_MODULES = [
   ['src/crm/deal-detail.js', 'createDealDetail'],
   ['src/crm/underwriter-page.js', 'createUnderwriterPage'],
   ['src/knowledge/knowledge-page.js', 'createKnowledgePage'],
+  ['src/settings/backups-panel.js', 'createBackupsPanel'],
   ['src/settings/plugins-panel.js', 'createPluginsPanel'],
   ['src/settings/workspace-settings.js', 'createWorkspaceSettings'],
   ['src/portals/client-portals-page.js', 'createClientPortalsPage'],

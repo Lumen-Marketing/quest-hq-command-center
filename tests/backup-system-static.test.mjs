@@ -5,7 +5,9 @@ import test from 'node:test';
 // The platform master panel is lazily loaded from its own module, so the shell and
 // that module are both part of 'the source' for these assertions.
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/platform/master-panel.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/platform/master-panel.js', import.meta.url), 'utf8')
+  // The Backups tab is fetched on demand now; same surface, one more file.
+  + readFileSync(new URL('../src/settings/backups-panel.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const packageJson = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const migrationDir = new URL('../supabase/migrations/', import.meta.url);

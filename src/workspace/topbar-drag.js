@@ -23,6 +23,10 @@ export function bindTopbarDrag(track) {
 
   let pressed = false;
   let dragging = false;
+  // A drag that started on an app tile reorders it; a drag on the strip itself pans. The
+  // two cannot share a gesture, so which one this is gets decided on pointerdown and does
+  // not change for the rest of the drag.
+  let reordering = null;
   let startX = 0;
   let startScroll = 0;
   let velocity = 0;
@@ -45,11 +49,20 @@ export function bindTopbarDrag(track) {
     momentum = requestAnimationFrame(glide);
   };
 
+  const tileUnder = (x, y) => {
+    const el = track.ownerDocument.elementFromPoint(x, y);
+    const tile = el && el.closest ? el.closest('[data-wb-app-id]') : null;
+    return tile && track.contains(tile) ? tile : null;
+  };
+
   track.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     stopMomentum();
     pressed = true;
     dragging = false;
+    reordering = track.dataset.wbReorder === '1' && event.target.closest
+      ? event.target.closest('[data-wb-app-id]')
+      : null;
     startX = event.clientX;
     lastX = event.clientX;
     lastTime = event.timeStamp;
@@ -64,8 +77,21 @@ export function bindTopbarDrag(track) {
       if (Math.abs(dx) < DRAG_SLOP) return;
       dragging = true;
       track.classList.add('wb-topbar-dragging');
+      if (reordering) reordering.classList.add('is-reordering');
       // Captured only once a drag is real, so a plain click is left entirely alone.
       try { track.setPointerCapture(event.pointerId); } catch { /* capture is best effort */ }
+    }
+    if (reordering) {
+      // The dragged tile is moved in the DOM as the pointer passes each neighbour, so the
+      // strip shows the result as it happens and the final order is simply the DOM order.
+      const over = tileUnder(event.clientX, event.clientY);
+      if (over && over !== reordering) {
+        const box = over.getBoundingClientRect();
+        const after = event.clientX > box.left + box.width / 2;
+        over.parentNode.insertBefore(reordering, after ? over.nextSibling : over);
+      }
+      event.preventDefault();
+      return;
     }
     const elapsed = event.timeStamp - lastTime;
     if (elapsed > 0) velocity = (event.clientX - lastX) / elapsed;
@@ -78,9 +104,18 @@ export function bindTopbarDrag(track) {
   const release = (event) => {
     if (!pressed) return;
     pressed = false;
-    if (!dragging) return;
+    if (!dragging) { reordering = null; return; }
     track.classList.remove('wb-topbar-dragging');
     try { track.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+    if (reordering) {
+      reordering.classList.remove('is-reordering');
+      const ids = [...track.querySelectorAll('[data-wb-app-id]')].map((el) => el.dataset.wbAppId);
+      // The order is reported, not saved here: this module knows nothing about workspaces,
+      // and keeping it that way is why it needs no context object.
+      track.dispatchEvent(new CustomEvent('wb-topbar-reorder', { bubbles: true, detail: { ids } }));
+      reordering = null;
+      return;
+    }
     // A long pause before release means the strip was parked, not thrown.
     const stale = event.timeStamp - lastTime > 100;
     if (!stale && !prefersReducedMotion() && Math.abs(velocity) > MIN_VELOCITY) glide();

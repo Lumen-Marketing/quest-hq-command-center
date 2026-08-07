@@ -31320,3 +31320,9 @@ a.wb-cal-more:hover { color: var(--orange); }
 .pipe-card-delete:hover { color: var(--danger, #c0392b); border-color: color-mix(in srgb, var(--danger, #c0392b) 35%, transparent); }
 /* Touch has no hover, so the control has to be visible from the start. */
 @media (hover: none) { .pipe-card-delete { opacity: 1; } }
+
+/* An app tile being dragged to a new position in the strip. */
+.wb-topbar-tab.is-reordering { opacity: .55; transform: scale(.97); }
+.wb-topbar-apps[data-wb-reorder] .wb-topbar-tab { cursor: grab; }
+.wb-topbar-apps[data-wb-reorder].wb-topbar-dragging .wb-topbar-tab { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) { .wb-topbar-tab.is-reordering { transform: none; } }

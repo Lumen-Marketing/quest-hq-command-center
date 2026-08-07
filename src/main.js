@@ -14698,6 +14698,7 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   // pager, so it can be swiped on touch and dragged/wheeled on desktop. The arrows
   // remain for mouse users and simply scroll the same track.
   const apps = wbWorkspaceApps(wbDoc(companyId), workspace);
+  const canReorderApps = can('workspaces.manage', companyId) && apps.length > 1;
   const homeHref = appHref(companyPath('workspaces', {}, companyId));
   const homeActive = !activeAppId;
   const homeTab = `<a class="wb-topbar-tab wb-topbar-home ${homeActive ? 'active' : ''}" href="${homeHref}" data-router aria-current="${homeActive ? 'page' : 'false'}"><span class="wb-topbar-ic wb-topbar-ic-home"><i class="ti ti-activity" aria-hidden="true"></i></span><span class="wb-topbar-label">Activity</span></a>`;
@@ -14705,7 +14706,9 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
     const active = a.id === activeAppId;
     const href = appHref(companyPath('workspaces', { app_id: a.id }, companyId));
     const linkMark = linked ? '<span class="wb-topbar-link" title="Linked app — shares data with another workspace"><i class="ti ti-link" aria-hidden="true"></i></span>' : '';
-    return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router title="${h(a.name)}${linked ? ' (linked)' : ''}" aria-current="${active ? 'page' : 'false'}"${active ? ' data-wb-topbar-active' : ''}><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
+    // draggable="false" so grabbing a tab does not start the browser's own link drag, which
+     // would hijack the gesture before the strip ever sees it.
+    return `<a class="wb-topbar-tab ${active ? 'active' : ''} ${linked ? 'is-linked' : ''}" href="${href}" data-router draggable="false" data-wb-app-id="${h(a.id)}" title="${h(a.name)}${linked ? ' (linked)' : ''}" aria-current="${active ? 'page' : 'false'}"${active ? ' data-wb-topbar-active' : ''}><span class="wb-topbar-ic" style="background:${h(a.color)}"><i class="ti ${h(a.icon)}" aria-hidden="true"></i>${linkMark}</span><span class="wb-topbar-label">${h(a.name)}</span></a>`;
   }).join('');
   // Rendered unconditionally and hidden by wbMountTopbar when nothing overflows, because
   // overflow depends on measured width which is not known at render time.
@@ -14716,7 +14719,7 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
   const addBtn = can('workspaces.manage', companyId)
     ? `<button class="wb-topbar-add" type="button" data-new-app title="Add app" aria-label="Add app"><i class="ti ti-plus" aria-hidden="true"></i><span>Add app</span></button>`
     : '';
-  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps">${homeTab}<div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0">${appTabs}</div><div class="wb-topbar-spacer"></div>${nav}${addBtn}</nav>`;
+  return `<nav class="wb-topbar" data-wb-topbar aria-label="Workspace apps">${homeTab}<div class="wb-topbar-apps" data-wb-topbar-apps tabindex="0"${canReorderApps ? ' data-wb-reorder="1"' : ''}>${appTabs}</div><div class="wb-topbar-spacer"></div>${nav}${addBtn}</nav>`;
 }
 
 // Where the app strip was scrolled to. Kept in a variable rather than on the element:
@@ -14737,6 +14740,26 @@ let wbTopbarScrollLeft = 0;
  */
 
 // Wire the app strip as a scrollable track: keep the open app in view, and show the
+/**
+ * Store the app order a drag ended on.
+ *
+ * The strip is built from `workspace.apps`, so the order IS the array order. Ids the strip
+ * did not show keep their place at the end rather than being dropped by a reorder.
+ */
+function wbApplyAppOrder(companyId, ids) {
+  if (!can('workspaces.manage', companyId)) return;
+  const workspace = wbCompanyWorkspace(companyId);
+  const entries = workspace?.apps;
+  if (!Array.isArray(entries) || ids.length < 2) return;
+  const idOf = (entry) => String(entry?.id || entry?.appId || '');
+  const next = ids.map((id) => entries.find((entry) => idOf(entry) === String(id))).filter(Boolean);
+  entries.forEach((entry) => { if (!next.includes(entry)) next.push(entry); });
+  // A drag that ended where it started must not write a revision.
+  if (next.every((entry, at) => entry === entries[at])) return;
+  workspace.apps = next;
+  wbSave(companyId);
+}
+
 // arrows only when there is something to scroll to. Re-runs after each render, so the
 // listeners are attached once per element via a data flag.
 function wbMountTopbar() {
@@ -14772,6 +14795,10 @@ function wbMountTopbar() {
     import('./workspace/topbar-drag.js')
       .then((mod) => mod.bindTopbarDrag(track))
       .catch((error) => console.error('App strip drag failed to load', error));
+    // The drag module reports the order it ended up with; storing it is this side's job.
+    track.addEventListener('wb-topbar-reorder', (event) => {
+      wbApplyAppOrder(activeCompanyId(), event.detail?.ids || []);
+    });
   }
 
   // Restore the remembered position BEFORE deciding whether the open app needs scrolling
@@ -19528,55 +19555,34 @@ function renderSettingsPage(route, companyId) {
   `;
 }
 
-function renderBackupsSettings(companyId) {
-  const settings = backupSettingsForCompany(companyId);
-  const backups = workspaceBackupsForCompany(companyId);
-  const lastBackup = backups.find((backup) => backup.status === 'active');
-  return `
-    <article class="panel span-3 backup-settings-panel">
-      <div class="section-head">
-        <div>
-          <h2>Backups</h2>
-          <p>Exportable workspace snapshots for recovery, transfer, and rollback.</p>
-        </div>
-        <button class="btn btn-primary" type="button" data-action="create-workspace-backup">
-          <i class="ti ti-database-export"></i>Backup now
-        </button>
-      </div>
-      <div class="backup-settings-grid">
-        <form class="backup-config-card" data-backup-settings-form>
-          <label>
-            <span>Automatic backup interval</span>
-            <select name="interval_key">
-              ${BACKUP_INTERVAL_OPTIONS.map(([value, label]) => `<option value="${h(value)}" ${settings.interval_key === value ? 'selected' : ''}>${h(label)}</option>`).join('')}
-            </select>
-          </label>
-          <button class="btn" type="submit"><i class="ti ti-device-floppy"></i>Save interval</button>
-          <small>Automatic backup scheduling uses this setting. Manual backups are always available.</small>
-        </form>
-        <div class="backup-config-card">
-          <strong>Import backup zip</strong>
-          <label class="file-drop small">
-            <span>Choose a Quest backup zip</span>
-            <input type="file" accept=".zip,application/zip" data-workspace-backup-import />
-          </label>
-          <small>Import adds the backup to this list. Restore is a separate confirmation step.</small>
-        </div>
-        <div class="backup-config-card">
-          <strong>Current state</strong>
-          ${contractRows([
-            ['Active backups', String(backups.filter((item) => item.status === 'active').length)],
-            ['Deleted markers', String(backups.filter((item) => item.status === 'deleted').length)],
-            ['Last backup', lastBackup ? formatDateTime(lastBackup.created_at) : 'None yet'],
-          ])}
-        </div>
-      </div>
-      <div class="backup-list">
-        ${backups.map(renderWorkspaceBackupRow).join('') || emptyState('No backups yet. Use Backup now to create the first snapshot.')}
-      </div>
-    </article>
-  `;
+// ---- Settings > Backups ---------------------------------------------------------
+// Body lives in ./settings/backups-panel.js and is fetched on first use.
+let backupsPanelModule = null;
+let backupsPanelPending = null;
+
+function loadBackupsPanel() {
+  if (backupsPanelModule) return Promise.resolve(backupsPanelModule);
+  if (!backupsPanelPending) {
+    backupsPanelPending = import('./settings/backups-panel.js').then((mod) => {
+      backupsPanelModule = mod.createBackupsPanel({
+        BACKUP_INTERVAL_OPTIONS, backupSettingsForCompany, contractRows, emptyState, formatDateTime,
+        h, renderWorkspaceBackupRow, state, workspaceBackupsForCompany,
+      });
+      return backupsPanelModule;
+    }).catch((error) => {
+      backupsPanelPending = null;
+      throw error;
+    });
+  }
+  return backupsPanelPending;
 }
+
+function renderBackupsSettings(companyId) {
+  if (backupsPanelModule) return backupsPanelModule.renderBackupsSettings(companyId);
+  loadBackupsPanel().then(() => render()).catch((error) => console.error('Backups panel failed to load', error));
+  return questLoader('Loading');
+}
+
 
 function renderWorkspaceBackupRow(backup) {
   const statusClass = backup.status === 'active' ? 'active' : 'muted';

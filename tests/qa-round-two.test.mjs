@@ -143,3 +143,41 @@ test('the caller states what did not come back', () => {
     'the success message belongs in the else branch',
   );
 });
+
+// "You cant drag the apps." Drag-to-pan worked -- verified with real pointer events -- so the
+// ask was reordering, which did not exist. Dragging a TILE now reorders; dragging the strip
+// itself still pans, because the two cannot share one gesture.
+
+test('a drag decides once whether it is a reorder or a pan', () => {
+  const drag = readFileSync(join(root, 'src', 'workspace', 'topbar-drag.js'), 'utf8');
+  assert.match(drag, /let reordering = null;/);
+  // Decided on pointerdown and not revisited, or a drag could change meaning mid-gesture.
+  assert.match(drag, /reordering = track\.dataset\.wbReorder === '1' && event\.target\.closest/);
+  assert.match(drag, /\? event\.target\.closest\('\[data-wb-app-id\]'\)/);
+  // Panning must not also run while reordering.
+  assert.match(drag, /if \(reordering\) \{[\s\S]{0,700}?return;/);
+});
+
+test('the module reports the order and stores nothing itself', () => {
+  const drag = readFileSync(join(root, 'src', 'workspace', 'topbar-drag.js'), 'utf8');
+  assert.match(drag, /new CustomEvent\('wb-topbar-reorder', \{ bubbles: true, detail: \{ ids \} \}\)/);
+  // It is deliberately context-free; knowing about workspaces would break that.
+  assert.ok(!/wbSave|workspace/i.test(drag.replace(/\/\/[^\n]*/g, '')), 'no workspace knowledge in the gesture');
+});
+
+test('only someone who can manage workspaces gets the reorder handle', () => {
+  assert.match(main, /const canReorderApps = can\('workspaces\.manage', companyId\) && apps\.length > 1;/);
+  assert.match(main, /\$\{canReorderApps \? ' data-wb-reorder="1"' : ''\}/);
+  // A tab is a link; without this the browser's own drag steals the gesture.
+  assert.match(main, /data-router draggable="false" data-wb-app-id="\$\{h\(a\.id\)\}"/);
+});
+
+test('the stored order keeps entries the strip never showed', () => {
+  const fn = main.slice(main.indexOf('function wbApplyAppOrder(companyId, ids)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /if \(!can\('workspaces\.manage', companyId\)\) return;/);
+  assert.match(body, /entries\.forEach\(\(entry\) => \{ if \(!next\.includes\(entry\)\) next\.push\(entry\); \}\);/);
+  // A drag that ended where it started must not write a revision.
+  assert.match(body, /if \(next\.every\(\(entry, at\) => entry === entries\[at\]\)\) return;/);
+  assert.match(body, /wbSave\(companyId\);/);
+});
