@@ -31305,3 +31305,18 @@ a.wb-cal-more:hover { color: var(--orange); }
 .chat-leave-points li { display: flex; gap: 8px; align-items: flex-start; font-size: .86rem; color: var(--muted); }
 .chat-leave-points li i { margin-top: 2px; flex: none; color: var(--success, #1f8a55); }
 .chat-leave-points li i.ti-alert-triangle { color: var(--warning, #b8791f); }
+
+/* Deleting a quote from the board. It sat only inside the edit dialog, so the pipeline --
+   where the work happens -- appeared to have no delete at all. */
+.pipe-card { position: relative; }
+.pipe-card-delete {
+  position: absolute; top: 6px; right: 6px;
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: 6px; background: none;
+  color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .15s ease, color .15s ease;
+}
+.pipe-card:hover .pipe-card-delete,
+.pipe-card-delete:focus-visible { opacity: 1; }
+.pipe-card-delete:hover { color: var(--danger, #c0392b); border-color: color-mix(in srgb, var(--danger, #c0392b) 35%, transparent); }
+/* Touch has no hover, so the control has to be visible from the start. */
+@media (hover: none) { .pipe-card-delete { opacity: 1; } }

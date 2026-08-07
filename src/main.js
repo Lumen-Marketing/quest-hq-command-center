@@ -21728,6 +21728,10 @@ function renderDealBoard(companyId) {
 }
 
 function dealCard(deal) {
+  // Deleting a quote used to exist only inside the edit dialog, so on the board -- where
+  // people actually work -- there was no way to remove one. Contacts and jobs both offer it
+  // from the record itself, which is why the tester found those and not this.
+  const canDelete = can('crm.manage', deal.company_id);
   return `
     <article class="pipe-card ${deal.id === state.selectedDealId ? 'active' : ''}" draggable="true" data-drag-kind="deal" data-drag-id="${h(deal.id)}">
       <button class="pipe-card-main" type="button" data-action="open-deal" data-deal-id="${h(deal.id)}">
@@ -21735,6 +21739,7 @@ function dealCard(deal) {
         <span>${h(accountName(deal.account_id) || 'No account')}</span>
         <em>${money(deal.value)}${deal.probability ? ` · ${deal.probability}%` : ''}</em>
       </button>
+      ${canDelete ? `<button class="pipe-card-delete" type="button" data-action="delete-deal" data-deal-id="${h(deal.id)}" title="Delete quote" aria-label="Delete ${h(deal.name)}"><i class="ti ti-trash" aria-hidden="true"></i></button>` : ''}
       ${renderPipelineNextAction('deal', deal)}
     </article>`;
 }
@@ -31130,8 +31135,20 @@ async function persistUserAccess(formNode, { companyId, profileId, role, status,
     }
   }
 
-  notifyLocalEvent('access.role', 'User access updated', `${actorName()} set ${profileName(profileId)} to ${role.name} / ${titleCase(status)}.`, companyPath('settings', { tab: 'access' }, companyId), 'membership', profileId, companyId, [profileId].concat(usersWithAnyPermission(companyId, ['users.manage', 'settings.manage'])));
-  recordAuditEvent(companyId, membershipAuditEventType(previousMembership, membership), 'membership', profileId, { role: role.name, status });
+  // Only announce a change that happened. Saving this form to adjust workspace assignments
+  // left the role and status untouched, yet still told everyone with users.manage that the
+  // access had been updated -- which is most of the notification fatigue the audit measured.
+  const identityChanged = previousMembership?.role !== membership.role
+    || previousMembership?.status !== membership.status;
+  if (identityChanged) {
+    notifyLocalEvent('access.role', 'User access updated', `${actorName()} set ${profileName(profileId)} to ${role.name} / ${titleCase(status)}.`, companyPath('settings', { tab: 'access' }, companyId), 'membership', profileId, companyId, [profileId].concat(usersWithAnyPermission(companyId, ['users.manage', 'settings.manage'])));
+    // The audit row is written by update_company_member_access, inside the same statement
+    // that makes the change. Recording a second one here is what produced two audit entries
+    // for every single access save.
+    if (!isLiveSupabaseSession()) {
+      recordAuditEvent(companyId, membershipAuditEventType(previousMembership, membership), 'membership', profileId, { role: role.name, status });
+    }
+  }
   render();
 }
 
