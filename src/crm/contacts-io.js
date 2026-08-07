@@ -34,11 +34,34 @@ export function createContactsIo(ctx) {
     // Skip rows that match a contact already here (by email/phone), and collapse
     // repeats within the file, so import doesn't manufacture duplicates.
     const { toImport, duplicates } = partitionImport(parsed, companyContacts(companyId));
+
+    // Count what actually saved. This loop used to ignore persistContact's result and always
+    // report the planned number, so a file that failed halfway still said "Imported 12
+    // contacts" and the user had no idea rows were missing.
+    let saved = 0;
+    let stoppedAt = '';
     for (const c of toImport) {
-      await persistContact(normalizeContact({ id: `contact-${crypto.randomUUID()}`, company_id: companyId, name: c.name, email: c.email, phone: c.phone, title: c.title, stage: contactStageNames()[0], value: 0 }));
+      const ok = await persistContact(normalizeContact({ id: `contact-${crypto.randomUUID()}`, company_id: companyId, name: c.name, email: c.email, phone: c.phone, title: c.title, stage: contactStageNames()[0], value: 0 }));
+      if (ok === false) {
+        // Whatever refused this row -- a permission, a policy, a bad column -- will refuse
+        // every remaining row too. Carrying on would bury the screen in identical failure
+        // toasts and add nothing, so stop and say where.
+        stoppedAt = c.name;
+        break;
+      }
+      saved += 1;
     }
+
     const skipped = duplicates.length ? `, skipped ${duplicates.length} already in your contacts` : '';
-    showToast(`Imported ${toImport.length} contact${toImport.length === 1 ? '' : 's'}${skipped}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+    if (stoppedAt) {
+      showToast(
+        `Imported ${saved} of ${toImport.length} contacts${skipped}. Stopped at "${stoppedAt}" — the rest were not saved.`,
+        'local',
+        'Contacts',
+      );
+    } else {
+      showToast(`Imported ${saved} contact${saved === 1 ? '' : 's'}${skipped}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+    }
     render();
   }
 

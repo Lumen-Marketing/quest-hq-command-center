@@ -32,6 +32,9 @@ export const FILE_SIGNATURES = {
 const EXT_SIGNATURE = {
   png: 'png', jpg: 'jpeg', jpeg: 'jpeg', gif: 'gif', webp: 'webp',
   pdf: 'pdf', zip: 'zip', csv: 'text', tsv: 'text', txt: 'text',
+  // An .xlsx is a zip container, so it must carry the zip signature. An encrypted workbook
+  // is an OLE compound file instead and is rejected here rather than deeper in the parser.
+  xlsx: 'zip',
 };
 
 // Canonical MIME allowlist per extension (Layer 2 — extension and MIME must
@@ -47,6 +50,10 @@ const EXT_MIME = {
   csv: ['text/csv', 'text/plain', 'application/vnd.ms-excel', ''],
   tsv: ['text/tab-separated-values', 'text/plain', ''],
   txt: ['text/plain', ''],
+  xlsx: [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/zip', 'application/x-zip-compressed', 'application/octet-stream', '',
+  ],
 };
 
 // Per-context upload policies: the extension allowlist and a hard size cap.

@@ -8,6 +8,13 @@
 // <v>. All three are handled -- reading only one of them is how a file opens fine in Excel
 // and imports as blank here.
 
+// A zip can claim to be small and expand to gigabytes. The upload cap only limits the file
+// on disk, so the expansion is bounded here as well: a workbook that needs more than this is
+// not a contact list.
+const MAX_EXPANDED_BYTES = 40 * 1024 * 1024;
+const MAX_ROWS = 50000;
+const MAX_COLUMNS = 512;
+
 const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
@@ -36,7 +43,20 @@ function parseXml(text) {
  */
 export async function readXlsxRows(file) {
   const { default: JSZip } = await import('jszip');
-  const zip = await JSZip.loadAsync(file);
+  let zip;
+  try {
+    zip = await JSZip.loadAsync(file);
+  } catch {
+    // Encrypted workbooks are OLE compound files, not zips, and land here.
+    throw new Error('That file is not a readable .xlsx. If it is password protected, remove the password and try again.');
+  }
+
+  // Refuse before decompressing anything, using the sizes the archive declares.
+  const declared = Object.values(zip.files)
+    .reduce((total, entry) => total + Number(entry?._data?.uncompressedSize || 0), 0);
+  if (declared > MAX_EXPANDED_BYTES) {
+    throw new Error('That workbook expands to more than 40 MB. Export just the contact rows and try again.');
+  }
 
   const shared = [];
   const sharedFile = zip.file('xl/sharedStrings.xml');
@@ -65,10 +85,17 @@ export async function readXlsxRows(file) {
   const sheet = parseXml(await sheetFile.async('string'));
 
   const rows = [];
-  for (const row of Array.from(sheet.getElementsByTagNameNS(NS, 'row'))) {
+  const sheetRows = Array.from(sheet.getElementsByTagNameNS(NS, 'row'));
+  if (sheetRows.length > MAX_ROWS) {
+    throw new Error(`That sheet has ${sheetRows.length.toLocaleString()} rows. Import up to ${MAX_ROWS.toLocaleString()} at a time.`);
+  }
+  for (const row of sheetRows) {
     const cells = [];
     for (const cell of Array.from(row.getElementsByTagNameNS(NS, 'c'))) {
       const at = columnIndex(cell.getAttribute('r'));
+      // A cell reference like XFD1 is legal and would otherwise pad 16,383 empty strings
+      // into every row.
+      if (at >= MAX_COLUMNS) continue;
       const type = cell.getAttribute('t');
       let value = '';
       if (type === 's') {

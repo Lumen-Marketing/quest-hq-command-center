@@ -87,3 +87,47 @@ test('the price book import shares the one parser', () => {
   // It hand-rolled tab detection and could not read a semicolon file at all.
   assert.ok(!/includes\('\\t'\) \? '\\t' : ','/.test(main), 'no second delimiter guess');
 });
+
+// The audit found the import claiming success after a failed write, and the .xlsx path
+// accepting anything 10 MB or under without checking what it actually was.
+
+test('the import reports what saved, not what it planned to save', () => {
+  const fn = io.slice(io.indexOf('async function importContactsFile'));
+  const body = fn.slice(0, fn.indexOf('\n  }'));
+  assert.match(body, /const ok = await persistContact\(/, 'the result has to be read');
+  assert.match(body, /if \(ok === false\) \{/);
+  assert.match(body, /stoppedAt = c\.name;/);
+  assert.match(body, /Imported \$\{saved\} of \$\{toImport\.length\} contacts/);
+  // The old version interpolated the planned count and nothing else.
+  assert.ok(!/Imported \$\{toImport\.length\} contact\$\{toImport\.length === 1/.test(body));
+});
+
+test('one refusal stops the run instead of repeating itself', () => {
+  const fn = io.slice(io.indexOf('async function importContactsFile'));
+  const body = fn.slice(0, fn.indexOf('\n  }'));
+  // Whatever refused one row refuses them all; continuing just buries the screen in toasts.
+  assert.match(body, /break;/);
+});
+
+test('an .xlsx must prove it is a zip, and match a real MIME type', () => {
+  assert.match(policy, /xlsx: 'zip',/, 'the container is checked, not just the extension');
+  assert.match(policy, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
+});
+
+test('a workbook cannot expand without limit', () => {
+  const reader = readFileSync(join(root, 'src', 'data', 'xlsx-read.js'), 'utf8');
+  assert.match(reader, /const MAX_EXPANDED_BYTES = 40 \* 1024 \* 1024;/);
+  assert.match(reader, /const MAX_ROWS = 50000;/);
+  assert.match(reader, /const MAX_COLUMNS = 512;/);
+  // Checked from the archive's declared sizes, before anything is decompressed.
+  assert.match(reader, /entry\?\._data\?\.uncompressedSize/);
+  assert.match(reader, /if \(declared > MAX_EXPANDED_BYTES\)/);
+  assert.match(reader, /if \(sheetRows\.length > MAX_ROWS\)/);
+  assert.match(reader, /if \(at >= MAX_COLUMNS\) continue;/);
+});
+
+test('a file that is not a zip is refused with a usable message', () => {
+  const reader = readFileSync(join(root, 'src', 'data', 'xlsx-read.js'), 'utf8');
+  assert.match(reader, /zip = await JSZip\.loadAsync\(file\);/);
+  assert.match(reader, /If it is password protected, remove the password and try again\./);
+});

@@ -19842,7 +19842,7 @@ async function cpResolveBase(doc, page) {
     const response = await cpWithTimeout(fetch(url), 15000, 'Document download');
     if (!response.ok) throw new Error('Document unavailable.');
     const data = new Uint8Array(await cpWithTimeout(response.arrayBuffer(), 15000, 'Document download'));
-    const pdf = await cpWithTimeout(pdfjsLib.getDocument({ data, disableWorker: true }).promise, 15000, 'PDF parser');
+    const pdf = await cpWithTimeout(pdfjsLib.getDocument({ data, disableWorker: true, isEvalSupported: false }).promise, 15000, 'PDF parser');
     const pageObj = await pdf.getPage(Math.min(page + 1, pdf.numPages));
     const unit = pageObj.getViewport({ scale: 1 });
     const scale = Math.min(4, Math.max(1.5, 2400 / unit.width));
@@ -42835,7 +42835,7 @@ async function ensurePdfThumbnail(file) {
     const response = await fetch(file.signed_url);
     if (!response.ok) return;
     const data = new Uint8Array(await response.arrayBuffer());
-    const pdf = await pdfjsLib.getDocument({ data, disableWorker: true }).promise;
+    const pdf = await pdfjsLib.getDocument({ data, disableWorker: true, isEvalSupported: false }).promise;
     const page = await pdf.getPage(1);
     const unit = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({ scale: Math.min(2, 260 / unit.width) });

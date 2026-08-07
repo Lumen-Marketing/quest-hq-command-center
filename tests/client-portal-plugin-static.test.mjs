@@ -90,7 +90,9 @@ test('public portal viewer exposes plan markup tools and persistent annotations'
   assert.match(source, /function cpDocumentSourceUrl\(doc\)/);
   assert.match(source, /const response = await cpWithTimeout\(fetch\(url\), 15000, 'Document download'\)/);
   assert.match(source, /const data = new Uint8Array\(await cpWithTimeout\(response\.arrayBuffer\(\), 15000, 'Document download'\)\)/);
-  assert.match(source, /pdfjsLib\.getDocument\(\{ data, disableWorker: true \}\)\.promise/);
+  // isEvalSupported: false is defence in depth for GHSA-hq66-cqwq-w95j — PDF.js can build
+  // JavaScript from embedded font programs unless eval is switched off explicitly.
+  assert.match(source, /pdfjsLib\.getDocument\(\{ data, disableWorker: true, isEvalSupported: false \}\)\.promise/);
   assert.match(source, /cpWithTimeout\(pageObj\.render\(\{ canvasContext: canvas\.getContext\('2d'\), viewport \}\)\.promise, 15000, 'PDF render'\)/);
   assert.match(source, /data-cp-annotate/);
   assert.match(source, /data-cp-frame/);
