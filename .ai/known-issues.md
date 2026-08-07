@@ -146,3 +146,38 @@ Two carry commits that are NOT on `main`, so neither should be deleted without a
 
 No branch was deleted. Deleting a remote branch is not recoverable from the local clone
 once the reflog expires, and the two above are exactly the cases where that would matter.
+
+## The embedded Tasks app cannot be fixed from this repository
+
+Two QA items land inside the vendored task app, not in Questbase:
+
+- The AI assistant endpoint. `ai-assistant` is not in this repository at all.
+- A task draft lost when the surface reloads.
+
+Tasks is a same-origin `<iframe>` to a separate application. Nothing in `src/` can change
+either behaviour; they need a change in that app and a redeploy of it. They are recorded
+here rather than closed so they do not get re-tested against this codebase and re-filed.
+
+## The portal sign-in failure has no reproduction and no residue
+
+Reported as: after registering from an invite link, signing in answers "Invalid login
+credentials". Audited 2026-08-08 against live `auth.users`: 11 accounts, zero unconfirmed,
+zero that have never signed in, and every one confirmed within two seconds of creation --
+the signature of auto-confirm being ON. So the "confirm your email first" path is not the
+cause, no account was left in a state that could produce the report, and both the sign-up
+and sign-in forms trim the email identically, so there is no case or whitespace asymmetry
+between them either.
+
+What was fixed is the wording, which was genuinely wrong: Supabase returns that same
+sentence for a wrong password, an unknown address AND an unconfirmed account, and both call
+sites passed it through verbatim. The mechanism behind the original report remains unknown.
+If it recurs, capture the exact email address and the time, because that is what would let
+the `auth.audit_log_entries` rows be matched to it.
+
+## Notifications INSERT is deliberately membership-scoped
+
+The tenant policy audit (see `current-state.md`, `202608081200`) flags one remaining write
+policy gated on membership alone: `notifications` INSERT. That is intended. A member may
+create a notification addressed to another ACTIVE member of the same company and nobody
+else, which is what makes peer notifications work. Do not "fix" it without replacing the
+feature.
