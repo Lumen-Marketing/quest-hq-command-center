@@ -40,13 +40,19 @@ export function createAccessRow(ctx) {
               const membership = workspaceMembershipForProfile(workspace.id, user.profile_id);
               const enabled = implicitWorkspaceAccess || membership?.status === 'active';
               const workspaceRoleId = membership?.role_id || selectedRoleId;
-              const assignmentEditable = canEditUser && !implicitWorkspaceAccess;
+              // Two different decisions, and they were sharing one flag. Whether somebody is
+              // IN a workspace is inherited from an owner/admin/developer company role and
+              // cannot be revoked here -- so the checkbox stays locked. What role they hold
+              // INSIDE that workspace is a separate choice, and locking it meant an owner
+              // could never be given a different role in one workspace.
+              const membershipEditable = canEditUser && !implicitWorkspaceAccess;
+              const workspaceRoleEditable = canEditUser;
               return `
                 <label class="workspace-access-assignment" data-workspace-assignment>
-                  <input type="checkbox" name="workspace_ids" value="${h(workspace.id)}" ${enabled ? 'checked' : ''} ${assignmentEditable ? '' : 'disabled'} />
+                  <input type="checkbox" name="workspace_ids" value="${h(workspace.id)}" ${enabled ? 'checked' : ''} ${membershipEditable ? '' : 'disabled'} />
                   ${implicitWorkspaceAccess && enabled ? `<input type="hidden" name="workspace_ids" value="${h(workspace.id)}" />` : ''}
                   <span><b>${h(workspace.name)}</b><small>${h(implicitWorkspaceAccess ? 'Inherited from company role' : workspace.is_default ? 'Default workspace' : 'Explicit assignment')}</small></span>
-                  <select name="workspace_role:${h(workspace.id)}" aria-label="${h(workspace.name)} role" ${assignmentEditable ? '' : 'disabled'}>
+                  <select name="workspace_role:${h(workspace.id)}" aria-label="${h(workspace.name)} role" ${workspaceRoleEditable ? '' : 'disabled'}>
                     ${roles.map((role) => `<option value="${h(role.id)}" ${role.id === workspaceRoleId ? 'selected' : ''}>${h(role.name)}</option>`).join('')}
                   </select>
                 </label>

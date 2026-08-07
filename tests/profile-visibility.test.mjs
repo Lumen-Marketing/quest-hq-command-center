@@ -46,3 +46,25 @@ test('the fallback that produced the id-as-a-name is still only a last resort', 
   // profile existed but could not be read.
   assert.match(main, /name: profile\?\.full_name \|\| member\?\.full_name \|\| profile\?\.email \|\| member\?\.name \|\| titleCase\(id\) \|\| 'User',/);
 });
+
+// Settings > Users > Access renders one checkbox and one role select per workspace. Both were
+// gated by a single flag, so an owner/admin/developer -- whose workspace ACCESS is inherited
+// and cannot be revoked here -- also had their per-workspace ROLE locked. Those are two
+// different decisions.
+
+test('workspace access stays locked for an inherited role, but the role in it does not', () => {
+  const row = readFileSync(join(root, 'src', 'team', 'access-row.js'), 'utf8');
+  assert.match(row, /const membershipEditable = canEditUser && !implicitWorkspaceAccess;/);
+  assert.match(row, /const workspaceRoleEditable = canEditUser;/);
+  // The checkbox keeps the stricter rule; the select only needs manage rights.
+  assert.match(row, /name="workspace_ids"[^`]*\$\{membershipEditable \? '' : 'disabled'\}/);
+  assert.match(row, /name="workspace_role:\$\{h\(workspace\.id\)\}"[^`]*\$\{workspaceRoleEditable \? '' : 'disabled'\}/);
+  assert.ok(!/assignmentEditable/.test(row), 'the one-flag-for-two-decisions version must be gone');
+});
+
+test('the saved workspace role is the one the select submitted', () => {
+  // A disabled select submits nothing, so this fell back to the company role every time.
+  assert.match(main, /const requestedWorkspaceRoleId = String\(data\.get\(`workspace_role:\$\{workspace\.id\}`\) \|\| role\.id \|\| ''\);/);
+  assert.match(main, /const workspaceRole = roleById\(companyId, requestedWorkspaceRoleId\) \|\| role;/);
+  assert.match(main, /target_role_id: isUuid\(workspaceMembership\.role_id\) \? workspaceMembership\.role_id : null,/);
+});
