@@ -22836,6 +22836,11 @@ function renderOperationsTabs(companyId, active) {
 }
 
 function renderCalendarPage(route, companyId) {
+  // Jobs are fetched on demand and the calendar reads them twice: to offer a job to link an
+  // event to, and to place job dates on the grid. Without this the dropdown held only
+  // "No linked job" for anyone who opened Calendar without visiting Jobs first -- which is
+  // exactly the reported "I cant link jobs".
+  if (!ensureDomainLoaded('production')) return questLoader('Loading calendar');
   const items = filteredCalendarItems(companyId);
   const allItems = calendarItems(companyId);
   const todayItems = items.filter((item) => item.dateKey === isoDate(0));
@@ -31513,18 +31518,28 @@ async function saveCalendarEvent(form) {
     created_at: existing?.created_at || now,
     updated_at: now,
   });
+  // The button said nothing while the write was in flight, so a slow save read as a hang and
+  // invited a second press -- the same shape as the access form and the chat starters.
+  const done = beginSubmitting(form, 'Saving…');
+  if (!done) return;
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
     const payload = calendarEventPayload(eventRecord);
     if (existing) delete payload.id;
-    const result = existing
-      ? await client.from('calendar_events').update({ ...payload, updated_at: now }).eq('id', existing.id).select().single()
-      : await client.from('calendar_events').insert(payload).select().single();
-    if (result.error) {
-      showToast(result.error.message || 'Calendar event save failed.', 'local', 'Calendar');
-      return;
+    try {
+      const result = existing
+        ? await client.from('calendar_events').update({ ...payload, updated_at: now }).eq('id', existing.id).select().single()
+        : await client.from('calendar_events').insert(payload).select().single();
+      if (result.error) {
+        showToast(result.error.message || 'Calendar event save failed.', 'local', 'Calendar');
+        return;
+      }
+      eventRecord = normalizeCalendarEvent(result.data);
+    } finally {
+      done();
     }
-    eventRecord = normalizeCalendarEvent(result.data);
+  } else {
+    done();
   }
   state.calendarEvents = [eventRecord].concat(state.calendarEvents.filter((item) => item.id !== eventRecord.id));
   persistCalendarEvents();

@@ -84,3 +84,32 @@ test('an accent is darkened for the one light sidebar', () => {
   const body = fn.slice(0, fn.indexOf('\n}\n'));
   assert.match(body, /color-mix\(in srgb, \$\{accent\} 65%, #000\)/);
 });
+
+// "I cant link jobs and even if i changed the scope the private i can still see the event."
+// The second half is not a bug -- private is enforced identically in the client and in the
+// calendar_events RLS policy, and the tester is an Owner, who holds calendar.view_team. The
+// first half is: the job list is fetched on demand and the calendar never asked for it.
+
+test('the calendar waits for jobs before it renders', () => {
+  const fn = main.slice(main.indexOf('function renderCalendarPage(route, companyId)'));
+  const body = fn.slice(0, fn.indexOf('\n  return `'));
+  assert.match(body, /if \(!ensureDomainLoaded\('production'\)\) return questLoader\('Loading calendar'\);/);
+  // Open Calendar without visiting Jobs first and the dropdown held only "No linked job".
+  assert.ok(
+    body.indexOf("ensureDomainLoaded('production')") < body.indexOf('filteredCalendarItems'),
+    'the jobs have to be there before anything reads them',
+  );
+});
+
+test('the linked-job control offers the company jobs', () => {
+  assert.match(main, /selectField\('Linked job', 'linked_job_id', jobValue, \[\['', 'No linked job'\]\]\.concat\(companyJobs\(companyId\)/);
+});
+
+test('saving a calendar event says it is working', () => {
+  const fn = main.slice(main.indexOf('async function saveCalendarEvent(form)'));
+  const body = fn.slice(0, fn.indexOf('\n}'));
+  assert.match(body, /const done = beginSubmitting\(form, 'Saving…'\);/);
+  assert.match(body, /if \(!done\) return;/);
+  // Released on every path, or a failed save leaves the dialog stuck.
+  assert.match(body, /\} finally \{\s*[\r\n]+\s*done\(\);/);
+});
