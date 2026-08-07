@@ -196,6 +196,7 @@ const FACTORY_MODULES = [
   ['src/ui/landing-page.js', 'createLandingPage'],
   ['src/ui/auth-form.js', 'createAuthForm'],
   ['src/settings/recycle-bin-panel.js', 'createRecycleBinPanel'],
+  ['src/reports/analytics-page.js', 'createAnalyticsPage'],
 ];
 
 test('the list above covers every factory module there is', () => {

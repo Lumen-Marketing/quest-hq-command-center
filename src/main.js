@@ -4655,6 +4655,8 @@ async function loadSupabaseData() {
     workspaceBackupsResult,
     workspaceBuilderResult,
     platformAdminResult,
+    activeTimerResult,
+    timeEntriesResult,
   ] = await Promise.all([
     client.from('companies').select('*').order('name', { ascending: true }),
     client.from('jobs').select('*').order('updated_at', { ascending: false }),
@@ -4691,6 +4693,11 @@ async function loadSupabaseData() {
     safeSupabaseQuery(client.from('workspace_backups').select('*').order('created_at', { ascending: false })),
     safeSupabaseQuery(client.from('workspace_builder_state').select('*')),
     safeSupabaseQuery(client.rpc('is_platform_admin')),
+    // The running clock is fetched here rather than in a deferred domain: the module grid
+    // paints an "On" badge for it on first paint, and a badge that reads blank while the
+    // clock is actually running is worse than one more row in the bootstrap.
+    safeSupabaseQuery(client.from('company_active_timers').select('*')),
+    safeSupabaseQuery(client.from('company_time_entries').select('*').order('started_at', { ascending: false }).limit(500)),
   ]);
 
   let liveTables = 0;
@@ -4744,6 +4751,10 @@ async function loadSupabaseData() {
   if (!messageReadsResult.error) state.messageReads = (messageReadsResult.data || []).map(normalizeMessageRead);
   if (!calendarEventsResult.error) state.calendarEvents = activeRows(calendarEventsResult.data || []).map(normalizeCalendarEvent);
   if (!notificationsResult.error) state.notifications = (notificationsResult.data || []).map(normalizeNotification);
+  // RLS already narrows both of these to the signed-in person, so there is nothing to filter
+  // here. The accessors filter anyway, because a local or demo session has no RLS behind it.
+  if (!activeTimerResult.error) state.activeTimer = normalizeActiveTimer((activeTimerResult.data || [])[0]);
+  if (!timeEntriesResult.error) state.timeEntries = (timeEntriesResult.data || []).map(normalizeTimeEntry);
   if (!contactsResult.error) {
     state.contacts = activeRows(contactsResult.data || []).map(normalizeContact);
     liveTables += 1;
@@ -5078,8 +5089,8 @@ function resetDemoWorkspaceData() {
   state.clientPortalDocuments = activeRows(readDemoList(CLIENT_PORTAL_DOCUMENT_CACHE_KEY, [])).map(normalizeClientPortalDocument);
   state.clientPortalAnnotations = readDemoList(CLIENT_PORTAL_ANNOTATION_CACHE_KEY, []).map(normalizeClientPortalAnnotation);
   state.clientPortalEvents = readDemoList(CLIENT_PORTAL_EVENT_CACHE_KEY, []).map(normalizeClientPortalEvent);
-  state.timeEntries = readDemoJson(TIME_ENTRY_CACHE_KEY, []);
-  state.activeTimer = readDemoJson(ACTIVE_TIMER_KEY, null);
+  state.timeEntries = readDemoJson(TIME_ENTRY_CACHE_KEY, []).map(normalizeTimeEntry);
+  state.activeTimer = normalizeActiveTimer(readDemoJson(ACTIVE_TIMER_KEY, null));
   state.teamMembers = readDemoList(TEAM_CACHE_KEY, teamMembersFallback).map(normalizeTeamMember);
   state.memberships = readDemoList(MEMBERSHIP_CACHE_KEY, membershipsFallback);
   state.profiles = [];
@@ -9651,91 +9662,36 @@ function firstName(value) {
   return String(value || '').trim().split(/\s+/)[0] || '';
 }
 
-function renderAnalyticsPage(route, companyId) {
-  const scopedJob = route.jobId ? jobById(route.jobId) : null;
-  const jobs = scopedJob ? [scopedJob] : companyJobs(companyId);
-  const tasks = companyTasks(companyId).filter((task) => !scopedJob || task.project_id === scopedJob.id);
-  const files = companyFiles(companyId).filter((file) => !scopedJob || file.job_id === scopedJob.id);
-  const forms = companyForms(companyId).filter((form) => !scopedJob || form.linked_job_id === scopedJob.id);
-  const openTasks = tasks.filter((task) => task.status !== 'done');
-  const lateTasks = tasks.filter((task) => task.status !== 'done' && task.due && new Date(task.due) < startOfToday());
-  const activeValue = sum(jobs, 'estimate_total');
-  return `
-    <section class="analytics-workspace">
-      <section class="analytics-toolbar panel">
-        <div>
-          <strong>Reports</strong>
-          <span>${h(scopedJob ? scopedJob.name : companyName(companyId))}</span>
-        </div>
-        <label>
-          <span>Job</span>
-          <select data-analytics-job-filter>
-            <option value="">All jobs</option>
-            ${companyJobs(companyId).map((job) => `<option value="${h(job.id)}" ${scopedJob?.id === job.id ? 'selected' : ''}>${h(analyticsJobChoiceLabel(job))}</option>`).join('')}
-          </select>
-        </label>
-        <a class="btn" href="${appHref(companyPath('jobs', scopedJob ? { tab: 'profile', job_id: scopedJob.id } : {}, companyId))}" data-router><i class="ti ti-briefcase"></i>Jobs</a>
-      </section>
-      <section class="analytics-grid">
-        <article class="panel analytics-score">
-          <span>Open work</span>
-          <strong>${h(openTasks.length)}</strong>
-          <small>${h(lateTasks.length)} overdue / ${h(tasks.filter((task) => task.priority === 'urgent' || task.priority === 'critical').length)} urgent</small>
-        </article>
-        <article class="panel analytics-score">
-          <span>Pipeline value</span>
-          <strong>${h(money(activeValue))}</strong>
-          <small>${h(jobs.length)} visible job${jobs.length === 1 ? '' : 's'}</small>
-        </article>
-        <article class="panel analytics-score">
-          <span>Drive and forms</span>
-          <strong>${h(files.length + forms.length)}</strong>
-          <small>${h(files.length)} files / ${h(forms.length)} forms</small>
-        </article>
-        <article class="panel analytics-score">
-          <span>Completion</span>
-          <strong>${h(percent(tasks.filter((task) => task.status === 'done').length, tasks.length))}</strong>
-          <small>${h(tasks.filter((task) => task.status === 'done').length)} done of ${h(tasks.length)}</small>
-        </article>
-        <article class="panel analytics-main">
-          <div class="section-head"><div><h2>Job health</h2><p>Company-scoped operational summary.</p></div></div>
-          <div class="analytics-table">
-            <div class="analytics-row head"><span>Job</span><span>Stage</span><span>Tasks</span><span>Files</span><span>Value</span></div>
-            ${jobs.map((job) => `
-              <a class="analytics-row" href="${appHref(companyPath('analytics', { job_id: job.id }, companyId))}" data-router>
-                <span><strong>${h(job.name)}</strong><small>${h(job.client_name || companyName(companyId))}</small></span>
-                <span>${h(job.stage)}</span>
-                <span>${h(taskCountForJob(job.id))}</span>
-                <span>${h(fileCountForJob(job.id))}</span>
-                <span>${h(money(job.estimate_total))}</span>
-              </a>
-            `).join('') || emptyState('No jobs to analyze yet.')}
-          </div>
-        </article>
-        <article class="panel analytics-side">
-          <div class="section-head"><div><h2>Task status</h2><p>Breakdown for this scope.</p></div></div>
-          <div class="stage-bars">
-            ${TASK_STATUSES.map((status) => {
-              const count = tasks.filter((task) => task.status === status).length;
-              return `<div><span>${h(statusLabel(status))}</span><b><i style="width:${h(percentNumber(count, tasks.length))}%"></i></b><strong>${h(count)}</strong></div>`;
-            }).join('')}
-          </div>
-        </article>
-        <article class="panel span-3">
-          <div class="section-head"><div><h2>Priority queue</h2><p>Highest risk tasks first.</p></div></div>
-          <div class="queue-list">
-            ${tasks
-              .filter((task) => task.status !== 'done')
-              .sort((a, b) => priorityRank(b.priority) - priorityRank(a.priority))
-              .slice(0, 8)
-              .map((task) => taskQueueRow(task))
-              .join('') || emptyState('No open tasks in this scope.')}
-          </div>
-        </article>
-      </section>
-    </section>
-  `;
+// ---- Reports ---------------------------------------------------------------------
+// Body lives in ./reports/analytics-page.js and is fetched on first use.
+let analyticsPageModule = null;
+let analyticsPagePending = null;
+
+function loadAnalyticsPage() {
+  if (analyticsPageModule) return Promise.resolve(analyticsPageModule);
+  if (!analyticsPagePending) {
+    analyticsPagePending = import('./reports/analytics-page.js').then((mod) => {
+      analyticsPageModule = mod.createAnalyticsPage({
+        analyticsJobChoiceLabel, appHref, companyFiles, companyForms, companyJobs,
+    companyName, companyPath, companyTasks, emptyState, fileCountForJob, h, jobById,
+    money, percent, percentNumber, priorityRank, startOfToday, statusLabel, sum,
+    TASK_STATUSES, taskCountForJob, taskQueueRow,
+      });
+      return analyticsPageModule;
+    }).catch((error) => {
+      analyticsPagePending = null;
+      throw error;
+    });
+  }
+  return analyticsPagePending;
 }
+
+function renderAnalyticsPage(route, companyId) {
+  if (analyticsPageModule) return analyticsPageModule.renderAnalyticsPage(route, companyId);
+  loadAnalyticsPage().then(() => render()).catch((error) => console.error('Reports failed to load', error));
+  return questLoader('Loading reports');
+}
+
 
 const CRM2_UNDERWRITER_GUIDANCE = {
   prospect: { title: 'Work the prospect.', lines: ['Confirm source and best contact method.', 'Decide if there is a real project.', 'Move them into a real conversation.'] },
@@ -22999,7 +22955,7 @@ function renderClockDashboardPage(companyId) {
   const weekMs = totalTimeForCompany(companyId, weekStart) + (active ? Date.now() - Date.parse(active.started_at) : 0);
   return `
     <section class="tool-page operations-page clock-page">
-      ${workspaceHeader('Clock dashboard', 'Local basic-mode clock tracking for the active company.', `
+      ${workspaceHeader('Clock dashboard', 'Your own time in this workspace. A running clock is saved, so it survives a refresh and follows you between devices.', `
         <button class="btn btn-primary" type="button" data-action="${active ? 'clock-out' : 'clock-in'}"><i class="ti ${active ? 'ti-player-stop-filled' : 'ti-player-play-filled'}"></i>${active ? 'Clock out' : 'Clock in'}</button>
       `)}
       ${renderOperationsTabs(companyId, 'clock')}
@@ -38031,15 +37987,32 @@ function approvalItems(companyId = activeCompanyId()) {
     .sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
 }
 
+// The identity a clock row is filed under. profile.id is the auth identity the database
+// keys on; member_id is the legacy id local and demo sessions carry, and is kept so a
+// cache written before this moved to the server still reads back as mine.
+function clockOwnerIds() {
+  const profile = activeSession()?.profile || {};
+  return [profile.id, profile.member_id].filter(Boolean).map(String);
+}
+
+function isMyClockRow(row) {
+  const owners = clockOwnerIds();
+  if (!owners.length) return true;
+  const rowOwner = String(row?.profile_id || row?.user_id || '');
+  return !rowOwner || owners.includes(rowOwner);
+}
+
 function activeTimerForCompany(companyId = activeCompanyId()) {
   const timer = state.activeTimer;
   if (!timer || timer.company_id !== companyId) return null;
+  // One clock per person, so a row belonging to somebody else is never mine to show.
+  if (!isMyClockRow(timer)) return null;
   return timer;
 }
 
 function timeEntriesForCompany(companyId = activeCompanyId()) {
   return state.timeEntries
-    .filter((entry) => entry.company_id === companyId)
+    .filter((entry) => entry.company_id === companyId && isMyClockRow(entry))
     .sort((a, b) => Date.parse(b.started_at || 0) - Date.parse(a.started_at || 0));
 }
 
@@ -38053,16 +38026,18 @@ function startClock(companyId = activeCompanyId(), taskId = '') {
   if (!requirePermission('time.track', companyId, 'Your role cannot track time in this workspace.', 'Time')) return;
   if (state.activeTimer) stopClock(false);
   const task = taskId ? taskById(taskId) : null;
+  const profile = activeSession().profile;
   state.activeTimer = {
     id: `timer-${crypto.randomUUID()}`,
     company_id: companyId,
-    user_id: activeSession().profile.member_id || activeSession().profile.id,
+    profile_id: profile.id,
+    user_id: profile.member_id || profile.id,
     task_id: task?.company_id === companyId ? task.id : '',
     task_title: task?.company_id === companyId ? task.title : '',
     started_at: new Date().toISOString(),
   };
   persistTimeState();
-  state.sync = { label: 'Clock started locally', mode: 'local' };
+  state.sync = { label: isLiveSupabaseSession() ? 'Clock started' : 'Clock started locally', mode: isLiveSupabaseSession() ? 'live' : 'local' };
   render();
 }
 
@@ -38071,9 +38046,10 @@ function stopClock(shouldRender = true) {
   if (!timer) return;
   const endedAt = new Date().toISOString();
   const durationMs = Math.max(0, Date.parse(endedAt) - Date.parse(timer.started_at || endedAt));
-  state.timeEntries.unshift({
+  const entry = {
     id: `time-${crypto.randomUUID()}`,
     company_id: timer.company_id,
+    profile_id: timer.profile_id || activeSession()?.profile?.id || '',
     user_id: timer.user_id,
     task_id: timer.task_id || '',
     task_title: timer.task_title || '',
@@ -38081,10 +38057,11 @@ function stopClock(shouldRender = true) {
     ended_at: endedAt,
     duration_ms: durationMs,
     notes: timer.task_title ? 'Task timer' : 'General shift',
-  });
+  };
+  state.timeEntries.unshift(entry);
   state.activeTimer = null;
-  persistTimeState();
-  state.sync = { label: 'Clock stopped locally', mode: 'local' };
+  persistTimeState(entry);
+  state.sync = { label: isLiveSupabaseSession() ? 'Clock stopped' : 'Clock stopped locally', mode: isLiveSupabaseSession() ? 'live' : 'local' };
   if (shouldRender) render();
 }
 
@@ -40701,6 +40678,39 @@ function normalizeCalendarEvent(input) {
   };
 }
 
+// Clock rows arrive from three places: the server, a localStorage cache written before the
+// clock moved to the server, and the demo seed. They agree on everything except the owner
+// column, so both spellings are read and both are written back.
+function normalizeTimeEntry(input = {}) {
+  const startedAt = input.started_at || new Date().toISOString();
+  const endedAt = input.ended_at || startedAt;
+  return {
+    id: String(input.id || `time-${crypto.randomUUID()}`),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    profile_id: String(input.profile_id || ''),
+    user_id: String(input.user_id || input.profile_id || ''),
+    task_id: String(input.task_id || ''),
+    task_title: String(input.task_title || ''),
+    started_at: startedAt,
+    ended_at: endedAt,
+    duration_ms: Math.max(0, number(input.duration_ms) || Math.max(0, Date.parse(endedAt) - Date.parse(startedAt))),
+    notes: String(input.notes || ''),
+  };
+}
+
+function normalizeActiveTimer(input) {
+  if (!input || !input.started_at) return null;
+  return {
+    id: String(input.id || `timer-${input.profile_id || input.user_id || 'me'}`),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    profile_id: String(input.profile_id || ''),
+    user_id: String(input.user_id || input.profile_id || ''),
+    task_id: String(input.task_id || ''),
+    task_title: String(input.task_title || ''),
+    started_at: input.started_at,
+  };
+}
+
 function messageConversationPayload(conversation) {
   return {
     id: conversation.id,
@@ -41496,11 +41506,59 @@ function persistAll() {
   writeJson(RECYCLE_BIN_CACHE_KEY, state.recycleBinItems);
 }
 
-function persistTimeState() {
+// Writes the clock wherever this session keeps its data.
+//
+// It used to return early for every Supabase session and write nothing at all, which is why
+// a signed-in person's timer vanished on refresh: the local cache was skipped, and there was
+// no server row to reload from either. `closedEntry` is the shift stopClock just finished,
+// passed in so only that one row is inserted rather than the whole list re-sent.
+function persistTimeState(closedEntry = null) {
   if (isReadOnlyDemo()) return;
-  if (state.session?.auth === 'supabase') return;
+  if (isLiveSupabaseSession()) {
+    persistTimeStateToSupabase(closedEntry).catch((error) => console.warn('Clock write failed', error));
+    return;
+  }
   writeJson(TIME_ENTRY_CACHE_KEY, state.timeEntries);
   writeJson(ACTIVE_TIMER_KEY, state.activeTimer);
+}
+
+async function persistTimeStateToSupabase(closedEntry) {
+  const client = createSupabaseClient();
+  const profileId = activeSession()?.profile?.id;
+  if (!client || !profileId) return;
+  if (closedEntry) {
+    const insert = await client.from('company_time_entries').insert({
+      company_id: closedEntry.company_id,
+      profile_id: profileId,
+      task_id: closedEntry.task_id || '',
+      task_title: closedEntry.task_title || '',
+      started_at: closedEntry.started_at,
+      ended_at: closedEntry.ended_at,
+      duration_ms: closedEntry.duration_ms,
+      notes: closedEntry.notes || '',
+    }).select().single();
+    // Swap the optimistic row for the stored one so its id is the server's, not a local
+    // uuid that nothing else would ever match.
+    if (!insert.error && insert.data) {
+      const at = state.timeEntries.findIndex((row) => row.id === closedEntry.id);
+      if (at >= 0) state.timeEntries[at] = normalizeTimeEntry(insert.data);
+    } else if (insert.error) {
+      notifySyncFailure(insert.error, 'Clock');
+    }
+  }
+  const timer = state.activeTimer;
+  // One row per person, upserted on the primary key: starting a clock while another runs
+  // replaces it, which is the rule startClock already enforces in memory.
+  const result = timer
+    ? await client.from('company_active_timers').upsert({
+      profile_id: profileId,
+      company_id: timer.company_id,
+      task_id: timer.task_id || '',
+      task_title: timer.task_title || '',
+      started_at: timer.started_at,
+    }, { onConflict: 'profile_id' })
+    : await client.from('company_active_timers').delete().eq('profile_id', profileId);
+  if (result.error) notifySyncFailure(result.error, 'Clock');
 }
 
 function persistNotifications() {

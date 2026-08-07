@@ -8,7 +8,10 @@ import {
 } from '../src/ui/audit-hardening.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/crm/contact-table.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/crm/contact-table.js', import.meta.url), 'utf8')
+  // The Reports page is fetched on demand now; it is still part of the surface these tests
+  // describe, so it is read as one with main.js.
+  + readFileSync(new URL('../src/reports/analytics-page.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('large contact field groups stay compact and become searchable', () => {
