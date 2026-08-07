@@ -100,6 +100,9 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Chats show who is in them and who is online: the details dialog lists each named member with the same presence ring the message list uses, online first, above a "N of M online" count. It also carries a delete-for-me action backed by `leave_message_conversation`, which removes only the caller own access row -- never the conversation, its messages, or anyone else access. The DELETE policy on `message_conversation_access` requires a manager permission, so without the RPC a member could not leave a chat and a manager leaving would have been able to remove others too. Migration `202608071200_leave_message_conversation.sql`.
 - Starting a direct message joins any create already in flight for the same pair, so repeated clicks open one chat instead of creating several. Notes-to-self shares the guard.
 
+- Reading another person profile is decided by shared company membership, not by the legacy `profiles.role` field. `can_view_team()` checked that legacy per-account role, so a company OWNER whose legacy role was still `member` could read no teammate profile at all and the Users page rendered each one as `titleCase(profile_id)`. The policy now allows yourself, anyone you share an ACTIVE company with (via `app_private.shares_active_company`, SECURITY DEFINER so it cannot recurse through company_memberships RLS), and platform admins. This is also tighter than before: a legacy `admin` previously read every approved profile on the platform. Migration `202608071400_profiles_visible_to_company_peers.sql`.
+- Contacts import reads CSV, TSV and .xlsx, sniffing comma/semicolon/tab off the header row; the .xlsx reader and JSZip are fetched on demand. Contacts export downloads the filtered list as Excel-safe CSV. The price book import shares the one parser.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.
