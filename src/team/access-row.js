@@ -5,7 +5,7 @@
 
 export function createAccessRow(ctx) {
   const {
-    companyRoles, h, isLastActiveOwner, renderAvatar, roleIdForName, state, titleCase,
+    companyRoles, h, isLastActiveOwner, isPrimaryOwner, renderAvatar, roleIdForName, state, titleCase,
     workspaceMembershipForProfile,
     userDisplayMeta, userDisplayName,
   } = ctx;
@@ -14,8 +14,14 @@ export function createAccessRow(ctx) {
     const roles = companyRoles(companyId);
     const workspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
     const selectedRoleId = user.role_id || roleIdForName(companyId, user.role) || roles[0]?.id || '';
-    const isProtectedOwner = user.profile_id && isLastActiveOwner(companyId, user.profile_id);
-    const canEditUser = canManageUsers && user.profile_id && !isProtectedOwner;
+    // Two different powers. Changing WHO somebody is in the company -- their role and
+    // status -- is refused for the main owner and for the last remaining owner. Assigning
+    // WORKSPACES is not: an owner may still place the main owner in a workspace, and the
+    // server allows it because nothing about the membership itself changes.
+    const isMainOwner = !!user.profile_id && isPrimaryOwner(companyId, user.profile_id);
+    const isLastOwner = !!user.profile_id && isLastActiveOwner(companyId, user.profile_id);
+    const canEditUser = canManageUsers && !!user.profile_id && !isMainOwner && !isLastOwner;
+    const canAssignWorkspaces = canManageUsers && !!user.profile_id;
     const implicitWorkspaceAccess = ['owner', 'admin', 'developer'].includes(String(user.role || '').toLowerCase());
     return `
       <article class="access-user-row ${user.status !== 'active' ? 'muted' : ''}">
@@ -23,7 +29,8 @@ export function createAccessRow(ctx) {
         <div class="access-user-main">
           <strong>${h(userDisplayName(user))}</strong>
           <span>${h(userDisplayMeta(user))} / ${h(titleCase(user.status))}</span>
-          ${isProtectedOwner ? '<small class="access-note">Last active Owner - promote another Owner before changing this access.</small>' : ''}
+          ${isMainOwner ? '<small class="access-note">Main owner of this company - their role and status cannot be changed.</small>'
+    : isLastOwner ? '<small class="access-note">Last active Owner - promote another Owner before changing this access.</small>' : ''}
         </div>
         <form class="access-role-form" data-user-role-form>
           <input type="hidden" name="company_id" value="${h(companyId)}" />
@@ -45,8 +52,8 @@ export function createAccessRow(ctx) {
               // cannot be revoked here -- so the checkbox stays locked. What role they hold
               // INSIDE that workspace is a separate choice, and locking it meant an owner
               // could never be given a different role in one workspace.
-              const membershipEditable = canEditUser && !implicitWorkspaceAccess;
-              const workspaceRoleEditable = canEditUser;
+              const membershipEditable = canAssignWorkspaces && !implicitWorkspaceAccess;
+              const workspaceRoleEditable = canAssignWorkspaces;
               return `
                 <label class="workspace-access-assignment" data-workspace-assignment>
                   <input type="checkbox" name="workspace_ids" value="${h(workspace.id)}" ${enabled ? 'checked' : ''} ${membershipEditable ? '' : 'disabled'} />
@@ -59,7 +66,7 @@ export function createAccessRow(ctx) {
               `;
             }).join('') || '<span class="form-note">No active workspaces are available.</span>'}
           </div>
-          <button class="btn" type="submit" ${canEditUser ? '' : 'disabled'}>Save role &amp; workspaces</button>
+          <button class="btn" type="submit" ${canAssignWorkspaces ? '' : 'disabled'}>Save role &amp; workspaces</button>
         </form>
       </article>
     `;

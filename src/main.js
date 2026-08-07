@@ -13561,7 +13561,7 @@ function loadAccessRow() {
   if (!accessRowPending) {
     accessRowPending = import('./team/access-row.js').then((mod) => {
       accessRowModule = mod.createAccessRow({
-        companyRoles, h, isLastActiveOwner, renderAvatar, roleIdForName, state, titleCase,
+        companyRoles, h, isLastActiveOwner, isPrimaryOwner, renderAvatar, roleIdForName, state, titleCase,
         workspaceMembershipForProfile,
         userDisplayMeta, userDisplayName,
       });
@@ -38736,6 +38736,18 @@ function activeOwnerMemberships(companyId = activeCompanyId()) {
   return state.memberships.filter((item) => item.company_id === companyId && item.role === 'owner' && item.status === 'active');
 }
 
+/**
+ * The company's main owner — the membership nobody in the company may change.
+ *
+ * Every owner used to be interchangeable, so any owner could demote the person whose company
+ * it is. This one is settled once, in the database, and only a platform admin can move it.
+ */
+function isPrimaryOwner(companyId, profileId) {
+  const company = companyById(companyId);
+  const primary = String(company?.primary_owner_profile_id || '');
+  return !!primary && primary === String(profileId || '');
+}
+
 function isLastActiveOwner(companyId, profileId) {
   const owners = activeOwnerMemberships(companyId);
   return owners.length === 1 && owners[0].profile_id === profileId;
@@ -38744,6 +38756,11 @@ function isLastActiveOwner(companyId, profileId) {
 function validateMembershipChange(companyId, profileId, role, status) {
   const current = membershipForProfile(companyId, profileId);
   const nextRole = membershipRoleForRole(role);
+  // Checked before anything else: the main owner outranks every other rule here.
+  if (isPrimaryOwner(companyId, profileId)
+      && (nextRole !== current?.role || status !== current?.status)) {
+    return 'This is the main owner of the company. Their role and status cannot be changed.';
+  }
   if (current?.role === 'owner' && current.status === 'active' && (nextRole !== 'owner' || status !== 'active') && isLastActiveOwner(companyId, profileId)) {
     return 'Promote another active Owner before changing the last Owner.';
   }
@@ -39583,6 +39600,9 @@ function normalizeCompany(input) {
     appearance_prefs: (input.appearance_prefs && typeof input.appearance_prefs === 'object')
       ? input.appearance_prefs
       : {},
+    // The one member no owner may edit. Absent on older rows, which simply means the
+    // company has no protected owner rather than protecting the wrong person.
+    primary_owner_profile_id: String(input.primary_owner_profile_id || ''),
   };
 }
 

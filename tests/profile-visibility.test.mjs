@@ -54,8 +54,8 @@ test('the fallback that produced the id-as-a-name is still only a last resort', 
 
 test('workspace access stays locked for an inherited role, but the role in it does not', () => {
   const row = readFileSync(join(root, 'src', 'team', 'access-row.js'), 'utf8');
-  assert.match(row, /const membershipEditable = canEditUser && !implicitWorkspaceAccess;/);
-  assert.match(row, /const workspaceRoleEditable = canEditUser;/);
+  assert.match(row, /const membershipEditable = canAssignWorkspaces && !implicitWorkspaceAccess;/);
+  assert.match(row, /const workspaceRoleEditable = canAssignWorkspaces;/);
   // The checkbox keeps the stricter rule; the select only needs manage rights.
   assert.match(row, /name="workspace_ids"[^`]*\$\{membershipEditable \? '' : 'disabled'\}/);
   assert.match(row, /name="workspace_role:\$\{h\(workspace\.id\)\}"[^`]*\$\{workspaceRoleEditable \? '' : 'disabled'\}/);
