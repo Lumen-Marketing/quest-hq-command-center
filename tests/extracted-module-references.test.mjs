@@ -162,6 +162,7 @@ const FACTORY_MODULES = [
   ['src/messaging/dock-fields.js', 'createDockFields'],
   ['src/crm/job-record.js', 'createJobRecord'],
   ['src/jobs/dashboard-view.js', 'createJobsDashboard'],
+  ['src/crm/deal-board.js', 'createDealBoard'],
   ['src/crm/contacts-io.js', 'createContactsIo'],
   ['src/crm/contact-editor.js', 'createContactEditor'],
   ['src/jobs/job-file.js', 'createJobFile'],

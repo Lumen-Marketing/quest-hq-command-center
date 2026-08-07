@@ -10,7 +10,9 @@ const source = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8')
   // surface these tests describe, so both files are read as one.
   + fs.readFileSync(path.join(root, 'src', 'messaging', 'dock-fields.js'), 'utf8')
   // The contacts table is fetched on demand too; same surface, more files.
-  + fs.readFileSync(path.join(root, 'src', 'crm', 'contact-table.js'), 'utf8');
+  + fs.readFileSync(path.join(root, 'src', 'crm', 'contact-table.js'), 'utf8')
+  // As is the quotes board and table.
+  + fs.readFileSync(path.join(root, 'src', 'crm', 'deal-board.js'), 'utf8');
 const migrationPath = path.join(root, 'supabase', 'migrations', '202607171500_task_deal_next_actions.sql');
 const handleActionSource = source.slice(source.indexOf('function handleAction('), source.indexOf('function onDocumentSubmit('));
 const submitSource = source.slice(source.indexOf('function onDocumentSubmit('), source.indexOf('function onDocumentInput('));
