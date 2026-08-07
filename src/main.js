@@ -36965,15 +36965,36 @@ async function restoreWorkspaceBackup(backupId) {
   const backup = workspaceBackupById(backupId);
   if (!backup) throw new Error('Backup not found.');
   applyWorkspaceBackupPayload(backup.payload);
-  if (isLiveSupabaseSession()) await persistWorkspaceBackupPayloadToSupabase(backup.payload);
+  const failures = isLiveSupabaseSession() ? await persistWorkspaceBackupPayloadToSupabase(backup.payload) : [];
   state.modal = '';
-  showToast('Workspace restored from backup.', 'saved', 'Backups');
+  if (failures.length) {
+    // Say what did not come back, and name one thing to look at. "Restored" alongside
+    // "Restore failed" told the user nothing about which to believe.
+    const names = failures.map((item) => item.table).slice(0, 3).join(', ');
+    const more = failures.length > 3 ? ` and ${failures.length - 3} more` : '';
+    showToast(
+      `Restored, but ${failures.length} table${failures.length === 1 ? '' : 's'} could not be written: ${names}${more}. First error: ${failures[0].message}`,
+      'error',
+      'Backups',
+    );
+  } else {
+    showToast('Workspace restored from backup.', 'saved', 'Backups');
+  }
   render();
 }
 
+/**
+ * Push a backup's rows back to the server.
+ *
+ * Returns the tables that refused rather than announcing each one. It used to raise a toast
+ * per failing table and then return normally, so the caller went on to say "Workspace
+ * restored" -- one action producing "Restore failed", another "Restore failed", and a
+ * success, all at once. The caller now states one outcome.
+ */
 async function persistWorkspaceBackupPayloadToSupabase(payload) {
+  const failures = [];
   const client = createSupabaseClient();
-  if (!client) return;
+  if (!client) return failures;
   const data = payload?.data || {};
   const tableMap = [
     ['jobs', data.jobs, (row) => supabaseRow(row, JOB_COLS), 'id'],
@@ -37013,7 +37034,7 @@ async function persistWorkspaceBackupPayloadToSupabase(payload) {
     const cleanRows = rows.map(mapper).filter((row) => row && Object.keys(row).length);
     if (!cleanRows.length) continue;
     const result = await client.from(table).upsert(cleanRows, { onConflict });
-    if (result.error) notifySyncFailure(result.error, 'Restore');
+    if (result.error) failures.push({ table, message: result.error.message || 'write refused' });
   }
   if (data.workspaceBuilderDoc) {
     // Restoring a backup is a deliberate, human-initiated overwrite, so unlike an
@@ -37023,12 +37044,13 @@ async function persistWorkspaceBackupPayloadToSupabase(payload) {
     // it and quietly resurrect everything the restore was meant to remove.
     const key = canonicalCompanyId(payload.company_id);
     const result = await client.from('workspace_builder_state').upsert({ company_id: payload.company_id, doc: data.workspaceBuilderDoc, updated_by: isUuid(activeSession()?.profile?.id) ? activeSession().profile.id : null }).select('updated_at');
-    if (result.error) notifySyncFailure(result.error, 'Restore');
+    if (result.error) failures.push({ table: 'workspace_builder_state', message: result.error.message || 'write refused' });
     else {
       state.wbDocVersions[key] = result.data?.[0]?.updated_at || '';
       state.wbDocBase[key] = wbCloneDoc(state.workspaceBuilderDocs?.[key] || null);
     }
   }
+  return failures;
 }
 
 async function markWorkspaceBackupDeleted(backupId) {

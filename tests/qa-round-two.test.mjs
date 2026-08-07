@@ -113,3 +113,33 @@ test('saving a calendar event says it is working', () => {
   // Released on every path, or a failed save leaves the dialog stuck.
   assert.match(body, /\} finally \{\s*[\r\n]+\s*done\(\);/);
 });
+
+// "its saying restore failed and other pop up toasts like restore successfully and error:
+// something" -- one action, three contradictory messages. The restore loops ~25 tables and
+// raised a toast per failing table, then returned normally so the caller announced success.
+
+test('a restore reports one outcome, not one per table', () => {
+  const fn = main.slice(main.indexOf('async function persistWorkspaceBackupPayloadToSupabase'));
+  // Bounded on a CRLF-safe closing brace: '\n}\n' never matches in this file, and the slice
+  // silently ran to the end of it, sweeping in unrelated functions.
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /const failures = \[\];/);
+  assert.match(body, /failures\.push\(\{ table, message: result\.error\.message/);
+  assert.match(body, /return failures;/);
+  // Announcing from inside the loop is the bug.
+  assert.ok(!/notifySyncFailure\(result\.error, 'Restore'\)/.test(body));
+});
+
+test('the caller states what did not come back', () => {
+  const fn = main.slice(main.indexOf('async function restoreWorkspaceBackup(backupId)'));
+  const body = fn.slice(0, fn.indexOf('\n}'));
+  assert.match(body, /const failures = isLiveSupabaseSession\(\)/);
+  assert.match(body, /if \(failures\.length\) \{/);
+  assert.match(body, /could not be written/);
+  assert.match(body, /First error: \$\{failures\[0\]\.message\}/, 'name one thing to look at');
+  // Success is only claimed when there is nothing to report.
+  assert.ok(
+    body.indexOf('Workspace restored from backup.') > body.indexOf('if (failures.length)'),
+    'the success message belongs in the else branch',
+  );
+});
