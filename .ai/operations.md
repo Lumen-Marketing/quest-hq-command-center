@@ -11,6 +11,8 @@ This project deploys directly. Do not run npm run dev or npm run preview, and do
 - npm run ai:check validates this project brain.
 - npm run build creates and validates the production bundle without serving it.
 - npm run check runs tests, project-brain validation, and the build.
+- npm run clean:check refuses to continue while tracked files differ from HEAD.
+- npm run deploy:prod is clean:check, then check, then `vercel --prod`. Use it instead of calling vercel by hand.
 
 ## Delivery path
 
@@ -23,6 +25,19 @@ This project deploys directly. Do not run npm run dev or npm run preview, and do
 7. Confirm the scheduled Production Guardian remains healthy.
 
 Relevant automation lives in [CI](../.github/workflows/ci.yml) and [Production Guardian](../.github/workflows/production-guardian.yml).
+
+### Deploying from a laptop
+
+A local `vercel --prod` uploads the WORKING TREE, not a commit. Production has been deployed
+that way with uncommitted changes in it, which leaves a build nobody can reproduce: the SHA
+the bundle reports names the last commit, and what actually shipped was whatever was on one
+machine at one moment. Rolling back to that SHA restores different software than the one
+serving traffic.
+
+So: commit first, then `npm run deploy:prod`. It refuses on a dirty tree and says which files
+are in the way. Untracked files are allowed through -- vercel honours .gitignore, and a stray
+report is not a code change. Deploying from CI or the Git integration is better still, because
+neither has a working tree to be dirty.
 
 ## Pilot launch rehearsal
 
