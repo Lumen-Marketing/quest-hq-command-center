@@ -13551,54 +13551,35 @@ function renderUsersPage(route, companyId) {
   `;
 }
 
-function renderUserAccessRow(companyId, user, canManageUsers) {
-  const roles = companyRoles(companyId);
-  const workspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
-  const selectedRoleId = user.role_id || roleIdForName(companyId, user.role) || roles[0]?.id || '';
-  const isProtectedOwner = user.profile_id && isLastActiveOwner(companyId, user.profile_id);
-  const canEditUser = canManageUsers && user.profile_id && !isProtectedOwner;
-  const implicitWorkspaceAccess = ['owner', 'admin', 'developer'].includes(String(user.role || '').toLowerCase());
-  return `
-    <article class="access-user-row ${user.status !== 'active' ? 'muted' : ''}">
-      ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
-      <div class="access-user-main">
-        <strong>${h(userDisplayName(user))}</strong>
-        <span>${h(userDisplayMeta(user))} / ${h(titleCase(user.status))}</span>
-        ${isProtectedOwner ? '<small class="access-note">Last active Owner - promote another Owner before changing this access.</small>' : ''}
-      </div>
-      <form class="access-role-form" data-user-role-form>
-        <input type="hidden" name="company_id" value="${h(companyId)}" />
-        <input type="hidden" name="profile_id" value="${h(user.profile_id)}" />
-        <select name="role_id" ${canEditUser ? '' : 'disabled'}>
-          ${roles.map((role) => `<option value="${h(role.id)}" ${role.id === selectedRoleId ? 'selected' : ''}>${h(role.name)}</option>`).join('')}
-        </select>
-        <select name="membership_status" ${canEditUser ? '' : 'disabled'}>
-          ${['active', 'pending', 'disabled', 'left'].map((status) => `<option value="${h(status)}" ${status === user.status ? 'selected' : ''}>${h(titleCase(status))}</option>`).join('')}
-        </select>
-        <div class="workspace-access-grid">
-          <strong>Workspace assignments</strong>
-          ${workspaces.map((workspace) => {
-            const membership = workspaceMembershipForProfile(workspace.id, user.profile_id);
-            const enabled = implicitWorkspaceAccess || membership?.status === 'active';
-            const workspaceRoleId = membership?.role_id || selectedRoleId;
-            const assignmentEditable = canEditUser && !implicitWorkspaceAccess;
-            return `
-              <label class="workspace-access-assignment" data-workspace-assignment>
-                <input type="checkbox" name="workspace_ids" value="${h(workspace.id)}" ${enabled ? 'checked' : ''} ${assignmentEditable ? '' : 'disabled'} />
-                ${implicitWorkspaceAccess && enabled ? `<input type="hidden" name="workspace_ids" value="${h(workspace.id)}" />` : ''}
-                <span><b>${h(workspace.name)}</b><small>${h(implicitWorkspaceAccess ? 'Inherited from company role' : workspace.is_default ? 'Default workspace' : 'Explicit assignment')}</small></span>
-                <select name="workspace_role:${h(workspace.id)}" aria-label="${h(workspace.name)} role" ${assignmentEditable ? '' : 'disabled'}>
-                  ${roles.map((role) => `<option value="${h(role.id)}" ${role.id === workspaceRoleId ? 'selected' : ''}>${h(role.name)}</option>`).join('')}
-                </select>
-              </label>
-            `;
-          }).join('') || '<span class="form-note">No active workspaces are available.</span>'}
-        </div>
-        <button class="btn" type="submit" ${canEditUser ? '' : 'disabled'}>Save role &amp; workspaces</button>
-      </form>
-    </article>
-  `;
+// ---- Users > Access row ---------------------------------------------------------
+// Body lives in ./team/access-row.js and is fetched on first use.
+let accessRowModule = null;
+let accessRowPending = null;
+
+function loadAccessRow() {
+  if (accessRowModule) return Promise.resolve(accessRowModule);
+  if (!accessRowPending) {
+    accessRowPending = import('./team/access-row.js').then((mod) => {
+      accessRowModule = mod.createAccessRow({
+        companyRoles, h, isLastActiveOwner, renderAvatar, roleIdForName, state, titleCase,
+        workspaceMembershipForProfile,
+        userDisplayMeta, userDisplayName,
+      });
+      return accessRowModule;
+    }).catch((error) => {
+      accessRowPending = null;
+      throw error;
+    });
+  }
+  return accessRowPending;
 }
+
+function renderUserAccessRow(companyId, user, canManageUsers) {
+  if (accessRowModule) return accessRowModule.renderUserAccessRow(companyId, user, canManageUsers);
+  loadAccessRow().then(() => render()).catch((error) => console.error('Access row failed to load', error));
+  return questLoader('Loading');
+}
+
 
 function renderJoinRequestRow(request, canManageUsers) {
   const title = request.requested_email || profileById(request.profile_id)?.email || request.profile_id || 'Requester';
@@ -31047,20 +31028,36 @@ async function saveUserAccess(formNode) {
   const profileId = String(data.get('profile_id') || '').trim();
   const roleId = String(data.get('role_id') || '').trim();
   const status = ['active', 'pending', 'disabled', 'left'].includes(String(data.get('membership_status'))) ? String(data.get('membership_status')) : 'active';
-  const selectedWorkspaceIds = new Set(data.getAll('workspace_ids').map((value) => String(value || '')));
-  const companyWorkspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
   const role = roleById(companyId, roleId);
   if (!profileId || !role) {
-    state.sync = { label: 'Select a user and role', mode: 'local' };
-    render();
+    accessSaveFailed('Choose a role before saving.');
     return;
   }
   const validationMessage = validateMembershipChange(companyId, profileId, role, status);
   if (validationMessage) {
-    state.sync = { label: validationMessage, mode: 'local' };
-    render();
+    accessSaveFailed(validationMessage);
     return;
   }
+  // The audit trail shows this form submitted three times inside 0.4s, so the button says it
+  // is working and refuses a second press while the first is in flight.
+  const done = beginSubmitting(formNode, 'Saving…');
+  if (!done) return;
+  try {
+    await persistUserAccess(formNode, { companyId, profileId, role, status, data });
+  } finally {
+    done();
+  }
+}
+
+/** A refused save has to say so where the user is looking, not only in the sync chip. */
+function accessSaveFailed(message) {
+  showToast(message, 'local', 'Users');
+  render();
+}
+
+async function persistUserAccess(formNode, { companyId, profileId, role, status, data }) {
+  const selectedWorkspaceIds = new Set(data.getAll('workspace_ids').map((value) => String(value || '')));
+  const companyWorkspaces = state.operationalWorkspaces.filter((workspace) => workspace.company_id === companyId && workspace.status === 'active');
 
   const membership = normalizeMembership({
     company_id: companyId,
@@ -31087,8 +31084,7 @@ async function saveUserAccess(formNode) {
       target_status: status,
     });
     if (membershipResult.error) {
-      state.sync = { label: membershipResult.error.message || 'Access update failed', mode: 'local' };
-      render();
+      accessSaveFailed(membershipResult.error.message || 'Access update failed.');
       return;
     }
     upsertMembership(normalizeMembership(membershipResult.data || membership));

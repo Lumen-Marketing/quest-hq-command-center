@@ -179,6 +179,7 @@ const FACTORY_MODULES = [
   ['src/portals/client-portals-page.js', 'createClientPortalsPage'],
   ['src/forms/forms-page.js', 'createFormsPage'],
   ['src/ops/price-book-page.js', 'createPriceBookPage'],
+  ['src/team/access-row.js', 'createAccessRow'],
   ['src/team/workload-page.js', 'createTeamWorkloadPage'],
   ['src/ops/eod-page.js', 'createEodPage'],
   ['src/ops/calls-page.js', 'createCallsPage'],
