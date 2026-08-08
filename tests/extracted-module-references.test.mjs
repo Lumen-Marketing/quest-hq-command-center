@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 // Extracting code out of main.js has one failure mode that neither the build nor the rest
 // of the suite catches: a function moves into a module, but something in main.js still
@@ -16,7 +17,7 @@ import test from 'node:test';
 // a name DEFINED in one of our modules and CALLED in main.js must also be defined in
 // main.js, or be reached through the module object.
 
-const srcDir = new URL('../src/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const srcDir = fileURLToPath(new URL('../src/', import.meta.url));
 const main = readFileSync(join(srcDir, 'main.js'), 'utf8').replace(/\r\n/g, '\n');
 
 const walk = (dir) => readdirSync(dir).flatMap((entry) => {
