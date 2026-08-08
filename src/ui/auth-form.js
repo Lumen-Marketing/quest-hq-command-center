@@ -9,7 +9,7 @@ export function createAuthForm(ctx) {
   const {
     h, state, authStatusMessage, authSubmitButton, inviteLookupForToken,
     isLiveSupabaseSession, renderAuthOAuthButtons, renderPasswordField,
-    renderPasswordRequirements, workspacePresetSelect,
+    renderPasswordRequirements,
   } = ctx;
 
   function renderSupabaseAuthForm(returnUrl) {
@@ -80,7 +80,7 @@ export function createAuthForm(ctx) {
           <label>Email<input name="email" type="email" autocomplete="email" required /></label>
           ${renderPasswordField({ autocomplete: 'new-password' })}
           ${renderPasswordRequirements()}
-          ${inviteToken ? '' : `<label>Company workspace<input name="company_name" placeholder="Example Roofing LLC" required /></label>${workspacePresetSelect()}`}
+          ${inviteToken ? '' : '<label>Company workspace<input name="company_name" placeholder="Example Roofing LLC" required /></label>'}
           <input type="hidden" name="invite_token" value="${h(inviteToken)}" />
           <input type="hidden" name="return_url" value="${h(returnUrl)}" />
           ${authSubmitButton(inviteToken ? 'Create account and join' : 'Create secure workspace', 'Creating account...')}

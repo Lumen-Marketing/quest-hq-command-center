@@ -1,0 +1,148 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+import { answersForBlueprint, buildCompanySetupPlan } from '../src/onboarding/company-setup-model.js';
+import {
+  RESET_COMPANY_SETUP_COPY,
+  createCompanySetupPanel,
+  editCompanySetupPlan,
+  setupStateFromProfile,
+} from '../src/onboarding/company-setup-panel.js';
+
+const mainPath = fileURLToPath(new URL('../src/main.js', import.meta.url));
+const authPath = fileURLToPath(new URL('../src/ui/auth-form.js', import.meta.url));
+const main = readFileSync(mainPath, 'utf8').replace(/\r\n/g, '\n');
+const auth = readFileSync(authPath, 'utf8').replace(/\r\n/g, '\n');
+
+function functionBody(source, name) {
+  const start = source.indexOf(`function ${name}`);
+  assert.notEqual(start, -1, `${name} must exist`);
+  const tail = source.slice(start + 1);
+  const nextMatch = /\n(?:async\s+)?function\s+/.exec(tail);
+  const next = nextMatch ? start + 1 + nextMatch.index : -1;
+  return source.slice(start, next < 0 ? source.length : next);
+}
+
+test('company creation no longer asks owners to choose a technical company type', () => {
+  assert.doesNotMatch(auth, /workspacePresetSelect|Company type/);
+  assert.doesNotMatch(functionBody(main, 'renderNoCompanyAccess'), /workspacePresetSelect|Company type/);
+
+  const register = functionBody(main, 'registerWorkspace');
+  const create = functionBody(main, 'createWorkspaceForCurrentUser');
+  assert.match(register, /preset_code:\s*'generic'/);
+  assert.match(create, /preset_code:\s*'generic'/);
+  assert.doesNotMatch(register, /form\.preset_code/);
+  assert.doesNotMatch(create, /form\.preset_code/);
+});
+
+test('new owners are routed to guided Setup rather than Billing', () => {
+  const register = functionBody(main, 'registerWorkspace');
+  const create = functionBody(main, 'createWorkspaceForCurrentUser');
+
+  for (const body of [register, create]) {
+    assert.match(body, /companyPath\('settings', \{ tab: 'setup' \}/);
+    assert.doesNotMatch(body, /companyPath\('settings', \{ tab: 'billing' \}/);
+    assert.doesNotMatch(body, /applyPluginPresetLocal/);
+  }
+});
+
+test('Settings lazily loads the setup interface and delegates its actions', () => {
+  assert.match(main, /import\('\.\/onboarding\/company-setup-panel\.js'\)/);
+  assert.match(main, /import\('\.\/onboarding\/company-setup\.css'\)/);
+  assert.match(main, /companyPath\('settings', \{ tab: 'setup' \}/);
+  assert.match(main, /renderCompanySetupSettings\(companyId\)/);
+  assert.match(main, /action\.startsWith\('company-setup-'\)/);
+  assert.match(main, /companySetupPanelModule\.handleAction/);
+});
+
+test('setup state resumes a saved review and distinguishes an applied setup', () => {
+  const answers = answersForBlueprint('roofing');
+  const plan = buildCompanySetupPlan(answers);
+
+  assert.equal(setupStateFromProfile(null).screen, 'entry');
+  assert.equal(setupStateFromProfile({ status: 'draft', answers, draft_plan: plan }).screen, 'review');
+  assert.equal(setupStateFromProfile({ status: 'applied', answers, applied_plan: plan }).screen, 'applied');
+});
+
+test('review editing supports workspace names, apps, role labels, and stages', () => {
+  const original = buildCompanySetupPlan(answersForBlueprint('roofing'));
+  const renamed = editCompanySetupPlan(original, { type: 'workspace-name', workspaceIndex: 0, value: 'Revenue' });
+  const withApp = editCompanySetupPlan(renamed, { type: 'plugin', workspaceIndex: 0, pluginId: 'calls', checked: true });
+  const withoutApp = editCompanySetupPlan(withApp, { type: 'plugin', workspaceIndex: 0, pluginId: 'tasks', checked: false });
+  const role = editCompanySetupPlan(withoutApp, { type: 'role-name', roleIndex: 0, value: 'Roofing Sales' });
+  const stages = editCompanySetupPlan(role, { type: 'stages', workspaceIndex: 0, value: 'Lead\nQualified\nWon' });
+
+  assert.equal(stages.workspaces[0].name, 'Revenue');
+  assert.equal(stages.workspaces[0].pluginIds.includes('calls'), true);
+  assert.equal(stages.workspaces[0].pluginIds.includes('tasks'), false);
+  assert.equal(stages.roles[0].name, 'Roofing Sales');
+  assert.deepEqual(stages.workspaces[0].stages, ['Lead', 'Qualified', 'Won']);
+  assert.equal(original.workspaces[0].name, 'Sales', 'edits must not mutate the last valid plan');
+});
+
+test('reset wording names both the cleared state and preserved records', () => {
+  assert.match(RESET_COMPANY_SETUP_COPY, /clears the setup answers and reopens the guide/i);
+  for (const noun of ['company', 'people', 'workspaces', 'customers', 'jobs', 'tasks', 'files', 'messages']) {
+    assert.match(RESET_COMPANY_SETUP_COPY, new RegExp(noun, 'i'));
+  }
+  assert.match(RESET_COMPANY_SETUP_COPY, /does not delete/i);
+});
+
+function fakeActionNode(companyId) {
+  return {
+    dataset: {},
+    closest: () => ({ dataset: { companyId } }),
+  };
+}
+
+function fakeClient(profile, rpcHandler) {
+  return {
+    from: () => ({
+      select() { return this; },
+      eq() { return this; },
+      async maybeSingle() { return { data: profile, error: null }; },
+    }),
+    rpc: rpcHandler,
+  };
+}
+
+test('controller applies a reviewed blank setup through draft then apply RPCs', async () => {
+  const calls = [];
+  const blankPlan = buildCompanySetupPlan({ mode: 'blank' });
+  const client = fakeClient(null, async (name, args) => {
+    calls.push({ name, args });
+    if (name === 'apply_company_setup') return { data: { status: 'applied', plan: blankPlan, warnings: [] }, error: null };
+    return { data: { status: 'draft' }, error: null };
+  });
+  const panel = createCompanySetupPanel({ createClient: () => client, isLive: () => true });
+  const node = fakeActionNode('company-a');
+
+  await panel.loadCompany('company-a');
+  await panel.handleAction('company-setup-start-blank', node);
+  await panel.handleAction('company-setup-apply', node);
+
+  assert.deepEqual(calls.map((call) => call.name), ['save_company_setup_draft', 'apply_company_setup']);
+  assert.match(panel.render('company-a', { companyLabel: 'Acme' }), /Your Questbase structure is ready/);
+});
+
+test('controller reset calls only the non-destructive reset RPC and returns to entry', async () => {
+  const calls = [];
+  const plan = buildCompanySetupPlan(answersForBlueprint('roofing'));
+  const profile = { status: 'applied', answers: answersForBlueprint('roofing'), draft_plan: plan, applied_plan: plan };
+  const client = fakeClient(profile, async (name, args) => {
+    calls.push({ name, args });
+    return { data: { status: 'draft', reset_count: 1 }, error: null };
+  });
+  const panel = createCompanySetupPanel({ createClient: () => client, isLive: () => true });
+  const node = fakeActionNode('company-a');
+
+  await panel.loadCompany('company-a');
+  await panel.handleAction('company-setup-open-reset', node);
+  assert.match(panel.render('company-a', { companyLabel: 'Acme' }), /Reopen the company setup guide/);
+  await panel.handleAction('company-setup-confirm-reset', node);
+
+  assert.deepEqual(calls.map((call) => call.name), ['reset_company_setup']);
+  assert.match(panel.render('company-a', { companyLabel: 'Acme' }), /Guide me/);
+});

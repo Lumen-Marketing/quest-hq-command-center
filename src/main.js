@@ -4460,7 +4460,6 @@ function renderNoCompanyAccess() {
             </div>
             <form data-company-create-form>
               <label>Company workspace<input name="company_name" placeholder="Example Roofing LLC" required /></label>
-              ${workspacePresetSelect()}
               ${workspaceIconSelect()}
               <button class="btn btn-primary full" type="submit" ${busy || !canCreate ? 'disabled' : ''}>${busy ? 'Creating workspace...' : 'Create business workspace'}</button>
               ${state.loginError ? `<div class="form-message error">${h(state.loginError)}</div>` : `<div class="form-message">${h(state.authMessage || `${workspaceLimitMessage()} You become Owner, then Quest approves access before live modules open.`)}</div>`}
@@ -19462,6 +19461,49 @@ function wbKeepModalScroll() {
   if (m && body) m.restoreScroll = body.scrollTop;
 }
 
+let companySetupPanelModule = null;
+let companySetupPanelPromise = null;
+
+function canManageCompanySetup(companyId = activeCompanyId()) {
+  return isQuestDeveloper() || ELEVATED_COMPANY_ROLES
+    .includes(String(membershipForProfile(companyId, activeSession().profile.id)?.role || '').toLowerCase());
+}
+
+function loadCompanySetupPanel() {
+  if (companySetupPanelModule) return Promise.resolve(companySetupPanelModule);
+  if (!companySetupPanelPromise) {
+    companySetupPanelPromise = Promise.all([
+      import('./onboarding/company-setup-panel.js'),
+      import('./onboarding/company-setup.css'),
+    ]).then(([module]) => {
+      companySetupPanelModule = module.createCompanySetupPanel({
+        createClient: createSupabaseClient,
+        isLive: isLiveSupabaseSession,
+        requestRender: render,
+        showToast,
+        h,
+        onApplied: async () => refreshRealtimeDomains(['access', 'crm']),
+      });
+      return companySetupPanelModule;
+    }).catch((error) => {
+      companySetupPanelPromise = null;
+      throw error;
+    });
+  }
+  return companySetupPanelPromise;
+}
+
+function renderCompanySetupSettings(companyId) {
+  if (companySetupPanelModule) {
+    return companySetupPanelModule.render(companyId, {
+      companyLabel: companyName(companyId),
+      canManage: canManageCompanySetup(companyId),
+    });
+  }
+  loadCompanySetupPanel().then(() => render()).catch((error) => console.error('Company setup panel failed to load', error));
+  return '<article class="panel span-3"><div class="section-head"><div><h2>Company setup</h2><p>Loading the setup guide…</p></div></div></article>';
+}
+
 function renderSettingsPage(route, companyId) {
   const company = companyById(companyId);
   const backupSettingsPath = companyPath('settings', { tab: 'backups' });
@@ -19475,6 +19517,9 @@ function renderSettingsPage(route, companyId) {
     [companyPath('settings', { tab: 'recycle-bin' }, companyId), 'Recycle Bin', 'recycle-bin'],
     [companyPath('settings', { tab: 'team' }, companyId), 'Workers', 'team'],
   ];
+  if (canManageCompanySetup(companyId)) {
+    settingsTabs.splice(1, 0, [companyPath('settings', { tab: 'setup' }, companyId), 'Setup', 'setup']);
+  }
   if (can('crm.manage', companyId)) {
     settingsTabs.push([companyPath('settings', { tab: 'handoff-review' }, companyId), 'Data review', 'handoff-review']);
   }
@@ -19486,6 +19531,7 @@ function renderSettingsPage(route, companyId) {
     ${compactTabs('Settings sections', settingsTabs.map(([href, label, id]) => [href, label, tab === id]))}
     <section class="dashboard-grid compact-settings-grid">
       ${tab === 'company' ? renderWorkspaceSettings(companyId) : ''}
+      ${tab === 'setup' ? renderCompanySetupSettings(companyId) : ''}
       ${tab === 'billing' ? renderBillingSettings(companyId) : ''}
       ${tab === 'plugins' ? renderPluginsSettings(companyId) : ''}
       ${tab === 'roles' ? renderRolesSettings(companyId) : ''}
@@ -23276,7 +23322,7 @@ function loadAuthForm() {
       authFormModule = mod.createAuthForm({
         h, state, authStatusMessage, authSubmitButton, inviteLookupForToken,
     isLiveSupabaseSession, renderAuthOAuthButtons, renderPasswordField,
-    renderPasswordRequirements, workspacePresetSelect,
+    renderPasswordRequirements,
       });
       return authFormModule;
     }).catch((error) => {
@@ -25996,6 +26042,13 @@ function handleAction(event, node) {
   if (isReadOnlyDemo() && isMutableAction(action)) {
     event.preventDefault();
     requireMutableWorkspace();
+    return;
+  }
+  if (action.startsWith('company-setup-')) {
+    event.preventDefault();
+    loadCompanySetupPanel()
+      .then(() => companySetupPanelModule.handleAction(action, node))
+      .catch((error) => showToast(error?.message || 'Company setup could not continue.', 'error', 'Setup'));
     return;
   }
   if (action === 'wb-modal-close') {
@@ -29773,7 +29826,6 @@ async function registerWorkspace(formNode) {
   const fullName = String(form.full_name || '').trim();
   const inviteToken = String(form.invite_token || '').trim();
   const companyName = String(form.company_name || '').trim();
-  const presetCode = WORKSPACE_PLUGIN_PRESETS[form.preset_code] ? form.preset_code : 'generic';
   const iconKey = workspaceIconOption(form.icon_key).key;
   if (!email || !password || !fullName || (!inviteToken && !companyName)) {
     state.loginError = inviteToken ? 'Name, email, and password are required.' : 'Name, email, password, and company workspace are required.';
@@ -29851,7 +29903,7 @@ async function registerWorkspace(formNode) {
     await acceptCompanyInvite(inviteToken, form.return_url);
     return;
   }
-  const workspace = await client.rpc('create_company_workspace', { company_name: companyName, preset_code: presetCode, icon_key: iconKey });
+  const workspace = await client.rpc('create_company_workspace', { company_name: companyName, preset_code: 'generic', icon_key: iconKey });
   if (workspace.error) {
     state.loginError = workspace.error.message || 'Account created, but workspace setup failed.';
     state.authMessage = '';
@@ -29859,16 +29911,14 @@ async function registerWorkspace(formNode) {
     return;
   }
   applyCreatedWorkspace(workspace.data, companyName, iconKey);
-  applyPluginPresetLocal(state.activeCompanyId, presetCode);
   state.authMessage = '';
-  navigate(companyPath('settings', { tab: 'billing' }, state.activeCompanyId), { replace: true });
+  navigate(companyPath('settings', { tab: 'setup' }, state.activeCompanyId), { replace: true });
 }
 
 async function createWorkspaceForCurrentUser(formNode) {
   const form = Object.fromEntries(new FormData(formNode).entries());
   const client = createSupabaseClient();
   const companyName = String(form.company_name || '').trim();
-  const presetCode = WORKSPACE_PLUGIN_PRESETS[form.preset_code] ? form.preset_code : 'generic';
   const iconKey = workspaceIconOption(form.icon_key).key;
   if (!client || !companyName) {
     state.loginError = 'Company workspace name is required.';
@@ -29885,7 +29935,7 @@ async function createWorkspaceForCurrentUser(formNode) {
   state.loginError = '';
   state.authMessage = 'Creating workspace...';
   render();
-  const workspace = await safeSupabaseQuery(client.rpc('create_company_workspace', { company_name: companyName, preset_code: presetCode, icon_key: iconKey }));
+  const workspace = await safeSupabaseQuery(client.rpc('create_company_workspace', { company_name: companyName, preset_code: 'generic', icon_key: iconKey }));
   if (workspace.error) {
     state.loginError = workspace.error.message || 'Workspace setup failed.';
     state.authMessage = '';
@@ -29893,9 +29943,8 @@ async function createWorkspaceForCurrentUser(formNode) {
     return;
   }
   applyCreatedWorkspace(workspace.data, companyName, iconKey);
-  applyPluginPresetLocal(state.activeCompanyId, presetCode);
   state.authMessage = 'Opening workspace...';
-  navigate(companyPath('settings', { tab: 'billing' }, state.activeCompanyId), { replace: true });
+  navigate(companyPath('settings', { tab: 'setup' }, state.activeCompanyId), { replace: true });
 }
 
 async function createOperationalWorkspace(formNode) {
@@ -38411,6 +38460,7 @@ function requireMutableWorkspace(message = 'Demo is read-only. Create a workspac
 function isMutableAction(action = '') {
   const clean = String(action || '');
   if (!clean) return false;
+  if (['company-setup-apply', 'company-setup-confirm-reset'].includes(clean)) return true;
   const safeActions = new Set([
     'refresh-data',
     'wb-modal-close',

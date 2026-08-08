@@ -1,0 +1,844 @@
+[data-company-setup-root] {
+  --setup-accent: var(--accent, #ef5b2a);
+  --setup-accent-soft: color-mix(in srgb, var(--setup-accent) 11%, transparent);
+  --setup-line: color-mix(in srgb, var(--ink, #172033) 12%, transparent);
+  --setup-muted: var(--muted, #6b7280);
+}
+
+.company-setup-shell {
+  display: grid;
+  gap: 22px;
+  overflow: hidden;
+  min-width: 0;
+  padding: clamp(18px, 2.4vw, 30px);
+  border: 1px solid var(--setup-line);
+  background:
+    radial-gradient(circle at 94% 4%, color-mix(in srgb, var(--setup-accent) 9%, transparent), transparent 27%),
+    var(--panel, #fff);
+}
+
+.company-setup-heading,
+.company-setup-progress-head,
+.company-setup-actions,
+.company-setup-reset-card,
+.company-setup-review-card-head,
+.company-setup-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.company-setup-heading > div:first-child {
+  min-width: 0;
+  max-width: 760px;
+}
+
+.company-setup-heading h2,
+.company-setup-progress-head strong,
+.company-setup-review-main h3,
+.company-setup-review-side h3,
+.company-setup-complete h3,
+.company-setup-reset-confirm h3 {
+  margin: 0;
+  color: var(--ink, #172033);
+}
+
+.company-setup-heading h2 {
+  margin-top: 4px;
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  letter-spacing: -0.035em;
+}
+
+.company-setup-heading p,
+.company-setup-complete p,
+.company-setup-reset-confirm p,
+.company-setup-scope-note p {
+  margin: 7px 0 0;
+  color: var(--setup-muted);
+  line-height: 1.55;
+}
+
+.company-setup-kicker,
+.company-setup-progress-head span,
+.company-setup-complete > div > span,
+.company-setup-reset-confirm > div > span {
+  color: var(--setup-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.company-setup-safe {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border: 1px solid color-mix(in srgb, #238636 24%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #238636 8%, transparent);
+  color: #1f7a35;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.company-setup-intro {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.company-setup-intro > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  align-items: center;
+  padding: 13px;
+  border: 1px solid var(--setup-line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--panel, #fff) 93%, var(--ink, #172033) 7%);
+}
+
+.company-setup-intro i {
+  grid-row: 1 / 3;
+  color: var(--setup-accent);
+  font-size: 1.25rem;
+}
+
+.company-setup-intro strong {
+  color: var(--ink, #172033);
+  font-size: 0.88rem;
+}
+
+.company-setup-intro span,
+.company-setup-mode-card span,
+.company-setup-blueprint-card span,
+.company-setup-loading span,
+.company-setup-reset-card span,
+.company-setup-summary-grid span,
+.company-setup-alert span {
+  color: var(--setup-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.company-setup-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.company-setup-mode-card,
+.company-setup-blueprint-card,
+.company-setup-option {
+  appearance: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.company-setup-mode-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 13px;
+  align-items: center;
+  min-height: 150px;
+  padding: 19px;
+  border: 1px solid var(--setup-line);
+  border-radius: 16px;
+  background: var(--panel, #fff);
+  color: var(--ink, #172033);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.company-setup-mode-card:hover,
+.company-setup-blueprint-card:hover,
+.company-setup-option:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--setup-accent) 55%, var(--setup-line));
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--ink, #172033) 8%, transparent);
+}
+
+.company-setup-mode-card.featured,
+.company-setup-blueprint-card.featured {
+  border-color: color-mix(in srgb, var(--setup-accent) 42%, var(--setup-line));
+  background: linear-gradient(145deg, var(--setup-accent-soft), transparent 60%), var(--panel, #fff);
+}
+
+.company-setup-card-icon {
+  display: grid;
+  grid-row: 1 / 4;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: var(--setup-accent-soft);
+  color: var(--setup-accent) !important;
+  font-size: 1.3rem !important;
+}
+
+.company-setup-mode-card strong {
+  font-size: 1rem;
+}
+
+.company-setup-mode-card em {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--setup-accent);
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.company-setup-blank-link,
+.company-setup-side-head button {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: var(--setup-accent);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.company-setup-entry-links {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.company-setup-blank-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.company-setup-blueprint-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.company-setup-blueprint-card {
+  display: grid;
+  gap: 7px;
+  min-height: 140px;
+  padding: 16px;
+  border: 1px solid var(--setup-line);
+  border-radius: 14px;
+  background: var(--panel, #fff);
+  color: var(--ink, #172033);
+}
+
+.company-setup-blueprint-card > i {
+  color: var(--setup-accent);
+  font-size: 1.35rem;
+}
+
+.company-setup-progress-head {
+  align-items: flex-end;
+}
+
+.company-setup-progress-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.company-setup-progress-head strong {
+  font-size: clamp(1.05rem, 1.5vw, 1.3rem);
+}
+
+.company-setup-progress-head small,
+.company-setup-stage-editor small {
+  color: var(--setup-muted);
+}
+
+.company-setup-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink, #172033) 9%, transparent);
+}
+
+.company-setup-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--setup-accent), color-mix(in srgb, var(--setup-accent) 60%, #ffc069));
+  transition: width 180ms ease;
+}
+
+.company-setup-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.company-setup-option-grid.multi {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.company-setup-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 13px 15px;
+  border: 1px solid var(--setup-line);
+  border-radius: 13px;
+  background: var(--panel, #fff);
+  color: var(--ink, #172033);
+  font-weight: 700;
+}
+
+.company-setup-option i {
+  color: color-mix(in srgb, var(--ink, #172033) 28%, transparent);
+  font-size: 1.2rem;
+}
+
+.company-setup-option.selected {
+  border-color: color-mix(in srgb, var(--setup-accent) 65%, var(--setup-line));
+  background: var(--setup-accent-soft);
+}
+
+.company-setup-option.selected i {
+  color: var(--setup-accent);
+}
+
+.company-setup-actions {
+  margin-top: 2px;
+}
+
+.company-setup-actions.split > div,
+.company-setup-actions.split > div:last-child,
+.company-setup-reset-card > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.company-setup-actions.sticky {
+  position: sticky;
+  bottom: -1px;
+  z-index: 3;
+  margin: 0 -8px -8px;
+  padding: 13px 8px 8px;
+  border-top: 1px solid var(--setup-line);
+  background: color-mix(in srgb, var(--panel, #fff) 94%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.company-setup-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--setup-line);
+  border-radius: 12px;
+  color: var(--ink, #172033);
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.company-setup-alert > div {
+  display: grid;
+  gap: 2px;
+}
+
+.company-setup-alert > i {
+  margin-top: 1px;
+  font-size: 1.1rem;
+}
+
+.company-setup-alert.info {
+  border-color: color-mix(in srgb, #378add 30%, transparent);
+  background: color-mix(in srgb, #378add 8%, transparent);
+}
+
+.company-setup-alert.info > i {
+  color: #2f78c4;
+}
+
+.company-setup-alert.warning {
+  border-color: color-mix(in srgb, #ba7517 32%, transparent);
+  background: color-mix(in srgb, #ba7517 9%, transparent);
+}
+
+.company-setup-alert.warning > i {
+  color: #a6620e;
+}
+
+.company-setup-alert.danger {
+  border-color: color-mix(in srgb, #d64545 32%, transparent);
+  background: color-mix(in srgb, #d64545 8%, transparent);
+}
+
+.company-setup-alert.danger > i {
+  color: #c83b3b;
+}
+
+.company-setup-review-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(250px, 0.75fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.company-setup-review-main,
+.company-setup-review-side,
+.company-setup-review-side > section {
+  display: grid;
+  gap: 11px;
+  min-width: 0;
+}
+
+.company-setup-review-side > section {
+  padding: 15px;
+  border: 1px solid var(--setup-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel, #fff) 96%, var(--ink, #172033) 4%);
+}
+
+.company-setup-review-card {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--setup-line);
+  border-radius: 15px;
+  background: var(--panel, #fff);
+}
+
+.company-setup-review-card-head {
+  justify-content: flex-start;
+}
+
+.company-setup-number {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--setup-accent-soft);
+  color: var(--setup-accent);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.company-setup-review-card-head label {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+.company-setup-review-card-head label span,
+.company-setup-stage-editor > span {
+  color: var(--setup-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.company-setup-review-card-head input,
+.company-setup-role-editor input,
+.company-setup-stage-editor textarea {
+  width: 100%;
+  border: 1px solid var(--setup-line);
+  border-radius: 9px;
+  background: var(--panel, #fff);
+  color: var(--ink, #172033);
+  font: inherit;
+}
+
+.company-setup-review-card-head input,
+.company-setup-role-editor input {
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.company-setup-stage-editor textarea {
+  min-height: 100px;
+  resize: vertical;
+  padding: 10px;
+  line-height: 1.45;
+}
+
+.company-setup-review-card-head b {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--setup-accent-soft);
+  color: var(--setup-accent);
+  font-size: 0.68rem;
+}
+
+.company-setup-review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.company-setup-review-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink, #172033) 6%, transparent);
+  color: var(--setup-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.company-setup-app-editor {
+  border-top: 1px solid var(--setup-line);
+  padding-top: 11px;
+}
+
+.company-setup-app-editor summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink, #172033);
+  font-size: 0.8rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.company-setup-app-editor summary span {
+  color: var(--setup-muted);
+  font-size: 0.7rem;
+}
+
+.company-setup-app-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.company-setup-app-option {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--setup-line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.company-setup-app-option.selected {
+  border-color: color-mix(in srgb, var(--setup-accent) 38%, var(--setup-line));
+  background: var(--setup-accent-soft);
+}
+
+.company-setup-app-option > i {
+  color: var(--setup-accent);
+}
+
+.company-setup-app-option > span {
+  display: grid;
+  min-width: 0;
+}
+
+.company-setup-app-option strong,
+.company-setup-app-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-setup-app-option strong {
+  color: var(--ink, #172033);
+  font-size: 0.76rem;
+}
+
+.company-setup-app-option small {
+  color: var(--setup-muted);
+  font-size: 0.65rem;
+}
+
+.company-setup-stage-editor,
+.company-setup-role-editor {
+  display: grid;
+  gap: 5px;
+}
+
+.company-setup-role-editor {
+  padding-top: 9px;
+  border-top: 1px solid var(--setup-line);
+}
+
+.company-setup-role-editor > span {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 7px;
+}
+
+.company-setup-role-editor > span i {
+  grid-row: 1 / 3;
+  color: var(--setup-accent);
+}
+
+.company-setup-role-editor small,
+.company-setup-muted {
+  color: var(--setup-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.company-setup-muted {
+  margin: 0;
+}
+
+.company-setup-complete,
+.company-setup-reset-confirm {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, #238636 24%, var(--setup-line));
+  border-radius: 16px;
+  background: color-mix(in srgb, #238636 7%, transparent);
+}
+
+.company-setup-complete-icon,
+.company-setup-reset-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #238636;
+  color: #fff;
+  font-size: 1.35rem;
+}
+
+.company-setup-reset-confirm {
+  border-color: color-mix(in srgb, #ba7517 28%, var(--setup-line));
+  background: color-mix(in srgb, #ba7517 7%, transparent);
+}
+
+.company-setup-reset-icon {
+  background: #ba7517;
+}
+
+.company-setup-summary-grid,
+.company-setup-preserved-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.company-setup-summary-grid section,
+.company-setup-preserved-grid span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--setup-line);
+  border-radius: 12px;
+  background: var(--panel, #fff);
+}
+
+.company-setup-summary-grid section > i,
+.company-setup-preserved-grid i {
+  color: var(--setup-accent);
+  font-size: 1.15rem;
+}
+
+.company-setup-summary-grid section > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.company-setup-summary-grid strong {
+  overflow: hidden;
+  color: var(--ink, #172033);
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-setup-reset-card {
+  padding: 14px;
+  border: 1px solid var(--setup-line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--panel, #fff) 95%, var(--ink, #172033) 5%);
+}
+
+.company-setup-reset-card > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.company-setup-preserved-grid span {
+  color: var(--ink, #172033);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.company-setup-loading {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 230px;
+  text-align: center;
+}
+
+.company-setup-spinner,
+.company-setup-button-spinner {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid color-mix(in srgb, var(--setup-accent) 25%, transparent);
+  border-top-color: var(--setup-accent);
+  border-radius: 50%;
+  animation: company-setup-spin 700ms linear infinite;
+}
+
+.company-setup-button-spinner {
+  width: 15px;
+  height: 15px;
+  border-width: 2px;
+}
+
+.company-setup-shell .danger-quiet {
+  border-color: color-mix(in srgb, #d64545 24%, var(--setup-line));
+  color: #bd3b3b;
+}
+
+@keyframes company-setup-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 980px) {
+  .company-setup-blueprint-grid,
+  .company-setup-option-grid.multi,
+  .company-setup-summary-grid,
+  .company-setup-preserved-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .company-setup-review-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .company-setup-shell {
+    gap: 17px;
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .company-setup-heading,
+  .company-setup-progress-head,
+  .company-setup-reset-card,
+  .company-setup-actions.split {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .company-setup-safe {
+    align-self: flex-start;
+  }
+
+  .company-setup-intro,
+  .company-setup-mode-grid,
+  .company-setup-blueprint-grid,
+  .company-setup-option-grid,
+  .company-setup-option-grid.multi,
+  .company-setup-app-grid,
+  .company-setup-summary-grid,
+  .company-setup-preserved-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .company-setup-intro {
+    gap: 7px;
+  }
+
+  .company-setup-intro > div {
+    padding: 10px 12px;
+  }
+
+  .company-setup-mode-card {
+    min-height: 124px;
+    padding: 15px;
+  }
+
+  .company-setup-blueprint-card {
+    min-height: 112px;
+  }
+
+  .company-setup-actions,
+  .company-setup-actions.split > div,
+  .company-setup-actions.split > div:last-child,
+  .company-setup-reset-card > div:last-child {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .company-setup-entry-links {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .company-setup-actions .btn,
+  .company-setup-actions button,
+  .company-setup-reset-card .btn,
+  .company-setup-blank-link {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .company-setup-actions.sticky {
+    position: static;
+    margin: 0;
+    padding: 13px 0 0;
+    backdrop-filter: none;
+  }
+
+  .company-setup-review-card-head {
+    display: grid;
+    grid-template-columns: auto 1fr;
+  }
+
+  .company-setup-review-card-head b {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .company-setup-review-card-head input,
+  .company-setup-role-editor input,
+  .company-setup-stage-editor textarea {
+    font-size: 16px;
+  }
+
+  .company-setup-complete,
+  .company-setup-reset-confirm {
+    padding: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .company-setup-mode-card,
+  .company-setup-blueprint-card,
+  .company-setup-option,
+  .company-setup-progress span {
+    transition: none;
+  }
+}
