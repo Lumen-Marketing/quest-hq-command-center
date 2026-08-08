@@ -83,7 +83,7 @@ test('chat details offers both, and neither once the chat is archived', () => {
   const fn = modals.slice(at, modals.indexOf('\n  function ', at + 10));
   assert.match(fn, /data-action="clear-conversation"/);
   assert.match(fn, /data-action="leave-conversation"/);
-  assert.match(fn, /You stay in the chat and keep receiving new ones\./);
+  assert.match(fn, /You stay in the chat, and the next message brings it back\./);
   assert.match(fn, /Moves it to Archived and stops new messages reaching you\./);
   // Leaving twice is meaningless, and a clear on an archive would hide the archive.
   assert.match(fn, /isConversationArchived\(conversation\.id\) \? `/);

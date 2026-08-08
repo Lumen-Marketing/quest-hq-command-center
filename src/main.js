@@ -31617,7 +31617,11 @@ async function markChatAccess(conversationId, mode) {
 async function clearConversation(conversationId) {
   const conversation = await markChatAccess(conversationId, 'clear');
   if (!conversation) return;
-  showToast('Chat cleared. You are still in it and will keep receiving messages.', isLiveSupabaseSession() ? 'live' : 'local', 'Messages');
+  // It has just left the inbox, so keeping it open would show a thread the list no longer
+  // contains -- the same reason leaving deselects.
+  if (state.selectedConversationId === conversationId) state.selectedConversationId = '';
+  showToast('Chat deleted. You are still in it — it comes back with the next message.', isLiveSupabaseSession() ? 'live' : 'local', 'Messages');
+  navigate(companyPath('messages', {}, conversation.company_id), { replace: true });
   render();
 }
 
@@ -35498,6 +35502,9 @@ function companyMessageConversations(companyId = activeCompanyId()) {
     // A chat I have left is an archive, not a chat. It appears under its own filter and
     // nowhere else, so leaving actually removes it from the list I work in.
     .filter((conversation) => (filter === 'archived') === isConversationArchived(conversation.id))
+    // A deleted chat leaves the inbox until there is a new message in it. Searching still
+    // finds it by name, which is the way back into a group nobody has posted in since.
+    .filter((conversation) => Boolean(query) || !isConversationClearedEmpty(conversation.id))
     .filter((conversation) => ['all', 'archived'].includes(filter) || conversation.type === filter || (filter === 'groups' && conversation.type !== 'direct') || (filter === 'unread' && conversationUnreadCount(conversation.id) > 0))
     .filter((conversation) => {
       if (!query) return true;
@@ -35543,6 +35550,22 @@ function conversationLeftAt(conversationId) {
 
 function isConversationArchived(conversationId) {
   return Boolean(conversationLeftAt(conversationId));
+}
+
+/**
+ * A deleted chat is gone from the inbox until it has something to show again.
+ *
+ * Leaving the emptied thread sitting in the list was wrong: "delete chat" means the thread
+ * disappears. You are still in the group, so the next message brings it straight back --
+ * carrying only that message, because everything before the delete stays hidden.
+ *
+ * Only ever true for a chat somebody actually deleted. A brand-new chat is empty too, and
+ * hiding that would hide the group you just made.
+ */
+function isConversationClearedEmpty(conversationId) {
+  const rows = myConversationAccessRows(conversationId);
+  if (!rows.some((row) => row.cleared_at)) return false;
+  return conversationMessages(conversationId).length === 0;
 }
 
 /**

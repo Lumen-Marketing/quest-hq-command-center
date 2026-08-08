@@ -92,6 +92,40 @@ test('the client mirrors the same window the database enforces', () => {
   assert.match(main, /\.filter\(\(message\) => messageInMyChatWindow\(conversationId, message\.created_at\)\)/);
 });
 
+test('a deleted chat leaves the inbox until there is something to show again', () => {
+  // Leaving the emptied thread in the list was wrong: "delete chat" means the thread goes.
+  // You are still in the group, so the next message brings it back with only that message.
+  const fn = main.slice(main.indexOf('function isConversationClearedEmpty(conversationId)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /if \(!rows\.some\(\(row\) => row\.cleared_at\)\) return false;/);
+  assert.match(body, /return conversationMessages\(conversationId\)\.length === 0;/);
+  assert.match(main, /\.filter\(\(conversation\) => Boolean\(query\) \|\| !isConversationClearedEmpty\(conversation\.id\)\)/);
+});
+
+test('a chat that was never deleted is not hidden for being empty', () => {
+  // A brand-new group has no messages either, and hiding that would hide the thing you
+  // just made. The watermark is what distinguishes them.
+  const fn = main.slice(main.indexOf('function isConversationClearedEmpty(conversationId)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.ok(
+    body.indexOf('cleared_at') < body.indexOf('length === 0'),
+    'the delete has to be established before emptiness is even considered',
+  );
+});
+
+test('searching still finds a deleted chat by name', () => {
+  // Otherwise a group nobody has posted in since is unreachable: it is not in the list, and
+  // there is no other way back to it.
+  assert.match(main, /Boolean\(query\) \|\| !isConversationClearedEmpty/);
+});
+
+test('deleting a chat closes the thread it just removed', () => {
+  const fn = main.slice(main.indexOf('async function clearConversation(conversationId)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /if \(state\.selectedConversationId === conversationId\) state\.selectedConversationId = '';/);
+  assert.match(body, /it comes back with the next message/);
+});
+
 test('an archived chat leaves the working list and stops nagging', () => {
   assert.match(main, /\.filter\(\(conversation\) => \(filter === 'archived'\) === isConversationArchived\(conversation\.id\)\)/);
   assert.match(main, /\['all', 'unread', 'groups', 'direct', 'archived'\]\.map/);
@@ -117,7 +151,7 @@ test('the clear and the leave share one write path and differ only in the mark',
   // A refused call must change nothing locally.
   assert.match(body, /return null;/);
   const clear = main.slice(main.indexOf('async function clearConversation(conversationId)'));
-  assert.match(clear.slice(0, clear.search(/\r?\n\}/)), /You are still in it and will keep receiving messages\./);
+  assert.match(clear.slice(0, clear.search(/\r?\n\}/)), /You are still in it — it comes back with the next message\./);
   const leave = main.slice(main.indexOf('async function leaveConversation(conversationId)'));
   assert.match(leave.slice(0, leave.search(/\r?\n\}/)), /It is in Archived\./);
 });

@@ -77,7 +77,7 @@ export function createChatModals(ctx) {
           <button class="btn" type="button" data-action="clear-conversation" data-conversation-id="${h(conversation.id)}">
             <i class="ti ti-eraser"></i>Delete chat
           </button>
-          <p class="chat-people-note">Clears the messages you can see. You stay in the chat and keep receiving new ones.</p>
+          <p class="chat-people-note">Removes it from your inbox along with the messages you can see. You stay in the chat, and the next message brings it back.</p>
           <button class="btn danger" type="button" data-action="leave-conversation" data-conversation-id="${h(conversation.id)}">
             <i class="ti ti-door-exit"></i>${h(conversation.type === 'direct' ? 'Leave this chat' : 'Leave chat')}
           </button>
@@ -253,6 +253,7 @@ export function createChatModals(ctx) {
     const points = clearing
       ? [
         ['ti-check', 'You stay in this chat and keep receiving new messages.'],
+        ['ti-check', 'It comes back to your inbox with the next message, showing only that message.'],
         ['ti-check', `${others} keeps every message. Nothing is deleted for anybody but you.`],
         ['ti-alert-triangle', 'The messages already here disappear from your view and cannot be brought back.'],
       ]
@@ -263,7 +264,7 @@ export function createChatModals(ctx) {
       ];
     return renderModalShell('Messages', clearing ? 'Delete this chat for you' : 'Leave this chat', `
       <p class="chat-leave-lead">${h(clearing
-    ? `“${conversation.title}” starts again from empty for you.`
+    ? `“${conversation.title}” leaves your inbox and starts again from empty.`
     : `“${conversation.title}” moves to Archived.`)}</p>
       <ul class="chat-leave-points">
         ${points.map(([icon, text]) => `<li><i class="ti ${icon}" aria-hidden="true"></i>${h(text)}</li>`).join('')}
