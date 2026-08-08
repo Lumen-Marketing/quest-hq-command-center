@@ -31617,10 +31617,12 @@ async function markChatAccess(conversationId, mode) {
 async function clearConversation(conversationId) {
   const conversation = await markChatAccess(conversationId, 'clear');
   if (!conversation) return;
-  // It has just left the inbox, so keeping it open would show a thread the list no longer
+  // It has just left the list, so keeping it open would show a thread the list no longer
   // contains -- the same reason leaving deselects.
   if (state.selectedConversationId === conversationId) state.selectedConversationId = '';
-  showToast('Chat deleted. You are still in it — it comes back with the next message.', isLiveSupabaseSession() ? 'live' : 'local', 'Messages');
+  showToast(isConversationArchived(conversationId)
+    ? 'Archived chat deleted.'
+    : 'Chat deleted. You are still in it — it comes back with the next message.', isLiveSupabaseSession() ? 'live' : 'local', 'Messages');
   navigate(companyPath('messages', {}, conversation.company_id), { replace: true });
   render();
 }
@@ -35502,9 +35504,7 @@ function companyMessageConversations(companyId = activeCompanyId()) {
     // A chat I have left is an archive, not a chat. It appears under its own filter and
     // nowhere else, so leaving actually removes it from the list I work in.
     .filter((conversation) => (filter === 'archived') === isConversationArchived(conversation.id))
-    // A deleted chat leaves the inbox until there is a new message in it. Searching still
-    // finds it by name, which is the way back into a group nobody has posted in since.
-    .filter((conversation) => Boolean(query) || !isConversationClearedEmpty(conversation.id))
+    .filter((conversation) => !isConversationHidden(conversation.id, Boolean(query)))
     .filter((conversation) => ['all', 'archived'].includes(filter) || conversation.type === filter || (filter === 'groups' && conversation.type !== 'direct') || (filter === 'unread' && conversationUnreadCount(conversation.id) > 0))
     .filter((conversation) => {
       if (!query) return true;
@@ -35566,6 +35566,21 @@ function isConversationClearedEmpty(conversationId) {
   const rows = myConversationAccessRows(conversationId);
   if (!rows.some((row) => row.cleared_at)) return false;
   return conversationMessages(conversationId).length === 0;
+}
+
+/**
+ * Should this chat be kept out of the list?
+ *
+ * A deleted chat leaves the inbox until a new message arrives, and while it is still live a
+ * search by name brings it back -- that is the only route into a group nobody has posted in
+ * since. An ARCHIVED chat has no such route worth protecting: you left it, nothing new can
+ * arrive and you cannot post. Deleting one of those is final, and it stays gone from the
+ * search too rather than lingering as a result that opens an empty thread.
+ */
+function isConversationHidden(conversationId, hasQuery) {
+  if (!isConversationClearedEmpty(conversationId)) return false;
+  if (isConversationArchived(conversationId)) return true;
+  return !hasQuery;
 }
 
 /**

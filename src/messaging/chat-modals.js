@@ -71,6 +71,10 @@ export function createChatModals(ctx) {
       ${isConversationArchived(conversation.id) ? `
         <div class="chat-leave">
           <p class="chat-people-note">${h(`You left this chat on ${formatDate(conversationLeftAt(conversation.id))}. It is kept as an archive of what was said up to then; nothing new arrives here.`)}</p>
+          <button class="btn danger" type="button" data-action="clear-conversation" data-conversation-id="${h(conversation.id)}">
+            <i class="ti ti-eraser"></i>Delete chat
+          </button>
+          <p class="chat-people-note">Discards the archive. Nothing can bring this one back, because you already left it.</p>
         </div>
       ` : `
         <div class="chat-leave">
@@ -249,23 +253,35 @@ export function createChatModals(ctx) {
     if (!conversation) return renderModalShell('Messages', 'Chat', emptyState('Conversation not found.'));
     const isDirect = conversation.type === 'direct';
     const clearing = state.chatExitMode === 'clear';
+    const archived = isConversationArchived(conversation.id);
     const others = isDirect ? 'The other person' : 'Everyone else';
-    const points = clearing
+    // Deleting an archive is the one genuinely final action here: you already left, so no
+    // message can arrive to bring it back. It gets its own wording rather than the reassuring
+    // "it comes back with the next message", which would be a lie.
+    const clearPoints = archived
       ? [
+        ['ti-check', `${others} keeps every message. Nothing is deleted for anybody but you.`],
+        ['ti-alert-triangle', 'This archive disappears for good. You already left this chat, so nothing will bring it back.'],
+      ]
+      : [
         ['ti-check', 'You stay in this chat and keep receiving new messages.'],
         ['ti-check', 'It comes back to your inbox with the next message, showing only that message.'],
         ['ti-check', `${others} keeps every message. Nothing is deleted for anybody but you.`],
         ['ti-alert-triangle', 'The messages already here disappear from your view and cannot be brought back.'],
-      ]
+      ];
+    const points = clearing
+      ? clearPoints
       : [
         ['ti-check', `${others} keeps the chat and every message in it.`],
         ['ti-check', 'What was said up to now stays readable under Archived.'],
         ['ti-alert-triangle', isDirect ? 'You stop receiving messages here. Message them again and a fresh chat starts.' : 'You stop receiving messages here. You will need to be added back to rejoin.'],
       ];
     return renderModalShell('Messages', clearing ? 'Delete this chat for you' : 'Leave this chat', `
-      <p class="chat-leave-lead">${h(clearing
-    ? `“${conversation.title}” leaves your inbox and starts again from empty.`
-    : `“${conversation.title}” moves to Archived.`)}</p>
+      <p class="chat-leave-lead">${h(!clearing
+    ? `“${conversation.title}” moves to Archived.`
+    : archived
+      ? `“${conversation.title}” disappears from Archived.`
+      : `“${conversation.title}” leaves your inbox and starts again from empty.`)}</p>
       <ul class="chat-leave-points">
         ${points.map(([icon, text]) => `<li><i class="ti ${icon}" aria-hidden="true"></i>${h(text)}</li>`).join('')}
       </ul>

@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+const modals = readFileSync(join(root, 'src', 'messaging', 'chat-modals.js'), 'utf8');
 const migration = readFileSync(
   join(root, 'supabase', 'migrations', '202608081400_chat_clear_and_leave.sql'),
   'utf8',
@@ -99,7 +100,7 @@ test('a deleted chat leaves the inbox until there is something to show again', (
   const body = fn.slice(0, fn.search(/\r?\n\}/));
   assert.match(body, /if \(!rows\.some\(\(row\) => row\.cleared_at\)\) return false;/);
   assert.match(body, /return conversationMessages\(conversationId\)\.length === 0;/);
-  assert.match(main, /\.filter\(\(conversation\) => Boolean\(query\) \|\| !isConversationClearedEmpty\(conversation\.id\)\)/);
+  assert.match(main, /\.filter\(\(conversation\) => !isConversationHidden\(conversation\.id, Boolean\(query\)\)\)/);
 });
 
 test('a chat that was never deleted is not hidden for being empty', () => {
@@ -113,10 +114,49 @@ test('a chat that was never deleted is not hidden for being empty', () => {
   );
 });
 
-test('searching still finds a deleted chat by name', () => {
+test('searching still finds a deleted chat that is still live', () => {
   // Otherwise a group nobody has posted in since is unreachable: it is not in the list, and
   // there is no other way back to it.
-  assert.match(main, /Boolean\(query\) \|\| !isConversationClearedEmpty/);
+  const fn = main.slice(main.indexOf('function isConversationHidden(conversationId, hasQuery)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /if \(!isConversationClearedEmpty\(conversationId\)\) return false;/);
+  assert.match(body, /return !hasQuery;/);
+});
+
+test('deleting an archived chat is final, search included', () => {
+  // You already left it, so no message can arrive to bring it back, and there is no route
+  // into it worth keeping open. A search result that opens an empty archive is just noise.
+  const fn = main.slice(main.indexOf('function isConversationHidden(conversationId, hasQuery)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /if \(isConversationArchived\(conversationId\)\) return true;/);
+  assert.ok(
+    body.indexOf('isConversationArchived') < body.indexOf('return !hasQuery'),
+    'the archived case has to be settled before the search escape hatch applies',
+  );
+});
+
+test('an archived chat can be deleted, and says that it will not come back', () => {
+  const at = modals.indexOf('function renderMessageDetailsModal(companyId, conversationId)');
+  const fn = modals.slice(at, modals.indexOf('\n  function ', at + 10));
+  const archivedBranch = fn.slice(fn.indexOf('isConversationArchived(conversation.id) ? `'), fn.indexOf('` : `'));
+  assert.match(archivedBranch, /data-action="clear-conversation"/);
+  assert.match(archivedBranch, /Discards the archive\. Nothing can bring this one back/);
+  // Leaving twice is meaningless, so that button stays out of the archived branch.
+  assert.ok(!/data-action="leave-conversation"/.test(archivedBranch));
+
+  const dialog = modals.slice(modals.indexOf('function renderLeaveConversationModal'));
+  assert.match(dialog, /const clearPoints = archived/);
+  assert.match(dialog, /This archive disappears for good\./);
+  assert.match(dialog, /disappears from Archived\./);
+  // The reassuring line would be a lie here.
+  const archivedPoints = dialog.slice(dialog.indexOf('const clearPoints = archived'), dialog.indexOf('      : ['));
+  assert.ok(!/comes back to your inbox/.test(archivedPoints));
+});
+
+test('the toast does not promise a return that cannot happen', () => {
+  const fn = main.slice(main.indexOf('async function clearConversation(conversationId)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /isConversationArchived\(conversationId\)\s*[\r\n]?\s*\? 'Archived chat deleted\.'/);
 });
 
 test('deleting a chat closes the thread it just removed', () => {
