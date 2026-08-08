@@ -5485,7 +5485,9 @@ function renderNotificationCenter(companyId) {
       </button>
       <div class="notification-popover" role="dialog" aria-label="Notifications">
         <div class="notification-head">
-          <div><strong>Inbox</strong><span>${h(companyName(companyId))}</span></div>
+          <!-- "Inbox" is the messages surface in the nav. This bell is notifications, and
+               giving it the other feature's name sent people looking for their chats. -->
+          <div><strong>Notifications</strong><span>${h(companyName(companyId))}</span></div>
           <button type="button" data-action="mark-all-notifications-read" ${unreadCount ? '' : 'disabled'}>Mark all read</button>
         </div>
         <div class="notification-list">
@@ -29368,6 +29370,21 @@ function startDemoMode(returnUrl = '') {
 }
 
 async function saveProfile(formNode) {
+  // Saving a profile can mean uploading and compressing a photo before the row is even
+  // written, which is long enough that a button doing nothing reads as a button that did not
+  // work. beginSubmitting also refuses a second submit while the first is in flight.
+  const done = beginSubmitting(formNode, 'Saving…');
+  if (!done) return;
+  try {
+    await saveProfileFields(formNode);
+  } finally {
+    // Released on every path, including the early returns below, or a refused save leaves
+    // the dialog stuck behind a permanently disabled button.
+    done();
+  }
+}
+
+async function saveProfileFields(formNode) {
   const data = new FormData(formNode);
   const current = activeSession().profile;
   const file = formNode.elements.avatar_file?.files?.[0] || null;
@@ -29418,6 +29435,9 @@ async function saveProfile(formNode) {
   writeJson(SESSION_KEY, state.session);
   state.modal = '';
   showToast('Profile saved.', isLiveSupabaseSession() ? 'live' : 'local', 'Profile');
+  // The modal was already being cleared from state here, but nothing repainted, so it stayed
+  // on screen with its own success toast in front of it until something else caused a render.
+  render();
 }
 
 async function prepareProfileAvatarCrop(formNode) {

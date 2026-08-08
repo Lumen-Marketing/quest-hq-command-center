@@ -44,3 +44,39 @@ test('profile modal close removes the account route query so it stays closed', (
   assert.match(source, /params\.delete\('account'\)/);
   assert.match(source, /navigate\(`\$\{route\.path\}\$\{search \? `\?\$\{search\}` : ''\}`,\s*\{ replace: true \}\)/);
 });
+
+// "Add loading animation while saving profile and also close this modal once profile is
+// saved." The save could upload and compress a photo before writing a row, so the button sat
+// doing nothing; and state.modal was cleared without a repaint, so the dialog stayed on screen
+// with its own "Profile saved." toast in front of it.
+
+test('saving a profile says it is working, and only once', () => {
+  const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const fn = source.slice(source.indexOf('async function saveProfile(formNode)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /const done = beginSubmitting\(formNode, 'Saving…'\);/);
+  // Null means the button is already disabled -- a second submit while the first is in flight.
+  assert.match(body, /if \(!done\) return;/);
+  // Released on every path, or a refused save leaves a permanently disabled button.
+  assert.match(body, /\} finally \{\s*[\r\n]+[\s\S]{0,200}?done\(\);/);
+});
+
+test('a saved profile closes its dialog', () => {
+  const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const fn = source.slice(source.indexOf('async function saveProfileFields(formNode)'));
+  const body = fn.slice(0, fn.search(/\r?\n\}/));
+  assert.match(body, /state\.modal = '';/);
+  // Clearing state without repainting is what left the dialog up.
+  assert.ok(
+    body.indexOf('state.modal') < body.lastIndexOf('render();'),
+    'the repaint has to come after the modal is cleared',
+  );
+});
+
+test('the bell is called Notifications, not Inbox', () => {
+  const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const head = source.slice(source.indexOf('<div class="notification-head">'));
+  assert.match(head.slice(0, 400), /<strong>Notifications<\/strong>/);
+  // Inbox is the Messages nav label; borrowing it sent people looking for their chats.
+  assert.match(source, /^\s{2}messages: 'Inbox',$/m);
+});
