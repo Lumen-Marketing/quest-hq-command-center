@@ -99,6 +99,34 @@ test('the sidebar card shows the name and both roles, not a picture', () => {
   assert.match(card, /\$\{sameEverywhere \? '' : ` · \$\{workspaceRole\}`\}/);
 });
 
+test('no rule still reserves the avatar track the card no longer has', () => {
+  // This is the one that broke it: two MORE SPECIFIC rules (.deck-footer .deck-user-card and
+  // .quest-nav-v2 .deck-user-card) still opened with a 30px track, so the name landed in a
+  // 30px column, wrapped one letter per line, and both role lines ellipsised to "Ow...".
+  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+  const offenders = [];
+  for (const m of styles.matchAll(/([^{}]*deck-user-card[^{}]*)\{([^}]*)\}/g)) {
+    const selector = m[1].replace(/\/\*[\s\S]*?\*\//g, '').trim().replace(/\s+/g, ' ');
+    const columns = /grid-template-columns:\s*([^;]+);/.exec(m[2])?.[1]?.trim();
+    if (!columns) continue;
+    // The first rule is shared with the company switcher, which keeps its icon and chevron.
+    if (selector.startsWith('.deck-company-switch,')) continue;
+    // A fixed PIXEL first track is the avatar slot. `1fr` is just one flexible column.
+    if (/^\d+px/.test(columns)) offenders.push(`${selector} -> ${columns}`);
+  }
+  assert.deepEqual(offenders, [], 'a fixed leading track means an avatar column that is gone');
+});
+
+test('the collapsed rail is not left blank', () => {
+  // Collapsed, `.deck-user-card span` is display:none -- which used to leave the avatar
+  // behind. With no avatar the button would have been empty.
+  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
+  assert.match(main, /<b class="deck-user-initials" aria-hidden="true">\$\{h\(initials\(session\.profile\.full_name\)\)\}<\/b>/);
+  const hidden = styles.slice(styles.indexOf('.deck-user-initials {'));
+  assert.match(hidden.slice(0, hidden.indexOf('}')), /display: none;/);
+  assert.match(styles, /\.sidebar-collapsed \.deck-user-initials \{[\s\S]{0,200}?display: grid;/);
+});
+
 test('the card loses its avatar column without taking the company switcher with it', () => {
   const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
   // Matched by regex, not indexOf: this repo's files are CRLF, so a literal '\n' never hits.

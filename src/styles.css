@@ -2458,6 +2458,24 @@ button { cursor: pointer; }
   font-size: 11px;
 }
 
+/* Collapsed, the rail hides `.deck-user-card span` -- which used to leave the avatar behind.
+   With no avatar the button would be blank, so initials stand in, shown ONLY when collapsed. */
+.deck-user-initials {
+  display: none;
+}
+
+.sidebar-collapsed .deck-user-initials {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 250, 240, .12);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
 .deck-company-switch .symbol-icon {
   color: var(--amber);
 }
@@ -23269,7 +23287,8 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .deck-footer .deck-user-card {
   width: 100%;
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  /* Same reason as .quest-nav-v2 .deck-user-card: no avatar, so no avatar track. */
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   text-align: left;
@@ -25210,7 +25229,10 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .quest-nav-v2 .deck-user-card {
   min-width: 0;
   min-height: 48px;
-  grid-template-columns: 30px minmax(0, 1fr);
+  /* No leading 30px track: the avatar this card used to open with is gone, and leaving the
+     track behind squeezed the name into a 30px column -- it wrapped one letter per line and
+     both role lines ellipsised to "Ow...". */
+  grid-template-columns: minmax(0, 1fr);
   gap: 9px;
   border: 0;
   border-radius: 8px;
@@ -25223,6 +25245,9 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   background: var(--surface-2);
 }
 
+/* The name wraps rather than being clipped -- a deliberate earlier decision, and the reason
+   it looked broken was never this rule but the 30px column above, which left it wrapping one
+   letter at a time. At full width it simply takes a second line when it needs one. */
 .quest-nav-v2 .deck-user-card strong {
   font-size: 13px;
   font-weight: 650;
@@ -25230,7 +25255,7 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   text-overflow: clip;
   white-space: normal;
   overflow-wrap: anywhere;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
 .quest-nav-v2 .deck-user-card small {

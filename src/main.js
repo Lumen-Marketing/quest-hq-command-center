@@ -5600,6 +5600,7 @@ function renderDeck(route) {
             || workspaceRole.replace(/ access$/i, '').toLowerCase() === String(companyRole).toLowerCase();
     return `
         <button class="deck-user-card" type="button" data-action="open-profile" title="${h(session.profile.full_name)}">
+          <b class="deck-user-initials" aria-hidden="true">${h(initials(session.profile.full_name))}</b>
           <span>
             <strong>${h(session.profile.full_name)}</strong>
             <small>${h(companyRole)}${sameEverywhere ? '' : ` · ${workspaceRole}`}</small>
