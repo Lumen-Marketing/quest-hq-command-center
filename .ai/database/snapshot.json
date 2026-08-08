@@ -5373,6 +5373,22 @@
           "udt_name": "timestamptz",
           "nullable": false,
           "default": "now()"
+        },
+        {
+          "name": "cleared_at",
+          "position": 7,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "left_at",
+          "position": 8,
+          "data_type": "timestamp with time zone",
+          "udt_name": "timestamptz",
+          "nullable": true,
+          "default": null
         }
       ]
     },

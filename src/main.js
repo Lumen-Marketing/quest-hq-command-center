@@ -2663,6 +2663,7 @@ const state = {
   messageFilter: 'all',
   selectedConversationId: '',
   leavingConversationId: '',
+  chatExitMode: 'leave',
   messageRealtimeChannel: null,
   messageRealtimeKey: '',
   calendarScope: 'company',
@@ -21869,7 +21870,7 @@ function renderMessagesPage(route, companyId) {
             <input data-message-search value="${h(state.messageQuery)}" placeholder="Find a chat or person" aria-label="Find a chat or person" />
           </label>
           <div class="message-filter" role="group" aria-label="Message filters">
-            ${['all', 'unread', 'groups', 'direct'].map((filter) => `
+            ${['all', 'unread', 'groups', 'direct', 'archived'].map((filter) => `
               <button type="button" data-action="set-message-filter" data-filter="${h(filter)}" class="${messageFilterActive(filter) ? 'active' : ''}">${h(filter === 'all' ? 'All' : titleCase(filter))}</button>
             `).join('')}
           </div>
@@ -21973,7 +21974,10 @@ function renderConversationRow(conversation, companyId, active) {
 
 function renderMessageThread(companyId, conversation) {
   const messages = conversationMessages(conversation.id);
-  const canSendMessage = can('messages.send', companyId);
+  // A chat I have left is an archive. The server refuses the write anyway, so offering a
+  // composer here would only produce a rejection after the message was typed.
+  const archived = isConversationArchived(conversation.id);
+  const canSendMessage = can('messages.send', companyId) && !archived;
   return `
     <div class="thread-head">
       <a class="btn mobile-thread-back" href="${appHref(companyPath('messages', {}, companyId))}" data-router><i class="ti ti-arrow-left"></i>Chats</a>
@@ -21994,9 +21998,13 @@ function renderMessageThread(companyId, conversation) {
       </div>
     </div>
     <div class="message-stream">
-      ${messages.map((message) => renderMessageBubble(message)).join('') || emptyState('No messages yet. Start the thread with a short update.')}
+      ${messages.map((message) => renderMessageBubble(message)).join('') || emptyState(archived
+    ? 'Nothing was said in this chat before you left it.'
+    : 'No messages yet. Start the thread with a short update.')}
     </div>
-    ${canSendMessage ? renderMessageComposer(conversation) : emptyState('Your role can view this chat but cannot send messages.')}
+    ${canSendMessage ? renderMessageComposer(conversation) : emptyState(archived
+    ? `You left this chat on ${formatDate(conversationLeftAt(conversation.id))}. It is kept as an archive of what was said up to then.`
+    : 'Your role can view this chat but cannot send messages.')}
   `;
 }
 
@@ -22428,6 +22436,7 @@ function loadChatModals() {
         companyAccessUsers, activeSession, renderMessageGroupIconControl,
         renderMessagePeoplePicker, renderMessageRolePicker,
         appHref, companyMessageConversations, companyPath, state,
+        conversationLeftAt, isConversationArchived,
       });
       return chatModalsModule;
     }).catch((error) => {
@@ -24288,114 +24297,43 @@ function roundCurrency(value) {
   return Math.round((number(value) + Number.EPSILON) * 100) / 100;
 }
 
-function estimateMetricGrid(draft, totals) {
-  return `
-    <div class="estimate-metrics">
-      ${metricCard('Quote', money(draft.quote || 0))}
-      ${metricCard('Hard cost', money(totals.hardCost))}
-      ${metricCard('Net profit', money(totals.netProfit))}
-      ${metricCard('Net margin', `${totals.netMargin.toFixed(1)}%`)}
-      ${metricCard('Target quote', money(totals.targetQuote))}
-      ${metricCard('Payment split', `${money(totals.deposit)} / ${money(totals.materialDrop)} / ${money(totals.completion)}`)}
-    </div>
-  `;
-}
+// ---- Estimate builder ------------------------------------------------------------
+// Body lives in ./ops/estimate-builder.js and is fetched on first use.
+let estimateBuilderModule = null;
+let estimateBuilderPending = null;
 
-function renderEstimateLineRows(kind, lines) {
-  return `
-    <div class="estimate-line-list">
-      ${lines.map((item, index) => `
-        <div class="estimate-line-row">
-          <input data-estimate-field name="${kind}_name" value="${h(item.name)}" aria-label="${h(kind)} item ${index + 1} name" />
-          <input data-estimate-field name="${kind}_quantity" value="${h(String(item.quantity || 0))}" type="number" step="0.01" aria-label="${h(kind)} item ${index + 1} quantity" />
-          <input data-estimate-field name="${kind}_unit_price" value="${h(String(item.unitPrice || 0))}" type="number" step="0.01" aria-label="${h(kind)} item ${index + 1} unit price" />
-        </div>
-      `).join('')}
-    </div>
-  `;
+function loadEstimateBuilder() {
+  if (estimateBuilderModule) return Promise.resolve(estimateBuilderModule);
+  if (!estimateBuilderPending) {
+    estimateBuilderPending = import('./ops/estimate-builder.js').then((mod) => {
+      estimateBuilderModule = mod.createEstimateBuilder({
+        calculateEstimateTotals, currentEstimateContext, emptyState,
+    estimateDraftForContext, h, metricCard, money, renderModalShell,
+    ESTIMATE_TAX_RATE, ROOF_ESTIMATE_SYSTEMS, ROOF_ESTIMATE_SYSTEM_ORDER,
+      });
+      return estimateBuilderModule;
+    }).catch((error) => {
+      estimateBuilderPending = null;
+      throw error;
+    });
+  }
+  return estimateBuilderPending;
 }
 
 function renderEstimateBuilderModal(companyId) {
-  const ctx = currentEstimateContext();
-  if (!ctx || ctx.company_id !== companyId) return renderModalShell('Job Center', 'Estimate', emptyState('Choose a contact, quote, or job before creating an estimate.'));
-  const draft = estimateDraftForContext(ctx);
-  const totals = calculateEstimateTotals(draft);
-  return renderModalShell('Job Center', `${ctx.label} estimate`, `
-    <form class="estimate-builder" data-estimate-builder-form>
-      <input type="hidden" name="related_type" value="${h(ctx.type)}" />
-      <input type="hidden" name="related_id" value="${h(ctx.id)}" />
-      <section class="estimate-hero span-2">
-        <div>
-          <span>${h(ctx.label)}</span>
-          <h3>${h(ctx.title)}</h3>
-          <p>${h(ctx.subtitle)}</p>
-        </div>
-        <div class="estimate-current">
-          <span>Current saved value</span>
-          <strong>${h(money(ctx.currentTotal || 0))}</strong>
-        </div>
-      </section>
-      <label>
-        <span>Estimate name</span>
-        <input data-estimate-field name="name" value="${h(draft.name)}" />
-      </label>
-      <label>
-        <span>Roof system</span>
-        <select data-estimate-system name="primary">
-          ${ROOF_ESTIMATE_SYSTEM_ORDER.map((key) => `<option value="${h(key)}" ${draft.primary === key ? 'selected' : ''}>${h(ROOF_ESTIMATE_SYSTEMS[key].label)}</option>`).join('')}
-        </select>
-      </label>
-      <label>
-        <span>Project type</span>
-        <select data-estimate-field name="project_type">
-          <option value="rr" selected>R&R</option>
-          <option value="new">New construction</option>
-        </select>
-      </label>
-      <label>
-        <span>Squares</span>
-        <input data-estimate-field name="squares" value="${h(String(draft.squares))}" type="number" step="0.1" />
-      </label>
-      <label>
-        <span>Commission %</span>
-        <input data-estimate-field name="commission_rate" value="${h(String(draft.commissionRate))}" type="number" step="0.1" />
-      </label>
-      <label>
-        <span>Target margin %</span>
-        <input data-estimate-field name="target_margin" value="${h(String(draft.targetMargin))}" type="number" step="0.1" />
-      </label>
-      <label class="span-2">
-        <span>Customer quote</span>
-        <input data-estimate-field name="quote" value="${h(String(draft.quote || ''))}" type="number" step="0.01" placeholder="Enter the sell price or use the target quote" />
-      </label>
-      <section class="estimate-preview span-2" data-estimate-preview>
-        ${estimateMetricGrid(draft, totals)}
-      </section>
-      <section class="estimate-lines span-2">
-        <div class="estimate-lines-head">
-          <div><h3>Labor</h3><p>Quantity x unit price</p></div>
-          <div class="estimate-line-labels"><span>Item</span><span>Qty</span><span>Unit</span></div>
-        </div>
-        ${renderEstimateLineRows('labor', draft.labor)}
-      </section>
-      <section class="estimate-lines span-2">
-        <div class="estimate-lines-head">
-          <div><h3>Materials</h3><p>Material subtotal includes ${Math.round(ESTIMATE_TAX_RATE * 1000) / 10}% tax.</p></div>
-          <div class="estimate-line-labels"><span>Item</span><span>Qty</span><span>Unit</span></div>
-        </div>
-        ${renderEstimateLineRows('material', draft.materials)}
-      </section>
-      <label class="span-2">
-        <span>Internal notes</span>
-        <textarea name="notes" data-estimate-field placeholder="Scope notes, exclusions, insurance details, or proposal reminders."></textarea>
-      </label>
-      <div class="form-actions span-2">
-        <button class="btn btn-primary" type="submit"><i class="ti ti-device-floppy"></i>Save estimate to ${h(ctx.label.toLowerCase())}</button>
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `, 'estimate-modal');
+  if (estimateBuilderModule) return estimateBuilderModule.renderEstimateBuilderModal(companyId);
+  loadEstimateBuilder().then(() => render()).catch((error) => console.error('Estimate builder failed to load', error));
+  return questLoader('Loading estimate builder');
 }
+
+// Only ever called while the dialog above is open, so the module is already here. The guard
+// is for the impossible case rather than a real one -- returning '' beats throwing into a
+// live keystroke handler.
+function estimateMetricGrid(draft, totals) {
+  if (!estimateBuilderModule) return '';
+  return estimateBuilderModule.estimateMetricGrid(draft, totals);
+}
+
 
 function estimateDraftFromForm(form) {
   const data = new FormData(form);
@@ -27467,7 +27405,10 @@ function handleAction(event, node) {
   }
   if (action === 'set-message-filter') {
     event.preventDefault();
-    state.messageFilter = ['all', 'unread', 'groups', ...MESSAGE_TYPES].includes(node.dataset.filter) ? node.dataset.filter : 'all';
+    state.messageFilter = ['all', 'unread', 'groups', 'archived', ...MESSAGE_TYPES].includes(node.dataset.filter) ? node.dataset.filter : 'all';
+    // The selected chat may not survive the new filter -- leaving Archived with an archived
+    // chat open would show a thread the list no longer contains.
+    state.selectedConversationId = '';
     render();
     return;
   }
@@ -27476,9 +27417,12 @@ function handleAction(event, node) {
     toggleMessagePeopleSelectAll(node);
     return;
   }
-  if (action === 'leave-conversation') {
+  if (action === 'leave-conversation' || action === 'clear-conversation') {
     event.preventDefault();
     state.leavingConversationId = node.dataset.conversationId || '';
+    // One confirmation screen, two intentions. The mode decides which one it describes,
+    // because getting these two confused is exactly the mistake worth guarding against.
+    state.chatExitMode = action === 'clear-conversation' ? 'clear' : 'leave';
     state.modal = 'chat-leave-confirm';
     render();
     return;
@@ -27492,7 +27436,8 @@ function handleAction(event, node) {
   }
   if (action === 'confirm-leave-conversation') {
     event.preventDefault();
-    leaveConversation(node.dataset.conversationId || '');
+    if (state.chatExitMode === 'clear') clearConversation(node.dataset.conversationId || '');
+    else leaveConversation(node.dataset.conversationId || '');
     return;
   }
   if (action === 'delete-message') {
@@ -31611,36 +31556,82 @@ async function persistConversation(conversation, accessRows, update = false) {
 }
 
 /**
- * Remove a chat from your own list without touching anybody else's.
+ * Write one of the two watermarks onto my own access row for a chat.
  *
- * Deletes the caller's access row and nothing more -- not the conversation, not its messages,
- * not another person's access. The RPC exists because the DELETE policy on
- * message_conversation_access requires a manager permission, so a member could not leave a
- * chat at all, and anyone who could would have been able to remove other people with it.
+ * Shared by clearConversation and leaveConversation because everything except the column and
+ * the wording is identical: call the RPC, mark the row in memory, and let the accessors do
+ * the rest. Neither touches a message, the conversation, or another person's access.
+ *
+ * The RPCs are SECURITY DEFINER because INSERT and UPDATE on message_conversation_access
+ * require a manager permission -- without them a member could not clear or leave anything,
+ * and anybody who could would have been able to do it to other people too. They also create
+ * the row when my access came from an all_company row, a role, or from having created the
+ * conversation, which is the case the old delete-the-row version silently did nothing for.
  */
-async function leaveConversation(conversationId) {
+async function markChatAccess(conversationId, mode) {
   const conversation = state.messageConversations.find((item) => item.id === conversationId);
-  if (!conversation) return;
-  const isDirect = conversation.type === 'direct';
-  // The confirmation is renderLeaveConversationModal, which is what got the user here.
-  const profileId = activeSession().profile.id;
+  if (!conversation) return null;
+  const profile = activeSession().profile;
+  const rpc = mode === 'clear' ? 'clear_message_conversation' : 'leave_message_conversation';
+  let at = new Date().toISOString();
   const client = createSupabaseClient();
   if (isLiveSupabaseSession() && client) {
-    const result = await safeSupabaseQuery(client.rpc('leave_message_conversation', { target_conversation_id: conversationId }));
+    const result = await safeSupabaseQuery(client.rpc(rpc, { target_conversation_id: conversationId }));
     if (result.error) {
-      showToast(result.error.message || 'Could not remove that chat.', 'local', 'Messages');
-      return;
+      showToast(result.error.message || (mode === 'clear' ? 'Could not clear that chat.' : 'Could not leave that chat.'), 'local', 'Messages');
+      return null;
     }
+    // The procedure returns the instant it stamped; using the server's clock rather than
+    // this browser's keeps the local window identical to the one RLS will apply.
+    if (typeof result.data === 'string' && result.data) at = result.data;
   }
-  state.messageAccess = state.messageAccess.filter((row) => !(
-    row.conversation_id === conversationId && row.target_type === 'profile' && row.target_id === profileId
-  ));
-  state.messageConversations = state.messageConversations.filter((item) => item.id !== conversationId);
-  if (state.selectedConversationId === conversationId) state.selectedConversationId = '';
+  const column = mode === 'clear' ? 'cleared_at' : 'left_at';
+  const mine = myConversationAccessRows(conversationId);
+  if (mine.length) {
+    state.messageAccess = state.messageAccess.map((row) => (
+      mine.includes(row) ? { ...row, [column]: at } : row
+    ));
+  } else {
+    // No row of my own to mark, so the RPC made one. Mirror it rather than refetch.
+    state.messageAccess = state.messageAccess.concat(normalizeMessageAccess({
+      conversation_id: conversationId,
+      company_id: conversation.company_id,
+      target_type: 'profile',
+      target_id: profile.id,
+      created_at: at,
+      [column]: at,
+    }));
+  }
   state.leavingConversationId = '';
   state.modal = '';
   persistMessages();
-  showToast(isDirect ? 'Chat removed from your list.' : 'You left the chat.', isLiveSupabaseSession() ? 'live' : 'local', 'Messages');
+  return conversation;
+}
+
+/**
+ * DELETE CHAT: clear my copy of the history and stay in the conversation.
+ *
+ * The chat starts again from empty for me. Everyone else keeps every message, and anything
+ * sent from now on still reaches me -- which is the whole difference from leaving.
+ */
+async function clearConversation(conversationId) {
+  const conversation = await markChatAccess(conversationId, 'clear');
+  if (!conversation) return;
+  showToast('Chat cleared. You are still in it and will keep receiving messages.', isLiveSupabaseSession() ? 'live' : 'local', 'Messages');
+  render();
+}
+
+/**
+ * LEAVE CHAT: stop receiving, and keep what was said up to now as an archive.
+ */
+async function leaveConversation(conversationId) {
+  const conversation = await markChatAccess(conversationId, 'leave');
+  if (!conversation) return;
+  const isDirect = conversation.type === 'direct';
+  // The thread is no longer in the working list, so showing it would be showing something
+  // the sidebar does not contain.
+  if (state.selectedConversationId === conversationId) state.selectedConversationId = '';
+  showToast(isDirect ? 'Chat archived. You will not receive new messages in it.' : 'You left the chat. It is in Archived.', isLiveSupabaseSession() ? 'live' : 'local', 'Messages');
   navigate(companyPath('messages', {}, conversation.company_id), { replace: true });
   render();
 }
@@ -35504,7 +35495,10 @@ function companyMessageConversations(companyId = activeCompanyId()) {
   const filter = state.messageFilter || 'all';
   return state.messageConversations
     .filter((conversation) => conversation.company_id === companyId && canAccessConversation(conversation))
-    .filter((conversation) => filter === 'all' || conversation.type === filter || (filter === 'groups' && conversation.type !== 'direct') || (filter === 'unread' && conversationUnreadCount(conversation.id) > 0))
+    // A chat I have left is an archive, not a chat. It appears under its own filter and
+    // nowhere else, so leaving actually removes it from the list I work in.
+    .filter((conversation) => (filter === 'archived') === isConversationArchived(conversation.id))
+    .filter((conversation) => ['all', 'archived'].includes(filter) || conversation.type === filter || (filter === 'groups' && conversation.type !== 'direct') || (filter === 'unread' && conversationUnreadCount(conversation.id) > 0))
     .filter((conversation) => {
       if (!query) return true;
       const messageMatch = conversationMessages(conversation.id).some((message) => message.body.toLowerCase().includes(query));
@@ -35524,18 +35518,75 @@ function selectedConversation(companyId = activeCompanyId()) {
   return visible.find((conversation) => conversation.id === candidate) || visible[0] || null;
 }
 
+// My own access rows for a chat. Access can also come from an all_company row, a role, or
+// from having created the conversation -- in those cases there is no row of mine and no
+// watermark, which is exactly right: I have neither cleared nor left it.
+function myConversationAccessRows(conversationId) {
+  const profile = activeSession()?.profile || {};
+  const keys = new Set([profile.id, profile.member_id, profile.email].filter(Boolean).map(String));
+  return state.messageAccess.filter((row) => (
+    row.conversation_id === conversationId && row.target_type === 'profile' && keys.has(row.target_id)
+  ));
+}
+
+/**
+ * The instant I left this chat, or '' if I am still in it.
+ *
+ * Being re-added writes a fresh row with no left_at, and that row is what puts me back --
+ * so any row without one means I am in.
+ */
+function conversationLeftAt(conversationId) {
+  const rows = myConversationAccessRows(conversationId);
+  if (!rows.length || rows.some((row) => !row.left_at)) return '';
+  return rows.map((row) => row.left_at).sort().pop() || '';
+}
+
+function isConversationArchived(conversationId) {
+  return Boolean(conversationLeftAt(conversationId));
+}
+
+/**
+ * Is one message inside the window I am allowed to see?
+ *
+ * Mirrors app_private.chat_message_visible: after the clear, up to and including the leave.
+ * The server enforces it -- this keeps a local or demo session honest, and stops a message
+ * already in memory from reappearing before the next fetch.
+ */
+function messageInMyChatWindow(conversationId, createdAt) {
+  const rows = myConversationAccessRows(conversationId);
+  if (!rows.length) return true;
+  const at = Date.parse(createdAt || 0);
+  return rows.some((row) => (
+    (!row.cleared_at || at > Date.parse(row.cleared_at))
+    && (!row.left_at || at <= Date.parse(row.left_at))
+  ));
+}
+
 function conversationMessages(conversationId) {
   return state.messages
     .filter((message) => message.conversation_id === conversationId && !message.deleted_at)
+    .filter((message) => messageInMyChatWindow(conversationId, message.created_at))
     .sort((a, b) => Date.parse(a.created_at || 0) - Date.parse(b.created_at || 0));
 }
 
+// Judged on the parent MESSAGE's timestamp, not the attachment's: the two are written moments
+// apart, and a cleared chat that still listed its photographs would not be cleared.
+function attachmentInMyChatWindow(attachment) {
+  const message = state.messages.find((item) => item.id === attachment.message_id);
+  if (!message) return messageInMyChatWindow(attachment.conversation_id, attachment.created_at);
+  return messageInMyChatWindow(attachment.conversation_id, message.created_at);
+}
+
 function conversationAttachments(conversationId) {
-  return state.messageAttachments.filter((attachment) => attachment.conversation_id === conversationId);
+  return state.messageAttachments
+    .filter((attachment) => attachment.conversation_id === conversationId)
+    .filter(attachmentInMyChatWindow);
 }
 
 function messageAttachments(messageId) {
-  return state.messageAttachments.filter((attachment) => attachment.message_id === messageId);
+  return state.messageAttachments
+    .filter((attachment) => attachment.message_id === messageId)
+    .filter(attachmentInMyChatWindow);
 }
 
 function conversationAccessRows(conversationId) {
@@ -35547,6 +35598,8 @@ function conversationRead(conversationId, profileId = activeSession().profile.id
 }
 
 function conversationUnreadCount(conversationId, profileId = activeSession().profile.id) {
+  // Nothing new can arrive in a chat I have left, so an archive never nags.
+  if (isConversationArchived(conversationId)) return 0;
   const readAt = Date.parse(conversationRead(conversationId, profileId)?.last_read_at || 0);
   return conversationMessages(conversationId).filter((message) => message.sender_profile_id !== profileId && Date.parse(message.created_at || 0) > readAt).length;
 }
@@ -40611,6 +40664,11 @@ function normalizeMessageAccess(input) {
     target_type: ['all_company', 'role', 'profile'].includes(input.target_type) ? input.target_type : 'profile',
     target_id: String(input.target_id || ''),
     created_at: input.created_at || '',
+    // Two marks, two different intentions. cleared_at hides what was said before it and
+    // leaves you in the chat; left_at stops the chat at that instant and keeps the rest as
+    // an archive. Both are yours alone and neither touches a message row.
+    cleared_at: input.cleared_at || '',
+    left_at: input.left_at || '',
   };
 }
 

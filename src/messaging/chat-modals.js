@@ -13,6 +13,7 @@ export function createChatModals(ctx) {
     renderMessageGroupIconControl,
     renderMessagePeoplePicker, renderMessageRolePicker,
     appHref, companyMessageConversations, companyPath, state,
+    conversationLeftAt, isConversationArchived,
   } = ctx;
 
   /**
@@ -67,12 +68,22 @@ export function createChatModals(ctx) {
         ['Attachments', String(conversationAttachments(conversation.id).length)],
         ['Last message', formatDate(conversation.last_message_at)],
       ])}
-      <div class="chat-leave">
-        <button class="btn danger" type="button" data-action="leave-conversation" data-conversation-id="${h(conversation.id)}">
-          <i class="ti ti-trash"></i>${h(conversation.type === 'direct' ? 'Delete this chat for me' : 'Leave and delete for me')}
-        </button>
-        <p class="chat-people-note">Removes it from your list only. Everyone else keeps the chat and its messages.</p>
-      </div>
+      ${isConversationArchived(conversation.id) ? `
+        <div class="chat-leave">
+          <p class="chat-people-note">${h(`You left this chat on ${formatDate(conversationLeftAt(conversation.id))}. It is kept as an archive of what was said up to then; nothing new arrives here.`)}</p>
+        </div>
+      ` : `
+        <div class="chat-leave">
+          <button class="btn" type="button" data-action="clear-conversation" data-conversation-id="${h(conversation.id)}">
+            <i class="ti ti-eraser"></i>Delete chat
+          </button>
+          <p class="chat-people-note">Clears the messages you can see. You stay in the chat and keep receiving new ones.</p>
+          <button class="btn danger" type="button" data-action="leave-conversation" data-conversation-id="${h(conversation.id)}">
+            <i class="ti ti-door-exit"></i>${h(conversation.type === 'direct' ? 'Leave this chat' : 'Leave chat')}
+          </button>
+          <p class="chat-people-note">Moves it to Archived and stops new messages reaching you. Nothing is deleted for anybody else either way.</p>
+        </div>
+      `}
     `, 'message-modal');
   }
 
@@ -223,29 +234,44 @@ export function createChatModals(ctx) {
   }
 
   /**
-   * Confirming a leave, in the app rather than through window.confirm.
+   * Confirming a clear or a leave, in the app rather than through window.confirm.
    *
    * The browser's own dialog is stamped with the origin ("127.0.0.1:5173 says"), cannot carry
    * the chat's name in the app's own voice, and blocks the page while it is up. This one says
    * plainly what is about to happen and, just as importantly, what is not.
+   *
+   * One screen, two intentions, chosen by state.chatExitMode. They are spelled out side by
+   * side rather than shortened, because "delete" and "leave" are precisely the pair somebody
+   * is about to confuse -- and only one of them can be undone by scrolling up.
    */
   function renderLeaveConversationModal(companyId, conversationId) {
     const conversation = state.messageConversations.find((item) => item.id === conversationId);
     if (!conversation) return renderModalShell('Messages', 'Chat', emptyState('Conversation not found.'));
     const isDirect = conversation.type === 'direct';
-    return renderModalShell('Messages', isDirect ? 'Delete this chat for you' : 'Leave this chat', `
-      <p class="chat-leave-lead">${h(isDirect
-    ? `“${conversation.title}” disappears from your list.`
-    : `“${conversation.title}” disappears from your list.`)}</p>
+    const clearing = state.chatExitMode === 'clear';
+    const others = isDirect ? 'The other person' : 'Everyone else';
+    const points = clearing
+      ? [
+        ['ti-check', 'You stay in this chat and keep receiving new messages.'],
+        ['ti-check', `${others} keeps every message. Nothing is deleted for anybody but you.`],
+        ['ti-alert-triangle', 'The messages already here disappear from your view and cannot be brought back.'],
+      ]
+      : [
+        ['ti-check', `${others} keeps the chat and every message in it.`],
+        ['ti-check', 'What was said up to now stays readable under Archived.'],
+        ['ti-alert-triangle', isDirect ? 'You stop receiving messages here. Message them again and a fresh chat starts.' : 'You stop receiving messages here. You will need to be added back to rejoin.'],
+      ];
+    return renderModalShell('Messages', clearing ? 'Delete this chat for you' : 'Leave this chat', `
+      <p class="chat-leave-lead">${h(clearing
+    ? `“${conversation.title}” starts again from empty for you.`
+    : `“${conversation.title}” moves to Archived.`)}</p>
       <ul class="chat-leave-points">
-        <li><i class="ti ti-check" aria-hidden="true"></i>${h(isDirect ? 'The other person keeps the chat and every message in it.' : 'Everyone else keeps the chat and every message in it.')}</li>
-        <li><i class="ti ti-check" aria-hidden="true"></i>${h('Nothing is deleted for anybody but you.')}</li>
-        <li><i class="ti ti-alert-triangle" aria-hidden="true"></i>${h(isDirect ? 'Message them again and a fresh chat starts.' : 'You will need to be added back to rejoin.')}</li>
+        ${points.map(([icon, text]) => `<li><i class="ti ${icon}" aria-hidden="true"></i>${h(text)}</li>`).join('')}
       </ul>
       <div class="modal-actions">
         <button class="btn" type="button" data-action="cancel-leave-conversation">Cancel</button>
         <button class="btn danger" type="button" data-action="confirm-leave-conversation" data-conversation-id="${h(conversation.id)}">
-          <i class="ti ti-trash"></i>${h(isDirect ? 'Delete for me' : 'Leave chat')}
+          <i class="ti ${clearing ? 'ti-eraser' : 'ti-door-exit'}"></i>${h(clearing ? 'Delete chat' : 'Leave chat')}
         </button>
       </div>
     `, 'message-modal');
