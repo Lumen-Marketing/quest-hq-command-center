@@ -6,10 +6,13 @@ import { fileURLToPath } from 'node:url';
 
 const migrationsDir = fileURLToPath(new URL('../supabase/migrations/', import.meta.url));
 const migrationName = readdirSync(migrationsDir).find((name) => /_company_setup_survey\.sql$/.test(name));
+const repairMigrationName = readdirSync(migrationsDir).find((name) => /_company_setup_apply_plugin_ambiguity\.sql$/.test(name));
 
 assert.ok(migrationName, 'company setup survey migration must exist');
+assert.ok(repairMigrationName, 'company setup apply repair migration must exist');
 
 const sql = readFileSync(join(migrationsDir, migrationName), 'utf8').replace(/\r\n/g, '\n');
+const repairSql = readFileSync(join(migrationsDir, repairMigrationName), 'utf8').replace(/\r\n/g, '\n');
 
 function functionBody(name) {
   const start = sql.indexOf(`function public.${name}`);
@@ -61,6 +64,18 @@ test('apply is idempotent and does not delete live workspaces or business record
   assert.match(body, /on conflict \(workspace_id, plugin_id\) do update/i);
   assert.doesNotMatch(body, /delete from public\.(companies|company_memberships|workspaces|workspace_memberships|contacts|deals|jobs|tasks|files|messages)/i);
   assert.doesNotMatch(body, /truncate/i);
+});
+
+test('apply keeps loop variables distinct from plugin conflict-target columns', () => {
+  const body = functionBody('apply_company_setup');
+
+  assert.doesNotMatch(body, /\n\s*plugin_id text;/i);
+  assert.match(body, /\n\s*unavailable_plugin_id text;/i);
+  assert.match(body, /for unavailable_plugin_id in/i);
+  assert.match(body, /'plugin_id', unavailable_plugin_id/i);
+  assert.match(repairSql, /create or replace function public\.apply_company_setup/i);
+  assert.doesNotMatch(repairSql, /\n\s*plugin_id text;/i);
+  assert.match(repairSql, /for unavailable_plugin_id in/i);
 });
 
 test('pipeline replacement is skipped when a workspace contains contacts, quotes, or jobs', () => {
