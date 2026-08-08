@@ -5797,6 +5797,18 @@ textarea:focus {
 .access-user-main { grid-area: 1 / 2; }
 .access-role-form { grid-area: 2 / 2; }
 
+/* Suspend and Remove sit below the save button, separated by a rule: they are not part of
+   filling the form in, and putting them beside Save is how somebody removes a person while
+   reaching for it. */
+.access-user-danger {
+  grid-area: 3 / 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line, #e7ded1);
+}
+
 .access-user-row.muted {
   background: #f7f1e7;
   opacity: .78;

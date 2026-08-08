@@ -2664,6 +2664,7 @@ const state = {
   selectedConversationId: '',
   leavingConversationId: '',
   chatExitMode: 'leave',
+  removingMemberId: '',
   messageRealtimeChannel: null,
   messageRealtimeKey: '',
   calendarScope: 'company',
@@ -4419,9 +4420,23 @@ function workspaceIconSelect(selected = 'home') {
   `;
 }
 
+/**
+ * The companies that hold a seat for me but are not letting me in.
+ *
+ * Landing on "you are not an active member yet, create a workspace or join with a code" is
+ * the wrong story for somebody who WAS a member and has been suspended: it reads as though
+ * they never had access and invites them to start over. The seat is still there.
+ */
+function blockedMembershipsForMe() {
+  const profileId = activeSession()?.profile?.id;
+  if (!profileId) return [];
+  return state.memberships.filter((item) => item.profile_id === profileId && item.status !== 'active');
+}
+
 function renderNoCompanyAccess() {
   const busy = /creating|joining|opening/i.test(state.authMessage || '');
   const canCreate = canCreateAnotherWorkspace();
+  const suspended = blockedMembershipsForMe().filter((item) => item.status === 'disabled');
   document.title = 'Company access pending | Questbase';
   app.innerHTML = `
     <main class="login-shell">
@@ -4432,8 +4447,10 @@ function renderNoCompanyAccess() {
         </div>
         <div>
           <div class="eyebrow">Tenant security</div>
-          <h1>No active company access</h1>
-          <p>Your account exists, but you are not an active member of a company workspace yet. Business owners can create a workspace. Workers need an invite code from their company admin.</p>
+          <h1>${h(suspended.length ? 'Your access is suspended' : 'No active company access')}</h1>
+          <p>${h(suspended.length
+    ? `Your membership of ${suspended.map((item) => companyName(item.company_id)).join(', ')} is suspended, so nothing in it will open. Your account and everything you did are untouched. Ask an owner or admin there to reactivate you.`
+    : 'Your account exists, but you are not an active member of a company workspace yet. Business owners can create a workspace. Workers need an invite code from their company admin.')}</p>
         </div>
         <section class="login-lanes no-access-lanes">
           <article class="login-lane-card">
@@ -13539,6 +13556,7 @@ function loadAccessRow() {
         companyRoles, h, isLastActiveOwner, isPrimaryOwner, renderAvatar, roleIdForName, state, titleCase,
         workspaceMembershipForProfile,
         userDisplayMeta, userDisplayName,
+        MEMBERSHIP_STATUS_OPTIONS, membershipStatusLabel,
       });
       return accessRowModule;
     }).catch((error) => {
@@ -22466,84 +22484,37 @@ function renderMessageSearchModal(companyId) {
 }
 
 
-function renderFinancePage(route, companyId) {
-  const summary = financeSummary(companyId);
-  const invoices = companyFinanceInvoices(companyId);
-  const payments = companyFinancePayments(companyId).slice().sort(dateDesc('received_at')).slice(0, 5);
-  const expenses = companyFinanceExpenses(companyId).slice().sort(dateDesc('spent_at')).slice(0, 5);
-  const vendors = companyFinanceVendors(companyId).slice().sort((a, b) => a.name.localeCompare(b.name)).slice(0, 5);
-  const canManageFinance = can('finance.manage', companyId);
-  return `
-    <section class="tool-page finance-page">
-      ${workspaceHeader('Finance', 'Invoices, payments, expenses, vendors, and job-linked money in one company view.', `
-        ${canManageFinance ? `
-          <button class="btn btn-primary" type="button" data-action="new-finance-invoice"><i class="ti ti-file-dollar"></i>New invoice</button>
-          <button class="btn" type="button" data-action="new-finance-payment"><i class="ti ti-cash"></i>Record payment</button>
-          <button class="btn" type="button" data-action="new-finance-expense"><i class="ti ti-receipt"></i>Add expense</button>
-          <button class="btn" type="button" data-action="new-finance-vendor"><i class="ti ti-building-store"></i>Add vendor</button>
-        ` : ''}
-        <a class="btn" href="${appHref(companyPath('finance', { report: 'summary' }, companyId))}" data-router><i class="ti ti-report-analytics"></i>Reports</a>
-      `)}
-      <section class="metric-grid finance-metrics">
-        ${metricCard('Estimated pipeline', money(summary.pipeline))}
-        ${metricCard('Invoiced', money(summary.invoiced))}
-        ${metricCard('Collected', money(summary.collected))}
-        ${metricCard('Outstanding', money(summary.outstanding))}
-        ${metricCard('Expenses', money(summary.expenses))}
-        ${metricCard('Net position', money(summary.net))}
-      </section>
-      <section class="panel finance-aging">
-        <div class="section-head"><div><h2>AR aging</h2><p>Outstanding invoice balance by due date.</p></div></div>
-        <div class="finance-aging-grid">
-          ${[
-            ['Current', summary.aging.current],
-            ['1-30', summary.aging.thirty],
-            ['31-60', summary.aging.sixty],
-            ['61+', summary.aging.overSixty],
-          ].map(([label, value]) => `<div><span>${h(label)}</span><strong>${money(value)}</strong></div>`).join('')}
-        </div>
-      </section>
-      <section class="panel finance-invoice-panel">
-        <div class="section-head"><div><h2>Invoices</h2><p>${invoices.length} billing record${invoices.length === 1 ? '' : 's'} for ${h(companyName(companyId))}</p></div></div>
-        <div class="data-table finance-invoice-table">
-          <div class="table-head"><span>Invoice</span><span>Status</span><span>Job</span><span>Due</span><span>Total</span><span>Paid</span><span>Balance</span></div>
-          ${invoices.map((invoice) => `
-            <a class="table-row" href="${appHref(companyPath('finance', { invoice: invoice.id }, companyId))}" data-router>
-              <span><strong>${h(invoice.invoice_number)}</strong><small>${h(invoice.client_name || jobById(invoice.job_id)?.client_name || 'No client')}</small></span>
-              <span>${financeStatusPill(invoiceStatus(invoice))}</span>
-              <span>${h(jobById(invoice.job_id)?.name || 'Company level')}</span>
-              <span>${formatDate(invoice.due_date)}</span>
-              <span>${money(invoice.total)}</span>
-              <span>${money(invoicePaid(invoice.id))}</span>
-              <span>${money(invoiceBalance(invoice.id))}</span>
-            </a>
-          `).join('') || emptyState('No invoices yet. Create one from a job or customer record.')}
-        </div>
-      </section>
-      <section class="finance-secondary-grid">
-        <article class="panel">
-          <div class="section-head"><div><h2>Recent payments</h2><p>Money received.</p></div></div>
-          <div class="finance-compact-list">
-            ${payments.map((payment) => compactFinanceRow(financeInvoiceById(payment.invoice_id)?.invoice_number || 'Payment', payment.method, money(payment.amount), payment.received_at)).join('') || emptyState('No payments recorded.')}
-          </div>
-        </article>
-        <article class="panel">
-          <div class="section-head"><div><h2>Expenses</h2><p>Job and company costs.</p></div></div>
-          <div class="finance-compact-list">
-            ${expenses.map((expense) => compactFinanceRow(financeVendorName(expense.vendor_id), expense.category, money(expense.amount), expense.spent_at, companyPath('finance', { expense: expense.id }, companyId))).join('') || emptyState('No expenses recorded.')}
-          </div>
-        </article>
-        <article class="panel">
-          <div class="section-head"><div><h2>Vendors</h2><p>Suppliers and subcontractors.</p></div></div>
-          <div class="finance-compact-list">
-            ${vendors.map((vendor) => compactFinanceRow(vendor.name, vendor.category, vendor.status, vendor.updated_at, companyPath('finance', { vendor: vendor.id }, companyId))).join('') || emptyState('No vendors recorded.')}
-          </div>
-        </article>
-      </section>
-      ${!canManageFinance ? `<p class="small-note">Your role can view finance records. Creating or editing invoices, payments, expenses, and vendors requires finance manage permission.</p>` : ''}
-    </section>
-  `;
+// ---- Finance ----------------------------------------------------------------
+// Body lives in ./finance/finance-page.js and is fetched on first use.
+let financePageModule = null;
+let financePagePending = null;
+
+function loadFinancePage() {
+  if (financePageModule) return Promise.resolve(financePageModule);
+  if (!financePagePending) {
+    financePagePending = import('./finance/finance-page.js').then((mod) => {
+      financePageModule = mod.createFinancePage({
+        appHref, can, compactFinanceRow, companyFinanceExpenses, companyFinanceInvoices,
+        companyFinancePayments, companyFinanceVendors, companyName, companyPath, dateDesc,
+        emptyState, financeInvoiceById, financeStatusPill, financeSummary, financeVendorName,
+        formatDate, h, invoiceBalance, invoicePaid, invoiceStatus, jobById, metricCard,
+        money, workspaceHeader,
+      });
+      return financePageModule;
+    }).catch((error) => {
+      financePagePending = null;
+      throw error;
+    });
+  }
+  return financePagePending;
 }
+
+function renderFinancePage(route, companyId) {
+  if (financePageModule) return financePageModule.renderFinancePage(route, companyId);
+  loadFinancePage().then(() => render()).catch((error) => console.error('Finance failed to load', error));
+  return questLoader('Loading finance');
+}
+
 
 function renderFinanceRouteModal(route, companyId) {
   if (route.params.get('invoice')) return renderInvoiceDetailModal(companyId, route.params.get('invoice'));
@@ -22761,75 +22732,36 @@ function renderOperationsTabs(companyId, active) {
   `;
 }
 
-function renderCalendarPage(route, companyId) {
-  // Jobs are fetched on demand and the calendar reads them twice: to offer a job to link an
-  // event to, and to place job dates on the grid. Without this the dropdown held only
-  // "No linked job" for anyone who opened Calendar without visiting Jobs first -- which is
-  // exactly the reported "I cant link jobs".
-  if (!ensureDomainLoaded('production')) return questLoader('Loading calendar');
-  const items = filteredCalendarItems(companyId);
-  const allItems = calendarItems(companyId);
-  const todayItems = items.filter((item) => item.dateKey === isoDate(0));
-  const mineItems = allItems.filter((item) => item.mine);
-  const sourceCount = allItems.filter((item) => item.source !== 'manual').length;
-  const canCreate = can('calendar.manage', companyId);
-  return `
-    <section class="tool-page operations-page calendar-page">
-      ${workspaceHeader('Calendar', 'Company schedule built from tasks, approvals, finance due dates, time context, and manual events.', `
-        <button class="btn btn-primary" type="button" data-action="open-calendar-event-form"><i class="ti ti-calendar-plus"></i>New event</button>
-      `)}
-      ${renderOperationsTabs(companyId, 'calendar')}
-      <section class="metric-grid operations-metrics calendar-metrics">
-        ${metricCard('Today', todayItems.length)}
-        ${metricCard('This week', calendarItemsThisWeek(items).length)}
-        ${metricCard('Mine', mineItems.length)}
-        ${metricCard('From modules', sourceCount)}
-      </section>
-      <section class="workspace-toolbar calendar-toolbar">
-        <div class="segmented" role="group" aria-label="Calendar scope">
-          <button class="${state.calendarScope === 'company' ? 'active' : ''}" type="button" data-action="set-calendar-scope" data-scope="company"><i class="ti ti-building"></i>Company</button>
-          <button class="${state.calendarScope === 'me' ? 'active' : ''}" type="button" data-action="set-calendar-scope" data-scope="me"><i class="ti ti-user"></i>Me</button>
-        </div>
-        <div class="segmented" role="group" aria-label="Calendar view">
-          ${['month', 'week', 'list'].map((view) => `<button class="${state.calendarView === view ? 'active' : ''}" type="button" data-action="set-calendar-view" data-view="${h(view)}">${h(titleCase(view))}</button>`).join('')}
-        </div>
-        <label class="wide-control">
-          <span>Search</span>
-          <input data-calendar-search value="${h(state.calendarQuery)}" placeholder="Find events, jobs, tasks, or people" />
-        </label>
-        <label>
-          <span>Type</span>
-          <select data-calendar-type-filter>
-            <option value="all">All types</option>
-            ${CALENDAR_FILTER_TYPES.map((type) => `<option value="${h(type)}" ${state.calendarTypeFilter === type ? 'selected' : ''}>${h(type)}</option>`).join('')}
-          </select>
-        </label>
-      </section>
-      <section class="calendar-nav">
-        <div>
-          <button class="btn" type="button" data-action="calendar-prev" aria-label="Previous month"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
-          <button class="btn" type="button" data-action="calendar-today">Today</button>
-          <button class="btn" type="button" data-action="calendar-next" aria-label="Next month"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
-        </div>
-        <strong>${h(calendarRangeLabel())}</strong>
-      </section>
-      <section class="calendar-shell">
-        <article class="panel calendar-main">
-          ${state.calendarView === 'month' ? renderCalendarMonth(companyId, items) : ''}
-          ${state.calendarView === 'week' ? renderCalendarWeek(companyId, items) : ''}
-          ${state.calendarView === 'list' ? renderCalendarList(companyId, items) : ''}
-        </article>
-        <aside class="panel calendar-agenda">
-          <div class="section-head"><div><h2>Agenda</h2><p>Next events that match this view.</p></div></div>
-          <div class="calendar-agenda-list">
-            ${items.slice(0, 9).map(renderCalendarAgendaItem).join('') || emptyState('No calendar items match this view.')}
-          </div>
-        </aside>
-      </section>
-      ${!canCreate ? `<p class="small-note">Your role can view the calendar. Manual company events require calendar manage permission.</p>` : ''}
-    </section>
-  `;
+// ---- Calendar ----------------------------------------------------------------
+// Body lives in ./ops/calendar-page.js and is fetched on first use.
+let calendarPageModule = null;
+let calendarPagePending = null;
+
+function loadCalendarPage() {
+  if (calendarPageModule) return Promise.resolve(calendarPageModule);
+  if (!calendarPagePending) {
+    calendarPagePending = import('./ops/calendar-page.js').then((mod) => {
+      calendarPageModule = mod.createCalendarPage({
+        CALENDAR_FILTER_TYPES, calendarItems, calendarItemsThisWeek, calendarRangeLabel, can,
+        emptyState, ensureDomainLoaded, filteredCalendarItems, h, isoDate, metricCard, questLoader,
+        renderCalendarAgendaItem, renderCalendarList, renderCalendarMonth, renderCalendarWeek,
+        renderOperationsTabs, state, titleCase, workspaceHeader,
+      });
+      return calendarPageModule;
+    }).catch((error) => {
+      calendarPagePending = null;
+      throw error;
+    });
+  }
+  return calendarPagePending;
 }
+
+function renderCalendarPage(route, companyId) {
+  if (calendarPageModule) return calendarPageModule.renderCalendarPage(route, companyId);
+  loadCalendarPage().then(() => render()).catch((error) => console.error('Calendar failed to load', error));
+  return questLoader('Loading calendar');
+}
+
 
 function renderCalendarMonth(companyId, items) {
   const days = calendarMonthDays(state.calendarCursorDate);
@@ -23726,6 +23658,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'message-access') return renderMessageAccessModal(activeCompanyId(), state.selectedConversationId);
   if (state.modal === 'message-details') return renderMessageDetailsModal(activeCompanyId(), state.selectedConversationId);
   if (state.modal === 'chat-leave-confirm') return renderLeaveConversationModal(activeCompanyId(), state.leavingConversationId);
+  if (state.modal === 'remove-member-confirm') return renderRemoveMemberModal(state.removingMemberId);
   if (state.modal === 'message-search') return renderMessageSearchModal(activeCompanyId());
   if (state.modal === 'calendar-event-detail') return renderCalendarEventDetailModal(activeCompanyId());
   if (state.modal === 'calendar-event-new') return renderCalendarEventFormModal(activeCompanyId(), null);
@@ -27417,6 +27350,32 @@ function handleAction(event, node) {
     toggleMessagePeopleSelectAll(node);
     return;
   }
+  if (action === 'suspend-company-member' || action === 'reactivate-company-member') {
+    event.preventDefault();
+    setMemberSuspension(node.dataset.companyId || '', node.dataset.profileId || '', action === 'suspend-company-member');
+    return;
+  }
+  if (action === 'remove-company-member') {
+    event.preventDefault();
+    // Removing a seat is not reversible from this screen, so it gets a confirmation that
+    // says what survives -- the fear is that removing somebody erases their work.
+    state.removingMemberId = `${node.dataset.companyId || ''}:${node.dataset.profileId || ''}`;
+    state.modal = 'remove-member-confirm';
+    render();
+    return;
+  }
+  if (action === 'cancel-remove-member') {
+    event.preventDefault();
+    state.removingMemberId = '';
+    state.modal = '';
+    render();
+    return;
+  }
+  if (action === 'confirm-remove-member') {
+    event.preventDefault();
+    removeCompanyMember(node.dataset.companyId || '', node.dataset.profileId || '');
+    return;
+  }
   if (action === 'leave-conversation' || action === 'clear-conversation') {
     event.preventDefault();
     state.leavingConversationId = node.dataset.conversationId || '';
@@ -30938,6 +30897,127 @@ async function saveUserAccess(formNode) {
 /** A refused save has to say so where the user is looking, not only in the sync chip. */
 function accessSaveFailed(message) {
   showToast(message, 'local', 'Users');
+  render();
+}
+
+/**
+ * Confirming a removal.
+ *
+ * The whole point of this dialog is the middle line. "Remove" reads as "erase", and the fear
+ * that removing somebody deletes the jobs, tasks and messages they produced is exactly what
+ * stops people using it. Say what survives before saying what goes.
+ */
+function renderRemoveMemberModal(key) {
+  const [companyId, profileId] = String(key || '').split(':');
+  const user = companyAccessUsers(companyId).find((item) => item.profile_id === profileId);
+  if (!user) return renderModalShell('Users', 'Remove from company', emptyState('That member was not found.'));
+  return renderModalShell('Users', 'Remove from company', `
+    <p class="chat-leave-lead">${h(`${userDisplayName(user)} loses access to ${companyName(companyId)}.`)}</p>
+    <ul class="chat-leave-points">
+      <li><i class="ti ti-check" aria-hidden="true"></i>${h('Everything they did stays: jobs, tasks, messages, files and time all keep their name on them.')}</li>
+      <li><i class="ti ti-check" aria-hidden="true"></i>${h('Their Questbase account is untouched. Any other company they belong to is unaffected.')}</li>
+      <li><i class="ti ti-check" aria-hidden="true"></i>${h('You can invite the same email again later and they come straight back.')}</li>
+      <li><i class="ti ti-alert-triangle" aria-hidden="true"></i>${h('Their role and workspace assignments here are gone and would need setting up again.')}</li>
+    </ul>
+    <p class="form-note">${h('To stop them signing in but keep their access ready, suspend them instead.')}</p>
+    <div class="modal-actions">
+      <button class="btn" type="button" data-action="cancel-remove-member">Cancel</button>
+      <button class="btn danger" type="button" data-action="confirm-remove-member" data-company-id="${h(companyId)}" data-profile-id="${h(profileId)}">
+        <i class="ti ti-user-minus"></i>Remove from company
+      </button>
+    </div>
+  `, 'task-modal');
+}
+
+// The stored vocabulary is what the database has always used; only the words shown changed.
+// 'disabled' is renamed Suspended because that is what it does -- the seat and every row stay
+// exactly where they are, and the person simply stops being an active member until somebody
+// sets them back. Renaming the value itself would have meant migrating live rows to buy a
+// nicer string, which is not a trade worth making.
+const MEMBERSHIP_STATUS_OPTIONS = [
+  ['active', 'Active'],
+  ['pending', 'Pending'],
+  ['disabled', 'Suspended'],
+  ['left', 'Left'],
+];
+
+function membershipStatusLabel(status) {
+  const match = MEMBERSHIP_STATUS_OPTIONS.find(([value]) => value === status);
+  return match ? match[1] : titleCase(status || '');
+}
+
+/**
+ * Suspend or reactivate somebody, without touching their role.
+ *
+ * Reuses update_company_member_access, which already refuses the main owner, refuses an
+ * Owner or Developer unless the actor is an Owner, and writes the audit event. Passing the
+ * role they already hold keeps this about the status and nothing else.
+ */
+async function setMemberSuspension(companyId, profileId, suspended) {
+  if (!requirePermission('users.manage', companyId, 'Your role cannot change member access.', 'Users')) return;
+  const membership = membershipForProfile(companyId, profileId);
+  if (!membership) return;
+  const status = suspended ? 'disabled' : 'active';
+  if (membership.status === status) return;
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await safeSupabaseQuery(client.rpc('update_company_member_access', {
+      target_company_id: companyId,
+      target_profile_id: profileId,
+      target_role: membership.role,
+      target_role_id: state.roleAssignments.find((item) => item.company_id === companyId && item.profile_id === profileId)?.role_id || null,
+      target_status: status,
+    }));
+    if (result.error) {
+      showToast(result.error.message || 'Could not change that access.', 'local', 'Users');
+      return;
+    }
+  }
+  state.memberships = state.memberships.map((item) => (
+    item.company_id === companyId && item.profile_id === profileId ? { ...item, status } : item
+  ));
+  persistAll();
+  showToast(suspended
+    ? 'Suspended. They keep their account and their work, and can reach nothing here until you reactivate them.'
+    : 'Reactivated. Their access is back exactly as it was.', isLiveSupabaseSession() ? 'live' : 'local', 'Users');
+  render();
+}
+
+/**
+ * Take somebody's seat back.
+ *
+ * Deletes the membership, the role assignment and the workspace assignments for this company.
+ * Their profile stays, and so does everything they wrote -- jobs, tasks, messages, time --
+ * because that is the company's record, not theirs to take away. Inviting the same email
+ * again puts them straight back.
+ *
+ * Their Questbase ACCOUNT is not deleted, deliberately: a person can hold seats in several
+ * companies, and one company removing them must not sign them out of the others.
+ */
+async function removeCompanyMember(companyId, profileId) {
+  if (!requirePermission('users.manage', companyId, 'Your role cannot change member access.', 'Users')) return;
+  const client = createSupabaseClient();
+  if (isLiveSupabaseSession() && client) {
+    const result = await safeSupabaseQuery(client.rpc('remove_company_member', {
+      target_company_id: companyId,
+      target_profile_id: profileId,
+    }));
+    if (result.error) {
+      showToast(result.error.message || 'Could not remove that person.', 'local', 'Users');
+      return;
+    }
+  }
+  const companyWorkspaceIds = new Set(state.operationalWorkspaces
+    .filter((workspace) => workspace.company_id === companyId).map((workspace) => workspace.id));
+  state.memberships = state.memberships.filter((item) => !(item.company_id === companyId && item.profile_id === profileId));
+  state.roleAssignments = state.roleAssignments.filter((item) => !(item.company_id === companyId && item.profile_id === profileId));
+  state.workspaceMemberships = state.workspaceMemberships.filter((item) => !(
+    companyWorkspaceIds.has(item.workspace_id) && item.profile_id === profileId
+  ));
+  state.removingMemberId = '';
+  state.modal = '';
+  persistAll();
+  showToast('Removed from this company. Their work stays on the record, and you can invite them again any time.', isLiveSupabaseSession() ? 'live' : 'local', 'Users');
   render();
 }
 

@@ -198,6 +198,8 @@ const FACTORY_MODULES = [
   ['src/settings/recycle-bin-panel.js', 'createRecycleBinPanel'],
   ['src/reports/analytics-page.js', 'createAnalyticsPage'],
   ['src/ops/estimate-builder.js', 'createEstimateBuilder'],
+  ['src/finance/finance-page.js', 'createFinancePage'],
+  ['src/ops/calendar-page.js', 'createCalendarPage'],
 ];
 
 test('the list above covers every factory module there is', () => {

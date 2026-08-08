@@ -8,6 +8,7 @@ export function createAccessRow(ctx) {
     companyRoles, h, isLastActiveOwner, isPrimaryOwner, renderAvatar, roleIdForName, state, titleCase,
     workspaceMembershipForProfile,
     userDisplayMeta, userDisplayName,
+    MEMBERSHIP_STATUS_OPTIONS, membershipStatusLabel,
   } = ctx;
 
   function renderUserAccessRow(companyId, user, canManageUsers) {
@@ -28,9 +29,10 @@ export function createAccessRow(ctx) {
         ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
         <div class="access-user-main">
           <strong>${h(userDisplayName(user))}</strong>
-          <span>${h(userDisplayMeta(user))} / ${h(titleCase(user.status))}</span>
+          <span>${h(userDisplayMeta(user))} / ${h(membershipStatusLabel(user.status))}</span>
           ${isMainOwner ? '<small class="access-note">Main owner of this company - their role and status cannot be changed.</small>'
     : isLastOwner ? '<small class="access-note">Last active Owner - promote another Owner before changing this access.</small>' : ''}
+          ${user.status === 'disabled' ? '<small class="access-note">Suspended. They keep their account and everything they did, and can reach nothing here until they are set back to Active.</small>' : ''}
         </div>
         <form class="access-role-form" data-user-role-form>
           <input type="hidden" name="company_id" value="${h(companyId)}" />
@@ -39,7 +41,7 @@ export function createAccessRow(ctx) {
             ${roles.map((role) => `<option value="${h(role.id)}" ${role.id === selectedRoleId ? 'selected' : ''}>${h(role.name)}</option>`).join('')}
           </select>
           <select name="membership_status" ${canEditUser ? '' : 'disabled'}>
-            ${['active', 'pending', 'disabled', 'left'].map((status) => `<option value="${h(status)}" ${status === user.status ? 'selected' : ''}>${h(titleCase(status))}</option>`).join('')}
+            ${MEMBERSHIP_STATUS_OPTIONS.map(([status, label]) => `<option value="${h(status)}" ${status === user.status ? 'selected' : ''}>${h(label)}</option>`).join('')}
           </select>
           <div class="workspace-access-grid">
             <strong>Workspace assignments</strong>
@@ -68,6 +70,20 @@ export function createAccessRow(ctx) {
           </div>
           <button class="btn" type="submit" ${canAssignWorkspaces ? '' : 'disabled'}>Save role &amp; workspaces</button>
         </form>
+        <div class="access-user-danger">
+          ${user.status === 'disabled' ? `
+            <button class="btn" type="button" data-action="reactivate-company-member" data-company-id="${h(companyId)}" data-profile-id="${h(user.profile_id)}" ${canEditUser ? '' : 'disabled'}>
+              <i class="ti ti-player-play"></i>Reactivate
+            </button>
+          ` : `
+            <button class="btn" type="button" data-action="suspend-company-member" data-company-id="${h(companyId)}" data-profile-id="${h(user.profile_id)}" ${canEditUser ? '' : 'disabled'}>
+              <i class="ti ti-player-pause"></i>Suspend
+            </button>
+          `}
+          <button class="btn danger" type="button" data-action="remove-company-member" data-company-id="${h(companyId)}" data-profile-id="${h(user.profile_id)}" ${canEditUser ? '' : 'disabled'}>
+            <i class="ti ti-user-minus"></i>Remove
+          </button>
+        </div>
       </article>
     `;
   }

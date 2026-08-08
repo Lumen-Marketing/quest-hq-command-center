@@ -91,8 +91,10 @@ test('an accent is darkened for the one light sidebar', () => {
 // first half is: the job list is fetched on demand and the calendar never asked for it.
 
 test('the calendar waits for jobs before it renders', () => {
-  const fn = main.slice(main.indexOf('function renderCalendarPage(route, companyId)'));
-  const body = fn.slice(0, fn.indexOf('\n  return `'));
+  // The page is a fetched module now; the copy left in main.js is only the loader shim.
+  const page = readFileSync(join(root, 'src', 'ops', 'calendar-page.js'), 'utf8');
+  const fn = page.slice(page.indexOf('function renderCalendarPage(route, companyId)'));
+  const body = fn.slice(0, fn.indexOf('\n    return `'));
   assert.match(body, /if \(!ensureDomainLoaded\('production'\)\) return questLoader\('Loading calendar'\);/);
   // Open Calendar without visiting Jobs first and the dropdown held only "No linked job".
   assert.ok(
