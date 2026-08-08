@@ -2443,8 +2443,19 @@ button { cursor: pointer; }
   text-align: left;
 }
 
+/* One column, not three. The rule above is shared with the company switcher, which still has
+   an icon and a chevron; only this card lost its avatar, and the space it took now goes to
+   the lines that say where you stand -- your company role and, when it differs, your role in
+   the workspace on screen. */
 .deck-user-card {
   cursor: pointer;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* The workspace name is context, not identity, so it sits quieter than the role above it. */
+.deck-user-scope {
+  opacity: .62;
+  font-size: 11px;
 }
 
 .deck-company-switch .symbol-icon {

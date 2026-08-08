@@ -5586,10 +5586,27 @@ function renderDeck(route) {
     </div>
     <div class="deck-footer">
       <div class="deck-footer-row">
-        <button class="deck-user-card" type="button" data-action="open-profile">
-          ${renderAvatar(session.profile, 'avatar small')}
-          <span><strong>${h(session.profile.full_name)}</strong><small>${h(roleForCompany(companyId))}</small></span>
-        </button>
+        ${(() => {
+    // Name, then where you stand: your role in the company and your role in the workspace
+    // you are actually looking at. Those two differ often enough to be worth saying -- an
+    // owner can hold an ordinary role inside one workspace -- and the card had room for it
+    // once the avatar went. The avatar was the least useful thing here: it told you who you
+    // were, which you knew, and it was the widest element on the row.
+    const companyRole = roleForCompany(companyId);
+    const workspace = activeWorkspace();
+    const workspaceRole = workspace ? workspaceRoleLabel(workspace.id) : '';
+    // Saying "Owner / Owner access" twice is noise; one line covers both when they agree.
+    const sameEverywhere = !workspace
+            || workspaceRole.replace(/ access$/i, '').toLowerCase() === String(companyRole).toLowerCase();
+    return `
+        <button class="deck-user-card" type="button" data-action="open-profile" title="${h(session.profile.full_name)}">
+          <span>
+            <strong>${h(session.profile.full_name)}</strong>
+            <small>${h(companyRole)}${sameEverywhere ? '' : ` · ${workspaceRole}`}</small>
+            ${workspace ? `<small class="deck-user-scope">${h(workspace.name)}</small>` : ''}
+          </span>
+        </button>`;
+  })()}
         <a class="deck-settings-link" href="${appHref(companyPath('settings', {}, companyId))}" data-router aria-label="Settings" title="Settings">
           ${svgIcon('q-symbol-settings')}
         </a>
@@ -20609,18 +20626,22 @@ function renderRolesSettings(companyId) {
   return `
     <article class="panel span-2">
       <div class="section-head">
-        <div><h2>Custom roles</h2><p>Discord-style roles for module, action, record, and field permissions.</p></div>
-        <button class="btn btn-primary" type="button" data-action="open-role-form"><i class="ti ti-plus"></i>New role</button>
+        <div><h2>Roles</h2><p>Every company starts with Owner, who can do everything, and Member, who can do the work but not change who anybody is. Add your own for anything between.</p></div>
+        <button class="btn btn-primary" type="button" data-action="open-role-form" ${canManageRoles ? '' : 'disabled'}><i class="ti ti-plus"></i>New role</button>
       </div>
       <div class="roles-list">
         ${roles.map((role) => {
-          const permissionCount = state.rolePermissions.filter((item) => item.role_id === role.id && item.effect === 'allow').length;
+          const rolePermissions = state.rolePermissions.filter((item) => item.role_id === role.id && item.effect === 'allow');
+          // A role holding '*' has every permission there will ever be, so counting its rows
+          // reports "2 permissions" for the one role that has them all.
+          const fullAccess = rolePermissions.some((item) => item.permission_key === '*');
+          const permissionCount = rolePermissions.length;
           const userCount = state.roleAssignments.filter((item) => item.company_id === companyId && item.role_id === role.id).length;
           const viewing = previewRole?.id === role.id;
           return `
             <article class="role-row" style="--role-color:${h(role.color)}">
               <span></span>
-              <div><strong>${h(role.name)}</strong><small>${permissionCount || 'All'} permissions / ${userCount} users / priority ${role.priority}</small></div>
+              <div><strong>${h(role.name)}</strong><small>${fullAccess ? 'Full access' : `${permissionCount || 'All'} permissions`} / ${userCount} users / priority ${role.priority}</small></div>
               <div class="role-row-actions">
                 <b>${role.is_system ? 'System' : 'Custom'}</b>
                 <button class="btn" type="button" data-action="view-as-role" data-role-id="${h(role.id)}" ${viewing ? 'disabled' : ''}>
