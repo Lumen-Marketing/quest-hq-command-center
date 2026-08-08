@@ -1,6 +1,6 @@
 # Public relationships
 
-Captured 2026-07-28T22:31:54.000Z. Composite foreign keys appear as one row per paired column.
+Captured 2026-08-08T00:57:09.780Z. Composite foreign keys appear as one row per paired column.
 
 | Constraint | From | To | Update | Delete |
 | --- | --- | --- | --- | --- |
@@ -43,6 +43,9 @@ Captured 2026-07-28T22:31:54.000Z. Composite foreign keys appear as one row per 
 | client_portals_job_id_fkey | `client_portals.job_id` | `jobs.id` | NO ACTION | SET NULL |
 | clients_company_id_fkey | `clients.company_id` | `companies.id` | NO ACTION | RESTRICT |
 | comment_reactions_comment_id_fkey | `comment_reactions.comment_id` | `task_comments.id` | NO ACTION | CASCADE |
+| companies_primary_owner_profile_id_fkey | `companies.primary_owner_profile_id` | `profiles.id` | NO ACTION | SET NULL |
+| company_active_timers_company_id_fkey | `company_active_timers.company_id` | `companies.id` | NO ACTION | CASCADE |
+| company_active_timers_profile_id_fkey | `company_active_timers.profile_id` | `profiles.id` | NO ACTION | CASCADE |
 | company_invites_accepted_by_fkey | `company_invites.accepted_by` | `profiles.id` | NO ACTION | SET NULL |
 | company_invites_company_id_fkey | `company_invites.company_id` | `companies.id` | NO ACTION | CASCADE |
 | company_invites_invited_by_fkey | `company_invites.invited_by` | `profiles.id` | NO ACTION | SET NULL |
@@ -55,7 +58,17 @@ Captured 2026-07-28T22:31:54.000Z. Composite foreign keys appear as one row per 
 | company_memberships_profile_id_fkey | `company_memberships.profile_id` | `profiles.id` | NO ACTION | CASCADE |
 | company_plugins_company_id_fkey | `company_plugins.company_id` | `companies.id` | NO ACTION | CASCADE |
 | company_plugins_installed_by_fkey | `company_plugins.installed_by` | `profiles.id` | NO ACTION | SET NULL |
+| company_setup_profiles_company_id_fkey | `company_setup_profiles.company_id` | `companies.id` | NO ACTION | CASCADE |
+| company_setup_profiles_updated_by_fkey | `company_setup_profiles.updated_by` | `profiles.id` | NO ACTION | SET NULL |
 | company_subscriptions_company_id_fkey | `company_subscriptions.company_id` | `companies.id` | NO ACTION | CASCADE |
+| company_time_entries_company_id_fkey | `company_time_entries.company_id` | `companies.id` | NO ACTION | CASCADE |
+| company_time_entries_profile_id_fkey | `company_time_entries.profile_id` | `profiles.id` | NO ACTION | CASCADE |
+| contact_label_assignments_assigned_by_fkey | `contact_label_assignments.assigned_by` | `profiles.id` | NO ACTION | SET NULL |
+| contact_label_assignments_contact_id_fkey | `contact_label_assignments.contact_id` | `contacts.id` | NO ACTION | CASCADE |
+| contact_label_assignments_label_id_fkey | `contact_label_assignments.label_id` | `contact_labels.id` | NO ACTION | CASCADE |
+| contact_label_assignments_workspace_id_fkey | `contact_label_assignments.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
+| contact_labels_created_by_fkey | `contact_labels.created_by` | `profiles.id` | NO ACTION | SET NULL |
+| contact_labels_workspace_id_fkey | `contact_labels.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
 | contacts_account_id_fkey | `contacts.account_id` | `accounts.id` | NO ACTION | SET NULL |
 | contacts_company_id_fkey | `contacts.company_id` | `companies.id` | NO ACTION | CASCADE |
 | contacts_created_by_fkey | `contacts.created_by` | `profiles.id` | NO ACTION | SET NULL |
@@ -74,6 +87,9 @@ Captured 2026-07-28T22:31:54.000Z. Composite foreign keys appear as one row per 
 | deals_primary_contact_id_fkey | `deals.primary_contact_id` | `contacts.id` | NO ACTION | SET NULL |
 | deals_site_id_fkey | `deals.site_id` | `crm_sites.id` | NO ACTION | SET NULL |
 | deals_workspace_id_fkey | `deals.workspace_id` | `workspaces.id` | NO ACTION | RESTRICT |
+| eod_reports_company_id_fkey | `eod_reports.company_id` | `companies.id` | NO ACTION | CASCADE |
+| eod_reports_created_by_fkey | `eod_reports.created_by` | `profiles.id` | NO ACTION | SET NULL |
+| eod_reports_workspace_id_fkey | `eod_reports.workspace_id` | `workspaces.id` | NO ACTION | SET NULL |
 | field_permissions_company_id_fkey | `field_permissions.company_id` | `companies.id` | NO ACTION | CASCADE |
 | field_permissions_role_id_fkey | `field_permissions.role_id` | `roles.id` | NO ACTION | CASCADE |
 | finance_expenses_company_id_fkey | `finance_expenses.company_id` | `companies.id` | NO ACTION | CASCADE |
@@ -98,10 +114,26 @@ Captured 2026-07-28T22:31:54.000Z. Composite foreign keys appear as one row per 
 | forms_company_id_fkey | `forms.company_id` | `companies.id` | NO ACTION | CASCADE |
 | forms_deleted_by_fkey | `forms.deleted_by` | `profiles.id` | NO ACTION | SET NULL |
 | job_activity_job_id_fkey | `job_activity.job_id` | `jobs.id` | NO ACTION | CASCADE |
+| job_change_order_lines_change_order_id_fkey | `job_change_order_lines.change_order_id` | `job_change_orders.id` | NO ACTION | CASCADE |
+| job_change_order_lines_company_id_fkey | `job_change_order_lines.company_id` | `companies.id` | NO ACTION | CASCADE |
+| job_change_order_lines_job_id_fkey | `job_change_order_lines.job_id` | `jobs.id` | NO ACTION | CASCADE |
+| job_change_order_lines_material_id_fkey | `job_change_order_lines.material_id` | `pricebook_materials.id` | NO ACTION | SET NULL |
+| job_change_orders_company_id_fkey | `job_change_orders.company_id` | `companies.id` | NO ACTION | CASCADE |
+| job_change_orders_created_by_fkey | `job_change_orders.created_by` | `profiles.id` | NO ACTION | SET NULL |
+| job_change_orders_job_id_fkey | `job_change_orders.job_id` | `jobs.id` | NO ACTION | CASCADE |
+| job_cost_buckets_company_id_fkey | `job_cost_buckets.company_id` | `companies.id` | NO ACTION | CASCADE |
+| job_cost_buckets_job_id_fkey | `job_cost_buckets.job_id` | `jobs.id` | NO ACTION | CASCADE |
+| job_dailies_company_id_fkey | `job_dailies.company_id` | `companies.id` | NO ACTION | CASCADE |
+| job_dailies_created_by_fkey | `job_dailies.created_by` | `profiles.id` | NO ACTION | SET NULL |
+| job_dailies_job_id_fkey | `job_dailies.job_id` | `jobs.id` | NO ACTION | CASCADE |
+| job_draws_company_id_fkey | `job_draws.company_id` | `companies.id` | NO ACTION | CASCADE |
+| job_draws_job_id_fkey | `job_draws.job_id` | `jobs.id` | NO ACTION | CASCADE |
 | job_files_company_id_fkey | `job_files.company_id` | `companies.id` | NO ACTION | RESTRICT |
 | job_files_deleted_by_fkey | `job_files.deleted_by` | `profiles.id` | NO ACTION | SET NULL |
 | job_files_job_id_fkey | `job_files.job_id` | `jobs.id` | NO ACTION | CASCADE |
 | job_files_workspace_id_fkey | `job_files.workspace_id` | `workspaces.id` | NO ACTION | RESTRICT |
+| job_plans_company_id_fkey | `job_plans.company_id` | `companies.id` | NO ACTION | CASCADE |
+| job_plans_job_id_fkey | `job_plans.job_id` | `jobs.id` | NO ACTION | CASCADE |
 | jobs_account_id_fkey | `jobs.account_id` | `accounts.id` | NO ACTION | SET NULL |
 | jobs_client_id_fkey | `jobs.client_id` | `clients.id` | NO ACTION | SET NULL |
 | jobs_company_id_fkey | `jobs.company_id` | `companies.id` | NO ACTION | RESTRICT |
@@ -170,6 +202,7 @@ Captured 2026-07-28T22:31:54.000Z. Composite foreign keys appear as one row per 
 | tasks_company_id_fkey | `tasks.company_id` | `companies.id` | NO ACTION | RESTRICT |
 | tasks_creator_id_fkey | `tasks.creator_id` | `team_members.id` | NO ACTION | RESTRICT |
 | tasks_deleted_by_fkey | `tasks.deleted_by` | `profiles.id` | NO ACTION | SET NULL |
+| tasks_job_id_fkey | `tasks.job_id` | `jobs.id` | NO ACTION | CASCADE |
 | tasks_workspace_id_fkey | `tasks.workspace_id` | `workspaces.id` | NO ACTION | RESTRICT |
 | time_entries_task_id_fkey | `time_entries.task_id` | `tasks.id` | NO ACTION | CASCADE |
 | time_entries_user_id_fkey | `time_entries.user_id` | `team_members.id` | NO ACTION | RESTRICT |

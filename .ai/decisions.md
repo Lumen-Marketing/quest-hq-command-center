@@ -20,6 +20,10 @@ The approved Modular Quest landing direction is the public visual source of trut
 
 A company is the market customer, subscription, and outer security tenant. The desktop rail groups operational child workspaces under that company account. Workspace switching preserves the company route and carries the child workspace as a query parameter. Owners, admins, and developers inherit every active child workspace; regular workers require explicit workspace memberships and can receive a different role per workspace. Creating or archiving an operational workspace never creates or deletes the company account.
 
+## Guided setup produces an editable plan, not a hardcoded company type
+
+Company registration creates only the account and its safe default Main workspace, then sends an owner to Settings > Setup. Guide me, ready-made blueprints, and Start from scratch all produce the same versioned plan shape, which the owner can review before applying. The server owns app/role allowlists and role permission templates, caps the plan size, rejects CRM conflicts, preserves populated pipelines, and maps generated workspace/role keys to stable ids so a retry cannot duplicate them. Questionnaire reset clears only answers and the draft; it intentionally retains the last applied plan and every company or business record. This keeps onboarding easy without making one roofing/CRM layout mandatory for every market customer.
+
 ## Worker invites are non-elevated and workspace-explicit
 
 An invite may assign a regular/custom role and one or more active operational workspaces, but it can never confer Owner, Admin, or Developer. Acceptance clears stale custom-role assignments and reinserts only a role proven non-elevated and company-scoped. Existing active members cannot use a second invite to mutate their access. Elevated promotion remains a separate, owner-guarded action after the teammate joins.

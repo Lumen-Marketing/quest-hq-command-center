@@ -1,17 +1,17 @@
 # Database overview
 
-The live Supabase public catalog was captured 2026-07-29T22:52:09.000Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
+The live Supabase public catalog was captured 2026-08-08T00:57:09.780Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
 
 ## Catalog summary
 
-- Public tables/views: 76
-- Foreign-key column relationships: 194
-- RLS policies: 224
-- Public functions: 64
-- Triggers: 91
+- Public tables/views: 88
+- Foreign-key column relationships: 227
+- RLS policies: 270
+- Public functions: 76
+- Triggers: 98
 - Storage buckets: 6
-- Applied migration ledger entries: 86
-- Latest live ledger entry: `20260729224956_operational_workspace_persistence`
+- Applied migration ledger entries: 119
+- Latest live ledger entry: `20260808005400_company_setup_apply_plugin_ambiguity`
 
 ## Operational-workspace identity
 
@@ -20,6 +20,24 @@ workspace icons; an empty value selects the built-in `icon_key`. The create and 
 accept that field through backward-compatible trailing parameters. The authorized
 `set_default_operational_workspace(uuid)` RPC serializes each company's change and atomically
 clears the old default before selecting an active replacement.
+
+## Guided company setup
+
+`company_setup_profiles` stores one company's questionnaire answers, editable draft plan,
+last applied plan, and reset history. Signed-in company administrators may read the row;
+writes go only through fixed-search-path RPCs. `save_company_setup_draft` changes no company
+configuration. `apply_company_setup` validates bounded workspace, app, pipeline, and role
+templates and applies them atomically and idempotently. `reset_company_setup` clears only the
+answers and draft so the guide can be run again; the company, members, workspaces, installed
+configuration, customers, jobs, tasks, files, and messages remain intact.
+
+New companies receive an active default `Main` workspace from a database trigger, and the
+migration safely backfilled companies that lacked one. Live verification found zero companies
+without an active default. A rollback-only production test passed draft, apply, retry, and
+reset, proved stable workspace/role counts, and left no test company behind. The repository
+migrations are `202608081800_company_setup_survey.sql` and
+`202608081900_company_setup_apply_plugin_ambiguity.sql`; Supabase records provider-generated
+ledger timestamps.
 
 ## Live P0 database state
 

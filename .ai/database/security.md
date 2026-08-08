@@ -1,6 +1,6 @@
 # Database security catalog
 
-Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
+Captured 2026-08-08T00:57:09.780Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
 
 ## RLS coverage
 
@@ -19,17 +19,23 @@ Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted 
 | client_portal_documents | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | client_portal_events | enabled | 2 | INSERT, SELECT |
 | client_portals | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
-| clients | enabled | 1 | ALL |
+| clients | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | comment_reactions | enabled | 3 | DELETE, INSERT, SELECT |
 | companies | enabled | 2 | SELECT, UPDATE |
+| company_active_timers | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | company_invites | enabled | 1 | ALL |
 | company_join_requests | enabled | 2 | SELECT, UPDATE |
 | company_memberships | enabled | 2 | ALL, SELECT |
 | company_plugins | enabled | 2 | ALL, SELECT |
+| company_setup_profiles | enabled | 1 | SELECT |
 | company_subscriptions | enabled | 1 | SELECT |
+| company_time_entries | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| contact_label_assignments | enabled | 3 | DELETE, INSERT, SELECT |
+| contact_labels | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | contacts | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | crm_sites | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | deals | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| eod_reports | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | field_permissions | enabled | 2 | ALL, SELECT |
 | finance_expenses | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | finance_invoices | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
@@ -38,7 +44,13 @@ Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted 
 | form_responses | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | forms | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | job_activity | enabled | 1 | ALL |
+| job_change_order_lines | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| job_change_orders | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| job_cost_buckets | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| job_dailies | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| job_draws | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | job_files | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| job_plans | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | jobs | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | knowledge_articles | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | message_attachments | enabled | 2 | INSERT, SELECT |
@@ -51,11 +63,11 @@ Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted 
 | pricebook_materials | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | pricebook_vendor_prices | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | pricebook_vendors | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
-| profiles | enabled | 5 | DELETE, SELECT, UPDATE |
+| profiles | enabled | 4 | DELETE, SELECT, UPDATE |
 | projects | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | proposal_documents | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
-| recycle_bin_items | enabled | 1 | ALL |
 | record_history | enabled | 1 | SELECT |
+| recycle_bin_items | enabled | 1 | ALL |
 | reminder_log | enabled | 0 | ? |
 | resource_acl | enabled | 2 | ALL, SELECT |
 | ringcentral_accounts | enabled | 1 | SELECT |
@@ -129,12 +141,19 @@ Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted 
 | client_portals | managers insert client portals | {authenticated} | INSERT | PERMISSIVE |
 | client_portals | managers update client portals | {authenticated} | UPDATE | PERMISSIVE |
 | client_portals | members read client portals | {authenticated} | SELECT | PERMISSIVE |
-| clients | members access clients | {authenticated} | ALL | PERMISSIVE |
+| clients | clients edited by job managers | {authenticated} | UPDATE | PERMISSIVE |
+| clients | clients removed by job managers | {authenticated} | DELETE | PERMISSIVE |
+| clients | clients visible to job viewers | {authenticated} | SELECT | PERMISSIVE |
+| clients | clients written by job managers | {authenticated} | INSERT | PERMISSIVE |
 | comment_reactions | company members insert own comment_reactions | {authenticated} | INSERT | PERMISSIVE |
 | comment_reactions | company members read comment_reactions | {authenticated} | SELECT | PERMISSIVE |
 | comment_reactions | owners and admins delete comment_reactions | {authenticated} | DELETE | PERMISSIVE |
 | companies | admins update companies | {authenticated} | UPDATE | PERMISSIVE |
 | companies | members read their companies | {authenticated} | SELECT | PERMISSIVE |
+| company_active_timers | move own clock | {authenticated} | UPDATE | PERMISSIVE |
+| company_active_timers | own running clock | {authenticated} | SELECT | PERMISSIVE |
+| company_active_timers | start own clock | {authenticated} | INSERT | PERMISSIVE |
+| company_active_timers | stop own clock | {authenticated} | DELETE | PERMISSIVE |
 | company_invites | admins manage invites | {authenticated} | ALL | PERMISSIVE |
 | company_join_requests | admins manage join requests | {authenticated} | UPDATE | PERMISSIVE |
 | company_join_requests | requesters read own join requests | {authenticated} | SELECT | PERMISSIVE |
@@ -142,7 +161,19 @@ Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted 
 | company_memberships | members read company memberships | {authenticated} | SELECT | PERMISSIVE |
 | company_plugins | admins manage company plugins | {authenticated} | ALL | PERMISSIVE |
 | company_plugins | members read company plugins | {authenticated} | SELECT | PERMISSIVE |
+| company_setup_profiles | company_setup_profiles_select_admin | {authenticated} | SELECT | PERMISSIVE |
 | company_subscriptions | members read subscriptions | {authenticated} | SELECT | PERMISSIVE |
+| company_time_entries | correct own time | {authenticated} | UPDATE | PERMISSIVE |
+| company_time_entries | drop own time | {authenticated} | DELETE | PERMISSIVE |
+| company_time_entries | log own time | {authenticated} | INSERT | PERMISSIVE |
+| company_time_entries | own time entries | {authenticated} | SELECT | PERMISSIVE |
+| contact_label_assignments | contact label assignments workspace delete | {authenticated} | DELETE | PERMISSIVE |
+| contact_label_assignments | contact label assignments workspace insert | {authenticated} | INSERT | PERMISSIVE |
+| contact_label_assignments | contact label assignments workspace read | {authenticated} | SELECT | PERMISSIVE |
+| contact_labels | contact labels workspace delete | {authenticated} | DELETE | PERMISSIVE |
+| contact_labels | contact labels workspace insert | {authenticated} | INSERT | PERMISSIVE |
+| contact_labels | contact labels workspace read | {authenticated} | SELECT | PERMISSIVE |
+| contact_labels | contact labels workspace update | {authenticated} | UPDATE | PERMISSIVE |
 | contacts | contacts workspace delete | {authenticated} | DELETE | PERMISSIVE |
 | contacts | contacts workspace insert | {authenticated} | INSERT | PERMISSIVE |
 | contacts | contacts workspace read | {authenticated} | SELECT | PERMISSIVE |
@@ -155,6 +186,10 @@ Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted 
 | deals | deals workspace insert | {authenticated} | INSERT | PERMISSIVE |
 | deals | deals workspace read | {authenticated} | SELECT | PERMISSIVE |
 | deals | deals workspace update | {authenticated} | UPDATE | PERMISSIVE |
+| eod_reports | eod reports delete | {authenticated} | DELETE | PERMISSIVE |
+| eod_reports | eod reports insert | {authenticated} | INSERT | PERMISSIVE |
+| eod_reports | eod reports read | {authenticated} | SELECT | PERMISSIVE |
+| eod_reports | eod reports update | {authenticated} | UPDATE | PERMISSIVE |
 | field_permissions | admins manage field permissions | {authenticated} | ALL | PERMISSIVE |
 | field_permissions | members read field permissions | {authenticated} | SELECT | PERMISSIVE |
 | finance_expenses | finance_expenses_delete | {authenticated} | DELETE | PERMISSIVE |
@@ -182,10 +217,34 @@ Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted 
 | forms | managers update company forms | {authenticated} | UPDATE | PERMISSIVE |
 | forms | members read company forms | {authenticated} | SELECT | PERMISSIVE |
 | job_activity | members access job activity | {authenticated} | ALL | PERMISSIVE |
+| job_change_order_lines | job_change_order_lines delete | {authenticated} | DELETE | PERMISSIVE |
+| job_change_order_lines | job_change_order_lines insert | {authenticated} | INSERT | PERMISSIVE |
+| job_change_order_lines | job_change_order_lines read | {authenticated} | SELECT | PERMISSIVE |
+| job_change_order_lines | job_change_order_lines update | {authenticated} | UPDATE | PERMISSIVE |
+| job_change_orders | job_change_orders delete | {authenticated} | DELETE | PERMISSIVE |
+| job_change_orders | job_change_orders insert | {authenticated} | INSERT | PERMISSIVE |
+| job_change_orders | job_change_orders read | {authenticated} | SELECT | PERMISSIVE |
+| job_change_orders | job_change_orders update | {authenticated} | UPDATE | PERMISSIVE |
+| job_cost_buckets | job_cost_buckets delete | {authenticated} | DELETE | PERMISSIVE |
+| job_cost_buckets | job_cost_buckets insert | {authenticated} | INSERT | PERMISSIVE |
+| job_cost_buckets | job_cost_buckets read | {authenticated} | SELECT | PERMISSIVE |
+| job_cost_buckets | job_cost_buckets update | {authenticated} | UPDATE | PERMISSIVE |
+| job_dailies | job_dailies delete | {authenticated} | DELETE | PERMISSIVE |
+| job_dailies | job_dailies insert | {authenticated} | INSERT | PERMISSIVE |
+| job_dailies | job_dailies read | {authenticated} | SELECT | PERMISSIVE |
+| job_dailies | job_dailies update | {authenticated} | UPDATE | PERMISSIVE |
+| job_draws | job_draws delete | {authenticated} | DELETE | PERMISSIVE |
+| job_draws | job_draws insert | {authenticated} | INSERT | PERMISSIVE |
+| job_draws | job_draws read | {authenticated} | SELECT | PERMISSIVE |
+| job_draws | job_draws update | {authenticated} | UPDATE | PERMISSIVE |
 | job_files | job_files workspace delete | {authenticated} | DELETE | PERMISSIVE |
 | job_files | job_files workspace insert | {authenticated} | INSERT | PERMISSIVE |
 | job_files | job_files workspace read | {authenticated} | SELECT | PERMISSIVE |
 | job_files | job_files workspace update | {authenticated} | UPDATE | PERMISSIVE |
+| job_plans | job_plans delete | {authenticated} | DELETE | PERMISSIVE |
+| job_plans | job_plans insert | {authenticated} | INSERT | PERMISSIVE |
+| job_plans | job_plans read | {authenticated} | SELECT | PERMISSIVE |
+| job_plans | job_plans update | {authenticated} | UPDATE | PERMISSIVE |
 | jobs | jobs workspace delete | {authenticated} | DELETE | PERMISSIVE |
 | jobs | jobs workspace insert | {authenticated} | INSERT | PERMISSIVE |
 | jobs | jobs workspace read | {authenticated} | SELECT | PERMISSIVE |
@@ -235,9 +294,8 @@ Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted 
 | pricebook_vendors | members read pricebook vendors | {authenticated} | SELECT | PERMISSIVE |
 | profiles | managers delete profiles | {authenticated} | DELETE | PERMISSIVE |
 | profiles | managers update profiles | {authenticated} | UPDATE | PERMISSIVE |
-| profiles | team viewers read profiles | {authenticated} | SELECT | PERMISSIVE |
-| profiles | users read own profile | {authenticated} | SELECT | PERMISSIVE |
-| profiles | users update own profile name | {authenticated} | UPDATE | PERMISSIVE |
+| profiles | profiles readable to self, company peers and platform | {authenticated} | SELECT | PERMISSIVE |
+| profiles | users update own profile name | {public} | UPDATE | PERMISSIVE |
 | projects | company members delete projects | {authenticated} | DELETE | PERMISSIVE |
 | projects | company members insert projects | {authenticated} | INSERT | PERMISSIVE |
 | projects | company members read projects | {authenticated} | SELECT | PERMISSIVE |
@@ -246,8 +304,8 @@ Captured 2026-07-28T22:31:54.000Z. Policy expressions are intentionally omitted 
 | proposal_documents | proposal_documents workspace insert | {authenticated} | INSERT | PERMISSIVE |
 | proposal_documents | proposal_documents workspace read | {authenticated} | SELECT | PERMISSIVE |
 | proposal_documents | proposal_documents workspace update | {authenticated} | UPDATE | PERMISSIVE |
-| recycle_bin_items | admins manage recycle bin | {authenticated} | ALL | PERMISSIVE |
 | record_history | record history workspace read | {authenticated} | SELECT | PERMISSIVE |
+| recycle_bin_items | admins manage recycle bin | {authenticated} | ALL | PERMISSIVE |
 | resource_acl | admins manage resource acl | {authenticated} | ALL | PERMISSIVE |
 | resource_acl | members read resource acl | {authenticated} | SELECT | PERMISSIVE |
 | ringcentral_accounts | company admins read accounts | {authenticated} | SELECT | PERMISSIVE |
@@ -322,15 +380,21 @@ to be the deleting actor, enforces the ten-minute Undo and 30-day restore window
 the source table from a server allowlist, re-checks current company/workspace permission, and
 restores the source plus recycle ledger atomically. Public and anonymous execution are revoked.
 
+The setup RPCs (`save_company_setup_draft`, `apply_company_setup`, and
+`reset_company_setup`) carry the same generic authenticated SECURITY DEFINER warning by
+design. Each fixes `search_path`, requires `auth.uid()`, checks active company-admin access,
+validates bounded JSON, and exposes no anonymous execution. The setup table itself grants
+signed-in users SELECT only through company-admin RLS; all writes remain inside those RPCs.
+
 ## Browser reachability inventory
 
 Derived from live state on 2026-07-31, not from reading migrations. A table is
 *browser-reachable* only if RLS is on, at least one policy exists, and `anon` or
 `authenticated` holds a grant. Anything else is reachable solely through a SECURITY
-DEFINER RPC, an API route, or the service role — which is a design decision and should be
+DEFINER RPC, an API route, or the service role â€” which is a design decision and should be
 recorded rather than rediscovered.
 
-**Totals: 77 tables in `public` — 75 browser-reachable, 2 server-only, 0 with RLS off.**
+**Totals: 77 tables in `public` â€” 75 browser-reachable, 2 server-only, 0 with RLS off.**
 
 ### Server-only tables
 
@@ -342,25 +406,25 @@ recorded rather than rediscovered.
 RLS enabled with no policy denies every row to every non-owner role, so these fail closed
 regardless of grants. Both nonetheless carried `anon`/`authenticated` table grants until
 `202608011000_revoke_unintended_browser_grants.sql` removed them. The grants were not a
-hole on their own — they described an access path that did not exist — but they would have
+hole on their own â€” they described an access path that did not exist â€” but they would have
 become one the moment anybody added a policy, which is the kind of latent trap that only
 looks obvious afterwards. Supabase's advisor reports both as `rls_enabled_no_policy` at
 INFO level; that finding is expected here and should not be "fixed" by adding a policy.
 
 ### Tables granted to `authenticated` only
 
-Most tables carry grants to both `anon` and `authenticated` — the Supabase default — which
+Most tables carry grants to both `anon` and `authenticated` â€” the Supabase default â€” which
 is harmless because every policy is written `to authenticated`, so `anon` matches nothing.
-These six are narrower still, with no `anon` grant at all:
+These eight are narrower still, with no `anon` grant at all:
 
-`record_history`, `underwriting_cases`, `ringcentral_accounts`, `ringcentral_calls`,
+`company_setup_profiles`, `record_history`, `underwriting_cases`, `ringcentral_accounts`, `ringcentral_calls`,
 `ringcentral_extensions`, `ringcentral_presence`, `ringcentral_sync_state`.
 
 ### Trigger functions are not RPCs
 
 PostgreSQL grants EXECUTE on new functions to PUBLIC by default, and PostgREST turns
 anything the browser roles can execute into a callable `/rest/v1/rpc` endpoint. That makes
-`create function … returns trigger` quietly ship an anon-reachable endpoint unless the
+`create function â€¦ returns trigger` quietly ship an anon-reachable endpoint unless the
 grant is revoked.
 
 All six SECURITY DEFINER trigger functions in `public` now have browser EXECUTE revoked:

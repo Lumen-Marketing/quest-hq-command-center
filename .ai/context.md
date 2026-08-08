@@ -4,7 +4,7 @@ Questbase is Lumen's multi-tenant operating system for roofing and service compa
 
 ## Product boundary
 
-Questbase owns the company shell, authentication flow, company and workspace memberships, subscription gating, roles and permissions, CRM records, job containers, files, forms, finance, messaging, calendar, client portals, reporting, settings, workspace plugins, and custom workspace apps.
+Questbase owns the company shell, authentication flow, guided company setup, company and workspace memberships, subscription gating, roles and permissions, CRM records, job containers, files, forms, finance, messaging, calendar, client portals, reporting, settings, workspace plugins, and custom workspace apps.
 
 TaskManagement remains the vendored work-execution engine and the default task surface; a host-native Tasks surface is gated behind `VITE_NATIVE_TASKS_MODULE` (off by default). Questbase links those tasks to jobs through `project_id`, contacts through `contact_id`, and quotes/deals through tenant-scoped `deal_id`. Do not create a second independent task or next-step model inside Questbase. The native surface's write engine (src/tasks/task-store.js) is not a second model: it reuses the single `normalizeTask` / `taskPayload` shape.
 
@@ -22,7 +22,7 @@ Saved Contacts, Quotes, Jobs, and Tasks have a separate shared record-history le
 | Review and build | Reports/Analytics, People/Users, Meetings/Calendar, Templates, Automations |
 | Company workspace | Workspace App Builder, Workday, Quotes/Deals, Files, Forms, Client Portals, Knowledge |
 | Company operations | Price Book, Finance, Team Chart, Team Workload, Time, Approvals, Clock |
-| Control | Company, roles, access, billing, plugins, and workspace settings |
+| Control | Guided setup, company, roles, access, billing, plugins, and workspace settings |
 
 Tickets and Templates appear as future/planned areas. Confirm current implementation status in [current-state.md](current-state.md) before building against them.
 
@@ -47,6 +47,7 @@ Tickets and Templates appear as future/planned areas. Confirm current implementa
 - Task: work execution that also supplies the shared "What's next" value for linked Contacts, Quotes/Deals, and Jobs.
 - Company account: the market customer, subscription, and outer security tenant.
 - Operational workspace: a configurable child environment for a team, pipeline, or role inside one company account.
+- Company setup plan: the owner-reviewed, editable list of operational workspaces, apps, pipeline stages, and non-elevated role templates produced by the post-company questionnaire or a ready-made blueprint.
 - Workspace App Builder: the configurable custom-app module available inside an operational workspace; it is not the tenancy object itself.
 - Plugin: a company-level entitlement with separate activation and configuration per operational workspace; disabling it preserves data.
 

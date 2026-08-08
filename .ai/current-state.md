@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-07-31T02:49:38+08:00. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured 2026-08-08T00:57:09.780Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -32,9 +32,10 @@ Captured 2026-07-31T02:49:38+08:00. This is a point-in-time operational snapshot
 - Status: `ACTIVE_HEALTHY`.
 - Region: `us-west-1`.
 - Postgres: `17.6.1.127`, engine 17.
-- The committed full catalog snapshot remains the 2026-07-29 metadata-only capture. A targeted live verification on 2026-07-31 found 77 public tables/views, 197 foreign-key column relationships, 228 policies, 66 public functions, 92 triggers, 6 storage buckets, and 91 applied migration records.
-- Latest repository migration: `20260730181000_pipeline_stage_seed_repair.sql`.
-- The latest live provider ledger entry is `20260730183713_pipeline_stage_seed_repair`, preceded by `20260730183658_atomic_contact_to_quote`. The repository filenames retain their forward migration timestamps.
+- The metadata-only catalog snapshot was refreshed from production on 2026-08-08 and contains 88 public tables/views, 227 foreign-key column relationships, 270 policies, 76 public functions, 98 triggers, 6 storage buckets, and 119 applied migration records.
+- Latest repository migration: `202608081900_company_setup_apply_plugin_ambiguity.sql`.
+- The latest live provider ledger entry is `20260808005400_company_setup_apply_plugin_ambiguity`, preceded by `20260808005113_company_setup_survey`. Repository filenames retain reviewed forward-order timestamps while Supabase records provider-generated ledger timestamps.
+- Live verification confirmed the company setup table, all three fixed-search-path administrator RPCs, zero companies missing an active default workspace, and no surviving rollback-test company. A rollback-only test passed draft save, apply, identical retry, and questionnaire reset while workspace and role counts stayed stable.
 - Live verification confirmed the quote request column and unique partial index, SECURITY INVOKER conversion RPC, authenticated-only execute grant, per-kind operational-workspace seeding logic, and zero missing contacts/deals/jobs pipeline kinds across active workspaces.
 - Post-migration advisors reported no ERROR or CRITICAL findings. The operational-workspace RPC retains its previously documented authenticated SECURITY DEFINER warning because it performs its own company-admin authorization with a fixed search path.
 - Also applied on 2026-07-30: `202607301200_eod_reports.sql` (EOD reports module) and `202607301300_company_admin_permissions.sql` (company Admins are elevated for feature permissions, matching `is_company_admin`).
@@ -54,6 +55,8 @@ Repository migration filenames and Supabase provider ledger versions can differ 
 
 The market customer and outer security boundary is a company. Each company owns configurable operational workspaces. Owners, Admins, and Developers inherit access to active workspaces; workers and other members require explicit active workspace memberships and can have a separate role in each workspace.
 
+After an owner creates a company, Questbase opens a guided Setup tab instead of asking for a hardcoded industry preset during registration. The owner can answer five short questions, choose a ready-made setup, or start from scratch; then they review and edit workspace names, apps, pipeline stages, and non-elevated role names before applying. Drafts follow the company across devices. Applying is one retry-safe database operation. Settings can reset the questionnaire and reopen the guide without deleting or undoing the company, members, workspaces, customers, jobs, tasks, files, messages, or the last applied configuration.
+
 The teammate flow now follows one bounded path:
 
 1. A company manager selects a non-elevated role and one or more active workspaces.
@@ -71,6 +74,7 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 ## Feature state
 
 - Company and operational-workspace separation is production state.
+- Guided company setup is implemented behind Settings > Setup with Guide me, ready-made, and Start from scratch entry paths. Its UI and styles are lazy-loaded, its draft is stored per company, and its reset action is explicitly non-destructive.
 - EOD reports are a native Operations module backed by `public.eod_reports`, gated by the new `eod.view` / `eod.manage` permissions. The page and the admin-only platform master panel are both lazily loaded, which is what kept the entry bundle under its ceiling.
 - Workspaces independently activate entitled plugins and preserve workspace identity through CRM, pipeline, underwriting, job, file, proposal, and task records.
 - Operational-workspace defaults and uploaded icons now persist in Supabase and survive a reload; rejected writes no longer appear successful in the browser.
