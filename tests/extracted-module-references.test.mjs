@@ -201,6 +201,7 @@ const FACTORY_MODULES = [
   ['src/ops/estimate-builder.js', 'createEstimateBuilder'],
   ['src/finance/finance-page.js', 'createFinancePage'],
   ['src/ops/calendar-page.js', 'createCalendarPage'],
+  ['src/forms/new-form-modal.js', 'createNewFormModal'],
 ];
 
 test('the list above covers every factory module there is', () => {
