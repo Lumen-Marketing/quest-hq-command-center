@@ -33,7 +33,7 @@ Captured 2026-08-08T00:57:09.780Z. This is a point-in-time operational snapshot,
 - Region: `us-west-1`.
 - Postgres: `17.6.1.127`, engine 17.
 - The metadata-only catalog snapshot was refreshed from production on 2026-08-08 and contains 88 public tables/views, 227 foreign-key column relationships, 270 policies, 76 public functions, 98 triggers, 6 storage buckets, and 119 applied migration records.
-- Latest repository migration: `202608082000_default_roles_and_roles_manage.sql`.
+- Latest repository migration: `202608082200_member_role_is_editable.sql`.
 - The latest live provider ledger entry is `20260808005400_company_setup_apply_plugin_ambiguity`, preceded by `20260808005113_company_setup_survey`. Repository filenames retain reviewed forward-order timestamps while Supabase records provider-generated ledger timestamps.
 - Live verification confirmed the company setup table, all three fixed-search-path administrator RPCs, zero companies missing an active default workspace, and no surviving rollback-test company. A rollback-only test passed draft save, apply, identical retry, and questionnaire reset while workspace and role counts stayed stable.
 - Live verification confirmed the quote request column and unique partial index, SECURITY INVOKER conversion RPC, authenticated-only execute grant, per-kind operational-workspace seeding logic, and zero missing contacts/deals/jobs pipeline kinds across active workspaces.

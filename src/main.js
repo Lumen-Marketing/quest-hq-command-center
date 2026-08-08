@@ -5584,35 +5584,6 @@ function renderDeck(route) {
         return navGroup(group.label, items);
       }).join('')}
     </div>
-    <div class="deck-footer">
-      <div class="deck-footer-row">
-        ${(() => {
-    // Name, then where you stand: your role in the company and your role in the workspace
-    // you are actually looking at. Those two differ often enough to be worth saying -- an
-    // owner can hold an ordinary role inside one workspace -- and the card had room for it
-    // once the avatar went. The avatar was the least useful thing here: it told you who you
-    // were, which you knew, and it was the widest element on the row.
-    const companyRole = roleForCompany(companyId);
-    const workspace = activeWorkspace();
-    const workspaceRole = workspace ? workspaceRoleLabel(workspace.id) : '';
-    // Saying "Owner / Owner access" twice is noise; one line covers both when they agree.
-    const sameEverywhere = !workspace
-            || workspaceRole.replace(/ access$/i, '').toLowerCase() === String(companyRole).toLowerCase();
-    return `
-        <button class="deck-user-card" type="button" data-action="open-profile" title="${h(session.profile.full_name)}">
-          <b class="deck-user-initials" aria-hidden="true">${h(initials(session.profile.full_name))}</b>
-          <span>
-            <strong>${h(session.profile.full_name)}</strong>
-            <small>${h(companyRole)}${sameEverywhere ? '' : ` · ${workspaceRole}`}</small>
-            ${workspace ? `<small class="deck-user-scope">${h(workspace.name)}</small>` : ''}
-          </span>
-        </button>`;
-  })()}
-        <a class="deck-settings-link" href="${appHref(companyPath('settings', {}, companyId))}" data-router aria-label="Settings" title="Settings">
-          ${svgIcon('q-symbol-settings')}
-        </a>
-      </div>
-    </div>
   `;
 }
 
@@ -20644,12 +20615,14 @@ function renderRolesSettings(companyId) {
               <span></span>
               <div><strong>${h(role.name)}</strong><small>${fullAccess ? 'Full access' : `${permissionCount || 'All'} permissions`} / ${userCount} users / priority ${role.priority}</small></div>
               <div class="role-row-actions">
-                <b>${role.is_system ? 'System' : 'Custom'}</b>
+                <b>${fullAccess ? 'Full access' : role.is_system ? 'Default' : 'Custom'}</b>
                 <button class="btn" type="button" data-action="view-as-role" data-role-id="${h(role.id)}" ${viewing ? 'disabled' : ''}>
                   <i class="ti ${viewing ? 'ti-eye-check' : 'ti-eye'}"></i>${viewing ? 'Viewing' : 'View as role'}
                 </button>
-                ${!role.is_system && canManageRoles ? `
+                ${canManageRoles && !fullAccess ? `
                   <button class="btn" type="button" data-action="edit-role" data-role-id="${h(role.id)}"><i class="ti ti-pencil"></i>Edit</button>
+                ` : ''}
+                ${canManageRoles && !role.is_system ? `
                   <button class="btn danger" type="button" data-action="delete-role" data-role-id="${h(role.id)}"><i class="ti ti-trash"></i>Delete</button>
                 ` : ''}
               </div>
@@ -20795,7 +20768,7 @@ function openRoleDeleteModal(roleId) {
   if (!requirePermission('roles.manage', companyId, 'Your role cannot manage roles.', 'Roles')) return;
   const role = roleById(companyId, roleId);
   if (!role) return showToast('That role is no longer available.', 'error', 'Roles');
-  if (role.is_system) return showToast('System roles cannot be deleted.', 'local', 'Roles');
+  if (role.is_system) return showToast('Owner and Member are the two roles every company starts with and cannot be deleted. You can edit Member.', 'local', 'Roles');
   const assignedCount = state.roleAssignments.filter((item) => item.company_id === companyId && item.role_id === role.id).length;
   if (assignedCount) {
     return showToast(`Reassign the ${assignedCount} member${assignedCount === 1 ? '' : 's'} using "${role.name}" before deleting it.`, 'local', 'Roles');
@@ -21230,6 +21203,16 @@ async function submitPublicFormResponse(formEl) {
 // ===========================================================================
 // CRM: Accounts (real entity), Deals pipeline, Activities timeline
 // ===========================================================================
+/**
+ * Does this role hold '*' -- every permission there is, including ones not invented yet?
+ *
+ * This, not is_system, is the line that matters. Member ships as a starting point and is meant
+ * to be tuned; Owner holds the wildcard, and editing it is the escalation the database refuses.
+ */
+function roleHasFullAccess(roleId) {
+  return state.rolePermissions.some((item) => item.role_id === roleId && item.permission_key === '*' && item.effect === 'allow');
+}
+
 function initials(name) {
   return String(name || '?').trim().split(/\s+/).slice(0, 2).map((part) => part[0] || '').join('').toUpperCase() || '?';
 }
@@ -27126,8 +27109,8 @@ function handleAction(event, node) {
       showToast('That role is no longer available.', 'local', 'Roles');
       return;
     }
-    if (role.is_system) {
-      showToast('System roles cannot be edited.', 'local', 'Roles');
+    if (roleHasFullAccess(role.id)) {
+      showToast('Owner holds every permission and cannot be edited. Build a role beside it instead.', 'local', 'Roles');
       return;
     }
     state.selectedRoleId = role.id;
@@ -30614,7 +30597,7 @@ async function deleteRole(roleId) {
     return;
   }
   if (role.is_system) {
-    showToast('System roles cannot be deleted.', 'local', 'Roles');
+    showToast('Owner and Member are the two roles every company starts with and cannot be deleted. You can edit Member.', 'local', 'Roles');
     return;
   }
   const assignedCount = state.roleAssignments.filter((item) => item.company_id === companyId && item.role_id === role.id).length;

@@ -58,10 +58,16 @@ test('sidebar scope is interactive without weakening module permissions', () => 
   assert.match(source, /if \(module\.id === 'jobs' \|\| module\.id === 'deals'\) return navItemPipeline/);
 });
 
-test('settings remains directly reachable from the compact profile footer', () => {
-  assert.match(source, /class="deck-settings-link[^"]*" href="\$\{appHref\(companyPath\('settings'/);
-  assert.match(source, /aria-label="Settings"/);
-  assert.match(styles, /\.quest-nav-v2 \.deck-settings-link\s*\{/);
+test('settings is reachable from the nav, and not twice over', () => {
+  // The footer used to carry a Settings cog beside the account card. It sat directly beneath
+  // the Settings nav item, pointing at the same route -- two controls, one destination, and
+  // the cog was the one nobody could name. Settings is a first-class module; that is the
+  // entry point.
+  assert.match(source, /\{ id: 'settings', group: 'Company', label: 'Settings',[^}]*permission: 'settings\.view' \}/);
+  assert.doesNotMatch(source, /class="deck-settings-link/, 'the duplicate cog must not come back');
+  // The row it lived in is a single column now, or the card would sit against a dead 40px gap.
+  const row = styles.slice(styles.indexOf('.quest-nav-v2 .deck-footer-row {'));
+  assert.match(row.slice(0, row.indexOf('}')), /grid-template-columns: minmax\(0, 1fr\);/);
 });
 
 test('the topbar search is visible on both desktop and mobile', () => {

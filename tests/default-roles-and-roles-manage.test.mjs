@@ -84,55 +84,21 @@ test('the roles screen names the two defaults and reads a wildcard correctly', (
   assert.match(main, /data-action="open-role-form" \$\{canManageRoles \? '' : 'disabled'\}/);
 });
 
-// The sidebar account card carried an avatar that told you who you were -- which you knew --
-// and was the widest thing on the row. The space goes to where you actually stand instead.
+// The sidebar footer carried an account card: your name, your role, your workspace, and a
+// Settings cog. All of it duplicated something else -- the topbar account menu already shows
+// the name and owns the Profile action, and Settings is a first-class nav item directly above
+// it. The rail is for navigating, not for telling you who you are.
 
-test('the sidebar card shows the name and both roles, not a picture', () => {
-  const at = main.indexOf('class="deck-user-card"');
-  const card = main.slice(at - 1200, at + 700);
-  assert.ok(!/renderAvatar\(session\.profile, 'avatar small'\)/.test(card), 'the avatar is gone');
-  assert.match(card, /const companyRole = roleForCompany\(companyId\);/);
-  assert.match(card, /const workspaceRole = workspace \? workspaceRoleLabel\(workspace\.id\) : '';/);
-  assert.match(card, /<strong>\$\{h\(session\.profile\.full_name\)\}<\/strong>/);
-  // "Owner / Owner access" twice is noise; one line covers both when they agree.
-  assert.match(card, /const sameEverywhere =/);
-  assert.match(card, /\$\{sameEverywhere \? '' : ` · \$\{workspaceRole\}`\}/);
-});
-
-test('no rule still reserves the avatar track the card no longer has', () => {
-  // This is the one that broke it: two MORE SPECIFIC rules (.deck-footer .deck-user-card and
-  // .quest-nav-v2 .deck-user-card) still opened with a 30px track, so the name landed in a
-  // 30px column, wrapped one letter per line, and both role lines ellipsised to "Ow...".
-  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
-  const offenders = [];
-  for (const m of styles.matchAll(/([^{}]*deck-user-card[^{}]*)\{([^}]*)\}/g)) {
-    const selector = m[1].replace(/\/\*[\s\S]*?\*\//g, '').trim().replace(/\s+/g, ' ');
-    const columns = /grid-template-columns:\s*([^;]+);/.exec(m[2])?.[1]?.trim();
-    if (!columns) continue;
-    // The first rule is shared with the company switcher, which keeps its icon and chevron.
-    if (selector.startsWith('.deck-company-switch,')) continue;
-    // A fixed PIXEL first track is the avatar slot. `1fr` is just one flexible column.
-    if (/^\d+px/.test(columns)) offenders.push(`${selector} -> ${columns}`);
+test('the rail carries no account card', () => {
+  for (const gone of ['deck-user-card', 'deck-footer', 'deck-user-initials', 'deck-user-scope', 'deck-settings-link']) {
+    assert.ok(!main.includes(gone), `${gone} should be gone from the sidebar markup`);
   }
-  assert.deepEqual(offenders, [], 'a fixed leading track means an avatar column that is gone');
 });
 
-test('the collapsed rail is not left blank', () => {
-  // Collapsed, `.deck-user-card span` is display:none -- which used to leave the avatar
-  // behind. With no avatar the button would have been empty.
-  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
-  assert.match(main, /<b class="deck-user-initials" aria-hidden="true">\$\{h\(initials\(session\.profile\.full_name\)\)\}<\/b>/);
-  const hidden = styles.slice(styles.indexOf('.deck-user-initials {'));
-  assert.match(hidden.slice(0, hidden.indexOf('}')), /display: none;/);
-  assert.match(styles, /\.sidebar-collapsed \.deck-user-initials \{[\s\S]{0,200}?display: grid;/);
-});
-
-test('the card loses its avatar column without taking the company switcher with it', () => {
-  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
-  // Matched by regex, not indexOf: this repo's files are CRLF, so a literal '\n' never hits.
-  const shared = styles.slice(styles.search(/\.deck-company-switch,\r?\n\.deck-user-card \{/));
-  assert.match(shared.slice(0, shared.indexOf('}')), /grid-template-columns: 32px minmax\(0, 1fr\) auto;/);
-  // Only the user card is narrowed, by an override.
-  const own = styles.slice(styles.search(/\.deck-user-card \{\r?\n\s*cursor: pointer;/));
-  assert.match(own.slice(0, own.indexOf('}')), /grid-template-columns: minmax\(0, 1fr\);/);
+test('Profile is still reachable, from the places that already had it', () => {
+  // Removing the card must not remove the only way in.
+  const menu = main.slice(main.indexOf('<div class="account-menu'));
+  assert.match(menu.slice(0, 1400), /data-action="open-profile"><i class="ti ti-user-circle"><\/i>Profile/);
+  assert.match(main, /if \(action === 'open-profile'\) \{/);
+  assert.match(main, /'open-profile',/, 'the action stays registered');
 });

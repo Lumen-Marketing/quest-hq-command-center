@@ -25219,9 +25219,11 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   padding-top: 10px;
 }
 
+/* One column: the 40px slot held a Settings cog that duplicated the Settings item sitting
+   directly above it in the nav. */
 .quest-nav-v2 .deck-footer-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 6px;
 }
