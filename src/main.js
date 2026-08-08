@@ -19464,25 +19464,17 @@ function wbKeepModalScroll() {
 let companySetupPanelModule = null;
 let companySetupPanelPromise = null;
 
-function canManageCompanySetup(companyId = activeCompanyId()) {
-  return isQuestDeveloper() || ELEVATED_COMPANY_ROLES
-    .includes(String(membershipForProfile(companyId, activeSession().profile.id)?.role || '').toLowerCase());
-}
-
 function loadCompanySetupPanel() {
   if (companySetupPanelModule) return Promise.resolve(companySetupPanelModule);
   if (!companySetupPanelPromise) {
-    companySetupPanelPromise = Promise.all([
-      import('./onboarding/company-setup-panel.js'),
-      import('./onboarding/company-setup.css'),
-    ]).then(([module]) => {
+    companySetupPanelPromise = import('./onboarding/company-setup-runtime.js').then((module) => {
       companySetupPanelModule = module.createCompanySetupPanel({
         createClient: createSupabaseClient,
         isLive: isLiveSupabaseSession,
         requestRender: render,
         showToast,
         h,
-        onApplied: async () => refreshRealtimeDomains(['access', 'crm']),
+        onApplied: () => refreshRealtimeDomains(['access', 'crm']),
       });
       return companySetupPanelModule;
     }).catch((error) => {
@@ -19497,11 +19489,11 @@ function renderCompanySetupSettings(companyId) {
   if (companySetupPanelModule) {
     return companySetupPanelModule.render(companyId, {
       companyLabel: companyName(companyId),
-      canManage: canManageCompanySetup(companyId),
+      canManage: canManageCompanyAppearance(companyId),
     });
   }
   loadCompanySetupPanel().then(() => render()).catch((error) => console.error('Company setup panel failed to load', error));
-  return '<article class="panel span-3"><div class="section-head"><div><h2>Company setup</h2><p>Loading the setup guide…</p></div></div></article>';
+  return questLoader('Loading');
 }
 
 function renderSettingsPage(route, companyId) {
@@ -19517,7 +19509,7 @@ function renderSettingsPage(route, companyId) {
     [companyPath('settings', { tab: 'recycle-bin' }, companyId), 'Recycle Bin', 'recycle-bin'],
     [companyPath('settings', { tab: 'team' }, companyId), 'Workers', 'team'],
   ];
-  if (canManageCompanySetup(companyId)) {
+  if (canManageCompanyAppearance(companyId)) {
     settingsTabs.splice(1, 0, [companyPath('settings', { tab: 'setup' }, companyId), 'Setup', 'setup']);
   }
   if (can('crm.manage', companyId)) {
@@ -26048,7 +26040,7 @@ function handleAction(event, node) {
     event.preventDefault();
     loadCompanySetupPanel()
       .then(() => companySetupPanelModule.handleAction(action, node))
-      .catch((error) => showToast(error?.message || 'Company setup could not continue.', 'error', 'Setup'));
+      .catch((error) => showToast(error?.message || 'Setup failed.', 'error', 'Setup'));
     return;
   }
   if (action === 'wb-modal-close') {

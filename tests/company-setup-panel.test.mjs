@@ -13,8 +13,10 @@ import {
 
 const mainPath = fileURLToPath(new URL('../src/main.js', import.meta.url));
 const authPath = fileURLToPath(new URL('../src/ui/auth-form.js', import.meta.url));
+const runtimePath = fileURLToPath(new URL('../src/onboarding/company-setup-runtime.js', import.meta.url));
 const main = readFileSync(mainPath, 'utf8').replace(/\r\n/g, '\n');
 const auth = readFileSync(authPath, 'utf8').replace(/\r\n/g, '\n');
+const runtime = readFileSync(runtimePath, 'utf8').replace(/\r\n/g, '\n');
 
 function functionBody(source, name) {
   const start = source.indexOf(`function ${name}`);
@@ -49,8 +51,9 @@ test('new owners are routed to guided Setup rather than Billing', () => {
 });
 
 test('Settings lazily loads the setup interface and delegates its actions', () => {
-  assert.match(main, /import\('\.\/onboarding\/company-setup-panel\.js'\)/);
-  assert.match(main, /import\('\.\/onboarding\/company-setup\.css'\)/);
+  assert.match(main, /import\('\.\/onboarding\/company-setup-runtime\.js'\)/);
+  assert.match(runtime, /import '\.\/company-setup\.css'/);
+  assert.match(runtime, /from '\.\/company-setup-panel\.js'/);
   assert.match(main, /companyPath\('settings', \{ tab: 'setup' \}/);
   assert.match(main, /renderCompanySetupSettings\(companyId\)/);
   assert.match(main, /action\.startsWith\('company-setup-'\)/);
