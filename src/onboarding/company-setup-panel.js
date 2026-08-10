@@ -438,6 +438,39 @@ export function createWorkspaceSetupPanel({
     requestRender();
   }
 
+  /**
+   * Did the server refuse this because somebody else moved the revision on?
+   *
+   * save/apply/reset all guard on `revision = expected`, raised as 40001. Postgres reports
+   * the code through PostgREST, but the shape of that varies by client version, so the
+   * message the procedure raises is matched as well rather than trusting one field.
+   */
+  function isRevisionConflict(error) {
+    if (!error) return false;
+    return String(error.code || '') === '40001'
+      || /changed in another tab or device/i.test(String(error.message || ''));
+  }
+
+  /**
+   * Re-read the stored row so the local revision matches the server's again.
+   *
+   * Without this a conflict is permanent: every later call sends the same stale revision and
+   * is refused the same way, so the panel sits behind a warning and saves nothing until the
+   * page is reloaded by hand.
+   */
+  async function refreshProfile(workspaceId, state) {
+    const client = createClient();
+    if (!client) return false;
+    const result = await client
+      .from('workspace_setup_profiles')
+      .select('workspace_id,answers,draft_plan,applied_plan,status,setup_version,revision,reset_count,applied_at,reset_at,updated_at')
+      .eq('workspace_id', String(workspaceId || ''))
+      .maybeSingle();
+    if (result.error) return false;
+    state.profile = result.data || null;
+    return true;
+  }
+
   async function saveDraft(workspaceId, state) {
     if (!isLive()) return;
     const key = String(workspaceId || '');
@@ -456,6 +489,29 @@ export function createWorkspaceSetupPanel({
         p_expected_revision: Number(state.profile?.revision || 0),
       });
       if (result.error) {
+        // One transparent retry against the current revision. A draft is the user's own
+        // typing -- there is nothing for them to review and nothing to lose by re-sending it.
+        if (isRevisionConflict(result.error) && await refreshProfile(workspaceId, state)) {
+          const retry = await client.rpc('save_workspace_setup_draft', {
+            target_workspace_id: workspaceId,
+            p_answers: answers,
+            p_draft_plan: state.plan || {},
+            p_expected_revision: Number(state.profile?.revision || 0),
+          });
+          if (!retry.error) {
+            state.saveError = '';
+            state.profile = {
+              ...(state.profile || {}),
+              status: 'draft',
+              answers,
+              draft_plan: state.plan || {},
+              revision: Number(retry.data?.revision ?? state.profile?.revision ?? 0),
+              updated_at: retry.data?.updated_at || state.profile?.updated_at,
+            };
+            requestRender();
+            return true;
+          }
+        }
         state.saveError = result.error.message || 'Setup progress could not be saved.';
         requestRender();
         return false;
@@ -562,6 +618,14 @@ export function createWorkspaceSetupPanel({
       showToast('Workspace setup applied.', 'live', 'Setup');
     } catch (error) {
       state.applying = false;
+      if (isRevisionConflict(error)) {
+        // Deliberately not retried. The plan was composed against a picture of this workspace
+        // that has since changed, and applying it anyway is how somebody's edit gets undone.
+        await refreshProfile(workspaceId, state).catch(() => false);
+        state.error = 'This workspace was set up somewhere else while you were reviewing. Nothing was applied. Reload Setup to see the current configuration before applying again.';
+        requestRender();
+        return;
+      }
       state.error = error?.message || 'Setup could not be applied. Nothing was partially deleted; try again.';
     }
     requestRender();
@@ -609,7 +673,14 @@ export function createWorkspaceSetupPanel({
       showToast('Workspace setup answers reset. Applied configuration and records were preserved.', 'live', 'Setup');
     } catch (error) {
       state.resetting = false;
-      state.error = error?.message || 'Setup answers could not be reset.';
+      if (isRevisionConflict(error)) {
+        // Same reasoning as apply: refresh the revision so the button works next time, but
+        // do not resend. Nothing was reset.
+        await refreshProfile(workspaceId, state).catch(() => false);
+        state.error = 'This workspace was changed somewhere else. Nothing was reset. Reload Setup and try again.';
+      } else {
+        state.error = error?.message || 'Setup answers could not be reset.';
+      }
     }
     requestRender();
   }
@@ -810,7 +881,10 @@ export function createWorkspaceSetupPanel({
 
   // roleNameIssues is returned so the rule can be tested directly rather than through a
   // rendered string -- it decides whether Apply is reachable at all.
-  return { render, mount, handleAction, loadWorkspace, roleNameIssues, firstRoleNameIssue };
+  // saveDraft is returned so the revision-conflict recovery can be driven directly. It is the
+  // one path that retries by itself, and "retries exactly once" is not visible from the
+  // rendered output.
+  return { render, mount, handleAction, loadWorkspace, roleNameIssues, firstRoleNameIssue, saveDraft };
 }
 
 // Kept as an import-compatible alias while callers roll over to workspace naming.
