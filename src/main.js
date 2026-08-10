@@ -3912,6 +3912,9 @@ function render() {
   queueMicrotask(mountContactSmsReadiness);
   queueMicrotask(mountContactSmsThread);
   queueMicrotask(mountProtectedFormDrafts);
+  // innerHTML replaced every live-clock element, so the interval has nothing to write to
+  // until it is re-armed against the new nodes.
+  queueMicrotask(ensureLiveClocks);
 }
 
 function activeDraftProfileId() {
@@ -5590,6 +5593,29 @@ function renderDeck(route) {
         return navGroup(group.label, items);
       }).join('')}
     </div>
+    ${renderRailClock(companyId)}
+  `;
+}
+
+/**
+ * The running clock, pinned to the bottom of the rail.
+ *
+ * Only drawn while a clock is actually running: an idle rail should not carry a permanent
+ * 00:00, and the Clock dashboard is one click away for starting one. It ticks through the
+ * shared live-clock interval rather than re-rendering the sidebar every second.
+ */
+function renderRailClock(companyId) {
+  const timer = activeTimerForCompany(companyId);
+  if (!timer) return '';
+  const started = timer.started_at;
+  return `
+    <a class="rail-clock" href="${appHref(companyPath('clock', {}, companyId))}" data-router title="${h(`Clocked in since ${formatDateTime(started)}`)}">
+      <span class="rail-clock-dot" aria-hidden="true"></span>
+      <span class="rail-clock-body">
+        <b data-live-clock="${h(started)}">${h(formatClock(Date.now() - Date.parse(started)))}</b>
+        <small>${h(timer.task_title || 'On the clock')}</small>
+      </span>
+    </a>
   `;
 }
 
@@ -19474,6 +19500,12 @@ function loadCompanySetupPanel() {
         reservedRoleNames: (companyId) => state.roles
           .filter((role) => role.company_id === canonicalCompanyId(companyId) && role.is_system)
           .map((role) => role.name),
+        // Apps already switched on in this workspace. Setup refuses to run alongside a
+        // manually installed app that its plan excludes, and that refusal aborts everything --
+        // so the panel needs to see them before offering the button.
+        installedWorkspacePlugins: (workspaceId) => state.workspacePlugins
+          .filter((row) => row.workspace_id === String(workspaceId || '') && row.status === 'installed')
+          .map((row) => row.plugin_id),
         onApplied: () => refreshRealtimeDomains(['access', 'crm']),
       });
       return companySetupPanelModule;
@@ -22956,8 +22988,14 @@ function renderClockDashboardPage(companyId) {
   const active = activeTimerForCompany(companyId);
   const todayStart = startOfToday().getTime();
   const weekStart = todayStart - 6 * 86400000;
-  const todayMs = totalTimeForCompany(companyId, todayStart) + (active ? Date.now() - Date.parse(active.started_at) : 0);
-  const weekMs = totalTimeForCompany(companyId, weekStart) + (active ? Date.now() - Date.parse(active.started_at) : 0);
+  // The banked totals, WITHOUT the running clock. When one is running the live element adds
+  // the elapsed time itself every second; adding it here too would count it twice.
+  const todayBanked = totalTimeForCompany(companyId, todayStart);
+  const weekBanked = totalTimeForCompany(companyId, weekStart);
+  const runningMs = active ? Date.now() - Date.parse(active.started_at) : 0;
+  const live = (banked) => (active
+    ? markup(`<span data-live-clock="${h(active.started_at)}" data-live-base="${h(String(banked))}" data-live-format="duration">${h(formatDuration(banked + runningMs))}</span>`)
+    : formatDuration(banked));
   return `
     <section class="tool-page operations-page clock-page">
       ${workspaceHeader('Clock dashboard', 'Your own time in this workspace. A running clock is saved, so it survives a refresh and follows you between devices.', `
@@ -22965,8 +23003,8 @@ function renderClockDashboardPage(companyId) {
       `)}
       ${renderOperationsTabs(companyId, 'clock')}
       <section class="metric-grid operations-metrics">
-        ${metricCard('Today', formatDuration(todayMs))}
-        ${metricCard('Last 7 days', formatDuration(weekMs))}
+        ${metricCard('Today', live(todayBanked))}
+        ${metricCard('Last 7 days', live(weekBanked))}
         ${metricCard('Entries', entries.length)}
         ${metricCard('Status', active ? 'Clocked in' : 'Off clock')}
       </section>
@@ -22977,7 +23015,7 @@ function renderClockDashboardPage(companyId) {
             ['User', memberName(active.user_id)],
             ['Started', formatDateTime(active.started_at)],
             ['Task', active.task_title || 'General shift'],
-            ['Elapsed', formatDuration(Date.now() - Date.parse(active.started_at))],
+            ['Elapsed', markup(`<span class="clock-elapsed" data-live-clock="${h(active.started_at)}">${h(formatClock(runningMs))}</span>`)],
           ]) : emptyState('Nobody is clocked in on this device.')}
         </article>
         <article class="panel span-2">
@@ -34308,93 +34346,33 @@ async function cpCommitMarker(status, customText) {
 
 // Modal shown when placing a pin-style annotation (comment / label / marker)
 // or calibrating the ruler.
-function renderClientPortalPlacementModal(placement) {
-  if (placement.type === 'measure') {
-    return `
-      <div class="cp-modal-backdrop" data-action="cp-placement-cancel">
-        <form class="cp-modal" data-cp-scale-form>
-          <div class="cp-modal-head"><span class="cp-modal-ico measure"><i class="ti ti-ruler-measure"></i></span><h3>Calibrate ruler scale</h3></div>
-          <div class="cp-modal-body">
-            <p class="cp-modal-text">This is the first measurement on this drawing. Enter the <strong>real-world length</strong> of the line you just drew — it sets the default scale for all future measurements on this plan.</p>
-            <label class="cp-modal-label">Actual length of this line</label>
-            <div class="cp-scale-input">
-              <input name="cp_length" placeholder="e.g. 24 &middot; 24'6&quot; &middot; 18.5" autocomplete="off" autofocus />
-              <select name="cp_unit" aria-label="Measurement unit">
-                ${[['ft', 'Feet (ft)'], ['in', 'Inches (in)'], ['cm', 'Centimeters (cm)']].map(([value, label]) => `<option value="${value}" ${cpProjectUnit() === value ? 'selected' : ''}>${label}</option>`).join('')}
-              </select>
-            </div>
-          </div>
-          <div class="cp-modal-foot">
-            <button class="btn" type="button" data-action="cp-placement-cancel">Cancel</button>
-            <button class="btn btn-primary" type="submit"><i class="ti ti-check"></i>Set scale</button>
-          </div>
-        </form>
-      </div>`;
+// ---- Client portal placement dialog ----------------------------------------------------------------
+// Body lives in ./portals/placement-modal.js and is fetched on first use.
+let placementModalModule = null;
+let placementModalPending = null;
+
+function loadPlacementModal() {
+  if (placementModalModule) return Promise.resolve(placementModalModule);
+  if (!placementModalPending) {
+    placementModalPending = import('./portals/placement-modal.js').then((mod) => {
+      placementModalModule = mod.createPlacementModal({
+        CP_LABEL_PRESETS, CP_PALETTE, CP_STATUS_META, cpProjectUnit, h,
+      });
+      return placementModalModule;
+    }).catch((error) => {
+      placementModalPending = null;
+      throw error;
+    });
   }
-  if (placement.type === 'comment') {
-    return `
-      <div class="cp-modal-backdrop" data-action="cp-placement-cancel">
-        <form class="cp-modal" data-cp-comment-form>
-          <div class="cp-modal-head"><span class="cp-modal-ico comment"><i class="ti ti-pin"></i></span><h3>New comment</h3></div>
-          <div class="cp-modal-body">
-            <label class="cp-modal-label">Comment on this point</label>
-            <textarea name="text" rows="3" placeholder="e.g. Please confirm the window dimensions here…" autofocus></textarea>
-          </div>
-          <div class="cp-modal-foot">
-            <button class="btn" type="button" data-action="cp-placement-cancel">Cancel</button>
-            <button class="btn btn-primary" type="submit"><i class="ti ti-plus"></i>Add comment</button>
-          </div>
-        </form>
-      </div>`;
-  }
-  if (placement.type === 'label') {
-    return `
-      <div class="cp-modal-backdrop" data-action="cp-placement-cancel">
-        <form class="cp-modal" data-cp-label-form>
-          <div class="cp-modal-head"><span class="cp-modal-ico label"><i class="ti ti-tag"></i></span><h3>Add label / note</h3></div>
-          <div class="cp-modal-body">
-            <label class="cp-modal-label">Label text</label>
-            <input name="text" list="cp-label-presets" placeholder="e.g. Kitchen Revision" autocomplete="off" autofocus />
-            <datalist id="cp-label-presets">${CP_LABEL_PRESETS.map((preset) => `<option value="${h(preset)}"></option>`).join('')}</datalist>
-            <div class="cp-modal-sub">Quick picks</div>
-            <div class="cp-preset-row">
-              ${CP_LABEL_PRESETS.map((preset) => `<button class="cp-preset" type="button" data-action="cp-label-preset" data-text="${h(preset)}">${h(preset)}</button>`).join('')}
-            </div>
-            <div class="cp-modal-sub">Color</div>
-            <div class="cp-preset-colors">
-              ${CP_PALETTE.map((color) => `<button class="cp-cdot ${placement.color === color ? 'active' : ''}" type="button" data-action="cp-placement-color" data-color="${h(color)}" style="background:${h(color)}"></button>`).join('')}
-            </div>
-          </div>
-          <div class="cp-modal-foot">
-            <button class="btn" type="button" data-action="cp-placement-cancel">Cancel</button>
-            <button class="btn btn-primary" type="submit"><i class="ti ti-plus"></i>Place label</button>
-          </div>
-        </form>
-      </div>`;
-  }
-  // marker / status stamp
-  return `
-    <div class="cp-modal-backdrop" data-action="cp-placement-cancel">
-      <div class="cp-modal">
-        <div class="cp-modal-head"><span class="cp-modal-ico marker"><i class="ti ti-rosette-discount-check"></i></span><h3>Place status stamp</h3></div>
-        <div class="cp-modal-body">
-          <div class="cp-modal-label">Mark this section as</div>
-          <div class="cp-stamp-grid">
-            ${Object.entries(CP_STATUS_META).map(([key, meta]) => `
-              <button class="cp-stamp-opt ${h(key)}" type="button" data-action="cp-place-marker" data-status="${h(key)}"><i class="ti ${meta.icon}"></i>${h(meta.label)}</button>
-            `).join('')}
-          </div>
-          <form class="cp-stamp-custom" data-cp-marker-custom-form>
-            <input name="text" placeholder="…or type a custom mark" autocomplete="off" />
-            <button class="btn" type="submit"><i class="ti ti-plus"></i>Custom</button>
-          </form>
-        </div>
-        <div class="cp-modal-foot">
-          <button class="btn" type="button" data-action="cp-placement-cancel">Cancel</button>
-        </div>
-      </div>
-    </div>`;
+  return placementModalPending;
 }
+
+function renderClientPortalPlacementModal(placement) {
+  if (placementModalModule) return placementModalModule.renderClientPortalPlacementModal(placement);
+  loadPlacementModal().then(() => render()).catch((error) => console.error('Client portal placement dialog failed to load', error));
+  return questLoader('Loading');
+}
+
 
 // All documents in the active annotate context (owner: portal; guest: session).
 function cpAllDocs() {
@@ -41438,8 +41416,18 @@ function miniLink(path, icon, title, text) {
   `;
 }
 
+// Values are escaped unless wrapped in markup(), which is deliberately noisy at the call
+// site: the only reason to reach for it is a value that is genuinely markup we built.
+function markup(html) {
+  return { __markup: String(html) };
+}
+
+function cellValue(value) {
+  return value && typeof value === 'object' && typeof value.__markup === 'string' ? value.__markup : h(value);
+}
+
 function contractRows(rows) {
-  return `<div class="contract-rows">${rows.map(([label, value]) => `<div><span>${h(label)}</span><strong>${h(value)}</strong></div>`).join('')}</div>`;
+  return `<div class="contract-rows">${rows.map(([label, value]) => `<div><span>${h(label)}</span><strong>${cellValue(value)}</strong></div>`).join('')}</div>`;
 }
 
 function field(label, name, value = '', required = false, type = 'text', className = '', attrs = '') {
@@ -42831,7 +42819,7 @@ function actorName() {
 }
 
 function metricCard(label, value, text = '') {
-  return `<article class="metric">${svgIcon(metricSymbol(label), 'metric-symbol')}<span>${h(label)}</span><strong>${h(value)}</strong>${text ? `<small>${h(text)}</small>` : ''}</article>`;
+  return `<article class="metric">${svgIcon(metricSymbol(label), 'metric-symbol')}<span>${h(label)}</span><strong>${cellValue(value)}</strong>${text ? `<small>${h(text)}</small>` : ''}</article>`;
 }
 
 function detailRow(label, value) {
@@ -44212,6 +44200,54 @@ function formatDuration(value) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   if (hours) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
   return `${minutes}m`;
+}
+
+/**
+ * A running clock, in the resolution somebody watching it expects.
+ *
+ * formatDuration stops at minutes, which is right for a timesheet and useless for a timer:
+ * a clock you just started reads "0m" and stays there for a minute, looking broken.
+ */
+function formatClock(value) {
+  const totalSeconds = Math.max(0, Math.floor(number(value) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(seconds).padStart(2, '0');
+  return hours ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+// ---- live clocks ------------------------------------------------------------------------
+//
+// One interval for the whole app. An element opts in with data-live-clock (the ISO instant the
+// clock started) plus an optional data-live-base (milliseconds already banked, for totals that
+// include closed entries).
+//
+// Only textContent is written. Re-rendering the page every second would throw away scroll
+// position and the keyboard focus of anyone typing, to move one number.
+let liveClockTimer = null;
+
+function tickLiveClocks() {
+  const nodes = document.querySelectorAll('[data-live-clock]');
+  if (!nodes.length) {
+    clearInterval(liveClockTimer);
+    liveClockTimer = null;
+    return;
+  }
+  const now = Date.now();
+  nodes.forEach((node) => {
+    const started = Date.parse(node.dataset.liveClock || '') || now;
+    const elapsed = Number(node.dataset.liveBase || 0) + Math.max(0, now - started);
+    node.textContent = node.dataset.liveFormat === 'duration' ? formatDuration(elapsed) : formatClock(elapsed);
+  });
+}
+
+function ensureLiveClocks() {
+  if (typeof document === 'undefined' || liveClockTimer) return;
+  if (!document.querySelector('[data-live-clock]')) return;
+  liveClockTimer = setInterval(tickLiveClocks, 1000);
+  tickLiveClocks();
 }
 
 function formatBytes(value) {

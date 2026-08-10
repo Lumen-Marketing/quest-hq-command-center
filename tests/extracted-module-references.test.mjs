@@ -202,6 +202,7 @@ const FACTORY_MODULES = [
   ['src/finance/finance-page.js', 'createFinancePage'],
   ['src/ops/calendar-page.js', 'createCalendarPage'],
   ['src/forms/new-form-modal.js', 'createNewFormModal'],
+  ['src/portals/placement-modal.js', 'createPlacementModal'],
 ];
 
 test('the list above covers every factory module there is', () => {
