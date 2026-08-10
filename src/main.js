@@ -29898,7 +29898,7 @@ async function registerWorkspace(formNode) {
     await acceptCompanyInvite(inviteToken, form.return_url);
     return;
   }
-  const workspace = await client.rpc('create_company_workspace', { company_name: companyName, preset_code: 'generic', icon_key: iconKey });
+  const workspace = await client.rpc('create_company_workspace', { company_name: companyName, preset_code: 'blank', icon_key: iconKey });
   if (workspace.error) {
     state.loginError = workspace.error.message || 'Account created, but workspace setup failed.';
     state.authMessage = '';
@@ -29930,7 +29930,7 @@ async function createWorkspaceForCurrentUser(formNode) {
   state.loginError = '';
   state.authMessage = 'Creating workspace...';
   render();
-  const workspace = await safeSupabaseQuery(client.rpc('create_company_workspace', { company_name: companyName, preset_code: 'generic', icon_key: iconKey }));
+  const workspace = await safeSupabaseQuery(client.rpc('create_company_workspace', { company_name: companyName, preset_code: 'blank', icon_key: iconKey }));
   if (workspace.error) {
     state.loginError = workspace.error.message || 'Workspace setup failed.';
     state.authMessage = '';

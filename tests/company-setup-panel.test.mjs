@@ -19,6 +19,7 @@ const runtimePath = fileURLToPath(new URL('../src/onboarding/company-setup-runti
 const main = readFileSync(mainPath, 'utf8').replace(/\r\n/g, '\n');
 const auth = readFileSync(authPath, 'utf8').replace(/\r\n/g, '\n');
 const runtime = readFileSync(runtimePath, 'utf8').replace(/\r\n/g, '\n');
+const panelSource = readFileSync(fileURLToPath(new URL('../src/onboarding/company-setup-panel.js', import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
 
 function functionBody(source, name) {
   const start = source.indexOf(`function ${name}`);
@@ -35,8 +36,8 @@ test('company creation no longer asks owners to choose a technical company type'
 
   const register = functionBody(main, 'registerWorkspace');
   const create = functionBody(main, 'createWorkspaceForCurrentUser');
-  assert.match(register, /preset_code:\s*'generic'/);
-  assert.match(create, /preset_code:\s*'generic'/);
+  assert.match(register, /preset_code:\s*'blank'/);
+  assert.match(create, /preset_code:\s*'blank'/);
   assert.doesNotMatch(register, /form\.preset_code/);
   assert.doesNotMatch(create, /form\.preset_code/);
 });
@@ -138,6 +139,8 @@ test('controller applies a reviewed workspace blueprint through draft then apply
   await panel.handleAction('company-setup-apply', node);
 
   assert.deepEqual(calls.map((call) => call.name), ['save_workspace_setup_draft', 'apply_workspace_setup']);
+  assert.equal(calls[0].args.p_expected_revision, 0);
+  assert.equal(calls[1].args.p_expected_revision, 0);
   assert.match(panel.render(workspaceId, { companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Sales' }), /Sales is ready/);
 });
 
@@ -160,6 +163,7 @@ test('controller reset calls only the non-destructive reset RPC and returns to e
   await panel.handleAction('company-setup-confirm-reset', node);
 
   assert.deepEqual(calls.map((call) => call.name), ['reset_workspace_setup']);
+  assert.equal(calls[0].args.p_expected_revision, 0);
   assert.match(panel.render(workspaceId, { companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Roofing' }), /Guide me/);
 });
 
@@ -197,8 +201,33 @@ test('workspace controller loads by workspace id and Start from scratch applies 
     table: 'workspace_setup_profiles', column: 'workspace_id', value: '11111111-1111-4111-8111-111111111111',
   }]);
   assert.deepEqual(calls.map((call) => call.name), ['apply_workspace_setup']);
+  assert.equal(calls[0].args.p_expected_revision, 0);
   assert.equal(calls[0].args.target_workspace_id, '11111111-1111-4111-8111-111111111111');
   assert.match(panel.render('11111111-1111-4111-8111-111111111111', {
     companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Roofing',
   }), /Roofing/);
+});
+
+test('blank setup is only the small direct Start from scratch action', async () => {
+  const client = fakeClient(null, async () => ({ data: { status: 'draft', revision: 1 }, error: null }));
+  const panel = createWorkspaceSetupPanel({ createClient: () => client, isLive: () => true });
+  const workspaceId = '11111111-1111-4111-8111-111111111111';
+  const node = fakeActionNode('company-a', workspaceId);
+
+  await panel.loadWorkspace(workspaceId);
+  panel.render(workspaceId, { companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Sales' });
+  await panel.handleAction('company-setup-open-blueprints', node);
+  const html = panel.render(workspaceId, { companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Sales' });
+
+  assert.match(html, /Start from scratch/);
+  assert.doesNotMatch(html, /data-blueprint="blank"/);
+});
+
+test('apply and reset cancel delayed draft saves and use server revisions', () => {
+  assert.match(panelSource, /function cancelScheduledDraft\(workspaceId\)/);
+  assert.match(functionBody(panelSource, 'applySetup'), /cancelScheduledDraft\(workspaceId\)/);
+  assert.match(functionBody(panelSource, 'resetSetup'), /cancelScheduledDraft\(workspaceId\)/);
+  assert.match(functionBody(panelSource, 'saveDraft'), /p_expected_revision:/);
+  assert.match(functionBody(panelSource, 'applySetup'), /p_expected_revision:/);
+  assert.match(functionBody(panelSource, 'resetSetup'), /p_expected_revision:/);
 });

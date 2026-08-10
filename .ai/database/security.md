@@ -1,6 +1,6 @@
 # Database security catalog
 
-Captured through 2026-08-10T17:58:17.905Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
+Captured through 2026-08-10T18:23:17.639Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
 
 ## RLS coverage
 
@@ -393,7 +393,9 @@ The workspace replacements (`save_workspace_setup_draft`, `apply_workspace_setup
 must call them. Each fixes `search_path`, derives the company from the active target workspace,
 requires `auth.uid()` plus company-admin access, validates bounded one-workspace JSON, and has
 anonymous/public execution revoked. `workspace_setup_profiles` grants authenticated users
-SELECT only through company-admin RLS; all writes remain inside those routines.
+SELECT only through company-admin RLS; all writes remain inside those routines. Each mutation
+also checks the caller's expected workspace-setup revision so a stale tab or device cannot
+overwrite a newer draft, apply, or reset.
 
 ## Browser reachability inventory
 

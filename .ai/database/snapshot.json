@@ -9262,6 +9262,14 @@
           "position": 12,
           "udt_name": "uuid",
           "data_type": "uuid"
+        },
+        {
+          "name": "revision",
+          "default": "0",
+          "nullable": false,
+          "position": 13,
+          "udt_name": "int4",
+          "data_type": "integer"
         }
       ],
       "primary_key": [
@@ -12165,7 +12173,7 @@
     {
       "name": "apply_workspace_setup",
       "returns": "jsonb",
-      "arguments": "target_workspace_id uuid, p_answers jsonb, p_plan jsonb",
+      "arguments": "target_workspace_id uuid, p_answers jsonb, p_plan jsonb, p_expected_revision integer",
       "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
@@ -12625,7 +12633,7 @@
     {
       "name": "reset_workspace_setup",
       "returns": "jsonb",
-      "arguments": "target_workspace_id uuid",
+      "arguments": "target_workspace_id uuid, p_expected_revision integer",
       "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
@@ -12695,7 +12703,7 @@
     {
       "name": "save_workspace_setup_draft",
       "returns": "jsonb",
-      "arguments": "target_workspace_id uuid, p_answers jsonb, p_draft_plan jsonb",
+      "arguments": "target_workspace_id uuid, p_answers jsonb, p_draft_plan jsonb, p_expected_revision integer",
       "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
@@ -13427,9 +13435,17 @@
     {
       "version": "20260810175316",
       "name": "workspace_setup_profiles"
+    },
+    {
+      "version": "20260810181935",
+      "name": "workspace_setup_release_hardening"
+    },
+    {
+      "version": "20260810182232",
+      "name": "workspace_setup_revision_save_fix"
     }
   ],
-  "captured_at": "2026-08-10T17:58:17.905017+00:00",
+  "captured_at": "2026-08-10T18:23:17.639796+00:00",
   "relationships": [
     {
       "name": "accounts_company_id_fkey",

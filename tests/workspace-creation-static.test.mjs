@@ -67,7 +67,7 @@ test('workspace creation allows three self-owned workspaces and platform owner o
   assert.match(source, /function canCreateAnotherWorkspace\(\)/);
   assert.match(source, /isQuestDeveloper\(\) \|\| ownedWorkspaceCount\(\) < WORKSPACE_SELF_CREATE_LIMIT/);
   assert.match(source, /workspaceLimitMessage\(\)/);
-  assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: 'generic', icon_key: iconKey \}\)/);
+  assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: 'blank', icon_key: iconKey \}\)/);
   assert.match(source, /data-platform-workspace-create-form/);
   assert.match(source, /owner_email/);
   assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: presetCode, icon_key: iconKey, owner_email: ownerEmail \}\)/);

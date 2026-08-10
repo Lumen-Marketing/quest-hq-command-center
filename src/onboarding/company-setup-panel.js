@@ -168,6 +168,7 @@ export function createWorkspaceSetupPanel({
 } = {}) {
   const workspaceStates = new Map();
   const saveTimers = new Map();
+  const draftSaves = new Map();
 
   /**
    * Role names the plan cannot use, and why.
@@ -276,9 +277,9 @@ export function createWorkspaceSetupPanel({
     return renderShell(workspaceId, workspaceLabel, `
       <div class="company-setup-progress-head"><div><span>Ready-made setups</span><strong>Pick a starting point</strong></div><small>You can edit everything on the next screen.</small></div>
       <div class="company-setup-blueprint-grid">
-        ${COMPANY_SETUP_BLUEPRINTS.map((blueprint) => `
+        ${COMPANY_SETUP_BLUEPRINTS.filter((blueprint) => blueprint.id !== 'blank').map((blueprint) => `
           <button type="button" class="company-setup-blueprint-card ${blueprint.id === 'roofing' ? 'featured' : ''}" data-action="company-setup-choose-blueprint" data-blueprint="${h(blueprint.id)}">
-            <i class="ti ${blueprint.id === 'blank' ? 'ti-file' : 'ti-layout-dashboard'}"></i>
+            <i class="ti ti-layout-dashboard"></i>
             <strong>${h(blueprint.label)}</strong>
             <span>${h(blueprint.description)}</span>
           </button>
@@ -378,7 +379,7 @@ export function createWorkspaceSetupPanel({
     return renderShell(workspaceId, workspaceLabel, `
       <div class="company-setup-complete">
         <span class="company-setup-complete-icon"><i class="ti ti-check"></i></span>
-        <div><span>Setup applied</span><h3>${h(workspaceLabel || 'This workspace')} is ready</h3><p>${h(plan.roles.length)} role starter${plan.roles.length === 1 ? '' : 's'} and the selected apps are configured for this workspace only.</p></div>
+        <div><span>Setup applied</span><h3>${h(workspaceLabel || 'This workspace')} is ready</h3><p>The selected apps and pipeline are configured only for this workspace. ${h(plan.roles.length)} role starter${plan.roles.length === 1 ? ' is' : 's are'} available company-wide.</p></div>
       </div>
       <div class="company-setup-summary-grid">
         ${plan.workspaces.map((workspace) => `<section><i class="ti ti-layout-dashboard"></i><div><strong>${h(workspace.name)}</strong><span>${h((workspace.pluginIds || []).length)} apps · ${h((workspace.stages || []).length)} stages${workspace.isDefault ? ' · Default' : ''}</span></div></section>`).join('')}
@@ -424,7 +425,7 @@ export function createWorkspaceSetupPanel({
       if (!client) throw new Error('Questbase could not connect to workspace setup.');
       const result = await client
         .from('workspace_setup_profiles')
-        .select('workspace_id,answers,draft_plan,applied_plan,status,setup_version,reset_count,applied_at,reset_at,updated_at')
+        .select('workspace_id,answers,draft_plan,applied_plan,status,setup_version,revision,reset_count,applied_at,reset_at,updated_at')
         .eq('workspace_id', id)
         .maybeSingle();
       if (result.error) throw result.error;
@@ -439,31 +440,58 @@ export function createWorkspaceSetupPanel({
 
   async function saveDraft(workspaceId, state) {
     if (!isLive()) return;
-    const client = createClient();
-    if (!client) return;
-    const answers = {
-      ...clone(state.answers),
-      ui: { screen: state.screen, questionIndex: state.questionIndex },
-    };
-    const result = await client.rpc('save_workspace_setup_draft', {
-      target_workspace_id: workspaceId,
-      p_answers: answers,
-      p_draft_plan: state.plan || {},
+    const key = String(workspaceId || '');
+    const previous = draftSaves.get(key) || Promise.resolve(true);
+    const task = previous.catch(() => false).then(async () => {
+      const client = createClient();
+      if (!client) return false;
+      const answers = {
+        ...clone(state.answers),
+        ui: { screen: state.screen, questionIndex: state.questionIndex },
+      };
+      const result = await client.rpc('save_workspace_setup_draft', {
+        target_workspace_id: workspaceId,
+        p_answers: answers,
+        p_draft_plan: state.plan || {},
+        p_expected_revision: Number(state.profile?.revision || 0),
+      });
+      if (result.error) {
+        state.saveError = result.error.message || 'Setup progress could not be saved.';
+        requestRender();
+        return false;
+      }
+      state.saveError = '';
+      state.profile = {
+        ...(state.profile || {}),
+        status: 'draft',
+        answers,
+        draft_plan: state.plan || {},
+        revision: Number(result.data?.revision ?? state.profile?.revision ?? 0),
+        updated_at: result.data?.updated_at || state.profile?.updated_at,
+      };
+      return true;
     });
-    if (result.error) {
-      state.saveError = result.error.message || 'Setup progress could not be saved.';
-      requestRender();
-      return;
+    draftSaves.set(key, task);
+    try {
+      return await task;
+    } finally {
+      if (draftSaves.get(key) === task) draftSaves.delete(key);
     }
-    state.saveError = '';
-    state.profile = { ...(state.profile || {}), status: 'draft', answers, draft_plan: state.plan || {} };
+  }
+
+  function cancelScheduledDraft(workspaceId) {
+    const key = String(workspaceId || '');
+    const timer = saveTimers.get(key);
+    if (timer !== undefined) clearTimeout(timer);
+    saveTimers.delete(key);
   }
 
   function scheduleDraft(workspaceId, state) {
-    clearTimeout(saveTimers.get(workspaceId));
-    saveTimers.set(workspaceId, setTimeout(() => {
+    const key = String(workspaceId || '');
+    cancelScheduledDraft(key);
+    saveTimers.set(key, setTimeout(() => {
       saveDraft(workspaceId, state).catch(() => {});
-      saveTimers.delete(workspaceId);
+      saveTimers.delete(key);
     }, 700));
   }
 
@@ -498,6 +526,13 @@ export function createWorkspaceSetupPanel({
       return;
     }
 
+    const key = String(workspaceId || '');
+    const hadScheduledDraft = saveTimers.has(key);
+    cancelScheduledDraft(workspaceId);
+    const activeDraft = draftSaves.get(key);
+    if (activeDraft && !(await activeDraft)) return;
+    if (hadScheduledDraft && !(await saveDraft(workspaceId, state))) return;
+
     state.applying = true;
     state.error = '';
     requestRender();
@@ -507,6 +542,7 @@ export function createWorkspaceSetupPanel({
         target_workspace_id: workspaceId,
         p_answers: { ...clone(state.answers), ui: { screen: 'applied', questionIndex: state.questionIndex } },
         p_plan: state.plan,
+        p_expected_revision: Number(state.profile?.revision || 0),
       });
       if (result.error) throw result.error;
       const applied = safeObject(result.data?.plan);
@@ -516,6 +552,8 @@ export function createWorkspaceSetupPanel({
         answers: state.answers,
         draft_plan: state.plan,
         applied_plan: applied,
+        revision: Number(result.data?.revision ?? state.profile?.revision ?? 0),
+        updated_at: result.data?.updated_at || state.profile?.updated_at,
       };
       state.plan = resumablePlan(applied) || state.plan;
       state.screen = 'applied';
@@ -535,12 +573,20 @@ export function createWorkspaceSetupPanel({
       requestRender();
       return;
     }
+    const key = String(workspaceId || '');
+    cancelScheduledDraft(workspaceId);
+    const activeDraft = draftSaves.get(key);
+    if (activeDraft) await activeDraft;
+
     state.resetting = true;
     state.error = '';
     requestRender();
     try {
       const client = createClient();
-      const result = await client.rpc('reset_workspace_setup', { target_workspace_id: workspaceId });
+      const result = await client.rpc('reset_workspace_setup', {
+        target_workspace_id: workspaceId,
+        p_expected_revision: Number(state.profile?.revision || 0),
+      });
       if (result.error) throw result.error;
       const appliedPlan = state.profile?.applied_plan || {};
       const resetState = setupStateFromProfile({
@@ -551,6 +597,8 @@ export function createWorkspaceSetupPanel({
         applied_plan: appliedPlan,
         reset_count: result.data?.reset_count,
         reset_at: result.data?.reset_at,
+        revision: Number(result.data?.revision ?? state.profile?.revision ?? 0),
+        updated_at: result.data?.updated_at || state.profile?.updated_at,
       });
       resetState.screen = 'entry';
       resetState.plan = null;

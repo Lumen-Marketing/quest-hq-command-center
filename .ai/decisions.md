@@ -1294,7 +1294,9 @@ treatment, and a test pins the synchronous branch.
 
 ## Guided setup belongs to each operational workspace
 
-Decided 2026-08-11 and applied in `20260810173743_workspace_setup_profiles.sql`.
+Decided 2026-08-11 and applied in `20260810173743_workspace_setup_profiles.sql`, with release
+hardening in `20260811100000_workspace_setup_release_hardening.sql` and
+`20260811103000_workspace_setup_revision_save_fix.sql`.
 
 A company is the billing and security account, not one fixed business process. The same
 customer may need Roofing, Sales, Production, and a separate service-business workspace,
@@ -1311,6 +1313,12 @@ only the selected workspace's answers and draft. It preserves the last applied p
 apps, populated pipelines, business records, company membership, and every sibling workspace.
 This is also why the legacy company setup routines remain only for compatibility while the
 current UI writes through the workspace-specific RPCs.
+
+The first Main workspace starts blank too; otherwise the generic creation preset survives a
+later selection and can leave two CRM variants active. Manual apps retain their configuration
+and are never silently adopted as setup-managed. A manual competing CRM variant blocks apply
+with an actionable message. Every setup mutation carries an expected revision, preventing an
+older tab or device from overwriting a newer decision.
 
 ## App Builder records move from the workspace JSON to rows
 

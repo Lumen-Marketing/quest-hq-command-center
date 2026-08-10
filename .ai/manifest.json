@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-10T17:58:17.905Z",
-  "generated_from_commit": "1eba0f3a1ea8998a8d52ec67628a4b0440ed9259",
+  "generated_at": "2026-08-10T18:23:17.639Z",
+  "generated_from_commit": "eb6d7075249af6baf45e51a8d915c155a3371da5",
   "canonical_entrypoint": ".ai/README.md",
   "repository": {
     "github": "Lumen-Marketing/quest-hq-command-center",
     "default_branch": "main",
     "main_commit_at_capture": "1eba0f3a1ea8998a8d52ec67628a4b0440ed9259",
-    "latest_migration": "20260810173743_workspace_setup_profiles.sql"
+    "latest_migration": "20260811103000_workspace_setup_revision_save_fix.sql"
   },
   "live": {
-    "supabase_verified_at": "2026-08-10T17:58:17.905Z",
+    "supabase_verified_at": "2026-08-10T18:23:17.639Z",
     "supabase_project_ref": "rqundirizvojpzhljtdn",
     "supabase_status": "ACTIVE_HEALTHY",
     "supabase_postgres_version": "17.6.1.127",
     "supabase_latest_migration": {
-      "version": "20260810175316",
-      "name": "workspace_setup_profiles"
+      "version": "20260810182232",
+      "name": "workspace_setup_revision_save_fix"
     },
     "vercel_verified_at": "2026-07-31T19:35:36.974Z",
     "vercel_project_id": "prj_0MxrYyGIo61QgLNW2M74fvTxlMRV",
@@ -24,7 +24,7 @@
     "vercel_deployment_id": "dpl_877wddrbdsYqQanobU64seu69kro",
     "vercel_deployment_state": "READY",
     "vercel_deployed_commit": "d8b635fa1208fcc95a42b5c900c3303958c591da",
-    "github_verified_at": "2026-08-10T17:58:17.905Z",
+    "github_verified_at": "2026-08-10T18:23:17.639Z",
     "github_production_guardian_run": "https://github.com/Lumen-Marketing/quest-hq-command-center/actions/runs/29528622459"
   },
   "refresh_commands": {

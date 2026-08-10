@@ -74,7 +74,7 @@ test('workspace presets install industry plugin bundles', () => {
   assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.construction, ['files', 'forms', 'finance', 'messages', 'calendar', 'time_clock', 'approvals', 'reporting', 'tasks']);
   assert.deepEqual(WORKSPACE_PLUGIN_PRESETS.generic, ['crm', 'files', 'messages', 'workspace_builder', 'tasks']);
   assert.match(source, /name="preset_code"/);
-  assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: 'generic', icon_key: iconKey \}\)/);
+  assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: 'blank', icon_key: iconKey \}\)/);
   assert.match(source, /client\.rpc\('create_company_workspace', \{ company_name: companyName, preset_code: presetCode, icon_key: iconKey, owner_email: ownerEmail \}\)/);
 });
 

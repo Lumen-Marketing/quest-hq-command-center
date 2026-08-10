@@ -1,6 +1,6 @@
 # Database overview
 
-The live Supabase public catalog was refreshed through 2026-08-10T17:58:17.905Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
+The live Supabase public catalog was refreshed through 2026-08-10T18:23:17.639Z. The [machine-readable snapshot](snapshot.json) contains catalog metadata only; it has no production rows, auth-user records, storage object paths, or credentials.
 
 ## Catalog summary
 
@@ -10,8 +10,8 @@ The live Supabase public catalog was refreshed through 2026-08-10T17:58:17.905Z.
 - Public functions: 79
 - Triggers: 103
 - Storage buckets: 6
-- Applied migration ledger entries: 127
-- Latest live ledger entry: `20260810175316_workspace_setup_profiles`
+- Applied migration ledger entries: 129
+- Latest live ledger entry: `20260810182232_workspace_setup_revision_save_fix`
 
 ## Operational-workspace identity
 
@@ -24,21 +24,24 @@ clears the old default before selecting an active replacement.
 ## Guided workspace setup
 
 `workspace_setup_profiles` stores questionnaire answers, editable draft, last applied plan,
-and reset history for one `workspaces.id`. Signed-in company administrators may read that
+reset history, and an optimistic mutation revision for one `workspaces.id`. Signed-in company administrators may read that
 workspace's row; writes go only through fixed-search-path RPCs. `save_workspace_setup_draft`
 changes no configuration. `apply_workspace_setup` validates exactly one bounded target,
 known apps, pipeline stages, and role templates and applies them atomically and idempotently.
-It preserves sibling workspaces, manual apps, populated pipelines, and explicitly disabled
-company entitlements. `reset_workspace_setup` clears only that workspace's answers and draft;
+It preserves sibling workspaces, manual apps and their configuration, populated pipelines,
+and explicitly disabled company entitlements. It blocks an unmanaged CRM/Quest CRM conflict
+instead of activating both. `reset_workspace_setup` clears only that workspace's answers and draft;
 the applied configuration and every tenant/business record remain intact.
 
 New companies still receive an active default `Main` workspace from the existing database
-trigger, and the UI opens this workspace-specific setup immediately. Every later operational
-workspace is created blank and opens its own survey. A rollback-only production test passed
-draft, repeated apply, manual-app preservation, sibling isolation, and reset, then proved that
-no probe workspace, setup row, or audit event survived. Repository migration
-`20260810173743_workspace_setup_profiles.sql` is recorded by Supabase as
-`20260810175316_workspace_setup_profiles`.
+trigger, and the UI opens this workspace-specific setup immediately. The first and every later
+operational workspace start blank and open their own survey. Draft, apply, and reset reject stale
+revisions from another tab or device. A rollback-only production test passed truly blank company
+creation, repeated apply, manual-app configuration/provenance, disabled-entitlement handling,
+mutually exclusive CRM blocking, stale-write rejection, and reset, then proved that no probe
+company, workspace, or setup row survived. The latest provider ledger entries are
+`20260810181935_workspace_setup_release_hardening` and
+`20260810182232_workspace_setup_revision_save_fix`.
 
 ## Live P0 database state
 
