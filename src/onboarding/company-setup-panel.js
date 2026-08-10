@@ -146,9 +146,60 @@ function questionAnswered(answers, question) {
     : Boolean(answers[question.id]);
 }
 
+const PLUGIN_LABELS = new Map(WORKSPACE_PLUGIN_REGISTRY.map((plugin) => [plugin.id, plugin.label]));
+
+function pluginLabel(pluginId) {
+  return PLUGIN_LABELS.get(String(pluginId || '')) || String(pluginId || '');
+}
+
 function warningMessage(warning) {
   if (typeof warning === 'string') return warning;
+  // The server builds these from plugin IDs, so an owner was told that "crm_2" or
+  // "time_clock" was unavailable. Rebuild the sentence from the id it carries.
+  if (warning?.code === 'plugin_unavailable' && warning?.plugin_id) {
+    return `${pluginLabel(warning.plugin_id)} is switched off for this company, so it was not activated here.`;
+  }
   return String(warning?.message || warning?.code || '').trim();
+}
+
+/**
+ * Apps that cannot be active together, where the plan wants one and the workspace already has
+ * the other by hand.
+ *
+ * apply refuses this with an exception that aborts everything -- the same shape as the
+ * reserved role name. The registry already declares the pairs through exclusiveGroup, so the
+ * clash is derived rather than hard-coded to CRM: a future exclusive pair is covered for free.
+ */
+function exclusiveAppClashes(plan, installedIds, previouslyManagedIds) {
+  const planned = new Set((plan?.workspaces || []).flatMap((workspace) => workspace.pluginIds || []));
+  const installed = new Set((installedIds || []).map(String));
+  const managed = new Set((previouslyManagedIds || []).map(String));
+  const clashes = [];
+  for (const plugin of WORKSPACE_PLUGIN_REGISTRY) {
+    if (!plugin.exclusiveGroup || !planned.has(plugin.id)) continue;
+    for (const other of WORKSPACE_PLUGIN_REGISTRY) {
+      if (other.id === plugin.id || other.exclusiveGroup !== plugin.exclusiveGroup) continue;
+      // Setup may replace a variant it installed itself; only a MANUAL one blocks.
+      if (installed.has(other.id) && !managed.has(other.id)) {
+        clashes.push(`${pluginLabel(other.id)} is already switched on in this workspace and cannot run alongside ${pluginLabel(plugin.id)}. Turn it off in Apps, or remove ${pluginLabel(plugin.id)} from this setup.`);
+      }
+    }
+  }
+  return [...new Set(clashes)];
+}
+
+/**
+ * Which pipelines one stage list is actually written to.
+ *
+ * A sales or roofing workspace gets this single list applied to BOTH the Contacts and the
+ * Quotes pipeline; a delivery workspace gets it applied to Jobs. The editor shows one box
+ * either way, so without saying so somebody tunes what they take to be the quote funnel and
+ * silently rewrites the contact funnel with it.
+ */
+function stageScopeNote(pipelineKind) {
+  if (pipelineKind === 'blank') return 'One per line';
+  if (['roofing', 'sales'].includes(pipelineKind)) return 'One per line - used for both Contacts and Quotes';
+  return 'One per line - used for Jobs';
 }
 
 function hasAppliedSetup(state) {
@@ -164,9 +215,11 @@ export function createWorkspaceSetupPanel({
   showToast = () => {},
   h = defaultEscape,
   reservedRoleNames = () => [],
+  installedWorkspacePlugins = () => [],
   defer = (callback) => queueMicrotask(callback),
 } = {}) {
   const workspaceStates = new Map();
+  let draftFlushArmed = false;
   const saveTimers = new Map();
   const draftSaves = new Map();
 
@@ -199,6 +252,24 @@ export function createWorkspaceSetupPanel({
 
   function firstRoleNameIssue(companyId, plan) {
     return roleNameIssues(companyId, plan).find(Boolean) || '';
+  }
+
+  /**
+   * Everything that would make apply throw, gathered before the button is offered.
+   *
+   * apply is one transaction: any of these aborts the whole thing, so none of them should be
+   * discoverable by pressing the button and reading the wreckage.
+   */
+  function applyBlockers(workspaceId, state, plan) {
+    // Apps this workspace's own setup installed last time may be replaced; only one somebody
+    // switched on by hand blocks.
+    const managed = Array.isArray(state?.profile?.applied_plan?.managed_plugins)
+      ? state.profile.applied_plan.managed_plugins
+      : [];
+    return [
+      firstRoleNameIssue(state?.companyId, plan),
+      ...exclusiveAppClashes(plan, installedWorkspacePlugins(workspaceId), managed),
+    ].filter(Boolean);
   }
 
   function current(workspaceId) {
@@ -336,7 +407,7 @@ export function createWorkspaceSetupPanel({
           </div>
         </details>
         ${workspace.pipelineKind === 'blank' ? '<p class="company-setup-muted">No pipeline changes are planned for this workspace.</p>' : `
-          <label class="company-setup-stage-editor"><span>Pipeline stages <small>One per line</small></span><textarea rows="${Math.min(8, Math.max(4, (workspace.stages || []).length))}" data-company-setup-stages data-workspace-index="${workspaceIndex}">${h((workspace.stages || []).join('\n'))}</textarea></label>
+          <label class="company-setup-stage-editor"><span>Pipeline stages <small>${h(stageScopeNote(workspace.pipelineKind))}</small></span><textarea rows="${Math.min(8, Math.max(4, (workspace.stages || []).length))}" data-company-setup-stages data-workspace-index="${workspaceIndex}">${h((workspace.stages || []).join('\n'))}</textarea></label>
         `}
       </section>
     `;
@@ -345,7 +416,8 @@ export function createWorkspaceSetupPanel({
   function renderReview(workspaceId, workspaceLabel, state) {
     const plan = state.plan || buildWorkspaceSetupPlan({ mode: 'blank' }, { id: workspaceId, name: workspaceLabel });
     const roleIssues = roleNameIssues(state.companyId, plan);
-    const blockingIssue = roleIssues.find(Boolean) || '';
+    const blockers = applyBlockers(workspaceId, state, plan);
+    const blockingIssue = blockers[0] || '';
     return renderShell(workspaceId, workspaceLabel, `
       <div class="company-setup-progress-head"><div><span>Review</span><strong>Your recommended Questbase setup</strong></div><small>Edit names, apps, roles, or stages before applying.</small></div>
       <div class="company-setup-alert info"><i class="ti ti-database-heart"></i><div><strong>Safe to change</strong><span>Applying a new setup never deletes existing business records. Pipelines with live contacts, quotes, or jobs are preserved.</span></div></div>
@@ -549,6 +621,31 @@ export function createWorkspaceSetupPanel({
       saveDraft(workspaceId, state).catch(() => {});
       saveTimers.delete(key);
     }, 700));
+    armDraftFlush();
+  }
+
+  /**
+   * Send a pending draft immediately when the tab goes away.
+   *
+   * The debounce is 700ms, so answering the last question and closing the tab lost that
+   * answer. visibilitychange is the one signal that still fires reliably when a tab is hidden,
+   * closed or backgrounded on mobile -- unload does not.
+   */
+  function flushPendingDrafts() {
+    for (const [key, timer] of [...saveTimers.entries()]) {
+      clearTimeout(timer);
+      saveTimers.delete(key);
+      const state = current(key);
+      if (state) saveDraft(key, state).catch(() => {});
+    }
+  }
+
+  function armDraftFlush() {
+    if (draftFlushArmed || typeof document === 'undefined') return;
+    draftFlushArmed = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushPendingDrafts();
+    });
   }
 
   async function selectPlan(workspaceId, state, answers) {
@@ -575,9 +672,10 @@ export function createWorkspaceSetupPanel({
     }
     // Checked again here rather than trusting the disabled button. Apply is one transaction:
     // a name the database refuses aborts the whole thing, so it must not reach the server.
-    const nameIssue = firstRoleNameIssue(state.companyId, state.plan);
-    if (nameIssue) {
-      state.error = nameIssue;
+    // Checked again here rather than trusting the disabled button.
+    const blocker = applyBlockers(workspaceId, state, state.plan)[0];
+    if (blocker) {
+      state.error = blocker;
       requestRender();
       return;
     }
