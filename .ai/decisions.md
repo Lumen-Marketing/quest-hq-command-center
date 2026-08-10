@@ -1320,6 +1320,26 @@ and are never silently adopted as setup-managed. A manual competing CRM variant 
 with an actionable message. Every setup mutation carries an expected revision, preventing an
 older tab or device from overwriting a newer decision.
 
+### Workspace creation requires a setup decision
+
+Decided 2026-08-11.
+
+Creating a company or an operational workspace now opens the selected workspace's setup as
+a modal that cannot be cancelled, closed from the backdrop, or dismissed with Escape. This
+does not force a preset: **Start from scratch** remains the explicit skip and applies the
+bounded blank plan. Once a plan is applied, the modal closes through the shared modal cleanup.
+
+Settings > Setup is deliberately different. It is a small launcher for the same lazy-loaded
+interface, but the reopened modal has Cancel because the workspace already exists and the
+owner is choosing to review it. Keeping one panel for both entry points prevents creation and
+Settings from drifting into two setup systems.
+
+The workspace work-type question uses a searchable catalog of more than forty common trades
+and business types. Those choices are presentation detail, not new server authorities: each
+maps to the existing `roofing`, `construction`, `home_services`, `sales_agency`, or `mixed`
+plan family before a plan is built. Older saved answers that contain only an industry family
+resume through a stable default work type.
+
 ## App Builder records move from the workspace JSON to rows
 
 Decided 2026-08-04. Approved, phase 1 not yet applied.

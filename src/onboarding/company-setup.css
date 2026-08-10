@@ -17,6 +17,22 @@
     var(--panel, #fff);
 }
 
+.company-setup-modal-overlay {
+  padding: clamp(10px, 2vw, 24px);
+}
+
+.company-setup-modal-frame {
+  width: min(1120px, 96vw);
+  max-height: 94vh;
+  overflow: auto;
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 24%);
+}
+
+.company-setup-modal-frame .company-setup-shell {
+  margin: 0;
+}
+
 .company-setup-heading,
 .company-setup-progress-head,
 .company-setup-actions,
@@ -32,6 +48,13 @@
 .company-setup-heading > div:first-child {
   min-width: 0;
   max-width: 760px;
+}
+
+.company-setup-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
 }
 
 .company-setup-heading h2,
@@ -282,6 +305,48 @@
 
 .company-setup-option-grid.multi {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.company-setup-work-type-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--setup-line);
+  border-radius: 13px;
+  background: var(--panel, #fff);
+  color: var(--setup-muted);
+}
+
+.company-setup-work-type-search:focus-within {
+  border-color: color-mix(in srgb, var(--setup-accent) 60%, var(--setup-line));
+  box-shadow: 0 0 0 3px var(--setup-accent-soft);
+}
+
+.company-setup-work-type-search input {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink, #172033);
+  font: inherit;
+}
+
+.company-setup-work-type-search + .company-setup-option-grid {
+  max-height: min(390px, 46vh);
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.company-setup-work-type-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 22px;
+  border: 1px dashed var(--setup-line);
+  border-radius: 13px;
+  color: var(--setup-muted);
+  text-align: center;
 }
 
 .company-setup-option {
@@ -753,6 +818,22 @@
 
   .company-setup-safe {
     align-self: flex-start;
+  }
+
+  .company-setup-heading-actions {
+    width: 100%;
+    align-items: stretch;
+    justify-content: space-between;
+  }
+
+  .company-setup-modal-overlay {
+    padding: 0;
+  }
+
+  .company-setup-modal-frame {
+    width: 100vw;
+    max-height: 100dvh;
+    border-radius: 0;
   }
 
   .company-setup-intro,

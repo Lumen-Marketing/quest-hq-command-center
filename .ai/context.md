@@ -47,7 +47,7 @@ Tickets and Templates appear as future/planned areas. Confirm current implementa
 - Task: work execution that also supplies the shared "What's next" value for linked Contacts, Quotes/Deals, and Jobs.
 - Company account: the market customer, subscription, and outer security tenant.
 - Operational workspace: a configurable child environment for a team, pipeline, or role inside one company account.
-- Workspace setup plan: the owner-reviewed, editable apps, pipeline stages, and non-elevated role templates produced for one selected operational workspace by its questionnaire or a ready-made blueprint. It never creates or rewrites sibling workspaces.
+- Workspace setup plan: the owner-reviewed, editable apps, pipeline stages, and non-elevated role templates produced for one selected operational workspace by its searchable work-type questionnaire or a ready-made blueprint. It never creates or rewrites sibling workspaces.
 - Workspace App Builder: the configurable custom-app module available inside an operational workspace; it is not the tenancy object itself.
 - Plugin: a company-level entitlement with separate activation and configuration per operational workspace; disabling it preserves data.
 

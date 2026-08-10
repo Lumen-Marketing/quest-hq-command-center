@@ -3,6 +3,8 @@ import {
   WORKSPACE_SETUP_QUESTIONS,
   answersForWorkspaceBlueprint,
   buildWorkspaceSetupPlan,
+  filterWorkspaceWorkTypes,
+  normalizeCompanySetupAnswers,
   validateWorkspaceSetupPlan,
 } from './company-setup-model.js';
 import { WORKSPACE_PLUGIN_REGISTRY, pluginDataScopeDetails } from '../workspaces/plugin-catalog.js';
@@ -15,6 +17,7 @@ const EMPTY_ANSWERS = Object.freeze({
   mode: 'guided',
   blueprint: '',
   goal: '',
+  workType: '',
   industry: '',
   layout: '',
   teams: [],
@@ -46,6 +49,9 @@ function resumablePlan(value) {
 export function setupStateFromProfile(profile) {
   const row = safeObject(profile);
   const answers = { ...clone(EMPTY_ANSWERS), ...clone(safeObject(row.answers)) };
+  if (!answers.workType && answers.industry) {
+    answers.workType = normalizeCompanySetupAnswers(answers).workType;
+  }
   const appliedPlan = resumablePlan(row.applied_plan);
   const draftPlan = resumablePlan(row.draft_plan);
   const requestedScreen = answers.ui?.screen;
@@ -212,6 +218,7 @@ export function createWorkspaceSetupPanel({
   isLive = () => false,
   requestRender = () => {},
   onApplied = async () => {},
+  onClose = () => {},
   showToast = () => {},
   h = defaultEscape,
   reservedRoleNames = () => [],
@@ -283,19 +290,30 @@ export function createWorkspaceSetupPanel({
 
   function renderShell(workspaceId, workspaceLabel, body, state) {
     const status = state?.profile?.status === 'applied' ? 'Configured' : 'Setup guide';
-    return `
+    const shell = `
       <article class="panel span-3 company-setup-shell" data-company-setup-root data-company-id="${h(state?.companyId || '')}" data-workspace-id="${h(workspaceId)}">
         <div class="company-setup-heading">
           <div>
             <span class="company-setup-kicker">${h(status)}</span>
-            <h2>Set up ${h(workspaceLabel || 'this workspace')}</h2>
+            <h2 id="workspaceSetupTitle">Set up ${h(workspaceLabel || 'this workspace')}</h2>
             <p>Questbase will configure this workspace from plain-language choices. You can review its apps, pipeline, and starter roles before applying it. Sibling workspaces stay unchanged.</p>
           </div>
-          <span class="company-setup-safe"><i class="ti ti-shield-check"></i>Existing records stay safe</span>
+          <div class="company-setup-heading-actions">
+            <span class="company-setup-safe"><i class="ti ti-shield-check"></i>Existing records stay safe</span>
+            ${state?.presentation === 'modal' && state?.canCancel ? '<button class="btn" type="button" data-action="company-setup-close">Cancel</button>' : ''}
+          </div>
         </div>
         ${state?.saveError ? `<div class="company-setup-alert warning"><i class="ti ti-alert-triangle"></i>${h(state.saveError)}</div>` : ''}
         ${body}
       </article>
+    `;
+    if (state?.presentation !== 'modal') return shell;
+    return `
+      <div class="modal-overlay company-setup-modal-overlay">
+        <div class="company-setup-modal-frame" role="dialog" aria-modal="true" aria-labelledby="workspaceSetupTitle" tabindex="-1">
+          ${shell}
+        </div>
+      </div>
     `;
   }
 
@@ -366,6 +384,10 @@ export function createWorkspaceSetupPanel({
   function renderQuestion(workspaceId, workspaceLabel, state) {
     const question = WORKSPACE_SETUP_QUESTIONS[state.questionIndex] || WORKSPACE_SETUP_QUESTIONS[0];
     const progress = Math.round(((state.questionIndex + 1) / WORKSPACE_SETUP_QUESTIONS.length) * 100);
+    const workTypeQuery = question.searchable ? String(state.workTypeQuery || '') : '';
+    const matchingWorkTypes = question.searchable
+      ? new Set(filterWorkspaceWorkTypes(workTypeQuery).map((item) => item.id))
+      : null;
     return renderShell(workspaceId, workspaceLabel, `
       <div class="company-setup-progress-head">
         <div><span>Question ${state.questionIndex + 1} of ${WORKSPACE_SETUP_QUESTIONS.length}</span><strong>${h(question.title)}</strong></div>
@@ -373,11 +395,19 @@ export function createWorkspaceSetupPanel({
       </div>
       <div class="company-setup-progress" aria-label="${progress}% complete"><span style="width:${progress}%"></span></div>
       ${state.error ? `<div class="company-setup-alert warning"><i class="ti ti-alert-triangle"></i>${h(state.error)}</div>` : ''}
+      ${question.searchable ? `
+        <label class="company-setup-work-type-search">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input type="search" value="${h(workTypeQuery)}" placeholder="Search work types" aria-label="Search work types" data-company-setup-work-type-search autocomplete="off" />
+        </label>
+      ` : ''}
       <div class="company-setup-option-grid ${question.multiple ? 'multi' : ''}">
         ${question.options.map(([value, label]) => {
           const selected = answerIsSelected(state.answers, question, value);
-          return `<button type="button" class="company-setup-option ${selected ? 'selected' : ''}" data-action="company-setup-select-option" data-question="${h(question.id)}" data-value="${h(value)}" data-multiple="${question.multiple ? 'true' : 'false'}" aria-pressed="${selected ? 'true' : 'false'}"><span>${h(label)}</span><i class="ti ${selected ? 'ti-circle-check-filled' : 'ti-circle'}"></i></button>`;
+          const hidden = matchingWorkTypes && !matchingWorkTypes.has(value);
+          return `<button type="button" class="company-setup-option ${selected ? 'selected' : ''}" data-action="company-setup-select-option" data-question="${h(question.id)}" data-value="${h(value)}" data-multiple="${question.multiple ? 'true' : 'false'}" ${question.searchable ? 'data-company-setup-work-type-option' : ''} ${hidden ? 'hidden' : ''} aria-pressed="${selected ? 'true' : 'false'}"><span>${h(label)}</span><i class="ti ${selected ? 'ti-circle-check-filled' : 'ti-circle'}"></i></button>`;
         }).join('')}
+        ${question.searchable ? `<p class="company-setup-work-type-empty" data-company-setup-work-type-empty ${matchingWorkTypes.size ? 'hidden' : ''}>No work type matches that search. Try a broader word or choose Other type of work.</p>` : ''}
       </div>
       <div class="company-setup-actions split">
         <button class="btn" type="button" data-action="company-setup-question-back"><i class="ti ti-arrow-left"></i>Back</button>
@@ -459,7 +489,7 @@ export function createWorkspaceSetupPanel({
       ${warnings.length ? `<div class="company-setup-alert warning"><i class="ti ti-alert-triangle"></i><div><strong>Kept safe</strong><span>${warnings.map((warning) => h(warning)).join(' ')}</span></div></div>` : ''}
       <div class="company-setup-reset-card">
         <div><strong>Need a different setup?</strong><span>You can adjust the current plan, or clear only the answers and run the guide again.</span></div>
-        <div><button class="btn" type="button" data-action="company-setup-adjust"><i class="ti ti-adjustments"></i>Adjust setup</button><button class="btn danger-quiet" type="button" data-action="company-setup-open-reset">Reset setup answers</button></div>
+        <div><button class="company-setup-blank-link" type="button" data-action="company-setup-start-blank">Start from scratch</button><button class="btn" type="button" data-action="company-setup-adjust"><i class="ti ti-adjustments"></i>Adjust setup</button><button class="btn danger-quiet" type="button" data-action="company-setup-open-reset">Reset setup answers</button></div>
       </div>
     `, state);
   }
@@ -785,6 +815,7 @@ export function createWorkspaceSetupPanel({
 
   function render(workspaceId, {
     companyId = '', companyLabel = 'this company', workspaceLabel = 'this workspace', canManage = true,
+    presentation = 'inline', canCancel = false,
   } = {}) {
     const id = String(workspaceId || '');
     let state = current(id);
@@ -798,6 +829,8 @@ export function createWorkspaceSetupPanel({
       state.companyLabel = companyLabel || state.companyLabel;
       state.workspaceLabel = workspaceLabel || state.workspaceLabel;
     }
+    state.presentation = presentation === 'modal' ? 'modal' : 'inline';
+    state.canCancel = Boolean(canCancel);
     if (!canManage) {
       return renderShell(id, workspaceLabel, '<div class="company-setup-alert warning"><i class="ti ti-lock"></i>Owner or Admin access is required to change workspace setup.</div>', state);
     }
@@ -822,6 +855,19 @@ export function createWorkspaceSetupPanel({
     const state = current(workspaceId);
     if (!root || !state || root.dataset.companySetupBound === 'true') return;
     root.dataset.companySetupBound = 'true';
+
+    const workTypeSearch = root.querySelector('[data-company-setup-work-type-search]');
+    if (workTypeSearch) {
+      workTypeSearch.addEventListener('input', () => {
+        state.workTypeQuery = workTypeSearch.value;
+        const matches = new Set(filterWorkspaceWorkTypes(workTypeSearch.value).map((item) => item.id));
+        root.querySelectorAll('[data-company-setup-work-type-option]').forEach((option) => {
+          option.hidden = !matches.has(option.dataset.value);
+        });
+        const empty = root.querySelector('[data-company-setup-work-type-empty]');
+        if (empty) empty.hidden = matches.size > 0;
+      });
+    }
 
     root.querySelectorAll('[data-company-setup-workspace-name]').forEach((input) => {
       input.addEventListener('input', () => {
@@ -870,8 +916,13 @@ export function createWorkspaceSetupPanel({
       await loadWorkspace(workspaceId);
       return;
     }
+    if (action === 'company-setup-close') {
+      if (state.canCancel) onClose(state.companyId, workspaceId);
+      return;
+    }
     if (action === 'company-setup-guide') {
       state.answers = clone(EMPTY_ANSWERS);
+      state.workTypeQuery = '';
       state.screen = 'question';
       state.questionIndex = 0;
       state.error = '';

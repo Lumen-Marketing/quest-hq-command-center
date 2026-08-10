@@ -4,11 +4,13 @@ import test from 'node:test';
 import {
   COMPANY_SETUP_BLUEPRINTS,
   COMPANY_SETUP_QUESTIONS,
+  WORKSPACE_WORK_TYPES,
   WORKSPACE_SETUP_QUESTIONS,
   answersForBlueprint,
   answersForWorkspaceBlueprint,
   buildCompanySetupPlan,
   buildWorkspaceSetupPlan,
+  filterWorkspaceWorkTypes,
   normalizeCompanySetupAnswers,
   validateCompanySetupPlan,
   validateWorkspaceSetupPlan,
@@ -28,8 +30,34 @@ test('the setup model exposes the seven approved ready-made choices', () => {
 test('workspace setup removes the company layout question', () => {
   assert.deepEqual(
     WORKSPACE_SETUP_QUESTIONS.map((item) => item.id),
-    ['goal', 'industry', 'teams', 'tools'],
+    ['goal', 'workType', 'teams', 'tools'],
   );
+});
+
+test('workspace setup offers a broad searchable work-type catalog and maps it to safe plan families', () => {
+  assert.ok(WORKSPACE_WORK_TYPES.length >= 30, 'the survey must cover more than the original five company types');
+  assert.deepEqual(
+    filterWorkspaceWorkTypes('garage').map((item) => item.id),
+    ['garage_door'],
+  );
+  assert.ok(filterWorkspaceWorkTypes('health').some((item) => item.id === 'healthcare'));
+
+  const plumbing = normalizeCompanySetupAnswers({ workType: 'plumbing', industry: 'roofing' });
+  assert.equal(plumbing.workType, 'plumbing');
+  assert.equal(plumbing.industry, 'home_services', 'the chosen work type must determine the backend-safe setup family');
+
+  const legacyRoofing = normalizeCompanySetupAnswers({ industry: 'roofing' });
+  assert.equal(legacyRoofing.workType, 'roofing', 'saved answers from before work types were added must still resume');
+  assert.equal(legacyRoofing.industry, 'roofing');
+
+  const plan = buildWorkspaceSetupPlan({
+    mode: 'guided',
+    goal: 'sales_to_jobs',
+    workType: 'plumbing',
+    teams: ['sales', 'field_crew'],
+    tools: ['crm_quotes', 'tasks_files'],
+  }, { id: 'workspace-plumbing', name: 'Plumbing' });
+  assert.equal(plan.profile, 'home_services');
 });
 
 test('every ready-made workspace setup configures exactly the selected workspace', () => {
@@ -113,6 +141,7 @@ test('normalization removes unknown values and duplicate team/tool choices', () 
     mode: 'guided',
     blueprint: '',
     goal: 'crm_sales',
+    workType: 'roofing',
     industry: 'roofing',
     layout: 'custom',
     teams: ['sales', 'field_crew'],

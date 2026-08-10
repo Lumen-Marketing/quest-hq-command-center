@@ -63,6 +63,7 @@ test('every operational workspace opens its own setup survey', () => {
   assert.match(create, /preset_code:\s*'blank'/);
   assert.doesNotMatch(create, /form\.preset_code|applyWorkspacePluginPresetLocal\(saved\.id/);
   assert.match(create, /companyPath\('settings', \{ tab: 'setup', workspace: saved\.id \}, companyId\)/);
+  assert.match(create, /openWorkspaceSetupModal\(saved\.id, \{ required: true \}\)/);
   assert.match(source, /module\.createWorkspaceSetupPanel\(/);
   assert.match(source, /workspaceLabel:\s*workspace\.name/);
   assert.match(source, /workspaceId:\s*workspace\.id/);

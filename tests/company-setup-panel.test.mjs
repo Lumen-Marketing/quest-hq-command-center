@@ -42,26 +42,85 @@ test('company creation no longer asks owners to choose a technical company type'
   assert.doesNotMatch(create, /form\.preset_code/);
 });
 
-test('new owners are routed to guided Setup rather than Billing', () => {
+test('new owners are routed to Setup with its required modal rather than Billing', () => {
   const register = functionBody(main, 'registerWorkspace');
   const create = functionBody(main, 'createWorkspaceForCurrentUser');
 
   for (const body of [register, create]) {
     assert.match(body, /companyPath\('settings', \{ tab: 'setup' \}/);
+    assert.match(body, /openWorkspaceSetupModal\([^)]*required:\s*true/);
     assert.doesNotMatch(body, /companyPath\('settings', \{ tab: 'billing' \}/);
     assert.doesNotMatch(body, /applyPluginPresetLocal/);
   }
 });
 
-test('Settings lazily loads the setup interface and delegates its actions', () => {
+test('Settings opens the dismissible setup modal and still lazy-loads its interface', () => {
   assert.match(main, /import\('\.\/onboarding\/company-setup-runtime\.js'\)/);
   assert.match(runtime, /import '\.\/company-setup\.css'/);
   assert.match(runtime, /from '\.\/company-setup-panel\.js'/);
   assert.match(main, /companyPath\('settings', \{ tab: 'setup' \}/);
   assert.match(main, /renderCompanySetupSettings\(companyId, route\)/);
-  assert.match(main, /companySetupPanelModule\.render\(workspace\.id/);
+  assert.match(main, /data-action="open-workspace-setup"/);
+  assert.match(main, /state\.modal = required \? 'workspace-setup-required' : 'workspace-setup'/);
+  assert.match(main, /companySetupPanelModule\.render\(workspace\.id,[\s\S]*presentation:\s*'modal'/);
   assert.match(main, /action\.startsWith\('company-setup-'\)/);
   assert.match(main, /companySetupPanelModule\.handleAction/);
+});
+
+test('setup modal is mandatory after creation and cancellable only when reopened from Settings', async () => {
+  let closes = 0;
+  const panel = createWorkspaceSetupPanel({
+    createClient: () => fakeClient(null, async () => ({ data: { status: 'draft' }, error: null })),
+    isLive: () => true,
+    onClose: () => { closes += 1; },
+  });
+  const workspaceId = '11111111-1111-4111-8111-111111111111';
+  const node = fakeActionNode('company-a', workspaceId);
+  await panel.loadWorkspace(workspaceId);
+
+  const required = panel.render(workspaceId, {
+    companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Sales', presentation: 'modal', canCancel: false,
+  });
+  assert.match(required, /role="dialog"/);
+  assert.match(required, /Start from scratch/);
+  assert.doesNotMatch(required, /data-action="company-setup-close"/);
+  await panel.handleAction('company-setup-close', node);
+  assert.equal(closes, 0, 'a synthetic close action must not bypass required setup');
+
+  const optional = panel.render(workspaceId, {
+    companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Sales', presentation: 'modal', canCancel: true,
+  });
+  assert.match(optional, /data-action="company-setup-close"[^>]*>Cancel</);
+  await panel.handleAction('company-setup-close', node);
+  assert.equal(closes, 1);
+});
+
+test('the work-type question renders a search field and the expanded job catalog', async () => {
+  const panel = createWorkspaceSetupPanel({
+    createClient: () => fakeClient(null, async () => ({ data: { status: 'draft' }, error: null })),
+    isLive: () => true,
+  });
+  const workspaceId = '11111111-1111-4111-8111-111111111111';
+  const node = fakeActionNode('company-a', workspaceId);
+  await panel.loadWorkspace(workspaceId);
+  panel.render(workspaceId, { companyId: 'company-a', workspaceLabel: 'Sales' });
+  await panel.handleAction('company-setup-guide', node);
+  await panel.handleAction('company-setup-select-option', fakeActionNode('company-a', workspaceId, {
+    question: 'goal', value: 'sales_to_jobs', multiple: 'false',
+  }));
+  await panel.handleAction('company-setup-question-next', node);
+  const html = panel.render(workspaceId, { companyId: 'company-a', workspaceLabel: 'Sales' });
+  assert.match(html, /data-company-setup-work-type-search/);
+  assert.match(html, /placeholder="Search work types"/);
+  assert.match(html, /Plumbing/);
+  assert.match(html, /Healthcare/);
+});
+
+test('Escape and generic close cannot dismiss required setup', () => {
+  assert.match(functionBody(main, 'closeActiveModal'), /workspace-setup-required/);
+  assert.match(functionBody(main, 'closeActiveModal'), /workspace-setup-required'\) return false/);
+  assert.match(functionBody(main, 'dismissTopModal'), /closeActiveModal\(\) !== false/);
+  assert.match(functionBody(main, 'closeAppliedWorkspaceSetupModal'), /state\.modal = 'workspace-setup'/);
 });
 
 test('setup state resumes a saved review and distinguishes an applied setup', () => {
@@ -95,6 +154,15 @@ test('reset wording names both the cleared state and preserved records', () => {
     assert.match(RESET_COMPANY_SETUP_COPY, new RegExp(noun, 'i'));
   }
   assert.match(RESET_COMPANY_SETUP_COPY, /does not delete/i);
+});
+
+test('setup state maps legacy industry answers into the searchable work-type question', () => {
+  const state = setupStateFromProfile({
+    status: 'draft',
+    answers: { industry: 'roofing', ui: { screen: 'question', questionIndex: 1 } },
+  });
+  assert.equal(state.screen, 'question');
+  assert.equal(state.answers.workType, 'roofing');
 });
 
 test('workspace reset wording protects sibling workspaces and the applied configuration', () => {

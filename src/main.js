@@ -19506,7 +19506,11 @@ function loadCompanySetupPanel() {
         installedWorkspacePlugins: (workspaceId) => state.workspacePlugins
           .filter((row) => row.workspace_id === String(workspaceId || '') && row.status === 'installed')
           .map((row) => row.plugin_id),
-        onApplied: () => refreshRealtimeDomains(['access', 'crm']),
+        onApplied: async () => {
+          await refreshRealtimeDomains(['access', 'crm']);
+          closeAppliedWorkspaceSetupModal();
+        },
+        onClose: () => closeActiveModal(),
       });
       return companySetupPanelModule;
     }).catch((error) => {
@@ -19525,17 +19529,74 @@ function renderCompanySetupSettings(companyId, route) {
     && item.status === 'active'
   ));
   if (!workspace) return questLoader('Loading workspace setup');
-  if (companySetupPanelModule) {
-    return companySetupPanelModule.render(workspace.id, {
-      workspaceId: workspace.id,
-      companyId,
-      companyLabel: companyName(companyId),
-      workspaceLabel: workspace.name,
-      canManage: canManageCompanyAppearance(companyId),
-    });
+  return `
+    <article class="panel span-3 company-setup-launcher">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Workspace setup</span>
+          <h2>${h(workspace.name)}</h2>
+          <p>Open the guided setup to choose this workspace's work type, apps, pipeline, and starter roles. Other workspaces stay unchanged.</p>
+        </div>
+        <button class="btn btn-primary" type="button" data-action="open-workspace-setup" data-workspace-id="${h(workspace.id)}"><i class="ti ti-adjustments"></i>Open setup</button>
+      </div>
+    </article>
+  `;
+}
+
+function openWorkspaceSetupModal(workspaceId = '', { required = false } = {}) {
+  state.selectedOperationalWorkspaceId = String(workspaceId || '');
+  state.modal = required ? 'workspace-setup-required' : 'workspace-setup';
+}
+
+function closeAppliedWorkspaceSetupModal() {
+  if (!['workspace-setup', 'workspace-setup-required'].includes(state.modal)) return;
+  // Applying (including Start from scratch) is the one valid exit from required setup.
+  // Downgrade it to the ordinary modal state, then use the shared close cleanup.
+  state.modal = 'workspace-setup';
+  closeActiveModal();
+}
+
+function workspaceSetupModalTarget(companyId, route) {
+  const requestedWorkspaceId = String(
+    state.selectedOperationalWorkspaceId
+      || route?.params?.get('workspace')
+      || workspaceIdForCompany(companyId)
+      || '',
+  );
+  return state.operationalWorkspaces.find((workspace) => (
+    workspace.id === requestedWorkspaceId
+    && canonicalCompanyId(workspace.company_id) === canonicalCompanyId(companyId)
+    && workspace.status === 'active'
+  ));
+}
+
+function renderWorkspaceSetupModal(companyId, route) {
+  const required = state.modal === 'workspace-setup-required';
+  const workspace = workspaceSetupModalTarget(companyId, route);
+  if (!companySetupPanelModule) {
+    loadCompanySetupPanel().then(() => render()).catch((error) => console.error('Company setup panel failed to load', error));
   }
-  loadCompanySetupPanel().then(() => render()).catch((error) => console.error('Company setup panel failed to load', error));
-  return questLoader('Loading');
+  if (!workspace || !companySetupPanelModule) {
+    const close = required ? '' : '<button class="btn" type="button" data-action="close-modal">Cancel</button>';
+    return `
+      <div class="modal-overlay">
+        <div class="modal-panel task-modal" role="dialog" aria-modal="true" aria-label="Workspace setup" tabindex="-1">
+          <div class="modal-head"><div><div class="eyebrow">Workspace setup</div><h2>Preparing your guide</h2></div>${close}</div>
+          <div class="modal-body">${questLoader('Loading workspace setup')}</div>
+        </div>
+      </div>
+    `;
+  }
+  state.selectedOperationalWorkspaceId = workspace.id;
+  return companySetupPanelModule.render(workspace.id, {
+    workspaceId: workspace.id,
+    companyId,
+    companyLabel: companyName(companyId),
+    workspaceLabel: workspace.name,
+    canManage: canManageCompanyAppearance(companyId),
+    presentation: 'modal',
+    canCancel: !required,
+  });
 }
 
 function renderSettingsPage(route, companyId) {
@@ -23677,6 +23738,9 @@ function renderCompanyPickerModal() {
 
 function renderActiveModal(route, session) {
   if (state.builderModal) return renderWorkspaceBuilderModal();
+  if (['workspace-setup', 'workspace-setup-required'].includes(state.modal)) {
+    return renderWorkspaceSetupModal(route.companyId || activeCompanyId(), route);
+  }
   if (state.modal === 'record-history') return renderRecordHistoryModal();
   if (state.modal === 'job-daily') return renderJobDailyModal();
   if (state.modal === 'job-record-new') return renderJobRecordModal();
@@ -25241,7 +25305,7 @@ function activeModalOverlay() {
 // Dismiss the topmost open modal (builder modal wins if both somehow exist).
 function dismissTopModal() {
   if (state.builderModal) { closeWbModal(); return true; }
-  if (state.modal) { closeActiveModal(); return true; }
+  if (state.modal) return closeActiveModal() !== false;
   return false;
 }
 // Keep Tab focus inside the open modal so keyboard users can't tab into the
@@ -26064,6 +26128,12 @@ function handleAction(event, node) {
     loadCompanySetupPanel()
       .then(() => companySetupPanelModule.handleAction(action, node))
       .catch((error) => showToast(error?.message || 'Setup failed.', 'error', 'Setup'));
+    return;
+  }
+  if (action === 'open-workspace-setup') {
+    event.preventDefault();
+    openWorkspaceSetupModal(node.dataset.workspaceId);
+    render();
     return;
   }
   if (action === 'wb-modal-close') {
@@ -28722,6 +28792,7 @@ function handleAction(event, node) {
 }
 
 function closeActiveModal() {
+  if (state.modal === 'workspace-setup-required') return false;
   const route = state.route || getRoute();
   state.dashboardTrayOpen = false;
   state.modal = '';
@@ -28759,6 +28830,7 @@ function closeActiveModal() {
     return;
   }
   render();
+  return true;
 }
 
 function onDocumentSubmit(event) {
@@ -29945,6 +30017,7 @@ async function registerWorkspace(formNode) {
   }
   applyCreatedWorkspace(workspace.data, companyName, iconKey);
   state.authMessage = '';
+  openWorkspaceSetupModal('', { required: true });
   navigate(companyPath('settings', { tab: 'setup' }, state.activeCompanyId), { replace: true });
 }
 
@@ -29977,6 +30050,7 @@ async function createWorkspaceForCurrentUser(formNode) {
   }
   applyCreatedWorkspace(workspace.data, companyName, iconKey);
   state.authMessage = 'Opening workspace...';
+  openWorkspaceSetupModal('', { required: true });
   navigate(companyPath('settings', { tab: 'setup' }, state.activeCompanyId), { replace: true });
 }
 
@@ -30047,9 +30121,9 @@ async function createOperationalWorkspace(formNode) {
   state.activeWorkspaceId = saved.id;
   localStorage.setItem(COMPANY_KEY, companyId);
   localStorage.setItem(ACTIVE_WORKSPACE_KEY, saved.id);
-  state.modal = '';
   state.operationalWorkspaceModalIcon = null;
   showToast(`${saved.name} workspace created.`, live ? 'live' : 'local', 'Workspaces');
+  openWorkspaceSetupModal(saved.id, { required: true });
   navigate(companyPath('settings', { tab: 'setup', workspace: saved.id }, companyId));
 }
 

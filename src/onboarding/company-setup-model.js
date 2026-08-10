@@ -18,6 +18,68 @@ const TOOL_IDS = [
 const TEAM_SET = new Set(TEAM_IDS);
 const TOOL_SET = new Set(TOOL_IDS);
 
+export const WORKSPACE_WORK_TYPES = Object.freeze([
+  ['roofing', 'Roofing', 'roofing', 'roofer shingles roof repair'],
+  ['gutters', 'Gutters', 'roofing', 'gutter installation drainage'],
+  ['general_construction', 'General construction', 'construction', 'contractor building commercial'],
+  ['remodeling', 'Remodeling and renovation', 'construction', 'renovation kitchen bathroom'],
+  ['home_building', 'Home building', 'construction', 'builder residential new construction'],
+  ['restoration', 'Restoration', 'construction', 'water fire storm damage mitigation'],
+  ['solar_installation', 'Solar installation', 'construction', 'solar panels renewable energy'],
+  ['plumbing', 'Plumbing', 'home_services', 'plumber pipes drains water'],
+  ['electrical', 'Electrical', 'home_services', 'electrician wiring power'],
+  ['hvac', 'HVAC and air conditioning', 'home_services', 'heating cooling ac ventilation'],
+  ['landscaping', 'Landscaping', 'home_services', 'landscape outdoor yard design'],
+  ['lawn_care', 'Lawn care', 'home_services', 'grass mowing yard'],
+  ['painting', 'Painting', 'home_services', 'painter interior exterior'],
+  ['flooring', 'Flooring', 'home_services', 'tile carpet hardwood'],
+  ['concrete_masonry', 'Concrete and masonry', 'home_services', 'cement brick stone paving'],
+  ['windows_doors', 'Windows and doors', 'home_services', 'window door glass installation'],
+  ['garage_door', 'Garage door service', 'home_services', 'garage opener repair installation'],
+  ['pool_spa', 'Pool and spa service', 'home_services', 'swimming pool hot tub maintenance'],
+  ['pest_control', 'Pest control', 'home_services', 'exterminator termite insects'],
+  ['cleaning', 'Cleaning services', 'home_services', 'janitorial maid commercial cleaning'],
+  ['handyman', 'Handyman services', 'home_services', 'home repair maintenance'],
+  ['property_management', 'Property management', 'home_services', 'rental facilities maintenance'],
+  ['appliance_repair', 'Appliance repair', 'home_services', 'refrigerator washer dryer service'],
+  ['locksmith', 'Locksmith', 'home_services', 'locks keys security'],
+  ['moving', 'Moving services', 'home_services', 'movers relocation packing'],
+  ['security_systems', 'Security systems', 'home_services', 'alarm camera access control'],
+  ['tree_service', 'Tree service', 'home_services', 'arborist trimming removal'],
+  ['fencing', 'Fencing', 'home_services', 'fence gate installation'],
+  ['insulation', 'Insulation', 'home_services', 'attic energy efficiency'],
+  ['sales_marketing_agency', 'Sales or marketing agency', 'sales_agency', 'advertising lead generation creative'],
+  ['real_estate', 'Real estate', 'sales_agency', 'realtor brokerage property sales'],
+  ['insurance', 'Insurance', 'sales_agency', 'agency broker policies claims'],
+  ['professional_services', 'Professional services', 'sales_agency', 'consulting legal accounting advisory'],
+  ['retail_ecommerce', 'Retail or ecommerce', 'mixed', 'store shop online products'],
+  ['manufacturing', 'Manufacturing', 'mixed', 'factory production fabrication'],
+  ['logistics', 'Logistics and transportation', 'mixed', 'delivery fleet freight shipping'],
+  ['restaurant_hospitality', 'Restaurant or hospitality', 'mixed', 'food hotel catering venue'],
+  ['healthcare', 'Healthcare', 'mixed', 'clinic medical dental wellness'],
+  ['education', 'Education or training', 'mixed', 'school courses coaching'],
+  ['technology', 'Technology or software', 'mixed', 'it saas development support'],
+  ['nonprofit', 'Nonprofit', 'mixed', 'charity community organization'],
+  ['other', 'Other type of work', 'mixed', 'custom mixed general'],
+].map(([id, label, family, keywords]) => Object.freeze({ id, label, family, keywords })));
+
+const WORK_TYPE_BY_ID = new Map(WORKSPACE_WORK_TYPES.map((item) => [item.id, item]));
+const DEFAULT_WORK_TYPE_BY_INDUSTRY = Object.freeze({
+  roofing: 'roofing',
+  construction: 'general_construction',
+  home_services: 'handyman',
+  sales_agency: 'sales_marketing_agency',
+  mixed: 'other',
+});
+
+export function filterWorkspaceWorkTypes(query = '') {
+  const needle = String(query || '').trim().toLowerCase();
+  if (!needle) return [...WORKSPACE_WORK_TYPES];
+  return WORKSPACE_WORK_TYPES.filter((item) => (
+    `${item.id.replaceAll('_', ' ')} ${item.label} ${item.keywords}`.toLowerCase().includes(needle)
+  ));
+}
+
 export const COMPANY_SETUP_QUESTIONS = Object.freeze([
   Object.freeze({
     id: 'goal',
@@ -85,10 +147,16 @@ export const COMPANY_SETUP_QUESTIONS = Object.freeze([
 export const WORKSPACE_SETUP_QUESTIONS = Object.freeze(
   COMPANY_SETUP_QUESTIONS
     .filter((question) => question.id !== 'layout')
-    .map((question) => Object.freeze({
-      ...question,
-      title: question.id === 'industry' ? 'What kind of work is this workspace for?' : question.title,
-    })),
+    .map((question) => {
+      if (question.id !== 'industry') return Object.freeze({ ...question });
+      return Object.freeze({
+        id: 'workType',
+        title: 'What kind of work is this workspace for?',
+        multiple: false,
+        searchable: true,
+        options: Object.freeze(WORKSPACE_WORK_TYPES.map((item) => Object.freeze([item.id, item.label]))),
+      });
+    }),
 );
 
 const BLUEPRINT_ANSWERS = Object.freeze({
@@ -243,11 +311,17 @@ function uniqueAllowed(values, allowed) {
 
 export function normalizeCompanySetupAnswers(raw = {}) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const legacyIndustry = INDUSTRIES.has(input.industry) ? input.industry : 'mixed';
+  const requestedWorkType = WORK_TYPE_BY_ID.has(input.workType)
+    ? input.workType
+    : (WORK_TYPE_BY_ID.has(input.industry) ? input.industry : DEFAULT_WORK_TYPE_BY_INDUSTRY[legacyIndustry]);
+  const workType = WORK_TYPE_BY_ID.has(requestedWorkType) ? requestedWorkType : 'other';
   return {
     mode: MODES.has(input.mode) ? input.mode : 'guided',
     blueprint: BLUEPRINT_IDS.has(input.blueprint) ? input.blueprint : '',
     goal: GOALS.has(input.goal) ? input.goal : 'internal_custom',
-    industry: INDUSTRIES.has(input.industry) ? input.industry : 'mixed',
+    workType,
+    industry: WORK_TYPE_BY_ID.get(workType)?.family || legacyIndustry,
     layout: LAYOUTS.has(input.layout) ? input.layout : 'one',
     teams: uniqueAllowed(input.teams, TEAM_SET),
     tools: uniqueAllowed(input.tools, TOOL_SET),
