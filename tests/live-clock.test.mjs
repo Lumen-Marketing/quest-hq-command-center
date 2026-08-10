@@ -81,3 +81,39 @@ test('markup() is the only way past the escaping, and stays opt-in', () => {
   assert.match(main, /function markup\(html\) \{/);
   assert.match(main, /<strong>\$\{cellValue\(value\)\}<\/strong>/);
 });
+
+// The clock shipped with `color: inherit`, so on a themed rail the digits came out near-black
+// on navy. The stylesheet already records this exact failure happening once before, to the
+// product name -- an element that carries its own colour has to be listed in the
+// [data-sidebar-theme] rules or it keeps the base one while everything around it themes.
+
+test('the rail clock takes its colour from the rail, never from inherit', () => {
+  // Anchored to the start of a line: `[data-sidebar-theme] .rail-clock {` also ends in
+  // ".rail-clock {" and sits earlier in the file, so a bare indexOf sliced from there to the
+  // hover rule and swept in thousands of lines of unrelated CSS.
+  const start = styles.search(/^\.rail-clock \{/m);
+  assert.notEqual(start, -1, 'base .rail-clock rule not found');
+  const rule = styles.slice(start, styles.indexOf('.rail-clock:hover', start));
+  // The DECLARATION, not the word: the comment above the rule explains why inherit was wrong,
+  // and a bare substring search matches that explanation instead of the code.
+  assert.ok(!/^\s*color:\s*inherit\s*;/m.test(rule), 'inherit is what made it unreadable');
+  assert.match(rule, /color: var\(--deck-text, var\(--ink-2\)\)/);
+  // The divider and hover follow the rail's surface too, not a hard-coded white wash.
+  assert.match(rule, /border-top: 1px solid var\(--deck-hairline/);
+  assert.match(styles, /\.rail-clock:hover \{ background: var\(--deck-hover/);
+});
+
+test('a custom sidebar theme reaches every part of the clock', () => {
+  // Body, headline and secondary line each have their own list in the theme block.
+  const themed = styles.slice(styles.indexOf('[data-sidebar-theme] .side-item,'));
+  for (const [selector, token] of [
+    ['[data-sidebar-theme] .rail-clock', '--deck-text'],
+    ['[data-sidebar-theme] .rail-clock-body b', '--deck-strong'],
+    ['[data-sidebar-theme] .rail-clock-body small', '--deck-label'],
+  ]) {
+    const at = themed.indexOf(selector);
+    assert.notEqual(at, -1, `${selector} is not themed`);
+    const block = themed.slice(at, themed.indexOf('}', at));
+    assert.ok(block.includes(token), `${selector} should resolve through ${token}`);
+  }
+});

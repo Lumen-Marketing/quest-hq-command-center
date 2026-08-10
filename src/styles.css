@@ -29049,7 +29049,8 @@ html[data-card-style="glass"] .message-context-rail {
 [data-sidebar-theme] .workspace-rail-copy,
 [data-sidebar-theme] .deck-settings-link,
 [data-sidebar-theme] .deck-company-switch span,
-[data-sidebar-theme] .deck-user-card span {
+[data-sidebar-theme] .deck-user-card span,
+[data-sidebar-theme] .rail-clock {
   color: var(--deck-text);
 }
 
@@ -29066,6 +29067,7 @@ html[data-card-style="glass"] .message-context-rail {
 [data-sidebar-theme] .company-account-copy strong,
 [data-sidebar-theme] .workspace-rail-copy strong,
 [data-sidebar-theme] .deck-user-card b,
+[data-sidebar-theme] .rail-clock-body b,
 [data-sidebar-theme] .side-item.active span {
   color: var(--deck-strong);
 }
@@ -29075,6 +29077,7 @@ html[data-card-style="glass"] .message-context-rail {
 [data-sidebar-theme] .company-account-copy small,
 [data-sidebar-theme] .workspace-rail-copy small,
 [data-sidebar-theme] .deck-user-card small,
+[data-sidebar-theme] .rail-clock-body small,
 [data-sidebar-theme] .company-account-switcher,
 [data-sidebar-theme] .workspace-rail-settings,
 [data-sidebar-theme] .deck-toggle {
@@ -31387,12 +31390,15 @@ a.wb-cal-more:hover { color: var(--orange); }
   gap: 9px;
   margin-top: auto;
   padding: 9px 10px;
-  border-top: 1px solid var(--rail-line, rgba(255, 250, 240, .12));
-  color: inherit;
+  border-top: 1px solid var(--deck-hairline, var(--rail-line, rgba(255, 250, 240, .12)));
+  /* NOT `inherit`. Inheriting gave the digits whatever the anchor picked up, which on the
+     dark rail was near-black on navy -- the same failure the base stylesheet already records
+     for the product name. These are the tokens every other row in the rail uses. */
+  color: var(--deck-text, var(--ink-2));
   text-decoration: none;
 }
 
-.rail-clock:hover { background: rgba(255, 250, 240, .06); }
+.rail-clock:hover { background: var(--deck-hover, rgba(255, 250, 240, .06)); }
 
 .rail-clock-dot {
   width: 8px;
@@ -31413,6 +31419,7 @@ a.wb-cal-more:hover { color: var(--orange); }
 .rail-clock-body { display: grid; min-width: 0; }
 
 .rail-clock-body b {
+  color: var(--deck-strong, var(--ink));
   font-size: 15px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -31421,8 +31428,8 @@ a.wb-cal-more:hover { color: var(--orange); }
 }
 
 .rail-clock-body small {
+  color: var(--deck-label, var(--muted));
   font-size: 11px;
-  opacity: .66;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
