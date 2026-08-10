@@ -574,6 +574,10 @@ const PERMISSION_KEYS = [
   ['finance.view', 'View finance'],
   ['finance.manage', 'Create/edit finance'],
   ['users.view', 'View users'],
+  // Team chart gates on this, and can() resolves it from role_permissions like any other --
+  // but it was missing from this list, which is the only place the Roles editor reads. So the
+  // permission worked and could not be granted: the one module gate with no checkbox.
+  ['team.view', 'View team chart'],
   ['users.manage', 'Invite/manage users'],
   ['roles.view', 'View roles'],
   ['roles.manage', 'Create/edit roles'],
@@ -19465,6 +19469,11 @@ function loadCompanySetupPanel() {
         requestRender: render,
         showToast,
         h,
+        // Built-in roles the setup plan cannot name. apply_company_setup refuses these and
+        // aborts the whole operation, so the panel needs to know them before the click.
+        reservedRoleNames: (companyId) => state.roles
+          .filter((role) => role.company_id === canonicalCompanyId(companyId) && role.is_system)
+          .map((role) => role.name),
         onApplied: () => refreshRealtimeDomains(['access', 'crm']),
       });
       return companySetupPanelModule;

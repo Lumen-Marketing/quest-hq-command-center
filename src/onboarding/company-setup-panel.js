@@ -162,10 +162,42 @@ export function createCompanySetupPanel({
   onApplied = async () => {},
   showToast = () => {},
   h = defaultEscape,
+  reservedRoleNames = () => [],
   defer = (callback) => queueMicrotask(callback),
 } = {}) {
   const companyStates = new Map();
   const saveTimers = new Map();
+
+  /**
+   * Role names the plan cannot use, and why.
+   *
+   * Two ways to lose here, both only discoverable at apply time before this existed:
+   *
+   *   RESERVED  apply refuses a name held by a built-in role, and aborts the whole operation
+   *             to do it. That used to mean "Owner", which nobody types. Every company now
+   *             also has a built-in Member -- a name somebody might well choose for a role.
+   *
+   *   DUPLICATE two generated roles renamed to the same thing do NOT collide loudly: the
+   *             second finds the first's row by name and adopts it, so two roles quietly
+   *             become one and the last template's permissions win.
+   */
+  function roleNameIssues(companyId, plan) {
+    const reserved = new Set((reservedRoleNames(companyId) || []).map((name) => String(name).trim().toLowerCase()));
+    const seen = new Map();
+    return (plan?.roles || []).map((role, index) => {
+      const name = String(role?.name || '').trim();
+      const key = name.toLowerCase();
+      if (!name) return 'Give this role a name.';
+      if (reserved.has(key)) return `"${name}" is a built-in role. Choose another name.`;
+      if (seen.has(key)) return `"${name}" is already used by another role above.`;
+      seen.set(key, index);
+      return '';
+    });
+  }
+
+  function firstRoleNameIssue(companyId, plan) {
+    return roleNameIssues(companyId, plan).find(Boolean) || '';
+  }
 
   function current(companyId) {
     return companyStates.get(String(companyId || ''));
@@ -310,6 +342,8 @@ export function createCompanySetupPanel({
 
   function renderReview(companyId, companyLabel, state) {
     const plan = state.plan || buildCompanySetupPlan({ mode: 'blank' });
+    const roleIssues = roleNameIssues(companyId, plan);
+    const blockingIssue = roleIssues.find(Boolean) || '';
     return renderShell(companyId, companyLabel, `
       <div class="company-setup-progress-head"><div><span>Review</span><strong>Your recommended Questbase setup</strong></div><small>Edit names, apps, roles, or stages before applying.</small></div>
       <div class="company-setup-alert info"><i class="ti ti-database-heart"></i><div><strong>Safe to change</strong><span>Applying a new setup never deletes existing business records. Pipelines with live contacts, quotes, or jobs are preserved.</span></div></div>
@@ -323,7 +357,7 @@ export function createCompanySetupPanel({
           <section>
             <div class="company-setup-side-head"><h3>Role starters</h3><button type="button" data-action="company-setup-edit-answers">Edit teams</button></div>
             ${(plan.roles || []).map((role, roleIndex) => `
-              <label class="company-setup-role-editor"><span><i class="ti ti-user-shield"></i><small>${h(role.purpose || 'Non-owner workspace role')}</small></span><input type="text" value="${h(role.name)}" maxlength="64" data-company-setup-role-name data-role-index="${roleIndex}" /></label>
+              <label class="company-setup-role-editor ${roleIssues[roleIndex] ? 'has-error' : ''}"><span><i class="ti ti-user-shield"></i><small>${h(roleIssues[roleIndex] || role.purpose || 'Non-owner workspace role')}</small></span><input type="text" value="${h(role.name)}" maxlength="64" data-company-setup-role-name data-role-index="${roleIndex}" aria-invalid="${roleIssues[roleIndex] ? 'true' : 'false'}" /></label>
             `).join('') || '<p class="company-setup-muted">No worker roles will be created. Owner access remains unchanged.</p>'}
           </section>
           <section class="company-setup-scope-note"><h3>Data scope</h3><p>Some apps store workspace-specific records; company-wide apps stay shared inside this company. Scope is shown beside every app.</p></section>
@@ -331,7 +365,8 @@ export function createCompanySetupPanel({
       </div>
       <div class="company-setup-actions split sticky">
         <div><button class="btn" type="button" data-action="company-setup-edit-answers"><i class="ti ti-arrow-left"></i>Edit answers</button>${hasAppliedSetup(state) ? '<button class="btn danger-quiet" type="button" data-action="company-setup-open-reset">Reset setup answers</button>' : ''}</div>
-        <button class="btn btn-primary" type="button" data-action="company-setup-apply" ${state.applying ? 'disabled' : ''}>${state.applying ? '<span class="company-setup-button-spinner"></span>Applying safely…' : '<i class="ti ti-wand"></i>Apply setup'}</button>
+        <button class="btn btn-primary" type="button" data-action="company-setup-apply" ${state.applying || blockingIssue ? 'disabled' : ''} ${blockingIssue ? `title="${h(blockingIssue)}"` : ''}>${state.applying ? '<span class="company-setup-button-spinner"></span>Applying safely…' : '<i class="ti ti-wand"></i>Apply setup'}</button>
+        ${blockingIssue ? `<span class="company-setup-apply-block">${h(blockingIssue)}</span>` : ''}
       </div>
     `, state);
   }
@@ -448,6 +483,14 @@ export function createCompanySetupPanel({
       state.plan = validateCompanySetupPlan(state.plan);
     } catch (error) {
       state.error = error?.message || 'Review the setup before applying it.';
+      requestRender();
+      return;
+    }
+    // Checked again here rather than trusting the disabled button. Apply is one transaction:
+    // a name the database refuses aborts the whole thing, so it must not reach the server.
+    const nameIssue = firstRoleNameIssue(companyId, state.plan);
+    if (nameIssue) {
+      state.error = nameIssue;
       requestRender();
       return;
     }
@@ -699,5 +742,7 @@ export function createCompanySetupPanel({
     if (action === 'company-setup-confirm-reset') await resetSetup(companyId, state);
   }
 
-  return { render, mount, handleAction, loadCompany };
+  // roleNameIssues is returned so the rule can be tested directly rather than through a
+  // rendered string -- it decides whether Apply is reachable at all.
+  return { render, mount, handleAction, loadCompany, roleNameIssues, firstRoleNameIssue };
 }

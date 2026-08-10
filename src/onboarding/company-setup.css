@@ -842,3 +842,23 @@
     transition: none;
   }
 }
+
+/* A role name the database would refuse. Shown where it is typed, not saved for the moment
+   after Apply -- one refused name aborts the whole transaction, so the moment to say so is
+   before the click. */
+.company-setup-role-editor.has-error > span small {
+  color: #b3300c;
+  font-weight: 600;
+}
+
+.company-setup-role-editor.has-error input {
+  border-color: #e07a55;
+  background: #fdf3ef;
+}
+
+.company-setup-apply-block {
+  align-self: center;
+  color: #b3300c;
+  font-size: 12px;
+  font-weight: 600;
+}
