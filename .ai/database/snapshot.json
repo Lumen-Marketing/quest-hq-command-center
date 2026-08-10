@@ -9164,6 +9164,112 @@
       "rls_enabled": true
     },
     {
+      "name": "workspace_setup_profiles",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "workspace_id",
+          "default": null,
+          "nullable": false,
+          "position": 1,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        },
+        {
+          "name": "answers",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 2,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
+        },
+        {
+          "name": "draft_plan",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 3,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
+        },
+        {
+          "name": "applied_plan",
+          "default": "'{}'::jsonb",
+          "nullable": false,
+          "position": 4,
+          "udt_name": "jsonb",
+          "data_type": "jsonb"
+        },
+        {
+          "name": "status",
+          "default": "'draft'::text",
+          "nullable": false,
+          "position": 5,
+          "udt_name": "text",
+          "data_type": "text"
+        },
+        {
+          "name": "setup_version",
+          "default": "1",
+          "nullable": false,
+          "position": 6,
+          "udt_name": "int4",
+          "data_type": "integer"
+        },
+        {
+          "name": "reset_count",
+          "default": "0",
+          "nullable": false,
+          "position": 7,
+          "udt_name": "int4",
+          "data_type": "integer"
+        },
+        {
+          "name": "applied_at",
+          "default": null,
+          "nullable": true,
+          "position": 8,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "reset_at",
+          "default": null,
+          "nullable": true,
+          "position": 9,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "created_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 10,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_at",
+          "default": "now()",
+          "nullable": false,
+          "position": 11,
+          "udt_name": "timestamptz",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "name": "updated_by",
+          "default": null,
+          "nullable": true,
+          "position": 12,
+          "udt_name": "uuid",
+          "data_type": "uuid"
+        }
+      ],
+      "primary_key": [
+        "workspace_id"
+      ],
+      "rls_enabled": true
+    },
+    {
       "name": "workspaces",
       "schema": "public",
       "columns": [
@@ -10865,13 +10971,6 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "admins manage role permissions",
-      "roles": "{authenticated}",
-      "table": "role_permissions",
-      "command": "ALL",
-      "permissive": "PERMISSIVE"
-    },
-    {
       "name": "members read role permissions",
       "roles": "{authenticated}",
       "table": "role_permissions",
@@ -10879,9 +10978,9 @@
       "permissive": "PERMISSIVE"
     },
     {
-      "name": "admins manage roles",
+      "name": "role managers manage role permissions",
       "roles": "{authenticated}",
-      "table": "roles",
+      "table": "role_permissions",
       "command": "ALL",
       "permissive": "PERMISSIVE"
     },
@@ -10890,6 +10989,13 @@
       "roles": "{authenticated}",
       "table": "roles",
       "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "role managers manage roles",
+      "roles": "{authenticated}",
+      "table": "roles",
+      "command": "ALL",
       "permissive": "PERMISSIVE"
     },
     {
@@ -11232,6 +11338,13 @@
       "name": "workspace users read plugins",
       "roles": "{authenticated}",
       "table": "workspace_plugins",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "workspace_setup_profiles_select_admin",
+      "roles": "{authenticated}",
+      "table": "workspace_setup_profiles",
       "command": "SELECT",
       "permissive": "PERMISSIVE"
     },
@@ -11805,6 +11918,34 @@
       "orientation": "ROW"
     },
     {
+      "name": "role_permissions_guard_wildcard",
+      "event": "INSERT",
+      "table": "role_permissions",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "role_permissions_guard_wildcard",
+      "event": "UPDATE",
+      "table": "role_permissions",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "roles_guard_system",
+      "event": "DELETE",
+      "table": "roles",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
+      "name": "roles_guard_system",
+      "event": "UPDATE",
+      "table": "roles",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
       "name": "roles_set_updated_at",
       "event": "UPDATE",
       "table": "roles",
@@ -11931,6 +12072,13 @@
       "orientation": "ROW"
     },
     {
+      "name": "workspace_setup_profiles_set_updated_at",
+      "event": "UPDATE",
+      "table": "workspace_setup_profiles",
+      "timing": "BEFORE",
+      "orientation": "ROW"
+    },
+    {
       "name": "workspaces_protect_identity",
       "event": "UPDATE",
       "table": "workspaces",
@@ -12008,6 +12156,16 @@
       "name": "apply_workspace_plugin_preset",
       "returns": "text[]",
       "arguments": "target_workspace_id uuid, preset_code text",
+      "volatility": "v",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
+      "name": "apply_workspace_setup",
+      "returns": "jsonb",
+      "arguments": "target_workspace_id uuid, p_answers jsonb, p_plan jsonb",
       "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
@@ -12205,7 +12363,7 @@
       "authenticated_execute": true
     },
     {
-      "name": "list_platform_companies",
+      "name": "list_platform_companies_v2",
       "returns": "TABLE(company_id text, company_name text, short_name text, color text, label text, pill text, icon_key text, status text, plan_code text, amount_cents integer, currency text, owner_profile_id uuid, owner_name text, owner_email text, member_count integer, active_member_count integer, pending_member_count integer, disabled_member_count integer, trial_ends_at timestamp with time zone, current_period_end timestamp with time zone, grace_ends_at timestamp with time zone, created_at timestamp with time zone, updated_at timestamp with time zone)",
       "arguments": "",
       "volatility": "v",
@@ -12215,7 +12373,7 @@
       "authenticated_execute": true
     },
     {
-      "name": "list_platform_companies_v2",
+      "name": "list_platform_companies",
       "returns": "TABLE(company_id text, company_name text, short_name text, color text, label text, pill text, icon_key text, status text, plan_code text, amount_cents integer, currency text, owner_profile_id uuid, owner_name text, owner_email text, member_count integer, active_member_count integer, pending_member_count integer, disabled_member_count integer, trial_ends_at timestamp with time zone, current_period_end timestamp with time zone, grace_ends_at timestamp with time zone, created_at timestamp with time zone, updated_at timestamp with time zone)",
       "arguments": "",
       "volatility": "v",
@@ -12245,7 +12403,7 @@
       "authenticated_execute": true
     },
     {
-      "name": "list_workspace_reviews",
+      "name": "list_workspace_reviews_v2",
       "returns": "TABLE(company_id text, company_name text, status text, plan_code text, amount_cents integer, currency text, owner_profile_id uuid, owner_name text, owner_email text, trial_ends_at timestamp with time zone, current_period_end timestamp with time zone, grace_ends_at timestamp with time zone, created_at timestamp with time zone, updated_at timestamp with time zone)",
       "arguments": "",
       "volatility": "v",
@@ -12255,7 +12413,7 @@
       "authenticated_execute": true
     },
     {
-      "name": "list_workspace_reviews_v2",
+      "name": "list_workspace_reviews",
       "returns": "TABLE(company_id text, company_name text, status text, plan_code text, amount_cents integer, currency text, owner_profile_id uuid, owner_name text, owner_email text, trial_ends_at timestamp with time zone, current_period_end timestamp with time zone, grace_ends_at timestamp with time zone, created_at timestamp with time zone, updated_at timestamp with time zone)",
       "arguments": "",
       "volatility": "v",
@@ -12465,6 +12623,16 @@
       "authenticated_execute": true
     },
     {
+      "name": "reset_workspace_setup",
+      "returns": "jsonb",
+      "arguments": "target_workspace_id uuid",
+      "volatility": "v",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
       "name": "review_company_join_request",
       "returns": "company_join_requests",
       "arguments": "target_request_id uuid, decision text, target_role_id uuid",
@@ -12518,6 +12686,16 @@
       "name": "save_company_setup_draft",
       "returns": "jsonb",
       "arguments": "target_company_id text, p_answers jsonb, p_draft_plan jsonb",
+      "volatility": "v",
+      "anon_execute": false,
+      "security_definer": true,
+      "service_role_execute": true,
+      "authenticated_execute": true
+    },
+    {
+      "name": "save_workspace_setup_draft",
+      "returns": "jsonb",
+      "arguments": "target_workspace_id uuid, p_answers jsonb, p_draft_plan jsonb",
       "volatility": "v",
       "anon_execute": false,
       "security_definer": true,
@@ -13217,9 +13395,41 @@
     {
       "name": "company_setup_apply_plugin_ambiguity",
       "version": "20260808005400"
+    },
+    {
+      "version": "20260808025256",
+      "name": "seed_company_default_roles"
+    },
+    {
+      "version": "20260808025317",
+      "name": "create_company_workspace_seeds_member_role"
+    },
+    {
+      "version": "20260808025331",
+      "name": "backfill_member_role_and_roles_manage"
+    },
+    {
+      "version": "20260808025419",
+      "name": "seed_default_roles_only_when_created"
+    },
+    {
+      "version": "20260808112008",
+      "name": "member_role_is_editable"
+    },
+    {
+      "version": "20260810171902",
+      "name": "company_setup_role_permissions_helper"
+    },
+    {
+      "version": "20260810171915",
+      "name": "company_setup_apply_uses_role_permission_helper"
+    },
+    {
+      "version": "20260810175316",
+      "name": "workspace_setup_profiles"
     }
   ],
-  "captured_at": "2026-08-08T00:57:09.780829+00:00",
+  "captured_at": "2026-08-10T17:58:17.905017+00:00",
   "relationships": [
     {
       "name": "accounts_company_id_fkey",
@@ -15242,6 +15452,24 @@
       "to_table": "workspaces",
       "to_column": "id",
       "from_table": "workspace_plugins",
+      "delete_rule": "CASCADE",
+      "from_column": "workspace_id",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspace_setup_profiles_updated_by_fkey",
+      "to_table": "profiles",
+      "to_column": "id",
+      "from_table": "workspace_setup_profiles",
+      "delete_rule": "SET NULL",
+      "from_column": "updated_by",
+      "update_rule": "NO ACTION"
+    },
+    {
+      "name": "workspace_setup_profiles_workspace_id_fkey",
+      "to_table": "workspaces",
+      "to_column": "id",
+      "from_table": "workspace_setup_profiles",
       "delete_rule": "CASCADE",
       "from_column": "workspace_id",
       "update_rule": "NO ACTION"

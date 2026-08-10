@@ -1292,6 +1292,26 @@ The same rule already applied to the Reports print path; this generalises it. An
 chunk containing `window.open`, a download anchor, or clipboard access needs the same
 treatment, and a test pins the synchronous branch.
 
+## Guided setup belongs to each operational workspace
+
+Decided 2026-08-11 and applied in `20260810173743_workspace_setup_profiles.sql`.
+
+A company is the billing and security account, not one fixed business process. The same
+customer may need Roofing, Sales, Production, and a separate service-business workspace,
+so one company-level questionnaire cannot safely own all of their apps and pipelines.
+
+Setup state is therefore keyed by `workspace_id`. Company creation still guarantees one
+default Main workspace and opens setup for it immediately. Every later operational workspace
+is created blank and opens the same independent survey. A plan may describe exactly one
+workspace; the server derives its company from that target and never accepts a sibling id in
+the payload.
+
+Start from scratch is a small skip action that directly applies a blank plan. Reset clears
+only the selected workspace's answers and draft. It preserves the last applied plan, manual
+apps, populated pipelines, business records, company membership, and every sibling workspace.
+This is also why the legacy company setup routines remain only for compatibility while the
+current UI writes through the workspace-specific RPCs.
+
 ## App Builder records move from the workspace JSON to rows
 
 Decided 2026-08-04. Approved, phase 1 not yet applied.

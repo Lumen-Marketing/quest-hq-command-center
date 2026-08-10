@@ -1,6 +1,6 @@
 # Public relationships
 
-Captured 2026-08-08T00:57:09.780Z. Composite foreign keys appear as one row per paired column.
+Captured through 2026-08-10T17:58:17.905Z. Composite foreign keys appear as one row per paired column.
 
 | Constraint | From | To | Update | Delete |
 | --- | --- | --- | --- | --- |
@@ -229,5 +229,7 @@ Captured 2026-08-08T00:57:09.780Z. Composite foreign keys appear as one row per 
 | workspace_memberships_workspace_id_fkey | `workspace_memberships.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
 | workspace_plugins_installed_by_fkey | `workspace_plugins.installed_by` | `profiles.id` | NO ACTION | SET NULL |
 | workspace_plugins_workspace_id_fkey | `workspace_plugins.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
+| workspace_setup_profiles_updated_by_fkey | `workspace_setup_profiles.updated_by` | `profiles.id` | NO ACTION | SET NULL |
+| workspace_setup_profiles_workspace_id_fkey | `workspace_setup_profiles.workspace_id` | `workspaces.id` | NO ACTION | CASCADE |
 | workspaces_company_id_fkey | `workspaces.company_id` | `companies.id` | NO ACTION | CASCADE |
 | workspaces_created_by_fkey | `workspaces.created_by` | `profiles.id` | NO ACTION | SET NULL |

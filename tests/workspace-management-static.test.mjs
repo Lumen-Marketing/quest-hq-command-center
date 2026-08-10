@@ -50,3 +50,20 @@ test('workspace administration is gated to company account managers and surfaces
   assert.match(source, /showToast\(result\.error\.message \|\| 'Workspace update failed.'/);
   assert.match(source, /showToast\(result\.error\.message \|\| 'Workspace creation failed.'/);
 });
+
+test('every operational workspace opens its own setup survey', () => {
+  const modalStart = source.indexOf('function renderOperationalWorkspaceCreateModal');
+  const modalEnd = source.indexOf('\nfunction renderOperationalWorkspaceEditModal', modalStart);
+  const modal = source.slice(modalStart, modalEnd);
+  const createStart = source.indexOf('async function createOperationalWorkspace');
+  const createEnd = source.indexOf('\nasync function saveOperationalWorkspaceSettings', createStart);
+  const create = source.slice(createStart, createEnd);
+
+  assert.doesNotMatch(modal, /workspacePresetSelect|name="preset_code"/);
+  assert.match(create, /preset_code:\s*'blank'/);
+  assert.doesNotMatch(create, /form\.preset_code|applyWorkspacePluginPresetLocal\(saved\.id/);
+  assert.match(create, /companyPath\('settings', \{ tab: 'setup', workspace: saved\.id \}, companyId\)/);
+  assert.match(source, /module\.createWorkspaceSetupPanel\(/);
+  assert.match(source, /workspaceLabel:\s*workspace\.name/);
+  assert.match(source, /workspaceId:\s*workspace\.id/);
+});

@@ -19463,13 +19463,13 @@ function loadCompanySetupPanel() {
   if (companySetupPanelModule) return Promise.resolve(companySetupPanelModule);
   if (!companySetupPanelPromise) {
     companySetupPanelPromise = import('./onboarding/company-setup-runtime.js').then((module) => {
-      companySetupPanelModule = module.createCompanySetupPanel({
+      companySetupPanelModule = module.createWorkspaceSetupPanel({
         createClient: createSupabaseClient,
         isLive: isLiveSupabaseSession,
         requestRender: render,
         showToast,
         h,
-        // Built-in roles the setup plan cannot name. apply_company_setup refuses these and
+        // Built-in roles the setup plan cannot name. apply_workspace_setup refuses these and
         // aborts the whole operation, so the panel needs to know them before the click.
         reservedRoleNames: (companyId) => state.roles
           .filter((role) => role.company_id === canonicalCompanyId(companyId) && role.is_system)
@@ -19485,10 +19485,20 @@ function loadCompanySetupPanel() {
   return companySetupPanelPromise;
 }
 
-function renderCompanySetupSettings(companyId) {
+function renderCompanySetupSettings(companyId, route) {
+  const requestedWorkspaceId = String(route?.params?.get('workspace') || '');
+  const workspace = state.operationalWorkspaces.find((item) => (
+    item.id === (requestedWorkspaceId || workspaceIdForCompany(companyId))
+    && canonicalCompanyId(item.company_id) === canonicalCompanyId(companyId)
+    && item.status === 'active'
+  ));
+  if (!workspace) return questLoader('Loading workspace setup');
   if (companySetupPanelModule) {
-    return companySetupPanelModule.render(companyId, {
+    return companySetupPanelModule.render(workspace.id, {
+      workspaceId: workspace.id,
+      companyId,
       companyLabel: companyName(companyId),
+      workspaceLabel: workspace.name,
       canManage: canManageCompanyAppearance(companyId),
     });
   }
@@ -19523,7 +19533,7 @@ function renderSettingsPage(route, companyId) {
     ${compactTabs('Settings sections', settingsTabs.map(([href, label, id]) => [href, label, tab === id]))}
     <section class="dashboard-grid compact-settings-grid">
       ${tab === 'company' ? renderWorkspaceSettings(companyId) : ''}
-      ${tab === 'setup' ? renderCompanySetupSettings(companyId) : ''}
+      ${tab === 'setup' ? renderCompanySetupSettings(companyId, route) : ''}
       ${tab === 'billing' ? renderBillingSettings(companyId) : ''}
       ${tab === 'plugins' ? renderPluginsSettings(companyId) : ''}
       ${tab === 'roles' ? renderRolesSettings(companyId) : ''}
@@ -23525,7 +23535,6 @@ function renderOperationalWorkspaceCreateModal(companyId) {
       <input type="hidden" name="company_id" value="${h(companyId)}" />
       <p class="ows-modal-sub">Add a configurable operational area inside ${h(companyName(companyId))}.</p>
       <label>Workspace name<input name="workspace_name" placeholder="Sales, Underwriting, Production..." required autofocus ${canManage ? '' : 'disabled'} /></label>
-      ${workspacePresetSelect()}
       ${operationalWorkspaceModalIconControl()}
       <div class="modal-actions">
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
@@ -29941,7 +29950,6 @@ async function createOperationalWorkspace(formNode) {
     return;
   }
   const workspaceName = String(form.workspace_name || '').trim();
-  const presetCode = WORKSPACE_PLUGIN_PRESETS[form.preset_code] ? form.preset_code : 'generic';
   const iconKey = workspaceIconOption(form.icon_key).key;
   const iconImage = sanitizeWorkspaceIconImage(form.icon_image) || '';
   if (!workspaceName) {
@@ -29956,7 +29964,7 @@ async function createOperationalWorkspace(formNode) {
     const result = await safeSupabaseQuery(client.rpc('create_operational_workspace', {
       target_company_id: companyId,
       workspace_name: workspaceName,
-      preset_code: presetCode,
+      preset_code: 'blank',
       icon_key: iconKey,
       icon_image: iconImage,
     }));
@@ -29997,7 +30005,6 @@ async function createOperationalWorkspace(formNode) {
   }
   if (iconImage) saved = normalizeOperationalWorkspace({ ...saved, icon_image: iconImage });
   state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.concat(saved));
-  applyWorkspacePluginPresetLocal(saved.id, presetCode);
   state.activeCompanyId = companyId;
   state.activeWorkspaceId = saved.id;
   localStorage.setItem(COMPANY_KEY, companyId);
@@ -30005,7 +30012,7 @@ async function createOperationalWorkspace(formNode) {
   state.modal = '';
   state.operationalWorkspaceModalIcon = null;
   showToast(`${saved.name} workspace created.`, live ? 'live' : 'local', 'Workspaces');
-  navigate(companyPath('settings', { tab: 'company', workspace: saved.id }, companyId));
+  navigate(companyPath('settings', { tab: 'setup', workspace: saved.id }, companyId));
 }
 
 async function saveOperationalWorkspaceSettings(formNode) {

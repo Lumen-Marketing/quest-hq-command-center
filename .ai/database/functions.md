@@ -1,6 +1,6 @@
 # Public functions
 
-Captured 2026-08-08T00:57:09.780Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
+Captured through 2026-08-10T17:58:17.905Z from the live catalog. Execute grants are catalog facts; SECURITY DEFINER routines still require their internal authorization checks.
 
 | Function | Returns | Definer | anon | authenticated | service_role |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -10,6 +10,7 @@ Captured 2026-08-08T00:57:09.780Z from the live catalog. Execute grants are cata
 | `apply_company_setup(target_company_id text, p_answers jsonb, p_plan jsonb)` | jsonb | yes | no | yes | yes |
 | `apply_stripe_subscription_event(p_event_id text, p_event_created_at timestamp with time zone, p_company_id text, p_customer_id text, p_subscription_id text, p_status text, p_current_period_end timestamp with time zone, p_trial_ends_at timestamp with time zone)` | boolean | yes | no | no | yes |
 | `apply_workspace_plugin_preset(target_workspace_id uuid, preset_code text)` | text[] | yes | no | yes | yes |
+| `apply_workspace_setup(target_workspace_id uuid, p_answers jsonb, p_plan jsonb)` | jsonb | yes | no | yes | yes |
 | `assign_wo_number(company text)` | integer | yes | no | yes | yes |
 | `can_manage_roles()` | boolean | yes | no | yes | yes |
 | `can_view_team()` | boolean | yes | no | yes | yes |
@@ -55,12 +56,14 @@ Captured 2026-08-08T00:57:09.780Z from the live catalog. Execute grants are cata
 | `replace_workspace_pipeline_stages(p_workspace_id uuid, p_kind text, p_stages jsonb, p_rename_map jsonb)` | SETOF pipeline_stages | yes | no | yes | yes |
 | `request_company_access(target_company_id text, request_message text)` | uuid | yes | no | yes | yes |
 | `reset_company_setup(target_company_id text)` | jsonb | yes | no | yes | yes |
+| `reset_workspace_setup(target_workspace_id uuid)` | jsonb | yes | no | yes | yes |
 | `review_company_join_request(target_request_id uuid, decision text, target_role_id uuid)` | company_join_requests | no | no | yes | yes |
 | `review_company_workspace(target_company_id text, next_status text, review_note text)` | text | yes | no | yes | yes |
 | `revoke_company_invite(target_invite_id uuid)` | company_invites | no | no | yes | yes |
 | `ringcentral_conversation_stats(p_company_id text, p_from timestamp with time zone, p_to timestamp with time zone)` | TABLE(extension_id text, extension_number text, extension_name text, total_calls bigint, conversations bigint) | no | no | yes | yes |
 | `save_company_role(p_role jsonb, p_permissions text[])` | roles | yes | no | yes | yes |
 | `save_company_setup_draft(target_company_id text, p_answers jsonb, p_draft_plan jsonb)` | jsonb | yes | no | yes | yes |
+| `save_workspace_setup_draft(target_workspace_id uuid, p_answers jsonb, p_draft_plan jsonb)` | jsonb | yes | no | yes | yes |
 | `set_company_plugin(target_company_id text, target_plugin_id text, next_status text)` | text | yes | no | yes | yes |
 | `set_default_operational_workspace(target_workspace_id uuid)` | workspaces | yes | no | yes | yes |
 | `set_updated_at()` | trigger | no | yes | yes | yes |

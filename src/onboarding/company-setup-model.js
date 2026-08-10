@@ -82,6 +82,15 @@ export const COMPANY_SETUP_QUESTIONS = Object.freeze([
   }),
 ]);
 
+export const WORKSPACE_SETUP_QUESTIONS = Object.freeze(
+  COMPANY_SETUP_QUESTIONS
+    .filter((question) => question.id !== 'layout')
+    .map((question) => Object.freeze({
+      ...question,
+      title: question.id === 'industry' ? 'What kind of work is this workspace for?' : question.title,
+    })),
+);
+
 const BLUEPRINT_ANSWERS = Object.freeze({
   roofing: Object.freeze({
     goal: 'sales_to_jobs',
@@ -252,6 +261,10 @@ export function answersForBlueprint(code) {
     mode: code === 'blank' ? 'blank' : 'blueprint',
     blueprint: code,
   });
+}
+
+export function answersForWorkspaceBlueprint(code) {
+  return { ...answersForBlueprint(code), layout: 'one' };
 }
 
 function answersWithBlueprintDefaults(raw) {
@@ -456,4 +469,30 @@ export function buildCompanySetupPlan(rawAnswers = {}) {
     roles: rolesFor(answers),
     warnings: [],
   });
+}
+
+export function validateWorkspaceSetupPlan(rawPlan) {
+  if (!rawPlan || !Array.isArray(rawPlan.workspaces) || rawPlan.workspaces.length !== 1) {
+    throw new TypeError('Workspace setup plan must include exactly one workspace.');
+  }
+  const plan = validateCompanySetupPlan(rawPlan);
+  if (plan.workspaces.length !== 1) {
+    throw new TypeError('Workspace setup plan must include exactly one workspace.');
+  }
+  return plan;
+}
+
+export function buildWorkspaceSetupPlan(rawAnswers = {}, workspace = {}) {
+  const plan = buildCompanySetupPlan({ ...safeWorkspaceAnswers(rawAnswers), layout: 'one' });
+  const name = typeof workspace?.name === 'string' && workspace.name.trim()
+    ? workspace.name.trim()
+    : plan.workspaces[0].name;
+  return validateWorkspaceSetupPlan({
+    ...plan,
+    workspaces: [{ ...plan.workspaces[0], key: 'workspace', name, isDefault: true }],
+  });
+}
+
+function safeWorkspaceAnswers(rawAnswers) {
+  return rawAnswers && typeof rawAnswers === 'object' && !Array.isArray(rawAnswers) ? rawAnswers : {};
 }

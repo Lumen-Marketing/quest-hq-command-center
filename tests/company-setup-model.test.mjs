@@ -4,10 +4,14 @@ import test from 'node:test';
 import {
   COMPANY_SETUP_BLUEPRINTS,
   COMPANY_SETUP_QUESTIONS,
+  WORKSPACE_SETUP_QUESTIONS,
   answersForBlueprint,
+  answersForWorkspaceBlueprint,
   buildCompanySetupPlan,
+  buildWorkspaceSetupPlan,
   normalizeCompanySetupAnswers,
   validateCompanySetupPlan,
+  validateWorkspaceSetupPlan,
 } from '../src/onboarding/company-setup-model.js';
 
 test('the setup model exposes the seven approved ready-made choices', () => {
@@ -18,6 +22,42 @@ test('the setup model exposes the seven approved ready-made choices', () => {
   assert.deepEqual(
     COMPANY_SETUP_QUESTIONS.map((item) => item.id),
     ['goal', 'industry', 'layout', 'teams', 'tools'],
+  );
+});
+
+test('workspace setup removes the company layout question', () => {
+  assert.deepEqual(
+    WORKSPACE_SETUP_QUESTIONS.map((item) => item.id),
+    ['goal', 'industry', 'teams', 'tools'],
+  );
+});
+
+test('every ready-made workspace setup configures exactly the selected workspace', () => {
+  for (const blueprint of COMPANY_SETUP_BLUEPRINTS) {
+    const workspace = { id: `workspace-${blueprint.id}`, name: `North ${blueprint.label}` };
+    const plan = buildWorkspaceSetupPlan(answersForWorkspaceBlueprint(blueprint.id), workspace);
+
+    assert.equal(plan.workspaces.length, 1, blueprint.id);
+    assert.equal(plan.workspaces[0].name, workspace.name, blueprint.id);
+    assert.deepEqual(validateWorkspaceSetupPlan(plan), plan, blueprint.id);
+  }
+});
+
+test('guided workspace answers cannot generate sibling workspaces', () => {
+  const plan = buildWorkspaceSetupPlan({
+    mode: 'guided',
+    goal: 'sales_to_jobs',
+    industry: 'roofing',
+    layout: 'sales_est_prod',
+    teams: ['sales', 'estimating', 'production_projects'],
+    tools: ['crm_quotes', 'underwriter_price_book', 'tasks_files'],
+  }, { id: 'workspace-roofing', name: 'Roofing' });
+
+  assert.equal(plan.workspaces.length, 1);
+  assert.equal(plan.workspaces[0].name, 'Roofing');
+  assert.throws(
+    () => validateWorkspaceSetupPlan({ ...plan, workspaces: [...plan.workspaces, { ...plan.workspaces[0], key: 'sibling', name: 'CRM' }] }),
+    /exactly one workspace/i,
   );
 });
 

@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { answersForBlueprint, buildCompanySetupPlan } from '../src/onboarding/company-setup-model.js';
 import {
   RESET_COMPANY_SETUP_COPY,
+  RESET_WORKSPACE_SETUP_COPY,
   createCompanySetupPanel,
+  createWorkspaceSetupPanel,
   editCompanySetupPlan,
   setupStateFromProfile,
 } from '../src/onboarding/company-setup-panel.js';
@@ -55,7 +57,8 @@ test('Settings lazily loads the setup interface and delegates its actions', () =
   assert.match(runtime, /import '\.\/company-setup\.css'/);
   assert.match(runtime, /from '\.\/company-setup-panel\.js'/);
   assert.match(main, /companyPath\('settings', \{ tab: 'setup' \}/);
-  assert.match(main, /renderCompanySetupSettings\(companyId\)/);
+  assert.match(main, /renderCompanySetupSettings\(companyId, route\)/);
+  assert.match(main, /companySetupPanelModule\.render\(workspace\.id/);
   assert.match(main, /action\.startsWith\('company-setup-'\)/);
   assert.match(main, /companySetupPanelModule\.handleAction/);
 });
@@ -93,10 +96,16 @@ test('reset wording names both the cleared state and preserved records', () => {
   assert.match(RESET_COMPANY_SETUP_COPY, /does not delete/i);
 });
 
-function fakeActionNode(companyId) {
+test('workspace reset wording protects sibling workspaces and the applied configuration', () => {
+  assert.match(RESET_WORKSPACE_SETUP_COPY, /selected workspace/i);
+  assert.match(RESET_WORKSPACE_SETUP_COPY, /sibling workspaces/i);
+  assert.match(RESET_WORKSPACE_SETUP_COPY, /applied configuration/i);
+});
+
+function fakeActionNode(companyId, workspaceId, dataset = {}) {
   return {
-    dataset: {},
-    closest: () => ({ dataset: { companyId } }),
+    dataset,
+    closest: () => ({ dataset: { companyId, workspaceId } }),
   };
 }
 
@@ -111,23 +120,25 @@ function fakeClient(profile, rpcHandler) {
   };
 }
 
-test('controller applies a reviewed blank setup through draft then apply RPCs', async () => {
+test('controller applies a reviewed workspace blueprint through draft then apply RPCs', async () => {
   const calls = [];
   const blankPlan = buildCompanySetupPlan({ mode: 'blank' });
   const client = fakeClient(null, async (name, args) => {
     calls.push({ name, args });
-    if (name === 'apply_company_setup') return { data: { status: 'applied', plan: blankPlan, warnings: [] }, error: null };
+    if (name === 'apply_workspace_setup') return { data: { status: 'applied', plan: blankPlan, warnings: [] }, error: null };
     return { data: { status: 'draft' }, error: null };
   });
-  const panel = createCompanySetupPanel({ createClient: () => client, isLive: () => true });
-  const node = fakeActionNode('company-a');
+  const panel = createWorkspaceSetupPanel({ createClient: () => client, isLive: () => true });
+  const workspaceId = '11111111-1111-4111-8111-111111111111';
+  const node = fakeActionNode('company-a', workspaceId, { blueprint: 'quick_starter' });
 
-  await panel.loadCompany('company-a');
-  await panel.handleAction('company-setup-start-blank', node);
+  await panel.loadWorkspace(workspaceId);
+  panel.render(workspaceId, { companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Sales' });
+  await panel.handleAction('company-setup-choose-blueprint', node);
   await panel.handleAction('company-setup-apply', node);
 
-  assert.deepEqual(calls.map((call) => call.name), ['save_company_setup_draft', 'apply_company_setup']);
-  assert.match(panel.render('company-a', { companyLabel: 'Acme' }), /Your Questbase structure is ready/);
+  assert.deepEqual(calls.map((call) => call.name), ['save_workspace_setup_draft', 'apply_workspace_setup']);
+  assert.match(panel.render(workspaceId, { companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Sales' }), /Sales is ready/);
 });
 
 test('controller reset calls only the non-destructive reset RPC and returns to entry', async () => {
@@ -138,14 +149,56 @@ test('controller reset calls only the non-destructive reset RPC and returns to e
     calls.push({ name, args });
     return { data: { status: 'draft', reset_count: 1 }, error: null };
   });
-  const panel = createCompanySetupPanel({ createClient: () => client, isLive: () => true });
-  const node = fakeActionNode('company-a');
+  const panel = createWorkspaceSetupPanel({ createClient: () => client, isLive: () => true });
+  const workspaceId = '11111111-1111-4111-8111-111111111111';
+  const node = fakeActionNode('company-a', workspaceId);
 
-  await panel.loadCompany('company-a');
+  await panel.loadWorkspace(workspaceId);
+  panel.render(workspaceId, { companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Roofing' });
   await panel.handleAction('company-setup-open-reset', node);
-  assert.match(panel.render('company-a', { companyLabel: 'Acme' }), /Reopen the company setup guide/);
+  assert.match(panel.render(workspaceId, { companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Roofing' }), /Reopen this workspace setup guide/);
   await panel.handleAction('company-setup-confirm-reset', node);
 
-  assert.deepEqual(calls.map((call) => call.name), ['reset_company_setup']);
-  assert.match(panel.render('company-a', { companyLabel: 'Acme' }), /Guide me/);
+  assert.deepEqual(calls.map((call) => call.name), ['reset_workspace_setup']);
+  assert.match(panel.render(workspaceId, { companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Roofing' }), /Guide me/);
+});
+
+test('workspace controller loads by workspace id and Start from scratch applies immediately', async () => {
+  const calls = [];
+  const filters = [];
+  const blankPlan = buildCompanySetupPlan({ mode: 'blank' });
+  const client = {
+    from(table) {
+      filters.push({ table });
+      return {
+        select() { return this; },
+        eq(column, value) { filters.at(-1).column = column; filters.at(-1).value = value; return this; },
+        async maybeSingle() { return { data: null, error: null }; },
+      };
+    },
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { data: { status: 'applied', plan: blankPlan, warnings: [] }, error: null };
+    },
+  };
+  const panel = createWorkspaceSetupPanel({ createClient: () => client, isLive: () => true });
+  const node = {
+    dataset: {},
+    closest: () => ({ dataset: { companyId: 'company-a', workspaceId: '11111111-1111-4111-8111-111111111111' } }),
+  };
+
+  await panel.loadWorkspace('11111111-1111-4111-8111-111111111111');
+  panel.render('11111111-1111-4111-8111-111111111111', {
+    companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Roofing',
+  });
+  await panel.handleAction('company-setup-start-blank', node);
+
+  assert.deepEqual(filters, [{
+    table: 'workspace_setup_profiles', column: 'workspace_id', value: '11111111-1111-4111-8111-111111111111',
+  }]);
+  assert.deepEqual(calls.map((call) => call.name), ['apply_workspace_setup']);
+  assert.equal(calls[0].args.target_workspace_id, '11111111-1111-4111-8111-111111111111');
+  assert.match(panel.render('11111111-1111-4111-8111-111111111111', {
+    companyId: 'company-a', companyLabel: 'Acme', workspaceLabel: 'Roofing',
+  }), /Roofing/);
 });

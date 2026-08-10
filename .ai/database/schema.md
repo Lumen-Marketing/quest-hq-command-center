@@ -1,6 +1,6 @@
 # Public schema catalog
 
-Captured 2026-08-08T00:57:09.780Z from the live Supabase catalog. Nullable columns end in `?`.
+Captured through 2026-08-10T17:58:17.905Z from the live Supabase catalog. Nullable columns end in `?`.
 
 ## public.accounts
 
@@ -523,6 +523,12 @@ Captured 2026-08-08T00:57:09.780Z from the live Supabase catalog. Nullable colum
 - RLS: enabled
 - Primary key: workspace_id, plugin_id
 - Columns: `workspace_id uuid`; `plugin_id text`; `status text`; `config jsonb`; `installed_by uuid?`; `installed_at timestamptz?`; `disabled_at timestamptz?`; `created_at timestamptz`; `updated_at timestamptz`
+
+## public.workspace_setup_profiles
+
+- RLS: enabled
+- Primary key: workspace_id
+- Columns: `workspace_id uuid`; `answers jsonb`; `draft_plan jsonb`; `applied_plan jsonb`; `status text`; `setup_version int4`; `reset_count int4`; `applied_at timestamptz?`; `reset_at timestamptz?`; `created_at timestamptz`; `updated_at timestamptz`; `updated_by uuid?`
 
 ## public.workspaces
 

@@ -1,6 +1,6 @@
 # Current state
 
-Captured 2026-08-08T00:57:09.780Z. This is a point-in-time operational snapshot, not a substitute for live verification.
+Captured through 2026-08-10T17:58:17.905Z. This is a point-in-time operational snapshot, not a substitute for live verification.
 
 ## Production
 
@@ -32,10 +32,10 @@ Captured 2026-08-08T00:57:09.780Z. This is a point-in-time operational snapshot,
 - Status: `ACTIVE_HEALTHY`.
 - Region: `us-west-1`.
 - Postgres: `17.6.1.127`, engine 17.
-- The metadata-only catalog snapshot was refreshed from production on 2026-08-08 and contains 88 public tables/views, 227 foreign-key column relationships, 270 policies, 76 public functions, 98 triggers, 6 storage buckets, and 119 applied migration records.
-- Latest repository migration: `202608082400_company_setup_role_fixes.sql`.
-- The latest live provider ledger entry is `20260808005400_company_setup_apply_plugin_ambiguity`, preceded by `20260808005113_company_setup_survey`. Repository filenames retain reviewed forward-order timestamps while Supabase records provider-generated ledger timestamps.
-- Live verification confirmed the company setup table, all three fixed-search-path administrator RPCs, zero companies missing an active default workspace, and no surviving rollback-test company. A rollback-only test passed draft save, apply, identical retry, and questionnaire reset while workspace and role counts stayed stable.
+- The metadata-only catalog snapshot was refreshed through the workspace-setup release and contains 89 public tables/views, 229 foreign-key column relationships, 271 policies, 79 public functions, 103 trigger-event entries, 6 storage buckets, and 127 applied migration records.
+- Latest repository migration: `20260810173743_workspace_setup_profiles.sql`.
+- The latest live provider ledger entry is `20260810175316_workspace_setup_profiles`. Repository filenames retain reviewed forward-order timestamps while Supabase records provider-generated ledger timestamps.
+- Live verification confirmed the workspace-keyed setup table, SELECT-only authenticated table grant, company-admin RLS, and all three fixed-search-path administrator RPCs. A rollback-only test passed draft save, identical retry, manual-app preservation, sibling isolation, and questionnaire reset, then confirmed zero surviving probe rows.
 - Live verification confirmed the quote request column and unique partial index, SECURITY INVOKER conversion RPC, authenticated-only execute grant, per-kind operational-workspace seeding logic, and zero missing contacts/deals/jobs pipeline kinds across active workspaces.
 - Post-migration advisors reported no ERROR or CRITICAL findings. The operational-workspace RPC retains its previously documented authenticated SECURITY DEFINER warning because it performs its own company-admin authorization with a fixed search path.
 - Also applied on 2026-07-30: `202607301200_eod_reports.sql` (EOD reports module) and `202607301300_company_admin_permissions.sql` (company Admins are elevated for feature permissions, matching `is_company_admin`).
@@ -55,7 +55,7 @@ Repository migration filenames and Supabase provider ledger versions can differ 
 
 The market customer and outer security boundary is a company. Each company owns configurable operational workspaces. Owners, Admins, and Developers inherit access to active workspaces; workers and other members require explicit active workspace memberships and can have a separate role in each workspace.
 
-After an owner creates a company, Questbase opens a guided Setup tab instead of asking for a hardcoded industry preset during registration. The owner can answer five short questions, choose a ready-made setup, or start from scratch; then they review and edit workspace names, apps, pipeline stages, and non-elevated role names before applying. Drafts follow the company across devices. Applying is one retry-safe database operation. Settings can reset the questionnaire and reopen the guide without deleting or undoing the company, members, workspaces, customers, jobs, tasks, files, messages, or the last applied configuration.
+After an owner creates a company, Questbase creates its default Main workspace and opens that workspace's guided Setup tab. The owner can answer four short questions, choose a ready-made setup, or use the small Start from scratch action; then they review the selected workspace's name, apps, pipeline stages, and non-elevated role names before applying. Every later operational workspace is created blank and opens its own independent survey. Drafts and reset history follow each workspace across devices. Applying is one retry-safe database operation scoped to the selected workspace. Settings can reset that workspace's questionnaire without deleting or undoing its applied configuration, the company, members, sibling workspaces, customers, jobs, tasks, files, or messages.
 
 The teammate flow now follows one bounded path:
 
@@ -74,7 +74,7 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 ## Feature state
 
 - Company and operational-workspace separation is production state.
-- Guided company setup is implemented behind Settings > Setup with Guide me, ready-made, and Start from scratch entry paths. Its UI and styles are lazy-loaded, its draft is stored per company, and its reset action is explicitly non-destructive.
+- Guided workspace setup is implemented behind Settings > Setup with Guide me, ready-made, and a small direct Start from scratch path. Its UI and styles are lazy-loaded, its draft is stored per operational workspace, workspace creation opens the new workspace's survey, and reset is explicitly non-destructive.
 - EOD reports are a native Operations module backed by `public.eod_reports`, gated by the new `eod.view` / `eod.manage` permissions. The page and the admin-only platform master panel are both lazily loaded, which is what kept the entry bundle under its ceiling.
 - Workspaces independently activate entitled plugins and preserve workspace identity through CRM, pipeline, underwriting, job, file, proposal, and task records.
 - Operational-workspace defaults and uploaded icons now persist in Supabase and survive a reload; rejected writes no longer appear successful in the browser.
@@ -121,6 +121,7 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - **`roles.manage` is enforced.** The interface checked it while the policies on `roles` and `role_permissions` checked membership rank, so granting it changed nothing and an admin could edit roles without it. Both policies consult `has_company_permission(company_id, 'roles.manage')` now, which still answers true for owner/admin/developer by rank, so nobody lost access. Two triggers close the escalation that opens: `app_private.guard_wildcard_permission` lets only an Owner grant `*`, and `app_private.guard_system_role` lets only an Owner alter an `is_system` role. Verified live, rolled back: wildcard refused, ordinary grant accepted, Owner role rename refused, ordinary role rename accepted. Migration `202608082000_default_roles_and_roles_manage.sql`.
 
 - Guided setup's generated roles were reviewed and two defects fixed. The **Office and Finance** template granted `reporting.view`, a key this application defines nowhere -- Reporting's two modules gate on `team.view` (Team chart) and `jobs.view` (Analytics) -- so the role advertised as covering reporting could open none of it. Verified before changing: `reporting.view` appeared in zero `role_permissions` rows, so nothing needed backfilling. The templates also moved out of the 680-line `apply_company_setup` body into `app_private.company_setup_role_permissions(role_key)`; burying them inside it is why a wrong key survived. Second, apply refuses a generated role whose name collides with a built-in role and aborts the whole transaction, but named neither the role nor the reason -- and that path went from unreachable to plausible this week, because every company now has a built-in **Member** as well as Owner. The panel now blocks the collision (and a duplicate name between two generated roles, which the server silently *merges*) before Apply is reachable; the server message names the role as a backstop. Migration `202608082400_company_setup_role_fixes.sql`.
+- Setup ownership moved from company-wide to operational-workspace-specific. One company can now run unrelated Roofing, Sales, Production, or other workspace setups without one questionnaire rewriting the others. The first Main workspace opens setup after company creation, each later workspace opens its own survey, and blank workspace creation no longer installs a generic preset before the owner chooses. Migration `20260810173743_workspace_setup_profiles.sql`.
 - `team.view` was missing from `PERMISSION_KEYS`, the only list the Roles editor reads. `can()` resolves it from `role_permissions` like any other key, so the permission worked and simply could not be granted by hand -- the one module gate in the product with no checkbox behind it. A test now asserts every `permission:` a module gates on appears in the catalog.
 
 ## Remaining controlled launch configuration

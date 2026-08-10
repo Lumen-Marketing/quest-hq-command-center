@@ -1,6 +1,6 @@
 # Database security catalog
 
-Captured 2026-08-08T00:57:09.780Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
+Captured through 2026-08-10T17:58:17.905Z. Policy expressions are intentionally omitted from the metadata snapshot; review migrations and live routine definitions for exact predicates.
 
 ## RLS coverage
 
@@ -93,6 +93,7 @@ Captured 2026-08-08T00:57:09.780Z. Policy expressions are intentionally omitted 
 | workspace_builder_state | enabled | 3 | INSERT, SELECT, UPDATE |
 | workspace_memberships | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
 | workspace_plugins | enabled | 4 | DELETE, INSERT, SELECT, UPDATE |
+| workspace_setup_profiles | enabled | 1 | SELECT |
 | workspaces | enabled | 3 | INSERT, SELECT, UPDATE |
 
 ## Policy catalog
@@ -313,9 +314,9 @@ Captured 2026-08-08T00:57:09.780Z. Policy expressions are intentionally omitted 
 | ringcentral_extensions | company admins read extensions | {authenticated} | SELECT | PERMISSIVE |
 | ringcentral_presence | company admins read presence | {authenticated} | SELECT | PERMISSIVE |
 | ringcentral_sync_state | members read sync state | {authenticated} | SELECT | PERMISSIVE |
-| role_permissions | admins manage role permissions | {authenticated} | ALL | PERMISSIVE |
+| role_permissions | role managers manage role permissions | {authenticated} | ALL | PERMISSIVE |
 | role_permissions | members read role permissions | {authenticated} | SELECT | PERMISSIVE |
-| roles | admins manage roles | {authenticated} | ALL | PERMISSIVE |
+| roles | role managers manage roles | {authenticated} | ALL | PERMISSIVE |
 | roles | members read roles | {authenticated} | SELECT | PERMISSIVE |
 | task_comments | authors and admins delete task_comments | {authenticated} | DELETE | PERMISSIVE |
 | task_comments | company members insert own task_comments | {authenticated} | INSERT | PERMISSIVE |
@@ -366,6 +367,7 @@ Captured 2026-08-08T00:57:09.780Z. Policy expressions are intentionally omitted 
 | workspace_plugins | workspace admins insert plugins | {authenticated} | INSERT | PERMISSIVE |
 | workspace_plugins | workspace admins update plugins | {authenticated} | UPDATE | PERMISSIVE |
 | workspace_plugins | workspace users read plugins | {authenticated} | SELECT | PERMISSIVE |
+| workspace_setup_profiles | workspace_setup_profiles_select_admin | {authenticated} | SELECT | PERMISSIVE |
 | workspaces | company admins create workspaces | {authenticated} | INSERT | PERMISSIVE |
 | workspaces | workspace admins update workspaces | {authenticated} | UPDATE | PERMISSIVE |
 | workspaces | workspace users read workspaces | {authenticated} | SELECT | PERMISSIVE |
@@ -385,6 +387,13 @@ The setup RPCs (`save_company_setup_draft`, `apply_company_setup`, and
 design. Each fixes `search_path`, requires `auth.uid()`, checks active company-admin access,
 validates bounded JSON, and exposes no anonymous execution. The setup table itself grants
 signed-in users SELECT only through company-admin RLS; all writes remain inside those RPCs.
+
+The workspace replacements (`save_workspace_setup_draft`, `apply_workspace_setup`, and
+`reset_workspace_setup`) intentionally carry the same advisor warning because the browser
+must call them. Each fixes `search_path`, derives the company from the active target workspace,
+requires `auth.uid()` plus company-admin access, validates bounded one-workspace JSON, and has
+anonymous/public execution revoked. `workspace_setup_profiles` grants authenticated users
+SELECT only through company-admin RLS; all writes remain inside those routines.
 
 ## Browser reachability inventory
 
@@ -417,7 +426,7 @@ Most tables carry grants to both `anon` and `authenticated` â€” the Supabas
 is harmless because every policy is written `to authenticated`, so `anon` matches nothing.
 These eight are narrower still, with no `anon` grant at all:
 
-`company_setup_profiles`, `record_history`, `underwriting_cases`, `ringcentral_accounts`, `ringcentral_calls`,
+`company_setup_profiles`, `workspace_setup_profiles`, `record_history`, `underwriting_cases`, `ringcentral_accounts`, `ringcentral_calls`,
 `ringcentral_extensions`, `ringcentral_presence`, `ringcentral_sync_state`.
 
 ### Trigger functions are not RPCs

@@ -1,3 +1,3 @@
 import './company-setup.css';
 
-export { createCompanySetupPanel } from './company-setup-panel.js';
+export { createCompanySetupPanel, createWorkspaceSetupPanel } from './company-setup-panel.js';

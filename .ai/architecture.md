@@ -17,7 +17,7 @@ The app uses:
 - A lazy-loaded company-search index maps only permission-allowed Contacts, Quotes, Jobs, Tasks, Files, and Proposals into workspace-aware command-palette routes.
 - A lazy-loaded local form-draft engine protects unsaved Contact, Job, Quote, and Underwriter input without adding those recovery copies to the primary browser bundle.
 - A lazy-loaded record-history presenter reads the workspace-scoped `record_history` ledger only when a Contact, Quote, or Job history dialog is opened.
-- A lazy-loaded company-setup panel turns owner answers or a selected blueprint into an editable workspace/app/pipeline/role plan; the pure planning model is separate from its Supabase controller and Settings UI.
+- A lazy-loaded workspace-setup panel turns owner answers or a selected blueprint into an editable app/pipeline/role plan for exactly one selected operational workspace; the pure planning model is separate from its Supabase controller and Settings UI.
 - A vendored TaskManagement runtime copied into the production bundle during build, now surfaced in-shell as the Tasks module via a same-origin `<iframe>` (see the X-Frame-Options and service-worker decisions) rather than a separate app the user is handed off to.
 
 ## Request and data flow
@@ -28,7 +28,7 @@ The route reconciliation step canonicalizes stale or inaccessible company/worksp
 
 The tenancy hierarchy is `profile -> company membership -> company -> operational workspace -> workspace membership/role/plugins -> workspace-owned records`. A company is the customer, billing, and top-level security tenant. Operational workspaces are configurable child environments inside that company; they are not separate customer accounts.
 
-Company-owner onboarding follows `company creation -> guaranteed default Main workspace -> Settings > Setup entry choice -> answers or blueprint -> editable review -> apply_company_setup`. Draft saves change no configuration. Apply validates and performs the complete configuration in one transaction, and a retry reuses the server-recorded workspace/role ids. Reset clears the questions and draft only; it deliberately preserves the applied plan and every tenant/business record.
+Company-owner onboarding follows `company creation -> guaranteed default Main workspace -> Settings > Setup for Main -> answers or blueprint -> editable review -> apply_workspace_setup`. Every later operational-workspace creation opens the same setup flow for that new workspace. Drafts, applied plans, and reset history are keyed by `workspace_id`; apply changes only the selected workspace and a retry reuses the server-recorded role ids. The small Start from scratch action applies a blank plan directly. Reset clears that workspace's questions and draft only, deliberately preserving its applied configuration, every tenant/business record, and every sibling workspace.
 
 Public flows such as client portals, public forms, and proposals go through token-aware API handlers. Server handlers use deployment-only credentials and must validate method, input, tenant scope, and authorization before accessing Supabase.
 
@@ -58,8 +58,8 @@ The SPA supports:
 | Shared CSV parser | [src/data/csv.js](../src/data/csv.js) |
 | Imported/persisted color validation | [src/security/color.js](../src/security/color.js) |
 | First-run launch checklist | [src/launch/pilot-readiness.js](../src/launch/pilot-readiness.js) |
-| Company setup planner and blueprints | [src/onboarding/company-setup-model.js](../src/onboarding/company-setup-model.js) |
-| Company setup Settings UI/controller | [src/onboarding/company-setup-panel.js](../src/onboarding/company-setup-panel.js) |
+| Workspace setup planner and blueprints | [src/onboarding/company-setup-model.js](../src/onboarding/company-setup-model.js) |
+| Workspace setup Settings UI/controller | [src/onboarding/company-setup-panel.js](../src/onboarding/company-setup-panel.js) |
 | In-product support reporting | [src/support/reporting.js](../src/support/reporting.js) |
 | Same-browser operational form recovery | [src/drafts/form-drafts.js](../src/drafts/form-drafts.js) |
 | Shared business-record history presentation | [src/history/record-history.js](../src/history/record-history.js) |
@@ -77,9 +77,9 @@ The SPA supports:
 
 - Company id remains the customer/billing/security tenant boundary; `workspace_id` is the operational data boundary for CRM, pipelines, underwriting, files, jobs, proposals, and tasks.
 - Every company has one non-archivable default operational workspace. Existing company data was backfilled into it.
-- Company setup plans are bounded and server-validated: one to six workspaces, known apps, mutually exclusive CRM variants, at most fifty stages per workspace, and only predefined non-elevated role templates.
-- Applying setup is atomic and idempotent. Existing company-disabled entitlements remain disabled, populated pipelines are preserved, and a setup-managed workspace is archived only when it has no business records.
-- Resetting company setup never deletes or rolls back the company, memberships, workspaces, plugins, roles, customers, jobs, tasks, files, or messages; it only reopens the questionnaire.
+- Workspace setup plans are bounded and server-validated: exactly one target workspace, known apps, mutually exclusive CRM variants, unique stage names, at most fifty stages, and only predefined non-elevated role templates.
+- Applying workspace setup is atomic and idempotent. It changes only the target workspace, never re-enables a company-disabled entitlement, preserves manually installed apps, and preserves populated pipelines.
+- Resetting workspace setup never deletes or rolls back the company, memberships, sibling workspaces, applied configuration, plugins, roles, customers, jobs, tasks, files, or messages; it only reopens that workspace's questionnaire.
 - Uploaded operational-workspace icons are validated and stored with the workspace. Default changes use one authorized, company-scoped database transaction; the browser updates only after that transaction succeeds.
 - Owners, admins, and developers inherit access to every active workspace in their company. Workers and other members require explicit active workspace membership and use that workspace's assigned role.
 - Invites never grant Owner, Admin, or Developer. Those promotions happen only after onboarding through the owner-guarded member-access path.
