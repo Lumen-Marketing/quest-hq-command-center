@@ -53,7 +53,7 @@ export function createHelpCenterPage({
         </div>
         <div class="help-support-actions">
           <button class="btn primary" type="button" data-action="open-support">
-            <i class="ti ti-message-report" aria-hidden="true"></i> Report a problem
+            <i class="ti ti-help-circle" aria-hidden="true"></i> Report a problem
           </button>
           ${emailAction}
         </div>
@@ -77,7 +77,7 @@ export function createHelpCenterPage({
     return `
       <section class="help-center-page">
         <div class="help-unavailable panel">
-          <span class="help-topic-icon"><i class="ti ti-file-off" aria-hidden="true"></i></span>
+          <span class="help-topic-icon"><i class="ti ti-alert-circle" aria-hidden="true"></i></span>
           <h1>That help article is no longer available</h1>
           <p>It may have moved, or the related tool is not available in this workspace.</p>
           <a class="btn primary" href="${helpPath(companyId)}" data-router>Browse all help</a>
@@ -214,7 +214,7 @@ export function createHelpCenterPage({
               ${topics.map((topic) => topicCard(topic, companyId, query, category)).join('')}
             </div>` : `
             <div class="help-empty panel">
-              <span class="help-topic-icon"><i class="ti ti-search-off" aria-hidden="true"></i></span>
+              <span class="help-topic-icon"><i class="ti ti-search" aria-hidden="true"></i></span>
               <h3>No guide matched “${h(query || categoryLabel(category))}”</h3>
               <p>Try a shorter phrase, choose another category, or browse every guide.</p>
               <a class="btn" href="${helpPath(companyId)}" data-router>Clear search</a>
