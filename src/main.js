@@ -16593,11 +16593,15 @@ function wbNotifyItem(companyId, workspace, app, item, title, body) {
 }
 // Notify the workspace audience of an app-level event (e.g. bulk delete) — no
 // per-item assignee targeting. Fire-and-forget; the actor isn't notified.
-function wbNotifyWorkspace(companyId, workspace, app, title, body) {
+function wbNotifyWorkspace(companyId, workspace, app, title, body, options = {}) {
   try {
     const recipients = wbNotifyAudience(companyId, workspace);
     if (!recipients.length) return;
-    const href = companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId);
+    // A notification about a REMOVED app must not link to it -- following that lands on an
+    // app that no longer exists. Point at the workspace it was in instead.
+    const href = options.appGone
+      ? companyPath('workspaces', { workspace_id: workspace.id }, companyId)
+      : companyPath('workspaces', { workspace_id: workspace.id, app_id: app.id }, companyId);
     notifyEvent({ companyId, recipients, type: 'workspace', title, body, href, sourceType: 'workspace_app', sourceId: app.id, excludeActor: true }).catch(() => { /* ignore */ });
   } catch { /* ignore */ }
 }
@@ -18513,17 +18517,25 @@ async function wbConfirmDeleteWorkspace() {
   if (!m || m.kind !== 'delete-workspace') return;
   const pw1 = document.getElementById('wbDelPw1')?.value || '';
   const pw2 = document.getElementById('wbDelPw2')?.value || '';
-  if (!pw1 || !pw2) { m.error = 'Enter your password in both fields.'; render(); return; }
-  if (pw1 !== pw2) { m.error = 'The two passwords do not match.'; render(); return; }
+  // Announced as well as written into the dialog, for the same reason as the app delete: a
+  // line under the fields is easy to read past, and then nothing says why it is still there.
+  const refuse = (message, field) => {
+    m.error = message;
+    m.errorField = field;
+    showToast(message, 'local', 'Workspace not deleted');
+    render();
+  };
+  if (!pw1 || !pw2) { refuse('Enter your password in both fields.', 'password'); return; }
+  if (pw1 !== pw2) { refuse('The two passwords do not match.', 'password'); return; }
   const client = createSupabaseClient();
   // On a live session, verify the password is actually correct by re-authenticating.
   if (isLiveSupabaseSession() && client) {
     let email = activeSession()?.profile?.email || '';
     if (!email) { try { email = (await client.auth.getUser())?.data?.user?.email || ''; } catch { /* ignore */ } }
-    if (!email) { m.error = 'Could not verify your account. Try again.'; render(); return; }
+    if (!email) { refuse('Could not verify your account. Try again.', 'password'); return; }
     const btn = document.querySelector('[data-wb-delete-ws-confirm]'); if (btn) btn.disabled = true;
     const { error } = await client.auth.signInWithPassword({ email, password: pw1 });
-    if (error) { m.error = 'Incorrect password.'; render(); return; }
+    if (error) { refuse('That password is not correct. The workspace was not deleted.', 'password'); return; }
   }
   const companyId = m.companyId;
   const doc = wbDoc(companyId);
@@ -18540,30 +18552,45 @@ async function wbConfirmDeleteApp() {
   const typed = (document.getElementById('wbDelAppName')?.value || '').trim();
   const pw1 = document.getElementById('wbDelAppPw1')?.value || '';
   const pw2 = document.getElementById('wbDelAppPw2')?.value || '';
-  if (typed.toLowerCase() !== String(m.appName || '').trim().toLowerCase()) { m.error = 'The app name does not match.'; render(); return; }
-  if (!pw1 || !pw2) { m.error = 'Enter your password in both fields.'; render(); return; }
-  if (pw1 !== pw2) { m.error = 'The two passwords do not match.'; render(); return; }
+  // Each refusal is announced as well as written into the dialog. The inline message sits
+  // below three fields and was easy to read past, so nothing told you why the app was still
+  // there. errorField marks the box that is actually wrong, so the eye goes to it.
+  const refuse = (message, field) => {
+    m.error = message;
+    m.errorField = field;
+    showToast(message, 'local', 'App not deleted');
+    render();
+  };
+  if (typed.toLowerCase() !== String(m.appName || '').trim().toLowerCase()) {
+    refuse(`Type "${String(m.appName || '').trim()}" exactly to confirm.`, 'name');
+    return;
+  }
+  if (!pw1 || !pw2) { refuse('Enter your password in both fields.', 'password'); return; }
+  if (pw1 !== pw2) { refuse('The two passwords do not match.', 'password'); return; }
   const client = createSupabaseClient();
   // On a live session, verify the password is actually correct by re-authenticating.
   if (isLiveSupabaseSession() && client) {
     let email = activeSession()?.profile?.email || '';
     if (!email) { try { email = (await client.auth.getUser())?.data?.user?.email || ''; } catch { /* ignore */ } }
-    if (!email) { m.error = 'Could not verify your account. Try again.'; render(); return; }
+    if (!email) { refuse('Could not verify your account. Try again.', 'password'); return; }
     const btn = document.querySelector('[data-wb-delete-app-confirm]'); if (btn) btn.disabled = true;
     const { error } = await client.auth.signInWithPassword({ email, password: pw1 });
-    if (error) { m.error = 'Incorrect password.'; render(); return; }
+    if (error) { refuse('That password is not correct. The app was not deleted.', 'password'); return; }
   }
   const companyId = m.companyId;
   const { workspace, app } = wbFind(companyId, m.workspaceId, m.appId);
   const appName = (app && app.name) || m.appName || 'app';
   if (workspace) {
     wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted app <b>${h(appName)}</b>` });
-    if (app) wbNotifyWorkspace(companyId, workspace, app, `App deleted: ${appName}`, `${actorName()} deleted the ${appName} app.`);
+    if (app) wbNotifyWorkspace(companyId, workspace, app, `App deleted: ${appName}`, `${actorName()} deleted the ${appName} app.`, { appGone: true });
     workspace.apps = workspace.apps.filter((a) => a.id !== m.appId);
   }
   state.builderModal = null;
   wbSave(companyId);
-  showToast('App deleted.', isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
+  // Named, and held longer than the default: the dialog closes and the page navigates to the
+  // workspace at the same moment, so a generic four-second "App deleted." was easy to miss --
+  // and the person who did it is excluded from the bell notification everyone else gets.
+  showToast(`"${appName}" was deleted, with its records, fields, reports and automations.`, isLiveSupabaseSession() ? 'live' : 'local', 'App deleted', { duration: 7000 });
   navigate(companyPath('workspaces', {}, companyId));
 }
 
@@ -18573,7 +18600,19 @@ function wbConfirmDelete() {
   const c = m.confirm; const companyId = m.companyId; const doc = wbDoc(companyId);
   if (c.op === 'del-ws') { doc.workspaces = doc.workspaces.filter((w) => w.id !== c.workspaceId); state.builderModal = null; wbSave(companyId); showToast('Workspace deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
   const { workspace, app } = wbFind(companyId, c.workspaceId, c.appId);
-  if (c.op === 'del-app') { if (workspace && app) { wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted app <b>${h(app.name)}</b>` }); wbNotifyWorkspace(companyId, workspace, app, `App deleted: ${app.name}`, `${actorName()} deleted the ${app.name} app.`); } workspace.apps = workspace.apps.filter((a) => a.id !== c.appId); state.builderModal = null; wbSave(companyId); showToast('App deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
+  if (c.op === 'del-app') {
+    const deletedName = (app && app.name) || 'App';
+    if (workspace && app) {
+      wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted app <b>${h(app.name)}</b>` });
+      wbNotifyWorkspace(companyId, workspace, app, `App deleted: ${app.name}`, `${actorName()} deleted the ${app.name} app.`, { appGone: true });
+    }
+    workspace.apps = workspace.apps.filter((a) => a.id !== c.appId);
+    state.builderModal = null;
+    wbSave(companyId);
+    showToast(`"${deletedName}" was deleted, with its records, fields, reports and automations.`, 'local', 'App deleted', { duration: 7000 });
+    navigate(companyPath('workspaces', {}, companyId));
+    return;
+  }
   if (c.op === 'del-field') {
     // A sub-item list's field lives on the collection, and its data lives on the children of
     // every record — not on the records themselves.

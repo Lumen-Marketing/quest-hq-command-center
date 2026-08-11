@@ -31515,3 +31515,15 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 /* The reaction bar sits under the line, quieter than a post's. */
 .wb-act-bar { margin-top: 6px; }
+
+/* The box that is actually wrong, so a refusal points somewhere rather than just saying no. */
+.wb-input.is-invalid {
+  border-color: #e0552d;
+  background: #fdf3ef;
+}
+
+.wb-form-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

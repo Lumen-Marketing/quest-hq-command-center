@@ -186,10 +186,10 @@ export function createBuilderModal(ctx) {
     if (m.kind === 'delete-app') {
       return wbModalShell('Delete app', 'wb-modal-sm', `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Delete this app</h3>`,
         `<p class="wb-sub">This permanently removes <b>${h(m.appName || 'this app')}</b> and all ${m.itemCount || 0} record(s), plus its fields, reports and automations. This cannot be undone.</p>
-        <div class="wb-field"><label>Type the app name to confirm</label><input class="wb-input" id="wbDelAppName" type="text" autocomplete="off" placeholder="${h(m.appName || '')}" autofocus></div>
-        <div class="wb-field"><label>Enter your password</label><input class="wb-input" id="wbDelAppPw1" type="password" autocomplete="off" placeholder="Your account password"></div>
-        <div class="wb-field"><label>Re-enter your password to confirm</label><input class="wb-input" id="wbDelAppPw2" type="password" autocomplete="off" placeholder="Type it again"></div>
-        ${m.error ? `<div class="wb-form-error">${h(m.error)}</div>` : ''}`,
+        <div class="wb-field"><label>Type the app name to confirm</label><input class="wb-input ${m.errorField === 'name' ? 'is-invalid' : ''}" id="wbDelAppName" type="text" autocomplete="off" placeholder="${h(m.appName || '')}" aria-invalid="${m.errorField === 'name' ? 'true' : 'false'}" autofocus></div>
+        <div class="wb-field"><label>Enter your password</label><input class="wb-input ${m.errorField === 'password' ? 'is-invalid' : ''}" id="wbDelAppPw1" type="password" autocomplete="off" placeholder="Your account password" aria-invalid="${m.errorField === 'password' ? 'true' : 'false'}"></div>
+        <div class="wb-field"><label>Re-enter your password to confirm</label><input class="wb-input ${m.errorField === 'password' ? 'is-invalid' : ''}" id="wbDelAppPw2" type="password" autocomplete="off" placeholder="Type it again" aria-invalid="${m.errorField === 'password' ? 'true' : 'false'}"></div>
+        ${m.error ? `<div class="wb-form-error" role="alert"><i class="ti ti-alert-circle" aria-hidden="true"></i>${h(m.error)}</div>` : ''}`,
         `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-delete-app-confirm><i class="ti ti-trash"></i>Delete app</button>`);
     }
     if (m.kind === 'members') {
