@@ -39,3 +39,15 @@ test('a failed module load surfaces instead of becoming an unhandled rejection',
   // Both openers are async and were called with no catch at all.
   assert.equal((main.match(/Card settings could not be opened\./g) || []).length, 2);
 });
+
+test('the icon subset is built from every source file, not a hand-kept list', () => {
+  // It named three files: src/main.js, src/styles.css, index.html. src/ now holds ~30 modules
+  // extracted out of main.js to hold the bundle budget, and none were scanned -- so an icon
+  // used only inside one was dropped from the subset AND invisible to the guard test, because
+  // it never became a candidate to compare. "Create your own app" shipped a blank square.
+  const usage = readFileSync(join(root, 'scripts', 'icon-usage.mjs'), 'utf8');
+  assert.match(usage, /export const ICON_SOURCE_FILES = collectSourceFiles\(\);/);
+  assert.match(usage, /function collectSourceFiles\(\) \{/);
+  assert.match(usage, /walk\('src'\);/, 'the whole tree, so the next extraction is covered');
+  assert.ok(!/\['src\/main\.js', 'src\/styles\.css', 'index\.html'\]/.test(usage));
+});

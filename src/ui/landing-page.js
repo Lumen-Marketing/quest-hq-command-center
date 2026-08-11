@@ -111,7 +111,7 @@ export function createLandingPage(ctx) {
                     <div class="qb-landing-workspace-switcher" role="tablist" aria-label="Preview a workspace">
                       ${[
                         ['cold-calling', 'ti-phone', 'Cold calling'],
-                        ['sales', 'ti-handshake', 'Sales'],
+                        ['sales', 'ti-heart-handshake', 'Sales'],
                         ['underwriting', 'ti-calculator', 'Underwriting'],
                         ['production', 'ti-hammer', 'Production'],
                       ].map(([key, icon, label]) => `

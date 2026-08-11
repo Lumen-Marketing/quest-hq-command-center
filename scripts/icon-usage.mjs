@@ -9,9 +9,32 @@
 // We pull every quoted literal out of the `${...}` expression instead, then keep
 // whatever the real font actually defines.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
-export const ICON_SOURCE_FILES = ['src/main.js', 'src/styles.css', 'index.html'];
+
+function collectSourceFiles() {
+  const files = ['index.html'];
+  const walk = (dir) => {
+    for (const entry of readdirSync(new URL(`../${dir}`, import.meta.url), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(rel);
+      else if (/\.(js|css)$/.test(entry.name)) files.push(rel);
+    }
+  };
+  walk('src');
+  return files;
+}
+
+// EVERY source file, walked -- not a hand-kept list.
+//
+// It used to name three: src/main.js, src/styles.css and index.html. src/ now holds ~30
+// modules extracted out of main.js to hold the bundle budget, and none of them were scanned.
+// An icon used only inside one of those was dropped from the subset font and rendered as a
+// blank square -- and was invisible to the test that guards against exactly that, because it
+// never became a candidate to compare. "Create your own app" shipped that way.
+//
+// Walked rather than globbed so the next extraction is covered without anybody remembering.
+export const ICON_SOURCE_FILES = collectSourceFiles();
 export const TABLER_CSS = 'taskmanagement/vendor/tabler-icons/tabler-icons.min.css';
 
 /** Parse `.ti-name:before{content:"\e123"}` into name -> codepoint. */
