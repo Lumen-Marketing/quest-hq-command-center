@@ -6,7 +6,9 @@ const migration = readFileSync(
   new URL('../supabase/migrations/20260730180045_atomic_contact_to_quote.sql', import.meta.url),
   'utf8',
 );
-const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  // The contact record page is a fetched module now; same surface, read as one.
+  + readFileSync(new URL('../src/crm/contact-record.js', import.meta.url), 'utf8');
 const workflow = readFileSync(new URL('../src/crm/contact-to-quote.js', import.meta.url), 'utf8');
 
 test('contact graduation is one authenticated workspace-authorized transaction', () => {

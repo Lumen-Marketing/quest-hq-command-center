@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
+const contactRecord = readFileSync(new URL('../src/crm/contact-record.js', import.meta.url), 'utf8');
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  // The contact record page is a fetched module now; same surface, read as one.
+  + readFileSync(new URL('../src/crm/contact-record.js', import.meta.url), 'utf8')
   // Composer fields live in their own fetched-on-demand module; same surface, two files.
   + readFileSync(new URL('../src/messaging/dock-fields.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/job-record.js', import.meta.url), 'utf8')
@@ -62,7 +65,7 @@ test('record detail routes read as contacts and quotes', () => {
 });
 
 test('nurturing contact records expose a stage-level graduate to quote action', () => {
-  const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const recordSource = contactRecord.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n  \}/)?.[0] || '';
   assert.match(recordSource, /const canGraduateContactToQuote = canManageContactQuotes[\s\S]*resolvePipelineStage\('contacts', contact\.stage, companyId\) === 'Nurturing'/);
   assert.match(recordSource, /canGraduateContactToQuote[\s\S]*data-action="contact-convert-quote"/);
   assert.match(recordSource, /Graduate to Quote/);
@@ -96,7 +99,7 @@ test('graduate action remains visible in compact contact record layouts', () => 
 test('contact entry formats phone, suggests addresses, links maps, and selects owners from members', () => {
   // The whole module is the editor now; slicing `source` would match the eager delegator.
   const editorSource = readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8');
-  const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const recordSource = contactRecord.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n  \}/)?.[0] || '';
   assert.match(source, /function formatPhoneNumber\(value\)/);
   // Contact fields are auto-formatted through a single shared formatter so the
   // form, inline edits, and record upserts all normalize identically.
@@ -127,7 +130,7 @@ test('contact entry formats phone, suggests addresses, links maps, and selects o
 });
 
 test('contact record pencils edit only the clicked field value', () => {
-  const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const recordSource = contactRecord.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n  \}/)?.[0] || '';
   const inlineSource = source.match(/function beginContactInlineEdit\(span\) \{[\s\S]*?\n\}/)?.[0] || '';
   assert.doesNotMatch(recordSource, /data-action="open-contact-form" data-mode="edit" data-contact-id="\$\{h\(contact\.id\)\}" aria-label="Edit \$\{h\(label\)\}"/);
   assert.match(recordSource, /fieldRow\('Phone', ed\('phone'\), 'phone'\)/);

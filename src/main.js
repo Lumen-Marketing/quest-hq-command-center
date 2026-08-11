@@ -6037,148 +6037,36 @@ function renderClientPortalPublicPage(route) {
   return questLoader('Loading');
 }
 
-function renderContactRecord(companyId, contact) {
-  const stages = contactStages();
-  const ci = stages.findIndex((s) => s.name === contact.stage);
-  const g = guidanceForStage(contact.stage);
-  const tempColor = contact.temperature === 'Hot' ? '#C2410C' : contact.temperature === 'Warm' ? '#B07A12' : '#2E72B8';
-  const smsCapabilities = contactSmsCapabilities(contact.id);
-  const requestedWorkspaceTab = state.contactWorkspaceTab || 'Notes';
-  const activeWorkspaceTab = requestedWorkspaceTab === 'Messages' && !smsCapabilities.canMountThread
-    ? 'Notes'
-    : requestedWorkspaceTab;
-  const tasks = tasksForContact(contact.id);
-  const totalFeed = activitiesFor('contact', contact.id);
-  const feed = filteredActivitiesFor('contact', contact.id);
-  const contactQuotes = companyDeals(companyId)
-    .filter((deal) => deal.primary_contact_id === contact.id)
-    .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
-  const latestContactQuote = contactQuotes[0] || null;
-  const canManageContactQuotes = can('crm.manage', companyId, contact.workspace_id);
-  const canGraduateContactToQuote = canManageContactQuotes
-    && resolvePipelineStage('contacts', contact.stage, companyId) === 'Nurturing';
-  const quoteInFlight = Boolean(state.contactQuoteConversionInFlight?.[contact.id]);
+// ---- Contact record ----------------------------------------------------------------
+// Body lives in ./crm/contact-record.js and is fetched on first use.
+let contactRecordModule = null;
+let contactRecordPending = null;
 
-  const ed = (key, opts = {}) => {
-    const isEmpty = contact[key] === '' || contact[key] == null;
-    const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : '', isEmpty ? 'sf-empty' : ''].filter(Boolean).join(' ');
-    const inner = isEmpty ? EMPTY_FIELD_PLACEHOLDER : h(String(contact[key]));
-    return `<span class="${cls}" data-contact-edit="${h(key)}" data-contact-id="${h(contact.id)}" title="Click to edit">${inner}</span>`;
-  };
-  const fieldRow = (label, content, editKey = '') => `
-    <div class="sf-field">
-      <div class="sf-field-label">
-        ${h(label)}
-        ${editKey
-          ? `<button class="sf-pencil" type="button" data-contact-edit="${h(editKey)}" data-contact-id="${h(contact.id)}" aria-label="Edit ${h(label)}"><i class="ti ti-pencil"></i></button>`
-          : ''}
-      </div>
-      <div class="sf-field-value">${content}</div>
-    </div>
-  `;
-
-  const workspaceTabs = [['Notes', 'ti-note'], ['Email', 'ti-mail'], ['Messages', 'ti-message'], ['Activity', 'ti-activity']];
-  const quickTiles = [['Task', 'ti-checkbox'], ['Meeting', 'ti-calendar'], ['Estimate', 'ti-calculator'], ['Proposal', 'ti-file-text'], ['Email', 'ti-mail'], ['Call Log', 'ti-phone']];
-
-  return `
-    <div class="sf-record">
-      <div class="sf-object-tabs">
-        <a class="sf-object-tab" href="${appHref(companyPath('dashboard', {}, companyId))}" data-router>Dashboard</a>
-        <a class="sf-object-tab" href="${appHref(companyPath('contacts', {}, companyId))}" data-router>All Contacts <span class="sf-tab-kind">| Contacts</span></a>
-        <span class="sf-object-tab on">${h(contact.name)} <span class="sf-tab-kind">| Contact</span></span>
-      </div>
-
-      <div class="sf-record-head">
-        <span class="sf-record-icon"><i class="ti ti-user"></i></span>
-        <div><div class="sf-record-label">Contact</div><div class="sf-record-name">${h(contact.name)}</div></div>
-        <div class="sf-actions">
-          ${workspaceTabs.map(([label, ico]) => {
-            const smsDisabled = label === 'Messages' && !smsCapabilities.canMountThread;
-            return `<button class="sf-btn ${activeWorkspaceTab === label ? 'active' : ''}" type="button" data-action="set-contact-workspace-tab" data-contact-id="${h(contact.id)}" data-tab="${h(label)}"${smsDisabled ? ` disabled aria-disabled="true" title="${h(smsCapabilities.message)}"` : ''}><i class="ti ${ico}"></i>${label}${smsDisabled ? '<i class="ti ti-lock sf-tab-lock" aria-hidden="true"></i>' : ''}</button>`;
-          }).join('')}
-          <button class="sf-btn" type="button" data-action="open-record-history" data-record-type="contact" data-record-id="${h(contact.id)}" data-record-label="${h(contact.name)}" data-company-id="${h(contact.company_id || companyId)}" data-workspace-id="${h(contact.workspace_id || activeWorkspaceId())}"><i class="ti ti-history"></i>History</button>
-          <button class="sf-btn" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit</button>
-        </div>
-      </div>
-
-      ${renderContactLabelStrip(companyId, contact)}
-
-      <div class="sf-path-wrap">
-        <div class="sf-path-row">
-          <div class="sf-stage-track">
-            ${stages.map((s, i) => {
-              const cls = i < ci ? 'done' : i === ci ? 'current' : 'future';
-              return `<button class="sf-stage ${cls}" type="button" data-action="set-contact-stage" data-contact-id="${h(contact.id)}" data-stage="${h(s.name)}" title="Move to ${h(s.name)}">${i < ci ? '<i class="ti ti-check"></i>' : h(s.name)}</button>`;
-            }).join('')}
-          </div>
-          <button class="sf-mark-btn" type="button" data-action="contact-mark-next" data-contact-id="${h(contact.id)}">Mark as Current Stage</button>
-          ${canGraduateContactToQuote
-            ? latestContactQuote
-              ? `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="open-contact-quote" data-deal-id="${h(latestContactQuote.id)}"><i class="ti ti-file-text"></i>Open latest Quote</button>`
-              : `<button class="sf-mark-btn sf-graduate-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-file-text"></i>${quoteInFlight ? 'Creating Quote…' : 'Graduate to Quote'}</button>`
-            : ''}
-        </div>
-        <div class="sf-guidance">
-          <div class="sf-guidance-label">Guidance for Success</div>
-          <div class="sf-guidance-title">${h(g.t)}</div>
-          <div class="sf-guidance-lines">${g.b.map((x) => `<div><span class="sf-guidance-bullet">•</span> ${h(x)}</div>`).join('')}</div>
-        </div>
-      </div>
-
-      <div class="sf-three-col">
-        <div class="sf-col">
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>About</div><div class="sf-card-body">
-            ${fieldRow('Phone', ed('phone'), 'phone')}
-            ${fieldRow('Email', ed('email', { blue: true }), 'email')}
-            ${fieldRow('Location', ed('location'), 'location')}
-            ${fieldRow('Job Type', `<span class="sf-pill sf-edit${contact.title ? '' : ' sf-empty'}" data-contact-edit="title" data-contact-id="${h(contact.id)}" title="Click to edit">${contact.title ? h(contact.title) : EMPTY_FIELD_PLACEHOLDER}</span>`, 'title')}
-            ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
-            ${fieldRow('Source', ed('source'), 'source')}
-          </div></div>
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
-            ${fieldRow('Stage', ed('stage'), 'stage')}
-            ${fieldRow('Est. Value', `<span class="sf-money"><span class="sf-edit mono" data-contact-edit="value" data-contact-id="${h(contact.id)}" title="Click to edit">${money(contact.value || 0)}</span></span>`, 'value')}
-            ${fieldRow('Temperature', `<span class="sf-edit" data-contact-edit="temperature" data-contact-id="${h(contact.id)}" style="color:${tempColor}" title="Click to edit">${h(contact.temperature)}</span>`, 'temperature')}
-            ${fieldRow('Pay Type', ed('pay_type'), 'pay_type')}
-            ${fieldRow('Roof System', ed('roof_system'), 'roof_system')}
-            ${contact.has_multiple_roof_systems || contact.secondary_roof_system ? fieldRow('Second Roof System', ed('secondary_roof_system'), 'secondary_roof_system') : ''}
-          </div></div>
-        </div>
-
-        <div class="sf-col">
-          ${renderContactWorkspacePanel(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities)}
-        </div>
-
-        <div class="sf-col">
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-bolt"></i>Quick Create</div>
-            <div class="sf-quick-grid">${quickTiles.map(([label, ico]) => `<button class="sf-quick-tile" type="button" data-action="contact-quick" data-kind="${h(label)}" data-contact-id="${h(contact.id)}"><i class="ti ${ico}"></i><span>${label}</span></button>`).join('')}</div>
-            ${latestContactQuote
-              ? `
-                <button class="sf-convert-btn" type="button" data-action="open-contact-quote" data-deal-id="${h(latestContactQuote.id)}"><i class="ti ti-external-link"></i>Open latest Quote</button>
-                ${canManageContactQuotes ? `<button class="sf-convert-btn sf-convert-secondary" type="button" data-action="contact-create-another-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-copy"></i>${quoteInFlight ? 'Creating Quote…' : 'Create another Quote'}</button>` : ''}
-              `
-              : canManageContactQuotes
-                ? `<button class="sf-convert-btn" type="button" data-action="contact-convert-quote" data-contact-id="${h(contact.id)}"${quoteInFlight ? ' disabled' : ''}><i class="ti ti-arrow-right"></i>${quoteInFlight ? 'Creating Quote…' : 'Convert to Quote'}</button>`
-                : ''}
-          </div>
-          <div class="sf-card"><div class="sf-card-head"><i class="ti ti-checkbox"></i>Open Tasks<span class="sf-connect"><i class="ti ti-plug"></i>Connect</span></div>
-            <div class="sf-tasks">
-              ${tasks.map((t) => renderSfTaskRow(t)).join('') || '<div class="sf-task-empty">No tasks yet.</div>'}
-            </div>
-            <form class="sf-task-add sf-task-add-rich" data-contact-task-form autocomplete="off">
-              <input type="hidden" name="contact_id" value="${h(contact.id)}" />
-              <i class="ti ti-plus"></i>
-              <input name="title" placeholder="Add a task?" />
-              <input name="due" type="date" value="${h(isoDate(1))}" aria-label="Due date" />
-              <input name="due_time" type="time" aria-label="Due time" />
-              <button type="submit" title="Save task" aria-label="Save task"><i class="ti ti-check"></i></button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+function loadContactRecord() {
+  if (contactRecordModule) return Promise.resolve(contactRecordModule);
+  if (!contactRecordPending) {
+    contactRecordPending = import('./crm/contact-record.js').then((mod) => {
+      contactRecordModule = mod.createContactRecord({
+        EMPTY_FIELD_PLACEHOLDER, activeWorkspaceId, activitiesFor, appHref, can, companyDeals,
+        companyPath, contactSmsCapabilities, contactStages, field, filteredActivitiesFor, guidanceForStage,
+        h, isoDate, money, renderContactLabelStrip, renderContactWorkspacePanel, renderSfTaskRow,
+        resolvePipelineStage, state, tasksForContact,
+      });
+      return contactRecordModule;
+    }).catch((error) => {
+      contactRecordPending = null;
+      throw error;
+    });
+  }
+  return contactRecordPending;
 }
+
+function renderContactRecord(companyId, contact) {
+  if (contactRecordModule) return contactRecordModule.renderContactRecord(companyId, contact);
+  loadContactRecord().then(() => render()).catch((error) => console.error('Contact record failed to load', error));
+  return questLoader('Loading contact');
+}
+
 
 // ---- renderContactTable ---------------------------------------------------------
 // Body lives in ./crm/contact-table.js and is fetched on first use.
@@ -14268,11 +14156,25 @@ function wbFeedStream(companyId, workspace) {
   }
   const rows = stream.map((entry) => entry.kind === 'post'
     ? wbFeedPost(companyId, workspace, entry.data)
-    : `<div class="wb-feed-card wb-feed-sys">${wbActivityRow(entry.data)}</div>`).join('');
+    : `<div class="wb-feed-card wb-feed-sys" data-wb-act="${h(entry.data.id)}">${wbActivityRow(entry.data, wbActivityHref(companyId, workspace, entry.data))}${wbActivityBar(companyId, entry.data)}</div>`).join('');
   return `<section class="wb-feed-stream">${rows}</section>`;
 }
 
-function wbActivityRow(ev) {
+/**
+ * Where a log line points.
+ *
+ * Only the entries that were written with a record identity have one -- "Workspace created"
+ * refers to no row and must not pretend to. Entries recorded before this shipped carry no ids
+ * either, so they stay plain text rather than linking somewhere wrong.
+ */
+function wbActivityHref(companyId, workspace, ev) {
+  if (!ev?.appId || !ev?.itemId) return '';
+  return appHref(companyPath('workspaces', {
+    workspace_id: workspace.id, app_id: ev.appId, item_id: ev.itemId,
+  }, companyId));
+}
+
+function wbActivityRow(ev, href = '') {
   // Both stamps: "2h ago" reads faster, the absolute one is what you quote when something
   // has to be pinned down. A real <time> element so the machine-readable value is the exact
   // instant rather than the rounded label.
@@ -14280,7 +14182,50 @@ function wbActivityRow(ev) {
   const when = stamp
     ? `<time datetime="${h(ev.ts)}">${h(stamp)}</time>${wbTimeAgo(ev.ts) ? `<span class="wb-act-rel">${h(wbTimeAgo(ev.ts))}</span>` : ''}`
     : h(wbTimeAgo(ev.ts) || '');
-  return `<div class="wb-act-item"><span class="wb-act-ic" style="background:${h(ev.color || '#6b7280')}"><i class="ti ${h(ev.icon || 'ti-point')}"></i></span><div><div class="wb-act-text">${ev.text}</div><div class="wb-act-time">${when}</div></div></div>`;
+  // ev.text is already-escaped markup built at write time, so it is emitted raw here as it
+  // always was. Only the wrapper changes: a link when the entry knows which record it means.
+  const body = href
+    ? `<a class="wb-act-text wb-act-link" href="${href}" data-router>${ev.text}<i class="ti ti-arrow-up-right" aria-hidden="true"></i></a>`
+    : `<div class="wb-act-text">${ev.text}</div>`;
+  return `<div class="wb-act-item"><span class="wb-act-ic" style="background:${h(ev.color || '#6b7280')}"><i class="ti ${h(ev.icon || 'ti-point')}"></i></span><div>${body}<div class="wb-act-time">${when}</div></div></div>`;
+}
+
+/**
+ * The action bar under a log line: Like, Comment, Task.
+ *
+ * The same three the feed's own posts carry, because a member reading the log wants to react
+ * to what happened there just as much -- and the Task button is the one that leaves the
+ * workspace, creating a real task through the single task model so it lands in My Tasks.
+ */
+function wbActivityBar(companyId, ev) {
+  const myId = activeSession().profile?.id || '';
+  const likes = Array.isArray(ev.likes) ? ev.likes : [];
+  const comments = Array.isArray(ev.comments) ? ev.comments : [];
+  const liked = myId && likes.includes(myId);
+  const canTask = can('tasks.manage', companyId);
+  return `
+    <div class="wb-post-bar wb-act-bar">
+      <button class="wb-post-like ${liked ? 'on' : ''}" type="button" data-wb-act-like="${h(ev.id)}"><i class="ti ti-heart${liked ? '-filled' : ''}" aria-hidden="true"></i>${likes.length || ''} Like</button>
+      <button class="wb-post-cmt-btn" type="button" data-wb-act-comment-toggle="${h(ev.id)}"><i class="ti ti-message-circle" aria-hidden="true"></i>${comments.length || ''} Comment</button>
+      ${canTask ? `<button class="wb-post-cmt-btn" type="button" data-wb-act-task="${h(ev.id)}"><i class="ti ti-circle-check" aria-hidden="true"></i>${ev.task ? 'Task created' : 'Task'}</button>` : ''}
+    </div>
+    ${ev.task ? `<div class="wb-post-task"><i class="ti ti-circle-check" aria-hidden="true"></i><span>${h(ev.task.title)}</span>${ev.task.dueDate ? `<em>· due ${h(ev.task.dueDate)}</em>` : ''}</div>` : ''}
+    ${wbActivityComments(companyId, ev)}`;
+}
+
+function wbActivityComments(companyId, ev) {
+  const comments = Array.isArray(ev.comments) ? ev.comments : [];
+  const open = wbComposeState().openActComments?.has(ev.id);
+  if (!comments.length && !open) return '';
+  const rows = comments.map((c) => {
+    const member = c.authorId ? wbMemberById(companyId, c.authorId) : null;
+    return `<div class="wb-cmt"><b>${h(member?.name || c.author || 'User')}</b><span>${wbFeedText(companyId, c.text)}</span><em>${h(wbTimeAgo(c.ts))}</em></div>`;
+  }).join('');
+  return `
+    <div class="wb-post-comments">
+      ${rows}
+      ${open ? `<div class="wb-cmt-new"><input class="wb-input" data-wb-act-comment-input="${h(ev.id)}" placeholder="Write a comment" /><button class="btn btn-sm btn-primary" type="button" data-wb-act-comment-send="${h(ev.id)}">Comment</button></div>` : ''}
+    </div>`;
 }
 
 // Turn free text into safe HTML: escape, highlight @mentions of known members,
@@ -15007,7 +14952,85 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
 }
 
 // ── Workspace activity feed: publisher actions ─────────────────────────────
-function wbComposeState() { state.wbCompose = state.wbCompose || { files: [] }; return state.wbCompose; }
+function wbComposeState() {
+  state.wbCompose = state.wbCompose || { files: [], openActComments: new Set() };
+  // Older sessions restored a state object without the set.
+  if (!(state.wbCompose.openActComments instanceof Set)) state.wbCompose.openActComments = new Set();
+  return state.wbCompose;
+}
+
+// ---- reacting to a log line ---------------------------------------------------------------
+//
+// The activity stream is stored on the workspace document, same as the feed posts, so likes
+// and comments live beside the entry they belong to rather than in a second store.
+function wbFindActivity(companyId, actId) {
+  const workspace = wbCompanyWorkspace(companyId);
+  const entry = workspace ? (workspace.activity || []).find((item) => item.id === actId) : null;
+  return { workspace, entry };
+}
+
+function wbToggleActivityLike(companyId, actId) {
+  const myId = activeSession().profile?.id || '';
+  const { entry } = wbFindActivity(companyId, actId);
+  if (!myId || !entry) return;
+  const likes = Array.isArray(entry.likes) ? entry.likes : [];
+  entry.likes = likes.includes(myId) ? likes.filter((id) => id !== myId) : [...likes, myId];
+  wbSave(companyId);
+  render();
+}
+
+function wbToggleActivityComments(actId) {
+  const open = wbComposeState().openActComments;
+  if (open.has(actId)) open.delete(actId);
+  else open.add(actId);
+  render();
+}
+
+function wbAddActivityComment(companyId, actId, text) {
+  const body = String(text || '').trim();
+  if (!body) return;
+  const { entry } = wbFindActivity(companyId, actId);
+  if (!entry) return;
+  entry.comments = Array.isArray(entry.comments) ? entry.comments : [];
+  entry.comments.push({
+    id: wbUid(),
+    ts: new Date().toISOString(),
+    authorId: activeSession().profile?.id || '',
+    author: activeSession().profile?.full_name || 'User',
+    text: body,
+  });
+  wbSave(companyId);
+  render();
+}
+
+/**
+ * Turn a log line into a real task.
+ *
+ * Through wbCreateTaskFromPost, which is the ONE task model -- so it appears in My Tasks like
+ * any other task rather than becoming a second kind of to-do that only the workspace knows
+ * about. The chip stamped back onto the entry is a receipt, not the task.
+ */
+async function wbCreateTaskFromActivity(companyId, actId, { title, assigneeId, due }) {
+  const { entry } = wbFindActivity(companyId, actId);
+  if (!entry) return;
+  const saved = await wbCreateTaskFromPost(companyId, {
+    title: title || wbActivityPlainText(entry) || 'Follow-up from workspace activity',
+    assigneeId,
+    due,
+    body: wbActivityPlainText(entry),
+  });
+  if (!saved) return;
+  entry.task = { id: saved.id, title: saved.title, assigneeId: saved.assignee_id, dueDate: saved.due };
+  state.modal = '';
+  wbSave(companyId);
+  showToast('Task created. It is in My Tasks now.', isLiveSupabaseSession() ? 'live' : 'local', 'Tasks');
+  render();
+}
+
+// The log text is markup built at write time; a task title has to be words.
+function wbActivityPlainText(entry) {
+  return String(entry?.text || '').replace(/<[^>]*>/g, '').trim();
+}
 function wbFeedOpenMap() { state.wbFeedOpen = state.wbFeedOpen || {}; return state.wbFeedOpen; }
 
 // Fan a feed post out to the workspace audience (+ anyone @mentioned in it).
@@ -16529,7 +16552,7 @@ async function wbAddItemComment() {
       return false;
     }
   } else {
-    wbLogActivity(workspace, { icon: 'ti-message-circle', color: '#2563eb', text: `Commented on <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
+    wbLogActivity(workspace, { icon: 'ti-message-circle', color: '#2563eb', appId: app.id, itemId: item.id, text: `Commented on <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
     wbSave(m.companyId);
   }
   wbNotifyItem(m.companyId, workspace, app, item, `New comment on ${wbItemTitle(app, item)}`, `${actorName()}: ${text.length > 90 ? `${text.slice(0, 90)}…` : text}`);
@@ -17431,7 +17454,7 @@ function wbRunAutomations(companyId, workspace, app, item, event, prev) {
       } else if (ac.type === 'notify') wbLogActivity(workspace, { icon: 'ti-bell', color: '#7c3aed', text: h(ac.message || `Notification from "${au.name}"`) });
     });
     fired.push(au.name);
-    wbLogActivity(workspace, { icon: 'ti-bolt', color: '#7c3aed', text: `⚡ <b>${h(au.name)}</b> ran on <b>${h(wbItemTitle(app, item))}</b>` });
+    wbLogActivity(workspace, { icon: 'ti-bolt', color: '#7c3aed', appId: app.id, itemId: item.id, text: `⚡ <b>${h(au.name)}</b> ran on <b>${h(wbItemTitle(app, item))}</b>` });
   });
   if (fired.length) showToast(`Automation: ${fired.join(', ')}`, 'local', 'Workspaces');
   return fired;
@@ -17798,7 +17821,7 @@ function wbToggleItemCheckbox(companyId, workspaceId, appId, itemId, fieldId) {
   const prev = { ...item.values };
   item.values = { ...item.values, [fieldId]: !cur };
   const nowStamp = new Date().toISOString(); item.updatedAt = nowStamp; item.lastActivityAt = nowStamp;
-  wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Set <b>${h(field.label)}</b> to ${!cur ? 'Yes' : 'No'} on <b>${h(wbItemTitle(app, item))}</b>` });
+  wbLogActivity(workspace, { icon: app.icon, color: app.color, appId: app.id, itemId: item.id, text: `Set <b>${h(field.label)}</b> to ${!cur ? 'Yes' : 'No'} on <b>${h(wbItemTitle(app, item))}</b>` });
   wbNotifyItem(companyId, workspace, app, item, `${field.label} updated`, `${actorName()} set ${field.label} to ${!cur ? 'Yes' : 'No'} on ${wbItemTitle(app, item)}`);
   wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
   wbSave(companyId);
@@ -18498,7 +18521,7 @@ function wbSubmitModal() {
     if (m.editId) {
       const item = app.items.find((i) => i.id === m.editId); const prev = { ...item.values }; item.values = values;
       item.updatedAt = nowStamp; item.lastActivityAt = nowStamp;
-      wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Updated <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
+      wbLogActivity(workspace, { icon: app.icon, color: app.color, appId: app.id, itemId: item.id, text: `Updated <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
       wbNotifyItem(companyId, workspace, app, item, `Updated: ${wbItemTitle(app, item)}`, `${actorName()} updated ${wbItemTitle(app, item)} in ${app.name}`);
       wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
       // Return to the read-only view instead of closing, so the record stays open.
@@ -18506,7 +18529,7 @@ function wbSubmitModal() {
     } else {
       wbAssignAutoNumbers(app, values);
       const item = { id: wbUid(), values, createdAt: nowStamp, createdBy: activeSession().profile?.id || '', updatedAt: nowStamp, lastActivityAt: nowStamp }; app.items.unshift(item);
-      wbLogActivity(workspace, { icon: app.icon, color: app.color, text: `Added <b>${h(wbItemTitle(app, item))}</b> to ${h(app.name)}` });
+      wbLogActivity(workspace, { icon: app.icon, color: app.color, appId: app.id, itemId: item.id, text: `Added <b>${h(wbItemTitle(app, item))}</b> to ${h(app.name)}` });
       wbNotifyItem(companyId, workspace, app, item, `${newRecordLabel(app)}: ${wbItemTitle(app, item)}`, `${actorName()} added ${wbItemTitle(app, item)} to ${app.name}`);
       wbRunAutomations(companyId, workspace, app, item, 'created', null);
       state.builderModal = null;
@@ -18787,6 +18810,22 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-post-cmt-del]', (el) => { const [pid, cid] = el.dataset.wbPostCmtDel.split(':'); wbDeleteFeedComment(companyId, pid, cid); });
     bind('[data-wb-poll-vote]', (el) => { const [pid, oid] = el.dataset.wbPollVote.split(':'); wbVoteFeedPoll(companyId, pid, oid); });
     document.querySelectorAll('[data-wb-post-cmt-input]').forEach((el) => { el.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); wbAddFeedComment(companyId, el.dataset.wbPostCmtInput); } }; });
+    // The same three reactions on a system log line as on a member's post.
+    bind('[data-wb-act-like]', (el) => wbToggleActivityLike(companyId, el.dataset.wbActLike));
+    bind('[data-wb-act-comment-toggle]', (el) => wbToggleActivityComments(el.dataset.wbActCommentToggle));
+    bind('[data-wb-act-comment-send]', (el) => {
+      const id = el.dataset.wbActCommentSend;
+      const input = document.querySelector(`[data-wb-act-comment-input="${CSS.escape(id)}"]`);
+      wbAddActivityComment(companyId, id, input?.value);
+    });
+    bind('[data-wb-act-task]', (el) => { state.wbTaskFromActivityId = el.dataset.wbActTask; state.modal = 'wb-activity-task'; render(); });
+    document.querySelectorAll('[data-wb-act-comment-input]').forEach((el) => {
+      el.onkeydown = (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        wbAddActivityComment(companyId, el.dataset.wbActCommentInput, el.value);
+      };
+    });
     // Sidebar widget tiles: customize toggle, add/reorder/config/remove, and per-tile actions.
     bind('[data-wb-tile-manage]', () => { state.wbTileManage = !state.wbTileManage; render(); });
     wbMountTileDnD(companyId);
@@ -23897,6 +23936,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'message-details') return renderMessageDetailsModal(activeCompanyId(), state.selectedConversationId);
   if (state.modal === 'chat-leave-confirm') return renderLeaveConversationModal(activeCompanyId(), state.leavingConversationId);
   if (state.modal === 'remove-member-confirm') return renderRemoveMemberModal(state.removingMemberId);
+  if (state.modal === 'wb-activity-task') return renderActivityTaskModal(activeCompanyId(), state.wbTaskFromActivityId);
   if (state.modal === 'message-search') return renderMessageSearchModal(activeCompanyId());
   if (state.modal === 'calendar-event-detail') return renderCalendarEventDetailModal(activeCompanyId());
   if (state.modal === 'calendar-event-new') return renderCalendarEventFormModal(activeCompanyId(), null);
@@ -29128,6 +29168,20 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-wb-activity-task-form]')) {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.target).entries());
+    const done = beginSubmitting(event.target, 'Creating…');
+    if (!done) return;
+    wbCreateTaskFromActivity(activeCompanyId(), String(data.activity_id || ''), {
+      title: String(data.title || '').trim(),
+      assigneeId: String(data.assignee_id || ''),
+      due: String(data.due || ''),
+    }).catch((error) => showToast(error.message || 'Task could not be created.', 'local', 'Tasks'))
+      .finally(done);
+    return;
+  }
+
   if (event.target.matches('[data-profile-form]')) {
     event.preventDefault();
     saveProfile(event.target).catch((error) => {
@@ -31156,6 +31210,33 @@ function accessSaveFailed(message) {
  * that removing somebody deletes the jobs, tasks and messages they produced is exactly what
  * stops people using it. Say what survives before saying what goes.
  */
+/**
+ * Make a task out of something that happened in the workspace.
+ *
+ * Pre-filled from the log line, because the whole point is that you saw an event and want to
+ * act on it -- retyping what you just read is friction. It goes through the one task model,
+ * so it lands in My Tasks rather than becoming a workspace-only to-do.
+ */
+function renderActivityTaskModal(companyId, actId) {
+  const workspace = wbCompanyWorkspace(companyId);
+  const entry = workspace ? (workspace.activity || []).find((item) => item.id === actId) : null;
+  if (!entry) return renderModalShell('Workspaces', 'New task', emptyState('That activity is no longer available.'));
+  const members = wbMembers(companyId);
+  return renderModalShell('Workspaces', 'New task from activity', `
+    <form class="compact-tool-form" data-wb-activity-task-form>
+      <input type="hidden" name="activity_id" value="${h(entry.id)}" />
+      <p class="form-note">${h(wbActivityPlainText(entry))}</p>
+      ${field('Task title', 'title', wbActivityPlainText(entry).slice(0, 120), true)}
+      <label><span>Assign to</span><select name="assignee_id"><option value="">Me</option>${members.map((member) => `<option value="${h(member.id)}">${h(member.name)}</option>`).join('')}</select></label>
+      ${field('Due date', 'due', '', false, 'date')}
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><i class="ti ti-circle-check"></i>Create task</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+
 function renderRemoveMemberModal(key) {
   const [companyId, profileId] = String(key || '').split(':');
   const user = companyAccessUsers(companyId).find((item) => item.profile_id === profileId);

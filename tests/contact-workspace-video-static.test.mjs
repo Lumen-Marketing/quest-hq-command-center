@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
+const contactRecord = readFileSync(new URL('../src/crm/contact-record.js', import.meta.url), 'utf8');
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  // The contact record page is a fetched module now; same surface, read as one.
+  + readFileSync(new URL('../src/crm/contact-record.js', import.meta.url), 'utf8')
   // The contact form is fetched on demand now; same surface, two files.
   + readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8')
   // Quote detail is fetched on demand too; same surface, more files.
@@ -17,7 +20,7 @@ const allMigrations = readdirSync(migrationDir)
   .join('\n');
 
 test('contact workspace uses notes email messages and activity instead of old action clutter', () => {
-  const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const recordSource = contactRecord.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n  \}/)?.[0] || '';
   assert.match(recordSource, /const workspaceTabs = \[\['Notes', 'ti-note'\], \['Email', 'ti-mail'\], \['Messages', 'ti-message'\], \['Activity', 'ti-activity'\]\]/);
   assert.match(recordSource, /data-action="set-contact-workspace-tab"/);
   assert.match(recordSource, /renderContactWorkspacePanel\(contact, activeWorkspaceTab, totalFeed, feed, smsCapabilities\)/);
@@ -65,7 +68,7 @@ test('contact locations support google maps autocomplete and pin links', () => {
   const editorSource = readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8');
   const jobEditorSource = source.match(/function renderJobEditor\(companyId, job\) \{[\s\S]*?\n\}/)?.[0] || '';
   const accountEditorSource = source.match(/function renderAccountEditor\(companyId, account\) \{[\s\S]*?\n\}/)?.[0] || '';
-  const recordSource = source.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const recordSource = contactRecord.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n  \}/)?.[0] || '';
   assert.match(source, /function googleMapsPlaceSearchUrl\(address\)/);
   assert.match(source, /function renderAddressLookupField\(label, name, value = '', options = \[\]/);
   assert.match(source, /function beginAddressInlineEdit\(span, value, companyId, commitValue, picker = \{\}\)/);

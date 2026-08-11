@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  // The contact record page is a fetched module now; same surface, read as one.
+  + readFileSync(new URL('../src/crm/contact-record.js', import.meta.url), 'utf8')
   // The job record page is fetched on demand now; it is still part of the surface these
   // tests describe, so both files are read as one.
   + readFileSync(new URL('../src/crm/job-record.js', import.meta.url), 'utf8')
