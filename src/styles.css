@@ -25327,19 +25327,6 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   }
 }
 
-.help-center-load-error {
-  display: grid;
-  justify-items: center;
-  max-width: 620px;
-  margin: 56px auto;
-  padding: 42px;
-  text-align: center;
-}
-
-.help-center-load-error > i { color: var(--orange); font-size: 34px; }
-.help-center-load-error h1 { margin: 14px 0 8px; }
-.help-center-load-error p { color: var(--muted); }
-
 /* Mobile topbar, settled in one place.
    Five rule-sets (720/760/900/560/620px) overlap on .topbar-right and disagree:
    the 720px one places each child explicitly but is dead, because a later

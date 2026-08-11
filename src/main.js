@@ -1255,7 +1255,7 @@ const NAV_GROUPS = [
   { label: 'Build', ids: ['templates', 'automations'] },
   { label: 'Workspace', ids: ['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'] },
   { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload', 'eod', 'calls'] },
-  { label: 'Control', ids: ['settings', 'tickets'] },
+  { label: 'Control', ids: ['settings', 'help', 'tickets'] },
 ];
 
 const SIDEBAR_SCOPE_GROUPS = {
@@ -3919,9 +3919,6 @@ function render() {
   queueMicrotask(mountContactSmsReadiness);
   queueMicrotask(mountContactSmsThread);
   queueMicrotask(mountProtectedFormDrafts);
-  if (state.route.name === 'company' && state.route.section === 'help' && state.route.params.get('topic')) {
-    queueMicrotask(() => document.querySelector('[data-help-topic-heading]')?.focus({ preventScroll: true }));
-  }
   // innerHTML replaced every live-clock element, so the interval has nothing to write to
   // until it is re-armed against the new nodes.
   queueMicrotask(ensureLiveClocks);
@@ -5464,18 +5461,7 @@ function renderMobileMoreSheet(route, companyId) {
           <strong>Menu</strong>
           <button class="mobile-more-close" type="button" data-action="toggle-mobile-menu" aria-label="Close menu"><i class="ti ti-x"></i></button>
         </div>
-        <div class="mobile-more-scroll">
-          <div class="more-sheet-group">
-            <div class="more-sheet-label">Help</div>
-            <div class="more-sheet-items">
-              <a class="more-sheet-item mobile-help-center ${route.section === 'help' ? 'active' : ''}" href="${appHref(companyPath('help', {}, companyId))}" data-router>
-                ${svgIcon('q-symbol-knowledge')}
-                <span>Help Center</span>
-              </a>
-            </div>
-          </div>
-          ${groups}
-        </div>
+        <div class="mobile-more-scroll">${groups}</div>
       </div>
     </div>
   `;
@@ -5786,55 +5772,23 @@ function renderKnowledgePage(route, companyId) {
 // The customer-facing product guide is intentionally split from the primary bundle.
 // Knowledge Base remains the company's own SOP library; this page explains Questbase.
 let renderHelpCenterPageModule = null;
-let renderHelpCenterPagePending = null;
-let renderHelpCenterPageError = '';
-
-function loadRenderHelpCenterPage() {
-  if (renderHelpCenterPageModule) return Promise.resolve(renderHelpCenterPageModule);
-  if (!renderHelpCenterPagePending) {
-    renderHelpCenterPagePending = import('./help/help-center-page.js').then((mod) => {
-      renderHelpCenterPageModule = mod.createHelpCenterPage({
-        h,
-        appHref,
-        companyPath,
-        supportEmail: CONFIG.supportEmail,
-        canOpenModule: (moduleId, permission, companyId) => {
-          if (permission && !can(permission, companyId)) return false;
-          const module = MODULE_REGISTRY.find((item) => item.id === moduleId);
-          return Boolean(module) && canViewModule(module, companyId);
-        },
-      });
-      renderHelpCenterPageError = '';
-      return renderHelpCenterPageModule;
-    }).catch((error) => {
-      renderHelpCenterPagePending = null;
-      renderHelpCenterPageError = error?.message || 'Help Center could not be loaded.';
-      throw error;
-    });
-  }
-  return renderHelpCenterPagePending;
-}
+let renderHelpCenterPageLoad = null;
 
 function renderHelpCenterPage(route, companyId) {
   if (renderHelpCenterPageModule) return renderHelpCenterPageModule.renderHelpCenterPage(route, companyId);
-  if (renderHelpCenterPageError) {
-    return `
-      <section class="help-center-load-error panel">
-        <i class="ti ti-alert-circle" aria-hidden="true"></i>
-        <h1>Help Center could not load</h1>
-        <p>${h(renderHelpCenterPageError)}</p>
-        <div class="button-row">
-          <button class="btn primary" type="button" data-action="retry-help-center">Try again</button>
-          <button class="btn" type="button" data-action="open-support">Report a problem</button>
-        </div>
-      </section>`;
+  if (renderHelpCenterPageLoad === false) {
+    return workspaceHeader('Help Center could not load', 'Please try loading it again.',
+      '<button class="btn btn-primary" type="button" data-action="retry-help-center">Try again</button>');
   }
-  loadRenderHelpCenterPage()
-    .then(() => render())
-    .catch((error) => {
-      console.error('renderHelpCenterPage failed to load', error);
+  if (!renderHelpCenterPageLoad) {
+    renderHelpCenterPageLoad = import('./help/help-center-page.js').then((mod) => {
+      renderHelpCenterPageModule = mod.createQuestbaseHelpCenter(h, appHref, companyPath, CONFIG.supportEmail, MODULE_REGISTRY, can, canViewModule);
+      render();
+    }, () => {
+      renderHelpCenterPageLoad = false;
       render();
     });
+  }
   return questLoader('Loading Help Center');
 }
 
@@ -26485,8 +26439,7 @@ function handleAction(event, node) {
   }
   if (action === 'retry-help-center') {
     event.preventDefault();
-    renderHelpCenterPagePending = null;
-    renderHelpCenterPageError = '';
+    renderHelpCenterPageLoad = null;
     render();
     return;
   }
@@ -29037,13 +28990,7 @@ function closeActiveModal() {
 function onDocumentSubmit(event) {
   if (event.target.matches('[data-help-search-form]')) {
     event.preventDefault();
-    const form = new FormData(event.target);
-    const query = String(form.get('q') || '').trim();
-    const category = String(form.get('category') || '').trim();
-    const params = {};
-    if (query) params.q = query;
-    if (category) params.category = category;
-    navigate(companyPath('help', params, activeCompanyId()));
+    navigate(companyPath('help', Object.fromEntries(new FormData(event.target)), activeCompanyId()));
     return;
   }
 
@@ -38884,7 +38831,6 @@ function isMutableAction(action = '') {
     'sign-out',
     'toggle-account-menu',
     'open-support',
-    'retry-help-center',
     'toggle-notifications',
     'toggle-workspace-menu',
     'select-workspace',

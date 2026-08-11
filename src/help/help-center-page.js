@@ -230,8 +230,25 @@ export function createHelpCenterPage({
 
     const topic = helpTopicById(requestedTopicId);
     if (!topicIsAvailable(topic, companyId)) return renderUnavailable(companyId);
+    if (typeof document !== 'undefined') {
+      queueMicrotask(() => document.querySelector('[data-help-topic-heading]')?.focus({ preventScroll: true }));
+    }
     return renderTopic(topic, companyId);
   }
 
   return { renderHelpCenterPage };
+}
+
+export function createQuestbaseHelpCenter(h, appHref, companyPath, supportEmail, modules, can, canViewModule) {
+  return createHelpCenterPage({
+    h,
+    appHref,
+    companyPath,
+    supportEmail,
+    canOpenModule: (moduleId, permission, companyId) => {
+      if (permission && !can(permission, companyId)) return false;
+      const module = modules.find((item) => item.id === moduleId);
+      return Boolean(module) && canViewModule(module, companyId);
+    },
+  });
 }

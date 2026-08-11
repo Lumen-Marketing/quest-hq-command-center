@@ -18,19 +18,19 @@ test('Help Center is a real company route loaded outside subscription and plugin
 test('desktop, account, and mobile navigation all expose Help Center links', () => {
   assert.match(main, /class="btn help-center-trigger"[^>]*href="\$\{appHref\(companyPath\('help'/);
   assert.match(main, /class="account-help-link"[^>]*href="\$\{appHref\(companyPath\('help'/);
-  assert.match(main, /class="more-sheet-item mobile-help-center/);
-  assert.match(main, /<span>Help Center<\/span>/);
+  assert.match(main, /\{ label: 'Control', ids: \['settings', 'help', 'tickets'\] \}/);
+  assert.match(main, /navigationLabel\(module\.id, module\.label\)/);
 });
 
 test('help search navigates through the SPA and preserves the active workspace', () => {
   assert.match(main, /event\.target\.matches\('\[data-help-search-form\]'\)/);
-  assert.match(main, /navigate\(companyPath\('help', params, activeCompanyId\(\)\)\)/);
+  assert.match(main, /navigate\(companyPath\('help', Object\.fromEntries\(new FormData\(event\.target\)\), activeCompanyId\(\)\)\)/);
   assert.match(page, /companyPath\('help', params, companyId\)/);
 });
 
 test('help content is permission-aware and the stylesheet is lazy and responsive', () => {
-  assert.match(main, /if \(permission && !can\(permission, companyId\)\) return false/);
-  assert.match(main, /return Boolean\(module\) && canViewModule\(module, companyId\)/);
+  assert.match(page, /if \(permission && !can\(permission, companyId\)\) return false/);
+  assert.match(page, /return Boolean\(module\) && canViewModule\(module, companyId\)/);
   assert.match(page, /typeof document !== 'undefined'[^\n]*import\('\.\/help-center\.css'\)/);
   assert.match(styles, /@media \(max-width: 760px\)/);
   assert.match(styles, /\.help-search \.btn[^}]*min-height: 44px/s);
