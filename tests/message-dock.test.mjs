@@ -204,6 +204,11 @@ test('the dock is pinned to the corner without blocking the page behind it', () 
   assert.match(block, /env\(safe-area-inset-bottom\)/);
 });
 
+test('the message launcher clears the mobile bottom navigation', () => {
+  const block = css.slice(css.indexOf('/* ---- Floating message dock'));
+  assert.match(block, /@media \(max-width: 980px\) \{[\s\S]*?\.msgdock \{[^}]*bottom: calc\(72px \+ env\(safe-area-inset-bottom\)\);/);
+});
+
 // --- staying put -------------------------------------------------------------------
 
 const slice = (start, end) => {

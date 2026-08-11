@@ -29927,6 +29927,14 @@ html[data-card-style="glass"] .message-context-rail {
   text-align: center;
 }
 
+/* The bottom tab bar owns the lower edge on phones and small tablets. Keep the
+   launcher above it so the Messages shortcut cannot intercept the More button. */
+@media (max-width: 980px) {
+  .msgdock {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+
 /* On a phone the panel takes the width it needs and the button tucks under it. */
 @media (max-width: 520px) {
   .msgdock-panel,
