@@ -9,6 +9,7 @@ import {
 
 const source = [
   readFileSync(new URL('../src/main.js', import.meta.url), 'utf8'),
+  readFileSync(new URL('../src/help/help-center-page.js', import.meta.url), 'utf8'),
   readFileSync(new URL('../src/support/reporting.js', import.meta.url), 'utf8'),
 ].join('\n');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -35,7 +36,7 @@ test('report-problem CORS accepts configured pilot origins and rejects unrelated
   assert.equal(corsHeadersForOrigin('https://evil.example')['Access-Control-Allow-Origin'], undefined);
 });
 
-test('the main account menu exposes a bounded support report with an email fallback', () => {
+test('the Help Center exposes a bounded support report with an email fallback', () => {
   assert.match(source, /supportEmail:\s*import\.meta\.env\.VITE_SUPPORT_EMAIL \|\| 'info@lumenmarketingusa\.com'/);
   assert.match(source, /data-action="open-support"/);
   assert.match(source, /import\('\.\/support\/reporting\.js'\)/);
