@@ -2036,7 +2036,8 @@ button { cursor: pointer; }
   text-decoration: underline;
 }
 
-.account-popover button {
+.account-popover button,
+.account-popover > a {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2048,11 +2049,14 @@ button { cursor: pointer; }
   padding: 0 9px;
   text-align: left;
   font-weight: 800;
+  text-decoration: none;
 }
 
-.account-popover button:hover { background: #f3e6c9; }
+.account-popover button:hover,
+.account-popover > a:hover { background: #f3e6c9; }
 
-[data-theme="dark"] .account-popover button:hover { background: var(--surface-3); }
+[data-theme="dark"] .account-popover button:hover,
+[data-theme="dark"] .account-popover > a:hover { background: var(--surface-3); }
 
 .account-popover .account-status button {
   min-height: 26px;
@@ -25323,6 +25327,19 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   }
 }
 
+.help-center-load-error {
+  display: grid;
+  justify-items: center;
+  max-width: 620px;
+  margin: 56px auto;
+  padding: 42px;
+  text-align: center;
+}
+
+.help-center-load-error > i { color: var(--orange); font-size: 34px; }
+.help-center-load-error h1 { margin: 14px 0 8px; }
+.help-center-load-error p { color: var(--muted); }
+
 /* Mobile topbar, settled in one place.
    Five rule-sets (720/760/900/560/620px) overlap on .topbar-right and disagree:
    the 720px one places each child explicitly but is dead, because a later
@@ -25344,6 +25361,10 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
   /* The brand is hidden at this width, so the command button takes the left. */
   .topbar-right > .command-trigger {
     margin-right: auto;
+  }
+
+  .topbar-right > .help-center-trigger {
+    display: none;
   }
 
   /* Were 38x36; 44px is the Apple HIG minimum for a touch target. */
