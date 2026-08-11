@@ -5,7 +5,9 @@ import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
 // The Workday page is fetched on demand now; same surface, two files.
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/ops/workday-page.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/ops/workday-page.js', import.meta.url), 'utf8')
+  // The panel is a fetched module too; same surface, read as one.
+  + readFileSync(new URL('../src/ops/workday-panel.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const smoke = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import.meta.url), 'utf8');
 
