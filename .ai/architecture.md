@@ -13,7 +13,7 @@ The app uses:
 - Vercel Functions under [api](../api) for privileged or public-token flows.
 - Stripe checkout and webhook APIs through server-side functions.
 - Lazy-loaded Leaflet and PDF.js; JSZip is used for archive/export behavior.
-- Lazy-loaded pilot-readiness, support-reporting, and help-index modules keep first-run and support behavior outside the primary browser bundle until needed.
+- Lazy-loaded pilot-readiness, support-reporting, Help Center page/styles, and help-index modules keep first-run and support behavior outside the primary browser bundle until needed.
 - A lazy-loaded company-search index maps only permission-allowed Contacts, Quotes, Jobs, Tasks, Files, and Proposals into workspace-aware command-palette routes.
 - A lazy-loaded local form-draft engine protects unsaved Contact, Job, Quote, and Underwriter input without adding those recovery copies to the primary browser bundle.
 - A lazy-loaded record-history presenter reads the workspace-scoped `record_history` ledger only when a Contact, Quote, or Job history dialog is opened.
@@ -22,7 +22,7 @@ The app uses:
 
 ## Request and data flow
 
-Browser route -> company/session reconciliation -> operational-workspace reconciliation -> permission, subscription, and plugin checks -> module renderer -> Supabase query/RPC or a narrowly scoped Vercel Function.
+Browser route -> company/session reconciliation -> operational-workspace reconciliation -> Help Center or permission/subscription/plugin checks -> module renderer -> Supabase query/RPC or a narrowly scoped Vercel Function.
 
 The route reconciliation step canonicalizes stale or inaccessible company/workspace identifiers against the signed-in member's allowed tenant set before any company module renders.
 
@@ -40,6 +40,7 @@ The SPA supports:
 
 - Public home and login.
 - Company routes scoped by company id and module section, with the selected operational workspace carried as `?workspace=<uuid>`.
+- The signed-in `/company/:companyId/help` route remains available after tenant reconciliation even when subscription or workspace-plugin gates block business modules. Its articles are filtered against the real module, plugin, subscription, and permission checks before they are shown.
 - Public client portal, proposal, and form routes.
 - Legacy route rewrites retained for compatibility.
 - The Tasks module defaults to a same-origin iframe of the vendored Task app inside the command-center shell. The host passes a required `workspace_id`, optional `project_id`, and same-origin `return_url`; business context remains linked through `project_id`, `contact_id`, and `deal_id`. The feature-flagged native Tasks surface uses the same workspace boundary and per-person visibility model.
@@ -61,6 +62,8 @@ The SPA supports:
 | Workspace setup planner and blueprints | [src/onboarding/company-setup-model.js](../src/onboarding/company-setup-model.js) |
 | Workspace setup Settings UI/controller | [src/onboarding/company-setup-panel.js](../src/onboarding/company-setup-panel.js) |
 | In-product support reporting | [src/support/reporting.js](../src/support/reporting.js) |
+| Grounded Help Center catalog and filtering | [src/assistant/help-index.js](../src/assistant/help-index.js) |
+| Lazy Help Center page and responsive styles | [src/help](../src/help) |
 | Same-browser operational form recovery | [src/drafts/form-drafts.js](../src/drafts/form-drafts.js) |
 | Shared business-record history presentation | [src/history/record-history.js](../src/history/record-history.js) |
 | Permission-scoped company search mapping | [src/company-search.js](../src/company-search.js) |
@@ -102,6 +105,7 @@ The SPA supports:
 - Job photos remain private `job_files`/`quest-job-files` records scoped by company and job; there is no parallel photo datastore.
 - Underwriting inputs are durable per-workspace, per-contact records protected by Underwriter permissions and workspace RLS.
 - Company search indexes only records already loaded for operational workspaces the signed-in user may enter, applies each target workspace's plugin and permission checks, and carries that workspace into navigation.
+- Help Center content is curated and grounded in shipped Questbase behavior rather than generated at request time. A topic tied to a module is visible only when the current role can open that module in the selected operational workspace; manage-only tutorials also require their named permission. The separate Knowledge Base remains customer-authored company SOP content.
 - Local form drafts are recovery copies, not business records. Their storage keys include profile, company, operational workspace, form type, and record id; they expire after seven days, exclude sensitive/file fields, clear after a successful real save or explicit discard, and purge for the signing-out profile.
 - Shared record history is append-only and workspace-scoped. Database triggers capture only whitelisted business fields for Contacts, Quotes, Jobs, and Tasks; readers still require current workspace membership plus the module's view permission. Immediate Undo is same-actor, time-limited, source-allowlisted, and server-authorized, while the 30-day Recycle Bin remains the durable recovery path.
 - RingCentral data is company-scoped and carries no `workspace_id`: a phone account belongs to the whole company and its calls do not belong to any single operational workspace. All `ringcentral_*` tables are service-role write only; every browser-facing policy is select. Non-admin members are matched to their own calls by `auth.jwt() ->> 'email'`, so no extension-to-member mapping table exists.

@@ -1361,3 +1361,30 @@ stay in the document: they are small, change rarely, and one owner edits them at
 Full plan and phases: [app-builder-records-as-rows](plans/app-builder-records-as-rows.md). The
 proposed phase-1 migration is parked beside it as `.proposed.sql`, deliberately outside
 `supabase/migrations/`, because it must land in the same change as the dual-write code.
+
+## Product help is a route, not another floating answer box
+
+Decided 2026-08-12.
+
+Questbase now has a company-scoped Help Center at `/company/:companyId/help`, reached from
+the top-bar `?`, the account menu, mobile More, or command search. It stays inside the
+selected operational workspace so an article can link back to the correct Tasks, People,
+Settings, Contacts, or other module without silently changing the user's context.
+
+The Help Center and the company Knowledge Base solve different problems. Knowledge Base is
+customer-authored SOP content. Help Center is Questbase-owned product documentation backed
+by the curated `HELP_TOPICS` catalog already used by the in-product guide. Reusing that one
+catalog prevents a tutorial page, command result, and floating guide from giving different
+answers about the same feature.
+
+Help itself renders after tenant access is reconciled but before billing, plugin, and module
+permission blockers. A user who is blocked from a paid module still needs to understand the
+account and contact support. Individual module articles do not bypass those checks: the
+browser filters them through the real installed-plugin, subscription, module permission,
+and optional manage-permission rules. A direct URL for a hidden article returns a neutral
+unavailable notice rather than leaking its contents.
+
+The page and its CSS are fetched only on first use. Search and category filters are URL
+parameters, so Back/Forward and copied links work while `companyPath` preserves the active
+workspace. Unresolved questions reuse the existing authenticated problem-report controller
+and support email; there is no second report pipeline to secure or maintain.

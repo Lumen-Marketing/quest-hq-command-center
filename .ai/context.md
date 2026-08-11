@@ -22,7 +22,7 @@ Saved Contacts, Quotes, Jobs, and Tasks have a separate shared record-history le
 | Review and build | Reports/Analytics, People/Users, Meetings/Calendar, Templates, Automations |
 | Company workspace | Workspace App Builder, Workday, Quotes/Deals, Files, Forms, Client Portals, Knowledge |
 | Company operations | Price Book, Finance, Team Chart, Team Workload, Time, Approvals, Clock |
-| Control | Guided setup, company, roles, access, billing, plugins, and workspace settings |
+| Control and help | Guided setup, company, roles, access, billing, plugins, workspace settings, and the Questbase Help Center |
 
 Tickets and Templates appear as future/planned areas. Confirm current implementation status in [current-state.md](current-state.md) before building against them.
 
