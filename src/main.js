@@ -2673,6 +2673,7 @@ const state = {
   leavingConversationId: '',
   chatExitMode: 'leave',
   removingMemberId: '',
+  workspaceNameDraft: '',
   deletingWorkspaceId: '',
   deleteWorkspaceError: '',
   deleteWorkspaceBlocking: null,
@@ -23748,7 +23749,7 @@ function renderOperationalWorkspaceCreateModal(companyId) {
     <form class="ows-modal-form" data-operational-workspace-create-form>
       <input type="hidden" name="company_id" value="${h(companyId)}" />
       <p class="ows-modal-sub">Add a configurable operational area inside ${h(companyName(companyId))}.</p>
-      <label>Workspace name<input name="workspace_name" placeholder="Sales, Underwriting, Production..." required autofocus ${canManage ? '' : 'disabled'} /></label>
+      <label>Workspace name<input name="workspace_name" value="${h(state.workspaceNameDraft || '')}" placeholder="Sales, Underwriting, Production..." required autofocus ${canManage ? '' : 'disabled'} /></label>
       ${operationalWorkspaceModalIconControl()}
       <div class="modal-actions">
         <button class="btn" type="button" data-action="close-modal">Cancel</button>
@@ -27273,6 +27274,7 @@ function handleAction(event, node) {
   }
   if (action === 'select-workspace-icon') {
     event.preventDefault();
+    keepWorkspaceFormText(node);
     setWorkspaceIconDraft(activeCompanyId(), {
       icon_key: workspaceIconOption(node.dataset.iconKey).key,
       icon_image: '',
@@ -27282,12 +27284,14 @@ function handleAction(event, node) {
   }
   if (action === 'set-workspace-icon-color') {
     event.preventDefault();
+    keepWorkspaceFormText(node);
     setWorkspaceIconDraft(activeCompanyId(), { icon_color: node.dataset.iconColor });
     render();
     return;
   }
   if (action === 'set-workspace-icon-pack') {
     event.preventDefault();
+    keepWorkspaceFormText(node);
     setWorkspaceIconDraft(activeCompanyId(), { icon_pack: node.dataset.iconPack });
     render();
     return;
@@ -27300,6 +27304,8 @@ function handleAction(event, node) {
     }
     state.selectedOperationalWorkspaceId = '';
     state.operationalWorkspaceModalIcon = { icon_key: 'home', icon_image: '' };
+    // A fresh dialog, not the last one's leftovers.
+    state.workspaceNameDraft = '';
     state.modal = 'operational-workspace-create';
     render();
     return;
@@ -30308,6 +30314,7 @@ async function createOperationalWorkspace(formNode) {
   localStorage.setItem(COMPANY_KEY, companyId);
   localStorage.setItem(ACTIVE_WORKSPACE_KEY, saved.id);
   state.operationalWorkspaceModalIcon = null;
+  state.workspaceNameDraft = '';
   showToast(`${saved.name} workspace created.`, live ? 'live' : 'local', 'Workspaces');
   openWorkspaceSetupModal(saved.id, { required: true });
   navigate(companyPath('settings', { tab: 'setup', workspace: saved.id }, companyId));
@@ -39047,6 +39054,22 @@ function workspaceIconDraft(companyId) {
     icon_color: normalizeIconColor(draft.icon_color ?? company.icon_color),
     icon_pack: workspaceIconPack(draft.icon_pack ?? company.icon_pack),
   };
+}
+
+/**
+ * Hold on to what the person has typed before the icon picker re-renders the dialog.
+ *
+ * Picking an icon, a colour or a pack all call render(), which rebuilds the form -- and the
+ * name field is uncontrolled, so anything typed into it was thrown away. You would name the
+ * workspace, choose an icon, and find the name gone.
+ *
+ * Read straight off the DOM at the moment of the click, because that is the only place the
+ * value exists: nothing else was ever told about it.
+ */
+function keepWorkspaceFormText(node) {
+  const form = node?.closest?.('form');
+  const input = form?.querySelector('input[name="workspace_name"]');
+  if (input) state.workspaceNameDraft = input.value;
 }
 
 function setWorkspaceIconDraft(companyId, patch = {}) {
