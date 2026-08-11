@@ -14899,10 +14899,12 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
         <div class="wb-sub">${h(app.description || '')}</div>
       </div>
       <div class="wb-spacer"></div>
-      ${headBtn}
     </div>
-    <div class="wb-tabs">
-      ${tabs.map((item) => `<a class="wb-tab ${tab === item ? 'active' : ''}" href="${tabPath(item)}" data-router>${tabLabel[item]}</a>`).join('')}
+    <div class="wb-tabs-row">
+      <div class="wb-tabs">
+        ${tabs.map((item) => `<a class="wb-tab ${tab === item ? 'active' : ''}" href="${tabPath(item)}" data-router>${tabLabel[item]}</a>`).join('')}
+      </div>
+      ${headBtn ? `<div class="wb-tab-actions">${headBtn}</div>` : ''}
     </div>
     ${body}`;
 }
@@ -15353,7 +15355,7 @@ function openWbTileAdd(companyId) { openWbModal({ kind: 'tile-add', companyId })
 function openWbTileConfig(companyId, tileId) {
   const workspace = wbEnsureTiles(companyId);
   const tile = workspace ? workspace.tiles.find((t) => t.id === tileId) : null;
-  if (!tile) return;
+  if (!tile) { showToast('That tile is no longer on this dashboard. Reload and try again.', 'local', 'Workspaces'); return; }
   openWbModal({
     kind: 'tile-config', companyId, tileId,
     draft: JSON.parse(JSON.stringify(tile.config || {})),
@@ -15964,10 +15966,10 @@ async function openWbRecordAdd(companyId, workspaceId, appId) {
 
 async function openWbRecordConfig(companyId, workspaceId, appId, blockId) {
   const { app } = wbFind(companyId, workspaceId, appId);
-  if (!app) return;
+  if (!app) { showToast('That app is no longer available.', 'local', 'Workspaces'); return; }
   const mod = await loadRecordLayout();
   const block = mod.layoutFor(app).find((b) => b.id === blockId);
-  if (!block) return;
+  if (!block) { showToast('That card is no longer on this layout. Reload and try again.', 'local', 'Workspaces'); return; }
   openWbModal({
     kind: 'record-config', companyId, workspaceId, appId, blockId,
     block,
@@ -18769,10 +18771,13 @@ async function openWbDashAdd(companyId, workspaceId, appId) {
 
 async function openWbDashConfig(companyId, workspaceId, appId, widgetId) {
   const { app } = wbFind(companyId, workspaceId, appId);
-  if (!app) return;
+  // These guards used to `return` in silence, so a Settings button that did nothing looked
+  // identical whether the app was missing, the card was missing, or the module failed to
+  // load. Saying which is the difference between a bug report and a diagnosis.
+  if (!app) { showToast('That app is no longer available.', 'local', 'Workspaces'); return; }
   const mod = await import('./workspace/dashboard-widgets.js');
   const widget = mod.dashboardFor(app).find((w) => w.id === widgetId);
-  if (!widget) return;
+  if (!widget) { showToast('That card is no longer on this dashboard. Reload and try again.', 'local', 'Workspaces'); return; }
   openWbModal({
     kind: 'dash-config', companyId, workspaceId, appId, widgetId,
     widget,
@@ -18987,7 +18992,8 @@ function mountWorkspaceBuilder() {
     // a different page: one arrangement, owned by the app, shown on every record.
     bind('[data-wb-rec-manage]', () => { state.wbRecordManage = !state.wbRecordManage; render(); });
     bind('[data-wb-rec-add]', () => openWbRecordAdd(companyId, workspaceId, appId));
-    bind('[data-wb-rec-config]', (el) => openWbRecordConfig(companyId, workspaceId, appId, el.dataset.wbRecConfig));
+    bind('[data-wb-rec-config]', (el) => openWbRecordConfig(companyId, workspaceId, appId, el.dataset.wbRecConfig)
+      .catch((error) => showToast(error.message || 'Card settings could not be opened.', 'local', 'Workspaces')));
     bind('[data-wb-rec-move]', (el) => {
       const [id, dir] = String(el.dataset.wbRecMove).split(':');
       wbRecordEdit(companyId, workspaceId, appId, (b, mod) => mod.moveBlock(b, id, dir));
@@ -19107,7 +19113,8 @@ function mountWorkspaceBuilder() {
     // feature: a Customize toggle, then per-card controls on the card itself.
     bind('[data-wb-dash-manage]', () => { state.wbDashManage = !state.wbDashManage; render(); });
     bind('[data-wb-dash-add]', () => openWbDashAdd(companyId, workspaceId, appId));
-    bind('[data-wb-dash-config]', (el) => openWbDashConfig(companyId, workspaceId, appId, el.dataset.wbDashConfig));
+    bind('[data-wb-dash-config]', (el) => openWbDashConfig(companyId, workspaceId, appId, el.dataset.wbDashConfig)
+      .catch((error) => showToast(error.message || 'Card settings could not be opened.', 'local', 'Workspaces')));
     bind('[data-wb-dash-move]', (el) => {
       const [id, dir] = String(el.dataset.wbDashMove).split(':');
       wbDashEdit(companyId, workspaceId, appId, (w, mod) => mod.moveWidget(w, id, dir));

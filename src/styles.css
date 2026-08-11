@@ -31527,3 +31527,28 @@ a.wb-cal-more:hover { color: var(--orange); }
   align-items: center;
   gap: 6px;
 }
+
+/* The app's actions sit WITH the tabs, not floating above them.
+   Every one of Export / Import / Print / Add is specific to the tab you are on -- Add field
+   only exists on Fields, Print only on Items and Reports -- so they belonged beside the tab
+   that governs them rather than in the page header above, where they read as page-level. */
+.wb-tabs-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.wb-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+@media (max-width: 900px) {
+  /* Stacked, with the actions first: on a narrow screen the tab strip scrolls sideways and
+     would otherwise push the buttons off the edge. */
+  .wb-tabs-row { grid-template-columns: minmax(0, 1fr); }
+  .wb-tab-actions { order: -1; flex-wrap: wrap; padding-bottom: 0; }
+}
