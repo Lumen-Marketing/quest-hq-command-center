@@ -4,10 +4,15 @@ import test from 'node:test';
 
 // Workspace settings is fetched on demand now; same surface, two files.
 const main = (readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+  + readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8')
+  // The workspace icon dialog is a fetched module too; same surface, three files.
+  + readFileSync(new URL('../src/workspace/icon-modal.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// LAST occurrence, not the first. The fetched modules are appended after main.js, and main.js
+// keeps a loader shim under the same name for anything it hands off -- so the first match is
+// the shim and slicing it returns three lines of loader instead of the function under test.
 const fn = (name) => {
-  const at = main.indexOf(`function ${name}(`);
+  const at = main.lastIndexOf(`function ${name}(`);
   assert.notEqual(at, -1, `${name} should exist`);
   return main.slice(at, main.indexOf('\n}\n', at));
 };

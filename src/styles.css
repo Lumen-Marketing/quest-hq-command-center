@@ -31441,3 +31441,62 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 /* Elapsed reads as a clock, not as prose. */
 .clock-elapsed { font-variant-numeric: tabular-nums; }
+
+/* ---- permission coverage and the empty-workspace prompt ---------------------------------- */
+
+/* A permission that rests on one you have not granted does nothing. Said where the boxes are
+   ticked, not after Save. */
+.permission-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #f2c9a8;
+  border-left: 3px solid var(--orange, #d86213);
+  border-radius: 8px;
+  background: #fdf3ec;
+  color: #7a3a08;
+  font-size: 12.5px;
+}
+
+.permission-warning i { color: var(--orange, #d86213); font-size: 15px; }
+.permission-warning strong { display: block; margin-bottom: 3px; }
+.permission-warning ul { margin: 0 0 6px; padding-left: 16px; }
+.permission-warning li { margin: 1px 0; }
+.permission-warning b { font-weight: 700; }
+
+/* How much of a workspace this person can actually open. Quiet when it is all of it. */
+.workspace-access-coverage {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.workspace-access-coverage.is-partial {
+  color: #a8560d;
+  font-weight: 600;
+}
+
+.empty-workspace-prompt {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber, #f3a71c);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.empty-workspace-prompt > i { font-size: 20px; color: var(--amber, #f3a71c); }
+.empty-workspace-prompt strong { display: block; color: var(--ink); }
+.empty-workspace-prompt span { color: var(--muted); font-size: 13px; }
+
+@media (max-width: 720px) {
+  .empty-workspace-prompt { grid-template-columns: auto minmax(0, 1fr); }
+  .empty-workspace-prompt .btn { grid-column: 1 / -1; }
+}

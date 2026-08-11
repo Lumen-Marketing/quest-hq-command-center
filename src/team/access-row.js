@@ -9,6 +9,7 @@ export function createAccessRow(ctx) {
     workspaceMembershipForProfile,
     userDisplayMeta, userDisplayName,
     MEMBERSHIP_STATUS_OPTIONS, membershipStatusLabel,
+    workspaceAppCoverage,
   } = ctx;
 
   function renderUserAccessRow(companyId, user, canManageUsers) {
@@ -60,7 +61,17 @@ export function createAccessRow(ctx) {
                 <label class="workspace-access-assignment" data-workspace-assignment>
                   <input type="checkbox" name="workspace_ids" value="${h(workspace.id)}" ${enabled ? 'checked' : ''} ${membershipEditable ? '' : 'disabled'} />
                   ${implicitWorkspaceAccess && enabled ? `<input type="hidden" name="workspace_ids" value="${h(workspace.id)}" />` : ''}
-                  <span><b>${h(workspace.name)}</b><small>${h(implicitWorkspaceAccess ? 'Inherited from company role' : workspace.is_default ? 'Default workspace' : 'Explicit assignment')}</small></span>
+                  ${(() => {
+    // What this person can actually OPEN in this workspace. A seat that reaches half the
+    // apps installed there looks identical to a working one until somebody signs in: a live
+    // worker could open 7 of 14, and nothing anywhere said so.
+    const coverage = enabled ? workspaceAppCoverage(companyId, workspace.id, user.profile_id) : null;
+    const note = implicitWorkspaceAccess ? 'Inherited from company role'
+      : workspace.is_default ? 'Default workspace' : 'Explicit assignment';
+    return `<span><b>${h(workspace.name)}</b><small>${h(note)}</small>${coverage?.summary
+      ? `<small class="workspace-access-coverage ${coverage.closed.length ? 'is-partial' : ''}" title="${h(coverage.closed.length ? `Cannot open: ${coverage.closed.join(', ')}` : '')}">${h(coverage.summary)}</small>`
+      : ''}</span>`;
+  })()}
                   <select name="workspace_role:${h(workspace.id)}" aria-label="${h(workspace.name)} role" ${workspaceRoleEditable ? '' : 'disabled'}>
                     ${roles.map((role) => `<option value="${h(role.id)}" ${role.id === workspaceRoleId ? 'selected' : ''}>${h(role.name)}</option>`).join('')}
                   </select>

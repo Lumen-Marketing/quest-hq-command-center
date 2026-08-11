@@ -203,6 +203,7 @@ const FACTORY_MODULES = [
   ['src/ops/calendar-page.js', 'createCalendarPage'],
   ['src/forms/new-form-modal.js', 'createNewFormModal'],
   ['src/portals/placement-modal.js', 'createPlacementModal'],
+  ['src/workspace/icon-modal.js', 'createWorkspaceIconModal'],
 ];
 
 test('the list above covers every factory module there is', () => {

@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The workspace icon dialog is a fetched module now. `main` concatenates both because most
+// assertions here only ask "does this string exist in the surface" -- but a slice of
+// renderWorkspaceIconModal must come from `iconModal`, since main.js still holds a loader
+// shim of the same name and indexOf finds that one first.
+const iconModal = readFileSync(new URL('../src/workspace/icon-modal.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n') + iconModal;
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 // The rules added for this, bounded by the next top-level section comment. Slicing to the
@@ -81,7 +86,7 @@ test('every context that resizes the box also declares its glyph size', () => {
 test('Done sits in the header beside Close, not at the foot of a scrolling grid', () => {
   // The icon grid is long enough to scroll, so a footer button was frequently off-screen.
   // Every choice in this dialog applies live, so Done is a way out, not a submit.
-  const fn = main.slice(main.indexOf('function renderWorkspaceIconModal('));
+  const fn = iconModal.slice(iconModal.indexOf('function renderWorkspaceIconModal('));
   const body = fn.slice(0, fn.indexOf("'wide-modal workspace-icon-modal-panel'") + 700);
   assert.ok(!/<div class="form-actions">/.test(body), 'the footer action row should be gone');
   assert.match(body, /'wide-modal workspace-icon-modal-panel',[\s\S]*data-action="close-modal"><i class="ti ti-check"><\/i>Done/);

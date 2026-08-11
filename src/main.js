@@ -62,6 +62,9 @@ import { resolveTenantRoute } from './workspaces/tenant-route.js';
 import { smsUiCapabilities } from './communications/sms-readiness.js';
 import { analyticsJobChoiceLabel, compactContactFilterValues } from './ui/audit-hardening.js';
 import { remapApp, remapChildren } from './workspace/app-portability.js';
+import {
+  appCoverage, buildPermissionDependencies, coverageSummary, unreachablePermissions,
+} from './team/permission-coverage.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -6549,6 +6552,62 @@ function demoCompanyPluginRows() {
   })));
 }
 
+// The permissions each installed app gates on, so "can this role open it" is answerable.
+// An app is openable when ANY of its modules is: Reporting opens through Analytics alone.
+let pluginGateCache = null;
+
+function pluginPermissionGates() {
+  if (pluginGateCache) return pluginGateCache;
+  pluginGateCache = new Map(WORKSPACE_PLUGIN_REGISTRY.map((plugin) => [
+    plugin.id,
+    compactUnique((plugin.module_ids || [])
+      .map((moduleId) => MODULE_REGISTRY.find((module) => module.id === moduleId)?.permission)
+      .filter(Boolean)),
+  ]));
+  return pluginGateCache;
+}
+
+// Derived once from the catalogue rather than hand-listed, so adding a permission cannot
+// leave the dependency table behind.
+let permissionDependencyCache = null;
+
+function permissionDependencies() {
+  if (!permissionDependencyCache) {
+    permissionDependencyCache = buildPermissionDependencies(PERMISSION_KEYS.map(([key]) => key));
+  }
+  return permissionDependencyCache;
+}
+
+/**
+ * How much of a workspace one person can actually open.
+ *
+ * Owners, admins and developers pass every check by rank, so there is nothing to report for
+ * them -- and reporting "opens all" would imply the check had been done against a role.
+ */
+function workspaceAppCoverage(companyId, workspaceId, profileId) {
+  const membership = membershipForProfile(companyId, profileId);
+  const rank = String(membership?.role || '').toLowerCase();
+  if (!membership || ELEVATED_COMPANY_ROLES.includes(rank)) return null;
+  const installed = workspaceInstalledPluginIds(workspaceId);
+  if (!installed.length) return null;
+  const roleIds = state.roleAssignments
+    .filter((item) => item.company_id === companyId && item.profile_id === profileId)
+    .map((item) => item.role_id);
+  const held = state.rolePermissions
+    .filter((item) => roleIds.includes(item.role_id) && item.effect === 'allow')
+    .map((item) => item.permission_key);
+  // A wildcard role opens everything, the same as a rank does.
+  if (held.includes('*')) return null;
+  const coverage = appCoverage(installed, pluginPermissionGates(), held);
+  return { ...coverage, summary: coverageSummary(coverage) };
+}
+
+function workspaceInstalledPluginIds(workspaceId) {
+  return state.workspacePlugins
+    .filter((row) => row.workspace_id === String(workspaceId || '') && row.status === 'installed')
+    .map((row) => row.plugin_id);
+}
+
 function pluginsForModule(moduleId) {
   return WORKSPACE_PLUGIN_REGISTRY.filter((plugin) => plugin.module_ids.includes(moduleId));
 }
@@ -7959,6 +8018,35 @@ function renderPilotLaunchChecklist(companyId) {
   });
 }
 
+/**
+ * A workspace with no apps in it, and nothing pointing at how to fix that.
+ *
+ * Three live companies have a default workspace carrying zero apps and no setup answers:
+ * their owner signs in to an empty product. Setup has always been reachable from Settings,
+ * but nothing said so, and an empty screen does not suggest a settings tab.
+ *
+ * Only for somebody who can actually run setup -- telling a worker their workspace is empty
+ * would name a problem they cannot solve.
+ */
+function renderEmptyWorkspacePrompt(companyId) {
+  const workspace = activeWorkspace();
+  if (!workspace || workspace.company_id !== companyId) return '';
+  if (workspaceInstalledPluginIds(workspace.id).length) return '';
+  if (!canManageCompanyAppearance(companyId)) return '';
+  return `
+    <div class="empty-workspace-prompt">
+      <i class="ti ti-wand" aria-hidden="true"></i>
+      <div>
+        <strong>${h(workspace.name)} has no apps yet</strong>
+        <span>Answer four short questions and Questbase will set up this workspace's apps, pipeline stages and roles. Nothing is deleted by doing it.</span>
+      </div>
+      <a class="btn btn-primary" href="${appHref(companyPath('settings', { tab: 'setup' }, companyId))}" data-router>
+        <i class="ti ti-sparkles"></i>Set up this workspace
+      </a>
+    </div>
+  `;
+}
+
 function renderCompanyDashboard(companyId) {
   const messagesModule = moduleById('messages');
   const showMessages = messagesModule && canViewModule(messagesModule, companyId);
@@ -7977,6 +8065,7 @@ function renderCompanyDashboard(companyId) {
 
   return `
     <section class="home-cockpit dash">
+      ${renderEmptyWorkspacePrompt(companyId)}
       <div class="home-hero">
         <div>
           <h1>Good ${h(dayPart())}, <span>${h(firstName(activeSession().profile.full_name) || 'Quest Admin')}</span></h1>
@@ -13577,6 +13666,7 @@ function loadAccessRow() {
         workspaceMembershipForProfile,
         userDisplayMeta, userDisplayName,
         MEMBERSHIP_STATUS_OPTIONS, membershipStatusLabel,
+        workspaceAppCoverage,
       });
       return accessRowModule;
     }).catch((error) => {
@@ -20850,6 +20940,25 @@ function renderRolePermissionPicker(companyId, selectedPermissions) {
         </label>
         <span class="permission-count">${selectedCount} selected</span>
       </div>
+      ${(() => {
+    // A permission that rests on one you have not granted does nothing at all. Live proof:
+    // a role held messages.send, messages.manage_groups and messages.delete_own without
+    // messages.view, so it could not open Messages -- and users.manage without users.view
+    // alongside it. The editor saved all four without a word.
+    const gaps = unreachablePermissions([...selectedPermissions], permissionDependencies());
+    if (!gaps.length) return '';
+    const label = (key) => (PERMISSION_KEYS.find(([id]) => id === key) || [key, key])[1];
+    return `
+      <div class="permission-warning" role="status">
+        <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+        <div>
+          <strong>${h(gaps.length === 1 ? 'One permission cannot do anything yet' : `${gaps.length} permissions cannot do anything yet`)}</strong>
+          <ul>${gaps.map((gap) => `<li>${h(label(gap.key))} needs <b>${h(label(gap.requires))}</b></li>`).join('')}</ul>
+          <button class="link-button" type="button" data-action="grant-required-permissions"
+            data-permissions="${h(compactUnique(gaps.map((gap) => gap.requires)).join(','))}">Add the missing ${gaps.length === 1 ? 'one' : 'ones'}</button>
+        </div>
+      </div>`;
+  })()}
       <div class="permission-groups">
         ${[...groups.entries()].map(([groupLabel, items]) => `
           <fieldset class="permission-group">
@@ -23526,71 +23635,35 @@ function renderProfileModal(profile) {
   `;
 }
 
-function renderWorkspaceIconModal(companyId) {
-  const draft = workspaceIconDraft(companyId);
-  const selectedKey = workspaceIconOption(draft.icon_key).key;
-  return renderModalShell('Workspace', 'Change icon', `
-    <div class="workspace-icon-modal">
-      <section class="workspace-icon-preview-panel">
-        ${workspaceIconMarkup({ ...(companyById(companyId) || {}), icon_key: draft.icon_key, icon_image: draft.icon_image, icon_color: draft.icon_color, icon_pack: draft.icon_pack }, 'large')}
-        <div>
-          <strong>${h(draft.icon_image ? 'Uploaded icon' : workspaceIconOption(selectedKey).label)}</strong>
-          <span>${h(draft.icon_image ? 'This image will be saved when you save workspace settings.' : 'Choose an icon or upload a custom image.')}</span>
-        </div>
-      </section>
-      <section class="workspace-icon-upload-card">
-        <div>
-          <strong>Upload</strong>
-          <span>PNG, JPG, or WebP at any size — large images are resized and compressed automatically. Square logos work best.</span>
-        </div>
-        <input type="file" accept="image/png,image/jpeg,image/webp" data-workspace-icon-upload />
-      </section>
-      ${draft.icon_image ? '' : `
-        <section class="workspace-icon-color-card" aria-label="Icon color">
-          <div>
-            <strong>Icon color</strong>
-            <span>Applies to the chosen icon wherever it appears. Uploaded images keep their own colours.</span>
-          </div>
-          <div class="icon-color-choices">
-            ${ICON_COLOR_PRESETS.map(([value, label]) => `
-              <button class="icon-color-swatch ${draft.icon_color === value ? 'active' : ''}" type="button" data-action="set-workspace-icon-color" data-icon-color="${h(value)}" style="--swatch:${h(value)}" title="${h(label)}" aria-label="${h(label)}" aria-pressed="${draft.icon_color === value ? 'true' : 'false'}"></button>
-            `).join('')}
-            <label class="icon-color-custom" title="Custom color">
-              <input type="color" value="${h(draft.icon_color)}" data-workspace-icon-color aria-label="Custom icon color" />
-              <i class="ti ti-palette" aria-hidden="true"></i>
-            </label>
-          </div>
-        </section>
-        <section class="workspace-icon-pack-row" aria-label="Icon style">
-          <strong>Icon style</strong>
-          <div class="appearance-seg" role="group" aria-label="Icon style">
-            ${WORKSPACE_ICON_PACKS.map(([id, label]) => `
-              <button class="${draft.icon_pack === id ? 'active' : ''}" type="button" data-action="set-workspace-icon-pack" data-icon-pack="${h(id)}" aria-pressed="${draft.icon_pack === id ? 'true' : 'false'}">${h(label)}</button>
-            `).join('')}
-          </div>
-          <span class="wb-sub">Both styles ship with Questbase — nothing is fetched from the internet. Solid uses the line version for icons that have no filled variant.</span>
-        </section>
-      `}
-      <section class="workspace-icon-picker modal-icon-picker" aria-label="Workspace icon choices">
-        ${WORKSPACE_ICON_GROUPS.map((group) => `
-          <h4 class="workspace-icon-group">${h(group)}</h4>
-          <div class="workspace-icon-group-grid">
-            ${WORKSPACE_ICON_OPTIONS.filter((item) => item.group === group).map((item) => `
-              <button class="workspace-icon-choice ${!draft.icon_image && item.key === selectedKey ? 'active' : ''}" type="button" data-action="select-workspace-icon" data-icon-key="${h(item.key)}" title="${h(item.label)}">
-                ${workspaceIconSvgMarkup(item, draft.icon_pack)}
-                <span>${h(item.label)}</span>
-              </button>
-            `).join('')}
-          </div>
-        `).join('')}
-      </section>
-    </div>
-  `, 'wide-modal workspace-icon-modal-panel',
-  // Done sits in the header beside Close rather than at the foot of the dialog. The icon
-  // grid is long enough to scroll, so a footer button was often off-screen — and every
-  // choice in here already applies live, which makes Done a way out rather than a submit.
-  `<button class="btn btn-primary" type="button" data-action="close-modal"><i class="ti ti-check"></i>Done</button>`);
+// ---- Workspace icon dialog ----------------------------------------------------------------
+// Body lives in ./workspace/icon-modal.js and is fetched on first use.
+let workspaceIconModalModule = null;
+let workspaceIconModalPending = null;
+
+function loadWorkspaceIconModal() {
+  if (workspaceIconModalModule) return Promise.resolve(workspaceIconModalModule);
+  if (!workspaceIconModalPending) {
+    workspaceIconModalPending = import('./workspace/icon-modal.js').then((mod) => {
+      workspaceIconModalModule = mod.createWorkspaceIconModal({
+        ICON_COLOR_PRESETS, WORKSPACE_ICON_GROUPS, WORKSPACE_ICON_OPTIONS, WORKSPACE_ICON_PACKS,
+        h, renderModalShell, state, workspaceById, workspaceIconDraft, workspaceIconMarkup,
+        workspaceIconOption, companyById, workspaceIconSvgMarkup,
+      });
+      return workspaceIconModalModule;
+    }).catch((error) => {
+      workspaceIconModalPending = null;
+      throw error;
+    });
+  }
+  return workspaceIconModalPending;
 }
+
+function renderWorkspaceIconModal(companyId) {
+  if (workspaceIconModalModule) return workspaceIconModalModule.renderWorkspaceIconModal(companyId);
+  loadWorkspaceIconModal().then(() => render()).catch((error) => console.error('Workspace icon dialog failed to load', error));
+  return questLoader('Loading');
+}
+
 
 // Icon control shared by the operational-workspace create/edit modals: a live preview,
 // a built-in icon picker, and an "upload your own image" option. The working choice lives
@@ -27486,6 +27559,28 @@ function handleAction(event, node) {
   if (node.matches('[data-message-select-all]')) {
     event.preventDefault();
     toggleMessagePeopleSelectAll(node);
+    return;
+  }
+  if (action === 'grant-required-permissions') {
+    event.preventDefault();
+    // Tick the boxes rather than saving: the owner still reviews and presses Save, so this
+    // fixes the set without quietly widening a role behind their back.
+    const form = node.closest('form');
+    const wanted = String(node.dataset.permissions || '').split(',').filter(Boolean);
+    wanted.forEach((key) => {
+      const box = form?.querySelector(`input[name="permissions"][value="${CSS.escape(key)}"]`);
+      if (box) box.checked = true;
+      // Filtered out of view: the picker resubmits hidden copies of anything selected but
+      // not rendered, so add one rather than losing the grant on save.
+      else if (form) {
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'permissions';
+        hidden.value = key;
+        form.appendChild(hidden);
+      }
+    });
+    showToast(`Added ${wanted.length} required permission${wanted.length === 1 ? '' : 's'}. Save the role to apply.`, 'local', 'Roles');
     return;
   }
   if (action === 'suspend-company-member' || action === 'reactivate-company-member') {

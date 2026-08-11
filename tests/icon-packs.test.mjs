@@ -5,7 +5,9 @@ import { collectTableIcons, parseIconFont } from '../scripts/icon-usage.mjs';
 
 // Workspace settings is fetched on demand now; same surface, two files.
 const main = (readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+  + readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8')
+  // The workspace icon dialog is a fetched module too; same surface, one more file.
+  + readFileSync(new URL('../src/workspace/icon-modal.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const subset = readFileSync(new URL('../src/tabler-icons.css', import.meta.url), 'utf8');
 const upstream = readFileSync(new URL('../taskmanagement/vendor/tabler-icons/tabler-icons.min.css', import.meta.url), 'utf8');
 const fn = (name) => {

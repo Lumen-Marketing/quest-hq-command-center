@@ -4,7 +4,9 @@ import test from 'node:test';
 
   // Workspace settings is fetched on demand now; same surface, two files.
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/settings/workspace-settings.js', import.meta.url), 'utf8')
+  // The workspace icon dialog is a fetched module too; same surface, one more file.
+  + readFileSync(new URL('../src/workspace/icon-modal.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const tablerIconsCss = readFileSync(new URL('../taskmanagement/vendor/tabler-icons/tabler-icons.min.css', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202606251230_idempotent_workspace_creation.sql', import.meta.url), 'utf8');
