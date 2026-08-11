@@ -8,6 +8,8 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/contact-record.js', import.meta.url), 'utf8')
   // Composer fields live in their own fetched-on-demand module; same surface, two files.
   + readFileSync(new URL('../src/messaging/dock-fields.js', import.meta.url), 'utf8')
+  // As does the contact's workspace panel, which carries the activity buttons.
+  + readFileSync(new URL('../src/crm/contact-workspace-panel.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/job-record.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8')
   // Quote detail is fetched on demand too; same surface, more files.
