@@ -7047,81 +7047,34 @@ function callsBoardMarkup() {
 
 // Dashboard widget. Same two ideas as the module, compressed: who is on the
 // phone, and today's conversation counts. Links through for the full view.
-function renderCallsWidget(companyId) {
-  // The widget carries its own date filter (Today / Last 7 days / Last 30 days
-  // / a custom From–To range) so the range can be changed here without leaving
-  // the dashboard for the Calls page. The live "on a call now" tile stays
-  // real-time via presence regardless of range.
-  const widgetRange = state.callsWidgetRange || '7d';
-  const custom = state.callsWidgetCustom || { from: '', to: '' };
-  const customReady = widgetRange === 'custom' && Boolean(custom.from && custom.to);
-  const customPending = widgetRange === 'custom' && !customReady;
+// ---- Calls widget ----------------------------------------------------------------
+// Body lives in ./ops/calls-widget.js and is fetched on first use.
+let callsWidgetModule = null;
+let callsWidgetPending = null;
 
-  // Only a fully-picked custom range has a real key to fetch. While the user is
-  // still choosing dates we skip the stats fetch but keep the live board going.
-  const rangeKey = widgetRange === 'custom'
-    ? (customReady ? `custom:${custom.from}|${custom.to}` : null)
-    : widgetRange;
-
-  const rangeLabel = widgetRange === 'custom'
-    ? (customReady ? `${formatDate(`${custom.from}T00:00`)} – ${formatDate(`${custom.to}T00:00`)}` : 'Custom range')
-    : ((CALLS_WIDGET_RANGE_OPTIONS.find(([id]) => id === widgetRange) || [])[1] || 'Last 7 days');
-
-  if (rangeKey) ensureCallsData(companyId, rangeKey);
-  else if (!state.callsPresence.forbidden && !state.callsPresence.notConnected) ensureCallsPresencePolling(companyId);
-
-  if (state.callsStats.unavailable || state.callsPresence.notConnected) return callsNotConnectedMarkup();
-
-  const rows = rangeKey && state.callsStats.key === `${companyId}|${rangeKey}` ? state.callsStats.rows : [];
-  const onCall = state.callsPresence.agents.filter((agent) => agent.status === 'on_call').length;
-  const available = state.callsPresence.agents.filter((agent) => agent.status === 'available').length;
-  const conversations = rows.reduce((total, row) => total + Number(row.conversations || 0), 0);
-
-  const ranked = rows
-    .filter((row) => String(row.extension_name || '').trim())
-    .slice()
-    .sort((a, b) => Number(b.conversations || 0) - Number(a.conversations || 0));
-
-  const noneLabel = widgetRange === 'custom' ? 'in this range' : rangeLabel.toLowerCase();
-  const ranking = customPending
-    ? `<p class="calls-empty">Pick a start and end date to see conversations.</p>`
-    : ranked.length
-    ? `<table class="calls-widget-rank"><tbody>${ranked.map((row) => `
-        <tr>
-          <td class="calls-rank-name">${h(row.extension_name)}</td>
-          <td class="calls-rank-sub">${Number(row.total_calls || 0)} calls</td>
-          <td class="calls-rank-conv"><b>${Number(row.conversations || 0)}</b> &gt; 60s</td>
-        </tr>`).join('')}</tbody></table>`
-    : `<p class="calls-empty">No calls over 60 seconds ${h(noneLabel)}.</p>`;
-
-  const ranges = `<nav class="calls-widget-ranges">${CALLS_WIDGET_RANGE_OPTIONS.map(([id, label]) =>
-    `<button class="calls-widget-range${id === widgetRange ? ' is-active' : ''}" type="button" data-action="calls-widget-range" data-range="${h(id)}">${h(label)}</button>`).join('')}</nav>`;
-
-  const customPicker = widgetRange === 'custom'
-    ? `<div class="calls-widget-custom">
-        <label>From <input type="date" data-calls-widget-custom="from" value="${h(custom.from)}"${custom.to ? ` max="${h(custom.to)}"` : ''}></label>
-        <label>To <input type="date" data-calls-widget-custom="to" value="${h(custom.to)}"${custom.from ? ` min="${h(custom.from)}"` : ''}></label>
-      </div>`
-    : '';
-
-  return `
-    <div class="calls-widget">
-      <div class="calls-widget-filter">
-        ${ranges}
-        ${customPicker}
-      </div>
-      <section class="dash-kpis dash-widget-kpis">
-        ${dashboardMetricTile('ti-phone', onCall, 'On a call now', `${available} available`)}
-        ${dashboardMetricTile('ti-message', conversations, 'Calls > 60s', h(rangeLabel))}
-      </section>
-      <div class="calls-widget-rank-wrap">
-        <div class="calls-widget-rank-head"><span>Who is having real conversations</span><span>${h(rangeLabel)}</span></div>
-        ${ranking}
-      </div>
-      ${state.callsPresence.forbidden ? '' : `<div class="calls-widget-board">${callsBoardMarkup()}</div>`}
-      <a class="calls-widget-link" href="${appHref(companyPath('calls', {}, companyId))}" data-router>Open Calls<i class="ti ti-arrow-right" aria-hidden="true"></i></a>
-    </div>`;
+function loadCallsWidget() {
+  if (callsWidgetModule) return Promise.resolve(callsWidgetModule);
+  if (!callsWidgetPending) {
+    callsWidgetPending = import('./ops/calls-widget.js').then((mod) => {
+      callsWidgetModule = mod.createCallsWidget({
+        CALLS_WIDGET_RANGE_OPTIONS, appHref, callsBoardMarkup, callsNotConnectedMarkup, can, companyPath,
+        dashboardMetricTile, ensureCallsData, ensureCallsPresencePolling, formatDate, h, state,
+      });
+      return callsWidgetModule;
+    }).catch((error) => {
+      callsWidgetPending = null;
+      throw error;
+    });
+  }
+  return callsWidgetPending;
 }
+
+function renderCallsWidget(companyId) {
+  if (callsWidgetModule) return callsWidgetModule.renderCallsWidget(companyId);
+  loadCallsWidget().then(() => render()).catch((error) => console.error('Calls widget failed to load', error));
+  return questLoader('Loading');
+}
+
 
 
 // ── Knowledge Base ───────────────────────────────────────────────────────────
@@ -15423,6 +15376,29 @@ function wbRelTargetApp(field, sourceCompanyId) {
   return wbTargetApp(wbRelCompany(field, sourceCompanyId), field?.config?.targetApp);
 }
 
+// Where a linked record actually lives, so the chip showing its name can be a link to it.
+//
+// The target app can sit in another workspace -- and in another company's builder doc --
+// and the record page is always rendered for whichever operational workspace is active.
+// So the link carries `workspace`, which reconcileCompany() already switches to on any
+// route change; that keeps this an ordinary anchor instead of a click handler.
+function wbRelHref(field, itemId) {
+  if (!itemId) return '';
+  // The index skips linked copies, so this is the workspace that owns the records.
+  const entry = wbAppIndex().get(field?.config?.targetApp);
+  if (!entry) return '';
+  // Builder-only workspaces (made in the builder, with no operational counterpart) key
+  // off a bare uid rather than ws-<workspace id>. There is no route that reaches one,
+  // so those records stay plain text rather than becoming a link that goes nowhere.
+  const opsId = /^ws-/.test(entry.workspace.id || '') ? entry.workspace.id.slice(3) : '';
+  if (!opsId) return '';
+  // Seeing a name you may not open is better than a link that bounces you elsewhere.
+  if (!allowedOperationalWorkspaces(entry.companyId).some((ws) => ws.id === opsId)) return '';
+  return appHref(companyPath('workspaces', {
+    workspace: opsId, app_id: entry.app.id, tab: 'items', item_id: itemId,
+  }, entry.companyId));
+}
+
 function wbNameValue(app, field, item, depth = 0) {
   const raw = item && item.values ? item.values[field.id] : undefined;
   if (raw === undefined || raw === null || raw === '' || (Array.isArray(raw) && !raw.length)) return '';
@@ -15611,6 +15587,105 @@ function wbUrlLabel(value) {
  *
  * Takes the root to search, so each surface binds its own copy after it paints.
  */
+/**
+ * Make a relationship field searchable.
+ *
+ * The <select> underneath stays the single source of truth -- every reader and writer of this
+ * field already goes through it, so the search box only ever sets select.value. Nothing that
+ * saves, validates or reads a linked record had to learn about this control.
+ *
+ * Filtering is substring, case-insensitive, on the same label the option shows, so what you
+ * type matches what you see.
+ */
+function wbBindRelationshipPickers(root) {
+  if (!root) return;
+  root.querySelectorAll('[data-wb-rel-pick]').forEach((pick) => {
+    if (pick.dataset.wbRelBound === '1') return;
+    pick.dataset.wbRelBound = '1';
+    const select = pick.querySelector('select[data-f]');
+    const search = pick.querySelector('[data-wb-rel-search]');
+    const results = pick.querySelector('[data-wb-rel-results]');
+    const clear = pick.querySelector('[data-wb-rel-clear]');
+    if (!select || !search || !results) return;
+
+    const options = [...select.options]
+      .filter((option) => option.value)
+      .map((option) => ({ id: option.value, label: option.textContent }));
+    let active = -1;
+
+    const close = () => {
+      results.hidden = true;
+      search.setAttribute('aria-expanded', 'false');
+      active = -1;
+    };
+
+    const commit = (option) => {
+      select.value = option ? option.id : '';
+      search.value = option ? option.label : '';
+      if (clear) clear.hidden = !option;
+      // Anything listening for a change on the field -- an automation, a dependent
+      // calculation -- must fire as if it had been picked from the list.
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      close();
+    };
+
+    const paint = (query) => {
+      const needle = query.trim().toLowerCase();
+      const matches = needle
+        ? options.filter((option) => option.label.toLowerCase().includes(needle))
+        : options;
+      const shown = matches.slice(0, 50);
+      results.innerHTML = shown.length
+        ? shown.map((option, index) => `<button type="button" role="option" class="wb-rel-result ${index === active ? 'active' : ''}" data-rel-id="${h(option.id)}">${h(option.label)}</button>`).join('')
+          + (matches.length > shown.length ? `<div class="wb-rel-more">${h(String(matches.length - shown.length))} more — keep typing</div>` : '')
+        : `<div class="wb-rel-more">No record matches "${h(query.trim())}".</div>`;
+      results.hidden = false;
+      search.setAttribute('aria-expanded', 'true');
+      return shown;
+    };
+
+    search.addEventListener('input', () => { active = -1; paint(search.value); });
+    search.addEventListener('focus', () => paint(search.value));
+    search.addEventListener('keydown', (event) => {
+      const shown = results.hidden ? [] : [...results.querySelectorAll('.wb-rel-result')];
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!shown.length) { paint(search.value); return; }
+        active = event.key === 'ArrowDown'
+          ? Math.min(active + 1, shown.length - 1)
+          : Math.max(active - 1, 0);
+        shown.forEach((node, index) => node.classList.toggle('active', index === active));
+        shown[active]?.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+      if (event.key === 'Enter' && !results.hidden && shown[active]) {
+        // Only when something is highlighted -- Enter on a half-typed query should submit
+        // the form, as it does in every other field here.
+        event.preventDefault();
+        commit(options.find((option) => option.id === shown[active].dataset.relId));
+        return;
+      }
+      if (event.key === 'Escape' && !results.hidden) { event.preventDefault(); close(); }
+    });
+    // Typed something that matches nothing and clicked away: the field shows text that is
+    // not a record, so put back whatever is actually selected.
+    search.addEventListener('blur', () => setTimeout(() => {
+      if (results.contains(document.activeElement)) return;
+      const current = options.find((option) => option.id === select.value);
+      search.value = current ? current.label : '';
+      close();
+    }, 120));
+
+    results.addEventListener('mousedown', (event) => {
+      const button = event.target.closest('[data-rel-id]');
+      if (!button) return;
+      event.preventDefault();
+      commit(options.find((option) => option.id === button.dataset.relId));
+    });
+    if (clear) clear.addEventListener('click', () => { commit(null); search.focus(); });
+  });
+}
+
 function wbBindUrlControls(root) {
   if (!root) return;
   root.querySelectorAll('[data-wb-url-copy]').forEach((button) => {
@@ -15709,7 +15784,21 @@ function wbFmtVal(ctx, field, value) {
           : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`;
       }).join('')}</span>`;
     }
-    case 'relationship': { const ta = wbRelTargetApp(field, ctx.companyId); if (!ta) return field.config.targetCompany && !wbDoc(field.config.targetCompany) ? '<span class="wb-tag wb-rel wb-rel-locked"><i class="ti ti-lock" aria-hidden="true"></i>No access</span>' : h(value); const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return `<span class="wb-tag wb-rel">${h(it ? wbRelLabel(ta, it, field.config.displayField) : '?')}</span>`; }).join(' '); }
+    case 'relationship': {
+      const ta = wbRelTargetApp(field, ctx.companyId);
+      if (!ta) return field.config.targetCompany && !wbDoc(field.config.targetCompany) ? '<span class="wb-tag wb-rel wb-rel-locked"><i class="ti ti-lock" aria-hidden="true"></i>No access</span>' : h(value);
+      const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]);
+      return arr.map((id) => {
+        const it = ta.items.find((i) => i.id === id);
+        // A record that no longer resolves has nowhere to go, so it stays a plain chip.
+        if (!it) return '<span class="wb-tag wb-rel">?</span>';
+        const label = wbRelLabel(ta, it, field.config.displayField);
+        const href = wbRelHref(field, it.id);
+        return href
+          ? `<a class="wb-tag wb-rel wb-rel-link" href="${h(href)}" data-router title="${h(`Open ${label} in ${ta.name}`)}">${h(label)}<i class="ti ti-arrow-up-right" aria-hidden="true"></i></a>`
+          : `<span class="wb-tag wb-rel">${h(label)}</span>`;
+      }).join(' ');
+    }
     case 'location': return `<a class="wb-loc" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(value))}" target="_blank" rel="noreferrer" title="Open in Google Maps"><i class="ti ti-map-pin"></i>${h(value)}</a>`;
     case 'duration': return h(wbFmtDuration(value));
     case 'image': { const fv = wbFileValue(value); return fv && fv.url ? `<img class="wb-img-avatar" src="${h(fv.url)}" alt="${h(fv.name || 'image')}" loading="lazy">` : '<span class="wb-cell-empty">—</span>'; }
@@ -18758,7 +18847,7 @@ function mountWorkspaceBuilder() {
   // The record PAGE renders the same url-field markup the record modal does, and its Copy and
   // QR buttons were never bound -- they drew fine and did nothing. Bound against the document
   // here because this runs after every workspace paint, modal or not.
-  if (state.route?.section === 'workspaces') wbBindUrlControls(document);
+  if (state.route?.section === 'workspaces') { wbBindUrlControls(document); wbBindRelationshipPickers(document); }
   if (!state.wbTopbarResizeBound) { state.wbTopbarResizeBound = true; window.addEventListener('resize', () => { if (state.route?.section === 'workspaces') { wbMountTopbar(); wbLayoutTiles(); } }); }
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-wb-topbar-scroll]', (el) => wbScrollTopbar(Number(el.dataset.wbTopbarScroll) || 1));
@@ -19507,6 +19596,7 @@ function wbMountModal() {
     overlay.querySelectorAll('[data-wb-view-file]').forEach((b) => { b.onclick = () => openWbFilePreview(b.dataset.fileUrl, b.dataset.fileName); });
     // Link/URL field controls: copy to clipboard, and toggle the QR code.
     wbBindUrlControls(overlay);
+    wbBindRelationshipPickers(overlay);
     const addComment = overlay.querySelector('[data-wb-add-comment]');
     if (addComment) addComment.onclick = () => { wbAddItemComment().catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); };
     overlay.querySelectorAll('[data-wb-comment-edit]').forEach((b) => { b.onclick = () => { state.wbEditingCommentId = b.dataset.wbCommentEdit; wbKeepModalScroll(); render(); }; });

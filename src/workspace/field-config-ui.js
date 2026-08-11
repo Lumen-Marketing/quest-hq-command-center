@@ -148,7 +148,34 @@ export function createFieldInput(ctx) {
         const cur = Array.isArray(val) ? val : (val ? [val] : []);
         // Options are labeled by the "Identify by" field so records are easy to
         // pick apart; cells still display the "Show field" value.
-        input = `<select class="wb-input" data-f="${h(f.id)}" ${f.config.multiple ? 'multiple style="min-height:96px"' : ''}>${f.config.multiple ? '' : '<option value="">— None —</option>'}${ta.items.map((it) => `<option value="${h(it.id)}" ${cur.includes(it.id) ? 'selected' : ''}>${h(wbRelLabel(ta, it, f.config.identifyField))}</option>`).join('')}</select><div class="wb-sub">Linked to <b>${h(ta.name)}</b>${f.config.multiple ? ' · hold Ctrl/Cmd to select multiple' : ''}</div>`; break;
+        // A plain <select> is fine for five records and unusable for five hundred: the only
+        // way to find one is to scroll. Single-select becomes a type-ahead -- start typing
+        // and matching records appear, pick one. The <select> stays underneath as the value
+        // holder, so everything that reads or writes this field is unchanged and it still
+        // submits, sorts and validates exactly as before.
+        //
+        // Multi-select keeps the plain list: a combobox that has to show several chosen
+        // records at once is a different control, and half-building it would be worse than
+        // the list that already works.
+        const options = ta.items.map((it) => ({ id: it.id, label: wbRelLabel(ta, it, f.config.identifyField) }));
+        const selectMarkup = `<select class="wb-input" data-f="${h(f.id)}" ${f.config.multiple ? 'multiple style="min-height:96px"' : ''}>${f.config.multiple ? '' : '<option value="">— None —</option>'}${options.map((it) => `<option value="${h(it.id)}" ${cur.includes(it.id) ? 'selected' : ''}>${h(it.label)}</option>`).join('')}</select>`;
+        if (f.config.multiple) {
+          input = `${selectMarkup}<div class="wb-sub">Linked to <b>${h(ta.name)}</b> · hold Ctrl/Cmd to select multiple</div>`;
+          break;
+        }
+        const chosen = options.find((it) => it.id === cur[0]);
+        input = `
+          <div class="wb-rel-pick" data-wb-rel-pick>
+            <div class="wb-rel-pick-hidden">${selectMarkup}</div>
+            <input class="wb-input wb-rel-search" type="text" role="combobox" autocomplete="off"
+              aria-expanded="false" aria-autocomplete="list"
+              placeholder="${h(`Search ${ta.name}…`)}" value="${h(chosen ? chosen.label : '')}"
+              data-wb-rel-search />
+            <button type="button" class="wb-rel-clear" data-wb-rel-clear title="Clear" aria-label="Clear"${chosen ? '' : ' hidden'}><i class="ti ti-x"></i></button>
+            <div class="wb-rel-results" data-wb-rel-results role="listbox" hidden></div>
+          </div>
+          <div class="wb-sub">Linked to <b>${h(ta.name)}</b> · type to search ${h(String(options.length))} record${options.length === 1 ? '' : 's'}</div>`;
+        break;
       }
       case 'file': input = `
         <div class="wb-file-field" data-wb-file ${f.config.multiple ? 'data-wb-file-multi' : ''}>

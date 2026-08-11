@@ -208,6 +208,7 @@ const FACTORY_MODULES = [
   ['src/team/users-page.js', 'createUsersPage'],
   ['src/crm/contact-workspace-panel.js', 'createContactWorkspacePanel'],
   ['src/ops/workday-panel.js', 'createWorkdayPanel'],
+  ['src/ops/calls-widget.js', 'createCallsWidget'],
 ];
 
 test('the list above covers every factory module there is', () => {

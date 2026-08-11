@@ -170,6 +170,23 @@ permitted to load -- the tenant boundary is enforced at load time, not by the
 render code, so a missed UI guard degrades to a blank, never a leak. The config's
 Workspace picker only appears when more than one company doc is loaded.
 
+A relationship value renders as a link to the record it names (`wbRelHref` ->
+`wb-rel-link`, `data-router`). The record page always renders whichever
+operational workspace is active, so the link carries `workspace=<ops id>`, which
+`reconcileCompany` switches to on any route change -- the same mechanism
+`setActiveWorkspace` uses, so this stays an ordinary anchor. `wbAppIndex` skips
+linked copies, so the target resolves to the workspace that owns the records.
+Four cases render as plain text rather than a dead link: no item id, a deleted
+target app, a builder-only workspace (keyed by bare uid, not `ws-<id>`, so no
+route reaches it), and an operational workspace the viewer may not open.
+
+The single-select relationship input is a type-ahead over a retained `<select>`
+(`wb-rel-pick`). The select is visually hidden, never removed: every read, write,
+automation and submit already goes through it, and committing a choice sets
+`select.value` and dispatches a bubbling `change` so dependent calculations and
+automations fire as they did for the plain dropdown. Multi-select deliberately
+keeps the plain list.
+
 ## Social sign-on is unified and provider-gated
 
 The auth screen offers "Continue with Google/Apple" above the email form, on both

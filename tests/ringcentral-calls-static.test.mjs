@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 
-// The calls page is fetched on demand now; same surface, two files.
+// The calls page and its home widget are fetched on demand now; same surface, read as one.
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/ops/calls-page.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/ops/calls-widget.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/home/widget-registry.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
