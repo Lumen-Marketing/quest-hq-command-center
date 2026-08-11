@@ -2673,7 +2673,8 @@ const state = {
   leavingConversationId: '',
   chatExitMode: 'leave',
   removingMemberId: '',
-  workspaceNameDraft: '',
+  workspaceNameDraft: null,
+  workspaceDescriptionDraft: null,
   deletingWorkspaceId: '',
   deleteWorkspaceError: '',
   deleteWorkspaceBlocking: null,
@@ -23826,8 +23827,8 @@ function renderOperationalWorkspaceEditModal(companyId) {
   return renderModalShell('Workspaces', 'Configure workspace', `
     <form class="ows-modal-form" id="operationalWorkspaceForm" data-operational-workspace-settings-form>
       <input type="hidden" name="workspace_id" value="${h(workspace.id)}" />
-      ${field('Workspace name', 'workspace_name', workspace.name, true, 'text')}
-      <label>Description<textarea name="workspace_description" rows="3" placeholder="What this team handles">${h(workspace.description)}</textarea></label>
+      ${field('Workspace name', 'workspace_name', state.workspaceNameDraft ?? workspace.name, true, 'text')}
+      <label>Description<textarea name="workspace_description" rows="3" placeholder="What this team handles">${h(state.workspaceDescriptionDraft ?? workspace.description)}</textarea></label>
       ${operationalWorkspaceModalIconControl()}
       <label>Status
         <select name="workspace_status" ${canManage ? '' : 'disabled'}>
@@ -26262,6 +26263,12 @@ function onDocumentClick(event) {
 
 function handleAction(event, node) {
   const action = node.dataset.action;
+  // Anything clicked while the workspace dialog is open may re-render it, so what has been
+  // typed is captured here rather than in each handler that happens to re-render. Naming the
+  // handlers individually is what failed before: the create dialog's own icon grid uses
+  // different action names from the icon modal's, so it kept losing the name after the icon
+  // modal stopped doing so.
+  keepWorkspaceFormText(node);
   if (action === 'restore-form-draft' || action === 'discard-form-draft') {
     event.preventDefault();
     handleProtectedFormDraftAction(action, node);
@@ -27347,7 +27354,8 @@ function handleAction(event, node) {
     state.selectedOperationalWorkspaceId = '';
     state.operationalWorkspaceModalIcon = { icon_key: 'home', icon_image: '' };
     // A fresh dialog, not the last one's leftovers.
-    state.workspaceNameDraft = '';
+    state.workspaceNameDraft = null;
+    state.workspaceDescriptionDraft = null;
     state.modal = 'operational-workspace-create';
     render();
     return;
@@ -27361,6 +27369,8 @@ function handleAction(event, node) {
     }
     state.selectedOperationalWorkspaceId = target.id;
     state.operationalWorkspaceModalIcon = { icon_key: workspaceIconOption(target.icon_key).key, icon_image: sanitizeWorkspaceIconImage(target.icon_image) || '' };
+    state.workspaceNameDraft = null;
+    state.workspaceDescriptionDraft = null;
     state.modal = 'operational-workspace-edit';
     render();
     return;
@@ -30356,7 +30366,8 @@ async function createOperationalWorkspace(formNode) {
   localStorage.setItem(COMPANY_KEY, companyId);
   localStorage.setItem(ACTIVE_WORKSPACE_KEY, saved.id);
   state.operationalWorkspaceModalIcon = null;
-  state.workspaceNameDraft = '';
+  state.workspaceNameDraft = null;
+  state.workspaceDescriptionDraft = null;
   showToast(`${saved.name} workspace created.`, live ? 'live' : 'local', 'Workspaces');
   openWorkspaceSetupModal(saved.id, { required: true });
   navigate(companyPath('settings', { tab: 'setup', workspace: saved.id }, companyId));
@@ -32718,6 +32729,8 @@ function onDocumentChange(event) {
     return;
   }
   if (event.target.matches('[data-operational-workspace-modal-icon-upload]')) {
+    // A change event, so it never reaches handleAction -- and this re-renders too.
+    keepWorkspaceFormText(event.target);
     prepareOperationalWorkspaceModalIconUpload(event.target.files?.[0] || null).catch((error) => {
       showToast(error.message || 'Could not use that image.', 'local', 'Workspaces');
     });
@@ -39102,16 +39115,23 @@ function workspaceIconDraft(companyId) {
  * Hold on to what the person has typed before the icon picker re-renders the dialog.
  *
  * Picking an icon, a colour or a pack all call render(), which rebuilds the form -- and the
- * name field is uncontrolled, so anything typed into it was thrown away. You would name the
- * workspace, choose an icon, and find the name gone.
+ * text fields are uncontrolled, so anything typed into them was thrown away. You would name
+ * the workspace, choose an icon, and find the name gone.
  *
  * Read straight off the DOM at the moment of the click, because that is the only place the
- * value exists: nothing else was ever told about it.
+ * value exists: nothing else was ever told about it. The dialog is found by class rather
+ * than from the clicked node, so a control rendered outside the <form> -- the header Save,
+ * the icon upload label -- is covered too.
+ *
+ * '' is a real value here (a field someone deliberately emptied), so null means untouched.
  */
 function keepWorkspaceFormText(node) {
-  const form = node?.closest?.('form');
-  const input = form?.querySelector('input[name="workspace_name"]');
-  if (input) state.workspaceNameDraft = input.value;
+  const form = node?.closest?.('form.ows-modal-form') || document.querySelector('form.ows-modal-form');
+  if (!form) return;
+  const name = form.querySelector('[name="workspace_name"]');
+  if (name) state.workspaceNameDraft = name.value;
+  const description = form.querySelector('[name="workspace_description"]');
+  if (description) state.workspaceDescriptionDraft = description.value;
 }
 
 function setWorkspaceIconDraft(companyId, patch = {}) {

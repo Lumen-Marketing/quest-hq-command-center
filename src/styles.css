@@ -29029,7 +29029,13 @@ html[data-card-style="glass"] .message-context-rail {
 
    Colours arrive as custom properties on <html>. [data-sidebar-surface] carries only
    light-vs-dark, so hairlines and hover washes can flip without naming each preset. */
-[data-sidebar-theme] .deck {
+/* :root is carried for weight, not for reach. `:root[data-theme="dark"] .deck` sets the
+   dark-mode deck gradient and out-specified a bare `[data-sidebar-theme] .deck`, so in dark
+   mode the chosen preset's BACKGROUND was dropped while its TEXT colours still applied --
+   picking the Light menu while the app was dark painted its near-black text onto the dark
+   deck at 1.16:1. Matching the specificity lets source order decide, and this block is
+   later. */
+:root[data-sidebar-theme] .deck {
   background: var(--deck-bg);
   border-color: var(--deck-hairline);
 }
@@ -29098,15 +29104,37 @@ html[data-card-style="glass"] .message-context-rail {
 [data-sidebar-theme] .side-head,
 [data-sidebar-theme] .side-label-chevron,
 [data-sidebar-theme] .side-sub-divider,
-[data-sidebar-theme] .company-account-copy,
-[data-sidebar-theme] .side-item .symbol-icon {
+[data-sidebar-theme] .company-account-copy {
   color: var(--deck-label);
 }
 
+/* A row's icon reads with its label, not with the section heading above it. At --deck-label
+   it measured 2.6:1 on the Light preset -- present, but you had to look for it. It carries
+   the row's own text colour instead, which is the value that already flips with the
+   preset's surface. */
+[data-sidebar-theme] .side-item .symbol-icon,
+[data-sidebar-theme] .side-item > i {
+  color: var(--deck-text);
+}
+
+/* Hover has to re-state its colours, not just its wash. The base menu sets
+   `.quest-nav-v2 .side-item:hover { color: var(--ink) }`, which is the PAGE theme's ink --
+   so hovering a row on a dark preset while the app was in light mode turned the row's icon
+   near-black on navy, 1.21:1, and the icon vanished under the pointer. The wash was themed
+   here already; the text colour was not, so it fell through to the base rule. */
 [data-sidebar-theme] .side-item:hover,
 [data-sidebar-theme] .side-sub-link:hover,
 [data-sidebar-theme] .workspace-rail-item:hover {
   background: var(--deck-hover);
+  color: var(--deck-strong);
+}
+
+/* Both icon kinds: nav rows built from svgIcon() carry .symbol-icon, while workspace-app
+   rows carry a Tabler <i> glyph that has no class and only inherits. */
+[data-sidebar-theme] .side-item:hover .symbol-icon,
+[data-sidebar-theme] .side-item:hover > i,
+[data-sidebar-theme] .side-sub-link:hover .symbol-icon {
+  color: var(--deck-strong);
 }
 
 /* The active row. Both the pill and its text come from the theme so a preset's accent
