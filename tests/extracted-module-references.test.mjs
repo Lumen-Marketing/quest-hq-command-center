@@ -205,6 +205,7 @@ const FACTORY_MODULES = [
   ['src/portals/placement-modal.js', 'createPlacementModal'],
   ['src/workspace/icon-modal.js', 'createWorkspaceIconModal'],
   ['src/crm/contact-record.js', 'createContactRecord'],
+  ['src/team/users-page.js', 'createUsersPage'],
 ];
 
 test('the list above covers every factory module there is', () => {

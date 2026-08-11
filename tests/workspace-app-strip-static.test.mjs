@@ -116,10 +116,20 @@ test('listeners are attached once, not on every render', () => {
   assert.match(source, /track\.dataset\.wbScrollBound = '1';/);
 });
 
-test('a vertical wheel scrolls the strip sideways without hijacking the page', () => {
-  // Only when the gesture is mostly vertical AND the strip actually moved.
+test('a plain vertical wheel scrolls the page, not the strip', () => {
+  // The strip is a narrow band across the top of a long page. Converting every vertical
+  // wheel to horizontal movement meant it swallowed the scroll everyone was actually doing,
+  // and the page only moved once the strip had run out of travel.
+  assert.match(source, /if \(!event\.shiftKey\) return;/);
+});
+
+test('horizontal intent still scrolls the strip', () => {
+  // Shift+wheel is the long-standing convention for a horizontal region with a mouse; a
+  // trackpad's sideways swipe arrives as deltaX and the browser handles it with no handler.
   assert.match(source, /if \(Math\.abs\(event\.deltaY\) <= Math\.abs\(event\.deltaX\)\) return;/);
   assert.match(source, /if \(track\.scrollLeft !== before\) event\.preventDefault\(\);/);
+  // Nothing that could only be done by wheel is lost: the arrows and drag-to-pan remain.
+  assert.match(source, /data-wb-topbar-scroll/);
 });
 
 test('reduced-motion users do not get smooth scrolling', () => {

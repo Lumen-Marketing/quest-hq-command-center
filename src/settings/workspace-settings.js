@@ -3,7 +3,7 @@
 
 export function createWorkspaceSettings(ctx) {
   const {
-    activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, canManageOperationalWorkspaces, companyById, companyJobs, companyName, contractRows, emptyState, field, h, isPluginInstalled, normalizeCompany, renderAppearanceControls, titleCase, workspaceIconDraft, workspaceIconMarkup, workspaceIconOption, workspaceMemberCount, workspaceRoleLabel, state,
+    activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, canManageOperationalWorkspaces, companyById, companyJobs, companyName, contractRows, emptyState, field, h, isPluginInstalled, normalizeCompany, renderAppearanceControls, titleCase, workspaceIconDraft, workspaceIconMarkup, workspaceIconOption, workspaceMemberCount, workspaceRoleLabel, state, isCompanyOwner,
   } = ctx;
 
   function renderWorkspaceSettings(companyId) {
@@ -71,6 +71,7 @@ export function createWorkspaceSettings(ctx) {
                   ${item.is_default
                     ? '<span class="ows-tag default"><i class="ti ti-star-filled" aria-hidden="true"></i>Default</span>'
                     : `<button class="btn ows-action" type="button" data-action="set-default-workspace" data-workspace-id="${h(item.id)}" ${canManage && item.status !== 'archived' ? '' : 'disabled'}><i class="ti ti-star"></i>Set default</button>`}
+                  ${item.is_default || !isCompanyOwner(companyId) ? '' : `<button class="btn ows-action danger" type="button" data-action="delete-operational-workspace" data-workspace-id="${h(item.id)}"><i class="ti ti-trash"></i>Delete</button>`}
                 </div>
               </div>
             `;

@@ -2,13 +2,19 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The Users page is a fetched module now; same surface, read as one.
+const main = (readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/team/users-page.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
+// LAST occurrence: main.js keeps a loader shim of the same name, and the real body is in the
+// fetched module appended after it. The old end-marker lived in main.js too, so bound the
+// slice on the module's own closing instead.
 const usersPage = (() => {
-  const at = main.indexOf('function renderUsersPage(');
+  const at = main.lastIndexOf('function renderUsersPage(');
   assert.notEqual(at, -1);
-  return main.slice(at, main.indexOf('\nfunction renderUserAccessRow(', at));
+  const end = main.indexOf('\n  }', at);
+  return main.slice(at, end === -1 ? undefined : end);
 })();
 
 // --- the tab ---------------------------------------------------------------------------

@@ -33,7 +33,7 @@ Captured through 2026-08-10T18:23:17.639Z. This is a point-in-time operational s
 - Region: `us-west-1`.
 - Postgres: `17.6.1.127`, engine 17.
 - The metadata-only catalog snapshot was refreshed through the workspace-setup release hardening and contains 89 public tables/views, 229 foreign-key column relationships, 271 policies, 79 public functions, 103 trigger-event entries, 6 storage buckets, and 129 applied migration records.
-- Latest repository migration: `20260811103000_workspace_setup_revision_save_fix.sql`.
+- Latest repository migration: `20260812090000_delete_workspace.sql`.
 - The latest live provider ledger entry is `20260810182232_workspace_setup_revision_save_fix`. Repository filenames retain reviewed forward-order timestamps while Supabase records provider-generated ledger timestamps.
 - Live verification confirmed the workspace-keyed setup table, SELECT-only authenticated table grant, company-admin RLS, and all three fixed-search-path administrator RPCs. A rollback-only test passed draft save, identical retry, manual-app preservation, sibling isolation, and questionnaire reset, then confirmed zero surviving probe rows.
 - Live verification confirmed the quote request column and unique partial index, SECURITY INVOKER conversion RPC, authenticated-only execute grant, per-kind operational-workspace seeding logic, and zero missing contacts/deals/jobs pipeline kinds across active workspaces.

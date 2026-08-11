@@ -2672,6 +2672,9 @@ const state = {
   leavingConversationId: '',
   chatExitMode: 'leave',
   removingMemberId: '',
+  deletingWorkspaceId: '',
+  deleteWorkspaceError: '',
+  deleteWorkspaceBlocking: null,
   messageRealtimeChannel: null,
   messageRealtimeKey: '',
   calendarScope: 'company',
@@ -5773,7 +5776,7 @@ function loadRenderWorkspaceSettings() {
   if (!renderWorkspaceSettingsPending) {
     renderWorkspaceSettingsPending = import('./settings/workspace-settings.js').then((mod) => {
       renderWorkspaceSettingsModule = mod.createWorkspaceSettings({
-        activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, canManageOperationalWorkspaces, companyById, companyJobs, companyName, contractRows, emptyState, field, h, isPluginInstalled, normalizeCompany, renderAppearanceControls, titleCase, workspaceIconDraft, workspaceIconMarkup, workspaceIconOption, workspaceMemberCount, workspaceRoleLabel, state,
+        activeWorkspace, activeWorkspaceId, availableWorkspacePlugins, canManageOperationalWorkspaces, companyById, companyJobs, companyName, contractRows, emptyState, field, h, isPluginInstalled, normalizeCompany, renderAppearanceControls, titleCase, workspaceIconDraft, workspaceIconMarkup, workspaceIconOption, workspaceMemberCount, workspaceRoleLabel, state, isCompanyOwner,
       });
       return renderWorkspaceSettingsModule;
     }).catch((error) => {
@@ -13454,91 +13457,36 @@ function renderJobPhotosModal(companyId, job) {
   `;
 }
 
-function renderUsersPage(route, companyId) {
-  const users = companyAccessUsers(companyId);
-  const tab = ['members', 'access', 'invites'].includes(route.params.get('tab')) ? route.params.get('tab') : 'members';
-  const pendingRequests = state.joinRequests.filter((item) => item.company_id === companyId && item.status === 'pending');
-  const canManageUsers = can('users.manage', companyId);
-  const activeUsers = users.filter((user) => user.status === 'active');
-  const inactiveUsers = users.filter((user) => user.status !== 'active');
-  return `
-    ${workspaceHeader('Users', 'Company members, roles, workers, and access context.', `
-      <button class="btn btn-primary" type="button" data-action="open-invite-form" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-user-plus"></i>Invite user</button>
-      <a class="btn" href="${appHref(companyPath('settings', { tab: 'roles' }, companyId))}" data-router><i class="ti ti-shield-lock"></i>Roles</a>
-      <a class="btn" href="${appHref(companyPath('settings', { tab: 'access' }, companyId))}" data-router><i class="ti ti-settings"></i>Access settings</a>
-    `)}
-    ${compactTabs('Users sections', [
-      [companyPath('users', { tab: 'members' }, companyId), 'Members', tab === 'members'],
-      [companyPath('users', { tab: 'access' }, companyId), 'Access', tab === 'access'],
-      // Counted in the label: an invitation nobody has accepted and a request nobody has
-      // answered are both things waiting on someone here, and a tab you have to open to
-      // discover that is a tab you forget to open.
-      [companyPath('users', { tab: 'invites' }, companyId), `Invites${companyInvites(companyId).length + pendingRequests.length ? ` (${companyInvites(companyId).length + pendingRequests.length})` : ''}`, tab === 'invites'],
-    ])}
-    ${tab === 'members' ? `
-      <section class="metric-grid operations-metrics">
-        ${metricCard('Active users', activeUsers.length)}
-        ${metricCard('Pending', users.filter((user) => user.status === 'pending').length + pendingRequests.length)}
-        ${metricCard('Disabled/left', inactiveUsers.filter((user) => user.status !== 'pending').length)}
-        ${metricCard('Roles', companyRoles(companyId).length)}
-      </section>
-      <section class="users-grid">
-        ${users.map((user) => `
-          <article class="user-card ${user.status !== 'active' ? 'muted' : ''}">
-            ${renderAvatar({ full_name: userDisplayName(user), email: user.email, avatar_url: user.avatar_url }, 'avatar')}
-            <div>
-              <strong>${h(userDisplayName(user))}</strong>
-              <span>${h(userDisplayMeta(user))}</span>
-              <small>${h(user.role_label)} / ${h(titleCase(user.status))}</small>
-              <small>${h(workspaceAccessSummaryForUser(companyId, user))}</small>
-            </div>
-          </article>
-        `).join('') || emptyState('No users assigned to this company yet.')}
-      </section>
-    ` : tab === 'invites' ? `
-      <!-- Getting someone in: an invitation goes out, or a request comes in. Two halves of
-           one job, which is why they share a tab rather than sitting under Access -- that
-           one is about people who are already here. -->
-      <section class="dashboard-grid compact-settings-grid">
-        <article class="panel span-2">
-          <div class="section-head">
-            <div><h2>Invites</h2><p>Copy a secure invite code or link for a specific email address.</p></div>
-            <button class="btn btn-primary" type="button" data-action="open-invite-form" ${canManageUsers ? '' : 'disabled'}><i class="ti ti-user-plus"></i>Invite</button>
-          </div>
-          <div class="access-invite-list">
-            ${companyInvites(companyId).map((invite) => renderInviteRow(invite, canManageUsers)).join('') || emptyState('No pending invites.')}
-          </div>
-        </article>
-        <article class="panel span-2">
-          <div class="section-head"><div><h2>Join requests</h2><p>Approve requests into this company workspace or reject them.</p></div></div>
-          <div class="access-request-list">
-            ${pendingRequests.map((request) => renderJoinRequestRow(request, canManageUsers)).join('') || emptyState('No pending join requests.')}
-          </div>
-        </article>
-      </section>
-    ` : `
-    <section class="dashboard-grid compact-settings-grid">
-      <article class="panel span-2">
-        <div class="section-head">
-          <div><h2>Member access</h2><p>Assign roles and confirm each user's company status.</p></div>
-        </div>
-        <div class="access-user-list">
-          ${users.map((user) => renderUserAccessRow(companyId, user, canManageUsers)).join('') || emptyState('No users assigned to this company yet.')}
-        </div>
-      </article>
-      <article class="panel span-2">
-        <div class="section-head"><div><h2>Access model</h2><p>Membership is company-scoped; UI hiding is convenience, RLS is the real privacy layer.</p></div></div>
-        ${contractRows([
-          ['Tenant key', 'company_id on jobs, tasks, files, forms, users, settings'],
-          ['Privacy status', CONFIG.questAuthEnabled ? 'Supabase Auth + RLS' : 'Client-filtered demo only'],
-          ['Your role', roleForCompany(companyId)],
-          ['Can manage users', canManageUsers ? 'Yes' : 'No'],
-        ])}
-      </article>
-    </section>
-    `}
-  `;
+// ---- Users ----------------------------------------------------------------
+// Body lives in ./team/users-page.js and is fetched on first use.
+let usersPageModule = null;
+let usersPagePending = null;
+
+function loadUsersPage() {
+  if (usersPageModule) return Promise.resolve(usersPageModule);
+  if (!usersPagePending) {
+    usersPagePending = import('./team/users-page.js').then((mod) => {
+      usersPageModule = mod.createUsersPage({
+        CONFIG, appHref, can, compactTabs, companyAccessUsers, companyInvites,
+        companyPath, companyRoles, contractRows, emptyState, h, metricCard,
+        renderAvatar, renderInviteRow, renderJoinRequestRow, renderUserAccessRow, roleForCompany, state,
+        titleCase, userDisplayMeta, userDisplayName, workspaceAccessSummaryForUser, workspaceHeader,
+      });
+      return usersPageModule;
+    }).catch((error) => {
+      usersPagePending = null;
+      throw error;
+    });
+  }
+  return usersPagePending;
 }
+
+function renderUsersPage(route, companyId) {
+  if (usersPageModule) return usersPageModule.renderUsersPage(route, companyId);
+  loadUsersPage().then(() => render()).catch((error) => console.error('Users failed to load', error));
+  return questLoader('Loading users');
+}
+
 
 // ---- Users > Access row ---------------------------------------------------------
 // Body lives in ./team/access-row.js and is fetched on first use.
@@ -14811,9 +14759,17 @@ function wbMountTopbar() {
       wbTopbarScrollLeft = track.scrollLeft;
       sync();
     }, { passive: true });
-    // A vertical wheel over a horizontal strip should move it sideways; without this the
-    // page scrolls instead and the strip feels stuck on a trackpad or mouse.
+    // A plain vertical wheel scrolls the PAGE, even with the pointer over the strip.
+    //
+    // It used to be converted to horizontal movement, which meant a narrow band across the
+    // top of a long page silently swallowed the scroll everyone was actually trying to do --
+    // the page only moved once the strip had run out of travel. Horizontal intent is still
+    // honoured: a trackpad's sideways swipe arrives as deltaX and the browser scrolls the
+    // strip natively with no handler at all, and Shift+wheel is the long-standing convention
+    // for scrolling a horizontal region with a mouse. The arrows and drag-to-pan are
+    // unaffected, so nothing that could only be done by wheel has been lost.
     track.addEventListener('wheel', (event) => {
+      if (!event.shiftKey) return;
       if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
       const before = track.scrollLeft;
       track.scrollLeft += event.deltaY;
@@ -23937,6 +23893,7 @@ function renderActiveModal(route, session) {
   if (state.modal === 'chat-leave-confirm') return renderLeaveConversationModal(activeCompanyId(), state.leavingConversationId);
   if (state.modal === 'remove-member-confirm') return renderRemoveMemberModal(state.removingMemberId);
   if (state.modal === 'wb-activity-task') return renderActivityTaskModal(activeCompanyId(), state.wbTaskFromActivityId);
+  if (state.modal === 'delete-workspace') return renderDeleteWorkspaceModal(activeCompanyId(), state.deletingWorkspaceId);
   if (state.modal === 'message-search') return renderMessageSearchModal(activeCompanyId());
   if (state.modal === 'calendar-event-detail') return renderCalendarEventDetailModal(activeCompanyId());
   if (state.modal === 'calendar-event-new') return renderCalendarEventFormModal(activeCompanyId(), null);
@@ -27601,6 +27558,15 @@ function handleAction(event, node) {
     toggleMessagePeopleSelectAll(node);
     return;
   }
+  if (action === 'delete-operational-workspace') {
+    event.preventDefault();
+    state.deletingWorkspaceId = node.dataset.workspaceId || '';
+    state.deleteWorkspaceError = '';
+    state.deleteWorkspaceBlocking = null;
+    state.modal = 'delete-workspace';
+    render();
+    return;
+  }
   if (action === 'grant-required-permissions') {
     event.preventDefault();
     // Tick the boxes rather than saving: the owner still reviews and presses Save, so this
@@ -29165,6 +29131,18 @@ function onDocumentSubmit(event) {
     event.preventDefault();
     const form = Object.fromEntries(new FormData(event.target).entries());
     permanentlyDeletePlatformBackupCopy(form.copy_id).catch((error) => showToast(error.message || 'Delete failed.', 'error', 'Master'));
+    return;
+  }
+
+  if (event.target.matches('[data-delete-workspace-form]')) {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.target).entries());
+    const password = event.target.querySelector('#deleteWorkspacePw')?.value || '';
+    const done = beginSubmitting(event.target, 'Deleting…');
+    if (!done) return;
+    deleteOperationalWorkspace(event.target, String(data.workspace_id || ''), password)
+      .catch((error) => { state.deleteWorkspaceError = error.message || 'The workspace could not be deleted.'; render(); })
+      .finally(done);
     return;
   }
 
@@ -31217,6 +31195,104 @@ function accessSaveFailed(message) {
  * act on it -- retyping what you just read is friction. It goes through the one task model,
  * so it lands in My Tasks rather than becoming a workspace-only to-do.
  */
+/**
+ * Deleting an operational workspace.
+ *
+ * Behind the account password, like the other operations that destroy something: being signed
+ * in is not enough for a thing that cannot be undone, and a session left open on a desk
+ * should not be either.
+ *
+ * The server refuses a workspace that still holds business records and returns the counts
+ * rather than a bare failure, so this can say what is in the way and point at Archive --
+ * which is the operation that does exist for a workspace with history in it.
+ */
+function renderDeleteWorkspaceModal(companyId, workspaceId) {
+  const workspace = state.operationalWorkspaces.find((item) => item.id === workspaceId);
+  if (!workspace) return renderModalShell('Workspaces', 'Delete workspace', emptyState('That workspace is no longer available.'));
+  const blocking = state.deleteWorkspaceBlocking;
+  const blockingRows = blocking
+    ? Object.entries(blocking).filter(([, count]) => Number(count) > 0)
+    : [];
+  return renderModalShell('Workspaces', 'Delete workspace', `
+    <form class="compact-tool-form" data-delete-workspace-form>
+      <input type="hidden" name="workspace_id" value="${h(workspace.id)}" />
+      <p class="chat-leave-lead">${h(`"${workspace.name}" and its configuration are removed for everyone.`)}</p>
+      <ul class="chat-leave-points">
+        <li><i class="ti ti-alert-triangle" aria-hidden="true"></i>${h('This cannot be undone.')}</li>
+        <li><i class="ti ti-check" aria-hidden="true"></i>${h('Its apps, member assignments, pipeline stages and setup answers go with it.')}</li>
+        <li><i class="ti ti-check" aria-hidden="true"></i>${h('Sibling workspaces, the company, its people and every other record are untouched.')}</li>
+      </ul>
+      ${blockingRows.length ? `
+        <div class="company-setup-alert danger">
+          <i class="ti ti-alert-circle"></i>
+          <div>
+            <strong>This workspace still holds records</strong>
+            <span>${h(blockingRows.map(([label, count]) => `${count} ${label}`).join(', '))}. Move or delete them first, or archive the workspace instead to keep its history.</span>
+          </div>
+        </div>` : ''}
+      ${isLiveSupabaseSession() ? reauthPasswordField('deleteWorkspacePw', 'Confirm your password') : ''}
+      ${state.deleteWorkspaceError ? `<div class="form-message error">${h(state.deleteWorkspaceError)}</div>` : ''}
+      <div class="form-actions">
+        <button class="btn danger" type="submit"><i class="ti ti-trash"></i>Delete workspace</button>
+        <button class="btn" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `, 'task-modal');
+}
+
+/**
+ * Confirm the password, then ask the server to delete.
+ *
+ * The password is checked first so a wrong one costs nothing, and the refusal path keeps the
+ * dialog open carrying the counts rather than closing on a toast the person cannot act on.
+ */
+async function deleteOperationalWorkspace(formNode, workspaceId, password) {
+  const companyId = activeCompanyId();
+  const workspace = state.operationalWorkspaces.find((item) => item.id === workspaceId);
+  if (!workspace) return;
+  if (!isCompanyOwner(companyId)) {
+    state.deleteWorkspaceError = 'Owner access is required to delete a workspace.';
+    render();
+    return;
+  }
+  if (isLiveSupabaseSession()) {
+    const check = await confirmAccountPassword(password);
+    if (!check.ok) {
+      state.deleteWorkspaceError = check.error;
+      render();
+      return;
+    }
+    const client = createSupabaseClient();
+    const result = await safeSupabaseQuery(client.rpc('delete_workspace', { target_workspace_id: workspaceId }));
+    if (result.error) {
+      state.deleteWorkspaceError = result.error.message || 'The workspace could not be deleted.';
+      render();
+      return;
+    }
+    if (result.data && result.data.deleted === false) {
+      state.deleteWorkspaceBlocking = result.data.blocking || {};
+      state.deleteWorkspaceError = '';
+      render();
+      return;
+    }
+  }
+  state.operationalWorkspaces = state.operationalWorkspaces.filter((item) => item.id !== workspaceId);
+  state.workspaceMemberships = state.workspaceMemberships.filter((item) => item.workspace_id !== workspaceId);
+  state.workspacePlugins = state.workspacePlugins.filter((item) => item.workspace_id !== workspaceId);
+  // Deleting the one you were looking at leaves the selection pointing at nothing; clearing
+  // it lets activeWorkspaceId() fall back to the company default on the next read.
+  if (state.activeWorkspaceId === workspaceId) {
+    state.activeWorkspaceId = '';
+    localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+  }
+  state.modal = '';
+  state.deletingWorkspaceId = '';
+  state.deleteWorkspaceBlocking = null;
+  persistAll();
+  showToast(`"${workspace.name}" deleted.`, isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
+  render();
+}
+
 function renderActivityTaskModal(companyId, actId) {
   const workspace = wbCompanyWorkspace(companyId);
   const entry = workspace ? (workspace.activity || []).find((item) => item.id === actId) : null;
@@ -39161,6 +39237,19 @@ function workspaceIconMarkup(companyOrId, className = '') {
 
 function companyIdForJob(jobId) {
   return canonicalCompanyId(state.jobs.find((job) => job.id === jobId)?.company_id || '');
+}
+
+/**
+ * Is the signed-in person an OWNER of this company, by membership rank?
+ *
+ * Not can('...') -- deleting a workspace is not a permission somebody can be granted, it is a
+ * rank. delete_workspace enforces the same with is_company_owner, so the button and the
+ * procedure agree rather than the interface promising something the server refuses.
+ */
+function isCompanyOwner(companyId) {
+  const profile = activeSession()?.profile;
+  if (!profile) return false;
+  return String(membershipForProfile(companyId, profile.id)?.role || '').toLowerCase() === 'owner';
 }
 
 function roleForCompany(companyId) {
