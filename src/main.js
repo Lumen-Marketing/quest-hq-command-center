@@ -15674,6 +15674,40 @@ function wbUrlLabel(value) {
 }
 // The rich control shown when viewing a record: the link plus Copy, Open, and a
 // toggleable QR code. Used in the item view (read-only) rows.
+/**
+ * Wire the Copy and QR buttons on a URL field.
+ *
+ * wbUrlControl renders these anywhere a url field is shown, but the handlers were bound only
+ * inside the record MODAL and scoped to its overlay. The record PAGE renders the very same
+ * markup, so on that screen both buttons drew fine and did nothing at all.
+ *
+ * Takes the root to search, so each surface binds its own copy after it paints.
+ */
+function wbBindUrlControls(root) {
+  if (!root) return;
+  root.querySelectorAll('[data-wb-url-copy]').forEach((button) => {
+    button.onclick = async () => {
+      const url = button.dataset.wbUrlCopy || '';
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast('Link copied to clipboard.', 'local', 'Workspaces');
+      } catch {
+        showToast('Could not copy — select and copy manually.', 'local', 'Workspaces');
+      }
+    };
+  });
+  root.querySelectorAll('[data-wb-url-qr]').forEach((button) => {
+    button.onclick = () => {
+      const box = button.closest('.wb-url-ctrl')?.querySelector('.wb-url-qr');
+      if (!box) return;
+      const show = box.hidden;
+      box.hidden = !show;
+      button.setAttribute('aria-expanded', show ? 'true' : 'false');
+      button.classList.toggle('active', show);
+    };
+  });
+}
+
 function wbUrlControl(value) {
   const s = String(value || '').trim();
   if (!s) return '<span class="wb-cell-empty">—</span>';
@@ -18790,6 +18824,10 @@ function mountWorkspaceBuilder() {
   const bind = (selector, handler, eventName = 'onclick') => document.querySelectorAll(selector).forEach((el) => { el[eventName] = handler.bind(null, el); });
   // The top app bar is on both the dashboard and app views; size it to fit.
   if (state.route?.section === 'workspaces') wbMountTopbar();
+  // The record PAGE renders the same url-field markup the record modal does, and its Copy and
+  // QR buttons were never bound -- they drew fine and did nothing. Bound against the document
+  // here because this runs after every workspace paint, modal or not.
+  if (state.route?.section === 'workspaces') wbBindUrlControls(document);
   if (!state.wbTopbarResizeBound) { state.wbTopbarResizeBound = true; window.addEventListener('resize', () => { if (state.route?.section === 'workspaces') { wbMountTopbar(); wbLayoutTiles(); } }); }
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-wb-topbar-scroll]', (el) => wbScrollTopbar(Number(el.dataset.wbTopbarScroll) || 1));
@@ -19535,17 +19573,7 @@ function wbMountModal() {
     if (viewBtn) viewBtn.onclick = () => { const mm = state.builderModal; const found = wbFind(mm.companyId, mm.workspaceId, mm.appId); const it = found.app?.items.find((i) => i.id === mm.editId); mm.draft = { values: it ? { ...it.values } : {} }; mm.mode = 'view'; render(); };
     overlay.querySelectorAll('[data-wb-view-file]').forEach((b) => { b.onclick = () => openWbFilePreview(b.dataset.fileUrl, b.dataset.fileName); });
     // Link/URL field controls: copy to clipboard, and toggle the QR code.
-    overlay.querySelectorAll('[data-wb-url-copy]').forEach((b) => { b.onclick = async () => {
-      const url = b.dataset.wbUrlCopy || '';
-      try { await navigator.clipboard.writeText(url); showToast('Link copied to clipboard.', 'local', 'Workspaces'); }
-      catch { showToast('Could not copy — select and copy manually.', 'local', 'Workspaces'); }
-    }; });
-    overlay.querySelectorAll('[data-wb-url-qr]').forEach((b) => { b.onclick = () => {
-      const box = b.closest('.wb-url-ctrl')?.querySelector('.wb-url-qr');
-      if (!box) return;
-      const show = box.hidden; box.hidden = !show; b.setAttribute('aria-expanded', show ? 'true' : 'false');
-      b.classList.toggle('active', show);
-    }; });
+    wbBindUrlControls(overlay);
     const addComment = overlay.querySelector('[data-wb-add-comment]');
     if (addComment) addComment.onclick = () => { wbAddItemComment().catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); };
     overlay.querySelectorAll('[data-wb-comment-edit]').forEach((b) => { b.onclick = () => { state.wbEditingCommentId = b.dataset.wbCommentEdit; wbKeepModalScroll(); render(); }; });
