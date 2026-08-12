@@ -12,6 +12,7 @@ const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/contact-workspace-panel.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/job-record.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/proposals/proposal-builder-modal.js', import.meta.url), 'utf8')
   // Quote detail is fetched on demand too; same surface, more files.
   + readFileSync(new URL('../src/crm/deal-detail.js', import.meta.url), 'utf8')
   + readFileSync(new URL('../src/crm/contact-table.js', import.meta.url), 'utf8');

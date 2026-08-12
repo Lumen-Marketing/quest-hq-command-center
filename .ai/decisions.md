@@ -59,6 +59,21 @@ baseline insert is `on conflict do nothing`, so a plugin somebody deliberately d
 stays disabled, and the default-workspace insert sits only on the branch that creates a
 workspace, never on the repair paths that adopt an existing one.
 
+## Workspace membership is answered from one rule, in both directions
+
+`allowedWorkspaces` answers "which workspaces may this person enter"; `workspaceMembers`
+answers "which people may enter this workspace". Both live in src/workspaces/model.js and
+both go through `roleCanEnterEveryWorkspace`, so they cannot disagree about an owner — who
+has no membership row for most workspaces and belongs to all of them. A second copy of that
+role list anywhere else is a bug waiting to happen.
+
+The Members dashboard tile is the first consumer. It is workspace-scoped rather than
+company-scoped (the Users page is the company view), excludes both disabled accounts and
+revoked memberships, and labels inherited access so an owner with no explicit assignment
+does not read as a defect. "Online" is the realtime presence channel — the same source as
+the messaging list and every avatar ring — which is ephemeral by design, so a row is never
+stale: a closed socket drops the person on the next paint.
+
 ## Plugin activation does not imply one data boundary
 
 Every plugin declares a customer-visible data scope: workspace-private, company-shared, or hybrid. The label describes the current storage and permission model; it does not pretend every enabled app is isolated to one workspace. Changing a declaration requires reviewing the plugin's tables, APIs, RLS, and navigation behavior together.

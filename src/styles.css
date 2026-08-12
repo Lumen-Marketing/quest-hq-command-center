@@ -31675,3 +31675,45 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 .wb-rel-link:hover { text-decoration: underline; }
 .wb-rel-link i { font-size: 12px; opacity: .45; }
+
+/* ---- Members tile: who is in this workspace, and who is here now ------------------------- */
+.wb-tile-members-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wb-tile-members-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+/* The same green as the avatar ring, so the count and the rings read as one signal. */
+.wb-presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.wb-presence-dot.is-online { background: #16a34a; }
+
+.wb-tile-member { cursor: default; }
+
+.wb-tile-member-status {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Offline stays the quiet default; only "here now" earns weight and colour. */
+.wb-tile-member-status.is-online {
+  color: #16a34a;
+  font-weight: 650;
+}

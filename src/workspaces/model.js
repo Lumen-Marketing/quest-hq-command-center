@@ -32,6 +32,34 @@ export function allowedWorkspaces({ companyId, workspaces = [], memberships = []
   return active.filter((workspace) => allowedIds.has(clean(workspace.id))).sort(workspaceSort);
 }
 
+/**
+ * Who is in ONE workspace: everybody with an active membership row, plus the company roles
+ * that reach every workspace without needing one.
+ *
+ * This is allowedWorkspaces() read from the other end. That answers "which workspaces may
+ * this person enter"; this answers "which people may enter this workspace". Both go through
+ * roleCanEnterEveryWorkspace, so the two directions cannot disagree about an owner -- who
+ * has no membership row for most workspaces and belongs to all of them.
+ *
+ * `inherited` is kept on the way out because the caller wants to say WHY somebody is here:
+ * an owner listed with no explicit assignment otherwise looks like a bug.
+ */
+export function workspaceMembers({ workspaceId, memberships = [], users = [] }) {
+  const target = clean(workspaceId);
+  const explicit = new Set(memberships
+    .filter((membership) => (
+      clean(membership.workspace_id) === target
+      && clean(membership.status || 'active').toLowerCase() === 'active'
+    ))
+    .map((membership) => clean(membership.profile_id))
+    .filter(Boolean));
+
+  return users
+    .filter((user) => clean(user.status || 'active').toLowerCase() === 'active')
+    .map((user) => ({ ...user, inherited: roleCanEnterEveryWorkspace(user.role) }))
+    .filter((user) => user.inherited || explicit.has(clean(user.profile_id)));
+}
+
 export function workspaceForRoute({
   companyId,
   workspaceParam,

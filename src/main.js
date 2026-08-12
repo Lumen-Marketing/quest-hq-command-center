@@ -51,6 +51,7 @@ import {
   workspaceForRoute,
   recordBelongsToWorkspace,
   workspacePluginStatus as resolveWorkspacePluginStatus,
+  workspaceMembers,
 } from './workspaces/model.js';
 import {
   WORKSPACE_PLUGIN_REGISTRY as WORKSPACE_PLUGIN_CATALOG,
@@ -14209,6 +14210,7 @@ function wbTileMeta(companyId, workspace, tile) {
     case 'app': { const a = wbTileTargetApp(companyId, workspace, tile.config.appId); return { title: a ? a.name : 'App', icon: a ? a.icon : 'ti-layout-grid', config: true, app: a }; }
     case 'report': { const a = wbTileTargetApp(companyId, workspace, tile.config.appId); return { title: a ? `${a.name} · Report` : 'Report', icon: 'ti-chart-bar', config: true, app: a }; }
     case 'tasks': return { title: 'Workspace tasks', icon: 'ti-checklist', config: false };
+    case 'members': return { title: 'Members', icon: 'ti-users', config: false };
     case 'calendar': return { title: 'Calendar', icon: 'ti-calendar', config: false };
     case 'contacts': return { title: 'Contacts', icon: 'ti-address-book', config: false };
     case 'jobs': return { title: tile.config.title || 'Jobs', icon: 'ti-hammer', config: true };
@@ -14251,6 +14253,7 @@ function wbTileBody(companyId, workspace, tile, meta) {
     case 'app': return wbTileApp(companyId, workspace, tile, meta);
     case 'report': return wbTileReport(companyId, workspace, tile, meta);
     case 'tasks': return wbTileTasks(companyId);
+    case 'members': return wbTileMembers(companyId);
     case 'calendar': return wbTileCalendar(companyId);
     case 'contacts': return wbTileContacts(companyId);
     case 'jobs': return wbTileJobs(companyId, tile);
@@ -14259,6 +14262,50 @@ function wbTileBody(companyId, workspace, tile, meta) {
     case 'links': return wbTileLinks(tile);
     default: return `<div class="wb-tile-empty">Unknown tile.</div>`;
   }
+}
+
+/**
+ * Who is in this workspace, and who is at their desk right now.
+ *
+ * Scoped to the workspace rather than the company: the tile sits on a workspace dashboard,
+ * and "the whole company" is what the Users page is for. Owners and admins reach every
+ * workspace without a membership row, so they are listed with the reason -- otherwise they
+ * look like people nobody assigned.
+ *
+ * Online is the realtime presence channel, the same source the messaging list and every
+ * avatar ring already use. It is ephemeral by design, so no row here is ever stale: when
+ * a socket closes the person drops out on the next paint.
+ */
+function wbTileMembers(companyId) {
+  const workspaceId = workspaceIdForCompany(companyId);
+  const members = workspaceMembers({
+    workspaceId,
+    memberships: state.workspaceMemberships,
+    users: companyAccessUsers(companyId),
+  });
+  if (!members.length) return `<div class="wb-tile-empty">Nobody has access to this workspace yet.</div>`;
+
+  // Online first, then alphabetical. The point of the tile is who is reachable now, and
+  // sorting by name alone buries that under whoever happens to start with an A.
+  const rows = members
+    .map((user) => ({ ...user, online: profileIsOnline(user.profile_id) }))
+    .sort((a, b) => (Number(b.online) - Number(a.online)) || String(a.name || '').localeCompare(String(b.name || '')));
+  const onlineCount = rows.filter((user) => user.online).length;
+
+  return `
+    <div class="wb-tile-members-head">
+      <span class="wb-tile-members-count"><span class="wb-presence-dot is-online" aria-hidden="true"></span>${onlineCount} online</span>
+      <span class="wb-sub">${rows.length} member${rows.length === 1 ? '' : 's'}</span>
+    </div>
+    <div class="wb-tile-rows">${rows.map((user) => {
+    const id = user.profile_id || user.member_id || '';
+    const avatar = wbAvatar({ id, name: user.name, avatar_url: user.avatar_url, color: wbColorFor(id) });
+    return `<div class="wb-tile-row wb-tile-member">
+        ${withPresenceRing(avatar, user.profile_id)}
+        <span class="wb-tile-row-main"><b>${h(user.name)}</b><span>${h(user.role_label || 'Member')}${user.inherited ? ' · all workspaces' : ''}</span></span>
+        <span class="wb-tile-member-status ${user.online ? 'is-online' : ''}">${user.online ? 'Online' : 'Offline'}</span>
+      </div>`;
+  }).join('')}</div>`;
 }
 
 function wbTileApps(companyId, workspace) {
@@ -25002,56 +25049,35 @@ function updateProposalBuilderPreview(form) {
   if (preview) preview.innerHTML = renderProposalPreview(proposalDraftFromForm(form));
 }
 
-function renderProposalBuilderModal(companyId) {
-  const ctx = currentProposalContext();
-  if (!ctx || ctx.company_id !== companyId) return renderModalShell('Job Center', 'Proposal', emptyState('Choose a contact, quote, or job before creating a proposal.'));
-  const draft = proposalDraftForContext(ctx);
-  const addressOptions = contactAddressOptions(companyId);
-  const saved = proposalsFor(ctx.type, ctx.id);
-  const activeProposal = ctx.proposalId ? proposalById(ctx.proposalId) : null;
-  const savedPanel = saved.length ? `
-    <section class="proposal-history">
-      <div><strong>Saved proposals</strong><small>Reuse, edit, or export past versions.</small></div>
-      ${saved.slice(0, 5).map((proposal) => `
-        <button class="${proposal.id === ctx.proposalId ? 'active' : ''}" type="button" data-action="edit-proposal" data-proposal-id="${h(proposal.id)}">
-          <span>${h(proposal.proposal_no || proposal.title)}</span>
-          <em>${h(proposal.status)} - ${h(money(proposal.total))}</em>
-        </button>
-      `).join('')}
-    </section>
-  ` : '';
-  return renderModalShell('Job Center', `${ctx.label} proposal`, `
-    <form id="proposal-builder-form" class="proposal-builder" data-proposal-builder-form>
-      <input type="hidden" name="proposal_id" value="${h(ctx.proposalId || '')}" />
-      <input type="hidden" name="related_type" value="${h(ctx.type)}" />
-      <input type="hidden" name="related_id" value="${h(ctx.id)}" />
-      <section class="proposal-builder-rail">
-        ${savedPanel}
-        <label><span>Template</span><select data-proposal-template name="template_id">${PROPOSAL_TEMPLATES.map((template) => `<option value="${h(template.id)}" ${template.id === draft.templateId ? 'selected' : ''}>${h(template.name)}</option>`).join('')}</select></label>
-        <label><span>Style</span><select data-proposal-field name="style"><option value="premium" ${draft.style !== 'simple' ? 'selected' : ''}>Premium</option><option value="simple" ${draft.style === 'simple' ? 'selected' : ''}>Simple</option></select></label>
-        <label><span>Proposal #</span><input data-proposal-field name="proposal_no" value="${h(draft.proposalNo)}" /></label>
-        <div class="proposal-two"><label><span>Issued</span><input data-proposal-field name="issued" type="date" value="${h(draft.issued)}" /></label><label><span>Valid through</span><input data-proposal-field name="valid" type="date" value="${h(draft.valid)}" /></label></div>
-        <label><span>Client name</span><input data-proposal-field name="client_name" value="${h(draft.client.name)}" /></label>
-        <label><span>Client email</span><input data-proposal-field name="client_email" value="${h(draft.client.email)}" /></label>
-        <label><span>Client phone</span><input data-proposal-field name="client_phone" value="${h(draft.client.phone)}" /></label>
-        ${renderAddressLookupField('Client address', 'client_address', draft.client.address, addressOptions, '', 'proposal-client-address-options', 'data-proposal-field')}
-        <label><span>Job title</span><input data-proposal-field name="job_title" value="${h(draft.jobTitle)}" /></label>
-        <label><span>Total</span><input data-proposal-field name="total" type="number" step="0.01" value="${h(String(draft.total || ''))}" /></label>
-        <div class="proposal-two"><label><span>Monthly</span><input data-proposal-field name="monthly" value="${h(draft.monthly)}" /></label><label><span>Deposit %</span><input data-proposal-field name="deposit" type="number" step="1" value="${h(String(draft.deposit))}" /></label></div>
-        <label><span>Includes row</span><input data-proposal-field name="includes" value="${h(draft.includes)}" /></label>
-        <label><span>Warranty</span><input data-proposal-field name="warranty" value="${h(draft.warranty)}" /></label>
-        <label><span>Manufacturer warranty</span><input data-proposal-field name="manufacturer_warranty" value="${h(draft.manufacturerWarranty)}" /></label>
-        <label><span>Materials</span><textarea data-proposal-field name="materials">${h(draft.materials)}</textarea></label>
-        <label><span>Terms</span><textarea data-proposal-field name="terms">${h(draft.terms)}</textarea></label>
-        <section class="proposal-scope-editor"><div><strong>Scope lines</strong><small>Asterisk marks featured items.</small></div>${renderProposalScopeRows(draft.items)}</section>
-      </section>
-      <section class="proposal-builder-preview" data-proposal-preview>${renderProposalPreview(draft)}</section>
-    </form>
-  `, 'proposal-modal', `
-    ${activeProposal ? `<button class="btn" type="button" data-action="export-proposal" data-proposal-id="${h(activeProposal.id)}"><i class="ti ti-download"></i>Export</button>` : ''}
-    <button class="btn btn-primary" type="submit" form="proposal-builder-form"><i class="ti ti-file-text"></i>${activeProposal ? 'Update proposal' : 'Save proposal'}</button>
-  `);
+// ---- Proposal builder ----------------------------------------------------------------
+// Body lives in ./proposals/proposal-builder-modal.js and is fetched on first use.
+let proposalBuilderModalModule = null;
+let proposalBuilderModalPending = null;
+
+function loadProposalBuilderModal() {
+  if (proposalBuilderModalModule) return Promise.resolve(proposalBuilderModalModule);
+  if (!proposalBuilderModalPending) {
+    proposalBuilderModalPending = import('./proposals/proposal-builder-modal.js').then((mod) => {
+      proposalBuilderModalModule = mod.createProposalBuilderModal({
+        PROPOSAL_TEMPLATES, contactAddressOptions, currentProposalContext, emptyState, field, h,
+        money, number, proposalById, proposalDraftForContext, proposalsFor, renderAddressLookupField,
+        renderModalShell, renderProposalPreview, renderProposalScopeRows,
+      });
+      return proposalBuilderModalModule;
+    }).catch((error) => {
+      proposalBuilderModalPending = null;
+      throw error;
+    });
+  }
+  return proposalBuilderModalPending;
 }
+
+function renderProposalBuilderModal(companyId) {
+  if (proposalBuilderModalModule) return proposalBuilderModalModule.renderProposalBuilderModal(companyId);
+  loadProposalBuilderModal().then(() => render()).catch((error) => console.error('Proposal builder failed to load', error));
+  return questLoader('Loading proposal builder');
+}
+
 
 function proposalActivityBody(draft) {
   const scope = draft.items.slice(0, 12).map((item) => `${item.star ? '* ' : ''}${item.service}${item.description ? ' - ' + item.description : ''}`).join('\n');
