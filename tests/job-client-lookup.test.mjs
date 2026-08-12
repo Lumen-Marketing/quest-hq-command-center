@@ -138,3 +138,19 @@ test('the contacts table is actually allowed to scroll sideways', () => {
   // The rows are what overflow; without the min-width there is nothing to scroll.
   assert.match(styles, /\.contacts-table \.table-head,\n\.contacts-table \.table-row \{[\s\S]*?min-width: 1160px;/);
 });
+
+test('a job card can be deleted from the board, like a quote card', () => {
+  // Same control, same route: through the recycle bin rather than destroying from a board,
+  // because a job carries tasks, files and forms with it.
+  assert.match(main, /data-action="delete-job" data-job-id="\$\{h\(job\.id\)\}"/);
+  assert.match(main, /can\('jobs\.manage', job\.company_id\) \?/, 'offered only to someone who may delete');
+  const at = main.indexOf("action === 'delete-job'");
+  assert.notEqual(at, -1, 'the button is rendered but never handled');
+  assert.match(main.slice(at, at + 600), /openRecycleDeleteModal\(\{ type: 'job', id: node\.dataset\.jobId \}\)/);
+
+  // The shared rules are keyed to .pipe-card; a job board card is .job-card, so without
+  // these the button lands in the wrong place and never becomes visible.
+  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(styles, /\.job-card \{ position: relative; \}/);
+  assert.match(styles, /\.job-card:hover \.pipe-card-delete,/);
+});

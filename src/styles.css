@@ -32019,3 +32019,11 @@ a.wb-cal-more:hover { color: var(--orange); }
   overflow-x: auto;
   overflow-y: hidden;
 }
+
+/* The job card gets the same delete affordance as a quote card. The rules above are keyed
+   to .pipe-card, and a job board card is .job-card -- without these the button renders at
+   the wrong place and never becomes visible, because both the absolute positioning and the
+   reveal-on-hover hang off that class. */
+.job-card { position: relative; }
+.job-card:hover .pipe-card-delete,
+.job-card .pipe-card-delete:focus-visible { opacity: 1; }

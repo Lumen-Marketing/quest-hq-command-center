@@ -28465,6 +28465,13 @@ function handleAction(event, node) {
     openRecycleDeleteModal({ type: 'deal', id: node.dataset.dealId });
     return;
   }
+  if (action === 'delete-job') {
+    event.preventDefault();
+    // Through the recycle bin, exactly as a quote is: a job carries tasks, files and forms,
+    // so it goes somewhere recoverable rather than being destroyed from a board.
+    openRecycleDeleteModal({ type: 'job', id: node.dataset.jobId });
+    return;
+  }
   if (action === 'remove-quote-line-item') {
     event.preventDefault();
     removeQuoteLineItem(node.dataset.dealId || '', node.dataset.lineId || '').catch((error) => showToast(error.message || 'Line item remove failed.', 'local', 'Quotes'));
@@ -42526,6 +42533,7 @@ function jobCard(job) {
         <span>${h(job.client_name || 'No client')}</span>
         <small>${h(companyName(job.company_id))} - ${h(job.owner_name || 'Unassigned')}</small>
       </button>
+      ${can('jobs.manage', job.company_id) ? `<button class="pipe-card-delete" type="button" data-action="delete-job" data-job-id="${h(job.id)}" title="Delete job" aria-label="Delete ${h(job.name)}"><i class="ti ti-trash" aria-hidden="true"></i></button>` : ''}
       ${renderPipelineNextAction('job', job)}
       <div class="job-card-foot">
         <em>${h(taskCountForJob(job.id))} tasks</em>
