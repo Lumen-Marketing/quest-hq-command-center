@@ -108,3 +108,70 @@ test('an entry written before this stays as it was', () => {
   assert.match(fn('wbActivityRow'), /const actor = actorName\s*[\r\n]+\s*\? `<span class="wb-act-actor">/);
   assert.match(fn('wbActivityRow'), /\$\{actor \? '<span class="wb-act-sep">·<\/span>' : ''\}/);
 });
+
+// --- the comment thread ---------------------------------------------------------------------
+// "can you not display all the comments only the last comment that will only be expand when
+// clicked, also click again to hide it, also fix the UI as you can see the name and comment
+// are almost merging so close, allow mentioning a member on the comment."
+
+test('only the newest comment shows until asked', () => {
+  const body = fn('wbActivityComments');
+  assert.match(body, /const shown = expanded \? comments : comments\.slice\(-1\);/);
+  assert.match(body, /const hidden = comments\.length - 1;/);
+  // One comment needs no control at all.
+  assert.match(body, /const more = hidden > 0/);
+});
+
+test('the same control hides them again', () => {
+  const toggle = fn('wbToggleActivityCommentsMore');
+  assert.match(toggle, /if \(set\.has\(id\)\) set\.delete\(id\); else set\.add\(id\);/);
+  assert.match(fn('wbActivityComments'), /\$\{expanded \? 'Hide' : `Show \$\{hidden\} earlier`\}/);
+  assert.match(fn('wbActivityComments'), /aria-expanded="\$\{expanded \? 'true' : 'false'\}"/);
+  assert.ok(main.includes("bind('[data-wb-act-comments-more]'"), 'the control is rendered but never bound');
+});
+
+test('expanded is its own state, not the composer being open', () => {
+  // openActComments controls whether the write box shows. Reusing it would mean opening the
+  // box to read, and reading to write.
+  const compose = fn('wbComposeState');
+  assert.match(compose, /if \(!\(state\.wbCompose\.expandedActComments instanceof Set\)\) state\.wbCompose\.expandedActComments = new Set\(\);/);
+  assert.match(fn('wbActivityComments'), /const open = compose\.openActComments\?\.has\(ev\.id\);/);
+  assert.match(fn('wbActivityComments'), /const expanded = compose\.expandedActComments\?\.has\(ev\.id\);/);
+});
+
+test('the name, the time and the text each get their own place', () => {
+  // They shared one line with no gap, so "Lumen Marketing Account" ran into "test" and then
+  // into "6m ago".
+  const body = fn('wbActivityComments');
+  assert.match(body, /<div class="wb-cmt-head"><b>\$\{h\(name\)\}<\/b><em>/);
+  assert.match(body, /<div class="wb-cmt-text">/);
+  const css = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(css, /\.wb-cmt \{\n  display: flex;/);
+  assert.match(css, /\.wb-cmt-head \{\n  display: flex;[\s\S]*?gap: 8px;/);
+  assert.match(css, /\.wb-cmt-text \{[\s\S]*?overflow-wrap: anywhere;/);
+});
+
+test('@ offers the members, so the name typed is one that resolves', () => {
+  // wbFeedText highlights a mention and mentionedProfileIds notifies the person, but both
+  // need the name spelled exactly right from memory.
+  const body = fn('wbBindMentionPickers');
+  // A plain substring: matching a regex with a regex needs escaping that is easy to get
+  // wrong, and a wrong one fails the test for the wrong reason.
+  assert.ok(
+    body.includes('/(^|\\s)@([^@\\n]*)$/.exec(input.value.slice(0, caret))'),
+    '@ must start a word, or an email address opens the menu',
+  );
+  assert.match(body, /matches = wbMembers\(companyId\)/);
+  assert.match(body, /input\.value = `\$\{before\}@\$\{member\.name\} \$\{after\}`;/, 'a trailing space, or the next word joins the mention');
+  for (const key of ['ArrowDown', 'ArrowUp', 'Escape']) assert.ok(body.includes(`'${key}'`), `${key} is unhandled`);
+  assert.ok(main.includes('wbBindMentionPickers(document, companyId)'), 'the picker is never bound');
+});
+
+test('Enter picks a mention without also sending the comment', () => {
+  // Both handlers are on the same element, so stopPropagation does not reach the other one,
+  // and by the time it runs the picker has already closed the list -- "is the list open"
+  // would answer no and send a comment nobody finished writing.
+  assert.match(fn('wbBindMentionPickers'), /event\.mentionHandled = true;/);
+  assert.match(main, /if \(event\.mentionHandled\) return;/);
+  assert.match(main, /const results = el\.closest\('\[data-wb-mention-wrap\]'\)\?\.querySelector\('\[data-wb-mention-results\]'\);\r?\n\s*if \(results && !results\.hidden\) return;/);
+});

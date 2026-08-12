@@ -31776,3 +31776,103 @@ a.wb-cal-more:hover { color: var(--orange); }
   margin: 0 6px;
   color: var(--muted);
 }
+
+/* ---- Activity comments: readable rows, newest only until asked --------------------------- */
+.wb-cmt {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 0;
+}
+
+.wb-cmt + .wb-cmt { border-top: 1px solid var(--border); }
+
+.wb-cmt .wb-avatar { flex: 0 0 auto; }
+
+.wb-cmt-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* The name and the time shared a line with the text and no gap, so "Lumen Marketing
+   Account" ran straight into "test" and then into "6m ago". */
+.wb-cmt-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.wb-cmt-head b {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wb-cmt-head em {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+.wb-cmt-text {
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.wb-cmt-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wb-cmt-more:hover { color: var(--ink); }
+
+/* ---- @mention picker --------------------------------------------------------------------- */
+.wb-mention-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wb-mention-results {
+  position: absolute;
+  z-index: 40;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(15, 18, 24, .16);
+}
+
+.wb-mention-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-mention-result:hover,
+.wb-mention-result.active { background: var(--surface-2); }

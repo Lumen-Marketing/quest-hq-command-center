@@ -8424,63 +8424,35 @@ function dashboardFindApp(companyId, appId) {
 
 // Lets the user choose which report an app widget renders (recent records, a
 // breakdown by a status/category field, or a numeric total) with a live preview.
-function renderDashboardAppWidgetConfigModal(companyId) {
-  const appId = state.dashboardConfigAppId || '';
-  const found = dashboardFindApp(companyId, appId);
-  if (!found) {
-    return renderModalShell('Widget report', 'App unavailable', `
-      <p class="wb-sub">This app is no longer available.</p>
-      <div class="modal-actions"><button class="btn" type="button" data-action="close-modal">Close</button></div>
-    `, 'dashboard-app-widget-modal');
+// ---- Widget settings ----------------------------------------------------------------
+// Body lives in ./home/app-widget-config-modal.js and is fetched on first use.
+let appWidgetConfigModalModule = null;
+let appWidgetConfigModalPending = null;
+
+function loadAppWidgetConfigModal() {
+  if (appWidgetConfigModalModule) return Promise.resolve(appWidgetConfigModalModule);
+  if (!appWidgetConfigModalPending) {
+    appWidgetConfigModalPending = import('./home/app-widget-config-modal.js').then((mod) => {
+      appWidgetConfigModalModule = mod.createAppWidgetConfigModal({
+        app, dashboardAppMultiBody, dashboardAppMultiConfig, dashboardAppMultiEligible, dashboardAppReportOptions, dashboardAppResolvedMultiFields,
+        dashboardAppResolvedReport, dashboardAppWidgetBody, dashboardAppWidgetConfig, dashboardEmptyNote, dashboardFindApp, field,
+        h, number, renderModalShell, state,
+      });
+      return appWidgetConfigModalModule;
+    }).catch((error) => {
+      appWidgetConfigModalPending = null;
+      throw error;
+    });
   }
-  const { app } = found;
-  if (state.dashboardConfigMulti) {
-    const cfg = dashboardAppMultiConfig(companyId, appId);
-    const selected = dashboardAppResolvedMultiFields(app, cfg);
-    const eligible = dashboardAppMultiEligible(app);
-    const picker = eligible.length ? `
-      <div class="dash-report-picker">
-        ${eligible.map((f) => {
-          const on = selected.includes(f.id);
-          const kind = (f.type === 'status' || f.type === 'category') ? 'Breakdown by option' : 'Sum across records';
-          return `
-            <button type="button" class="dash-report-opt dash-report-check ${on ? 'active' : ''}" data-action="dashboard-app-widget-field" data-widget-app="${h(appId)}" data-field="${h(f.id)}">
-              <span class="dro-check"><i class="ti ti-check"></i></span>
-              <span class="dro-text"><b>${h(f.label)}</b><small>${h(kind)}</small></span>
-            </button>`;
-        }).join('')}
-      </div>` : '<p class="wb-sub">This app has no status, category, or numeric fields to report on yet.</p>';
-    return renderModalShell('Widget fields', `${app.name} — fields`, `
-      <div class="dash-modal-summary">
-        <div><b>Which fields should this widget show?</b><span>Pick any number — each appears as its own mini report on the ${h(app.name)} card.</span></div>
-      </div>
-      ${picker}
-      <div class="dash-report-preview">
-        <div class="dro-preview-label">Live preview</div>
-        <article class="panel dash-widget-card"><div class="dash-widget-body">${app.items.length ? dashboardAppMultiBody(app, selected) : dashboardEmptyNote('No records yet — add records to see these reports.')}</div></article>
-      </div>
-    `, 'dashboard-app-widget-modal');
-  }
-  const cfg = dashboardAppWidgetConfig(companyId, appId);
-  const current = dashboardAppResolvedReport(app, cfg);
-  const options = dashboardAppReportOptions(app);
-  return renderModalShell('Widget report', `${app.name} widget`, `
-    <div class="dash-modal-summary">
-      <div><b>What should this widget show?</b><span>Pick the report displayed on the ${h(app.name)} dashboard card.</span></div>
-    </div>
-    <div class="dash-report-picker">
-      ${options.map((o) => `
-        <button type="button" class="dash-report-opt ${o.id === current ? 'active' : ''}" data-action="dashboard-app-widget-report" data-widget-app="${h(appId)}" data-report="${h(o.id)}">
-          <span class="dro-check"><i class="ti ti-check"></i></span>
-          <span class="dro-text"><b>${h(o.label)}</b><small>${h(o.hint)}</small></span>
-        </button>`).join('')}
-    </div>
-    <div class="dash-report-preview">
-      <div class="dro-preview-label">Live preview</div>
-      <article class="panel dash-widget-card"><div class="dash-widget-body">${app.items.length ? dashboardAppWidgetBody(app, current) : dashboardEmptyNote('No records yet — add records to see this report.')}</div></article>
-    </div>
-  `, 'dashboard-app-widget-modal');
+  return appWidgetConfigModalPending;
 }
+
+function renderDashboardAppWidgetConfigModal(companyId) {
+  if (appWidgetConfigModalModule) return appWidgetConfigModalModule.renderDashboardAppWidgetConfigModal(companyId);
+  loadAppWidgetConfigModal().then(() => render()).catch((error) => console.error('Widget settings failed to load', error));
+  return questLoader('Loading settings');
+}
+
 
 function renderDashboardWidgetTray(registry, layout) {
   return `
@@ -14040,19 +14012,56 @@ function wbActivityBar(companyId, ev) {
     ${wbActivityComments(companyId, ev)}`;
 }
 
+/**
+ * The comments under one activity entry.
+ *
+ * Only the newest is shown. Eight of them turned the feed into a wall of repeated names
+ * that pushed every later entry off the screen, and the newest is the one anybody is
+ * actually reading. The rest are one click away, and the same click puts them back.
+ */
 function wbActivityComments(companyId, ev) {
   const comments = Array.isArray(ev.comments) ? ev.comments : [];
-  const open = wbComposeState().openActComments?.has(ev.id);
+  const compose = wbComposeState();
+  const open = compose.openActComments?.has(ev.id);
+  const expanded = compose.expandedActComments?.has(ev.id);
   if (!comments.length && !open) return '';
-  const rows = comments.map((c) => {
+
+  const row = (c) => {
+    // The author's CURRENT profile, so a rename shows on old comments; the stored name is
+    // the fallback for somebody who no longer resolves.
     const member = c.authorId ? wbMemberById(companyId, c.authorId) : null;
-    return `<div class="wb-cmt"><b>${h(member?.name || c.author || 'User')}</b><span>${wbFeedText(companyId, c.text)}</span><em>${h(wbTimeAgo(c.ts))}</em></div>`;
-  }).join('');
+    const name = member?.name || c.author || 'User';
+    const avatar = wbAvatar({ id: c.authorId, name, color: member?.color || wbColorFor(c.authorId || name), avatar_url: member?.avatar_url || '' }, 24);
+    return `<div class="wb-cmt">${avatar}<div class="wb-cmt-body">`
+      + `<div class="wb-cmt-head"><b>${h(name)}</b><em>${h(wbTimeAgo(c.ts))}</em></div>`
+      + `<div class="wb-cmt-text">${wbFeedText(companyId, c.text)}</div></div></div>`;
+  };
+
+  const hidden = comments.length - 1;
+  const shown = expanded ? comments : comments.slice(-1);
+  const more = hidden > 0
+    ? `<button class="wb-cmt-more" type="button" data-wb-act-comments-more="${h(ev.id)}" aria-expanded="${expanded ? 'true' : 'false'}"><i class="ti ti-chevron-${expanded ? 'up' : 'down'}" aria-hidden="true"></i>${expanded ? 'Hide' : `Show ${hidden} earlier`} comment${hidden === 1 ? '' : 's'}</button>`
+    : '';
+
   return `
     <div class="wb-post-comments">
-      ${rows}
-      ${open ? `<div class="wb-cmt-new"><input class="wb-input" data-wb-act-comment-input="${h(ev.id)}" placeholder="Write a comment" /><button class="btn btn-sm btn-primary" type="button" data-wb-act-comment-send="${h(ev.id)}">Comment</button></div>` : ''}
+      ${more}
+      ${shown.map(row).join('')}
+      ${open ? `<div class="wb-cmt-new">
+        <div class="wb-mention-wrap" data-wb-mention-wrap>
+          <input class="wb-input" data-wb-act-comment-input="${h(ev.id)}" data-wb-mention placeholder="Write a comment — @ to mention" autocomplete="off" />
+          <div class="wb-mention-results" data-wb-mention-results role="listbox" hidden></div>
+        </div>
+        <button class="btn btn-sm btn-primary" type="button" data-wb-act-comment-send="${h(ev.id)}">Comment</button>
+      </div>` : ''}
     </div>`;
+}
+
+// Show or hide the earlier comments on one entry.
+function wbToggleActivityCommentsMore(id) {
+  const set = wbComposeState().expandedActComments;
+  if (set.has(id)) set.delete(id); else set.add(id);
+  render();
 }
 
 // Turn free text into safe HTML: escape, highlight @mentions of known members,
@@ -14836,9 +14845,10 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
 
 // ── Workspace activity feed: publisher actions ─────────────────────────────
 function wbComposeState() {
-  state.wbCompose = state.wbCompose || { files: [], openActComments: new Set() };
-  // Older sessions restored a state object without the set.
+  state.wbCompose = state.wbCompose || { files: [], openActComments: new Set(), expandedActComments: new Set() };
+  // Older sessions restored a state object without the sets.
   if (!(state.wbCompose.openActComments instanceof Set)) state.wbCompose.openActComments = new Set();
+  if (!(state.wbCompose.expandedActComments instanceof Set)) state.wbCompose.expandedActComments = new Set();
   return state.wbCompose;
 }
 
@@ -15729,6 +15739,91 @@ function wbBindRelationshipPickers(root) {
       commit(options.find((option) => option.id === button.dataset.relId));
     });
     if (clear) clear.addEventListener('click', () => { commit(null); search.focus(); });
+  });
+}
+
+/**
+ * Type @ to mention somebody.
+ *
+ * wbFeedText already highlights a mention and mentionedProfileIds already notifies the
+ * person, but both work on a name typed exactly right from memory. This offers the list,
+ * so the name that lands in the text is one that will actually resolve.
+ *
+ * The trigger is the @-run immediately before the caret, so a mid-sentence mention works
+ * and an email address does not open a menu (@ must start a word).
+ */
+function wbBindMentionPickers(root, companyId) {
+  (root || document).querySelectorAll('[data-wb-mention]').forEach((input) => {
+    if (input.dataset.mentionBound) return;
+    input.dataset.mentionBound = '1';
+    const wrap = input.closest('[data-wb-mention-wrap]');
+    const results = wrap?.querySelector('[data-wb-mention-results]');
+    if (!results) return;
+
+    let matches = [];
+    let active = 0;
+    let at = -1;
+
+    const close = () => { results.hidden = true; results.innerHTML = ''; matches = []; at = -1; };
+
+    const paint = () => {
+      results.innerHTML = matches.map((m, i) => `<button type="button" class="wb-mention-result${i === active ? ' active' : ''}" role="option" aria-selected="${i === active}" data-i="${i}">`
+        + `${wbAvatar({ id: m.id, name: m.name, color: m.color, avatar_url: m.avatar_url }, 22)}<span>${h(m.name)}</span></button>`).join('');
+      results.hidden = !matches.length;
+    };
+
+    const commit = (member) => {
+      if (!member || at < 0) return;
+      const before = input.value.slice(0, at);
+      const after = input.value.slice(input.selectionStart ?? input.value.length);
+      // A trailing space so the next word is not swallowed into the mention.
+      input.value = `${before}@${member.name} ${after}`;
+      const caret = before.length + member.name.length + 2;
+      input.setSelectionRange(caret, caret);
+      close();
+      input.focus();
+    };
+
+    const refresh = () => {
+      const caret = input.selectionStart ?? input.value.length;
+      // The @-run the caret sits in: @ at a word boundary, then anything but @ or newline.
+      const found = /(^|\s)@([^@\n]*)$/.exec(input.value.slice(0, caret));
+      if (!found) { close(); return; }
+      at = caret - found[2].length - 1;
+      const query = found[2].trim().toLowerCase();
+      matches = wbMembers(companyId)
+        .filter((m) => m.name && (!query || m.name.toLowerCase().includes(query)))
+        .slice(0, 6);
+      active = 0;
+      paint();
+    };
+
+    input.addEventListener('input', refresh);
+    input.addEventListener('click', refresh);
+    input.addEventListener('keydown', (event) => {
+      if (results.hidden || !matches.length) return;
+      if (event.key === 'ArrowDown') { event.preventDefault(); active = (active + 1) % matches.length; paint(); return; }
+      if (event.key === 'ArrowUp') { event.preventDefault(); active = (active - 1 + matches.length) % matches.length; paint(); return; }
+      // Enter picks the highlighted member rather than sending a half-typed name. The flag
+      // is what tells the send handler to stand down: both listeners are on this same
+      // element, so stopPropagation does not reach it, and by the time it runs commit() has
+      // already closed the list -- so "is the list open" would answer no and send anyway.
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault();
+        event.mentionHandled = true;
+        commit(matches[active]);
+        return;
+      }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+    });
+    // mousedown, not click: the input's own blur would close the list first.
+    results.addEventListener('mousedown', (event) => {
+      const button = event.target.closest('[data-i]');
+      if (!button) return;
+      event.preventDefault();
+      commit(matches[Number(button.dataset.i)]);
+    });
+    input.addEventListener('blur', () => { setTimeout(close, 120); });
   });
 }
 
@@ -19076,9 +19171,18 @@ function mountWorkspaceBuilder() {
       wbAddActivityComment(companyId, id, input?.value);
     });
     bind('[data-wb-act-task]', (el) => { state.wbTaskFromActivityId = el.dataset.wbActTask; state.modal = 'wb-activity-task'; render(); });
+    bind('[data-wb-act-comments-more]', (el) => wbToggleActivityCommentsMore(el.dataset.wbActCommentsMore));
+    wbBindMentionPickers(document, companyId);
     document.querySelectorAll('[data-wb-act-comment-input]').forEach((el) => {
       el.onkeydown = (event) => {
         if (event.key !== 'Enter') return;
+        // While the mention list is open, Enter picks a name instead of sending. Two guards,
+        // because both handlers sit on this same element and either could run first: the
+        // flag catches the picker having already handled it (and closed the list), the
+        // hidden check catches this handler running before the picker.
+        if (event.mentionHandled) return;
+        const results = el.closest('[data-wb-mention-wrap]')?.querySelector('[data-wb-mention-results]');
+        if (results && !results.hidden) return;
         event.preventDefault();
         wbAddActivityComment(companyId, el.dataset.wbActCommentInput, el.value);
       };
@@ -22357,68 +22461,35 @@ function renderActivityDetailModal() {
   `, 'task-modal activity-detail-panel');
 }
 
-function renderCrmAccountModal(companyId, accountKey) {
-  const account = crmAccountByKey(companyId, accountKey);
-  if (!account) {
-    return renderModalShell('CRM', 'Customer account', emptyState('This customer is not visible in the current company view.'));
+// ---- Account ----------------------------------------------------------------
+// Body lives in ./crm/account-modal.js and is fetched on first use.
+let crmAccountModalModule = null;
+let crmAccountModalPending = null;
+
+function loadCrmAccountModal() {
+  if (crmAccountModalModule) return Promise.resolve(crmAccountModalModule);
+  if (!crmAccountModalPending) {
+    crmAccountModalPending = import('./crm/account-modal.js').then((mod) => {
+      crmAccountModalModule = mod.createCrmAccountModal({
+        appHref, can, companyPath, contractRows, crmAccountByKey, emptyState,
+        formatDate, h, metricCard, money, priorityPill, renderModalShell,
+        taskQueueRow,
+      });
+      return crmAccountModalModule;
+    }).catch((error) => {
+      crmAccountModalPending = null;
+      throw error;
+    });
   }
-  const latestJob = account.latestJob;
-  const openTasks = account.tasks.filter((task) => task.status !== 'done');
-  return renderModalShell('CRM', account.name, `
-    <div class="crm-account-modal">
-      <section class="crm-modal-summary">
-        <div class="section-head">
-          <div>
-            <h2>${h(account.name)}</h2>
-            <p>${h(account.subtitle)}</p>
-          </div>
-          ${priorityPill(account.priority)}
-        </div>
-        ${contractRows([
-          ['Primary contact', account.primaryContact],
-          ['Owner', account.owner],
-          ['Current stage', account.stage],
-          ['Pipeline value', money(account.estimateTotal)],
-          ['Open tasks', String(openTasks.length)],
-          ['Last updated', formatDate(account.updatedAt)],
-        ])}
-      </section>
-      <section class="crm-rollup-grid">
-        ${metricCard('Jobs', account.jobs.length)}
-        ${can('files.view', companyId) ? metricCard('Files', account.fileCount) : ''}
-        ${can('forms.view', companyId) ? metricCard('Forms', account.formCount) : ''}
-        ${metricCard('Tasks', account.tasks.length)}
-      </section>
-      <section class="crm-modal-actions">
-        ${latestJob ? `<a class="btn btn-primary" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: latestJob.id }, companyId))}" data-router><i class="ti ti-briefcase"></i>Open job</a>` : ''}
-        ${latestJob ? `<a class="btn" href="${appHref(companyPath('tasks', { job_id: latestJob.id }, companyId))}" data-router><i class="ti ti-list-check"></i>Tasks</a>` : ''}
-        ${latestJob && can('files.view', companyId) ? `<a class="btn" href="${appHref(companyPath('files', { job_id: latestJob.id }, companyId))}" data-router><i class="ti ti-folder"></i>Files</a>` : ''}
-        ${latestJob ? `<button class="btn" type="button" data-action="open-job-form" data-mode="edit" data-job-id="${h(latestJob.id)}"><i class="ti ti-pencil"></i>Edit latest job</button>` : ''}
-        <button class="btn" type="button" data-action="open-job-form" data-mode="new"><i class="ti ti-plus"></i>Add job</button>
-      </section>
-      <section class="crm-modal-section">
-        <div class="section-head"><div><h2>Linked jobs</h2><p>Customer workspaces connected to this account.</p></div></div>
-        <div class="data-table crm-linked-jobs">
-          <div class="table-head"><span>Job</span><span>Stage</span><span>Owner</span><span>Value</span></div>
-          ${account.jobs.map((job) => `
-            <a class="table-row" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router>
-              <span><strong>${h(job.name)}</strong><small>${h(job.site_address || 'No address')}</small></span>
-              <span>${h(job.stage)}</span>
-              <span>${h(job.owner_name || 'Unassigned')}</span>
-              <span>${money(job.estimate_total)}</span>
-            </a>
-          `).join('') || emptyState('No linked jobs yet.')}
-        </div>
-      </section>
-      <section class="crm-modal-section">
-        <div class="section-head"><div><h2>Follow-ups</h2><p>Open tasks across linked jobs.</p></div></div>
-        <div class="queue-list">
-          ${openTasks.slice(0, 6).map((task) => taskQueueRow(task)).join('') || emptyState('No open follow-ups for this customer.')}
-        </div>
-      </section>
-    </div>
-  `, 'crm-modal');
+  return crmAccountModalPending;
 }
+
+function renderCrmAccountModal(companyId, accountKey) {
+  if (crmAccountModalModule) return crmAccountModalModule.renderCrmAccountModal(companyId, accountKey);
+  loadCrmAccountModal().then(() => render()).catch((error) => console.error('Account failed to load', error));
+  return questLoader('Loading account');
+}
+
 
 function renderMessagesPage(route, companyId) {
   const conversations = companyMessageConversations(companyId);

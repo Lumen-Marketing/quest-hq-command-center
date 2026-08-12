@@ -211,6 +211,8 @@ const FACTORY_MODULES = [
   ['src/ops/calls-widget.js', 'createCallsWidget'],
   ['src/proposals/proposal-builder-modal.js', 'createProposalBuilderModal'],
   ['src/jobs/job-photos-modal.js', 'createJobPhotosModal'],
+  ['src/crm/account-modal.js', 'createCrmAccountModal'],
+  ['src/home/app-widget-config-modal.js', 'createAppWidgetConfigModal'],
 ];
 
 test('the list above covers every factory module there is', () => {
