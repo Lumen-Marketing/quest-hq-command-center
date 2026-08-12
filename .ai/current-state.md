@@ -129,6 +129,14 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - The clock reads as a clock. `formatDuration` stops at minutes, so a timer that had just started showed `0m` and stayed there. A running clock now shows seconds, ticks live in the rail (bottom of the sidebar, only while one is running, linking to the dashboard) and on the Clock dashboard's Today / Last 7 days / Elapsed. One `setInterval` drives every element carrying `data-live-clock`, writing `textContent` only -- re-rendering each second would discard scroll and the keyboard focus of anyone typing. Day totals carry `data-live-base` (the banked closed entries) so the running time is added by the ticker and not counted twice. `metricCard`/`contractRows` still escape by default; `markup()` is an explicit, greppable opt-in for the one value that is genuinely markup.
 - Guided setup, second review pass. Every reason `apply` can throw is now surfaced at review instead of by pressing the button: the reserved role name, a duplicate name between two generated roles, and an app that cannot run beside one already installed by hand (derived from the registry's `exclusiveGroup`, so a future exclusive pair is covered without code). `plugin_unavailable` warnings name the app rather than printing `crm_2`. The stage editor says which pipelines its single list is written to -- a sales workspace applies it to both Contacts and Quotes, which was invisible. A pending draft is flushed on `visibilitychange`, so answering the last question and closing the tab no longer loses it inside the 700ms debounce.
 
+## 2026-08-13 QA usability candidate
+
+- Workspace creation now leaves owners in the workspace after **Start from scratch** instead of routing them into Settings. Applying a guided setup immediately refreshes both company and workspace plugin rows, so the installed apps appear together with the generated navigation.
+- Jobs now link their client, trade, and current stage to the corresponding record or filtered view. Those CRM links remain company-scoped and permission-scoped. Pipeline stage management supports persisted up/down reordering.
+- Job owner selection searches active company users. Estimate and invoice fields accept cents and display currency symbols plus thousands separators. Address lookup biases suggestions toward Vercel's visitor location instead of a fixed alphabetical/Phoenix-first result.
+- Roof-specific contact fields appear only for roofing work or when a record already contains roof data. The platform company list marks every approved/active company in green, not only the currently selected company.
+- This candidate is client/API-only and adds no database migration.
+
 ## Remaining controlled launch configuration
 
 - Payments remain intentionally out of this change set.

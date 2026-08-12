@@ -36,9 +36,9 @@ test('job record pencil controls trigger inline editing for editable fields', ()
   assert.match(source, /const rowValueTarget = \[\.\.\.\(span\.closest\('\.sf-field'\)\?\.querySelectorAll\('\.sf-field-value \[data-job-edit\]'\) \|\| \[\]\)\]/);
   assert.match(source, /const input = document\.createElement\(options\.length \? 'select' : 'input'\)/);
   assert.match(source, /input\.addEventListener\('change', commit\)/);
-  assert.match(source, /fieldRow\('Job Type', `<span class="sf-pill sf-edit" data-job-edit="job_type"/);
+  assert.match(source, /fieldRow\('Job Type', tradeLink, 'job_type'\)/);
   assert.match(source, /fieldRow\('Owner', ed\('owner_name'/);
   assert.match(source, /fieldRow\('Priority', `<span class="sf-pill sf-edit" data-job-edit="priority"/);
-  assert.match(source, /fieldRow\('Stage', `<span>\$\{h\(job.stage\)\}<\/span>`, 'stage'\)/);
+  assert.match(source, /fieldRow\('Stage', stageLink, 'stage'\)/);
   assert.doesNotMatch(source, /<i class="ti ti-pencil sf-pencil"><\/i>/);
 });

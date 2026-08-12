@@ -9,7 +9,7 @@
 export function createJobRecord(ctx) {
   const {
     h, can, state, emptyState, pipelineStages, resolvePipelineStage, guidanceForJobStage,
-    activitiesFor, filteredActivitiesFor, accountById, dealById, appHref, companyPath,
+    activitiesFor, filteredActivitiesFor, accountById, contactById, companyContacts, dealById, appHref, companyPath,
     activeWorkspaceId, money, renderActivityFilterBar, sfFeedItem, renderSfTaskRow,
   } = ctx;
 
@@ -26,7 +26,12 @@ export function createJobRecord(ctx) {
     const tasks = state.tasks
       .filter((task) => task.project_id === job.id)
       .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || String(a.due).localeCompare(String(b.due)));
-    const account = accountById(job.account_id);
+    const linkedAccount = accountById(job.account_id);
+    const account = linkedAccount?.company_id === companyId ? linkedAccount : null;
+    const clientNames = [job.contact_name, job.client_name].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+    const linkedContact = contactById(job.contact_id);
+    const contact = (linkedContact?.company_id === companyId ? linkedContact : null)
+      || companyContacts(companyId).find((item) => clientNames.includes(String(item.name || '').trim().toLowerCase()));
     const deal = dealById(job.deal_id);
     const showCrm = can('crm.view', companyId);
     const fieldRow = (label, content, editKey = '') => `
@@ -45,6 +50,13 @@ export function createJobRecord(ctx) {
       const cls = ['sf-edit', opts.blue ? 'blue' : '', opts.mono ? 'mono' : ''].filter(Boolean).join(' ');
       return `<span class="${cls}" data-job-edit="${h(key)}" data-job-id="${h(job.id)}" title="Click to edit">${h(String(display))}</span>`;
     };
+    const clientLink = showCrm && contact
+      ? `<a class="link-button" href="${appHref(companyPath('contacts', { contact_id: contact.id }, companyId))}" data-router>${h(job.client_name || contact.name)}</a>`
+      : showCrm && account
+        ? `<button class="link-button" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(job.client_name || account.name)}</button>`
+        : ed('client_name', { blue: true });
+    const tradeLink = `<a class="link-button" href="${appHref(companyPath('jobs', { tab: 'list', trade: job.job_type || 'Unassigned' }, companyId))}" data-router>${h(job.job_type || 'Unassigned')}</a>`;
+    const stageLink = `<a class="link-button" href="${appHref(companyPath('jobs', { tab: 'pipeline', stage: currentStage }, companyId))}" data-router>${h(currentStage)}</a>`;
     const headerActions = [
       ['New Task', 'ti-checkbox'],
       ...(can('files.view', companyId) ? [['Photos', 'ti-camera']] : []),
@@ -109,15 +121,15 @@ export function createJobRecord(ctx) {
         <div class="sf-three-col">
           <div class="sf-col">
             <div class="sf-card"><div class="sf-card-head"><i class="ti ti-id-badge-2"></i>Job Details</div><div class="sf-card-body">
-              ${fieldRow('Client', ed('client_name', { blue: true }), 'client_name')}
+              ${fieldRow('Client', clientLink, 'client_name')}
               ${fieldRow('Contact', ed('contact_name', { blue: true }), 'contact_name')}
               ${fieldRow('Site Address', `${ed('site_address')}${job.site_address ? `<button class="sf-field-action" type="button" data-action="open-location-picker" data-location-kind="job" data-location-id="${h(job.id)}" data-location-field="site_address" data-address="${h(job.site_address)}"><i class="ti ti-map-pin"></i>Map pin</button>` : ''}`, 'site_address')}
-              ${fieldRow('Job Type', `<span class="sf-pill sf-edit" data-job-edit="job_type" data-job-id="${h(job.id)}" title="Click to edit">${h(job.job_type || '-')}</span>`, 'job_type')}
+              ${fieldRow('Job Type', tradeLink, 'job_type')}
               ${fieldRow('Owner', ed('owner_name', { blue: true }), 'owner_name')}
               ${fieldRow('Priority', `<span class="sf-pill sf-edit" data-job-edit="priority" data-job-id="${h(job.id)}" title="Click to edit">${h(job.priority || 'Medium')}</span>`, 'priority')}
             </div></div>
             <div class="sf-card"><div class="sf-card-head"><i class="ti ti-clipboard-data"></i>Status</div><div class="sf-card-body">
-              ${fieldRow('Stage', `<span>${h(job.stage)}</span>`, 'stage')}
+              ${fieldRow('Stage', stageLink, 'stage')}
               ${fieldRow('Estimate Total', `<span class="sf-money"><span class="sf-edit mono" data-job-edit="estimate_total" data-job-id="${h(job.id)}" title="Click to edit">${money(job.estimate_total || 0)}</span></span>`, 'estimate_total')}
               ${fieldRow('Invoice Total', `<span class="sf-money"><span class="sf-edit mono" data-job-edit="invoice_total" data-job-id="${h(job.id)}" title="Click to edit">${money(job.invoice_total || 0)}</span></span>`, 'invoice_total')}
               ${fieldRow('Account', account ? (showCrm ? `<button class="link-button" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(account.name)}</button>` : `<span>${h(account.name)}</span>`) : '<span>-</span>')}

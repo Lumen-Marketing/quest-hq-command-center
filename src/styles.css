@@ -4541,6 +4541,10 @@ textarea:focus {
   background: var(--surface-2);
 }
 
+.platform-company-card.approved {
+  border-color: color-mix(in srgb, #16a34a 45%, var(--border));
+}
+
 .platform-company-card.suspended {
   background: var(--surface-2);
 }
@@ -4559,6 +4563,11 @@ textarea:focus {
   border-radius: 999px;
   background: var(--company-color, var(--orange));
   box-shadow: 0 0 0 4px rgba(237, 78, 13, .1);
+}
+
+.company-dot.approved {
+  background: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, .14);
 }
 
 .platform-company-main strong,
@@ -18461,13 +18470,16 @@ textarea:focus {
   color: var(--ink);
 }
 
-.pipe-lane-head span:not(.pipe-dot) {
+.pipe-lane-head span:not(.pipe-dot),
+.pipe-lane-head > a {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.pipe-lane-head > a { color: inherit; text-decoration: none; }
+.pipe-lane-head > a:hover { color: var(--orange); }
 .pipe-lane-head .pipe-dot {
   flex: 0 0 auto;
   width: 8px;
@@ -19699,7 +19711,7 @@ button[aria-busy="true"] { cursor: progress; opacity: 1; }
 
 .stage-row {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) 44px 40px;
+  grid-template-columns: 20px minmax(0, 1fr) 44px 58px 40px;
   align-items: center;
   gap: 10px;
 }
@@ -19744,6 +19756,27 @@ button[aria-busy="true"] { cursor: progress; opacity: 1; }
   place-items: center;
   padding: 0;
 }
+
+.stage-reorder {
+  display: grid;
+  grid-template-columns: repeat(2, 26px);
+  gap: 4px;
+}
+
+.stage-reorder .btn {
+  width: 26px;
+  height: 38px;
+  min-width: 0;
+  padding: 0;
+}
+
+.contact-roof-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.contact-roof-fields[hidden] { display: none; }
 
 .add-stage-btn {
   justify-self: start;
@@ -30988,6 +31021,21 @@ a.wb-cal-more:hover { color: var(--orange); }
 .jl-name:hover b { color: var(--orange); }
 .jl-cell { padding: 11px 0; font-size: .85rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jl-stage { display: flex; align-items: center; gap: 7px; }
+.jl-data-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+.jl-data-link:hover,
+.jl-data-link:focus-visible { color: var(--orange); text-decoration-color: currentColor; }
 .jl-num { font-variant-numeric: tabular-nums; }
 .jl-dots { display: inline-flex; gap: 3px; align-items: center; }
 .jl-dots-none { color: var(--muted); }

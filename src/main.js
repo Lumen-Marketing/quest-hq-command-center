@@ -66,6 +66,7 @@ import { remapApp, remapChildren } from './workspace/app-portability.js';
 import {
   appCoverage, buildPermissionDependencies, coverageSummary, unreachablePermissions,
 } from './team/permission-coverage.js';
+import { formatCurrencyDraft, parseCurrencyAmount } from './ui/currency-input.js';
 
 globalThis.__QUEST_BUILD_SHA__ = __QUEST_BUILD_SHA__;
 
@@ -4216,7 +4217,9 @@ function renderJobTypeSuggestions(input, force = false) {
   const query = input.value.trim();
   const matches = jobTypeMatches(input);
   const exact = matches.some((item) => item.toLowerCase() === query.toLowerCase());
-  const custom = query && !exact ? [`<button type="button" class="job-type-suggestion-option custom" data-job-type-option="${h(query)}"><i class="ti ti-plus"></i><span>Use "${h(query)}"</span></button>`] : [];
+  const custom = input.dataset.jobTypeAllowCustom !== 'false' && query && !exact
+    ? [`<button type="button" class="job-type-suggestion-option custom" data-job-type-option="${h(query)}"><i class="ti ti-plus"></i><span>Use "${h(query)}"</span></button>`]
+    : [];
   if (!force && !query && !matches.length) {
     menu.hidden = true;
     menu.innerHTML = '';
@@ -4239,6 +4242,12 @@ function wireJobTypeAutocomplete(input, options = null) {
   input.setAttribute('data-job-type-input', '');
   jobTypeMenu(input);
   renderJobTypeSuggestions(input, true);
+}
+
+function syncContactRoofFieldVisibility(input) {
+  if (input.name !== 'title') return;
+  const fields = input.closest('[data-contact-form]')?.querySelector('[data-contact-roof-fields]');
+  if (fields) fields.hidden = !/(roof|shingle|underlayment)/i.test(input.value);
 }
 
 function addressLookupContainer(input) {
@@ -11178,7 +11187,7 @@ function patchJobField(jobId, key, raw) {
   const job = jobById(jobId);
   if (!job) return;
   let value;
-  if (key === 'estimate_total' || key === 'invoice_total') value = Number(String(raw).replace(/[^0-9.]/g, '')) || 0;
+  if (key === 'estimate_total' || key === 'invoice_total') value = parseCurrencyAmount(raw);
   else value = String(raw).trim();
   if (job[key] === value) { render(); return; }
   persistJob({ ...job, [key]: value }, 'Job field saved locally');
@@ -11891,31 +11900,20 @@ async function deleteContact(id) {
 }
 
 // ---- Stage manager (create / rename / recolor / delete) -------------------
+let stageManagerView = null;
+let stageManagerViewPending = null;
+
+function loadStageManagerView() {
+  if (stageManagerView) return Promise.resolve(stageManagerView);
+  if (!stageManagerViewPending) stageManagerViewPending = import('./pipeline/stage-manager-view.js')
+    .then((module) => (stageManagerView = module))
+    .catch((error) => { stageManagerViewPending = null; throw error; });
+  return stageManagerViewPending;
+}
+
 function renderStageManagerModal(kind) {
   const stages = pipelineStages(kind, activeCompanyId());
-  const title = kind === 'contacts' ? 'Contact pipeline stages' : kind === 'deals' ? 'Quote pipeline stages' : 'Job pipeline stages';
-  const body = `
-    <form class="stage-manager" data-stage-form data-kind="${kind}">
-      <p class="stage-manager-hint">Stages are your pipeline columns - the placeholder groups your team can shape. Rename or recolor any stage and your records keep their place; add new stages for any workflow.</p>
-      <div class="stage-rows">
-        ${stages.map((stage, i) => `
-          <div class="stage-row">
-            <span class="stage-row-handle">${pipelineDot(stage.color)}</span>
-            <input type="text" name="name_${i}" value="${h(stage.name)}" placeholder="Stage name" />
-            <input type="hidden" name="orig_${i}" value="${h(stage.name)}" />
-            <input class="stage-color" type="color" name="color_${i}" value="${h(/^#[0-9a-fA-F]{6}$/.test(stage.color) ? stage.color : '#9aa0a8')}" aria-label="Stage color" />
-            <button class="btn danger stage-del" type="button" data-action="delete-stage" data-module="${kind}" data-index="${i}" aria-label="Delete stage"><i class="ti ti-trash"></i></button>
-          </div>
-        `).join('')}
-      </div>
-      <button class="btn add-stage-btn" type="button" data-action="add-stage" data-module="${kind}"><i class="ti ti-plus"></i>Add stage</button>
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit">Save stages</button>
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `;
-  return renderModalShell('Pipeline', title, body, 'wide-modal');
+  return stageManagerView?.renderStageManagerModal({ kind, stages, h, pipelineDot, renderModalShell }) || '';
 }
 
 function parseStageForm(form) {
@@ -11949,6 +11947,21 @@ function captureStageFormInto(kind) {
 function stageListForKind(kind) {
   return kind === 'contacts' ? CONTACT_STAGES : kind === 'deals' ? DEAL_STAGES : JOB_STAGES;
 }
+
+function movePipelineStage(button) {
+  const row = button.closest('.stage-row');
+  const delta = Number(button.dataset.delta);
+  if (!row || ![-1, 1].includes(delta)) return;
+  const sibling = delta < 0 ? row.previousElementSibling : row.nextElementSibling;
+  if (!sibling) return;
+  ['name', 'orig', 'color'].forEach((prefix) => {
+    const current = row.querySelector(`[name^="${prefix}_"]`);
+    const target = sibling.querySelector(`[name^="${prefix}_"]`);
+    [current.value, target.value] = [target.value, current.value];
+  });
+  [row, sibling].forEach((item) => { item.querySelector('.pipe-dot').style.background = item.querySelector('[name^="color_"]').value; });
+}
+
 function persistStagesForKind(kind) {
   if (kind === 'contacts') persistContactStages();
   else if (kind === 'deals') persistDealStages();
@@ -12120,6 +12133,11 @@ function renderJobsPage(route, companyId) {
   const tab = normalizeJobTab(route.params.get('tab'));
   const stageParam = route.params.get('stage');
   if (stageParam) state.stageFilter = jobStageNames().includes(stageParam) ? stageParam : 'all';
+  const tradeParam = route.params.get('trade');
+  if (tradeParam) {
+    const trades = new Set(companyJobs(companyId).map((job) => job.job_type || 'Unassigned'));
+    state.jobTradeFilter = trades.has(tradeParam) ? tradeParam : 'all';
+  }
   const job = selectedJob();
   const showFiles = can('files.view', companyId);
   return `
@@ -12304,7 +12322,7 @@ function renderJobBoard(companyId) {
         const cards = rows.filter((job) => resolvePipelineStage('jobs', job.stage, companyId) === stage.name);
         return `
           <article class="pipe-lane" data-drop-stage="${h(stage.name)}" data-drag-kind="job">
-            <header class="pipe-lane-head">${pipelineDot(stage.color)}<span>${h(stage.name)}</span><b>${cards.length}</b></header>
+            <header class="pipe-lane-head">${pipelineDot(stage.color)}<a href="${appHref(companyPath('jobs', { tab: 'pipeline', stage: stage.name }, companyId))}" data-router>${h(stage.name)}</a><b>${cards.length}</b></header>
             <div class="pipe-lane-body">
               ${cards.map((job) => jobCard(job)).join('') || '<div class="lane-empty">No jobs</div>'}
             </div>
@@ -12336,7 +12354,7 @@ function loadJobRecord() {
     jobRecordPending = import('./crm/job-record.js').then((mod) => {
       jobRecordModule = mod.createJobRecord({
         h, can, state, emptyState, pipelineStages, resolvePipelineStage, guidanceForJobStage,
-        activitiesFor, filteredActivitiesFor, accountById, dealById, appHref, companyPath,
+        activitiesFor, filteredActivitiesFor, accountById, contactById, companyContacts, dealById, appHref, companyPath,
         activeWorkspaceId, money, renderActivityFilterBar, sfFeedItem, renderSfTaskRow,
       });
       return jobRecordModule;
@@ -12395,6 +12413,7 @@ function loadJobList() {
         h, can, money, emptyState, appHref, companyPath,
         pipelineDot, pipelineStageColor, resolvePipelineStage,
         filteredJobs, selectedJobRows, productionFor: productionForJob, state,
+        contactById, accountById, companyContacts, companyAccounts,
         todayIso: () => localIsoDate(),
       });
       return jobListModule;
@@ -12469,36 +12488,28 @@ function guidanceForJobStage(name) {
 }
 
 
+let jobEditorModule = null;
+let jobEditorPending = null;
+
 function renderJobEditor(companyId, job) {
-  const edit = job || blankJob(companyId);
-  const addressOptions = contactAddressOptions(companyId);
-  return `
-    <form class="job-editor" data-job-form ${protectedFormDraftAttributes('job', edit.id || 'new', companyId, edit.workspace_id || activeWorkspaceId())}>
-      <input type="hidden" name="id" value="${h(edit.id || '')}" />
-      <div class="section-head span-2">
-        <div><h2>${job ? 'Edit job' : 'Create job'}</h2><p>Creates the company job container for tasks, files, forms, and reporting.</p></div>
-      </div>
-      ${renderProtectedFormDraftStrip()}
-      ${field('Workspace name', 'name', edit.name, true)}
-      ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
-      ${field('Client', 'client_name', edit.client_name)}
-      ${field('Contact', 'contact_name', edit.contact_name)}
-      ${field('Account owner', 'owner_name', edit.owner_name)}
-      ${field('Job type', 'job_type', edit.job_type || 'Roofing')}
-      ${selectField('Stage', 'stage', resolveJobStage(edit.stage), jobStageNames().map((stage) => [stage, stage]))}
-      ${selectField('Client urgency', 'priority', edit.priority || 'Medium', ['Low', 'Medium', 'High', 'Urgent'].map((item) => [item, item]))}
-      ${field('Estimate total', 'estimate_total', edit.estimate_total || 0, false, 'number')}
-      ${field('Invoice total', 'invoice_total', edit.invoice_total || 0, false, 'number')}
-      ${renderAddressLookupField('Site address', 'site_address', edit.site_address, addressOptions, 'span-2', 'job-site-address-options')}
-      ${textareaField('Scope', 'scope', edit.scope, 'span-2')}
-      ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
-      <div class="form-actions span-2">
-        <button class="btn btn-primary" type="submit">Save job</button>
-        ${job ? `<button class="btn danger" type="button" data-action="delete-job" data-job-id="${h(job.id)}">Delete</button>` : ''}
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `;
+  if (jobEditorModule) return jobEditorModule.renderJobEditor(companyId, job);
+  if (!jobEditorPending) {
+    jobEditorPending = import('./jobs/job-editor.js').then((module) => {
+      jobEditorModule = module.createJobEditor({
+        h, blankJob, contactAddressOptions, protectedFormDraftAttributes, activeWorkspaceId,
+        renderProtectedFormDraftStrip, field, selectField, allowedCompanies, companyLabel,
+        renderSearchCombobox, contactOwnerOptions, resolveJobStage, jobStageNames,
+        renderAddressLookupField, textareaField, formatCurrencyDraft,
+      });
+      render();
+    }).catch((error) => {
+      jobEditorPending = null;
+      state.modal = '';
+      showToast(error.message || 'Could not open the job form.', 'error', 'Jobs');
+      render();
+    });
+  }
+  return questLoader('Loading job form');
 }
 
 function nativeTasksModuleEnabled(route) {
@@ -20258,7 +20269,19 @@ function loadCompanySetupPanel() {
         installedWorkspacePlugins: (workspaceId) => state.workspacePlugins
           .filter((row) => row.workspace_id === String(workspaceId || '') && row.status === 'installed')
           .map((row) => row.plugin_id),
-        onApplied: async () => {
+        onApplied: async (companyId, workspaceId) => {
+          // Setup writes both entitlement layers in one transaction. Read those exact rows
+          // back immediately instead of relying only on the background refresh, which can
+          // legitimately be skipped while another realtime refresh is already running.
+          const client = createSupabaseClient();
+          if (client) {
+            const [companyPlugins, workspacePlugins] = await Promise.all([
+              safeSupabaseQuery(client.from('company_plugins').select('*').eq('company_id', companyId)),
+              safeSupabaseQuery(client.from('workspace_plugins').select('*').eq('workspace_id', workspaceId)),
+            ]);
+            if (!companyPlugins.error) state.companyPlugins = mergeCompanyPlugins(state.companyPlugins.concat(companyPlugins.data || []));
+            if (!workspacePlugins.error) state.workspacePlugins = mergeWorkspacePlugins(state.workspacePlugins.concat(workspacePlugins.data || []));
+          }
           await refreshRealtimeDomains(['access', 'crm']);
           closeAppliedWorkspaceSetupModal();
         },
@@ -26615,6 +26638,7 @@ function onDocumentClick(event) {
     const input = combo?.querySelector('[data-job-type-input]');
     if (input) {
       input.value = jobTypeOption.dataset.jobTypeOption || '';
+      syncContactRoofFieldVisibility(input);
       input.dispatchEvent(new Event('change', { bubbles: true }));
       input.focus();
       closeJobTypeMenus(input);
@@ -29101,8 +29125,15 @@ function handleAction(event, node) {
   if (action === 'open-stage-manager') {
     event.preventDefault();
     const module = ['contacts', 'deals'].includes(node.dataset.module) ? node.dataset.module : 'jobs';
-    state.modal = `stages-${module}`;
-    render();
+    loadStageManagerView().then(() => {
+      state.modal = `stages-${module}`;
+      render();
+    }).catch((error) => showToast(error.message || 'Could not open pipeline stages.', 'error', 'Stages'));
+    return;
+  }
+  if (action === 'move-stage') {
+    event.preventDefault();
+    movePipelineStage(node);
     return;
   }
   if (action === 'add-stage') {
@@ -30720,7 +30751,7 @@ async function registerWorkspace(formNode) {
   applyCreatedWorkspace(workspace.data, companyName, iconKey);
   state.authMessage = '';
   openWorkspaceSetupModal('', { required: true });
-  navigate(companyPath('settings', { tab: 'setup' }, state.activeCompanyId), { replace: true });
+  navigate(companyPath('workspaces', {}, state.activeCompanyId), { replace: true });
 }
 
 async function createWorkspaceForCurrentUser(formNode) {
@@ -30753,7 +30784,7 @@ async function createWorkspaceForCurrentUser(formNode) {
   applyCreatedWorkspace(workspace.data, companyName, iconKey);
   state.authMessage = 'Opening workspace...';
   openWorkspaceSetupModal('', { required: true });
-  navigate(companyPath('settings', { tab: 'setup' }, state.activeCompanyId), { replace: true });
+  navigate(companyPath('workspaces', {}, state.activeCompanyId), { replace: true });
 }
 
 async function createOperationalWorkspace(formNode) {
@@ -32898,9 +32929,16 @@ function onDocumentInput(event) {
     return;
   }
   if (event.target.matches('[data-job-type-input]')) {
+    syncContactRoofFieldVisibility(event.target);
     wireJobTypeAutocomplete(event.target);
     closeJobTypeMenus(event.target);
     renderJobTypeSuggestions(event.target, true);
+    return;
+  }
+  if (event.target.matches('[data-currency-input]')) {
+    event.target.value = formatCurrencyDraft(event.target.value);
+    const end = event.target.value.length;
+    event.target.setSelectionRange?.(end, end);
     return;
   }
   if (event.target.matches('[data-digits-only]')) {
@@ -33334,6 +33372,8 @@ function validateJobForm(form) {
   }
   nameInput?.setCustomValidity('');
   formData.name = rawName;
+  formData.estimate_total = parseCurrencyAmount(formData.estimate_total);
+  formData.invoice_total = parseCurrencyAmount(formData.invoice_total);
   return { ok: true, data: formData };
 }
 
@@ -42466,18 +42506,21 @@ function field(label, name, value = '', required = false, type = 'text', classNa
   return `<label class="${h(className)}"><span>${h(label)}</span><input name="${h(name)}" type="${h(type)}" value="${h(value)}" ${required ? 'required' : ''} ${attrs} /></label>`;
 }
 
-function renderJobTypeCombobox(label, name, value, companyId) {
-  const options = contactJobTypeOptions(companyId);
+function renderSearchCombobox(label, name, value, options, { placeholder = 'Type to search', allowCustom = true } = {}) {
   return `
     <label class="job-type-field">
       <span>${h(label)}</span>
       <div class="job-type-combobox">
-        <input name="${h(name)}" type="text" value="${h(value || '')}" data-job-type-input data-job-type-options="${h(JSON.stringify(options))}" autocomplete="off" placeholder="Type or choose job type" />
-        <button class="job-type-toggle" type="button" data-job-type-toggle aria-label="Show job type suggestions"><i class="ti ti-chevron-down"></i></button>
+        <input name="${h(name)}" type="text" value="${h(value || '')}" data-job-type-input data-job-type-options="${h(JSON.stringify(options))}" data-job-type-allow-custom="${allowCustom ? 'true' : 'false'}" autocomplete="off" placeholder="${h(placeholder)}" />
+        <button class="job-type-toggle" type="button" data-job-type-toggle aria-label="Show ${h(label.toLowerCase())} suggestions"><i class="ti ti-chevron-down"></i></button>
         <div class="job-type-suggestions-menu" data-job-type-menu hidden></div>
       </div>
     </label>
   `;
+}
+
+function renderJobTypeCombobox(label, name, value, companyId) {
+  return renderSearchCombobox(label, name, value, contactJobTypeOptions(companyId), { placeholder: 'Type or choose job type' });
 }
 
 function textareaField(label, name, value = '', className = '') {
@@ -45371,7 +45414,7 @@ function shortUserId(value) {
 }
 
 function money(value) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(number(value));
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(number(value));
 }
 
 function readJson(key, fallback) {

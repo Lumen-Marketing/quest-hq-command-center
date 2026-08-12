@@ -116,9 +116,9 @@ export function createPlatformPanel(ctx) {
     const members = platformMembersForCompany(company.company_id);
     const statusClass = active ? 'active' : pending ? 'pending' : suspended ? 'muted' : 'hold';
     return `
-      <article class="platform-company-card ${pending ? 'pending' : suspended ? 'suspended' : ''}">
+      <article class="platform-company-card ${active ? 'approved' : pending ? 'pending' : suspended ? 'suspended' : ''}">
         <div class="platform-company-main">
-          <span class="company-dot" style="--company-color:${h(company.color || companyColor(company.company_id))}"></span>
+          <span class="company-dot ${active ? 'approved' : ''}" style="--company-color:${h(company.color || companyColor(company.company_id))}" title="${active ? 'Approved company' : h(subscriptionLabelForStatus(company.status, company))}"></span>
           <div>
             <strong>${h(company.company_name || companyName(company.company_id))}${company.company_id === currentCompanyId ? ' / current' : ''}</strong>
             <small>${h(company.company_id)} / Owner: ${h(company.owner_email || company.owner_name || 'No owner yet')}</small>

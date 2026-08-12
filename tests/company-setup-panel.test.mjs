@@ -42,13 +42,14 @@ test('company creation no longer asks owners to choose a technical company type'
   assert.doesNotMatch(create, /form\.preset_code/);
 });
 
-test('new owners are routed to Setup with its required modal rather than Billing', () => {
+test('new owners see required setup over their workspace rather than being stranded in Settings', () => {
   const register = functionBody(main, 'registerWorkspace');
   const create = functionBody(main, 'createWorkspaceForCurrentUser');
 
   for (const body of [register, create]) {
-    assert.match(body, /companyPath\('settings', \{ tab: 'setup' \}/);
+    assert.match(body, /companyPath\('workspaces'/);
     assert.match(body, /openWorkspaceSetupModal\([^)]*required:\s*true/);
+    assert.doesNotMatch(body, /companyPath\('settings', \{ tab: 'setup' \}/);
     assert.doesNotMatch(body, /companyPath\('settings', \{ tab: 'billing' \}/);
     assert.doesNotMatch(body, /applyPluginPresetLocal/);
   }

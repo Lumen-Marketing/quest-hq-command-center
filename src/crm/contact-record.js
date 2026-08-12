@@ -2,6 +2,8 @@
 //
 // A factory, because every store, permission check and formatter it reads belongs to main.js.
 
+import { contactUsesRoofFields } from './contact-field-visibility.js';
+
 export function createContactRecord(ctx) {
   const {
     EMPTY_FIELD_PLACEHOLDER, activeWorkspaceId, activitiesFor, appHref, can, companyDeals,
@@ -31,6 +33,7 @@ export function createContactRecord(ctx) {
     const canGraduateContactToQuote = canManageContactQuotes
       && resolvePipelineStage('contacts', contact.stage, companyId) === 'Nurturing';
     const quoteInFlight = Boolean(state.contactQuoteConversionInFlight?.[contact.id]);
+    const showRoofFields = contactUsesRoofFields(contact);
 
     const ed = (key, opts = {}) => {
       const isEmpty = contact[key] === '' || contact[key] == null;
@@ -113,8 +116,8 @@ export function createContactRecord(ctx) {
               ${fieldRow('Est. Value', `<span class="sf-money"><span class="sf-edit mono" data-contact-edit="value" data-contact-id="${h(contact.id)}" title="Click to edit">${money(contact.value || 0)}</span></span>`, 'value')}
               ${fieldRow('Temperature', `<span class="sf-edit" data-contact-edit="temperature" data-contact-id="${h(contact.id)}" style="color:${tempColor}" title="Click to edit">${h(contact.temperature)}</span>`, 'temperature')}
               ${fieldRow('Pay Type', ed('pay_type'), 'pay_type')}
-              ${fieldRow('Roof System', ed('roof_system'), 'roof_system')}
-              ${contact.has_multiple_roof_systems || contact.secondary_roof_system ? fieldRow('Second Roof System', ed('secondary_roof_system'), 'secondary_roof_system') : ''}
+              ${showRoofFields ? fieldRow('Roof System', ed('roof_system'), 'roof_system') : ''}
+              ${showRoofFields && (contact.has_multiple_roof_systems || contact.secondary_roof_system) ? fieldRow('Second Roof System', ed('secondary_roof_system'), 'secondary_roof_system') : ''}
             </div></div>
           </div>
 

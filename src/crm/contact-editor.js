@@ -6,6 +6,8 @@
 // A factory -- the field builders and option lists belong to main.js. The body is unchanged
 // from where it lived there.
 
+import { contactUsesRoofFields } from './contact-field-visibility.js';
+
 export function createContactEditor(ctx) {
   const {
     h, field, selectField, textareaField, blankContact, TEMPERATURES,
@@ -16,6 +18,7 @@ export function createContactEditor(ctx) {
 
   function renderContactEditor(companyId, contact) {
     const edit = contact || blankContact(companyId);
+    const showRoofFields = contactUsesRoofFields(edit);
     return `
       <form class="job-editor contact-editor" data-contact-form data-contact-address-form ${protectedFormDraftAttributes('contact', edit.id || 'new', companyId, edit.workspace_id || activeWorkspaceId())}>
         <input type="hidden" name="id" value="${h(edit.id || '')}" />
@@ -105,9 +108,11 @@ export function createContactEditor(ctx) {
         ${field('Estimated value', 'value', edit.value || 0, false, 'number')}
         ${selectField('Temperature', 'temperature', edit.temperature || 'Warm', TEMPERATURES.map((t) => [t, t]))}
         ${field('Pay type', 'pay_type', edit.pay_type)}
-        ${selectField('Roof system', 'roof_system', edit.roof_system, contactRoofSystemSelectOptions(companyId))}
-        <label class="checkbox-field"><span>Multiple roof systems?</span><input name="has_multiple_roof_systems" type="checkbox" ${edit.has_multiple_roof_systems ? 'checked' : ''} /></label>
-        ${selectField('Secondary roof system', 'secondary_roof_system', edit.secondary_roof_system, contactRoofSystemSelectOptions(companyId, true))}
+        <div class="contact-roof-fields span-2" data-contact-roof-fields ${showRoofFields ? '' : 'hidden'}>
+          ${selectField('Roof system', 'roof_system', edit.roof_system, contactRoofSystemSelectOptions(companyId))}
+          <label class="checkbox-field"><span>Multiple roof systems?</span><input name="has_multiple_roof_systems" type="checkbox" ${edit.has_multiple_roof_systems ? 'checked' : ''} /></label>
+          ${selectField('Secondary roof system', 'secondary_roof_system', edit.secondary_roof_system, contactRoofSystemSelectOptions(companyId, true))}
+        </div>
         ${selectField('Source', 'source', edit.source, contactSourceOptions(companyId))}
         ${textareaField('Notes', 'notes', edit.notes, 'span-2')}
         <div class="form-actions span-2">

@@ -67,7 +67,7 @@ test('contact locations support google maps autocomplete and pin links', () => {
   // The whole module is the editor now. Slicing it out of `source` would match the eager
   // delegator main.js keeps, whose body is a loader rather than the form.
   const editorSource = readFileSync(new URL('../src/crm/contact-editor.js', import.meta.url), 'utf8');
-  const jobEditorSource = source.match(/function renderJobEditor\(companyId, job\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const jobEditorSource = readFileSync(new URL('../src/jobs/job-editor.js', import.meta.url), 'utf8');
   const accountEditorSource = source.match(/function renderAccountEditor\(companyId, account\) \{[\s\S]*?\n\}/)?.[0] || '';
   const recordSource = contactRecord.match(/function renderContactRecord\(companyId, contact\) \{[\s\S]*?\n  \}/)?.[0] || '';
   assert.match(source, /function googleMapsPlaceSearchUrl\(address\)/);

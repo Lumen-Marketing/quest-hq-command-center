@@ -168,6 +168,7 @@ const FACTORY_MODULES = [
   ['src/crm/contact-editor.js', 'createContactEditor'],
   ['src/jobs/job-file.js', 'createJobFile'],
   ['src/jobs/job-list.js', 'createJobList'],
+  ['src/jobs/job-editor.js', 'createJobEditor'],
   ['src/jobs/job-calendar.js', 'createJobCalendar'],
   ['src/jobs/change-order-wizard.js', 'createChangeOrderWizard'],
   ['src/workspace/memo-runtime.js', 'createMemoRuntime'],

@@ -13,6 +13,7 @@ export function createJobList(ctx) {
     h, can, money, emptyState, appHref, companyPath,
     pipelineDot, pipelineStageColor, resolvePipelineStage,
     filteredJobs, selectedJobRows, productionFor, state, todayIso,
+    contactById, accountById, companyContacts, companyAccounts,
   } = ctx;
 
   const RATING_LABEL = { good: 'Good', ok: 'OK', rough: 'Rough' };
@@ -38,9 +39,26 @@ export function createJobList(ctx) {
     const selected = new Set(selectedJobRows(companyId).map((job) => job.id));
     const allSelected = rows.length > 0 && rows.every((job) => selected.has(job.id));
     const canManage = can('jobs.manage', companyId);
+    const showCrm = can('crm.view', companyId);
     const flagged = needsYouFirst(rows);
+    const contacts = companyContacts(companyId);
+    const accounts = companyAccounts(companyId);
 
     const jobHref = (job) => appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId));
+    const clientCell = (job) => {
+      const names = [job.contact_name, job.client_name].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+      const contact = contactById(job.contact_id)
+        || contacts.find((item) => names.includes(String(item.name || '').trim().toLowerCase()));
+      if (showCrm && contact?.company_id === companyId) {
+        return `<a class="jl-data-link" href="${appHref(companyPath('contacts', { contact_id: contact.id }, companyId))}" data-router>${h(job.client_name || contact.name)}</a>`;
+      }
+      const account = accountById(job.account_id)
+        || accounts.find((item) => String(item.name || '').trim().toLowerCase() === String(job.client_name || '').trim().toLowerCase());
+      if (showCrm && account?.company_id === companyId) {
+        return `<button class="jl-data-link" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(job.client_name || account.name)}</button>`;
+      }
+      return h(job.client_name || '—');
+    };
 
     return `
       <section class="jl">
@@ -94,9 +112,9 @@ export function createJobList(ctx) {
                 <b>${h(job.name)}</b>
                 <small>${h(job.site_address || 'No address')}${job.owner_name ? ` · ${h(job.owner_name)}` : ''}</small>
               </a>
-              <span class="jl-cell">${h(job.client_name || '—')}</span>
-              <span class="jl-cell">${h(job.job_type || 'Unassigned')}</span>
-              <span class="jl-cell jl-stage">${pipelineDot(pipelineStageColor('jobs', stage, companyId))}${h(stage)}</span>
+              <span class="jl-cell">${clientCell(job)}</span>
+              <span class="jl-cell"><button class="jl-data-link" type="button" data-action="jobs-trade-filter" data-trade="${h(job.job_type || 'Unassigned')}">${h(job.job_type || 'Unassigned')}</button></span>
+              <span class="jl-cell jl-stage">${pipelineDot(pipelineStageColor('jobs', stage, companyId))}<a class="jl-data-link" href="${appHref(companyPath('jobs', { tab: 'pipeline', stage: stage }, companyId))}" data-router>${h(stage)}</a></span>
               <span class="jl-cell jl-num">${worked || '—'}</span>
               <span class="jl-cell">${streakDots(data.dailies)}</span>
               <span class="jl-cell jl-num">${h(money(job.estimate_total))}</span>
