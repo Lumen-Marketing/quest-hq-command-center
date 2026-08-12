@@ -80,6 +80,19 @@ test('a name that matches nothing is left alone, and drops the link', () => {
   assert.ok(!/contactField\.value =/.test(noMatch), 'a typed name must survive');
 });
 
-test('it runs off the combobox change the picker already dispatches', () => {
-  assert.match(main, /if \(event\.target\.name === 'client_name'\) fillJobClientFromContact\(event\.target\);/);
+test('it runs on BOTH the typing path and the picking path', () => {
+  // The suggestion menu dispatches CHANGE, not input. Wiring only onDocumentInput meant
+  // typing a full name worked and clicking the very name the menu offered did nothing --
+  // the one case the feature exists for.
+  const input = main.indexOf('function onDocumentInput(');
+  const change = main.indexOf('function onDocumentChange(');
+  assert.notEqual(input, -1);
+  assert.notEqual(change, -1);
+  const nextFn = (from) => main.indexOf(`${'\n'}function `, from + 10);
+  const inputBody = main.slice(input, nextFn(input));
+  const changeBody = main.slice(change, nextFn(change));
+  assert.match(inputBody, /fillJobClientFromContact\(event\.target\)/, 'typing path');
+  assert.match(changeBody, /fillJobClientFromContact\(event\.target\)/, 'picking path');
+  // And the pick handler is what dispatches that change.
+  assert.match(main, /input\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\);/);
 });

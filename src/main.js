@@ -33066,6 +33066,13 @@ function onDocumentInput(event) {
 }
 
 function onDocumentChange(event) {
+  // Picking a client from the suggestions dispatches CHANGE, not input -- see the
+  // [data-job-type-option] handler. The same call lives in onDocumentInput for the typing
+  // path; without this one, choosing the very name the menu offered filled nothing, which
+  // is the one case the feature exists for.
+  if (event.target.matches?.('[data-job-type-input]') && event.target.name === 'client_name') {
+    fillJobClientFromContact(event.target);
+  }
   // Member access directory: filter, sort, and the selection checkboxes.
   if (event.target.matches('[data-member-role]')) {
     memberDirectoryUi().role = event.target.value;
