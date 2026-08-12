@@ -3933,6 +3933,7 @@ function render() {
   queueMicrotask(mountContactSmsReadiness);
   queueMicrotask(mountContactSmsThread);
   queueMicrotask(mountProtectedFormDrafts);
+  queueMicrotask(mountPipeBoardScroll);
   // innerHTML replaced every live-clock element, so the interval has nothing to write to
   // until it is re-armed against the new nodes.
   queueMicrotask(ensureLiveClocks);
@@ -33035,6 +33036,34 @@ function onDocumentInput(event) {
  * stopped the page moving at all. The board fills the view, and letting the page scroll once
  * the board has run out of travel keeps both possible.
  */
+/**
+ * Keep a pipeline board where it was scrolled to across a re-render.
+ *
+ * Deleting a card calls render(), which replaces the markup -- and a fresh element starts at
+ * scrollLeft 0. Somebody working in Won, over at the right-hand end, was thrown back to
+ * Prospect on every delete and had to scroll out again. It reads as the page reloading.
+ *
+ * Remembered in a variable rather than on the node, for the same reason the app strip does
+ * it: the node the value would live on is the one being thrown away.
+ */
+let pipeBoardScrollLeft = 0;
+
+function mountPipeBoardScroll() {
+  const board = document.querySelector('.pipe-board');
+  if (!board) {
+    // Left the board entirely -- a remembered offset would be wrong when it is next opened.
+    pipeBoardScrollLeft = 0;
+    return;
+  }
+  if (!board.dataset.scrollBound) {
+    board.dataset.scrollBound = '1';
+    board.addEventListener('scroll', () => { pipeBoardScrollLeft = board.scrollLeft; }, { passive: true });
+  }
+  // Clamped, because the board may now be narrower -- deleting the last card in the final
+  // column removes it, and restoring past the new end would silently land at the edge.
+  if (pipeBoardScrollLeft > 0) board.scrollLeft = Math.min(pipeBoardScrollLeft, board.scrollWidth - board.clientWidth);
+}
+
 function onPipeBoardWheel(event) {
   // A trackpad's sideways swipe already arrives as deltaX and the browser handles it.
   if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;

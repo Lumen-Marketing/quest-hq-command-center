@@ -169,3 +169,19 @@ test('the job profile links its client to the contact record', () => {
   // The lookups have to be handed in, or the module throws on a name it cannot resolve.
   assert.match(main, /pipelineStageColor, resolvePipelineStage, contactById, contactByName,/);
 });
+
+test('the pipeline board keeps its place across a re-render', () => {
+  // "when clicking delete do not refresh this page stay where it is." It never reloaded --
+  // render() replaces the markup and a fresh element starts at scrollLeft 0, so somebody
+  // working over in Won was thrown back to Prospect on every delete.
+  const body = fn('mountPipeBoardScroll');
+  assert.match(body, /board\.addEventListener\('scroll', \(\) => \{ pipeBoardScrollLeft = board\.scrollLeft; \}/);
+  // Clamped: deleting the last card in the final column makes the board narrower, and
+  // restoring past the new end would silently land at the edge.
+  assert.match(body, /Math\.min\(pipeBoardScrollLeft, board\.scrollWidth - board\.clientWidth\)/);
+  // Leaving the board forgets the offset, or it is restored onto an unrelated visit.
+  assert.match(body, /if \(!board\) \{[\s\S]*?pipeBoardScrollLeft = 0;/);
+  // Held in a variable, not on the node -- the node is the thing being replaced.
+  assert.match(main, /^let pipeBoardScrollLeft = 0;$/m);
+  assert.match(main, /queueMicrotask\(mountPipeBoardScroll\);/);
+});
