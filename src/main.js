@@ -2796,6 +2796,10 @@ function init() {
   document.addEventListener('input', onProtectedFormDraftChange);
   document.addEventListener('change', onDocumentChange);
   document.addEventListener('change', onProtectedFormDraftChange);
+  // Wheel over the pipeline board pans it sideways. Delegated rather than bound per render,
+  // because the board's markup is replaced on every paint and a listener on the node would
+  // go with it. passive: false so the vertical scroll can be swapped for a horizontal one.
+  document.addEventListener('wheel', onPipeBoardWheel, { passive: false });
   document.addEventListener('dragstart', onPipeDragStart);
   document.addEventListener('dragend', onPipeDragEnd);
   document.addEventListener('dragover', onPipeDragOver);
@@ -5239,6 +5243,7 @@ function metricSymbol(label) {
   return moduleSymbol();
 }
 
+// ---- Companies ----------------------------------------------------------------
 function renderCompanySwitch(companyId, extraClass = '', options = {}) {
   const companies = allowedCompanies();
   const current = companies.find((company) => company.id === companyId) || companyById(companyId) || companies[0] || {};
@@ -5333,6 +5338,7 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
     </label>
   `;
 }
+
 
 function shellTemplate(route, workspace) {
   const session = activeSession();
@@ -6077,11 +6083,33 @@ function loadRenderClientPortalPublicPage() {
   return renderClientPortalPublicPagePending;
 }
 
+// ---- Portal ----------------------------------------------------------------
+// Body lives in ./portals/portal-public-page.js and is fetched on first use.
+let portalPublicPageModule = null;
+let portalPublicPagePending = null;
+
+function loadPortalPublicPage() {
+  if (portalPublicPageModule) return Promise.resolve(portalPublicPageModule);
+  if (!portalPublicPagePending) {
+    portalPublicPagePending = import('./portals/portal-public-page.js').then((mod) => {
+      portalPublicPageModule = mod.createPortalPublicPage({
+        loadRenderClientPortalPublicPage, questLoader, render, renderClientPortalPublicPageModule,
+      });
+      return portalPublicPageModule;
+    }).catch((error) => {
+      portalPublicPagePending = null;
+      throw error;
+    });
+  }
+  return portalPublicPagePending;
+}
+
 function renderClientPortalPublicPage(route) {
-  if (renderClientPortalPublicPageModule) return renderClientPortalPublicPageModule.renderClientPortalPublicPage(route);
-  loadRenderClientPortalPublicPage().then(() => render()).catch((error) => console.error('renderClientPortalPublicPage failed to load', error));
+  if (portalPublicPageModule) return portalPublicPageModule.renderClientPortalPublicPage(route);
+  loadPortalPublicPage().then(() => render()).catch((error) => console.error('Portal failed to load', error));
   return questLoader('Loading');
 }
+
 
 // ---- Contact record ----------------------------------------------------------------
 // Body lives in ./crm/contact-record.js and is fetched on first use.
@@ -7935,114 +7963,38 @@ function renderEmptyWorkspacePrompt(companyId) {
   `;
 }
 
-function renderCompanyDashboard(companyId) {
-  const messagesModule = moduleById('messages');
-  const showMessages = messagesModule && canViewModule(messagesModule, companyId);
-  const unreadMessages = showMessages ? companyMessageUnreadCount(companyId) : 0;
-  const recentActivity = dashboardActivityItems(companyId, 5);
-  const roleViews = dashboardVisibleRoleViews(companyId);
-  const role = roleViews.some(([id]) => id === state.dashboardRole) ? state.dashboardRole : roleViews[0]?.[0] || 'exec';
-  state.dashboardRole = role;
-  const ctx = dashboardContext(companyId);
-  const registry = dashboardWidgetRegistry(companyId, ctx);
-  const layout = dashboardWidgetLayout(companyId, role).filter((id) => registry[id] && !isLaunchHiddenDashboardWidget(registry[id]));
-  const repOptions = dashboardRepOptions(companyId);
-  if (!repOptions.some((rep) => rep.id === state.dashboardRep)) state.dashboardRep = 'all';
-  const activeRep = repOptions.find((rep) => rep.id === state.dashboardRep) || repOptions[0];
-  const activeRange = DASHBOARD_RANGE_OPTIONS.find(([id]) => id === state.dashboardRange) || DASHBOARD_RANGE_OPTIONS[1];
+// ---- Dashboard ----------------------------------------------------------------
+// Body lives in ./home/company-dashboard.js and is fetched on first use.
+let companyDashboardModule = null;
+let companyDashboardPending = null;
 
-  return `
-    <section class="home-cockpit dash">
-      ${renderEmptyWorkspacePrompt(companyId)}
-      <div class="home-hero">
-        <div>
-          <h1>Good ${h(dayPart())}, <span>${h(firstName(activeSession().profile.full_name) || 'Quest Admin')}</span></h1>
-          <p>A complete operating overview of ${h(companyName(companyId) || 'your workspace')} today.</p>
-        </div>
-        <div class="home-hero-actions">
-          ${renderCompanySwitch(companyId, 'home-company-switch')}
-          <button class="icon-button" type="button" data-action="toggle-notifications" aria-label="Open notifications">
-            <i class="ti ti-bell"></i>
-            ${unreadMessages ? `<b>${h(String(Math.min(unreadMessages, 99)))}</b>` : ''}
-          </button>
-          ${renderAvatar(activeSession().profile, 'avatar')}
-        </div>
-      </div>
-
-      ${renderPilotLaunchChecklist(companyId)}
-
-      <section class="dash-commandbar">
-        <div class="dash-role-tabs">
-          ${roleViews.map(([id, label]) => `<button class="${role === id ? 'active' : ''}" type="button" data-action="dashboard-role" data-role="${id}">${h(label)}</button>`).join('')}
-          ${state.dashboardCustomize ? `<button class="dash-manage-view" type="button" data-action="dashboard-manage-views"><i class="ti ti-settings"></i>Views</button>` : ''}
-        </div>
-        <div class="dash-command-actions">
-          <button class="btn" type="button" data-action="dashboard-toggle-tray"><i class="ti ti-plus"></i>Add widget</button>
-          <button class="btn ${state.dashboardCustomize ? 'btn-primary' : ''}" type="button" data-action="dashboard-toggle-customize"><i class="ti ti-pencil"></i>${state.dashboardCustomize ? 'Done' : 'Customize'}</button>
-        </div>
-      </section>
-
-      <section class="dash-filter-bar">
-        <div class="dash-filter-field">
-          <label>Rep</label>
-          <select data-dashboard-rep>
-            ${repOptions.map((rep) => `<option value="${h(rep.id)}" ${rep.id === activeRep.id ? 'selected' : ''}>${h(rep.name)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="dash-filter-field dash-filter-range">
-          <label>Range</label>
-          <div class="dash-range-seg">
-            ${DASHBOARD_RANGE_OPTIONS.map(([id, label]) => `<button class="${state.dashboardRange === id ? 'active' : ''}" type="button" data-action="dashboard-range" data-range="${id}">${h(label)}</button>`).join('')}
-          </div>
-        </div>
-      </section>
-
-      ${state.dashboardCustomize ? `
-        <section class="dash-edit-banner">
-          <i class="ti ti-layout-dashboard"></i>
-          <div><b>Customizing ${h(activeRange[1].toLowerCase())} dashboard</b><span>Reorder cards, remove noise, or manage the visible views for this workspace.</span></div>
-          <button class="btn" type="button" data-action="dashboard-reset-layout"><i class="ti ti-rotate"></i>Reset layout</button>
-        </section>
-      ` : ''}
-
-      <section class="dash-widget-grid ${state.dashboardCustomize ? 'editing' : ''}">
-        ${layout.map((id, index) => renderDashboardWidgetCard(registry[id], id, index, layout.length)).join('') || emptyState('No widgets in this dashboard view. Use Add widget to restore one.')}
-      </section>
-
-      <section class="dash-lists">
-        <article class="panel home-activity-panel">
-          <div class="section-head">
-            <div><h2>Recent activity</h2><p>Latest company work and inbox events.</p></div>
-            <button class="btn" type="button" data-action="open-dashboard-activity">All activity</button>
-          </div>
-          <div class="home-activity-list">
-            ${recentActivity.map(renderHomeActivity).join('') || emptyState('No recent activity yet.')}
-          </div>
-        </article>
-        <div class="dash-lists-right">
-          <article class="panel home-next-panel">
-            <div class="section-head">
-              <div><h2>Next tasks</h2><p>Your cleanest path through today.</p></div>
-              <a href="${appHref(companyPath('tasks', {}, companyId))}" data-router>View all <i class="ti ti-arrow-right"></i></a>
-            </div>
-            <div class="home-next-list">
-              ${homeNextTasks(companyId).map(renderHomeNextTask).join('') || emptyState('No open tasks.')}
-            </div>
-          </article>
-          ${showMessages ? `<article class="panel home-message-panel">
-            <div class="section-head">
-              <div><h2>Unread messages</h2><p>Conversations needing attention.</p></div>
-              <a href="${appHref(companyPath('messages', {}, companyId))}" data-router>View all <i class="ti ti-arrow-right"></i></a>
-            </div>
-            <div class="home-message-list">
-              ${homeUnreadMessages(companyId).map(renderHomeMessage).join('') || emptyState('No unread messages.')}
-            </div>
-          </article>` : ''}
-        </div>
-      </section>
-    </section>
-  `;
+function loadCompanyDashboard() {
+  if (companyDashboardModule) return Promise.resolve(companyDashboardModule);
+  if (!companyDashboardPending) {
+    companyDashboardPending = import('./home/company-dashboard.js').then((mod) => {
+      companyDashboardModule = mod.createCompanyDashboard({
+        DASHBOARD_RANGE_OPTIONS, activeSession, appHref, canViewModule, companyMessageUnreadCount, companyName,
+        companyPath, dashboardActivityItems, dashboardContext, dashboardRepOptions, dashboardVisibleRoleViews, dashboardWidgetLayout,
+        dashboardWidgetRegistry, dayPart, emptyState, field, firstName, h,
+        homeNextTasks, homeUnreadMessages, isLaunchHiddenDashboardWidget, moduleById, renderAvatar, renderCompanySwitch,
+        renderDashboardWidgetCard, renderEmptyWorkspacePrompt, renderHomeActivity, renderHomeMessage, renderHomeNextTask, renderPilotLaunchChecklist,
+        state,
+      });
+      return companyDashboardModule;
+    }).catch((error) => {
+      companyDashboardPending = null;
+      throw error;
+    });
+  }
+  return companyDashboardPending;
 }
+
+function renderCompanyDashboard(companyId) {
+  if (companyDashboardModule) return companyDashboardModule.renderCompanyDashboard(companyId);
+  loadCompanyDashboard().then(() => render()).catch((error) => console.error('Dashboard failed to load', error));
+  return questLoader('Loading dashboard');
+}
+
 
 function dashboardContext(companyId) {
   const window = dashboardRangeWindow(state.dashboardRange);
@@ -33063,6 +33015,52 @@ function onDocumentInput(event) {
   if (event.target.matches('[data-question-field]') || event.target.matches('[data-question-option]')) {
     updateQuestionField(event.target);
   }
+}
+
+/**
+ * A wheel over the pipeline board scrolls it sideways.
+ *
+ * The board is wider than the screen and the columns that matter -- Won, Lost -- sit off the
+ * right edge, so reaching them meant finding the scrollbar every time.
+ *
+ * It hands the gesture back at the ends rather than swallowing it. The app strip was made
+ * Shift-only for exactly the opposite reason: it is a thin bar, so trapping the wheel there
+ * stopped the page moving at all. The board fills the view, and letting the page scroll once
+ * the board has run out of travel keeps both possible.
+ */
+function onPipeBoardWheel(event) {
+  // A trackpad's sideways swipe already arrives as deltaX and the browser handles it.
+  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  const board = horizontalScrollerUnder(event.target);
+  if (!board) return;
+  const before = board.scrollLeft;
+  board.scrollLeft += event.deltaY;
+  // Only claim the gesture if it actually moved -- at either end it did not, and the page
+  // should scroll rather than the wheel doing nothing.
+  if (board.scrollLeft !== before) event.preventDefault();
+}
+
+/**
+ * The nearest thing under the pointer that genuinely scrolls sideways.
+ *
+ * Found by measuring rather than by a list of class names: the quote board, the contacts
+ * table and every other wide table want the same behaviour, and a list would need extending
+ * for each one -- and would silently miss the next.
+ *
+ * A vertical scroller wins if it is closer, so the wheel keeps working normally inside a
+ * long list that happens to sit within a wide one.
+ */
+function horizontalScrollerUnder(target) {
+  let node = target?.closest?.('*') || null;
+  while (node && node !== document.body) {
+    if (node.scrollHeight > node.clientHeight + 1) return null;
+    if (node.scrollWidth > node.clientWidth + 1) {
+      const overflowX = getComputedStyle(node).overflowX;
+      if (overflowX === 'auto' || overflowX === 'scroll') return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
 }
 
 function onDocumentChange(event) {

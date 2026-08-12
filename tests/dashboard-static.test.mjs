@@ -4,7 +4,9 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   // The widget registry is fetched on demand now; same surface, two files.
-  + readFileSync(new URL('../src/home/widget-registry.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/home/widget-registry.js', import.meta.url), 'utf8')
+  // The dashboard body is a fetched module now; same surface, read as one.
+  + readFileSync(new URL('../src/home/company-dashboard.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const smokeScript = readFileSync(new URL('../scripts/production-smoke-lib.mjs', import.meta.url), 'utf8');
 const dashboardRepOptionsBody = source.slice(source.indexOf('function dashboardRepOptions(companyId)'), source.indexOf('function dashboardOwnerKey'));

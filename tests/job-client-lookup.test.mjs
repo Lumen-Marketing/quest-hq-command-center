@@ -96,3 +96,26 @@ test('it runs on BOTH the typing path and the picking path', () => {
   // And the pick handler is what dispatches that change.
   assert.match(main, /input\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\);/);
 });
+
+test('the wheel pans anything that scrolls sideways, and gives the page back', () => {
+  // "when my mouse is on the stages cards I want to use the mouse scroll to scroll it
+  // horizontally", and the same for the contacts table whose columns run off the edge.
+  const body = fn('onPipeBoardWheel');
+  assert.match(body, /const board = horizontalScrollerUnder\(event\.target\);/);
+  assert.match(body, /board\.scrollLeft \+= event\.deltaY;/);
+  // Claimed only when it actually moved; at either end the page scrolls instead.
+  assert.match(body, /if \(board\.scrollLeft !== before\) event\.preventDefault\(\);/);
+  // A trackpad's sideways swipe is already horizontal and is left to the browser.
+  assert.match(body, /if \(Math\.abs\(event\.deltaY\) <= Math\.abs\(event\.deltaX\)\) return;/);
+  assert.match(main, /document\.addEventListener\('wheel', onPipeBoardWheel, \{ passive: false \}\);/);
+});
+
+test('the scroller is measured, not named, and a vertical one wins', () => {
+  // A list of class names would need extending for every wide table and would silently miss
+  // the next one. And a long list inside a wide container must still scroll DOWN.
+  const body = fn('horizontalScrollerUnder');
+  assert.match(body, /if \(node\.scrollHeight > node\.clientHeight \+ 1\) return null;/);
+  assert.match(body, /if \(node\.scrollWidth > node\.clientWidth \+ 1\)/);
+  assert.match(body, /overflowX === 'auto' \|\| overflowX === 'scroll'/);
+  assert.ok(!/pipe-board/.test(body), 'no hard-coded class names');
+});
