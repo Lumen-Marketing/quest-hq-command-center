@@ -40,10 +40,35 @@ test('picking a known contact links the record, not just the text', () => {
   assert.match(editor, /<input type="hidden" name="contact_id"[^>]*data-job-contact-id/);
 });
 
-test('it fills an empty Contact box and never overwrites a full one', () => {
+test('it fills an empty Contact box with the number, and never overwrites a full one', () => {
+  // The number, not the name: the name is already in the Client box right beside it, and the
+  // number is the detail somebody actually needs off a job.
   const body = fn('fillJobClientFromContact');
   assert.match(body, /if \(contactField && !contactField\.value\.trim\(\)\)/);
-  assert.match(body, /\[contact\.name, phone\]\.filter\(Boolean\)\.join\(' · '\)/);
+  assert.match(body, /contactField\.value = formatPhoneNumber\(contact\.phone \|\| ''\);/);
+});
+
+test('a job for somebody new creates the contact', () => {
+  // Typing a client the CRM does not have is how a real job starts, and the contact record
+  // is the thing nobody goes back to make.
+  const body = fn('ensureJobClientContact');
+  assert.match(body, /if \(!name \|\| payload\.contact_id\) return payload;/, 'never on an already-linked job');
+  assert.match(body, /const existing = contactByName\(payload\.company_id, name\);/);
+  assert.match(body, /if \(existing\) return \{ \.\.\.payload, contact_id: existing\.id \};/, 'a matching name links, it does not duplicate');
+  assert.match(body, /await persistContact\(contact\);/);
+  // The number typed beside the name is the one that gets saved.
+  assert.match(body, /form\?\.querySelector\('\[name="contact_name"\]'\)\?\.value/);
+  // A failed convenience write must not cost somebody the job they were saving.
+  assert.match(body, /catch \(error\) \{[\s\S]*?return payload;/);
+});
+
+test('the contact is only created once the job is allowed to save', () => {
+  // Somebody who cannot save a job must not leave a contact behind as a side effect.
+  const body = fn('saveJob');
+  assert.ok(
+    body.indexOf("requirePermission('jobs.manage'") < body.indexOf('await ensureJobClientContact(payload, form)'),
+    'the permission check has to come first',
+  );
 });
 
 test('a name that matches nothing is left alone, and drops the link', () => {

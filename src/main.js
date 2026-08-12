@@ -33336,10 +33336,46 @@ function validateJobForm(form) {
   return { ok: true, data: formData };
 }
 
+/**
+ * A job for somebody who is not in the CRM yet creates them.
+ *
+ * Typing a client the contact list does not have is how a real job starts -- a call comes
+ * in, the job is opened, and the contact record is the thing nobody goes back to make. So
+ * saving the job makes it, using the number typed into Contact beside it.
+ *
+ * Never on an edit that already resolved to a contact, and never on a name that matches one
+ * -- that would mint a duplicate every time an existing job was saved. Failure here is
+ * swallowed on purpose: the job is what was asked for, and losing it because a convenience
+ * record could not be written would be the worse outcome.
+ */
+async function ensureJobClientContact(payload, form) {
+  const name = String(payload.client_name || '').trim();
+  if (!name || payload.contact_id) return payload;
+  const existing = contactByName(payload.company_id, name);
+  if (existing) return { ...payload, contact_id: existing.id };
+  try {
+    const contact = normalizeContact({
+      id: crypto.randomUUID(),
+      company_id: payload.company_id,
+      workspace_id: payload.workspace_id,
+      name,
+      // The Contact box beside Client is where the number was typed.
+      phone: String(form?.querySelector('[name="contact_name"]')?.value || '').trim(),
+      stage: 'Prospects',
+    });
+    await persistContact(contact);
+    showToast(`${name} added to Contacts.`, isLiveSupabaseSession() ? 'live' : 'local', 'Contacts');
+    return { ...payload, contact_id: contact.id };
+  } catch (error) {
+    console.warn('Client contact could not be created', error);
+    return payload;
+  }
+}
+
 async function saveJob(form) {
   const validation = validateJobForm(form);
   if (!validation.ok) return;
-  const payload = normalizeJob(validation.data);
+  let payload = normalizeJob(validation.data);
   payload.id = payload.id || crypto.randomUUID();
   payload.company_id = payload.company_id || activeCompanyId();
   payload.workspace_id = workspaceIdForRecord(payload.company_id, payload.workspace_id);
@@ -33347,6 +33383,9 @@ async function saveJob(form) {
   payload.estimate_total = Number(payload.estimate_total || 0);
   payload.invoice_total = Number(payload.invoice_total || 0);
   payload.updated_at = new Date().toISOString();
+  // After the permission check -- somebody who cannot save the job must not leave a contact
+  // behind as a side effect of trying.
+  payload = await ensureJobClientContact(payload, form);
 
   const existing = state.jobs.some((job) => job.id === payload.id);
   const client = createSupabaseClient();
@@ -40528,8 +40567,7 @@ function fillJobClientFromContact(input) {
   }
   if (idField) idField.value = contact.id || '';
   if (contactField && !contactField.value.trim()) {
-    const phone = formatPhoneNumber(contact.phone || '');
-    contactField.value = [contact.name, phone].filter(Boolean).join(' · ');
+    contactField.value = formatPhoneNumber(contact.phone || '');
   }
 }
 
