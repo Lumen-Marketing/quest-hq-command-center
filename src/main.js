@@ -1009,6 +1009,12 @@ const DASHBOARD_WIDGET_DEFAULTS = {
 // company plugin is the entitlement and each operational workspace controls
 // its own Tasks activation/configuration through workspace_plugins.
 const CORE_MODULE_IDS = new Set(['dashboard', 'jobs', 'users', 'settings', 'automations']);
+// Not core -- it is a real plugin with real permissions -- but installed for every new
+// company and workspace regardless of preset, because creating a workspace leads into the
+// workspace app and a workspace without this lands on a module that is not installed.
+// Mirrors app_private.baseline_plugin_ids(); the server is the authority, this covers the
+// offline path, which has no RPC to ask.
+const BASELINE_WORKSPACE_PLUGIN_IDS = ['workspace_builder'];
 // Private plugins are gated by companyPluginStatus() against company_plugins,
 // not by a client-side password. The old private-plugin access constant, which
 // shipped a literal password in the bundle, was deliberately removed on main;
@@ -30329,6 +30335,11 @@ async function createOperationalWorkspace(formNode) {
       return;
     }
     const workspaceId = String(result.data || '');
+    // Read back what the server installed rather than assuming it. Without this the new
+    // workspace has its plugins in the database but not in state, so isModuleInstalled()
+    // still says no and the workspace app stays hidden until a reload.
+    const pluginResult = await safeSupabaseQuery(client.from('workspace_plugins').select('*').eq('workspace_id', workspaceId));
+    (pluginResult.data || []).forEach((row) => upsertWorkspacePluginLocal(row.workspace_id, row.plugin_id, row.status));
     const rowResult = await safeSupabaseQuery(client.from('workspaces').select('*').eq('id', workspaceId).maybeSingle());
     saved = normalizeOperationalWorkspace(rowResult.data || {
       id: workspaceId,
@@ -30358,6 +30369,8 @@ async function createOperationalWorkspace(formNode) {
       status: 'active',
       assigned_by: activeSession().profile.id,
     })));
+    // The offline path has no RPC to do it, so the same baseline is applied here.
+    BASELINE_WORKSPACE_PLUGIN_IDS.forEach((pluginId) => upsertWorkspacePluginLocal(saved.id, pluginId, 'installed'));
   }
   if (iconImage) saved = normalizeOperationalWorkspace({ ...saved, icon_image: iconImage });
   state.operationalWorkspaces = mergeOperationalWorkspaces(state.operationalWorkspaces.concat(saved));

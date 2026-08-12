@@ -34,6 +34,31 @@ Invite delivery is durable state, not the source of access truth. The database i
 
 `company_plugins` records what a customer's plan is entitled to use. `workspace_plugins` records which entitled plugins are active and how they are configured in one operational workspace. This keeps the system customizable without hardcoding one pipeline or app layout for every market customer.
 
+Both layers must say yes: `workspacePluginStatus` in src/workspaces/model.js returns
+`available` when the company is not entitled, and again when the workspace has no row. A
+plugin present in only one of the two tables is not installed.
+
+## The Workspace App Builder is baseline, not a preset choice
+
+`app_private.baseline_plugin_ids()` names the plugins every new company and every new
+workspace gets regardless of preset; `plugin_ids_for_preset` unions it into all four
+presets, including `blank`. Blank means no *business* modules, not no workspace.
+
+The reason is that `workspaces` is not in `CORE_MODULE_IDS`, so reaching the workspace app
+requires the `workspace_builder` plugin, and creating a workspace leads there. Three
+independent places failed to provide it: `'blank'` returned an empty array and is what the
+client passes for both creation RPCs; a new account's `Main` workspace is built by the
+`companies_ensure_default_workspace` trigger, which seeded pipeline stages and no plugins;
+and the client never re-read `workspace_plugins` after the create RPC, so rows that existed
+in the database still read as uninstalled until a reload.
+
+`create_operational_workspace` installs the intersection of the preset list with the
+company's entitlements, so it now guarantees the company-level baseline row first --
+otherwise a company created before this installs nothing however the preset is fixed. Every
+baseline insert is `on conflict do nothing`, so a plugin somebody deliberately disabled
+stays disabled, and the default-workspace insert sits only on the branch that creates a
+workspace, never on the repair paths that adopt an existing one.
+
 ## Plugin activation does not imply one data boundary
 
 Every plugin declares a customer-visible data scope: workspace-private, company-shared, or hybrid. The label describes the current storage and permission model; it does not pretend every enabled app is isolated to one workspace. Changing a declaration requires reviewing the plugin's tables, APIs, RLS, and navigation behavior together.
