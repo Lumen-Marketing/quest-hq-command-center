@@ -88,6 +88,20 @@ current profile at read time, so a rename shows on every past entry -- and the s
 is the fallback for somebody who has since left. Entries written before this carry neither
 and render exactly as they did; inventing an actor for them would be worse than the gap.
 
+## A company's own members are readable by its members
+
+`company_memberships` SELECT is `own row OR is_company_admin OR is_company_member`. Before
+the third clause a worker could read exactly one row -- their own -- and every feature built
+on the client-side directory (`companyAccessUsers` -> `wbMembers`) failed at once on a worker
+account: @mention offered only yourself, the Members tile listed one person, and comment
+authors fell back to the `{ name: 'Unknown' }` stand-in `wbMemberById` returns.
+
+This is not a widening of personal data. Membership rows carry company, profile, role and
+status; `profiles` is a separate table whose policy already lets company peers read each
+other via `shares_active_company`. The two tables disagreed -- you could read a colleague's
+profile but not learn they were a colleague -- and this closes that gap. Writes are
+untouched and remain admin-only.
+
 ## Workspace membership is answered from one rule, in both directions
 
 `allowedWorkspaces` answers "which workspaces may this person enter"; `workspaceMembers`
