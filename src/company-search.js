@@ -31,6 +31,7 @@ export function buildCompanySearchRecords({
   tasks = [],
   files = [],
   proposals = [],
+  appItems = [],
   workspaceNames = {},
 } = {}) {
   const records = [];
@@ -167,7 +168,81 @@ export function buildCompanySearchRecords({
     });
   }
 
+  // Records built in the workspace app builder, and the sub-items under them. These are the
+  // only searchable things a customer defines themselves, so the group is the app's own name
+  // -- "Roof Quote & Job Tracker", not a generic "Workspace" -- because that is what the
+  // person searching calls it.
+  for (const entry of appItems) {
+    records.push({
+      id: entry.subOf ? `wbchild-${entry.appId}-${entry.itemId}-${entry.id}` : `wbitem-${entry.appId}-${entry.id}`,
+      group: entry.appName || 'Apps',
+      icon: entry.icon || 'ti-layout-grid',
+      label: entry.label || 'Untitled',
+      hint: recordHint(entry, workspaceNames, entry.subOf ? `in ${entry.subOf}` : ''),
+      keywords: joinedText(entry.text, entry.appName, entry.subOf, 'app record'),
+      section: 'workspaces',
+      // A sub-item has no page of its own, so it opens the record that holds it.
+      params: routeParams(entry, { app_id: entry.appId, tab: 'items', item_id: entry.itemId || entry.id }),
+    });
+  }
+
   return records;
+}
+
+/**
+ * Every app record and sub-item the viewer may reach, flattened for the index.
+ *
+ * Values are stringified rather than formatted: the point is to match what somebody types,
+ * and a raw phone number or option id is as likely a search term as its rendered label.
+ * Arrays and objects are flattened too, so a relationship or a checklist still contributes.
+ */
+export function buildWorkspaceAppSearchEntries({ doc, allowedWorkspaceIds, itemTitle }) {
+  const entries = [];
+  const flatten = (value, depth = 0) => {
+    if (value == null || depth > 2) return '';
+    if (Array.isArray(value)) return value.map((v) => flatten(v, depth + 1)).join(' ');
+    if (typeof value === 'object') return Object.values(value).map((v) => flatten(v, depth + 1)).join(' ');
+    return String(value);
+  };
+
+  for (const workspace of doc?.workspaces || []) {
+    // ws-<operational id> is how a builder workspace keys to one somebody can be a member
+    // of. Anything else has no route to open and no access rule to check it against.
+    const workspaceId = /^ws-/.test(workspace.id || '') ? workspace.id.slice(3) : '';
+    if (!workspaceId || !allowedWorkspaceIds.has(workspaceId)) continue;
+    for (const app of workspace.apps || []) {
+      // Linked copies resolve to the same records; indexing both lists every hit twice.
+      if (app.linked) continue;
+      for (const item of app.items || []) {
+        entries.push({
+          id: item.id,
+          appId: app.id,
+          appName: app.name,
+          icon: app.icon,
+          workspace_id: workspaceId,
+          label: itemTitle(app, item),
+          text: flatten(item.values),
+        });
+        for (const child of item.children || []) {
+          const collection = (app.collections || []).find((c) => c.id === child.collection);
+          const childText = flatten(child.values);
+          entries.push({
+            id: child.id,
+            itemId: item.id,
+            appId: app.id,
+            appName: app.name,
+            icon: app.icon,
+            workspace_id: workspaceId,
+            subOf: collection?.name || 'Sub-items',
+            label: childText.slice(0, 80) || 'Sub-item',
+            // The parent's title too, so searching the record finds its sub-items with it.
+            text: `${childText} ${itemTitle(app, item)}`,
+          });
+        }
+      }
+    }
+  }
+  return entries;
 }
 
 export function buildCompanySearchRecordsFromState({
@@ -176,6 +251,7 @@ export function buildCompanySearchRecordsFromState({
   workspaces,
   canAccess,
   memberName,
+  workspaceAppEntries = [],
 }) {
   const fallbackWorkspaceId = workspaces.find((workspace) => workspace.is_default)?.id || '';
   const allowedWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
@@ -197,5 +273,10 @@ export function buildCompanySearchRecordsFromState({
   const files = scope(state.files, 'files.view', 'files')
     .map((file) => ({ ...file, job_name: jobsById.get(file.job_id)?.name || '' }));
   const proposals = scope(state.proposals, 'crm.view', 'proposals');
-  return buildCompanySearchRecords({ contacts, quotes, jobs, tasks, files, proposals, workspaceNames });
+  return buildCompanySearchRecords({
+    contacts, quotes, jobs, tasks, files, proposals, workspaceNames,
+    // Re-checked here rather than trusted: the entries were built against the same set, but
+    // this function is the one place every source passes an access filter.
+    appItems: workspaceAppEntries.filter((entry) => allowedWorkspaceIds.has(entry.workspace_id)),
+  });
 }

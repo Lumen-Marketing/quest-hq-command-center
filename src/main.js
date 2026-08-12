@@ -15857,12 +15857,26 @@ function wbBindInlineEdits(root, companyId, workspaceId, appId, itemId) {
     if (cell.dataset.bound) return;
     cell.dataset.bound = '1';
 
-    const open = () => {
+    const open = (retried = false) => {
       if (cell.dataset.editing) return;
       const { app } = wbFind(companyId, workspaceId, appId);
       const field = app?.fields.find((f) => f.id === cell.dataset.wbInline);
       const item = app?.items.find((i) => i.id === itemId);
       if (!field || !item) return;
+
+      // wbRenderFieldInput returns an EMPTY STRING until its module has been fetched, and
+      // that module is only pulled in by the builder modal. Opening an editor cold blanked
+      // the cell, and then focusout read no input, got '' back, and wrote it over the real
+      // value. So the fetch is awaited before anything is replaced.
+      if (!wbFieldUiModule) {
+        // Exactly one retry. A load that resolves without leaving the module usable would
+        // otherwise re-enter here forever and hang on the click.
+        if (retried) { showToast('The editor could not be loaded. Reload and try again.', 'error', 'Workspaces'); return; }
+        wbLoadFieldUi()
+          .then(() => open(true))
+          .catch(() => showToast('The editor could not be loaded. Reload and try again.', 'error', 'Workspaces'));
+        return;
+      }
 
       cell.dataset.editing = '1';
       // Kept so Escape, and any refused save, can put back exactly what was there.
@@ -15945,8 +15959,14 @@ function wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell) {
   const item = app?.items.find((i) => i.id === itemId);
   if (!item) return;
 
-  const value = wbReadFieldInput(field);
   const restore = () => { cell.innerHTML = cell.dataset.was; wbResetInlineCell(cell); render(); };
+  // No input in this cell means nothing was ever editable here -- a renderer that returned
+  // nothing, or markup that failed to mount. wbReadFieldInput cannot tell that apart from a
+  // field somebody deliberately cleared: both come back as ''. Checked before reading, so a
+  // missing editor can never be mistaken for an instruction to erase the value.
+  if (!cell.querySelector('[data-f]')) { restore(); return; }
+
+  const value = wbReadFieldInput(field);
   // Generated fields read back as undefined; they are not offered for editing, so this only
   // catches a field that vanished from the app while its editor was open.
   if (value === undefined) { restore(); return; }
@@ -25948,6 +25968,17 @@ function commandPaletteRecords() {
       && can(permission, companyId, workspaceId)
     ),
     memberName,
+    // App records and their sub-items. Gated on the same two checks every other source
+    // gets, just applied once for the whole builder doc rather than per row: the plugin
+    // has to be installed in the workspace, and the viewer has to be allowed to see it.
+    workspaceAppEntries: companySearchModule.buildWorkspaceAppSearchEntries({
+      doc: wbDoc(companyId),
+      allowedWorkspaceIds: new Set(workspaces
+        .filter((workspace) => isModuleInstalled('workspaces', companyId, workspace.id)
+          && can('workspaces.view', companyId, workspace.id))
+        .map((workspace) => workspace.id)),
+      itemTitle: wbItemTitle,
+    }),
   });
 }
 

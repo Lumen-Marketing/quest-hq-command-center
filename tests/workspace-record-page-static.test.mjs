@@ -158,3 +158,27 @@ test('the record page reads on a phone', () => {
   assert.match(styles, /\.wb-record-body \{[^}]*grid-template-columns: minmax\(0, 1\.35fr\) minmax\(0, 1fr\)/);
   assert.match(styles, /@media \(max-width: 900px\) \{ \.wb-record-body \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
 });
+
+test('the editor waits for its module instead of blanking the value', () => {
+  // wbRenderFieldInput returns an EMPTY STRING until field-config-ui is fetched, and only
+  // the builder modal used to pull that in. Opening an editor cold blanked the cell, and
+  // focusout then read no input, got '' back, and wrote it over the real value.
+  const open = slice('wbBindInlineEdits');
+  assert.match(open, /if \(!wbFieldUiModule\) \{/);
+  assert.match(open, /wbLoadFieldUi\(\)\s*[\r\n]+\s*\.then\(\(\) => open\(true\)\)/);
+  // Bounded: a load that resolves without leaving the module usable must not re-enter
+  // forever and hang the click.
+  assert.match(open, /const open = \(retried = false\) => \{/);
+  assert.match(open, /if \(retried\) \{ showToast\(/);
+});
+
+test('a missing input can never be read as an instruction to erase', () => {
+  // wbReadFieldInput returns '' both for a field somebody cleared and for markup that never
+  // mounted. Checked BEFORE reading, so the two can never be confused.
+  const save = slice('wbSaveInlineValue');
+  assert.match(save, /if \(!cell\.querySelector\('\[data-f\]'\)\) \{ restore\(\); return; \}/);
+  assert.ok(
+    save.indexOf("cell.querySelector('[data-f]')") < save.indexOf('const value = wbReadFieldInput(field);'),
+    'the guard has to come before the read, or the empty value is already in hand',
+  );
+});
