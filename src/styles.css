@@ -32027,3 +32027,206 @@ a.wb-cal-more:hover { color: var(--orange); }
 .job-card { position: relative; }
 .job-card:hover .pipe-card-delete,
 .job-card .pipe-card-delete:focus-visible { opacity: 1; }
+
+/* ---- Member access directory ----------------------------------------------------------
+   Search, role filter, sort, the three views, and the bulk-assign bar. The markup lives
+   in src/team/users-page.js and the rule that decides who is a member is in
+   src/workspaces/model.js. */
+
+/* ---- Member access directory ------------------------------------------------------------- */
+
+.member-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.member-search {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.member-search i {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+
+.member-search input {
+  width: 100%;
+  padding-left: 30px;
+}
+
+.member-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.member-filter select {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.member-views {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.member-count {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.member-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+/* Only once something is selected does this read as an action bar rather than a header. */
+
+.member-bulk.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.member-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.member-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.member-row-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.member-pick {
+  padding-top: 16px;
+}
+
+.member-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.member-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.member-card.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.member-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.member-card-head b {
+  display: block;
+  font-size: 14px;
+}
+
+.member-card-head span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.member-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.member-card-ws {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.member-role-chip {
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--surface-3, #eef1f4);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.member-status {
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.member-status.is-active {
+  color: #16a34a;
+}
+
+.member-status.is-pending {
+  color: #b45309;
+}
+
+.member-status.is-disabled,
+.member-status.is-left {
+  color: var(--muted);
+}
+
+.member-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.member-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.member-tag.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.member-tag em {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}

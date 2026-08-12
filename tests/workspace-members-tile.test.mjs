@@ -122,3 +122,19 @@ test('members is an allowed tile type, or it is silently a blank note', () => {
   assert.match(body, /WB_TILE_TYPES\.includes\(tile\.type\) \? tile\.type : 'text'/,
     'the fallback is what makes the list authoritative');
 });
+
+test('the member access directory has its styling', () => {
+  // These were lost in a file restore and the directory shipped unstyled. Each is asserted
+  // once, because a duplicated block is how the first recovery attempt went wrong.
+  for (const selector of [
+    '.member-toolbar {', '.member-search {', '.member-filter {', '.member-views {',
+    '.member-bulk {', '.member-check {', '.member-cards {', '.member-card {',
+    '.member-role-chip {', '.member-status {', '.member-tags {', '.member-tag {',
+  ]) {
+    const count = css.split(selector).length - 1;
+    assert.equal(count, 1, `${selector} should appear exactly once, found ${count}`);
+  }
+  // The bits that carry meaning rather than decoration.
+  assert.match(css, /\.member-bulk\.on \{[\s\S]*?border-color: var\(--accent\);/, 'the bar reads as active only once something is selected');
+  assert.match(css, /\.member-status\.is-active \{\s*color: #16a34a;/);
+});
