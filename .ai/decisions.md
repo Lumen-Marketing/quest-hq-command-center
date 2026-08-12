@@ -59,6 +59,35 @@ baseline insert is `on conflict do nothing`, so a plugin somebody deliberately d
 stays disabled, and the default-workspace insert sits only on the branch that creates a
 workspace, never on the repair paths that adopt an existing one.
 
+## A record is edited in place, not in a form over it
+
+The record page has no Edit button. Clicking a value opens that field's real input in the
+cell; moving focus away commits, Escape reverts, Enter commits except where a newline is
+part of the value. The input is the SAME markup the modal used -- `wbRenderFieldInput` out,
+`wbReadFieldInput` back, which finds its element by `[data-f]` anywhere in the document --
+so every field type is editable inline with no per-type code, and a type added later works
+without being taught to. Fields in `WB_AUTO_FIELD_TYPES` are not offered: there is no input
+behind them and the reader returns `undefined`, so a click would promise an edit that could
+never save.
+
+Committing on focusout is deferred one tick and then asks where focus actually landed,
+because "focus left" and "focus moved into my own dropdown" are indistinguishable at event
+time. A file picker takes focus out of the document entirely, so an open file zone suppresses
+the commit -- leaving the editor open is recoverable, discarding a pending upload is not.
+
+A single-field save runs the same tail as the modal did (stamp, log, notify, automations
+with the previous values, persist). An inline edit that skipped automations would be a
+second, quieter way to edit a record, and the two would drift. Opening a value and leaving
+it untouched compares equal and does nothing at all -- no stamp, no activity, no automation.
+
+## Activity says who, recorded at the choke point
+
+`wbLogActivity` stamps `actorId` and `actor` from the session. It is the one place every
+entry passes through, so no writer can forget. The id is what renders -- resolved to a
+current profile at read time, so a rename shows on every past entry -- and the stored name
+is the fallback for somebody who has since left. Entries written before this carry neither
+and render exactly as they did; inventing an actor for them would be worse than the gap.
+
 ## Workspace membership is answered from one rule, in both directions
 
 `allowedWorkspaces` answers "which workspaces may this person enter"; `workspaceMembers`

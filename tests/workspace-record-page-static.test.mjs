@@ -45,8 +45,82 @@ test('a deleted record explains itself instead of rendering blank', () => {
   assert.match(source, /All \$\{h\(app\.name\)\}/, 'the way out must still be there');
 });
 
-test('Edit is hidden from someone who cannot manage the app', () => {
-  assert.match(slice('wbViewItemPage'), /\$\{canManage \? `<button class="btn btn-primary"[^`]*data-wb-record-edit/);
+// --- editing happens on the record, not in a form over it -----------------------------------
+//
+// "remove the edit button and make it directly edit on the item, so when I click the data
+// I'm on edit mode and when I click somewhere else or go back it saves."
+
+test('there is no Edit button, because the value is the control', () => {
+  const page = slice('wbViewItemPage');
+  assert.ok(!/data-wb-record-edit/.test(page), 'the Edit button must be gone');
+  assert.ok(!/openWbItemModal/.test(page), 'and it must not reopen the record as a modal');
+  assert.ok(!/data-wb-record-edit/.test(main), 'nothing may still bind it either');
+  assert.match(page, /data-wb-inline="\$\{h\(f\.id\)\}"/);
+});
+
+test('only somebody who can manage gets an editable cell', () => {
+  assert.match(
+    slice('wbViewItemPage'),
+    /if \(!canManage \|\| !wbFieldIsEditable\(f\)\) return `<span class="wb-view-val">/,
+  );
+});
+
+test('a generated field is not offered as editable', () => {
+  // There is no input behind these, and wbReadFieldInput returns undefined for exactly this
+  // set -- so a click would promise an edit that could never be saved.
+  assert.match(main, /function wbFieldIsEditable\(field\) \{\n\s*return !!field && !WB_AUTO_FIELD_TYPES\.has\(field\.type\);/);
+  assert.match(main, /const WB_AUTO_FIELD_TYPES = new Set\(\['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time'\]\);/);
+});
+
+test('the inline editor is the modal\'s own input and reader', () => {
+  // Reusing both is what makes every field type editable inline with no per-type code, and
+  // what makes a type added later work here without being taught to.
+  const open = slice('wbBindInlineEdits');
+  assert.match(open, /wbRenderFieldInput\(companyId, workspaceId, field, item\.values\[field\.id\]\)/);
+  assert.match(slice('wbSaveInlineValue'), /const value = wbReadFieldInput\(field\);/);
+  // The same binders the modal runs over its own markup.
+  for (const binder of ['wbMountFileFields(cell)', 'wbBindUrlControls(cell)', 'wbBindRelationshipPickers(cell)']) {
+    assert.ok(open.includes(binder), `${binder} is not run over the inline input`);
+  }
+});
+
+test('clicking away saves, and Escape puts it back', () => {
+  const open = slice('wbBindInlineEdits');
+  assert.match(open, /cell\.addEventListener\('focusout'/);
+  // Deferred a tick: at focusout time the new target is not focused yet, so a click on this
+  // cell's own dropdown is indistinguishable from leaving it.
+  assert.match(open, /setTimeout\(\(\) => \{[\s\S]*?if \(cell\.contains\(document\.activeElement\)\) return;/);
+  assert.match(open, /if \(!document\.hasFocus\(\) \|\| cell\.querySelector\('\[data-wb-file\]'\)\) return;/);
+  assert.match(open, /if \(event\.key === 'Escape'\)[\s\S]*?close\(false\)/);
+  // Enter saves, except where a newline is part of the value.
+  assert.match(open, /field\.type !== 'textarea' && field\.type !== 'checklist'/);
+});
+
+test('an inline save is a real save, not a quieter one', () => {
+  // A change made here must not skip what the modal did, or there are two ways to edit a
+  // record and they drift.
+  const save = slice('wbSaveInlineValue');
+  assert.match(save, /wbLogActivity\(workspace, \{/);
+  assert.match(save, /wbNotifyItem\(companyId, workspace, app, item/);
+  assert.match(save, /wbRunAutomations\(companyId, workspace, app, item, 'updated', prev\)/);
+  assert.match(save, /wbSave\(companyId\);/);
+  assert.match(save, /item\.updatedAt = stamp;/);
+});
+
+test('it refuses what the form refused, and puts the value back', () => {
+  const save = slice('wbSaveInlineValue');
+  assert.match(save, /if \(field\.required && emptied\)/);
+  assert.match(save, /isValidEmail\(String\(value\)\.trim\(\)\)/);
+  assert.match(save, /const restore = \(\) => \{ cell\.innerHTML = cell\.dataset\.was;/);
+});
+
+test('opening a value and leaving it alone changes nothing', () => {
+  // Clicking a value and clicking away is a normal thing to do. It must not stamp the record
+  // as edited, log activity, or fire automations at everybody.
+  assert.match(
+    slice('wbSaveInlineValue'),
+    /if \(JSON\.stringify\(before \?\? ''\) === JSON\.stringify\(value \?\? ''\)\) \{ restore\(\); return; \}/,
+  );
 });
 
 // --- comments work in both places ---------------------------------------------------------
@@ -75,7 +149,7 @@ test('which comment is being edited is not stored on the modal', () => {
 });
 
 test('the page binds its own comment handlers', () => {
-  for (const attr of ['data-wb-add-comment', 'data-wb-comment-edit', 'data-wb-comment-save', 'data-wb-comment-del', 'data-wb-record-edit']) {
+  for (const attr of ['data-wb-add-comment', 'data-wb-comment-edit', 'data-wb-comment-save', 'data-wb-comment-del']) {
     assert.match(main, new RegExp(`bind\\('\\[${attr}\\]'`), `${attr} is unbound on the page`);
   }
 });

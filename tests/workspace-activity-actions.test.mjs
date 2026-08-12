@@ -24,7 +24,8 @@ test('a log line links to the record it describes', () => {
     'an entry about no record must not pretend to point at one');
   assert.match(body, /workspace_id: workspace\.id, app_id: ev\.appId, item_id: ev\.itemId/);
   // Every write that knows a record now records which one.
-  assert.equal((main.match(/appId: app\.id, itemId: item\.id/g) || []).length, 5);
+  // Six now: the five original writes, plus the inline single-field save on the record page.
+  assert.equal((main.match(/appId: app\.id, itemId: item\.id/g) || []).length, 6);
 });
 
 test('entries written before this stay plain text', () => {
@@ -79,4 +80,31 @@ test('the dialog is routed and its handlers are bound', () => {
   // The submit says it is working and releases on every path.
   assert.match(main, /const done = beginSubmitting\(event\.target, 'Creating…'\);/);
   assert.match(main, /\.finally\(done\);/);
+});
+
+// --- who did it ----------------------------------------------------------------------------
+// "can you add who's user do this activity?" -- the feed said what happened and when, and
+// never who.
+
+test('the actor is stamped where every entry passes through', () => {
+  // Not at each call site: there are six of them, and a writer that forgets is a silent gap.
+  const body = fn('wbLogActivity');
+  assert.match(body, /const actor = activeSession\(\)\.profile \|\| \{\};/);
+  assert.match(body, /actorId: actor\.id \|\| '',/);
+  assert.match(body, /actor: actor\.full_name \|\| actor\.email \|\| '',/);
+  // Spread last so an entry may still say who it was on behalf of somebody else.
+  assert.ok(body.indexOf('actor: actor.full_name') < body.indexOf('...entry'));
+});
+
+test('the name is resolved live, so a rename shows on past entries', () => {
+  const body = fn('wbActivityRow');
+  assert.match(body, /const member = ev\.actorId \? wbMemberById\(companyId, ev\.actorId\) : null;/);
+  // The stored name is only the fallback for somebody who no longer resolves.
+  assert.match(body, /const actorName = live \? live\.name : \(ev\.actor \|\| ''\);/);
+});
+
+test('an entry written before this stays as it was', () => {
+  // No actor recorded, so none is shown -- inventing one would be worse than the gap.
+  assert.match(fn('wbActivityRow'), /const actor = actorName\s*[\r\n]+\s*\? `<span class="wb-act-actor">/);
+  assert.match(fn('wbActivityRow'), /\$\{actor \? '<span class="wb-act-sep">·<\/span>' : ''\}/);
 });

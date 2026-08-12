@@ -210,6 +210,7 @@ const FACTORY_MODULES = [
   ['src/ops/workday-panel.js', 'createWorkdayPanel'],
   ['src/ops/calls-widget.js', 'createCallsWidget'],
   ['src/proposals/proposal-builder-modal.js', 'createProposalBuilderModal'],
+  ['src/jobs/job-photos-modal.js', 'createJobPhotosModal'],
 ];
 
 test('the list above covers every factory module there is', () => {

@@ -31717,3 +31717,62 @@ a.wb-cal-more:hover { color: var(--orange); }
   color: #16a34a;
   font-weight: 650;
 }
+
+/* ---- Inline record editing: the value is the control ------------------------------------- */
+.wb-record-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* Editable, but quietly. A page of boxes reads as a form; this should read as a record you
+   happen to be able to change. The affordance arrives on hover, where it is needed. */
+.wb-view-val.wb-inline {
+  margin: -3px -7px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  cursor: text;
+  transition: background .12s ease, box-shadow .12s ease;
+}
+
+.wb-view-val.wb-inline:hover {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.wb-view-val.wb-inline:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.wb-view-val.wb-inline.is-editing {
+  display: block;
+  background: transparent;
+  box-shadow: none;
+  cursor: default;
+}
+
+.wb-inline-edit { display: block; }
+
+.wb-inline-edit .wb-input,
+.wb-inline-edit select.wb-input,
+.wb-inline-edit textarea.wb-input { width: 100%; }
+
+/* Who did it, in the activity line's own meta row. */
+.wb-act-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.wb-act-actor .wb-avatar { flex: 0 0 auto; }
+
+.wb-act-sep {
+  margin: 0 6px;
+  color: var(--muted);
+}

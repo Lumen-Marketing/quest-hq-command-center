@@ -44,8 +44,8 @@ const filled = (child, field) => {
 
 export function createRecordPage(ctx) {
   const {
-    appHref, can, companyPath, emptyState, formatDate, h, wbFmtVal, wbItemCommentsHtml,
-    wbItemTitle, wbTimeAgo, wbUrlControl, state,
+    appHref, can, companyPath, emptyState, formatDate, h, wbFieldIsEditable, wbFmtVal,
+    wbItemCommentsHtml, wbItemTitle, wbTimeAgo, wbUrlControl, state,
   } = ctx;
 
   /**
@@ -122,8 +122,22 @@ export function createRecordPage(ctx) {
     // and a form that changed shape per row would be unreadable.
     const blocks = recordLayout.layoutFor(app);
 
+    // The value IS the control. Clicking it opens the field's real input in place and moving
+    // focus away commits, so there is no Edit button, no modal, and no separate "you are now
+    // editing" mode to enter or forget to leave.
+    //
+    // Computed and generated fields -- calculation, rollup, autonumber, created/updated time
+    // -- are not offered. There is no input behind them, and wbReadFieldInput returns
+    // undefined rather than a value, so a click would promise an edit that could never save.
+    const valueCell = (f) => {
+      const shown = f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(ctx, f, item.values[f.id]);
+      if (!canManage || !wbFieldIsEditable(f)) return `<span class="wb-view-val">${shown}</span>`;
+      return `<span class="wb-view-val wb-inline" data-wb-inline="${h(f.id)}" tabindex="0" role="button"
+        title="${h(`Click to edit ${f.label}`)}" aria-label="${h(`Edit ${f.label}`)}">${shown}</span>`;
+    };
+
     const fieldRows = (fields) => (fields.length
-      ? fields.map((f) => `<div class="wb-view-row"><span class="wb-view-label">${h(f.label)}</span><span class="wb-view-val">${f.type === 'url' ? wbUrlControl(item.values[f.id]) : wbFmtVal(ctx, f, item.values[f.id])}</span></div>`).join('')
+      ? fields.map((f) => `<div class="wb-view-row"><span class="wb-view-label">${h(f.label)}</span>${valueCell(f)}</div>`).join('')
       : '<div class="wb-sub">No fields in this group yet.</div>');
 
     const blockBody = (block) => {
@@ -212,7 +226,7 @@ export function createRecordPage(ctx) {
             <h1>${h(wbItemTitle(app, item)) || 'Item'}</h1>
             <p class="wb-record-meta">${item.createdAt ? `Created ${h(formatDate(item.createdAt))}` : ''}${item.updatedAt && item.updatedAt !== item.createdAt ? ` · edited ${h(wbTimeAgo(item.updatedAt))}` : ''}${count ? ` · ${count} comment${count === 1 ? '' : 's'}` : ''}</p>
           </div>
-          ${canManage ? `<button class="btn btn-primary" type="button" data-wb-record-edit="${h(item.id)}"><i class="ti ti-pencil"></i>Edit</button>` : ''}
+          ${canManage ? '<p class="wb-record-hint"><i class="ti ti-pencil" aria-hidden="true"></i>Click any value to edit it</p>' : ''}
         </header>
         ${canManage ? `<div class="wb-dash-controls">
           <button class="btn btn-sm ${editing ? 'btn-primary' : ''}" type="button" data-wb-rec-manage>${editing ? '<i class="ti ti-check"></i>Done' : '<i class="ti ti-adjustments"></i>Customize layout'}</button>

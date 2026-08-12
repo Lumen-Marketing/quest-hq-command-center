@@ -6233,7 +6233,7 @@ function loadWbViewItemPage() {
   if (!wbViewItemPagePending) {
     wbViewItemPagePending = import('./workspace/record-page.js').then((mod) => {
       wbViewItemPageModule = mod.createRecordPage({
-        appHref, can, companyPath, emptyState, formatDate, h, wbFmtVal, wbItemCommentsHtml, wbItemTitle, wbTimeAgo, wbUrlControl, state
+        appHref, can, companyPath, emptyState, formatDate, h, wbFieldIsEditable, wbFmtVal, wbItemCommentsHtml, wbItemTitle, wbTimeAgo, wbUrlControl, state
       });
       return wbViewItemPageModule;
     }).catch((error) => {
@@ -13284,65 +13284,35 @@ function jobPhotosFor(jobId, companyId = activeCompanyId()) {
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 }
 
-function renderJobPhotosModal(companyId, job) {
-  if (!job || job.company_id !== companyId) return renderModalShell('Job photos', 'Job unavailable', emptyState('This job is no longer available.'));
-  const canManagePhotos = can('files.manage', companyId);
-  const allPhotos = jobPhotosFor(job.id, companyId);
-  const filter = state.jobPhotoCategory || 'All';
-  const photos = filter === 'All' ? allPhotos : allPhotos.filter((file) => file.category === filter);
-  ensureFileThumbnails(photos);
-  return `
-    <div class="modal-overlay">
-      <div class="modal-panel job-photos-modal" role="dialog" aria-modal="true" aria-labelledby="job-photos-title">
-        <div class="modal-head">
-          <div><div class="eyebrow">${h(job.name)}</div><h2 id="job-photos-title">Job photos</h2><p>${h(job.site_address || job.client_name || companyName(companyId))}</p></div>
-          <button class="btn" type="button" data-action="close-modal">Close</button>
-        </div>
-        <div class="job-photos-shell">
-          <form class="job-photo-uploader" data-job-photo-form>
-            <fieldset class="job-photo-upload-fields" ${canManagePhotos ? '' : 'disabled'}>
-            <input type="hidden" name="job_id" value="${h(job.id)}" />
-            <div class="job-photo-drop span-2">
-              <label class="job-photo-capture">
-                <i class="ti ti-camera"></i><span><strong>Take a photo</strong><small>Opens the rear camera on supported phones.</small></span>
-                <input name="camera" type="file" accept="${acceptAttr('image')}" capture="environment" />
-              </label>
-              <label class="job-photo-capture">
-                <i class="ti ti-photo"></i><span><strong>Add from device</strong><small>Select several job photos at once.</small></span>
-                <input name="photos" type="file" multiple accept="${acceptAttr('image')}" />
-              </label>
-            </div>
-            ${selectField('Photo type', 'category', 'Inspection', JOB_PHOTO_CATEGORIES.map((item) => [item, item]))}
-            ${field('Caption', 'notes', '', false, 'text')}
-            <div class="form-actions span-2">
-              <button class="btn btn-primary" type="submit" data-job-photo-submit ${canManagePhotos ? '' : 'disabled'}><i class="ti ti-cloud-upload"></i>Upload photos</button>
-              <span class="form-note">${canManagePhotos ? 'Images stay inside this job and the company workspace.' : 'Your role has view-only access to job photos.'}</span>
-            </div>
-            <div class="upload-progress span-2" data-job-photo-progress hidden><div class="upload-progress-bar" data-job-photo-bar></div></div>
-            </fieldset>
-          </form>
-          <section class="job-photo-library">
-            <div class="job-photo-library-head">
-              <div><strong>${allPhotos.length} photo${allPhotos.length === 1 ? '' : 's'}</strong><span>Before, damage, progress, and closeout evidence.</span></div>
-              <a class="btn btn-compact" href="${appHref(companyPath('files', { folder: 'jobs', job_id: job.id }, companyId))}" data-router><i class="ti ti-folder"></i>Open drive</a>
-            </div>
-            <div class="job-photo-filters" role="group" aria-label="Photo type">
-              ${['All', ...JOB_PHOTO_CATEGORIES].map((item) => `<button class="${filter === item ? 'active' : ''}" type="button" data-action="set-job-photo-filter" data-category="${h(item)}">${h(item)}</button>`).join('')}
-            </div>
-            <div class="job-photo-gallery">
-              ${photos.map((file) => `
-                <button type="button" class="job-photo-card" data-action="select-file" data-file-id="${h(file.id)}">
-                  <span class="job-photo-image">${fileThumb(file)}</span>
-                  <span><strong>${h(file.category || 'Photo')}</strong><small>${h(file.notes || file.file_name)}</small></span>
-                </button>
-              `).join('') || `<div class="job-photo-empty"><i class="ti ti-camera"></i><strong>No ${filter === 'All' ? '' : h(filter.toLowerCase() + ' ')}photos yet</strong><span>Capture the first photo without leaving this job.</span></div>`}
-            </div>
-          </section>
-        </div>
-      </div>
-    </div>
-  `;
+// ---- Job photos ----------------------------------------------------------------
+// Body lives in ./jobs/job-photos-modal.js and is fetched on first use.
+let jobPhotosModalModule = null;
+let jobPhotosModalPending = null;
+
+function loadJobPhotosModal() {
+  if (jobPhotosModalModule) return Promise.resolve(jobPhotosModalModule);
+  if (!jobPhotosModalPending) {
+    jobPhotosModalPending = import('./jobs/job-photos-modal.js').then((mod) => {
+      jobPhotosModalModule = mod.createJobPhotosModal({
+        JOB_PHOTO_CATEGORIES, acceptAttr, appHref, can, companyName, companyPath,
+        emptyState, ensureFileThumbnails, field, fileThumb, h, jobPhotosFor,
+        renderModalShell, selectField, state,
+      });
+      return jobPhotosModalModule;
+    }).catch((error) => {
+      jobPhotosModalPending = null;
+      throw error;
+    });
+  }
+  return jobPhotosModalPending;
 }
+
+function renderJobPhotosModal(companyId, job) {
+  if (jobPhotosModalModule) return jobPhotosModalModule.renderJobPhotosModal(companyId, job);
+  loadJobPhotosModal().then(() => render()).catch((error) => console.error('Job photos failed to load', error));
+  return questLoader('Loading photos');
+}
+
 
 // ---- Users ----------------------------------------------------------------
 // Body lives in ./team/users-page.js and is fetched on first use.
@@ -13834,7 +13804,19 @@ function wbFind(companyId, workspaceId, appId = '') {
 }
 function wbLogActivity(workspace, entry) {
   workspace.activity = workspace.activity || [];
-  workspace.activity.unshift({ id: wbUid(), ts: new Date().toISOString(), ...entry });
+  // Who did it, stamped here rather than at each call site: this is the one place every
+  // entry passes through, so no writer can forget and there is nothing to keep in step.
+  // The id is what gets rendered -- resolved to a CURRENT profile at read time, so a later
+  // rename shows everywhere -- and the name is the fallback for an author who has since
+  // left and no longer resolves.
+  const actor = activeSession().profile || {};
+  workspace.activity.unshift({
+    id: wbUid(),
+    ts: new Date().toISOString(),
+    actorId: actor.id || '',
+    actor: actor.full_name || actor.email || '',
+    ...entry,
+  });
   if (workspace.activity.length > 60) workspace.activity.length = 60;
 }
 function wbTimeAgo(ts) {
@@ -13991,7 +13973,7 @@ function wbFeedStream(companyId, workspace) {
   }
   const rows = stream.map((entry) => entry.kind === 'post'
     ? wbFeedPost(companyId, workspace, entry.data)
-    : `<div class="wb-feed-card wb-feed-sys" data-wb-act="${h(entry.data.id)}">${wbActivityRow(entry.data, wbActivityHref(companyId, workspace, entry.data))}${wbActivityBar(companyId, entry.data)}</div>`).join('');
+    : `<div class="wb-feed-card wb-feed-sys" data-wb-act="${h(entry.data.id)}">${wbActivityRow(companyId, entry.data, wbActivityHref(companyId, workspace, entry.data))}${wbActivityBar(companyId, entry.data)}</div>`).join('');
   return `<section class="wb-feed-stream">${rows}</section>`;
 }
 
@@ -14009,7 +13991,7 @@ function wbActivityHref(companyId, workspace, ev) {
   }, companyId));
 }
 
-function wbActivityRow(ev, href = '') {
+function wbActivityRow(companyId, ev, href = '') {
   // Both stamps: "2h ago" reads faster, the absolute one is what you quote when something
   // has to be pinned down. A real <time> element so the machine-readable value is the exact
   // instant rather than the rounded label.
@@ -14022,7 +14004,17 @@ function wbActivityRow(ev, href = '') {
   const body = href
     ? `<a class="wb-act-text wb-act-link" href="${href}" data-router>${ev.text}<i class="ti ti-arrow-up-right" aria-hidden="true"></i></a>`
     : `<div class="wb-act-text">${ev.text}</div>`;
-  return `<div class="wb-act-item"><span class="wb-act-ic" style="background:${h(ev.color || '#6b7280')}"><i class="ti ${h(ev.icon || 'ti-point')}"></i></span><div>${body}<div class="wb-act-time">${when}</div></div></div>`;
+  // Who did it. Resolved from the id so a later rename shows on every past entry; the
+  // stored name is the fallback for somebody who has since left. Entries written before
+  // this carry neither and simply say when, as they always did -- inventing an actor for
+  // them would be worse than the gap.
+  const member = ev.actorId ? wbMemberById(companyId, ev.actorId) : null;
+  const live = member && member.name && member.name !== 'Unknown' ? member : null;
+  const actorName = live ? live.name : (ev.actor || '');
+  const actor = actorName
+    ? `<span class="wb-act-actor">${wbAvatar({ id: ev.actorId, name: actorName, color: live ? live.color : wbColorFor(ev.actorId || actorName), avatar_url: live ? live.avatar_url : '' }, 18)}<b>${h(actorName)}</b></span>`
+    : '';
+  return `<div class="wb-act-item"><span class="wb-act-ic" style="background:${h(ev.color || '#6b7280')}"><i class="ti ${h(ev.icon || 'ti-point')}"></i></span><div>${body}<div class="wb-act-time">${actor}${actor ? '<span class="wb-act-sep">·</span>' : ''}${when}</div></div></div>`;
 }
 
 /**
@@ -15738,6 +15730,164 @@ function wbBindRelationshipPickers(root) {
     });
     if (clear) clear.addEventListener('click', () => { commit(null); search.focus(); });
   });
+}
+
+// A field you can type into has an input behind it. The generated ones do not, and
+// wbReadFieldInput returns undefined for exactly this set rather than a value.
+function wbFieldIsEditable(field) {
+  return !!field && !WB_AUTO_FIELD_TYPES.has(field.type);
+}
+
+/**
+ * Click a value, edit it in place, click away to save.
+ *
+ * The record page used to be read-only with an Edit button that opened the whole record in
+ * a modal: four interactions to change one field, and the record you were reading was
+ * replaced by a form. Here the value cell IS the control.
+ *
+ * The input is the SAME markup the modal used -- wbRenderFieldInput out, wbReadFieldInput
+ * back -- so every field type is editable inline with no per-type code, and a type added
+ * later works here without being taught to. wbReadFieldInput finds its element by
+ * [data-f="<field id>"] anywhere in the document, which is why rendering one input on its
+ * own is enough.
+ *
+ * Committing on focusout rather than on a Save button is the whole point of the request,
+ * but "focus left" and "focus moved inside my own control" look identical at the moment the
+ * event fires -- a <select>'s dropdown, the relationship picker's results list, a file
+ * dialog. So the decision is deferred a tick and then asks where focus actually landed.
+ */
+function wbBindInlineEdits(root, companyId, workspaceId, appId, itemId) {
+  const scope = root || document;
+  scope.querySelectorAll('[data-wb-inline]').forEach((cell) => {
+    if (cell.dataset.bound) return;
+    cell.dataset.bound = '1';
+
+    const open = () => {
+      if (cell.dataset.editing) return;
+      const { app } = wbFind(companyId, workspaceId, appId);
+      const field = app?.fields.find((f) => f.id === cell.dataset.wbInline);
+      const item = app?.items.find((i) => i.id === itemId);
+      if (!field || !item) return;
+
+      cell.dataset.editing = '1';
+      // Kept so Escape, and any refused save, can put back exactly what was there.
+      cell.dataset.was = cell.innerHTML;
+      cell.classList.add('is-editing');
+      cell.removeAttribute('tabindex');
+      cell.removeAttribute('role');
+      cell.innerHTML = `<span class="wb-inline-edit">${wbRenderFieldInput(companyId, workspaceId, field, item.values[field.id])}</span>`;
+      // The same binders the modal runs, because it is the same markup. All are idempotent
+      // and root-scoped, so running them on one cell is safe.
+      wbMountFileFields(cell);
+      wbBindUrlControls(cell);
+      wbBindRelationshipPickers(cell);
+
+      const input = cell.querySelector('[data-f]');
+      if (input) {
+        input.focus();
+        if (typeof input.select === 'function' && ['text', 'textarea', 'number', 'email', 'phone', 'money'].includes(field.type)) input.select();
+      }
+
+      let done = false;
+      const close = (commit) => {
+        if (done) return;
+        done = true;
+        if (commit) wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell);
+        else { cell.innerHTML = cell.dataset.was; wbResetInlineCell(cell); render(); }
+      };
+
+      // A tick later, because at focusout time the new target is not focused yet -- and a
+      // click on this cell's own dropdown would otherwise read as leaving it.
+      cell.addEventListener('focusout', () => {
+        setTimeout(() => {
+          if (done || !cell.isConnected) return;
+          if (cell.contains(document.activeElement)) return;
+          // A file picker takes focus out of the page entirely. Leaving the editor open is
+          // the recoverable mistake here; closing it would throw away the pending upload.
+          if (!document.hasFocus() || cell.querySelector('[data-wb-file]')) return;
+          close(true);
+        }, 0);
+      });
+
+      cell.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(false); return; }
+        // Enter saves, except where a newline is a legitimate part of the value.
+        if (event.key === 'Enter' && !event.shiftKey && field.type !== 'textarea' && field.type !== 'checklist') {
+          event.preventDefault();
+          close(true);
+        }
+      });
+    };
+
+    cell.addEventListener('click', (event) => {
+      // A phone/email/map link inside the value keeps working as a link.
+      if (event.target.closest('a, button')) return;
+      open();
+    });
+    cell.addEventListener('keydown', (event) => {
+      if (cell.dataset.editing) return;
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+    });
+  });
+}
+
+function wbResetInlineCell(cell) {
+  delete cell.dataset.editing;
+  delete cell.dataset.was;
+  cell.classList.remove('is-editing');
+}
+
+/**
+ * Save one field of one record.
+ *
+ * Deliberately the same tail as the modal's item branch -- stamp, log, notify, run
+ * automations with the previous values, persist -- because a change made here is not a
+ * lesser kind of change. An inline edit that skipped automations would be a second, quieter
+ * way to edit a record, and the two would drift.
+ */
+function wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell) {
+  const { workspace, app } = wbFind(companyId, workspaceId, appId);
+  const item = app?.items.find((i) => i.id === itemId);
+  if (!item) return;
+
+  const value = wbReadFieldInput(field);
+  const restore = () => { cell.innerHTML = cell.dataset.was; wbResetInlineCell(cell); render(); };
+  // Generated fields read back as undefined; they are not offered for editing, so this only
+  // catches a field that vanished from the app while its editor was open.
+  if (value === undefined) { restore(); return; }
+
+  const emptied = value === '' || value == null || (Array.isArray(value) && !value.length);
+  if (field.required && emptied) {
+    showToast(`"${field.label}" is required.`, 'local', 'Workspaces');
+    restore();
+    return;
+  }
+  if (field.type === 'email' && String(value || '').trim() && !isValidEmail(String(value).trim())) {
+    showToast(`"${field.label}" must be a valid email address, e.g. name@company.com.`, 'local', 'Workspaces');
+    restore();
+    return;
+  }
+
+  // Clicking a value and clicking away without touching it is a normal thing to do, and it
+  // must not stamp the record as edited or fire automations at everyone.
+  const before = item.values[field.id];
+  if (JSON.stringify(before ?? '') === JSON.stringify(value ?? '')) { restore(); return; }
+
+  const prev = { ...item.values };
+  const stamp = new Date().toISOString();
+  item.values = { ...item.values, [field.id]: value };
+  item.updatedAt = stamp;
+  item.lastActivityAt = stamp;
+  wbResetInlineCell(cell);
+  wbLogActivity(workspace, {
+    icon: app.icon, color: app.color, appId: app.id, itemId: item.id,
+    text: `Updated <b>${h(field.label)}</b> on <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}`,
+  });
+  wbNotifyItem(companyId, workspace, app, item, `Updated: ${wbItemTitle(app, item)}`, `${actorName()} updated ${field.label} on ${wbItemTitle(app, item)} in ${app.name}`);
+  wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
+  wbSave(companyId);
+  showToast(`${field.label} saved.`, 'local', 'Workspaces');
+  render();
 }
 
 function wbBindUrlControls(root) {
@@ -19056,7 +19206,10 @@ function mountWorkspaceBuilder() {
     // Record page. The same comment thread as the modal, bound to the page instead of an
     // overlay; the handlers resolve their target through wbCommentContext either way.
     const commentFail = (error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces');
-    bind('[data-wb-record-edit]', (el) => { openWbItemModal(companyId, workspaceId, appId, el.dataset.wbRecordEdit, 'edit'); });
+    // No Edit button any more: the value cells are the editors. Bound with the record's
+    // identity, because a single-field save has to know which record it is saving to.
+    const openItemId = state.route?.params?.get('item_id') || '';
+    if (openItemId) wbBindInlineEdits(document, companyId, workspaceId, appId, openItemId);
     // Record layout. Same vocabulary as the dashboard, because it is the same idea applied to
     // a different page: one arrangement, owned by the app, shown on every record.
     bind('[data-wb-rec-manage]', () => { state.wbRecordManage = !state.wbRecordManage; render(); });

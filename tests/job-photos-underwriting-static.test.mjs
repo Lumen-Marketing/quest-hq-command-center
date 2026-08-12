@@ -4,7 +4,8 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   // The underwriter page is fetched on demand now; same surface, two files.
-  + readFileSync(new URL('../src/crm/underwriter-page.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/crm/underwriter-page.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/jobs/job-photos-modal.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/202607171200_underwriting_cases.sql', import.meta.url), 'utf8');
 
