@@ -54,7 +54,9 @@ export function createJobRecord(ctx) {
       ? `<a class="link-button" href="${appHref(companyPath('contacts', { contact_id: contact.id }, companyId))}" data-router>${h(job.client_name || contact.name)}</a>`
       : showCrm && account
         ? `<button class="link-button" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(job.client_name || account.name)}</button>`
-        : ed('client_name', { blue: true });
+        : showCrm && job.client_name
+          ? `<a class="link-button" href="${appHref(companyPath('contacts', { q: job.client_name }, companyId))}" data-router>${h(job.client_name)}</a>`
+          : ed('client_name', { blue: true });
     const tradeLink = `<a class="link-button" href="${appHref(companyPath('jobs', { tab: 'list', trade: job.job_type || 'Unassigned' }, companyId))}" data-router>${h(job.job_type || 'Unassigned')}</a>`;
     const stageLink = `<a class="link-button" href="${appHref(companyPath('jobs', { tab: 'pipeline', stage: currentStage }, companyId))}" data-router>${h(currentStage)}</a>`;
     const headerActions = [

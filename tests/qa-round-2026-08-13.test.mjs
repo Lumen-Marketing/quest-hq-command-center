@@ -55,6 +55,9 @@ test('job client, trade, and stage labels navigate instead of remaining dead tex
   assert.match(jobList, /showCrm && account\?\.company_id === companyId/);
   assert.match(jobRecord, /linkedContact\?\.company_id === companyId/);
   assert.match(jobRecord, /linkedAccount\?\.company_id === companyId/);
+  assert.match(jobList, /companyPath\('contacts', \{ q: job\.client_name \}/);
+  assert.match(jobRecord, /companyPath\('contacts', \{ q: job\.client_name \}/);
+  assert.match(functionBody(main, 'renderContactsPage'), /state\.contactQuery = queryParam/);
   assert.match(functionBody(main, 'renderJobBoard'), /companyPath\('jobs', \{ tab: 'pipeline', stage: stage\.name \}/);
   assert.doesNotMatch(functionBody(main, 'renderContactBoard'), /companyPath\('jobs'/);
 });

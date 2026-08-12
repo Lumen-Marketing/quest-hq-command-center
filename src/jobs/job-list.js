@@ -57,7 +57,9 @@ export function createJobList(ctx) {
       if (showCrm && account?.company_id === companyId) {
         return `<button class="jl-data-link" type="button" data-action="open-account" data-account-id="${h(account.id)}">${h(job.client_name || account.name)}</button>`;
       }
-      return h(job.client_name || '—');
+      return showCrm && job.client_name
+        ? `<a class="jl-data-link" href="${appHref(companyPath('contacts', { q: job.client_name }, companyId))}" data-router>${h(job.client_name)}</a>`
+        : h(job.client_name || '—');
     };
 
     return `

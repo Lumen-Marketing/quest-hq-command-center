@@ -4245,7 +4245,6 @@ function wireJobTypeAutocomplete(input, options = null) {
 }
 
 function syncContactRoofFieldVisibility(input) {
-  if (input.name !== 'title') return;
   const fields = input.closest('[data-contact-form]')?.querySelector('[data-contact-roof-fields]');
   if (fields) fields.hidden = !/(roof|shingle|underlayment)/i.test(input.value);
 }
@@ -9780,6 +9779,8 @@ function renderContactsPage(route, companyId) {
     const contact = contactById(contactId);
     if (contact && contact.company_id === companyId) return renderContactRecord(companyId, contact);
   }
+  const queryParam = route.params.get('q');
+  if (queryParam !== null) state.contactQuery = queryParam;
   const lifecycleParam = route.params.get('lifecycle') || '';
   const lifecycleAliases = { prospect: 'prospects', lead: 'leads', nurturing: 'followup' };
   const lifecycleKey = lifecycleAliases[lifecycleParam] || lifecycleParam;
@@ -32937,8 +32938,6 @@ function onDocumentInput(event) {
   }
   if (event.target.matches('[data-currency-input]')) {
     event.target.value = formatCurrencyDraft(event.target.value);
-    const end = event.target.value.length;
-    event.target.setSelectionRange?.(end, end);
     return;
   }
   if (event.target.matches('[data-digits-only]')) {
