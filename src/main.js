@@ -33053,11 +33053,14 @@ function onPipeBoardWheel(event) {
 function horizontalScrollerUnder(target) {
   let node = target?.closest?.('*') || null;
   while (node && node !== document.body) {
-    if (node.scrollHeight > node.clientHeight + 1) return null;
-    if (node.scrollWidth > node.clientWidth + 1) {
-      const overflowX = getComputedStyle(node).overflowX;
-      if (overflowX === 'auto' || overflowX === 'scroll') return node;
-    }
+    const style = getComputedStyle(node);
+    const scrollable = (overflow) => overflow === 'auto' || overflow === 'scroll';
+    // Yields only to a box that can ACTUALLY scroll down -- it both overflows AND is allowed
+    // to. Testing the overflow alone was wrong: a quote column full of cards is taller than
+    // its board with overflow-y hidden, so the board was treated as a vertical scroller and
+    // the wheel did nothing at all.
+    if (style.overflowY && scrollable(style.overflowY) && node.scrollHeight > node.clientHeight + 1) return null;
+    if (node.scrollWidth > node.clientWidth + 1 && scrollable(style.overflowX)) return node;
     node = node.parentElement;
   }
   return null;

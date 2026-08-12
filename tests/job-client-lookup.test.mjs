@@ -114,9 +114,12 @@ test('the scroller is measured, not named, and a vertical one wins', () => {
   // A list of class names would need extending for every wide table and would silently miss
   // the next one. And a long list inside a wide container must still scroll DOWN.
   const body = fn('horizontalScrollerUnder');
-  assert.match(body, /if \(node\.scrollHeight > node\.clientHeight \+ 1\) return null;/);
-  assert.match(body, /if \(node\.scrollWidth > node\.clientWidth \+ 1\)/);
-  assert.match(body, /overflowX === 'auto' \|\| overflowX === 'scroll'/);
+  // Yields only to a box that can ACTUALLY scroll down -- overflowing is not enough. A
+  // quote column full of cards is taller than its board, whose overflow-y is hidden, so
+  // testing the overflow alone made the board look vertical and the wheel did nothing.
+  assert.match(body, /if \(style\.overflowY && scrollable\(style\.overflowY\) && node\.scrollHeight > node\.clientHeight \+ 1\) return null;/);
+  assert.match(body, /if \(node\.scrollWidth > node\.clientWidth \+ 1 && scrollable\(style\.overflowX\)\) return node;/);
+  assert.match(body, /const scrollable = \(overflow\) => overflow === 'auto' \|\| overflow === 'scroll';/);
   assert.ok(!/pipe-board/.test(body), 'no hard-coded class names');
 });
 
