@@ -109,7 +109,7 @@ test('roof fields follow work type but never hide existing roof data', () => {
   assert.equal(contactUsesRoofFields({ title: 'Plumbing', roof_system: 'Tile' }), true);
 });
 
-test('location parsing rejects missing coordinates and separates nearby caches', () => {
+test('location parsing keeps US visitor bias and drops overseas coordinates', () => {
   assert.deepEqual(visitorLocation({ headers: {} }), { city: '', region: '', country: 'us' });
   const phoenix = visitorLocation({ headers: {
     'x-vercel-ip-latitude': '33.4484',
@@ -119,4 +119,12 @@ test('location parsing rejects missing coordinates and separates nearby caches',
   } });
   assert.equal(phoenix.latitude, 33.4484);
   assert.notEqual(locationCacheKey('Main St', phoenix), locationCacheKey('Main St', { ...phoenix, latitude: 40.71 }));
+
+  assert.deepEqual(visitorLocation({ headers: {
+    'x-vercel-ip-latitude': '14.5995',
+    'x-vercel-ip-longitude': '120.9842',
+    'x-vercel-ip-city': 'Manila',
+    'x-vercel-ip-country-region': '00',
+    'x-vercel-ip-country': 'PH',
+  } }), { city: '', region: '', country: 'us' });
 });

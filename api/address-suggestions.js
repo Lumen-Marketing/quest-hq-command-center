@@ -3,7 +3,7 @@ import { enforceRateLimit } from './_lib/rate-limit.js';
 
 const suggestionCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const DEFAULT_LOCATION = { latitude: 33.4484, longitude: -112.0740, country: 'us' };
+const DEFAULT_LOCATION = { country: 'us' };
 
 const json = (response, status, payload) => {
   response.statusCode = status;
@@ -35,15 +35,17 @@ function safeDecode(value) {
 export function visitorLocation(request) {
   const latitudeRaw = requestHeader(request, 'x-vercel-ip-latitude').trim();
   const longitudeRaw = requestHeader(request, 'x-vercel-ip-longitude').trim();
+  const visitorCountry = requestHeader(request, 'x-vercel-ip-country').trim().toLowerCase();
+  const isUsVisitor = visitorCountry === DEFAULT_LOCATION.country;
   const latitude = latitudeRaw ? Number(latitudeRaw) : Number.NaN;
   const longitude = longitudeRaw ? Number(longitudeRaw) : Number.NaN;
   const validCoordinates = Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
     && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
   return {
-    ...(validCoordinates ? { latitude, longitude } : {}),
-    city: safeDecode(requestHeader(request, 'x-vercel-ip-city')).trim(),
-    region: safeDecode(requestHeader(request, 'x-vercel-ip-country-region')).trim(),
-    country: requestHeader(request, 'x-vercel-ip-country').trim().toLowerCase() || DEFAULT_LOCATION.country,
+    ...(isUsVisitor && validCoordinates ? { latitude, longitude } : {}),
+    city: isUsVisitor ? safeDecode(requestHeader(request, 'x-vercel-ip-city')).trim() : '',
+    region: isUsVisitor ? safeDecode(requestHeader(request, 'x-vercel-ip-country-region')).trim() : '',
+    country: DEFAULT_LOCATION.country,
   };
 }
 
@@ -65,16 +67,16 @@ async function googleSuggestions(query, location) {
     },
     body: JSON.stringify({
       input: query,
-      includedRegionCodes: [location.country || DEFAULT_LOCATION.country],
-      locationBias: {
+      includedRegionCodes: [DEFAULT_LOCATION.country],
+      ...(Number.isFinite(location.latitude) && Number.isFinite(location.longitude) ? { locationBias: {
         circle: {
           center: {
-            latitude: location.latitude ?? DEFAULT_LOCATION.latitude,
-            longitude: location.longitude ?? DEFAULT_LOCATION.longitude,
+            latitude: location.latitude,
+            longitude: location.longitude,
           },
-          radius: Number.isFinite(location.latitude) ? 150000 : 350000,
+          radius: 150000,
         },
-      },
+      } } : {}),
     }),
   });
   if (!response.ok) return [];
@@ -90,7 +92,7 @@ async function openStreetMapSuggestions(query, location) {
     format: 'jsonv2',
     addressdetails: '1',
     limit: '8',
-    countrycodes: location.country || DEFAULT_LOCATION.country,
+    countrycodes: DEFAULT_LOCATION.country,
     bounded: '0',
     'accept-language': 'en',
   });
