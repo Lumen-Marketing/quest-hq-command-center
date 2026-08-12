@@ -119,3 +119,19 @@ test('the scroller is measured, not named, and a vertical one wins', () => {
   assert.match(body, /overflowX === 'auto' \|\| overflowX === 'scroll'/);
   assert.ok(!/pipe-board/.test(body), 'no hard-coded class names');
 });
+
+test('the contacts table is actually allowed to scroll sideways', () => {
+  // .contacts-table asked for overflow-x: auto, but .data-table sets `overflow: hidden` for
+  // its rounded corners and, being the later rule, won on BOTH axes. The row overflowed its
+  // panel with no way to reach the far columns, and the wheel handler rightly declined to
+  // touch a box whose computed overflow-x said it does not scroll.
+  const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(styles, /\.contacts-table \{\n  overflow-x: auto;\n  overflow-y: hidden;\n\}/);
+  // Later than the .data-table rule it has to beat, or it loses again.
+  assert.ok(
+    styles.lastIndexOf('.contacts-table {\n  overflow-x: auto;') > styles.lastIndexOf('.data-table { gap: 0;'),
+    'source order is what decides this',
+  );
+  // The rows are what overflow; without the min-width there is nothing to scroll.
+  assert.match(styles, /\.contacts-table \.table-head,\n\.contacts-table \.table-row \{[\s\S]*?min-width: 1160px;/);
+});

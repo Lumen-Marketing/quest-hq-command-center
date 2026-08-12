@@ -32009,3 +32009,13 @@ a.wb-cal-more:hover { color: var(--orange); }
   min-height: 2.4em;
   word-break: break-word;
 }
+
+/* The contacts table is wider than its panel, so its columns have to be reachable.
+   .data-table sets `overflow: hidden` to keep content inside its rounded corners, and being
+   the later rule it was winning on BOTH axes -- so the row overflowed by 20px with no way to
+   get at it, and the wheel handler correctly declined to touch a box that says it does not
+   scroll. Vertical stays hidden, which is all the corner clipping actually needed. */
+.contacts-table {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
