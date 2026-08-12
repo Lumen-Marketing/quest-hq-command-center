@@ -220,6 +220,7 @@ const FACTORY_MODULES = [
   ['src/ops/time-page.js', 'createTimePage'],
   ['src/jobs/job-daily-modal.js', 'createJobDailyModal'],
   ['src/portals/portal-detail.js', 'createPortalDetail'],
+  ['src/crm/account-tab.js', 'createAccountTab'],
 ];
 
 test('the list above covers every factory module there is', () => {

@@ -2,7 +2,7 @@ export function createJobEditor(ctx) {
   const {
     h, blankJob, contactAddressOptions, protectedFormDraftAttributes, activeWorkspaceId,
     renderProtectedFormDraftStrip, field, selectField, allowedCompanies, companyLabel,
-    renderSearchCombobox, contactOwnerOptions, resolveJobStage, jobStageNames,
+    renderSearchCombobox, contactOwnerOptions, jobClientOptions, resolveJobStage, jobStageNames,
     renderAddressLookupField, textareaField, formatCurrencyDraft,
   } = ctx;
 
@@ -12,6 +12,16 @@ export function createJobEditor(ctx) {
     value,
     contactOwnerOptions(companyId, value).slice(1).map(([owner]) => owner),
     { placeholder: 'Search account owners', allowCustom: false },
+  );
+  // Type a client name and take the contact if there is one. allowCustom stays true: a job
+  // is often opened for somebody who is not in the CRM yet, so the list is a shortcut rather
+  // than a constraint, and anything typed is kept as-is.
+  const clientField = (value, companyId) => renderSearchCombobox(
+    'Client',
+    'client_name',
+    value,
+    jobClientOptions(companyId),
+    { placeholder: 'Search contacts, or type a new name', allowCustom: true },
   );
   const currencyField = (label, name, value) => `<label><span>${h(label)}</span><input name="${h(name)}" type="text" value="${h(formatCurrencyDraft(value))}" inputmode="decimal" autocomplete="off" data-currency-input /></label>`;
 
@@ -27,8 +37,9 @@ export function createJobEditor(ctx) {
         ${renderProtectedFormDraftStrip()}
         ${field('Workspace name', 'name', edit.name, true)}
         ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
-        ${field('Client', 'client_name', edit.client_name)}
+        ${clientField(edit.client_name, companyId)}
         ${field('Contact', 'contact_name', edit.contact_name)}
+        <input type="hidden" name="contact_id" value="${h(edit.contact_id || '')}" data-job-contact-id />
         ${ownerField(edit.owner_name, companyId)}
         ${field('Job type', 'job_type', edit.job_type || 'Roofing')}
         ${selectField('Stage', 'stage', resolveJobStage(edit.stage), jobStageNames().map((stage) => [stage, stage]))}

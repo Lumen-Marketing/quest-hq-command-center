@@ -12499,7 +12499,7 @@ function renderJobEditor(companyId, job) {
       jobEditorModule = module.createJobEditor({
         h, blankJob, contactAddressOptions, protectedFormDraftAttributes, activeWorkspaceId,
         renderProtectedFormDraftStrip, field, selectField, allowedCompanies, companyLabel,
-        renderSearchCombobox, contactOwnerOptions, resolveJobStage, jobStageNames,
+        renderSearchCombobox, contactOwnerOptions, jobClientOptions, resolveJobStage, jobStageNames,
         renderAddressLookupField, textareaField, formatCurrencyDraft,
       });
       render();
@@ -22188,80 +22188,35 @@ function renderAccountDetail(companyId, account) {
   `;
 }
 
-function renderAccountTab(companyId, account, tab, data) {
-  if (tab === 'contacts') {
-    return `<section class="panel">
-      <div class="section-head"><div><h2>Contacts</h2><p>People at ${h(account.name)}</p></div><button class="btn" type="button" data-action="open-contact-form" data-mode="new" data-account-id="${h(account.id)}"><i class="ti ti-plus"></i>Add contact</button></div>
-      <div class="data-table contacts-table">
-        <div class="table-head"><span>Name</span><span>Title</span><span>Phone</span><span>Email</span><span>Owner</span><span></span></div>
-        ${data.contacts.map((contact) => `
-          <button class="table-row" type="button" data-action="open-contact-form" data-mode="edit" data-contact-id="${h(contact.id)}">
-            <span class="cell-lead"><span class="account-avatar sm">${h(initials(contact.name))}</span><span><strong>${h(contact.name)}</strong></span></span>
-            <span>${h(contact.title || '—')}</span>
-            <span>${h(contact.phone || '—')}</span>
-            <span>${contact.email ? h(contact.email) : '<span class="muted-dash">—</span>'}</span>
-            <span>${h(contact.owner_name || 'Unassigned')}</span>
-            <span></span>
-          </button>`).join('') || emptyState('No contacts linked to this account yet.')}
-      </div>
-    </section>`;
+// ---- Account ----------------------------------------------------------------
+// Body lives in ./crm/account-tab.js and is fetched on first use.
+let accountTabModule = null;
+let accountTabPending = null;
+
+function loadAccountTab() {
+  if (accountTabModule) return Promise.resolve(accountTabModule);
+  if (!accountTabPending) {
+    accountTabPending = import('./crm/account-tab.js').then((mod) => {
+      accountTabModule = mod.createAccountTab({
+        appHref, companyPath, contractRows, dealRow, emptyState, h,
+        initials, money, pipelineDot, pipelineStageColor, priorityPill, renderActivityTimeline,
+        resolvePipelineStage, stageTagPipe,
+      });
+      return accountTabModule;
+    }).catch((error) => {
+      accountTabPending = null;
+      throw error;
+    });
   }
-  if (tab === 'deals') {
-    return `<section class="panel">
-      <div class="section-head"><div><h2>Quotes</h2><p>Bottom-of-funnel opportunities for ${h(account.name)}</p></div><button class="btn" type="button" data-action="open-deal-form" data-mode="new" data-account-id="${h(account.id)}"><i class="ti ti-plus"></i>New quote</button></div>
-      <div class="data-table deals-table">
-        <div class="table-head"><span>Deal</span><span>Stage</span><span>Status</span><span>Value</span><span>Owner</span><span>Close</span></div>
-        ${data.deals.map((deal) => dealRow(deal)).join('') || emptyState('No quotes for this account yet.')}
-      </div>
-    </section>`;
-  }
-  if (tab === 'jobs') {
-    return `<section class="panel">
-      <div class="section-head"><div><h2>Jobs</h2><p>Production work for ${h(account.name)}</p></div></div>
-      <div class="data-table jobs-table">
-        <div class="table-head"><span>Job</span><span>Type</span><span>Stage</span><span>Priority</span><span>Owner</span><span>Value</span></div>
-        ${data.jobs.map((job) => `
-          <a class="table-row" href="${appHref(companyPath('jobs', { tab: 'profile', job_id: job.id }, companyId))}" data-router>
-            <span class="cell-lead">${pipelineDot(pipelineStageColor('jobs', resolvePipelineStage('jobs', job.stage, companyId), companyId))}<span><strong>${h(job.name)}</strong><small>${h(job.site_address || 'No address')}</small></span></span>
-            <span>${h(job.job_type || '—')}</span>
-            <span>${stageTagPipe('jobs', job.stage, companyId)}</span>
-            <span>${priorityPill(job.priority)}</span>
-            <span>${h(job.owner_name || 'Unassigned')}</span>
-            <span>${money(job.estimate_total)}</span>
-          </a>`).join('') || emptyState('No jobs linked to this account yet. Win a deal to create one.')}
-      </div>
-    </section>`;
-  }
-  if (tab === 'activity') {
-    return `<section class="panel">
-      <div class="section-head"><div><h2>Activity</h2></div><button class="btn" type="button" data-action="open-activity-form" data-related-type="account" data-related-id="${h(account.id)}" data-account-id="${h(account.id)}"><i class="ti ti-plus"></i>Log activity</button></div>
-      ${renderActivityTimeline('account', account.id)}
-    </section>`;
-  }
-  // overview
-  return `
-    <section class="crm-detail-grid">
-      <article class="panel">
-        <div class="section-head"><div><h2>Details</h2></div></div>
-        ${contractRows([
-          ['Type', account.type],
-          ['Industry', account.industry || '—'],
-          ['Owner', account.owner_name || 'Unassigned'],
-          ['Phone', account.phone || '—'],
-          ['Email', account.email || '—'],
-          ['Website', account.website || '—'],
-          ['Address', account.address || '—'],
-          ['Status', account.status],
-        ])}
-        ${account.notes ? `<p class="crm-notes">${h(account.notes)}</p>` : ''}
-      </article>
-      <article class="panel">
-        <div class="section-head"><div><h2>Recent activity</h2></div><button class="btn" type="button" data-action="open-activity-form" data-related-type="account" data-related-id="${h(account.id)}" data-account-id="${h(account.id)}"><i class="ti ti-plus"></i>Log</button></div>
-        ${renderActivityTimeline('account', account.id, '', 6)}
-      </article>
-    </section>
-  `;
+  return accountTabPending;
 }
+
+function renderAccountTab(companyId, account, tab, data) {
+  if (accountTabModule) return accountTabModule.renderAccountTab(companyId, account, tab, data);
+  loadAccountTab().then(() => render()).catch((error) => console.error('Account failed to load', error));
+  return questLoader('Loading account');
+}
+
 
 function blankAccount(companyId = activeCompanyId()) {
   return normalizeAccount({ id: '', company_id: companyId, name: '', type: 'Customer' });
@@ -32930,6 +32885,11 @@ function onDocumentInput(event) {
     return;
   }
   if (event.target.matches('[data-job-type-input]')) {
+    // Picking a client that is already a contact carries their details across, so the job is
+    // linked to the CRM record rather than repeating a name that only looks the same. A name
+    // that matches nothing is left exactly as typed -- that is how a job gets opened for
+    // somebody who is not in the CRM yet.
+    if (event.target.name === 'client_name') fillJobClientFromContact(event.target);
     syncContactRoofFieldVisibility(event.target);
     wireJobTypeAutocomplete(event.target);
     closeJobTypeMenus(event.target);
@@ -40520,6 +40480,57 @@ function renderAddressLookupField(label, name, value = '', options = [], classNa
       <small class="field-hint">Pick a saved address or type the full site address, then set the exact map pin.</small>
     </label>
   `;
+}
+
+/**
+ * Contacts offered as the client on a job, newest-looking name first.
+ *
+ * Only names that exist: the field still accepts anything typed, because a job is often
+ * opened for somebody who is not in the CRM yet. The list is a shortcut, not a constraint.
+ */
+function jobClientOptions(companyId) {
+  return compactUnique(companyContacts(companyId).map((contact) => contact.name).filter(Boolean));
+}
+
+/**
+ * The contact behind a typed client name, matched case-insensitively on the whole name.
+ *
+ * Exact rather than fuzzy on purpose: filling somebody else's phone number into a job
+ * because their name was similar is worse than filling nothing.
+ */
+function contactByName(companyId, name) {
+  const wanted = String(name || '').trim().toLowerCase();
+  if (!wanted) return null;
+  return companyContacts(companyId).find((contact) => String(contact.name || '').trim().toLowerCase() === wanted) || null;
+}
+
+/**
+ * Fill the rest of the job's client details from the matching contact.
+ *
+ * Only ever fills what the person has not already written: an empty Contact box gets the
+ * contact's name and phone, a filled one is left alone. Overwriting something typed on
+ * purpose because a lookup happened to fire is worse than leaving a field blank.
+ *
+ * contact_id is the part that matters beyond convenience -- it is what links the job to the
+ * CRM record, so the two stay connected if the contact is later renamed.
+ */
+function fillJobClientFromContact(input) {
+  const form = input.closest('[data-job-form]');
+  if (!form) return;
+  const companyId = form.querySelector('[name="company_id"]')?.value || activeCompanyId();
+  const contact = contactByName(companyId, input.value);
+  const idField = form.querySelector('[data-job-contact-id]');
+  const contactField = form.querySelector('[name="contact_name"]');
+  if (!contact) {
+    // A name that matches nothing means this is not that contact any more, so the link goes.
+    if (idField) idField.value = '';
+    return;
+  }
+  if (idField) idField.value = contact.id || '';
+  if (contactField && !contactField.value.trim()) {
+    const phone = formatPhoneNumber(contact.phone || '');
+    contactField.value = [contact.name, phone].filter(Boolean).join(' · ');
+  }
 }
 
 function contactAddressOptions(companyId) {
