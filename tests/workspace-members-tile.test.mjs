@@ -111,3 +111,14 @@ test('the status reads without relying on colour', () => {
   assert.match(css, /\.wb-tile-member-status\.is-online \{/);
   assert.match(css, /\.wb-presence-dot\.is-online \{ background: #16a34a; \}/);
 });
+
+test('members is an allowed tile type, or it is silently a blank note', () => {
+  // normalizeWorkspaceTile falls back to 'text' for anything not on this list, so a type
+  // missing from it does not render as an unknown tile -- it renders as an empty note, and
+  // that is exactly what adding a Members tile did.
+  assert.match(main, /const WB_TILE_TYPES = \[[^\]]*'members'/);
+  const at = main.indexOf('function normalizeWorkspaceTile(');
+  const body = main.slice(at, main.indexOf('\n}', at));
+  assert.match(body, /WB_TILE_TYPES\.includes\(tile\.type\) \? tile\.type : 'text'/,
+    'the fallback is what makes the list authoritative');
+});

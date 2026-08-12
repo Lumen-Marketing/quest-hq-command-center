@@ -213,6 +213,12 @@ const FACTORY_MODULES = [
   ['src/jobs/job-photos-modal.js', 'createJobPhotosModal'],
   ['src/crm/account-modal.js', 'createCrmAccountModal'],
   ['src/home/app-widget-config-modal.js', 'createAppWidgetConfigModal'],
+  ['src/portals/portal-delete-modal.js', 'createPortalDeleteModal'],
+  ['src/proposals/proposals-page.js', 'createProposalsPage'],
+  ['src/ops/clock-dashboard-page.js', 'createClockDashboardPage'],
+  ['src/ops/time-page.js', 'createTimePage'],
+  ['src/jobs/job-daily-modal.js', 'createJobDailyModal'],
+  ['src/portals/portal-detail.js', 'createPortalDetail'],
 ];
 
 test('the list above covers every factory module there is', () => {

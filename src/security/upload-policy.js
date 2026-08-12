@@ -25,6 +25,9 @@ export const FILE_SIGNATURES = {
   webp: [{ bytes: [0x52, 0x49, 0x46, 0x46] }, { offset: 8, bytes: [0x57, 0x45, 0x42, 0x50] }],
   pdf: [{ bytes: [0x25, 0x50, 0x44, 0x46, 0x2d] }],
   zip: [{ bytes: [0x50, 0x4b, 0x03, 0x04] }, { bytes: [0x50, 0x4b, 0x05, 0x06] }, { bytes: [0x50, 0x4b, 0x07, 0x08] }],
+  // OLE2 compound file: the container the pre-2007 Office formats use (.doc/.xls/.ppt).
+  // Modern .docx/.xlsx/.pptx are zip containers instead and verify against `zip` above.
+  ole: [{ bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] }],
 };
 
 // Which signature an extension must satisfy. `text` types carry no binary
@@ -34,7 +37,10 @@ const EXT_SIGNATURE = {
   pdf: 'pdf', zip: 'zip', csv: 'text', tsv: 'text', txt: 'text',
   // An .xlsx is a zip container, so it must carry the zip signature. An encrypted workbook
   // is an OLE compound file instead and is rejected here rather than deeper in the parser.
-  xlsx: 'zip',
+  // The other two modern Office formats are the same container, so they verify the same way.
+  xlsx: 'zip', docx: 'zip', pptx: 'zip',
+  // The pre-2007 formats are OLE compound files.
+  doc: 'ole', xls: 'ole', ppt: 'ole',
 };
 
 // Canonical MIME allowlist per extension (Layer 2 — extension and MIME must
@@ -54,6 +60,21 @@ const EXT_MIME = {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/zip', 'application/x-zip-compressed', 'application/octet-stream', '',
   ],
+  // The remaining Office formats. The modern three are zip containers, so Windows and some
+  // browsers report them as a zip or as octet-stream rather than the long OOXML type --
+  // rejecting those would fail on machines where the file is perfectly valid. The magic-byte
+  // layer is what actually decides; this layer only rules out the obviously wrong.
+  docx: [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/zip', 'application/x-zip-compressed', 'application/octet-stream', '',
+  ],
+  pptx: [
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/zip', 'application/x-zip-compressed', 'application/octet-stream', '',
+  ],
+  doc: ['application/msword', 'application/octet-stream', ''],
+  xls: ['application/vnd.ms-excel', 'application/octet-stream', ''],
+  ppt: ['application/vnd.ms-powerpoint', 'application/octet-stream', ''],
 };
 
 // Per-context upload policies: the extension allowlist and a hard size cap.
@@ -74,7 +95,18 @@ export const UPLOAD_POLICIES = {
   // feature silently fails on half the phones on site. 40MB is roughly an hour of Opus,
   // far past any job walk.
   audio: { exts: ['webm', 'm4a', 'mp4', 'ogg', 'oga', 'mp3', 'wav'], max: 40 * MB, label: 'audio' },
-  document: { exts: ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'csv'], max: 25 * MB, label: 'document' },
+  // Office documents and archives belong here: a file field on a record is where a quote
+  // workbook, a scope-of-work document, a deck or a bundle of photos actually gets attached.
+  // Every one of these still has to clear the extension/MIME agreement AND its magic bytes,
+  // so widening the list does not widen what a renamed executable can do.
+  document: {
+    exts: [
+      'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'csv',
+      'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip',
+    ],
+    max: 25 * MB,
+    label: 'document',
+  },
   csv: { exts: ['csv', 'tsv', 'txt'], max: 10 * MB, label: 'spreadsheet' },
   // .xlsx is a zip, so it stays a kind of its own rather than widening 'csv' -- the
   // dangerous-extension backstop should keep treating archives with suspicion by default.
@@ -133,11 +165,20 @@ export function acceptAttr(policyKey) {
 // fall back to the canonical MIME for the file's extension so it still satisfies
 // a bucket's `allowed_mime_types` (never a bare application/octet-stream, which
 // a locked-down bucket would reject).
+// Types that say "some binary" rather than what the file is. An .xlsx is a zip container, so
+// Windows and several browsers report one of these for it -- and Storage's allowed_mime_types
+// is checked against whatever we send, so passing that through means the bucket has to allow
+// octet-stream for everything, which would make its allowlist meaningless.
+const GENERIC_MIMES = new Set(['application/octet-stream', 'application/zip', 'application/x-zip-compressed', 'application/x-zip']);
+
 export function contentTypeFor(file) {
   const declared = String((file && file.type) || '').toLowerCase();
-  if (declared) return declared;
   const canonical = (EXT_MIME[fileExtension(file && file.name)] || []).find(Boolean);
-  return canonical || 'application/octet-stream';
+  // The extension's own type wins over a generic one, so a .docx uploads as a Word document
+  // rather than as a nameless blob. A real .zip has zip as its canonical type, so it is
+  // unaffected -- the swap only ever makes the type MORE specific, never less.
+  if (declared && (!GENERIC_MIMES.has(declared) || !canonical || GENERIC_MIMES.has(canonical))) return declared;
+  return canonical || declared || 'application/octet-stream';
 }
 
 function bytesMatch(head, sig) {

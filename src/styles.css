@@ -31876,3 +31876,88 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 .wb-mention-result:hover,
 .wb-mention-result.active { background: var(--surface-2); }
+
+/* ---- App strip: smaller, and flush against the top nav ------------------------------------
+   .work-surface has overflow: auto, so IT is the scroll container -- the strip's sticky
+   offset is measured from its top edge, which already sits under the page header. top: 0 is
+   therefore correct; offsetting by the header height pushed it down by exactly that much.
+
+   No negative TOP margin either: sticky pins the margin box, so pulling up that way left the
+   painted box offset from where it pinned and content scrolled through the gap. The space is
+   removed at its source instead -- the surface's own top padding, dropped for this section
+   only. The sides still bleed through its 24px so the strip spans the full width. */
+.quest-app[data-section="workspaces"] .work-surface { padding-top: 0; }
+
+.wb-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  margin: 0 -24px 12px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  /* overflow: hidden on the base rule clips the sticky behaviour; it is the strip's own
+     scroller that needs it, and that is .wb-topbar-apps. */
+  overflow: visible;
+}
+
+.wb-topbar-apps .wb-topbar-tab,
+.wb-topbar-home,
+.wb-topbar-add { width: 66px; }
+
+.wb-topbar-tab {
+  gap: 4px;
+  padding: 5px 4px;
+  font-size: .7rem;
+}
+
+.wb-topbar-ic {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 15px;
+}
+
+.wb-topbar-add {
+  gap: 3px;
+  padding: 5px 4px;
+  font-size: .66rem;
+}
+
+.wb-topbar-add i { font-size: 15px; }
+
+/* The tab being dragged: lifted, and translucent enough to see where it will land. */
+.wb-topbar-apps .wb-topbar-tab.is-dragging {
+  opacity: .55;
+  transform: scale(.96);
+}
+
+/* No text selection or link-drag ghost while reordering. */
+.wb-topbar-apps.wb-topbar-dragging {
+  user-select: none;
+  scroll-snap-type: none;
+}
+
+/* One line, not two. In a feed card the activity row's own bottom border met the action
+   bar's top border with only padding between them, so every card drew a double rule. The
+   row's border belongs to the LIST form of this component, where rows stack against each
+   other; inside a card the bar's border already separates them. */
+.wb-feed-sys .wb-act-item { border-bottom: 0; }
+
+/* App names fit instead of being cut to "Quest D...". Smaller type, and the label wraps to
+   two lines rather than ellipsing on one -- an app called "Quest Daily" and one called
+   "Quest Docs" both truncate to the same thing, which makes the strip unreadable. */
+.wb-topbar-tab { font-size: .63rem; }
+
+.wb-topbar-label {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.2;
+  /* Two lines always, so tabs keep a common height whether the name wraps or not. */
+  min-height: 2.4em;
+  word-break: break-word;
+}

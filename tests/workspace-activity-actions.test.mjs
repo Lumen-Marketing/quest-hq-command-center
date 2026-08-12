@@ -175,3 +175,46 @@ test('Enter picks a mention without also sending the comment', () => {
   assert.match(main, /if \(event\.mentionHandled\) return;/);
   assert.match(main, /const results = el\.closest\('\[data-wb-mention-wrap\]'\)\?\.querySelector\('\[data-wb-mention-results\]'\);\r?\n\s*if \(results && !results\.hidden\) return;/);
 });
+
+// --- the feed orders by activity, not by age ------------------------------------------------
+// "make this activity log sort by updated, so when new comments on an old post or activity
+// that post or activity will go to top."
+
+test('a comment pulls its thread back to the top', () => {
+  const body = fn('wbFeedBumpedAt');
+  assert.match(body, /let latest = String\(entry\?\.ts \|\| ''\);/);
+  assert.match(body, /const at = String\(comment\?\.editedAt \|\| comment\?\.ts \|\| ''\);/,
+    'editing a comment is activity on the thread too');
+  assert.match(body, /if \(at > latest\) latest = at;/);
+});
+
+test('both halves of the stream are ordered the same way', () => {
+  const stream = fn('wbFeedStream');
+  assert.match(stream, /kind: 'post', ts: wbFeedBumpedAt\(p\)/);
+  assert.match(stream, /kind: 'act', ts: wbFeedBumpedAt\(a\)/);
+  // Sort first, THEN trim: the other order drops an old thread with a new reply before its
+  // comment has been taken into account.
+  assert.ok(stream.indexOf('.sort(') < stream.indexOf('.slice(0, 60)'));
+});
+
+test('a like does not reshuffle the feed', () => {
+  // Likes carry no timestamp, and a like is an acknowledgement rather than something to come
+  // back and read -- bumping for one would move the ground under anybody scrolling.
+  const body = fn('wbFeedBumpedAt');
+  assert.ok(!/likes/.test(body), 'likes must not contribute to the bump time');
+});
+
+test('commenting refreshes one entry instead of stacking identical ones', () => {
+  // "they are commented on the same item, can you make it one and just update the activity
+  // log every time someone adds a comment on it."
+  const body = fn('wbLogCommentActivity');
+  assert.match(body, /entry\.appId === app\.id && entry\.itemId === item\.id && entry\.text === text/);
+  assert.match(body, /existing\.ts = new Date\(\)\.toISOString\(\);/, 're-stamping is what lifts it back to the top');
+  // The bumped card reports whoever spoke last.
+  assert.match(body, /existing\.actorId = actor\.id \|\| '';/);
+  // Only the first comment on a record creates an entry at all.
+  assert.ok(body.indexOf('if (existing)') < body.indexOf('wbLogActivity(workspace, {'));
+  // And the caller goes through it rather than logging directly.
+  assert.match(main, /wbLogCommentActivity\(workspace, app, item\);/);
+  assert.equal((main.match(/Commented on <b>/g) || []).length, 1, 'one place builds this text');
+});

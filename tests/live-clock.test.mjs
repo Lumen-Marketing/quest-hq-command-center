@@ -9,11 +9,16 @@ import { fileURLToPath } from 'node:url';
 // started read "0m" and stayed there, because formatDuration stops at minutes.
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+// The clock dashboard is a fetched module now; same surface, read as one.
+const main = readFileSync(join(root, 'src', 'main.js'), 'utf8')
+  + readFileSync(join(root, 'src', 'ops', 'clock-dashboard-page.js'), 'utf8');
 const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
 
 function fn(name) {
-  const at = main.indexOf(`function ${name}(`);
+  // LAST occurrence: main.js keeps a loader shim of the same name for anything extracted,
+  // and the real body is in the fetched module appended after it. indexOf finds the shim,
+  // whose body fetches rather than renders.
+  const at = main.lastIndexOf(`function ${name}(`);
   assert.notEqual(at, -1, `${name} not found`);
   return main.slice(at, main.indexOf('\n}', at) + 2);
 }

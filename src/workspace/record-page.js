@@ -114,7 +114,12 @@ export function createRecordPage(ctx) {
     const backHref = appHref(companyPath('workspaces', {
       app_id: app.id, tab: 'items', ...(stage ? { stage } : {}),
     }, companyId));
-    const ctx = { companyId, workspace, app, values: item.values, item: null, canManage: false };
+    // The item is handed over, not withheld. Created / Last modified fields read their value
+    // off item.createdAt and item.updatedAt rather than out of values, so with item: null
+    // they rendered a dash on every record. canManage stays false, which is what actually
+    // suppresses the live checkbox toggle -- that branch needs BOTH, so passing the item
+    // alone changes nothing else on this page.
+    const ctx = { companyId, workspace, app, values: item.values, item, canManage: false };
     const count = (item.comments || []).length;
     const editing = canManage && state.wbRecordManage;
 

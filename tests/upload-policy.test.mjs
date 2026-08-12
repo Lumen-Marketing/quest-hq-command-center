@@ -33,11 +33,20 @@ test('double-extension executable (invoice.pdf.exe) is blocked outright', async 
   assert.equal(result.ok, false);
 });
 
-test('ZIP is rejected in the document policy but accepted for backups', async () => {
+test('ZIP is accepted as a document, and still only as a real archive', async () => {
+  // This asserted the opposite until a customer asked for Office files and zips on record
+  // file fields: "allow documents file too like excel files word, powerpoint also zip
+  // files". A bundle of site photos or a zipped submittal is a normal attachment.
+  //
+  // Widening the extension list does not widen what can actually get through -- the
+  // magic-byte layer still has to see a real archive, which the second half checks.
   const doc = await validateUpload(fakeFile('archive.zip', ZIP, 'application/zip'), 'document');
-  assert.equal(doc.ok, false);
+  assert.equal(doc.ok, true);
   const backup = await validateUpload(fakeFile('backup.zip', ZIP, 'application/zip'), 'backup');
   assert.equal(backup.ok, true);
+  // An executable renamed .zip is refused by the bytes, in this policy as in every other.
+  const renamed = await validateUpload(fakeFile('malware.zip', [0x4d, 0x5a, 0x90, 0x00], 'application/zip'), 'document');
+  assert.equal(renamed.ok, false);
 });
 
 test('Layer 2: a MIME type that disagrees with the extension is rejected', async () => {

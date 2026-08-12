@@ -2,13 +2,117 @@
 //
 // A factory, because every store, permission check and formatter it reads belongs to main.js.
 
+import * as memberDirectory from './member-directory.js';
+
 export function createUsersPage(ctx) {
   const {
     CONFIG, appHref, can, compactTabs, companyAccessUsers, companyInvites,
-    companyPath, companyRoles, contractRows, emptyState, h, metricCard,
+    companyPath, companyRoles, contractRows, emptyState, h, isProtectedOwner, metricCard,
     renderAvatar, renderInviteRow, renderJoinRequestRow, renderUserAccessRow, roleForCompany, state,
     titleCase, userDisplayMeta, userDisplayName, workspaceAccessSummaryForUser, workspaceHeader,
   } = ctx;
+
+  // The state these controls read. Kept on state rather than in the DOM so a re-render --
+  // which every save causes -- does not throw the filter away mid-task.
+  function ui() {
+    state.memberDirectory = state.memberDirectory || { view: 'list', query: '', role: '', sort: 'name', selected: new Set() };
+    if (!(state.memberDirectory.selected instanceof Set)) state.memberDirectory.selected = new Set();
+    return state.memberDirectory;
+  }
+
+  function visibleMembers(users) {
+    const d = ui();
+    return memberDirectory.filterSortMembers({ users, query: d.query, role: d.role, sort: d.sort });
+  }
+
+  function memberDirectoryToolbar(companyId, users, canManageUsers) {
+    const d = ui();
+    const shown = visibleMembers(users);
+    const roles = memberDirectory.memberRoleOptions(users);
+    const { eligible, blocked } = memberDirectory.assignableSelection({
+      selected: d.selected,
+      visible: shown,
+      isProtected: (user) => isProtectedOwner(companyId, user),
+    });
+    const view = (id, icon, label) => `<button class="btn btn-sm ${d.view === id ? 'btn-primary' : ''}" type="button" data-member-view="${h(id)}" aria-pressed="${d.view === id}" title="${h(label)}"><i class="ti ${icon}"></i>${h(label)}</button>`;
+
+    return `
+      <div class="member-toolbar">
+        <div class="member-search">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input class="wb-input" type="search" data-member-search value="${h(d.query)}" placeholder="Search name, email or role" aria-label="Search members" />
+        </div>
+        <label class="member-filter"><span>Role</span>
+          <select data-member-role aria-label="Filter by role">
+            <option value="">All roles (${users.length})</option>
+            ${roles.map((role) => `<option value="${h(role.label)}" ${d.role.toLowerCase() === role.key ? 'selected' : ''}>${h(role.label)} (${role.count})</option>`).join('')}
+          </select>
+        </label>
+        <label class="member-filter"><span>Sort</span>
+          <select data-member-sort aria-label="Sort members">
+            ${[['name', 'Name'], ['role', 'Role'], ['status', 'Status']].map(([id, label]) => `<option value="${id}" ${d.sort === id ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </label>
+        <div class="member-views" role="group" aria-label="View">
+          ${view('list', 'ti-list', 'List')}${view('cards', 'ti-layout-grid', 'Cards')}${view('tags', 'ti-tag', 'Tags')}
+        </div>
+      </div>
+      ${shown.length !== users.length ? `<p class="member-count">${shown.length} of ${users.length} members</p>` : ''}
+      ${canManageUsers ? `
+        <div class="member-bulk${d.selected.size ? ' on' : ''}">
+          <label class="member-check">
+            <input type="checkbox" data-member-all ${shown.length && shown.every((u) => d.selected.has(u.profile_id)) ? 'checked' : ''} />
+            <span>${d.selected.size ? `${d.selected.size} selected` : 'Select all'}</span>
+          </label>
+          ${d.selected.size ? `
+            <select data-member-bulk-role aria-label="Role to assign">
+              <option value="">Assign role…</option>
+              ${companyRoles(companyId).map((role) => `<option value="${h(role.id)}">${h(role.name)}</option>`).join('')}
+            </select>
+            <button class="btn btn-sm btn-primary" type="button" data-member-bulk-apply ${eligible.length ? '' : 'disabled'}><i class="ti ti-check"></i>Apply to ${eligible.length}</button>
+            <button class="btn btn-sm" type="button" data-member-clear>Clear</button>
+            ${blocked.length ? `<span class="form-note">${blocked.length} skipped — the main owner cannot be reassigned.</span>` : ''}
+          ` : ''}
+        </div>` : ''}
+    `;
+  }
+
+  function memberDirectoryBody(companyId, users, canManageUsers) {
+    const d = ui();
+    const shown = visibleMembers(users);
+    if (!users.length) return emptyState('No users assigned to this company yet.');
+    if (!shown.length) return emptyState('No members match that search.');
+
+    const box = (user) => (canManageUsers && user.profile_id
+      ? `<label class="member-check member-pick"><input type="checkbox" data-member-pick="${h(user.profile_id)}" ${d.selected.has(user.profile_id) ? 'checked' : ''} aria-label="Select ${h(userDisplayName(user))}" /></label>`
+      : '');
+
+    // Tags and cards are summaries: they say who somebody is and let you select them, and
+    // send you to List to change anything. Repeating the full role/workspace form in three
+    // shapes would be three places for the same save to go wrong.
+    if (d.view === 'tags') {
+      return `<div class="member-tags">${shown.map((user) => `
+        <span class="member-tag ${d.selected.has(user.profile_id) ? 'on' : ''}">
+          ${box(user)}${renderAvatar(user, 24)}
+          <b>${h(userDisplayName(user))}</b><em>${h(user.role_label || titleCase(user.role || 'Member'))}</em>
+        </span>`).join('')}</div>`;
+    }
+    if (d.view === 'cards') {
+      return `<div class="member-cards">${shown.map((user) => `
+        <article class="member-card ${d.selected.has(user.profile_id) ? 'on' : ''}">
+          <div class="member-card-head">${box(user)}${renderAvatar(user, 34)}
+            <div><b>${h(userDisplayName(user))}</b><span>${h(user.email || '')}</span></div>
+          </div>
+          <div class="member-card-meta">
+            <span class="member-role-chip">${h(user.role_label || titleCase(user.role || 'Member'))}</span>
+            <span class="member-status is-${h(user.status || 'active')}">${h(titleCase(user.status || 'active'))}</span>
+          </div>
+          <div class="member-card-ws">${h(workspaceAccessSummaryForUser(companyId, user))}</div>
+        </article>`).join('')}</div>`;
+    }
+    return `<div class="access-user-list">${shown.map((user) => `
+      <div class="member-row">${box(user)}<div class="member-row-body">${renderUserAccessRow(companyId, user, canManageUsers)}</div></div>`).join('')}</div>`;
+  }
 
   function renderUsersPage(route, companyId) {
     const users = companyAccessUsers(companyId);
@@ -78,9 +182,8 @@ export function createUsersPage(ctx) {
           <div class="section-head">
             <div><h2>Member access</h2><p>Assign roles and confirm each user's company status.</p></div>
           </div>
-          <div class="access-user-list">
-            ${users.map((user) => renderUserAccessRow(companyId, user, canManageUsers)).join('') || emptyState('No users assigned to this company yet.')}
-          </div>
+          ${memberDirectoryToolbar(companyId, users, canManageUsers)}
+          ${memberDirectoryBody(companyId, users, canManageUsers)}
         </article>
         <article class="panel span-2">
           <div class="section-head"><div><h2>Access model</h2><p>Membership is company-scoped; UI hiding is convenience, RLS is the real privacy layer.</p></div></div>

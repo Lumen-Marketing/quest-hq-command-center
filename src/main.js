@@ -12535,6 +12535,7 @@ function renderNativeTasksPage(route, companyId) {
   `;
 }
 
+// ---- Tasks ----------------------------------------------------------------
 function renderEmbeddedTasksPage(route, companyId) {
   const job = route.jobId ? jobById(route.jobId) : null;
   const workspaceId = workspaceIdForCompany(companyId);
@@ -12595,6 +12596,7 @@ function renderEmbeddedTasksPage(route, companyId) {
     </section>
   `;
 }
+
 
 function renderTaskToolbar(companyId, job) {
   const jobs = companyJobs(companyId);
@@ -13298,6 +13300,7 @@ function loadUsersPage() {
       usersPageModule = mod.createUsersPage({
         CONFIG, appHref, can, compactTabs, companyAccessUsers, companyInvites,
         companyPath, companyRoles, contractRows, emptyState, h, metricCard,
+        isProtectedOwner,
         renderAvatar, renderInviteRow, renderJoinRequestRow, renderUserAccessRow, roleForCompany, state,
         titleCase, userDisplayMeta, userDisplayName, workspaceAccessSummaryForUser, workspaceHeader,
       });
@@ -13545,7 +13548,9 @@ function normalizeFeedPost(p) {
 
 // A dashboard sidebar tile. Types: apps, app (dynamic records), report (pinned
 // chart), tasks, calendar, contacts, text, image, links. `config` is per-type.
-const WB_TILE_TYPES = ['apps', 'app', 'report', 'tasks', 'calendar', 'contacts', 'jobs', 'text', 'image', 'links'];
+// Every type a tile may be. normalizeWorkspaceTile falls back to 'text' for anything not
+// listed, so a type missing from here is not an unknown tile -- it is silently a blank note.
+const WB_TILE_TYPES = ['apps', 'app', 'report', 'tasks', 'members', 'calendar', 'contacts', 'jobs', 'text', 'image', 'links'];
 /**
  * What a Jobs tile can show, and what each part is for.
  *
@@ -13774,6 +13779,33 @@ function wbFind(companyId, workspaceId, appId = '') {
   // in this workspace (a linked pointer or the app itself) for remove-from-here.
   return { workspace, app: resolved.app, appEntry: entry, appLinked: resolved.linked };
 }
+/**
+ * One "Commented on X" entry per record, refreshed rather than repeated.
+ *
+ * Every comment used to log its own entry, so a four-message conversation filled the feed
+ * with four identical cards that all said the same thing and all pointed at the same
+ * record. The conversation itself already lives on the record; what the feed is for is
+ * saying that record has been talked on, and once is enough.
+ *
+ * Re-stamping is what moves it: the stream orders by wbFeedBumpedAt, so the refreshed
+ * entry rises to the top exactly as a new one would have.
+ */
+function wbLogCommentActivity(workspace, app, item) {
+  const text = `Commented on <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}`;
+  const existing = (workspace.activity || []).find((entry) => (
+    entry.appId === app.id && entry.itemId === item.id && entry.text === text
+  ));
+  if (existing) {
+    const actor = activeSession().profile || {};
+    existing.ts = new Date().toISOString();
+    // The entry names whoever spoke last, which is what a bumped card is reporting.
+    existing.actorId = actor.id || '';
+    existing.actor = actor.full_name || actor.email || '';
+    return;
+  }
+  wbLogActivity(workspace, { icon: 'ti-message-circle', color: '#2563eb', appId: app.id, itemId: item.id, text });
+}
+
 function wbLogActivity(workspace, entry) {
   workspace.activity = workspace.activity || [];
   // Who did it, stamped here rather than at each call site: this is the one place every
@@ -13871,7 +13903,6 @@ function wbViewCompanyHome(companyId, workspace) {
     <div class="wb-page-head">
       <div>
         <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>${h(wsName)}</h1>
-        <div class="wb-sub">Build customizable, no-code dashboards for ${h(wsName)}.</div>
       </div>
       <div class="wb-spacer"></div>
     </div>
@@ -13934,11 +13965,33 @@ function wbComposer(companyId) {
   </div>`;
 }
 
-// Merge member posts (rich) and system activity (compact rows) into one stream,
-// newest first, so the dashboard reads like Podio's activity feed.
+/**
+ * When an entry last had something happen TO it, not when it was written.
+ *
+ * A comment on a week-old post is the newest thing in the workspace, and sorting by the
+ * entry's own timestamp buried it under everything written since. This is the value the
+ * stream orders by, so a reply pulls its thread back to the top.
+ *
+ * Likes deliberately do not count. They carry no timestamp, and a like is an
+ * acknowledgement rather than something to come back and read -- bumping a thread for one
+ * would keep reshuffling the feed under anybody scrolling it.
+ */
+function wbFeedBumpedAt(entry) {
+  let latest = String(entry?.ts || '');
+  for (const comment of (Array.isArray(entry?.comments) ? entry.comments : [])) {
+    const at = String(comment?.editedAt || comment?.ts || '');
+    if (at > latest) latest = at;
+  }
+  return latest;
+}
+
+// Merge member posts (rich) and system activity (compact rows) into one stream, most
+// recently active first, so the dashboard reads like Podio's activity feed.
 function wbFeedStream(companyId, workspace) {
-  const posts = (workspace.feed || []).map((p) => ({ kind: 'post', ts: p.ts, data: p }));
-  const acts = (workspace.activity || []).map((a) => ({ kind: 'act', ts: a.ts, data: a }));
+  const posts = (workspace.feed || []).map((p) => ({ kind: 'post', ts: wbFeedBumpedAt(p), data: p }));
+  const acts = (workspace.activity || []).map((a) => ({ kind: 'act', ts: wbFeedBumpedAt(a), data: a }));
+  // Sorted by activity, then trimmed -- the other order would drop an old thread with a new
+  // reply before its comment was ever taken into account.
   const stream = posts.concat(acts).sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60);
   if (!stream.length) {
     return `<section class="wb-feed"><div class="wb-feed-empty"><i class="ti ti-activity" aria-hidden="true"></i><p>Nothing here yet. Share an update or create an app to get things moving.</p></div></section>`;
@@ -14028,12 +14081,29 @@ function wbActivityComments(companyId, ev) {
 
   const row = (c) => {
     // The author's CURRENT profile, so a rename shows on old comments; the stored name is
-    // the fallback for somebody who no longer resolves.
+    // the fallback for anybody who does not resolve.
+    //
+    // wbMemberById never returns null -- it returns a { name: 'Unknown' } stand-in -- and
+    // 'Unknown' is truthy, so taking member.name first put that stand-in ahead of the real
+    // name saved with the comment. A worker sees fewer company members than an owner does,
+    // so every author outside their view read as "Unknown" while the owner saw the names.
     const member = c.authorId ? wbMemberById(companyId, c.authorId) : null;
-    const name = member?.name || c.author || 'User';
-    const avatar = wbAvatar({ id: c.authorId, name, color: member?.color || wbColorFor(c.authorId || name), avatar_url: member?.avatar_url || '' }, 24);
+    const live = member && member.name && member.name !== 'Unknown' ? member : null;
+    const name = live ? live.name : (c.author || 'User');
+    const avatar = wbAvatar({ id: c.authorId, name, color: live?.color || wbColorFor(c.authorId || name), avatar_url: live?.avatar_url || '' }, 24);
+    // Yours to delete, or the owner's to moderate. Everybody else gets no button at all
+    // rather than one that refuses -- an action you cannot take should not be offered.
+    const myId = activeSession().profile?.id || '';
+    const mine = !!c.authorId && c.authorId === myId;
+    const canDelete = mine || isCompanyOwner(companyId);
+    const likes = Array.isArray(c.likes) ? c.likes : [];
+    const liked = myId && likes.includes(myId);
     return `<div class="wb-cmt">${avatar}<div class="wb-cmt-body">`
-      + `<div class="wb-cmt-head"><b>${h(name)}</b><em>${h(wbTimeAgo(c.ts))}</em></div>`
+      + `<div class="wb-cmt-head"><b>${h(name)}</b><em>${h(wbTimeAgo(c.ts))}</em>`
+      + `<span class="wb-cmt-acts">`
+      + `<button type="button" class="wb-cmt-act${liked ? ' on' : ''}" data-wb-cmt-like="${h(ev.id)}:${h(c.id)}" title="${liked ? 'Unlike' : 'Like'}" aria-pressed="${liked ? 'true' : 'false'}"><i class="ti ti-heart${liked ? '-filled' : ''}" aria-hidden="true"></i>${likes.length || ''}</button>`
+      + (canDelete ? `<button type="button" class="wb-cmt-act danger" data-wb-cmt-del="${h(ev.id)}:${h(c.id)}" title="${mine ? 'Delete your comment' : 'Delete this comment'}" aria-label="Delete comment"><i class="ti ti-trash" aria-hidden="true"></i></button>` : '')
+      + `</span></div>`
       + `<div class="wb-cmt-text">${wbFeedText(companyId, c.text)}</div></div></div>`;
   };
 
@@ -14055,6 +14125,41 @@ function wbActivityComments(companyId, ev) {
         <button class="btn btn-sm btn-primary" type="button" data-wb-act-comment-send="${h(ev.id)}">Comment</button>
       </div>` : ''}
     </div>`;
+}
+
+/**
+ * Delete one comment on an activity entry.
+ *
+ * Re-checked here, not just hidden in the markup: the button is absent for everybody else,
+ * but a rule that lives only in a template is a rule anybody can skip past.
+ */
+function wbDeleteActivityComment(companyId, actId, commentId) {
+  const { entry } = wbFindActivity(companyId, actId);
+  const comment = (entry?.comments || []).find((c) => c.id === commentId);
+  if (!comment) return;
+  const myId = activeSession().profile?.id || '';
+  const mine = !!comment.authorId && comment.authorId === myId;
+  if (!mine && !isCompanyOwner(companyId)) {
+    showToast('You can only delete your own comments.', 'local', 'Workspaces');
+    return;
+  }
+  if (!window.confirm('Delete this comment?')) return;
+  entry.comments = entry.comments.filter((c) => c.id !== commentId);
+  wbSave(companyId);
+  showToast('Comment deleted.', 'local', 'Workspaces');
+  render();
+}
+
+// Like, or take it back. Stored as a list of ids so the count is who, not just how many.
+function wbToggleActivityCommentLike(companyId, actId, commentId) {
+  const { entry } = wbFindActivity(companyId, actId);
+  const comment = (entry?.comments || []).find((c) => c.id === commentId);
+  const myId = activeSession().profile?.id || '';
+  if (!comment || !myId) return;
+  const likes = Array.isArray(comment.likes) ? comment.likes : [];
+  comment.likes = likes.includes(myId) ? likes.filter((id) => id !== myId) : likes.concat(myId);
+  wbSave(companyId);
+  render();
 }
 
 // Show or hide the earlier comments on one entry.
@@ -14674,10 +14779,108 @@ function wbApplyAppOrder(companyId, ids) {
 
 // arrows only when there is something to scroll to. Re-runs after each render, so the
 // listeners are attached once per element via a data flag.
+/**
+ * Drag an app tab to change the order of the strip.
+ *
+ * Pointer events, not native HTML5 drag: the tabs are deliberately draggable="false" so a
+ * drag scrolls the strip on touch rather than tearing a tab out of it, and turning that back
+ * on would take the gesture away again.
+ *
+ * A tab is also a link, so the two gestures have to be told apart. Nothing happens until the
+ * pointer has moved DRAG_SLOP pixels; below that it is a click and navigation is left alone.
+ * Once it is a drag, the click that follows pointerup is swallowed once, or letting go over a
+ * tab would open the app you just dropped.
+ */
+function wbMountTopbarReorder(track) {
+  if (!track || track.dataset.wbReorderBound || !track.dataset.wbReorder) return;
+  track.dataset.wbReorderBound = '1';
+  const DRAG_SLOP = 5;
+  let held = null;
+  let startX = 0;
+  let dragging = false;
+
+  const tabs = () => [...track.querySelectorAll('.wb-topbar-tab')];
+
+  const drop = (clientX) => {
+    // Where the held tab now belongs: before the first tab whose midpoint is right of the
+    // pointer, which is the same rule whether it moved left or right.
+    const order = tabs().filter((tab) => tab !== held);
+    const before = order.find((tab) => {
+      const box = tab.getBoundingClientRect();
+      return clientX < box.left + box.width / 2;
+    });
+    if (before) track.insertBefore(held, before);
+    else track.appendChild(held);
+
+    const companyId = activeCompanyId();
+    const workspace = wbCompanyWorkspace(companyId);
+    if (!workspace) return;
+    const ids = tabs().map((tab) => tab.dataset.wbAppId).filter(Boolean);
+    // Reordered by the ids the strip now shows. Anything not on the strip -- a linked app
+    // resolved elsewhere, or one added since this paint -- keeps its place at the end rather
+    // than being dropped from the workspace.
+    const byId = new Map((workspace.apps || []).map((app) => [app.id, app]));
+    const moved = ids.map((id) => byId.get(id)).filter(Boolean);
+    const rest = (workspace.apps || []).filter((app) => !ids.includes(app.id));
+    workspace.apps = moved.concat(rest);
+    wbSave(companyId);
+  };
+
+  track.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const tab = event.target.closest('.wb-topbar-tab');
+    if (!tab || !tab.dataset.wbAppId) return;
+    held = tab;
+    startX = event.clientX;
+    dragging = false;
+  });
+
+  track.addEventListener('pointermove', (event) => {
+    if (!held) return;
+    if (!dragging) {
+      if (Math.abs(event.clientX - startX) < DRAG_SLOP) return;
+      dragging = true;
+      track.classList.add('wb-topbar-dragging');
+      held.classList.add('is-dragging');
+      // The strip scrolls horizontally; capturing keeps the gesture even past its edge.
+      try { track.setPointerCapture(event.pointerId); } catch { /* not capturable */ }
+    }
+    // Live preview: move the held tab as the pointer passes each midpoint.
+    const over = tabs().find((tab) => {
+      if (tab === held) return false;
+      const box = tab.getBoundingClientRect();
+      return event.clientX >= box.left && event.clientX <= box.right;
+    });
+    if (!over) return;
+    const box = over.getBoundingClientRect();
+    const after = event.clientX > box.left + box.width / 2;
+    track.insertBefore(held, after ? over.nextSibling : over);
+  });
+
+  const finish = (event) => {
+    if (!held) return;
+    const wasDragging = dragging;
+    if (wasDragging) {
+      drop(event.clientX);
+      track.classList.remove('wb-topbar-dragging');
+      held.classList.remove('is-dragging');
+      // One click only: the pointerup that ends a drag is followed by a click on the tab,
+      // which would navigate into the app that was just dropped.
+      track.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); }, { capture: true, once: true });
+    }
+    held = null;
+    dragging = false;
+    if (wasDragging) render();
+  };
+  track.addEventListener('pointerup', finish);
+  track.addEventListener('pointercancel', () => { held = null; dragging = false; track.classList.remove('wb-topbar-dragging'); });
+}
+
 function wbMountTopbar() {
   const track = document.querySelector('[data-wb-topbar-apps]');
   const nav = document.querySelector('[data-wb-topbar-nav]');
   if (!track) return;
+  wbMountTopbarReorder(track);
   const sync = () => {
     if (!nav) return;
     const overflowing = track.scrollWidth - track.clientWidth > 1;
@@ -14889,7 +15092,7 @@ function wbAddActivityComment(companyId, actId, text) {
     id: wbUid(),
     ts: new Date().toISOString(),
     authorId: activeSession().profile?.id || '',
-    author: activeSession().profile?.full_name || 'User',
+    author: activeSession().profile?.full_name || activeSession().profile?.email || 'User',
     text: body,
   });
   wbSave(companyId);
@@ -15887,7 +16090,13 @@ function wbBindInlineEdits(root, companyId, workspaceId, appId, itemId) {
       cell.innerHTML = `<span class="wb-inline-edit">${wbRenderFieldInput(companyId, workspaceId, field, item.values[field.id])}</span>`;
       // The same binders the modal runs, because it is the same markup. All are idempotent
       // and root-scoped, so running them on one cell is safe.
+      // Every binder the modal runs over this same markup. Missing one leaves that field
+      // type rendered but dead: the checklist drew its tick boxes, delete buttons and
+      // "add a step" row and none of them did anything, because nothing had wired them.
       wbMountFileFields(cell);
+      wbMountDurationFields(cell);
+      wbMountProgressFields(cell);
+      wbMountChecklistFields(cell);
       wbBindUrlControls(cell);
       wbBindRelationshipPickers(cell);
 
@@ -15901,21 +16110,37 @@ function wbBindInlineEdits(root, companyId, workspaceId, appId, itemId) {
       const close = (commit) => {
         if (done) return;
         done = true;
+        document.removeEventListener('pointerdown', onOutside, true);
         if (commit) wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell);
         else { cell.innerHTML = cell.dataset.was; wbResetInlineCell(cell); render(); }
       };
 
-      // A tick later, because at focusout time the new target is not focused yet -- and a
-      // click on this cell's own dropdown would otherwise read as leaving it.
-      cell.addEventListener('focusout', () => {
-        setTimeout(() => {
-          if (done || !cell.isConnected) return;
-          if (cell.contains(document.activeElement)) return;
-          // A file picker takes focus out of the page entirely. Leaving the editor open is
-          // the recoverable mistake here; closing it would throw away the pending upload.
-          if (!document.hasFocus() || cell.querySelector('[data-wb-file]')) return;
-          close(true);
-        }, 0);
+      // "When I click outside the card or data, close the field and save it" -- taken
+      // literally, because the focus-based version could not be made to behave.
+      //
+      // It used to commit on focusout once focus was no longer inside the cell. Controls
+      // that redraw themselves break that: the checklist rebuilds its body on every tick,
+      // which destroys the button you just clicked, so activeElement fell back to <body>
+      // and every tick read as "they left" and closed the editor. A file picker did the
+      // same by taking focus out of the document entirely.
+      //
+      // A pointerdown outside the cell is unambiguous: it cannot be caused by anything the
+      // editor does to itself, so ticking, uploading and picking from a dropdown all leave
+      // it open, and one click anywhere else saves.
+      function onOutside(event) {
+        if (done || !cell.isConnected) return;
+        if (cell.contains(event.target)) return;
+        close(true);
+      }
+      // Capture phase: a handler that stops propagation on its own control must not also
+      // stop this from noticing the click happened elsewhere.
+      document.addEventListener('pointerdown', onOutside, true);
+
+      // Tabbing away is leaving too, and relatedTarget says where focus went -- unlike
+      // activeElement, it is not disturbed by a redraw.
+      cell.addEventListener('focusout', (event) => {
+        const to = event.relatedTarget;
+        if (to && !cell.contains(to)) close(true);
       });
 
       cell.addEventListener('keydown', (event) => {
@@ -15929,8 +16154,11 @@ function wbBindInlineEdits(root, companyId, workspaceId, appId, itemId) {
     };
 
     cell.addEventListener('click', (event) => {
-      // A phone/email/map link inside the value keeps working as a link.
-      if (event.target.closest('a, button')) return;
+      // Anything already interactive inside the value keeps its own behaviour. The same
+      // exclusion the row click uses, and for the same reason: a checklist renders its own
+      // tick boxes, delete buttons and "add a step" input, and swapping the whole cell for a
+      // field editor the moment one is clicked makes the checklist impossible to use.
+      if (event.target.closest('a, button, input, select, textarea, label, .wb-check-toggle')) return;
       open();
     });
     cell.addEventListener('keydown', (event) => {
@@ -15991,6 +16219,12 @@ function wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell) {
   const prev = { ...item.values };
   const stamp = new Date().toISOString();
   item.values = { ...item.values, [field.id]: value };
+  // Derived fields first, automations second -- the order the card path already uses. A
+  // progress field linked to a checklist is what an automation like "when progress hits
+  // 100%" actually watches, so running the rules before recomputing it means the rule reads
+  // the old number and never fires. Ticking the last step on a card worked and ticking it
+  // here did not, for exactly this.
+  wbSyncLinkedProgress(app, item, field.id);
   item.updatedAt = stamp;
   item.lastActivityAt = stamp;
   wbResetInlineCell(cell);
@@ -16832,7 +17066,11 @@ function wbItemCommentsHtml(companyId, item) {
       const name = live ? live.name : (c.author || 'User');
       const color = live ? live.color : '#6b7280';
       const mine = !!c.authorId && c.authorId === myId;
-      const avatar = `<span class="wb-avatar" style="width:26px;height:26px;background:${h(color || '#6b7280')}" title="${h(name)}">${h(wbInitials(name))}</span>`;
+      // wbAvatar, not hand-rolled markup: this built the initials badge directly and never
+      // looked at avatar_url, so a comment showed "LM" while the same person's photo
+      // appeared everywhere else. wbAvatar renders the image when there is one and falls
+      // back to exactly this badge when there is not.
+      const avatar = wbAvatar({ id: c.authorId, name, color, avatar_url: live?.avatar_url || '' }, 26);
       if (mine && editingId === c.id) {
         return `<div class="wb-comment">${avatar}<div class="wb-comment-body"><textarea class="wb-input" id="wbEditComment-${h(c.id)}" rows="2">${h(c.text)}</textarea><div class="wb-comment-edit-acts"><button class="btn btn-primary btn-sm" type="button" data-wb-comment-save="${h(c.id)}"><i class="ti ti-check"></i>Save</button><button class="btn btn-sm" type="button" data-wb-comment-cancel>Cancel</button></div></div></div>`;
       }
@@ -16878,7 +17116,7 @@ async function wbAddItemComment() {
       return false;
     }
   } else {
-    wbLogActivity(workspace, { icon: 'ti-message-circle', color: '#2563eb', appId: app.id, itemId: item.id, text: `Commented on <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
+    wbLogCommentActivity(workspace, app, item);
     wbSave(m.companyId);
   }
   wbNotifyItem(m.companyId, workspace, app, item, `New comment on ${wbItemTitle(app, item)}`, `${actorName()}: ${text.length > 90 ? `${text.slice(0, 90)}…` : text}`);
@@ -19192,6 +19430,14 @@ function mountWorkspaceBuilder() {
     });
     bind('[data-wb-act-task]', (el) => { state.wbTaskFromActivityId = el.dataset.wbActTask; state.modal = 'wb-activity-task'; render(); });
     bind('[data-wb-act-comments-more]', (el) => wbToggleActivityCommentsMore(el.dataset.wbActCommentsMore));
+    bind('[data-wb-cmt-like]', (el) => {
+      const [actId, commentId] = String(el.dataset.wbCmtLike).split(':');
+      wbToggleActivityCommentLike(companyId, actId, commentId);
+    });
+    bind('[data-wb-cmt-del]', (el) => {
+      const [actId, commentId] = String(el.dataset.wbCmtDel).split(':');
+      wbDeleteActivityComment(companyId, actId, commentId);
+    });
     wbBindMentionPickers(document, companyId);
     document.querySelectorAll('[data-wb-act-comment-input]').forEach((el) => {
       el.onkeydown = (event) => {
@@ -20105,6 +20351,7 @@ function renderWorkspaceSetupModal(companyId, route) {
   });
 }
 
+// ---- Settings ----------------------------------------------------------------
 function renderSettingsPage(route, companyId) {
   const company = companyById(companyId);
   const backupSettingsPath = companyPath('settings', { tab: 'backups' });
@@ -20176,6 +20423,7 @@ function renderSettingsPage(route, companyId) {
     </section>
   `;
 }
+
 
 // ---- Settings > Backups ---------------------------------------------------------
 // Body lives in ./settings/backups-panel.js and is fetched on first use.
@@ -20320,25 +20568,33 @@ function renderClientPortalDocumentModal(companyId, portal) {
   `, 'file-modal-panel');
 }
 
-function renderClientPortalDeleteModal(companyId, portal) {
-  if (!portal) return renderModalShell('Client Portal', 'Delete portal', emptyState('Portal not found.'));
-  const docs = portalDocumentGroups(portal.id).length;
-  const marks = clientPortalAnnotationsForPortal(portal.id).length;
-  return renderModalShell('Client Portal', 'Delete portal', `
-    <form class="compact-tool-form" data-client-portal-delete-form>
-      <input type="hidden" name="portal_id" value="${h(portal.id)}" />
-      <div class="form-message error">
-        <strong>This permanently deletes "${h(portal.title)}".</strong>
-        <span>${docs} plan${docs === 1 ? '' : 's'} and ${marks} markup${marks === 1 ? '' : 's'} will be removed for everyone. This cannot be undone.</span>
-      </div>
-      <label><span>Type <b>${h(portal.title)}</b> to confirm</span><input name="confirm_name" autocomplete="off" placeholder="${h(portal.title)}" /></label>
-      <div class="form-actions">
-        <button class="btn danger" type="submit"><i class="ti ti-trash"></i>Delete portal</button>
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-    </form>
-  `, 'task-modal');
+// ---- Delete portal ----------------------------------------------------------------
+// Body lives in ./portals/portal-delete-modal.js and is fetched on first use.
+let portalDeleteModalModule = null;
+let portalDeleteModalPending = null;
+
+function loadPortalDeleteModal() {
+  if (portalDeleteModalModule) return Promise.resolve(portalDeleteModalModule);
+  if (!portalDeleteModalPending) {
+    portalDeleteModalPending = import('./portals/portal-delete-modal.js').then((mod) => {
+      portalDeleteModalModule = mod.createPortalDeleteModal({
+        clientPortalAnnotationsForPortal, emptyState, h, portalDocumentGroups, renderModalShell,
+      });
+      return portalDeleteModalModule;
+    }).catch((error) => {
+      portalDeleteModalPending = null;
+      throw error;
+    });
+  }
+  return portalDeleteModalPending;
 }
+
+function renderClientPortalDeleteModal(companyId, portal) {
+  if (portalDeleteModalModule) return portalDeleteModalModule.renderClientPortalDeleteModal(companyId, portal);
+  loadPortalDeleteModal().then(() => render()).catch((error) => console.error('Delete portal failed to load', error));
+  return questLoader('Loading');
+}
+
 
 /* =========================================================================
    CLIENT PORTAL — Blueprint review & annotation engine (owner + guest)
@@ -20850,78 +21106,35 @@ function cpEventMeta(event) {
   return { icon: base.icon, actor, text };
 }
 
-function renderClientPortalDetail(portal, canManagePortals) {
-  const groups = portalDocumentGroups(portal.id);
-  const annotations = clientPortalAnnotationsForPortal(portal.id);
-  const guestMarks = annotations.filter((annotation) => (annotation.payload?.author || (annotation.guest_name ? 'guest' : 'draft')) === 'guest');
-  const events = clientPortalEventsForPortal(portal.id);
-  const revoked = portal.status === 'revoked';
-  const link = clientPortalPublicLink(portal);
-  return `
-    <div class="client-portal-head">
-      <div>
-        <div class="eyebrow">Client Portal</div>
-        <h2>${h(portal.title)}</h2>
-        <p>${h(portal.client_name || 'External reviewer')} / ${h(portal.client_email || 'No email saved')}</p>
-      </div>
-      <span class="status-pill ${h(portal.status)}">${h(titleCase(portal.status))}</span>
-    </div>
-    <div class="forms-summary-share compact">
-      <strong>Portal link</strong>
-      <input readonly value="${revoked ? '— link revoked —' : h(link)}" />
-      <button class="btn" type="button" data-action="copy-client-portal-link" data-portal-id="${h(portal.id)}" ${revoked ? 'disabled' : ''}><i class="ti ti-copy"></i>Copy link</button>
-      ${canManagePortals ? `<button class="btn" type="button" data-action="regenerate-client-portal-link" data-portal-id="${h(portal.id)}"><i class="ti ti-refresh"></i>Regenerate</button>` : ''}
-      ${canManagePortals && !revoked ? `<button class="btn danger" type="button" data-action="revoke-client-portal" data-portal-id="${h(portal.id)}"><i class="ti ti-ban"></i>Revoke</button>` : ''}
-      ${canManagePortals && revoked ? `<button class="btn" type="button" data-action="restore-client-portal" data-portal-id="${h(portal.id)}"><i class="ti ti-rotate"></i>Reactivate</button>` : ''}
-    </div>
-    ${canManagePortals ? `
-      <div class="client-portal-actionbar">
-        <button class="btn btn-primary" type="button" data-action="open-client-portal-document-form" data-portal-id="${h(portal.id)}"><i class="ti ti-upload"></i>Upload plan set</button>
-        <button class="btn" type="button" data-action="open-client-portal-form" data-portal-id="${h(portal.id)}"><i class="ti ti-key"></i>Edit details</button>
-        ${!revoked ? `<button class="btn" type="button" data-action="copy-client-portal-link" data-portal-id="${h(portal.id)}"><i class="ti ti-external-link"></i>Open client view</button>` : ''}
-        <button class="btn danger" type="button" data-action="delete-client-portal" data-portal-id="${h(portal.id)}"><i class="ti ti-trash"></i>Delete</button>
-      </div>
-    ` : ''}
-    <div class="client-portal-detail-grid">
-      <article>
-        <div class="section-head"><div><h2>Documents</h2><p>PDF, PNG, and JPG plan sets. DWG should be exported to PDF first.</p></div></div>
-        ${canManagePortals ? `<button class="cp-dropzone" type="button" data-action="open-client-portal-document-form" data-portal-id="${h(portal.id)}"><i class="ti ti-cloud-upload"></i><strong>Click or drop to upload plan set</strong><small>PDF · PNG · JPG · multiple files</small></button>` : ''}
-        <div class="client-portal-doc-list">
-          ${groups.map((versions) => {
-            const doc = currentVersionOf(versions);
-            const meta = CP_STATUS_META[doc.review_status] || CP_STATUS_META.pending;
-            const marks = clientPortalAnnotationsForDocument(doc.id).length;
-            return `
-              <button class="client-portal-doc-row" type="button" data-action="cp-open-document-page" data-portal-id="${h(portal.id)}" data-document-id="${h(doc.id)}">
-                ${fileTypeBadge({ file_name: doc.file_name, mime_type: doc.mime_type })}
-                <span><strong>${h(doc.file_name)}</strong><small>${versions.length > 1 ? `v${doc.version_number} · ` : ''}${formatBytes(doc.size_bytes)} · ${marks} mark${marks === 1 ? '' : 's'}</small></span>
-                <span class="status-pill sm ${h(doc.review_status)}"><i class="ti ${meta.icon}"></i>${h(meta.label)}</span>
-                <i class="ti ti-chevron-right cp-row-chevron"></i>
-              </button>`;
-          }).join('') || emptyState('No plan documents uploaded.')}
-        </div>
-      </article>
-      <article>
-        <div class="section-head"><div><h2>Guest markups</h2><p>${guestMarks.length} client annotation${guestMarks.length === 1 ? '' : 's'}.</p></div></div>
-        <div class="client-portal-annotation-list">
-          ${guestMarks.slice(0, 8).map((annotation) => renderClientPortalMarkCard(annotation)).join('') || emptyState('No guest markups yet.')}
-        </div>
-      </article>
-    </div>
-    <section class="client-portal-events">
-      <div class="section-head"><div><h2>Activity</h2><p>${events.length} portal event${events.length === 1 ? '' : 's'}.</p></div></div>
-      <div class="cp-activity">
-        ${events.slice(0, 14).map((event) => {
-          const meta = cpEventMeta(event);
-          return `<div class="cp-activity-row">
-            <span class="cp-activity-ico"><i class="ti ${meta.icon}"></i></span>
-            <div class="cp-activity-meta"><p><b>${h(meta.actor)}</b> ${h(meta.text)}</p><small>${cpTimeAgo(event.created_at)}</small></div>
-          </div>`;
-        }).join('') || emptyState('No portal activity yet.')}
-      </div>
-    </section>
-  `;
+// ---- Portal ----------------------------------------------------------------
+// Body lives in ./portals/portal-detail.js and is fetched on first use.
+let portalDetailModule = null;
+let portalDetailPending = null;
+
+function loadPortalDetail() {
+  if (portalDetailModule) return Promise.resolve(portalDetailModule);
+  if (!portalDetailPending) {
+    portalDetailPending = import('./portals/portal-detail.js').then((mod) => {
+      portalDetailModule = mod.createPortalDetail({
+        CP_STATUS_META, clientPortalAnnotationsForDocument, clientPortalAnnotationsForPortal, clientPortalEventsForPortal, clientPortalPublicLink, cpEventMeta,
+        cpTimeAgo, currentVersionOf, emptyState, fileTypeBadge, formatBytes, h,
+        portalDocumentGroups, renderClientPortalMarkCard, titleCase,
+      });
+      return portalDetailModule;
+    }).catch((error) => {
+      portalDetailPending = null;
+      throw error;
+    });
+  }
+  return portalDetailPending;
 }
+
+function renderClientPortalDetail(portal, canManagePortals) {
+  if (portalDetailModule) return portalDetailModule.renderClientPortalDetail(portal, canManagePortals);
+  loadPortalDetail().then(() => render()).catch((error) => console.error('Portal failed to load', error));
+  return questLoader('Loading portal');
+}
+
 
 // Guest-markup summary card; the icon is tinted with the colour used in the markup.
 function renderClientPortalMarkCard(annotation) {
@@ -22169,54 +22382,35 @@ function renderProposalSourceLink(proposal) {
   return proposal.related_id ? `<a class="link-button" href="${appHref(companyPath(section, params, proposal.company_id))}" data-router>${h(label)}</a>` : '<span class="muted-dash">No source</span>';
 }
 
-function renderProposalsPage(route, companyId) {
-  const proposalId = route.params.get('proposal_id') || state.selectedProposalId;
-  const selected = proposalId ? proposalById(proposalId) : null;
-  if (selected?.company_id === companyId) state.selectedProposalId = selected.id;
-  else state.selectedProposalId = companyProposals(companyId)[0]?.id || '';
-  const rows = filteredProposals(companyId);
-  const active = proposalById(state.selectedProposalId);
-  const accepted = companyProposals(companyId).filter((proposal) => proposal.status === 'Accepted');
-  const open = companyProposals(companyId).filter((proposal) => !['Accepted', 'Declined'].includes(proposal.status));
-  const fallbackDeal = companyDeals(companyId)[0];
-  const fallbackContact = companyContacts(companyId)[0];
-  const fallbackJob = companyJobs(companyId)[0];
-  const newRelatedType = active?.related_type || (fallbackDeal ? 'deal' : fallbackContact ? 'contact' : fallbackJob ? 'job' : 'deal');
-  const newRelatedId = active?.related_id || fallbackDeal?.id || fallbackContact?.id || fallbackJob?.id || '';
-  return `
-    ${workspaceHeader('Proposals', 'Saved customer proposals, approval links, and reusable quote documents.', `
-      <button class="btn" type="button" data-action="duplicate-proposal" data-proposal-id="${h(active?.id || '')}" ${active ? '' : 'disabled'}><i class="ti ti-copy"></i>Reuse selected</button>
-      <button class="btn btn-primary" type="button" data-action="open-proposal-builder" data-related-type="${h(newRelatedType)}" data-related-id="${h(newRelatedId)}"><i class="ti ti-plus"></i>New proposal</button>
-    `)}
-    <section class="metric-grid crm-metrics">
-      ${metricCard('Open proposals', open.length)}
-      ${metricCard('Accepted', accepted.length)}
-      ${metricCard('Open value', money(sum(open, 'total')))}
-      ${metricCard('Accepted value', money(sum(accepted, 'total')))}
-    </section>
-    <section class="proposal-workspace">
-      <aside class="proposal-list-panel panel">
-        <div class="proposal-toolbar">
-          <label class="crm-search"><i class="ti ti-search"></i><input data-proposal-search value="${h(state.proposalQuery)}" placeholder="Search proposals" /></label>
-          <select data-proposal-status-filter>
-            <option value="all" ${state.proposalStatusFilter === 'all' ? 'selected' : ''}>All statuses</option>
-            ${PROPOSAL_STATUS_OPTIONS.map((status) => `<option value="${h(status)}" ${state.proposalStatusFilter === status ? 'selected' : ''}>${h(status)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="proposal-list">
-          ${rows.map((proposal) => `
-            <button class="proposal-row ${proposal.id === state.selectedProposalId ? 'active' : ''}" type="button" data-action="open-proposal" data-proposal-id="${h(proposal.id)}">
-              <span><strong>${h(proposal.proposal_no || proposal.title)}</strong><em>${h(proposal.client.name || 'No client')} - ${h(formatDate(proposal.updated_at))}</em></span>
-              <b>${h(money(proposal.total))}</b>
-              ${proposalStatusBadge(proposal.status)}
-            </button>
-          `).join('') || emptyState('No proposals saved yet. Create one from a quote, contact, or job.')}
-        </div>
-      </aside>
-      ${active ? renderProposalDetail(active) : `<section class="panel proposal-detail">${emptyState('Select a proposal to review, export, or send for approval.')}</section>`}
-    </section>
-  `;
+// ---- Proposals ----------------------------------------------------------------
+// Body lives in ./proposals/proposals-page.js and is fetched on first use.
+let proposalsPageModule = null;
+let proposalsPagePending = null;
+
+function loadProposalsPage() {
+  if (proposalsPageModule) return Promise.resolve(proposalsPageModule);
+  if (!proposalsPagePending) {
+    proposalsPagePending = import('./proposals/proposals-page.js').then((mod) => {
+      proposalsPageModule = mod.createProposalsPage({
+        PROPOSAL_STATUS_OPTIONS, companyContacts, companyDeals, companyJobs, companyProposals, emptyState,
+        filteredProposals, formatDate, h, metricCard, money, proposalById,
+        proposalStatusBadge, renderProposalDetail, state, sum, workspaceHeader,
+      });
+      return proposalsPageModule;
+    }).catch((error) => {
+      proposalsPagePending = null;
+      throw error;
+    });
+  }
+  return proposalsPagePending;
 }
+
+function renderProposalsPage(route, companyId) {
+  if (proposalsPageModule) return proposalsPageModule.renderProposalsPage(route, companyId);
+  loadProposalsPage().then(() => render()).catch((error) => console.error('Proposals failed to load', error));
+  return questLoader('Loading proposals');
+}
+
 
 function renderProposalDetail(proposal) {
   const draft = proposalDraftFromRecord(proposal);
@@ -23484,111 +23678,65 @@ function renderCalendarAgendaItem(item) {
   `;
 }
 
+// ---- Time ----------------------------------------------------------------
+// Body lives in ./ops/time-page.js and is fetched on first use.
+let timePageModule = null;
+let timePagePending = null;
+
+function loadTimePage() {
+  if (timePageModule) return Promise.resolve(timePageModule);
+  if (!timePagePending) {
+    timePagePending = import('./ops/time-page.js').then((mod) => {
+      timePageModule = mod.createTimePage({
+        activeTimerForCompany, appHref, companyName, companyPath, contractRows, emptyState,
+        formatDate, h, jobById, memberName, metricCard, renderOperationsTabs,
+        taskQueueRow, taskStatusPill, taskTypeLabel, timeSummary, workspaceHeader,
+      });
+      return timePageModule;
+    }).catch((error) => {
+      timePagePending = null;
+      throw error;
+    });
+  }
+  return timePagePending;
+}
+
 function renderTimePage(companyId) {
-  const summary = timeSummary(companyId);
-  const active = activeTimerForCompany(companyId);
-  return `
-    <section class="tool-page operations-page">
-      ${workspaceHeader('My time', "A compact personal work queue built from this company's tasks.", `
-        <a class="btn" href="${appHref(companyPath('tasks', {}, companyId))}" data-router><i class="ti ti-list-check"></i>Open tasks</a>
-        <button class="btn btn-primary" type="button" data-action="${active ? 'clock-out' : 'clock-in'}"><i class="ti ${active ? 'ti-player-stop-filled' : 'ti-player-play-filled'}"></i>${active ? 'Clock out' : 'Clock in'}</button>
-      `)}
-      ${renderOperationsTabs(companyId, 'time')}
-      <section class="metric-grid operations-metrics">
-        ${metricCard('Due today', summary.dueToday.length)}
-        ${metricCard('Overdue', summary.overdue.length)}
-        ${metricCard('Open work', summary.open.length)}
-        ${metricCard('In review', summary.review.length)}
-      </section>
-      <section class="dashboard-grid operations-grid">
-        <article class="panel span-2">
-          <div class="section-head"><div><h2>Today</h2><p>Due now, overdue, and highest priority work.</p></div></div>
-          <div class="queue-list">
-            ${summary.focus.slice(0, 8).map((task) => taskQueueRow(task)).join('') || emptyState('No time-sensitive tasks for this company.')}
-          </div>
-        </article>
-        <article class="panel">
-          <div class="section-head"><div><h2>Workload</h2><p>Simple task-based time view.</p></div></div>
-          ${contractRows([
-            ['Company', companyName(companyId)],
-            ['Assigned to you', String(summary.assignedToMe.length)],
-            ['Due this week', String(summary.thisWeek.length)],
-            ['Completed', String(summary.done.length)],
-          ])}
-        </article>
-      <article class="panel span-2">
-          <div class="section-head"><div><h2>This week</h2><p>Upcoming task commitments.</p></div></div>
-          <div class="data-table operations-table">
-            <div class="table-head"><span>Task</span><span>Job</span><span>Owner</span><span>Due</span><span>Status</span></div>
-            ${summary.thisWeek.slice(0, 8).map((task) => `
-              <a class="table-row" href="${appHref(companyPath('tasks', { ...(task.project_id ? { job_id: task.project_id } : {}), task_id: task.id }, companyId))}" data-router>
-                <span><strong>${h(task.title)}</strong><small>${h(task.description || taskTypeLabel(task.type))}</small></span>
-                <span>${h(jobById(task.project_id)?.name || 'Company task')}</span>
-                <span>${h(memberName(task.assignee_id))}</span>
-                <span>${formatDate(task.due)}</span>
-                <span>${taskStatusPill(task.status)}</span>
-              </a>
-            `).join('') || emptyState('No upcoming tasks this week.')}
-          </div>
-        </article>
-      </section>
-    </section>
-  `;
+  if (timePageModule) return timePageModule.renderTimePage(companyId);
+  loadTimePage().then(() => render()).catch((error) => console.error('Time failed to load', error));
+  return questLoader('Loading time');
+}
+
+
+// ---- Clock dashboard ----------------------------------------------------------------
+// Body lives in ./ops/clock-dashboard-page.js and is fetched on first use.
+let clockDashboardPageModule = null;
+let clockDashboardPagePending = null;
+
+function loadClockDashboardPage() {
+  if (clockDashboardPageModule) return Promise.resolve(clockDashboardPageModule);
+  if (!clockDashboardPagePending) {
+    clockDashboardPagePending = import('./ops/clock-dashboard-page.js').then((mod) => {
+      clockDashboardPageModule = mod.createClockDashboardPage({
+        activeTimerForCompany, contractRows, emptyState, formatClock, formatDateTime, formatDuration,
+        h, markup, memberName, metricCard, renderOperationsTabs, startOfToday,
+        timeEntriesForCompany, totalTimeForCompany, workspaceHeader,
+      });
+      return clockDashboardPageModule;
+    }).catch((error) => {
+      clockDashboardPagePending = null;
+      throw error;
+    });
+  }
+  return clockDashboardPagePending;
 }
 
 function renderClockDashboardPage(companyId) {
-  const entries = timeEntriesForCompany(companyId);
-  const active = activeTimerForCompany(companyId);
-  const todayStart = startOfToday().getTime();
-  const weekStart = todayStart - 6 * 86400000;
-  // The banked totals, WITHOUT the running clock. When one is running the live element adds
-  // the elapsed time itself every second; adding it here too would count it twice.
-  const todayBanked = totalTimeForCompany(companyId, todayStart);
-  const weekBanked = totalTimeForCompany(companyId, weekStart);
-  const runningMs = active ? Date.now() - Date.parse(active.started_at) : 0;
-  const live = (banked) => (active
-    ? markup(`<span data-live-clock="${h(active.started_at)}" data-live-base="${h(String(banked))}" data-live-format="duration">${h(formatDuration(banked + runningMs))}</span>`)
-    : formatDuration(banked));
-  return `
-    <section class="tool-page operations-page clock-page">
-      ${workspaceHeader('Clock dashboard', 'Your own time in this workspace. A running clock is saved, so it survives a refresh and follows you between devices.', `
-        <button class="btn btn-primary" type="button" data-action="${active ? 'clock-out' : 'clock-in'}"><i class="ti ${active ? 'ti-player-stop-filled' : 'ti-player-play-filled'}"></i>${active ? 'Clock out' : 'Clock in'}</button>
-      `)}
-      ${renderOperationsTabs(companyId, 'clock')}
-      <section class="metric-grid operations-metrics">
-        ${metricCard('Today', live(todayBanked))}
-        ${metricCard('Last 7 days', live(weekBanked))}
-        ${metricCard('Entries', entries.length)}
-        ${metricCard('Status', active ? 'Clocked in' : 'Off clock')}
-      </section>
-      <section class="dashboard-grid operations-grid">
-        <article class="panel">
-          <div class="section-head"><div><h2>Active now</h2><p>Current local clock session.</p></div></div>
-          ${active ? contractRows([
-            ['User', memberName(active.user_id)],
-            ['Started', formatDateTime(active.started_at)],
-            ['Task', active.task_title || 'General shift'],
-            ['Elapsed', markup(`<span class="clock-elapsed" data-live-clock="${h(active.started_at)}">${h(formatClock(runningMs))}</span>`)],
-          ]) : emptyState('Nobody is clocked in on this device.')}
-        </article>
-        <article class="panel span-2">
-          <div class="section-head"><div><h2>Recent entries</h2><p>Local time records for this company.</p></div></div>
-          <div class="data-table clock-table">
-            <div class="table-head"><span>Entry</span><span>User</span><span>Start</span><span>Duration</span></div>
-            ${entries.slice(0, 10).map((entry) => `
-              <div class="table-row">
-                <span><strong>${h(entry.task_title || 'General shift')}</strong><small>${h(entry.notes || 'Clock entry')}</small></span>
-                <span>${h(memberName(entry.user_id))}</span>
-                <span>${formatDateTime(entry.started_at)}</span>
-                <span>${formatDuration(entry.duration_ms)}</span>
-              </div>
-            `).join('') || emptyState('No clock entries yet.')}
-          </div>
-        </article>
-      </section>
-    </section>
-  `;
+  if (clockDashboardPageModule) return clockDashboardPageModule.renderClockDashboardPage(companyId);
+  loadClockDashboardPage().then(() => render()).catch((error) => console.error('Clock dashboard failed to load', error));
+  return questLoader('Loading clock');
 }
+
 
 function renderApprovalsPage(companyId) {
   const items = approvalItems(companyId);
@@ -23965,6 +24113,7 @@ function authStatusMessage(defaultText) {
   return `<div class="form-message">${h(state.authMessage || defaultText)}</div>`;
 }
 
+// ---- Profile ----------------------------------------------------------------
 function renderProfileModal(profile) {
   return `
     <div class="modal-overlay">
@@ -24017,6 +24166,7 @@ function renderProfileModal(profile) {
     </div>
   `;
 }
+
 
 // ---- Workspace icon dialog ----------------------------------------------------------------
 // Body lives in ./workspace/icon-modal.js and is fetched on first use.
@@ -26534,6 +26684,27 @@ function onDocumentClick(event) {
   if (dealEditSpan) {
     event.preventDefault();
     beginDealInlineEdit(dealEditSpan);
+    return;
+  }
+
+  const memberView = event.target.closest('[data-member-view]');
+  if (memberView) {
+    event.preventDefault();
+    memberDirectoryUi().view = memberView.dataset.memberView;
+    render();
+    return;
+  }
+  if (event.target.closest('[data-member-clear]')) {
+    event.preventDefault();
+    memberDirectoryUi().selected.clear();
+    render();
+    return;
+  }
+  if (event.target.closest('[data-member-bulk-apply]')) {
+    event.preventDefault();
+    const roleId = document.querySelector('[data-member-bulk-role]')?.value || '';
+    assignRoleToSelectedMembers(activeCompanyId(), roleId)
+      .catch((error) => showToast(error.message || 'Role assignment failed.', 'error', 'Users'));
     return;
   }
 
@@ -31563,6 +31734,70 @@ async function revokeInvite(inviteId) {
   render();
 }
 
+let memberDirectoryModule = null;
+function loadMemberDirectory() {
+  if (memberDirectoryModule) return Promise.resolve(memberDirectoryModule);
+  return import('./team/member-directory.js').then((mod) => { memberDirectoryModule = mod; return mod; });
+}
+
+function memberDirectoryUi() {
+  state.memberDirectory = state.memberDirectory || { view: 'list', query: '', role: '', sort: 'name', selected: new Set() };
+  if (!(state.memberDirectory.selected instanceof Set)) state.memberDirectory.selected = new Set();
+  return state.memberDirectory;
+}
+
+/**
+ * Give one role to everybody selected.
+ *
+ * Runs each person through the SAME validation and persistence the single-user form does,
+ * one at a time -- so a bulk change cannot make a company ownerless by a route the form
+ * already refuses. Only the role moves: the workspace ids handed to persistUserAccess are
+ * the person's current ones, so assigning a role does not silently rewrite who can see what.
+ */
+async function assignRoleToSelectedMembers(companyId, roleId) {
+  if (!requirePermission('users.manage', companyId, 'Your role cannot manage user access.', 'Users')) return;
+  const role = roleById(companyId, roleId);
+  if (!role) { showToast('Choose a role to assign.', 'local', 'Users'); return; }
+
+  const ui = memberDirectoryUi();
+  const users = companyAccessUsers(companyId);
+  const memberDirectory = await loadMemberDirectory();
+  const { eligible } = memberDirectory.assignableSelection({
+    selected: ui.selected,
+    visible: memberDirectory.filterSortMembers({ users, query: ui.query, role: ui.role, sort: ui.sort }),
+    isProtected: (user) => isProtectedOwner(companyId, user),
+  });
+  if (!eligible.length) { showToast('Nobody selected can be reassigned.', 'local', 'Users'); return; }
+
+  const done = [];
+  const refused = [];
+  for (const user of eligible) {
+    const status = ['active', 'pending', 'disabled', 'left'].includes(user.status) ? user.status : 'active';
+    const refusal = validateMembershipChange(companyId, user.profile_id, role, status);
+    if (refusal) { refused.push(`${userDisplayName(user)}: ${refusal}`); continue; }
+    const workspaceIds = state.workspaceMemberships
+      .filter((m) => m.profile_id === user.profile_id && (m.status || 'active') === 'active')
+      .map((m) => String(m.workspace_id));
+    try {
+      // persistUserAccess reads only `data`, and only workspace_ids off it.
+      await persistUserAccess(null, {
+        companyId, profileId: user.profile_id, role, status,
+        data: { getAll: () => workspaceIds },
+      });
+      done.push(user);
+    } catch (error) {
+      refused.push(`${userDisplayName(user)}: ${error.message || 'save failed'}`);
+    }
+  }
+
+  if (done.length) ui.selected.clear();
+  // Both halves reported: a partial success that only says "3 updated" hides the two it
+  // could not do, and those are the ones needing attention.
+  if (done.length) showToast(`${role.name} assigned to ${done.length} member${done.length === 1 ? '' : 's'}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Users');
+  if (refused.length) showToast(`Not changed — ${refused.join('; ')}`, 'local', 'Users');
+  render();
+}
+
 async function saveUserAccess(formNode) {
   const data = new FormData(formNode);
   const companyId = canonicalCompanyId(data.get('company_id') || activeCompanyId());
@@ -32686,6 +32921,11 @@ function onDocumentInput(event) {
     openCommandPalette(event.target.value);
     return;
   }
+  if (event.target.matches('[data-member-search]')) {
+    memberDirectoryUi().query = event.target.value;
+    updateWorkspacePreservingFocus('[data-member-search]');
+    return;
+  }
   if (event.target.matches('[data-file-search]')) {
     state.fileQuery = event.target.value;
     updateWorkspacePreservingFocus('[data-file-search]');
@@ -32829,6 +33069,40 @@ function onDocumentInput(event) {
 }
 
 function onDocumentChange(event) {
+  // Member access directory: filter, sort, and the selection checkboxes.
+  if (event.target.matches('[data-member-role]')) {
+    memberDirectoryUi().role = event.target.value;
+    render();
+    return;
+  }
+  if (event.target.matches('[data-member-sort]')) {
+    memberDirectoryUi().sort = event.target.value;
+    render();
+    return;
+  }
+  if (event.target.matches('[data-member-pick]')) {
+    const ui = memberDirectoryUi();
+    const id = event.target.dataset.memberPick;
+    if (event.target.checked) ui.selected.add(id); else ui.selected.delete(id);
+    render();
+    return;
+  }
+  if (event.target.matches('[data-member-all]')) {
+    const ui = memberDirectoryUi();
+    const companyId = activeCompanyId();
+    const checked = event.target.checked;
+    loadMemberDirectory().then((memberDirectory) => {
+    // Everyone currently VISIBLE, not everyone in the company: the box sits above a
+    // filtered list, and selecting people you cannot see is how bulk actions surprise you.
+      const visible = memberDirectory.filterSortMembers({
+        users: companyAccessUsers(companyId), query: ui.query, role: ui.role, sort: ui.sort,
+      }).filter((user) => user.profile_id);
+      if (checked) visible.forEach((user) => ui.selected.add(user.profile_id));
+      else visible.forEach((user) => ui.selected.delete(user.profile_id));
+      render();
+    }).catch((error) => console.error('Member directory failed to load', error));
+    return;
+  }
   if (event.target.matches('[data-underwriting-contact]')) {
     state.underwritingContactId = event.target.value || '';
     state.underwritingDraft = null;
@@ -33225,60 +33499,34 @@ async function deleteSelectedJobs(button) {
  * which is exactly when it is worth having, and the rest of the time it is one less field
  * between someone on a roof and a submitted report.
  */
-function renderJobDailyModal() {
-  const draft = state.jobDailyDraft;
-  const job = draft ? jobById(draft.jobId) : null;
-  if (!job) return renderModalShell('Jobs', 'Daily report', emptyState('That job is no longer available.'), 'wb-modal-sm');
-  const crew = companyTaskAssignees(job.company_id).slice(0, 12);
-  const pick = (field, value, label, tone = '') => `
-    <button class="jd-opt ${draft[field === 'production' ? 'production' : field === 'cleaned' ? 'cleaned' : 'materialsOk'] === (field === 'production' ? value : value === 'yes') ? `on ${tone}` : ''}"
-            type="button" data-action="job-daily-set" data-field="${h(field)}" data-value="${h(value)}">${h(label)}</button>`;
+// ---- Daily log ----------------------------------------------------------------
+// Body lives in ./jobs/job-daily-modal.js and is fetched on first use.
+let jobDailyModalModule = null;
+let jobDailyModalPending = null;
 
-  return renderModalShell('Jobs', 'Daily report', `
-    <form class="jd-form" data-job-daily-form>
-      <p class="jd-job"><b>${h(job.name)}</b><span>${h(formatDate(new Date().toISOString()))}</span></p>
-      ${draft.error ? `<div class="wb-modal-error" role="alert">${h(draft.error)}</div>` : ''}
-
-      <p class="jd-q">How was production?</p>
-      <div class="jd-seg">
-        ${pick('production', 'good', 'Good', 'good')}
-        ${pick('production', 'ok', 'OK', 'ok')}
-        ${pick('production', 'rough', 'Rough', 'rough')}
-      </div>
-      ${draft.production && draft.production !== 'good' ? `
-        <label class="jd-why">Roughly what happened?
-          <input class="wb-input" name="production_note" value="${h(draft.productionNote)}" placeholder="e.g. 80% — concrete crew in the way" />
-        </label>` : ''}
-
-      <p class="jd-q">Who was on site?</p>
-      <input class="wb-input" name="crew_label" value="${h(draft.crewLabel)}" placeholder="e.g. Alkeith + 4" />
-      ${crew.length ? `<div class="jd-crew">${crew.map((m) => `
-        <label class="jd-crew-pick"><input type="checkbox" name="crew_names" value="${h(memberName(m) || '')}" /> ${h(memberName(m) || 'Member')}</label>`).join('')}</div>` : ''}
-
-      <div class="jd-row">
-        <p class="jd-q">Site cleaned up?</p>
-        <div class="jd-yn">${pick('cleaned', 'yes', 'Yes')}${pick('cleaned', 'no', 'No', 'warn')}</div>
-      </div>
-      <div class="jd-row">
-        <p class="jd-q">Enough material to finish?</p>
-        <div class="jd-yn">${pick('materials', 'yes', 'Yes')}${pick('materials', 'no', 'No', 'warn')}</div>
-      </div>
-      ${draft.materialsOk === false ? `
-        <label class="jd-why">What is needed?
-          <input class="wb-input" name="materials_needed" placeholder="e.g. 2x6 (40), fascia" />
-        </label>` : ''}
-
-      <label class="jd-why">Notes
-        <textarea class="wb-input" name="notes" rows="3" placeholder="What got done, what is in the way">${h(draft.notes)}</textarea>
-      </label>
-
-      <div class="modal-actions">
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-        <button class="btn btn-primary" type="submit">Submit daily</button>
-      </div>
-    </form>
-  `, 'wb-modal-sm');
+function loadJobDailyModal() {
+  if (jobDailyModalModule) return Promise.resolve(jobDailyModalModule);
+  if (!jobDailyModalPending) {
+    jobDailyModalPending = import('./jobs/job-daily-modal.js').then((mod) => {
+      jobDailyModalModule = mod.createJobDailyModal({
+        companyTaskAssignees, emptyState, formatDate, h, jobById, memberName,
+        renderModalShell, state,
+      });
+      return jobDailyModalModule;
+    }).catch((error) => {
+      jobDailyModalPending = null;
+      throw error;
+    });
+  }
+  return jobDailyModalPending;
 }
+
+function renderJobDailyModal() {
+  if (jobDailyModalModule) return jobDailyModalModule.renderJobDailyModal();
+  loadJobDailyModal().then(() => render()).catch((error) => console.error('Daily log failed to load', error));
+  return questLoader('Loading daily');
+}
+
 
 async function submitJobDaily(formNode) {
   const draft = state.jobDailyDraft;
@@ -39720,6 +39968,10 @@ function activeOwnerMemberships(companyId = activeCompanyId()) {
  * Every owner used to be interchangeable, so any owner could demote the person whose company
  * it is. This one is settled once, in the database, and only a platform admin can move it.
  */
+function isProtectedOwner(companyId, user) {
+  return !user?.profile_id || isPrimaryOwner(companyId, user.profile_id);
+}
+
 function isPrimaryOwner(companyId, profileId) {
   const company = companyById(companyId);
   const primary = String(company?.primary_owner_profile_id || '');

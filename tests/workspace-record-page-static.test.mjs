@@ -79,18 +79,25 @@ test('the inline editor is the modal\'s own input and reader', () => {
   assert.match(open, /wbRenderFieldInput\(companyId, workspaceId, field, item\.values\[field\.id\]\)/);
   assert.match(slice('wbSaveInlineValue'), /const value = wbReadFieldInput\(field\);/);
   // The same binders the modal runs over its own markup.
-  for (const binder of ['wbMountFileFields(cell)', 'wbBindUrlControls(cell)', 'wbBindRelationshipPickers(cell)']) {
+  // All four the modal runs, not just some: a missing one leaves that field type rendered
+  // but dead -- the checklist drew its controls and none of them were wired.
+  for (const binder of ['wbMountFileFields(cell)', 'wbMountDurationFields(cell)', 'wbMountProgressFields(cell)', 'wbMountChecklistFields(cell)', 'wbBindUrlControls(cell)', 'wbBindRelationshipPickers(cell)']) {
     assert.ok(open.includes(binder), `${binder} is not run over the inline input`);
   }
 });
 
 test('clicking away saves, and Escape puts it back', () => {
   const open = slice('wbBindInlineEdits');
-  assert.match(open, /cell\.addEventListener\('focusout'/);
-  // Deferred a tick: at focusout time the new target is not focused yet, so a click on this
-  // cell's own dropdown is indistinguishable from leaving it.
-  assert.match(open, /setTimeout\(\(\) => \{[\s\S]*?if \(cell\.contains\(document\.activeElement\)\) return;/);
-  assert.match(open, /if \(!document\.hasFocus\(\) \|\| cell\.querySelector\('\[data-wb-file\]'\)\) return;/);
+  // A pointerdown outside the cell, not a focus heuristic. Controls that redraw
+  // themselves -- the checklist rebuilds its body on every tick -- destroy the focused
+  // element, so activeElement fell back to <body> and every tick read as 'they left'.
+  assert.match(open, /function onOutside\(event\) \{/);
+  assert.match(open, /if \(cell\.contains\(event\.target\)\) return;/);
+  assert.match(open, /document\.addEventListener\('pointerdown', onOutside, true\);/);
+  assert.match(open, /document\.removeEventListener\('pointerdown', onOutside, true\);/, 'or the listener outlives the editor');
+  // Tabbing away is leaving too, and relatedTarget survives a redraw.
+  assert.match(open, /const to = event\.relatedTarget;/);
+  assert.match(open, /if \(to && !cell\.contains\(to\)\) close\(true\);/);
   assert.match(open, /if \(event\.key === 'Escape'\)[\s\S]*?close\(false\)/);
   // Enter saves, except where a newline is part of the value.
   assert.match(open, /field\.type !== 'textarea' && field\.type !== 'checklist'/);
@@ -181,4 +188,70 @@ test('a missing input can never be read as an instruction to erase', () => {
     save.indexOf("cell.querySelector('[data-f]')") < save.indexOf('const value = wbReadFieldInput(field);'),
     'the guard has to come before the read, or the empty value is already in hand',
   );
+});
+
+test('an inline save recomputes derived fields before automations run', () => {
+  // The card path (wbEditChecklistStepInline) syncs the linked progress field and only then
+  // runs the rules. Inline editing skipped the sync, so an automation watching progress read
+  // the stale number: ticking the last checklist step on a card fired it, ticking the same
+  // step on the record page did not.
+  const save = slice('wbSaveInlineValue');
+  assert.match(save, /wbSyncLinkedProgress\(app, item, field\.id\);/);
+  assert.ok(
+    save.indexOf('wbSyncLinkedProgress(app, item, field.id);') < save.indexOf('wbRunAutomations('),
+    'the order is the point: rules must read the recomputed value, not the old one',
+  );
+  // And the card path it is matching is still doing the same thing.
+  const card = main.slice(main.indexOf('function wbEditChecklistStepInline('));
+  const cardBody = card.slice(0, card.indexOf('\n}'));
+  assert.ok(cardBody.indexOf('wbSyncLinkedProgress(') < cardBody.indexOf('wbRunAutomations('));
+});
+
+test('a comment shows the author photo, not always their initials', () => {
+  // This built the initials badge as literal markup and never read avatar_url, so a comment
+  // showed "LM" while the same person's photo rendered everywhere else. wbAvatar draws the
+  // image when there is one and falls back to that same badge when there is not.
+  const comments = slice('wbItemCommentsHtml');
+  assert.match(comments, /const avatar = wbAvatar\(\{ id: c\.authorId, name, color, avatar_url: live\?\.avatar_url \|\| '' \}, 26\);/);
+  assert.ok(!/const avatar = `<span class="wb-avatar"/.test(comments), 'no hand-rolled avatar markup');
+  // wbAvatar only renders an image if the member carries one, so the directory must supply it.
+  const members = main.slice(main.indexOf('function wbMembers('));
+  assert.match(members.slice(0, members.indexOf('\n}')), /avatar_url: user\.avatar_url \|\| ''/);
+});
+
+test('Created and Last modified show their value on the record page', () => {
+  // wbFmtVal already reads these off item.createdAt / item.updatedAt rather than out of
+  // values. The record page passed item: null, so both rendered a dash on every record.
+  assert.match(slice('wbViewItemPage'), /const ctx = \{ companyId, workspace, app, values: item\.values, item, canManage: false \};/);
+  assert.match(main, /if \(field\.type === 'created_time'\) \{ const t = ctx\.item && ctx\.item\.createdAt;/);
+  assert.match(main, /if \(field\.type === 'updated_time'\)/);
+});
+
+test('the timestamp fields stay read-only', () => {
+  // "just make sure that the date created and date updated is uneditable." They are in
+  // WB_AUTO_FIELD_TYPES, which is what wbFieldIsEditable refuses, so handing the item over
+  // does not make them clickable.
+  assert.match(main, /const WB_AUTO_FIELD_TYPES = new Set\(\['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time'\]\);/);
+  assert.match(main, /function wbFieldIsEditable\(field\) \{\n\s*return !!field && !WB_AUTO_FIELD_TYPES\.has\(field\.type\);/);
+  // And the live checkbox toggle needs canManage as well as the item, so it is still off.
+  assert.match(main, /if \(ctx\.item && ctx\.canManage\) \{/);
+});
+
+test('the app strip pins to its scroll container, flush under the header', () => {
+  // .work-surface has overflow: auto, so IT is the scroll container -- the strip's sticky
+  // offset is measured from its top edge, which already sits below the page header.
+  // Offsetting by the header height pushed the strip down by exactly that much and left a
+  // band of dead space above it.
+  assert.match(styles, /\.wb-topbar \{[\s\S]*?position: sticky;[\s\S]*?top: 0;/);
+  assert.ok(!/--quest-header-h/.test(styles), 'the header offset was the bug, not the fix');
+  assert.ok(!/--quest-header-h/.test(main), 'and nothing should still be measuring it');
+  // Pulled through .work-surface's own padding so it meets the header with no seam.
+  assert.match(styles, /\.wb-topbar \{[\s\S]*?margin: 0 -24px 12px;/);
+  // No negative TOP margin: sticky pins the margin box, so that left an uncovered band.
+  assert.match(styles, /\.quest-app\[data-section="workspaces"\] \.work-surface \{ padding-top: 0; \}/);
+  assert.match(styles, /\.work-surface \{[\s\S]*?padding: 18px 24px 26px;/, 'the -24px sides mirror these');
+  // Opaque, or content scrolls visibly under it.
+  assert.match(styles, /\.wb-topbar \{[\s\S]*?background: var\(--surface\);/);
+  // The base rule's overflow: hidden would clip the sticky behaviour.
+  assert.match(styles, /\.wb-topbar \{[\s\S]*?overflow: visible;/);
 });
