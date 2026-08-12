@@ -30382,8 +30382,11 @@ async function createOperationalWorkspace(formNode) {
   state.workspaceNameDraft = null;
   state.workspaceDescriptionDraft = null;
   showToast(`${saved.name} workspace created.`, live ? 'live' : 'local', 'Workspaces');
-  openWorkspaceSetupModal(saved.id, { required: true });
-  navigate(companyPath('settings', { tab: 'setup', workspace: saved.id }, companyId));
+  // Into the workspace itself, so the next thing you do is build an app. It used to force
+  // the guided setup and land on Settings > Setup, which is a settings page you then had to
+  // leave before you could make anything. Setup is still there for anyone who wants it --
+  // the Setup tab, and the prompt an empty workspace shows -- it is just no longer a gate.
+  navigate(companyPath('workspaces', { workspace: saved.id }, companyId));
 }
 
 async function saveOperationalWorkspaceSettings(formNode) {

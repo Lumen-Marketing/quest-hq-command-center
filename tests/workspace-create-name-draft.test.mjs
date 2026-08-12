@@ -84,9 +84,14 @@ test('a fresh dialog is empty, and a created workspace leaves nothing behind', (
   assert.match(body, /state\.workspaceNameDraft = null;/, 'or the next Create opens pre-filled');
 });
 
-test('a new workspace opens its Setup, not the app builder', () => {
+test('a new workspace opens the workspace, not a settings page', () => {
+  // It used to force the guided setup and land on Settings > Setup. "after workspace is
+  // created it will redirect to workspace app so i can start creating an app" -- setup is
+  // still reachable from the Setup tab and from the prompt an empty workspace shows, but it
+  // is no longer a gate standing between creating a workspace and using it.
   const create = main.indexOf('async function createOperationalWorkspace');
   const body = main.slice(create, main.indexOf('\n}', create));
-  assert.match(body, /openWorkspaceSetupModal\(saved\.id, \{ required: true \}\)/);
-  assert.match(body, /navigate\(companyPath\('settings', \{ tab: 'setup', workspace: saved\.id \}, companyId\)\)/);
+  assert.match(body, /navigate\(companyPath\('workspaces', \{ workspace: saved\.id \}, companyId\)\)/);
+  assert.ok(!/openWorkspaceSetupModal/.test(body), 'the guided setup must not be forced open');
+  assert.ok(!/tab: 'setup'/.test(body), 'and it must not land on the settings page either');
 });

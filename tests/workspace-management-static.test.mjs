@@ -62,8 +62,12 @@ test('every operational workspace opens its own setup survey', () => {
   assert.doesNotMatch(modal, /workspacePresetSelect|name="preset_code"/);
   assert.match(create, /preset_code:\s*'blank'/);
   assert.doesNotMatch(create, /form\.preset_code|applyWorkspacePluginPresetLocal\(saved\.id/);
-  assert.match(create, /companyPath\('settings', \{ tab: 'setup', workspace: saved\.id \}, companyId\)/);
-  assert.match(create, /openWorkspaceSetupModal\(saved\.id, \{ required: true \}\)/);
+  // Creating a workspace lands IN the workspace, so the next thing you do is build an app.
+  // It used to force the guided setup open and land on Settings > Setup, which is a
+  // settings page you then had to leave before you could make anything. Setup still exists
+  // per workspace -- the assertions below cover the panel -- it is just not a gate.
+  assert.match(create, /companyPath\('workspaces', \{ workspace: saved\.id \}, companyId\)/);
+  assert.doesNotMatch(create, /openWorkspaceSetupModal/);
   assert.match(source, /module\.createWorkspaceSetupPanel\(/);
   assert.match(source, /workspaceLabel:\s*workspace\.name/);
   assert.match(source, /workspaceId:\s*workspace\.id/);
