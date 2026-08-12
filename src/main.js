@@ -12160,7 +12160,7 @@ function loadJobFile() {
     jobFilePending = import('./jobs/job-file.js').then((mod) => {
       jobFileModule = mod.createJobFile({
         h, can, money, emptyState, appHref, companyPath, formatDate,
-        pipelineStageColor, resolvePipelineStage,
+        pipelineStageColor, resolvePipelineStage, contactById, contactByName,
         productionFor: productionForJob,
         renderJobRecord, renderPipelineNextAction,
         fileThumb, photoFilter: () => state.jobFilePhotoCategory,

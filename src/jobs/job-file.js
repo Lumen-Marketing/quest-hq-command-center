@@ -34,8 +34,26 @@ export const JOB_FILE_TABS = [
 export function createJobFile(ctx) {
   const {
     h, can, money, emptyState, appHref, companyPath, formatDate,
-    pipelineStageColor, resolvePipelineStage,
+    pipelineStageColor, resolvePipelineStage, contactById, contactByName,
   } = ctx;
+
+  /**
+   * The client's name, as a link to their contact record where there is one.
+   *
+   * contact_id is preferred over the name: it survives a rename, which a name search does
+   * not. A job whose client was typed before that link existed falls back to matching the
+   * name, and a client nobody can resolve stays plain text rather than becoming a link that
+   * lands on an empty search.
+   */
+  const clientLink = (job, companyId) => {
+    const name = job.client_name || '';
+    if (!name) return h('No client on this job');
+    if (!can('crm.view', companyId)) return h(name);
+    const contact = (job.contact_id && contactById(job.contact_id)) || contactByName(companyId, name);
+    if (!contact) return h(name);
+    const href = appHref(companyPath('contacts', { contact_id: contact.id }, companyId));
+    return `<a class="link-button" href="${h(href)}" data-router>${h(name)}</a>`;
+  };
 
   const RATING = {
     good: ['Good', '#15803d', '#e7f8ec'],
@@ -117,7 +135,7 @@ export function createJobFile(ctx) {
       <div class="jf-cards">
         <article class="jf-card">
           <h3>Client</h3>
-          <p>${h(job.client_name || 'No client on this job')}</p>
+          <p>${clientLink(job, companyId)}</p>
           ${job.contact_name ? `<p class="jf-sub">${h(job.contact_name)}</p>` : ''}
           ${job.site_address ? `<p class="jf-sub">${h(job.site_address)}</p>` : ''}
         </article>

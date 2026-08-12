@@ -154,3 +154,18 @@ test('a job card can be deleted from the board, like a quote card', () => {
   assert.match(styles, /\.job-card \{ position: relative; \}/);
   assert.match(styles, /\.job-card:hover \.pipe-card-delete,/);
 });
+
+test('the job profile links its client to the contact record', () => {
+  const jobFile = readFileSync(join(root, 'src', 'jobs', 'job-file.js'), 'utf8');
+  // contact_id first: it survives a rename, which a name lookup does not. The name is the
+  // fallback for jobs written before that link existed.
+  assert.match(jobFile, /const contact = \(job\.contact_id && contactById\(job\.contact_id\)\) \|\| contactByName\(companyId, name\);/);
+  assert.match(jobFile, /<a class="link-button" href="\$\{h\(href\)\}" data-router>\$\{h\(name\)\}<\/a>/);
+  // A client nobody can resolve stays plain text rather than a link onto an empty search.
+  assert.match(jobFile, /if \(!contact\) return h\(name\);/);
+  // And it is not offered to somebody who cannot open contacts at all.
+  assert.match(jobFile, /if \(!can\('crm\.view', companyId\)\) return h\(name\);/);
+  assert.match(jobFile, /<p>\$\{clientLink\(job, companyId\)\}<\/p>/);
+  // The lookups have to be handed in, or the module throws on a name it cannot resolve.
+  assert.match(main, /pipelineStageColor, resolvePipelineStage, contactById, contactByName,/);
+});
