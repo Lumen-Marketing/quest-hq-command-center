@@ -13,6 +13,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+// The picker moved into its own lazily-fetched module, leaving a loader shim behind. Its
+// behaviour is read from the module; main.js is still read for the shim and everything else.
+const picker = readFileSync(join(root, 'src', 'workspace', 'relationship-picker.js'), 'utf8');
 const fieldUi = readFileSync(join(root, 'src', 'workspace', 'field-config-ui.js'), 'utf8');
 const css = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
 
@@ -43,28 +46,28 @@ test('multi-select keeps the plain list', () => {
 });
 
 test('choosing a record drives the select, so everything downstream still fires', () => {
-  const body = fn(main, 'wbBindRelationshipPickers');
+  const body = fn(picker, 'wbBindRelationshipPickers');
   assert.match(body, /select\.value = /);
   assert.match(body, /new Event\('change', \{ bubbles: true \}\)/,
     'automations and calculated fields listen for change, not for this widget');
 });
 
 test('the keyboard works, because a search box you must reach for the mouse from is worse', () => {
-  const body = fn(main, 'wbBindRelationshipPickers');
+  const body = fn(picker, 'wbBindRelationshipPickers');
   for (const key of ['ArrowDown', 'ArrowUp', 'Enter', 'Escape']) {
     assert.ok(body.includes(`'${key}'`), `${key} is unhandled`);
   }
 });
 
 test('a long list is capped rather than rendered whole', () => {
-  const body = fn(main, 'wbBindRelationshipPickers');
+  const body = fn(picker, 'wbBindRelationshipPickers');
   assert.match(body, /slice\(0, 50\)/);
   assert.match(body, /more — keep typing/, 'a silent cut looks like a missing record');
 });
 
 test('leaving the box without choosing restores the real value', () => {
   // Half-typed text left sitting in the box reads as a selection that was never made.
-  const body = fn(main, 'wbBindRelationshipPickers');
+  const body = fn(picker, 'wbBindRelationshipPickers');
   assert.match(body, /'blur'/);
 });
 

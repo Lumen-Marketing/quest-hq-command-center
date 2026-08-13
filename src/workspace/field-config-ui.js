@@ -11,6 +11,66 @@
 // The body is unchanged from where it lived in main.js. Everything it calls is
 // destructured from `ctx` under the original names, so this is a move, not a rewrite.
 import { acceptAttr } from '../security/upload-policy.js';
+import {
+  PULL_FAMILY, effectivePull, matchedFields, pullTargets,
+} from './relationship-pull.js';
+
+// "Copy the data inputted on the other field so it will automatically input on it."
+//
+// Picking a linked record can fill fields on THIS record from it. The relationship still
+// displays whatever Show field says -- this is a separate job: the link decides what is
+// shown, the mapping decides what is copied.
+//
+// Only for a single link. With several linked records there is no answer to "which one's
+// address?", and guessing would be worse than not offering it.
+// `h` is passed in rather than closed over: this sits at module scope, and h is destructured
+// from ctx inside renderFieldConfig. Reaching for it here threw a ReferenceError that took
+// the whole relationship config panel down with it -- Show field, Identify by and Specific
+// record all vanished, which looked like they had been removed.
+function pullConfigUI(h, fd, app, targetApp) {
+  const rows = Array.isArray(fd.config.pull) ? fd.config.pull : [];
+  const sources = (targetApp.fields || []).filter((f) => PULL_FAMILY[f.type]);
+  if (!sources.length) return '';
+
+  const row = (pair, index) => {
+    const from = sources.find((f) => f.id === pair.from);
+    // The destination list narrows to what the source can actually become: a date into a
+    // money field is not a copy, it is a corruption.
+    const targets = pullTargets(app, from, fd.id);
+    return `
+      <div class="wb-pull-row" data-wb-pull-row data-index="${index}">
+        <select class="wb-input" data-wb-pull-from data-wb-rel-refresh>
+          <option value="">— Field to copy —</option>
+          ${sources.map((f) => `<option value="${h(f.id)}" ${pair.from === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}
+        </select>
+        <i class="ti ti-arrow-right" aria-hidden="true"></i>
+        <select class="wb-input" data-wb-pull-to ${from ? '' : 'disabled'}>
+          <option value="">${from ? '— Into which field —' : 'Pick a field to copy first'}</option>
+          ${targets.map((f) => `<option value="${h(f.id)}" ${pair.to === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}
+        </select>
+        <button type="button" class="wb-icon-btn danger" data-wb-pull-del title="Remove" aria-label="Remove this mapping"><i class="ti ti-x"></i></button>
+      </div>`;
+  };
+
+  // What "copy everything we share" would actually copy, named. A switch that silently does
+  // twelve things is a switch nobody trusts.
+  const shared = matchedFields(app, targetApp, fd.id);
+  const sharedNote = shared.length
+    ? `Copies <b>${shared.map((pair) => h(pair.label)).join('</b>, <b>')}</b> — the fields both apps call the same thing.`
+    : `Nothing to copy automatically: no field on <b>${h(targetApp.name)}</b> shares a name with one here that could hold it.`;
+
+  return `
+    <div class="wb-field">
+      <label>Copy from the linked record <span class="wb-opt">(optional)</span></label>
+      <div class="wb-check-row">
+        <label class="wb-switch"><input type="checkbox" id="wbRelPullAll" ${fd.config.pullAll ? 'checked' : ''}><span class="wb-slider"></span></label>
+        <div><b>Copy every field they share</b><div class="wb-sub">${sharedNote}</div></div>
+      </div>
+      <div class="wb-pull-list">${rows.map(row).join('')}</div>
+      <button class="btn btn-sm" type="button" data-wb-pull-add><i class="ti ti-plus"></i>Copy a field</button>
+      <div class="wb-sub">When somebody picks a <b>${h(targetApp.name)}</b> record, these fields are filled in from it. A row here wins over the switch above, so name a field explicitly when the two apps call it different things. They stay editable afterwards — this fills a blank, it does not lock it.</div>
+    </div>`;
+}
 
 export function renderFieldConfig(fd, app, ctx) {
   const {
@@ -58,7 +118,8 @@ export function renderFieldConfig(fd, app, ctx) {
       ${targetApp ? `<div class="wb-field"><label>Show field <span class="wb-opt">(what to display from the linked item)</span></label><select class="wb-input" id="wbRelDisplay"><option value="">Item name (default)</option>${displayFields.map((f) => `<option value="${h(f.id)}" ${fd.config.displayField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select><div class="wb-sub">Pick a field from <b>${h(targetApp.name)}</b> to show instead of the item's name.</div></div>` : ''}
       ${targetApp ? `<div class="wb-field"><label>Identify by <span class="wb-opt">(how records are labeled when choosing)</span></label><select class="wb-input" id="wbRelIdentify" data-wb-rel-refresh><option value="">Item name (default)</option>${displayFields.map((f) => `<option value="${h(f.id)}" ${fd.config.identifyField === f.id ? 'selected' : ''}>${h(f.label)}</option>`).join('')}</select><div class="wb-sub">Labels each <b>${h(targetApp.name)}</b> record in the pickers below so you can tell them apart — e.g. by <b>Project Name</b> instead of the shown field.</div></div>` : ''}
       ${targetApp ? `<div class="wb-field"><label>Specific record <span class="wb-opt">(optional — pin one record)</span></label><select class="wb-input" id="wbRelFixed" data-wb-rel-refresh><option value="">Let each item choose</option>${targetApp.items.map((it) => `<option value="${h(it.id)}" ${fd.config.fixedItem === it.id ? 'selected' : ''}>${h(wbRelLabel(targetApp, it, fd.config.identifyField))}</option>`).join('')}</select><div class="wb-sub">Pin every item to one <b>${h(targetApp.name)}</b> record. Leave unset to let each item choose.</div></div>` : ''}
-      <div class="wb-check-row"><label class="wb-switch"><input type="checkbox" id="wbRelMulti" ${fd.config.multiple ? 'checked' : ''} ${fd.config.fixedItem ? 'disabled' : ''}><span class="wb-slider"></span></label><div><b>Allow multiple links</b>${fd.config.fixedItem ? '<div class="wb-sub">Disabled while a specific record is pinned.</div>' : ''}</div></div>`;
+      <div class="wb-check-row"><label class="wb-switch"><input type="checkbox" id="wbRelMulti" ${fd.config.multiple ? 'checked' : ''} ${fd.config.fixedItem ? 'disabled' : ''}><span class="wb-slider"></span></label><div><b>Allow multiple links</b>${fd.config.fixedItem ? '<div class="wb-sub">Disabled while a specific record is pinned.</div>' : ''}</div></div>
+      ${targetApp && !fd.config.multiple ? pullConfigUI(h, fd, app, targetApp) : ''}`;
   }
   if (t === 'calculation') {
     const numFields = app.fields.filter((f) => ['number', 'money', 'calculation', 'duration', 'progress', 'checklist'].includes(f.type));
@@ -117,6 +178,17 @@ export function createFieldInput(ctx) {
     h, WB_FIELD_TYPES, companyContactOptions, wbMembers, wbRelTargetApp, wbDoc, wbRelLabel, wbProgressColor,
     wbProgressDisplayHtml, wbChecklistValue, wbChecklistBodyHtml, wbRatingStars, wbAutoNumberText,
   } = ctx;
+  // The app a field belongs to. A linked app is a pointer with no fields of its own, so it
+  // cannot match and cannot be returned by mistake.
+  function ownerAppOf(companyId, fieldId) {
+    for (const workspace of wbDoc(companyId)?.workspaces || []) {
+      for (const candidate of workspace.apps || []) {
+        if ((candidate.fields || []).some((field) => field.id === fieldId)) return candidate;
+      }
+    }
+    return null;
+  }
+
   function wbRenderFieldInput(companyId, workspaceId, f, val) {
     const meta = WB_FIELD_TYPES[f.type];
     const lbl = `<label>${h(f.label)}${f.required ? '<span class="wb-req">*</span>' : ''} <span class="wb-opt" style="text-transform:none">${h(meta.label)}</span></label>`;
@@ -131,7 +203,28 @@ export function createFieldInput(ctx) {
       case 'money': input = `<div class="wb-inline"><span class="wb-cur">${h(f.config.currency || '$')}</span><input type="number" step="0.01" class="wb-input" data-f="${h(f.id)}" value="${h(val ?? '')}" style="max-width:220px"></div>`; break;
       case 'date': input = `<input type="date" class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" style="max-width:220px">`; break;
       case 'checkbox': input = `<label class="wb-switch"><input type="checkbox" data-f="${h(f.id)}" ${val ? 'checked' : ''}><span class="wb-slider"></span></label>`; break;
-      case 'category': case 'status': input = `<select class="wb-input" data-f="${h(f.id)}"><option value="">— Select —</option>${(f.config.options || []).map((o) => `<option value="${h(o.id)}" ${val === o.id ? 'selected' : ''}>${h(o.label)}</option>`).join('')}</select>`; break;
+      // A type-ahead over the app's own options, not a <select>. Blank until you click it,
+      // filters as you type, and a value nobody has used before joins the list rather than
+      // being refused -- the same control the contacts form uses.
+      //
+      // The <select>'s job is done by a hidden input carrying the option ID, so every read,
+      // write, automation and submit that looks for [data-f] is unchanged. The visible input
+      // holds the LABEL, because that is what somebody types.
+      case 'category': case 'status': {
+        const chosen = (f.config.options || []).find((o) => o.id === val);
+        const labels = (f.config.options || []).map((o) => o.label);
+        input = `
+          <div class="wb-option-combo job-type-combobox" data-wb-option-combo>
+            <input type="hidden" data-f="${h(f.id)}" value="${h(val || '')}" />
+            <input class="wb-input" type="text" value="${h(chosen ? chosen.label : '')}"
+              data-job-type-input data-job-type-options="${h(JSON.stringify(labels))}"
+              data-job-type-allow-custom="true" data-wb-option-input="${h(f.id)}"
+              autocomplete="off" placeholder="${h(`Type or pick a ${String(f.label || 'value').toLowerCase()}`)}" />
+            <button class="job-type-toggle" type="button" data-job-type-toggle aria-label="Show ${h(String(f.label || 'value').toLowerCase())} options"><i class="ti ti-chevron-down"></i></button>
+            <div class="job-type-suggestions-menu" data-job-type-menu hidden></div>
+          </div>`;
+        break;
+      }
       case 'user': {
         const members = wbMembers(companyId);
         input = members.length ? `<select class="wb-input" data-f="${h(f.id)}"><option value="">— Unassigned —</option>${members.map((m) => `<option value="${h(m.id)}" ${val === m.id ? 'selected' : ''}>${h(m.name)}</option>`).join('')}</select>` : '<div class="wb-sub" style="color:var(--warning,#d97706)">No company members to assign.</div>'; break;
@@ -173,8 +266,45 @@ export function createFieldInput(ctx) {
         // Multi-select keeps the plain list: a combobox that has to show several chosen
         // records at once is a different control, and half-building it would be worse than
         // the list that already works.
-        const options = ta.items.map((it) => ({ id: it.id, label: wbRelLabel(ta, it, f.config.identifyField) }));
-        const selectMarkup = `<select class="wb-input" data-f="${h(f.id)}" ${f.config.multiple ? 'multiple style="min-height:96px"' : ''}>${f.config.multiple ? '' : '<option value="">— None —</option>'}${options.map((it) => `<option value="${h(it.id)}" ${cur.includes(it.id) ? 'selected' : ''}>${h(it.label)}</option>`).join('')}</select>`;
+        // Each option carries what picking it would copy, resolved here where both apps are
+        // in hand. The picker then just writes values and needs to know nothing about apps.
+        // Shared-by-name pairs plus the hand-written rows. wbRenderFieldInput is handed the
+        // FIELD, not the app it belongs to, so the owner is found by looking for the app that
+        // carries this field id -- cheap, and it works on the record page as well as the modal.
+        const pulls = effectivePull(ownerAppOf(companyId, f.id), ta, f);
+        const pullFor = (item) => {
+          if (!pulls.length) return '';
+          const out = {};
+          pulls.forEach((pair) => {
+            const src = (ta.fields || []).find((x) => x.id === pair.from);
+            if (!src) return;
+            const raw = item?.values?.[src.id];
+            if (raw === undefined || raw === null || raw === '') return;
+            // A status/category stores an option id that means nothing in the other app, so
+            // the LABEL travels and the destination matches its own option by text.
+            if (src.type === 'status' || src.type === 'category') {
+              const option = (src.config?.options || []).find((o) => o.id === raw);
+              if (!option) return;
+              out[pair.to] = String(option.label);
+              return;
+            }
+            if (typeof raw === 'object') return;
+            out[pair.to] = String(raw);
+          });
+          return Object.keys(out).length ? JSON.stringify(out) : '';
+        };
+        // Two records can carry the same Identify-by value -- two leads for the same person --
+        // and a list of identical rows is a coin toss. Each row also carries what the Show
+        // field says, which is the thing that tells them apart.
+        const options = ta.items.map((it) => {
+          const label = wbRelLabel(ta, it, f.config.identifyField);
+          const shown = f.config.displayField ? wbRelLabel(ta, it, f.config.displayField) : '';
+          // Only when it adds something: with no Show field set both fall back to the item
+          // title, and "Roman — Roman" is noise pretending to be a distinction.
+          const detail = shown && shown !== label ? shown : '';
+          return { id: it.id, label, detail, text: detail ? `${label} — ${detail}` : label, pull: pullFor(it) };
+        });
+        const selectMarkup = `<select class="wb-input" data-f="${h(f.id)}" ${f.config.multiple ? 'multiple style="min-height:96px"' : ''}>${f.config.multiple ? '' : '<option value="">— None —</option>'}${options.map((it) => `<option value="${h(it.id)}" ${cur.includes(it.id) ? 'selected' : ''}${it.pull ? ` data-pull="${h(it.pull)}"` : ''}${it.detail ? ` data-detail="${h(it.detail)}"` : ''}>${h(it.text)}</option>`).join('')}</select>`;
         if (f.config.multiple) {
           input = `${selectMarkup}<div class="wb-sub">Linked to <b>${h(ta.name)}</b> · hold Ctrl/Cmd to select multiple</div>`;
           break;
@@ -185,7 +315,7 @@ export function createFieldInput(ctx) {
             <div class="wb-rel-pick-hidden">${selectMarkup}</div>
             <input class="wb-input wb-rel-search" type="text" role="combobox" autocomplete="off"
               aria-expanded="false" aria-autocomplete="list"
-              placeholder="${h(`Search ${ta.name}…`)}" value="${h(chosen ? chosen.label : '')}"
+              placeholder="${h(`Search ${ta.name}…`)}" value="${h(chosen ? chosen.text : '')}"
               data-wb-rel-search />
             <button type="button" class="wb-rel-clear" data-wb-rel-clear title="Clear" aria-label="Clear"${chosen ? '' : ' hidden'}><i class="ti ti-x"></i></button>
             <div class="wb-rel-results" data-wb-rel-results role="listbox" hidden></div>

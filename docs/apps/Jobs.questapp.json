@@ -1,0 +1,611 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-14T00:00:00.000Z",
+  "app": {
+    "name": "Jobs",
+    "recordName": "Job",
+    "type": "Production",
+    "icon": "ti-hammer",
+    "color": "#e0552d",
+    "description": "Production. One job per trade, arriving from Sales at signature with its draws armed, and running Unscheduled → Paid / closed. Dailies and change orders are sub-item lists; a change order raised here goes back to Underwriting to be priced and returns through Sales. Money is role-gated by workspace permissions, not by this app — a foreman should not be given a role that can read the money fields.",
+    "fields": [
+      {
+        "id": "f-job",
+        "label": "Job",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "58th Pl — Framing"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Job #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "J-",
+          "padding": 4
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-project",
+        "label": "Project",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Henderson — 58th Pl"
+        }
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-trade",
+        "label": "Trade",
+        "type": "category",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "t-roof",
+              "label": "Roofing",
+              "color": "#e0552d"
+            },
+            {
+              "id": "t-frame",
+              "label": "Framing",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "t-demo",
+              "label": "Demo",
+              "color": "#64748b"
+            },
+            {
+              "id": "t-gutter",
+              "label": "Gutters",
+              "color": "#0891b2"
+            },
+            {
+              "id": "t-solar",
+              "label": "Solar",
+              "color": "#eab308"
+            },
+            {
+              "id": "t-window",
+              "label": "Windows",
+              "color": "#2563eb"
+            },
+            {
+              "id": "t-stucco",
+              "label": "Stucco",
+              "color": "#d97706"
+            },
+            {
+              "id": "t-paint",
+              "label": "Paint",
+              "color": "#16a34a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-status",
+        "label": "Status",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "j-unsched",
+              "label": "Unscheduled",
+              "color": "#9AA0A8"
+            },
+            {
+              "id": "j-sched",
+              "label": "Scheduled",
+              "color": "#378ADD"
+            },
+            {
+              "id": "j-progress",
+              "label": "In progress",
+              "color": "#BA7517"
+            },
+            {
+              "id": "j-punch",
+              "label": "Punch list",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "j-complete",
+              "label": "Complete",
+              "color": "#0891b2"
+            },
+            {
+              "id": "j-invoiced",
+              "label": "Invoiced",
+              "color": "#d97706"
+            },
+            {
+              "id": "j-paid",
+              "label": "Paid / closed",
+              "color": "#639922"
+            },
+            {
+              "id": "j-hold",
+              "label": "On hold",
+              "color": "#E24B4A"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-pm",
+        "label": "PM",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-foreman",
+        "label": "Foreman",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-crew",
+        "label": "Crew size",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "people"
+        }
+      },
+      {
+        "id": "f-start",
+        "label": "Start date",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-target",
+        "label": "Target finish",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-actual",
+        "label": "Actual finish",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-day",
+        "label": "Day on site",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "day"
+        }
+      },
+      {
+        "id": "f-value",
+        "label": "Contract value",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What the customer signed"
+        }
+      },
+      {
+        "id": "f-budget",
+        "label": "Budget",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What it should cost"
+        }
+      },
+      {
+        "id": "f-spent",
+        "label": "Cost to date",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What it has cost so far"
+        }
+      },
+      {
+        "id": "f-variance",
+        "label": "Budget variance",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Budget} - {Cost to date}"
+        }
+      },
+      {
+        "id": "f-profit",
+        "label": "Gross profit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Contract value} - {Cost to date}"
+        }
+      },
+      {
+        "id": "f-margin",
+        "label": "Gross margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Contract value} - {Cost to date}) * 100 / {Contract value}"
+        }
+      },
+      {
+        "id": "f-d1",
+        "label": "Draw 1 %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-d2",
+        "label": "Draw 2 %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-d3",
+        "label": "Draw 3 %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-invoiced",
+        "label": "Invoiced to date",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-collected",
+        "label": "Collected to date",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-outstanding",
+        "label": "Outstanding",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Invoiced to date} - {Collected to date}"
+        }
+      },
+      {
+        "id": "f-toinvoice",
+        "label": "Left to invoice",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Contract value} - {Invoiced to date}"
+        }
+      },
+      {
+        "id": "f-plans",
+        "label": "Plans",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-photos",
+        "label": "Photos",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-scope",
+        "label": "Scope & notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "What is being built, exclusions, access"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "automations": [],
+    "collections": [
+      {
+        "id": "c-daily",
+        "name": "Daily reports",
+        "recordName": "Daily report",
+        "fields": [
+          {
+            "id": "d-date",
+            "label": "Date",
+            "type": "date",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "d-crew",
+            "label": "Crew on site",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "unit": "people"
+            }
+          },
+          {
+            "id": "d-hours",
+            "label": "Hours",
+            "type": "number",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "unit": "hrs"
+            }
+          },
+          {
+            "id": "d-work",
+            "label": "Work completed",
+            "type": "textarea",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "What went in today"
+            }
+          },
+          {
+            "id": "d-blockers",
+            "label": "Blockers",
+            "type": "textarea",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "What stopped, and who is needed"
+            }
+          },
+          {
+            "id": "d-photos",
+            "label": "Photos",
+            "type": "file",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "multiple": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "c-co",
+        "name": "Change orders",
+        "recordName": "Change order",
+        "fields": [
+          {
+            "id": "co-date",
+            "label": "Raised on",
+            "type": "date",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          },
+          {
+            "id": "co-desc",
+            "label": "What changed",
+            "type": "textarea",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "placeholder": "Why the scope moved"
+            }
+          },
+          {
+            "id": "co-amount",
+            "label": "Amount",
+            "type": "money",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "currency": "$",
+              "placeholder": ""
+            }
+          },
+          {
+            "id": "co-status",
+            "label": "Status",
+            "type": "status",
+            "required": false,
+            "hidden": false,
+            "config": {
+              "options": [
+                {
+                  "id": "co-draft",
+                  "label": "Raised",
+                  "color": "#9AA0A8"
+                },
+                {
+                  "id": "co-pricing",
+                  "label": "Pricing",
+                  "color": "#BA7517"
+                },
+                {
+                  "id": "co-sent",
+                  "label": "Sent",
+                  "color": "#378ADD"
+                },
+                {
+                  "id": "co-accepted",
+                  "label": "Accepted",
+                  "color": "#639922"
+                },
+                {
+                  "id": "co-rejected",
+                  "label": "Rejected",
+                  "color": "#E24B4A"
+                }
+              ]
+            }
+          },
+          {
+            "id": "co-doc",
+            "label": "Signed ticket",
+            "type": "file",
+            "required": false,
+            "hidden": false,
+            "config": {}
+          }
+        ]
+      }
+    ],
+    "cardFields": [
+      "f-contact",
+      "f-trade",
+      "f-foreman",
+      "f-status"
+    ],
+    "views": [
+      {
+        "id": "v-status",
+        "title": "By status",
+        "fieldId": "f-status",
+        "scope": "team"
+      },
+      {
+        "id": "v-trade",
+        "title": "By trade",
+        "fieldId": "f-trade",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-value",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-value"
+        }
+      },
+      {
+        "id": "w-status",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-status"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 6
+        }
+      },
+      {
+        "id": "w-cal",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-start"
+        }
+      }
+    ]
+  }
+}

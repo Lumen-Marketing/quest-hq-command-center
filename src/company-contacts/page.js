@@ -17,7 +17,8 @@ export function createCompanyContactsPage(ctx) {
     companyPath, emptyState, createSupabaseClient, h, isLiveSupabaseSession, money, navigate,
     normalizeCompanyContact, normalizeCompanyContactField, render,
     requirePermission, showToast, state, supabaseRow, supabaseWrite, timeAgo, wbDoc,
-    wbFieldBuilderMarkup, wbFileIcon, wbFileValues, wbOptRow, acceptAttr, fileTypeKind,
+    wbFieldBuilderMarkup, wbFileIcon, wbFileValues, wbFmtDuration, wbNameValue, wbOptRow, acceptAttr,
+    fileTypeKind, formatDate,
     WB_FIELD_TYPES,
     COMPANY_CONTACT_COLS, COMPANY_CONTACT_FIELD_COLS, COMPANY_CONTACT_FIELD_TYPES,
   } = ctx;
@@ -105,6 +106,64 @@ export function createCompanyContactsPage(ctx) {
     showToast(`Removed "${label}" from ${next.label}.`, isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');
   }
 
+  // Create a contact from nothing but a name.
+  //
+  // Somebody filling in a workspace record types a customer who is not in the directory yet.
+  // Refusing the link leaves the record pointing at nobody; stopping to open Company Contacts
+  // loses what they were doing. So the name becomes a contact with every other field blank,
+  // ready to be filled in later -- which is what "I will manually edit it when the record is
+  // created" asks for.
+  //
+  // An existing contact of the same name is reused rather than duplicated: two Kevin Hendersons
+  // created a minute apart is worse than the problem this solves.
+  async function createCompanyContactNamed(companyId, name) {
+    const target = canonicalCompanyId(companyId);
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    const existing = companyContactsFor(target)
+      .find((contact) => String(contact.name || '').trim().toLowerCase() === clean.toLowerCase());
+    if (existing) return existing;
+    if (!requirePermission('company_contacts.manage', target)) return null;
+    const saved = await persistCompanyContact({ id: '', company_id: target, name: clean, field_values: {} });
+    return saved || null;
+  }
+
+  // Mint a contact for each pending name, and write the new id back into the form that is
+  // still on screen. Sequential rather than parallel: two names that turn out to be the same
+  // person must not race each other into two rows.
+  // Company Contact pickers holding a name that matched nobody: the name is on screen and the
+  // id is empty, which is the state syncCompanyContactPicker leaves behind on purpose so a
+  // half-typed name cannot silently keep the previous contact.
+  function unlinkedContactNames() {
+    return [...document.querySelectorAll('[data-wb-cc-picker]')]
+      .map((picker) => ({
+        name: String(picker.querySelector('[data-wb-cc-name]')?.value || '').trim(),
+        idField: picker.querySelector('[data-wb-cc-id]'),
+      }))
+      .filter((entry) => entry.name && entry.idField && !entry.idField.value);
+  }
+
+  async function createMissingContacts(companyId, entries = unlinkedContactNames()) {
+    let made = 0;
+    let firstName = '';
+    for (const entry of entries) {
+      const contact = await createCompanyContactNamed(companyId, entry.name);
+      // No permission, or the write failed. Leaving the id empty is the honest outcome: the
+      // record saves without a link rather than pointing at something invented.
+      if (!contact) continue;
+      entry.idField.value = contact.id;
+      if (!made) firstName = contact.name;
+      made += 1;
+    }
+    if (made) {
+      showToast(`Added ${made === 1 ? firstName : `${made} contacts`} to Company Contacts.`,
+        isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');
+    }
+    // True even when nothing was made, so the save still goes through with an empty link
+    // rather than the modal sitting there having apparently ignored the button.
+    return true;
+  }
+
   async function deleteCompanyContact(contactId) {
     const contact = companyContactById(contactId);
     if (!contact) return;
@@ -169,41 +228,66 @@ export function createCompanyContactsPage(ctx) {
     ];
   }
 
-  // The first field of a given type that the company has not hidden. Every directory column
-  // is "whatever they called it", so nothing here names a column.
+  // The first field of a given type, hidden or not.
+  //
+  // Hiding is a COLUMN setting, and the number under somebody's name is not a column. Filtering
+  // it here meant that taking Phone out of the table -- reasonable, since it is already under
+  // the name -- silently blanked the line under every name as well.
   function firstFieldOf(companyId, type) {
-    return companyContactFieldsFor(companyId).find((field) => field.type === type && !field.hidden) || null;
+    return companyContactFieldsFor(companyId).find((field) => field.type === type) || null;
   }
 
   const fieldText = (contact, field) => (field ? String(companyContactValue(contact, field) || '').trim() : '');
+
+  // One cell, rendered the way that field's type deserves.
+  function fieldCell(companyId, contact, field) {
+    const value = companyContactValue(contact, field);
+    if (value === '' || value === undefined || value === null) return '<span class="muted-dash">—</span>';
+    if (field.type === 'category') {
+      const color = (field.config?.options || []).find((option) => option.label === value)?.color || '#6b7280';
+      return `<span class="cc-type" style="--cc-type:${h(color)}">${h(value)}</span>`;
+    }
+    if (field.type === 'file') {
+      const files = wbFileValues(value);
+      return files.length ? `<span class="cc-cell-files"><i class="ti ti-paperclip"></i>${h(String(files.length))}</span>` : '<span class="muted-dash">—</span>';
+    }
+    if (field.type === 'money') return `<b>${h(money(Number(value) || 0))}</b>`;
+    return h(displayValue(field, value));
+  }
 
   function renderDirectory(companyId) {
     const doc = wbDoc(companyId);
     const rows = visibleContacts(companyId);
     const chips = typeChips(companyId);
     const chipField = companyContactChipField(companyId);
-    const companyField = firstFieldOf(companyId, 'text');
     const phoneField = firstFieldOf(companyId, 'phone');
     const active = state.companyContactTypeFilter || 'all';
     const canManage = can('company_contacts.manage', companyId);
 
+    // Name, Active with us, Open balance and Last touch are this view's own — they are what a
+    // directory is for, and no field of yours produces them. Everything between is YOUR fields,
+    // one column each, minus the ones hidden in the Fields editor.
+    const columns = companyContactFieldsFor(companyId).filter((field) => !field.hidden);
+    // The grid is built from the count, because the count is now the company's decision. A
+    // fixed six-column rule silently mis-aligned every row the moment a seventh appeared.
+    const tracks = ['minmax(200px, 1.4fr)', ...columns.map(() => 'minmax(130px, .9fr)'),
+      'minmax(180px, 1.2fr)', '120px', '110px'].join(' ');
+    const minWidth = 610 + columns.length * 130;
+    const grid = `style="--cc-cols:${tracks};--cc-min:${minWidth}px"`;
+
     const row = (contact) => {
-      const uses = contactUsage(doc, contact.id);
+      const uses = contactUsage(doc, contact.id, { nameValue: wbNameValue });
       const balance = usageBalance(uses);
       const summary = usageSummary(uses);
       const chip = companyContactValue(contact, chipField);
-      const company = fieldText(contact, companyField);
       const phone = fieldText(contact, phoneField);
       return `
-        <div class="table-row cc-row" role="button" tabindex="0" data-action="open-company-record" data-contact-id="${h(contact.id)}">
+        <div class="table-row cc-row" role="button" tabindex="0" ${grid} data-action="open-company-record" data-contact-id="${h(contact.id)}">
           <span class="cc-cell-name">
             <span class="cc-avatar" style="background:${h(chipColor(companyId, chip))}">${h(initials(contact.name))}</span>
             <span><strong>${h(contact.name)}</strong><small class="cc-cell-phone">${h(phone || '—')}</small></span>
           </span>
-          <span class="cc-cell-company">${company ? `<b>${h(company)}</b>` : '<span class="muted-dash">—</span>'}</span>
-          <span>${chip
-            ? `<span class="cc-type" style="--cc-type:${h(chipColor(companyId, chip))}">${h(chip)}</span>`
-            : '<span class="muted-dash">—</span>'}</span>
+          ${columns.map((field) => `<span class="cc-cell-field">${fieldCell(companyId, contact, field)}</span>`).join('')}
           <span>${summary ? h(summary) : '<span class="muted-dash">—</span>'}</span>
           <span class="cc-cell-money">${balance ? `<b>${h(money(balance))}</b>` : '<span class="muted-dash">—</span>'}</span>
           <span class="cc-cell-touch">${contact.last_activity_at ? h(timeAgo(contact.last_activity_at)) : h(timeAgo(contact.updated_at))}</span>
@@ -235,9 +319,10 @@ export function createCompanyContactsPage(ctx) {
               </button>`).join('')}
           </div>` : ''}
         <div class="data-table cc-table">
-          <div class="table-head">
-            <span>Name</span><span>${h(companyField ? companyField.label : 'Company')}</span>
-            <span>${h(chipField ? chipField.label : 'Type')}</span><span>Active with us</span>
+          <div class="table-head" ${grid}>
+            <span>Name</span>
+            ${columns.map((field) => `<span>${h(field.label)}</span>`).join('')}
+            <span>Active with us</span>
             <span class="cc-cell-money">Open balance</span><span class="cc-cell-touch">Last touch</span>
           </div>
           ${rows.map(row).join('') || emptyState(state.companyContactQuery
@@ -263,9 +348,52 @@ export function createCompanyContactsPage(ctx) {
     return String(value);
   }
 
+  // One row per record in flight. It answers "where has this got to?" without opening the
+  // record: the stage the app gave it, how long it is booked for, its dates, and when somebody
+  // last touched it. Every part is optional -- an app with no status field contributes no
+  // stage rather than an empty slot.
+  function useRow(companyId, use, item) {
+    const facts = item.facts || {};
+    const meta = [];
+    if (facts.duration !== null && facts.duration !== undefined) {
+      meta.push(`<span class="cc-use-fact"><i class="ti ti-clock-hour-4"></i>${h(wbFmtDuration(facts.duration))}</span>`);
+    }
+    // A stamp reads as "8m ago" and a typed date as "Aug 20, 2026": one answers "how long has
+    // this been sitting?", the other answers "when is it happening?".
+    (facts.dates || []).forEach((date) => {
+      const icon = date.relative ? 'ti-history' : 'ti-calendar';
+      const text = date.relative ? timeAgo(date.value) : formatDate(date.value);
+      meta.push(`<span class="cc-use-fact"><i class="ti ${icon}"></i>${h(date.label)} ${h(text)}</span>`);
+    });
+    if (facts.updatedAt) {
+      meta.push(`<span class="cc-use-fact"><i class="ti ti-pencil"></i>Edited ${h(timeAgo(facts.updatedAt))}</span>`);
+    }
+
+    const body = `
+      <span class="cc-use-main">
+        <span class="cc-use-title">${h(item.title)}</span>
+        ${facts.stage ? `<span class="cc-use-stage" style="--cc-stage:${h(facts.stage.color || '#6b7280')}">${h(facts.stage.label)}</span>` : ''}
+      </span>
+      ${meta.length ? `<span class="cc-use-meta">${meta.join('')}</span>` : ''}`;
+
+    // A builder-only workspace has no route, so the row stays plain text rather than becoming
+    // a link that goes nowhere.
+    if (!use.workspaceRouteId) return `<span class="cc-use-row is-flat">${body}</span>`;
+    // workspace / app_id / item_id are the parameter names the router reads. The old link used
+    // ws / app / item, which it ignores -- so these rows opened the workspaces section and
+    // never the record.
+    const href = appHref(companyPath('workspaces', {
+      workspace: use.workspaceRouteId, app_id: use.appId, tab: 'items', item_id: item.id,
+    }, companyId));
+    return `
+      <a class="cc-use-row" href="${h(href)}" data-router title="Open ${h(item.title)} in ${h(use.appName)}">
+        ${body}<i class="ti ti-arrow-right"></i>
+      </a>`;
+  }
+
   function renderCard(companyId, contact) {
     const doc = wbDoc(companyId);
-    const uses = contactUsage(doc, contact.id);
+    const uses = contactUsage(doc, contact.id, { nameValue: wbNameValue });
     const balance = usageBalance(uses);
     const records = uses.reduce((sum, use) => sum + use.count, 0);
     const canManage = can('company_contacts.manage', companyId);
@@ -275,7 +403,9 @@ export function createCompanyContactsPage(ctx) {
     // Long-form fields get their own panel; the short ones read as a summary line under the
     // name, which is how somebody scans a card they opened to answer one question.
     const fields = companyContactFieldsFor(companyId);
-    const filled = fields.filter((field) => field !== chipField && !field.hidden && companyContactValue(contact, field) !== '');
+    // Every field with something in it, hidden ones included: hiding is about the directory's
+    // columns, and a card that quietly omitted details would be a card you cannot trust.
+    const filled = fields.filter((field) => field !== chipField && companyContactValue(contact, field) !== '');
     const longFields = filled.filter((field) => field.type === 'textarea');
     const shortFields = filled.filter((field) => field.type !== 'textarea');
     const meta = shortFields.map((field) => displayValue(field, companyContactValue(contact, field)));
@@ -331,10 +461,7 @@ export function createCompanyContactsPage(ctx) {
                   <span class="cc-ws">${h(use.workspaceName)}</span>
                   <em>${use.count} record${use.count === 1 ? '' : 's'}${use.balance ? ` · ${h(money(use.balance))}` : ''}</em>
                 </div>
-                ${use.items.slice(0, 5).map((item) => `
-                  <a class="cc-use-row" href="${h(appHref(companyPath('workspaces', { ws: use.workspaceId, app: use.appId, item: item.id }, companyId)))}" data-router>
-                    <span>${h(item.title)}</span><i class="ti ti-arrow-right"></i>
-                  </a>`).join('')}
+                ${use.items.slice(0, 5).map((item) => useRow(companyId, use, item)).join('')}
                 ${use.count > 5 ? `<span class="cc-use-more">+${use.count - 5} more</span>` : ''}
               </div>`).join('')
               : '<p class="cc-empty">Nothing references this contact yet. Add a Company Contact field to a workspace app and pick them on a record.</p>'}
@@ -347,8 +474,9 @@ export function createCompanyContactsPage(ctx) {
           </div>
         </div>
 
-        <p class="cc-window-note"><i class="ti ti-pin"></i>
-          A window, not a workbench. Every row links out to the workspace that owns the record — the work happens there. Only the contact's own details are edited here.</p>
+        <div class="cc-card-foot">
+          <a class="btn" href="${h(appHref(companyPath('company-contacts', {}, companyId)))}" data-router><i class="ti ti-arrow-left"></i>Back to Company Contacts</a>
+        </div>
       </div>`;
   }
 
@@ -701,7 +829,9 @@ export function createCompanyContactsPage(ctx) {
 
   return {
     renderCompanyContactsPage, renderCompanyContactEditor, saveCompanyContactForm,
-    deleteCompanyContact, renderCompanyContactFieldsEditor, openCompanyContactFieldEditor,
+    deleteCompanyContact, createCompanyContactNamed, createMissingContacts,
+    renderCompanyContactFieldsEditor,
+    openCompanyContactFieldEditor,
     closeCompanyContactFieldEditor, addCompanyContactField, removeCompanyContactField,
     toggleCompanyContactFieldHidden, configureCompanyContactField,
     moveCompanyContactField, fieldIndexOf, addCompanyContactFieldOption, removeDraftFieldOption,

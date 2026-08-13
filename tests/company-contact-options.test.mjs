@@ -40,7 +40,7 @@ test('the field carries its list, and only a stored list is prunable', () => {
 test('a value that is not on the list offers to join it', () => {
   // This is the "add automatically" half: type something new, use it, and it is offered to
   // the next person instead of being re-invented with a different spelling.
-  const menu = createComboboxMenu(h);
+  const menu = createComboboxMenu({ h });
   const input = fakeInput(['Client', 'GC', 'Sub', 'Vendor'], 'Architect', 'type');
   menu.renderJobTypeSuggestions(input);
   // The quotes around the value are literal in the label; only the value itself is escaped.
@@ -48,7 +48,7 @@ test('a value that is not on the list offers to join it', () => {
 });
 
 test('an exact match is never offered as a new value', () => {
-  const menu = createComboboxMenu(h);
+  const menu = createComboboxMenu({ h });
   const input = fakeInput(['Client', 'GC'], 'Client', 'type');
   menu.renderJobTypeSuggestions(input);
   assert.ok(!/Use "/.test(input.menuHtml), 'that would add a second "Client" to the list');
@@ -56,7 +56,7 @@ test('an exact match is never offered as a new value', () => {
 
 test('typing narrows the list, and still offers the fragment as a new value', () => {
   // "su" matches Sub AND is a legal new label -- somebody naming a type "SU" is not wrong.
-  const menu = createComboboxMenu(h);
+  const menu = createComboboxMenu({ h });
   const input = fakeInput(['Client', 'GC', 'Sub', 'Vendor'], 'su', 'type');
   menu.renderJobTypeSuggestions(input);
   const options = [...input.menuHtml.matchAll(/data-job-type-option="([^"]*)"/g)].map((m) => m[1]);
@@ -64,7 +64,7 @@ test('typing narrows the list, and still offers the fragment as a new value', ()
 });
 
 test('the remove control is a sibling of the option, never a child', () => {
-  const menu = createComboboxMenu(h);
+  const menu = createComboboxMenu({ h });
   const input = fakeInput(['Client', 'GC'], '', 'type');
   menu.renderJobTypeSuggestions(input, true);
   // A <button> inside a <button> is invalid and browsers disagree about which one a click
@@ -74,7 +74,7 @@ test('the remove control is a sibling of the option, never a child', () => {
 });
 
 test('a list with no removeKind renders no remove controls at all', () => {
-  const menu = createComboboxMenu(h);
+  const menu = createComboboxMenu({ h });
   const input = fakeInput(['Ana', 'Ben'], '', '');
   menu.renderJobTypeSuggestions(input, true);
   assert.ok(!/data-job-type-remove-option/.test(input.menuHtml));

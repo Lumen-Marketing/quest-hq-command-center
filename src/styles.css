@@ -31954,9 +31954,12 @@ a.wb-cal-more:hover { color: var(--orange); }
   overflow: visible;
 }
 
+/* Wide enough for the app names people actually use. At 66px "Underwriter" did not fit on one
+   line and was split between letters -- "Underwrite" over "r" -- which reads as a rendering
+   fault rather than a name. */
 .wb-topbar-apps .wb-topbar-tab,
 .wb-topbar-home,
-.wb-topbar-add { width: 66px; }
+.wb-topbar-add { width: 84px; }
 
 .wb-topbar-tab {
   gap: 4px;
@@ -32012,7 +32015,12 @@ a.wb-cal-more:hover { color: var(--orange); }
   line-height: 1.2;
   /* Two lines always, so tabs keep a common height whether the name wraps or not. */
   min-height: 2.4em;
-  word-break: break-word;
+  /* Wrap between words, never between letters. break-word split "Underwriter" across two
+     lines as "Underwrite" + "r", which reads as a rendering fault rather than a name. A word
+     too long for the tile is clamped with an ellipsis instead, which at least stays a word. */
+  word-break: normal;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
 }
 
 /* The contacts table is wider than its panel, so its columns have to be reachable.
@@ -32375,14 +32383,27 @@ a.wb-cal-more:hover { color: var(--orange); }
   overflow-y: hidden;
 }
 
+/* The column count is the company's decision -- Name, Active with us, Open balance and Last
+   touch are this view's own, and every field they have not hidden sits between them. The
+   renderer passes the tracks in as custom properties so the narrow-screen rule below can still
+   collapse the row; an inline grid-template-columns would have beaten it. */
 .cc-table .table-head,
 .cc-table .table-row {
   display: grid;
-  grid-template-columns: minmax(200px, 1.4fr) minmax(140px, .9fr) 110px minmax(180px, 1.2fr) 120px 110px;
+  grid-template-columns: var(--cc-cols, minmax(200px, 1.4fr) minmax(180px, 1.2fr) 120px 110px);
   gap: 12px;
   align-items: center;
-  min-width: 980px;
+  min-width: var(--cc-min, 610px);
 }
+
+.cc-cell-field {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-cell-files { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 
 .cc-table .table-row { cursor: pointer; }
 
@@ -32731,18 +32752,86 @@ a.wb-cal-more:hover { color: var(--orange); }
    width. In the contact form it spans both columns, so let it fill them. */
 .cc-editor .wb-file-field { width: 100%; }
 
-.cc-window-note {
+/* A row in "In flight": the record, its stage, and the few facts worth reading before
+   deciding whether to open it. */
+.cc-use-row {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  padding: 11px 14px;
-  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 30%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--warning, #d97706) 8%, transparent);
-  color: var(--muted);
-  font-size: 12.5px;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: var(--text);
+  text-decoration: none;
+  min-width: 0;
 }
+
+a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
+.cc-use-row.is-flat { cursor: default; }
+.cc-use-row > .ti-arrow-right { margin-left: auto; color: var(--muted); flex: 0 0 auto; }
+
+.cc-use-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cc-use-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The stage reads as the chip the app draws it as, so the same work looks the same on the
+   contact card as it does on the board it came from. */
+.cc-use-stage {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--cc-stage, #6b7280) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cc-stage, #6b7280) 14%, transparent);
+  color: color-mix(in srgb, var(--cc-stage, #6b7280) 75%, var(--text));
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cc-use-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  width: 100%;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.cc-use-fact { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cc-use-fact i { font-size: 13px; }
+
+/* A row in the record picker: what the record IS, and what tells it apart from the one with
+   the same name underneath it. */
+.wb-rel-result-name { display: block; }
+
+.wb-rel-result-detail {
+  display: block;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-rel-result.active .wb-rel-result-detail { color: inherit; opacity: .8; }
+
+/* A way back out of the card. The breadcrumb at the top does the same job, but somebody who
+   has read to the bottom of a long record should not have to travel back up to leave. */
+.cc-card-foot { display: flex; }
 
 @media (max-width: 720px) {
   .cc-table .table-head { display: none; }
@@ -32750,7 +32839,10 @@ a.wb-cal-more:hover { color: var(--orange); }
     grid-template-columns: minmax(0, 1fr);
     min-width: 0;
   }
-  .cc-table .table-row > span:nth-child(n+4) { display: none; }
+  /* Just the name. The column count is no longer fixed, so "everything from the fourth"
+     stopped meaning anything -- and on a phone the row is one line whatever the company
+     configured. The full record is a tap away. */
+  .cc-table .table-row > span:not(.cc-cell-name) { display: none; }
 }
 
 /* An option you can prune: the X is a sibling of the option button, never nested inside it,

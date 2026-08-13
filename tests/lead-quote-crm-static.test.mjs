@@ -53,8 +53,14 @@ test('crm 1 and crm 2 use separate quote and job stage models', () => {
   assert.match(source, /\{ name: 'In Production', color:/);
   assert.doesNotMatch(source.match(/const CRM2_JOB_STAGES = \[[\s\S]*?\];/)?.[0] || '', /QC \/ punch list|Invoiced|Paid \/ closed|On hold/);
   assert.match(source, /function activeCrmPluginId\(companyId = activeCompanyId\(\)\)/);
-  assert.match(source, /function pipelineStages\(kind, companyId = activeCompanyId\(\)\)/);
-  assert.match(source, /if \(activeCrmPluginId\(companyId\) === 'crm_2'\)/);
+  // No `= activeCompanyId()` default any more: that reads `state`, and the state literal
+  // normalises its own seed rows, so the default fired inside state's temporal dead zone and
+  // the app failed to boot. The company is resolved inside, behind the readiness flag.
+  assert.match(source, /function pipelineStages\(kind, companyId\) \{/);
+  assert.match(source, /if \(stageLookupReady\) \{/);
+  assert.match(source, /let stageLookupReady = false;/);
+  assert.match(source, /stageLookupReady = true;/);
+  assert.match(source, /if \(activeCrmPluginId\(owner\) === 'crm_2'\)/);
 });
 
 test('record detail routes read as contacts and quotes', () => {

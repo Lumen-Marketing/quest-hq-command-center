@@ -57,67 +57,10 @@ const GOLDEN = {
   'Target margin %': 25,
 };
 
-test('the file is the shape the importer accepts', () => {
-  // The whole validation is `bundle.app` with an array of fields — but the rest still has to
-  // survive normalisation rather than being silently rewritten.
-  assert.equal(bundle.format, 'quest-hq-app');
-  assert.ok(Array.isArray(app.fields) && app.fields.length > 0);
-  assert.match(app.icon, /^ti-[a-z0-9-]+$/, 'a bad icon is silently reset to ti-address-book');
-  assert.match(app.color, /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
-  app.fields.forEach((field) => {
-    assert.ok(WB_FIELD_TYPES[field.type], `"${field.label}" has type ${field.type}, which imports as plain text`);
-  });
-});
-
-test('nothing points at an id that install cannot remap', () => {
-  // relationship/rollup targets and progress `link:` sources are NOT remapped on install, so
-  // they would arrive pointing at nothing in a fresh workspace.
-  app.fields.forEach((field) => {
-    ['targetApp', 'targetCompany', 'relField', 'targetField', 'fixedItem', 'displayField', 'identifyField']
-      .forEach((key) => assert.ok(!field.config?.[key], `"${field.label}" carries config.${key}, which would dangle`));
-  });
-  // These ARE remapped, so they must resolve inside the bundle.
-  const ids = new Set(app.fields.map((f) => f.id));
-  (app.cardFields || []).forEach((id) => assert.ok(ids.has(id), `cardFields references ${id}`));
-  (app.dashboard || []).forEach((w) => {
-    if (w.config?.fieldId) assert.ok(ids.has(w.config.fieldId), `widget ${w.id} references ${w.config.fieldId}`);
-  });
-  (app.views || []).forEach((view) => {
-    assert.equal(view.scope, 'team', 'a private view is dropped on install');
-    assert.ok(['status', 'category'].includes(fieldByLabel(app.fields.find((f) => f.id === view.fieldId)?.label)?.type));
-  });
-});
-
-test('every formula is flattened to stored fields only', () => {
-  // wbCalcRaw substitutes `Number(values[id] || 0)`, and a calculation's value is never
-  // written to values — so a formula that references another calculation silently reads 0.
-  // This is the single mistake that would make the app look right and compute wrong.
-  const stored = new Set(app.fields.filter((f) => ['number', 'money'].includes(f.type)).map((f) => f.label.toLowerCase()));
-  app.fields.filter((f) => f.type === 'calculation').forEach((field) => {
-    [...field.config.formula.matchAll(/\{([^}]+)\}/g)].forEach(([, ref]) => {
-      assert.ok(stored.has(ref.trim().toLowerCase()), `"${field.label}" references {${ref}}, which is not a stored number`);
-    });
-  });
-});
-
-test('every formula survives the grammar after substitution', () => {
-  // Operators are + - * / ( ) and digits. Anything else — a function name, a comma, a % —
-  // fails the whitelist and the field renders a warning triangle instead of a number.
-  app.fields.filter((f) => f.type === 'calculation').forEach((field) => {
-    const expr = field.config.formula.replace(/\{[^}]+\}/g, '1');
-    assert.match(expr, /^[-+*/(). 0-9]+$/, `"${field.label}" has illegal characters: ${expr}`);
-  });
-});
-
-test('no two fields share a label, because formulas reference by label', () => {
-  // find() takes the first match, so a duplicate silently redirects a formula.
-  const seen = new Set();
-  app.fields.forEach((field) => {
-    const key = field.label.toLowerCase();
-    assert.ok(!seen.has(key), `duplicate label: ${field.label}`);
-    seen.add(key);
-  });
-});
+// The import rules -- field types, dangling ids, the formula grammar, duplicate labels -- are
+// checked for EVERY app in docs/apps by tests/app-bundles.test.mjs. What is left here is the
+// one thing only this app can be checked for: that its arithmetic still agrees with the
+// calculator it was built from.
 
 test('the app computes what the shipped calculator computes', () => {
   const values = valuesFrom(GOLDEN);

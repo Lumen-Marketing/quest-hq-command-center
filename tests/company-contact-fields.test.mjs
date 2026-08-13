@@ -120,25 +120,6 @@ test('the drop zone does not claim a contact belongs to one workspace', () => {
   assert.match(page, /data-wb-file-hint="Shared with every workspace"/);
 });
 
-test('the directory follows the mockup: phone under the name, company its own column', () => {
-  const body = fn('renderDirectory', page);
-  // Six columns, in the order the design puts them: Name, Company, Type, Active with us,
-  // Open balance, Last touch. Workspace folded into "Active with us", which already reads
-  // across every workspace.
-  assert.match(body, /<strong>\$\{h\(contact\.name\)\}<\/strong><small class="cc-cell-phone">/);
-  assert.match(body, /<span class="cc-cell-company">/);
-  assert.ok(!/Workspace<\/span>/.test(body), 'the workspace column is gone');
-  // Every column header is whatever the company called that field, not a hard-coded word.
-  assert.match(body, /\$\{h\(companyField \? companyField\.label : 'Company'\)\}/);
-  assert.match(body, /\$\{h\(chipField \? chipField\.label : 'Type'\)\}/);
-});
-
-test('the directory reads its columns off the field list, skipping hidden ones', () => {
-  const body = fn('firstFieldOf', page);
-  assert.match(body, /field\.type === type && !field\.hidden/);
-  assert.match(fn('renderDirectory', page), /const companyField = firstFieldOf\(companyId, 'text'\);/);
-  assert.match(fn('renderDirectory', page), /const phoneField = firstFieldOf\(companyId, 'phone'\);/);
-});
 
 test('the card shows an attachment as a link, never as its JSON', () => {
   // {"name":"quote.pdf","url":"https://…"} printed raw is what somebody reads instead of
@@ -206,13 +187,50 @@ test('a palette type dropped on the app field list actually lands', () => {
   assert.ok(!/'data-wb-field-dropzone="\$\{h\(scope\)\}"'/.test(markup));
 });
 
+test('hiding the phone column does not blank the number under the name', () => {
+  // Hiding is a COLUMN setting. Taking Phone out of the table is reasonable — it is already
+  // under the name — and doing so must not remove it from under the name as well.
+  assert.match(fn('firstFieldOf', page), /\.find\(\(field\) => field\.type === type\) \|\| null;/);
+  assert.ok(!/field\.type === type && !field\.hidden/.test(page), 'the sub-line is not a column');
+  const body = fn('renderDirectory', page);
+  assert.match(body, /const phoneField = firstFieldOf\(companyId, 'phone'\);/);
+  assert.match(body, /<small class="cc-cell-phone">\$\{h\(phone \|\| '—'\)\}<\/small>/);
+});
+
+test('the job form builds without throwing', () => {
+  // renderSearchCombobox takes `h` as its FIRST argument. ownerField was not passing it, so
+  // `h` was the string 'Account owner', calling it threw, and the exception escaped while the
+  // form was being built -- clicking Add job rendered nothing at all.
+  const editor = readFileSync(join(root, 'src', 'jobs', 'job-editor.js'), 'utf8');
+  const calls = [...editor.matchAll(/renderSearchCombobox\(\s*([A-Za-z_$][\w$]*|')/g)].map((m) => m[1]);
+  assert.ok(calls.length >= 2, 'expected the owner and client comboboxes');
+  calls.forEach((first) => assert.equal(first, 'h', 'every call must pass h first'));
+});
+
+test('both save buttons say they are working', () => {
+  // A save that writes several rows and then re-renders looks like nothing happened until it
+  // finishes. The button disables, spins and announces itself.
+  assert.match(main, /const done = beginSubmitting\(node, 'Saving…'\);[\s\S]{0,220}saveCompanyContactFields\(\)/);
+  assert.match(main, /const done = beginSubmitting\(event\.target, 'Saving…'\);[\s\S]{0,200}saveCompanyContactForm\(event\.target\)/);
+  // Restored whatever happened, or a failed save leaves a button nobody can press again.
+  assert.equal((main.match(/\.finally\(\(\) => done\?\.\(\)\)/g) || []).length, 2);
+});
+
+test('the busy helper works for a button that is not in a form', () => {
+  // The field editor saves from a button in the modal header, nowhere near a <form>.
+  const body = fn('beginSubmitting');
+  assert.match(body, /formNode\?\.matches\?\.\('button'\) \? formNode : formNode\?\.querySelector\?\.\('button\[type="submit"\]'\)/);
+  assert.match(body, /button\.setAttribute\('aria-busy', 'true'\)/, 'a spinner alone says nothing to a screen reader');
+  assert.match(body, /btn-spinner/);
+});
+
 test('hidden means off the directory, not off the record', () => {
   assert.match(fn('normalizeCompanyContactField'), /hidden: input\.hidden === true,/);
   assert.match(main, /const COMPANY_CONTACT_FIELD_COLS = \['id', 'company_id', 'label', 'type', 'config', 'required', 'hidden', 'position'\];/);
-  // The card and the directory subline skip it; the form does not.
-  assert.match(fn('renderCard', page), /!field\.hidden && companyContactValue/);
-  // The form maps over the whole list with no hidden filter, which is the point: hidden takes
-  // a field off the readouts, it does not stop it being filled in.
+  // The table drops it; the card and the form keep it. Hiding is a column setting, and a card
+  // that quietly omitted details would be a card you cannot trust.
+  assert.match(fn('renderDirectory', page), /\.filter\(\(field\) => !field\.hidden\)/);
+  assert.match(fn('renderCard', page), /const filled = fields\.filter\(\(field\) => field !== chipField && companyContactValue/);
   assert.match(fn('renderCompanyContactEditor', page), /\$\{fields\.map\(\(field\) => fieldControl\(companyId, field, edit\.field_values\?\.\[field\.id\] \?\? ''\)\)\.join\(''\)\}/);
 });
 
@@ -240,4 +258,23 @@ test('name stays a real column, because it is the title', () => {
   // Making it a custom field would let somebody delete the only thing identifying a row.
   assert.match(fn('renderCompanyContactEditor', page), /<input name="name"[^>]*required/);
   assert.match(main, /const COMPANY_CONTACT_COLS = \['id', 'company_id', 'name', 'field_values'/);
+});
+
+test('the directory keeps its four built-ins and a column per visible field', () => {
+  const body = fn('renderDirectory', page);
+  // Name, Active with us, Open balance and Last touch are this view's own -- no field of
+  // theirs produces them. Between them sits one column per field they have not hidden.
+  assert.match(body, /<strong>\$\{h\(contact\.name\)\}<\/strong><small class="cc-cell-phone">/);
+  assert.match(body, /const columns = companyContactFieldsFor\(companyId\)\.filter\(\(field\) => !field\.hidden\);/);
+  assert.match(body, /columns\.map\(\(field\) => `<span class="cc-cell-field">\$\{fieldCell/);
+  assert.ok(!/Workspace<\/span>/.test(body), 'the workspace column is gone');
+});
+
+test('the grid is built from the column count, and can still collapse', () => {
+  // A fixed six-track rule mis-aligned every row the moment a seventh column appeared.
+  const body = fn('renderDirectory', page);
+  assert.match(body, /--cc-cols:\$\{tracks\};--cc-min:\$\{minWidth\}px/);
+  // Custom properties, not the properties themselves: an inline grid-template-columns would
+  // beat the narrow-screen rule that collapses the row to a single column.
+  assert.match(body, /const tracks = \['minmax\(200px, 1\.4fr\)', \.\.\.columns\.map/);
 });

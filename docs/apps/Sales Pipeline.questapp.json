@@ -1,0 +1,421 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-14T00:00:00.000Z",
+  "app": {
+    "name": "Sales Pipeline",
+    "recordName": "Deal",
+    "type": "Sales",
+    "icon": "ti-writing-sign",
+    "color": "#378ADD",
+    "description": "The Closer's board. A priced quote arrives from Underwriting and moves Estimate sent → Negotiating → Contract sent → Waiting to sign → Won. One deal per trade per address, grouped under a Project; each Won trade leaves as its own Job.",
+    "fields": [
+      {
+        "id": "f-deal",
+        "label": "Deal",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "placeholder": "58th Pl — Roofing"
+        }
+      },
+      {
+        "id": "f-no",
+        "label": "Deal #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "Q-",
+          "padding": 4
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-project",
+        "label": "Project",
+        "type": "text",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Henderson — 58th Pl"
+        }
+      },
+      {
+        "id": "f-address",
+        "label": "Address",
+        "type": "location",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-trade",
+        "label": "Trade",
+        "type": "category",
+        "required": true,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "t-roof",
+              "label": "Roofing",
+              "color": "#e0552d"
+            },
+            {
+              "id": "t-frame",
+              "label": "Framing",
+              "color": "#7c3aed"
+            },
+            {
+              "id": "t-demo",
+              "label": "Demo",
+              "color": "#64748b"
+            },
+            {
+              "id": "t-gutter",
+              "label": "Gutters",
+              "color": "#0891b2"
+            },
+            {
+              "id": "t-solar",
+              "label": "Solar",
+              "color": "#eab308"
+            },
+            {
+              "id": "t-window",
+              "label": "Windows",
+              "color": "#2563eb"
+            },
+            {
+              "id": "t-stucco",
+              "label": "Stucco",
+              "color": "#d97706"
+            },
+            {
+              "id": "t-paint",
+              "label": "Paint",
+              "color": "#16a34a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-stage",
+        "label": "Stage",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "s-est",
+              "label": "Estimate sent",
+              "color": "#378ADD"
+            },
+            {
+              "id": "s-neg",
+              "label": "Negotiating",
+              "color": "#BA7517"
+            },
+            {
+              "id": "s-contract",
+              "label": "Contract sent",
+              "color": "#7F77DD"
+            },
+            {
+              "id": "s-wait",
+              "label": "Waiting to sign",
+              "color": "#0891b2"
+            },
+            {
+              "id": "s-won",
+              "label": "Won",
+              "color": "#639922"
+            },
+            {
+              "id": "s-lost",
+              "label": "Lost",
+              "color": "#E24B4A"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-closer",
+        "label": "Closer",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-price",
+        "label": "Contract price",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What the customer signs for"
+        }
+      },
+      {
+        "id": "f-cost",
+        "label": "Cost",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "From the underwriting sheet"
+        }
+      },
+      {
+        "id": "f-profit",
+        "label": "Gross profit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Contract price} - {Cost}"
+        }
+      },
+      {
+        "id": "f-margin",
+        "label": "Gross margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Contract price} - {Cost}) * 100 / {Contract price}"
+        }
+      },
+      {
+        "id": "f-proposal",
+        "label": "Proposal type",
+        "type": "category",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "p-lump",
+              "label": "Lump sum",
+              "color": "#2563eb"
+            },
+            {
+              "id": "p-split",
+              "label": "Split per scope",
+              "color": "#7c3aed"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-d1",
+        "label": "Draw 1 %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-d2",
+        "label": "Draw 2 %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-d3",
+        "label": "Draw 3 %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-dtotal",
+        "label": "Draw total %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Draw 1 %} + {Draw 2 %} + {Draw 3 %})"
+        }
+      },
+      {
+        "id": "f-d1amt",
+        "label": "Draw 1 amount",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Contract price} * {Draw 1 %} / 100"
+        }
+      },
+      {
+        "id": "f-d2amt",
+        "label": "Draw 2 amount",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Contract price} * {Draw 2 %} / 100"
+        }
+      },
+      {
+        "id": "f-d3amt",
+        "label": "Draw 3 amount",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Contract price} * {Draw 3 %} / 100"
+        }
+      },
+      {
+        "id": "f-sent",
+        "label": "Estimate sent on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-close",
+        "label": "Expected close",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-signed",
+        "label": "Signed on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-docs",
+        "label": "Proposal & contract",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Objections, concessions, who signs"
+        }
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-touched",
+        "label": "Last modified",
+        "type": "updated_time",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      }
+    ],
+    "items": [],
+    "automations": [],
+    "collections": [],
+    "cardFields": [
+      "f-contact",
+      "f-trade",
+      "f-price",
+      "f-stage"
+    ],
+    "views": [
+      {
+        "id": "v-stage",
+        "title": "By stage",
+        "fieldId": "f-stage",
+        "scope": "team"
+      },
+      {
+        "id": "v-trade",
+        "title": "By trade",
+        "fieldId": "f-trade",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-open",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-value",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-price"
+        }
+      },
+      {
+        "id": "w-stages",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-stage"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 6
+        }
+      },
+      {
+        "id": "w-close",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-close"
+        }
+      }
+    ]
+  }
+}

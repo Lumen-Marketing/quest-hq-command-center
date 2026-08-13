@@ -9,6 +9,7 @@ export function createJobEditor(ctx) {
   } = ctx;
 
   const ownerField = (value, companyId) => renderSearchCombobox(
+    h,
     'Account owner',
     'owner_name',
     value,

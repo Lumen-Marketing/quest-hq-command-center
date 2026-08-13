@@ -4,6 +4,7 @@ import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import {
   companiesToSave, resolveAppEntry, tileTargetApp, workspaceApps,
 } from './workspace/builder-core.js';
+import { readPullRows } from './workspace/pull-rows.js';
 // The pipeline MODEL is eager -- the stage pill, filters and the stage manager all need
 // it. Only the board's rendering is deferred, in ./workspace/board-view.js.
 import {
@@ -1418,6 +1419,8 @@ function normalizeContactStageList(rows, fallback = DEFAULT_CONTACT_STAGES) {
   return output.length ? output : fallback.map((stage) => ({ ...stage }));
 }
 
+// False until `state` exists. See pipelineStages.
+let stageLookupReady = false;
 let JOB_STAGES = loadStageList(JOB_STAGES_KEY, DEFAULT_JOB_STAGES);
 let CONTACT_STAGES = loadStageList(CONTACT_STAGES_KEY, DEFAULT_CONTACT_STAGES);
 let DEAL_STAGES = loadStageList(DEAL_STAGES_KEY, DEFAULT_DEAL_STAGES);
@@ -1425,20 +1428,34 @@ let DEAL_STAGES = loadStageList(DEAL_STAGES_KEY, DEFAULT_DEAL_STAGES);
 function jobStages() { return JOB_STAGES; }
 function contactStages() { return CONTACT_STAGES; }
 function dealStages() { return DEAL_STAGES; }
-function jobStageNames() { return JOB_STAGES.map((stage) => stage.name); }
+// Through pipelineStages, always. It is the only function that knows a company running the
+// CRM 2 plugin has a different set -- Underwriting / Estimate Sent / Negotiating / Contract
+// Sent / Waiting to Sign / Won -- and these read straight from JOB_STAGES / DEAL_STAGES,
+// which are the CRM 1 defaults.
+//
+// That split is what made the quote stage rail unclickable. The rail drew the CRM 2 stages
+// and resolveDealStage validated against the CRM 1 ones, so every name that existed in only
+// one of them was silently rewritten back on save. Won worked because it is in both lists.
+function jobStageNames(companyId) { return pipelineStages('jobs', companyId).map((stage) => stage.name); }
 function contactStageNames() { return CONTACT_STAGES.map((stage) => stage.name); }
-function dealStageNames() { return DEAL_STAGES.map((stage) => stage.name); }
-function jobStageColor(name) { return (JOB_STAGES.find((stage) => stage.name === name) || {}).color || '#9AA0A8'; }
+function dealStageNames(companyId) { return pipelineStages('deals', companyId).map((stage) => stage.name); }
 function contactStageColor(name) { return (CONTACT_STAGES.find((stage) => stage.name === name) || {}).color || '#9AA0A8'; }
-function dealStageColor(name) { return (DEAL_STAGES.find((stage) => stage.name === name) || {}).color || '#9AA0A8'; }
 function activeCrmPluginId(companyId = activeCompanyId()) {
   if (isPluginInstalled(companyId, 'crm_2')) return 'crm_2';
   if (isPluginInstalled(companyId, 'crm')) return 'crm';
   return 'crm';
 }
-function pipelineStages(kind, companyId = activeCompanyId()) {
+function pipelineStages(kind, companyId) {
   if (kind === 'contacts') return CONTACT_STAGES;
-  if (activeCrmPluginId(companyId) === 'crm_2') return kind === 'deals' ? CRM2_DEAL_STAGES : CRM2_JOB_STAGES;
+  // Which plugin a company runs is a question about `state`, and `const state = {...}` calls
+  // normalizeJob / normalizeDeal on its own seed rows while it is still being built -- so
+  // asking then reads `state` inside its own temporal dead zone and the whole app fails to
+  // boot. Until it exists, the defaults are the honest answer; every row that arrives from the
+  // server is normalised again afterwards, when the real answer is available.
+  if (stageLookupReady) {
+    const owner = companyId || activeCompanyId();
+    if (activeCrmPluginId(owner) === 'crm_2') return kind === 'deals' ? CRM2_DEAL_STAGES : CRM2_JOB_STAGES;
+  }
   return kind === 'deals' ? DEAL_STAGES : JOB_STAGES;
 }
 function pipelineStageColor(kind, name, companyId = activeCompanyId()) {
@@ -1464,12 +1481,15 @@ function resolvePipelineStage(kind, value, companyId = activeCompanyId()) {
   return names.includes(aliases[lower]) ? aliases[lower] : names[0];
 }
 
-function resolveJobStage(value) {
-  const names = jobStageNames();
+function resolveJobStage(value, companyId) {
+  const names = jobStageNames(companyId);
   const raw = String(value || '').trim();
+  if (!raw) return names[0] || 'Unscheduled';
   if (names.includes(raw)) return raw;
   if (LEGACY_JOB_STAGE_MAP[raw] && names.includes(LEGACY_JOB_STAGE_MAP[raw])) return LEGACY_JOB_STAGE_MAP[raw];
-  return names[0] || 'Unscheduled';
+  // Kept, not rewritten. Snapping an unrecognised stage back to the first one is how a click
+  // on a stage the rail offered looked like it had done nothing at all.
+  return raw;
 }
 function resolveContactStage(value) {
   const names = contactStageNames();
@@ -1479,9 +1499,10 @@ function resolveContactStage(value) {
   if (names.includes(legacy)) return legacy;
   return names[0] || 'Prospects';
 }
-function resolveDealStage(value) {
-  const names = dealStageNames();
+function resolveDealStage(value, companyId) {
+  const names = dealStageNames(companyId);
   const raw = String(value || '').trim();
+  if (!raw) return names[0] || 'Underwriting';
   if (names.includes(raw)) return raw;
   const legacy = {
     Prospect: 'Underwriting',
@@ -1493,7 +1514,8 @@ function resolveDealStage(value) {
     Lost: 'Negotiating',
   }[raw];
   if (legacy && names.includes(legacy)) return legacy;
-  return names[0] || 'Underwriting';
+  // Kept, not rewritten -- see resolveJobStage.
+  return raw;
 }
 
 function persistJobStages() { JOB_STAGES = JOB_STAGES.filter((stage) => stage.name); writeJson(JOB_STAGES_KEY, JOB_STAGES); }
@@ -2747,6 +2769,10 @@ const state = {
   callsStats: { key: '', rows: [], sync: null, unavailable: false },
   callsPresence: { agents: [], error: '', forbidden: false, notConnected: false },
 };
+// `state` exists from here on, so the CRM-plugin question can be asked. Anything normalised
+// above used the default stage lists; server rows are normalised again after they load.
+stageLookupReady = true;
+
 
 const app = document.getElementById('app');
 let supabaseClientCache = null;
@@ -4202,7 +4228,9 @@ function loadComboboxMenu() {
   if (comboboxMenuModule) return Promise.resolve(comboboxMenuModule);
   if (!comboboxMenuPending) {
     comboboxMenuPending = import('./ui/combobox-menu.js').then((mod) => {
-      comboboxMenuModule = mod.createComboboxMenu(h);
+      comboboxMenuModule = mod.createComboboxMenu({
+        h, wbDoc, wbSave, wbUid, can, showToast, activeCompanyId, WB_PALETTE,
+      });
       return comboboxMenuModule;
     }).catch((error) => {
       comboboxMenuPending = null;
@@ -15814,93 +15842,33 @@ function wbUrlLabel(value) {
  * Filtering is substring, case-insensitive, on the same label the option shows, so what you
  * type matches what you see.
  */
+// The picker and its field-copy live in ./workspace/relationship-picker.js and are fetched
+// on the first record form that carries a relationship field. Until it arrives the field is
+// still a working <select> -- the search box is an enhancement over it, not a replacement.
+let relationshipPickerModule = null;
+let relationshipPickerPending = null;
+
+function loadRelationshipPicker() {
+  if (relationshipPickerModule) return Promise.resolve(relationshipPickerModule);
+  if (!relationshipPickerPending) {
+    relationshipPickerPending = import('./workspace/relationship-picker.js').then((mod) => {
+      relationshipPickerModule = mod.createRelationshipPicker({ h });
+      return relationshipPickerModule;
+    }).catch((error) => {
+      relationshipPickerPending = null;
+      throw error;
+    });
+  }
+  return relationshipPickerPending;
+}
+
 function wbBindRelationshipPickers(root) {
-  if (!root) return;
-  root.querySelectorAll('[data-wb-rel-pick]').forEach((pick) => {
-    if (pick.dataset.wbRelBound === '1') return;
-    pick.dataset.wbRelBound = '1';
-    const select = pick.querySelector('select[data-f]');
-    const search = pick.querySelector('[data-wb-rel-search]');
-    const results = pick.querySelector('[data-wb-rel-results]');
-    const clear = pick.querySelector('[data-wb-rel-clear]');
-    if (!select || !search || !results) return;
-
-    const options = [...select.options]
-      .filter((option) => option.value)
-      .map((option) => ({ id: option.value, label: option.textContent }));
-    let active = -1;
-
-    const close = () => {
-      results.hidden = true;
-      search.setAttribute('aria-expanded', 'false');
-      active = -1;
-    };
-
-    const commit = (option) => {
-      select.value = option ? option.id : '';
-      search.value = option ? option.label : '';
-      if (clear) clear.hidden = !option;
-      // Anything listening for a change on the field -- an automation, a dependent
-      // calculation -- must fire as if it had been picked from the list.
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      close();
-    };
-
-    const paint = (query) => {
-      const needle = query.trim().toLowerCase();
-      const matches = needle
-        ? options.filter((option) => option.label.toLowerCase().includes(needle))
-        : options;
-      const shown = matches.slice(0, 50);
-      results.innerHTML = shown.length
-        ? shown.map((option, index) => `<button type="button" role="option" class="wb-rel-result ${index === active ? 'active' : ''}" data-rel-id="${h(option.id)}">${h(option.label)}</button>`).join('')
-          + (matches.length > shown.length ? `<div class="wb-rel-more">${h(String(matches.length - shown.length))} more — keep typing</div>` : '')
-        : `<div class="wb-rel-more">No record matches "${h(query.trim())}".</div>`;
-      results.hidden = false;
-      search.setAttribute('aria-expanded', 'true');
-      return shown;
-    };
-
-    search.addEventListener('input', () => { active = -1; paint(search.value); });
-    search.addEventListener('focus', () => paint(search.value));
-    search.addEventListener('keydown', (event) => {
-      const shown = results.hidden ? [] : [...results.querySelectorAll('.wb-rel-result')];
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        if (!shown.length) { paint(search.value); return; }
-        active = event.key === 'ArrowDown'
-          ? Math.min(active + 1, shown.length - 1)
-          : Math.max(active - 1, 0);
-        shown.forEach((node, index) => node.classList.toggle('active', index === active));
-        shown[active]?.scrollIntoView({ block: 'nearest' });
-        return;
-      }
-      if (event.key === 'Enter' && !results.hidden && shown[active]) {
-        // Only when something is highlighted -- Enter on a half-typed query should submit
-        // the form, as it does in every other field here.
-        event.preventDefault();
-        commit(options.find((option) => option.id === shown[active].dataset.relId));
-        return;
-      }
-      if (event.key === 'Escape' && !results.hidden) { event.preventDefault(); close(); }
-    });
-    // Typed something that matches nothing and clicked away: the field shows text that is
-    // not a record, so put back whatever is actually selected.
-    search.addEventListener('blur', () => setTimeout(() => {
-      if (results.contains(document.activeElement)) return;
-      const current = options.find((option) => option.id === select.value);
-      search.value = current ? current.label : '';
-      close();
-    }, 120));
-
-    results.addEventListener('mousedown', (event) => {
-      const button = event.target.closest('[data-rel-id]');
-      if (!button) return;
-      event.preventDefault();
-      commit(options.find((option) => option.id === button.dataset.relId));
-    });
-    if (clear) clear.addEventListener('click', () => { commit(null); search.focus(); });
-  });
+  if (!root || !root.querySelector) return;
+  if (!root.querySelector('[data-wb-rel-pick]')) return;
+  if (relationshipPickerModule) { relationshipPickerModule.wbBindRelationshipPickers(root); return; }
+  loadRelationshipPicker()
+    .then((mod) => mod.wbBindRelationshipPickers(root))
+    .catch((error) => console.error('relationship picker failed to load', error));
 }
 
 /**
@@ -18936,6 +18904,16 @@ function wbReadFieldInput(f) {
 }
 
 // Read the live modal inputs back into the working draft before a re-render.
+// The label->option-id resolution, and minting an option for a value nobody has used
+// before, live in ./ui/combobox-menu.js -- the module that is already fetched the moment a
+// combobox is on screen, which is the only time either is wanted.
+function wbCommitOptionChoice(input) {
+  if (comboboxMenuModule) { comboboxMenuModule.wbCommitOptionChoice(input); return; }
+  loadComboboxMenu()
+    .then((mod) => mod.wbCommitOptionChoice(input))
+    .catch((error) => console.error('Option combobox failed to load', error));
+}
+
 function wbCollectModalDraft() {
   const m = state.builderModal;
   if (!m) return;
@@ -18966,8 +18944,21 @@ function wbCollectModalDraft() {
       if (ident) m.draft.config.identifyField = ident.value || '';
       const fixed = document.getElementById('wbRelFixed');
       if (fixed) m.draft.config.fixedItem = fixed.value || '';
-      // A different linked app (or workspace) invalidates the old field / pin choices.
-      if (prevTarget !== m.draft.config.targetApp) { m.draft.config.displayField = ''; m.draft.config.identifyField = ''; m.draft.config.fixedItem = ''; }
+      // "Copy every field they share" -- the broad instruction. The rows below it are the
+      // exceptions, for fields the two apps call different things.
+      m.draft.config.pullAll = !!checked('wbRelPullAll');
+      // Read the copy-across rows straight off the panel. Partial rows are kept while it is
+      // open, so a row half-chosen does not vanish under the person filling it in.
+      m.draft.config.pull = readPullRows([...document.querySelectorAll('[data-wb-pull-row]')].map((row) => ({
+        from: row.querySelector('[data-wb-pull-from]')?.value || '',
+        to: row.querySelector('[data-wb-pull-to]')?.value || '',
+      })), { keepPartial: true });
+      // A different linked app (or workspace) invalidates the old field / pin choices -- and
+      // every mapping, which named fields in the app that is no longer linked.
+      if (prevTarget !== m.draft.config.targetApp) { m.draft.config.displayField = ''; m.draft.config.identifyField = ''; m.draft.config.fixedItem = ''; m.draft.config.pull = []; }
+      // Several links means there is no answer to "which one's address?", so the mapping is
+      // dropped rather than left storing something the UI no longer offers.
+      if (m.draft.config.multiple) { m.draft.config.pull = []; m.draft.config.pullAll = false; }
     }
     if (t === 'calculation') m.draft.config.formula = (val('wbCalcFormula') || '').trim();
     if (t === 'money') m.draft.config.currency = (val('wbCurSym') || '').trim() || '$';
@@ -19019,6 +19010,10 @@ function wbSubmitModal() {
   const m = state.builderModal;
   if (!m) return;
   wbCollectModalDraft();
+  // The panel keeps a half-chosen mapping row while it is open so it does not vanish under
+  // the person filling it in. Saving is where it stops being in progress: an unfinished row
+  // copies nothing, so it is dropped rather than stored to puzzle over later.
+  if (m.draft?.config?.pull) m.draft.config.pull = readPullRows(m.draft.config.pull);
   const companyId = m.companyId;
   if (m.kind === 'workspace') {
     const name = (m.draft.name || '').trim(); if (!name) { showToast('Give your workspace a name.', 'local', 'Workspaces'); return; }
@@ -19066,6 +19061,15 @@ function wbSubmitModal() {
   }
   if (m.kind === 'item') {
     const { workspace, app } = wbFind(companyId, m.workspaceId, m.appId);
+    // A Company Contact typed but never matched has no id yet. Create those first, then
+    // come back through here with the links filled in -- the form is untouched in between,
+    // so nothing typed into it is lost, and the second pass finds nothing pending.
+    if (document.querySelector('[data-wb-cc-picker] [data-wb-cc-name]')) {
+      wbCreateMissingContacts(companyId)
+        .then((made) => { if (made) wbSubmitModal(); })
+        .catch((error) => showToast(error.message || 'That contact could not be created.', 'local', 'Company Contacts'));
+      return;
+    }
     const values = {}; let missing = null;
     app.fields.forEach((f) => { const v = wbReadFieldInput(f); values[f.id] = v; if (f.required && (v === '' || v == null || (Array.isArray(v) && !v.length))) missing = missing || f; });
     // Keep the user's input on any validation error (render() from showToast would
@@ -20050,6 +20054,29 @@ function wbMountModal() {
     else { wbCollectModalDraft(); m.draft.members = m.draft.members.includes(id) ? m.draft.members.filter((x) => x !== id) : [...m.draft.members, id]; render(); }
   }; });
   if (m.kind === 'stages') wbMountStagesModal(overlay, m);
+  // Copy-across rows. Collect first, so a mapping half-chosen on another row survives adding
+  // or removing this one -- render() rebuilds the panel from the draft.
+  overlay.querySelectorAll('[data-wb-pull-add]').forEach((b) => {
+    b.onclick = () => {
+      wbCollectModalDraft();
+      m.draft.config.pull = [...(m.draft.config.pull || []), { from: '', to: '' }];
+      render();
+    };
+  });
+  overlay.querySelectorAll('[data-wb-pull-del]').forEach((b) => {
+    b.onclick = () => {
+      const index = Number(b.closest('[data-wb-pull-row]')?.dataset.index);
+      wbCollectModalDraft();
+      // Against the DOM order, not the collected list: collect keeps partial rows, but the
+      // index of the row somebody clicked is only meaningful against what is on screen.
+      const rows = [...overlay.querySelectorAll('[data-wb-pull-row]')].map((row) => ({
+        from: row.querySelector('[data-wb-pull-from]')?.value || '',
+        to: row.querySelector('[data-wb-pull-to]')?.value || '',
+      }));
+      m.draft.config.pull = rows.filter((_, i) => i !== index);
+      render();
+    };
+  });
   overlay.querySelectorAll('[data-wb-add-option]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); m.draft.config.options = m.draft.config.options || []; m.draft.config.options.push({ id: wbUid(), label: '', color: WB_PALETTE[m.draft.config.options.length % WB_PALETTE.length] }); render(); }; });
   overlay.querySelectorAll('[data-wb-del-option]').forEach((b) => { b.onclick = () => { if ((m.draft.config.options || []).length <= 1) { showToast('Keep at least one option.', 'local', 'Workspaces'); return; } wbCollectModalDraft(); const oid = b.closest('.wb-opt-item').dataset.oid; m.draft.config.options = m.draft.config.options.filter((o) => o.id !== oid); render(); }; });
   // Progress field appearance: display/color-mode selects re-render; stops add/remove; live preview on color edits.
@@ -26762,6 +26789,7 @@ function onDocumentClick(event) {
     if (input) {
       input.value = jobTypeOption.dataset.jobTypeOption || '';
       syncContactRoofFieldVisibility(input);
+      if (input.hasAttribute('data-wb-option-input')) wbCommitOptionChoice(input);
       input.dispatchEvent(new Event('change', { bubbles: true }));
       input.focus();
       closeJobTypeMenus(input);
@@ -29254,8 +29282,10 @@ function handleAction(event, node) {
   }
   if (action === 'save-company-contact-fields') {
     event.preventDefault();
+    const done = beginSubmitting(node, 'Saving…');
     companyContactWrites()?.saveCompanyContactFields()
-      .catch((error) => showToast(error.message || 'Could not save those fields.', 'local', 'Company Contacts'));
+      .catch((error) => showToast(error.message || 'Could not save those fields.', 'local', 'Company Contacts'))
+      .finally(() => done?.());
     return;
   }
   if (action === 'delete-company-record') {
@@ -29989,7 +30019,10 @@ function onDocumentSubmit(event) {
 
   if (event.target.matches('[data-company-record-form]')) {
     event.preventDefault();
-    companyContactWrites()?.saveCompanyContactForm(event.target).catch((error) => showToast(error.message || 'Could not save that contact.', 'local', 'Company Contacts'));
+    const done = beginSubmitting(event.target, 'Saving…');
+    companyContactWrites()?.saveCompanyContactForm(event.target)
+      .catch((error) => showToast(error.message || 'Could not save that contact.', 'local', 'Company Contacts'))
+      .finally(() => done?.());
     return;
   }
   if (event.target.matches('[data-contact-form]')) {
@@ -31729,7 +31762,9 @@ async function deleteRole(roleId) {
  * Returns a no-op when there is no submit button, so callers never have to check.
  */
 function beginSubmitting(formNode, label = 'Working…') {
-  const button = formNode?.querySelector?.('button[type="submit"]');
+  // A form, or the button itself. The Company Contacts field editor saves from a button in the
+  // modal header, which is nowhere near a <form>.
+  const button = formNode?.matches?.('button') ? formNode : formNode?.querySelector?.('button[type="submit"]');
   if (!button || button.disabled) return null;
   const original = button.innerHTML;
   button.disabled = true;
@@ -33410,6 +33445,9 @@ function horizontalScrollerUnder(target) {
 }
 
 function onDocumentChange(event) {
+  // Typed rather than picked: change fires when the box loses focus, which is the moment a
+  // value stops being half-typed and becomes the answer.
+  if (event.target.matches?.('[data-wb-option-input]')) wbCommitOptionChoice(event.target);
   if (event.target.matches('[data-wb-cc-name]')) syncCompanyContactPicker(event.target);
   // Picking a client from the suggestions dispatches CHANGE, not input -- see the
   // [data-job-type-option] handler. The same call lives in onDocumentInput for the typing
@@ -37720,7 +37758,7 @@ function loadCompanyContactsPage() {
         createSupabaseClient, h, isLiveSupabaseSession, money, navigate, normalizeCompanyContact,
         normalizeCompanyContactField, render, requirePermission, showToast, state,
         supabaseRow, supabaseWrite, timeAgo, wbDoc, wbFieldBuilderMarkup, wbFileIcon, wbFileValues,
-        wbOptRow, acceptAttr, fileTypeKind, WB_FIELD_TYPES,
+        wbFmtDuration, wbNameValue, wbOptRow, acceptAttr, fileTypeKind, formatDate, WB_FIELD_TYPES,
         COMPANY_CONTACT_COLS, COMPANY_CONTACT_FIELD_COLS, COMPANY_CONTACT_FIELD_TYPES,
       });
       return companyContactsPageModule;
@@ -37811,6 +37849,13 @@ function companyContactOptions(companyId = activeCompanyId()) {
 // The datalist gives back a NAME; the field stores an id. Resolve on the way through, and
 // clear the id when the text matches nobody so a half-typed name cannot silently keep the
 // previously picked contact attached.
+// The scan for unlinked names, and the creating, both live in ./company-contacts/page.js.
+// Only the cheap "is there even a contact picker on screen" guard stays here, so an app
+// without one never fetches the module at all.
+async function wbCreateMissingContacts(companyId) {
+  return (await loadCompanyContactsPage()).createMissingContacts(companyId);
+}
+
 function syncCompanyContactPicker(input) {
   const picker = input?.closest?.('[data-wb-cc-picker]');
   if (!picker) return;
@@ -41429,7 +41474,7 @@ function normalizeJob(input) {
     contact_name: String(input.contact_name || '').trim(),
     site_address: String(input.site_address || '').trim(),
     job_type: String(input.job_type || 'Roofing').trim(),
-    stage: resolveJobStage(input.stage),
+    stage: resolveJobStage(input.stage, input.company_id),
     priority: ['Low', 'Medium', 'High', 'Urgent'].includes(input.priority) ? input.priority : 'Medium',
     owner_name: String(input.owner_name || '').trim(),
     account_id: input.account_id ? String(input.account_id) : '',
@@ -41682,7 +41727,7 @@ function normalizeDeal(input) {
     primary_contact_id: input.primary_contact_id ? String(input.primary_contact_id) : '',
     site_id: input.site_id ? String(input.site_id) : '',
     name: String(input.name || '').trim() || 'Untitled deal',
-    stage: resolveDealStage(input.stage),
+    stage: resolveDealStage(input.stage, input.company_id),
     status,
     value: number(input.value),
     probability: Math.max(0, Math.min(100, Math.round(number(input.probability)))),

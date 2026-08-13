@@ -23,7 +23,14 @@ export function renderSearchCombobox(h, label, name, value, options, { placehold
 // Takes its one dependency positionally rather than as a ctx object: a factory that
 // destructures a single key is ceremony, and the extracted-module guard rightly treats a
 // three-key ctx as a sign the extraction was not worth making.
-export function createComboboxMenu(h) {
+export function createComboboxMenu(ctx) {
+  // `h` was the whole context until the option-minting below, which needs the builder document
+  // and a way to save it. Everything is optional in practice: a caller that only renders the
+  // menu never reaches the part that writes.
+  const {
+    h, wbDoc, wbSave, wbUid, can, showToast, activeCompanyId, WB_PALETTE,
+  } = ctx;
+
 
   function parseJobTypeOptions(input) {
     try {
@@ -89,5 +96,108 @@ export function createComboboxMenu(h) {
     menu.hidden = !menu.innerHTML;
   }
 
-  return { parseJobTypeOptions, jobTypeMenu, jobTypeMatches, renderJobTypeSuggestions };
+  // The app, workspace and field behind a field id. Sub-item lists are searched too, so a
+
+  // category on a daily report resolves the same way as one on the record.
+
+  function wbFieldOwner(companyId, fieldId) {
+
+    for (const workspace of wbDoc(companyId)?.workspaces || []) {
+
+      for (const app of workspace.apps || []) {
+
+        const own = (app.fields || []).find((field) => field.id === fieldId);
+
+        if (own) return { workspace, app, field: own };
+
+        for (const collection of app.collections || []) {
+
+          const sub = (collection.fields || []).find((field) => field.id === fieldId);
+
+          if (sub) return { workspace, app, field: sub };
+
+        }
+
+      }
+
+    }
+
+    return null;
+
+  }
+
+
+
+  // A category/status combobox shows a LABEL; the field stores an option ID. Resolve one to the
+
+  // other, and when the label matches nothing, add it to the list rather than refusing it --
+
+  // "when the data I type does not match on the list and I just use it, it will automatically
+
+  // add to the category list".
+
+  function wbCommitOptionChoice(input) {
+
+    const combo = input.closest('[data-wb-option-combo]');
+
+    const holder = combo?.querySelector('input[type="hidden"][data-f]');
+
+    if (!holder) return;
+
+    const companyId = activeCompanyId();
+
+    const found = wbFieldOwner(companyId, holder.getAttribute('data-f'));
+
+    if (!found) return;
+
+    const { field } = found;
+
+    const label = String(input.value || '').trim();
+
+    if (!label) { holder.value = ''; return; }
+
+
+
+    const options = field.config.options || [];
+
+    const match = options.find((option) => String(option.label).toLowerCase() === label.toLowerCase());
+
+    if (match) {
+
+      // Snap to the stored spelling, so "roofing" and "Roofing" do not become two chips.
+
+      holder.value = match.id;
+
+      input.value = match.label;
+
+      return;
+
+    }
+
+    // Adding an option edits the app, which not everybody may do. Their typing stays on screen;
+
+    // it simply does not become a new choice for the whole company.
+
+    if (!can('workspaces.manage', companyId)) return;
+
+    const option = { id: wbUid(), label, color: WB_PALETTE[options.length % WB_PALETTE.length] };
+
+    field.config = { ...field.config, options: [...options, option] };
+
+    wbSave(companyId);
+
+    holder.value = option.id;
+
+    // The menu reads its list off the input, so the new value is offered immediately rather
+
+    // than after a reload.
+
+    input.dataset.jobTypeOptions = JSON.stringify([...options, option].map((o) => o.label));
+
+    showToast(`Added "${label}" to ${field.label}.`, 'local', 'Workspaces');
+
+  }
+
+  return {
+    wbCommitOptionChoice, parseJobTypeOptions, jobTypeMenu, jobTypeMatches, renderJobTypeSuggestions };
 }

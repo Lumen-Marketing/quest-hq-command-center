@@ -169,14 +169,25 @@ test('a record is named by its text field, not by the contact link on it', () =>
   assert.deepEqual(uses[1].items.map((item) => item.title), ['58th Pl — Framing', 'Onyx Ave — Demo']);
 });
 
-test('a record with no text field still gets a usable name', () => {
+test('a record with no text field is named by its data, not by its id', () => {
+  // "Case -ff7" named nothing. With no text anywhere, the first field carrying something is a
+  // better name than the id's tail -- and the app author controls which field that is.
   const app = {
     name: 'Job Tracker', recordName: 'Job',
     fields: [{ id: 'c', type: 'company_contact', config: {} }, { id: 'm', type: 'money', config: {} }],
     items: [{ id: 'item-abcd', values: { c: 'kevin', m: '10' } }],
   };
   const [use] = contactUsage({ workspaces: [{ id: 'w', name: 'W', apps: [app] }] }, 'kevin');
-  assert.equal(use.items[0].title, 'Job abcd', 'never the contact id, and never blank');
+  assert.equal(use.items[0].title, '10', 'never the contact id, and never blank');
+  assert.ok(!/kevin/.test(use.items[0].title));
+
+  // Only when there is nothing at all does the id tail stand in -- and without its separator.
+  const empty = { ...app, items: [{ id: 'item-abcd', values: {} }] };
+  const [none] = contactUsage({ workspaces: [{ id: 'w', name: 'W', apps: [empty] }] }, 'kevin');
+  assert.equal(none, undefined, 'a record that does not mention the contact is not listed');
+  const solo = { ...app, items: [{ id: 'item-abcd', values: { c: 'kevin' } }] };
+  const [only] = contactUsage({ workspaces: [{ id: 'w', name: 'W', apps: [solo] }] }, 'kevin');
+  assert.equal(only.items[0].title, 'Job abcd');
 });
 
 test('every contact anyone points at can be listed in one pass', () => {
@@ -220,10 +231,15 @@ test('the directory is company-scoped, with no workspace filter anywhere near it
 });
 
 test('the card links out and never edits a workspace record', () => {
-  assert.match(page, /companyPath\('workspaces', \{ ws: use\.workspaceId, app: use\.appId, item: item\.id \}, companyId\)/);
-  assert.match(page, /A window, not a workbench/);
-  // The only write on the page is the contact's own details.
+  // These were ws / app / item, which the router does not read — so the row opened the
+  // workspaces section and never the record. It reads workspace / app_id / item_id.
+  assert.match(page, /companyPath\('workspaces', \{\s*\n\s*workspace: use\.workspaceRouteId, app_id: use\.appId, tab: 'items', item_id: item\.id,\s*\n\s*\}, companyId\)/);
+  // The only write on the page is the contact's own details. The note that used to say so is
+  // gone — it explained the design once, where a way back is wanted every time — so the rule
+  // is asserted rather than described.
   assert.ok(!/data-action="wb-/.test(page), 'no workspace record actions belong on this card');
+  assert.match(page, /class="cc-card-foot"[\s\S]*?Back to Company Contacts/);
+  assert.match(page, /href="\$\{h\(appHref\(companyPath\('company-contacts', \{\}, companyId\)\)\)\}" data-router/);
 });
 
 test('the plugin is company-shared and auto-installed', () => {
@@ -269,11 +285,35 @@ test('the page is fetched on demand and its ctx is complete', () => {
   for (const name of destructured) assert.ok(ctx.includes(name), `page.js needs ${name}`);
 });
 
-test('the six columns match the grid that lays them out', () => {
-  const head = page.slice(page.indexOf('<div class="table-head">'), page.indexOf('</div>', page.indexOf('<div class="table-head">')));
-  assert.equal((head.match(/<span/g) || []).length, 6);
-  const value = styles.slice(styles.indexOf('.cc-table .table-head,')).match(/grid-template-columns: ([^;]+);/)[1];
-  assert.equal(value.replace(/minmax\([^)]*\)/g, 'x').trim().split(/\s+/).length, 6);
+test('the built-in columns are fixed and the rest are the company’s', () => {
+  // Name, Active with us, Open balance and Last touch are this view's own — no field of theirs
+  // produces them. Everything between is their fields, one column each.
+  const head = page.slice(page.indexOf('<div class="table-head"'), page.indexOf('</div>', page.indexOf('<div class="table-head"')));
+  assert.match(head, /<span>Name<\/span>/);
+  assert.match(head, /columns\.map\(\(field\) => `<span>\$\{h\(field\.label\)\}<\/span>`\)/);
+  assert.match(head, /<span>Active with us<\/span>/);
+  assert.match(head, /Open balance/);
+  assert.match(head, /Last touch/);
+});
+
+test('a hidden field is dropped from the table, not from the record', () => {
+  const body = fn('renderDirectory', page);
+  assert.match(body, /companyContactFieldsFor\(companyId\)\.filter\(\(field\) => !field\.hidden\)/);
+  // The card shows everything: hiding is about this table's columns.
+  assert.match(fn('renderCard', page), /const filled = fields\.filter\(\(field\) => field !== chipField && companyContactValue/);
+  assert.ok(!/!field\.hidden && companyContactValue/.test(page), 'the card no longer skips hidden fields');
+});
+
+test('the grid is built from the column count, and can still collapse', () => {
+  // A fixed six-track rule mis-aligned every row the moment a seventh column appeared.
+  const body = fn('renderDirectory', page);
+  assert.match(body, /const tracks = \['minmax\(200px, 1\.4fr\)', \.\.\.columns\.map/);
+  assert.match(body, /--cc-cols:\$\{tracks\};--cc-min:\$\{minWidth\}px/);
+  // Custom properties, not the properties themselves: an inline grid-template-columns would
+  // beat the narrow-screen rule that collapses the row to one column.
+  assert.match(styles, /grid-template-columns: var\(--cc-cols/);
+  assert.match(styles, /min-width: var\(--cc-min/);
+  assert.match(styles, /\.cc-table \.table-row > span:not\(\.cc-cell-name\) \{ display: none; \}/);
   // Wider than a laptop panel, so it has to be reachable sideways.
   assert.match(styles, /\.cc-table \{\n  overflow-x: auto;/);
 });
