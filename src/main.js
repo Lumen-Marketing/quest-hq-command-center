@@ -44,7 +44,6 @@ import { deserializeRecurrence, serializeRecurrence, describeRecurrence, nextDue
 import { collectAutomationActions, buildTaskFromAction, describeAutomation, AUTOMATION_OBJECTS } from './data/automations.js';
 import { findDuplicateGroups, mergeContactFields, partitionImport } from './data/dedupe.js';
 import { parseCsvRows } from './data/csv.js';
-import { calculateUnderwriting, normalizeUnderwritingInput } from './underwriting/calculator.js';
 import { selectNextAction, taskMatchesRecord } from './crm/next-action.js';
 import { safeHexColor, sanitizeColorConfig } from './security/color.js';
 import {
@@ -2456,6 +2455,7 @@ const state = {
   tasks: activeRows(readSeededList(TASK_CACHE_KEY, tasksFallback)).map(normalizeTask),
   files: activeRows(readSeededList(FILE_CACHE_KEY, filesFallback)).map(normalizeFile),
   underwritingCases: [],
+  underwritingCalculators: [],
   driveFolders: readSeededList(DRIVE_FOLDER_CACHE_KEY, []).map(normalizeDriveFolder),
   forms: activeRows(readSeededList(FORM_CACHE_KEY, formsFallback)).map(normalizeForm),
   formResponses: activeRows(readSeededList(FORM_RESPONSE_CACHE_KEY, formResponsesFallback)).map(normalizeFormResponse),
@@ -2685,6 +2685,8 @@ const state = {
   jobFilePhotoCategory: 'All',
   underwritingContactId: '',
   underwritingDraft: null,
+  takeoffCalculatorId: '',
+  takeoffDraft: null,
   selectedFormId: '',
   selectedFormResponseId: '',
   selectedClientPortalId: '',
@@ -4182,7 +4184,7 @@ function handleProtectedFormDraftAction(actionName, node) {
     delete form.dataset.draftRecoveryPending;
     delete form.dataset.draftChangedWhilePending;
     setProtectedFormDraftStatus(form, result.draft ? 'restored' : 'idle');
-    if (form.matches('[data-underwriting-form]')) syncUnderwritingForm(form);
+    if (form.matches('[data-underwriting-form]')) renderUnderwriterPageModule?.syncUnderwritingForm(form);
     syncContactAddressFromRestoredDraft(form).catch((error) => console.warn('Contact draft address restore failed', error));
     return true;
   }
@@ -9632,86 +9634,10 @@ function underwritingCaseForContact(contactId, companyId = activeCompanyId()) {
   return state.underwritingCases.find((item) => recordVisibleInOperationalWorkspace(item, companyId) && item.contact_id === contactId) || null;
 }
 
-function underwritingInputFromCase(item, contact) {
-  return normalizeUnderwritingInput({
-    contractPrice: item?.contract_price ?? contact?.value ?? 0,
-    materialCost: item?.material_cost ?? 0,
-    laborCost: item?.labor_cost ?? 0,
-    permitCost: item?.permit_cost ?? 0,
-    disposalCost: item?.disposal_cost ?? 0,
-    otherCost: item?.other_cost ?? 0,
-    overheadPercent: item?.overhead_percent ?? 10,
-    commissionPercent: item?.commission_percent ?? 5,
-    contingencyPercent: item?.contingency_percent ?? 2,
-    targetMarginPercent: item?.target_margin_percent ?? 30,
-  });
-}
 
-function underwritingDraftForContact(contact, companyId) {
-  if (!contact) return null;
-  // The cases are fetched on demand, so on a fresh load or a return to this screen they have
-  // not arrived yet and there is nothing to build a draft from. Caching that empty draft was
-  // the bug: the early return below then served zeros for the rest of the session, and a
-  // decision that had saved perfectly well looked like it had never been saved at all.
-  const ready = ensureDomainLoaded('underwriting');
-  const draft = state.underwritingDraft;
-  const matches = draft?.contactId === contact.id && draft?.companyId === companyId;
-  // `hydrated` means this draft is the user's: either built from loaded cases, or typed into.
-  // Either way it must never be replaced underneath them.
-  if (matches && (draft.hydrated || !ready)) return draft;
-  const saved = underwritingCaseForContact(contact.id, companyId);
-  state.underwritingDraft = {
-    companyId,
-    contactId: contact.id,
-    ...underwritingInputFromCase(saved, contact),
-    notes: saved?.notes || '',
-    hydrated: ready,
-  };
-  return state.underwritingDraft;
-}
 
-function underwritingNumberField(label, name, value, suffix = '$') {
-  return `
-    <label class="underwriting-field">
-      <span>${h(label)}</span>
-      <div class="underwriting-input-wrap ${suffix === '%' ? 'percent' : ''}">
-        ${suffix === '$' ? '<b>$</b>' : ''}
-        <input name="${h(name)}" type="number" min="0" max="${suffix === '%' ? '100' : '999999999'}" step="0.01" value="${h(String(value))}" data-underwriting-field inputmode="decimal" />
-        ${suffix === '%' ? '<b>%</b>' : ''}
-      </div>
-    </label>
-  `;
-}
 
-function underwritingDecisionCopy(decision) {
-  if (decision === 'approve') return ['Ready to price', 'Margin meets the target with room in direct costs.'];
-  if (decision === 'review') return ['Review the scope', 'Margin is within three points of target. Tighten costs or price before approval.'];
-  if (decision === 'decline') return ['Reprice before approval', 'The current scope misses the target margin by more than three points.'];
-  return ['Enter a contract price', 'Add revenue and costs to calculate a decision.'];
-}
 
-function renderUnderwritingResults(result) {
-  const [title, detail] = underwritingDecisionCopy(result.decision);
-  const headroomLabel = result.directCostHeadroom >= 0 ? 'Direct cost headroom' : 'Direct cost overage';
-  return `
-    <div class="underwriting-decision ${h(result.decision)}">
-      <span><i class="ti ti-shield-check"></i>${h(title)}</span>
-      <p>${h(detail)}</p>
-    </div>
-    <div class="underwriting-result-grid">
-      <div><span>Gross profit</span><strong>${money(result.grossProfit)}</strong></div>
-      <div><span>Gross margin</span><strong>${h(result.grossMarginPercent.toFixed(2))}%</strong></div>
-      <div><span>Total cost</span><strong>${money(result.totalCost)}</strong></div>
-      <div><span>Break-even price</span><strong>${money(result.breakEvenPrice)}</strong></div>
-    </div>
-    <div class="underwriting-cost-stack">
-      <div><span>Direct costs</span><strong>${money(result.directCost)}</strong></div>
-      <div><span>Overhead, commission, contingency</span><strong>${money(result.percentageCost)}</strong></div>
-      <div class="${result.directCostHeadroom < 0 ? 'negative' : ''}"><span>${h(headroomLabel)}</span><strong>${money(Math.abs(result.directCostHeadroom))}</strong></div>
-      <div><span>Max direct cost at target</span><strong>${money(result.maxDirectCost)}</strong></div>
-    </div>
-  `;
-}
 
 
 function underwriterStageByKey(key) {
@@ -22386,6 +22312,7 @@ function loadRenderDealDetail() {
     renderDealDetailPending = import('./crm/deal-detail.js').then((mod) => {
       renderDealDetailModule = mod.createDealDetail({
         accountById, activeWorkspaceId, activitiesFor, appHref, companyPath, contactById, filteredActivitiesFor, googleMapsPlaceSearchUrl, guidanceForStage, h, jobById, money, pipelineStages, renderActivityFilterBar, renderDealLineItems, renderSfTaskRow, resolvePipelineStage, sfFeedItem, tasksForDeal, state, EMPTY_FIELD_PLACEHOLDER,
+        can, isLiveSupabaseSession, render, showToast, supabaseRow, supabaseWrite, activeCompanyId, setTakeoffHandler, dealById, persistDeal,
       });
       return renderDealDetailModule;
     }).catch((error) => {
@@ -26758,6 +26685,7 @@ function onDocumentClick(event) {
   if (closeWorkspaceMenu) state.workspaceMenuOpen = false;
   if (!event.target.closest('.address-lookup-control, .sf-inline-address-editor')) closeAddressSuggestionMenus();
   if (!event.target.closest('.job-type-combobox')) closeJobTypeMenus();
+  if (event.target.closest('[data-takeoff-action]') && takeoffEvent(event, 'click')) return;
 
   // Checked before the option itself: the X sits beside the option, so a click that lands on
   // it must prune the list rather than pick the value it is attached to.
@@ -33148,9 +33076,11 @@ function onDocumentInput(event) {
     return;
   }
   if (event.target.matches('[data-underwriting-field]')) {
-    syncUnderwritingForm(event.target.closest('[data-underwriting-form]'));
+    // Only ever reachable while the underwriter page is on screen, which is what loaded it.
+    renderUnderwriterPageModule?.syncUnderwritingForm(event.target.closest('[data-underwriting-form]'));
     return;
   }
+  if (takeoffEvent(event, 'input')) return;
   if (event.target.matches('[data-phone-format]')) {
     // Only digits, '+' and '-' are allowed; strip anything else, then format.
     const cleaned = event.target.value.replace(/[^0-9+\-]/g, '');
@@ -33493,9 +33423,11 @@ function onDocumentChange(event) {
   if (event.target.matches('[data-underwriting-contact]')) {
     state.underwritingContactId = event.target.value || '';
     state.underwritingDraft = null;
+    state.takeoffDraft = null;
     render();
     return;
   }
+  if (takeoffEvent(event, 'change')) return;
   // Auto-format contact form text fields on blur/commit so the entry the user
   // sees matches exactly what gets stored (name casing, email case, zip, etc.).
   const cf = event.target;
@@ -33822,7 +33754,8 @@ function loadRenderUnderwriterPage() {
   if (!renderUnderwriterPagePending) {
     renderUnderwriterPagePending = import('./crm/underwriter-page.js').then((mod) => {
       renderUnderwriterPageModule = mod.createUnderwriterPage({
-        activeWorkspaceId, appHref, companyContacts, companyPath, emptyState, h, metricCard, money, pipelineDot, protectedFormDraftAttributes, renderProtectedFormDraftStrip, renderUnderwritingResults, sum, svgIcon, underwriterStageByKey, underwriterStageForContact, underwritingCaseForContact, underwritingDraftForContact, underwritingNumberField, state, CRM2_UNDERWRITER_STAGES,
+        activeWorkspaceId, appHref, companyContacts, companyPath, emptyState, ensureDomainLoaded, h, metricCard, money, pipelineDot, protectedFormDraftAttributes, renderProtectedFormDraftStrip, sum, svgIcon, underwriterStageByKey, underwriterStageForContact, underwritingCaseForContact, state, CRM2_UNDERWRITER_STAGES,
+        can, isLiveSupabaseSession, render, showToast, supabaseRow, supabaseWrite, activeCompanyId, setTakeoffHandler,
       });
       return renderUnderwriterPageModule;
     }).catch((error) => {
@@ -33831,6 +33764,17 @@ function loadRenderUnderwriterPage() {
     });
   }
   return renderUnderwriterPagePending;
+}
+
+// The takeoff card handles its own input, clicks and changes, in the module that drew it --
+// and two modules draw it, the Underwriter page and a quote record. Whichever painted last
+// registers here, so this stays one guard over all three listeners and knows about neither.
+let takeoffHandler = null;
+function setTakeoffHandler(handler) { takeoffHandler = handler; }
+function takeoffEvent(event, kind) {
+  if (!takeoffHandler || !event.target.closest?.('[data-takeoff-root]')) return false;
+  takeoffHandler(event, kind);
+  return true;
 }
 
 function renderUnderwriterPage(route, companyId) {
@@ -34346,28 +34290,20 @@ async function deleteTask(id, options = {}) {
   await recycleDeleteRecord({ type: 'task', id, options });
 }
 
-function underwritingInputFromForm(form) {
-  const fields = Object.fromEntries(new FormData(form).entries());
-  return {
-    contactId: String(fields.contact_id || ''),
-    ...normalizeUnderwritingInput(fields),
-    notes: String(fields.notes || '').trim(),
-  };
+// The measurements live in the takeoff card's draft while it is on screen. Saving the decision
+// saves them with it, so reopening the contact shows the report it was priced from.
+function takeoffStateForSave() {
+  const draft = state.takeoffDraft;
+  if (!draft || draft.scope !== 'underwriter' || draft.companyId !== activeCompanyId()) return null;
+  return { calculator_id: draft.calculatorId || '', measurements: draft.measurements };
 }
 
-function syncUnderwritingForm(form) {
-  if (!form) return;
-  const input = underwritingInputFromForm(form);
-  state.underwritingContactId = input.contactId;
-  state.underwritingDraft = { companyId: activeCompanyId(), ...input, hydrated: true };
-  const results = form.querySelector('[data-underwriting-results]');
-  if (results) results.innerHTML = renderUnderwritingResults(calculateUnderwriting(input));
-}
+
 
 async function saveUnderwritingCase(form) {
   const companyId = activeCompanyId();
   if (!requirePermission('underwriter.manage', companyId, 'Your role can view underwriting but cannot save cases.', 'Underwriter')) return false;
-  const input = underwritingInputFromForm(form);
+  const input = renderUnderwriterPageModule.underwritingInputFromForm(form);
   const contact = companyContacts(companyId).find((item) => item.id === input.contactId);
   if (!contact) {
     showToast('Choose a contact before saving.', 'error', 'Underwriter');
@@ -34390,6 +34326,7 @@ async function saveUnderwritingCase(form) {
     contingency_percent: input.contingencyPercent,
     target_margin_percent: input.targetMarginPercent,
     notes: input.notes,
+    takeoff: takeoffStateForSave() || existing?.takeoff || {},
     created_by: existing?.created_by || (isUuid(activeSession().profile.id) ? activeSession().profile.id : null),
     updated_at: new Date().toISOString(),
   });
@@ -39034,7 +38971,7 @@ async function permanentlyDeleteRecycleBinItem(itemId, options = {}) {
 
 const ACCOUNT_COLS = ['id', 'company_id', 'workspace_id', 'name', 'type', 'industry', 'website', 'phone', 'email', 'address', 'owner_name', 'status', 'notes', 'updated_at'];
 const SITE_COLS = ['id', 'company_id', 'workspace_id', 'contact_id', 'account_id', 'label', 'address', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'notes', 'updated_at'];
-const DEAL_COLS = ['id', 'company_id', 'workspace_id', 'account_id', 'primary_contact_id', 'site_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'line_items', 'notes', 'updated_at'];
+const DEAL_COLS = ['id', 'company_id', 'workspace_id', 'account_id', 'primary_contact_id', 'site_id', 'name', 'stage', 'status', 'value', 'probability', 'close_date', 'owner_name', 'source', 'job_id', 'line_items', 'takeoff', 'notes', 'updated_at'];
 const JOB_COLS = ['id', 'company_id', 'workspace_id', 'name', 'client_name', 'contact_name', 'site_address', 'job_type', 'stage', 'priority', 'owner_name', 'scope', 'notes', 'estimate_total', 'invoice_total', 'account_id', 'contact_id', 'deal_id', 'site_id', 'starts_on', 'ends_on', 'updated_at'];
 const PROPOSAL_COLS = ['id', 'company_id', 'workspace_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
 const ACTIVITY_COLS = ['id', 'company_id', 'workspace_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
@@ -41736,6 +41673,9 @@ function normalizeDeal(input) {
     source: String(input.source || '').trim(),
     job_id: input.job_id ? String(input.job_id) : '',
     line_items: normalizeDealLineItems(input.line_items),
+    // The GAF measurements this quote was priced from. One customer can have a quote per trade
+    // per address, so the roof belongs to the quote rather than to the contact.
+    takeoff: input.takeoff && typeof input.takeoff === 'object' ? input.takeoff : {},
     notes: String(input.notes || '').trim(),
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || new Date().toISOString(),
@@ -41959,6 +41899,9 @@ function normalizeUnderwritingCase(input = {}) {
     contingency_percent: number(input.contingency_percent ?? 2),
     target_margin_percent: number(input.target_margin_percent ?? 30),
     notes: String(input.notes || ''),
+    // The GAF measurements the takeoff card was priced from, kept as saved so a decision can
+    // be reopened on the numbers it was actually made on.
+    takeoff: input.takeoff && typeof input.takeoff === 'object' ? input.takeoff : {},
     created_by: input.created_by || null,
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || input.created_at || new Date().toISOString(),
@@ -42811,6 +42754,7 @@ function underwritingCasePayload(item) {
     contingency_percent: item.contingency_percent,
     target_margin_percent: item.target_margin_percent,
     notes: item.notes,
+    takeoff: item.takeoff,
     created_by: item.created_by || null,
   };
 }
@@ -43775,8 +43719,15 @@ async function loadSecondaryRealtimeDomain(client, domain) {
     return;
   }
   if (domain === 'underwriting') {
-    const result = await safeSupabaseQuery(client.from('underwriting_cases').select('*').order('updated_at', { ascending: false }));
+    const [result, calculators] = await Promise.all([
+      safeSupabaseQuery(client.from('underwriting_cases').select('*').order('updated_at', { ascending: false })),
+      safeSupabaseQuery(client.from('underwriting_calculators').select('*').order('position', { ascending: true })),
+    ]);
     if (!result.error) state.underwritingCases = activeRows(result.data || []).map(normalizeUnderwritingCase);
+    // Kept as the server sent them: the takeoff module owns this shape and normalizes on read,
+    // so the entry bundle does not carry a copy of the calculator's schema for a page most
+    // sessions never open.
+    if (!calculators.error) state.underwritingCalculators = calculators.data || [];
     return;
   }
   if (domain === 'proposals') {

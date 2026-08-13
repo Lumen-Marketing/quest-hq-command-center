@@ -229,6 +229,11 @@ const FACTORY_MODULES = [
   ['src/crm/account-tab.js', 'createAccountTab'],
   ['src/portals/portal-public-page.js', 'createPortalPublicPage'],
   ['src/home/company-dashboard.js', 'createCompanyDashboard'],
+  // A third entry names the factory that builds this one. The takeoff card is created by the
+  // underwriter page and handed that page's own ctx, so the keys it destructures still have to
+  // come from main.js -- just one hop further along. Checking the wrong call site would let a
+  // missing key through, which is the ReferenceError this whole file exists to catch.
+  ['src/underwriting/takeoff-card.js', 'createTakeoffCard', 'createUnderwriterPage'],
 ];
 
 test('the list above covers every factory module there is', () => {
@@ -249,7 +254,7 @@ test('the list above covers every factory module there is', () => {
   for (const file of found) assert.ok(listed.has(file), `${file} takes a ctx but is not in FACTORY_MODULES`);
 });
 
-for (const [file, factory] of FACTORY_MODULES) {
+for (const [file, factory, forwardedBy] of FACTORY_MODULES) {
   test(`${file.split('/').pop()}: main.js passes every key it destructures`, () => {
     const module = readFileSync(join(srcDir, file.replace(/^src\//, '')), 'utf8').replace(/\r\n/g, '\n');
     const at = module.indexOf(`function ${factory}`);
@@ -261,7 +266,17 @@ for (const [file, factory] of FACTORY_MODULES) {
     // Every identifier in the destructure, not just the comma-terminated ones: the last key
     // before the closing brace has no delimiter, so it was never counted and never checked
     // against what main.js passes.
-    const wanted = [...module.slice(open + 'const {'.length, close).matchAll(/([A-Za-z_$][\w$]*)/g)].map((m) => m[1]);
+    //
+    // Two things in that list are not keys to check. A `// comment` explaining why an option
+    // exists is prose, and reading it as identifiers demanded main.js pass a key called `The`.
+    // And `key = 'default'` is a setting supplied by whoever builds the module -- the takeoff
+    // card is created by two different pages, each naming its own permission -- so a caller
+    // that leaves it out is using the default, not forgetting an argument.
+    const wanted = module.slice(open + 'const {'.length, close)
+      .replace(/^\s*\/\/.*$/gm, '')
+      .split(',')
+      .filter((part) => !part.includes('='))
+      .flatMap((part) => [...part.matchAll(/([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
     // The point of this floor is to reject a "module" invented only to move bytes past the
     // bundle budget -- a wrapper around one call, dressed as an extraction.
     //
@@ -280,8 +295,10 @@ for (const [file, factory] of FACTORY_MODULES) {
     // The call site in main.js. The context is not always the first argument —
     // renderFieldConfig takes (fd, app, ctx) — so this finds the call, then the object
     // literal inside it, and reads to that object's closing brace.
-    const callAt = main.indexOf(`${factory}(`);
-    assert.notEqual(callAt, -1, `main.js should call ${factory}`);
+    // A forwarded factory is never named in main.js; its context arrives through its parent.
+    const entry = forwardedBy || factory;
+    const callAt = main.indexOf(`${entry}(`);
+    assert.notEqual(callAt, -1, `main.js should call ${entry}`);
     const objectAt = main.indexOf('{', callAt);
     assert.notEqual(objectAt, -1, `${factory} should be passed an object`);
     let depth = 0;

@@ -33082,3 +33082,162 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   .cc-setting-row { grid-template-columns: 40px minmax(0, 1fr); }
   .cc-setting-row .btn { grid-column: 2; justify-self: start; }
 }
+
+/* ---- Underwriting takeoff calculator ---------------------------------------------------- */
+/* A pricing sheet, so it reads down the column: names left, money right, every figure on the
+   same decimal. tabular-nums matters more here than anywhere else on the page -- a column of
+   totals that does not line up cannot be scanned, only read. */
+
+.takeoff-card { display: grid; gap: 14px; }
+/* A quote record bleeds 26px past its container and insets its columns 16px back from that.
+   The card sits on the same line as those columns rather than running out to the bleed edge. */
+.sf-record > .takeoff-card { margin: 0 16px 24px; }
+.takeoff-card .tk-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.takeoff-card .tk-pick { min-width: 190px; }
+.takeoff-card .tk-title { display: grid; gap: 5px; max-width: 340px; }
+.takeoff-card .tk-title span { font-size: 12px; color: var(--muted); }
+.takeoff-card .tk-body { display: grid; gap: 16px; }
+
+.takeoff-card .tk-measures {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  padding: 12px 13px;
+  display: grid;
+  gap: 11px;
+}
+
+.takeoff-card .tk-measures-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.takeoff-card .tk-measures-head h4 { margin: 0; font-size: 13px; font-weight: 600; margin-right: auto; }
+.takeoff-card .tk-rate { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+.takeoff-card .tk-rate input { width: 66px; text-align: right; }
+.takeoff-card .tk-rate b { font-weight: 500; }
+
+.takeoff-card .tk-measure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 9px;
+}
+
+.takeoff-card .tk-measure { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; }
+.takeoff-card .tk-measure > span { grid-column: 1 / -1; font-size: 11px; color: var(--muted); display: flex; gap: 5px; }
+.takeoff-card .tk-measure em { font-style: normal; opacity: .7; }
+.takeoff-card .tk-measure input { width: 100%; text-align: right; font-variant-numeric: tabular-nums; }
+/* The waste allowance is derived, so it is shown, never typed. */
+.takeoff-card .tk-measure b {
+  min-width: 52px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.takeoff-card .tk-groups { display: grid; gap: 14px; }
+.takeoff-card .tk-group { border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+/* The header shares the row grid so every label sits over the column it names. */
+.takeoff-card .tk-group > header,
+.takeoff-card .tk-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px 104px 116px;
+  gap: 10px;
+  align-items: center;
+}
+.takeoff-card .tk-group > header {
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.takeoff-card .tk-group > header h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.takeoff-card .tk-group > header span { font-size: 11px; color: var(--muted); text-align: right; }
+.takeoff-card .tk-group > header .tk-h-formula { text-align: left; }
+
+.takeoff-card .tk-row { padding: 7px 13px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.takeoff-card .tk-row:last-of-type { border-bottom: 0; }
+.takeoff-card .tk-row > .tk-name { display: grid; gap: 2px; min-width: 0; }
+/* The formula is the explanation of the quantity beside it, so it sits under the name in the
+   quieter type rather than in a column of its own. */
+.takeoff-card .tk-row > .tk-name em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.takeoff-card .tk-row > .tk-qty,
+.takeoff-card .tk-row > .tk-price,
+.takeoff-card .tk-row > .tk-total { text-align: right; font-variant-numeric: tabular-nums; }
+.takeoff-card .tk-row > .tk-total { font-weight: 500; }
+.takeoff-card .tk-row .ti-alert-triangle { color: var(--danger, #c0392b); }
+
+.takeoff-card .tk-group.editing > header,
+.takeoff-card .tk-row-edit { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) 76px 96px 104px 32px; }
+.takeoff-card .tk-row-edit input { width: 100%; font-size: 12px; padding: 5px 7px; }
+.takeoff-card .tk-row-edit .tk-formula { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.takeoff-card .tk-row-edit .tk-formula.bad { border-color: var(--danger, #c0392b); }
+.takeoff-card .tk-row-edit .tk-qty,
+.takeoff-card .tk-row-edit .tk-price { text-align: right; }
+.takeoff-card .tk-row-edit .tk-qty:disabled { opacity: .45; }
+.takeoff-card .tk-drop {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+.takeoff-card .tk-drop:hover { color: var(--danger, #c0392b); background: var(--surface-2); }
+.takeoff-card .tk-error {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--danger, #c0392b);
+}
+.takeoff-card .tk-empty { margin: 0; padding: 10px 13px; font-size: 12px; color: var(--muted); }
+.takeoff-card .tk-add { margin: 8px 13px; }
+
+.takeoff-card .tk-totals { display: grid; gap: 5px; padding: 9px 13px; border-top: 1px solid var(--border); background: var(--surface-2); }
+.takeoff-card .tk-totals > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); }
+.takeoff-card .tk-totals strong { font-variant-numeric: tabular-nums; font-weight: 500; color: var(--text); }
+.takeoff-card .tk-totals > .strong { font-size: 13px; color: var(--text); }
+.takeoff-card .tk-totals > .strong strong { font-size: 15px; }
+
+.takeoff-card .tk-outcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 22px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+}
+.takeoff-card .tk-outcome > div { display: grid; gap: 2px; }
+.takeoff-card .tk-outcome span { font-size: 11px; color: var(--muted); }
+.takeoff-card .tk-outcome strong { font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.takeoff-card .tk-outcome .tk-profit strong { color: var(--success, #1c7a4a); }
+.takeoff-card .tk-outcome.negative .tk-profit strong { color: var(--danger, #c0392b); }
+.takeoff-card .tk-push { margin-left: auto; }
+
+.takeoff-card .tk-help { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.takeoff-card .tk-help code {
+  font-size: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+@media (max-width: 900px) {
+  .takeoff-card .tk-group > header span { display: none; }
+  .takeoff-card .tk-group > header { display: flex; }
+  .takeoff-card .tk-row { grid-template-columns: minmax(0, 1fr) 64px 92px 100px; gap: 6px; font-size: 12px; }
+  .takeoff-card .tk-row-edit { grid-template-columns: minmax(0, 1fr) 32px; }
+  .takeoff-card .tk-row-edit .tk-formula,
+  .takeoff-card .tk-row-edit .tk-qty,
+  .takeoff-card .tk-row-edit .tk-price { grid-column: 1 / 2; }
+  .takeoff-card .tk-row-edit .tk-total { grid-column: 1 / -1; text-align: right; }
+  .takeoff-card .tk-push { margin-left: 0; }
+}

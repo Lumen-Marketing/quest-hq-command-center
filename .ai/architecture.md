@@ -52,7 +52,9 @@ The SPA supports:
 | --- | --- |
 | Browser application and module renderers | [src/main.js](../src/main.js) |
 | Global interface styling | [src/styles.css](../src/styles.css) |
-| Underwriting calculation rules | [src/underwriting/calculator.js](../src/underwriting/calculator.js) |
+| Underwriting margin rules | [src/underwriting/calculator.js](../src/underwriting/calculator.js) |
+| GAF takeoff formulas, defaults and formula language | [src/underwriting/takeoff.js](../src/underwriting/takeoff.js) |
+| Takeoff card rendering and editing | [src/underwriting/takeoff-card.js](../src/underwriting/takeoff-card.js) |
 | Operational workspace selection and isolation rules | [src/workspaces/model.js](../src/workspaces/model.js) |
 | Funnel next-action selection and record matching | [src/crm/next-action.js](../src/crm/next-action.js) |
 | Password, upload, realtime policy helpers | [src](../src) |

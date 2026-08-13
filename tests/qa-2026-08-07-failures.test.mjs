@@ -10,6 +10,10 @@ import { findDuplicateGroups } from '../src/data/dedupe.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+// Both underwriting fixes moved into the underwriter page when it stopped being carried in the
+// entry bundle. The regression is in the code, not in the file it happens to sit in, so this
+// follows it rather than being deleted -- the bug it pins is still perfectly reachable.
+const underwriter = readFileSync(join(root, 'src', 'crm', 'underwriter-page.js'), 'utf8');
 
 // --- #37 Underwriter: "saved" but reload showed zeros -------------------------------------
 // The save was never the problem -- the row in production held every cost and the notes. The
@@ -17,9 +21,9 @@ const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
 // and it was then cached under the contact id and served for the rest of the session.
 
 function underwritingDraftFn() {
-  const at = main.indexOf('function underwritingDraftForContact(contact, companyId)');
+  const at = underwriter.indexOf('function underwritingDraftForContact(contact, companyId)');
   assert.notEqual(at, -1);
-  return main.slice(at, main.indexOf('function ', at + 10));
+  return underwriter.slice(at, underwriter.indexOf('function ', at + 10));
 }
 
 test('an underwriting draft built before the cases arrive is not cached as the answer', () => {
@@ -33,8 +37,9 @@ test('an underwriting draft built before the cases arrive is not cached as the a
 test('typing owns the draft, so the rebuild cannot discard it', () => {
   // syncUnderwritingForm runs on every keystroke and replaces the draft wholesale. Without
   // the flag the rebuild above would fire on the next render and wipe what was being typed.
-  const at = main.indexOf('function syncUnderwritingForm(form)');
-  const fn = main.slice(at, main.indexOf('\n}', at));
+  const at = underwriter.indexOf('function syncUnderwritingForm(form)');
+  assert.notEqual(at, -1);
+  const fn = underwriter.slice(at, underwriter.indexOf('\n  }', at));
   assert.match(fn, /state\.underwritingDraft = \{ companyId: activeCompanyId\(\), \.\.\.input, hydrated: true \};/);
   const save = main.slice(main.indexOf('async function saveUnderwritingCase(form)'));
   assert.match(save.slice(0, save.indexOf('\nasync function ')), /state\.underwritingDraft = \{ companyId, \.\.\.input, hydrated: true \};/);

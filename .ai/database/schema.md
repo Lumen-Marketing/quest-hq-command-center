@@ -474,7 +474,20 @@ Captured through 2026-08-10T18:23:17.639Z from the live Supabase catalog. Nullab
 
 - RLS: enabled
 - Primary key: id
-- Columns: `id uuid`; `company_id text`; `contact_id text`; `contract_price numeric`; `material_cost numeric`; `labor_cost numeric`; `permit_cost numeric`; `disposal_cost numeric`; `other_cost numeric`; `overhead_percent numeric`; `commission_percent numeric`; `contingency_percent numeric`; `target_margin_percent numeric`; `notes text`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `workspace_id uuid`
+- Columns: `id uuid`; `company_id text`; `contact_id text`; `contract_price numeric`; `material_cost numeric`; `labor_cost numeric`; `permit_cost numeric`; `disposal_cost numeric`; `other_cost numeric`; `overhead_percent numeric`; `commission_percent numeric`; `contingency_percent numeric`; `target_margin_percent numeric`; `notes text`; `takeoff jsonb`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`; `workspace_id uuid`
+- `takeoff` holds the GAF report the decision was priced from: `{ calculator_id, measurements }`. It belongs to the contact, not to the calculator.
+
+## public.deals — takeoff column
+
+- `takeoff jsonb not null default '{}'` holds the GAF measurements a quote was priced from: `{ calculator_id, measurements }`. It is on the deal rather than the contact because the Sales pipeline opens one deal per trade per address, so one customer can carry two quotes with two different roofs.
+
+## public.underwriting_calculators
+
+- RLS: enabled
+- Primary key: id
+- Columns: `id uuid`; `company_id text`; `workspace_id text`; `name text`; `config jsonb`; `position int4`; `created_by uuid?`; `created_at timestamptz`; `updated_at timestamptz`
+- `config` is the whole calculator — waste percent, tax percent and the ordered line items with their formulas and prices. It is read and written as a unit and never queried across, so a table per line would cost a migration every time the shape moves and buy nothing.
+- No rows are seeded. A company with no calculator of its own gets the built-in one from `src/underwriting/takeoff.js`.
 
 ## public.user_role_assignments
 

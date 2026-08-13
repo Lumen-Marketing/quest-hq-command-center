@@ -1,12 +1,118 @@
 // Moved out of main.js and fetched on demand: it is behind a click, and nothing that paints
 // before the click needs it. The body is unchanged from where it lived.
 
-import { calculateUnderwriting } from '../underwriting/calculator.js';
+import { calculateUnderwriting, normalizeUnderwritingInput } from '../underwriting/calculator.js';
+import { createTakeoffCard } from '../underwriting/takeoff-card.js';
 
 export function createUnderwriterPage(ctx) {
   const {
-    activeWorkspaceId, appHref, companyContacts, companyPath, emptyState, h, metricCard, money, pipelineDot, protectedFormDraftAttributes, renderProtectedFormDraftStrip, renderUnderwritingResults, sum, svgIcon, underwriterStageByKey, underwriterStageForContact, underwritingCaseForContact, underwritingDraftForContact, underwritingNumberField, state, CRM2_UNDERWRITER_STAGES,
+    activeCompanyId, activeWorkspaceId, appHref, companyContacts, companyPath, emptyState, ensureDomainLoaded, h, metricCard, money, pipelineDot, protectedFormDraftAttributes, renderProtectedFormDraftStrip, sum, svgIcon, underwriterStageByKey, underwriterStageForContact, underwritingCaseForContact, state, CRM2_UNDERWRITER_STAGES,
   } = ctx;
+
+  const takeoff = createTakeoffCard(ctx);
+
+  // Everything the underwriter form needs came with it out of main.js: the draft, the number
+  // field, the decision copy and the results panel are used on this page and nowhere else, so
+  // carrying them in the entry bundle cost every session that never opens Underwriter.
+
+  function underwritingInputFromCase(item, contact) {
+    return normalizeUnderwritingInput({
+      contractPrice: item?.contract_price ?? contact?.value ?? 0,
+      materialCost: item?.material_cost ?? 0,
+      laborCost: item?.labor_cost ?? 0,
+      permitCost: item?.permit_cost ?? 0,
+      disposalCost: item?.disposal_cost ?? 0,
+      otherCost: item?.other_cost ?? 0,
+      overheadPercent: item?.overhead_percent ?? 10,
+      commissionPercent: item?.commission_percent ?? 5,
+      contingencyPercent: item?.contingency_percent ?? 2,
+      targetMarginPercent: item?.target_margin_percent ?? 30,
+    });
+  }
+
+  function underwritingDraftForContact(contact, companyId) {
+    if (!contact) return null;
+    // The cases are fetched on demand, so on a fresh load or a return to this screen they have
+    // not arrived yet and there is nothing to build a draft from. Caching that empty draft was
+    // the bug: the early return below then served zeros for the rest of the session, and a
+    // decision that had saved perfectly well looked like it had never been saved at all.
+    const ready = ensureDomainLoaded('underwriting');
+    const draft = state.underwritingDraft;
+    const matches = draft?.contactId === contact.id && draft?.companyId === companyId;
+    // `hydrated` means this draft is the user's: either built from loaded cases, or typed into.
+    // Either way it must never be replaced underneath them.
+    if (matches && (draft.hydrated || !ready)) return draft;
+    const saved = underwritingCaseForContact(contact.id, companyId);
+    state.underwritingDraft = {
+      companyId,
+      contactId: contact.id,
+      ...underwritingInputFromCase(saved, contact),
+      notes: saved?.notes || '',
+      hydrated: ready,
+    };
+    return state.underwritingDraft;
+  }
+
+  function underwritingNumberField(label, name, value, suffix = '$') {
+    return `
+      <label class="underwriting-field">
+        <span>${h(label)}</span>
+        <div class="underwriting-input-wrap ${suffix === '%' ? 'percent' : ''}">
+          ${suffix === '$' ? '<b>$</b>' : ''}
+          <input name="${h(name)}" type="number" min="0" max="${suffix === '%' ? '100' : '999999999'}" step="0.01" value="${h(String(value))}" data-underwriting-field inputmode="decimal" />
+          ${suffix === '%' ? '<b>%</b>' : ''}
+        </div>
+      </label>
+    `;
+  }
+
+  function underwritingDecisionCopy(decision) {
+    if (decision === 'approve') return ['Ready to price', 'Margin meets the target with room in direct costs.'];
+    if (decision === 'review') return ['Review the scope', 'Margin is within three points of target. Tighten costs or price before approval.'];
+    if (decision === 'decline') return ['Reprice before approval', 'The current scope misses the target margin by more than three points.'];
+    return ['Enter a contract price', 'Add revenue and costs to calculate a decision.'];
+  }
+
+  function renderUnderwritingResults(result) {
+    const [title, detail] = underwritingDecisionCopy(result.decision);
+    const headroomLabel = result.directCostHeadroom >= 0 ? 'Direct cost headroom' : 'Direct cost overage';
+    return `
+      <div class="underwriting-decision ${h(result.decision)}">
+        <span><i class="ti ti-shield-check"></i>${h(title)}</span>
+        <p>${h(detail)}</p>
+      </div>
+      <div class="underwriting-result-grid">
+        <div><span>Gross profit</span><strong>${money(result.grossProfit)}</strong></div>
+        <div><span>Gross margin</span><strong>${h(result.grossMarginPercent.toFixed(2))}%</strong></div>
+        <div><span>Total cost</span><strong>${money(result.totalCost)}</strong></div>
+        <div><span>Break-even price</span><strong>${money(result.breakEvenPrice)}</strong></div>
+      </div>
+      <div class="underwriting-cost-stack">
+        <div><span>Direct costs</span><strong>${money(result.directCost)}</strong></div>
+        <div><span>Overhead, commission, contingency</span><strong>${money(result.percentageCost)}</strong></div>
+        <div class="${result.directCostHeadroom < 0 ? 'negative' : ''}"><span>${h(headroomLabel)}</span><strong>${money(Math.abs(result.directCostHeadroom))}</strong></div>
+        <div><span>Max direct cost at target</span><strong>${money(result.maxDirectCost)}</strong></div>
+      </div>
+    `;
+  }
+
+  function underwritingInputFromForm(form) {
+    const fields = Object.fromEntries(new FormData(form).entries());
+    return {
+      contactId: String(fields.contact_id || ''),
+      ...normalizeUnderwritingInput(fields),
+      notes: String(fields.notes || '').trim(),
+    };
+  }
+
+  function syncUnderwritingForm(form) {
+    if (!form) return;
+    const input = underwritingInputFromForm(form);
+    state.underwritingContactId = input.contactId;
+    state.underwritingDraft = { companyId: activeCompanyId(), ...input, hydrated: true };
+    const results = form.querySelector('[data-underwriting-results]');
+    if (results) results.innerHTML = renderUnderwritingResults(calculateUnderwriting(input));
+  }
 
   // The queue row and its stage tag were left behind in main.js when this page moved, and
   // the page reached across for them -- a ReferenceError, since they are another module's
@@ -98,6 +204,7 @@ export function createUnderwriterPage(ctx) {
             </form>
           ` : emptyState('Add a contact to start an underwriting case.')}
         </section>
+        ${takeoff.renderTakeoffCard(companyId, underwritingCaseForContact(selectedContact?.id, companyId)?.takeoff)}
         <section class="panel underwriter-ledger-queue">
           <div class="section-head"><div><h2>Estimate queue</h2><p>${visible.length} contact${visible.length === 1 ? '' : 's'} in this Quest CRM view.</p></div></div>
           <div class="data-table underwriter-table">
@@ -109,5 +216,5 @@ export function createUnderwriterPage(ctx) {
     `;
   }
 
-  return { renderUnderwriterPage };
+  return { renderUnderwriterPage, onTakeoffEvent: takeoff.onTakeoffEvent, syncUnderwritingForm, underwritingInputFromForm };
 }

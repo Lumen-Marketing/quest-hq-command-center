@@ -1,10 +1,31 @@
 // Moved out of main.js and fetched on demand: it is behind a click, and nothing that paints
 // before the click needs it. The body is unchanged from where it lived.
 
+import { createTakeoffCard } from '../underwriting/takeoff-card.js';
+
 export function createDealDetail(ctx) {
   const {
-    accountById, activeWorkspaceId, activitiesFor, appHref, companyPath, contactById, filteredActivitiesFor, googleMapsPlaceSearchUrl, guidanceForStage, h, jobById, money, pipelineStages, renderActivityFilterBar, renderDealLineItems, renderSfTaskRow, resolvePipelineStage, sfFeedItem, tasksForDeal, state, EMPTY_FIELD_PLACEHOLDER,
+    accountById, activeWorkspaceId, activitiesFor, appHref, companyPath, contactById, filteredActivitiesFor, googleMapsPlaceSearchUrl, guidanceForStage, h, jobById, money, pipelineStages, renderActivityFilterBar, renderDealLineItems, renderSfTaskRow, resolvePipelineStage, sfFeedItem, tasksForDeal, state, EMPTY_FIELD_PLACEHOLDER, dealById, persistDeal, showToast,
   } = ctx;
+
+  // The same calculator as the Underwriter page, attached to this quote. Pricing a roof is a
+  // quote's own work -- the measurements are this address's, not the contact's, because one
+  // customer can have a quote per trade -- so they are stored on the deal and saved from here.
+  const takeoff = createTakeoffCard({
+    ...ctx,
+    takeoffPermission: 'crm.manage',
+    saveRecordLabel: 'Save to this quote',
+    saveTakeoffToRecord: async (scope, payload, totals) => {
+      const deal = dealById(String(scope).replace('deal:', ''));
+      if (!deal) return;
+      // A takeoff that prices nothing must not wipe a value somebody typed by hand.
+      const setsValue = totals.contractPrice > 0;
+      await persistDeal(
+        { ...deal, takeoff: payload, value: setsValue ? totals.contractPrice : deal.value },
+        setsValue ? `Takeoff saved. Quote value set to ${money(totals.contractPrice)}.` : 'Takeoff saved.',
+      );
+    },
+  });
 
   function renderDealDetail(companyId, deal) {
     const account = accountById(deal.account_id);
@@ -123,6 +144,8 @@ export function createDealDetail(ctx) {
             </div>
           </div>
         </div>
+
+        ${takeoff.renderTakeoffCard(companyId, deal.takeoff, { scope: `deal:${deal.id}` })}
       </div>
     `;
   }
