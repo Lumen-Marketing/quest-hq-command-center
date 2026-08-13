@@ -1577,6 +1577,20 @@ button { cursor: pointer; }
   gap: 6px;
 }
 
+.location-picker-search .address-lookup-control {
+  align-items: stretch;
+}
+
+.location-picker-search [data-action="location-picker-current"],
+.location-picker-search .address-suggestions-menu {
+  grid-column: 1 / -1;
+}
+
+.location-picker-search .address-suggestions-menu {
+  position: static;
+  max-height: min(238px, 34vh);
+}
+
 .location-picker-actions {
   justify-content: flex-start;
   margin: 2px 0 4px;

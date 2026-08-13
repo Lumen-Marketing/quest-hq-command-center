@@ -38,7 +38,6 @@ export function createLocationPickerModal(ctx) {
         </div>
         <div class="form-actions location-picker-actions">
           <button class="btn btn-primary" type="submit" data-action="save-location-picker"><i class="ti ti-map-pin"></i>Save exact pin</button>
-          <button class="btn" type="button" data-action="close-modal">Cancel</button>
         </div>
         <div class="location-picker-mode">
           <span><i class="ti ti-click"></i>Manual pin</span>
@@ -59,6 +58,20 @@ export function createLocationPickerModal(ctx) {
   function setLocationPickerStatus(text) {
     const status = document.querySelector('[data-location-picker-status]');
     if (status) status.textContent = text;
+  }
+
+  function dismissLocationPickerSuggestions(input) {
+    if (!input) return;
+    window.clearTimeout(Number(input.dataset.addressSuggestTimer || 0));
+    input.dataset.addressSuggestTimer = '';
+    // Invalidate an address request already in flight so it cannot repaint the menu after
+    // Search, current location, or a dropped pin has committed a location.
+    input.dataset.addressSuggestRequest = 'dismissed';
+    const menu = input.closest('.address-lookup-control')?.querySelector('.address-suggestions-menu');
+    if (menu) {
+      menu.hidden = true;
+      menu.innerHTML = '';
+    }
   }
 
   function setLocationPickerPin(lat, lng, { center = false, reverse = false } = {}) {
@@ -82,6 +95,7 @@ export function createLocationPickerModal(ctx) {
     const address = String(payload.display_name || '').trim();
     const input = document.querySelector('[data-location-picker-search]');
     if (address && input) {
+      dismissLocationPickerSuggestions(input);
       input.value = address;
       state.locationPicker = { ...(state.locationPicker || {}), address };
       setLocationPickerStatus('Address filled from the dropped pin.');
@@ -102,6 +116,7 @@ export function createLocationPickerModal(ctx) {
   async function searchLocationPickerAddress() {
     const input = document.querySelector('[data-location-picker-search]');
     const query = String(input?.value || '').trim();
+    dismissLocationPickerSuggestions(input);
     if (!query) return showToast('Type an address to search.', 'local', 'Map Pin');
     setLocationPickerStatus('Searching the map...');
     const match = await geocodeLocationPickerAddress(query);
@@ -117,6 +132,7 @@ export function createLocationPickerModal(ctx) {
 
   function useCurrentLocationForPicker() {
     if (!navigator.geolocation) return showToast('Current location is not available in this browser.', 'local', 'Map Pin');
+    dismissLocationPickerSuggestions(document.querySelector('[data-location-picker-search]'));
     setLocationPickerStatus('Requesting current location...');
     navigator.geolocation.getCurrentPosition(
       (position) => setLocationPickerPin(position.coords.latitude, position.coords.longitude, { center: true, reverse: true }),
