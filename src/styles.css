@@ -23018,6 +23018,11 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .wb-cl-caret { font-size: 14px; color: var(--text-muted, #9a8f7d); flex: none; }
 .wb-card-cl-panel { margin: 6px 0 4px; padding: 4px 8px; border: 1px solid var(--border, #e2d5bf); border-radius: 10px; background: var(--surface, #fffaf0); }
 .wb-card-cl-panel .wb-cl-item { padding: 7px 2px; }
+/* The whole row ticks the step, so it has to look like it does -- and the label must not
+   read as text you could select while trying to click it. */
+.wb-card-cl-panel .wb-cl-item[data-wb-cl-card] { cursor: pointer; border-radius: 6px; }
+.wb-card-cl-panel .wb-cl-item[data-wb-cl-card]:hover { background: var(--surface-2); }
+.wb-card-cl-panel .wb-cl-item[data-wb-cl-card] .wb-cl-label { user-select: none; }
 .wb-card-cl-panel .wb-cl-label { font-size: .86rem; font-weight: 600; }
 .wb-card-prog { display: inline-flex; align-items: center; gap: 8px; min-width: 130px; }
 .wb-card-prog input[type="range"] { flex: 1; accent-color: #7c3aed; min-width: 70px; cursor: pointer; }
@@ -32229,4 +32234,722 @@ a.wb-cal-more:hover { color: var(--orange); }
   color: var(--muted);
   font-size: 11.5px;
   font-style: normal;
+}
+
+/* The pin beside an App Builder location field is a control now, not an adornment, so it
+   has to read as one. A bare <button> would inherit the browser's chrome and look like a
+   form widget wedged against the input; .wb-cur beside it only sets colour and weight. */
+.wb-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.wb-pin-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wb-pin-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- Company Contacts ------------------------------------------------------
+   The directory and one contact's card. Six columns, and the row is wider than the
+   panel on a laptop, so the table scrolls sideways the way the contacts table does --
+   .data-table sets overflow:hidden for its corners and would otherwise win on both axes. */
+.cc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 10px;
+}
+
+.cc-eyebrow {
+  display: block;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.cc-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+}
+
+.cc-count {
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cc-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.cc-search input {
+  min-width: 220px;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.cc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+
+.cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.cc-chip:hover { border-color: var(--accent); }
+
+.cc-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.cc-chip b {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-chip.active b { color: inherit; }
+
+.cc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.cc-table {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.cc-table .table-head,
+.cc-table .table-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) minmax(140px, .9fr) 110px minmax(180px, 1.2fr) 120px 110px;
+  gap: 12px;
+  align-items: center;
+  min-width: 980px;
+}
+
+.cc-table .table-row { cursor: pointer; }
+
+.cc-cell-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cc-cell-name strong,
+.cc-cell-name small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-cell-name small { color: var(--muted); }
+
+/* The number sits under the name, set in tabular figures so a column of them lines up
+   digit for digit rather than drifting. */
+.cc-cell-phone { font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+
+.cc-cell-company {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-cell-company b { color: var(--text); font-size: 13.5px; }
+.cc-cell-touch { color: var(--muted); white-space: nowrap; }
+
+
+.cc-cell-money {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-cell-money b { color: var(--warning, #d97706); }
+
+.cc-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cc-avatar-lg {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  font-size: 19px;
+}
+
+/* The type pill takes the customer's own colour, so it is set as a variable per row
+   rather than hard-coded per label -- the labels are theirs to rename. */
+.cc-type {
+  display: inline-block;
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--cc-type, #6b7280) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cc-type, #6b7280) 14%, transparent);
+  color: var(--cc-type, #6b7280);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.cc-ws {
+  display: inline-block;
+  margin: 0 4px 2px 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* ---- One contact's card ---- */
+.cc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cc-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.cc-crumb a { color: var(--accent); text-decoration: none; }
+
+.cc-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.cc-profile-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.cc-profile-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.cc-profile-actions { margin-left: auto; }
+
+.cc-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.cc-tile {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.cc-tile span {
+  display: block;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.cc-tile strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-tile small { color: var(--muted); font-size: 11.5px; }
+
+.cc-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.cc-panel {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.cc-panel h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.cc-use { margin-bottom: 12px; }
+.cc-use:last-child { margin-bottom: 0; }
+
+.cc-use-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.cc-use-head em {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+.cc-use-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: inherit;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.cc-use-row:hover { background: var(--surface-2); }
+.cc-use-row .ti { color: var(--muted); font-size: 13px; }
+
+.cc-use-more,
+.cc-empty,
+.cc-notes {
+  display: block;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.cc-notes { color: var(--text); white-space: pre-wrap; }
+
+/* The card's detail grid: whatever short fields the company defined, two up, so a card with
+   three fields does not look broken beside one with nine. */
+.cc-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.cc-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2, var(--surface));
+  min-width: 0;
+}
+
+.cc-detail span {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.cc-detail b {
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* Yes/no reads as a switch with its answer beside it -- a bare checkbox in a column of
+   labelled inputs is the one control nobody is sure they have set. */
+.cc-check-field .cc-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+}
+
+.cc-check-field .cc-check em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 12.5px;
+}
+
+.cc-check-field input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent, #2563eb); }
+.cc-editor .cc-hint { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; }
+.cc-editor .cc-money-input { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- The field editor ----------------------------------------------------
+   It IS the App Builder's field editor, so .wb-builder-grid / .wb-field-row / .wb-palette
+   carry the layout. Only the dialog around it and the per-field config panel are new. */
+.cc-field-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ccf-intro { margin: 0; color: var(--muted); font-size: 12.5px; }
+
+/* The dialog is narrower than the Fields tab it borrows from, so the palette drops under the
+   list rather than squeezing both into unreadable columns. */
+@media (max-width: 1000px) {
+  .cc-field-builder .wb-builder-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Configuring a field happens under its row, not in a second dialog stacked on this one. */
+.cc-field-config {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: -6px 0 8px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 35%, var(--border));
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  background: color-mix(in srgb, var(--accent, #2563eb) 5%, transparent);
+}
+
+.cc-field-config-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.cc-field-config-head .wb-field-ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; }
+
+/* The dialog styles assume a dialog. Inline under a row, the fields need their own
+   breathing room and the switch row must not stretch edge to edge. */
+.cc-field-config .wb-field { margin: 0; }
+.cc-field-config .wb-check-row { margin: 0; }
+
+.cc-field-config-done { display: flex; justify-content: flex-end; }
+
+/* Attachments on the card read as the files they are, not as the JSON they are stored
+   as. Each one links straight out to itself. */
+.cc-detail-files {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cc-detail-files a,
+.cc-detail-files span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.cc-detail-files a:hover { color: var(--accent, #2563eb); text-decoration: underline; }
+.cc-detail-files i { color: var(--muted); flex: 0 0 auto; }
+
+/* The uploader is the App Builder's, and its styles assume the App Builder's column
+   width. In the contact form it spans both columns, so let it fill them. */
+.cc-editor .wb-file-field { width: 100%; }
+
+.cc-window-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 30%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning, #d97706) 8%, transparent);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+@media (max-width: 720px) {
+  .cc-table .table-head { display: none; }
+  .cc-table .table-row {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+  .cc-table .table-row > span:nth-child(n+4) { display: none; }
+}
+
+/* An option you can prune: the X is a sibling of the option button, never nested inside it,
+   because a button in a button is invalid and browsers disagree about which one a click hit. */
+.job-type-suggestion-row {
+  display: flex;
+  align-items: center;
+}
+
+.job-type-suggestion-row .job-type-suggestion-option {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.job-type-suggestion-remove {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.job-type-suggestion-row:hover .job-type-suggestion-remove,
+.job-type-suggestion-remove:focus-visible {
+  opacity: 1;
+}
+
+.job-type-suggestion-remove:hover {
+  background: var(--surface-2);
+  color: var(--danger, #e24b4a);
+}
+
+/* The + that creates a record sits on the Records row itself, so the row becomes a flex
+   container rather than the link filling it. */
+.side-item-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.side-item-row .side-item { flex: 1 1 auto; min-width: 0; }
+
+.side-item-add {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.side-item-add:hover { background: var(--surface-2); color: var(--text); }
+.side-item-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* A record type nested under Records, the way an app nests under Workspaces. */
+.side-item-child { padding-left: 26px; font-size: .93em; }
+.side-item-child .ti { font-size: 15px; }
+
+/* Icon picker in the create-record dialog. */
+.crt-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.crt-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.crt-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.crt-icon:hover { border-color: var(--accent); color: var(--accent); }
+
+.crt-icon.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Records front door: the record types you have made, or the prompt to make one. A directory
+   of contacts is one record type's view, not the module's landing page. */
+.cc-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 24px 56px;
+  text-align: center;
+}
+
+.cc-blank .ti { font-size: 30px; color: var(--muted); }
+.cc-blank h3 { margin: 0; font-size: 16px; }
+.cc-blank p { max-width: 46ch; margin: 0; color: var(--muted); font-size: 13px; }
+
+.cc-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  padding: 0 16px 18px;
+}
+
+.cc-type-card {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+}
+
+.cc-type-card:hover { border-color: var(--accent); }
+
+.cc-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--surface-2);
+  color: var(--accent);
+  font-size: 19px;
+}
+
+.cc-type-copy strong,
+.cc-type-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-type-copy small { color: var(--muted); font-size: 12px; }
+.cc-type-card > .ti { color: var(--muted); font-size: 14px; }
+
+/* Settings › Company Contacts: the list you manage record types from. */
+.cc-setting-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cc-setting-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.cc-setting-copy strong,
+.cc-setting-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-setting-copy small { color: var(--muted); font-size: 12px; }
+
+@media (max-width: 640px) {
+  .cc-setting-row { grid-template-columns: 40px minmax(0, 1fr); }
+  .cc-setting-row .btn { grid-column: 2; justify-self: start; }
 }

@@ -1,8 +1,10 @@
+import { renderSearchCombobox } from '../ui/combobox-menu.js';
+
 export function createJobEditor(ctx) {
   const {
     h, blankJob, contactAddressOptions, protectedFormDraftAttributes, activeWorkspaceId,
     renderProtectedFormDraftStrip, field, selectField, allowedCompanies, companyLabel,
-    renderSearchCombobox, contactOwnerOptions, jobClientOptions, resolveJobStage, jobStageNames,
+    contactOwnerOptions, jobClientOptions, resolveJobStage, jobStageNames,
     renderAddressLookupField, textareaField, formatCurrencyDraft,
   } = ctx;
 
@@ -17,6 +19,7 @@ export function createJobEditor(ctx) {
   // is often opened for somebody who is not in the CRM yet, so the list is a shortcut rather
   // than a constraint, and anything typed is kept as-is.
   const clientField = (value, companyId) => renderSearchCombobox(
+    h,
     'Client',
     'client_name',
     value,

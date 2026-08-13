@@ -574,6 +574,8 @@ const PERMISSION_KEYS = [
   ['client_portals.manage', 'Create/edit client portal'],
   ['crm.view', 'View CRM'],
   ['crm.manage', 'Delete CRM records'],
+  ['company_contacts.view', 'View company contacts'],
+  ['company_contacts.manage', 'Add/edit company contacts'],
   ['underwriter.view', 'View underwriter'],
   ['underwriter.manage', 'Manage underwriter'],
   ['finance.view', 'View finance'],
@@ -1212,6 +1214,8 @@ const MODULE_REGISTRY = [
   { id: 'workday', group: 'Quest CRM', label: 'Workday', icon: 'ti-clipboard-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'crm.view' },
   { id: 'jobs', group: 'Quest CRM', label: 'Jobs', icon: 'ti-hammer', symbol: 'q-symbol-jobs', status: 'live', permission: 'jobs.view' },
   { id: 'tasks', group: 'Work', label: 'My tasks', icon: 'ti-list-check', symbol: 'q-symbol-tasks', status: 'live', permission: 'tasks.view' },
+  // Company-wide, so it sits in My work beside Home and Inbox rather than under a workspace.
+  { id: 'company-contacts', group: 'Work', label: 'Company Contacts', icon: 'ti-address-book', symbol: 'q-symbol-crm', status: 'live', permission: 'company_contacts.view' },
   { id: 'files', group: 'Workspace', label: 'Files', icon: 'ti-folder', symbol: 'q-symbol-files', status: 'live', permission: 'files.view' },
   { id: 'forms', group: 'Workspace', label: 'Forms', icon: 'ti-clipboard-list', symbol: 'q-symbol-forms', status: 'live', permission: 'forms.view' },
   { id: 'client-portals', group: 'Workspace', label: 'Client portals', icon: 'ti-world-upload', symbol: 'q-symbol-files', status: 'live', permission: 'client_portals.view' },
@@ -1255,7 +1259,7 @@ const NAVIGATION_LABELS = {
 };
 
 const NAV_GROUPS = [
-  { label: 'Work', ids: ['dashboard', 'tasks', 'messages'] },
+  { label: 'Work', ids: ['dashboard', 'tasks', 'messages', 'company-contacts'] },
   { label: 'Pipeline', ids: ['contacts'] },
   { label: 'Production', ids: ['jobs'] },
   { label: 'Tools', ids: ['underwriter', 'proposals'] },
@@ -2602,6 +2606,11 @@ const state = {
   contactStageFilter: 'all',
   contactLifecycleFilter: 'all',
   contactQuery: '',
+  companyContacts: [],
+  companyContactFields: [],
+  companyContactQuery: '',
+  companyContactTypeFilter: 'all',
+  selectedCompanyContactId: '',
   contactSort: 'name',
   contactFilters: { ...CONTACT_FILTER_DEFAULTS },
   contactRailScope: 'team',
@@ -3927,7 +3936,10 @@ function render() {
   queueMicrotask(mountPriceBookVendorModal);
   queueMicrotask(mountPriceBookImport);
   queueMicrotask(() => mountLocationPicker().catch((error) => console.warn('Location picker map failed', error)));
+  queueMicrotask(mountWorkspaceRailDrag);
   queueMicrotask(mountWorkspaceBuilder);
+  queueMicrotask(mountCompanyContactFields);
+  queueMicrotask(mountCompanyContactForm);
   queueMicrotask(mountFileViewer);
   queueMicrotask(mountDashboardWidgetDnD);
   queueMicrotask(mountContactSmsReadiness);
@@ -4178,60 +4190,33 @@ function bindTimePickerInputs() {
   });
 }
 
-function parseJobTypeOptions(input) {
-  try {
-    const parsed = JSON.parse(input.dataset.jobTypeOptions || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    return [];
-  }
-}
+// ---- Combobox suggestion menu -----------------------------------------------
+// The matching, the menu and its markup live in ./ui/combobox-menu.js and are fetched the
+// first time somebody focuses one. Nothing paints a suggestion before that, and the module
+// is tiny, so the first open costs a tick and every one after it is instant.
+// closeJobTypeMenus stays here: it runs on every document click and is pure DOM.
+let comboboxMenuModule = null;
+let comboboxMenuPending = null;
 
-function jobTypeMenu(input) {
-  const host = input.closest('.job-type-combobox');
-  if (!host) return null;
-  let menu = host.querySelector('[data-job-type-menu]');
-  if (!menu) {
-    menu = document.createElement('div');
-    menu.className = 'job-type-suggestions-menu';
-    menu.setAttribute('data-job-type-menu', '');
-    menu.hidden = true;
-    host.appendChild(menu);
-  }
-  if (!menu.dataset.jobTypeBound) {
-    menu.dataset.jobTypeBound = 'true';
-    menu.addEventListener('pointerdown', (event) => {
-      if (event.target.closest('[data-job-type-option]')) event.preventDefault();
+function loadComboboxMenu() {
+  if (comboboxMenuModule) return Promise.resolve(comboboxMenuModule);
+  if (!comboboxMenuPending) {
+    comboboxMenuPending = import('./ui/combobox-menu.js').then((mod) => {
+      comboboxMenuModule = mod.createComboboxMenu(h);
+      return comboboxMenuModule;
+    }).catch((error) => {
+      comboboxMenuPending = null;
+      throw error;
     });
   }
-  return menu;
-}
-
-function jobTypeMatches(input) {
-  const query = input.value.trim().toLowerCase();
-  const options = parseJobTypeOptions(input);
-  const filtered = query
-    ? options.filter((item) => item.toLowerCase().includes(query))
-    : options;
-  return filtered.slice(0, 12);
+  return comboboxMenuPending;
 }
 
 function renderJobTypeSuggestions(input, force = false) {
-  const menu = jobTypeMenu(input);
-  if (!menu) return;
-  const query = input.value.trim();
-  const matches = jobTypeMatches(input);
-  const exact = matches.some((item) => item.toLowerCase() === query.toLowerCase());
-  const custom = input.dataset.jobTypeAllowCustom !== 'false' && query && !exact
-    ? [`<button type="button" class="job-type-suggestion-option custom" data-job-type-option="${h(query)}"><i class="ti ti-plus"></i><span>Use "${h(query)}"</span></button>`]
-    : [];
-  if (!force && !query && !matches.length) {
-    menu.hidden = true;
-    menu.innerHTML = '';
-    return;
-  }
-  menu.innerHTML = `${custom.join('')}${matches.map((item) => `<button type="button" class="job-type-suggestion-option" data-job-type-option="${h(item)}"><span>${h(item)}</span></button>`).join('')}`;
-  menu.hidden = !menu.innerHTML;
+  if (comboboxMenuModule) { comboboxMenuModule.renderJobTypeSuggestions(input, force); return; }
+  loadComboboxMenu()
+    .then((mod) => mod.renderJobTypeSuggestions(input, force))
+    .catch((error) => console.error('Suggestion menu failed to load', error));
 }
 
 function closeJobTypeMenus(exceptInput = null) {
@@ -4245,7 +4230,8 @@ function wireJobTypeAutocomplete(input, options = null) {
   if (options) input.dataset.jobTypeOptions = JSON.stringify(options);
   input.setAttribute('autocomplete', 'off');
   input.setAttribute('data-job-type-input', '');
-  jobTypeMenu(input);
+  // renderJobTypeSuggestions builds the menu when it is missing, so there is nothing to
+  // create first -- and asking for it here would only pull the module in a beat earlier.
   renderJobTypeSuggestions(input, true);
 }
 
@@ -4696,6 +4682,8 @@ async function loadSupabaseData() {
     calendarEventsResult,
     notificationsResult,
     contactsResult,
+    companyContactsResult,
+    companyContactFieldsResult,
     pipelineStagesResult,
     accountsResult,
     dealsResult,
@@ -4734,6 +4722,11 @@ async function loadSupabaseData() {
     client.from('calendar_events').select('*').order('starts_at', { ascending: true }),
     client.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
     client.from('contacts').select('*').order('updated_at', { ascending: false }),
+    // Not deferred: the directory is a first-class nav item in My work, and the App Builder
+    // resolves company_contact fields to names on any grid that carries one -- so a deferred
+    // load would paint raw ids across every workspace until somebody opened Contacts.
+    safeSupabaseQuery(client.from('company_contacts').select('*').order('name', { ascending: true })),
+    safeSupabaseQuery(client.from('company_contact_fields').select('*').order('position', { ascending: true })),
     client.from('pipeline_stages').select('*').order('position', { ascending: true }),
     client.from('accounts').select('*').order('name', { ascending: true }),
     client.from('deals').select('*').order('updated_at', { ascending: false }),
@@ -4810,6 +4803,14 @@ async function loadSupabaseData() {
   if (!timeEntriesResult.error) state.timeEntries = (timeEntriesResult.data || []).map(normalizeTimeEntry);
   if (!contactsResult.error) {
     state.contacts = activeRows(contactsResult.data || []).map(normalizeContact);
+    liveTables += 1;
+  }
+  if (!companyContactsResult.error) {
+    state.companyContacts = activeRows(companyContactsResult.data || []).map(normalizeCompanyContact);
+    liveTables += 1;
+  }
+  if (!companyContactFieldsResult.error) {
+    state.companyContactFields = (companyContactFieldsResult.data || []).map(normalizeCompanyContactField);
     liveTables += 1;
   }
   if (!pipelineStagesResult.error) {
@@ -5291,9 +5292,9 @@ function renderCompanySwitch(companyId, extraClass = '', options = {}) {
             </button>
           ` : ''}
         </div>
-        <div class="workspace-rail-list">
+        <div class="workspace-rail-list"${canManageWorkspaces ? ' data-workspace-reorder' : ''}>
           ${visibleWorkspaces.map((workspace) => `
-            <div class="workspace-rail-item ${workspace.id === currentWorkspaceId ? 'active' : ''}">
+            <div class="workspace-rail-item ${workspace.id === currentWorkspaceId ? 'active' : ''}"${canManageWorkspaces ? ` draggable="true" data-workspace-id="${h(workspace.id)}"` : ''}>
               <button class="workspace-rail-open" type="button" data-action="select-workspace" data-workspace-id="${h(workspace.id)}" aria-label="Open ${h(workspace.name)} workspace" aria-current="${workspace.id === currentWorkspaceId ? 'true' : 'false'}">
                 ${workspaceIconMarkup(workspace)}
                 <span class="workspace-rail-copy">
@@ -6297,7 +6298,7 @@ function loadRenderWorkspaceBuilderModal() {
   if (!renderWorkspaceBuilderModalPending) {
     renderWorkspaceBuilderModalPending = import('./workspace/builder-modal.js').then((mod) => {
       renderWorkspaceBuilderModalModule = mod.createBuilderModal({
-        WB_WS_ICONS, WB_APP_ICONS, WB_FIELD_TYPES, WB_PALETTE, clearableCount, can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAppReportOptions, wbAvatar, wbColorSwatches, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbIconLabel, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
+        WB_FIELD_TYPES, WB_PALETTE, clearableCount, can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAppReportOptions, wbAvatar, wbColorSwatches, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbIconLabel, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
       });
       return renderWorkspaceBuilderModalModule;
     }).catch((error) => {
@@ -6611,6 +6612,8 @@ function workspacePluginStatus(companyId, pluginId, workspaceId = workspaceIdFor
     pluginId,
     workspacePlugins: state.workspacePlugins,
     companyEntitled: companyPluginStatus(companyId, pluginId) === 'installed',
+    // A plugin whose data has no workspace does not wait to be installed in one.
+    companyWide: plugin.companyWide === true,
   });
 }
 
@@ -6889,6 +6892,7 @@ function renderWorkspace(route) {
   if (route.section === 'forms') return renderFormsPage(companyId);
   if (route.section === 'analytics') return renderAnalyticsPage(route, companyId);
   if (route.section === 'crm') return renderCrmPage(route, companyId);
+  if (route.section === 'company-contacts') return renderCompanyContactsPage(route, companyId);
   if (route.section === 'contacts') return renderContactsPage(route, companyId);
   if (route.section === 'deals') return renderDealsPage(route, companyId);
   if (route.section === 'proposals') return renderProposalsPage(route, companyId);
@@ -9766,7 +9770,7 @@ function loadContactEditor() {
       contactEditorModule = mod.createContactEditor({
         h, field, selectField, textareaField, blankContact, TEMPERATURES,
     protectedFormDraftAttributes, renderProtectedFormDraftStrip, activeWorkspaceId,
-    allowedCompanies, companyLabel, companyAccounts, renderJobTypeCombobox,
+    allowedCompanies, companyLabel, companyAccounts, contactJobTypeOptions,
     contactStageNames, contactOwnerOptions, contactRoofSystemSelectOptions, contactSourceOptions,
       });
       return contactEditorModule;
@@ -9823,45 +9827,7 @@ function openContactBulkModal(kind) {
 
 const CONTACT_MERGE_FIELDS = ['name', 'phone', 'email', 'location', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'account_id', 'owner_name', 'value'];
 
-function renderContactsDedupeModal() {
-  const companyId = activeCompanyId();
-  const groups = findDuplicateGroups(companyContacts(companyId).map((c) => ({ id: c.id, name: c.name, email: c.email, phone: c.phone })));
-  if (!groups.length) {
-    return renderModalShell('Contacts', 'Find duplicates',
-      `<div class="dedupe-empty">${emptyState('No likely duplicates found. Contacts are matched by email, phone, and name.')}</div>
-       <div class="modal-actions"><button class="btn" type="button" data-action="close-modal">Close</button></div>`, '');
-  }
-  const byId = new Map(companyContacts(companyId).map((c) => [c.id, c]));
-  const cards = groups.map((group, gi) => {
-    const rows = group.ids.map((id, i) => {
-      const c = byId.get(id) || {};
-      return `
-        <label class="dedupe-row">
-          <input type="radio" name="survivor-${gi}" value="${h(id)}" ${i === 0 ? 'checked' : ''} />
-          <span class="dedupe-keep-hint">keep</span>
-          <span class="dedupe-contact">
-            <strong>${h(c.name || 'Unnamed')}</strong>
-            <span class="dedupe-meta">${[c.email, c.phone, c.stage].filter(Boolean).map((x) => h(x)).join(' · ') || 'No details'}</span>
-          </span>
-        </label>`;
-    }).join('');
-    return `
-      <form class="dedupe-group ${group.strong ? '' : 'weak'}" data-dedupe-form data-group="${gi}" data-ids="${h(group.ids.join(','))}">
-        <div class="dedupe-group-head">
-          <span class="dedupe-reason">${h(group.contacts.length)} possible duplicates · matched by ${h(group.reasons.join(', '))}</span>
-          ${group.strong ? '' : '<span class="dedupe-weak-tag">name only — review carefully</span>'}
-        </div>
-        ${rows}
-        <div class="dedupe-group-actions">
-          <button class="btn btn-compact btn-primary" type="submit"><i class="ti ti-git-merge"></i>Merge these ${h(group.ids.length)}</button>
-        </div>
-      </form>`;
-  }).join('');
-  return renderModalShell('Contacts', `${groups.length} duplicate group${groups.length === 1 ? '' : 's'}`,
-    `<p class="modal-lead">Pick the record to keep in each group; the others merge into it (filling any blank fields) and their quotes, tasks, and activity move over.</p>
-     <div class="dedupe-list">${cards}</div>
-     <div class="modal-actions"><button class="btn" type="button" data-action="close-modal">Done</button></div>`, '');
-}
+
 
 // Merge duplicates into the survivor: fill the survivor's blank fields, move
 // every foreign reference (deals, tasks, activities) onto it, then recycle the
@@ -12452,7 +12418,7 @@ function renderJobEditor(companyId, job) {
       jobEditorModule = module.createJobEditor({
         h, blankJob, contactAddressOptions, protectedFormDraftAttributes, activeWorkspaceId,
         renderProtectedFormDraftStrip, field, selectField, allowedCompanies, companyLabel,
-        renderSearchCombobox, contactOwnerOptions, jobClientOptions, resolveJobStage, jobStageNames,
+        contactOwnerOptions, jobClientOptions, resolveJobStage, jobStageNames,
         renderAddressLookupField, textareaField, formatCurrencyDraft,
       });
       render();
@@ -13444,7 +13410,7 @@ function normalizeWorkspaceBuilderDoc(doc) {
       id: ws.id || wbUid(),
       name: ws.name || 'Untitled workspace',
       description: ws.description || '',
-      icon: ws.icon || WB_WS_ICONS[0],
+      icon: ws.icon || WB_DEFAULT_WS_ICON,
       color: safeHexColor(ws.color, WB_PALETTE[1]),
       members: Array.isArray(ws.members) ? ws.members.map(String) : [],
       createdAt: ws.createdAt || new Date().toISOString().slice(0, 10),
@@ -13474,7 +13440,7 @@ function normalizeWorkspaceBuilderDoc(doc) {
         recordLayout: Array.isArray(app.recordLayout) ? app.recordLayout : null,
         collections: Array.isArray(app.collections) ? app.collections : [],
         views: Array.isArray(app.views) ? app.views : [],
-        icon: app.icon || WB_APP_ICONS[0],
+        icon: app.icon || WB_DEFAULT_APP_ICON,
         color: safeHexColor(app.color, safeHexColor(ws.color, WB_PALETTE[1])),
         shared: !!app.shared,
         ...(Array.isArray(app.cardFields) ? { cardFields: app.cardFields.filter((id) => typeof id === 'string') } : {}),
@@ -13544,26 +13510,43 @@ function wbColorSwatches(selected) {
   const custom = `<label class="wb-swatch wb-swatch-custom ${isCustom ? 'sel' : ''}" title="Custom color"${isCustom ? ` style="background:${h(current)}"` : ''}><input type="color" data-wb-custom-color value="${h(isCustom ? current : '#000000')}" aria-label="Choose a custom color"><i class="ti ${isCustom ? 'ti-check' : 'ti-plus'}"></i></label>`;
   return `<div class="wb-swatches">${presets}${custom}</div>`;
 }
-const WB_WS_ICONS = ['ti-rocket', 'ti-speakerphone', 'ti-tools', 'ti-headset', 'ti-home-2', 'ti-building-store', 'ti-hammer', 'ti-users-group', 'ti-chart-bar', 'ti-cash', 'ti-package', 'ti-palette'];
-const WB_APP_ICONS = [
-  'ti-address-book', 'ti-checklist', 'ti-folder', 'ti-calendar-event', 'ti-receipt', 'ti-bug',
-  'ti-shopping-cart', 'ti-id-badge', 'ti-truck', 'ti-file-description', 'ti-phone', 'ti-flask',
-  'ti-briefcase', 'ti-building', 'ti-building-store', 'ti-building-factory', 'ti-home', 'ti-users',
-  'ti-user', 'ti-users-group', 'ti-mail', 'ti-message', 'ti-message-circle', 'ti-clipboard-list',
-  'ti-clipboard-check', 'ti-notes', 'ti-note', 'ti-book', 'ti-bookmark', 'ti-tag', 'ti-tags',
-  'ti-star', 'ti-heart', 'ti-flag', 'ti-map-pin', 'ti-map', 'ti-world', 'ti-package', 'ti-box',
-  'ti-packages', 'ti-gift', 'ti-credit-card', 'ti-cash', 'ti-coin', 'ti-wallet', 'ti-chart-bar',
-  'ti-chart-line', 'ti-chart-pie', 'ti-report', 'ti-file', 'ti-file-text', 'ti-files', 'ti-photo',
-  'ti-camera', 'ti-video', 'ti-music', 'ti-headphones', 'ti-microphone', 'ti-bell', 'ti-alarm',
-  'ti-clock', 'ti-calendar', 'ti-calendar-stats', 'ti-settings', 'ti-tool', 'ti-tools', 'ti-adjustments',
-  'ti-hammer', 'ti-rocket', 'ti-plane', 'ti-car', 'ti-bike', 'ti-ship', 'ti-leaf', 'ti-plant',
-  'ti-tree', 'ti-paw', 'ti-heartbeat', 'ti-stethoscope', 'ti-pill', 'ti-first-aid-kit', 'ti-shield',
-  'ti-lock', 'ti-key', 'ti-cloud', 'ti-database', 'ti-server', 'ti-device-laptop',
-  'ti-device-desktop', 'ti-device-mobile', 'ti-printer', 'ti-cpu', 'ti-code', 'ti-terminal',
-  'ti-bulb', 'ti-atom', 'ti-microscope', 'ti-school', 'ti-certificate', 'ti-award', 'ti-trophy',
-  'ti-target', 'ti-compass', 'ti-anchor', 'ti-brush', 'ti-palette', 'ti-pencil', 'ti-scissors',
-  'ti-ruler', 'ti-calculator', 'ti-coffee', 'ti-cup', 'ti-ticket', 'ti-basket', 'ti-shopping-bag',
-];
+// The fallback icons, as literals: normalising a stored document runs on boot and must
+// name one before ./workspace/icon-sets.js has been fetched. They are the first entry of
+// each list there, and a test holds the two in agreement.
+const WB_DEFAULT_WS_ICON = 'ti-rocket';
+// An imported app may name an icon this build's picker does not list. What matters is the
+// shape, because the value is interpolated straight into class="ti ${icon}".
+const WB_ICON_CLASS = /^ti-[a-z0-9-]+$/;
+const WB_DEFAULT_APP_ICON = 'ti-address-book';
+
+// Fetched on the first icon picker. Until then the grid renders as a loader rather than
+// as an empty box, which reads as a picker with no icons in it.
+let wbIconSetsModule = null;
+let wbIconSetsPending = null;
+
+function loadWbIconSets() {
+  if (wbIconSetsModule) return Promise.resolve(wbIconSetsModule);
+  if (!wbIconSetsPending) {
+    wbIconSetsPending = import('./workspace/icon-sets.js').then((mod) => {
+      wbIconSetsModule = mod;
+      return mod;
+    }).catch((error) => {
+      wbIconSetsPending = null;
+      throw error;
+    });
+  }
+  return wbIconSetsPending;
+}
+
+function wbAppIconGrid(selected) {
+  if (!wbIconSetsModule) {
+    loadWbIconSets().then(() => render()).catch((error) => console.error('icon set failed to load', error));
+    return questLoader('Loading icons');
+  }
+  return wbIconSetsModule.WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${selected === icon ? 'sel' : ''}" type="button" data-icon="${icon}" aria-pressed="${selected === icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('');
+}
+
+
 const WB_FIELD_TYPES = {
   text: { label: 'Text', icon: 'ti-letter-case', color: '#2563eb', desc: 'Single line of text' },
   textarea: { label: 'Text Area', icon: 'ti-align-left', color: '#2563eb', desc: 'Long multi-line text' },
@@ -13572,6 +13555,10 @@ const WB_FIELD_TYPES = {
   category: { label: 'Category / Dropdown', icon: 'ti-list', color: '#d97706', desc: 'Choose from options' },
   status: { label: 'Status', icon: 'ti-flag', color: '#16a34a', desc: 'Colored workflow state' },
   relationship: { label: 'Relationship', icon: 'ti-link', color: '#0891b2', desc: 'Link to items in another app' },
+  // Distinct from `relationship`, which points at another app inside one workspace. This
+  // points out of the workspace entirely, at the company-wide directory, which is what lets
+  // Sales and Production describe the same person.
+  company_contact: { label: 'Company Contact', icon: 'ti-address-book', color: '#e0552d', desc: 'Link to a contact in the company directory' },
   file: { label: 'File Attachment', icon: 'ti-paperclip', color: '#6b7280', desc: 'Attach documents' },
   user: { label: 'User Assignment', icon: 'ti-user', color: '#e0552d', desc: 'Assign workspace members' },
   email: { label: 'Email', icon: 'ti-mail', color: '#2563eb', desc: 'Email address' },
@@ -13595,7 +13582,7 @@ const WB_FIELD_TYPES = {
 // Computed / automatic fields hold no user-entered value: created/updated read the
 // item's timestamps, autonumber is assigned on create, rollup and calculation compute.
 const WB_AUTO_FIELD_TYPES = new Set(['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time']);
-const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox'];
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'company_contact', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox'];
 // Comparison operators for numeric (number/money) automation triggers:
 // [operator, dropdown label, symbol for the human-readable rule summary].
 const WB_TRIG_OPS = [['==', 'equals', '='], ['!=', 'not equal', '≠'], ['>', 'greater than', '>'], ['<', 'less than', '<'], ['>=', 'at least', '≥'], ['<=', 'at most', '≤']];
@@ -13823,7 +13810,7 @@ function wbCompanyWorkspace(companyId) {
       legacy.id = wsKey;
       entry = legacy;
     } else {
-      entry = { id: wsKey, name: opsWorkspace?.name || companyName(companyId) || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], createdAt: new Date().toISOString().slice(0, 10) };
+      entry = { id: wsKey, name: opsWorkspace?.name || companyName(companyId) || 'Workspace', icon: WB_DEFAULT_WS_ICON, color: WB_PALETTE[0], members: [], apps: [], activity: [], createdAt: new Date().toISOString().slice(0, 10) };
       doc.workspaces.push(entry);
     }
   }
@@ -15539,6 +15526,7 @@ function wbSimpleTitle(app, item) {
       case 'money': return `${x.config.currency || '$'}${raw}`;
       case 'status': case 'category': { const o = (x.config.options || []).find((o2) => o2.id === raw); if (o) return String(o.label); break; }
       case 'user': { const loc = wbLocateApp(app); const m = wbMemberById(loc.companyId, raw); if (m && m.name) return String(m.name); break; }
+      case 'company_contact': { const c = companyContactById(String(raw)); if (c && c.name) return String(c.name); break; }
       default: break; // relationship / file / image / checklist / progress / checkbox / calculation
     }
   }
@@ -15631,6 +15619,11 @@ function wbNameValue(app, field, item, depth = 0) {
     case 'autonumber': return wbAutoNumberText(field, raw);
     case 'category': case 'status': { const o = (field.config.options || []).find((x) => x.id === raw); return o ? String(o.label) : ''; }
     case 'user': { const loc = wbLocateApp(app); const m = wbMemberById(loc.companyId, raw); return m ? String(m.name) : ''; }
+    // A company_contact stores the contact's id. Without this it fell to the default branch
+    // and a linked record was labelled "cc-00cecde3-1e52-..." -- the key, not the person.
+    // Empty rather than the raw id when it cannot be resolved: the caller then falls back to
+    // the record's own title, which is worth reading.
+    case 'company_contact': { const c = companyContactById(String(raw)); return c ? String(c.name) : ''; }
     case 'relationship': {
       const loc = wbLocateApp(app);
       const ta = wbRelTargetApp(field, loc.companyId);
@@ -16302,6 +16295,13 @@ function wbFmtVal(ctx, field, value) {
           : `<span class="wb-file-icon-btn muted" title="${h(fv.name)}"><i class="ti ${wbFileIcon(kind)}"></i></span>`;
       }).join('')}</span>`;
     }
+    case 'company_contact': {
+      const contact = companyContactById(String(value || ''));
+      // An id that resolves to nobody stays visible as a broken chip rather than an empty
+      // cell -- a deleted contact is worth noticing, not hiding.
+      if (!contact) return value ? '<span class="wb-tag wb-rel">?</span>' : '';
+      return `<a class="wb-tag wb-rel" href="${h(appHref(companyPath('company-contacts', { contact_id: contact.id }, ctx.companyId)))}" data-router><i class="ti ti-address-book" aria-hidden="true"></i>${h(contact.name)}</a>`;
+    }
     case 'relationship': {
       const ta = wbRelTargetApp(field, ctx.companyId);
       if (!ta) return field.config.targetCompany && !wbDoc(field.config.targetCompany) ? '<span class="wb-tag wb-rel wb-rel-locked"><i class="ti ti-lock" aria-hidden="true"></i>No access</span>' : h(value);
@@ -16769,6 +16769,9 @@ function wbPlainVal(companyId, workspace, app, field, value, values) {
   switch (field.type) {
     case 'status': case 'category': { const o = (field.config.options || []).find((x) => x.id === value); return o ? o.label : String(value); }
     case 'user': { const m = wbMemberById(companyId, value); return m ? m.name : ''; }
+    // The name, not the id: this feeds search, sort and CSV export, and nobody searches a
+    // directory by primary key.
+    case 'company_contact': return companyContactLabel(String(value || ''));
     case 'relationship': { const ta = wbRelTargetApp(field, companyId); if (!ta) return field.config.targetCompany && !wbDoc(field.config.targetCompany) ? 'No access' : ''; const arr = field.config.fixedItem ? [field.config.fixedItem] : (Array.isArray(value) ? value : [value]); return arr.map((id) => { const it = ta.items.find((i) => i.id === id); return it ? wbRelLabel(ta, it, field.config.displayField) : ''; }).join(' '); }
     case 'file': case 'image': { const fv = wbFileValue(value); return fv ? (fv.name || '') : ''; }
     case 'money': return `${field.config.currency || '$'}${value}`;
@@ -17227,7 +17230,12 @@ function wbCardFieldHtml(ctx, field, ui) {
     </button>`;
     let panel = '';
     if (open) {
-      const list = s.items.map((it) => `<li class="wb-cl-item ${it.done ? 'done' : ''}">
+      // The whole row toggles, not just the circle. On a card the row sits inside a big
+      // click target that opens the record, so a click on the label used to navigate away
+      // instead of ticking the step -- the one thing somebody is trying to do there.
+      // No role on the <li>: the button below is the accessible control, and marking both
+      // would announce two checkboxes per step.
+      const list = s.items.map((it) => `<li class="wb-cl-item ${it.done ? 'done' : ''}" ${canManage ? `data-wb-cl-card="toggle:${h(item.id)}:${h(field.id)}:${h(it.id)}"` : ''}>
         <button type="button" class="wb-cl-check" ${canManage ? `data-wb-cl-card="toggle:${h(item.id)}:${h(field.id)}:${h(it.id)}"` : 'disabled'} role="checkbox" aria-checked="${it.done ? 'true' : 'false'}" aria-label="${h(it.label || 'Step')}"><i class="ti ti-check"></i></button>
         <span class="wb-cl-label">${h(it.label)}</span>
         ${canManage ? `<button type="button" class="wb-cl-del" data-wb-cl-card="remove:${h(item.id)}:${h(field.id)}:${h(it.id)}" title="Remove step"><i class="ti ti-x"></i></button>` : ''}
@@ -17461,7 +17469,11 @@ function wbAddFieldInstant(companyId, workspaceId, appId, type, index, collectio
   showToast(`Added "${label}" — use the sliders to configure it.`, 'local', 'Workspaces');
   render();
 }
-function wbFieldBuilderMarkup(companyId, fields, canManage, scope = '') {
+// `types` narrows the palette -- Company Contacts offers the basics and not, say, a rollup
+// over another app's records, which it has no app to roll up. `rowExtra` hangs a panel under
+// a row, which is how the Company Contacts editor configures a field in place instead of
+// stacking a second dialog over the first.
+function wbFieldBuilderMarkup(companyId, fields, canManage, scope = '', types = WB_FIELD_ORDER, rowExtra = null) {
   const key = (id) => (scope ? `${scope}:${id}` : id);
   const list = fields.length ? fields.map((field) => {
     const meta = WB_FIELD_TYPES[field.type];
@@ -17474,11 +17486,11 @@ function wbFieldBuilderMarkup(companyId, fields, canManage, scope = '') {
       <div class="wb-field-ic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></div>
       <div class="wb-field-meta"><b>${h(field.label)}${field.required ? '<span class="wb-req">*</span>' : ''}${field.hidden ? '<span class="wb-hidden-tag"><i class="ti ti-eye-off"></i>Hidden in table</span>' : ''}</b><div class="wb-field-type">${h(meta.label)}${extra}</div></div>
       ${canManage ? `<div class="wb-field-acts"><button class="wb-icon-btn ${field.hidden ? 'active' : ''}" data-hide-field="${h(key(field.id))}" title="${field.hidden ? 'Show this field in the items table' : 'Hide this field from the items table (still editable on each record)'}"><i class="ti ti-${field.hidden ? 'eye-off' : 'eye'}"></i></button><button class="wb-icon-btn" data-edit-field="${h(key(field.id))}" title="Configure"><i class="ti ti-adjustments"></i></button><button class="wb-icon-btn danger" data-del-field="${h(key(field.id))}" title="Delete"><i class="ti ti-trash"></i></button></div>` : ''}
-    </div>`;
+    </div>${rowExtra ? rowExtra(field) : ''}`;
   }).join('') : '<div class="wb-empty wb-empty-dashed"><i class="ti ti-layout-dashboard"></i><h3>Design your app</h3><p>Add fields from the palette to shape what data this app stores. Drag to reorder anytime.</p></div>';
-  const palette = canManage ? `<div class="wb-palette"><h4>Add a field</h4><div class="wb-sub" style="margin:-4px 0 10px">Click to configure, or <b>drag one into your app</b> to add it instantly.</div>${WB_FIELD_ORDER.map((type) => { const meta = WB_FIELD_TYPES[type]; return `<button class="wb-palette-item" draggable="true" data-add-type="${scope ? `${scope}:${type}` : type}" data-wb-palette-type="${scope ? `${scope}:${type}` : type}"><span class="wb-pic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-palette-text">${h(meta.label)}<small>${h(meta.desc)}</small></span><i class="ti ti-grip-vertical wb-palette-grip"></i></button>`; }).join('')}</div>` : '';
+  const palette = canManage ? `<div class="wb-palette"><h4>Add a field</h4><div class="wb-sub" style="margin:-4px 0 10px">Click to configure, or <b>drag one into your app</b> to add it instantly.</div>${types.map((type) => { const meta = WB_FIELD_TYPES[type]; return `<button class="wb-palette-item" draggable="true" data-add-type="${scope ? `${scope}:${type}` : type}" data-wb-palette-type="${scope ? `${scope}:${type}` : type}"><span class="wb-pic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-palette-text">${h(meta.label)}<small>${h(meta.desc)}</small></span><i class="ti ti-grip-vertical wb-palette-grip"></i></button>`; }).join('')}</div>` : '';
   const dropHint = canManage ? '<div class="wb-drop-hint"><i class="ti ti-arrow-down-to-arc"></i>Drag a field type here to add it</div>' : '';
-  return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? 'data-wb-field-dropzone="${h(scope)}"' : ''}><div class="wb-field-count">${fields.length} field${fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${list}${dropHint}</div>${palette}</div>`;
+  return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? `data-wb-field-dropzone="${h(scope)}"` : ''}><div class="wb-field-count">${fields.length} field${fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${list}${dropHint}</div>${palette}</div>`;
 }
 
 /** The app's own fields, on the Fields tab. */
@@ -17514,7 +17526,7 @@ function wbInstallLinkedApp(el, companyId, workspaceId, appId) {
     let target = targetDoc.workspaces.find((w) => w.id === targetKey);
     if (!target) {
       const opsWs = (allowedOperationalWorkspaces(targetCompany) || []).find((w) => w.id === targetOpsId);
-      target = { id: targetKey, name: opsWs?.name || 'Workspace', icon: WB_WS_ICONS[0], color: WB_PALETTE[0], members: [], apps: [], activity: [], feed: [], tiles: null, createdAt: new Date().toISOString().slice(0, 10) };
+      target = { id: targetKey, name: opsWs?.name || 'Workspace', icon: WB_DEFAULT_WS_ICON, color: WB_PALETTE[0], members: [], apps: [], activity: [], feed: [], tiles: null, createdAt: new Date().toISOString().slice(0, 10) };
       targetDoc.workspaces.push(target);
     }
     if (target.apps.some((a) => a.id === app.id)) { showToast(`${target.name} already has "${app.name}".`, 'local', 'Workspaces'); return; }
@@ -17642,7 +17654,7 @@ function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
     <div class="wb-field"><label>Description</label><textarea class="wb-input" id="wbSetDesc" data-wb-setting="description" ${canManage ? '' : 'disabled'}>${h(draft.description ?? app.description ?? '')}</textarea></div>
     <div class="wb-field"><label>Type</label><input class="wb-input" id="wbSetType" data-wb-setting="type" value="${h(draft.type ?? app.type ?? '')}" placeholder="e.g. Contacts, Tasks, Projects" ${canManage ? '' : 'disabled'}></div>
     <div class="wb-field"><label>Icon &amp; color</label>
-      <div class="wb-emoji-pick" id="wbSetIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${app.icon === icon ? 'sel' : ''}" type="button" data-icon="${icon}" aria-pressed="${app.icon === icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('')}</div>
+      <div class="wb-emoji-pick" id="wbSetIcons">${wbAppIconGrid(app.icon)}</div>
       <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}<label class="wb-swatch wb-swatch-custom ${isCustomColor ? 'sel' : ''}" data-color="${h(app.color)}" title="Custom color"${isCustomColor ? ` style="background:${h(app.color)}"` : ''}><input type="color" id="wbSetCustomColor" value="${h(isCustomColor ? app.color : '#000000')}" aria-label="Custom color" ${canManage ? '' : 'disabled'}><i class="ti ${isCustomColor ? 'ti-check' : 'ti-plus'}"></i></label></div>
     </div>
     <div class="wb-field"><label>Portability</label>
@@ -17806,7 +17818,7 @@ function wbBuildInstalledApp(workspace, src, includeItems) {
   const memos = includeItems && Array.isArray(src.memos)
     ? src.memos.filter(Boolean).map((m) => ({ ...m, id: wbUid(), notifiedAt: '' }))
     : [];
-  return { id: wbUid(), name, description: String(src.description || ''), type: String(src.type || ''), icon: WB_APP_ICONS.includes(src.icon) ? src.icon : WB_APP_ICONS[0], color: safeHexColor(src.color, WB_PALETTE[1]), fields, items, automations, ...extras, ...(memos.length ? { memos } : {}) };
+  return { id: wbUid(), name, description: String(src.description || ''), type: String(src.type || ''), icon: WB_ICON_CLASS.test(String(src.icon || '')) ? src.icon : WB_DEFAULT_APP_ICON, color: safeHexColor(src.color, WB_PALETTE[1]), fields, items, automations, ...extras, ...(memos.length ? { memos } : {}) };
 }
 function wbInstallAppFromJson(companyId, workspaceId, text) {
   let bundle;
@@ -18093,12 +18105,12 @@ async function wbClearWorkspaceActivity(button) {
 
 function openWbWorkspaceModal(companyId, editId) {
   const ws = editId ? wbFind(companyId, editId).workspace : null;
-  openWbModal({ kind: 'workspace', companyId, editId: editId || '', draft: { icon: ws?.icon || WB_WS_ICONS[0], color: ws?.color || WB_PALETTE[1], members: ws ? [...ws.members] : [] } });
+  openWbModal({ kind: 'workspace', companyId, editId: editId || '', draft: { icon: ws?.icon || WB_DEFAULT_WS_ICON, color: ws?.color || WB_PALETTE[1], members: ws ? [...ws.members] : [] } });
 }
 function openWbMembersModal(companyId, workspaceId) { openWbModal({ kind: 'members', companyId, workspaceId }); }
 function openWbAppModal(companyId, workspaceId) {
   const ws = wbFind(companyId, workspaceId).workspace;
-  openWbModal({ kind: 'app', companyId, workspaceId, draft: { icon: WB_APP_ICONS[0], color: ws?.color || WB_PALETTE[1] } });
+  openWbModal({ kind: 'app', companyId, workspaceId, draft: { icon: WB_DEFAULT_APP_ICON, color: ws?.color || WB_PALETTE[1] } });
 }
 /**
  * Sub-item lists an app declares, and the fields each one holds.
@@ -18472,7 +18484,7 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
   if (!wbFieldUiModule) return '';
   if (!wbFieldInputFn) {
     wbFieldInputFn = wbFieldUiModule.createFieldInput({
-      h, WB_FIELD_TYPES, wbMembers, wbRelTargetApp, wbDoc, wbRelLabel, wbProgressColor,
+      h, WB_FIELD_TYPES, companyContactOptions, wbMembers, wbRelTargetApp, wbDoc, wbRelLabel, wbProgressColor,
       wbProgressDisplayHtml, wbChecklistValue, wbChecklistBodyHtml, wbRatingStars, wbAutoNumberText,
     });
   }
@@ -18629,7 +18641,7 @@ function wbReconstructAppDriveFolders() {
 }
 // Mirror a workspace-app file upload into Company Drive, filed under a nested
 // structure: App > (App name) > (Field name). Returns a breadcrumb string (or '').
-function wbMirrorFileToDrive(file, objectPath, companyId, fieldId) {
+function wbMirrorFileToDrive(file, objectPath, companyId, fieldId, labels = null) {
   try {
     const m = state.builderModal;
     const app = m ? wbFind(companyId, m.workspaceId, m.appId)?.app : null;
@@ -18637,9 +18649,13 @@ function wbMirrorFileToDrive(file, objectPath, companyId, fieldId) {
     const field = app && fieldId ? app.fields.find((f) => f.id === fieldId) : null;
     const fieldName = String(field?.label || 'Attached files').trim() || 'Attached files';
     // Build (or reuse) the App > (App) > (Field) folder chain.
-    const appRoot = wbFindOrCreateDriveFolder(companyId, 'App', 'home');
-    const appFolder = wbFindOrCreateDriveFolder(companyId, appName, appRoot.id);
-    const fieldFolder = wbFindOrCreateDriveFolder(companyId, fieldName, appFolder.id);
+    const rootName = labels?.root || 'App';
+    const groupName = labels ? labels.group : appName;
+    const leafName = labels?.field || fieldName;
+    const appRoot = wbFindOrCreateDriveFolder(companyId, rootName, 'home');
+    // A caller with no middle level gets two, not an empty folder called "".
+    const appFolder = groupName ? wbFindOrCreateDriveFolder(companyId, groupName, appRoot.id) : appRoot;
+    const fieldFolder = wbFindOrCreateDriveFolder(companyId, leafName, appFolder.id);
     const payload = normalizeFile({
       id: `file-${crypto.randomUUID()}`,
       company_id: companyId,
@@ -18648,8 +18664,10 @@ function wbMirrorFileToDrive(file, objectPath, companyId, fieldId) {
       file_name: file.name,
       mime_type: file.type || 'application/octet-stream',
       size_bytes: file.size,
-      category: appName,
-      notes: `Uploaded from workspace app "${appName}" · field "${fieldName}".`,
+      category: labels ? rootName : appName,
+      notes: labels
+        ? `Uploaded from ${rootName} · field "${leafName}".`
+        : `Uploaded from workspace app "${appName}" · field "${fieldName}".`,
       uploaded_by_label: activeSession().profile.full_name || 'Questbase',
       bucket_id: 'quest-job-files',
       object_path: objectPath,
@@ -18660,7 +18678,7 @@ function wbMirrorFileToDrive(file, objectPath, companyId, fieldId) {
     const client = createSupabaseClient();
     if (client) { client.from('job_files').insert(filePayload(payload)).then((r) => { if (r.error) console.warn('Drive mirror insert failed', r.error); }).catch((e) => console.warn('Drive mirror insert failed', e)); }
     persistAll();
-    return `App / ${appName} / ${fieldName}`;
+    return [rootName, groupName, leafName].filter(Boolean).join(' / ');
   } catch (error) { console.warn('Drive mirror failed', error); return ''; }
 }
 
@@ -18683,6 +18701,12 @@ function wbMountFileFields(overlay) {
     const isImage = zone.hasAttribute('data-wb-image');
     const preview = zone.querySelector('[data-wb-img-preview]');
     const multi = zone.hasAttribute('data-wb-file-multi');
+    // Company Contacts renders this same field, so the zone carries whose it is rather than
+    // the uploader assuming an App Builder record is open behind it.
+    const scope = zone.dataset.wbFileScope || 'Workspaces';
+    const driveLabels = zone.dataset.wbFileDrive ? JSON.parse(zone.dataset.wbFileDrive) : null;
+    // "Uploads to this workspace" is a lie on a contact, which every workspace shares.
+    const hint = zone.dataset.wbFileHint || 'Uploads to this workspace';
     const list = zone.querySelector('[data-wb-file-list]');
     const readAll = () => wbFileValues(hidden.value);
     const writeAll = (files) => {
@@ -18727,14 +18751,14 @@ function wbMountFileFields(overlay) {
       } else {
         if (isImage && preview) preview.innerHTML = '<i class="ti ti-photo"></i>';
         else if (ico) ico.className = 'ti ti-cloud-upload';
-        label.innerHTML = isImage ? '<strong>Click or drop an image</strong><small>Shown as a circular avatar</small>' : '<strong>Click or drop a file</strong><small>Uploads to this workspace</small>';
+        label.innerHTML = isImage ? '<strong>Click or drop an image</strong><small>Shown as a circular avatar</small>' : `<strong>Click or drop a file</strong><small>${h(hint)}</small>`;
         openBtn.classList.remove('has-file');
         actions.hidden = true;
       }
     };
     const upload = async (file) => {
       if (!file) return;
-      if (!(await guardUpload(file, isImage ? 'image' : 'document', 'Workspaces'))) return;
+      if (!(await guardUpload(file, isImage ? 'image' : 'document', scope))) return;
       openBtn.disabled = true;
       progress.hidden = false;
       bar.style.width = '20%';
@@ -18772,7 +18796,7 @@ function wbMountFileFields(overlay) {
       if (!url && !live && file.size <= 2 * 1024 * 1024) { bar.style.width = '85%'; url = await wbReadFileAsDataUrl(file); }
       if (!url && !objectPath) {
         stop();
-        showToast('File is too large to attach here — link it by URL instead.', 'error', 'Workspaces');
+        showToast('File is too large to attach here — link it by URL instead.', 'error', scope);
         return;
       }
       bar.style.width = '100%';
@@ -18788,8 +18812,8 @@ function wbMountFileFields(overlay) {
       openBtn.disabled = false;
       setTimeout(() => { progress.hidden = true; bar.style.width = '0%'; }, 400);
       // Mirror the upload into Company Drive under App > (App) > (Field).
-      const mirrored = objectPath ? wbMirrorFileToDrive(file, objectPath, companyId, hidden.getAttribute('data-f')) : '';
-      showToast(mirrored ? `File attached and saved to Company Drive → ${mirrored}.` : 'File attached.', live ? 'live' : 'local', 'Workspaces');
+      const mirrored = objectPath ? wbMirrorFileToDrive(file, objectPath, companyId, hidden.getAttribute('data-f'), driveLabels) : '';
+      showToast(mirrored ? `File attached and saved to Company Drive → ${mirrored}.` : 'File attached.', live ? 'live' : 'local', scope);
     };
     // One at a time rather than in parallel: each upload owns the progress bar, and three
     // racing each other drive it backwards.
@@ -19244,6 +19268,38 @@ function mountWbRecordDrag(companyId, workspaceId, appId) {
   });
 }
 
+// ---- Workspace rail reorder -------------------------------------------------
+// Body lives in ./workspaces/rail-reorder.js and is fetched the first time a rail that can
+// actually be reordered is painted. Only a manager ever sees one, and the rail works
+// without it, so it has no business in the entry bundle.
+let workspaceRailReorderModule = null;
+let workspaceRailReorderPending = null;
+
+function loadWorkspaceRailReorder() {
+  if (workspaceRailReorderModule) return Promise.resolve(workspaceRailReorderModule);
+  if (!workspaceRailReorderPending) {
+    workspaceRailReorderPending = import('./workspaces/rail-reorder.js').then((mod) => {
+      workspaceRailReorderModule = mod.createWorkspaceRailReorder({
+        activeCompanyId, allowedOperationalWorkspaces, canonicalCompanyId, createSupabaseClient,
+        normalizeOperationalWorkspace, render, showToast, state,
+      });
+      return workspaceRailReorderModule;
+    }).catch((error) => {
+      workspaceRailReorderPending = null;
+      throw error;
+    });
+  }
+  return workspaceRailReorderPending;
+}
+
+function mountWorkspaceRailDrag() {
+  if (!document.querySelector('.workspace-rail-list[data-workspace-reorder]')) return;
+  if (workspaceRailReorderModule) { workspaceRailReorderModule.mount(); return; }
+  loadWorkspaceRailReorder()
+    .then((mod) => mod.mount())
+    .catch((error) => console.error('Workspace rail reorder failed to load', error));
+}
+
 function mountWbGridDrag(gridSelector, idAttr, idKey, commit) {
   const grid = document.querySelector(gridSelector);
   if (!grid) return;
@@ -19357,6 +19413,91 @@ function wbSaveAppSettings(companyId, workspaceId, appId) {
 }
 
 // Bind the builder's content + modal interactions after each render.
+// The Company Contacts field editor is the App Builder's field editor, so it emits the same
+// markup -- and that markup is inert without handlers. mountWorkspaceBuilder binds these
+// selectors too, but only when the route section is "workspaces", so the two never collide.
+// The contact form carries the App Builder's file field, and that field is inert without
+// its uploader. Scoped to the form so it cannot bind an App Builder zone behind it.
+function mountCompanyContactForm() {
+  const form = document.querySelector('[data-company-record-form]');
+  if (form) wbMountFileFields(form);
+}
+
+function mountCompanyContactFields() {
+  const root = document.querySelector('[data-cc-field-builder]');
+  if (!root) return;
+  const page = companyContactWrites();
+  if (!page) return;
+
+  // The scope prefix the shared markup writes in front of every id. Stripped here rather than
+  // threaded through, because this editor has exactly one list to put a field in.
+  const bare = (raw) => String(raw || '').replace(/^cc:/, '');
+  const bind = (selector, handler, event = 'onclick') => root.querySelectorAll(selector)
+    .forEach((el) => { el[event] = (e) => { e.preventDefault(); handler(el, e); }; });
+
+  bind('[data-add-type]', (el) => page.addCompanyContactField(bare(el.dataset.addType)));
+  bind('[data-edit-field]', (el) => page.configureCompanyContactField(bare(el.dataset.editField)));
+  bind('[data-hide-field]', (el) => page.toggleCompanyContactFieldHidden(bare(el.dataset.hideField)));
+  bind('[data-del-field]', (el) => page.removeCompanyContactField(bare(el.dataset.delField)));
+
+  bind('[data-cc-add-option]', (el) => page.addCompanyContactFieldOption(el.dataset.fieldId));
+  bind('[data-wb-del-option]', (el) => page.removeDraftFieldOption(
+    el.closest('[data-cc-field-config]')?.dataset.fieldId, el.closest('.wb-opt-item')?.dataset.oid,
+  ));
+
+  // Drag a type out of the palette; drop it on the list to append, or on a row to insert
+  // there. The same two gestures the App Builder has.
+  let dragId = '';
+  let paletteType = '';
+  root.querySelectorAll('.wb-palette-item').forEach((item) => {
+    item.ondragstart = (event) => {
+      paletteType = bare(item.dataset.wbPaletteType);
+      item.classList.add('dragging');
+      if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'copy'; try { event.dataTransfer.setData('text/plain', paletteType); } catch { /* ignore */ } }
+    };
+    item.ondragend = () => {
+      paletteType = '';
+      item.classList.remove('dragging');
+      root.querySelectorAll('.drop-target, .wb-drop-active').forEach((el) => el.classList.remove('drop-target', 'wb-drop-active'));
+    };
+  });
+
+  const zone = root.querySelector('[data-wb-field-dropzone]');
+  if (zone) {
+    zone.ondragover = (event) => { if (paletteType) { event.preventDefault(); zone.classList.add('wb-drop-active'); } };
+    zone.ondragleave = (event) => { if (event.target === zone) zone.classList.remove('wb-drop-active'); };
+    zone.ondrop = (event) => {
+      if (!paletteType) return;
+      event.preventDefault();
+      zone.classList.remove('wb-drop-active');
+      const type = paletteType;
+      paletteType = '';
+      page.addCompanyContactField(type);
+    };
+  }
+
+  root.querySelectorAll('.wb-field-row[draggable]').forEach((row) => {
+    row.ondragstart = () => { dragId = bare(row.dataset.fid); row.classList.add('dragging'); };
+    row.ondragend = () => { row.classList.remove('dragging'); root.querySelectorAll('.wb-field-row').forEach((el) => el.classList.remove('drop-target')); };
+    row.ondragover = (event) => { event.preventDefault(); row.classList.add('drop-target'); };
+    row.ondragleave = () => row.classList.remove('drop-target');
+    row.ondrop = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      row.classList.remove('drop-target');
+      const target = bare(row.dataset.fid);
+      // A palette drag lands as an insert at that position; a row drag is a reorder.
+      if (paletteType) {
+        const type = paletteType;
+        paletteType = '';
+        page.addCompanyContactField(type, page.fieldIndexOf(target));
+        return;
+      }
+      page.moveCompanyContactField(dragId, target);
+    };
+  });
+}
+
 function mountWorkspaceBuilder() {
   const companyId = activeCompanyId();
   const params = state.route?.params;
@@ -19524,7 +19665,10 @@ function mountWorkspaceBuilder() {
     // and the row action buttons), which keep their own behavior.
     document.querySelectorAll('#wbItemsList [data-item]').forEach((el) => {
       el.addEventListener('click', (e) => {
-        if (e.target.closest('a, button, input, select, textarea, label, .wb-check-toggle')) return;
+        // The checklist panel is a control surface, not part of the card's body: clicking a
+        // step's label or the gap beside it must tick the step, never navigate away from it.
+        // Buttons already bail, which covered the circle and the X but not the row itself.
+        if (e.target.closest('a, button, input, select, textarea, label, .wb-check-toggle, .wb-card-cl-panel')) return;
         // Navigate rather than open a modal: a record is a place, so it gets a URL and
         // browser-back. The deck stage rides along so Back lands on the list you left.
         const stage = state.route?.params?.get('stage') || '';
@@ -24226,6 +24370,40 @@ function renderOperationalWorkspaceEditModal(companyId) {
 //
 // Built on renderModalShell so it inherits what that already does correctly: role=dialog,
 // an accessible name, the focus trap, focus returning to this button on close, and Escape.
+// ---- Bulk-action dialogs ----------------------------------------------------
+// Both are reached from a toolbar button on a list, so neither belongs in the entry bundle.
+let bulkModalsModule = null;
+let bulkModalsPending = null;
+
+function loadBulkModals() {
+  if (bulkModalsModule) return Promise.resolve(bulkModalsModule);
+  if (!bulkModalsPending) {
+    bulkModalsPending = import('./crm/bulk-modals.js').then((mod) => {
+      bulkModalsModule = mod.createBulkModals({
+        activeCompanyId, companyContacts, emptyState, findDuplicateGroups, h, isLiveSupabaseSession,
+        jobById, money, reauthPasswordField, renderModalShell, selectedJobRows, state,
+      });
+      return bulkModalsModule;
+    }).catch((error) => {
+      bulkModalsPending = null;
+      throw error;
+    });
+  }
+  return bulkModalsPending;
+}
+
+function renderContactsDedupeModal() {
+  if (bulkModalsModule) return bulkModalsModule.renderContactsDedupeModal();
+  loadBulkModals().then(() => render()).catch((error) => console.error('Dedupe dialog failed to load', error));
+  return questLoader('Loading');
+}
+
+function renderJobsBulkDeleteModal() {
+  if (bulkModalsModule) return bulkModalsModule.renderJobsBulkDeleteModal();
+  loadBulkModals().then(() => render()).catch((error) => console.error('Bulk delete dialog failed to load', error));
+  return questLoader('Loading');
+}
+
 function renderCompanyPickerModal() {
   const companies = allowedCompanies();
   const currentId = activeCompanyId();
@@ -24275,6 +24453,11 @@ function renderCompanyPickerModal() {
 }
 
 function renderActiveModal(route, session) {
+  // A map pin opened from an App Builder record. The record modal deliberately stays in
+  // state underneath -- this cannot go through state.modal, because the line below answers
+  // to builderModal first, and closing the record to show a map would throw away every
+  // other field the person had typed but not yet saved.
+  if (state.builderModal?.kind === 'wb-location') return renderLocationPickerModal();
   if (state.builderModal) return renderWorkspaceBuilderModal();
   if (['workspace-setup', 'workspace-setup-required'].includes(state.modal)) {
     return renderWorkspaceSetupModal(route.companyId || activeCompanyId(), route);
@@ -24290,6 +24473,15 @@ function renderActiveModal(route, session) {
   if (state.modal === 'job-expense') return jobExpenseModule ? jobExpenseModule.renderModal() : renderModalShell('Jobs', 'Log spend', questLoader('Loading'), 'wb-modal-sm');
   if (state.modal === 'job-walk') return jobWalkModule ? jobWalkModule.renderModal() : renderModalShell('Jobs', 'Job walk', questLoader('Loading'), 'wb-modal-sm');
   if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();
+  if (state.modal === 'company-contact-fields') {
+    return renderModalShell('Company Contacts', 'Edit fields',
+      renderCompanyContactFieldsEditor(route.companyId || activeCompanyId()), 'wide-modal',
+      '<button class="btn btn-primary" type="button" data-action="save-company-contact-fields"><i class="ti ti-device-floppy"></i>Save fields</button>');
+  }
+  if (state.modal === 'company-record-form') {
+    return renderModalShell('Company Contacts', state.selectedCompanyContactId ? 'Edit contact' : 'New contact',
+      renderCompanyContactEditor(route.companyId || activeCompanyId(), companyContactById(state.selectedCompanyContactId)), 'wide-modal');
+  }
   if (state.modal === 'contact-bulk') return renderContactBulkModal();
   if (state.modal === 'contacts-dedupe') return renderContactsDedupeModal();
   if (state.modal === 'task-delete') return renderTaskDeleteModal();
@@ -26540,6 +26732,28 @@ function onDocumentClick(event) {
   if (!event.target.closest('.address-lookup-control, .sf-inline-address-editor')) closeAddressSuggestionMenus();
   if (!event.target.closest('.job-type-combobox')) closeJobTypeMenus();
 
+  // Checked before the option itself: the X sits beside the option, so a click that lands on
+  // it must prune the list rather than pick the value it is attached to.
+  const removeOption = event.target.closest('[data-job-type-remove-option]');
+  if (removeOption) {
+    event.preventDefault();
+    event.stopPropagation();
+    const label = removeOption.dataset.jobTypeRemoveOption || '';
+    // Patched in place rather than re-rendered: the menu is open over a half-filled form, and
+    // a render() here would throw away everything typed into it so far.
+    const combo = removeOption.closest('.job-type-combobox');
+    const input = combo?.querySelector('[data-job-type-input]');
+    if (input) {
+      const kept = JSON.parse(input.dataset.jobTypeOptions || '[]').filter((item) => item !== label);
+      input.dataset.jobTypeOptions = JSON.stringify(kept);
+    }
+    removeOption.closest('.job-type-suggestion-row')?.remove();
+    companyContactWrites()
+      ?.removeCompanyContactFieldOption(removeOption.dataset.jobTypeRemoveKind, label)
+      .catch((error) => showToast(error.message || 'Could not remove that entry.', 'local', 'Company Contacts'));
+    return;
+  }
+
   const jobTypeOption = event.target.closest('[data-job-type-option]');
   if (jobTypeOption) {
     event.preventDefault();
@@ -26561,7 +26775,7 @@ function onDocumentClick(event) {
     const input = jobTypeToggle.closest('.job-type-combobox')?.querySelector('[data-job-type-input]');
     if (input) {
       wireJobTypeAutocomplete(input);
-      const menu = jobTypeMenu(input);
+      const menu = input.closest('.job-type-combobox')?.querySelector('[data-job-type-menu]');
       const open = menu?.hidden;
       closeJobTypeMenus(input);
       renderJobTypeSuggestions(input, true);
@@ -26692,6 +26906,11 @@ function handleAction(event, node) {
     event.preventDefault();
     openWorkspaceSetupModal(node.dataset.workspaceId);
     render();
+    return;
+  }
+  if (action === 'wb-location-pin') {
+    event.preventDefault();
+    wbOpenLocationPicker(node.dataset.f);
     return;
   }
   if (action === 'wb-modal-close') {
@@ -28994,6 +29213,56 @@ function handleAction(event, node) {
     render();
     return;
   }
+  if (action === 'open-company-record') {
+    event.preventDefault();
+    navigate(companyPath('company-contacts', { contact_id: node.dataset.contactId }, activeCompanyId()));
+    return;
+  }
+  if (action === 'set-company-record-type') {
+    event.preventDefault();
+    const key = node.dataset.type || 'all';
+    // Clicking the chip you are already on clears it, like the pipeline chips.
+    state.companyContactTypeFilter = state.companyContactTypeFilter === key ? 'all' : key;
+    render();
+    return;
+  }
+  if (action === 'open-company-record-form') {
+    event.preventDefault();
+    if (!requirePermission('company_contacts.manage', activeCompanyId())) return;
+    state.selectedCompanyContactId = node.dataset.mode === 'edit' ? (node.dataset.contactId || '') : '';
+    state.modal = 'company-record-form';
+    render();
+    return;
+  }
+  if (action === 'open-company-contact-fields') {
+    event.preventDefault();
+    if (!requirePermission('company_contacts.manage', activeCompanyId())) return;
+    companyContactWrites()?.openCompanyContactFieldEditor(activeCompanyId());
+    state.modal = 'company-contact-fields';
+    render();
+    return;
+  }
+  if (action === 'configure-company-contact-field') {
+    event.preventDefault();
+    companyContactWrites()?.configureCompanyContactField(node.dataset.fieldId);
+    return;
+  }
+  if (action === 'remove-draft-field-option') {
+    event.preventDefault();
+    companyContactWrites()?.removeDraftFieldOption(node.dataset.fieldId, node.dataset.optionId);
+    return;
+  }
+  if (action === 'save-company-contact-fields') {
+    event.preventDefault();
+    companyContactWrites()?.saveCompanyContactFields()
+      .catch((error) => showToast(error.message || 'Could not save those fields.', 'local', 'Company Contacts'));
+    return;
+  }
+  if (action === 'delete-company-record') {
+    event.preventDefault();
+    companyContactWrites()?.deleteCompanyContact(node.dataset.contactId).catch((error) => showToast(error.message || 'Could not delete that contact.', 'local', 'Company Contacts'));
+    return;
+  }
   if (action === 'set-contact-rail-scope') {
     event.preventDefault();
     state.contactRailScope = node.dataset.scope === 'private' ? 'private' : 'team';
@@ -29410,6 +29679,16 @@ function handleAction(event, node) {
 
 function closeActiveModal() {
   if (state.modal === 'workspace-setup-required') return false;
+  // Cancelling a pin returns to the record it was opened from, with the draft intact.
+  // Falling through would clear state.modal, leave builderModal on 'wb-location', and
+  // strand the person on a map with no way back to what they were editing.
+  if (state.builderModal?.kind === 'wb-location') { wbCloseLocationPicker(); return true; }
+  // Same for a pin opened from a form in the modal slot: Cancel means "not that address",
+  // not "throw away everything I had typed".
+  if (state.modal === 'location-picker' && state.locationPicker?.returnModal) {
+    returnFromLocationPicker(state.locationPicker);
+    return true;
+  }
   const route = state.route || getRoute();
   state.dashboardTrayOpen = false;
   state.modal = '';
@@ -29708,6 +29987,11 @@ function onDocumentSubmit(event) {
     return;
   }
 
+  if (event.target.matches('[data-company-record-form]')) {
+    event.preventDefault();
+    companyContactWrites()?.saveCompanyContactForm(event.target).catch((error) => showToast(error.message || 'Could not save that contact.', 'local', 'Company Contacts'));
+    return;
+  }
   if (event.target.matches('[data-contact-form]')) {
     event.preventDefault();
     saveContact(event.target);
@@ -32767,6 +33051,29 @@ async function openMessageAttachment(attachmentId) {
 }
 
 function onDocumentInput(event) {
+  // Both paths, for the reason the job Client field taught us: typing fires input, and
+  // picking from the datalist fires input too in Chromium but change in Firefox.
+  if (event.target.matches('[data-wb-cc-name]')) syncCompanyContactPicker(event.target);
+  // The visible box drives a hidden input, so an unchecked field still submits a value: a
+  // missing key would be indistinguishable from a field somebody deleted.
+  if (event.target.matches('[data-cc-check]')) {
+    const name = event.target.dataset.ccCheck;
+    const hidden = event.target.closest('label')?.querySelector(`input[type="hidden"][name="${CSS.escape(name)}"]`);
+    if (hidden) hidden.value = event.target.checked ? 'yes' : 'no';
+    const echo = event.target.closest('.cc-check')?.querySelector('em');
+    if (echo) echo.textContent = event.target.checked ? 'Yes' : 'No';
+    return;
+  }
+  if (event.target.matches('[data-company-contact-search]')) {
+    state.companyContactQuery = event.target.value || '';
+    render();
+    // The re-render replaces the input, so put the caret back at the end.
+    queueMicrotask(() => {
+      const field = document.querySelector('[data-company-contact-search]');
+      if (field) { field.focus(); field.setSelectionRange(field.value.length, field.value.length); }
+    });
+    return;
+  }
   if (event.target.matches('[data-company-picker-search]')) {
     state.companyPickerQuery = event.target.value || '';
     render();
@@ -33103,6 +33410,7 @@ function horizontalScrollerUnder(target) {
 }
 
 function onDocumentChange(event) {
+  if (event.target.matches('[data-wb-cc-name]')) syncCompanyContactPicker(event.target);
   // Picking a client from the suggestions dispatches CHANGE, not input -- see the
   // [data-job-type-option] handler. The same call lives in onDocumentInput for the typing
   // path; without this one, choosing the very name the menu offered filled nothing, which
@@ -33493,41 +33801,7 @@ function renderUnderwriterPage(route, companyId) {
   return questLoader('Loading');
 }
 
-function renderJobsBulkDeleteModal() {
-  const ctx = state.jobBulkDelete || { count: 0, error: '' };
-  const targets = selectedJobRows();
-  const n = targets.length;
-  const s = n === 1 ? '' : 's';
 
-  // Deletes run one at a time, so there is real progress to show rather than an indefinite
-  // spinner that says only "something is happening". The count is the honest version.
-  if (ctx.busy) {
-    const total = ctx.total || n || 1;
-    const done = Math.min(ctx.done || 0, total);
-    const pct = Math.round((done / total) * 100);
-    return renderModalShell('Jobs', `Deleting ${total} job${total === 1 ? '' : 's'}`, `
-      <div class="jobs-delete-progress" role="status" aria-live="polite">
-        <div class="jobs-delete-spinner" aria-hidden="true"></div>
-        <p class="wb-sub">${ctx.label ? h(ctx.label) : `Moving ${done + 1} of ${total} to the Recycle Bin…`}</p>
-        <div class="jobs-delete-bar"><span style="width:${pct}%"></span></div>
-        <p class="wb-sub jobs-delete-count">${done} of ${total} done</p>
-      </div>
-    `, 'wb-modal-sm jobs-delete-busy');
-  }
-
-  return renderModalShell('Jobs', `Delete ${n} job${s}`, `
-    ${ctx.error ? `<div class="wb-modal-error" role="alert">${h(ctx.error)}</div>` : ''}
-    <p class="wb-sub">This moves <b>${n}</b> job${s} to the Recycle Bin, along with what each one carries.</p>
-    <ul class="wb-sub jobs-delete-list">${targets.slice(0, 8).map((job) => `<li>${h(job.name)}${job.client_name ? ` — ${h(job.client_name)}` : ''}</li>`).join('')}</ul>
-    ${n > 8 ? `<p class="wb-sub">…and ${n - 8} more.</p>` : ''}
-    <p class="wb-sub">Deleted jobs can be restored from the Recycle Bin, so this is reversible — but everyone else loses sight of them straight away.</p>
-    ${isLiveSupabaseSession() ? reauthPasswordField('jobsDeletePw', 'Confirm your password') : ''}
-    <div class="modal-actions">
-      <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      <button class="btn danger" type="button" data-action="jobs-bulk-delete-confirm" ${n ? '' : 'disabled'}><i class="ti ti-trash"></i>Delete ${n} job${s}</button>
-    </div>
-  `, 'wb-modal-sm');
-}
 
 /**
  * Move every selected job to the Recycle Bin, after confirming the password.
@@ -37423,6 +37697,130 @@ function sortedContacts(contacts) {
   });
 }
 
+// A lazily-loaded screen that fails shows a spinner for ever and says nothing. Surface it:
+// the console is where a developer looks, and nobody using the product opens it.
+function companyContactsLoadFailed(error, what) {
+  console.error(what, error);
+  showToast(`${what}. ${error?.message || 'Check your connection and try again.'}`, 'error', 'Records');
+}
+
+// ---- Company Contacts page --------------------------------------------------
+// Directory, contact card and the add/edit form all live in ./company-contacts/page.js and
+// are fetched on the first visit. The aggregation they read is pure and travels with them.
+let companyContactsPageModule = null;
+let companyContactsPagePending = null;
+
+function loadCompanyContactsPage() {
+  if (companyContactsPageModule) return Promise.resolve(companyContactsPageModule);
+  if (!companyContactsPagePending) {
+    companyContactsPagePending = import('./company-contacts/page.js').then((mod) => {
+      companyContactsPageModule = mod.createCompanyContactsPage({
+        activeCompanyId, appHref, can, canonicalCompanyId, companyContactById, companyContactChipField,
+        companyContactFieldsFor, companyContactValue, companyContactsFor, companyPath, emptyState,
+        createSupabaseClient, h, isLiveSupabaseSession, money, navigate, normalizeCompanyContact,
+        normalizeCompanyContactField, render, requirePermission, showToast, state,
+        supabaseRow, supabaseWrite, timeAgo, wbDoc, wbFieldBuilderMarkup, wbFileIcon, wbFileValues,
+        wbOptRow, acceptAttr, fileTypeKind, WB_FIELD_TYPES,
+        COMPANY_CONTACT_COLS, COMPANY_CONTACT_FIELD_COLS, COMPANY_CONTACT_FIELD_TYPES,
+      });
+      return companyContactsPageModule;
+    }).catch((error) => {
+      companyContactsPagePending = null;
+      throw error;
+    });
+  }
+  return companyContactsPagePending;
+}
+
+function renderCompanyContactsPage(route, companyId) {
+  if (companyContactsPageModule) return companyContactsPageModule.renderCompanyContactsPage(route, companyId);
+  loadCompanyContactsPage().then(() => render()).catch((error) => companyContactsLoadFailed(error, 'Company Contacts could not load'));
+  return questLoader('Loading contacts');
+}
+
+function renderCompanyContactEditor(companyId, contact) {
+  if (companyContactsPageModule) return companyContactsPageModule.renderCompanyContactEditor(companyId, contact);
+  loadCompanyContactsPage().then(() => render()).catch((error) => companyContactsLoadFailed(error, 'That form could not load'));
+  return questLoader('Loading form');
+}
+
+// The write path lives in ./company-contacts/page.js beside the form it serves: it only
+// ever runs from that page, and keeping it out here keeps it out of the entry bundle.
+function companyContactWrites() {
+  return companyContactsPageModule;
+}
+
+function renderCompanyContactFieldsEditor(companyId) {
+  if (companyContactsPageModule) return companyContactsPageModule.renderCompanyContactFieldsEditor(companyId);
+  loadCompanyContactsPage().then(() => render()).catch((error) => companyContactsLoadFailed(error, 'The field editor could not load'));
+  return questLoader('Loading fields');
+}
+
+// ---- Company Contacts -------------------------------------------------------
+// Company-scoped, not workspace-scoped: these are filtered by company alone, so a member of
+// any workspace sees the same directory. That is the whole feature.
+function companyContactsFor(companyId = activeCompanyId()) {
+  const target = canonicalCompanyId(companyId);
+  return state.companyContacts.filter((contact) => contact.company_id === target);
+}
+
+// The company's own field list, in the order they arranged it.
+function companyContactFieldsFor(companyId = activeCompanyId()) {
+  const target = canonicalCompanyId(companyId);
+  return state.companyContactFields
+    .filter((field) => field.company_id === target)
+    .sort((a, b) => a.position - b.position || a.label.localeCompare(b.label));
+}
+
+// Whichever category field the directory groups by. The first one, because a second set of
+// chips would be two answers to the same question.
+function companyContactChipField(companyId = activeCompanyId()) {
+  return companyContactFieldsFor(companyId).find((field) => field.type === 'category') || null;
+}
+
+function companyContactValue(contact, field) {
+  return field ? contact?.field_values?.[field.id] ?? '' : '';
+}
+
+function companyContactById(id) {
+  return id ? state.companyContacts.find((contact) => contact.id === id) || null : null;
+}
+
+// The name an App Builder cell shows for a stored contact id. Falls back to the raw id
+// rather than an empty cell: a value that cannot be resolved is a broken link worth seeing,
+// not nothing.
+function companyContactLabel(id) {
+  if (!id) return '';
+  return companyContactById(id)?.name || String(id);
+}
+
+// Options for the App Builder picker. The detail line is what tells two people with the
+// same name apart, which a directory of any size will have. Read from whichever fields the
+// company defined -- naming columns here would go blank the moment they changed the form.
+function companyContactOptions(companyId = activeCompanyId()) {
+  const detailFields = companyContactFieldsFor(companyId)
+    .filter((field) => ['text', 'phone', 'email'].includes(field.type))
+    .slice(0, 2);
+  return companyContactsFor(companyId).map((contact) => ({
+    id: contact.id,
+    name: contact.name,
+    detail: detailFields.map((field) => companyContactValue(contact, field)).filter(Boolean).join(' · '),
+  }));
+}
+
+// The datalist gives back a NAME; the field stores an id. Resolve on the way through, and
+// clear the id when the text matches nobody so a half-typed name cannot silently keep the
+// previously picked contact attached.
+function syncCompanyContactPicker(input) {
+  const picker = input?.closest?.('[data-wb-cc-picker]');
+  if (!picker) return;
+  const idField = picker.querySelector('[data-wb-cc-id]');
+  if (!idField) return;
+  const typed = String(input.value || '').trim().toLowerCase();
+  const match = companyContactsFor().find((contact) => contact.name.trim().toLowerCase() === typed);
+  idField.value = match ? match.id : '';
+}
+
 function contactById(id) {
   return state.contacts.find((contact) => contact.id === id && recordVisibleInOperationalWorkspace(contact)) || null;
 }
@@ -38595,6 +38993,11 @@ const DEAL_COLS = ['id', 'company_id', 'workspace_id', 'account_id', 'primary_co
 const JOB_COLS = ['id', 'company_id', 'workspace_id', 'name', 'client_name', 'contact_name', 'site_address', 'job_type', 'stage', 'priority', 'owner_name', 'scope', 'notes', 'estimate_total', 'invoice_total', 'account_id', 'contact_id', 'deal_id', 'site_id', 'starts_on', 'ends_on', 'updated_at'];
 const PROPOSAL_COLS = ['id', 'company_id', 'workspace_id', 'proposal_no', 'title', 'status', 'related_type', 'related_id', 'contact_id', 'deal_id', 'job_id', 'client', 'draft', 'total', 'public_token', 'accepted_by', 'accepted_email', 'accepted_at', 'declined_at', 'viewed_at', 'sent_at', 'created_by', 'created_by_label', 'created_at', 'updated_at'];
 const ACTIVITY_COLS = ['id', 'company_id', 'workspace_id', 'type', 'subject', 'body', 'related_type', 'related_id', 'account_id', 'contact_id', 'site_id', 'deal_id', 'job_id', 'due_at', 'completed_at', 'owner_name', 'updated_at'];
+// No workspace_id: that absence is the feature.
+// field_values carries everything the customer defined. The named columns stay for now so a
+// rollback is a code change rather than a data recovery.
+const COMPANY_CONTACT_COLS = ['id', 'company_id', 'name', 'field_values', 'contact_type', 'organization', 'phone', 'email', 'location', 'notes', 'last_activity_at', 'updated_at'];
+const COMPANY_CONTACT_FIELD_COLS = ['id', 'company_id', 'label', 'type', 'config', 'required', 'hidden', 'position'];
 const CONTACT_COLS = ['id', 'company_id', 'workspace_id', 'name', 'phone', 'email', 'location', 'stage', 'value', 'owner_name', 'account_id', 'title', 'source', 'temperature', 'pay_type', 'roof_system', 'secondary_roof_system', 'has_multiple_roof_systems', 'last_activity_at', 'notes', 'country_code', 'country', 'province', 'city', 'barangay', 'street', 'block_no', 'zip', 'lat', 'lng', 'updated_at'];
 const CLIENT_PORTAL_DOCUMENT_COLS = ['id', 'company_id', 'portal_id', 'version_group_id', 'version_number', 'is_current', 'review_status', 'scale', 'scale_unit', 'bucket_id', 'object_path', 'file_name', 'mime_type', 'size_bytes', 'page_count', 'uploaded_by', 'created_at', 'updated_at'];
 const CLIENT_PORTAL_ANNOTATION_COLS = ['id', 'company_id', 'portal_id', 'document_id', 'page_number', 'guest_name', 'author_profile_id', 'annotation_type', 'payload', 'resolved_at', 'created_at', 'updated_at'];
@@ -39571,6 +39974,8 @@ function isMutableAction(action = '') {
     'set-account-tab',
     'account-type',
     'set-contact-sort',
+    // Opens a map over the record. It writes nothing -- the record's own Save does that.
+    'wb-location-pin',
     'open-deal',
     'deal-activity-tab',
     'open-contact',
@@ -40327,6 +40732,33 @@ function locationPickerDefaultPin(address = '') {
   return { lat: 33.4484, lng: -112.0740 };
 }
 
+// A location field on an App Builder record opens the same picker the CRM uses -- search an
+// address, drag the pin, or take the browser's position. Only the address comes back: a
+// workspace field stores one string, and the coordinates have nowhere to live on it yet.
+function wbOpenLocationPicker(fieldId) {
+  const m = state.builderModal;
+  if (!m || !fieldId) return;
+  // Capture what is typed in the other fields first. Swapping the modal replaces the DOM,
+  // so anything not in the draft by now is gone.
+  wbCollectModalDraft();
+  const address = String(m.draft?.values?.[fieldId] ?? '').trim();
+  const pin = locationPickerDefaultPin(address);
+  state.locationPicker = { kind: 'wb-field', field: fieldId, address, lat: pin.lat, lng: pin.lng, inputName: '' };
+  state.builderModal = { ...m, kind: 'wb-location', fieldId, returnTo: { ...m } };
+  render();
+}
+
+function wbCloseLocationPicker() {
+  const back = state.builderModal?.returnTo;
+  state.builderModal = back ? { ...back } : null;
+  state.locationPicker = null;
+  // The Leaflet instances belong to a node render() has already thrown away; holding them
+  // would leave the next open talking to a map that is no longer on the page.
+  locationPickerMap = null;
+  locationPickerMarker = null;
+  render();
+}
+
 function openLocationPicker(node) {
   const sourceInput = node.closest('.address-lookup-control, .sf-inline-address-editor')?.querySelector('[data-address-lookup-input]');
   const kind = node.dataset.locationKind || (sourceInput ? 'input' : '');
@@ -40334,6 +40766,10 @@ function openLocationPicker(node) {
   const field = node.dataset.locationField || sourceInput?.name || 'address';
   const address = String(node.dataset.address || sourceInput?.value || '').trim();
   const pin = locationPickerDefaultPin(address);
+  // The picker takes over state.modal, so a pin opened from a form inside a modal unmounts
+  // that form. Remember which modal it was and everything typed into it, or Save writes the
+  // address into a form that is no longer on the page and the rest of the entry is gone.
+  const form = node.closest('form');
   state.locationPicker = {
     kind,
     id,
@@ -40342,155 +40778,87 @@ function openLocationPicker(node) {
     lat: Number(node.dataset.lat || pin.lat),
     lng: Number(node.dataset.lng || pin.lng),
     inputName: sourceInput?.name || '',
+    returnModal: kind === 'input' ? (state.modal || '') : '',
+    formValues: kind === 'input' && form ? Object.fromEntries(new FormData(form).entries()) : null,
   };
   state.modal = 'location-picker';
   render();
 }
 
-function renderLocationPickerModal() {
-  const picker = state.locationPicker || {};
-  const pin = locationPickerDefaultPin(picker.address);
-  const lat = Number(picker.lat || pin.lat);
-  const lng = Number(picker.lng || pin.lng);
-  return renderModalShell('Map Pin', 'Set exact site pin', `
-    <form class="location-picker" data-location-picker-form>
-      <div class="address-lookup-field location-picker-search">
-        <span>Address</span>
-        <div class="address-lookup-control">
-          <input name="address" value="${h(picker.address || '')}" data-location-picker-search data-google-address-input data-address-lookup-input data-address-options="${h(JSON.stringify(contactAddressOptions(activeCompanyId())))}" autocomplete="street-address" placeholder="Type the full site address" />
-          <button class="address-pin-button" type="button" data-action="location-picker-search"><i class="ti ti-search"></i><span>Search</span></button>
-          <button class="address-pin-button" type="button" data-action="location-picker-current"><i class="ti ti-current-location"></i><span>Use my location</span></button>
-        </div>
-      </div>
-      <div class="form-actions location-picker-actions">
-        <button class="btn btn-primary" type="submit" data-action="save-location-picker"><i class="ti ti-map-pin"></i>Save exact pin</button>
-        <button class="btn" type="button" data-action="close-modal">Cancel</button>
-      </div>
-      <div class="location-picker-mode">
-        <span><i class="ti ti-click"></i>Manual pin</span>
-        <p>Click the map or drag the pin to set the exact spot. Search will move the pin to the best address match.</p>
-      </div>
-      <input type="hidden" name="lat" value="${h(String(lat))}" data-location-lat />
-      <input type="hidden" name="lng" value="${h(String(lng))}" data-location-lng />
-      <div class="location-map" data-location-map data-lat="${h(String(lat))}" data-lng="${h(String(lng))}"></div>
-      <p class="location-picker-hint" data-location-picker-status>Search the address, drag the pin if needed, then save it to this customer record.</p>
-    </form>
-  `, 'wide-modal location-picker-modal');
-}
-
-async function refreshLocationPickerSuggestions(input) {
-  await refreshAddressSuggestions(input);
-}
-
-function setLocationPickerStatus(text) {
-  const status = document.querySelector('[data-location-picker-status]');
-  if (status) status.textContent = text;
-}
-
-function setLocationPickerPin(lat, lng, { center = false, reverse = false } = {}) {
-  if (!locationPickerMap || !locationPickerMarker) return;
-  locationPickerMarker.setLatLng([lat, lng]);
-  if (center) locationPickerMap.setView([lat, lng], Math.max(locationPickerMap.getZoom(), 16));
-  const latInput = document.querySelector('[data-location-lat]');
-  const lngInput = document.querySelector('[data-location-lng]');
-  if (latInput) latInput.value = String(lat);
-  if (lngInput) lngInput.value = String(lng);
-  state.locationPicker = { ...(state.locationPicker || {}), lat, lng };
-  setLocationPickerStatus(`Pinned at ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}.`);
-  if (reverse) reverseGeocodeLocationPicker(lat, lng).catch(() => {});
-}
-
-async function reverseGeocodeLocationPicker(lat, lng) {
-  const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`, {
-    headers: { Accept: 'application/json' },
-  }).catch(() => null);
-  const payload = response?.ok ? await response.json().catch(() => ({})) : {};
-  const address = String(payload.display_name || '').trim();
-  const input = document.querySelector('[data-location-picker-search]');
-  if (address && input) {
-    input.value = address;
-    state.locationPicker = { ...(state.locationPicker || {}), address };
-    setLocationPickerStatus('Address filled from the dropped pin.');
-  }
-}
-
-// Forward-geocode a free-text address to the best-matching place (worldwide,
-// no country restriction) using Nominatim — the same concept as the template.
-async function geocodeLocationPickerAddress(query) {
-  const clean = String(query || '').trim();
-  if (!clean) return null;
-  const params = new URLSearchParams({ q: clean, format: 'jsonv2', addressdetails: '1', limit: '1', 'accept-language': 'en' });
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, { headers: { Accept: 'application/json' } }).catch(() => null);
-  const payload = response?.ok ? await response.json().catch(() => []) : [];
-  return Array.isArray(payload) ? payload[0] : null;
-}
-
-async function searchLocationPickerAddress() {
-  const input = document.querySelector('[data-location-picker-search]');
-  const query = String(input?.value || '').trim();
-  if (!query) return showToast('Type an address to search.', 'local', 'Map Pin');
-  setLocationPickerStatus('Searching the map...');
-  const match = await geocodeLocationPickerAddress(query);
-  if (!match) {
-    setLocationPickerStatus('No match found — click or drag on the map to drop a manual pin.');
-    return showToast('No map match found. You can still click the map to drop a manual pin.', 'local', 'Map Pin');
-  }
-  const address = String(match.display_name || query).trim();
-  if (input) input.value = address;
-  state.locationPicker = { ...(state.locationPicker || {}), address };
-  setLocationPickerPin(Number(match.lat), Number(match.lon), { center: true });
-}
-
-function useCurrentLocationForPicker() {
-  if (!navigator.geolocation) return showToast('Current location is not available in this browser.', 'local', 'Map Pin');
-  setLocationPickerStatus('Requesting current location...');
-  navigator.geolocation.getCurrentPosition(
-    (position) => setLocationPickerPin(position.coords.latitude, position.coords.longitude, { center: true, reverse: true }),
-    () => showToast('Could not get your current location.', 'local', 'Map Pin'),
-    { enableHighAccuracy: true, timeout: 10000 },
-  );
-}
-
-async function mountLocationPicker() {
-  const mapNode = document.querySelector('[data-location-map]');
-  if (!mapNode || mapNode.dataset.bound) return;
-  mapNode.dataset.bound = '1';
-  const mapLibrary = await loadLeaflet().catch(() => null);
-  if (!mapLibrary || !document.body.contains(mapNode)) {
-    setLocationPickerStatus('Map unavailable. Enter the address manually.');
-    return;
-  }
-  const lat = Number(mapNode.dataset.lat || 33.4484);
-  const lng = Number(mapNode.dataset.lng || -112.0740);
-  locationPickerMap = mapLibrary.map(mapNode, { zoomControl: true }).setView([lat, lng], 14);
-  mapLibrary.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap',
-  }).addTo(locationPickerMap);
-  locationPickerMarker = mapLibrary.marker([lat, lng], {
-    draggable: true,
-    icon: mapLibrary.divIcon({ className: 'quest-map-pin', html: '<i class="ti ti-map-pin-filled"></i>', iconSize: [34, 34], iconAnchor: [17, 34] }),
-  }).addTo(locationPickerMap);
-  const sync = (reverse = false) => {
-    const pos = locationPickerMarker.getLatLng();
-    setLocationPickerPin(pos.lat, pos.lng, { reverse });
-  };
-  locationPickerMarker.on('dragend', () => sync(true));
-  locationPickerMap.on('click', (event) => {
-    locationPickerMarker.setLatLng(event.latlng);
-    sync(true);
+// Put a captured form back after the picker borrowed the modal slot. Files are skipped --
+// FormData carries a File object a value assignment cannot restore, and browsers refuse it.
+function restoreCapturedForm(form, values) {
+  if (!form || !values) return;
+  Object.entries(values).forEach(([name, value]) => {
+    if (typeof value !== 'string') return;
+    const field = form.querySelector(`[name="${CSS.escape(name)}"]`);
+    if (field && field.type !== 'file' && field.value !== value) field.value = value;
   });
-  setTimeout(() => locationPickerMap?.invalidateSize(), 80);
-  // On open, geocode the record's address so the map lands on the real place
-  // (worldwide) instead of the hardcoded fallback pin.
-  const initialAddress = String(state.locationPicker?.address || '').trim();
-  if (initialAddress) {
-    setLocationPickerStatus('Locating the address on the map…');
-    geocodeLocationPickerAddress(initialAddress).then((match) => {
-      if (match) setLocationPickerPin(Number(match.lat), Number(match.lon), { center: true });
-      else setLocationPickerStatus('Click or drag on the map to set the exact pin.');
-    }).catch(() => {});
+}
+
+// Shared by Save and Cancel: hand the modal back to the form the pin came from.
+function returnFromLocationPicker(picker, address = null) {
+  state.modal = picker.returnModal || '';
+  state.locationPicker = null;
+  resetLocationPickerMap();
+  render();
+  const input = document.querySelector(`[name="${CSS.escape(picker.inputName || picker.field || 'address')}"][data-address-lookup-input]`);
+  restoreCapturedForm(input?.closest('form'), picker.formValues);
+  if (input && address !== null) {
+    input.value = address;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   }
+}
+
+// ---- Map pin dialog ---------------------------------------------------------
+// Markup lives in ./crm/location-picker-modal.js and is fetched the first time a pin is
+// opened. Everything that reads or writes state stays here.
+let locationPickerModalModule = null;
+let locationPickerModalPending = null;
+
+function loadLocationPickerModal() {
+  if (locationPickerModalModule) return Promise.resolve(locationPickerModalModule);
+  if (!locationPickerModalPending) {
+    locationPickerModalPending = import('./crm/location-picker-modal.js').then((mod) => {
+      locationPickerModalModule = mod.createLocationPickerModal({
+        activeCompanyId, contactAddressOptions, h, loadLeaflet, locationPickerDefaultPin,
+        refreshAddressSuggestions, renderModalShell, showToast, state,
+      });
+      return locationPickerModalModule;
+    }).catch((error) => {
+      locationPickerModalPending = null;
+      throw error;
+    });
+  }
+  return locationPickerModalPending;
+}
+
+function renderLocationPickerModal() {
+  if (locationPickerModalModule) return locationPickerModalModule.renderLocationPickerModal();
+  loadLocationPickerModal().then(() => render()).catch((error) => console.error('Map pin dialog failed to load', error));
+  return questLoader('Loading map');
+}
+
+// The map runtime moved into ./crm/location-picker-modal.js with the markup it drives.
+// These shims stay because the render loop and the action handlers call them by name; the
+// module is always loaded by the time any of them can do anything, because the dialog it
+// renders is what puts the map on the page.
+function mountLocationPicker() {
+  return locationPickerModalModule ? locationPickerModalModule.mountLocationPicker() : Promise.resolve();
+}
+function searchLocationPickerAddress() {
+  return locationPickerModalModule ? locationPickerModalModule.searchLocationPickerAddress() : Promise.resolve();
+}
+function useCurrentLocationForPicker() {
+  locationPickerModalModule?.useCurrentLocationForPicker();
+}
+function refreshLocationPickerSuggestions(input) {
+  return locationPickerModalModule ? locationPickerModalModule.refreshLocationPickerSuggestions(input) : Promise.resolve();
+}
+// The Leaflet instances belong to a node render() has already replaced.
+function resetLocationPickerMap() {
+  locationPickerModalModule?.resetLocationPickerMap();
 }
 
 async function persistCrmSite(site) {
@@ -40513,7 +40881,28 @@ async function saveLocationPicker() {
   const address = String(formData.address || picker.address || '').trim();
   if (!address) return showToast('Enter an address before saving the pin.', 'local', 'Map Pin');
   const pinNote = `Exact pin: ${Number(formData.lat || picker.lat).toFixed(6)}, ${Number(formData.lng || picker.lng).toFixed(6)}`;
+  if (picker.kind === 'wb-field') {
+    const back = state.builderModal?.returnTo;
+    if (!back) return false;
+    // Into the draft, not straight to storage: the record modal owns saving, and a pin
+    // dropped on a record somebody then cancels must not persist behind their back.
+    back.draft = { ...(back.draft || {}), values: { ...(back.draft?.values || {}), [picker.field]: address } };
+    state.builderModal = { ...back };
+    state.locationPicker = null;
+    locationPickerMap = null;
+    locationPickerMarker = null;
+    showToast('Location set — save the record to keep it.', 'local', 'Workspaces');
+    render();
+    return true;
+  }
   if (picker.kind === 'input') {
+    // Opened from a form inside a modal: give that modal back, put the entry back, and only
+    // then write the address into it.
+    if (picker.returnModal) {
+      returnFromLocationPicker(picker, address);
+      showToast('Address set.', 'local', 'Map Pin');
+      return true;
+    }
     const input = document.querySelector(`[name="${CSS.escape(picker.inputName || picker.field || 'address')}"][data-address-lookup-input]`);
     if (input) {
       input.value = address;
@@ -40995,6 +41384,9 @@ function normalizeOperationalWorkspace(input) {
     color: String(input.color || '#f0b23b'),
     status: String(input.status || 'active').toLowerCase() === 'archived' ? 'archived' : 'active',
     is_default: input.is_default === true,
+    // Rail order, company-wide. 0 means a row that predates the column or arrived from a
+    // cache written before it; those sort last rather than jumping to the front.
+    position: Number.isFinite(Number(input.position)) && Number(input.position) > 0 ? Number(input.position) : 0,
     created_by: String(input.created_by || ''),
     created_at: input.created_at || '',
     updated_at: input.updated_at || input.created_at || '',
@@ -41204,6 +41596,54 @@ function normalizeCrmSite(input) {
     notes: String(input.notes || '').trim(),
     created_at: input.created_at || new Date().toISOString(),
     updated_at: input.updated_at || new Date().toISOString(),
+  };
+}
+
+// The company-wide directory. No workspace_id by design: one person, seen the same way from
+// every workspace. The type is free text validated against company_contact_types, because
+// the label list is the customer's to edit.
+function normalizeCompanyContact(input) {
+  return {
+    id: String(input.id || ''),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    name: String(input.name || '').trim() || 'Untitled contact',
+    // Everything the customer defined, keyed by field id. The named columns below are the
+    // pre-field-editor shape, kept so a rollback needs no data recovery.
+    field_values: input.field_values && typeof input.field_values === 'object' ? input.field_values : {},
+    contact_type: String(input.contact_type || '').trim(),
+    organization: String(input.organization || '').trim(),
+    phone: formatPhoneNumber(input.phone || ''),
+    email: String(input.email || '').trim().toLowerCase(),
+    location: String(input.location || '').trim(),
+    notes: String(input.notes || '').trim(),
+    last_activity_at: input.last_activity_at || null,
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: input.updated_at || input.created_at || new Date().toISOString(),
+  };
+}
+
+// One row of a customer-editable dropdown. `kind` says which list it belongs to: the type
+// list ships with trade defaults, the organization list fills itself from use.
+// The field types a Company Contact may use. A deliberate subset of the App Builder's --
+// these are the ones that mean something on a person, and every one of them already has a
+// renderer, so nothing here needs a second implementation.
+const COMPANY_CONTACT_FIELD_TYPES = ['text', 'textarea', 'number', 'money', 'phone', 'email', 'location', 'file', 'category', 'checkbox', 'date'];
+
+function normalizeCompanyContactField(input) {
+  return {
+    id: String(input.id || ''),
+    company_id: canonicalCompanyId(input.company_id || defaultCompanyId()),
+    label: String(input.label || '').trim() || 'Field',
+    // An unknown type falls back to text rather than rendering nothing: the value is still
+    // there, and a field that shows its content is recoverable where a blank one is not.
+    type: COMPANY_CONTACT_FIELD_TYPES.includes(input.type) ? input.type : 'text',
+    config: input.config && typeof input.config === 'object' ? input.config : {},
+    required: input.required === true,
+    // Hidden means the same here as in an app: off the directory and the card, still on
+    // the form and still stored. A date of birth belongs on the record without being a
+    // column everybody reads.
+    hidden: input.hidden === true,
+    position: Number.isFinite(Number(input.position)) ? Number(input.position) : 0,
   };
 }
 
@@ -42597,23 +43037,6 @@ function contractRows(rows) {
 
 function field(label, name, value = '', required = false, type = 'text', className = '', attrs = '') {
   return `<label class="${h(className)}"><span>${h(label)}</span><input name="${h(name)}" type="${h(type)}" value="${h(value)}" ${required ? 'required' : ''} ${attrs} /></label>`;
-}
-
-function renderSearchCombobox(label, name, value, options, { placeholder = 'Type to search', allowCustom = true } = {}) {
-  return `
-    <label class="job-type-field">
-      <span>${h(label)}</span>
-      <div class="job-type-combobox">
-        <input name="${h(name)}" type="text" value="${h(value || '')}" data-job-type-input data-job-type-options="${h(JSON.stringify(options))}" data-job-type-allow-custom="${allowCustom ? 'true' : 'false'}" autocomplete="off" placeholder="${h(placeholder)}" />
-        <button class="job-type-toggle" type="button" data-job-type-toggle aria-label="Show ${h(label.toLowerCase())} suggestions"><i class="ti ti-chevron-down"></i></button>
-        <div class="job-type-suggestions-menu" data-job-type-menu hidden></div>
-      </div>
-    </label>
-  `;
-}
-
-function renderJobTypeCombobox(label, name, value, companyId) {
-  return renderSearchCombobox(label, name, value, contactJobTypeOptions(companyId), { placeholder: 'Type or choose job type' });
 }
 
 function textareaField(label, name, value = '', className = '') {

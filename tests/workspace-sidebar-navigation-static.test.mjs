@@ -50,7 +50,10 @@ test('workspace creation and management are restricted to company account manage
 test('the row is a container, so the settings control is not nested inside a button', () => {
   // A <button> inside a <button> is invalid, and browsers disagree about which one a
   // click belongs to — so selecting a workspace and opening its settings would fight.
-  const rail = source.slice(source.indexOf('<div class="workspace-rail-list">'));
+  // Anchored on the class, not the whole tag: the list also carries the reorder marker now,
+  // and matching the closing bracket made this silently slice nothing and pass on an
+  // empty string.
+  const rail = source.slice(source.indexOf('<div class="workspace-rail-list"'));
   const row = rail.slice(0, rail.indexOf('.join('));
   assert.match(row, /<div class="workspace-rail-item /);
   assert.match(row, /<button class="workspace-rail-open" type="button" data-action="select-workspace"/);

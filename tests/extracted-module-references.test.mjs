@@ -154,6 +154,10 @@ test('what the account popover paints stays out of the settings-only chunk', () 
 // This compares every factory's destructure against what main.js actually passes.
 
 const FACTORY_MODULES = [
+  ['src/workspaces/rail-reorder.js', 'createWorkspaceRailReorder'],
+  ['src/crm/location-picker-modal.js', 'createLocationPickerModal'],
+  ['src/company-contacts/page.js', 'createCompanyContactsPage'],
+  ['src/crm/bulk-modals.js', 'createBulkModals'],
   ['src/platform/master-panel.js', 'createPlatformPanel'],
   ['src/workspace/data-io.js', 'createDataIO'],
   ['src/workspace/field-config-ui.js', 'renderFieldConfig'],

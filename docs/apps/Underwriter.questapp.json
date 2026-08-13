@@ -1,0 +1,357 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-14T00:00:00.000Z",
+  "app": {
+    "name": "Underwriter",
+    "recordName": "Case",
+    "type": "Underwriting",
+    "icon": "ti-clipboard-check",
+    "color": "#BA7517",
+    "description": "Price the scope and protect the margin. One case per job: enter the contract price and the costs, and the margin, headroom and break-even price fall out of it.",
+    "fields": [
+      {
+        "id": "f-case",
+        "label": "Case #",
+        "type": "autonumber",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "prefix": "UW-",
+          "padding": 4
+        }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": true,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-decision",
+        "label": "Decision",
+        "type": "status",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "options": [
+            {
+              "id": "uw-draft",
+              "label": "Draft",
+              "color": "#64748b"
+            },
+            {
+              "id": "uw-approve",
+              "label": "Ready to price",
+              "color": "#168653"
+            },
+            {
+              "id": "uw-review",
+              "label": "Review the scope",
+              "color": "#d18a05"
+            },
+            {
+              "id": "uw-decline",
+              "label": "Reprice before approval",
+              "color": "#c2413a"
+            }
+          ]
+        }
+      },
+      {
+        "id": "f-underwriter",
+        "label": "Underwriter",
+        "type": "user",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-priced",
+        "label": "Priced on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-price",
+        "label": "Contract price",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": "What the customer pays"
+        }
+      },
+      {
+        "id": "f-target",
+        "label": "Target margin %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-material",
+        "label": "Material",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-labor",
+        "label": "Labor",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-permits",
+        "label": "Permits and fees",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-disposal",
+        "label": "Disposal",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-other",
+        "label": "Other direct cost",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$",
+          "placeholder": ""
+        }
+      },
+      {
+        "id": "f-overhead",
+        "label": "Overhead %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-commission",
+        "label": "Commission %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-contingency",
+        "label": "Contingency %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        }
+      },
+      {
+        "id": "f-direct",
+        "label": "Direct costs",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Material} + {Labor} + {Permits and fees} + {Disposal} + {Other direct cost})"
+        }
+      },
+      {
+        "id": "f-pctcost",
+        "label": "Overhead, commission, contingency",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Contract price} * ({Overhead %} + {Commission %} + {Contingency %}) / 100"
+        }
+      },
+      {
+        "id": "f-total",
+        "label": "Total cost",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Material} + {Labor} + {Permits and fees} + {Disposal} + {Other direct cost}) + {Contract price} * ({Overhead %} + {Commission %} + {Contingency %}) / 100"
+        }
+      },
+      {
+        "id": "f-profit",
+        "label": "Gross profit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Contract price} - (({Material} + {Labor} + {Permits and fees} + {Disposal} + {Other direct cost}) + {Contract price} * ({Overhead %} + {Commission %} + {Contingency %}) / 100)"
+        }
+      },
+      {
+        "id": "f-margin",
+        "label": "Gross margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Contract price} - (({Material} + {Labor} + {Permits and fees} + {Disposal} + {Other direct cost}) + {Contract price} * ({Overhead %} + {Commission %} + {Contingency %}) / 100)) * 100 / {Contract price}"
+        }
+      },
+      {
+        "id": "f-gap",
+        "label": "Margin gap",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "(({Contract price} - (({Material} + {Labor} + {Permits and fees} + {Disposal} + {Other direct cost}) + {Contract price} * ({Overhead %} + {Commission %} + {Contingency %}) / 100)) * 100 / {Contract price}) - {Target margin %}"
+        }
+      },
+      {
+        "id": "f-maxdirect",
+        "label": "Max direct cost at target",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Contract price} * (100 - ({Overhead %} + {Commission %} + {Contingency %}) - {Target margin %}) / 100"
+        }
+      },
+      {
+        "id": "f-headroom",
+        "label": "Direct cost headroom",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Contract price} * (100 - ({Overhead %} + {Commission %} + {Contingency %}) - {Target margin %}) / 100) - ({Material} + {Labor} + {Permits and fees} + {Disposal} + {Other direct cost})"
+        }
+      },
+      {
+        "id": "f-breakeven",
+        "label": "Break-even price",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Material} + {Labor} + {Permits and fees} + {Disposal} + {Other direct cost}) * 100 / (100 - ({Overhead %} + {Commission %} + {Contingency %}))"
+        }
+      },
+      {
+        "id": "f-notes",
+        "label": "Decision notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "Scope risks, exclusions, or pricing decision"
+        }
+      },
+      {
+        "id": "f-docs",
+        "label": "Scope & carrier docs",
+        "type": "file",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "multiple": true
+        }
+      }
+    ],
+    "items": [],
+    "automations": [],
+    "collections": [],
+    "cardFields": [
+      "f-contact",
+      "f-price",
+      "f-margin",
+      "f-decision"
+    ],
+    "views": [
+      {
+        "id": "v-decision",
+        "title": "By decision",
+        "fieldId": "f-decision",
+        "scope": "team"
+      }
+    ],
+    "dashboard": [
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-pipeline",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-price"
+        }
+      },
+      {
+        "id": "w-stages",
+        "type": "stages",
+        "size": 2,
+        "config": {
+          "fieldId": "f-decision"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 6
+        }
+      },
+      {
+        "id": "w-calendar",
+        "type": "calendar",
+        "size": 2,
+        "config": {
+          "fieldId": "f-priced"
+        }
+      }
+    ]
+  }
+}

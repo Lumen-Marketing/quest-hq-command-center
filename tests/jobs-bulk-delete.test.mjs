@@ -2,11 +2,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The dialog moved into its own fetched-on-demand chunk to pay the bundle budget, and
+// main.js keeps a loader shim of the same name — so its markup has to be read from both, or
+// every assertion below matches the shim and proves nothing.
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  + readFileSync(new URL('../src/crm/bulk-modals.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 // The list follows the v1 structure now and lives in its own fetched-on-demand module.
 const jobList = readFileSync(new URL('../src/jobs/job-list.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The dialog lives in the module and main.js keeps a shim of the same name, so search the
+// module first — indexOf on the concatenation finds the shim and proves nothing.
+const bulkModals = readFileSync(new URL('../src/crm/bulk-modals.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const fn = (name) => {
+  const inModule = bulkModals.indexOf(`function ${name}(`);
+  if (inModule !== -1) return bulkModals.slice(inModule, bulkModals.indexOf('\n  }\n', inModule));
   const at = main.indexOf(`function ${name}(`);
   assert.notEqual(at, -1, `${name} should exist`);
   return main.slice(at, main.indexOf('\n}\n', at));

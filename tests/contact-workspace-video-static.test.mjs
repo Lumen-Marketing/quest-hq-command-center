@@ -50,7 +50,10 @@ test('contact intake fields have real suggestions and constrained source options
   assert.match(source, /function contactJobTypeOptions\(companyId\)/);
   assert.match(source, /function contactRoofSystemOptions\(companyId\)/);
   assert.match(source, /function contactSourceOptions\(companyId\)/);
-  assert.match(editorSource, /renderJobTypeCombobox\('Job type', 'title', edit\.title, companyId\)/);
+  // The wrapper is gone: the editor imports the combobox directly (it is a lazily fetched
+  // module, so a static import there costs the entry bundle nothing) and passes the option
+  // list itself. Same widget, same field, one indirection fewer.
+  assert.match(editorSource, /renderSearchCombobox\(h, 'Job type', 'title', edit\.title, contactJobTypeOptions\(companyId\)/);
   assert.match(source, /data-job-type-input/);
   assert.doesNotMatch(editorSource, /selectField\('Job type', 'title'/);
   assert.doesNotMatch(editorSource, /list="contact-job-type-options"/);

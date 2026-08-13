@@ -6,7 +6,15 @@ function roleCanEnterEveryWorkspace(role) {
   return ['owner', 'admin', 'developer'].includes(clean(role).toLowerCase());
 }
 
+// `position` is the order somebody dragged the rail into, so it outranks everything --
+// including is_default, which used to pin the default workspace first and would otherwise
+// leave one row that refuses to move.
+//
+// 0 means a row written before the column existed, or read back from an older cache. Those
+// sort last on the old rules rather than all colliding at the front.
 function workspaceSort(a, b) {
+  const rank = (w) => (Number(w.position) > 0 ? Number(w.position) : Infinity);
+  if (rank(a) !== rank(b)) return rank(a) - rank(b);
   if (!!a.is_default !== !!b.is_default) return a.is_default ? -1 : 1;
   return clean(a.name).localeCompare(clean(b.name)) || clean(a.id).localeCompare(clean(b.id));
 }
@@ -85,12 +93,28 @@ export function recordBelongsToWorkspace(record, workspaceId, defaultWorkspaceId
   return recordWorkspace ? recordWorkspace === target : target === clean(defaultWorkspaceId);
 }
 
-export function workspacePluginStatus({ workspaceId, pluginId, workspacePlugins = [], companyEntitled }) {
+/**
+ * Is a plugin usable in this workspace?
+ *
+ * The default is opt-in per workspace: a company may be entitled to Finance and still not
+ * want it in the Field workspace, so no row means not installed.
+ *
+ * `companyWide` inverts that for the plugins whose data has no workspace at all. Company
+ * Records is one directory every workspace reads; requiring a row per workspace meant the
+ * module vanished from every workspace nobody had explicitly installed it in -- which is the
+ * exact opposite of what "shared by every workspace" is supposed to mean. An explicit
+ * `disabled` row is still honoured, so it can be turned off deliberately.
+ *
+ * Deliberately a per-plugin flag rather than keying off COMPANY_SHARED: several plugins carry
+ * that scope and are still legitimately chosen per workspace, and flipping their default
+ * would silently switch them on where somebody had left them out.
+ */
+export function workspacePluginStatus({ workspaceId, pluginId, workspacePlugins = [], companyEntitled, companyWide = false }) {
   if (!companyEntitled) return 'available';
   const row = workspacePlugins.find((plugin) => (
     clean(plugin.workspace_id) === clean(workspaceId)
     && clean(plugin.plugin_id) === clean(pluginId)
   ));
-  if (!row) return 'available';
+  if (!row) return companyWide ? 'installed' : 'available';
   return clean(row.status).toLowerCase() === 'disabled' ? 'disabled' : 'installed';
 }

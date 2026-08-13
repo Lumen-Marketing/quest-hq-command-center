@@ -106,7 +106,13 @@ test('the link is routed in-app rather than reloading the page', () => {
 test('the row click does not swallow the link', () => {
   // Clicking a row opens that row; the guard that keeps links working is what lets a
   // relationship chip inside a row navigate somewhere else instead.
-  assert.match(main, /if \(e\.target\.closest\('a, button, input, select, textarea, label, \.wb-check-toggle'\)\) return;/);
+  // Asserted by parts, not as a fixed string: the list grows as more of a card becomes
+  // interactive (the checklist panel joined it), and what matters here is that `a` is still
+  // in it, not that nothing else ever is.
+  const bail = main.match(/if \(e\.target\.closest\('([^']+)'\)\) return;/)[1];
+  for (const part of ['a', 'button', 'input', 'select', 'textarea', 'label', '.wb-check-toggle']) {
+    assert.ok(bail.split(', ').includes(part), `${part} dropped from the row-click bail list: ${bail}`);
+  }
 });
 
 // --- styling -------------------------------------------------------------------------------

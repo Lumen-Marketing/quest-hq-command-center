@@ -5,9 +5,11 @@ import { addRecordLabel, newRecordLabel } from './naming.js';
 import { acceptAttr } from '../security/upload-policy.js';
 import { JOB_TILE_PARTS } from '../jobs/dashboard-model.js';
 
+import { WB_APP_ICONS, WB_WS_ICONS } from './icon-sets.js';
+
 export function createBuilderModal(ctx) {
   const {
-    WB_WS_ICONS, WB_APP_ICONS, WB_FIELD_TYPES, WB_PALETTE, clearableCount,
+    WB_FIELD_TYPES, WB_PALETTE, clearableCount,
     can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAppReportOptions, wbAvatar, wbColorSwatches, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbIconLabel, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
   } = ctx;
 

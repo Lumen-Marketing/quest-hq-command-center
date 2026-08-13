@@ -182,7 +182,9 @@ test('child values are formatted against the COLLECTION field list, not the pare
 test('a sub-item list gets the real field builder, not a lesser one', () => {
   // The same markup the app's Fields tab uses — palette, drag handles, configure, hide,
   // delete — so there is one builder to learn and one to keep working.
-  assert.match(main, /function wbFieldBuilderMarkup\(companyId, fields, canManage, scope = ''\)/);
+  // `types` and `rowExtra` arrived with Company Contacts, which renders this same builder for
+  // a field list that is not an app's: a narrower palette, and a config panel under the row.
+  assert.match(main, /function wbFieldBuilderMarkup\(companyId, fields, canManage, scope = '', types = WB_FIELD_ORDER, rowExtra = null\)/);
   assert.match(main, /function wbViewBuilder\(companyId, workspace, app\) \{\n\s*return wbFieldBuilderMarkup\(companyId, app\.fields, can\('workspaces\.manage', companyId\)\);/);
   assert.match(main, /wbFieldBuilderMarkup\(companyId, c\.fields, canManage, c\.id\)/);
 });
@@ -207,7 +209,10 @@ test('a scoped id tells an app field from a sub-item field', () => {
 test('deleting a sub-item field counts the children it will empty, not the records', () => {
   // "and its data in all 5 item(s)" would be wrong: the data lives on the child records,
   // and there can be many per record.
-  const handler = main.match(/bind\('\[data-del-field\]'[\s\S]*?\n {4}\}\);/)?.[0] || '';
+  // Sliced out of mountWorkspaceBuilder specifically: the Company Contacts field editor binds
+  // the same selector for its own list, and it is defined earlier in the file.
+  const builder = main.slice(main.indexOf('function mountWorkspaceBuilder('));
+  const handler = builder.match(/bind\('\[data-del-field\]'[\s\S]*?\n {4}\}\);/)?.[0] || '';
   assert.match(handler, /app\.items\.reduce\(\(n, it\) => n \+ \(it\.children \|\| \[\]\)\.filter\(\(c\) => c\.collection === collectionId\)\.length, 0\)/);
   assert.match(handler, /const noun = collectionId \? `\$\{owner\.name\} record` : 'item';/);
 });

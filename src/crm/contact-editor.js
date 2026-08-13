@@ -7,12 +7,13 @@
 // from where it lived there.
 
 import { contactUsesRoofFields } from './contact-field-visibility.js';
+import { renderSearchCombobox } from '../ui/combobox-menu.js';
 
 export function createContactEditor(ctx) {
   const {
     h, field, selectField, textareaField, blankContact, TEMPERATURES,
     protectedFormDraftAttributes, renderProtectedFormDraftStrip, activeWorkspaceId,
-    allowedCompanies, companyLabel, companyAccounts, renderJobTypeCombobox,
+    allowedCompanies, companyLabel, companyAccounts, contactJobTypeOptions,
     contactStageNames, contactOwnerOptions, contactRoofSystemSelectOptions, contactSourceOptions,
   } = ctx;
 
@@ -29,7 +30,7 @@ export function createContactEditor(ctx) {
         ${field('Name', 'name', edit.name, true)}
         ${selectField('Company', 'company_id', companyId, allowedCompanies().map((company) => [company.id, companyLabel(company)]))}
         ${selectField('Account', 'account_id', edit.account_id, [['', '- None -']].concat(companyAccounts(companyId).map((account) => [account.id, account.name])))}
-        ${renderJobTypeCombobox('Job type', 'title', edit.title, companyId)}
+        ${renderSearchCombobox(h, 'Job type', 'title', edit.title, contactJobTypeOptions(companyId), { placeholder: 'Type or choose job type' })}
         ${field('Email', 'email', edit.email, false, 'email')}
         <label class="span-2">
           <span>Phone</span>

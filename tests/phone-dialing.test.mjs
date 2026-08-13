@@ -60,8 +60,11 @@ test('the phone field renders as a link, matching how email already does', () =>
 test('tapping the number calls instead of opening the record', () => {
   // The row's own click handler opens the item. It already skips anchors, which is what
   // keeps a phone link from doing both things at once.
+  // Anchored on the guard itself rather than a fixed byte window: comments explaining why
+  // the bail list has grown pushed it past the old 400-character slice.
   const guard = main.slice(main.indexOf("document.querySelectorAll('#wbItemsList [data-item]')"));
-  assert.match(guard.slice(0, 400), /e\.target\.closest\('a, button, input, select, textarea, label/);
+  const bail = guard.match(/e\.target\.closest\('([^']+)'\)/)[1];
+  assert.ok(bail.split(', ').includes('a'), `anchors dropped from the row-click bail list: ${bail}`);
 });
 
 test('the cell is styled as an action and takes visible focus', () => {

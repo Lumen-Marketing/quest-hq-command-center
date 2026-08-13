@@ -189,7 +189,10 @@ test('job type options use Quest Roofing services instead of saved junk values',
   const helperSource = source.match(/function contactJobTypeOptions\(companyId\) \{[\s\S]*?\n\}/)?.[0] || '';
   const defaultOptions = [...constantSource.matchAll(/'([^']+)'/g)].map((match) => match[1]);
   assert.ok(defaultOptions.length >= 200, `expected at least 200 default job types, found ${defaultOptions.length}`);
-  assert.match(source, /function renderJobTypeCombobox\(label, name, value, companyId\)/);
+  // Lives in src/ui/combobox-menu.js now, imported by the editors that use it rather than
+  // held in main.js and handed down.
+  const combobox = readFileSync(new URL('../src/ui/combobox-menu.js', import.meta.url), 'utf8');
+  assert.match(combobox, /export function renderSearchCombobox\(h, label, name, value, options/);
   ['Tile Roofing', 'Shingle Roofing', 'Metal Roofing', 'Foam Roofing', 'Roof Repair', 'Free Inspection', 'Storm & Emergency', 'Insurance Claims', 'Maintenance', 'Not Sure'].forEach((item) => assert.ok(constantSource.includes(`'${item}'`)));
   ['General Construction', 'Remodeling', 'Painting', 'Plumbing', 'Electrical', 'HVAC', 'Flooring', 'Landscaping', 'Solar', 'Windows & Doors'].forEach((item) => assert.ok(constantSource.includes(`'${item}'`)));
   ['Software Development', 'Web Development', 'Mobile App Development', 'DevOps Engineering', 'Cybersecurity', 'IT Support', 'Data Analytics', 'AI Automation', 'Cloud Migration', 'Database Administration'].forEach((item) => assert.ok(constantSource.includes(`'${item}'`)));
@@ -351,7 +354,10 @@ test('account record tabs use contacts and quotes language', () => {
 
 test('messages remains visible as the job center inbox', () => {
   assert.match(source, /\{ id: 'messages', group: 'Communication', label: 'Messages'/);
-  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
+  // Company Contacts joined this group: it is company-wide, so it belongs beside Home and
+  // Inbox in My work rather than under any one workspace. The three that were here before
+  // still have to be, in order.
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages', 'company-contacts'\] \}/);
   assert.match(source, /messages:\s*'Inbox'/);
   assert.doesNotMatch(source, /\{ id: 'messages', group: 'Company', label: 'Inbox'/);
 });

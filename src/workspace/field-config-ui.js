@@ -114,7 +114,7 @@ export function renderFieldConfig(fd, app, ctx) {
  */
 export function createFieldInput(ctx) {
   const {
-    h, WB_FIELD_TYPES, wbMembers, wbRelTargetApp, wbDoc, wbRelLabel, wbProgressColor,
+    h, WB_FIELD_TYPES, companyContactOptions, wbMembers, wbRelTargetApp, wbDoc, wbRelLabel, wbProgressColor,
     wbProgressDisplayHtml, wbChecklistValue, wbChecklistBodyHtml, wbRatingStars, wbAutoNumberText,
   } = ctx;
   function wbRenderFieldInput(companyId, workspaceId, f, val) {
@@ -135,6 +135,22 @@ export function createFieldInput(ctx) {
       case 'user': {
         const members = wbMembers(companyId);
         input = members.length ? `<select class="wb-input" data-f="${h(f.id)}"><option value="">— Unassigned —</option>${members.map((m) => `<option value="${h(m.id)}" ${val === m.id ? 'selected' : ''}>${h(m.name)}</option>`).join('')}</select>` : '<div class="wb-sub" style="color:var(--warning,#d97706)">No company members to assign.</div>'; break;
+      }
+      // A datalist, not a <select>: a company directory runs to hundreds of people and the
+      // only way to find one in a dropdown is to scroll. The visible input carries the name
+      // and the hidden input carries the id, so a renamed contact does not break the link.
+      case 'company_contact': {
+        const options = companyContactOptions(companyId);
+        const listId = `wbcr-${f.id}`;
+        const current = options.find((option) => option.id === String(val || ''));
+        input = `
+          <div class="wb-inline wb-cc-picker" data-wb-cc-picker>
+            <span class="wb-cur"><i class="ti ti-address-book"></i></span>
+            <input class="wb-input" list="${h(listId)}" data-wb-cc-name value="${h(current ? current.name : '')}" placeholder="${options.length ? 'Search the company directory…' : 'No company contacts yet'}" autocomplete="off" />
+            <input type="hidden" data-f="${h(f.id)}" data-wb-cc-id value="${h(current ? current.id : '')}" />
+            <datalist id="${h(listId)}">${options.map((option) => `<option value="${h(option.name)}"${option.detail ? ` label="${h(option.detail)}"` : ''}></option>`).join('')}</datalist>
+          </div>`;
+        break;
       }
       case 'relationship': {
         const ta = wbRelTargetApp(f, companyId);
@@ -195,7 +211,9 @@ export function createFieldInput(ctx) {
           <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
         </div>`; break;
       case 'calculation': input = `<div class="wb-input wb-calc-display" data-calc="${h(f.id)}">—</div><div class="wb-sub">Auto-calculated: <code>${h(f.config.formula || '(no formula)')}</code></div>`; break;
-      case 'location': input = `<div class="wb-inline"><span class="wb-cur"><i class="ti ti-map-pin"></i></span><input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="Address, city, or place"></div>`; break;
+      // The pin is a button, not decoration: it opens the same map picker the CRM uses, so
+      // an address can be dropped or found rather than typed from memory.
+      case 'location': input = `<div class="wb-inline"><button class="wb-cur wb-pin-btn" type="button" data-action="wb-location-pin" data-f="${h(f.id)}" title="Pick this on a map" aria-label="Pick ${h(f.name || 'location')} on a map"><i class="ti ti-map-pin"></i></button><input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="Address, city, or place"></div>`; break;
       case 'duration': {
         const mins = Math.max(0, Math.round(Number(val) || 0));
         input = `<div class="wb-inline wb-duration" data-wb-duration>

@@ -14,7 +14,10 @@ test('command center uses the approved IBM Plex typography system', () => {
 
 test('navigation follows the approved job center information architecture', () => {
   assert.match(source, /const NAVIGATION_LABELS = \{[\s\S]*dashboard:\s*'Home'[\s\S]*messages:\s*'Inbox'[\s\S]*underwriter:\s*'Estimator'[\s\S]*analytics:\s*'Reports'[\s\S]*users:\s*'People'[\s\S]*calendar:\s*'Meetings'/);
-  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
+  // Company Contacts joined this group: it is company-wide, so it belongs beside Home and
+  // Inbox in My work rather than under any one workspace. The three that were here before
+  // still have to be, in order.
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages', 'company-contacts'\] \}/);
   assert.match(source, /\{ label: 'Pipeline', ids: \['contacts'\] \}/);
   assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
   assert.match(source, /\{ label: 'Tools', ids: \['underwriter', 'proposals'\] \}/);

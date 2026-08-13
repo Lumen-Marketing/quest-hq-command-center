@@ -6,8 +6,12 @@ import { WORKSPACE_PLUGIN_REGISTRY } from '../src/workspaces/plugin-catalog.js';
 // The Appearance panel markup now lives in its own lazily-fetched module. These read
 // both files as one source: the assertions are about what the app renders, not about
 // which file happens to hold it.
+// Concatenated, because these behaviours are wired across main.js and the modules it
+// fetches on demand -- the map-pin dialog's markup moved out to pay the bundle budget, and
+// asserting against main.js alone would report it as deleted.
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/ui/appearance-panel.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/ui/appearance-panel.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/crm/location-picker-modal.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const packageJson = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
