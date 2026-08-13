@@ -26,6 +26,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
 const picker = readFileSync(join(root, 'src', 'workspace', 'relationship-picker.js'), 'utf8');
 const fieldUi = readFileSync(join(root, 'src', 'workspace', 'field-config-ui.js'), 'utf8');
+const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8');
 
 const fn = (source, name) => {
   const at = source.lastIndexOf(`function ${name}(`);
@@ -268,4 +269,14 @@ test('the switch is wired end to end, and named in the panel', () => {
   assert.match(main, /if \(m\.draft\.config\.multiple\) \{ m\.draft\.config\.pull = \[\]; m\.draft\.config\.pullAll = false; \}/);
   // And the record input resolves the merged mapping, not the written rows alone.
   assert.match(fieldUi, /const pulls = effectivePull\(ownerAppOf\(companyId, f\.id\), ta, f\);/);
+});
+
+test('the mapping rows have styles, not just markup', () => {
+  // The markup emits these and the stylesheet did not define them, so the rows shipped as a
+  // stack of unstyled controls. A class in a template with no rule behind it is invisible to
+  // every test that only reads JavaScript.
+  ['wb-pull-list', 'wb-pull-row'].forEach((cls) => {
+    assert.match(fieldUi, new RegExp(`class="${cls}`), `${cls} should be emitted`);
+    assert.match(styles, new RegExp(`\.${cls} \{`), `${cls} has no rule behind it`);
+  });
 });

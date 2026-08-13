@@ -32831,6 +32831,29 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 
 /* A way back out of the card. The breadcrumb at the top does the same job, but somebody who
    has read to the bottom of a long record should not have to travel back up to leave. */
+/* Copy-across rows in the relationship field config: source, arrow, destination, remove. */
+.wb-pull-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wb-pull-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-pull-row > .ti-arrow-right { color: var(--muted); }
+.wb-pull-row select:disabled { opacity: .55; cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .wb-pull-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .wb-pull-row > .ti-arrow-right { display: none; }
+}
+
 .cc-card-foot { display: flex; }
 
 @media (max-width: 720px) {
