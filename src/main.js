@@ -17600,7 +17600,7 @@ function wbTileClock(tile) {
   // "Friday, Aug 14" rather than "Friday, August 14, 2026". A tile is not wide, the year is the
   // part nobody is checking, and a date that wraps to two lines stops reading as one thing.
   const date = now.toLocaleDateString([], { timeZone: zone, weekday: 'long', day: 'numeric', month: 'short' });
-  return `<div class="wb-clock" data-wb-clock="${h(JSON.stringify({ tz: zone || '', hour12: tile.config.hour12 !== false, seconds: !!tile.config.seconds }))}">
+  return `<div class="wb-clock" data-wb-tile-clock="${h(JSON.stringify({ tz: zone || '', hour12: tile.config.hour12 !== false, seconds: !!tile.config.seconds }))}">
     <div class="wb-clock-time">${h(time)}</div>
     <div class="wb-clock-date">${h(date)}</div>
     ${zone ? `<div class="wb-clock-zone">${h(wbClockPlace(tile))}</div>` : ''}
@@ -17613,11 +17613,11 @@ function wbTileClock(tile) {
 let wbClockTicker = null;
 function wbBindClocks() {
   wbClockTicker?.stopClocks();
-  if (!document.querySelector('[data-wb-clock]')) return;
+  if (!document.querySelector('[data-wb-tile-clock]')) return;
   import('./workspace/clock-tick.js').then((mod) => {
     wbClockTicker = mod;
     // Checked again: a paint may have taken the clock away while this was in flight.
-    if (document.querySelector('[data-wb-clock]')) mod.startClocks();
+    if (document.querySelector('[data-wb-tile-clock]')) mod.startClocks();
   }).catch(() => {});
 }
 

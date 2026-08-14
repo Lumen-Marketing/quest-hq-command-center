@@ -17,13 +17,13 @@ export function stopClocks() {
 
 export function startClocks() {
   stopClocks();
-  if (!document.querySelector('[data-wb-clock]')) return;
+  if (!document.querySelector('[data-wb-tile-clock]')) return;
   timer = setInterval(() => {
-    const clocks = document.querySelectorAll('[data-wb-clock]');
+    const clocks = document.querySelectorAll('[data-wb-tile-clock]');
     if (!clocks.length) { stopClocks(); return; }
     clocks.forEach((node) => {
       let config;
-      try { config = JSON.parse(node.dataset.wbClock || '{}'); } catch { return; }
+      try { config = JSON.parse(node.dataset.wbTileClock || '{}'); } catch { return; }
       const zone = config.tz || undefined;
       const opts = { timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: config.hour12 !== false };
       if (config.seconds) opts.second = '2-digit';

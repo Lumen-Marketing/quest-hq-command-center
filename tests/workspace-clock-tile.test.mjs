@@ -71,7 +71,7 @@ test('one timer for the page, cleared before the next paint starts another', () 
   const tick = readFileSync(join(root, 'src', 'workspace', 'clock-tick.js'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(tick, /export function stopClocks\(\) \{\s*\n\s*clearInterval\(timer\);\s*\n\s*timer = null;/);
   assert.match(tick, /startClocks\(\) \{\s*\n\s*stopClocks\(\);/, 'a new run always clears the old one');
-  assert.match(tick, /if \(!document\.querySelector\('\[data-wb-clock\]'\)\) return;/);
+  assert.match(tick, /if \(!document\.querySelector\('\[data-wb-tile-clock\]'\)\) return;/);
   // And it stops itself if the tile goes away between ticks.
   assert.match(tick, /if \(!clocks\.length\) \{ stopClocks\(\); return; \}/);
   assert.match(main, /wbBindClocks\(\);/);
@@ -82,10 +82,10 @@ test('the ticking runtime is fetched only once a clock is on screen', () => {
   // server-side, so nothing is missing in the moment before the module arrives.
   const bind = slice('wbBindClocks');
   assert.match(bind, /wbClockTicker\?\.stopClocks\(\);/);
-  assert.match(bind, /if \(!document\.querySelector\('\[data-wb-clock\]'\)\) return;/);
+  assert.match(bind, /if \(!document\.querySelector\('\[data-wb-tile-clock\]'\)\) return;/);
   assert.match(bind, /import\('\.\/workspace\/clock-tick\.js'\)/);
   // A paint can remove the clock while the fetch is in flight.
-  assert.match(bind, /if \(document\.querySelector\('\[data-wb-clock\]'\)\) mod\.startClocks\(\);/);
+  assert.match(bind, /if \(document\.querySelector\('\[data-wb-tile-clock\]'\)\) mod\.startClocks\(\);/);
 });
 
 test('a tick writes only what changed', () => {
@@ -100,6 +100,33 @@ test('a tick writes only what changed', () => {
   // And in the SAME format the tile was rendered with, or the date visibly changes on the
   // first tick.
   assert.match(main, /weekday: 'long', day: 'numeric', month: 'short'/);
+});
+
+test('the tile and the dashboard clock widget do not share a hook', () => {
+  // They did, and it was destructive rather than merely untidy. The app-dashboard clock widget
+  // paints with `node.textContent = now` over every `[data-wb-clock]`, and the tile's CONTAINER
+  // carried that attribute -- so a second after the tile rendered correctly, its time, date and
+  // zone elements were replaced by one bare text node. That is why the tile showed a small
+  // unstyled "8:12 PM" with no date, and why the hour was 1-digit: the widget formats with
+  // `hour: 'numeric'` where the tile uses '2-digit'.
+  const views = readFileSync(join(root, 'src', 'workspace', 'app-views.js'), 'utf8');
+  const tick = readFileSync(join(root, 'src', 'workspace', 'clock-tick.js'), 'utf8');
+
+  // The widget keeps the name it has always had.
+  assert.match(views, /<strong data-wb-clock>/);
+  // The tile has its own, and an attribute selector matches an exact name -- so
+  // `[data-wb-clock]` cannot reach `data-wb-tile-clock`.
+  assert.match(main, /<div class="wb-clock" data-wb-tile-clock=/);
+  assert.ok(!/<div class="wb-clock" data-wb-clock=/.test(main), 'the tile must not carry the widget hook');
+
+  // The widget's painter is the destructive one; it must only ever find its own element.
+  const painter = main.slice(main.indexOf('const nodes = document.querySelectorAll(\'[data-wb-clock]\')'));
+  assert.match(painter.slice(0, 400), /node\.textContent = now;/, 'it replaces the whole element');
+
+  // And the tile's ticker only ever finds tiles.
+  assert.ok(!/\[data-wb-clock\]/.test(tick), 'the tile ticker must not reach the widget');
+  assert.match(tick, /\[data-wb-tile-clock\]/);
+  assert.match(tick, /node\.dataset\.wbTileClock/);
 });
 
 test('every class the tile uses is styled', () => {
