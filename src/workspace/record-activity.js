@@ -151,8 +151,11 @@ export function recordFeed(workspace, appId, itemId, comments = []) {
     if (!entry || entry.itemId !== itemId) return;
     if (appId && entry.appId && entry.appId !== appId) return;
     // The workspace feed carries a line saying somebody commented. Here the comment itself is
-    // already in the list, so keeping both would show the same event twice.
+    // already in the list, so keeping both would show the same event twice. The text test is for
+    // history: entries written before this had a kind was added carry none, and they are still
+    // in every workspace that has been used.
     if (entry.kind === 'comment-log') return;
+    if (!entry.kind && entry.icon === 'ti-message-circle' && /^Commented on /.test(entry.text || '')) return;
     out.push({
       kind: entry.kind || 'other',
       id: entry.id,

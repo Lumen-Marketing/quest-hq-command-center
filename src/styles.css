@@ -22891,7 +22891,21 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
 .wb-rec-tab.on .wb-rec-count { background: var(--orange, #e0552d); color: #fff; }
 /* Room between the tabs, the history and the box you type into. Without it the rows run into
    the panel's own edges and the last one sits on top of the composer. */
-.wb-rec-body { margin: 0 0 16px; }
+/* The feed keeps its own scroll, so reading the history does not mean scrolling the record's
+   fields off the screen -- and the box you reply in stays where it is. */
+.wb-rec-body {
+  margin: 0 0 14px;
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color .15s ease;
+  padding-right: 2px;
+}
+.wb-rec-panel:hover .wb-rec-body,
+.wb-rec-body:focus-within { scrollbar-color: var(--border-strong, #cdb595) transparent; }
 
 /* One line of history. */
 .wb-act-feed { display: flex; flex-direction: column; }
@@ -30633,6 +30647,23 @@ a.wb-cal-more:hover { color: var(--orange); }
    A record is a place, not a popup: it has a URL, browser-back works, and a long field list
    next to a comment thread has room to breathe. */
 .wb-record { display: grid; gap: 14px; }
+/* The record's name, the way back and the layout control stay put while the record is read.
+   Opaque and full-bleed to the surface's padding, or the cards would show through it as they
+   pass underneath. The work surface is the scrollport here, not the window. */
+.wb-record-top {
+  position: sticky;
+  top: -18px;
+  z-index: 8;
+  display: grid;
+  gap: 14px;
+  margin: -18px -24px 0;
+  padding: 18px 24px 12px;
+  background: var(--surface-2, #f6efe4);
+}
+/* The way back and the layout control share a row: two full-width rows for two small buttons
+   was most of the height the header was taking, and this header now stays on screen. */
+.wb-record-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wb-record-bar .wb-dash-controls { margin-left: auto; padding: 0; }
 .wb-record-back {
   display: inline-flex; align-items: center; gap: 7px; justify-self: start;
   font-size: .82rem; font-weight: 700; color: var(--ink-2);

@@ -224,7 +224,14 @@ export function createRecordPage(ctx) {
     const missing = blocks && editing ? recordLayout.unplacedFields(app, blocks) : [];
     return `
       <div class="wb-record">
-        <a class="wb-record-back" href="${backHref}" data-router><i class="ti ti-arrow-left"></i>All ${h(app.name)}</a>
+        <div class="wb-record-top">
+        <div class="wb-record-bar">
+          <a class="wb-record-back" href="${backHref}" data-router><i class="ti ti-arrow-left"></i>All ${h(app.name)}</a>
+          ${canManage ? `<div class="wb-dash-controls">
+            <button class="btn btn-sm ${editing ? 'btn-primary' : ''}" type="button" data-wb-rec-manage>${editing ? '<i class="ti ti-check"></i>Done' : '<i class="ti ti-adjustments"></i>Customize'}</button>
+            ${editing ? '<button class="btn btn-sm" type="button" data-wb-rec-add><i class="ti ti-plus"></i>Add card</button><button class="btn btn-sm" type="button" data-wb-rec-reset><i class="ti ti-rotate"></i>Reset</button>' : ''}
+          </div>` : ''}
+        </div>
         <header class="wb-record-head">
           <div class="wb-record-ic" style="background:${h(app.color)}"><i class="ti ${h(app.icon)}"></i></div>
           <div class="wb-record-title">
@@ -233,11 +240,8 @@ export function createRecordPage(ctx) {
           </div>
           ${canManage ? '<p class="wb-record-hint"><i class="ti ti-pencil" aria-hidden="true"></i>Click any value to edit it</p>' : ''}
         </header>
-        ${canManage ? `<div class="wb-dash-controls">
-          <button class="btn btn-sm ${editing ? 'btn-primary' : ''}" type="button" data-wb-rec-manage>${editing ? '<i class="ti ti-check"></i>Done' : '<i class="ti ti-adjustments"></i>Customize layout'}</button>
-          ${editing ? '<button class="btn btn-sm" type="button" data-wb-rec-add><i class="ti ti-plus"></i>Add card</button><button class="btn btn-sm" type="button" data-wb-rec-reset><i class="ti ti-rotate"></i>Reset</button>' : ''}
-          ${editing ? '<span class="wb-rec-note">This layout applies to every record in this app.</span>' : ''}
-        </div>` : ''}
+        ${editing ? '<p class="wb-rec-note">This layout applies to every record in this app.</p>' : ''}
+        </div>
         ${missing.length ? `<p class="wb-cal-setup"><i class="ti ti-alert-triangle"></i><span>Not on the page: ${missing.map((f) => h(f.label)).join(', ')}. Add them to a field group, or they will not show on any record.</span></p>` : ''}
         ${body}
       </div>`;
