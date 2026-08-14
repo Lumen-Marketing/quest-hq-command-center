@@ -32,6 +32,11 @@ export function createTakeoffCard(ctx) {
   const CALCULATOR_COLS = ['id', 'company_id', 'workspace_id', 'name', 'config', 'position', 'created_by'];
   const canManageFor = (companyId) => can(takeoffPermission, companyId);
   const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+  // Is there anything on this takeoff to clear? Measurements off the report, or a quantity
+  // typed over one a formula worked out. The calculator's own prices and formulas are not
+  // "fields here" -- they are the company's, and the next roof needs them.
+  const hasEntries = (draft) => Object.values(draft.measurements).some((value) => num(value) !== 0)
+    || Object.keys(draft.overrides || {}).length > 0;
   const qty = (value) => (Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100));
 
   function calculatorsFor(companyId) {
@@ -220,6 +225,8 @@ export function createTakeoffCard(ctx) {
                 ${saved.map((item) => `<option value="${h(item.id)}" ${item.id === calculator.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}
                 ${calculator.builtin ? `<option value="" selected>${h(calculator.name)} (built in)</option>` : ''}
               </select>` : ''}
+            <button class="btn" type="button" data-takeoff-action="clear" ${hasEntries(draft) ? '' : 'disabled'}
+              title="Empties the measurements and any quantity typed over a formula. Prices and formulas are left alone."><i class="ti ti-eraser"></i>Clear</button>
             ${canManage ? `
               <button class="btn" type="button" data-takeoff-action="toggle-edit"><i class="ti ti-${draft.editing ? 'eye' : 'pencil'}"></i>${draft.editing ? 'Done editing' : 'Edit formulas'}</button>
               <button class="btn" type="button" data-takeoff-action="new"><i class="ti ti-plus"></i>New calculator</button>
@@ -418,6 +425,15 @@ export function createTakeoffCard(ctx) {
     if (action === 'toggle-edit') {
       draft.editing = !draft.editing;
       render();
+      return;
+    }
+    if (action === 'clear') {
+      // Only what belongs to this roof. Nothing is written anywhere until Save, so a mis-click
+      // costs the measurements on screen and not the record.
+      draft.measurements = normalizeMeasurements({});
+      draft.overrides = {};
+      render();
+      showToast('Takeoff cleared.', 'local', 'Underwriter');
       return;
     }
     if (action === 'add-line') {

@@ -137,6 +137,36 @@ test('somebody who cannot edit never sees the rate boxes at all', () => {
   assert.ok(!/data-takeoff-rate=/.test(card.renderTakeoffCard('co', null)));
 });
 
+test('Clear empties the roof and leaves the calculator alone', () => {
+  const { card, state } = build();
+  card.renderTakeoffCard('co', { measurements: SHEET });
+  state.takeoffDraft.overrides = { 'ln-6': 12 };
+  const before = state.takeoffDraft.config.lines.length;
+
+  withFakeDocument(fakeCard(), () => card.onTakeoffEvent({ target: fakeButton('clear') }, 'click'));
+
+  assert.deepEqual(Object.values(state.takeoffDraft.measurements), [0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(state.takeoffDraft.overrides, {}, 'typed quantities go with them');
+  // The prices and formulas belong to the company, and the next roof needs them.
+  assert.equal(state.takeoffDraft.config.lines.length, before);
+  assert.equal(state.takeoffDraft.config.lines[5].price, 120, 'Eagle tile still costs what it costs');
+  assert.equal(state.takeoffDraft.config.waste_percent, 10);
+  assert.equal(state.takeoffDraft.dirty, false, 'clearing a roof does not make the calculator unsaved');
+});
+
+test('Clear is offered only when there is something to clear', () => {
+  // The draft is sticky on purpose — it is what is on screen — so each case starts fresh.
+  const disabled = (saved) => {
+    const { card, state } = build();
+    state.takeoffDraft = null;
+    return /data-takeoff-action="clear" disabled/.test(card.renderTakeoffCard('co', saved));
+  };
+  assert.equal(disabled(null), true, 'nothing entered yet');
+  assert.equal(disabled({ measurements: SHEET }), false, 'a report has been entered');
+  // A typed quantity counts too, even on a takeoff with no measurements.
+  assert.equal(disabled({ measurements: {}, overrides: { 'ln-6': 3 } }), false);
+});
+
 test('the sheet is laid out in two columns, as the spreadsheet is', () => {
   const { card } = build();
   const html = card.renderTakeoffCard('co', { measurements: SHEET });
