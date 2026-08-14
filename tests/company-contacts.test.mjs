@@ -199,7 +199,9 @@ test('the field type is registered, or the builder silently rewrites it to text'
   // normalizeWorkspaceBuilderDoc coerces any type not in WB_FIELD_TYPES to 'text', so an
   // unregistered type would survive one render and be gone on reload.
   assert.match(main, /company_contact: \{ label: 'Company Contact'/);
-  assert.match(main, /'user', 'relationship', 'company_contact', 'rollup'/, 'and it has to be offered in the picker');
+  // Offered in the picker. Its neighbours are the other fields that reach into another app,
+  // and Button joined them, so this pins company_contact's presence rather than the exact run.
+  assert.match(main, /'user', 'relationship', 'company_contact',/, 'and it has to be offered in the picker');
 });
 
 test('the picker stores the id and shows the name', () => {
