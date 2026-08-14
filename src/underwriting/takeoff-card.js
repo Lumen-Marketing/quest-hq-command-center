@@ -35,8 +35,11 @@ export function createTakeoffCard(ctx) {
   // Is there anything on this takeoff to clear? Measurements off the report, or a quantity
   // typed over one a formula worked out. The calculator's own prices and formulas are not
   // "fields here" -- they are the company's, and the next roof needs them.
-  const hasEntries = (draft) => Object.values(draft.measurements).some((value) => num(value) !== 0)
-    || Object.keys(draft.overrides || {}).length > 0;
+  // Nothing left to clear once it has been cleared, even though the zeros are held as
+  // overrides.
+  const hasEntries = (draft) => !draft.cleared
+    && (Object.values(draft.measurements).some((value) => num(value) !== 0)
+      || Object.keys(draft.overrides || {}).length > 0);
   const qty = (value) => (Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100));
 
   function calculatorsFor(companyId) {
@@ -100,15 +103,17 @@ export function createTakeoffCard(ctx) {
   // the person using it. The formula fills it; typing replaces it; emptying it hands the line
   // back to the formula. The formula itself is not printed on the row -- it is a working, not
   // a fact about the job -- but it is on the box as a tooltip and on show under Edit formulas.
-  function qtyCell(line) {
+  function qtyCell(line, cleared) {
     const title = line.formula
-      ? `${line.overridden ? 'Typed over' : 'Worked out by'} ${line.formula}`
+      ? `${line.overridden && !cleared ? 'Typed over' : 'Worked out by'} ${line.formula}`
       : 'Typed in';
-    return `<input class="tk-qty ${line.overridden ? 'over' : ''}" type="number" step="0.01" inputmode="decimal"
+    // A cleared sheet is every line at zero, which is not twenty-six deliberate overrides and
+    // should not be marked as such.
+    return `<input class="tk-qty ${line.overridden && !cleared ? 'over' : ''}" type="number" step="0.01" inputmode="decimal"
       value="${h(qty(line.quantity))}" data-takeoff-qty="${h(line.id)}" title="${h(title)}" aria-label="Quantity for ${h(line.name)}" />`;
   }
 
-  function lineRow(line, editing, canManage) {
+  function lineRow(line, editing, canManage, cleared) {
     if (editing && canManage) {
       return `
         <div class="tk-row tk-row-edit" data-takeoff-line="${h(line.id)}">
@@ -124,7 +129,7 @@ export function createTakeoffCard(ctx) {
     return `
       <div class="tk-row" data-takeoff-line="${h(line.id)}">
         <span class="tk-name">${h(line.name)}${line.error ? '<i class="ti ti-alert-triangle"></i>' : ''}</span>
-        ${qtyCell(line)}
+        ${qtyCell(line, cleared)}
         <span class="tk-price">${money(line.price)}</span>
         <span class="tk-total">${money(line.total)}</span>
         <p class="tk-error" ${line.error ? '' : 'hidden'}>${h(line.error)}</p>
@@ -152,7 +157,7 @@ export function createTakeoffCard(ctx) {
     return `
       <section class="tk-group ${editing ? 'editing' : ''}" data-takeoff-group="${h(group.key)}">
         <header><h4>${h(group.label)}</h4>${headCells.join('')}</header>
-        ${lines.map((line) => lineRow(line, draft.editing, canManage)).join('') || '<p class="tk-empty">No lines yet.</p>'}
+        ${lines.map((line) => lineRow(line, draft.editing, canManage, draft.cleared)).join('') || '<p class="tk-empty">No lines yet.</p>'}
         ${editing ? `<button class="btn btn-quiet tk-add" type="button" data-takeoff-action="add-line" data-takeoff-group-key="${h(group.key)}"><i class="ti ti-plus"></i>Add a line</button>` : ''}
         <div class="tk-totals" data-takeoff-totals="${h(group.key)}">
           ${totals.map(([label, value, strong]) => `<div class="${strong ? 'strong' : ''}"><span>${h(label)}</span><strong>${money(value)}</strong></div>`).join('')}
@@ -336,6 +341,9 @@ export function createTakeoffCard(ctx) {
   function handleTakeoffInput(target) {
     const draft = state.takeoffDraft;
     if (!draft) return;
+    // The first thing typed after Clear ends the cleared state: the zeros were a blank sheet,
+    // not twenty-six decisions, and every line goes back to its formula before this lands.
+    if (draft.cleared) { draft.cleared = false; draft.overrides = {}; }
     // Halfway through typing "65.5" the field holds "65.", which a number input reports as an
     // empty value with badInput set -- not as a cleared field. Reading that as 0 blinks every
     // total on the card to zero between the point and the next digit. Clearing the field for
@@ -428,10 +436,15 @@ export function createTakeoffCard(ctx) {
       return;
     }
     if (action === 'clear') {
-      // Only what belongs to this roof. Nothing is written anywhere until Save, so a mis-click
-      // costs the measurements on screen and not the record.
+      // Every field on the sheet reads zero, which is what "clear" means to the person looking
+      // at it. Zeroing the measurements is not enough on its own: the lines with a standing
+      // quantity (ten pipejacks, one dump run) would keep it, and "{Total SQ} + 1" is 1 at no
+      // squares at all. So every line is held at zero -- as this ROOF's quantities, leaving the
+      // company's calculator untouched -- until the next thing typed, which hands every line
+      // back to its formula.
       draft.measurements = normalizeMeasurements({});
-      draft.overrides = {};
+      draft.overrides = Object.fromEntries(draft.config.lines.map((line) => [line.id, 0]));
+      draft.cleared = true;
       render();
       showToast('Takeoff cleared.', 'local', 'Underwriter');
       return;

@@ -5,6 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { createTakeoffCard } from '../src/underwriting/takeoff-card.js';
+import { calculateTakeoff } from '../src/underwriting/takeoff.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
@@ -137,21 +138,57 @@ test('somebody who cannot edit never sees the rate boxes at all', () => {
   assert.ok(!/data-takeoff-rate=/.test(card.renderTakeoffCard('co', null)));
 });
 
-test('Clear empties the roof and leaves the calculator alone', () => {
+test('Clear puts every quantity at zero, not just the measurements', () => {
+  // "When I clear it using the Clear button, all fields become 0 on this calculator."
+  // Zeroing the measurements alone is not enough: the lines with a standing quantity keep it
+  // (ten pipejacks, one dump run), and "{Total SQ} + 1" is 1 at no squares at all.
   const { card, state } = build();
   card.renderTakeoffCard('co', { measurements: SHEET });
-  state.takeoffDraft.overrides = { 'ln-6': 12 };
   const before = state.takeoffDraft.config.lines.length;
 
   withFakeDocument(fakeCard(), () => card.onTakeoffEvent({ target: fakeButton('clear') }, 'click'));
 
   assert.deepEqual(Object.values(state.takeoffDraft.measurements), [0, 0, 0, 0, 0, 0, 0, 0]);
-  assert.deepEqual(state.takeoffDraft.overrides, {}, 'typed quantities go with them');
-  // The prices and formulas belong to the company, and the next roof needs them.
+  const priced = calculateTakeoff(state.takeoffDraft.config, state.takeoffDraft.measurements, state.takeoffDraft.overrides);
+  assert.deepEqual(priced.lines.filter((line) => line.quantity !== 0), [], 'every line reads zero');
+  assert.equal(priced.laborTotal, 0);
+  assert.equal(priced.materialTotal, 0);
+  assert.equal(priced.clientTotal, 0);
+
+  // And the company's calculator is untouched: the zeros belong to this roof.
   assert.equal(state.takeoffDraft.config.lines.length, before);
   assert.equal(state.takeoffDraft.config.lines[5].price, 120, 'Eagle tile still costs what it costs');
+  assert.equal(state.takeoffDraft.config.lines[4].qty, 1, 'Dump & gas still stands at one in the calculator');
   assert.equal(state.takeoffDraft.config.waste_percent, 10);
   assert.equal(state.takeoffDraft.dirty, false, 'clearing a roof does not make the calculator unsaved');
+});
+
+test('a cleared sheet is not twenty-six deliberate overrides', () => {
+  const { card, state } = build();
+  card.renderTakeoffCard('co', { measurements: SHEET });
+  withFakeDocument(fakeCard(), () => card.onTakeoffEvent({ target: fakeButton('clear') }, 'click'));
+  const html = card.renderTakeoffCard('co', null);
+  assert.ok(!/tk-qty over/.test(html), 'nothing is marked as typed over');
+  assert.ok(/data-takeoff-action="clear" disabled/.test(html), 'and there is nothing left to clear');
+});
+
+test('the first thing typed after Clear hands every line back to its formula', () => {
+  // Otherwise the zeros would be sticky and the calculator would never compute again.
+  const { card, state } = build();
+  card.renderTakeoffCard('co', { measurements: SHEET });
+  withFakeDocument(fakeCard(), () => card.onTakeoffEvent({ target: fakeButton('clear') }, 'click'));
+  assert.equal(state.takeoffDraft.cleared, true);
+
+  withFakeDocument(fakeCard(), () => {
+    card.onTakeoffEvent({ target: measureInput('total_sq', '65') }, 'input');
+  });
+  assert.equal(state.takeoffDraft.cleared, false);
+  assert.deepEqual(state.takeoffDraft.overrides, {}, 'the zeros are gone');
+  const priced = calculateTakeoff(state.takeoffDraft.config, state.takeoffDraft.measurements, state.takeoffDraft.overrides);
+  const q = (name) => priced.lines.find((line) => line.name === name).quantity;
+  assert.equal(q('Eagle tile'), 8, 'computing again');
+  assert.equal(q('Pipejacks'), 10, 'and the standing quantities are back');
+  assert.equal(priced.laborTotal, 8600);
 });
 
 test('Clear is offered only when there is something to clear', () => {
