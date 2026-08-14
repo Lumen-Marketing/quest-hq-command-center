@@ -96,7 +96,10 @@ test('a tick writes only what changed', () => {
   assert.match(tick, /if \(date && date\.textContent !== day\) date\.textContent = day;/);
   // The date is written on every tick, so a clock whose tile has just been repainted still
   // carries one -- which is the half of the tile the ticker is easiest to forget.
-  assert.match(tick, /weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'/);
+  assert.match(tick, /weekday: 'long', day: 'numeric', month: 'short'/);
+  // And in the SAME format the tile was rendered with, or the date visibly changes on the
+  // first tick.
+  assert.match(main, /weekday: 'long', day: 'numeric', month: 'short'/);
 });
 
 test('every class the tile uses is styled', () => {

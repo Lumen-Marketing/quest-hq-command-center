@@ -17597,7 +17597,9 @@ function wbTileClock(tile) {
   if (tile.config.seconds) opts.second = '2-digit';
   const now = new Date();
   const time = now.toLocaleTimeString([], opts);
-  const date = now.toLocaleDateString([], { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  // "Friday, Aug 14" rather than "Friday, August 14, 2026". A tile is not wide, the year is the
+  // part nobody is checking, and a date that wraps to two lines stops reading as one thing.
+  const date = now.toLocaleDateString([], { timeZone: zone, weekday: 'long', day: 'numeric', month: 'short' });
   return `<div class="wb-clock" data-wb-clock="${h(JSON.stringify({ tz: zone || '', hour12: tile.config.hour12 !== false, seconds: !!tile.config.seconds }))}">
     <div class="wb-clock-time">${h(time)}</div>
     <div class="wb-clock-date">${h(date)}</div>

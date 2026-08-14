@@ -101,6 +101,24 @@ test('a ribbon menu is not clipped by the ribbon it hangs off', async () => {
   assert.match(source, /\[data-sh-ribbon\]'\)\?\.addEventListener\('scroll', closeMenus\)/);
 });
 
+test('a sheet can be opened in a window of its own', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');
+  const { overlay } = await open();
+  assert.match(overlay.innerHTML, /data-sh-window/);
+
+  // A whole document, not a link: the sheet lives inside a record and has no URL to point at.
+  assert.match(source, /function openInWindow\(\)/);
+  assert.match(source, /window\.open\('', '_blank'\)/);
+  // `noopener` makes window.open return NULL, so there is no handle to write into and the
+  // window opens blank. Nothing third-party is loaded here, so there is nothing to open to.
+  assert.ok(!/window\.open\('', '_blank', 'noopener'\)/.test(source));
+  // Blocked pop-ups are said out loud rather than failing silently.
+  assert.match(source, /blocked the new window/);
+  // The same markup the printer gets, so the window shows the sheet and not the editor.
+  assert.match(source, /\$\{printMarkup\(\)/);
+});
+
 test('a sheet that will not parse opens empty instead of throwing', async () => {
   const { overlay } = await open({ read: () => null });
   assert.ok(overlay);

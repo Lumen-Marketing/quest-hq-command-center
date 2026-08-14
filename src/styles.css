@@ -33919,9 +33919,11 @@ button.wb-sheet-chip:focus-visible { outline: 2px solid var(--orange, #e0552d); 
   /* Sized to the TILE, not the window: a tile is a full column on one dashboard and half of one
      on the next, and a flat size is either cramped in the first or overflowing in the second.
      "10:38:47 PM" is eleven characters, which is what the 15cqw is scaled for. */
-  font-size: clamp(24px, 15cqw, 46px);
-  font-weight: 300;
-  letter-spacing: -.02em;
+  font-size: clamp(20px, 13cqw, 46px);
+  /* Bold. A hairline 300 at this size reads as washed out rather than elegant -- the time is
+     the one thing on this tile you are meant to catch from across a room. */
+  font-weight: 800;
+  letter-spacing: -.03em;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   color: var(--text);

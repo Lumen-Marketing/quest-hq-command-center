@@ -129,7 +129,10 @@ test('the clock is sized to its tile, not to the window', () => {
   // A tile is a full column on one dashboard and half of one on the next, so a flat size is
   // either cramped or overflowing. Viewport units were the first attempt and were wrong for the
   // same reason: vw tracks the window, which is not what the clock sits in.
-  assert.match(rule('.wb-clock-time'), /font-size: clamp\(24px, 15cqw, 46px\)/);
+  assert.match(rule('.wb-clock-time'), /font-size: clamp\(20px, 13cqw, 46px\)/);
+  // Bold: a hairline 300 at this size read as washed out rather than elegant, and the time is
+  // the one thing on the tile meant to be caught from across a room.
+  assert.match(rule('.wb-clock-time'), /font-weight: 800/);
   assert.match(rule('.wb-clock-date'), /font-size: clamp\(/, 'the date is half the point of the tile');
   assert.match(rule('.wb-clock-date'), /overflow-wrap: anywhere/);
   // A cqw with no container silently measures the viewport, so the container has to exist.

@@ -95,6 +95,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
             ${icon('ti-upload')}Import<input type="file" accept=".csv,.xlsx" data-sh-file hidden>
           </label>`}
           <button type="button" class="btn btn-sm" data-sh-export title="Download as an Excel workbook">${icon('ti-file-spreadsheet')}Excel</button>
+          <button type="button" class="btn btn-sm" data-sh-window title="Open this sheet in its own window">${icon('ti-external-link')}Open</button>
           <button type="button" class="btn btn-sm" data-sh-print title="Print this sheet">${icon('ti-printer')}Print</button>
           <button type="button" class="btn btn-primary btn-sm" data-sh-done>${readOnly ? 'Close' : 'Done'}</button>
         </div>
@@ -718,6 +719,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
 
     if (event.target.closest('[data-sh-print]')) printSheet();
     if (event.target.closest('[data-sh-export]')) exportWorkbook();
+    if (event.target.closest('[data-sh-window]')) openInWindow();
     if (event.target.closest('[data-sh-done]')) close();
     if (event.target === overlay) close();
   });
@@ -790,6 +792,32 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
       return `<tr${height}>${cells}</tr>`;
     }).join('');
     return `<table class="sh-print-grid"><colgroup>${cols}</colgroup><tbody>${body}</tbody></table>`;
+  }
+
+  /**
+   * The sheet on its own, in a window of its own.
+   *
+   * A whole document rather than a link, because the sheet lives inside a record and has no URL
+   * of its own to point at. Same markup the printer gets -- the content and its formatting, no
+   * grid chrome -- so what opens is what would come out of a printer, and that window can print
+   * it too.
+   */
+  function openInWindow() {
+    const name = sheet.title || title || 'Sheet';
+    // No `noopener`: it makes window.open return null, and this window is written into rather
+    // than navigated to. Nothing third-party is loaded in it, so there is nothing to open to.
+    const win = window.open('', '_blank');
+    if (!win) { say('Your browser blocked the new window. Allow pop-ups for this site and try again.'); return; }
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(name)}</title>
+      <style>
+        body { margin: 0; padding: 28px; background: #fff; color: #111; font-family: Arial, Helvetica, sans-serif; }
+        h1 { margin: 0 0 16px; font-size: 20px; }
+        table { border-collapse: collapse; }
+        td { padding: 4px 8px; vertical-align: middle; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        @media print { body { padding: 0; } }
+      </style></head><body>${printMarkup().replace('<table class="sh-print-grid">', `<h1>${esc(name)}</h1><table>`)}</body></html>`);
+    win.document.close();
   }
 
   function printSheet() {

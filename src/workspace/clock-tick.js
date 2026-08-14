@@ -34,7 +34,10 @@ export function startClocks() {
       // Only what changed. Rewriting the tile every second is how a dashboard ends up fighting
       // anybody trying to use it.
       if (time && time.textContent !== next) time.textContent = next;
-      const day = stamp.toLocaleDateString([], { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      // Kept in step with wbTileClock: the tile is rendered once with this format and the
+      // ticker rewrites it every second, so a mismatch would make the date flicker on the
+      // first tick.
+      const day = stamp.toLocaleDateString([], { timeZone: zone, weekday: 'long', day: 'numeric', month: 'short' });
       if (date && date.textContent !== day) date.textContent = day;
     });
   }, 1000);
