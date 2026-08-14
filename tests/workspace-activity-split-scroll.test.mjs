@@ -112,6 +112,19 @@ test('a long unbroken value wraps instead of widening the feed', () => {
   assert.match(rule('.wb-act-item > div'), /min-width: 0/);
 });
 
+test('the scrollbar shows up when the pointer is in the pane, and nothing moves when it does', () => {
+  // Only the THUMB is hidden. Switching `scrollbar-width` to none would take the track away
+  // too and reflow the whole column under the pointer, which is worse than a visible bar.
+  const base = rule('.wb-dash-split > .wb-dash-main,\n.wb-dash-split > .wb-dash-side { scrollbar-color');
+  assert.match(base, /scrollbar-color: transparent transparent/);
+  assert.match(rule('.wb-dash-split > .wb-dash-main,\n.wb-dash-split > .wb-dash-side {'), /scrollbar-gutter: stable/,
+    'the track stays reserved, so the bar appearing cannot shift the layout');
+  const shown = rule('.wb-dash-split > .wb-dash-main:hover,');
+  assert.match(shown, /scrollbar-color: var\(--border-strong/);
+  // Keyboard scrolling has no pointer to hover with.
+  assert.match(declarations, /\.wb-dash-split > \.wb-dash-side:focus-within \{ scrollbar-color: var\(--border-strong/);
+});
+
 test('the clock is sized to its tile', () => {
   // A tile is half the side column. "10:38:47 PM" at a flat 34px does not fit in one.
   assert.match(rule('.wb-clock-time'), /font-size: clamp\(/);

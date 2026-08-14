@@ -14220,17 +14220,30 @@ function wbTileMeta(companyId, workspace, tile) {
 
 function wbRenderTile(companyId, workspace, tile, i, total, manageMode) {
   const meta = wbTileMeta(companyId, workspace, tile);
+  // No up/down arrows. Four controls in a tile header this narrow left Remove too small to hit
+  // -- and the tiles are dragged to reorder anyway, so the arrows were spending the room twice.
   const ctrls = manageMode
     ? `<span class="wb-tile-mng">
-        <button class="wb-tile-mbtn" type="button" data-wb-tile-up="${h(tile.id)}" ${i === 0 ? 'disabled' : ''} title="Move up" aria-label="Move up"><i class="ti ti-chevron-up"></i></button>
-        <button class="wb-tile-mbtn" type="button" data-wb-tile-down="${h(tile.id)}" ${i === total - 1 ? 'disabled' : ''} title="Move down" aria-label="Move down"><i class="ti ti-chevron-down"></i></button>
         ${meta.config ? `<button class="wb-tile-mbtn" type="button" data-wb-tile-config="${h(tile.id)}" title="Configure" aria-label="Configure"><i class="ti ti-settings"></i></button>` : ''}
         <button class="wb-tile-mbtn danger" type="button" data-wb-tile-remove="${h(tile.id)}" title="Remove" aria-label="Remove"><i class="ti ti-x"></i></button>
       </span>`
     : wbTileHeadExtra(companyId, workspace, tile, meta);
   const body = wbTileBody(companyId, workspace, tile, meta);
-  const grip = manageMode ? `<span class="wb-tile-grip" title="Drag to reorder" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>` : '';
-  return `<section class="wb-tile${manageMode ? ' wb-tile-draggable' : ''}" data-wb-tile="${h(tile.id)}"${manageMode ? ' draggable="true"' : ''}><div class="wb-tile-head"><span>${grip}<i class="ti ${h(meta.icon)}" aria-hidden="true"></i>${h(meta.title)}</span>${ctrls}</div><div class="wb-tile-body">${body}</div></section>`;
+  // The handle takes the arrows' job for anyone not using a mouse: focus it and press up/down.
+  // Dragging cannot be done from a keyboard, so losing the arrows without this would leave
+  // reordering to pointer users only.
+  const grip = manageMode
+    // draggable="false" so grabbing the handle starts the TILE's drag rather than the browser's
+    // own drag of a button, the same reason the app tabs carry it.
+    ? `<button class="wb-tile-grip" type="button" draggable="false" data-wb-tile-grip="${h(tile.id)}" title="Drag to reorder, or use the arrow keys" aria-label="Reorder ${h(meta.title)}, ${i + 1} of ${total}. Press the up or down arrow to move it."><i class="ti ti-grip-vertical" aria-hidden="true"></i></button>`
+    : '';
+  // The name gets its own element so it can ellipsise. As a bare text node beside the icon it is
+  // an anonymous flex item, and text-overflow has nothing to apply to -- it clipped mid-letter.
+  // While rearranging, the handle stands in for the type icon. Carrying both leaves a tile this
+  // narrow no room for its own name, and the name is the thing you are looking at to decide
+  // what to move.
+  const mark = manageMode ? grip : `<i class="ti ${h(meta.icon)}" aria-hidden="true"></i>`;
+  return `<section class="wb-tile${manageMode ? ' wb-tile-draggable' : ''}" data-wb-tile="${h(tile.id)}"${manageMode ? ' draggable="true"' : ''}><div class="wb-tile-head"><span>${mark}<span class="wb-tile-name" title="${h(meta.title)}">${h(meta.title)}</span></span>${ctrls}</div><div class="wb-tile-body">${body}</div></section>`;
 }
 
 // The non-manage-mode header action (a quick "+" where it makes sense).
@@ -19629,8 +19642,18 @@ function mountWorkspaceBuilder() {
     // Web fonts can shift heights after first paint — re-pack once, when ready.
     if (!state.wbFontsPacked && document.fonts && document.fonts.ready) { state.wbFontsPacked = true; document.fonts.ready.then(() => wbLayoutTiles()); }
     bind('[data-wb-tile-add]', () => openWbTileAdd(companyId));
-    bind('[data-wb-tile-up]', (el) => wbMoveTile(companyId, el.dataset.wbTileUp, 'up'));
-    bind('[data-wb-tile-down]', (el) => wbMoveTile(companyId, el.dataset.wbTileDown, 'down'));
+    // The handle reorders from the keyboard, which is what the removed arrows used to do.
+    // Focus is put back on the moved tile's handle so a second press keeps going.
+    document.querySelectorAll('[data-wb-tile-grip]').forEach((el) => {
+      el.onkeydown = (event) => {
+        const dir = { ArrowUp: 'up', ArrowLeft: 'up', ArrowDown: 'down', ArrowRight: 'down' }[event.key];
+        if (!dir) return;
+        event.preventDefault();
+        const id = el.dataset.wbTileGrip;
+        wbMoveTile(companyId, id, dir);
+        document.querySelector(`[data-wb-tile-grip="${CSS.escape(id)}"]`)?.focus();
+      };
+    });
     bind('[data-wb-tile-config]', (el) => openWbTileConfig(companyId, el.dataset.wbTileConfig));
     bind('[data-wb-tile-remove]', (el) => wbRemoveTile(companyId, el.dataset.wbTileRemove));
     bind('[data-wb-tile-page]', (el) => { const [tid, p] = el.dataset.wbTilePage.split(':'); state.wbTilePage = state.wbTilePage || {}; state.wbTilePage[tid] = +p; render(); });

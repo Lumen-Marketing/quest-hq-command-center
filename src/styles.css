@@ -22367,6 +22367,25 @@ button {
    sideways bar of its own. Wide content that genuinely cannot wrap carries its own scroller. */
 .wb-dash-split > .wb-dash-main,
 .wb-dash-split > .wb-dash-side { min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; padding-right: 2px; }
+/* The bar shows up when the pointer is in the pane, and is out of the way the rest of the time.
+   Only the THUMB is hidden, never the bar's width -- `scrollbar-gutter: stable` keeps the track
+   reserved either way, so nothing on the page moves when it appears. Hiding it by switching
+   `scrollbar-width` to none would reflow the whole column under the pointer. */
+.wb-dash-split > .wb-dash-main,
+.wb-dash-split > .wb-dash-side { scrollbar-color: transparent transparent; transition: scrollbar-color .15s ease; }
+/* :focus-within as well as :hover -- keyboard scrolling has no pointer to hover with. */
+.wb-dash-split > .wb-dash-main:hover,
+.wb-dash-split > .wb-dash-side:hover,
+.wb-dash-split > .wb-dash-main:focus-within,
+.wb-dash-split > .wb-dash-side:focus-within { scrollbar-color: var(--border-strong, #cdb595) transparent; }
+/* Chrome and Safari ignore `scrollbar-color` when they are old enough to want the pseudo-element
+   instead; setting both means one of the two lands whatever is running. */
+.wb-dash-split > .wb-dash-main::-webkit-scrollbar,
+.wb-dash-split > .wb-dash-side::-webkit-scrollbar { width: 10px; }
+.wb-dash-split > .wb-dash-main::-webkit-scrollbar-thumb,
+.wb-dash-split > .wb-dash-side::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+.wb-dash-split > .wb-dash-main:hover::-webkit-scrollbar-thumb,
+.wb-dash-split > .wb-dash-side:hover::-webkit-scrollbar-thumb { background: var(--border-strong, #cdb595); background-clip: content-box; }
 /* The @mention list opens upward out of a comment box, so a box scrolled flush to the top of
    the pane has nowhere to draw it. The work surface clipped it the same way before this, only
    from ~100px higher up; keeping the pane's own scrolling away from that edge is what stops
@@ -22390,7 +22409,13 @@ button {
 
 .wb-tile { border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); overflow: hidden; }
 .wb-tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border, #e2d5bf); font-weight: 800; color: var(--text, #17130f); }
-.wb-tile-head > span { display: inline-flex; align-items: center; gap: 8px; }
+/* The name gives way, the controls do not. Without min-width: 0 the flex item refuses to go
+   below its content width, so a long tile name pushed Remove clean out of the header and there
+   was nothing left to click. The name ellipsises instead. */
+.wb-tile-head > span { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.wb-tile-head > span > i { flex: none; }
+.wb-tile-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-tile-mng { flex: none; }
 .wb-tile-head i { color: var(--text-muted, #72695d); }
 .wb-tile-add { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border, #e2d5bf); background: var(--surface-2, #f6efe4); color: var(--text-muted, #72695d); cursor: pointer; display: grid; place-items: center; }
 .wb-tile-add:hover { border-color: var(--orange, #e0552d); color: var(--orange, #e0552d); }
@@ -22571,7 +22596,10 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
 .wb-tilecfg-linkrow { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .wb-tilecfg-linkrow .wb-input:first-of-type { max-width: 130px; }
 .wb-tile-manage-active .wb-tile { border-style: dashed; }
-.wb-tile-grip { display: inline-grid; place-items: center; color: var(--text-muted, #72695d); cursor: grab; font-size: 15px; margin-right: 2px; }
+/* A button now, not a decoration: it reorders from the keyboard since the arrows went. */
+.wb-tile-grip { display: inline-grid; place-items: center; color: var(--text-muted, #72695d); cursor: grab; font-size: 15px; margin-right: 2px; border: 0; background: transparent; padding: 0 2px; }
+.wb-tile-grip:hover { color: var(--orange, #e0552d); }
+.wb-tile-grip:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; border-radius: 5px; }
 .wb-tile-draggable { cursor: grab; }
 .wb-tile-draggable .wb-tile-head { cursor: grab; }
 .wb-tile-draggable.dragging { opacity: .45; }
