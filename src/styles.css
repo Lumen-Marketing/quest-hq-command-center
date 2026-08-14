@@ -22353,9 +22353,15 @@ button {
    Side by side they are two different lengths, and one scrollbar for both means reaching the
    end of the tiles by scrolling past the whole feed. The work surface stops scrolling and
    hands its height to the split, which gives each column the same height and its own
-   scrollport. Below 900px the columns stack, where a single page scroll is the right one. */
-.work-surface:has(> .wb-dash-split) { display: flex; flex-direction: column; overflow: hidden; }
-.work-surface:has(> .wb-dash-split) > .wb-dash-split { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+   scrollport. Below 900px the columns stack, where a single page scroll is the right one.
+
+   The height has to be handed down the WHOLE chain. The activity page renders as
+   .work-surface > section.tool-page.wb-page > .wb-dash-split, so the first version of this --
+   `:has(> .wb-dash-split)` -- skipped the wrapper, matched nothing, and left every rule under
+   it dead while looking perfectly correct. */
+.work-surface:has(.wb-dash-split) { display: flex; flex-direction: column; overflow: hidden; }
+.work-surface:has(.wb-dash-split) > .wb-page { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.wb-page > .wb-dash-split { flex: 1 1 auto; min-height: 0; align-items: stretch; }
 /* overflow-x: hidden, not the `visible` that would otherwise compute to `auto` the moment the
    other axis scrolls. These two panes scroll DOWN; anything too wide wraps, and nothing gets a
    sideways bar of its own. Wide content that genuinely cannot wrap carries its own scroller. */
@@ -22409,7 +22415,8 @@ button {
   .wb-tile-grid { grid-template-columns: 1fr; grid-auto-rows: auto; row-gap: 14px; }
   /* Stacked, the two are one column, and two nested scrollports inside a page that also
      scrolls is a trap on a phone. The surface takes its scroll back. */
-  .work-surface:has(> .wb-dash-split) { display: block; overflow: auto; }
+  .work-surface:has(.wb-dash-split) { display: block; overflow: auto; }
+  .work-surface:has(.wb-dash-split) > .wb-page { display: block; }
   .wb-dash-split > .wb-dash-main,
   .wb-dash-split > .wb-dash-side { overflow: visible; padding-right: 0; padding-bottom: 0; }
 }

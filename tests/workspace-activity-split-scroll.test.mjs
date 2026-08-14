@@ -13,13 +13,16 @@ const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r
 
 // The rule block, so a later `.wb-dash` rule elsewhere in the sheet cannot satisfy these by
 // accident -- there are two unrelated `.wb-dash` uses in this stylesheet.
-// Comments are stripped: a rule whose comment explains why it does NOT use some unit would
-// otherwise satisfy a check for that unit.
+// Every lookup runs against a comment-free copy. These rules are explained in prose that names
+// the selectors and units involved -- including the wrong ones, and why they were wrong -- so
+// searching the raw file finds the explanation rather than the declaration.
+const declarations = styles.replace(/\/\*[\s\S]*?\*\//g, '');
+
 const rule = (selector) => {
-  const at = styles.indexOf(selector);
+  const at = declarations.indexOf(selector);
   assert.notEqual(at, -1, `no rule for ${selector}`);
-  const open = styles.indexOf('{', at);
-  return styles.slice(open, styles.indexOf('}', open)).replace(/\/\*[\s\S]*?\*\//g, '');
+  const open = declarations.indexOf('{', at);
+  return declarations.slice(open, declarations.indexOf('}', open));
 };
 
 test('the activity page marks itself as the split, and nothing else does', () => {
@@ -30,14 +33,33 @@ test('the activity page marks itself as the split, and nothing else does', () =>
   assert.equal((main.match(/wb-dash-split/g) || []).length, 1, 'one page owns the split');
 });
 
+test('the selector matches the nesting main.js actually emits', () => {
+  // The first version of this rule was `.work-surface:has(> .wb-dash-split)`, and the page
+  // renders as .work-surface > section.tool-page.wb-page > .wb-dash-split. It matched nothing,
+  // every rule under it was dead, and the test here passed anyway because it only checked that
+  // the CSS file contained the selector I had written. Checking a selector against itself
+  // proves nothing; this checks it against the markup.
+  const wrapped = /<section class="tool-page wb-page">\$\{wbViewCompanyHome\(companyId, workspace\)\}<\/section>/.test(main);
+  assert.ok(wrapped, 'the activity page is wrapped in .wb-page');
+  assert.ok(
+    !/\.work-surface:has\(>\s*\.wb-dash-split\)/.test(styles),
+    'a direct-child selector from the surface skips that wrapper and matches nothing',
+  );
+  // The wrapper is in the chain, so it has to pass the height through rather than be stepped over.
+  const page = rule('.work-surface:has(.wb-dash-split) > .wb-page');
+  assert.match(page, /display: flex/);
+  assert.match(page, /flex: 1 1 auto/);
+  assert.match(page, /min-height: 0/);
+});
+
 test('the surface hands its height to the split instead of scrolling itself', () => {
   // One scrollbar for both columns means reaching the end of the tiles by scrolling past the
   // whole feed. The surface has to stop being the scrollport for the two panes to become one.
-  const surface = rule('.work-surface:has(> .wb-dash-split)');
+  const surface = rule('.work-surface:has(.wb-dash-split)');
   assert.match(surface, /display: flex/);
   assert.match(surface, /flex-direction: column/);
   assert.match(surface, /overflow: hidden/);
-  const split = rule('.work-surface:has(> .wb-dash-split) > .wb-dash-split');
+  const split = rule('.wb-page > .wb-dash-split');
   assert.match(split, /flex: 1 1 auto/);
   // Without this the panes are sized by their content and overflow the surface instead of
   // scrolling -- it is the single declaration the whole layout turns on.
@@ -61,12 +83,14 @@ test('stacked on a narrow screen, the surface takes its scroll back', () => {
   // also scrolls is a trap on a phone.
   // The sheet has many `max-width: 900px` blocks; this wants the one the split is undone in,
   // not whichever comes first.
-  const undo = styles.indexOf('.work-surface:has(> .wb-dash-split) { display: block');
+  const undo = declarations.indexOf('.work-surface:has(.wb-dash-split) { display: block');
   assert.notEqual(undo, -1, 'the split is never undone');
-  const at = styles.lastIndexOf('@media (max-width: 900px)', undo);
+  const at = declarations.lastIndexOf('@media (max-width: 900px)', undo);
   assert.notEqual(at, -1, 'the undo is not inside a narrow-screen block');
-  const block = styles.slice(at, styles.indexOf('\n}', undo));
-  assert.match(block, /\.work-surface:has\(> \.wb-dash-split\) \{ display: block; overflow: auto; \}/);
+  const block = declarations.slice(at, declarations.indexOf('\n}', undo));
+  assert.match(block, /\.work-surface:has\(\.wb-dash-split\) \{ display: block; overflow: auto; \}/);
+  // The wrapper is flexed on desktop, so it has to be put back too.
+  assert.match(block, /> \.wb-page \{ display: block; \}/);
   assert.match(block, /overflow: visible/);
 });
 
