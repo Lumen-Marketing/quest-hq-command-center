@@ -14918,7 +14918,6 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   if (tab === 'items' && app.items.length) headBtn += `<button class="btn" data-wb-print-data><i class="ti ti-printer"></i>Print</button>`;
   if (tab === 'reports' && app.fields.length && app.items.length) headBtn += `<button class="btn" data-wb-print-reports><i class="ti ti-printer"></i>Print</button>`;
   if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button>`;
-  else if (canManage && tab === 'fields') headBtn += `<button class="btn btn-primary" data-add-field><i class="ti ti-plus"></i>Add field</button>`;
   else if (canManage && tab === 'automations') headBtn += `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
   const tabLabel = { dashboard: 'Dashboard', calendar: 'Calendar', items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, settings: 'Settings' };
   let body = '';
@@ -16137,8 +16136,11 @@ function wbFmtVal(ctx, field, value) {
     if (!ctx.item) return '<span class="wb-cell-empty">—</span>';
     // Only where it sits. The rules and the destination are read back off the record itself by
     // the module that judges them, so none of that has to be spelled into every row.
+    // No title here: the column header already says what this button is, which is exactly the
+    // context a bare one needs and the one thing the record form has not got.
     const seat = [ctx.companyId, ctx.workspace?.id || '', ctx.app?.id || '', ctx.item.id].join('|');
-    return `<button type="button" class="btn btn-sm wb-push-btn" data-wb-press="${h(field.id)}" data-wb-press-ctx="${h(seat)}" disabled><i class="ti ti-click"></i>${h(String(field.config.text || '').trim() || field.label)}</button>`;
+    const ico = field.config.icon;
+    return `<button type="button" class="btn btn-sm wb-push-btn" data-wb-press="${h(field.id)}" data-wb-press-ctx="${h(seat)}" disabled>${ico ? `<i class="ti ${h(ico)}"></i>` : ''}${h(field.config.text || '')}</button>`;
   }
   // Calculation fields have no stored value — they compute from other fields —
   // so they must render before the empty-value guard below (which would else swallow them).
@@ -17381,7 +17383,7 @@ function wbFieldBuilderMarkup(companyId, fields, canManage, scope = '', types = 
       ${canManage ? `<div class="wb-field-acts"><button class="wb-icon-btn ${field.hidden ? 'active' : ''}" data-hide-field="${h(key(field.id))}" title="${field.hidden ? 'Show this field in the items table' : 'Hide this field from the items table (still editable on each record)'}"><i class="ti ti-${field.hidden ? 'eye-off' : 'eye'}"></i></button><button class="wb-icon-btn" data-edit-field="${h(key(field.id))}" title="Configure"><i class="ti ti-adjustments"></i></button><button class="wb-icon-btn danger" data-del-field="${h(key(field.id))}" title="Delete"><i class="ti ti-trash"></i></button></div>` : ''}
     </div>${rowExtra ? rowExtra(field) : ''}`;
   }).join('') : '<div class="wb-empty wb-empty-dashed"><i class="ti ti-layout-dashboard"></i><h3>Design your app</h3><p>Add fields from the palette to shape what data this app stores. Drag to reorder anytime.</p></div>';
-  const palette = canManage ? `<div class="wb-palette"><h4>Add a field</h4><div class="wb-sub" style="margin:-4px 0 10px">Click to configure, or <b>drag one into your app</b> to add it instantly.</div>${types.map((type) => { const meta = WB_FIELD_TYPES[type]; return `<button class="wb-palette-item" draggable="true" data-add-type="${scope ? `${scope}:${type}` : type}" data-wb-palette-type="${scope ? `${scope}:${type}` : type}"><span class="wb-pic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-palette-text">${h(meta.label)}<small>${h(meta.desc)}</small></span><i class="ti ti-grip-vertical wb-palette-grip"></i></button>`; }).join('')}</div>` : '';
+  const palette = canManage ? `<div class="wb-palette"><h4>Add a field</h4><input class="wb-input wb-pal-find" data-wb-pal-find placeholder="Search field types" autocomplete="off" aria-label="Search field types">${types.map((type) => { const meta = WB_FIELD_TYPES[type]; return `<button class="wb-palette-item" draggable="true" data-add-type="${scope ? `${scope}:${type}` : type}" data-wb-palette-type="${scope ? `${scope}:${type}` : type}"><span class="wb-pic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-palette-text">${h(meta.label)}<small>${h(meta.desc)}</small></span><i class="ti ti-grip-vertical wb-palette-grip"></i></button>`; }).join('')}</div>` : '';
   const dropHint = canManage ? '<div class="wb-drop-hint"><i class="ti ti-arrow-down-to-arc"></i>Drag a field type here to add it</div>' : '';
   return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? `data-wb-field-dropzone="${h(scope)}"` : ''}><div class="wb-field-count">${fields.length} field${fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${list}${dropHint}</div>${palette}</div>`;
 }
@@ -18886,26 +18888,10 @@ function wbCollectModalDraft() {
       // dropped rather than left storing something the UI no longer offers.
       if (m.draft.config.multiple) { m.draft.config.pull = []; m.draft.config.pullAll = false; }
     }
-    if (t === 'button') {
-      m.draft.config.text = (val('wbBtnText') || '').trim();
-      const company = document.getElementById('wbBtnCompany');
-      m.draft.config.targetCompany = company ? company.value : canonicalCompanyId(m.companyId);
-      const targetApp = val('wbBtnApp') || '';
-      // A different destination invalidates the chosen field list, which named fields in the
-      // app that is no longer the target.
-      if (targetApp !== m.draft.config.targetApp) m.draft.config.fields = [];
-      m.draft.config.targetApp = targetApp;
-      m.draft.config.when = [...document.querySelectorAll('[data-wb-when-row]')]
-        .map((row) => ({
-          field: row.querySelector('[data-wb-when-field]')?.value || '',
-          op: row.querySelector('[data-wb-when-op]')?.value || 'eq',
-          value: row.querySelector('[data-wb-when-value]')?.value || '',
-        }))
-        .filter((rule) => rule.field);
-      m.draft.config.fields = checked('wbBtnAll')
-        ? []
-        : [...document.querySelectorAll('[data-wb-btn-field]')].filter((box) => box.checked).map((box) => box.dataset.wbBtnField);
-    }
+    // Read back by the module that drew the panel: a dozen ids and three kinds of row are its
+    // business, not the monolith's, and every session that never opens a Button field would
+    // otherwise carry them.
+    if (t === 'button') wbFieldUiModule?.collectButtonConfig(m.draft.config, canonicalCompanyId(m.companyId));
     if (t === 'company_contact') {
       // The same two controls as a relationship, read the same way. The switch is on by
       // default for this field type, so an untouched panel saves it as on.
@@ -20021,41 +20007,30 @@ function wbMountModal() {
   if (m.kind === 'stages') wbMountStagesModal(overlay, m);
   // Copy-across rows. Collect first, so a mapping half-chosen on another row survives adding
   // or removing this one -- render() rebuilds the panel from the draft.
+  // Deleting a row reads the rows back off the DOM rather than trusting the collected draft:
+  // collect drops rows that are still half-filled, so the index of the row somebody clicked is
+  // only meaningful against what is on screen. All three kinds do it that way now -- the two
+  // newer ones had the same off-by-one the mappings were already fixed for.
+  const wbDelRow = (kind, keys, index) => [...overlay.querySelectorAll(`[data-wb-${kind}-row]`)]
+    .map((row) => Object.fromEntries(keys.map((key) => [key, row.querySelector(`[data-wb-${kind}-${key}]`)?.value || ''])))
+    .filter((_, at) => at !== index);
+  overlay.querySelectorAll('[data-wb-set-add]').forEach((b) => {
+    b.onclick = () => { wbCollectModalDraft(); m.draft.config.set = [...(m.draft.config.set || []), { field: '', value: '' }]; render(); };
+  });
+  overlay.querySelectorAll('[data-wb-set-del]').forEach((b) => {
+    b.onclick = () => { const i = Number(b.closest('[data-wb-set-row]')?.dataset.index); wbCollectModalDraft(); m.draft.config.set = wbDelRow('set', ['field', 'value'], i); render(); };
+  });
   overlay.querySelectorAll('[data-wb-when-add]').forEach((b) => {
-    b.onclick = () => {
-      wbCollectModalDraft();
-      m.draft.config.when = [...(m.draft.config.when || []), { field: '', op: 'eq', value: '' }];
-      render();
-    };
+    b.onclick = () => { wbCollectModalDraft(); m.draft.config.when = [...(m.draft.config.when || []), { field: '', op: 'eq', value: '' }]; render(); };
   });
   overlay.querySelectorAll('[data-wb-when-del]').forEach((b) => {
-    b.onclick = () => {
-      const index = Number(b.closest('[data-wb-when-row]')?.dataset.index);
-      wbCollectModalDraft();
-      m.draft.config.when = (m.draft.config.when || []).filter((_, at) => at !== index);
-      render();
-    };
+    b.onclick = () => { const i = Number(b.closest('[data-wb-when-row]')?.dataset.index); wbCollectModalDraft(); m.draft.config.when = wbDelRow('when', ['field', 'op', 'value'], i); render(); };
   });
   overlay.querySelectorAll('[data-wb-pull-add]').forEach((b) => {
-    b.onclick = () => {
-      wbCollectModalDraft();
-      m.draft.config.pull = [...(m.draft.config.pull || []), { from: '', to: '' }];
-      render();
-    };
+    b.onclick = () => { wbCollectModalDraft(); m.draft.config.pull = [...(m.draft.config.pull || []), { from: '', to: '' }]; render(); };
   });
   overlay.querySelectorAll('[data-wb-pull-del]').forEach((b) => {
-    b.onclick = () => {
-      const index = Number(b.closest('[data-wb-pull-row]')?.dataset.index);
-      wbCollectModalDraft();
-      // Against the DOM order, not the collected list: collect keeps partial rows, but the
-      // index of the row somebody clicked is only meaningful against what is on screen.
-      const rows = [...overlay.querySelectorAll('[data-wb-pull-row]')].map((row) => ({
-        from: row.querySelector('[data-wb-pull-from]')?.value || '',
-        to: row.querySelector('[data-wb-pull-to]')?.value || '',
-      }));
-      m.draft.config.pull = rows.filter((_, i) => i !== index);
-      render();
-    };
+    b.onclick = () => { const i = Number(b.closest('[data-wb-pull-row]')?.dataset.index); wbCollectModalDraft(); m.draft.config.pull = wbDelRow('pull', ['from', 'to'], i); render(); };
   });
   overlay.querySelectorAll('[data-wb-add-option]').forEach((b) => { b.onclick = () => { wbCollectModalDraft(); m.draft.config.options = m.draft.config.options || []; m.draft.config.options.push({ id: wbUid(), label: '', color: WB_PALETTE[m.draft.config.options.length % WB_PALETTE.length] }); render(); }; });
   overlay.querySelectorAll('[data-wb-del-option]').forEach((b) => { b.onclick = () => { if ((m.draft.config.options || []).length <= 1) { showToast('Keep at least one option.', 'local', 'Workspaces'); return; } wbCollectModalDraft(); const oid = b.closest('.wb-opt-item').dataset.oid; m.draft.config.options = m.draft.config.options.filter((o) => o.id !== oid); render(); }; });
@@ -33145,6 +33120,13 @@ function onDocumentInput(event) {
   }
   if (takeoffEvent(event, 'input')) return;
   if (event.target.closest?.('[data-f]')) wbSyncButtons(event.target.closest('form, .wb-modal, .wb-record-page'));
+  if (event.target.matches('[data-wb-pal-find]')) {
+    const q = event.target.value.trim().toLowerCase();
+    event.target.parentNode.querySelectorAll('.wb-palette-item').forEach((item) => {
+      item.hidden = !!q && !item.textContent.toLowerCase().includes(q);
+    });
+    return;
+  }
   if (event.target.matches('[data-phone-format]')) {
     // Only digits, '+' and '-' are allowed; strip anything else, then format.
     const cleaned = event.target.value.replace(/[^0-9+\-]/g, '');

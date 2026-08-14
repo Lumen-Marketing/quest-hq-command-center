@@ -182,6 +182,16 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Overrides belong to the **job**, not the company's calculator, so they ride with the measurements in `deals.takeoff` / `underwriting_cases.takeoff`. Zero is a real override; empty is not.
 - The box keeps whatever was typed while it has the caret — `patchFigures` skips only the active element's VALUE, not its marker — and the formula's answer reappears on leaving an emptied box, rather than being restored mid-edit under somebody who cleared it in order to retype.
 
+## 2026-08-14 The Button field: a second action, its own look, and a searchable palette
+
+- **A second action.** As well as sending the record to another app, a button can **change fields on the record it sits on** — set values, clear chosen fields, or clear every field with one switch. Automatic fields are refused for the same reason they are never pushed: a value written to a calculation vanishes on the next render.
+- Where it acts differs by where it is pressed, deliberately: in the **list** there is no form, so it writes the record and saves; on a **form** there is one, so it fills the boxes and leaves them to be saved. Writing behind somebody halfway through typing is the more surprising of the two.
+- A category is set by what it SAYS, matched against that field's own options. A word the field has never heard of writes nothing rather than inventing an option a single press would leave behind for ever.
+- **Its own look**: text, an icon, or both — and with neither, a blank button, which is a choice rather than a fault. `:empty` gives it a body to hit without the renderer having to label the case. The icon picker is radio inputs, so the browser keeps the choice with no script, and it leads with arrows, a bin, a floppy and the rest of `WB_ACTION_ICONS`.
+- **The palette is searchable.** Twenty-eight types is too many to scan — the first thing asked after shipping the Button was where to find it. The box that filters them replaced the sentence explaining how to drag, and the duplicate "Add field" button beside the tabs went with it, which is what paid for the filter.
+- **Two budget lessons, both measured.** Collapsing the three repeatable-row handlers into one table-driven loop read better and gzipped **15 bytes worse**: near-identical blocks compress almost to nothing, template literals and a shape table do not. And reading a Button's panel back moved into the module that draws it — a dozen ids and three row kinds are its business, and every session that never opens one was carrying them.
+- Deleting a row now reads the rows back off the DOM in all three cases. Collect drops half-filled rows, so the clicked index only lines up with what is on screen; the two newer kinds had the same off-by-one the mappings were fixed for.
+
 ## 2026-08-14 The Button field
 
 - A 28th field type: a control on a record that carries it into another **company > workspace > app**, growing that app's field list to fit.

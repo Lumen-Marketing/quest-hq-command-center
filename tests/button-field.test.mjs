@@ -10,8 +10,10 @@ import {
   conditionMet,
   fieldToCreate,
   planPush,
+  planSet,
   pushableFields,
   readable,
+  setValueFor,
   translateValue,
 } from '../src/workspace/button-field.js';
 import { createButtonPush } from '../src/workspace/button-push.js';
@@ -407,4 +409,105 @@ test('main.js renders the button in the table and stops the row opening', () => 
   assert.match(main, /data-wb-press-ctx="\$\{h\(seat\)\}"/);
   // Pressing a button inside a row must not also open the record that row points at.
   assert.match(main, /event\.stopPropagation\(\);\s*\r?\n\s*wbPressButton/);
+});
+
+// ---- the second action: change fields on this record ---------------------------------
+
+test('a button can set fields, and an empty value clears one', () => {
+  // "Set control to other selected fields: change its value, or clear the value."
+  const app = {
+    fields: [
+      { id: 'b', type: 'button', label: 'Go', config: {} },
+      { id: 't', type: 'text', label: 'Owner', config: {} },
+      { id: 'n', type: 'number', label: 'Price', config: {} },
+    ],
+  };
+  const button = { id: 'b', config: { action: 'set', set: [{ field: 't', value: 'Abe' }, { field: 'n', value: '' }] } };
+  assert.deepEqual(planSet(app, button).map(({ field, value }) => [field.label, value]), [['Owner', 'Abe'], ['Price', '']]);
+});
+
+test('clear-everything is a switch, not thirty rows', () => {
+  const app = {
+    fields: [
+      { id: 'b', type: 'button', label: 'Go', config: {} },
+      { id: 't', type: 'text', label: 'Owner', config: {} },
+      { id: 'a', type: 'autonumber', label: 'Ref', config: {} },
+      { id: 'c', type: 'calculation', label: 'Total', config: {} },
+    ],
+  };
+  const cleared = planSet(app, { id: 'b', config: { action: 'set', clearAll: true } });
+  assert.deepEqual(cleared.map(({ field }) => field.label), ['Owner'], 'automatic fields are left alone');
+  assert.deepEqual(cleared.map(({ value }) => value), ['']);
+});
+
+test('two rows writing one field: the first wins, visibly', () => {
+  const app = { fields: [{ id: 'b', type: 'button', config: {} }, { id: 't', type: 'text', label: 'Owner', config: {} }] };
+  const plan = planSet(app, { id: 'b', config: { set: [{ field: 't', value: 'first' }, { field: 't', value: 'second' }] } });
+  assert.deepEqual(plan.map((row) => row.value), ['first']);
+});
+
+test('a set value is turned into what the field really stores', () => {
+  const stage = { type: 'status', label: 'Stage', config: { options: [{ id: 'o1', label: 'Won' }] } };
+  assert.equal(setValueFor(stage, 'won'), 'o1', 'set by what it says, matched case-insensitively');
+  assert.equal(setValueFor(stage, ''), '', 'and cleared by an empty value');
+  // A word the field has never heard of writes nothing rather than leaving an invented option
+  // behind for ever.
+  assert.equal(setValueFor(stage, 'Nonsense'), null);
+  assert.deepEqual(setValueFor({ type: 'tags', config: { options: [{ id: 'o1', label: 'A' }] } }, 'a'), ['o1']);
+  assert.equal(setValueFor({ type: 'number', config: {} }, '12'), 12);
+  assert.equal(setValueFor({ type: 'number', config: {} }, 'twelve'), null, 'letters are not a number');
+  assert.equal(setValueFor({ type: 'checkbox', config: {} }, 'yes'), true);
+  assert.equal(setValueFor({ type: 'checkbox', config: {} }, ''), false);
+  assert.equal(setValueFor({ type: 'text', config: {} }, ' hi '), 'hi');
+});
+
+test('pressing a set button in the list writes the record and saves it', async () => {
+  const app = {
+    id: 'app1',
+    name: 'App 1',
+    fields: [
+      { id: 'b', type: 'button', label: 'Close it', config: { action: 'set', set: [{ field: 't', value: 'Done' }] } },
+      { id: 't', type: 'text', label: 'Owner', config: {} },
+    ],
+    items: [{ id: 'i1', values: { t: 'Abe' } }],
+  };
+  const saved = [];
+  const push = createButtonPush({
+    can: () => true,
+    wbDoc: () => ({ workspaces: [{ id: 'ws', apps: [app] }] }),
+    wbSave: (companyId) => saved.push(companyId),
+    wbUid: () => 'u',
+    showToast: () => {},
+    render: () => {},
+    canonicalCompanyId: (id) => id,
+    activeSession: () => ({ profile: { id: 'me' } }),
+    state: {},
+    wbFind: () => ({ app }),
+    wbReadFieldInput: () => undefined,
+    activeCompanyId: () => 'co',
+  });
+  await push.press('b', 'co|ws|app1|i1');
+  assert.equal(app.items[0].values.t, 'Done', 'overwritten: a button asked to set a field means it');
+  assert.deepEqual(saved, ['co']);
+  assert.ok(app.items[0].updatedAt, 'and the record is stamped as changed');
+});
+
+// ---- the picker and the palette --------------------------------------------------------
+
+test('every icon offered for a button is one the bundled font has', async () => {
+  // No CDN here, so a name the font does not carry renders as a blank square.
+  const { WB_ACTION_ICONS } = await import('../src/workspace/icon-sets.js');
+  const font = readFileSync(join(root, 'src', 'tabler-icons.css'), 'utf8');
+  WB_ACTION_ICONS.forEach((icon) => assert.ok(font.includes(`.${icon}:`), `${icon} is missing from the font`));
+  // The ones asked for by name.
+  ['ti-arrow-right', 'ti-arrow-left', 'ti-trash', 'ti-device-floppy']
+    .forEach((icon) => assert.ok(WB_ACTION_ICONS.includes(icon), `${icon} should be offered`));
+});
+
+test('the field palette is searchable, and no longer explains dragging instead', () => {
+  const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+  assert.match(main, /data-wb-pal-find/);
+  assert.ok(!main.includes('drag one into your app'), 'the sentence it replaced is gone');
+  // Filtering hides items rather than rebuilding the palette, so the caret stays in the box.
+  assert.match(main, /item\.hidden = !!q && !item\.textContent\.toLowerCase\(\)\.includes\(q\)/);
 });

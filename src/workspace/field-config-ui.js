@@ -14,7 +14,10 @@ import { acceptAttr } from '../security/upload-policy.js';
 import {
   PULL_FAMILY, contactPullMap, contactSourceApp, effectivePull, matchedFields, pullTargets,
 } from './relationship-pull.js';
-import { BUTTON_OPS, planPush, pushableFields } from './button-field.js';
+import {
+  BUTTON_OPS, planPush, planSet, pushableFields,
+} from './button-field.js';
+import { WB_ACTION_ICONS, WB_APP_ICONS } from './icon-sets.js';
 
 // "Copy the data inputted on the other field so it will automatically input on it."
 //
@@ -188,6 +191,19 @@ export function renderFieldConfig(fd, app, ctx) {
     const rules = Array.isArray(fd.config.when) && fd.config.when.length ? fd.config.when : [{ field: '', op: 'eq', value: '' }];
     const plan = targetApp ? planPush(app, targetApp, fd) : null;
     const names = (list) => list.map((label) => h(label)).join('</b>, <b>');
+    const action = fd.config.action === 'set' ? 'set' : 'push';
+    // Fields this button could write to: everything the record actually stores.
+    const settable = pushableFields(app, fd.id);
+    const setRows = Array.isArray(fd.config.set) && fd.config.set.length ? fd.config.set : [{ field: '', value: '' }];
+    const setRow = (row, index) => `
+      <div class="wb-set-row" data-wb-set-row data-index="${index}">
+        <select class="wb-input" data-wb-set-field>
+          <option value="">— Pick a field —</option>
+          ${settable.map((field) => `<option value="${h(field.id)}" ${row.field === field.id ? 'selected' : ''}>${h(field.label)}</option>`).join('')}
+        </select>
+        <input class="wb-input" data-wb-set-value value="${h(row.value ?? '')}" placeholder="Leave empty to clear" />
+        <button type="button" class="wb-icon-btn danger" data-wb-set-del title="Remove" aria-label="Remove this change"><i class="ti ti-x"></i></button>
+      </div>`;
 
     const ruleRow = (rule, index) => `
       <div class="wb-when-row" data-wb-when-row data-index="${index}">
@@ -203,28 +219,57 @@ export function renderFieldConfig(fd, app, ctx) {
       </div>`;
 
     return `
-      <div class="wb-field"><label>Button text</label>
-        <input class="wb-input" id="wbBtnText" value="${h(fd.config.text || '')}" placeholder="${h(fd.label || 'Send')}" maxlength="40">
-        <div class="wb-sub">What the button says on the record. Defaults to the field's own name.</div>
+      <div class="wb-field"><label>Button text <span class="wb-opt">(optional)</span></label>
+        <input class="wb-input" id="wbBtnText" value="${h(fd.config.text || '')}" placeholder="Leave empty for no text" maxlength="40">
+      </div>
+      <div class="wb-field"><label>Icon <span class="wb-opt">(optional)</span></label>
+        <div class="wb-icon-pick">
+          <label class="wb-icon-opt ${fd.config.icon ? '' : 'on'}" title="No icon">
+            <input type="radio" name="wbBtnIcon" value="" ${fd.config.icon ? '' : 'checked'}><i class="ti ti-ban"></i>
+          </label>
+          ${[...WB_ACTION_ICONS, ...WB_APP_ICONS.filter((icon) => !WB_ACTION_ICONS.includes(icon))].map((icon) => `<label class="wb-icon-opt ${fd.config.icon === icon ? 'on' : ''}" title="${h(icon.replace('ti-', '').replace(/-/g, ' '))}">
+            <input type="radio" name="wbBtnIcon" value="${h(icon)}" ${fd.config.icon === icon ? 'checked' : ''}><i class="ti ${h(icon)}"></i>
+          </label>`).join('')}
+        </div>
+        <div class="wb-sub">Text, an icon, or both. With neither, the button is blank — it still works, and screen readers still read the field's name.</div>
       </div>
       <div class="wb-field"><label>Enabled when <span class="wb-opt">(leave it on “Always enabled” for no condition)</span></label>
         <div class="wb-when-list">${rules.map(ruleRow).join('')}</div>
         <button class="btn btn-sm" type="button" data-wb-when-add><i class="ti ti-plus"></i>Add a condition</button>
         <div class="wb-sub">Every condition has to hold. A stage or category is matched on what it says, so type <b>Won</b> rather than an option id. The button follows the form as it is filled in — changing the stage lights it up without saving first.</div>
       </div>
+      <div class="wb-field"><label>What the button does</label>
+        <select class="wb-input" id="wbBtnAction" data-wb-rel-refresh>
+          <option value="push" ${action === 'push' ? 'selected' : ''}>Send the record to another app</option>
+          <option value="set" ${action === 'set' ? 'selected' : ''}>Change fields on this record</option>
+        </select>
+      </div>
+      ${action === 'set' ? `
+        <div class="wb-field"><label>Change these fields</label>
+          <div class="wb-check-row">
+            <label class="wb-switch"><input type="checkbox" id="wbBtnClearAll" ${fd.config.clearAll ? 'checked' : ''} data-wb-rel-refresh><span class="wb-slider"></span></label>
+            <div><b>Clear every field</b><div class="wb-sub">Empties the whole record in one press. Automatic fields are left alone — a value written to a calculation or a created time vanishes on the next render.</div></div>
+          </div>
+          ${fd.config.clearAll ? '' : `
+            <div class="wb-set-list">${setRows.map(setRow).join('')}</div>
+            <button class="btn btn-sm" type="button" data-wb-set-add><i class="ti ti-plus"></i>Change a field</button>
+            <div class="wb-sub">Leave the value empty to clear that field. A stage or category is set by what it says, so type <b>Won</b> — a word the field has never heard of is skipped rather than added to its list. Pressed in the list it saves the record; pressed on an open record it fills the boxes and leaves them for you to save.</div>`}
+        </div>
+      ` : `
       <div class="wb-field"><label>Send the record to</label>
         ${companies.length > 1 ? `<select class="wb-input" id="wbBtnCompany" data-wb-rel-refresh>${companies.map((company) => `<option value="${h(company.id)}" ${targetCompany === company.id ? 'selected' : ''}>${h(company.name)}</option>`).join('')}</select>` : ''}
         <select class="wb-input" id="wbBtnApp" data-wb-rel-refresh><option value="">— Select an app —</option>${apps.map((item) => `<option value="${h(item.id)}" ${fd.config.targetApp === item.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}</select>
         <div class="wb-sub">Pressing it adds a record there carrying this one's values.</div>
       </div>
-      <div class="wb-field"><label>What to send</label>
+      <div class="wb-field wb-push-only"><label>What to send</label>
         <div class="wb-check-row">
           <label class="wb-switch"><input type="checkbox" id="wbBtnAll" ${chosen.length ? '' : 'checked'} data-wb-rel-refresh><span class="wb-slider"></span></label>
           <div><b>Everything on the record</b><div class="wb-sub">Turn this off to pick particular fields.</div></div>
         </div>
         ${chosen.length ? `<div class="wb-pick-list">${carryable.map((field) => `<label class="wb-pick"><input type="checkbox" data-wb-btn-field="${h(field.id)}" ${chosen.includes(field.id) ? 'checked' : ''}><span>${h(field.label)}</span></label>`).join('')}</div>` : ''}
       </div>
-      ${plan ? `<div class="wb-field"><div class="wb-sub wb-plan">
+      `}
+      ${action === 'push' && plan ? `<div class="wb-field"><div class="wb-sub wb-plan">
         ${plan.carry.length ? `Carries <b>${names(plan.carry.map((pair) => pair.from.label))}</b>.` : 'Nothing on this record can be carried across yet.'}
         ${plan.create.length ? ` <b>${h(targetApp.name)}</b> has no <b>${names(plan.create.map((field) => field.label))}</b>, so ${plan.create.length === 1 ? 'it is added' : 'they are added'} there on the first send. Records already in that app keep every value they have and read blank in the new ${plan.create.length === 1 ? 'column' : 'columns'}.` : ''}
         ${plan.blocked.length ? ` <b>${names(plan.blocked)}</b> ${plan.blocked.length === 1 ? 'stays' : 'stay'} behind: an automatic field belongs to the app that filled it in.` : ''}
@@ -318,13 +363,18 @@ export function createFieldInput(ctx) {
       // element and are judged against the FORM, so changing a stage lights it up immediately
       // rather than after a save and a reload.
       case 'button': {
-        const text = String(f.config.text || '').trim() || f.label || 'Send';
+        // Text, an icon, or both -- and with neither, a blank button, which is a deliberate
+        // choice rather than a broken one. It keeps an aria-label either way: invisible to the
+        // eye is fine, invisible to a screen reader is not.
+        const text = String(f.config.text || '').trim();
+        const icon = String(f.config.icon || '').trim();
         const rules = (Array.isArray(f.config.when) ? f.config.when : []).filter((rule) => rule && rule.field && rule.op);
         const ready = !!f.config.targetApp;
         return `<div class="wb-fieldbox wb-btnfield">${lbl}
           <button class="btn btn-primary wb-push-btn" type="button" data-wb-press="${h(f.id)}"
             data-wb-when="${h(JSON.stringify(rules))}" ${ready ? '' : 'disabled data-wb-no-target="1"'}
-            title="${h(ready ? '' : 'This button has no destination set yet.')}"><i class="ti ti-click"></i>${h(text)}</button>
+            aria-label="${h(text || f.label || 'Send')}"
+            title="${h(ready ? '' : 'This button has no destination set yet.')}">${icon ? `<i class="ti ${h(icon)}"></i>` : ''}${h(text)}</button>
           ${ready ? '' : '<div class="wb-sub">No destination set yet — open the field to choose one.</div>'}
         </div>`;
       }
@@ -521,4 +571,34 @@ export function createFieldInput(ctx) {
   }
 
   return wbRenderFieldInput;
+}
+
+/**
+ * Read a Button field's panel back into its config.
+ *
+ * Lives beside the panel that drew it: the ids and the row shapes are one thing, and splitting
+ * them across two files is how the two halves drift apart. Mutates the draft in place, which is
+ * what every other branch of the field editor does.
+ */
+export function collectButtonConfig(config, fallbackCompany) {
+  const val = (id) => document.getElementById(id)?.value;
+  const rows = (kind, keys) => [...document.querySelectorAll(`[data-wb-${kind}-row]`)]
+    .map((row) => Object.fromEntries(keys.map((key) => [key, row.querySelector(`[data-wb-${kind}-${key}]`)?.value || ''])))
+    .filter((row) => row.field);
+  config.text = (val('wbBtnText') || '').trim();
+  config.icon = document.querySelector('[name=wbBtnIcon]:checked')?.value || '';
+  config.action = val('wbBtnAction') || 'push';
+  // The workspace picker is only drawn when there is more than one to choose from.
+  config.targetCompany = val('wbBtnCompany') || fallbackCompany;
+  const targetApp = val('wbBtnApp') || '';
+  // A different destination invalidates the chosen field list, which named fields in the app
+  // that is no longer the target.
+  if (targetApp !== config.targetApp) config.fields = [];
+  config.targetApp = targetApp;
+  config.clearAll = !!document.getElementById('wbBtnClearAll')?.checked;
+  config.set = rows('set', ['field', 'value']);
+  config.when = rows('when', ['field', 'op', 'value']);
+  config.fields = document.getElementById('wbBtnAll')?.checked
+    ? []
+    : [...document.querySelectorAll('[data-wb-btn-field]')].filter((box) => box.checked).map((box) => box.dataset.wbBtnField);
 }

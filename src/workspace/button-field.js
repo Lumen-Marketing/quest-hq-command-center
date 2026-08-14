@@ -158,6 +158,62 @@ export function planPush(sourceApp, targetApp, buttonField) {
 }
 
 /**
+ * What a button set to "change fields on this record" would write.
+ *
+ * "Set control to other selected fields: change its value, or clear the value of selected
+ * fields, or all of the fields."
+ *
+ * Returns [{ field, value }] against the app's real fields, with '' meaning clear. Clearing
+ * everything is a switch rather than a row per field, because listing thirty rows to say
+ * "empty this record" is a worse way of saying it.
+ *
+ * Automatic fields are refused for the same reason they are never pushed: a value written to a
+ * calculation or a created-time vanishes on the next render, which reads as the button having
+ * silently failed.
+ */
+export function planSet(app, buttonField) {
+  const config = buttonField?.config || {};
+  const fields = (app?.fields || []).filter((field) => field
+    && field.id !== buttonField?.id
+    && !NEVER_PUSHED.has(field.type));
+  if (config.clearAll) return fields.map((field) => ({ field, value: '' }));
+  const rows = Array.isArray(config.set) ? config.set : [];
+  const seen = new Set();
+  return rows.reduce((out, row) => {
+    const field = fields.find((item) => item.id === row?.field);
+    // First row wins: two rows writing one field is a rule nobody can see in the UI.
+    if (!field || seen.has(field.id)) return out;
+    seen.add(field.id);
+    out.push({ field, value: row.value === undefined || row.value === null ? '' : String(row.value) });
+    return out;
+  }, []);
+}
+
+/**
+ * One of those writes, turned into what the field actually stores.
+ *
+ * A category is written by LABEL -- somebody setting "Stage to Won" typed Won -- and matched
+ * against that field's own options. A label the field has never heard of writes nothing rather
+ * than inventing an option a button press would leave behind for ever.
+ */
+export function setValueFor(field, value) {
+  const wanted = String(value ?? '').trim();
+  if (['category', 'status', 'tags'].includes(field.type)) {
+    if (!wanted) return field.type === 'tags' ? [] : '';
+    const match = (field.config?.options || []).find((option) => key(option.label) === key(wanted));
+    if (!match) return null;
+    return field.type === 'tags' ? [match.id] : match.id;
+  }
+  if (field.type === 'checkbox') return /^(yes|true|1|on)$/i.test(wanted);
+  if (!wanted) return '';
+  if (['number', 'money', 'duration', 'rating', 'progress'].includes(field.type)) {
+    const numeric = Number(wanted);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+  return wanted;
+}
+
+/**
  * A field to add to the target app, cloned from the source.
  *
  * A fresh id, because ids are per-app and reusing one would collide with whatever already

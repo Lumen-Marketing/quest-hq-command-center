@@ -33299,3 +33299,64 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   .wb-when-row { grid-template-columns: minmax(0, 1fr) 32px; }
   .wb-when-row [data-wb-when-op], .wb-when-row [data-wb-when-value] { grid-column: 1 / 2; }
 }
+
+/* The button's own look: text, an icon, or both -- and with neither, a blank button, which is
+   a choice rather than a fault. It still needs a body somebody can hit. */
+/* No text and no icon at all: still a button somebody can hit, and :empty says exactly
+   that without the renderer having to label the case. */
+.wb-push-btn:empty { min-width: 44px; }
+
+/* Picking that icon. Radios rather than a grid of click handlers: the browser already knows
+   how to keep one of a set chosen, and it costs no script. */
+.wb-icon-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 5px;
+  max-height: 190px;
+  overflow-y: auto;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+.wb-icon-opt {
+  display: grid;
+  place-items: center;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 17px;
+}
+.wb-icon-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.wb-icon-opt:hover { background: var(--surface); color: var(--text); }
+/* :has keeps the checked state on the label without a line of script; the .on class the
+   renderer also sets is the fallback where :has is not supported. */
+.wb-icon-opt:has(input:checked),
+.wb-icon-opt.on {
+  border-color: var(--accent, #d4541f);
+  color: var(--accent, #d4541f);
+  background: var(--surface);
+}
+.wb-icon-opt:focus-within { outline: 2px solid var(--accent, #d4541f); outline-offset: 1px; }
+
+/* "Change this field to that" -- the same shape as the condition rows above them. */
+.wb-set-list { display: grid; gap: 8px; margin-bottom: 8px; }
+.wb-set-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+.wb-set-row .wb-input { min-width: 0; }
+
+@media (max-width: 640px) {
+  .wb-set-row { grid-template-columns: minmax(0, 1fr) 32px; }
+  .wb-set-row [data-wb-set-value] { grid-column: 1 / 2; }
+}
+
+/* Twenty-eight field types is too many to scan, so the palette gets a filter instead of a
+   sentence explaining how to drag. */
+.wb-pal-find { margin: -2px 0 10px; }
+.wb-palette-item[hidden] { display: none; }

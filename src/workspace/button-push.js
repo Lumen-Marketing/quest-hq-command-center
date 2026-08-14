@@ -6,7 +6,7 @@
 // company, so every step checks it is allowed before it changes anything.
 
 import {
-  conditionMet, fieldToCreate, planPush, translateValue,
+  conditionMet, fieldToCreate, planPush, planSet, setValueFor, translateValue,
 } from './button-field.js';
 
 export function createButtonPush(ctx) {
@@ -170,6 +170,65 @@ export function createButtonPush(ctx) {
    * and the field reader, so it lives beside the push rather than in main.js, which would pay
    * for it in every session that never presses a button.
    */
+  /**
+   * The second action: change fields on the record the button is sitting on.
+   *
+   * Where it acts differs by where it is pressed, and deliberately. In the LIST there is no
+   * form, so it writes the record and saves. On a FORM there is one, so it writes the boxes and
+   * leaves them for the person to look at and save -- writing behind their back while they are
+   * halfway through typing is the more surprising of the two.
+   */
+  function applySet(companyId, app, buttonField, item, seated) {
+    const sets = planSet(app, buttonField);
+    if (!sets.length) {
+      showToast('This button has no fields to change yet.', 'local', 'Workspaces');
+      return false;
+    }
+    let touched = 0;
+    if (seated) {
+      sets.forEach(({ field, value }) => {
+        const next = setValueFor(field, value);
+        // null means the value could not be expressed in that field -- an option it has never
+        // heard of, or letters in a number. Skipped rather than written as nonsense.
+        if (next === null) return;
+        item.values[field.id] = next;
+        touched += 1;
+      });
+      if (touched) {
+        item.updatedAt = new Date().toISOString();
+        item.lastActivityAt = item.updatedAt;
+        wbSave(companyId);
+      }
+    } else {
+      const scope = document.querySelector('.wb-modal, .wb-record-page') || document;
+      sets.forEach(({ field, value }) => {
+        if (writeIntoForm(scope, field, value)) touched += 1;
+      });
+    }
+    showToast(touched
+      ? `${touched} field${touched === 1 ? '' : 's'} changed.`
+      : 'Nothing on this record could be changed.', 'local', 'Workspaces');
+    render();
+    return touched > 0;
+  }
+
+  /** Write one value into the form, overwriting: a button asked to set a field means it. */
+  function writeIntoForm(scope, field, value) {
+    const node = scope.querySelector(`[data-f="${cssEscape(field.id)}"]`);
+    if (!node) return false;
+    const combo = node.type === 'hidden' ? node.closest('[data-wb-option-combo]') : null;
+    const box = combo ? combo.querySelector('[data-wb-option-input]') : node;
+    if (!box) return false;
+    if (!combo && box.type === 'checkbox') box.checked = /^(yes|true|1|on)$/i.test(String(value));
+    else if (!combo && box.tagName === 'SELECT') {
+      const match = [...box.options].find((option) => option.textContent.trim().toLowerCase() === String(value).trim().toLowerCase());
+      box.value = match ? match.value : '';
+    } else box.value = value;
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
   /** The row a table button belongs to: "companyId|workspaceId|appId|itemId". */
   function seatOf(seat) {
     const [companyId, workspaceId, appId, itemId] = String(seat || '').split('|');
@@ -189,7 +248,10 @@ export function createButtonPush(ctx) {
     const row = seatOf(seat);
     if (!row) return pressFromForm(fieldId);
     const field = (row.app.fields || []).find((item) => item.id === fieldId);
-    return field ? pressButton(row.companyId, row.app, field, row.item) : false;
+    if (!field) return false;
+    return field.config?.action === 'set'
+      ? applySet(row.companyId, row.app, field, row.item, true)
+      : pressButton(row.companyId, row.app, field, row.item);
   }
 
   function pressFromForm(fieldId) {
@@ -203,6 +265,7 @@ export function createButtonPush(ctx) {
       const read = wbReadFieldInput(item);
       if (read !== undefined) values[item.id] = read;
     });
+    if (field.config?.action === 'set') return applySet(companyId, app, field, { values }, false);
     return pressButton(companyId, app, field, { id: modal?.editId || wbUid(), values });
   }
 

@@ -29,3 +29,15 @@ export const WB_APP_ICONS = [
   'ti-target', 'ti-compass', 'ti-anchor', 'ti-brush', 'ti-palette', 'ti-pencil', 'ti-scissors',
   'ti-ruler', 'ti-calculator', 'ti-coffee', 'ti-cup', 'ti-ticket', 'ti-basket', 'ti-shopping-bag',
 ];
+
+// Icons a Button field wants and an app icon rarely does: the arrows that say "this moves on",
+// a bin for a button that clears, a floppy for one that saves. Kept in one list with the rest
+// so the picker stays a single grid, and every name here is checked against the bundled font
+// by the button tests -- there is no CDN, so a wrong name is a blank square.
+export const WB_ACTION_ICONS = [
+  'ti-arrow-right', 'ti-arrow-left', 'ti-arrow-up', 'ti-arrow-down',
+  'ti-arrow-back-up', 'ti-arrow-forward-up', 'ti-arrows-sort', 'ti-refresh',
+  'ti-send', 'ti-share', 'ti-external-link', 'ti-click',
+  'ti-trash', 'ti-trash-x', 'ti-eraser', 'ti-x',
+  'ti-device-floppy', 'ti-check', 'ti-circle-check', 'ti-player-play',
+];
