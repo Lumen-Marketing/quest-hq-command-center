@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   BUTTON_OPS,
+  buttonNotReady,
+  buttonReady,
   NEVER_PUSHED,
   conditionMet,
   fieldToCreate,
@@ -510,4 +512,59 @@ test('the field palette is searchable, and no longer explains dragging instead',
   assert.ok(!main.includes('drag one into your app'), 'the sentence it replaced is gone');
   // Filtering hides items rather than rebuilding the palette, so the caret stays in the box.
   assert.match(main, /item\.hidden = !!q && !item\.textContent\.toLowerCase\(\)\.includes\(q\)/);
+});
+
+// ---- "I didn't add any condition, why is it still disabled?" --------------------------
+
+test('a Change-fields button with no condition is live the moment it has a field to change', () => {
+  // The bug: "ready" meant "has a destination app", which a Change-fields button never has.
+  // Every one of them was disabled for ever, including one with no condition at all.
+  const setButton = (config) => ({ id: 'b', type: 'button', label: 'Go', config: { action: 'set', ...config } });
+  assert.equal(buttonReady(setButton({ set: [{ field: 't', value: 'x' }] })), true, 'one row is enough');
+  assert.equal(buttonReady(setButton({ clearAll: true })), true, 'so is clearing everything');
+  assert.equal(buttonReady(setButton({ set: [] })), false, 'nothing to change yet');
+  assert.equal(buttonReady(setButton({ set: [{ field: '', value: 'x' }] })), false, 'a half-filled row is not a field');
+});
+
+test('a Send button still needs somewhere to send to', () => {
+  assert.equal(buttonReady({ config: { targetApp: 'app2' } }), true);
+  assert.equal(buttonReady({ config: {} }), false);
+  assert.equal(buttonReady({ config: { action: 'push', set: [{ field: 't' }] } }), false, 'set rows do not make a Send button ready');
+});
+
+test('a button that cannot act says which thing it is missing', () => {
+  assert.match(buttonNotReady({ config: { action: 'set' } }), /no fields to change/);
+  assert.match(buttonNotReady({ config: {} }), /no destination/);
+});
+
+test('in the list, a Change-fields button is enabled on the rows that qualify', () => {
+  const app = {
+    id: 'app1',
+    name: 'App 1',
+    fields: [
+      { id: 'b', type: 'button', label: 'Close', config: { action: 'set', set: [{ field: 't', value: 'Done' }], when: [{ field: 't', op: 'eq', value: 'Abe' }] } },
+      { id: 't', type: 'text', label: 'Owner', config: {} },
+    ],
+    items: [{ id: 'i1', values: { t: 'Abe' } }, { id: 'i2', values: { t: 'Someone' } }],
+  };
+  const push = createButtonPush({
+    can: () => true,
+    wbDoc: () => ({ workspaces: [{ id: 'ws', apps: [app] }] }),
+    wbSave: () => {},
+    wbUid: () => 'u',
+    showToast: () => {},
+    render: () => {},
+    canonicalCompanyId: (id) => id,
+    activeSession: () => ({ profile: { id: 'me' } }),
+    state: {},
+    wbFind: () => ({ app }),
+    wbReadFieldInput: () => undefined,
+    activeCompanyId: () => 'co',
+  });
+  const button = (itemId) => ({ dataset: { wbPress: 'b', wbPressCtx: `co|ws|app1|${itemId}` }, disabled: true, title: '', closest: () => null });
+  const first = button('i1');
+  const second = button('i2');
+  push.syncButtons({ querySelectorAll: () => [first, second] });
+  assert.equal(first.disabled, false, 'no longer stuck disabled just for having no target app');
+  assert.equal(second.disabled, true, 'and the condition still decides');
 });

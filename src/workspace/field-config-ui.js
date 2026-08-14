@@ -15,7 +15,7 @@ import {
   PULL_FAMILY, contactPullMap, contactSourceApp, effectivePull, matchedFields, pullTargets,
 } from './relationship-pull.js';
 import {
-  BUTTON_OPS, planPush, planSet, pushableFields,
+  BUTTON_OPS, buttonNotReady, buttonReady, planPush, planSet, pushableFields,
 } from './button-field.js';
 import { WB_ACTION_ICONS, WB_APP_ICONS } from './icon-sets.js';
 
@@ -369,13 +369,15 @@ export function createFieldInput(ctx) {
         const text = String(f.config.text || '').trim();
         const icon = String(f.config.icon || '').trim();
         const rules = (Array.isArray(f.config.when) ? f.config.when : []).filter((rule) => rule && rule.field && rule.op);
-        const ready = !!f.config.targetApp;
+        // What "ready" means depends on the action: a destination for one, something to change
+        // for the other.
+        const ready = buttonReady(f);
         return `<div class="wb-fieldbox wb-btnfield">${lbl}
           <button class="btn btn-primary wb-push-btn" type="button" data-wb-press="${h(f.id)}"
             data-wb-when="${h(JSON.stringify(rules))}" ${ready ? '' : 'disabled data-wb-no-target="1"'}
             aria-label="${h(text || f.label || 'Send')}"
-            title="${h(ready ? '' : 'This button has no destination set yet.')}">${icon ? `<i class="ti ${h(icon)}"></i>` : ''}${h(text)}</button>
-          ${ready ? '' : '<div class="wb-sub">No destination set yet — open the field to choose one.</div>'}
+            title="${h(ready ? '' : buttonNotReady(f))}">${icon ? `<i class="ti ${h(icon)}"></i>` : ''}${h(text)}</button>
+          ${ready ? '' : `<div class="wb-sub">${h(buttonNotReady(f))} Open the field to set it up.</div>`}
         </div>`;
       }
       case 'company_contact': {

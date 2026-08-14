@@ -158,6 +158,29 @@ export function planPush(sourceApp, targetApp, buttonField) {
 }
 
 /**
+ * Is this button configured enough to do anything?
+ *
+ * It depends entirely on which action it is set to, which is what the first version got wrong:
+ * readiness was "has a destination app", so every button set to CHANGE FIELDS was disabled for
+ * ever -- including one with no condition at all, which is the case somebody would reasonably
+ * expect to be live the moment they made it.
+ */
+export function buttonReady(field) {
+  const config = field?.config || {};
+  if (config.action === 'set') {
+    return !!config.clearAll || (Array.isArray(config.set) && config.set.some((row) => row && row.field));
+  }
+  return !!config.targetApp;
+}
+
+/** Why it is not, in words, for the tooltip on a button nobody can press. */
+export function buttonNotReady(field) {
+  return field?.config?.action === 'set'
+    ? 'This button has no fields to change yet.'
+    : 'This button has no destination set yet.';
+}
+
+/**
  * What a button set to "change fields on this record" would write.
  *
  * "Set control to other selected fields: change its value, or clear the value of selected

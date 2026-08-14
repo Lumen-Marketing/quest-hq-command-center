@@ -6,7 +6,8 @@
 // company, so every step checks it is allowed before it changes anything.
 
 import {
-  conditionMet, fieldToCreate, planPush, planSet, setValueFor, translateValue,
+  buttonNotReady, buttonReady, conditionMet, fieldToCreate,
+  planPush, planSet, setValueFor, translateValue,
 } from './button-field.js';
 
 export function createButtonPush(ctx) {
@@ -148,9 +149,9 @@ export function createButtonPush(ctx) {
       const row = seatOf(button.dataset.wbPressCtx);
       if (row) {
         const field = (row.app.fields || []).find((item) => item.id === button.dataset.wbPress);
-        const ready = !!field?.config?.targetApp;
+        const ready = buttonReady(field);
         button.disabled = !(ready && conditionMet(field, row.item, row.app));
-        button.title = ready ? '' : 'This button has no destination set yet.';
+        button.title = ready ? '' : buttonNotReady(field);
         return;
       }
       let rules = [];
