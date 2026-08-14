@@ -235,6 +235,7 @@ const FACTORY_MODULES = [
   // missing key through, which is the ReferenceError this whole file exists to catch.
   ['src/underwriting/takeoff-card.js', 'createTakeoffCard', 'createUnderwriterPage'],
   ['src/workspace/button-push.js', 'createButtonPush'],
+  ['src/workspace/app-settings.js', 'createAppSettings'],
 ];
 
 test('the list above covers every factory module there is', () => {

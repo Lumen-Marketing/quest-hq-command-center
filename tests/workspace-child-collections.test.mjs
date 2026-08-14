@@ -7,9 +7,11 @@ import {
   setChildValue, toggleChildStep, updateChild,
 } from '../src/workspace/child-collections.js';
 
-// The builder's dialogs are their own fetched-on-demand module; same surface, two files.
+// The builder's dialogs are their own fetched-on-demand module, and so is its Settings tab;
+// same surface, three files.
 const main = (readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
-  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/workspace/app-settings.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const page = readFileSync(new URL('../src/workspace/record-page.js', import.meta.url), 'utf8');
 const model = readFileSync(new URL('../src/workspace/child-collections.js', import.meta.url), 'utf8');
 const plan = readFileSync(new URL('../.ai/plans/app-builder-records-as-rows.md', import.meta.url), 'utf8');
