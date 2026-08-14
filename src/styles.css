@@ -33605,3 +33605,25 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   body.sh-printing .sh-grid thead { display: table-header-group; }
   body.sh-printing .sh-grid tr { break-inside: avoid; }
 }
+
+/* The Time & date tile. A clock is read at a glance from across a room, so the time carries
+   the tile and everything else is quiet underneath it. */
+.wb-clock { display: grid; gap: 2px; padding: 14px 4px 10px; text-align: center; }
+.wb-clock-time {
+  font-size: 34px;
+  font-weight: 300;
+  letter-spacing: -.02em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.wb-clock-date { font-size: 12px; color: var(--muted); }
+.wb-clock-zone {
+  justify-self: center;
+  margin-top: 5px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--muted);
+}

@@ -14213,6 +14213,7 @@ function wbTileMeta(companyId, workspace, tile) {
     case 'text': return { title: tile.config.title || 'Note', icon: 'ti-align-left', config: true };
     case 'image': return { title: tile.config.caption || 'Image', icon: 'ti-photo', config: true };
     case 'links': return { title: tile.config.title || 'Links', icon: 'ti-link', config: true };
+    case 'clock': return { title: tile.config.title || wbClockPlace(tile), icon: 'ti-clock', config: true };
     default: return { title: 'Tile', icon: 'ti-square', config: false };
   }
 }
@@ -14256,6 +14257,7 @@ function wbTileBody(companyId, workspace, tile, meta) {
     case 'text': return wbTileText(tile);
     case 'image': return wbTileImage(tile);
     case 'links': return wbTileLinks(tile);
+    case 'clock': return wbTileClock(tile);
     default: return `<div class="wb-tile-empty">Unknown tile.</div>`;
   }
 }
@@ -15398,6 +15400,12 @@ function wbSaveTileConfig(companyId) {
     tile.config.title = val('[data-wb-tilecfg-title]');
     tile.config.parts = [...document.querySelectorAll('[data-wb-tilecfg-part]')]
       .filter((el) => el.checked).map((el) => el.getAttribute('data-wb-tilecfg-part'));
+  }
+  else if (tile.type === 'clock') {
+    tile.config.title = val('[data-wb-tilecfg-title]');
+    tile.config.tz = val('[data-wb-tilecfg-tz]');
+    tile.config.hour12 = !!document.querySelector('[data-wb-tilecfg-hour12]')?.checked;
+    tile.config.seconds = !!document.querySelector('[data-wb-tilecfg-seconds]')?.checked;
   }
   else if (tile.type === 'image') {
     if (m.draft.objectPath) {
@@ -17525,6 +17533,63 @@ function wbAppTabs(app) {
   return [...new Set([...chosen.filter((tab) => tab !== 'settings'), 'settings'])];
 }
 
+// ---- the Time & date tile ----------------------------------------------------------------
+// The zone as somebody would say it: "Asia/Manila" is a database key, "Manila" is a place.
+function wbClockPlace(tile) {
+  const zone = tile.config.tz || '';
+  return zone ? zone.split('/').pop().replace(/_/g, ' ') : 'Time & date';
+}
+
+// An invalid zone would throw on every tick and take the dashboard down with it, so it is
+// checked once here and the browser's own zone stands in.
+function wbClockZone(tile) {
+  const zone = String(tile.config.tz || '').trim();
+  if (!zone) return undefined;
+  try { new Intl.DateTimeFormat('en', { timeZone: zone }); return zone; } catch { return undefined; }
+}
+
+function wbTileClock(tile) {
+  const zone = wbClockZone(tile);
+  const opts = { timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: tile.config.hour12 !== false };
+  if (tile.config.seconds) opts.second = '2-digit';
+  const now = new Date();
+  const time = now.toLocaleTimeString([], opts);
+  const date = now.toLocaleDateString([], { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return `<div class="wb-clock" data-wb-clock="${h(JSON.stringify({ tz: zone || '', hour12: tile.config.hour12 !== false, seconds: !!tile.config.seconds }))}">
+    <div class="wb-clock-time">${h(time)}</div>
+    <div class="wb-clock-date">${h(date)}</div>
+    ${zone ? `<div class="wb-clock-zone">${h(wbClockPlace(tile))}</div>` : ''}
+  </div>`;
+}
+
+// One timer for every clock on the page, started after each paint and cleared before the next.
+// A timer per tile, or one that outlives the tile it drew, is how a dashboard ends up ticking
+// in the background of a page nobody is looking at.
+let wbClockTimer = null;
+function wbBindClocks() {
+  clearInterval(wbClockTimer);
+  wbClockTimer = null;
+  if (!document.querySelector('[data-wb-clock]')) return;
+  wbClockTimer = setInterval(() => {
+    const clocks = document.querySelectorAll('[data-wb-clock]');
+    if (!clocks.length) { clearInterval(wbClockTimer); wbClockTimer = null; return; }
+    clocks.forEach((node) => {
+      let config;
+      try { config = JSON.parse(node.dataset.wbClock || '{}'); } catch { return; }
+      const zone = config.tz || undefined;
+      const opts = { timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: config.hour12 !== false };
+      if (config.seconds) opts.second = '2-digit';
+      const stamp = new Date();
+      const time = node.querySelector('.wb-clock-time');
+      const date = node.querySelector('.wb-clock-date');
+      const next = stamp.toLocaleTimeString([], opts);
+      if (time && time.textContent !== next) time.textContent = next;
+      const day = stamp.toLocaleDateString([], { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      if (date && date.textContent !== day) date.textContent = day;
+    });
+  }, 1000);
+}
+
 // ---- the Sheet field ---------------------------------------------------------------------
 // A spreadsheet inside a record. The grid is a full-screen overlay of its own, fetched the
 // first time one is opened -- most apps have no sheet, and none of them should pay for it.
@@ -19494,6 +19559,7 @@ function mountWorkspaceBuilder() {
   // QR buttons were never bound -- they drew fine and did nothing. Bound against the document
   // here because this runs after every workspace paint, modal or not.
   if (state.route?.section === 'workspaces') { wbBindUrlControls(document); wbBindRelationshipPickers(document); wbSyncButtons(document); }
+  wbBindClocks();
   if (!state.wbTopbarResizeBound) { state.wbTopbarResizeBound = true; window.addEventListener('resize', () => { if (state.route?.section === 'workspaces') { wbMountTopbar(); wbLayoutTiles(); } }); }
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-wb-topbar-scroll]', (el) => wbScrollTopbar(Number(el.dataset.wbTopbarScroll) || 1));

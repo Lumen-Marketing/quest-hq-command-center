@@ -367,6 +367,7 @@ export function createBuilderModal(ctx) {
         ['text', 'ti-align-left', 'Text / Banner', 'A custom note or greeting'],
         ['image', 'ti-photo', 'Image', 'A logo or graphic (opens in a lightbox)'],
         ['links', 'ti-link', 'Links', 'Pinned bookmarks and URLs'],
+        ['clock', 'ti-clock', 'Time & date', 'The clock, in any time zone you work with'],
       ];
       return wbModalShell('Add tile', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:#e0552d"><i class="ti ti-layout-board-split"></i></div><h3>Add a dashboard tile</h3>`,
         `<div class="wb-tile-catalog">${catalog.map(([type, icon, title, desc]) => `<button class="wb-tile-cat" type="button" data-wb-tile-pick="${h(type)}"><span class="wb-tile-cat-ic"><i class="ti ${icon}"></i></span><span class="wb-tile-cat-main"><b>${h(title)}</b><span>${h(desc)}</span></span></button>`).join('')}</div>`,
@@ -387,6 +388,31 @@ export function createBuilderModal(ctx) {
         const reportOpts = app ? wbAppReportOptions(app) : [];
         form = `<div class="wb-field"><label>App</label>${appSelect(m.draft.appId || apps[0]?.id)}</div>
           <div class="wb-field"><label>Report</label><select class="wb-input" data-wb-tilecfg-report>${reportOpts.map(([id, label]) => `<option value="${h(id)}" ${id === m.draft.reportId ? 'selected' : ''}>${h(label)}</option>`).join('')}</select><div class="wb-sub">Change the app and reopen to see its reports.</div></div>`;
+      } else if (tile.type === 'clock') {
+        // Whatever zones this browser knows, which is every zone the operating system carries.
+        // Falling back to a hand-written list would go stale the next time a country moves its
+        // clocks, and this one never does.
+        const zones = (typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [])
+          .filter((zone) => zone.includes('/'));
+        const here = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        const chosen = m.draft.tz || '';
+        form = `<div class="wb-field"><label>Title <span class="wb-opt">(optional)</span></label>
+            <input class="wb-input" data-wb-tilecfg-title value="${h(m.draft.title || '')}" placeholder="e.g. Head office"></div>
+          <div class="wb-field"><label>Time zone</label>
+            <select class="wb-input" data-wb-tilecfg-tz>
+              <option value="" ${chosen ? '' : 'selected'}>This device${here ? ` — ${h(here.split('/').pop().replace(/_/g, ' '))}` : ''}</option>
+              ${zones.map((zone) => `<option value="${h(zone)}" ${zone === chosen ? 'selected' : ''}>${h(zone.replace(/_/g, ' '))}</option>`).join('')}
+            </select>
+            <div class="wb-sub">Leave it on this device and the tile follows whoever is looking at it. Pick a zone and it always shows that one — a crew, an office, a client three time zones away.</div>
+          </div>
+          <div class="wb-check-row">
+            <label class="wb-switch"><input type="checkbox" data-wb-tilecfg-hour12 ${m.draft.hour12 === false ? '' : 'checked'}><span class="wb-slider"></span></label>
+            <div><b>12-hour clock</b><div class="wb-sub">Off for 24-hour.</div></div>
+          </div>
+          <div class="wb-check-row">
+            <label class="wb-switch"><input type="checkbox" data-wb-tilecfg-seconds ${m.draft.seconds ? 'checked' : ''}><span class="wb-slider"></span></label>
+            <div><b>Show seconds</b></div>
+          </div>`;
       } else if (tile.type === 'jobs') {
         // The Jobs dashboard was a fixed page. Here it is parts you tick, so the tile shows
         // what you actually watch rather than everything anyone might.
