@@ -22356,8 +22356,11 @@ button {
    scrollport. Below 900px the columns stack, where a single page scroll is the right one. */
 .work-surface:has(> .wb-dash-split) { display: flex; flex-direction: column; overflow: hidden; }
 .work-surface:has(> .wb-dash-split) > .wb-dash-split { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+/* overflow-x: hidden, not the `visible` that would otherwise compute to `auto` the moment the
+   other axis scrolls. These two panes scroll DOWN; anything too wide wraps, and nothing gets a
+   sideways bar of its own. Wide content that genuinely cannot wrap carries its own scroller. */
 .wb-dash-split > .wb-dash-main,
-.wb-dash-split > .wb-dash-side { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; padding-right: 2px; }
+.wb-dash-split > .wb-dash-side { min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; padding-right: 2px; }
 /* The @mention list opens upward out of a comment box, so a box scrolled flush to the top of
    the pane has nowhere to draw it. The work surface clipped it the same way before this, only
    from ~100px higher up; keeping the pane's own scrolling away from that edge is what stops
@@ -23086,9 +23089,13 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 
 .wb-activity { border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); padding: 8px 18px; }
 .wb-act-item { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border, #e2d5bf); }
+/* Without this the flex child refuses to go narrower than its longest word, and one unbroken
+   string pushes the whole feed sideways instead of wrapping. */
+.wb-act-item > div { min-width: 0; flex: 1; }
 .wb-act-item:last-child { border-bottom: 0; }
 .wb-act-ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: #fff; font-size: 16px; flex: none; }
-.wb-act-text { font-size: .88rem; } .wb-act-text b { font-weight: 800; }
+/* A long unbroken value -- a URL, an id, a pasted blob -- wraps rather than widening the feed. */
+.wb-act-text { font-size: .88rem; overflow-wrap: anywhere; } .wb-act-text b { font-weight: 800; }
 .wb-act-time { font-size: .76rem; color: var(--text-muted, #72695d); margin-top: 2px; }
 
 /* Workspace builder modals */
@@ -33786,16 +33793,23 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 
 /* The Time & date tile. A clock is read at a glance from across a room, so the time carries
    the tile and everything else is quiet underneath it. */
-.wb-clock { display: grid; gap: 2px; padding: 14px 4px 10px; text-align: center; }
+.wb-clock { display: grid; gap: 2px; padding: 14px 4px 10px; text-align: center; min-width: 0; }
 .wb-clock-time {
-  font-size: 34px;
+  /* Not a flat 34px: a tile is half the side column, and "10:38:47 PM" with seconds on runs
+     straight out the side of it on a narrower window. Viewport-based rather than container-based
+     because nothing in this stylesheet establishes a container, and a cqw with no container
+     silently measures the viewport instead. */
+  font-size: clamp(21px, 2.4vw, 34px);
   font-weight: 300;
   letter-spacing: -.02em;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
   color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.wb-clock-date { font-size: 12px; color: var(--muted); }
+/* "Thursday, August 14, 2026" does not fit on one line in a tile, so it takes two. */
+.wb-clock-date { font-size: 12px; color: var(--muted); min-width: 0; text-wrap: balance; overflow-wrap: anywhere; }
 .wb-clock-zone {
   justify-self: center;
   margin-top: 5px;

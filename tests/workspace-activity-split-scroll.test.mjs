@@ -13,11 +13,13 @@ const styles = readFileSync(join(root, 'src', 'styles.css'), 'utf8').replace(/\r
 
 // The rule block, so a later `.wb-dash` rule elsewhere in the sheet cannot satisfy these by
 // accident -- there are two unrelated `.wb-dash` uses in this stylesheet.
+// Comments are stripped: a rule whose comment explains why it does NOT use some unit would
+// otherwise satisfy a check for that unit.
 const rule = (selector) => {
   const at = styles.indexOf(selector);
   assert.notEqual(at, -1, `no rule for ${selector}`);
   const open = styles.indexOf('{', at);
-  return styles.slice(open, styles.indexOf('}', open));
+  return styles.slice(open, styles.indexOf('}', open)).replace(/\/\*[\s\S]*?\*\//g, '');
 };
 
 test('the activity page marks itself as the split, and nothing else does', () => {
@@ -66,6 +68,33 @@ test('stacked on a narrow screen, the surface takes its scroll back', () => {
   const block = styles.slice(at, styles.indexOf('\n}', undo));
   assert.match(block, /\.work-surface:has\(> \.wb-dash-split\) \{ display: block; overflow: auto; \}/);
   assert.match(block, /overflow: visible/);
+});
+
+// --- down, never sideways -----------------------------------------------------------------
+
+test('the panes scroll down and never sideways', () => {
+  // `overflow-x` defaults to `visible`, which computes to `auto` the moment the other axis
+  // scrolls -- so making the panes scroll vertically gave them a horizontal bar for free.
+  const panes = rule('.wb-dash-split > .wb-dash-main,\n.wb-dash-split > .wb-dash-side');
+  assert.match(panes, /overflow-x: hidden/);
+});
+
+test('a long unbroken value wraps instead of widening the feed', () => {
+  // A sheet field stores its whole grid as one JSON string. Before this, one of those in the
+  // feed pushed every card in the column sideways.
+  assert.match(rule('.wb-act-text {'), /overflow-wrap: anywhere/);
+  // The flex child has to be allowed to go narrower than its longest word, or the wrap never
+  // gets the chance to happen.
+  assert.match(rule('.wb-act-item > div'), /min-width: 0/);
+});
+
+test('the clock is sized to its tile', () => {
+  // A tile is half the side column. "10:38:47 PM" at a flat 34px does not fit in one.
+  assert.match(rule('.wb-clock-time'), /font-size: clamp\(/);
+  assert.match(rule('.wb-clock-date'), /overflow-wrap: anywhere/);
+  // cqw would measure the viewport here: nothing in this stylesheet declares a container.
+  assert.ok(!/container-type/.test(styles), 'no container context exists');
+  assert.ok(!/cqw/.test(rule('.wb-clock-time')), 'so the clock must not use container units');
 });
 
 test('a comment box is never focused flush against the edge its menu opens into', () => {

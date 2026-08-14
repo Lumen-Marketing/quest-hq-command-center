@@ -15554,7 +15554,10 @@ function wbNameValue(app, field, item, depth = 0) {
   const raw = item && item.values ? item.values[field.id] : undefined;
   if (raw === undefined || raw === null || raw === '' || (Array.isArray(raw) && !raw.length)) return '';
   switch (field.type) {
-    case 'checklist': case 'progress': case 'checkbox': case 'file': case 'image': case 'duration': case 'calculation': case 'rating': case 'tags': case 'rollup': case 'created_time': case 'updated_time': return '';
+    // A sheet stores its whole grid as JSON and a button stores its own configuration. Neither
+    // is a name, and falling through to the default branch put `{"rows":39,"cols":24,"cells":…`
+    // in the activity feed as the record's title.
+    case 'checklist': case 'progress': case 'checkbox': case 'file': case 'image': case 'duration': case 'calculation': case 'rating': case 'tags': case 'rollup': case 'created_time': case 'updated_time': case 'sheet': case 'button': return '';
     case 'autonumber': return wbAutoNumberText(field, raw);
     case 'category': case 'status': { const o = (field.config.options || []).find((x) => x.id === raw); return o ? String(o.label) : ''; }
     case 'user': { const loc = wbLocateApp(app); const m = wbMemberById(loc.companyId, raw); return m ? String(m.name) : ''; }
