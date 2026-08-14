@@ -16135,6 +16135,7 @@ function wbUrlControl(value) {
     <div class="wb-url-qr" hidden><img loading="lazy" width="180" height="180" alt="QR code linking to ${h(wbUrlLabel(s))}" src="${h(qr)}"><span class="wb-sub">Scan to open the link.</span></div>
   </div>`;
 }
+const wbSeat = (ctx) => [ctx.companyId, ctx.workspace?.id || '', ctx.app?.id || '', ctx.item.id].join('|');
 function wbFmtVal(ctx, field, value) {
   // Checkbox renders as an inline toggle (even when unset) so managers can flip
   // it straight from the table — handled before the empty-value guard below.
@@ -16155,9 +16156,8 @@ function wbFmtVal(ctx, field, value) {
     // the module that judges them, so none of that has to be spelled into every row.
     // No title here: the column header already says what this button is, which is exactly the
     // context a bare one needs and the one thing the record form has not got.
-    const seat = [ctx.companyId, ctx.workspace?.id || '', ctx.app?.id || '', ctx.item.id].join('|');
     const ico = field.config.icon;
-    return `<button type="button" class="btn btn-sm wb-push-btn" data-wb-press="${h(field.id)}" data-wb-press-ctx="${h(seat)}" disabled>${ico ? `<i class="ti ${h(ico)}"></i>` : ''}${h(field.config.text || '')}</button>`;
+    return `<button type="button" class="btn btn-sm wb-push-btn" data-wb-press="${h(field.id)}" data-wb-press-ctx="${h(wbSeat(ctx))}" disabled>${ico ? `<i class="ti ${h(ico)}"></i>` : ''}${h(field.config.text || '')}</button>`;
   }
   // Calculation fields have no stored value — they compute from other fields —
   // so they must render before the empty-value guard below (which would else swallow them).
@@ -16236,6 +16236,15 @@ function wbFmtVal(ctx, field, value) {
     case 'rating': return wbRatingStars(value);
     case 'tags': return wbTagsChips(field, value) || '<span class="wb-cell-empty">—</span>';
     case 'autonumber': return `<span class="wb-autonum">${h(wbAutoNumberText(field, value))}</span>`;
+    // A sheet stores its whole grid as JSON. A row shows what it is CALLED and opens it when
+    // clicked -- printing the grid into a table cell is how a column ends up unreadable.
+    case 'sheet': {
+      const label = h(wbSheetLabel(value));
+      const face = `<i class="ti ti-table"></i>${label}`;
+      return ctx.item
+        ? `<button type="button" class="wb-sheet-chip" data-wb-sheet-row="${h(field.id)}" data-wb-sheet-ctx="${h(wbSeat(ctx))}" title="Open ${label}">${face}</button>`
+        : `<span class="wb-sheet-chip">${face}</span>`;
+    }
     default: return h(value);
   }
 }
@@ -17596,32 +17605,18 @@ function wbTileClock(tile) {
   </div>`;
 }
 
-// One timer for every clock on the page, started after each paint and cleared before the next.
-// A timer per tile, or one that outlives the tile it drew, is how a dashboard ends up ticking
-// in the background of a page nobody is looking at.
-let wbClockTimer = null;
+// The ticking runtime is fetched the first time a dashboard actually has a clock on it. The
+// tile renders its own time already, so nothing is missing before it arrives, and a dashboard
+// with no clock never pays for it.
+let wbClockTicker = null;
 function wbBindClocks() {
-  clearInterval(wbClockTimer);
-  wbClockTimer = null;
+  wbClockTicker?.stopClocks();
   if (!document.querySelector('[data-wb-clock]')) return;
-  wbClockTimer = setInterval(() => {
-    const clocks = document.querySelectorAll('[data-wb-clock]');
-    if (!clocks.length) { clearInterval(wbClockTimer); wbClockTimer = null; return; }
-    clocks.forEach((node) => {
-      let config;
-      try { config = JSON.parse(node.dataset.wbClock || '{}'); } catch { return; }
-      const zone = config.tz || undefined;
-      const opts = { timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: config.hour12 !== false };
-      if (config.seconds) opts.second = '2-digit';
-      const stamp = new Date();
-      const time = node.querySelector('.wb-clock-time');
-      const date = node.querySelector('.wb-clock-date');
-      const next = stamp.toLocaleTimeString([], opts);
-      if (time && time.textContent !== next) time.textContent = next;
-      const day = stamp.toLocaleDateString([], { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-      if (date && date.textContent !== day) date.textContent = day;
-    });
-  }, 1000);
+  import('./workspace/clock-tick.js').then((mod) => {
+    wbClockTicker = mod;
+    // Checked again: a paint may have taken the clock away while this was in flight.
+    if (document.querySelector('[data-wb-clock]')) mod.startClocks();
+  }).catch(() => {});
 }
 
 // ---- the Sheet field ---------------------------------------------------------------------
@@ -17630,6 +17625,19 @@ function wbBindClocks() {
 function wbOpenSheet(fieldId) {
   import('./sheet/sheet-editor.js')
     .then((mod) => mod.openFor(fieldId, { render }))
+    .catch((error) => showToast(error.message || 'The sheet could not be opened.', 'local', 'Workspaces'));
+}
+
+/**
+ * Open the sheet held by a record, from a row rather than from the open form.
+ *
+ * The form path reads a hidden input that is on the page; a table row has no such input, so the
+ * module goes to the record itself. Finding it lives there too -- every session that never
+ * clicks one would otherwise carry the lookup.
+ */
+function wbOpenSheetRow(fieldId, seat) {
+  import('./sheet/sheet-editor.js')
+    .then((mod) => mod.openForRecord(fieldId, seat, { wbDoc, wbSave, render, can }))
     .catch((error) => showToast(error.message || 'The sheet could not be opened.', 'local', 'Workspaces'));
 }
 
@@ -26885,6 +26893,14 @@ function onDocumentClick(event) {
   if (event.target.closest('[data-takeoff-action]') && takeoffEvent(event, 'click')) return;
   const sheetOpen = event.target.closest('[data-wb-sheet-open]');
   if (sheetOpen) { event.preventDefault(); wbOpenSheet(sheetOpen.dataset.wbSheetOpen); return; }
+  const sheetRow = event.target.closest('[data-wb-sheet-row]');
+  if (sheetRow) {
+    // A row's sheet must not also open the record it sits in.
+    event.preventDefault();
+    event.stopPropagation();
+    wbOpenSheetRow(sheetRow.dataset.wbSheetRow, sheetRow.dataset.wbSheetCtx || '');
+    return;
+  }
   const pressed = event.target.closest('[data-wb-press]');
   if (pressed && !pressed.disabled) {
     // A row's button must not also open the record it sits in.
@@ -33224,6 +33240,20 @@ function onDocumentInput(event) {
   // Both paths, for the reason the job Client field taught us: typing fires input, and
   // picking from the datalist fires input too in Chromium but change in Firefox.
   if (event.target.matches('[data-wb-cc-name]')) syncCompanyContactPicker(event.target);
+  // The sheet's name is typed beside it and stored INSIDE the sheet, because that is what every
+  // column, search result and export reads. The hidden input still carries the whole thing, so
+  // the form's own save needs to know nothing about this.
+  if (event.target.matches('[data-wb-sheet-name]')) {
+    const holder = document.querySelector(`[data-f="${CSS.escape(event.target.dataset.wbSheetName)}"]`);
+    if (holder) {
+      let sheet;
+      try { sheet = JSON.parse(holder.value || '{}'); } catch { sheet = {}; }
+      sheet.title = event.target.value.slice(0, 120);
+      holder.value = JSON.stringify(sheet);
+      holder.dataset.wbSheetTitle = sheet.title || 'Sheet';
+    }
+    return;
+  }
   // The visible box drives a hidden input, so an unchecked field still submits a value: a
   // missing key would be indistinguishable from a field somebody deleted.
   if (event.target.matches('[data-cc-check]')) {

@@ -33864,6 +33864,31 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
    column letters and whatever happened to be selected with it, which is how a print came out
    with an orange header band and a black stripe across row 2. This is built fresh from the
    used range: the content, the formatting somebody applied, and nothing else. */
+/* A sheet in a table row: what it is called, and a way in. */
+.wb-sheet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 5px 11px;
+  border: 1px solid var(--border, #e2d5bf);
+  border-radius: 999px;
+  background: var(--surface-2, #f6efe4);
+  color: var(--text, #17130f);
+  font-size: .84rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-sheet-chip i { color: var(--orange, #e0552d); flex: none; }
+button.wb-sheet-chip { cursor: pointer; }
+button.wb-sheet-chip:hover { border-color: var(--orange, #e0552d); color: var(--orange, #e0552d); }
+button.wb-sheet-chip:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; }
+/* The name box on the field itself. */
+.wb-sheet-name { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.wb-sheet-name > span { font-size: .74rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted, #72695d); }
+
 .sh-print { display: none; }
 @media print {
   body.sh-printing > *:not(.sh-print) { display: none !important; }

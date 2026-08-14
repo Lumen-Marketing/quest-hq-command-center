@@ -410,9 +410,17 @@ export function createFieldInput(ctx) {
         const grid = view.filled
           ? `<table class="wb-sheet-mini">${view.rows.map((row) => `<tr>${row.map((cell) => `<td>${h(cell)}</td>`).join('')}</tr>`).join('')}</table>`
           : '<div class="wb-sub">Empty sheet.</div>';
+        // The name is the sheet's own, and it is what every list, column, search result and
+        // export shows -- so it is typed here rather than guessed from the field label. An
+        // import fills it in from the file, which is usually the answer anyway.
+        const sheetName = String(start?.title || '').trim();
         return `<div class="wb-fieldbox wb-sheetfield">${lbl}
           <input type="hidden" data-f="${h(f.id)}" data-wb-sheet-title="${h(f.label)}" value="${h(JSON.stringify(start))}" />
           <div class="wb-sheet-card">
+            <label class="wb-sheet-name">
+              <span>File name</span>
+              <input class="wb-input" type="text" data-wb-sheet-name="${h(f.id)}" value="${h(sheetName)}" maxlength="120" placeholder="Spreadsheet" />
+            </label>
             ${grid}
             <button class="btn btn-sm" type="button" data-wb-sheet-open="${h(f.id)}"><i class="ti ti-table"></i>${view.filled ? 'Open sheet' : 'Start the sheet'}</button>
           </div>

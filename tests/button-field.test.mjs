@@ -421,7 +421,10 @@ test('main.js renders the button in the table and stops the row opening', () => 
   // The cell has to render before the empty-value guard: a button holds no value at all.
   const at = main.indexOf("if (field.type === 'button') {");
   assert.ok(at !== -1 && at < main.indexOf("if (value === undefined || value === null || value === ''"));
-  assert.match(main, /data-wb-press-ctx="\$\{h\(seat\)\}"/);
+  // The seat is one shared expression now: a sheet in a row has to say which record it
+  // belongs to for exactly the same reason a button does.
+  assert.match(main, /data-wb-press-ctx="\$\{h\(wbSeat\(ctx\)\)\}"/);
+  assert.match(main, /const wbSeat = \(ctx\) => \[ctx\.companyId, ctx\.workspace\?\.id \|\| '', ctx\.app\?\.id \|\| '', ctx\.item\.id\]\.join\('\|'\);/);
   // Pressing a button inside a row must not also open the record that row points at.
   assert.match(main, /event\.stopPropagation\(\);\s*\r?\n\s*wbPressButton/);
 });

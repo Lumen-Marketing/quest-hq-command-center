@@ -894,6 +894,33 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
  * rather than in main.js, which would otherwise carry it for every session that never opens a
  * sheet.
  */
+/**
+ * Open the sheet a RECORD holds, addressed by "company|workspace|app|item".
+ *
+ * The form path above reads a hidden input that is on the page. A table row has none, so this
+ * goes to the record itself and writes back through the app's own save. Finding the record lives
+ * here rather than in main.js: every session that never opens a sheet from a row would otherwise
+ * carry the lookup for one that does.
+ */
+export function openForRecord(fieldId, seat, { wbDoc, wbSave, render, can }) {
+  const [companyId, workspaceId, appId, itemId] = String(seat || '').split('|');
+  const workspace = (wbDoc(companyId)?.workspaces || []).find((entry) => entry.id === workspaceId);
+  const app = (workspace?.apps || []).find((entry) => entry.id === appId);
+  const item = (app?.items || []).find((entry) => entry.id === itemId);
+  if (!item) throw new Error('That record is no longer here. Reload and try again.');
+  const field = (app.fields || []).find((entry) => entry.id === fieldId);
+  return openSheetEditor({
+    title: field?.label || 'Sheet',
+    readOnly: !can('workspaces.manage', companyId),
+    read: () => { try { return JSON.parse(item.values[fieldId] || '{}'); } catch { return {}; } },
+    write: (sheet) => {
+      item.values[fieldId] = JSON.stringify(sheet);
+      wbSave(companyId);
+      render?.();
+    },
+  });
+}
+
 export function openFor(fieldId, { render }) {
   const holder = document.querySelector(`[data-f="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(fieldId) : fieldId}"]`);
   if (!holder) return null;

@@ -68,20 +68,35 @@ test('12-hour, seconds and a title are all settable and all saved', () => {
 test('one timer for the page, cleared before the next paint starts another', () => {
   // A timer per tile, or one that outlives the tile it drew, is how a dashboard ends up
   // ticking in the background of a page nobody is looking at.
-  const bind = slice('wbBindClocks');
-  assert.match(bind, /clearInterval\(wbClockTimer\);/);
-  assert.match(bind, /if \(!document\.querySelector\('\[data-wb-clock\]'\)\) return;/);
+  const tick = readFileSync(join(root, 'src', 'workspace', 'clock-tick.js'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(tick, /export function stopClocks\(\) \{\s*\n\s*clearInterval\(timer\);\s*\n\s*timer = null;/);
+  assert.match(tick, /startClocks\(\) \{\s*\n\s*stopClocks\(\);/, 'a new run always clears the old one');
+  assert.match(tick, /if \(!document\.querySelector\('\[data-wb-clock\]'\)\) return;/);
   // And it stops itself if the tile goes away between ticks.
-  assert.match(bind, /if \(!clocks\.length\) \{ clearInterval\(wbClockTimer\); wbClockTimer = null; return; \}/);
+  assert.match(tick, /if \(!clocks\.length\) \{ stopClocks\(\); return; \}/);
   assert.match(main, /wbBindClocks\(\);/);
+});
+
+test('the ticking runtime is fetched only once a clock is on screen', () => {
+  // A dashboard with no clock should not carry the ticker. The tile renders its own time
+  // server-side, so nothing is missing in the moment before the module arrives.
+  const bind = slice('wbBindClocks');
+  assert.match(bind, /wbClockTicker\?\.stopClocks\(\);/);
+  assert.match(bind, /if \(!document\.querySelector\('\[data-wb-clock\]'\)\) return;/);
+  assert.match(bind, /import\('\.\/workspace\/clock-tick\.js'\)/);
+  // A paint can remove the clock while the fetch is in flight.
+  assert.match(bind, /if \(document\.querySelector\('\[data-wb-clock\]'\)\) mod\.startClocks\(\);/);
 });
 
 test('a tick writes only what changed', () => {
   // The whole tile is not redrawn every second: a dashboard that rebuilds itself once a second
   // is one that fights anybody trying to use it.
-  const bind = slice('wbBindClocks');
-  assert.match(bind, /if \(time && time\.textContent !== next\) time\.textContent = next;/);
-  assert.match(bind, /if \(date && date\.textContent !== day\) date\.textContent = day;/);
+  const tick = readFileSync(join(root, 'src', 'workspace', 'clock-tick.js'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(tick, /if \(time && time\.textContent !== next\) time\.textContent = next;/);
+  assert.match(tick, /if \(date && date\.textContent !== day\) date\.textContent = day;/);
+  // The date is written on every tick, so a clock whose tile has just been repainted still
+  // carries one -- which is the half of the tile the ticker is easiest to forget.
+  assert.match(tick, /weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'/);
 });
 
 test('every class the tile uses is styled', () => {
