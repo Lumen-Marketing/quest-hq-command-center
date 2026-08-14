@@ -234,6 +234,7 @@ const FACTORY_MODULES = [
   // come from main.js -- just one hop further along. Checking the wrong call site would let a
   // missing key through, which is the ReferenceError this whole file exists to catch.
   ['src/underwriting/takeoff-card.js', 'createTakeoffCard', 'createUnderwriterPage'],
+  ['src/workspace/button-push.js', 'createButtonPush'],
 ];
 
 test('the list above covers every factory module there is', () => {

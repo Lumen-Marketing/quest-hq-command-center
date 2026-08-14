@@ -13532,11 +13532,12 @@ const WB_FIELD_TYPES = {
   autonumber: { label: 'Auto-number', icon: 'ti-hash', color: '#6b7280', desc: 'Automatic sequential ID' },
   created_time: { label: 'Created time', icon: 'ti-calendar-plus', color: '#6b7280', desc: 'When the record was created' },
   updated_time: { label: 'Last modified', icon: 'ti-calendar-up', color: '#6b7280', desc: 'When it last changed' },
+  button: { label: 'Button', icon: 'ti-click', color: '#d4541f', desc: 'Send the record to another app' },
 };
 // Computed / automatic fields hold no user-entered value: created/updated read the
 // item's timestamps, autonumber is assigned on create, rollup and calculation compute.
-const WB_AUTO_FIELD_TYPES = new Set(['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time']);
-const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'company_contact', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox'];
+const WB_AUTO_FIELD_TYPES = new Set(['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time', 'button']);
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'company_contact', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox', 'button'];
 // Comparison operators for numeric (number/money) automation triggers:
 // [operator, dropdown label, symbol for the human-readable rule summary].
 const WB_TRIG_OPS = [['==', 'equals', '='], ['!=', 'not equal', '≠'], ['>', 'greater than', '>'], ['<', 'less than', '<'], ['>=', 'at least', '≥'], ['<=', 'at most', '≤']];
@@ -18874,6 +18875,26 @@ function wbCollectModalDraft() {
       // dropped rather than left storing something the UI no longer offers.
       if (m.draft.config.multiple) { m.draft.config.pull = []; m.draft.config.pullAll = false; }
     }
+    if (t === 'button') {
+      m.draft.config.text = (val('wbBtnText') || '').trim();
+      const company = document.getElementById('wbBtnCompany');
+      m.draft.config.targetCompany = company ? company.value : canonicalCompanyId(m.companyId);
+      const targetApp = val('wbBtnApp') || '';
+      // A different destination invalidates the chosen field list, which named fields in the
+      // app that is no longer the target.
+      if (targetApp !== m.draft.config.targetApp) m.draft.config.fields = [];
+      m.draft.config.targetApp = targetApp;
+      m.draft.config.when = [...document.querySelectorAll('[data-wb-when-row]')]
+        .map((row) => ({
+          field: row.querySelector('[data-wb-when-field]')?.value || '',
+          op: row.querySelector('[data-wb-when-op]')?.value || 'eq',
+          value: row.querySelector('[data-wb-when-value]')?.value || '',
+        }))
+        .filter((rule) => rule.field);
+      m.draft.config.fields = checked('wbBtnAll')
+        ? []
+        : [...document.querySelectorAll('[data-wb-btn-field]')].filter((box) => box.checked).map((box) => box.dataset.wbBtnField);
+    }
     if (t === 'company_contact') {
       // The same two controls as a relationship, read the same way. The switch is on by
       // default for this field type, so an untouched panel saves it as on.
@@ -19989,6 +20010,21 @@ function wbMountModal() {
   if (m.kind === 'stages') wbMountStagesModal(overlay, m);
   // Copy-across rows. Collect first, so a mapping half-chosen on another row survives adding
   // or removing this one -- render() rebuilds the panel from the draft.
+  overlay.querySelectorAll('[data-wb-when-add]').forEach((b) => {
+    b.onclick = () => {
+      wbCollectModalDraft();
+      m.draft.config.when = [...(m.draft.config.when || []), { field: '', op: 'eq', value: '' }];
+      render();
+    };
+  });
+  overlay.querySelectorAll('[data-wb-when-del]').forEach((b) => {
+    b.onclick = () => {
+      const index = Number(b.closest('[data-wb-when-row]')?.dataset.index);
+      wbCollectModalDraft();
+      m.draft.config.when = (m.draft.config.when || []).filter((_, at) => at !== index);
+      render();
+    };
+  });
   overlay.querySelectorAll('[data-wb-pull-add]').forEach((b) => {
     b.onclick = () => {
       wbCollectModalDraft();
@@ -20243,6 +20279,7 @@ function wbMountModal() {
     // Link/URL field controls: copy to clipboard, and toggle the QR code.
     wbBindUrlControls(overlay);
     wbBindRelationshipPickers(overlay);
+    wbSyncButtons(overlay);
     const addComment = overlay.querySelector('[data-wb-add-comment]');
     if (addComment) addComment.onclick = () => { wbAddItemComment().catch((error) => showToast(error.message || 'Comment save failed.', 'error', 'Workspaces')); };
     overlay.querySelectorAll('[data-wb-comment-edit]').forEach((b) => { b.onclick = () => { state.wbEditingCommentId = b.dataset.wbCommentEdit; wbKeepModalScroll(); render(); }; });
@@ -26693,6 +26730,8 @@ function onDocumentClick(event) {
   if (!event.target.closest('.address-lookup-control, .sf-inline-address-editor')) closeAddressSuggestionMenus();
   if (!event.target.closest('.job-type-combobox')) closeJobTypeMenus();
   if (event.target.closest('[data-takeoff-action]') && takeoffEvent(event, 'click')) return;
+  const pressed = event.target.closest('[data-wb-press]');
+  if (pressed && !pressed.disabled) { wbPressButton(pressed.dataset.wbPress); return; }
 
   // Checked before the option itself: the X sits beside the option, so a click that lands on
   // it must prune the list rather than pick the value it is attached to.
@@ -33088,6 +33127,7 @@ function onDocumentInput(event) {
     return;
   }
   if (takeoffEvent(event, 'input')) return;
+  if (event.target.closest?.('[data-f]')) wbSyncButtons(event.target.closest('form, .wb-modal, .wb-record-page'));
   if (event.target.matches('[data-phone-format]')) {
     // Only digits, '+' and '-' are allowed; strip anything else, then format.
     const cleaned = event.target.value.replace(/[^0-9+\-]/g, '');
@@ -33749,6 +33789,42 @@ async function saveJob(form) {
   state.modal = '';
   navigate(companyPath('jobs', { tab: 'profile', job_id: payload.id }, payload.company_id), { replace: true });
   return true;
+}
+
+// ---- the Button field -------------------------------------------------------------------
+// A field that carries its record into another app. Both halves -- deciding whether it is live
+// against what the form holds, and doing the push -- are fetched on the first record form that
+// has one, because most apps have none.
+let buttonPushModule = null;
+let buttonPushPending = null;
+
+function loadButtonPush() {
+  if (buttonPushModule) return Promise.resolve(buttonPushModule);
+  if (!buttonPushPending) {
+    buttonPushPending = import('./workspace/button-push.js').then((mod) => {
+      buttonPushModule = mod.createButtonPush({
+        can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
+        state, wbFind, wbReadFieldInput, activeCompanyId,
+      });
+      return buttonPushModule;
+    }).catch((error) => { buttonPushPending = null; throw error; });
+  }
+  return buttonPushPending;
+}
+
+// Enable or disable the buttons on screen against what the form currently holds.
+function wbSyncButtons(root) {
+  if (!root?.querySelector?.('[data-wb-press]')) return;
+  if (buttonPushModule) { buttonPushModule.syncButtons(root); return; }
+  loadButtonPush()
+    .then((mod) => mod.syncButtons(root))
+    .catch((error) => console.error('button field failed to load', error));
+}
+
+function wbPressButton(fieldId) {
+  loadButtonPush()
+    .then((mod) => mod.pressFromForm(fieldId))
+    .catch((error) => showToast(error.message || 'That record could not be sent.', 'local', 'Workspaces'));
 }
 
 // ---- renderUnderwriterPage ---------------------------------------------------------

@@ -14,6 +14,7 @@ import { acceptAttr } from '../security/upload-policy.js';
 import {
   PULL_FAMILY, contactPullMap, contactSourceApp, effectivePull, matchedFields, pullTargets,
 } from './relationship-pull.js';
+import { BUTTON_OPS, planPush, pushableFields } from './button-field.js';
 
 // "Copy the data inputted on the other field so it will automatically input on it."
 //
@@ -171,6 +172,65 @@ export function renderFieldConfig(fd, app, ctx) {
       ${colorBlock}
       <div class="wb-field"><label>Preview <span class="wb-opt">at ${previewPct}%</span></label><div class="wb-prog-preview" id="wbProgPreview">${wbProgressDisplayHtml(fd, previewPct)}</div></div>`;
   }
+  if (t === 'button') {
+    const sourceCompany = canonicalCompanyId(state.builderModal.companyId);
+    const companies = Object.keys(state.workspaceBuilderDocs || {})
+      .map((cid) => ({ id: cid, name: cid === sourceCompany ? `${companyName(cid) || 'This workspace'} (this workspace)` : (companyName(cid) || cid) }))
+      .sort((a, b) => (a.id === sourceCompany ? -1 : b.id === sourceCompany ? 1 : a.name.localeCompare(b.name)));
+    const targetCompany = fd.config.targetCompany || sourceCompany;
+    // Not this app: a button that files a record into the app it is already in is a loop
+    // somebody has to notice for themselves.
+    const apps = wbCompanyApps(targetCompany).map((entry) => entry.app).filter((item) => item.id !== app.id);
+    const targetApp = wbTargetApp(targetCompany, fd.config.targetApp);
+    const carryable = pushableFields(app, fd.id);
+    const chosen = Array.isArray(fd.config.fields) ? fd.config.fields : [];
+    const testable = (app.fields || []).filter((field) => field.id !== fd.id && field.type !== 'button');
+    const rules = Array.isArray(fd.config.when) && fd.config.when.length ? fd.config.when : [{ field: '', op: 'eq', value: '' }];
+    const plan = targetApp ? planPush(app, targetApp, fd) : null;
+    const names = (list) => list.map((label) => h(label)).join('</b>, <b>');
+
+    const ruleRow = (rule, index) => `
+      <div class="wb-when-row" data-wb-when-row data-index="${index}">
+        <select class="wb-input" data-wb-when-field data-wb-rel-refresh>
+          <option value="">— Always enabled —</option>
+          ${testable.map((field) => `<option value="${h(field.id)}" ${rule.field === field.id ? 'selected' : ''}>${h(field.label)}</option>`).join('')}
+        </select>
+        <select class="wb-input" data-wb-when-op data-wb-rel-refresh>
+          ${BUTTON_OPS.map(([op, label]) => `<option value="${h(op)}" ${rule.op === op ? 'selected' : ''}>${h(label)}</option>`).join('')}
+        </select>
+        <input class="wb-input" data-wb-when-value value="${h(rule.value ?? '')}" placeholder="Value" ${['filled', 'empty'].includes(rule.op) ? 'disabled' : ''} />
+        <button type="button" class="wb-icon-btn danger" data-wb-when-del title="Remove" aria-label="Remove this condition"><i class="ti ti-x"></i></button>
+      </div>`;
+
+    return `
+      <div class="wb-field"><label>Button text</label>
+        <input class="wb-input" id="wbBtnText" value="${h(fd.config.text || '')}" placeholder="${h(fd.label || 'Send')}" maxlength="40">
+        <div class="wb-sub">What the button says on the record. Defaults to the field's own name.</div>
+      </div>
+      <div class="wb-field"><label>Enabled when <span class="wb-opt">(leave it on “Always enabled” for no condition)</span></label>
+        <div class="wb-when-list">${rules.map(ruleRow).join('')}</div>
+        <button class="btn btn-sm" type="button" data-wb-when-add><i class="ti ti-plus"></i>Add a condition</button>
+        <div class="wb-sub">Every condition has to hold. A stage or category is matched on what it says, so type <b>Won</b> rather than an option id. The button follows the form as it is filled in — changing the stage lights it up without saving first.</div>
+      </div>
+      <div class="wb-field"><label>Send the record to</label>
+        ${companies.length > 1 ? `<select class="wb-input" id="wbBtnCompany" data-wb-rel-refresh>${companies.map((company) => `<option value="${h(company.id)}" ${targetCompany === company.id ? 'selected' : ''}>${h(company.name)}</option>`).join('')}</select>` : ''}
+        <select class="wb-input" id="wbBtnApp" data-wb-rel-refresh><option value="">— Select an app —</option>${apps.map((item) => `<option value="${h(item.id)}" ${fd.config.targetApp === item.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}</select>
+        <div class="wb-sub">Pressing it adds a record there carrying this one's values.</div>
+      </div>
+      <div class="wb-field"><label>What to send</label>
+        <div class="wb-check-row">
+          <label class="wb-switch"><input type="checkbox" id="wbBtnAll" ${chosen.length ? '' : 'checked'} data-wb-rel-refresh><span class="wb-slider"></span></label>
+          <div><b>Everything on the record</b><div class="wb-sub">Turn this off to pick particular fields.</div></div>
+        </div>
+        ${chosen.length ? `<div class="wb-pick-list">${carryable.map((field) => `<label class="wb-pick"><input type="checkbox" data-wb-btn-field="${h(field.id)}" ${chosen.includes(field.id) ? 'checked' : ''}><span>${h(field.label)}</span></label>`).join('')}</div>` : ''}
+      </div>
+      ${plan ? `<div class="wb-field"><div class="wb-sub wb-plan">
+        ${plan.carry.length ? `Carries <b>${names(plan.carry.map((pair) => pair.from.label))}</b>.` : 'Nothing on this record can be carried across yet.'}
+        ${plan.create.length ? ` <b>${h(targetApp.name)}</b> has no <b>${names(plan.create.map((field) => field.label))}</b>, so ${plan.create.length === 1 ? 'it is added' : 'they are added'} there on the first send. Records already in that app keep every value they have and read blank in the new ${plan.create.length === 1 ? 'column' : 'columns'}.` : ''}
+        ${plan.blocked.length ? ` <b>${names(plan.blocked)}</b> ${plan.blocked.length === 1 ? 'stays' : 'stay'} behind: an automatic field belongs to the app that filled it in.` : ''}
+        ${plan.skipped.length ? ` ${plan.skipped.map((entry) => h(`${entry.field.label} is left behind — ${entry.why}`)).join('. ')}.` : ''}
+      </div></div>` : ''}`;
+  }
   if (t === 'company_contact') {
     const contactFields = companyContactFieldsFor(canonicalCompanyId(state.builderModal.companyId));
     const source = contactSourceApp(contactFields);
@@ -253,6 +313,21 @@ export function createFieldInput(ctx) {
       // A datalist, not a <select>: a company directory runs to hundreds of people and the
       // only way to find one in a dropdown is to scroll. The visible input carries the name
       // and the hidden input carries the id, so a renamed contact does not break the link.
+      // A control, not a value: it moves the record somewhere rather than storing anything, so
+      // it carries no [data-f] and nothing reads it back on save. Its conditions ride on the
+      // element and are judged against the FORM, so changing a stage lights it up immediately
+      // rather than after a save and a reload.
+      case 'button': {
+        const text = String(f.config.text || '').trim() || f.label || 'Send';
+        const rules = (Array.isArray(f.config.when) ? f.config.when : []).filter((rule) => rule && rule.field && rule.op);
+        const ready = !!f.config.targetApp;
+        return `<div class="wb-fieldbox wb-btnfield">${lbl}
+          <button class="btn btn-primary wb-push-btn" type="button" data-wb-press="${h(f.id)}"
+            data-wb-when="${h(JSON.stringify(rules))}" ${ready ? '' : 'disabled data-wb-no-target="1"'}
+            title="${h(ready ? '' : 'This button has no destination set yet.')}"><i class="ti ti-click"></i>${h(text)}</button>
+          ${ready ? '' : '<div class="wb-sub">No destination set yet — open the field to choose one.</div>'}
+        </div>`;
+      }
       case 'company_contact': {
         const options = companyContactOptions(companyId);
         const listId = `wbcr-${f.id}`;

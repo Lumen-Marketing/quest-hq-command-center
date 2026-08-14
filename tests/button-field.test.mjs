@@ -1,0 +1,309 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  BUTTON_OPS,
+  NEVER_PUSHED,
+  conditionMet,
+  fieldToCreate,
+  planPush,
+  pushableFields,
+  readable,
+  translateValue,
+} from '../src/workspace/button-field.js';
+import { createButtonPush } from '../src/workspace/button-push.js';
+
+// "This field is a button, programmable to manipulate the data list... set the condition it
+// becomes enabled on, or no condition so it is always active. The action passes the record to
+// another company > workspace > app, and if that app has not got the fields, the system merges
+// them in."
+//
+// The worked example, which the push test below reproduces exactly:
+//   App1 (John Doe {name}, 13 {age})  +  App2 (USA {address})
+//   press the button → App2 has Name, Age and Address, and a new record carrying John Doe / 13
+//   with its Address blank.
+
+let seq = 0;
+const mintId = () => `new-${++seq}`;
+
+const APP1 = () => ({
+  id: 'app1',
+  name: 'App 1',
+  fields: [
+    { id: 'f-name', type: 'text', label: 'Name', config: {} },
+    { id: 'f-age', type: 'number', label: 'Age', config: {} },
+    { id: 'f-btn', type: 'button', label: 'Graduate', config: {} },
+    { id: 'f-num', type: 'autonumber', label: 'Ref', config: {} },
+    { id: 'f-made', type: 'created_time', label: 'Created', config: {} },
+    { id: 'f-calc', type: 'calculation', label: 'Twice age', config: { formula: '{Age} * 2' } },
+  ],
+  items: [{ id: 'i1', values: { 'f-name': 'John Doe', 'f-age': 13, 'f-num': 'A-001' } }],
+});
+
+const APP2 = () => ({
+  id: 'app2',
+  name: 'App 2',
+  fields: [{ id: 'g-addr', type: 'location', label: 'Address', config: {} }],
+  items: [{ id: 'j1', values: { 'g-addr': 'USA' } }],
+});
+
+// ---- which fields may travel ---------------------------------------------------------------
+
+test('the button, and every automatic field, stay behind', () => {
+  // "Some fields cannot be graduated: the button field and the other auto fields like the auto
+  // number, date created and date updated."
+  const carried = pushableFields(APP1(), 'f-btn').map((field) => field.label);
+  assert.deepEqual(carried, ['Name', 'Age']);
+  ['button', 'autonumber', 'created_time', 'updated_time', 'calculation', 'rollup']
+    .forEach((type) => assert.ok(NEVER_PUSHED.has(type), `${type} must never be pushed`));
+});
+
+test('a chosen subset is carried, and no choice means all of it', () => {
+  // "Pass all the data, or select specific data to pass."
+  assert.deepEqual(pushableFields(APP1(), 'f-btn', ['f-age']).map((f) => f.label), ['Age']);
+  assert.deepEqual(pushableFields(APP1(), 'f-btn', []).map((f) => f.label), ['Name', 'Age'], 'empty means all');
+  assert.deepEqual(pushableFields(APP1(), 'f-btn', null).map((f) => f.label), ['Name', 'Age']);
+});
+
+// ---- when the button is live ---------------------------------------------------------------
+
+const stageApp = {
+  fields: [
+    { id: 's', type: 'status', label: 'Stage', config: { options: [{ id: 'o1', label: 'Won' }, { id: 'o2', label: 'Lost' }] } },
+    { id: 't', type: 'text', label: 'Owner', config: {} },
+    { id: 'n', type: 'number', label: 'Price', config: {} },
+  ],
+};
+const record = (values) => ({ id: 'x', values });
+
+test('no condition means always active', () => {
+  // A button that does nothing until it is configured twice is a button people call broken.
+  assert.equal(conditionMet({ config: {} }, record({}), stageApp), true);
+  assert.equal(conditionMet({ config: { when: [] } }, record({}), stageApp), true);
+  assert.equal(conditionMet({}, record({}), stageApp), true);
+});
+
+test('a stage condition is written against the label, not the option id', () => {
+  // Somebody setting "enabled when the stage is Won" typed Won. Comparing that against
+  // "o1" would never once be true.
+  const button = { config: { when: [{ field: 's', op: 'eq', value: 'Won' }] } };
+  assert.equal(conditionMet(button, record({ s: 'o1' }), stageApp), true);
+  assert.equal(conditionMet(button, record({ s: 'o2' }), stageApp), false);
+  assert.equal(conditionMet(button, record({}), stageApp), false);
+  assert.equal(readable(stageApp.fields[0], 'o1'), 'Won');
+});
+
+test('a text condition ignores case and stray spacing', () => {
+  const button = { config: { when: [{ field: 't', op: 'eq', value: 'abe ' }] } };
+  assert.equal(conditionMet(button, record({ t: 'Abe' }), stageApp), true);
+});
+
+test('every operator does what it says', () => {
+  const check = (op, value, held) => conditionMet({ config: { when: [{ field: 'n', op, value }] } }, record({ n: held }), stageApp);
+  assert.equal(check('eq', 10, 10), true);
+  assert.equal(check('neq', 10, 11), true);
+  assert.equal(check('gt', 10, 11), true);
+  assert.equal(check('gt', 10, 9), false);
+  assert.equal(check('lt', 10, 9), true);
+  assert.equal(check('filled', '', 0), true, 'zero is a value somebody entered');
+  assert.equal(check('empty', '', ''), true);
+  assert.equal(check('filled', '', ''), false);
+  // Every operator offered in the panel is one this understands.
+  BUTTON_OPS.forEach(([op]) => assert.doesNotThrow(() => check(op, 1, 1), op));
+});
+
+test('two conditions both have to hold', () => {
+  const button = { config: { when: [{ field: 's', op: 'eq', value: 'Won' }, { field: 'n', op: 'gt', value: 100 }] } };
+  assert.equal(conditionMet(button, record({ s: 'o1', n: 500 }), stageApp), true);
+  assert.equal(conditionMet(button, record({ s: 'o1', n: 50 }), stageApp), false);
+  assert.equal(conditionMet(button, record({ s: 'o2', n: 500 }), stageApp), false);
+});
+
+test('a half-written condition is ignored rather than blocking the button', () => {
+  // The panel keeps a row while it is being filled in; it must not lock the button meanwhile.
+  const button = { config: { when: [{ field: '', op: 'eq', value: 'Won' }] } };
+  assert.equal(conditionMet(button, record({}), stageApp), true);
+});
+
+// ---- the merge -------------------------------------------------------------------------
+
+test('the plan says what will be carried, made, and left behind', () => {
+  const plan = planPush(APP1(), APP2(), { id: 'f-btn', config: {} });
+  assert.deepEqual(plan.create.map((field) => field.label), ['Name', 'Age'], 'App 2 has neither');
+  assert.deepEqual(plan.carry.map((pair) => pair.from.label), ['Name', 'Age']);
+  assert.deepEqual(plan.blocked.sort(), ['Created', 'Ref', 'Twice age'], 'named, so nobody is surprised');
+});
+
+test('a field the target already has is reused, never duplicated', () => {
+  const target = APP2();
+  target.fields.push({ id: 'g-name', type: 'text', label: ' name ', config: {} });
+  const plan = planPush(APP1(), target, { id: 'f-btn', config: {} });
+  assert.deepEqual(plan.create.map((field) => field.label), ['Age'], 'Name matched, spacing and case ignored');
+  assert.equal(plan.carry.find((pair) => pair.from.label === 'Name').to.id, 'g-name');
+});
+
+test('a relationship is carried where it fits and left behind where it does not', () => {
+  // Creating one would point at an app that workspace may not even see.
+  const source = { fields: [{ id: 'r', type: 'relationship', label: 'Deal', config: { targetApp: 'x' } }] };
+  const plan = planPush(source, APP2(), { id: 'b', config: {} });
+  assert.deepEqual(plan.create, []);
+  assert.deepEqual(plan.carry, []);
+  assert.equal(plan.skipped.length, 1);
+  assert.match(plan.skipped[0].why, /no Deal to link into/);
+});
+
+test('a created field is a clone with its own id and none of the source wiring', () => {
+  const source = {
+    id: 'f-trade', type: 'category', label: 'Trade',
+    required: true,
+    config: { options: [{ id: 'o1', label: 'Roofing' }], pull: [{ from: 'a', to: 'b' }], pullAll: true, when: [1] },
+  };
+  const clone = fieldToCreate(source, mintId);
+  assert.notEqual(clone.id, 'f-trade', 'ids are per-app and would collide');
+  assert.equal(clone.label, 'Trade');
+  assert.equal(clone.type, 'category');
+  assert.deepEqual(clone.config.options, [{ id: 'o1', label: 'Roofing' }], 'a category with no options cannot be filled in');
+  assert.equal(clone.config.pull, undefined, 'no copy rules from the app it left');
+  assert.equal(clone.config.pullAll, undefined);
+  assert.equal(clone.config.when, undefined);
+  assert.equal(clone.required, false, 'a field arriving mid-life must not invalidate every existing record');
+  source.config.options[0].label = 'changed';
+  assert.equal(clone.config.options[0].label, 'Roofing', 'and it is a copy, not a shared reference');
+});
+
+// ---- values on the way across --------------------------------------------------------------
+
+test('a category travels as its label and lands on the target own option', () => {
+  const from = { type: 'category', label: 'Trade', config: { options: [{ id: 'a1', label: 'Roofing' }] } };
+  const to = { type: 'category', label: 'Trade', config: { options: [{ id: 'b9', label: 'Roofing' }] } };
+  const { value, options } = translateValue(from, to, 'a1', mintId);
+  assert.equal(value, 'b9', "the destination's own id for the same word");
+  assert.equal(options.length, 1, 'nothing added; it was already there');
+});
+
+test('an option the target has never seen is added to it', () => {
+  const from = { type: 'category', label: 'Trade', config: { options: [{ id: 'a1', label: 'Siding' }] } };
+  const to = { type: 'category', label: 'Trade', config: { options: [{ id: 'b9', label: 'Roofing' }] } };
+  const { value, options } = translateValue(from, to, 'a1', mintId);
+  assert.equal(options.length, 2);
+  assert.equal(options.find((option) => option.id === value).label, 'Siding');
+});
+
+test('a multi-select carries every option, a single one carries the first', () => {
+  const from = { type: 'tags', label: 'T', config: { options: [{ id: 'a1', label: 'One' }, { id: 'a2', label: 'Two' }] } };
+  const toTags = { type: 'tags', label: 'T', config: { options: [] } };
+  assert.equal(translateValue(from, toTags, ['a1', 'a2'], mintId).value.length, 2);
+  const toOne = { type: 'category', label: 'T', config: { options: [] } };
+  assert.equal(typeof translateValue(from, toOne, ['a1', 'a2'], mintId).value, 'string');
+});
+
+test('a category into a text field arrives as words, not as an id', () => {
+  const from = { type: 'status', label: 'Stage', config: { options: [{ id: 'a1', label: 'Won' }] } };
+  const to = { type: 'text', label: 'Stage', config: {} };
+  assert.equal(translateValue(from, to, 'a1', mintId).value, 'Won');
+});
+
+test('a blank stays blank rather than becoming the string "undefined"', () => {
+  const from = { type: 'text', label: 'X', config: {} };
+  const to = { type: 'text', label: 'X', config: {} };
+  [undefined, null, ''].forEach((raw) => assert.equal(translateValue(from, to, raw, mintId).value, ''));
+});
+
+test('a file travels as its reference, so both records point at the one stored object', () => {
+  const file = [{ name: 'plan.pdf', path: 'co/workspace/plan.pdf', url: 'https://…' }];
+  const from = { type: 'file', label: 'Blue Print', config: {} };
+  const to = { type: 'file', label: 'Blue Print', config: {} };
+  assert.deepEqual(translateValue(from, to, file, mintId).value, file);
+});
+
+// ---- pressing it -----------------------------------------------------------------------
+
+const pressed = async ({ canManage = true } = {}) => {
+  const app1 = APP1();
+  const app2 = APP2();
+  const doc = { workspaces: [{ id: 'ws2', apps: [app2] }] };
+  const saved = [];
+  const toasts = [];
+  let ids = 0;
+  const push = createButtonPush({
+    can: () => canManage,
+    wbDoc: (companyId) => (companyId === 'co2' ? doc : null),
+    wbSave: async (companyId) => saved.push({ companyId }),
+    wbUid: () => `u-${++ids}`,
+    showToast: (message) => toasts.push(message),
+    render: () => {},
+    canonicalCompanyId: (id) => id,
+    activeSession: () => ({ profile: { id: 'me' } }),
+  });
+  const button = { id: 'f-btn', config: { targetCompany: 'co2', targetApp: 'app2' } };
+  const ok = await push.pressButton('co1', app1, button, app1.items[0]);
+  return { ok, app1, app2, saved, toasts };
+};
+
+test('the worked example: App 2 grows to fit and gains the record', async () => {
+  const { ok, app2, saved } = await pressed();
+  assert.equal(ok, true);
+  assert.deepEqual(app2.fields.map((field) => field.label), ['Address', 'Name', 'Age'], 'three fields now');
+  assert.equal(app2.items.length, 2, 'the record that was there is still there');
+
+  const arrived = app2.items[0];
+  const byLabel = (label) => arrived.values[app2.fields.find((field) => field.label === label).id];
+  assert.equal(byLabel('Name'), 'John Doe');
+  assert.equal(byLabel('Age'), 13);
+  assert.equal(byLabel('Address'), undefined, 'App 1 had no address, so it arrives blank');
+
+  const untouched = app2.items[1];
+  assert.equal(untouched.values['g-addr'], 'USA', 'and the record already there keeps everything');
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].companyId, 'co2');
+});
+
+test('nothing automatic is carried across', async () => {
+  const { app2 } = await pressed();
+  ['Ref', 'Created', 'Twice age', 'Graduate']
+    .forEach((label) => assert.ok(!app2.fields.some((field) => field.label === label), `${label} must not travel`));
+});
+
+test('the arrival remembers where it came from', async () => {
+  const { app2 } = await pressed();
+  assert.deepEqual(app2.items[0].pushedFrom, { companyId: 'co1', appId: 'app1', itemId: 'i1' });
+});
+
+test('a role that cannot manage the target app changes nothing there', async () => {
+  const { ok, app2, saved, toasts } = await pressed({ canManage: false });
+  assert.equal(ok, false);
+  assert.deepEqual(app2.fields.map((field) => field.label), ['Address'], 'not even the field merge ran');
+  assert.equal(app2.items.length, 1);
+  assert.equal(saved.length, 0);
+  assert.match(toasts[0], /cannot add records/);
+});
+
+test('a destination that is gone, or was never set, says so and writes nothing', async () => {
+  const push = createButtonPush({
+    can: () => true,
+    wbDoc: () => ({ workspaces: [] }),
+    wbSave: async () => { throw new Error('must not save'); },
+    wbUid: () => 'u',
+    showToast: () => {},
+    render: () => {},
+    canonicalCompanyId: (id) => id,
+    activeSession: () => ({ profile: { id: 'me' } }),
+  });
+  assert.match(push.resolveTarget({}).error, /no destination set/);
+  assert.match(push.resolveTarget({ targetCompany: 'co2', targetApp: 'gone' }).error, /deleted or moved/);
+  assert.equal(await push.pressButton('co1', APP1(), { id: 'f-btn', config: {} }, APP1().items[0]), false);
+});
+
+test('a workspace this account cannot load is not a crash', async () => {
+  const push = createButtonPush({
+    can: () => true,
+    wbDoc: () => null,
+    wbSave: async () => { throw new Error('must not save'); },
+    wbUid: () => 'u',
+    showToast: () => {},
+    render: () => {},
+    canonicalCompanyId: (id) => id,
+    activeSession: () => ({ profile: { id: 'me' } }),
+  });
+  assert.match(push.resolveTarget({ targetCompany: 'other', targetApp: 'a' }).error, /do not have access/);
+});

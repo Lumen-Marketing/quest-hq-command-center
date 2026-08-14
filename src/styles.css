@@ -33261,3 +33261,41 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   .takeoff-card .tk-measure-head { display: none; }
   .takeoff-card .tk-push { margin-left: 0; }
 }
+
+/* ---- Button field ----------------------------------------------------------------------- */
+/* A control on a record rather than a value: it sends the record on to another app. */
+
+.wb-btnfield .wb-push-btn { justify-self: start; }
+.wb-push-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* The condition rows in the field editor, and the copy-across rows above them, are the same
+   shape: a thing, how it is compared, what to. */
+.wb-when-list { display: grid; gap: 8px; margin-bottom: 8px; }
+.wb-when-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, .9fr) minmax(0, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+.wb-when-row .wb-input { min-width: 0; }
+
+.wb-pick-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px 12px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.wb-pick { display: flex; align-items: center; gap: 7px; font-size: 12px; min-width: 0; }
+.wb-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* What the button will actually do, spelled out before anybody presses it. */
+.wb-sub.wb-plan { line-height: 1.65; }
+
+@media (max-width: 640px) {
+  .wb-when-row { grid-template-columns: minmax(0, 1fr) 32px; }
+  .wb-when-row [data-wb-when-op], .wb-when-row [data-wb-when-value] { grid-column: 1 / 2; }
+}

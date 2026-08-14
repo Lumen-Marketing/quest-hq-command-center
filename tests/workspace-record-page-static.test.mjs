@@ -69,7 +69,7 @@ test('a generated field is not offered as editable', () => {
   // There is no input behind these, and wbReadFieldInput returns undefined for exactly this
   // set -- so a click would promise an edit that could never be saved.
   assert.match(main, /function wbFieldIsEditable\(field\) \{\n\s*return !!field && !WB_AUTO_FIELD_TYPES\.has\(field\.type\);/);
-  assert.match(main, /const WB_AUTO_FIELD_TYPES = new Set\(\['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time'\]\);/);
+  assert.match(main, /const WB_AUTO_FIELD_TYPES = new Set\(\['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time', 'button'\]\);/);
 });
 
 test('the inline editor is the modal\'s own input and reader', () => {
@@ -231,7 +231,7 @@ test('the timestamp fields stay read-only', () => {
   // "just make sure that the date created and date updated is uneditable." They are in
   // WB_AUTO_FIELD_TYPES, which is what wbFieldIsEditable refuses, so handing the item over
   // does not make them clickable.
-  assert.match(main, /const WB_AUTO_FIELD_TYPES = new Set\(\['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time'\]\);/);
+  assert.match(main, /const WB_AUTO_FIELD_TYPES = new Set\(\['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time', 'button'\]\);/);
   assert.match(main, /function wbFieldIsEditable\(field\) \{\n\s*return !!field && !WB_AUTO_FIELD_TYPES\.has\(field\.type\);/);
   // And the live checkbox toggle needs canManage as well as the item, so it is still off.
   assert.match(main, /if \(ctx\.item && ctx\.canManage\) \{/);

@@ -182,6 +182,17 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Overrides belong to the **job**, not the company's calculator, so they ride with the measurements in `deals.takeoff` / `underwriting_cases.takeoff`. Zero is a real override; empty is not.
 - The box keeps whatever was typed while it has the caret — `patchFigures` skips only the active element's VALUE, not its marker — and the formula's answer reappears on leaving an emptied box, rather than being restored mid-edit under somebody who cleared it in order to retype.
 
+## 2026-08-14 The Button field
+
+- A 28th field type: a control on a record that carries it into another **company > workspace > app**, growing that app's field list to fit.
+- **Config**: button text; the conditions it is live under (any number, all of which must hold, or none at all — the default is always enabled); the destination; and whether it sends everything or a chosen subset.
+- **Conditions read the FORM, not the last save**, so changing a stage lights the button up immediately. A category is compared on its LABEL — somebody writing "enabled when the stage is Won" typed Won, and comparing that against `o1` would never once be true. A half-written rule is ignored rather than locking the button while it is being filled in.
+- **The merge**: fields are matched by label, case and spacing ignored. Missing ones are CREATED in the target as clones with fresh ids (ids are per-app), carrying their options but none of the source's copy rules, and `required: false` so a field arriving mid-life cannot invalidate every record already there. Those records keep every value and read blank in the new columns.
+- **Never carried**: the button itself and every automatic field — autonumber, created/updated time, calculation, rollup. They hold nothing the record owns. A **relationship** is carried where the target already has one of that name but never created, since it would point at an app that workspace may not see.
+- Values are translated on the way: a category travels as its label and lands on the target's own option id, adding the option there when it has never seen it; into a plain text field it arrives as words. A file travels as its reference, so both records point at one stored object rather than duplicating it.
+- `src/workspace/button-field.js` is pure — `conditionMet`, `planPush`, `translateValue` — so the config panel can state what pressing it would do before anybody presses anything. `button-push.js` does the writing and is fetched on the first press.
+- Paid for by moving the press body out of `main.js` into that module: it first landed **13 bytes over** the budget, passing only on the 64-byte gzip tolerance, which is not spendable. It is 115 under now.
+
 ## 2026-08-14 Saving a record with a contact field froze the tab
 
 - Every save of an App Builder record in an app with a **Company Contact field** re-submitted itself for ever. Two things combined: the guard asked `document.querySelector('[data-wb-cc-picker] [data-wb-cc-name]')`, which is true whenever the app HAS such a field rather than when a contact is still to be created; and `createMissingContacts` returns `true` whatever happens, on purpose, so a record whose contact could not be created still saves. `if (made) wbSubmitModal()` therefore always fired.

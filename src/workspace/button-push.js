@@ -1,0 +1,177 @@
+// Pressing a Button field: carry this record into another app, growing that app's field list
+// to fit if it has to.
+//
+// Fetched on the first press. The plan and the merge rules are in ./button-field.js and are
+// pure; this is the part that writes -- into the target doc, which may belong to another
+// company, so every step checks it is allowed before it changes anything.
+
+import { fieldToCreate, planPush, translateValue } from './button-field.js';
+
+export function createButtonPush(ctx) {
+  const {
+    can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
+    state, wbFind, wbReadFieldInput, activeCompanyId,
+  } = ctx;
+
+  /** The target app, wherever it lives, or null with the reason it cannot be reached. */
+  function resolveTarget(config) {
+    const companyId = canonicalCompanyId(config?.targetCompany || '');
+    if (!companyId || !config?.targetApp) return { error: 'This button has no destination set yet.' };
+    const doc = wbDoc(companyId);
+    // The builder docs a session holds are the ones its RLS let it load, so an unreachable
+    // company is simply absent rather than something to test for separately.
+    if (!doc) return { error: 'You do not have access to that workspace.' };
+    for (const workspace of doc.workspaces || []) {
+      const app = (workspace.apps || []).find((item) => item.id === config.targetApp);
+      if (app) return { companyId, doc, workspace, app };
+    }
+    return { error: 'That app has been deleted or moved.' };
+  }
+
+  /**
+   * Carry `item` from `sourceApp` into wherever the button points.
+   *
+   * The target app gains any field it was missing, then a new record is added holding what
+   * came across. A field the source has nothing for is left blank on the new record -- which
+   * is the whole reason the merge is safe: nothing in the target is overwritten, and the
+   * records already there keep every value they had, with the new columns empty.
+   */
+  async function pressButton(sourceCompanyId, sourceApp, buttonField, item) {
+    const target = resolveTarget(buttonField.config);
+    if (target.error) { showToast(target.error, 'local', 'Workspaces'); return false; }
+    if (!can('workspaces.manage', target.companyId)) {
+      showToast(`Your role cannot add records in ${target.app.name}.`, 'error', 'Workspaces');
+      return false;
+    }
+
+    const plan = planPush(sourceApp, target.app, buttonField);
+    if (!plan.carry.length) {
+      showToast('There is nothing on this record that can be carried across.', 'local', 'Workspaces');
+      return false;
+    }
+
+    // 1. Grow the target's field list. Existing records are untouched: a field they have never
+    //    had simply reads blank, which is what an empty cell already means everywhere else.
+    const made = new Map();
+    plan.create.forEach((field) => {
+      const fresh = fieldToCreate(field, wbUid);
+      target.app.fields.push(fresh);
+      made.set(field.id, fresh);
+    });
+
+    // 2. Translate the values into the target's own ids.
+    const values = {};
+    plan.carry.forEach(({ from, to, made: isNew }) => {
+      const destination = isNew ? made.get(from.id) : to;
+      if (!destination) return;
+      const raw = item?.values?.[from.id];
+      const { value, options } = translateValue(from, destination, raw, wbUid);
+      // A category that gained an option had to gain it on the DESTINATION field, or the value
+      // would point at an option only the source app has.
+      if (options) destination.config = { ...(destination.config || {}), options };
+      values[destination.id] = value;
+    });
+
+    // 3. Add the record.
+    const now = new Date().toISOString();
+    if (!Array.isArray(target.app.items)) target.app.items = [];
+    target.app.items.unshift({
+      id: wbUid(),
+      values,
+      createdAt: now,
+      createdBy: activeSession()?.profile?.id || '',
+      updatedAt: now,
+      lastActivityAt: now,
+      // Where it came from, so a record that arrived by button can be told from one typed in.
+      pushedFrom: { companyId: canonicalCompanyId(sourceCompanyId), appId: sourceApp.id, itemId: item.id },
+    });
+
+    // The doc resolveTarget handed back IS the one in state, so the merge above already
+    // landed; this persists it, for the target's company rather than for the one we are in.
+    await wbSave(target.companyId);
+    const grew = plan.create.length
+      ? ` ${plan.create.length} field${plan.create.length === 1 ? '' : 's'} added to fit.`
+      : '';
+    showToast(`Sent to ${target.app.name}.${grew}`, 'local', 'Workspaces');
+    render();
+    return true;
+  }
+
+  // ---- whether the button is live, judged against the form ---------------------------------
+  //
+  // Against the FORM rather than the saved record, so changing a stage lights the button up
+  // straight away. Waiting for a save and a reload to find out whether a button works is how
+  // people conclude it does not.
+
+  /** A field's value as a person reads it, read back out of the form. */
+  function readFromDom(scope, fieldId) {
+    const node = scope.querySelector(`[data-f="${cssEscape(fieldId)}"]`);
+    if (!node) return '';
+    // A category shows its label in a box beside the hidden id, and the label is what a
+    // condition is written against.
+    const combo = node.type === 'hidden' ? node.closest('[data-wb-option-combo]') : null;
+    if (combo) return String(combo.querySelector('[data-wb-option-input]')?.value || '').trim();
+    if (node.type === 'checkbox') return node.checked ? 'yes' : 'no';
+    if (node.tagName === 'SELECT') return String(node.options[node.selectedIndex]?.textContent || '').trim();
+    return String(node.value || '').trim();
+  }
+
+  const cssEscape = (value) => (typeof CSS !== 'undefined' && CSS.escape
+    ? CSS.escape(value)
+    : String(value).replace(/["\\]/g, '\\$&'));
+
+  const same = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
+  function ruleHoldsInDom(scope, rule) {
+    const value = readFromDom(scope, rule.field);
+    switch (rule.op) {
+      case 'filled': return value !== '' && value !== 'no';
+      case 'empty': return value === '' || value === 'no';
+      case 'neq': return !same(value, rule.value);
+      case 'gt': return Number(value) > Number(rule.value);
+      case 'lt': return Number(value) < Number(rule.value);
+      default: return same(value, rule.value);
+    }
+  }
+
+  /** Enable or disable every button in `root` against what the form currently holds. */
+  function syncButtons(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('[data-wb-press]').forEach((button) => {
+      // A button with no destination stays disabled whatever the record says.
+      if (button.dataset.wbNoTarget === '1') return;
+      let rules = [];
+      try { rules = JSON.parse(button.dataset.wbWhen || '[]'); } catch { rules = []; }
+      const scope = button.closest('form, .wb-modal, .wb-record-page') || root;
+      const live = rules.every((rule) => ruleHoldsInDom(scope, rule));
+      button.disabled = !live;
+      button.title = live ? '' : 'Not available on this record yet.';
+    });
+  }
+
+  /**
+   * Press the button on the record form that is open.
+   *
+   * Reads the FORM rather than the last save, so pressing it on a record somebody has just
+   * edited carries what they can actually see. Everything here needs the open modal, the app
+   * and the field reader, so it lives beside the push rather than in main.js, which would pay
+   * for it in every session that never presses a button.
+   */
+  function pressFromForm(fieldId) {
+    const modal = state.builderModal;
+    const companyId = canonicalCompanyId(modal?.companyId || activeCompanyId());
+    const { app } = wbFind(companyId, modal?.workspaceId, modal?.appId);
+    const field = (app?.fields || []).find((item) => item.id === fieldId);
+    if (!app || !field) return false;
+    const values = { ...(modal?.draft?.values || {}) };
+    app.fields.forEach((item) => {
+      const read = wbReadFieldInput(item);
+      if (read !== undefined) values[item.id] = read;
+    });
+    return pressButton(companyId, app, field, { id: modal?.editId || wbUid(), values });
+  }
+
+  return {
+    pressButton, pressFromForm, resolveTarget, syncButtons,
+  };
+}
