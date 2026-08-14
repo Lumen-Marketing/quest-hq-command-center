@@ -34315,7 +34315,7 @@ async function deleteTask(id, options = {}) {
 function takeoffStateForSave() {
   const draft = state.takeoffDraft;
   if (!draft || draft.scope !== 'underwriter' || draft.companyId !== activeCompanyId()) return null;
-  return { calculator_id: draft.calculatorId || '', measurements: draft.measurements };
+  return { calculator_id: draft.calculatorId || '', measurements: draft.measurements, overrides: draft.overrides || {} };
 }
 
 

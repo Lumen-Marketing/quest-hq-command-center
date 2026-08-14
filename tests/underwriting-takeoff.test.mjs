@@ -123,6 +123,48 @@ test('a measurement no default formula touches is still available to one', () =>
   assert.ok(!defaultTakeoffConfig().lines.some((item) => /ridges/i.test(item.formula)));
 });
 
+// ---- a quantity typed over the one a formula worked out -----------------------------------
+
+test('a typed quantity beats the formula', () => {
+  // "Although some of it is auto calculated, still make it editable for further customizing."
+  const result = calculateTakeoff(defaultTakeoffConfig(), SHEET, { 'ln-6': 12 });
+  const eagle = line(result, 'Eagle tile');
+  assert.equal(eagle.quantity, 12, 'ROUNDUP said 8; the estimator said 12');
+  assert.equal(eagle.total, 1440);
+  assert.equal(eagle.overridden, true, 'and the card can show that it was');
+});
+
+test('lines that refer to an overridden one follow it', () => {
+  // Override the base sheet and the cap sheet follows, as it would on paper.
+  const base = defaultTakeoffConfig().lines.find((item) => item.name === 'Base sheet 2sq');
+  const result = calculateTakeoff(defaultTakeoffConfig(), SHEET, { [base.id]: 5 });
+  assert.equal(line(result, 'Base sheet 2sq').quantity, 5);
+  assert.equal(line(result, 'Cap sheet 1sq').quantity, 10);
+});
+
+test('an emptied box hands the line back to its formula', () => {
+  // Not pinned at zero: clearing an override is how you undo it.
+  ['', null, undefined].forEach((cleared) => {
+    const result = calculateTakeoff(defaultTakeoffConfig(), SHEET, { 'ln-6': cleared });
+    assert.equal(line(result, 'Eagle tile').quantity, 8, JSON.stringify(cleared));
+    assert.equal(line(result, 'Eagle tile').overridden, false);
+  });
+});
+
+test('zero is a real override, not an empty box', () => {
+  // Somebody who types 0 means "none of these", and that is not the same as not typing.
+  const result = calculateTakeoff(defaultTakeoffConfig(), SHEET, { 'ln-6': 0 });
+  assert.equal(line(result, 'Eagle tile').quantity, 0);
+  assert.equal(line(result, 'Eagle tile').overridden, true);
+  assert.equal(result.materialTotal, 8242, '9202 less the 960 of tile');
+});
+
+test('a hand-typed line can be overridden too, and the totals follow', () => {
+  const result = calculateTakeoff(defaultTakeoffConfig(), SHEET, { 'ln-5': 3 }); // Dump & gas
+  assert.equal(line(result, 'Dump & gas').quantity, 3);
+  assert.equal(result.laborTotal, 10200); // 7800 + 3 * 800
+});
+
 // ---- what happens when a formula is wrong -------------------------------------------------
 
 test('a broken formula is reported against its own line, and the rest still prices', () => {

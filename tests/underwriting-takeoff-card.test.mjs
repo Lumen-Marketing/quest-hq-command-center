@@ -93,13 +93,36 @@ test('editing opens the formula, the price and the name of every line', () => {
   assert.match(html, /\+ waste/);
 });
 
-test('a line worked out by a formula does not also offer a quantity to type', () => {
-  const { card, state } = build();
-  card.renderTakeoffCard('co', null);
-  state.takeoffDraft.editing = true;
-  const html = card.renderTakeoffCard('co', null);
-  const eagle = html.slice(html.indexOf('Eagle tile'));
-  assert.match(eagle.slice(0, 800), /class="tk-qty" type="number"[^>]*disabled/);
+test('every quantity is editable, including the ones a formula worked out', () => {
+  // "Although some of it is auto calculated, still make it editable for further customizing."
+  // A greyed-out box on a line the estimator can see is wrong is the calculator arguing with
+  // the person using it. This used to assert the opposite — that a formula-driven line offered
+  // no box at all.
+  const { card } = build();
+  const html = card.renderTakeoffCard('co', { measurements: SHEET });
+  assert.equal((html.match(/data-takeoff-qty=/g) || []).length, 26, 'one per line');
+  assert.ok(!/tk-qty[^>]*disabled/.test(html), 'and none of them are disabled');
+});
+
+test('the formula is not printed on the row', () => {
+  // It is a working, not a fact about the job. It stays on the box as a tooltip, and on show
+  // under Edit formulas.
+  const { card } = build();
+  const html = card.renderTakeoffCard('co', { measurements: SHEET });
+  assert.ok(!html.includes('ROUNDUP({Total SQ + waste} / 10)</em>'), 'no formula in the row text');
+  assert.match(html, /title="Worked out by ROUNDUP\(\{Total SQ \+ waste\} \/ 10\)"/);
+});
+
+test('the sheet is laid out in two columns, as the spreadsheet is', () => {
+  const { card } = build();
+  const html = card.renderTakeoffCard('co', { measurements: SHEET });
+  const sheet = html.indexOf('tk-sheet');
+  assert.notEqual(sheet, -1);
+  // Report and labor left, material and the client price right.
+  const order = ['GAF measurement', 'data-takeoff-group="labor"', 'data-takeoff-group="material"', 'data-takeoff-group="client"']
+    .map((marker) => html.indexOf(marker));
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), `blocks are out of order: ${order}`);
+  assert.ok(order.every((at) => at > sheet));
 });
 
 test('somebody who can only view gets the numbers and none of the controls', () => {
@@ -175,6 +198,7 @@ test('the totals handed to the decision panel are the takeoff totals', () => {
     laborCost: 8600,
     contractPrice: 29250,
     measurements: SHEET,
+    overrides: {},
     calculatorId: '',
   });
 });

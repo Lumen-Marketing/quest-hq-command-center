@@ -167,6 +167,14 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - `ROUNDUP(528 / 8)` is 66, not 67: 528/8 is 65.99999999999999 in binary floating point, and a naive `Math.ceil` buys an extra box of birdstop on every tile job. Values are nudged to 12 significant digits before rounding.
 - **Storage**: `underwriting_calculators` holds the company's templates; the measurements ride on `underwriting_cases.takeoff`, because the calculator prices every roof and each roof has its own report. **Use in the decision** pushes the takeoff's totals into the margin panel above rather than duplicating the arithmetic.
 
+## 2026-08-14 The takeoff card, laid out like the sheet it came from
+
+- Two columns, as the spreadsheet has them: **GAF measurement** and **Labor** down the left, the long **Material** list and **Price to client** down the right. The measurements read as rows — label, figure, unit, waste — rather than as a wrapping grid of cards.
+- **The formula is no longer printed on each row.** It is a working, not a fact about the job. It stays as the quantity box's tooltip and on show under Edit formulas.
+- **Every quantity is an editable box**, including the ones a formula worked out — the lavender column of the sheet. A greyed-out box on a line the estimator can see is wrong is the calculator arguing with the person using it. The formula fills it, typing replaces it, emptying it hands the line back. An override is marked, and lines that refer to an overridden one follow it: override the base sheet and the cap sheet doubles, as it would on paper.
+- Overrides belong to the **job**, not the company's calculator, so they ride with the measurements in `deals.takeoff` / `underwriting_cases.takeoff`. Zero is a real override; empty is not.
+- The box keeps whatever was typed while it has the caret — `patchFigures` skips only the active element's VALUE, not its marker — and the formula's answer reappears on leaving an emptied box, rather than being restored mid-edit under somebody who cleared it in order to retype.
+
 ## 2026-08-14 Saving a record with a contact field froze the tab
 
 - Every save of an App Builder record in an app with a **Company Contact field** re-submitted itself for ever. Two things combined: the guard asked `document.querySelector('[data-wb-cc-picker] [data-wb-cc-name]')`, which is true whenever the app HAS such a field rather than when a contact is still to be created; and `createMissingContacts` returns `true` whatever happens, on purpose, so a record whose contact could not be created still saves. `if (made) wbSubmitModal()` therefore always fired.

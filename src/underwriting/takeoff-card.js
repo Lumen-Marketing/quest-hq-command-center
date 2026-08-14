@@ -64,25 +64,43 @@ export function createTakeoffCard(ctx) {
       calculatorId: calculator.id,
       name: calculator.name,
       config: normalizeTakeoffConfig(calculator.config),
-      measurements: normalizeMeasurements(savedMeasurements),
+      measurements: normalizeMeasurements(savedMeasurements?.measurements ?? savedMeasurements),
+      // Quantities typed over the ones the formulas worked out. Per job, like the
+      // measurements -- not part of the company's calculator.
+      overrides: { ...(savedMeasurements?.overrides || {}) },
       editing: false,
       dirty: false,
     };
     return state.takeoffDraft;
   }
 
+  // Laid out like the sheet it came from: label, the figure off the report, its unit, and the
+  // waste allowance worked out beside it.
   function measurementFields(draft, result) {
-    return TAKEOFF_MEASUREMENTS.map((item, index) => {
-      const withWaste = result.measurements[index].withWaste;
-      return `
-        <label class="tk-measure">
-          <span>${h(item.label)}<em>${h(item.unit)}</em></span>
-          <input type="number" min="0" step="0.01" inputmode="decimal" value="${h(String(draft.measurements[item.key]))}"
-            data-takeoff-measure="${h(item.key)}" aria-label="${h(item.label)} in ${h(item.unit)}" />
-          <b title="With the waste allowance" data-takeoff-waste="${h(item.key)}">${h(qty(withWaste))}</b>
-        </label>
-      `;
-    }).join('');
+    return TAKEOFF_MEASUREMENTS.map((item, index) => `
+      <label class="tk-measure">
+        <span>${h(item.label)}</span>
+        <input type="number" min="0" step="0.01" inputmode="decimal" value="${h(String(draft.measurements[item.key]))}"
+          data-takeoff-measure="${h(item.key)}" aria-label="${h(item.label)} in ${h(item.unit)}" />
+        <em>${h(item.unit)}</em>
+        <b data-takeoff-waste="${h(item.key)}">${h(qty(result.measurements[index].withWaste))}</b>
+      </label>
+    `).join('');
+  }
+
+  // The quantity box, on every line whether a formula works it out or not.
+  //
+  // "Although some of it is auto calculated, still make it editable for further customizing."
+  // A greyed-out box on a line the estimator can see is wrong is the calculator arguing with
+  // the person using it. The formula fills it; typing replaces it; emptying it hands the line
+  // back to the formula. The formula itself is not printed on the row -- it is a working, not
+  // a fact about the job -- but it is on the box as a tooltip and on show under Edit formulas.
+  function qtyCell(line) {
+    const title = line.formula
+      ? `${line.overridden ? 'Typed over' : 'Worked out by'} ${line.formula}`
+      : 'Typed in';
+    return `<input class="tk-qty ${line.overridden ? 'over' : ''}" type="number" step="0.01" inputmode="decimal"
+      value="${h(qty(line.quantity))}" data-takeoff-qty="${h(line.id)}" title="${h(title)}" aria-label="Quantity for ${h(line.name)}" />`;
   }
 
   function lineRow(line, editing, canManage) {
@@ -92,10 +110,7 @@ export function createTakeoffCard(ctx) {
           <input class="tk-name" type="text" value="${h(line.name)}" data-takeoff-field="name" aria-label="Line name" />
           <input class="tk-formula ${line.error ? 'bad' : ''}" type="text" value="${h(line.formula)}" data-takeoff-field="formula"
             placeholder="Typed quantity" aria-label="Formula for ${h(line.name)}" />
-          <input class="tk-qty" type="number" step="0.01" value="${h(String(line.qty))}" data-takeoff-field="qty"
-            ${line.formula ? 'disabled title="This line is worked out by its formula"' : ''} aria-label="Quantity" />
           <input class="tk-price" type="number" step="0.01" min="0" value="${h(String(line.price))}" data-takeoff-field="price" aria-label="Unit price" />
-          <span class="tk-total">${money(line.total)}</span>
           <button class="tk-drop" type="button" data-takeoff-action="remove-line" data-takeoff-line-id="${h(line.id)}" title="Remove ${h(line.name)}" aria-label="Remove ${h(line.name)}"><i class="ti ti-trash"></i></button>
           <p class="tk-error" ${line.error ? '' : 'hidden'}>${h(line.error)}</p>
         </div>
@@ -103,8 +118,8 @@ export function createTakeoffCard(ctx) {
     }
     return `
       <div class="tk-row" data-takeoff-line="${h(line.id)}">
-        <span class="tk-name">${h(line.name)}${line.formula ? `<em title="${h(line.formula)}">${h(line.formula)}</em>` : ''}</span>
-        <span class="tk-qty">${line.error ? '<i class="ti ti-alert-triangle"></i>' : h(qty(line.quantity))}</span>
+        <span class="tk-name">${h(line.name)}${line.error ? '<i class="ti ti-alert-triangle"></i>' : ''}</span>
+        ${qtyCell(line)}
         <span class="tk-price">${money(line.price)}</span>
         <span class="tk-total">${money(line.total)}</span>
         <p class="tk-error" ${line.error ? '' : 'hidden'}>${h(line.error)}</p>
@@ -124,16 +139,16 @@ export function createTakeoffCard(ctx) {
       client: [['Total for client', result.clientTotal, true]],
     }[group.key];
     const editing = draft.editing && canManage;
-    // The header is laid out on the same grid as the rows beneath it, so a column label sits
-    // over its own column. Editing adds two columns, which is why the mode is on the section.
+    // The header sits on the row grid so a column label is over its own column. Editing swaps
+    // the quantity column for the formula, which is what is being edited.
     const headCells = editing
-      ? ['<span class="tk-h-formula">Formula</span>', '<span>Qty</span>', '<span>Unit price</span>', '<span>Total</span>', '<span></span>']
+      ? ['<span class="tk-h-formula">Formula</span>', '<span>Unit price</span>', '<span></span>']
       : ['<span>Qty</span>', '<span>Unit price</span>', '<span>Total</span>'];
     return `
       <section class="tk-group ${editing ? 'editing' : ''}" data-takeoff-group="${h(group.key)}">
         <header><h4>${h(group.label)}</h4>${headCells.join('')}</header>
         ${lines.map((line) => lineRow(line, draft.editing, canManage)).join('') || '<p class="tk-empty">No lines yet.</p>'}
-        ${draft.editing && canManage ? `<button class="btn btn-quiet tk-add" type="button" data-takeoff-action="add-line" data-takeoff-group-key="${h(group.key)}"><i class="ti ti-plus"></i>Add a line</button>` : ''}
+        ${editing ? `<button class="btn btn-quiet tk-add" type="button" data-takeoff-action="add-line" data-takeoff-group-key="${h(group.key)}"><i class="ti ti-plus"></i>Add a line</button>` : ''}
         <div class="tk-totals" data-takeoff-totals="${h(group.key)}">
           ${totals.map(([label, value, strong]) => `<div class="${strong ? 'strong' : ''}"><span>${h(label)}</span><strong>${money(value)}</strong></div>`).join('')}
         </div>
@@ -141,19 +156,35 @@ export function createTakeoffCard(ctx) {
     `;
   }
 
+  const groupOf = (key, result, draft, canManage) => groupSection(
+    TAKEOFF_GROUPS.find((group) => group.key === key), result, draft, canManage,
+  );
+
+  // Two columns, arranged as the spreadsheet arranges them: the report and the labor it buys
+  // down the left, the materials and the price to the client down the right. Material is the
+  // long list, so it sits opposite the two short ones rather than pushing them off the screen.
   function renderBody(companyId, draft, canManage) {
-    const result = calculateTakeoff(draft.config, draft.measurements);
+    const result = calculateTakeoff(draft.config, draft.measurements, draft.overrides);
     const profitable = result.profit >= 0;
     return `
-      <div class="tk-measures">
-        <div class="tk-measures-head">
-          <h4>GAF report measurements</h4>
-          <label class="tk-rate"><span>Waste</span><input type="number" min="0" step="0.5" value="${h(String(draft.config.waste_percent))}" data-takeoff-rate="waste_percent" ${canManage ? '' : 'disabled'} /><b>%</b></label>
-          <label class="tk-rate"><span>Tax</span><input type="number" min="0" step="0.25" value="${h(String(draft.config.tax_percent))}" data-takeoff-rate="tax_percent" ${canManage ? '' : 'disabled'} /><b>%</b></label>
+      <div class="tk-sheet">
+        <div class="tk-col">
+          <div class="tk-measures">
+            <div class="tk-measures-head">
+              <h4>GAF measurement</h4>
+              <label class="tk-rate"><span>Waste</span><input type="number" min="0" step="0.5" value="${h(String(draft.config.waste_percent))}" data-takeoff-rate="waste_percent" ${canManage ? '' : 'disabled'} /><b>%</b></label>
+              <label class="tk-rate"><span>Tax</span><input type="number" min="0" step="0.25" value="${h(String(draft.config.tax_percent))}" data-takeoff-rate="tax_percent" ${canManage ? '' : 'disabled'} /><b>%</b></label>
+            </div>
+            <div class="tk-measure-head"><span></span><span>Measurement</span><span></span><span data-takeoff-waste-head>${h(qty(result.wastePercent))}% waste</span></div>
+            <div class="tk-measure-grid">${measurementFields(draft, result)}</div>
+          </div>
+          ${groupOf('labor', result, draft, canManage)}
         </div>
-        <div class="tk-measure-grid">${measurementFields(draft, result)}</div>
+        <div class="tk-col">
+          ${groupOf('material', result, draft, canManage)}
+          ${groupOf('client', result, draft, canManage)}
+        </div>
       </div>
-      <div class="tk-groups">${TAKEOFF_GROUPS.map((group) => groupSection(group, result, draft, canManage)).join('')}</div>
       <div class="tk-outcome ${profitable ? '' : 'negative'}" data-takeoff-outcome>
         <div><span>Cost of the job</span><strong data-takeoff-figure="cost">${money(result.costTotal)}</strong></div>
         <div><span>Price to client</span><strong data-takeoff-figure="client">${money(result.clientTotal)}</strong></div>
@@ -173,7 +204,7 @@ export function createTakeoffCard(ctx) {
     const scope = options.scope || 'underwriter';
     const canManage = canManageFor(companyId);
     const calculator = selectedCalculator(companyId);
-    const draft = draftFor(scope, companyId, calculator, savedTakeoff?.measurements);
+    const draft = draftFor(scope, companyId, calculator, savedTakeoff);
     const saved = calculatorsFor(companyId);
     // Whichever page drew the card owns its events until another one draws it.
     setTakeoffHandler?.(onTakeoffEvent);
@@ -225,12 +256,14 @@ export function createTakeoffCard(ctx) {
   const setText = (node, text) => { if (node && node.textContent !== text) node.textContent = text; };
 
   function patchFigures(body, draft, canManage) {
-    const result = calculateTakeoff(draft.config, draft.measurements);
+    const result = calculateTakeoff(draft.config, draft.measurements, draft.overrides);
     const editing = draft.editing && canManage;
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
 
     result.measurements.forEach((item) => {
       setText(body.querySelector(`[data-takeoff-waste="${item.key}"]`), qty(item.withWaste));
     });
+    setText(body.querySelector('[data-takeoff-waste-head]'), `${qty(result.wastePercent)}% waste`);
 
     // Looked up by dataset rather than by selector: an id restored from an older save is not
     // guaranteed to be selector-safe, and this needs no escaping to get right.
@@ -253,7 +286,14 @@ export function createTakeoffCard(ctx) {
         if (typed && typed.disabled !== !!line.formula) typed.disabled = !!line.formula;
       } else {
         const cell = row.querySelector('.tk-qty');
-        if (cell) cell.innerHTML = line.error ? '<i class="ti ti-alert-triangle"></i>' : h(qty(line.quantity));
+        // The quantity is a box somebody may be typing in. A computed one follows the
+        // measurements; the one under the caret keeps exactly what was typed -- but it still
+        // gets the mark, so the line reads as overridden the moment it is.
+        if (cell) {
+          cell.classList.toggle('over', !!line.overridden);
+          const next = qty(line.quantity);
+          if (cell !== active && cell.value !== next) cell.value = next;
+        }
         setText(row.querySelector('.tk-price'), money(line.price));
       }
     });
@@ -300,6 +340,14 @@ export function createTakeoffCard(ctx) {
     if (target.matches('[data-takeoff-rate]')) {
       draft.config[target.dataset.takeoffRate] = Math.max(0, num(target.value));
       draft.dirty = true;
+      repaint();
+      return;
+    }
+    if (target.matches('[data-takeoff-qty]')) {
+      const id = target.dataset.takeoffQty;
+      // Emptying the box hands the line back to its formula rather than pinning it at zero.
+      if (String(target.value).trim() === '') delete draft.overrides[id];
+      else draft.overrides[id] = num(target.value);
       repaint();
       return;
     }
@@ -400,6 +448,7 @@ export function createTakeoffCard(ctx) {
         name: 'New calculator',
         config: defaultTakeoffConfig(),
         measurements: draft.measurements,
+        overrides: draft.overrides,
         editing: true,
         dirty: true,
       };
@@ -410,7 +459,7 @@ export function createTakeoffCard(ctx) {
       // The measurements belong to the record the card is sitting on -- this quote's roof --
       // so they are stored there rather than on the company's calculator.
       const totals = takeoffTotals();
-      if (totals) saveTakeoffToRecord?.(draft.scope, { calculator_id: draft.calculatorId || '', measurements: draft.measurements }, totals);
+      if (totals) saveTakeoffToRecord?.(draft.scope, { calculator_id: draft.calculatorId || '', measurements: draft.measurements, overrides: draft.overrides }, totals);
       return;
     }
     if (action === 'push') {
@@ -438,7 +487,18 @@ export function createTakeoffCard(ctx) {
       render();
       return;
     }
-    // Nothing left to do on change: the figures already followed every keystroke.
+    // Emptying a quantity hands the line back to its formula. The box is left blank while it
+    // has the caret -- putting the number back mid-edit would fight somebody who cleared it in
+    // order to type a different one -- so the formula's answer reappears when they leave it.
+    if (target.matches?.('[data-takeoff-qty]') && String(target.value).trim() === '') {
+      const draft = state.takeoffDraft;
+      if (!draft) return;
+      const line = calculateTakeoff(draft.config, draft.measurements, draft.overrides)
+        .lines.find((item) => item.id === target.dataset.takeoffQty);
+      if (line) target.value = qty(line.quantity);
+      return;
+    }
+    // Nothing else to do on change: the figures already followed every keystroke.
   }
 
   function onTakeoffEvent(event, kind) {
@@ -451,12 +511,13 @@ export function createTakeoffCard(ctx) {
   function takeoffTotals() {
     const draft = state.takeoffDraft;
     if (!draft) return null;
-    const result = calculateTakeoff(draft.config, draft.measurements);
+    const result = calculateTakeoff(draft.config, draft.measurements, draft.overrides);
     return {
       materialCost: result.materialWithTax,
       laborCost: result.laborTotal,
       contractPrice: result.clientTotal,
       measurements: draft.measurements,
+      overrides: draft.overrides,
       calculatorId: draft.calculatorId,
     };
   }

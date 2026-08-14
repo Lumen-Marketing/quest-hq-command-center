@@ -33113,34 +33113,46 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 .takeoff-card .tk-rate input { width: 66px; text-align: right; }
 .takeoff-card .tk-rate b { font-weight: 500; }
 
-.takeoff-card .tk-measure-grid {
+/* Two columns, as the spreadsheet has them: the report and the labor it buys on the left,
+   the long material list and the price to the client on the right. */
+.takeoff-card .tk-sheet {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
-  gap: 9px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 14px;
 }
+.takeoff-card .tk-col { display: grid; gap: 14px; min-width: 0; }
 
-.takeoff-card .tk-measure { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; }
-.takeoff-card .tk-measure > span { grid-column: 1 / -1; font-size: 11px; color: var(--muted); display: flex; gap: 5px; }
-.takeoff-card .tk-measure em { font-style: normal; opacity: .7; }
-.takeoff-card .tk-measure input { width: 100%; text-align: right; font-variant-numeric: tabular-nums; }
+.takeoff-card .tk-measure-grid { display: grid; }
+.takeoff-card .tk-measure-head,
+.takeoff-card .tk-measure {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px 46px 84px;
+  gap: 8px;
+  align-items: center;
+}
+.takeoff-card .tk-measure-head { font-size: 11px; color: var(--muted); padding-bottom: 4px; }
+.takeoff-card .tk-measure-head span:nth-child(2) { text-align: center; }
+.takeoff-card .tk-measure-head span:last-child { text-align: right; }
+.takeoff-card .tk-measure { padding: 3px 0; font-size: 12px; }
+.takeoff-card .tk-measure > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.takeoff-card .tk-measure em { font-style: normal; font-size: 11px; color: var(--muted); }
+.takeoff-card .tk-measure input { width: 100%; text-align: right; font-variant-numeric: tabular-nums; padding: 4px 7px; }
 /* The waste allowance is derived, so it is shown, never typed. */
 .takeoff-card .tk-measure b {
-  min-width: 52px;
   text-align: right;
   font-size: 12px;
   font-weight: 500;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-
-.takeoff-card .tk-groups { display: grid; gap: 14px; }
 .takeoff-card .tk-group { border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
 /* The header shares the row grid so every label sits over the column it names. */
 .takeoff-card .tk-group > header,
 .takeoff-card .tk-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px 104px 116px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 74px 86px 96px;
+  gap: 8px;
   align-items: center;
 }
 .takeoff-card .tk-group > header {
@@ -33152,28 +33164,37 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 .takeoff-card .tk-group > header span { font-size: 11px; color: var(--muted); text-align: right; }
 .takeoff-card .tk-group > header .tk-h-formula { text-align: left; }
 
-.takeoff-card .tk-row { padding: 7px 13px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.takeoff-card .tk-row { padding: 5px 13px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
 .takeoff-card .tk-row:last-of-type { border-bottom: 0; }
-.takeoff-card .tk-row > .tk-name { display: grid; gap: 2px; min-width: 0; }
-/* The formula is the explanation of the quantity beside it, so it sits under the name in the
-   quieter type rather than in a column of its own. */
-.takeoff-card .tk-row > .tk-name em {
-  font-style: normal;
-  font-size: 11px;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+.takeoff-card .tk-row > .tk-name {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.takeoff-card .tk-row > .tk-qty,
 .takeoff-card .tk-row > .tk-price,
 .takeoff-card .tk-row > .tk-total { text-align: right; font-variant-numeric: tabular-nums; }
 .takeoff-card .tk-row > .tk-total { font-weight: 500; }
 .takeoff-card .tk-row .ti-alert-triangle { color: var(--danger, #c0392b); }
+/* Every quantity is a box, whether a formula fills it or somebody types it -- see qtyCell. */
+.takeoff-card input.tk-qty {
+  width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 6px;
+  font-size: 12.5px;
+}
+/* Typed over the formula: worth seeing at a glance, without shouting. */
+.takeoff-card input.tk-qty.over {
+  border-color: var(--accent, #d4541f);
+  font-weight: 600;
+}
 
 .takeoff-card .tk-group.editing > header,
-.takeoff-card .tk-row-edit { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) 76px 96px 104px 32px; }
+.takeoff-card .tk-row-edit { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 88px 30px; }
 .takeoff-card .tk-row-edit input { width: 100%; font-size: 12px; padding: 5px 7px; }
 .takeoff-card .tk-row-edit .tk-formula { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .takeoff-card .tk-row-edit .tk-formula.bad { border-color: var(--danger, #c0392b); }
@@ -33230,14 +33251,17 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   padding: 1px 4px;
 }
 
+@media (max-width: 1180px) {
+  .takeoff-card .tk-sheet { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media (max-width: 900px) {
   .takeoff-card .tk-group > header span { display: none; }
   .takeoff-card .tk-group > header { display: flex; }
-  .takeoff-card .tk-row { grid-template-columns: minmax(0, 1fr) 64px 92px 100px; gap: 6px; font-size: 12px; }
-  .takeoff-card .tk-row-edit { grid-template-columns: minmax(0, 1fr) 32px; }
+  .takeoff-card .tk-row { grid-template-columns: minmax(0, 1fr) 62px 78px 88px; gap: 6px; font-size: 12px; }
+  .takeoff-card .tk-row-edit { grid-template-columns: minmax(0, 1fr) 30px; }
   .takeoff-card .tk-row-edit .tk-formula,
-  .takeoff-card .tk-row-edit .tk-qty,
   .takeoff-card .tk-row-edit .tk-price { grid-column: 1 / 2; }
-  .takeoff-card .tk-row-edit .tk-total { grid-column: 1 / -1; text-align: right; }
+  .takeoff-card .tk-measure-head { display: none; }
   .takeoff-card .tk-push { margin-left: 0; }
 }

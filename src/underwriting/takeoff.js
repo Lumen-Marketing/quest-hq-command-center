@@ -239,7 +239,22 @@ export function evaluateFormula(source, resolve) {
 
 // ---- the calculation ----------------------------------------------------------------------
 
-export function calculateTakeoff(config, measurementInput) {
+/**
+ * A quantity typed over the top of one a formula worked out.
+ *
+ * "Although some of it is auto calculated, still make it editable for further customizing."
+ * The formula is the default, not the law: the estimator who can see the roof gets the last
+ * word. An override belongs to the job rather than to the company's calculator, so it is
+ * stored with the measurements and cleared by emptying the box.
+ */
+export function overrideOf(overrides, lineId) {
+  const raw = overrides?.[lineId];
+  if (raw === undefined || raw === null || raw === '') return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+export function calculateTakeoff(config, measurementInput, overrides = {}) {
   const { waste_percent: wastePercent, tax_percent: taxPercent, lines } = normalizeTakeoffConfig(config);
   const raw = normalizeMeasurements(measurementInput);
   const wasteRate = 1 + (wastePercent / 100);
@@ -271,6 +286,13 @@ export function calculateTakeoff(config, measurementInput) {
 
   function quantityOf(line) {
     if (quantities.has(line.id)) return quantities.get(line.id);
+    // A typed quantity wins over the formula, and is still what other lines referring to this
+    // one read -- override the base sheet and the cap sheet follows, as it would on paper.
+    const typed = overrideOf(overrides, line.id);
+    if (typed !== null) {
+      quantities.set(line.id, typed);
+      return typed;
+    }
     if (!line.formula) {
       quantities.set(line.id, line.qty);
       return line.qty;
@@ -298,7 +320,13 @@ export function calculateTakeoff(config, measurementInput) {
     } catch (error) {
       errors.set(line.id, error.message);
     }
-    return { ...line, quantity: qty, total: money(qty * line.price), error: errors.get(line.id) || '' };
+    return {
+      ...line,
+      quantity: qty,
+      total: money(qty * line.price),
+      overridden: overrideOf(overrides, line.id) !== null,
+      error: errors.get(line.id) || '',
+    };
   });
 
   const groupTotal = (key) => money(priced
