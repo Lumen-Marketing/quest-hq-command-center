@@ -172,8 +172,10 @@ export function createTakeoffCard(ctx) {
           <div class="tk-measures">
             <div class="tk-measures-head">
               <h4>GAF measurement</h4>
-              <label class="tk-rate"><span>Waste</span><input type="number" min="0" step="0.5" value="${h(String(draft.config.waste_percent))}" data-takeoff-rate="waste_percent" ${canManage ? '' : 'disabled'} /><b>%</b></label>
-              <label class="tk-rate"><span>Tax</span><input type="number" min="0" step="0.25" value="${h(String(draft.config.tax_percent))}" data-takeoff-rate="tax_percent" ${canManage ? '' : 'disabled'} /><b>%</b></label>
+              ${draft.editing && canManage ? `
+                <label class="tk-rate"><span>Waste</span><input type="number" min="0" step="0.5" value="${h(String(draft.config.waste_percent))}" data-takeoff-rate="waste_percent" /><b>%</b></label>
+                <label class="tk-rate"><span>Tax</span><input type="number" min="0" step="0.25" value="${h(String(draft.config.tax_percent))}" data-takeoff-rate="tax_percent" /><b>%</b></label>
+              ` : ''}
             </div>
             <div class="tk-measure-head"><span></span><span>Measurement</span><span></span><span data-takeoff-waste-head>${h(qty(result.wastePercent))}% waste</span></div>
             <div class="tk-measure-grid">${measurementFields(draft, result)}</div>

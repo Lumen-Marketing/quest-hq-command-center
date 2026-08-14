@@ -113,6 +113,30 @@ test('the formula is not printed on the row', () => {
   assert.match(html, /title="Worked out by ROUNDUP\(\{Total SQ \+ waste\} \/ 10\)"/);
 });
 
+test('the waste and tax boxes belong to editing, not to pricing a roof', () => {
+  // They are the calculator's settings, not this job's numbers, and a box beside the
+  // measurements invites somebody pricing a roof to change the company's rates by accident.
+  // Both figures are still on show — the measurement column is headed "10% waste" and the
+  // material total says "with tax (8.5%)" — so hiding the boxes hides no information.
+  const { card, state } = build();
+  const pricing = card.renderTakeoffCard('co', { measurements: SHEET });
+  assert.ok(!/data-takeoff-rate=/.test(pricing), 'no rate boxes while pricing');
+  assert.match(pricing, /10% waste/);
+  assert.match(pricing, /with tax \(8\.5%\)/);
+
+  state.takeoffDraft.editing = true;
+  const editing = card.renderTakeoffCard('co', null);
+  assert.match(editing, /data-takeoff-rate="waste_percent"/);
+  assert.match(editing, /data-takeoff-rate="tax_percent"/);
+});
+
+test('somebody who cannot edit never sees the rate boxes at all', () => {
+  const { card, state } = build({ canManage: false });
+  card.renderTakeoffCard('co', { measurements: SHEET });
+  state.takeoffDraft.editing = true;
+  assert.ok(!/data-takeoff-rate=/.test(card.renderTakeoffCard('co', null)));
+});
+
 test('the sheet is laid out in two columns, as the spreadsheet is', () => {
   const { card } = build();
   const html = card.renderTakeoffCard('co', { measurements: SHEET });
