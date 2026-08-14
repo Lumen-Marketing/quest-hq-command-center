@@ -375,7 +375,7 @@ export function createCompanyContactsPage(ctx) {
    * through one person, which is the question somebody on a contact card is actually asking.
    */
   function activityPanel(companyId, doc, contact) {
-    const entries = contactActivity(doc, contact.id, { nameValue: contact.name });
+    const entries = contactActivity(doc, contact.id, { nameValue: wbNameValue });
     return `
       <div class="cc-panel">
         <h3><i class="ti ti-activity"></i>Recent updates</h3>
@@ -405,7 +405,7 @@ export function createCompanyContactsPage(ctx) {
     const view = CALENDAR_VIEWS.includes(state.ccCalView) ? state.ccCalView : 'month';
     const anchor = state.ccCalAt ? new Date(state.ccCalAt) : new Date();
     const span = calendarSpan(view, anchor);
-    const byDay = datesByDay(contactDates(doc, contact.id, { nameValue: contact.name }));
+    const byDay = datesByDay(contactDates(doc, contact.id, { nameValue: wbNameValue }));
     const today = dayKey(new Date());
 
     const cell = (item) => {

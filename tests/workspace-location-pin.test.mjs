@@ -156,11 +156,11 @@ test('the map instances are dropped with the node they belonged to', () => {
 
 test('the pin is a real button wired to the action', () => {
   // It was a decorative <span>, which is exactly why clicking it did nothing.
-  assert.match(fieldUi, /<button class="wb-cur wb-pin-btn" type="button" data-action="wb-location-pin" data-f="\$\{h\(f\.id\)\}"/);
+  assert.match(fieldUi, /<button class="wb-cur wb-pin-btn" type="button" data-action="wb-location-pin" data-wb-loc-for="\$\{h\(f\.id\)\}"/);
   assert.match(fieldUi, /aria-label="Pick \$\{h\(f\.name \|\| 'location'\)\} on a map"/);
   const at = main.indexOf("action === 'wb-location-pin'");
   assert.notEqual(at, -1, 'the button renders but nothing handles it');
-  assert.match(main.slice(at, at + 200), /wbOpenLocationPicker\(node\.dataset\.f\)/);
+  assert.match(main.slice(at, at + 600), /wbOpenLocationPicker\(node\.dataset\.wbLocFor\)/);
 });
 
 test('opening a map is not treated as a write', () => {
@@ -190,4 +190,15 @@ test('the map picker it reuses really does offer all three ways in', () => {
   assert.match(modal, /locationPickerMarker\.on\('dragend'/);
   assert.match(modal, /locationPickerMap\.on\('click'/);
   assert.match(modal, /navigator\.geolocation\.getCurrentPosition/);
+});
+
+test('only the input carries the field id, not the pin beside it', () => {
+  // Both did. The pin comes FIRST in the markup, so every querySelector('[data-f=...]') for a
+  // location field found a <button> whose .value is always '' -- which is why a Company Contact
+  // copied every field except Location, and why reading the field back gave nothing.
+  const location = fieldUi.slice(fieldUi.indexOf("case 'location':"));
+  const line = location.slice(0, location.indexOf('break;'));
+  assert.equal((line.match(/data-f="/g) || []).length, 1, 'exactly one element may claim the id');
+  assert.match(line, /<input class="wb-input" data-f=/, 'and it is the input');
+  assert.match(line, /data-wb-loc-for=/, 'the pin gets its own hook');
 });

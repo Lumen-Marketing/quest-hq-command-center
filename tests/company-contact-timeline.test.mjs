@@ -171,6 +171,32 @@ test('a day belongs to the reader, not to UTC', () => {
 
 // ---- on the card ---------------------------------------------------------------------------
 
+test('nameValue is a RENDERER, and both panels pass one', () => {
+  // It reads like "the contact's name" and is not: contactUsage hands it to itemTitle, which
+  // CALLS it as (app, field, item). Passing contact.name meant a string was called as a
+  // function -- and only once a contact was actually used on a record, because with no uses
+  // itemTitle is never reached. The contact card threw inside render(), so the page kept
+  // whatever was last painted and sat on its loading spinner with no error anywhere.
+  const calls = [...page.matchAll(/nameValue:\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
+  assert.ok(calls.length >= 4, `only found ${calls.length} nameValue arguments`);
+  calls.forEach((argument) => {
+    assert.equal(argument, 'wbNameValue', `nameValue must be the renderer, got ${argument}`);
+  });
+
+  // And it really is called, so the shape matters.
+  const model = readFileSync(join(root, 'src', 'company-contacts', 'model.js'), 'utf8');
+  assert.match(model, /nameValue \? nameValue\(app, field, item\)/);
+});
+
+test('a contact used on a record still builds its feed and diary', () => {
+  // The failing case, run: with no uses the title is never rendered and the bug hides.
+  const used = doc();
+  const feed = contactActivity(used, 'c1', { nameValue: (app, field, item) => String(item?.values?.[field.id] ?? '') });
+  assert.ok(feed.length > 0, 'this contact IS used');
+  assert.equal(feed[0].title, 'Wew', 'the renderer named the record');
+  assert.ok(contactDates(used, 'c1', { nameValue: (app, field, item) => String(item?.values?.[field.id] ?? '') }).length > 0);
+});
+
 test('both panels are on the contact card', () => {
   assert.match(page, /function activityPanel\(companyId, doc, contact\)/);
   assert.match(page, /function calendarPanel\(companyId, doc, contact\)/);

@@ -27087,7 +27087,10 @@ function handleAction(event, node) {
   }
   if (action === 'wb-location-pin') {
     event.preventDefault();
-    wbOpenLocationPicker(node.dataset.f);
+    // Its own attribute, not data-f. The pin sits beside the field's input, and while it also
+    // carried data-f it was the FIRST match for it -- so every querySelector('[data-f=...]')
+    // for a location field found a button whose value is always ''.
+    wbOpenLocationPicker(node.dataset.wbLocFor);
     return;
   }
   if (action === 'wb-modal-close') {

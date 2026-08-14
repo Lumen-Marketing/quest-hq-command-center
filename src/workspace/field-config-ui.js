@@ -551,7 +551,7 @@ export function createFieldInput(ctx) {
       case 'calculation': input = `<div class="wb-input wb-calc-display" data-calc="${h(f.id)}" title="${h(f.config.formula ? `Auto-calculated: ${f.config.formula}` : 'Auto-calculated')}">—</div>${f.config.formula ? '' : '<div class="wb-sub">No formula set yet.</div>'}`; break;
       // The pin is a button, not decoration: it opens the same map picker the CRM uses, so
       // an address can be dropped or found rather than typed from memory.
-      case 'location': input = `<div class="wb-inline"><button class="wb-cur wb-pin-btn" type="button" data-action="wb-location-pin" data-f="${h(f.id)}" title="Pick this on a map" aria-label="Pick ${h(f.name || 'location')} on a map"><i class="ti ti-map-pin"></i></button><input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="Address, city, or place"></div>`; break;
+      case 'location': input = `<div class="wb-inline"><button class="wb-cur wb-pin-btn" type="button" data-action="wb-location-pin" data-wb-loc-for="${h(f.id)}" title="Pick this on a map" aria-label="Pick ${h(f.name || 'location')} on a map"><i class="ti ti-map-pin"></i></button><input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="Address, city, or place"></div>`; break;
       case 'duration': {
         const mins = Math.max(0, Math.round(Number(val) || 0));
         input = `<div class="wb-inline wb-duration" data-wb-duration>
