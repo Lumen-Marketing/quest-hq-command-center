@@ -846,9 +846,17 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
         const rows = (await import('../data/csv.js')).parseCsvRows(await file.text());
         sheet = normalizeSheetFull(sheetFromRows(rows, sheet));
       }
+      // The file's name becomes the sheet's, unless it already had one. Everywhere a sheet is
+      // listed -- a table cell, a search result, a CSV column -- shows this rather than the grid,
+      // and "Roof takeoff.xlsx" is a far better answer there than "Spreadsheet".
+      if (!String(sheet.title || '').trim()) {
+        sheet.title = file.name.replace(/\.[^.]+$/, '').slice(0, 120);
+      }
       anchor = 'A1';
       sel = rangeOf('A1', 'A1');
       paint();
+      const heading = overlay.querySelector('[data-sh-title]');
+      if (heading) heading.textContent = sheet.title || title;
     } catch (error) {
       // Said out loud on the sheet rather than only in the console: somebody who just picked a
       // file needs to know it did not go in.

@@ -16695,7 +16695,22 @@ function wbPlainVal(companyId, workspace, app, field, value, values) {
     case 'rating': return value ? `${Math.round(Number(value))}/5` : '';
     case 'tags': { const ids = Array.isArray(value) ? value : [value]; return ids.map((id) => (field.config.options || []).find((o) => o.id === id)).filter(Boolean).map((o) => o.label).join(', '); }
     case 'autonumber': return wbAutoNumberText(field, value);
+    // A sheet stores its whole grid as JSON. Nobody wants to read that in a table cell, a search
+    // index or a CSV column -- they want to know there is a spreadsheet here and what it is
+    // called. A button holds its own configuration, which is not a value at all.
+    case 'sheet': return wbSheetLabel(value);
+    case 'button': return '';
     default: return String(value);
+  }
+}
+
+/** What a sheet is called: its own title, or just "Spreadsheet" when it has never been named. */
+function wbSheetLabel(raw) {
+  try {
+    const sheet = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
+    return String(sheet?.title || '').trim() || 'Spreadsheet';
+  } catch {
+    return 'Spreadsheet';
   }
 }
 function wbFieldNumber(app, field, raw, values) {

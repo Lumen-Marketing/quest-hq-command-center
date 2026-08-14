@@ -63,3 +63,62 @@ test('an empty value is empty whatever the type', () => {
   assert.equal(named('text', null), '');
   assert.equal(named('relationship', []), '');
 });
+
+// ---- and the same blob in a table cell ---------------------------------------------------
+
+// wbNameValue keeps a sheet from NAMING a record. wbPlainVal is the other renderer -- the one
+// behind table cells, card fields, search, sort and CSV export -- and it was still printing the
+// whole grid into a column. "A spreadsheet must show a label or the file name; if there is no
+// file name it just displays Spreadsheet."
+
+const plainAt = main.indexOf('function wbPlainVal(');
+assert.notEqual(plainAt, -1, 'wbPlainVal not found');
+const plainBody = main.slice(plainAt, main.indexOf('\n}\n', main.indexOf('function wbSheetLabel(')) + 2);
+const noop = () => '';
+const wbPlainVal = new Function(
+  'wbCalcRaw', 'wbRollupValue', 'wbProgressFillPct', 'wbMemberById', 'companyContactLabel',
+  'wbRelTargetApp', 'wbRelLabel', 'wbFileValue', 'wbFmtDuration', 'wbChecklistStats', 'wbAutoNumberText',
+  `${plainBody}; return wbPlainVal;`,
+)(noop, noop, () => null, () => null, noop, () => null, noop, () => null, noop, () => ({}), noop);
+
+const shown = (type, value) => wbPlainVal('c1', null, { fields: [] }, { id: 'f1', type, config: {} }, value, {});
+
+const GRID = JSON.stringify({
+  rows: 200, cols: 24,
+  cells: { A3: 'Labor Description', B3: 'QTY', C3: 'Unit Price', F3: 'GAF MEASUREMENT' },
+});
+
+test('a sheet shows its name, not its contents', () => {
+  assert.equal(shown('sheet', JSON.stringify({ title: 'Roof takeoff', cells: { A1: 'x' } })), 'Roof takeoff');
+});
+
+test('a sheet with no name is just called Spreadsheet', () => {
+  assert.equal(shown('sheet', GRID), 'Spreadsheet');
+  assert.equal(shown('sheet', JSON.stringify({ title: '   ', cells: {} })), 'Spreadsheet');
+});
+
+test('a value that will not parse still reads as a spreadsheet, not as an error', () => {
+  assert.equal(shown('sheet', '{not json'), 'Spreadsheet');
+});
+
+test('an empty sheet cell stays empty rather than saying Spreadsheet', () => {
+  assert.equal(shown('sheet', ''), '');
+  assert.equal(shown('sheet', null), '');
+});
+
+test('a button has nothing to show in a column', () => {
+  assert.equal(shown('button', '{"op":"push","targetApp":"a1"}'), '');
+});
+
+test('the fields that do have a value still show it', () => {
+  assert.equal(shown('text', 'Roof job'), 'Roof job');
+  assert.equal(shown('money', 1200), '$1200');
+  assert.equal(shown('checkbox', true), 'yes');
+});
+
+test('an imported file names the sheet after itself', () => {
+  // So the column reads "Roof takeoff" rather than "Spreadsheet" for every sheet on the app.
+  const editor = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');
+  assert.match(editor, /if \(!String\(sheet\.title \|\| ''\)\.trim\(\)\) \{/);
+  assert.match(editor, /sheet\.title = file\.name\.replace\(\/\\\.\[\^\.\]\+\$\/, ''\)/);
+});
