@@ -13796,7 +13796,7 @@ function wbViewCompanyHome(companyId, workspace) {
   const wsName = opsWorkspace?.name || workspace.name || companyName(companyId) || 'Workspace';
   return `
     ${wbWorkspaceHeader(companyId, workspace, null)}
-    <div class="wb-dash">
+    <div class="wb-dash wb-dash-split">
       <main class="wb-dash-main">
         ${wbFeedColumn(companyId, workspace)}
       </main>

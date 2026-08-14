@@ -22348,6 +22348,25 @@ button {
 .wb-dash { display: grid; grid-template-columns: minmax(0, 1fr) clamp(420px, 36vw, 580px); gap: 20px; align-items: start; }
 .wb-dash-main { min-width: 0; }
 .wb-dash-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* The feed and the tiles scroll on their own.
+   Side by side they are two different lengths, and one scrollbar for both means reaching the
+   end of the tiles by scrolling past the whole feed. The work surface stops scrolling and
+   hands its height to the split, which gives each column the same height and its own
+   scrollport. Below 900px the columns stack, where a single page scroll is the right one. */
+.work-surface:has(> .wb-dash-split) { display: flex; flex-direction: column; overflow: hidden; }
+.work-surface:has(> .wb-dash-split) > .wb-dash-split { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+.wb-dash-split > .wb-dash-main,
+.wb-dash-split > .wb-dash-side { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; padding-right: 2px; }
+/* The @mention list opens upward out of a comment box, so a box scrolled flush to the top of
+   the pane has nowhere to draw it. The work surface clipped it the same way before this, only
+   from ~100px higher up; keeping the pane's own scrolling away from that edge is what stops
+   focusing a comment box from putting it there. */
+.wb-dash-split > .wb-dash-main { scroll-padding-top: 240px; }
+/* Cards sit flush against the top and bottom edges of a pane, which reads as cut off; the
+   padding gives the last card somewhere to end. */
+.wb-dash-split > .wb-dash-main { padding-bottom: 20px; }
+.wb-dash-split > .wb-dash-side { padding-bottom: 20px; }
 .wb-tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 14px; row-gap: 0; grid-auto-rows: 8px; align-items: start; }
 .wb-side-controls { display: flex; gap: 8px; }
 
@@ -22385,6 +22404,11 @@ button {
 @media (max-width: 900px) {
   .wb-dash { grid-template-columns: 1fr; }
   .wb-tile-grid { grid-template-columns: 1fr; grid-auto-rows: auto; row-gap: 14px; }
+  /* Stacked, the two are one column, and two nested scrollports inside a page that also
+     scrolls is a trap on a phone. The surface takes its scroll back. */
+  .work-surface:has(> .wb-dash-split) { display: block; overflow: auto; }
+  .wb-dash-split > .wb-dash-main,
+  .wb-dash-split > .wb-dash-side { overflow: visible; padding-right: 0; padding-bottom: 0; }
 }
 .wb-topbar-tab:focus-visible, .wb-topbar-add:focus-visible, .wb-tile-row:focus-visible, .wb-tile-add:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 2px; }
 
