@@ -70,7 +70,11 @@ test('the eight measurements are inputs and the waste column is not', () => {
   const { card } = build();
   const html = card.renderTakeoffCard('co', null);
   assert.equal((html.match(/data-takeoff-measure=/g) || []).length, 8);
-  assert.ok(!/data-takeoff-waste=/.test(html));
+  // The waste figure is a readout with a hook on it so recalculating can rewrite it in place.
+  // What it must never be is an input: it is derived, and offering it as a box to type in
+  // would be a lie about which number is in charge.
+  assert.equal((html.match(/data-takeoff-waste=/g) || []).length, 8);
+  assert.ok(!/<input[^>]*data-takeoff-waste/.test(html));
 });
 
 test('editing opens the formula, the price and the name of every line', () => {
@@ -173,6 +177,53 @@ test('the totals handed to the decision panel are the takeoff totals', () => {
     measurements: SHEET,
     calculatorId: '',
   });
+});
+
+// ---- typing must not rebuild the field being typed into -----------------------------------
+// "every time I enter a number it exited my mouse in the edit field."
+//
+// Recalculating replaced the whole card body, so each keystroke destroyed the input and built
+// a new one: the caret jumped out and the number came back selected. The browser probe that
+// signed this off dispatched input events and read the totals -- it never checked focus, which
+// is the one thing the user was actually doing.
+
+test('a keystroke updates the figures without rebuilding the card', () => {
+  const { card, state } = build();
+  card.renderTakeoffCard('co', { measurements: SHEET });
+  const dom = fakeCard();
+  withFakeDocument(dom, () => {
+    card.onTakeoffEvent({ target: measureInput('total_sq', '80') }, 'input');
+  });
+  assert.equal(dom.bodyWrites, 0, 'the card body was rebuilt under the caret');
+  assert.equal(state.takeoffDraft.measurements.total_sq, 80);
+  assert.equal(dom.text['[data-takeoff-waste="total_sq"]'], '88', 'the waste column still followed along');
+  assert.equal(dom.text['[data-takeoff-figure="client"]'], '$36000.00', 'and so did the totals');
+});
+
+test('adding or removing a line does rebuild it, which is when that is correct', () => {
+  const { card, state } = build();
+  card.renderTakeoffCard('co', null);
+  state.takeoffDraft.editing = true;
+  const dom = fakeCard();
+  withFakeDocument(dom, () => {
+    card.onTakeoffEvent({ target: fakeButton('add-line', { takeoffGroupKey: 'material' }) }, 'click');
+  });
+  assert.equal(dom.bodyWrites, 1, 'a new row has to come from somewhere');
+});
+
+test('a half-typed decimal does not blink every total to zero', () => {
+  // "65." is reported by a number input as an empty value with badInput set. Reading it as 0
+  // between the point and the next digit made the whole card flicker.
+  const { card, state } = build();
+  card.renderTakeoffCard('co', { measurements: SHEET });
+  const dom = fakeCard();
+  const midDecimal = measureInput('total_sq', '');
+  midDecimal.validity = { badInput: true };
+  withFakeDocument(dom, () => card.onTakeoffEvent({ target: midDecimal }, 'input'));
+  assert.equal(state.takeoffDraft.measurements.total_sq, 65, 'the last complete number stands');
+  // Genuinely clearing the field is a different thing, and still means zero.
+  withFakeDocument(dom, () => card.onTakeoffEvent({ target: measureInput('total_sq', '') }, 'input'));
+  assert.equal(state.takeoffDraft.measurements.total_sq, 0);
 });
 
 // ---- the same card on a quote record ------------------------------------------------------
@@ -356,11 +407,59 @@ async function withDocument(run) {
   }
 }
 
-function fakeButton(action) {
+function fakeButton(action, extra = {}) {
   const node = {
-    dataset: { takeoffAction: action },
+    dataset: { takeoffAction: action, ...extra },
     matches: () => false,
     closest: (selector) => (selector === '[data-takeoff-action]' ? node : null),
   };
   return node;
+}
+
+function measureInput(key, value) {
+  return {
+    dataset: { takeoffMeasure: key },
+    value,
+    validity: { badInput: false },
+    matches: (selector) => selector === '[data-takeoff-measure]',
+    closest: () => null,
+  };
+}
+
+// A card just complete enough to tell a rebuild from a patch: it counts writes to the body's
+// innerHTML and records the text put into each readout.
+function fakeCard() {
+  const dom = { bodyWrites: 0, text: {} };
+  const stub = (selector) => ({
+    get textContent() { return dom.text[selector] ?? ''; },
+    set textContent(next) { dom.text[selector] = next; },
+    set innerHTML(next) { dom.text[selector] = next; },
+    set hidden(next) { dom.text[`${selector}:hidden`] = next; },
+    set disabled(next) { dom.text[`${selector}:disabled`] = next; },
+    classList: { toggle: () => {} },
+    // Nested lookups resolve to their own stub, keyed by the child selector: the outcome strip
+    // is found first and its figures read off it.
+    querySelector: (child) => stub(child),
+    querySelectorAll: () => [],
+  });
+  const body = {
+    set innerHTML(next) { dom.bodyWrites += 1; dom.text.body = next; },
+    querySelector: (selector) => stub(selector),
+    querySelectorAll: () => [],
+  };
+  dom.root = {
+    querySelector: (selector) => (selector === '[data-takeoff-body]' ? body : stub(selector)),
+  };
+  return dom;
+}
+
+function withFakeDocument(dom, run) {
+  const previous = globalThis.document;
+  globalThis.document = { querySelector: (selector) => (selector === '[data-takeoff-root]' ? dom.root : null) };
+  try {
+    run();
+  } finally {
+    if (previous === undefined) delete globalThis.document;
+    else globalThis.document = previous;
+  }
 }

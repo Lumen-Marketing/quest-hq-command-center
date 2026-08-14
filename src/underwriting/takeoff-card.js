@@ -79,7 +79,7 @@ export function createTakeoffCard(ctx) {
           <span>${h(item.label)}<em>${h(item.unit)}</em></span>
           <input type="number" min="0" step="0.01" inputmode="decimal" value="${h(String(draft.measurements[item.key]))}"
             data-takeoff-measure="${h(item.key)}" aria-label="${h(item.label)} in ${h(item.unit)}" />
-          <b title="With the waste allowance">${h(qty(withWaste))}</b>
+          <b title="With the waste allowance" data-takeoff-waste="${h(item.key)}">${h(qty(withWaste))}</b>
         </label>
       `;
     }).join('');
@@ -97,7 +97,7 @@ export function createTakeoffCard(ctx) {
           <input class="tk-price" type="number" step="0.01" min="0" value="${h(String(line.price))}" data-takeoff-field="price" aria-label="Unit price" />
           <span class="tk-total">${money(line.total)}</span>
           <button class="tk-drop" type="button" data-takeoff-action="remove-line" data-takeoff-line-id="${h(line.id)}" title="Remove ${h(line.name)}" aria-label="Remove ${h(line.name)}"><i class="ti ti-trash"></i></button>
-          ${line.error ? `<p class="tk-error">${h(line.error)}</p>` : ''}
+          <p class="tk-error" ${line.error ? '' : 'hidden'}>${h(line.error)}</p>
         </div>
       `;
     }
@@ -107,7 +107,7 @@ export function createTakeoffCard(ctx) {
         <span class="tk-qty">${line.error ? '<i class="ti ti-alert-triangle"></i>' : h(qty(line.quantity))}</span>
         <span class="tk-price">${money(line.price)}</span>
         <span class="tk-total">${money(line.total)}</span>
-        ${line.error ? `<p class="tk-error">${h(line.error)}</p>` : ''}
+        <p class="tk-error" ${line.error ? '' : 'hidden'}>${h(line.error)}</p>
       </div>
     `;
   }
@@ -134,7 +134,7 @@ export function createTakeoffCard(ctx) {
         <header><h4>${h(group.label)}</h4>${headCells.join('')}</header>
         ${lines.map((line) => lineRow(line, draft.editing, canManage)).join('') || '<p class="tk-empty">No lines yet.</p>'}
         ${draft.editing && canManage ? `<button class="btn btn-quiet tk-add" type="button" data-takeoff-action="add-line" data-takeoff-group-key="${h(group.key)}"><i class="ti ti-plus"></i>Add a line</button>` : ''}
-        <div class="tk-totals">
+        <div class="tk-totals" data-takeoff-totals="${h(group.key)}">
           ${totals.map(([label, value, strong]) => `<div class="${strong ? 'strong' : ''}"><span>${h(label)}</span><strong>${money(value)}</strong></div>`).join('')}
         </div>
       </section>
@@ -154,11 +154,11 @@ export function createTakeoffCard(ctx) {
         <div class="tk-measure-grid">${measurementFields(draft, result)}</div>
       </div>
       <div class="tk-groups">${TAKEOFF_GROUPS.map((group) => groupSection(group, result, draft, canManage)).join('')}</div>
-      <div class="tk-outcome ${profitable ? '' : 'negative'}">
-        <div><span>Cost of the job</span><strong>${money(result.costTotal)}</strong></div>
-        <div><span>Price to client</span><strong>${money(result.clientTotal)}</strong></div>
-        <div class="tk-profit"><span>${profitable ? 'Profit' : 'Loss'}</span><strong>${money(Math.abs(result.profit))}</strong></div>
-        <div><span>Margin</span><strong>${h(result.marginPercent.toFixed(2))}%</strong></div>
+      <div class="tk-outcome ${profitable ? '' : 'negative'}" data-takeoff-outcome>
+        <div><span>Cost of the job</span><strong data-takeoff-figure="cost">${money(result.costTotal)}</strong></div>
+        <div><span>Price to client</span><strong data-takeoff-figure="client">${money(result.clientTotal)}</strong></div>
+        <div class="tk-profit"><span data-takeoff-figure="profit-label">${profitable ? 'Profit' : 'Loss'}</span><strong data-takeoff-figure="profit">${money(Math.abs(result.profit))}</strong></div>
+        <div><span>Margin</span><strong data-takeoff-figure="margin">${h(result.marginPercent.toFixed(2))}%</strong></div>
         ${canManage ? (draft.scope === 'underwriter'
           ? '<button class="btn tk-push" type="button" data-takeoff-action="push"><i class="ti ti-arrow-up"></i>Use in the decision</button>'
           : `<button class="btn btn-primary tk-push" type="button" data-takeoff-action="save-record"><i class="ti ti-device-floppy"></i>${h(saveRecordLabel)}</button>`) : ''}
@@ -202,19 +202,96 @@ export function createTakeoffCard(ctx) {
 
   // ---- events -----------------------------------------------------------------------------
 
-  function repaint() {
+  // Recalculating must never rebuild the field being typed into. Replacing the card body was
+  // doing exactly that: every keystroke destroyed the input and built a new one, so the caret
+  // jumped out and the number came back selected. Worse, the value was re-rendered from
+  // Number(), so a half-typed "6." lost its decimal point before the next digit arrived.
+  //
+  // So the inputs are left strictly alone and only the figures they produce are rewritten.
+  // A full rebuild happens only when the shape of the card really changes -- a line added or
+  // removed -- and at that point nothing is mid-word.
+  function repaint({ structure = false } = {}) {
     const root = document.querySelector('[data-takeoff-root]');
     const body = root?.querySelector('[data-takeoff-body]');
     const draft = state.takeoffDraft;
     if (!body || !draft) return;
-    body.innerHTML = renderBody(draft.companyId, draft, canManageFor(draft.companyId));
+    const canManage = canManageFor(draft.companyId);
+    if (structure) body.innerHTML = renderBody(draft.companyId, draft, canManage);
+    else patchFigures(body, draft, canManage);
     const save = root.querySelector('[data-takeoff-action="save"]');
     if (save) save.disabled = !draft.dirty;
+  }
+
+  const setText = (node, text) => { if (node && node.textContent !== text) node.textContent = text; };
+
+  function patchFigures(body, draft, canManage) {
+    const result = calculateTakeoff(draft.config, draft.measurements);
+    const editing = draft.editing && canManage;
+
+    result.measurements.forEach((item) => {
+      setText(body.querySelector(`[data-takeoff-waste="${item.key}"]`), qty(item.withWaste));
+    });
+
+    // Looked up by dataset rather than by selector: an id restored from an older save is not
+    // guaranteed to be selector-safe, and this needs no escaping to get right.
+    const rows = new Map();
+    body.querySelectorAll('[data-takeoff-line]').forEach((row) => rows.set(row.dataset.takeoffLine, row));
+
+    result.lines.forEach((line) => {
+      const row = rows.get(line.id);
+      if (!row) return;
+      setText(row.querySelector('.tk-total'), money(line.total));
+      const error = row.querySelector('.tk-error');
+      if (error) {
+        setText(error, line.error);
+        error.hidden = !line.error;
+      }
+      if (editing) {
+        row.querySelector('.tk-formula')?.classList.toggle('bad', !!line.error);
+        const typed = row.querySelector('.tk-qty');
+        // A line that has just been given a formula stops accepting a typed quantity.
+        if (typed && typed.disabled !== !!line.formula) typed.disabled = !!line.formula;
+      } else {
+        const cell = row.querySelector('.tk-qty');
+        if (cell) cell.innerHTML = line.error ? '<i class="ti ti-alert-triangle"></i>' : h(qty(line.quantity));
+        setText(row.querySelector('.tk-price'), money(line.price));
+      }
+    });
+
+    TAKEOFF_GROUPS.forEach((group) => {
+      const totals = body.querySelector(`[data-takeoff-totals="${group.key}"]`);
+      if (!totals) return;
+      const figures = {
+        labor: [result.laborTotal],
+        material: [result.materialTotal, result.materialWithTax, result.costTotal],
+        client: [result.clientTotal],
+      }[group.key];
+      totals.querySelectorAll('strong').forEach((node, index) => setText(node, money(figures[index])));
+      // The tax rate is editable, and it is named in the label beside the figure it applies to.
+      const taxLabel = group.key === 'material' ? totals.querySelectorAll('span')[1] : null;
+      setText(taxLabel, `Material with tax (${qty(result.taxPercent)}%)`);
+    });
+
+    const outcome = body.querySelector('[data-takeoff-outcome]');
+    if (!outcome) return;
+    const profitable = result.profit >= 0;
+    outcome.classList.toggle('negative', !profitable);
+    const figure = (key) => outcome.querySelector(`[data-takeoff-figure="${key}"]`);
+    setText(figure('cost'), money(result.costTotal));
+    setText(figure('client'), money(result.clientTotal));
+    setText(figure('profit-label'), profitable ? 'Profit' : 'Loss');
+    setText(figure('profit'), money(Math.abs(result.profit)));
+    setText(figure('margin'), `${result.marginPercent.toFixed(2)}%`);
   }
 
   function handleTakeoffInput(target) {
     const draft = state.takeoffDraft;
     if (!draft) return;
+    // Halfway through typing "65.5" the field holds "65.", which a number input reports as an
+    // empty value with badInput set -- not as a cleared field. Reading that as 0 blinks every
+    // total on the card to zero between the point and the next digit. Clearing the field for
+    // real leaves badInput false, so it still means 0.
+    if (target.validity?.badInput) return;
     if (target.matches('[data-takeoff-measure]')) {
       draft.measurements[target.dataset.takeoffMeasure] = Math.max(0, num(target.value));
       repaint();
@@ -238,9 +315,9 @@ export function createTakeoffCard(ctx) {
       const key = target.dataset.takeoffField;
       line[key] = key === 'name' || key === 'formula' ? target.value : num(target.value);
       draft.dirty = true;
-      // Retyping the name or the formula would move the caret if the row were replaced, so
-      // only the numbers repaint in place; the totals catch up when the field is left.
-      if (key === 'qty' || key === 'price') repaint();
+      // Safe on every keystroke now: a formula is repriced as it is typed, and the field it
+      // was typed into is not one of the things that gets rewritten.
+      repaint();
     }
   }
 
@@ -303,14 +380,14 @@ export function createTakeoffCard(ctx) {
         price: 0,
       });
       draft.dirty = true;
-      repaint();
+      repaint({ structure: true });
       return;
     }
     if (action === 'remove-line') {
       const id = target.closest('[data-takeoff-action]').dataset.takeoffLineId;
       draft.config.lines = draft.config.lines.filter((line) => line.id !== id);
       draft.dirty = true;
-      repaint();
+      repaint({ structure: true });
       return;
     }
     if (action === 'new') {
@@ -361,8 +438,7 @@ export function createTakeoffCard(ctx) {
       render();
       return;
     }
-    // A formula or a name is finished being typed: now the lines can be redrawn.
-    if (target.matches('[data-takeoff-field]')) repaint();
+    // Nothing left to do on change: the figures already followed every keystroke.
   }
 
   function onTakeoffEvent(event, kind) {

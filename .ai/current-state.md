@@ -167,6 +167,14 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - `ROUNDUP(528 / 8)` is 66, not 67: 528/8 is 65.99999999999999 in binary floating point, and a naive `Math.ceil` buys an extra box of birdstop on every tile job. Values are nudged to 12 significant digits before rounding.
 - **Storage**: `underwriting_calculators` holds the company's templates; the measurements ride on `underwriting_cases.takeoff`, because the calculator prices every roof and each roof has its own report. **Use in the decision** pushes the takeoff's totals into the margin panel above rather than duplicating the arithmetic.
 
+## 2026-08-14 Typing in the takeoff card threw the caret out
+
+- "Every time I enter a number it exited my mouse in the edit field." Recalculating replaced the card body's innerHTML, so every keystroke destroyed the input being typed into and built a new one: focus was lost and the number came back selected.
+- The card now patches only the figures it derives — the waste column, each line's quantity, price and total, the group totals and the outcome strip — and never touches an input. A full rebuild happens only when the shape changes, adding or removing a line, when nothing is mid-word. Error lines are always present and `hidden` when empty, because adding and removing them was itself a structural change.
+- Freed from that, a formula is now repriced on every keystroke instead of waiting for the field to be left.
+- **The browser probe that signed the feature off dispatched input events and read the totals — it never checked focus, which is the one thing the user was actually doing.** Verified this time by typing character by character through `execCommand('insertText')` and asserting `document.activeElement` after each: real insertion is also the only way to reach the browser's own value parsing. Programmatic `.value =` is rejected outright for a partial "80." and never sets `validity.badInput`, so it cannot reproduce what typing does.
+- `tests/underwriting-takeoff-card.test.mjs` counts writes to the body's innerHTML: a keystroke must cause none, adding a line must cause one. Confirmed it fails against the old code.
+
 ## 2026-08-14 The takeoff card on a quote record
 
 - The calculator was first put on the Underwriter tool page. That was the wrong page to stop at: the estimator prices a roof **on the quote**, at the Underwriting stage, where the guidance already asks "Is the takeoff / measurements done?". The same card now renders full width at the bottom of the quote record in `crm/deal-detail.js`.
