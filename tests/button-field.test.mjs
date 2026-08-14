@@ -252,7 +252,10 @@ const pressed = async ({ canManage = true } = {}) => {
 test('the worked example: App 2 grows to fit and gains the record', async () => {
   const { ok, app2, saved } = await pressed();
   assert.equal(ok, true);
-  assert.deepEqual(app2.fields.map((field) => field.label), ['Address', 'Name', 'Age'], 'three fields now');
+  // What arrived comes first, in the order it had at home: App 1 (Name, Age) into App 2
+  // (Address) reads Name, Age, Address -- the record as the person sending it thinks of it.
+  // A starting order only; the field list is draggable afterwards like any other.
+  assert.deepEqual(app2.fields.map((field) => field.label), ['Name', 'Age', 'Address'], 'three fields now');
   assert.equal(app2.items.length, 2, 'the record that was there is still there');
 
   const arrived = app2.items[0];
@@ -276,6 +279,16 @@ test('nothing automatic is carried across', async () => {
 test('the arrival remembers where it came from', async () => {
   const { app2 } = await pressed();
   assert.deepEqual(app2.items[0].pushedFrom, { companyId: 'co1', appId: 'app1', itemId: 'i1' });
+});
+
+test('an app that already has one of the fields keeps its own place in the order', () => {
+  // Only the NEW ones are prepended. Moving a field the target already had would rearrange an
+  // app somebody else laid out, which is not this button's business.
+  const target = APP2();
+  target.fields.push({ id: 'g-age', type: 'number', label: 'Age', config: {} });
+  const plan = planPush(APP1(), target, { id: 'f-btn', config: {} });
+  assert.deepEqual(plan.create.map((field) => field.label), ['Name'], 'only Name is new');
+  assert.deepEqual(target.fields.map((field) => field.label), ['Address', 'Age'], 'and planning moves nothing');
 });
 
 test('a role that cannot manage the target app changes nothing there', async () => {

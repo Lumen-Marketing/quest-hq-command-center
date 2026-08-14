@@ -53,14 +53,20 @@ export function createButtonPush(ctx) {
       return false;
     }
 
-    // 1. Grow the target's field list. Existing records are untouched: a field they have never
-    //    had simply reads blank, which is what an empty cell already means everywhere else.
+    // 1. Grow the target's field list, with what arrived FIRST and in the order it had at
+    //    home: App 1 (text, number) landing in App 2 (location) reads text, number, location,
+    //    which is the record as the person sending it thinks of it. It is only a starting
+    //    order -- the field list is draggable afterwards like any other.
+    //
+    //    Existing records are untouched: a field they have never had simply reads blank, which
+    //    is what an empty cell already means everywhere else.
     const made = new Map();
-    plan.create.forEach((field) => {
-      const fresh = fieldToCreate(field, wbUid);
-      target.app.fields.push(fresh);
-      made.set(field.id, fresh);
+    const fresh = plan.create.map((field) => {
+      const clone = fieldToCreate(field, wbUid);
+      made.set(field.id, clone);
+      return clone;
     });
+    target.app.fields.unshift(...fresh);
 
     // 2. Translate the values into the target's own ids.
     const values = {};
