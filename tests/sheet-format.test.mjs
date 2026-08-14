@@ -77,9 +77,30 @@ test('only real formatting is stored, and nonsense is dropped rather than kept',
   const style = normalizeStyle({
     b: true, i: 1, fg: '#FF0000', bg: 'red', ha: 'middle', va: 'middle', fs: 900, ff: 'Comic Sans', bd: 'txq',
   });
-  assert.deepEqual(style, { b: 1, i: 1, fg: '#ff0000', va: 'middle', bd: 't' });
+  // `ha: 'middle'` is not a horizontal alignment, `bg: 'red'` is not a hex colour, 900 is not a
+  // font size -- and 'Comic Sans' IS a font, because the box is typed into rather than picked
+  // from a list of seven.
+  assert.deepEqual(style, { b: 1, i: 1, fg: '#ff0000', va: 'middle', bd: 't', ff: 'Comic Sans' });
   assert.equal(normalizeStyle({}), null, 'a cell with no formatting is not stored at all');
   assert.equal(normalizeStyle({ bg: 'nope' }), null);
+});
+
+test('a typed font name cannot smuggle CSS into the page', () => {
+  // The name is written straight into an inline font-family, so a quote or a semicolon in it
+  // would be a way to write arbitrary style onto the record.
+  assert.equal(normalizeStyle({ ff: 'Tahoma' }).ff, 'Tahoma', 'a font the picker never suggested');
+  assert.equal(normalizeStyle({ ff: 'Times New Roman' }).ff, 'Times New Roman');
+  assert.equal(normalizeStyle({ ff: 'Arial; background: url(x)' }), null);
+  assert.equal(normalizeStyle({ ff: '"Arial"' }), null);
+  assert.equal(normalizeStyle({ ff: 'a'.repeat(200) })?.ff.length, 40, 'and it cannot be a payload');
+});
+
+test('any size can be typed, not only the ones on the list', () => {
+  // The list is a suggestion. 13 is not on it, and 13 is a perfectly ordinary size to want.
+  assert.equal(normalizeStyle({ fs: 13 }).fs, 13);
+  assert.equal(normalizeStyle({ fs: '13' }).fs, 13);
+  assert.equal(normalizeStyle({ fs: 5 }), null, 'but not one nobody could read');
+  assert.equal(normalizeStyle({ fs: 900 }), null);
 });
 
 test('bold applies to every cell in the selection and toggles off again', () => {

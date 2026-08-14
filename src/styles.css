@@ -33521,6 +33521,17 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   place-items: center;
   padding: 18px;
 }
+/* A sheet opened as its own tab takes the whole window: no backdrop to see past, no card edges
+   to waste the width on, and every extra pixel goes to the grid. */
+.sh-overlay.sh-full { padding: 0; background: var(--surface); }
+.sh-overlay.sh-full .sh-frame {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
 .sh-frame {
   display: grid;
   /* Title bar, ribbon, formula bar, the grid, the function list. Only the grid takes the slack. */
@@ -33604,7 +33615,8 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 .sh-badge { font-size: 10px; font-weight: 800; line-height: 1; margin-left: -2px; }
 /* Big enough to read the value at a glance. At 27px and 12px these were legible only if you
    went looking, and the value in them is the answer to "what is this cell". */
-.sh-ribbon select {
+.sh-ribbon select,
+.sh-ribbon input[data-sh-set] {
   height: 31px;
   padding: 0 24px 0 8px;
   border: 1px solid var(--border-strong, #cdb595);
@@ -33622,8 +33634,14 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
-.sh-ribbon select:hover { border-color: var(--orange, #e0552d); }
-.sh-ribbon select:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 1px; }
+.sh-ribbon select:hover,
+.sh-ribbon input[data-sh-set]:hover { border-color: var(--orange, #e0552d); }
+.sh-ribbon select:focus-visible,
+.sh-ribbon input[data-sh-set]:focus { outline: 2px solid var(--orange, #e0552d); outline-offset: 1px; }
+/* The typed boxes keep the caret room the drawn arrow would otherwise take, and the browser
+   draws its own list marker for a datalist. */
+.sh-ribbon input[data-sh-set] { background-image: none; padding-right: 8px; }
+.sh-ribbon input.sh-size { padding-right: 2px; }
 .sh-font { width: 138px; }
 .sh-size { width: 74px; }
 .sh-nf { width: 156px; }

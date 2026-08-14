@@ -75,7 +75,7 @@ const tool = (action, name, title, extra = '', badge = '') =>
  * written until then: a spreadsheet somebody is halfway through is not a saved record, and the
  * form underneath still has its own Save.
  */
-export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false, openHref = '' }) {
+export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false, openHref = '', fullScreen = false }) {
   let sheet = normalizeSheetFull(read());
   let anchor = 'A1';
   let sel = rangeOf('A1', 'A1');
@@ -85,7 +85,9 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
   let fillTo = null;
 
   const overlay = document.createElement('div');
-  overlay.className = 'sh-overlay';
+  // A sheet that IS the tab fills it. The centred card exists so the record form stays
+  // visible behind it; in a tab opened for the sheet there is nothing behind it to keep.
+  overlay.className = `sh-overlay${fullScreen ? ' sh-full' : ''}`;
   overlay.innerHTML = `
     <div class="sh-frame" role="dialog" aria-modal="true" aria-label="${esc(title)}">
       <div class="sh-bar">
@@ -122,8 +124,10 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     return `
       <div class="sh-ribbon" data-sh-ribbon>
         <div class="sh-group">
-          <select class="sh-font" data-sh-set="ff" aria-label="Font">${FONTS.map((name) => option(name, name)).join('')}</select>
-          <select class="sh-size" data-sh-set="fs" aria-label="Font size">${FONT_SIZES.map((size) => option(size, size)).join('')}</select>
+          <input class="sh-font" data-sh-set="ff" list="sh-fonts" aria-label="Font" placeholder="Font" spellcheck="false" autocomplete="off">
+          <datalist id="sh-fonts">${FONTS.map((name) => `<option value="${esc(name)}"></option>`).join('')}</datalist>
+          <input class="sh-size" data-sh-set="fs" list="sh-sizes" type="number" min="6" max="96" step="1" aria-label="Font size" autocomplete="off">
+          <datalist id="sh-sizes">${FONT_SIZES.map((size) => `<option value="${size}"></option>`).join('')}</datalist>
           ${tool('grow', 'ti-letter-case-upper', 'Grow font')}
           ${tool('shrink', 'ti-letter-case-lower', 'Shrink font')}
           <span class="sh-sep"></span>
@@ -731,13 +735,25 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     if (event.target === overlay) close();
   });
 
+  const applySetter = (setter) => {
+    const key = setter.dataset.shSet;
+    patch({ [key]: key === 'fs' ? Number(setter.value) : (setter.value === 'general' ? null : setter.value) });
+  };
   overlay.addEventListener('input', (event) => {
     const color = event.target.closest('[data-sh-color]');
     if (color) { patch({ [color.dataset.shColor]: color.value }); return; }
-    const setter = event.target.closest('[data-sh-set]');
-    if (!setter) return;
-    const key = setter.dataset.shSet;
-    patch({ [key]: key === 'fs' ? Number(setter.value) : (setter.value === 'general' ? null : setter.value) });
+    // A <select> is done the moment it changes; a typed box is not.
+    const setter = event.target.closest('select[data-sh-set]');
+    if (setter) applySetter(setter);
+  });
+  overlay.addEventListener('change', (event) => {
+    const setter = event.target.closest('input[data-sh-set]');
+    if (setter) applySetter(setter);
+  });
+  // Enter applies without leaving the box, which is what typing a size and carrying on expects.
+  overlay.addEventListener('keydown', (event) => {
+    const setter = event.target.closest('input[data-sh-set]');
+    if (setter && event.key === 'Enter') { event.preventDefault(); applySetter(setter); overlay.focus(); }
   });
 
   // ---- printing ------------------------------------------------------------------------------
@@ -945,6 +961,8 @@ export function openForRecord(fieldId, seat, { wbDoc, wbSave, render, can }) {
   if (!item) throw new Error('That record is no longer here. Reload and try again.');
   const field = (app.fields || []).find((entry) => entry.id === fieldId);
   const here = new URL(window.location.href);
+  // Opened from the address bar rather than from a row: this tab IS the sheet.
+  const ownTab = here.searchParams.get('sheet') === fieldId;
   // Taken back off the address, so a refresh or a Back does not reopen the sheet. A no-op when
   // this was an ordinary click on a row rather than a tab opened from one.
   if (here.searchParams.has('sheet')) {
@@ -958,7 +976,9 @@ export function openForRecord(fieldId, seat, { wbDoc, wbSave, render, can }) {
   return openSheetEditor({
     title: field?.label || 'Sheet',
     readOnly: !can('workspaces.manage', companyId),
-    openHref: here.toString(),
+    fullScreen: ownTab,
+    // Already in its own tab, so the button would only open another one.
+    openHref: ownTab ? '' : here.toString(),
     read: () => { try { return JSON.parse(item.values[fieldId] || '{}'); } catch { return {}; } },
     write: (sheet) => {
       item.values[fieldId] = JSON.stringify(sheet);

@@ -101,6 +101,53 @@ test('a ribbon menu is not clipped by the ribbon it hangs off', async () => {
   assert.match(source, /\[data-sh-ribbon\]'\)\?\.addEventListener\('scroll', closeMenus\)/);
 });
 
+test('the font and the size are typed into, not only picked from', async () => {
+  // A <select> cannot be typed into at all: there was no way to search for a font or to ask for
+  // 13pt, which is not on the list. A datalist keeps the suggestions and allows both.
+  const { overlay } = await open();
+  const html = overlay.innerHTML;
+  assert.match(html, /<input class="sh-font" data-sh-set="ff" list="sh-fonts"/);
+  assert.match(html, /<input class="sh-size" data-sh-set="fs" list="sh-sizes" type="number" min="6" max="96"/);
+  assert.match(html, /<datalist id="sh-fonts">/);
+  assert.match(html, /<datalist id="sh-sizes">/);
+  assert.ok(!/<select class="sh-font"/.test(html));
+  assert.ok(!/<select class="sh-size"/.test(html));
+
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');
+  // A typed box commits when it is finished with. Patching per keystroke would apply size 1 on
+  // the way to 13 and repaint the grid for each character.
+  assert.match(source, /const setter = event\.target\.closest\('select\[data-sh-set\]'\);/);
+  assert.match(source, /const setter = event\.target\.closest\('input\[data-sh-set\]'\);/);
+  assert.match(source, /event\.key === 'Enter'.*applySetter\(setter\)/s, 'Enter applies without leaving the box');
+});
+
+test('a sheet opened as its own tab fills it', async () => {
+  // The centred card exists so the record form stays visible behind it. A tab opened FOR the
+  // sheet has nothing behind it worth keeping, and every pixel spent on the card is one the
+  // grid does not get.
+  const { overlay } = await open({ fullScreen: true });
+  assert.equal(overlay.className, 'sh-overlay sh-full');
+  const plain = await open();
+  assert.equal(plain.overlay.className, 'sh-overlay');
+
+  const { readFileSync } = await import('node:fs');
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const at = styles.indexOf('.sh-overlay.sh-full .sh-frame {');
+  assert.notEqual(at, -1);
+  const rule = styles.slice(at, styles.indexOf('}', at));
+  assert.match(rule, /width: 100%/);
+  assert.match(rule, /height: 100%/);
+  assert.match(rule, /max-width: none/, 'the frame is capped at 1400px otherwise');
+  assert.match(rule, /border-radius: 0/);
+
+  const source = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');
+  // Opened from the address bar means this tab IS the sheet, and Open would only make another.
+  assert.match(source, /const ownTab = here\.searchParams\.get\('sheet'\) === fieldId;/);
+  assert.match(source, /fullScreen: ownTab,/);
+  assert.match(source, /openHref: ownTab \? '' : here\.toString\(\),/);
+});
+
 test('a sheet can be opened in a window of its own', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');

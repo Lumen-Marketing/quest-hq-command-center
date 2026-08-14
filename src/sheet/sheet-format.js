@@ -119,7 +119,12 @@ export function normalizeStyle(input) {
   const bc = hex(input.bc); if (bc) out.bc = bc;
   if (ALIGN_H.includes(input.ha)) out.ha = input.ha;
   if (ALIGN_V.includes(input.va)) out.va = input.va;
-  if (FONTS.includes(input.ff)) out.ff = input.ff;
+  // Any font the machine has, not just the seven the picker suggests -- the box is typed into.
+  // Sanitised rather than checked against a list: this string is written into an inline
+  // font-family, so it may hold letters, digits, spaces and hyphens and nothing else. A quote or
+  // a semicolon in there would be a way to write arbitrary CSS into the page.
+  const font = String(input.ff || '').trim().slice(0, 40);
+  if (font && /^[A-Za-z0-9 -]+$/.test(font)) out.ff = font;
   const size = Number(input.fs);
   if (Number.isFinite(size) && size >= 6 && size <= 96) out.fs = Math.round(size);
   const bd = String(input.bd || '').toLowerCase().split('').filter((edge) => EDGES.includes(edge));
