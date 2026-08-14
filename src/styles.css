@@ -22407,7 +22407,10 @@ button {
 .wb-feed-empty i { font-size: 30px; color: var(--border-strong, #cdb595); }
 .wb-feed-empty p { margin: 0; max-width: 340px; }
 
-.wb-tile { border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); overflow: hidden; }
+/* container-type so a tile's contents can size themselves to the TILE rather than the window --
+   the clock needs it, since a tile is anywhere from a full column to half of one. Inline-size
+   only: block size is still content-driven, which is what wbLayoutTiles measures to pack them. */
+.wb-tile { border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); overflow: hidden; container-type: inline-size; }
 .wb-tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border, #e2d5bf); font-weight: 800; color: var(--text, #17130f); }
 /* The name gives way, the controls do not. Without min-width: 0 the flex item refuses to go
    below its content width, so a long tile name pushed Remove clean out of the header and there
@@ -33886,23 +33889,31 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 
 /* The Time & date tile. A clock is read at a glance from across a room, so the time carries
    the tile and everything else is quiet underneath it. */
-.wb-clock { display: grid; gap: 2px; padding: 14px 4px 10px; text-align: center; min-width: 0; }
+.wb-clock { display: grid; gap: 4px; padding: 20px 10px 18px; text-align: center; min-width: 0; }
 .wb-clock-time {
-  /* Not a flat 34px: a tile is half the side column, and "10:38:47 PM" with seconds on runs
-     straight out the side of it on a narrower window. Viewport-based rather than container-based
-     because nothing in this stylesheet establishes a container, and a cqw with no container
-     silently measures the viewport instead. */
-  font-size: clamp(21px, 2.4vw, 34px);
+  /* Sized to the TILE, not the window: a tile is a full column on one dashboard and half of one
+     on the next, and a flat size is either cramped in the first or overflowing in the second.
+     "10:38:47 PM" is eleven characters, which is what the 15cqw is scaled for. */
+  font-size: clamp(24px, 15cqw, 46px);
   font-weight: 300;
   letter-spacing: -.02em;
-  line-height: 1.05;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
   color: var(--text);
   min-width: 0;
   overflow-wrap: anywhere;
 }
-/* "Thursday, August 14, 2026" does not fit on one line in a tile, so it takes two. */
-.wb-clock-date { font-size: 12px; color: var(--muted); min-width: 0; text-wrap: balance; overflow-wrap: anywhere; }
+/* The date is half the point of a Time & date tile, so it gets a real size rather than a
+   footnote's, and it wraps rather than being cut off. */
+.wb-clock-date {
+  font-size: clamp(11.5px, 4.4cqw, 14px);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-muted, #72695d);
+  min-width: 0;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
 .wb-clock-zone {
   justify-self: center;
   margin-top: 5px;

@@ -125,13 +125,18 @@ test('the scrollbar shows up when the pointer is in the pane, and nothing moves 
   assert.match(declarations, /\.wb-dash-split > \.wb-dash-side:focus-within \{ scrollbar-color: var\(--border-strong/);
 });
 
-test('the clock is sized to its tile', () => {
-  // A tile is half the side column. "10:38:47 PM" at a flat 34px does not fit in one.
-  assert.match(rule('.wb-clock-time'), /font-size: clamp\(/);
+test('the clock is sized to its tile, not to the window', () => {
+  // A tile is a full column on one dashboard and half of one on the next, so a flat size is
+  // either cramped or overflowing. Viewport units were the first attempt and were wrong for the
+  // same reason: vw tracks the window, which is not what the clock sits in.
+  assert.match(rule('.wb-clock-time'), /font-size: clamp\(24px, 15cqw, 46px\)/);
+  assert.match(rule('.wb-clock-date'), /font-size: clamp\(/, 'the date is half the point of the tile');
   assert.match(rule('.wb-clock-date'), /overflow-wrap: anywhere/);
-  // cqw would measure the viewport here: nothing in this stylesheet declares a container.
-  assert.ok(!/container-type/.test(styles), 'no container context exists');
-  assert.ok(!/cqw/.test(rule('.wb-clock-time')), 'so the clock must not use container units');
+  // A cqw with no container silently measures the viewport, so the container has to exist.
+  assert.match(rule('.wb-tile {'), /container-type: inline-size/, 'the tile is the container');
+  // inline-size only: block size stays content-driven, which is what wbLayoutTiles measures to
+  // pack the masonry. `container-type: size` would collapse every tile.
+  assert.ok(!/container-type: size/.test(declarations), 'never the two-axis kind');
 });
 
 test('a comment box is never focused flush against the edge its menu opens into', () => {
