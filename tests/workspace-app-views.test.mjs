@@ -90,7 +90,9 @@ test('the calendar reuses the date maths rather than repeating it', () => {
 // --- wiring -------------------------------------------------------------------------------
 
 test('Dashboard and Calendar come before Items', () => {
-  assert.match(main, /const tabs = \['dashboard', 'calendar', 'items', /, 'the two overviews lead');
+  // The order an app starts with. It is a default now rather than a fixture: an app can hide
+  // tabs and reorder them from Settings, which is why this reads WB_ALL_TABS.
+  assert.match(main, /const WB_ALL_TABS = \['dashboard', 'calendar', 'items', /, 'the two overviews lead');
   assert.match(main, /dashboard: 'Dashboard', calendar: 'Calendar',/);
 });
 
@@ -210,8 +212,10 @@ test('the url carries no field when there is none to carry', () => {
 
 // --- where an app opens ----------------------------------------------------------------------
 
-test('opening an app lands on its dashboard', () => {
-  assert.match(main, /const tab = tabs\.includes\(route\.params\.get\('tab'\)\) \? route\.params\.get\('tab'\) : 'dashboard';/);
+test('opening an app lands on its first tab', () => {
+  // It used to land on 'dashboard' by name. An app is allowed to hide that one now, and a
+  // fallback onto a hidden tab strands whoever followed the link.
+  assert.match(main, /const tab = tabs\.includes\(route\.params\.get\('tab'\)\) \? route\.params\.get\('tab'\) : tabs\[0\];/);
 });
 
 test('every "open this app" link follows that default rather than naming a tab', () => {

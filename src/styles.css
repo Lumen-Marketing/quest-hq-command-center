@@ -33398,3 +33398,25 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   .wb-trash-row { flex-wrap: wrap; }
   .wb-trash-what { flex: 1 1 100%; }
 }
+
+/* Choosing which tabs an app shows, and in what order. */
+.wb-tab-list { display: grid; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.wb-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.wb-tab-list .wb-tab-row:last-child { border-bottom: 0; }
+.wb-tab-show { display: flex; align-items: center; gap: 8px; margin-right: auto; font-size: 13px; cursor: pointer; }
+/* Settings sits below the list and cannot be moved or hidden -- it is the way back here. */
+.wb-tab-fixed {
+  margin-top: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  opacity: .75;
+}
+.wb-tab-fixed .wb-tab-show { cursor: default; }

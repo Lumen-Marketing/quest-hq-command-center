@@ -13419,6 +13419,8 @@ function normalizeWorkspaceBuilderDoc(doc) {
         ...(Array.isArray(app.cardFields) ? { cardFields: app.cardFields.filter((id) => typeof id === 'string') } : {}),
         fields: Array.isArray(app.fields) ? app.fields.map((field) => ({ id: field.id || wbUid(), label: field.label || 'Field', type: WB_FIELD_TYPES[field.type] ? field.type : 'text', required: !!field.required, hidden: !!field.hidden, config: sanitizeColorConfig(field.config && typeof field.config === 'object' ? field.config : {}, safeHexColor(app.color, WB_PALETTE[1])) })) : [],
         items: Array.isArray(app.items) ? app.items.map(normalizeWbItem) : [],
+        // Which tabs this app shows, and in what order. Absent means all of them.
+        ...(Array.isArray(app.tabs) ? { tabs: app.tabs.filter((tab) => typeof tab === 'string') } : {}),
         // Deleted records, kept so a misclick is recoverable. Same shape plus when it went.
         trash: Array.isArray(app.trash) ? app.trash.map((item) => ({ ...normalizeWbItem(item), deletedAt: item.deletedAt || new Date().toISOString(), deletedBy: item.deletedBy || '' })) : [],
         automations: Array.isArray(app.automations) ? app.automations.map((auto) => ({ id: auto.id || wbUid(), name: auto.name || 'Automation', enabled: auto.enabled !== false, trigger: auto.trigger && typeof auto.trigger === 'object' ? auto.trigger : { event: 'created' }, actions: Array.isArray(auto.actions) ? auto.actions : [] })) : [],
@@ -14929,8 +14931,8 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   const canManage = can('workspaces.manage', companyId);
   // Dashboard and Calendar lead: they answer "how is this app doing" and "what is coming",
   // which you want before you start reading rows.
-  const tabs = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'trash', 'settings'];
-  const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'dashboard';
+  const tabs = wbAppTabs(app);
+  const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : tabs[0];
   const tabPath = (next) => appHref(companyPath('workspaces', { app_id: app.id, tab: next }, companyId));
   let headBtn = '';
   // Print/Export are read-only and available to all roles; Import writes data.
@@ -17544,6 +17546,19 @@ function wbInstallTargetBody(companyId, workspace, app, chosenCompanyId) {
       ` : ''}`;
 }
 
+// The tabs an app shows, in the order it shows them.
+//
+// "I can hide it in the settings and select only what to display, or rearrange its order."
+// An app that has never been told otherwise shows all of them, in the order they were built.
+// Settings is always last and never hidden: it is the only way back to this setting, and a
+// workspace that has hidden the door is one somebody has to be dug out of.
+const WB_ALL_TABS = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'trash', 'settings'];
+function wbAppTabs(app) {
+  const chosen = Array.isArray(app?.tabs) ? app.tabs.filter((tab) => WB_ALL_TABS.includes(tab)) : null;
+  if (!chosen) return WB_ALL_TABS;
+  return [...new Set([...chosen.filter((tab) => tab !== 'settings'), 'settings'])];
+}
+
 // ---- the app's recycle bin ---------------------------------------------------------------
 // Deleting a record moves it here rather than dropping it. Body in ./workspace/recycle-bin.js.
 let recycleBinModule = null;
@@ -17585,7 +17600,7 @@ function loadAppSettings() {
   if (!appSettingsPending) {
     appSettingsPending = import('./workspace/app-settings.js').then((mod) => {
       appSettingsModule = mod.createAppSettings({
-        h, state, can, wbDoc, singularize, addRecordLabel, wbAppIconGrid,
+        h, state, can, wbDoc, singularize, addRecordLabel, wbAppIconGrid, wbAppTabs, WB_ALL_TABS,
         wbInstallToWorkspaceField, wbCollectionsSettings, WB_PALETTE,
       });
       return appSettingsModule;
@@ -19395,6 +19410,12 @@ function wbSaveAppSettings(companyId, workspaceId, appId) {
   app.description = (document.getElementById('wbSetDesc')?.value || '').trim();
   app.type = (document.getElementById('wbSetType')?.value || '').trim();
   app.recordName = (document.getElementById('wbSetRecordName')?.value || '').trim();
+  // The tab strip: which tabs, in which order. Read off the list in the order it is drawn, so
+  // moving a row and ticking a box are the same save.
+  const rows = [...document.querySelectorAll('[data-wb-tab-row]')];
+  if (rows.length) {
+    app.tabs = rows.filter((row) => row.querySelector('input[type=checkbox]')?.checked).map((row) => row.dataset.wbTabRow);
+  }
   const icon = document.querySelector('#wbSetIcons .wb-emoji-opt.sel'); if (icon) app.icon = icon.dataset.icon;
   const color = document.querySelector('#wbSetColors .wb-swatch.sel'); if (color) app.color = color.dataset.color;
   if (state.wbSettingsDraft) delete state.wbSettingsDraft[appId];
@@ -19901,6 +19922,12 @@ function mountWorkspaceBuilder() {
       state.wbSettingsDraft[appId] = { ...(state.wbSettingsDraft[appId] || {}), [el.dataset.wbSetting]: el.value };
     }, 'oninput');
     bind('[data-save-app]', () => wbSaveAppSettings(companyId, workspaceId, appId));
+    bind('[data-wb-tab-move]', (el) => {
+      const row = el.closest('[data-wb-tab-row]');
+      const near = el.dataset.wbTabMove === 'up' ? row?.previousElementSibling : row?.nextElementSibling;
+      if (!row || !near) return;
+      row.parentNode.insertBefore(el.dataset.wbTabMove === 'up' ? row : near, el.dataset.wbTabMove === 'up' ? near : row);
+    });
     bind('[data-del-app]', () => { const { app } = wbFind(companyId, workspaceId, appId); if (app) openWbDeleteApp(companyId, workspaceId, app); });
     bind('[data-add-auto]', () => openWbAutoModal(companyId, workspaceId, appId, ''));
     bind('[data-edit-auto]', (el) => openWbAutoModal(companyId, workspaceId, appId, el.dataset.editAuto));

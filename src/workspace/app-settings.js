@@ -8,7 +8,7 @@
 
 export function createAppSettings(ctx) {
   const {
-    h, state, can, wbDoc, singularize, addRecordLabel, wbAppIconGrid,
+    h, state, can, wbDoc, singularize, addRecordLabel, wbAppIconGrid, wbAppTabs, WB_ALL_TABS,
     wbInstallToWorkspaceField, wbCollectionsSettings, WB_PALETTE,
   } = ctx;
 
@@ -46,6 +46,7 @@ export function createAppSettings(ctx) {
         <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — its fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'}, ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'}, and how it is arranged: card layout, sub-item lists, record layout, dashboard and saved views. Back it up, or install it into another workspace.</div>
         <div class="wb-settings-actions" style="margin-top:10px"><button class="btn" data-wb-download-app><i class="ti ti-download"></i>Download app</button></div>
       </div>
+      ${canManage ? tabsField(app) : ''}
       ${canManage ? wbInstallToWorkspaceField(companyId, workspace, app) : ''}
       <div class="wb-field"><label>Quest App Market</label>
         <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.' : 'Share this app so anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.'}</div>
@@ -54,6 +55,51 @@ export function createAppSettings(ctx) {
       ${canManage ? `<div class="wb-settings-actions"><button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save changes</button><button class="btn danger" data-del-app><i class="ti ti-trash"></i>Delete app</button></div>` : ''}
     </div>
     ${wbCollectionsSettings(companyId, app, canManage)}`;
+  }
+
+  // Which tabs this app shows, and in what order.
+  //
+  // Checkboxes and up/down rather than drag-and-drop: eight rows do not need a drop zone, and
+  // arrows work on a phone where dragging a list inside a scrolling page fights the scroll.
+  // The save reads the rows in the order they are drawn, so moving one and ticking one are the
+  // same action.
+  //
+  // Settings itself is listed but cannot be moved or hidden. It is the only way back to this
+  // setting, and an app that has hidden the door is one somebody has to be dug out of.
+  const TAB_NAMES = {
+    dashboard: 'Dashboard',
+    calendar: 'Calendar',
+    items: 'Items',
+    fields: 'Fields',
+    reports: 'Reports',
+    automations: 'Automations',
+    trash: 'Recycle bin',
+    settings: 'Settings',
+  };
+
+  function tabsField(app) {
+    const showing = wbAppTabs(app);
+    // The ones it shows, in its own order, then the ones it does not, so nothing is lost.
+    const ordered = [...showing.filter((tab) => tab !== 'settings'),
+      ...WB_ALL_TABS.filter((tab) => tab !== 'settings' && !showing.includes(tab))];
+    const row = (tab) => `
+      <div class="wb-tab-row" data-wb-tab-row="${h(tab)}">
+        <label class="wb-tab-show">
+          <input type="checkbox" ${showing.includes(tab) ? 'checked' : ''} aria-label="Show ${h(TAB_NAMES[tab])}">
+          <span>${h(TAB_NAMES[tab])}</span>
+        </label>
+        <button type="button" class="wb-icon-btn" data-wb-tab-move="up" title="Move up" aria-label="Move ${h(TAB_NAMES[tab])} up"><i class="ti ti-chevron-up"></i></button>
+        <button type="button" class="wb-icon-btn" data-wb-tab-move="down" title="Move down" aria-label="Move ${h(TAB_NAMES[tab])} down"><i class="ti ti-chevron-down"></i></button>
+      </div>`;
+    return `
+      <div class="wb-field"><label>Tabs</label>
+        <div class="wb-tab-list">${ordered.map(row).join('')}</div>
+        <div class="wb-tab-row wb-tab-fixed" data-wb-tab-row="settings">
+          <label class="wb-tab-show"><input type="checkbox" checked disabled aria-label="Settings is always shown"><span>Settings</span></label>
+          <span class="wb-sub">Always last</span>
+        </div>
+        <div class="wb-sub">Untick a tab to hide it, and use the arrows to put them in the order you want. Hiding a tab hides the tab, not the data — Save changes to apply it.</div>
+      </div>`;
   }
 
   return { wbViewAppSettings };

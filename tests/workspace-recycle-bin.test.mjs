@@ -120,7 +120,9 @@ test('old records are reported, never swept', () => {
 // ---- the tab, and the way in --------------------------------------------------------------
 
 test('the bin is a tab between Automations and Settings', () => {
-  const tabs = main.match(/const tabs = \[([^\]]*)\]/)[1].split(',').map((t) => t.trim().replace(/'/g, ''));
+  // The default order. An app can hide and reorder its tabs from Settings; this is what it
+  // starts with.
+  const tabs = main.match(/const WB_ALL_TABS = \[([^\]]*)\]/)[1].split(',').map((t) => t.trim().replace(/'/g, ''));
   assert.deepEqual(tabs.slice(-3), ['automations', 'trash', 'settings'], 'exactly where it was asked for');
   assert.match(main, /trash: `Recycle bin\$\{\(app\.trash \|\| \[\]\)\.length \? ` <b>\$\{app\.trash\.length\}<\/b>` : ''\}`/);
 });
