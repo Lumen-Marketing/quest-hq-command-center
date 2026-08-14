@@ -5,7 +5,9 @@
 // pure; this is the part that writes -- into the target doc, which may belong to another
 // company, so every step checks it is allowed before it changes anything.
 
-import { fieldToCreate, planPush, translateValue } from './button-field.js';
+import {
+  conditionMet, fieldToCreate, planPush, translateValue,
+} from './button-field.js';
 
 export function createButtonPush(ctx) {
   const {
@@ -140,6 +142,17 @@ export function createButtonPush(ctx) {
     root.querySelectorAll('[data-wb-press]').forEach((button) => {
       // A button with no destination stays disabled whatever the record says.
       if (button.dataset.wbNoTarget === '1') return;
+      // A button in the LIST is judged against its own record's stored values, and reads its
+      // rules straight off the field. One on a FORM is judged against the form, so changing a
+      // stage lights it up before anything is saved.
+      const row = seatOf(button.dataset.wbPressCtx);
+      if (row) {
+        const field = (row.app.fields || []).find((item) => item.id === button.dataset.wbPress);
+        const ready = !!field?.config?.targetApp;
+        button.disabled = !(ready && conditionMet(field, row.item, row.app));
+        button.title = ready ? '' : 'This button has no destination set yet.';
+        return;
+      }
       let rules = [];
       try { rules = JSON.parse(button.dataset.wbWhen || '[]'); } catch { rules = []; }
       const scope = button.closest('form, .wb-modal, .wb-record-page') || root;
@@ -157,6 +170,28 @@ export function createButtonPush(ctx) {
    * and the field reader, so it lives beside the push rather than in main.js, which would pay
    * for it in every session that never presses a button.
    */
+  /** The row a table button belongs to: "companyId|workspaceId|appId|itemId". */
+  function seatOf(seat) {
+    const [companyId, workspaceId, appId, itemId] = String(seat || '').split('|');
+    if (!itemId) return null;
+    const { app } = wbFind(canonicalCompanyId(companyId), workspaceId, appId);
+    const item = (app?.items || []).find((row) => row.id === itemId);
+    return app && item ? { companyId: canonicalCompanyId(companyId), app, item } : null;
+  }
+
+  /**
+   * Press a button, from a row in the list or from the open record.
+   *
+   * A row carries its own seat, because the list shows many records and the button has to act
+   * on the one it is sitting in rather than on whatever happens to be open.
+   */
+  function press(fieldId, seat) {
+    const row = seatOf(seat);
+    if (!row) return pressFromForm(fieldId);
+    const field = (row.app.fields || []).find((item) => item.id === fieldId);
+    return field ? pressButton(row.companyId, row.app, field, row.item) : false;
+  }
+
   function pressFromForm(fieldId) {
     const modal = state.builderModal;
     const companyId = canonicalCompanyId(modal?.companyId || activeCompanyId());
@@ -172,6 +207,6 @@ export function createButtonPush(ctx) {
   }
 
   return {
-    pressButton, pressFromForm, resolveTarget, syncButtons,
+    press, pressButton, pressFromForm, resolveTarget, syncButtons,
   };
 }

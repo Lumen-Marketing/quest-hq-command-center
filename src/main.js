@@ -16129,6 +16129,17 @@ function wbFmtVal(ctx, field, value) {
     }
     return on ? '<span class="wb-status-pill wb-yes"><i class="ti ti-check"></i>Yes</span>' : '<span class="wb-cell-empty">No</span>';
   }
+  // A button is a control, so it renders in the table too and is pressed straight from a row
+  // rather than only from the open record. It arrives disabled and is switched on by the
+  // module that knows the rules -- judging the condition here would pull the whole rule engine
+  // into the entry bundle for a field most apps do not have.
+  if (field.type === 'button') {
+    if (!ctx.item) return '<span class="wb-cell-empty">—</span>';
+    // Only where it sits. The rules and the destination are read back off the record itself by
+    // the module that judges them, so none of that has to be spelled into every row.
+    const seat = [ctx.companyId, ctx.workspace?.id || '', ctx.app?.id || '', ctx.item.id].join('|');
+    return `<button type="button" class="btn btn-sm wb-push-btn" data-wb-press="${h(field.id)}" data-wb-press-ctx="${h(seat)}" disabled><i class="ti ti-click"></i>${h(String(field.config.text || '').trim() || field.label)}</button>`;
+  }
   // Calculation fields have no stored value — they compute from other fields —
   // so they must render before the empty-value guard below (which would else swallow them).
   const meta = WB_FIELD_TYPES[field.type];
@@ -19468,7 +19479,7 @@ function mountWorkspaceBuilder() {
   // The record PAGE renders the same url-field markup the record modal does, and its Copy and
   // QR buttons were never bound -- they drew fine and did nothing. Bound against the document
   // here because this runs after every workspace paint, modal or not.
-  if (state.route?.section === 'workspaces') { wbBindUrlControls(document); wbBindRelationshipPickers(document); }
+  if (state.route?.section === 'workspaces') { wbBindUrlControls(document); wbBindRelationshipPickers(document); wbSyncButtons(document); }
   if (!state.wbTopbarResizeBound) { state.wbTopbarResizeBound = true; window.addEventListener('resize', () => { if (state.route?.section === 'workspaces') { wbMountTopbar(); wbLayoutTiles(); } }); }
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-wb-topbar-scroll]', (el) => wbScrollTopbar(Number(el.dataset.wbTopbarScroll) || 1));
@@ -26731,7 +26742,13 @@ function onDocumentClick(event) {
   if (!event.target.closest('.job-type-combobox')) closeJobTypeMenus();
   if (event.target.closest('[data-takeoff-action]') && takeoffEvent(event, 'click')) return;
   const pressed = event.target.closest('[data-wb-press]');
-  if (pressed && !pressed.disabled) { wbPressButton(pressed.dataset.wbPress); return; }
+  if (pressed && !pressed.disabled) {
+    // A row's button must not also open the record it sits in.
+    event.preventDefault();
+    event.stopPropagation();
+    wbPressButton(pressed.dataset.wbPress, pressed.dataset.wbPressCtx || '');
+    return;
+  }
 
   // Checked before the option itself: the X sits beside the option, so a click that lands on
   // it must prune the list rather than pick the value it is attached to.
@@ -33821,9 +33838,9 @@ function wbSyncButtons(root) {
     .catch((error) => console.error('button field failed to load', error));
 }
 
-function wbPressButton(fieldId) {
+function wbPressButton(fieldId, seat) {
   loadButtonPush()
-    .then((mod) => mod.pressFromForm(fieldId))
+    .then((mod) => mod.press(fieldId, seat))
     .catch((error) => showToast(error.message || 'That record could not be sent.', 'local', 'Workspaces'));
 }
 

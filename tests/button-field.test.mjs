@@ -331,3 +331,80 @@ test('Button is in the palette, and not buried at the bottom of it', () => {
   const font = readFileSync(join(root, 'src', 'tabler-icons.css'), 'utf8');
   assert.ok(font.includes(`.${icon}:`), `${icon} is not in the bundled icon font`);
 });
+
+// ---- in the list, not only on the record ---------------------------------------------
+
+const listSetup = () => {
+  const app1 = APP1();
+  const app2 = APP2();
+  app1.fields[2].config = { targetCompany: 'co', targetApp: 'app2', when: [{ field: 'f-name', op: 'eq', value: 'John Doe' }] };
+  app1.items.push({ id: 'i2', values: { 'f-name': 'Someone Else', 'f-age': 40 } });
+  const toasts = [];
+  const push = createButtonPush({
+    can: () => true,
+    wbDoc: () => ({ workspaces: [{ id: 'ws', apps: [app1, app2] }] }),
+    wbSave: async () => {},
+    wbUid: () => `u-${++seq}`,
+    showToast: (message) => toasts.push(message),
+    render: () => {},
+    canonicalCompanyId: (id) => id,
+    activeSession: () => ({ profile: { id: 'me' } }),
+    state: {},
+    wbFind: () => ({ app: app1 }),
+    wbReadFieldInput: () => undefined,
+    activeCompanyId: () => 'co',
+  });
+  return { push, app1, app2, toasts };
+};
+
+const rowButton = (itemId) => ({
+  dataset: { wbPress: 'f-btn', wbPressCtx: `co|ws|app1|${itemId}` },
+  disabled: false,
+  title: '',
+  closest: () => null,
+});
+
+test('a row in the list presses on its OWN record, not on whatever is open', () => {
+  // The list shows many records; a button in one of them must act on the one it sits in.
+  const { push, app1, app2 } = listSetup();
+  const seat = `co|ws|app1|${app1.items[1].id}`;
+  push.press('f-btn', seat);
+  const arrived = app2.items[0];
+  const name = arrived.values[app2.fields.find((field) => field.label === 'Name').id];
+  assert.equal(name, 'Someone Else', 'the second row, which is the one that was pressed');
+  assert.equal(arrived.pushedFrom.itemId, 'i2');
+});
+
+test('each row is judged on its own values', () => {
+  const { push } = listSetup();
+  const first = rowButton('i1');
+  const second = rowButton('i2');
+  const root = { querySelectorAll: () => [first, second] };
+  push.syncButtons(root);
+  assert.equal(first.disabled, false, 'John Doe matches the condition');
+  assert.equal(second.disabled, true, 'Someone Else does not');
+});
+
+test('a row button with no destination stays disabled and says why', () => {
+  const { push, app1 } = listSetup();
+  app1.fields[2].config.targetApp = '';
+  const button = rowButton('i1');
+  push.syncButtons({ querySelectorAll: () => [button] });
+  assert.equal(button.disabled, true);
+  assert.match(button.title, /no destination/);
+});
+
+test('a seat pointing at a record that is gone falls back rather than throwing', () => {
+  const { push } = listSetup();
+  assert.doesNotThrow(() => push.syncButtons({ querySelectorAll: () => [rowButton('deleted')] }));
+});
+
+test('main.js renders the button in the table and stops the row opening', () => {
+  const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+  // The cell has to render before the empty-value guard: a button holds no value at all.
+  const at = main.indexOf("if (field.type === 'button') {");
+  assert.ok(at !== -1 && at < main.indexOf("if (value === undefined || value === null || value === ''"));
+  assert.match(main, /data-wb-press-ctx="\$\{h\(seat\)\}"/);
+  // Pressing a button inside a row must not also open the record that row points at.
+  assert.match(main, /event\.stopPropagation\(\);\s*\r?\n\s*wbPressButton/);
+});
