@@ -4,15 +4,21 @@ import test from 'node:test';
 import { renderBoard, renderStageDeletePrompt, renderStageManager } from '../src/workspace/board-view.js';
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
-  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
+  + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8')
+  // The Items tab is fetched on demand now; what it renders is unchanged.
+  + readFileSync(new URL('../src/workspace/items-view.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 // The Automations tab and its rule editor are fetched on demand now, so the stage-trigger
 // UI is read from its own module rather than from main.js.
 const automations = readFileSync(new URL('../src/workspace/automations-ui.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The LAST definition, and a closing brace at any indentation. A tab that has been moved into
+// its own module leaves a three-line loader of the same name behind in main.js, and the first
+// match is that wrapper -- which slices to ";" and passes nothing.
 const fn = (name) => {
-  const at = main.indexOf(`function ${name}(`);
+  const at = main.lastIndexOf(`function ${name}(`);
   assert.notEqual(at, -1, `${name} should exist`);
-  return main.slice(at, main.indexOf('\n}\n', at));
+  const end = main.slice(at).search(/\n\s{0,2}\}\n/);
+  return main.slice(at, end === -1 ? undefined : at + end);
 };
 
 const cols = [

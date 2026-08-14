@@ -5,7 +5,10 @@ import test from 'node:test';
 // Quick filter chips on an app's items list: one chip per value of a field the user picks,
 // with a live count, the way the Jobs trade spine reads.
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The Items tab, where the chips and the deck stage are drawn, is its own fetched-on-demand
+// module now. The behaviour pinned below has not moved, only the file it lives in.
+const main = (readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/workspace/items-view.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const slice = (name) => main.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`))?.[0] || '';
 

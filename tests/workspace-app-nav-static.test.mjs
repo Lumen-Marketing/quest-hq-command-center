@@ -8,7 +8,10 @@ import { boardColumns, pipelineField } from '../src/workspace/pipeline-core.js';
 // tested; what is checked here is that the deck reuses it rather than counting again, and
 // that navigation stays read-only.
 
-const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The Items tab, where the deck stage narrows the rows, is its own fetched-on-demand module
+// now. The behaviour pinned below has not moved, only the file it lives in.
+const main = (readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../src/workspace/items-view.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const slice = (name) => main.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`))?.[0] || '';
 
 test('apps sit directly beneath the Workspaces row that built them', () => {
