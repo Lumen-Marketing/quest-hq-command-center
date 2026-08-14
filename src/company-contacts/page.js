@@ -8,6 +8,10 @@
 // records can be worked from this page it becomes a fifth workspace with no owner.
 
 import { contactUsage, usageBalance, usageSummary } from './model.js';
+import {
+  CALENDAR_VIEWS, calendarSpan, contactActivity, contactDates, datesByDay, dayKey, entriesIn,
+  shiftAnchor,
+} from './timeline.js';
 import { renderSearchCombobox } from '../ui/combobox-menu.js';
 
 export function createCompanyContactsPage(ctx) {
@@ -352,6 +356,106 @@ export function createCompanyContactsPage(ctx) {
   // record: the stage the app gave it, how long it is booked for, its dates, and when somebody
   // last touched it. Every part is optional -- an app with no status field contributes no
   // stage rather than an empty slot.
+
+  // ---- what has happened, and what is coming ----------------------------------------------
+
+  /** A link to the record an entry belongs to, where the workspace has a route. */
+  function entryHref(companyId, entry) {
+    return entry.workspaceRouteId
+      ? appHref(companyPath('workspaces', {
+        workspace: entry.workspaceRouteId, app_id: entry.appId, tab: 'items', item_id: entry.itemId,
+      }, companyId))
+      : '';
+  }
+
+  /**
+   * Everything logged against a record this contact is named on.
+   *
+   * The workspace feed already records what happened to each record; this is that feed read
+   * through one person, which is the question somebody on a contact card is actually asking.
+   */
+  function activityPanel(companyId, doc, contact) {
+    const entries = contactActivity(doc, contact.id, { nameValue: contact.name });
+    return `
+      <div class="cc-panel">
+        <h3><i class="ti ti-activity"></i>Recent updates</h3>
+        ${entries.length ? `<div class="cc-feed">${entries.map((entry) => {
+    const href = entryHref(companyId, entry);
+    const line = `<span class="cc-feed-ic"><i class="ti ${h(entry.icon)}"></i></span>
+            <span class="cc-feed-main">
+              <span class="cc-feed-text">${entry.text}</span>
+              <small>${h(entry.appName)}${entry.actor ? ` · ${h(entry.actor)}` : ''} · ${h(timeAgo(entry.at))}</small>
+            </span>`;
+    return href
+      ? `<a class="cc-feed-row" href="${h(href)}" data-router>${line}</a>`
+      : `<div class="cc-feed-row">${line}</div>`;
+  }).join('')}</div>`
+    : '<p class="cc-empty">Nothing has happened on their records yet. Edits, stage changes and new records all show up here.</p>'}
+      </div>`;
+  }
+
+  /**
+   * Their diary: every dated field on every record that names them.
+   *
+   * Only fields somebody CHOSE a day in. Created and Last modified are stamps the system
+   * writes, and a calendar full of "this was edited" is a calendar nobody opens -- those are in
+   * Recent updates, where they belong.
+   */
+  function calendarPanel(companyId, doc, contact) {
+    const view = CALENDAR_VIEWS.includes(state.ccCalView) ? state.ccCalView : 'month';
+    const anchor = state.ccCalAt ? new Date(state.ccCalAt) : new Date();
+    const span = calendarSpan(view, anchor);
+    const byDay = datesByDay(contactDates(doc, contact.id, { nameValue: contact.name }));
+    const today = dayKey(new Date());
+
+    const cell = (item) => {
+      const entries = entriesIn(item, byDay);
+      const key = dayKey(item.date);
+      const label = item.month === undefined
+        ? String(item.date.getDate())
+        : item.date.toLocaleDateString([], { month: 'short' });
+      const classes = [
+        'cc-cal-cell',
+        item.outside ? 'out' : '',
+        key === today && item.month === undefined ? 'today' : '',
+        entries.length ? 'has' : '',
+      ].filter(Boolean).join(' ');
+      // Day and week show what is on: the cells are big enough to read, and that is the whole
+      // point of looking at a day. Month and year show that something is there.
+      const detail = ['day', 'week'].includes(view)
+        ? entries.map((entry) => {
+          const href = entryHref(companyId, entry);
+          const body = `<b>${h(entry.title)}</b><small>${h(entry.label)} · ${h(entry.appName)}</small>`;
+          return href ? `<a class="cc-cal-item" href="${h(href)}" data-router>${body}</a>` : `<span class="cc-cal-item">${body}</span>`;
+        }).join('')
+        : entries.length ? `<span class="cc-cal-dot">${entries.length}</span>` : '';
+      return `<div class="${classes}" title="${h(entries.map((entry) => `${entry.title} — ${entry.label}`).join('\n'))}">
+        <span class="cc-cal-num">${h(label)}</span>${detail}
+      </div>`;
+    };
+
+    const weekdays = view === 'month' || view === 'week'
+      ? `<div class="cc-cal-days">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => `<span>${day}</span>`).join('')}</div>`
+      : '';
+
+    return `
+      <div class="cc-panel cc-cal-panel">
+        <h3><i class="ti ti-calendar"></i>Calendar</h3>
+        <div class="cc-cal-bar">
+          <button class="wb-icon-btn" type="button" data-cc-cal-step="-1" aria-label="Previous"><i class="ti ti-chevron-left"></i></button>
+          <b class="cc-cal-title">${h(span.title)}</b>
+          <button class="wb-icon-btn" type="button" data-cc-cal-step="1" aria-label="Next"><i class="ti ti-chevron-right"></i></button>
+          <button class="btn btn-sm" type="button" data-cc-cal-today>Today</button>
+          <div class="cc-cal-views">
+            ${CALENDAR_VIEWS.map((name) => `<button class="cc-cal-view ${name === view ? 'on' : ''}" type="button" data-cc-cal-view="${name}">${name[0].toUpperCase()}${name.slice(1)}</button>`).join('')}
+          </div>
+        </div>
+        ${weekdays}
+        <div class="cc-cal-grid cc-cal-${h(view)}">${span.cells.map(cell).join('')}</div>
+        ${byDay.size ? '' : '<p class="cc-empty">No dates yet. A date field on any record that names them shows up here.</p>'}
+      </div>`;
+  }
+
   function useRow(companyId, use, item) {
     const facts = item.facts || {};
     const meta = [];
@@ -472,6 +576,8 @@ export function createCompanyContactsPage(ctx) {
               <p class="cc-notes">${h(companyContactValue(contact, field))}</p>`).join('')
               : '<p class="cc-empty">Nothing written down yet.</p>'}
           </div>
+          ${activityPanel(companyId, doc, contact)}
+          ${calendarPanel(companyId, doc, contact)}
         </div>
 
         <div class="cc-card-foot">
@@ -827,7 +933,13 @@ export function createCompanyContactsPage(ctx) {
       </div>`;
   }
 
+  /** One step of the calendar, in whatever the current view counts in. */
+  function shiftContactCalendar(view, at, direction) {
+    return shiftAnchor(CALENDAR_VIEWS.includes(view) ? view : 'month', at || new Date(), direction).toISOString();
+  }
+
   return {
+    shiftContactCalendar,
     renderCompanyContactsPage, renderCompanyContactEditor, saveCompanyContactForm,
     deleteCompanyContact, createCompanyContactNamed, createMissingContacts,
     renderCompanyContactFieldsEditor,

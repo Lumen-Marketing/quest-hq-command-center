@@ -19488,6 +19488,15 @@ function mountCompanyContactFields() {
   bind('[data-hide-field]', (el) => page.toggleCompanyContactFieldHidden(bare(el.dataset.hideField)));
   bind('[data-del-field]', (el) => page.removeCompanyContactField(bare(el.dataset.delField)));
 
+  // The contact card's calendar. State only -- which view, and which week or month it is
+  // looking at -- so the card redraws from the same records rather than fetching anything.
+  bind('[data-cc-cal-view]', (el) => { state.ccCalView = el.dataset.ccCalView; render(); });
+  bind('[data-cc-cal-step]', (el) => {
+    state.ccCalAt = page.shiftContactCalendar(state.ccCalView, state.ccCalAt, Number(el.dataset.ccCalStep));
+    render();
+  });
+  bind('[data-cc-cal-today]', () => { state.ccCalAt = ''; render(); });
+
   bind('[data-cc-add-option]', (el) => page.addCompanyContactFieldOption(el.dataset.fieldId));
   bind('[data-wb-del-option]', (el) => page.removeDraftFieldOption(
     el.closest('[data-cc-field-config]')?.dataset.fieldId, el.closest('.wb-opt-item')?.dataset.oid,

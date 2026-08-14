@@ -146,6 +146,16 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - `position` outranks `is_default` in `workspaceSort`. The default used to be pinned first unconditionally, which would have left one row that refuses to move.
 - Both features were paid for against the bundle budget by extracting `src/workspaces/rail-reorder.js` and `src/crm/location-picker-modal.js`. Entry JavaScript stayed under 360,448 gzip bytes.
 
+## 2026-08-14 A contact card carries their history and their diary
+
+- "Display the recent updates on a record where his contact is used all over the workspace so we can track it… it also has a calendar with the dates where his name is linked, with four views: year, month, week or day." Two panels under Notes on the Company Contacts card.
+- **Recent updates** is the workspace activity feed read through one person. `contactUsage` already knows every record naming them; an entry is kept only when its `itemId` is one of those records. Entries naming no record — somebody renamed an app — are dropped: this is a feed about a person, not everything that happened nearby. Newest first, capped at 12, each row linking to the record and labelled with the app, who did it, and how long ago.
+- **The calendar** shows fields somebody CHOSE a day in. Created and Last modified are excluded on purpose: a diary full of "this record was edited" is a diary nobody opens, and those already read better in the feed above.
+- Four views, one shape — a title, a span and cells — so the grid draws a year the way it draws a day. A **year is twelve month cells**, not 365 squares: a year of squares is a heat map, and the question being asked of it is which months have anything. A **month is 42 cells**, whole weeks, so the grid is rectangular and the neighbouring days are marked `outside` rather than left blank. **Weeks run Monday to Sunday.** Month and year show a count; **week and day show the entries themselves**, since the cells are big enough to read and that is the point of looking at a day.
+- `dayKey` is **local, not UTC**. A date field holds a day; reading it in UTC moves it across midnight for half the world, and a calendar that draws the wrong square is worse than no calendar.
+- `src/company-contacts/timeline.js` is pure — dates in, cells out, no DOM and no state — so a leap February is checked without a browser. `tests/company-contact-timeline.test.mjs` runs the model rather than matching the source: 18 tests covering the exclusions, the Monday start, the year boundary a naive month step gets wrong, and February in 2026 and 2028.
+- Verified rendered, not just green: the fixture's two entries on 20 Aug show as `2` in the month grid, roll up to `3` on August in the year grid, and list as titled rows in both week and day.
+
 ## 2026-08-14 Sales Pipeline and Jobs apps, from the reference flow
 
 - **`docs/apps/Sales Pipeline.questapp.json`** — 27 fields, 6 calculated. The Closer's stage of Prospecting → Underwriting → **Sales** → Production, built from `The reference/The flow.jpg`: **Estimate sent → Negotiating → Contract sent → Waiting to sign → Won**, plus **Lost**, which the flow does not draw but a pipeline needs — a dead deal parked in Negotiating for ever makes the board meaningless.

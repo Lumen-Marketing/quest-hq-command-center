@@ -33627,3 +33627,110 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   font-size: 10.5px;
   color: var(--muted);
 }
+
+/* ---- The contact card's feed and calendar ------------------------------------------------ */
+
+.cc-feed { display: grid; }
+.cc-feed-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+}
+.cc-feed-row:last-child { border-bottom: 0; }
+a.cc-feed-row:hover { background: var(--surface-2); }
+.cc-feed-ic {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+}
+.cc-feed-main { display: grid; gap: 1px; min-width: 0; }
+.cc-feed-text { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
+.cc-feed-main small { font-size: 11px; color: var(--muted); }
+
+.cc-cal-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.cc-cal-title { font-size: 13px; margin-right: auto; }
+.cc-cal-views { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; }
+.cc-cal-view {
+  border: 0;
+  background: none;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.cc-cal-view.on { background: var(--accent, #d4541f); color: #fff; }
+
+.cc-cal-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  margin-bottom: 3px;
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
+}
+.cc-cal-grid { display: grid; gap: 3px; }
+.cc-cal-month, .cc-cal-week { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cc-cal-year { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cc-cal-day { grid-template-columns: minmax(0, 1fr); }
+
+.cc-cal-cell {
+  min-height: 42px;
+  padding: 4px 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 11px;
+  display: grid;
+  gap: 2px;
+  align-content: start;
+}
+/* The days either side of a month belong to the neighbours, and read that way. */
+.cc-cal-cell.out { opacity: .38; }
+.cc-cal-cell.today { border-color: var(--accent, #d4541f); }
+.cc-cal-cell.has { background: var(--surface-2); }
+.cc-cal-num { font-weight: 600; color: var(--muted); }
+.cc-cal-cell.has .cc-cal-num { color: var(--text); }
+/* Month and year say THAT something is on; day and week say what. */
+.cc-cal-dot {
+  justify-self: start;
+  min-width: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent, #d4541f);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+.cc-cal-item {
+  display: grid;
+  gap: 1px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+}
+a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
+.cc-cal-item b { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-cal-item small { font-size: 10px; color: var(--muted); }
+.cc-cal-day .cc-cal-cell, .cc-cal-week .cc-cal-cell { min-height: 96px; }
+
+@media (max-width: 640px) {
+  .cc-cal-year { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cc-cal-cell { min-height: 36px; }
+}
