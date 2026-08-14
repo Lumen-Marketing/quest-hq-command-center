@@ -257,9 +257,16 @@ test('the sheet is written back only when the grid is closed', () => {
 test('printing prints the sheet, not the page around it', () => {
   const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
   assert.match(styles, /@media print/, 'the app had no print rules at all before this');
-  assert.match(styles, /body\.sh-printing > \*:not\(\.sh-overlay\) \{ display: none !important; \}/);
-  // The toolbar is for working, not for reading on paper.
-  assert.match(styles, /body\.sh-printing \.sh-tools/);
-  // Column letters repeat on every page, and a row never splits across two.
-  assert.match(styles, /body\.sh-printing \.sh-grid thead \{ display: table-header-group; \}/);
+  // Printing builds its own document and hides everything else. There must be exactly ONE rule
+  // deciding what survives: the first version kept the old `:not(.sh-overlay)` rule alongside
+  // the new `:not(.sh-print)` one, and between them they hid BOTH -- every page came out blank.
+  assert.match(styles, /body\.sh-printing > \*:not\(\.sh-print\) \{ display: none !important; \}/);
+  assert.ok(
+    !/body\.sh-printing > \*:not\(\.sh-overlay\)/.test(styles),
+    'two competing survivors cancel out and print a blank page',
+  );
+  assert.equal((styles.match(/body\.sh-printing > \*:not\(/g) || []).length, 1);
+  // What does print is the built document: the used range, its formatting, and a heading.
+  assert.match(styles, /body\.sh-printing \.sh-print \{ display: block/);
+  assert.match(styles, /\.sh-print-grid tr \{ break-inside: avoid; \}/);
 });

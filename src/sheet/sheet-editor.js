@@ -75,7 +75,7 @@ const tool = (action, name, title, extra = '', badge = '') =>
  * written until then: a spreadsheet somebody is halfway through is not a saved record, and the
  * form underneath still has its own Save.
  */
-export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false }) {
+export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false, openHref = '' }) {
   let sheet = normalizeSheetFull(read());
   let anchor = 'A1';
   let sel = rangeOf('A1', 'A1');
@@ -95,7 +95,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
             ${icon('ti-upload')}Import<input type="file" accept=".csv,.xlsx" data-sh-file hidden>
           </label>`}
           <button type="button" class="btn btn-sm" data-sh-export title="Download as an Excel workbook">${icon('ti-file-spreadsheet')}Excel</button>
-          <button type="button" class="btn btn-sm" data-sh-window title="Open this sheet in its own window">${icon('ti-external-link')}Open</button>
+          <button type="button" class="btn btn-sm" data-sh-window title="${openHref ? 'Open this sheet in a new tab, where it can be edited' : 'Open this sheet in its own window'}">${icon('ti-external-link')}Open</button>
           <button type="button" class="btn btn-sm" data-sh-print title="Print this sheet">${icon('ti-printer')}Print</button>
           <button type="button" class="btn btn-primary btn-sm" data-sh-done>${readOnly ? 'Close' : 'Done'}</button>
         </div>
@@ -719,7 +719,14 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
 
     if (event.target.closest('[data-sh-print]')) printSheet();
     if (event.target.closest('[data-sh-export]')) exportWorkbook();
-    if (event.target.closest('[data-sh-window]')) openInWindow();
+    if (event.target.closest('[data-sh-window]')) {
+      // A full tab of the app is the SAME editor with the whole window to work in, which is
+      // what somebody asking to "open it in a tab" wants. Only a saved record can be addressed
+      // by URL, so a sheet opened from a half-filled form falls back to its own window: a
+      // read-and-print copy rather than nothing.
+      if (openHref) window.open(openHref, '_blank');
+      else openInWindow();
+    }
     if (event.target.closest('[data-sh-done]')) close();
     if (event.target === overlay) close();
   });
@@ -937,9 +944,21 @@ export function openForRecord(fieldId, seat, { wbDoc, wbSave, render, can }) {
   const item = (app?.items || []).find((entry) => entry.id === itemId);
   if (!item) throw new Error('That record is no longer here. Reload and try again.');
   const field = (app.fields || []).find((entry) => entry.id === fieldId);
+  const here = new URL(window.location.href);
+  // Taken back off the address, so a refresh or a Back does not reopen the sheet. A no-op when
+  // this was an ordinary click on a row rather than a tab opened from one.
+  if (here.searchParams.has('sheet')) {
+    const clean = new URL(here);
+    clean.searchParams.delete('sheet');
+    clean.searchParams.delete('sheetctx');
+    window.history.replaceState({}, '', clean.toString());
+  }
+  here.searchParams.set('sheet', fieldId);
+  here.searchParams.set('sheetctx', seat);
   return openSheetEditor({
     title: field?.label || 'Sheet',
     readOnly: !can('workspaces.manage', companyId),
+    openHref: here.toString(),
     read: () => { try { return JSON.parse(item.values[fieldId] || '{}'); } catch { return {}; } },
     write: (sheet) => {
       item.values[fieldId] = JSON.stringify(sheet);

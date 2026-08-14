@@ -19613,6 +19613,14 @@ function mountWorkspaceBuilder() {
   // here because this runs after every workspace paint, modal or not.
   if (state.route?.section === 'workspaces') { wbBindUrlControls(document); wbBindRelationshipPickers(document); wbSyncButtons(document); }
   wbBindClocks();
+  // A sheet opened in its own tab: the URL says which record and which field, so the tab comes
+  // up on the full editor rather than a copy of it. Once only; the module takes the parameters
+  // back off the address so a refresh cannot reopen it.
+  if (state.route?.section === 'workspaces' && !state.wbSheetFromUrl) {
+    const field = state.route.params?.get('sheet');
+    const seat = state.route.params?.get('sheetctx');
+    if (field && seat) { state.wbSheetFromUrl = true; wbOpenSheetRow(field, seat); }
+  }
   if (!state.wbTopbarResizeBound) { state.wbTopbarResizeBound = true; window.addEventListener('resize', () => { if (state.route?.section === 'workspaces') { wbMountTopbar(); wbLayoutTiles(); } }); }
   if (state.route?.section === 'workspaces' && !state.builderModal) {
     bind('[data-wb-topbar-scroll]', (el) => wbScrollTopbar(Number(el.dataset.wbTopbarScroll) || 1));

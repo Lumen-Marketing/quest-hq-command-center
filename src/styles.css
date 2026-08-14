@@ -33827,38 +33827,6 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   .sh-formula { order: 3; flex-basis: 100%; }
 }
 
-/* Printing the sheet. The app had no print rules at all before this, so the whole page came
-   out -- sidebar, topbar and the record form behind the grid. */
-@media print {
-  body.sh-printing > *:not(.sh-overlay) { display: none !important; }
-  body.sh-printing .sh-overlay {
-    position: static;
-    background: none;
-    padding: 0;
-    display: block;
-  }
-  body.sh-printing .sh-frame {
-    width: auto;
-    height: auto;
-    border: 0;
-    box-shadow: none;
-    display: block;
-  }
-  /* The controls are for working, not for reading on paper. */
-  body.sh-printing .sh-tools,
-  body.sh-printing .sh-ribbon,
-  body.sh-printing .sh-fbar,
-  body.sh-printing .sh-help { display: none !important; }
-  /* Fills and cell lines are the point of formatting, so they print. */
-  body.sh-printing .sh-grid { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body.sh-printing .sh-scroll { overflow: visible; }
-  body.sh-printing .sh-grid { width: 100%; font-size: 10pt; }
-  body.sh-printing .sh-grid td.sel { outline: 0; }
-  /* Repeat the column letters on every page, and never split a row across two. */
-  body.sh-printing .sh-grid thead { display: table-header-group; }
-  body.sh-printing .sh-grid tr { break-inside: avoid; }
-}
-
 /* ── The sheet, printed as a document ──
    The editor is not what goes on the page. Printing the live grid took the row numbers, the
    column letters and whatever happened to be selected with it, which is how a print came out
