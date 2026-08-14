@@ -167,6 +167,13 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - `ROUNDUP(528 / 8)` is 66, not 67: 528/8 is 65.99999999999999 in binary floating point, and a naive `Math.ceil` buys an extra box of birdstop on every tile job. Values are nudged to 12 significant digits before rounding.
 - **Storage**: `underwriting_calculators` holds the company's templates; the measurements ride on `underwriting_cases.takeoff`, because the calculator prices every roof and each roof has its own report. **Use in the decision** pushes the takeoff's totals into the margin panel above rather than duplicating the arithmetic.
 
+## 2026-08-14 Saving a record with a contact field froze the tab
+
+- Every save of an App Builder record in an app with a **Company Contact field** re-submitted itself for ever. Two things combined: the guard asked `document.querySelector('[data-wb-cc-picker] [data-wb-cc-name]')`, which is true whenever the app HAS such a field rather than when a contact is still to be created; and `createMissingContacts` returns `true` whatever happens, on purpose, so a record whose contact could not be created still saves. `if (made) wbSubmitModal()` therefore always fired.
+- Guarded on the pending NAMES now (`wbPendingContactNames()`), re-entered at most once per set of them via `m.contactPass`. It terminates either way: the names are gone on the second pass if the contact was made, and unchanged if it could not be — which saves with the link empty rather than trying again. A different name typed later is a different key, so it gets its own attempt.
+- **Every test of this passed throughout**, including one asserting the exact `.then((made) => { if (made) wbSubmitModal(); })` line, with a comment claiming "the second pass finds nothing pending — which is what stops it looping". It never did. `tests/company-contact-save-loop.test.mjs` runs the loop and bounds the passes, and includes a test that the OLD guard does not terminate, so the harness is demonstrably sensitive to the bug it was written for.
+- Also corrected in the same pass: reading `company_contacts` without `deleted_at is null` shows recycle-bin rows. It made one contact look like two duplicates and produced a warning to the user that was simply wrong.
+
 ## 2026-08-14 A Company Contact field fills the record in
 
 - "When you select an item on it, it fetches all of the data of that contact with the same field to automatically fill other fields on this app." The copy-across the relationship field already did, sourced from the directory instead of another app.

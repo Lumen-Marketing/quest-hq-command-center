@@ -136,12 +136,21 @@ test('two pending names are created one after another, not in a race', async () 
 });
 
 test('save creates the missing ones first, then comes back through', () => {
-  // The form is untouched in between, so nothing typed into it is lost, and the second pass
-  // finds nothing pending — which is what stops it looping.
-  // A cheap sync guard stays in the entry bundle: an app with no contact picker never fetches
-  // the module. The scan for unlinked names moved into it, beside the write path.
-  assert.match(main, /if \(document\.querySelector\('\[data-wb-cc-picker\] \[data-wb-cc-name\]'\)\) \{/);
-  assert.match(main, /wbCreateMissingContacts\(companyId\)\s*\r?\n\s*\.then\(\(made\) => \{ if \(made\) wbSubmitModal\(\); \}\)/);
+  // The form is untouched in between, so nothing typed into it is lost.
+  //
+  // This test used to assert the guard was `document.querySelector('[data-wb-cc-picker]…')`
+  // and that the answer was re-submitted whenever `made` was true, and its comment claimed
+  // "the second pass finds nothing pending — which is what stops it looping". Neither was so:
+  // the guard is true for any app that HAS a contact field, and createMissingContacts returns
+  // true whatever happens. Every such save re-submitted itself for ever and froze the tab, and
+  // this test passed throughout because it only ever read the source.
+  //
+  // tests/company-contact-save-loop.test.mjs now RUNS it and bounds the passes.
+  assert.match(main, /const pendingContacts = wbPendingContactNames\(\);/);
+  assert.match(main, /if \(pendingContacts && m\.contactPass !== pendingContacts\) \{/);
+  // A cheap sync read stays in the entry bundle: an app with nothing pending never fetches
+  // the module. The scan for unlinked names lives in it, beside the write path.
+  assert.match(main, /function wbPendingContactNames\(\)/);
   // A name with no id is the state syncCompanyContactPicker deliberately leaves behind.
   assert.match(page, /entry\.name && entry\.idField && !entry\.idField\.value/);
 });

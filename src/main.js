@@ -18997,12 +18997,22 @@ function wbSubmitModal() {
   }
   if (m.kind === 'item') {
     const { workspace, app } = wbFind(companyId, m.workspaceId, m.appId);
-    // A Company Contact typed but never matched has no id yet. Create those first, then
-    // come back through here with the links filled in -- the form is untouched in between,
-    // so nothing typed into it is lost, and the second pass finds nothing pending.
-    if (document.querySelector('[data-wb-cc-picker] [data-wb-cc-name]')) {
+    // A Company Contact typed but never matched has no id yet. Create those first, then come
+    // back through here with the links filled in -- the form is untouched in between, so
+    // nothing typed into it is lost.
+    //
+    // Guarded on the pending NAMES, not on "is a picker on screen", and re-entered at most
+    // once per set of them. The old guard was true whenever the app had a contact field at
+    // all, and createMissingContacts answers true even when it created nothing -- so every
+    // save of such an app re-submitted itself for ever and locked the tab up. Keying on the
+    // names terminates whatever happens: they are gone on the second pass if the contact was
+    // made, and unchanged if it could not be, which saves with the link empty rather than
+    // trying again. Typing a different name later is a different key, so it gets its own try.
+    const pendingContacts = wbPendingContactNames();
+    if (pendingContacts && m.contactPass !== pendingContacts) {
+      m.contactPass = pendingContacts;
       wbCreateMissingContacts(companyId)
-        .then((made) => { if (made) wbSubmitModal(); })
+        .then(() => wbSubmitModal())
         .catch((error) => showToast(error.message || 'That contact could not be created.', 'local', 'Company Contacts'));
       return;
     }
@@ -37796,9 +37806,19 @@ function companyContactOptions(companyId = activeCompanyId()) {
 // The datalist gives back a NAME; the field stores an id. Resolve on the way through, and
 // clear the id when the text matches nobody so a half-typed name cannot silently keep the
 // previously picked contact attached.
+// Contact pickers holding a name that matched nobody, as one comparable key. The module that
+// does the creating scans for the same state; this is the cheap synchronous read that decides
+// whether to fetch it at all, so an app with no pending contact never loads it.
+function wbPendingContactNames() {
+  return [...document.querySelectorAll('[data-wb-cc-picker]')]
+    .filter((picker) => !picker.querySelector('[data-wb-cc-id]')?.value)
+    .map((picker) => String(picker.querySelector('[data-wb-cc-name]')?.value || '').trim())
+    .filter(Boolean)
+    .sort()
+    .join(' ');
+}
+
 // The scan for unlinked names, and the creating, both live in ./company-contacts/page.js.
-// Only the cheap "is there even a contact picker on screen" guard stays here, so an app
-// without one never fetches the module at all.
 async function wbCreateMissingContacts(companyId) {
   return (await loadCompanyContactsPage()).createMissingContacts(companyId);
 }
