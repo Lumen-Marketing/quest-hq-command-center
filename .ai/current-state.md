@@ -167,6 +167,13 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - `ROUNDUP(528 / 8)` is 66, not 67: 528/8 is 65.99999999999999 in binary floating point, and a naive `Math.ceil` buys an extra box of birdstop on every tile job. Values are nudged to 12 significant digits before rounding.
 - **Storage**: `underwriting_calculators` holds the company's templates; the measurements ride on `underwriting_cases.takeoff`, because the calculator prices every roof and each roof has its own report. **Use in the decision** pushes the takeoff's totals into the margin panel above rather than duplicating the arithmetic.
 
+## 2026-08-14 The contact copy never ran, and said nothing
+
+- `loadRelationshipPicker()` resolves to whatever `createRelationshipPicker({ h })` RETURNS, not to the module namespace. `applyPullValues` was a module-level export only, so `mod.applyPullValues` was `undefined`, the call threw, and the `.catch` written to report a failed IMPORT swallowed it. The copy never ran once, in any session — and the console said "Contact copy failed to load", which points at the network rather than at the shape of the object.
+- The factory hands `applyPullValues` back now, and the message distinguishes a module that could not load from one that loaded and could not do the job.
+- **The test asserted the `.then((mod) => mod.applyPullValues(...))` line matched a regex. It did.** That is the fourth bug in this session that a source-text assertion waved through — after the dead Add-job button, the blank field panel, and the save loop that never terminated. `tests/lazy-module-surface.test.mjs` resolves the loader for real and asserts the object carries every method `main.js` calls on it, including the cached fast path beside the loader. Confirmed it fails when the export is taken back off.
+- Diagnosis order that found it, after two wrong guesses: check the deployed bundle (feature present), check the live data (contact had values), run the mapping against the REAL app doc pulled from `workspace_builder_state` (8 correct pairs) — which left only the runtime call, and there it was.
+
 ## 2026-08-14 The takeoff card, laid out like the sheet it came from
 
 - Two columns, as the spreadsheet has them: **GAF measurement** and **Labor** down the left, the long **Material** list and **Price to client** down the right. The measurements read as rows — label, figure, unit, waste — rather than as a wrapping grid of cards.

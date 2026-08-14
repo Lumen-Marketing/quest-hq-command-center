@@ -37853,9 +37853,12 @@ function wbPullFromContact(picker, contact) {
     if (value !== '' && value != null && values[to] === undefined) values[to] = value;
   });
   if (!Object.keys(values).length) return;
+  // Reported precisely: a module that loaded but could not do the job is a different
+  // fault from one that never arrived, and calling both "failed to load" hid the
+  // first for two deploys.
   loadRelationshipPicker()
     .then((mod) => mod.applyPullValues(picker, values))
-    .catch((error) => console.error('Contact copy failed to load', error));
+    .catch((error) => console.error('Contact copy failed', error));
 }
 
 function contactById(id) {

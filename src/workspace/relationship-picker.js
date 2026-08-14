@@ -176,5 +176,10 @@ export function createRelationshipPicker(ctx) {
   });
   }
 
-  return { wbBindRelationshipPickers };
+  // applyPullValues is a module-level export AND is handed back here, because main.js reaches
+  // this module through loadRelationshipPicker(), which resolves to whatever this factory
+  // returns rather than to the module namespace. Leaving it off meant the company-contact copy
+  // called undefined, threw, and was swallowed by its own error handler -- so it never once
+  // ran, and nothing said why.
+  return { wbBindRelationshipPickers, applyPullValues };
 }
