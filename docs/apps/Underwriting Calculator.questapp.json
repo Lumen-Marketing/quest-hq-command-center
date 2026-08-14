@@ -8,296 +8,1094 @@
     "type": "Underwriting",
     "icon": "ti-calculator",
     "color": "#D4541F",
-    "description": "Price a roof from its GAF report. The eight measurements carry their own waste allowance, the line items are listed as they are bought, and the totals work out the cost, the price and the margin. Built from Underwriting_Calculator.xlsx. Note: the App Builder's formula grammar has no ROUNDUP, so quantities that round up to whole boxes and rolls are typed here — the Takeoff calculator on the Underwriter page and on every quote does that rounding for you and is the better tool for pricing.",
+    "description": "The tile takeoff from Underwriting_Calculator.xlsx, as an app. Eight GAF measurements each carry their own waste allowance, every labor, material and client line has its quantity, unit price and total, and the totals work out the cost, the price and the margin. Quantities that round up to whole boxes and rolls are typed rather than derived — the App Builder's formulas have no ROUNDUP — and each of those fields shows the working it came from. The Takeoff calculator on the Underwriter page and on every quote does that rounding for you and is the quicker tool for pricing; this app is for keeping a takeoff as a record.",
     "fields": [
       {
-        "id": "f-job",
-        "label": "Job",
-        "type": "text",
         "required": true,
         "hidden": false,
-        "config": { "placeholder": "300-12444 — Re-roof" }
+        "config": {
+          "placeholder": "300-12444 — Re-roof"
+        },
+        "id": "f-job",
+        "label": "Job",
+        "type": "text"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {},
         "id": "f-contact",
         "label": "Contact",
-        "type": "company_contact",
-        "required": false,
-        "hidden": false,
-        "config": {}
+        "type": "company_contact"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {},
         "id": "f-priced",
         "label": "Priced on",
-        "type": "date",
-        "required": false,
-        "hidden": false,
-        "config": {}
+        "type": "date"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        },
         "id": "f-waste",
         "label": "Waste %",
-        "type": "number",
-        "required": false,
-        "hidden": false,
-        "config": { "unit": "%" }
+        "type": "number"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "%"
+        },
         "id": "f-tax",
         "label": "Tax %",
-        "type": "number",
+        "type": "number"
+      },
+      {
         "required": false,
         "hidden": false,
-        "config": { "unit": "%" }
-      },
-
-      {
-        "id": "f-sq",
+        "config": {
+          "unit": "SQ"
+        },
+        "id": "m-0",
         "label": "Total SQ",
-        "type": "number",
-        "required": false,
-        "hidden": false,
-        "config": { "unit": "SQ" }
+        "type": "number"
       },
       {
-        "id": "f-rakes",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "FT"
+        },
+        "id": "m-1",
         "label": "Rakes",
-        "type": "number",
-        "required": false,
-        "hidden": false,
-        "config": { "unit": "FT" }
+        "type": "number"
       },
       {
-        "id": "f-valleys",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "FT"
+        },
+        "id": "m-2",
         "label": "Valleys",
-        "type": "number",
-        "required": false,
-        "hidden": false,
-        "config": { "unit": "FT" }
+        "type": "number"
       },
       {
-        "id": "f-drip",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "FT"
+        },
+        "id": "m-3",
         "label": "Drip edge",
-        "type": "number",
-        "required": false,
-        "hidden": false,
-        "config": { "unit": "FT" }
+        "type": "number"
       },
       {
-        "id": "f-eaves",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "FT"
+        },
+        "id": "m-4",
         "label": "Eaves",
-        "type": "number",
-        "required": false,
-        "hidden": false,
-        "config": { "unit": "FT" }
+        "type": "number"
       },
       {
-        "id": "f-ridges",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "FT"
+        },
+        "id": "m-5",
         "label": "Ridges",
-        "type": "number",
-        "required": false,
-        "hidden": false,
-        "config": { "unit": "FT" }
+        "type": "number"
       },
       {
-        "id": "f-low",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "SQ FT"
+        },
+        "id": "m-6",
         "label": "Low slope",
-        "type": "number",
-        "required": false,
-        "hidden": false,
-        "config": { "unit": "SQ FT" }
+        "type": "number"
       },
       {
-        "id": "f-leak",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "unit": "FT"
+        },
+        "id": "m-7",
         "label": "Leak barrier",
-        "type": "number",
+        "type": "number"
+      },
+      {
         "required": false,
         "hidden": false,
-        "config": { "unit": "FT" }
-      },
-
-      {
-        "id": "f-sq-w",
+        "config": {
+          "formula": "{Total SQ} + ({Total SQ} * {Waste %} / 100)"
+        },
+        "id": "mw-0",
         "label": "Total SQ + waste",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Total SQ} + ({Total SQ} * {Waste %} / 100)" }
+        "type": "calculation"
       },
       {
-        "id": "f-rakes-w",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Rakes} + ({Rakes} * {Waste %} / 100)"
+        },
+        "id": "mw-1",
         "label": "Rakes + waste",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Rakes} + ({Rakes} * {Waste %} / 100)" }
+        "type": "calculation"
       },
       {
-        "id": "f-valleys-w",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Valleys} + ({Valleys} * {Waste %} / 100)"
+        },
+        "id": "mw-2",
         "label": "Valleys + waste",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Valleys} + ({Valleys} * {Waste %} / 100)" }
+        "type": "calculation"
       },
       {
-        "id": "f-drip-w",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Drip edge} + ({Drip edge} * {Waste %} / 100)"
+        },
+        "id": "mw-3",
         "label": "Drip edge + waste",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Drip edge} + ({Drip edge} * {Waste %} / 100)" }
+        "type": "calculation"
       },
       {
-        "id": "f-eaves-w",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Eaves} + ({Eaves} * {Waste %} / 100)"
+        },
+        "id": "mw-4",
         "label": "Eaves + waste",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Eaves} + ({Eaves} * {Waste %} / 100)" }
+        "type": "calculation"
       },
       {
-        "id": "f-ridges-w",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Ridges} + ({Ridges} * {Waste %} / 100)"
+        },
+        "id": "mw-5",
         "label": "Ridges + waste",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Ridges} + ({Ridges} * {Waste %} / 100)" }
+        "type": "calculation"
       },
       {
-        "id": "f-low-w",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Low slope} + ({Low slope} * {Waste %} / 100)"
+        },
+        "id": "mw-6",
         "label": "Low slope + waste",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Low slope} + ({Low slope} * {Waste %} / 100)" }
+        "type": "calculation"
       },
       {
-        "id": "f-leak-w",
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Leak barrier} + ({Leak barrier} * {Waste %} / 100)"
+        },
+        "id": "mw-7",
         "label": "Leak barrier + waste",
-        "type": "calculation",
+        "type": "calculation"
+      },
+      {
         "required": false,
         "hidden": false,
-        "config": { "formula": "{Leak barrier} + ({Leak barrier} * {Waste %} / 100)" }
+        "config": {
+          "placeholder": "{Total SQ}"
+        },
+        "id": "q-0",
+        "label": "Tile install labor per square qty",
+        "type": "number"
       },
-
       {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-0",
+        "label": "Tile install labor per square price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Tile install labor per square qty} * {Tile install labor per square price}"
+        },
+        "id": "t-0",
+        "label": "Tile install labor per square total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-1",
+        "label": "Metal qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-1",
+        "label": "Metal price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Metal qty} * {Metal price}"
+        },
+        "id": "t-1",
+        "label": "Metal total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-2",
+        "label": "Plywood labor per sheet qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-2",
+        "label": "Plywood labor per sheet price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Plywood labor per sheet qty} * {Plywood labor per sheet price}"
+        },
+        "id": "t-2",
+        "label": "Plywood labor per sheet total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-3",
+        "label": "Solar panels un-install & re-install (Labor) qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-3",
+        "label": "Solar panels un-install & re-install (Labor) price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price}"
+        },
+        "id": "t-3",
+        "label": "Solar panels un-install & re-install (Labor) total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-4",
+        "label": "Dump & gas qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-4",
+        "label": "Dump & gas price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Dump & gas qty} * {Dump & gas price}"
+        },
+        "id": "t-4",
+        "label": "Dump & gas total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "ROUNDUP({Total SQ + waste} / 10)"
+        },
+        "id": "q-5",
+        "label": "Eagle tile qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-5",
+        "label": "Eagle tile price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Eagle tile qty} * {Eagle tile price}"
+        },
+        "id": "t-5",
+        "label": "Eagle tile total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "ROUNDUP({Rakes + waste} / 5)"
+        },
+        "id": "q-6",
+        "label": "Tile trim qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-6",
+        "label": "Tile trim price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Tile trim qty} * {Tile trim price}"
+        },
+        "id": "t-6",
+        "label": "Tile trim total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "{Total SQ}"
+        },
+        "id": "q-7",
+        "label": "Ply40 Westlake Royal underlayment qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-7",
+        "label": "Ply40 Westlake Royal underlayment price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price}"
+        },
+        "id": "t-7",
+        "label": "Ply40 Westlake Royal underlayment total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "{Total SQ} + 1"
+        },
+        "id": "q-8",
+        "label": "Furring strips qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-8",
+        "label": "Furring strips price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Furring strips qty} * {Furring strips price}"
+        },
+        "id": "t-8",
+        "label": "Furring strips total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "ROUNDUP({Valleys + waste} / 10)"
+        },
+        "id": "q-9",
+        "label": "Valley metals qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-9",
+        "label": "Valley metals price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Valley metals qty} * {Valley metals price}"
+        },
+        "id": "t-9",
+        "label": "Valley metals total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "ROUNDUP({Drip edge + waste} / 10)"
+        },
+        "id": "q-10",
+        "label": "Drip edge 2x2 10ft qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-10",
+        "label": "Drip edge 2x2 10ft price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price}"
+        },
+        "id": "t-10",
+        "label": "Drip edge 2x2 10ft total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "ROUND({Eaves + waste} / 8)"
+        },
+        "id": "q-11",
+        "label": "Birdstop / eave riser qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-11",
+        "label": "Birdstop / eave riser price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Birdstop / eave riser qty} * {Birdstop / eave riser price}"
+        },
+        "id": "t-11",
+        "label": "Birdstop / eave riser total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-12",
+        "label": "Pipejacks qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-12",
+        "label": "Pipejacks price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Pipejacks qty} * {Pipejacks price}"
+        },
+        "id": "t-12",
+        "label": "Pipejacks total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-13",
+        "label": "Other flashings qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-13",
+        "label": "Other flashings price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Other flashings qty} * {Other flashings price}"
+        },
+        "id": "t-13",
+        "label": "Other flashings total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "ROUNDUP({Total SQ} / 15)"
+        },
+        "id": "q-14",
+        "label": "Plastic cap nails qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-14",
+        "label": "Plastic cap nails price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Plastic cap nails qty} * {Plastic cap nails price}"
+        },
+        "id": "t-14",
+        "label": "Plastic cap nails total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "ROUNDUP({Total SQ} / 22)"
+        },
+        "id": "q-15",
+        "label": "Nails qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-15",
+        "label": "Nails price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Nails qty} * {Nails price}"
+        },
+        "id": "t-15",
+        "label": "Nails total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-16",
+        "label": "Hip & ridge blocker qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-16",
+        "label": "Hip & ridge blocker price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Hip & ridge blocker qty} * {Hip & ridge blocker price}"
+        },
+        "id": "t-16",
+        "label": "Hip & ridge blocker total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-17",
+        "label": "Plastic cement 4.75gal qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-17",
+        "label": "Plastic cement 4.75gal price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price}"
+        },
+        "id": "t-17",
+        "label": "Plastic cement 4.75gal total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "ROUNDUP({Low slope + waste} / 200)"
+        },
+        "id": "q-18",
+        "label": "Base sheet 2sq qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-18",
+        "label": "Base sheet 2sq price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Base sheet 2sq qty} * {Base sheet 2sq price}"
+        },
+        "id": "t-18",
+        "label": "Base sheet 2sq total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "{Base sheet 2sq} * 2"
+        },
+        "id": "q-19",
+        "label": "Cap sheet 1sq qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-19",
+        "label": "Cap sheet 1sq price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Cap sheet 1sq qty} * {Cap sheet 1sq price}"
+        },
+        "id": "t-19",
+        "label": "Cap sheet 1sq total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "ROUNDUP({Leak barrier + waste} / 200)"
+        },
+        "id": "q-20",
+        "label": "Ice and water barrier qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-20",
+        "label": "Ice and water barrier price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Ice and water barrier qty} * {Ice and water barrier price}"
+        },
+        "id": "t-20",
+        "label": "Ice and water barrier total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-21",
+        "label": "Tile seal qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-21",
+        "label": "Tile seal price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Tile seal qty} * {Tile seal price}"
+        },
+        "id": "t-21",
+        "label": "Tile seal total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-22",
+        "label": "Misc qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-22",
+        "label": "Misc price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Misc qty} * {Misc price}"
+        },
+        "id": "t-22",
+        "label": "Misc total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "placeholder": "{Total SQ}"
+        },
+        "id": "q-23",
+        "label": "Whole roof shingle replacement (underlayment, drip edge) qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-23",
+        "label": "Whole roof shingle replacement (underlayment, drip edge) price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Whole roof shingle replacement (underlayment, drip edge) qty} * {Whole roof shingle replacement (underlayment, drip edge) price}"
+        },
+        "id": "t-23",
+        "label": "Whole roof shingle replacement (underlayment, drip edge) total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-24",
+        "label": "Whole roof plywood replacement qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-24",
+        "label": "Whole roof plywood replacement price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Whole roof plywood replacement qty} * {Whole roof plywood replacement price}"
+        },
+        "id": "t-24",
+        "label": "Whole roof plywood replacement total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {},
+        "id": "q-25",
+        "label": "Solar panels un-install & re-install (Client) qty",
+        "type": "number"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "currency": "$"
+        },
+        "id": "p-25",
+        "label": "Solar panels un-install & re-install (Client) price",
+        "type": "money"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price}"
+        },
+        "id": "t-25",
+        "label": "Solar panels un-install & re-install (Client) total",
+        "type": "calculation"
+      },
+      {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Tile install labor per square qty} * {Tile install labor per square price} + {Metal qty} * {Metal price} + {Plywood labor per sheet qty} * {Plywood labor per sheet price} + {Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price} + {Dump & gas qty} * {Dump & gas price}"
+        },
         "id": "f-labor",
         "label": "Labor total",
-        "type": "money",
-        "required": false,
-        "hidden": false,
-        "config": { "currency": "$" }
+        "type": "calculation"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Eagle tile qty} * {Eagle tile price} + {Tile trim qty} * {Tile trim price} + {Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price} + {Furring strips qty} * {Furring strips price} + {Valley metals qty} * {Valley metals price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Birdstop / eave riser qty} * {Birdstop / eave riser price} + {Pipejacks qty} * {Pipejacks price} + {Other flashings qty} * {Other flashings price} + {Plastic cap nails qty} * {Plastic cap nails price} + {Nails qty} * {Nails price} + {Hip & ridge blocker qty} * {Hip & ridge blocker price} + {Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price} + {Base sheet 2sq qty} * {Base sheet 2sq price} + {Cap sheet 1sq qty} * {Cap sheet 1sq price} + {Ice and water barrier qty} * {Ice and water barrier price} + {Tile seal qty} * {Tile seal price} + {Misc qty} * {Misc price}"
+        },
         "id": "f-material",
         "label": "Material total",
-        "type": "money",
-        "required": false,
-        "hidden": false,
-        "config": { "currency": "$" }
+        "type": "calculation"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Eagle tile qty} * {Eagle tile price} + {Tile trim qty} * {Tile trim price} + {Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price} + {Furring strips qty} * {Furring strips price} + {Valley metals qty} * {Valley metals price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Birdstop / eave riser qty} * {Birdstop / eave riser price} + {Pipejacks qty} * {Pipejacks price} + {Other flashings qty} * {Other flashings price} + {Plastic cap nails qty} * {Plastic cap nails price} + {Nails qty} * {Nails price} + {Hip & ridge blocker qty} * {Hip & ridge blocker price} + {Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price} + {Base sheet 2sq qty} * {Base sheet 2sq price} + {Cap sheet 1sq qty} * {Cap sheet 1sq price} + {Ice and water barrier qty} * {Ice and water barrier price} + {Tile seal qty} * {Tile seal price} + {Misc qty} * {Misc price}) + (({Eagle tile qty} * {Eagle tile price} + {Tile trim qty} * {Tile trim price} + {Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price} + {Furring strips qty} * {Furring strips price} + {Valley metals qty} * {Valley metals price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Birdstop / eave riser qty} * {Birdstop / eave riser price} + {Pipejacks qty} * {Pipejacks price} + {Other flashings qty} * {Other flashings price} + {Plastic cap nails qty} * {Plastic cap nails price} + {Nails qty} * {Nails price} + {Hip & ridge blocker qty} * {Hip & ridge blocker price} + {Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price} + {Base sheet 2sq qty} * {Base sheet 2sq price} + {Cap sheet 1sq qty} * {Cap sheet 1sq price} + {Ice and water barrier qty} * {Ice and water barrier price} + {Tile seal qty} * {Tile seal price} + {Misc qty} * {Misc price}) * {Tax %} / 100)"
+        },
         "id": "f-material-tax",
         "label": "Material with tax",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Material total} + ({Material total} * {Tax %} / 100)" }
+        "type": "calculation"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Tile install labor per square qty} * {Tile install labor per square price} + {Metal qty} * {Metal price} + {Plywood labor per sheet qty} * {Plywood labor per sheet price} + {Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price} + {Dump & gas qty} * {Dump & gas price}) + ({Eagle tile qty} * {Eagle tile price} + {Tile trim qty} * {Tile trim price} + {Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price} + {Furring strips qty} * {Furring strips price} + {Valley metals qty} * {Valley metals price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Birdstop / eave riser qty} * {Birdstop / eave riser price} + {Pipejacks qty} * {Pipejacks price} + {Other flashings qty} * {Other flashings price} + {Plastic cap nails qty} * {Plastic cap nails price} + {Nails qty} * {Nails price} + {Hip & ridge blocker qty} * {Hip & ridge blocker price} + {Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price} + {Base sheet 2sq qty} * {Base sheet 2sq price} + {Cap sheet 1sq qty} * {Cap sheet 1sq price} + {Ice and water barrier qty} * {Ice and water barrier price} + {Tile seal qty} * {Tile seal price} + {Misc qty} * {Misc price}) + (({Eagle tile qty} * {Eagle tile price} + {Tile trim qty} * {Tile trim price} + {Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price} + {Furring strips qty} * {Furring strips price} + {Valley metals qty} * {Valley metals price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Birdstop / eave riser qty} * {Birdstop / eave riser price} + {Pipejacks qty} * {Pipejacks price} + {Other flashings qty} * {Other flashings price} + {Plastic cap nails qty} * {Plastic cap nails price} + {Nails qty} * {Nails price} + {Hip & ridge blocker qty} * {Hip & ridge blocker price} + {Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price} + {Base sheet 2sq qty} * {Base sheet 2sq price} + {Cap sheet 1sq qty} * {Cap sheet 1sq price} + {Ice and water barrier qty} * {Ice and water barrier price} + {Tile seal qty} * {Tile seal price} + {Misc qty} * {Misc price}) * {Tax %} / 100)"
+        },
         "id": "f-cost",
         "label": "Total labor & material",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Labor total} + {Material total} + ({Material total} * {Tax %} / 100)" }
+        "type": "calculation"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "{Whole roof shingle replacement (underlayment, drip edge) qty} * {Whole roof shingle replacement (underlayment, drip edge) price} + {Whole roof plywood replacement qty} * {Whole roof plywood replacement price} + {Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price}"
+        },
         "id": "f-client",
-        "label": "Price to client",
-        "type": "money",
-        "required": false,
-        "hidden": false,
-        "config": { "currency": "$" }
+        "label": "Total for client",
+        "type": "calculation"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "({Whole roof shingle replacement (underlayment, drip edge) qty} * {Whole roof shingle replacement (underlayment, drip edge) price} + {Whole roof plywood replacement qty} * {Whole roof plywood replacement price} + {Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price}) - (({Tile install labor per square qty} * {Tile install labor per square price} + {Metal qty} * {Metal price} + {Plywood labor per sheet qty} * {Plywood labor per sheet price} + {Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price} + {Dump & gas qty} * {Dump & gas price}) + ({Eagle tile qty} * {Eagle tile price} + {Tile trim qty} * {Tile trim price} + {Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price} + {Furring strips qty} * {Furring strips price} + {Valley metals qty} * {Valley metals price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Birdstop / eave riser qty} * {Birdstop / eave riser price} + {Pipejacks qty} * {Pipejacks price} + {Other flashings qty} * {Other flashings price} + {Plastic cap nails qty} * {Plastic cap nails price} + {Nails qty} * {Nails price} + {Hip & ridge blocker qty} * {Hip & ridge blocker price} + {Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price} + {Base sheet 2sq qty} * {Base sheet 2sq price} + {Cap sheet 1sq qty} * {Cap sheet 1sq price} + {Ice and water barrier qty} * {Ice and water barrier price} + {Tile seal qty} * {Tile seal price} + {Misc qty} * {Misc price}) + (({Eagle tile qty} * {Eagle tile price} + {Tile trim qty} * {Tile trim price} + {Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price} + {Furring strips qty} * {Furring strips price} + {Valley metals qty} * {Valley metals price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Birdstop / eave riser qty} * {Birdstop / eave riser price} + {Pipejacks qty} * {Pipejacks price} + {Other flashings qty} * {Other flashings price} + {Plastic cap nails qty} * {Plastic cap nails price} + {Nails qty} * {Nails price} + {Hip & ridge blocker qty} * {Hip & ridge blocker price} + {Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price} + {Base sheet 2sq qty} * {Base sheet 2sq price} + {Cap sheet 1sq qty} * {Cap sheet 1sq price} + {Ice and water barrier qty} * {Ice and water barrier price} + {Tile seal qty} * {Tile seal price} + {Misc qty} * {Misc price}) * {Tax %} / 100))"
+        },
         "id": "f-profit",
         "label": "Profit",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "{Price to client} - {Labor total} - {Material total} - ({Material total} * {Tax %} / 100)" }
+        "type": "calculation"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {
+          "formula": "(({Whole roof shingle replacement (underlayment, drip edge) qty} * {Whole roof shingle replacement (underlayment, drip edge) price} + {Whole roof plywood replacement qty} * {Whole roof plywood replacement price} + {Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price}) - (({Tile install labor per square qty} * {Tile install labor per square price} + {Metal qty} * {Metal price} + {Plywood labor per sheet qty} * {Plywood labor per sheet price} + {Solar panels un-install & re-install (Labor) qty} * {Solar panels un-install & re-install (Labor) price} + {Dump & gas qty} * {Dump & gas price}) + ({Eagle tile qty} * {Eagle tile price} + {Tile trim qty} * {Tile trim price} + {Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price} + {Furring strips qty} * {Furring strips price} + {Valley metals qty} * {Valley metals price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Birdstop / eave riser qty} * {Birdstop / eave riser price} + {Pipejacks qty} * {Pipejacks price} + {Other flashings qty} * {Other flashings price} + {Plastic cap nails qty} * {Plastic cap nails price} + {Nails qty} * {Nails price} + {Hip & ridge blocker qty} * {Hip & ridge blocker price} + {Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price} + {Base sheet 2sq qty} * {Base sheet 2sq price} + {Cap sheet 1sq qty} * {Cap sheet 1sq price} + {Ice and water barrier qty} * {Ice and water barrier price} + {Tile seal qty} * {Tile seal price} + {Misc qty} * {Misc price}) + (({Eagle tile qty} * {Eagle tile price} + {Tile trim qty} * {Tile trim price} + {Ply40 Westlake Royal underlayment qty} * {Ply40 Westlake Royal underlayment price} + {Furring strips qty} * {Furring strips price} + {Valley metals qty} * {Valley metals price} + {Drip edge 2x2 10ft qty} * {Drip edge 2x2 10ft price} + {Birdstop / eave riser qty} * {Birdstop / eave riser price} + {Pipejacks qty} * {Pipejacks price} + {Other flashings qty} * {Other flashings price} + {Plastic cap nails qty} * {Plastic cap nails price} + {Nails qty} * {Nails price} + {Hip & ridge blocker qty} * {Hip & ridge blocker price} + {Plastic cement 4.75gal qty} * {Plastic cement 4.75gal price} + {Base sheet 2sq qty} * {Base sheet 2sq price} + {Cap sheet 1sq qty} * {Cap sheet 1sq price} + {Ice and water barrier qty} * {Ice and water barrier price} + {Tile seal qty} * {Tile seal price} + {Misc qty} * {Misc price}) * {Tax %} / 100))) * 100 / ({Whole roof shingle replacement (underlayment, drip edge) qty} * {Whole roof shingle replacement (underlayment, drip edge) price} + {Whole roof plywood replacement qty} * {Whole roof plywood replacement price} + {Solar panels un-install & re-install (Client) qty} * {Solar panels un-install & re-install (Client) price})"
+        },
         "id": "f-margin",
         "label": "Margin %",
-        "type": "calculation",
-        "required": false,
-        "hidden": false,
-        "config": { "formula": "({Price to client} - {Labor total} - {Material total} - ({Material total} * {Tax %} / 100)) * 100 / {Price to client}" }
+        "type": "calculation"
       },
       {
+        "required": false,
+        "hidden": false,
+        "config": {},
         "id": "f-notes",
         "label": "Notes",
-        "type": "textarea",
-        "required": false,
-        "hidden": false,
-        "config": {}
+        "type": "textarea"
       },
       {
-        "id": "f-created",
-        "label": "Created",
-        "type": "created_time",
         "required": false,
         "hidden": true,
-        "config": {}
+        "config": {},
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time"
       }
     ],
-    "collections": [
-      {
-        "id": "c-labor",
-        "name": "Labor",
-        "recordName": "Labor line",
-        "fields": [
-          { "id": "cl-desc", "label": "Description", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "Tile install labor per square" } },
-          { "id": "cl-qty", "label": "Qty", "type": "number", "required": false, "hidden": false, "config": {} },
-          { "id": "cl-price", "label": "Unit price", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } },
-          { "id": "cl-total", "label": "Line total", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } }
-        ]
-      },
-      {
-        "id": "c-material",
-        "name": "Material",
-        "recordName": "Material line",
-        "fields": [
-          { "id": "cm-desc", "label": "Description", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "Eagle tile" } },
-          { "id": "cm-basis", "label": "Worked out from", "type": "text", "required": false, "hidden": false, "config": { "placeholder": "ROUNDUP(Total SQ + waste / 10)" } },
-          { "id": "cm-qty", "label": "Qty", "type": "number", "required": false, "hidden": false, "config": {} },
-          { "id": "cm-price", "label": "Unit price", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } },
-          { "id": "cm-total", "label": "Line total", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } }
-        ]
-      },
-      {
-        "id": "c-client",
-        "name": "Price to client",
-        "recordName": "Client line",
-        "fields": [
-          { "id": "cc-desc", "label": "Description", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "Whole roof shingle replacement" } },
-          { "id": "cc-qty", "label": "Qty", "type": "number", "required": false, "hidden": false, "config": {} },
-          { "id": "cc-price", "label": "Unit price", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } },
-          { "id": "cc-total", "label": "Line total", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } }
-        ]
-      }
+    "collections": [],
+    "cardFields": [
+      "f-job",
+      "m-0",
+      "f-cost",
+      "f-client",
+      "f-margin"
     ],
-    "cardFields": ["f-job", "f-sq", "f-cost", "f-client", "f-margin"],
     "items": [],
     "automations": [],
     "views": [],
     "dashboard": [
-      { "id": "w-count", "type": "metric", "size": 1, "config": { "metric": "count" } },
-      { "id": "w-client", "type": "metric", "size": 1, "config": { "metric": "sum", "fieldId": "f-client" } },
-      { "id": "w-recent", "type": "recent", "size": 2, "config": { "limit": 5 } }
+      {
+        "id": "w-count",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "count"
+        }
+      },
+      {
+        "id": "w-client",
+        "type": "metric",
+        "size": 1,
+        "config": {
+          "metric": "sum",
+          "fieldId": "f-client"
+        }
+      },
+      {
+        "id": "w-recent",
+        "type": "recent",
+        "size": 2,
+        "config": {
+          "limit": 5
+        }
+      }
     ]
   }
 }
