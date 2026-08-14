@@ -33478,7 +33478,8 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 }
 .sh-frame {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* Title bar, ribbon, formula bar, the grid, the function list. Only the grid takes the slack. */
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   width: min(1400px, 100%);
   height: min(880px, 100%);
   background: var(--surface);
@@ -33496,7 +33497,140 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 }
-.sh-title { font-size: 13px; white-space: nowrap; }
+.sh-title { font-size: 13px; white-space: nowrap; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── The ribbon ──
+   Excel's Home tab, cut to what a field-sized sheet needs. Grouped and labelled the way it is
+   there, because that is where somebody looking for Merge & centre will look for it. */
+.sh-ribbon {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 6px 8px 3px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.sh-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  padding: 0 10px;
+  border-right: 1px solid var(--border);
+  position: relative;
+  padding-bottom: 14px;
+}
+.sh-group:last-child { border-right: 0; }
+/* The group name, the way the ribbon labels its groups. */
+.sh-group > small {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  text-align: center;
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  color: var(--muted);
+  pointer-events: none;
+}
+.sh-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--border); }
+.sh-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 27px;
+  height: 27px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+.sh-tool:hover { background: var(--surface-2); border-color: var(--border); }
+.sh-tool.on { background: var(--accent, #d4541f); border-color: var(--accent, #d4541f); color: #fff; }
+.sh-tool:focus-visible { outline: 2px solid var(--accent, #d4541f); outline-offset: 1px; }
+.sh-has-menu i:last-child { font-size: 10px; opacity: .6; }
+/* The sign that separates More decimals from Fewer decimals, which share a glyph. */
+.sh-badge { font-size: 10px; font-weight: 800; line-height: 1; margin-left: -2px; }
+.sh-ribbon select {
+  height: 27px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+}
+.sh-font { width: 118px; }
+.sh-size { width: 58px; }
+.sh-nf { width: 132px; }
+
+/* The colour buttons carry a bar of the colour they would apply, which is the only way to tell
+   two identical paint-pot icons apart. */
+.sh-color { position: relative; flex-direction: column; gap: 0; padding-bottom: 4px; }
+.sh-color input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+}
+.sh-color-bar {
+  display: block;
+  width: 15px;
+  height: 3px;
+  border-radius: 1px;
+  border: 1px solid var(--border);
+  margin-top: -1px;
+}
+
+.sh-menu-wrap { position: relative; display: inline-flex; }
+.sh-menu {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  z-index: 5;
+  min-width: 176px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 14px 34px rgba(15, 12, 10, .22);
+}
+.sh-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.sh-menu button:hover { background: var(--surface-2); }
+.sh-menu button i { font-size: 15px; color: var(--muted); }
+
+.sh-fbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
 /* The reference box and the formula bar: which cell, and what is actually in it. */
 .sh-ref {
   min-width: 56px;
@@ -33524,18 +33658,20 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 .sh-upload { position: relative; cursor: pointer; }
 
 .sh-scroll { overflow: auto; background: var(--surface); }
-.sh-grid { border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+/* Fixed layout so the <colgroup> is what decides a column's width -- with auto layout the
+   content wins and a column somebody dragged narrow springs back open. */
+.sh-grid { border-collapse: separate; border-spacing: 0; font-size: 12.5px; table-layout: fixed; }
+.sh-grid .sh-gutter { width: 44px; }
 .sh-grid th,
 .sh-grid td {
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   padding: 0 7px;
   height: 26px;
-  min-width: 92px;
-  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
 }
 /* The row and column headers stay put, which is the difference between a grid and a table. */
 .sh-grid thead th {
@@ -33569,7 +33705,17 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 .sh-grid td.calc { color: var(--accent, #d4541f); }
 .sh-grid td.head { font-weight: 600; background: var(--surface-2); }
 .sh-grid td.bad { color: var(--danger, #c0392b); }
-.sh-grid td.sel { outline: 2px solid var(--accent, #d4541f); outline-offset: -2px; }
+/* A multi-cell selection is a wash, with the cell you are actually on outlined -- one box round
+   forty cells says nothing about where typing would go. */
+.sh-grid td.sel { background-image: linear-gradient(rgba(212, 84, 31, .13), rgba(212, 84, 31, .13)); }
+.sh-grid td.sel-lead { outline: 2px solid var(--accent, #d4541f); outline-offset: -2px; background-image: none; }
+.sh-grid .sh-colhead, .sh-grid .sh-rownum { position: relative; cursor: pointer; user-select: none; }
+.sh-grid .sh-colhead.on, .sh-grid .sh-rownum.on { background: var(--accent, #d4541f); color: #fff; }
+/* The line between two headers is the handle. Wider than it looks, or it cannot be hit. */
+.sh-grip { position: absolute; z-index: 4; }
+.sh-colhead .sh-grip { top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; }
+.sh-rownum .sh-grip { left: 0; bottom: -3px; height: 7px; width: 100%; cursor: row-resize; }
+.sh-grip:hover { background: var(--accent, #d4541f); }
 .sh-cell-input {
   width: 100%;
   height: 100%;
@@ -33583,6 +33729,9 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 }
 
 .sh-help {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   padding: 7px 12px;
   border-top: 1px solid var(--border);
   background: var(--surface-2);
@@ -33592,6 +33741,9 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   overflow-x: auto;
   white-space: nowrap;
 }
+/* What the selection adds up to, which is the one thing a status bar is for. */
+.sh-help [data-sh-status] { font-weight: 700; color: var(--text); flex: none; }
+.sh-help .sh-fns { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 760px) {
   .sh-overlay { padding: 0; }
@@ -33619,9 +33771,11 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   }
   /* The controls are for working, not for reading on paper. */
   body.sh-printing .sh-tools,
-  body.sh-printing .sh-ref,
-  body.sh-printing .sh-formula,
+  body.sh-printing .sh-ribbon,
+  body.sh-printing .sh-fbar,
   body.sh-printing .sh-help { display: none !important; }
+  /* Fills and cell lines are the point of formatting, so they print. */
+  body.sh-printing .sh-grid { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body.sh-printing .sh-scroll { overflow: visible; }
   body.sh-printing .sh-grid { width: 100%; font-size: 10pt; }
   body.sh-printing .sh-grid td.sel { outline: 0; }

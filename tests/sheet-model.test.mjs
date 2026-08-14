@@ -251,7 +251,7 @@ test('the sheet is written back only when the grid is closed', () => {
   // A spreadsheet somebody is halfway through is not a saved record, and the form underneath
   // still has its own Save.
   const editor = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');
-  assert.match(editor, /function close\(\) \{\s*\n\s*if \(!readOnly\) write\(normalizeSheet\(sheet\)\);/);
+  assert.match(editor, /function close\(\) \{\s*\n\s*if \(!readOnly\) write\(normalizeSheetFull\(sheet\)\);/);
 });
 
 test('printing prints the sheet, not the page around it', () => {

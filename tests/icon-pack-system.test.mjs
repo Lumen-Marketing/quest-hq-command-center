@@ -31,10 +31,15 @@ test('the pack covers essentially every icon the app uses', () => {
   // never asked to cover them. Each one falls back to its Tabler glyph, which the test below
   // proves is safe -- a mixed glyph is much better than a confidently wrong one. Aliasing
   // them into Lucide is worthwhile but is its own piece of work.
+  //
+  // The last three arrived with the spreadsheet ribbon and are deliberate, not missed: Lucide's
+  // `rows-2`/`columns-2` say "rows" and "columns", not "delete these rows", and `hash` is not
+  // "more decimal places". Every other ribbon icon IS aliased.
   const KNOWN_FALLBACKS = [
     'arrows-diagonal', 'chart-donut', 'database-heart', 'door-exit', 'help-off', 'ladder',
     'layout-sidebar-left-collapse', 'message-off', 'player-pause', 'player-play',
     'refresh-alert', 'rotate-2', 'square-rounded',
+    'column-remove', 'decimal', 'row-remove',
   ];
   assert.deepEqual(
     [...uncovered].sort(),

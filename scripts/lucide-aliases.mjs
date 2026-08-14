@@ -196,6 +196,31 @@ export const LUCIDE_ALIASES = {
   'letter-t': 'type',
   'number-9': 'hash',
   ladder: '',
+  // The spreadsheet ribbon. Lucide's `between-*` icons are literally "insert between", which
+  // is exactly what the Insert menu does.
+  'border-all': 'grid-3x3',
+  'border-none': 'square-dashed',
+  'layout-align-top': 'align-vertical-justify-start',
+  'layout-align-middle': 'align-vertical-justify-center',
+  'layout-align-bottom': 'align-vertical-justify-end',
+  'letter-case-upper': 'case-upper',
+  'letter-case-lower': 'case-lower',
+  'letter-a': 'type',
+  'arrow-autofit-width': 'table-cells-merge',
+  'table-plus': 'grid-2x2-plus',
+  'table-minus': 'grid-2x2-x',
+  'row-insert-top': 'between-vertical-start',
+  'row-insert-bottom': 'between-vertical-end',
+  'column-insert-left': 'between-horizontal-start',
+  'column-insert-right': 'between-horizontal-end',
+  'arrows-horizontal': 'move-horizontal',
+  'arrows-vertical': 'move-vertical',
+  'ruler-measure': 'ruler',
+  paint: 'paint-bucket',
+  // A plain `rows-2` for "delete rows" says rows, not delete. Tabler's own is clearer.
+  'row-remove': '',
+  'column-remove': '',
+  decimal: '',
 };
 
 /** Aliases with an empty target are explicit "no good Lucide equivalent" — keep Tabler. */

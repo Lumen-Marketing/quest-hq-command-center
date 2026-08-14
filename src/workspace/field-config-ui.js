@@ -18,7 +18,8 @@ import {
   BUTTON_OPS, buttonNotReady, buttonReady, planPush, planSet, pushableFields,
 } from './button-field.js';
 import { WB_ACTION_ICONS, WB_APP_ICONS } from './icon-sets.js';
-import { normalizeSheet, sheetPreview } from '../sheet/sheet-model.js';
+import { sheetPreview } from '../sheet/sheet-model.js';
+import { normalizeSheetFull } from '../sheet/sheet-format.js';
 
 // "Copy the data inputted on the other field so it will automatically input on it."
 //
@@ -177,7 +178,7 @@ export function renderFieldConfig(fd, app, ctx) {
       <div class="wb-field"><label>Preview <span class="wb-opt">at ${previewPct}%</span></label><div class="wb-prog-preview" id="wbProgPreview">${wbProgressDisplayHtml(fd, previewPct)}</div></div>`;
   }
   if (t === 'sheet') {
-    const start = normalizeSheet(fd.config.sheet || {});
+    const start = normalizeSheetFull(fd.config.sheet || {});
     const filled = Object.keys(start.cells).length;
     return `
       <div class="wb-field"><label>Starting sheet</label>
