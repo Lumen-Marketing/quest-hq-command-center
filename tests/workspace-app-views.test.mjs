@@ -90,7 +90,7 @@ test('the calendar reuses the date maths rather than repeating it', () => {
 // --- wiring -------------------------------------------------------------------------------
 
 test('Dashboard and Calendar come before Items', () => {
-  assert.match(main, /const tabs = \['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'settings'\];/);
+  assert.match(main, /const tabs = \['dashboard', 'calendar', 'items', /, 'the two overviews lead');
   assert.match(main, /dashboard: 'Dashboard', calendar: 'Calendar',/);
 });
 

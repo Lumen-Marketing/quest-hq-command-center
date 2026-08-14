@@ -13357,6 +13357,25 @@ function renderTeamNode(companyId, member, members, depth = 0) {
 function workspaceBuilderStorageKey(companyId) {
   return `${WORKSPACE_BUILDER_STORAGE_PREFIX}:${canonicalCompanyId(companyId)}`;
 }
+// One record inside an app, in the one shape the whole builder agrees on. Shared by the live
+// list and the recycle bin, so a restored record comes back exactly as it went in.
+function normalizeWbItem(item) {
+  const createdAt = item.createdAt || new Date().toISOString().slice(0, 10);
+  return {
+    id: item.id || wbUid(),
+    values: item.values && typeof item.values === 'object' ? item.values : {},
+    createdAt,
+    createdBy: item.createdBy || '',
+    updatedAt: item.updatedAt || createdAt,
+    lastActivityAt: item.lastActivityAt || item.updatedAt || createdAt,
+    comments: Array.isArray(item.comments) ? item.comments : [],
+    children: Array.isArray(item.children) ? item.children : [],
+    // Where a record that arrived by Button came from. It was being dropped on the first save,
+    // so the provenance never survived a reload.
+    ...(item.pushedFrom && typeof item.pushedFrom === 'object' ? { pushedFrom: item.pushedFrom } : {}),
+  };
+}
+
 function normalizeWorkspaceBuilderDoc(doc) {
   const workspaces = Array.isArray(doc?.workspaces) ? doc.workspaces : [];
   return {
@@ -13399,7 +13418,9 @@ function normalizeWorkspaceBuilderDoc(doc) {
         shared: !!app.shared,
         ...(Array.isArray(app.cardFields) ? { cardFields: app.cardFields.filter((id) => typeof id === 'string') } : {}),
         fields: Array.isArray(app.fields) ? app.fields.map((field) => ({ id: field.id || wbUid(), label: field.label || 'Field', type: WB_FIELD_TYPES[field.type] ? field.type : 'text', required: !!field.required, hidden: !!field.hidden, config: sanitizeColorConfig(field.config && typeof field.config === 'object' ? field.config : {}, safeHexColor(app.color, WB_PALETTE[1])) })) : [],
-        items: Array.isArray(app.items) ? app.items.map((item) => { const createdAt = item.createdAt || new Date().toISOString().slice(0, 10); return { id: item.id || wbUid(), values: item.values && typeof item.values === 'object' ? item.values : {}, createdAt, createdBy: item.createdBy || '', updatedAt: item.updatedAt || createdAt, lastActivityAt: item.lastActivityAt || item.updatedAt || createdAt, comments: Array.isArray(item.comments) ? item.comments : [], children: Array.isArray(item.children) ? item.children : [] }; }) : [],
+        items: Array.isArray(app.items) ? app.items.map(normalizeWbItem) : [],
+        // Deleted records, kept so a misclick is recoverable. Same shape plus when it went.
+        trash: Array.isArray(app.trash) ? app.trash.map((item) => ({ ...normalizeWbItem(item), deletedAt: item.deletedAt || new Date().toISOString(), deletedBy: item.deletedBy || '' })) : [],
         automations: Array.isArray(app.automations) ? app.automations.map((auto) => ({ id: auto.id || wbUid(), name: auto.name || 'Automation', enabled: auto.enabled !== false, trigger: auto.trigger && typeof auto.trigger === 'object' ? auto.trigger : { event: 'created' }, actions: Array.isArray(auto.actions) ? auto.actions : [] })) : [],
       })) : [],
     })),
@@ -14908,7 +14929,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   const canManage = can('workspaces.manage', companyId);
   // Dashboard and Calendar lead: they answer "how is this app doing" and "what is coming",
   // which you want before you start reading rows.
-  const tabs = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'settings'];
+  const tabs = ['dashboard', 'calendar', 'items', 'fields', 'reports', 'automations', 'trash', 'settings'];
   const tab = tabs.includes(route.params.get('tab')) ? route.params.get('tab') : 'dashboard';
   const tabPath = (next) => appHref(companyPath('workspaces', { app_id: app.id, tab: next }, companyId));
   let headBtn = '';
@@ -14919,7 +14940,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   if (tab === 'reports' && app.fields.length && app.items.length) headBtn += `<button class="btn" data-wb-print-reports><i class="ti ti-printer"></i>Print</button>`;
   if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button>`;
   else if (canManage && tab === 'automations') headBtn += `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
-  const tabLabel = { dashboard: 'Dashboard', calendar: 'Calendar', items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, settings: 'Settings' };
+  const tabLabel = { dashboard: 'Dashboard', calendar: 'Calendar', items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, trash: `Recycle bin${(app.trash || []).length ? ` <b>${app.trash.length}</b>` : ''}`, settings: 'Settings' };
   let body = '';
   if (tab === 'dashboard') body = renderAppDashboard(companyId, app, state.wbDashManage);
   else if (tab === 'calendar') body = renderAppCalendar(companyId, app, route.params.get('on') || '', route.params.get('field') || '', route.params.get('view') || '');
@@ -14927,6 +14948,7 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   else if (tab === 'fields') body = wbViewBuilder(companyId, workspace, app);
   else if (tab === 'reports') body = wbViewReports(companyId, workspace, app);
   else if (tab === 'automations') body = wbViewAutomations(companyId, workspace, app);
+  else if (tab === 'trash') body = wbViewRecycleBin(companyId, workspace, app);
   else body = wbViewAppSettings(companyId, workspace, app, appLinked);
   return `
     ${wbWorkspaceHeader(companyId, workspace, app.id)}
@@ -17522,6 +17544,37 @@ function wbInstallTargetBody(companyId, workspace, app, chosenCompanyId) {
       ` : ''}`;
 }
 
+// ---- the app's recycle bin ---------------------------------------------------------------
+// Deleting a record moves it here rather than dropping it. Body in ./workspace/recycle-bin.js.
+let recycleBinModule = null;
+let recycleBinPending = null;
+
+function loadRecycleBin() {
+  if (recycleBinModule) return Promise.resolve(recycleBinModule);
+  if (!recycleBinPending) {
+    recycleBinPending = import('./workspace/recycle-bin.js').then((mod) => {
+      recycleBinModule = { ...mod, ...mod.createRecycleBin({ h, can, wbItemTitle, wbTimeAgo, formatDate, memberName, emptyState }) };
+      return recycleBinModule;
+    }).catch((error) => { recycleBinPending = null; throw error; });
+  }
+  return recycleBinPending;
+}
+
+function wbViewRecycleBin(companyId, workspace, app) {
+  if (recycleBinModule) return recycleBinModule.wbViewRecycleBin(companyId, workspace, app);
+  loadRecycleBin().then(() => render()).catch((error) => console.error('recycle bin failed to load', error));
+  return questLoader('Loading');
+}
+
+// Deleting is the one path that has to work before the module arrives -- it is reached from the
+// items table, not from the bin -- so it awaits it rather than dropping the record on the floor.
+async function wbTrashItems(companyId, workspace, app, itemIds) {
+  const mod = await loadRecycleBin();
+  const moved = mod.sendToTrash(app, itemIds, activeSession()?.profile?.id || '');
+  if (moved) wbSave(companyId);
+  return moved;
+}
+
 // ---- the app Settings tab ----------------------------------------------------------------
 // Body lives in ./workspace/app-settings.js and is fetched the first time the tab is opened.
 let appSettingsModule = null;
@@ -19163,10 +19216,10 @@ function wbConfirmDelete() {
   else if (c.op === 'del-item') {
     const gone = app.items.find((i) => i.id === c.itemId);
     if (gone) { const title = wbItemTitle(app, gone); wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted <b>${h(title)}</b> from ${h(app.name)}` }); wbNotifyItem(companyId, workspace, app, gone, `Deleted: ${title}`, `${actorName()} deleted ${title} from ${app.name}`); }
-    app.items = app.items.filter((i) => i.id !== c.itemId);
+    wbTrashItems(companyId, workspace, app, [c.itemId]).catch(() => null);
   } else if (c.op === 'del-items') {
     const kill = new Set(c.itemIds || []); const n = app.items.filter((i) => kill.has(i.id)).length;
-    app.items = app.items.filter((i) => !kill.has(i.id)); wbItemsUI(app.id).sel.clear();
+    wbTrashItems(companyId, workspace, app, [...kill]).catch(() => null); wbItemsUI(app.id).sel.clear();
     if (n) { wbLogActivity(workspace, { icon: 'ti-trash', color: '#dc2626', text: `Deleted <b>${n}</b> record${n === 1 ? '' : 's'} from ${h(app.name)}` }); wbNotifyWorkspace(companyId, workspace, app, `${n} record${n === 1 ? '' : 's'} deleted`, `${actorName()} deleted ${n} record${n === 1 ? '' : 's'} from ${app.name}`); }
   } else if (c.op === 'del-auto') { app.automations = app.automations.filter((a) => a.id !== c.autoId); }
   state.builderModal = null; wbSave(companyId); showToast('Deleted.', 'local', 'Workspaces'); render();
@@ -19593,7 +19646,7 @@ function mountWorkspaceBuilder() {
     });
     bind('[data-add-item]', () => openWbItemModal(companyId, workspaceId, appId, ''));
     bind('[data-edit-item]', (el, e) => { e.stopPropagation(); openWbItemModal(companyId, workspaceId, appId, el.dataset.editItem, 'edit'); });
-    bind('[data-del-item]', (el, e) => { e.stopPropagation(); openWbConfirm(companyId, 'del-item', 'This record will be permanently removed.', { workspaceId, appId, itemId: el.dataset.delItem }); });
+    bind('[data-del-item]', (el, e) => { e.stopPropagation(); openWbConfirm(companyId, 'del-item', 'This record moves to the app’s recycle bin, where it can be restored.', { workspaceId, appId, itemId: el.dataset.delItem }); });
     // Card comment button: open the record's detail view focused on the comment box.
     bind('[data-wb-open-comments]', (el, e) => { e.stopPropagation(); openWbItemModal(companyId, workspaceId, appId, el.dataset.wbOpenComments, 'view', { focusComment: true }); });
     // Click an item anywhere to open its detail/edit view — except on interactive
@@ -19706,6 +19759,20 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-comment-cancel]', () => { state.wbEditingCommentId = null; render(); });
     bind('[data-wb-comment-save]', (el) => { wbSaveEditedComment(el.dataset.wbCommentSave).catch(commentFail); });
     bind('[data-wb-comment-del]', (el) => { wbDeleteItemComment(el.dataset.wbCommentDel).catch(commentFail); });
+    bind('[data-wb-trash-restore]', (el) => {
+      const { app } = wbFind(companyId, workspaceId, appId);
+      const back = recycleBinModule?.restoreFromTrash(app, el.dataset.wbTrashRestore);
+      if (back) { wbSave(companyId); showToast('Record restored.', 'local', 'Workspaces'); render(); }
+    });
+    bind('[data-wb-trash-purge]', (el) => {
+      const { app } = wbFind(companyId, workspaceId, appId);
+      if (recycleBinModule?.purgeFromTrash(app, el.dataset.wbTrashPurge)) { wbSave(companyId); showToast('Deleted for good.', 'local', 'Workspaces'); render(); }
+    });
+    bind('[data-wb-trash-empty]', () => {
+      const { app } = wbFind(companyId, workspaceId, appId);
+      const n = recycleBinModule?.emptyTrash(app) || 0;
+      if (n) { wbSave(companyId); showToast(`${n} record${n === 1 ? '' : 's'} deleted for good.`, 'local', 'Workspaces'); render(); }
+    });
     bind('[data-wb-view-file]', (el) => { openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
     // Changing the chip field clears the chosen chip: its id belongs to the old field and
     // would match nothing, leaving an empty list with no chip highlighted to explain it.
