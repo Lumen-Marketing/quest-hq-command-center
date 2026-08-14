@@ -13,7 +13,7 @@ import {
 export function createButtonPush(ctx) {
   const {
     can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
-    state, wbFind, wbReadFieldInput, activeCompanyId,
+    state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle,
   } = ctx;
 
   /** The target app, wherever it lives, or null with the reason it cannot be reached. */
@@ -39,7 +39,7 @@ export function createButtonPush(ctx) {
    * is the whole reason the merge is safe: nothing in the target is overwritten, and the
    * records already there keep every value they had, with the new columns empty.
    */
-  async function pressButton(sourceCompanyId, sourceApp, buttonField, item) {
+  async function pressButton(sourceCompanyId, sourceApp, buttonField, item, sourceWorkspace) {
     const target = resolveTarget(buttonField.config);
     if (target.error) { showToast(target.error, 'local', 'Workspaces'); return false; }
     if (!can('workspaces.manage', target.companyId)) {
@@ -101,7 +101,27 @@ export function createButtonPush(ctx) {
     const grew = plan.create.length
       ? ` ${plan.create.length} field${plan.create.length === 1 ? '' : 's'} added to fit.`
       : '';
-    showToast(`Sent to ${target.app.name}.${grew}`, 'local', 'Workspaces');
+    // 4. "Send it and take it off this app." The record moves on rather than being copied:
+    //    its FIELDS stay exactly as they are here -- this app keeps its shape and its other
+    //    records -- and only the one that was sent is gone. Done after the target is saved, so
+    //    a failure to write there cannot lose the record from both.
+    const moved = buttonField.config?.action === 'move'
+      && (sourceApp.items || []).some((row) => row.id === item.id);
+    if (moved) {
+      const title = wbItemTitle(sourceApp, item);
+      sourceApp.items = sourceApp.items.filter((row) => row.id !== item.id);
+      if (sourceWorkspace) {
+        wbLogActivity(sourceWorkspace, {
+          icon: 'ti-trash', color: '#dc2626',
+          text: `Sent <b>${title}</b> to ${target.app.name} and removed it from ${sourceApp.name}`,
+        });
+      }
+      wbSave(canonicalCompanyId(sourceCompanyId));
+      // The record it was open on no longer exists, so the form cannot stay on it.
+      if (state.builderModal?.editId === item.id) state.builderModal = null;
+    }
+
+    showToast(`${moved ? 'Moved' : 'Sent'} to ${target.app.name}.${grew}`, 'local', 'Workspaces');
     render();
     return true;
   }
@@ -240,9 +260,9 @@ export function createButtonPush(ctx) {
   function seatOf(seat) {
     const [companyId, workspaceId, appId, itemId] = String(seat || '').split('|');
     if (!itemId) return null;
-    const { app } = wbFind(canonicalCompanyId(companyId), workspaceId, appId);
+    const { app, workspace } = wbFind(canonicalCompanyId(companyId), workspaceId, appId);
     const item = (app?.items || []).find((row) => row.id === itemId);
-    return app && item ? { companyId: canonicalCompanyId(companyId), app, item } : null;
+    return app && item ? { companyId: canonicalCompanyId(companyId), app, workspace, item } : null;
   }
 
   /**
@@ -258,13 +278,13 @@ export function createButtonPush(ctx) {
     if (!field) return false;
     return field.config?.action === 'set'
       ? applySet(row.companyId, row.app, field, row.item, true)
-      : pressButton(row.companyId, row.app, field, row.item);
+      : pressButton(row.companyId, row.app, field, row.item, row.workspace);
   }
 
   function pressFromForm(fieldId) {
     const modal = state.builderModal;
     const companyId = canonicalCompanyId(modal?.companyId || activeCompanyId());
-    const { app } = wbFind(companyId, modal?.workspaceId, modal?.appId);
+    const { app, workspace } = wbFind(companyId, modal?.workspaceId, modal?.appId);
     const field = (app?.fields || []).find((item) => item.id === fieldId);
     if (!app || !field) return false;
     const values = { ...(modal?.draft?.values || {}) };
@@ -273,7 +293,7 @@ export function createButtonPush(ctx) {
       if (read !== undefined) values[item.id] = read;
     });
     if (field.config?.action === 'set') return applySet(companyId, app, field, { values }, false);
-    return pressButton(companyId, app, field, { id: modal?.editId || wbUid(), values });
+    return pressButton(companyId, app, field, { id: modal?.editId || wbUid(), values }, workspace);
   }
 
   return {

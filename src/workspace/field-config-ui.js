@@ -191,7 +191,7 @@ export function renderFieldConfig(fd, app, ctx) {
     const rules = Array.isArray(fd.config.when) && fd.config.when.length ? fd.config.when : [{ field: '', op: 'eq', value: '' }];
     const plan = targetApp ? planPush(app, targetApp, fd) : null;
     const names = (list) => list.map((label) => h(label)).join('</b>, <b>');
-    const action = fd.config.action === 'set' ? 'set' : 'push';
+    const action = ['set', 'move'].includes(fd.config.action) ? fd.config.action : 'push';
     // Fields this button could write to: everything the record actually stores.
     const settable = pushableFields(app, fd.id);
     const setRows = Array.isArray(fd.config.set) && fd.config.set.length ? fd.config.set : [{ field: '', value: '' }];
@@ -240,7 +240,8 @@ export function renderFieldConfig(fd, app, ctx) {
       </div>
       <div class="wb-field"><label>What the button does</label>
         <select class="wb-input" id="wbBtnAction" data-wb-rel-refresh>
-          <option value="push" ${action === 'push' ? 'selected' : ''}>Send the record to another app</option>
+          <option value="push" ${action === 'push' ? 'selected' : ''}>Send a copy to another app</option>
+          <option value="move" ${action === 'move' ? 'selected' : ''}>Send it and remove it from this app</option>
           <option value="set" ${action === 'set' ? 'selected' : ''}>Change fields on this record</option>
         </select>
       </div>
@@ -269,11 +270,12 @@ export function renderFieldConfig(fd, app, ctx) {
         ${chosen.length ? `<div class="wb-pick-list">${carryable.map((field) => `<label class="wb-pick"><input type="checkbox" data-wb-btn-field="${h(field.id)}" ${chosen.includes(field.id) ? 'checked' : ''}><span>${h(field.label)}</span></label>`).join('')}</div>` : ''}
       </div>
       `}
-      ${action === 'push' && plan ? `<div class="wb-field"><div class="wb-sub wb-plan">
+      ${action !== 'set' && plan ? `<div class="wb-field"><div class="wb-sub wb-plan">
         ${plan.carry.length ? `Carries <b>${names(plan.carry.map((pair) => pair.from.label))}</b>.` : 'Nothing on this record can be carried across yet.'}
         ${plan.create.length ? ` <b>${h(targetApp.name)}</b> has no <b>${names(plan.create.map((field) => field.label))}</b>, so ${plan.create.length === 1 ? 'it is added' : 'they are added'} there on the first send. Records already in that app keep every value they have and read blank in the new ${plan.create.length === 1 ? 'column' : 'columns'}.` : ''}
         ${plan.blocked.length ? ` <b>${names(plan.blocked)}</b> ${plan.blocked.length === 1 ? 'stays' : 'stay'} behind: an automatic field belongs to the app that filled it in.` : ''}
         ${plan.skipped.length ? ` ${plan.skipped.map((entry) => h(`${entry.field.label} is left behind — ${entry.why}`)).join('. ')}.` : ''}
+        ${action === 'move' ? ` Then the record is <b>removed from ${h(app.name)}</b>. Its fields stay exactly as they are here — this app keeps its shape and every other record; only the one that was sent is gone.` : ''}
       </div></div>` : ''}`;
   }
   if (t === 'company_contact') {

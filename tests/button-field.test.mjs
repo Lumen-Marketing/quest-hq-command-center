@@ -581,3 +581,78 @@ test('in the list, a Change-fields button is enabled on the rows that qualify', 
   assert.equal(first.disabled, false, 'no longer stuck disabled just for having no target app');
   assert.equal(second.disabled, true, 'and the condition still decides');
 });
+
+// ---- the third action: send it and take it off this app ------------------------------
+
+const movedSetup = () => {
+  const app1 = APP1();
+  const app2 = APP2();
+  app1.items.push({ id: 'i2', values: { 'f-name': 'Stays Put' } });
+  const workspace = { id: 'ws', apps: [app1], activity: [] };
+  const saved = [];
+  const logged = [];
+  const push = createButtonPush({
+    can: () => true,
+    wbDoc: () => ({ workspaces: [{ id: 'ws2', apps: [app2] }] }),
+    wbSave: (companyId) => saved.push(companyId),
+    wbUid: () => `u-${++seq}`,
+    showToast: () => {},
+    render: () => {},
+    canonicalCompanyId: (id) => id,
+    activeSession: () => ({ profile: { id: 'me' } }),
+    state: {},
+    wbFind: () => ({ app: app1, workspace }),
+    wbReadFieldInput: () => undefined,
+    activeCompanyId: () => 'co1',
+    wbLogActivity: (ws, entry) => logged.push(entry),
+    wbItemTitle: () => 'John Doe',
+  });
+  const button = { id: 'f-btn', config: { action: 'move', targetCompany: 'co2', targetApp: 'app2' } };
+  return { push, app1, app2, button, workspace, saved, logged };
+};
+
+test('the record lands in the other app and leaves this one', async () => {
+  const { push, app1, app2, button, workspace, saved, logged } = movedSetup();
+  await push.pressButton('co1', app1, button, app1.items[0], workspace);
+  assert.equal(app2.items.length, 2, 'it arrived');
+  assert.deepEqual(app1.items.map((row) => row.id), ['i2'], 'and it is gone from here');
+  assert.deepEqual(saved, ['co2', 'co1'], 'target saved first, so a failure there cannot lose it from both');
+  assert.match(logged[0].text, /Sent .* and removed it from App 1/, 'the workspace feed says where it went');
+});
+
+test('the fields of the app it left are untouched', async () => {
+  // "The field set on it still stays; only the item that was sent is gone."
+  const { push, app1, button, workspace } = movedSetup();
+  const before = app1.fields.map((field) => field.label);
+  await push.pressButton('co1', app1, button, app1.items[0], workspace);
+  assert.deepEqual(app1.fields.map((field) => field.label), before);
+});
+
+test('a plain Send leaves the record where it is', async () => {
+  const { push, app1, button, workspace } = movedSetup();
+  await push.pressButton('co1', app1, { ...button, config: { ...button.config, action: 'push' } }, app1.items[0], workspace);
+  assert.equal(app1.items.length, 2, 'copied, not moved');
+});
+
+test('a record that never reached the target is not removed from the source', async () => {
+  // Removing it on a failed write would lose it from both apps at once.
+  const { app1, button, workspace } = movedSetup();
+  const push = createButtonPush({
+    can: () => false,
+    wbDoc: () => ({ workspaces: [] }),
+    wbSave: () => {},
+    wbUid: () => 'u',
+    showToast: () => {},
+    render: () => {},
+    canonicalCompanyId: (id) => id,
+    activeSession: () => ({ profile: { id: 'me' } }),
+    state: {},
+    wbFind: () => ({ app: app1, workspace }),
+    wbReadFieldInput: () => undefined,
+    activeCompanyId: () => 'co1',
+    wbLogActivity: () => {},
+    wbItemTitle: () => 'x',
+  });
+  await push.pressButton('co1', app1, button, app1.items[0], workspace);
+  assert.equal(app1.items.length, 2, 'still here');
+});

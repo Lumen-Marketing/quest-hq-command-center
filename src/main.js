@@ -33803,7 +33803,7 @@ function loadButtonPush() {
     buttonPushPending = import('./workspace/button-push.js').then((mod) => {
       buttonPushModule = mod.createButtonPush({
         can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
-        state, wbFind, wbReadFieldInput, activeCompanyId,
+        state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle,
       });
       return buttonPushModule;
     }).catch((error) => { buttonPushPending = null; throw error; });
