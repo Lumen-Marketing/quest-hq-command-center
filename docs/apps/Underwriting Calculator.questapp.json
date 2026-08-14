@@ -1,0 +1,303 @@
+{
+  "format": "quest-hq-app",
+  "version": 1,
+  "exported_at": "2026-08-14T00:00:00.000Z",
+  "app": {
+    "name": "Underwriting Calculator",
+    "recordName": "Takeoff",
+    "type": "Underwriting",
+    "icon": "ti-calculator",
+    "color": "#D4541F",
+    "description": "Price a roof from its GAF report. The eight measurements carry their own waste allowance, the line items are listed as they are bought, and the totals work out the cost, the price and the margin. Built from Underwriting_Calculator.xlsx. Note: the App Builder's formula grammar has no ROUNDUP, so quantities that round up to whole boxes and rolls are typed here — the Takeoff calculator on the Underwriter page and on every quote does that rounding for you and is the better tool for pricing.",
+    "fields": [
+      {
+        "id": "f-job",
+        "label": "Job",
+        "type": "text",
+        "required": true,
+        "hidden": false,
+        "config": { "placeholder": "300-12444 — Re-roof" }
+      },
+      {
+        "id": "f-contact",
+        "label": "Contact",
+        "type": "company_contact",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-priced",
+        "label": "Priced on",
+        "type": "date",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-waste",
+        "label": "Waste %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "%" }
+      },
+      {
+        "id": "f-tax",
+        "label": "Tax %",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "%" }
+      },
+
+      {
+        "id": "f-sq",
+        "label": "Total SQ",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "SQ" }
+      },
+      {
+        "id": "f-rakes",
+        "label": "Rakes",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "FT" }
+      },
+      {
+        "id": "f-valleys",
+        "label": "Valleys",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "FT" }
+      },
+      {
+        "id": "f-drip",
+        "label": "Drip edge",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "FT" }
+      },
+      {
+        "id": "f-eaves",
+        "label": "Eaves",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "FT" }
+      },
+      {
+        "id": "f-ridges",
+        "label": "Ridges",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "FT" }
+      },
+      {
+        "id": "f-low",
+        "label": "Low slope",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "SQ FT" }
+      },
+      {
+        "id": "f-leak",
+        "label": "Leak barrier",
+        "type": "number",
+        "required": false,
+        "hidden": false,
+        "config": { "unit": "FT" }
+      },
+
+      {
+        "id": "f-sq-w",
+        "label": "Total SQ + waste",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Total SQ} + ({Total SQ} * {Waste %} / 100)" }
+      },
+      {
+        "id": "f-rakes-w",
+        "label": "Rakes + waste",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Rakes} + ({Rakes} * {Waste %} / 100)" }
+      },
+      {
+        "id": "f-valleys-w",
+        "label": "Valleys + waste",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Valleys} + ({Valleys} * {Waste %} / 100)" }
+      },
+      {
+        "id": "f-drip-w",
+        "label": "Drip edge + waste",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Drip edge} + ({Drip edge} * {Waste %} / 100)" }
+      },
+      {
+        "id": "f-eaves-w",
+        "label": "Eaves + waste",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Eaves} + ({Eaves} * {Waste %} / 100)" }
+      },
+      {
+        "id": "f-ridges-w",
+        "label": "Ridges + waste",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Ridges} + ({Ridges} * {Waste %} / 100)" }
+      },
+      {
+        "id": "f-low-w",
+        "label": "Low slope + waste",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Low slope} + ({Low slope} * {Waste %} / 100)" }
+      },
+      {
+        "id": "f-leak-w",
+        "label": "Leak barrier + waste",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Leak barrier} + ({Leak barrier} * {Waste %} / 100)" }
+      },
+
+      {
+        "id": "f-labor",
+        "label": "Labor total",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": { "currency": "$" }
+      },
+      {
+        "id": "f-material",
+        "label": "Material total",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": { "currency": "$" }
+      },
+      {
+        "id": "f-material-tax",
+        "label": "Material with tax",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Material total} + ({Material total} * {Tax %} / 100)" }
+      },
+      {
+        "id": "f-cost",
+        "label": "Total labor & material",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Labor total} + {Material total} + ({Material total} * {Tax %} / 100)" }
+      },
+      {
+        "id": "f-client",
+        "label": "Price to client",
+        "type": "money",
+        "required": false,
+        "hidden": false,
+        "config": { "currency": "$" }
+      },
+      {
+        "id": "f-profit",
+        "label": "Profit",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "{Price to client} - {Labor total} - {Material total} - ({Material total} * {Tax %} / 100)" }
+      },
+      {
+        "id": "f-margin",
+        "label": "Margin %",
+        "type": "calculation",
+        "required": false,
+        "hidden": false,
+        "config": { "formula": "({Price to client} - {Labor total} - {Material total} - ({Material total} * {Tax %} / 100)) * 100 / {Price to client}" }
+      },
+      {
+        "id": "f-notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "hidden": false,
+        "config": {}
+      },
+      {
+        "id": "f-created",
+        "label": "Created",
+        "type": "created_time",
+        "required": false,
+        "hidden": true,
+        "config": {}
+      }
+    ],
+    "collections": [
+      {
+        "id": "c-labor",
+        "name": "Labor",
+        "recordName": "Labor line",
+        "fields": [
+          { "id": "cl-desc", "label": "Description", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "Tile install labor per square" } },
+          { "id": "cl-qty", "label": "Qty", "type": "number", "required": false, "hidden": false, "config": {} },
+          { "id": "cl-price", "label": "Unit price", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } },
+          { "id": "cl-total", "label": "Line total", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } }
+        ]
+      },
+      {
+        "id": "c-material",
+        "name": "Material",
+        "recordName": "Material line",
+        "fields": [
+          { "id": "cm-desc", "label": "Description", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "Eagle tile" } },
+          { "id": "cm-basis", "label": "Worked out from", "type": "text", "required": false, "hidden": false, "config": { "placeholder": "ROUNDUP(Total SQ + waste / 10)" } },
+          { "id": "cm-qty", "label": "Qty", "type": "number", "required": false, "hidden": false, "config": {} },
+          { "id": "cm-price", "label": "Unit price", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } },
+          { "id": "cm-total", "label": "Line total", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } }
+        ]
+      },
+      {
+        "id": "c-client",
+        "name": "Price to client",
+        "recordName": "Client line",
+        "fields": [
+          { "id": "cc-desc", "label": "Description", "type": "text", "required": true, "hidden": false, "config": { "placeholder": "Whole roof shingle replacement" } },
+          { "id": "cc-qty", "label": "Qty", "type": "number", "required": false, "hidden": false, "config": {} },
+          { "id": "cc-price", "label": "Unit price", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } },
+          { "id": "cc-total", "label": "Line total", "type": "money", "required": false, "hidden": false, "config": { "currency": "$" } }
+        ]
+      }
+    ],
+    "cardFields": ["f-job", "f-sq", "f-cost", "f-client", "f-margin"],
+    "items": [],
+    "automations": [],
+    "views": [],
+    "dashboard": [
+      { "id": "w-count", "type": "metric", "size": 1, "config": { "metric": "count" } },
+      { "id": "w-client", "type": "metric", "size": 1, "config": { "metric": "sum", "fieldId": "f-client" } },
+      { "id": "w-recent", "type": "recent", "size": 2, "config": { "limit": 5 } }
+    ]
+  }
+}
