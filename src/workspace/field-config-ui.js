@@ -305,15 +305,19 @@ export function createFieldInput(ctx) {
             const src = (ta.fields || []).find((x) => x.id === pair.from);
             if (!src) return;
             const raw = item?.values?.[src.id];
-            if (raw === undefined || raw === null || raw === '') return;
+            // Blanks travel too. Picking a different record refreshes the fields this copy
+            // filled, and "the new record has nothing here" is an instruction to empty one --
+            // without it, the first record's value would sit there, silently wrong.
+            if (raw === undefined || raw === null || raw === '') { out[pair.to] = ''; return; }
             // A status/category stores an option id that means nothing in the other app, so
             // the LABEL travels and the destination matches its own option by text.
             if (src.type === 'status' || src.type === 'category') {
               const option = (src.config?.options || []).find((o) => o.id === raw);
-              if (!option) return;
-              out[pair.to] = String(option.label);
+              out[pair.to] = option ? String(option.label) : '';
               return;
             }
+            // A file or a checklist is not a value that can be copied into another field; the
+            // pair is dropped entirely rather than blanking a field it could never fill.
             if (typeof raw === 'object') return;
             out[pair.to] = String(raw);
           });
@@ -366,7 +370,12 @@ export function createFieldInput(ctx) {
           </div>`}
           <div class="wb-file-progress" data-wb-file-progress hidden><div class="wb-file-bar" data-wb-file-bar></div></div>
         </div>`; break;
-      case 'calculation': input = `<div class="wb-input wb-calc-display" data-calc="${h(f.id)}">—</div><div class="wb-sub">Auto-calculated: <code>${h(f.config.formula || '(no formula)')}</code></div>`; break;
+      // The formula is not printed under the box. On a record form it is noise -- nobody
+      // filling in a case needs to read ({Material} + {Labor} + …) * ({Overhead %} + …) / 100
+      // to understand a number they cannot edit -- and it pushed the fields that DO need
+      // filling in off the screen. It stays as the box's tooltip, and in full in the field
+      // editor, which is where a formula is actually worked on.
+      case 'calculation': input = `<div class="wb-input wb-calc-display" data-calc="${h(f.id)}" title="${h(f.config.formula ? `Auto-calculated: ${f.config.formula}` : 'Auto-calculated')}">—</div>${f.config.formula ? '' : '<div class="wb-sub">No formula set yet.</div>'}`; break;
       // The pin is a button, not decoration: it opens the same map picker the CRM uses, so
       // an address can be dropped or found rather than typed from memory.
       case 'location': input = `<div class="wb-inline"><button class="wb-cur wb-pin-btn" type="button" data-action="wb-location-pin" data-f="${h(f.id)}" title="Pick this on a map" aria-label="Pick ${h(f.name || 'location')} on a map"><i class="ti ti-map-pin"></i></button><input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="Address, city, or place"></div>`; break;

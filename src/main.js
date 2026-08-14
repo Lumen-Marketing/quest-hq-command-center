@@ -13806,12 +13806,6 @@ function wbViewCompanyHome(companyId, workspace) {
   const wsName = opsWorkspace?.name || workspace.name || companyName(companyId) || 'Workspace';
   return `
     ${wbWorkspaceHeader(companyId, workspace, null)}
-    <div class="wb-page-head">
-      <div>
-        <h1 class="wb-title"><i class="ti ti-layout-grid-add" aria-hidden="true"></i>${h(wsName)}</h1>
-      </div>
-      <div class="wb-spacer"></div>
-    </div>
     <div class="wb-dash">
       <main class="wb-dash-main">
         ${wbFeedColumn(companyId, workspace)}
@@ -14936,13 +14930,6 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   else body = wbViewAppSettings(companyId, workspace, app, appLinked);
   return `
     ${wbWorkspaceHeader(companyId, workspace, app.id)}
-    <div class="wb-page-head">
-      <div>
-        <h1 class="wb-title"><span class="wb-title-ic" style="background:${h(app.color)}" aria-hidden="true"><i class="ti ${h(app.icon)}"></i></span>${h(app.name)}</h1>
-        <div class="wb-sub">${h(app.description || '')}</div>
-      </div>
-      <div class="wb-spacer"></div>
-    </div>
     <div class="wb-tabs-row">
       <div class="wb-tabs">
         ${tabs.map((item) => `<a class="wb-tab ${tab === item ? 'active' : ''}" href="${tabPath(item)}" data-router>${tabLabel[item]}</a>`).join('')}
@@ -37848,9 +37835,10 @@ function wbPullFromContact(picker, contact) {
   const values = {};
   pairs.forEach(([from, to]) => {
     const value = from === 'name' ? contact.name : companyContactValue(contact, fields.find((field) => field.id === from));
-    // A field the contact has nothing for is left alone rather than blanked: "fields the
-    // contact doesn't have will be left blank" means untouched, not cleared.
-    if (value !== '' && value != null && values[to] === undefined) values[to] = value;
+    // Blanks included: picking a different contact refreshes the fields this copy filled, and
+    // one the new contact has nothing for has to be emptied rather than left showing the last
+    // contact's value. applyPullValues only ever touches what it wrote itself.
+    if (values[to] === undefined) values[to] = value == null ? '' : value;
   });
   if (!Object.keys(values).length) return;
   // Reported precisely: a module that loaded but could not do the job is a different

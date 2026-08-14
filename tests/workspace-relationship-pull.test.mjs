@@ -9,6 +9,7 @@ import {
 } from '../src/workspace/relationship-pull.js';
 // Its own module: main.js reads the DOM rows synchronously, so importing the compatibility
 // table there would drag it into the entry bundle for one small helper.
+import { applyPullValues } from '../src/workspace/relationship-picker.js';
 import { readPullRows } from '../src/workspace/pull-rows.js';
 
 // "On the relationship field add an option where I can copy the data inputted on the other
@@ -96,22 +97,54 @@ test('two rows cannot both write the same field', () => {
   assert.deepEqual(readPullRows([{ from: 'a', to: 'z' }, { from: 'b', to: 'z' }]), [{ from: 'a', to: 'z' }]);
 });
 
-test('the copy fills a blank and never overwrites', () => {
-  // Somebody who typed an address and then linked a record did not ask for it to be replaced.
-  // The body moved into applyPullValues so a company-contact picker could share it: the copy
-  // is the same job whether the values came from a linked record or from the directory.
+test('the copy owns what the copy wrote, and nothing else', () => {
+  // This used to read "fills a blank and never overwrites", which meant changing the linked
+  // record left the FIRST record's values sitting under the SECOND record's name -- a wrong
+  // value, not a stale one. Each field it fills is stamped; picking a different record
+  // refreshes exactly those, and a field somebody typed no longer matches its stamp.
+  const node = (value = '') => ({ tagName: 'INPUT', value, dataset: {}, dispatchEvent: () => {} });
+  const build = (fields) => ({
+    fields,
+    picker: { closest: () => ({ querySelector: (sel) => fields[sel.replace(/\[data-f="|"\]/g, '')] || null }), contains: () => false },
+  });
+
+  const form = build({ a: node(), b: node('typed by hand') });
+  applyPullValues(form.picker, { a: 'from record one', b: 'from record one' });
+  assert.equal(form.fields.a.value, 'from record one');
+  assert.equal(form.fields.b.value, 'typed by hand', 'filled before any copy ran, so not the copy to change');
+
+  applyPullValues(form.picker, { a: 'from record two', b: 'from record two' });
+  assert.equal(form.fields.a.value, 'from record two', 'refreshed');
+  assert.equal(form.fields.b.value, 'typed by hand', 'still left alone');
+
+  applyPullValues(form.picker, { a: '', b: '' });
+  assert.equal(form.fields.a.value, '', 'a record with nothing here empties what the copy filled');
+  assert.equal(form.fields.b.value, 'typed by hand');
+});
+
+test('a blank on the linked record travels, so the copy can undo itself', () => {
+  // Dropped before, which is what made a changed link leave the old value behind.
+  assert.match(fieldUi, /if \(raw === undefined \|\| raw === null \|\| raw === ''\) \{ out\[pair\.to\] = ''; return; \}/);
+  // A file or checklist is still dropped: it could never have filled that field anyway.
+  assert.match(fieldUi, /if \(typeof raw === 'object'\) return;/);
+});
+
+test('both events fire, because different things listen for each', () => {
   const body = fn(picker, 'applyPullValues');
-  assert.match(body, /if \(target\.checked\) return;/);
-  assert.match(body, /if \(target\.value\) return;/, 'a select that already has a value is left alone');
-  assert.match(body, /if \(String\(target\.value \|\| ''\)\.trim\(\)\) return;/);
-  // Both events, because an automation listens for change and a calculation redraws on input.
   assert.match(body, /new Event\('input', \{ bubbles: true \}\)/);
   assert.match(body, /new Event\('change', \{ bubbles: true \}\)/);
 });
 
 test('a stage travels as its label, because option ids mean nothing in the other app', () => {
-  assert.match(fieldUi, /if \(src\.type === 'status' \|\| src\.type === 'category'\) \{[\s\S]*?out\[pair\.to\] = String\(option\.label\)/);
-  assert.match(fn(picker, 'applyPullValues'), /o\.textContent\.trim\(\)\.toLowerCase\(\) === String\(value\)\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(fieldUi, /out\[pair\.to\] = option \? String\(option\.label\) : '';/);
+  assert.match(picker, /option\.textContent\.trim\(\)\.toLowerCase\(\) === value\.trim\(\)\.toLowerCase\(\)/);
+  // And the behaviour itself, not just the line: a <select> takes the option whose TEXT matches.
+  const options = [{ value: 'p1', textContent: ' Acme Roofing ' }, { value: 'p2', textContent: 'Other' }];
+  const select = { tagName: 'SELECT', value: '', options, dataset: {}, dispatchEvent: () => {} };
+  const fields = { s: select };
+  const from = { closest: () => ({ querySelector: () => fields.s }), contains: () => false };
+  applyPullValues(from, { s: 'acme roofing' });
+  assert.equal(select.value, 'p1', 'matched by text, ignoring case and spacing');
 });
 
 test('the copy is scoped to its own form', () => {

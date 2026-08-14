@@ -11,53 +11,75 @@ const cssEscape = (value) => (typeof CSS !== 'undefined' && CSS.escape
   : String(value).replace(/["\\]/g, '\\$&'));
 
 /**
+ * What a control currently holds, in the one form the copy compares against.
+ */
+function readValue(node) {
+  if (node.type === 'checkbox') return node.checked ? '1' : '';
+  return String(node.value || '').trim();
+}
+
+function writeValue(node, isCombo, value) {
+  if (isCombo) {
+    // The visible box of a category/status: it SHOWS a label while the hidden field beside it
+    // STORES an option id. Writing the label into the box lets the app's own commit resolve
+    // the id -- and add the option when this app has never seen that value.
+    node.value = value;
+    return;
+  }
+  if (node.type === 'checkbox') {
+    node.checked = /^(yes|true|1)$/i.test(value);
+    return;
+  }
+  if (node.tagName === 'SELECT') {
+    const match = [...node.options].find((option) => option.value === value)
+      || [...node.options].find((option) => option.textContent.trim().toLowerCase() === value.trim().toLowerCase());
+    node.value = match ? match.value : '';
+    return;
+  }
+  node.value = value;
+}
+
+/**
  * Fill a record's fields from somewhere else: a linked record, or a company contact.
  *
  * `values` is already resolved to { thisAppFieldId: value } -- whoever calls had the source in
  * hand, so nothing here needs to know what an app or a contact is. A status/category arrives as
- * its LABEL, because an option id means nothing on the other side; the destination matches its
- * own option by text.
+ * its LABEL, because an option id means nothing on the other side. Every MAPPED field is
+ * present, including the ones the source leaves empty, because "" is an instruction too.
  *
- * Only ever fills a BLANK field. Somebody who typed an address and then picked a contact did
- * not ask for their address to be replaced, and a copy that overwrites is a copy people learn
- * to work around rather than use.
+ * The copy owns what the copy wrote, and nothing else. Each field it fills is stamped with the
+ * value it put there; picking a different record refreshes exactly those fields -- to the new
+ * record's value, or to empty where it has none. A field somebody typed in themselves no longer
+ * matches its stamp, so it is left alone from then on, and a field that was already filled
+ * before any copy ran was never the copy's to touch.
+ *
+ * That is the difference between a copy you can trust and one people work around: changing the
+ * linked record used to leave the first record's values sitting there, silently wrong.
  */
 export function applyPullValues(from, values) {
   // Scoped to the form the picker is in, so two record forms on one page cannot fill each other.
   const scope = from.closest('form, .wb-modal, .wb-record-page') || document;
-  Object.entries(values).forEach(([fieldId, value]) => {
+  Object.entries(values).forEach(([fieldId, raw]) => {
     const target = scope.querySelector(`[data-f="${cssEscape(fieldId)}"]`);
     if (!target || target === from || from.contains?.(target)) return;
-    // A category or status is a combobox: it SHOWS a label and STORES an option id, in a
-    // hidden input beside the visible box. Writing to the hidden field directly put the label
-    // where an id belongs and left the box looking empty -- the value was wrong and the copy
-    // looked like it had not happened. Fill the visible box instead and let the app's own
-    // commit resolve it, which also adds the option when this app has never seen it.
     const combo = target.type === 'hidden' ? target.closest?.('[data-wb-option-combo]') : null;
-    if (combo) {
-      const visible = combo.querySelector('[data-wb-option-input]');
-      if (!visible || String(visible.value || '').trim() || String(target.value || '').trim()) return;
-      visible.value = value;
-      visible.dispatchEvent(new Event('input', { bubbles: true }));
-      visible.dispatchEvent(new Event('change', { bubbles: true }));
-      return;
-    }
-    if (target.type === 'checkbox') {
-      if (target.checked) return;
-      target.checked = /^(yes|true|1)$/i.test(String(value));
-    } else if (target.tagName === 'SELECT') {
-      if (target.value) return;
-      const match = [...target.options].find((o) => o.value === value)
-        || [...target.options].find((o) => o.textContent.trim().toLowerCase() === String(value).trim().toLowerCase());
-      if (!match) return;
-      target.value = match.value;
-    } else {
-      if (String(target.value || '').trim()) return;
-      target.value = value;
-    }
-    // Both events: an automation listens for change, a calculation redraws on input.
-    target.dispatchEvent(new Event('input', { bubbles: true }));
-    target.dispatchEvent(new Event('change', { bubbles: true }));
+    // For a combobox everything happens on the visible box; the hidden id follows from it.
+    const node = combo ? combo.querySelector('[data-wb-option-input]') : target;
+    if (!node) return;
+
+    const value = raw === undefined || raw === null ? '' : String(raw);
+    const current = readValue(node);
+    const stamp = node.dataset.wbPull;
+    // Ours to write: still empty, or still holding exactly what we last put there.
+    if (current !== '' && current !== stamp) return;
+    if (current === value.trim() && stamp !== undefined) return;
+
+    writeValue(node, !!combo, value);
+    node.dataset.wbPull = readValue(node);
+    // Both events: an automation listens for change, a calculation redraws on input, and a
+    // combobox resolves its option id on change.
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+    node.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
 

@@ -22250,11 +22250,7 @@ button {
 /* ===================== Workspace Builder (full module) ===================== */
 .wb-loading { padding: 60px; text-align: center; color: var(--text-muted, #72695d); font-weight: 600; }
 .wb-page { display: block; }
-.wb-page-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
 .wb-spacer { flex: 1; }
-.wb-title { margin: 0; font-size: 1.6rem; font-weight: 900; letter-spacing: -.01em; display: flex; align-items: center; gap: 12px; color: var(--text, #17130f); }
-.wb-title > i { color: #e0552d; }
-.wb-title-ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; color: #fff; font-size: 20px; flex: none; }
 .wb-sub { color: var(--text-muted, #72695d); font-size: .92rem; margin-top: 3px; }
 .wb-section-title { font-size: 1.05rem; font-weight: 800; margin: 4px 0 14px; display: flex; align-items: center; gap: 8px; }
 .wb-with-icon { margin-top: 26px; } .wb-with-icon i { color: #e0552d; }

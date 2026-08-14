@@ -54,6 +54,7 @@ test('the copy is reachable the way the contact picker reaches it', () => {
   const target = {
     tagName: 'INPUT',
     value: '',
+    dataset: {},
     dispatchEvent: () => {},
   };
   const scope = { querySelector: () => target };

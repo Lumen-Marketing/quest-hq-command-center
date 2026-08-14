@@ -228,8 +228,61 @@ test('picking a contact copies, and only when the contact actually changes', () 
   assert.match(main, /const previous = idField\.value;/);
 });
 
-test('a value the contact does not have is left alone rather than blanked', () => {
-  assert.match(main, /if \(value !== '' && value != null && values\[to\] === undefined\) values\[to\] = value;/);
+test('a blank on the contact is sent, so switching contacts can empty what it filled', () => {
+  // It used to be dropped. That left the FIRST contact's phone number sitting under the
+  // SECOND contact's name, which is worse than an empty box: it is a wrong one.
+  assert.match(main, /if \(values\[to\] === undefined\) values\[to\] = value == null \? '' : value;/);
+});
+
+// ---- changing the record the copy came from ----------------------------------------------
+
+test('picking a different contact refreshes what the copy filled', () => {
+  const form = fakeForm({ a1: { value: '' }, a2: { value: '' } });
+  applyPullValues(form.picker, { a1: '555-0100', a2: 'kevin@acme.com' });
+  assert.equal(form.fields.a1.value, '555-0100');
+
+  applyPullValues(form.picker, { a1: '+639551766487', a2: 'jrom@acme.com' });
+  assert.equal(form.fields.a1.value, '+639551766487', 'the second contact wins');
+  assert.equal(form.fields.a2.value, 'jrom@acme.com');
+});
+
+test('a field the new record leaves blank is emptied, not left showing the old one', () => {
+  const form = fakeForm({ a1: { value: '' } });
+  applyPullValues(form.picker, { a1: '555-0100' });
+  applyPullValues(form.picker, { a1: '' });
+  assert.equal(form.fields.a1.value, '', 'the previous contact’s number does not linger');
+});
+
+test('a value somebody typed themselves is never refreshed or emptied', () => {
+  // The copy owns what the copy wrote, and nothing else.
+  const form = fakeForm({ a1: { value: '' }, a2: { value: 'mine@typed.com' } });
+  applyPullValues(form.picker, { a1: '555-0100', a2: 'kevin@acme.com' });
+  assert.equal(form.fields.a2.value, 'mine@typed.com', 'was filled before any copy ran');
+
+  // Now type over one the copy DID fill: it stops being the copy's from that moment.
+  form.fields.a1.value = '555-9999';
+  applyPullValues(form.picker, { a1: '+639551766487', a2: '' });
+  assert.equal(form.fields.a1.value, '555-9999', 'edited by hand, so left alone');
+  assert.equal(form.fields.a2.value, 'mine@typed.com', 'and still never touched');
+});
+
+test('re-picking the same record writes nothing and fires no events', () => {
+  const form = fakeForm({ a1: { value: '' } });
+  applyPullValues(form.picker, { a1: '555-0100' });
+  const fired = form.events.a1.length;
+  applyPullValues(form.picker, { a1: '555-0100' });
+  assert.equal(form.events.a1.length, fired, 'nothing changed, so nothing was announced');
+});
+
+test('a category follows the new record too, through its combobox', () => {
+  const combo = fakeCombo();
+  const form = fakeForm({ a3: combo.hidden });
+  applyPullValues(form.picker, { a3: 'Acme' });
+  assert.equal(combo.visible.value, 'Acme');
+  applyPullValues(form.picker, { a3: 'ANR Construction' });
+  assert.equal(combo.visible.value, 'ANR Construction');
+  applyPullValues(form.picker, { a3: '' });
+  assert.equal(combo.visible.value, '', 'and clears when the new record has no company');
 });
 
 test('the filling itself stays in the lazily fetched picker module', () => {
@@ -251,6 +304,7 @@ function fakeCombo(shown = '') {
   const events = [];
   const visible = {
     value: shown,
+    dataset: {},
     dispatchEvent: (event) => events.push(event.type),
   };
   const node = { querySelector: (selector) => (selector === '[data-wb-option-input]' ? visible : null) };
@@ -272,6 +326,7 @@ function fakeForm(spec, inside = '') {
     events[id] = [];
     fields[id] = {
       tagName: 'INPUT',
+      dataset: {},
       ...node,
       dispatchEvent: (event) => events[id].push(event.type),
     };
