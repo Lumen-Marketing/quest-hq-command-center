@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   BUTTON_OPS,
@@ -22,6 +25,8 @@ import { createButtonPush } from '../src/workspace/button-push.js';
 //   App1 (John Doe {name}, 13 {age})  +  App2 (USA {address})
 //   press the button → App2 has Name, Age and Address, and a new record carrying John Doe / 13
 //   with its Address blank.
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 let seq = 0;
 const mintId = () => `new-${++seq}`;
@@ -306,4 +311,23 @@ test('a workspace this account cannot load is not a crash', async () => {
     activeSession: () => ({ profile: { id: 'me' } }),
   });
   assert.match(push.resolveTarget({ targetCompany: 'other', targetApp: 'a' }).error, /do not have access/);
+});
+
+// ---- findable in the palette ----------------------------------------------------------
+
+test('Button is in the palette, and not buried at the bottom of it', () => {
+  // It shipped as item 28 of 28, below Checkbox, and the first thing asked was "where is it?".
+  // It sits with the fields that connect one app to another, which is what it does.
+  const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+  const order = JSON.parse(main.match(/const WB_FIELD_ORDER = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
+  const at = order.indexOf('button');
+  assert.notEqual(at, -1, 'a type absent from WB_FIELD_ORDER cannot be added to any app');
+  assert.ok(at < order.length - 1, 'not last');
+  assert.deepEqual(order.slice(at - 1, at + 1), ['company_contact', 'button']);
+  // And it needs an entry in WB_FIELD_TYPES, or the palette throws reading meta.color.
+  assert.match(main, /\n  button: \{ label: 'Button', icon: '([\w-]+)'/);
+  // An icon the local set actually has: no CDN, so a missing glyph is an empty square.
+  const icon = main.match(/\n  button: \{ label: 'Button', icon: '([\w-]+)'/)[1];
+  const font = readFileSync(join(root, 'src', 'tabler-icons.css'), 'utf8');
+  assert.ok(font.includes(`.${icon}:`), `${icon} is not in the bundled icon font`);
 });

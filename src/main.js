@@ -13537,7 +13537,7 @@ const WB_FIELD_TYPES = {
 // Computed / automatic fields hold no user-entered value: created/updated read the
 // item's timestamps, autonumber is assigned on create, rollup and calculation compute.
 const WB_AUTO_FIELD_TYPES = new Set(['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time', 'button']);
-const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'company_contact', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox', 'button'];
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'company_contact', 'button', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox'];
 // Comparison operators for numeric (number/money) automation triggers:
 // [operator, dropdown label, symbol for the human-readable rule summary].
 const WB_TRIG_OPS = [['==', 'equals', '='], ['!=', 'not equal', '≠'], ['>', 'greater than', '>'], ['<', 'less than', '<'], ['>=', 'at least', '≥'], ['<=', 'at most', '≤']];
