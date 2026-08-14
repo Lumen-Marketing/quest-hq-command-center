@@ -22858,6 +22858,64 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
 .wb-view-label { flex: 0 0 34%; max-width: 200px; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted, #72695d); }
 .wb-view-val { flex: 1; min-width: 0; font-size: .9rem; word-break: break-word; }
 .wb-item-meta { font-size: .78rem; color: var(--text-muted, #72695d); margin-top: 6px; }
+/* ── The record card: Activity, and Comments ──
+   Two readings of the same record. Activity is the history AND the conversation, because a
+   history that omits what people said about the record is not a history of it. Comments is the
+   conversation alone. The composer stays on both: the reason to read the history is usually to
+   say something about it. */
+.wb-rec-panel { margin-top: 20px; border-top: 1px solid var(--border, #e2d5bf); padding-top: 12px; }
+.wb-rec-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border, #e2d5bf); }
+.wb-rec-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--text-muted, #72695d);
+  font-size: .92rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wb-rec-tab:hover { color: var(--text, #17130f); }
+.wb-rec-tab.on { color: var(--orange, #e0552d); border-bottom-color: var(--orange, #e0552d); }
+.wb-rec-tab:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: -2px; }
+.wb-rec-count { font-size: .72rem; font-weight: 800; background: var(--surface-2, #f6efe4); color: var(--text-muted, #72695d); border-radius: 999px; padding: 1px 7px; }
+.wb-rec-tab.on .wb-rec-count { background: var(--orange, #e0552d); color: #fff; }
+/* Room between the tabs, the history and the box you type into. Without it the rows run into
+   the panel's own edges and the last one sits on top of the composer. */
+.wb-rec-body { margin: 0 0 16px; }
+
+/* One line of history. */
+.wb-act-feed { display: flex; flex-direction: column; }
+.wb-act-line { display: flex; gap: 11px; padding: 11px 2px; border-bottom: 1px solid var(--border, #e2d5bf); }
+.wb-act-line:first-child { padding-top: 4px; }
+.wb-act-line:last-child { border-bottom: 0; padding-bottom: 4px; }
+.wb-act-dot { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-size: 13px; flex: none; }
+.wb-act-main { min-width: 0; flex: 1; }
+.wb-act-who { display: flex; align-items: baseline; gap: 8px; font-size: .86rem; }
+.wb-act-who b { font-weight: 800; color: var(--text, #17130f); }
+.wb-act-who span { font-size: .76rem; color: var(--text-muted, #72695d); }
+.wb-act-said { font-size: .88rem; color: var(--text, #17130f); overflow-wrap: anywhere; }
+/* A change reads as a receipt: which field, what it was, what it is. */
+.wb-act-changes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.wb-act-change { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--border, #e2d5bf); border-radius: 999px; background: var(--surface-2, #f6efe4); font-size: .78rem; }
+.wb-act-change em { font-style: normal; font-weight: 800; color: var(--text-muted, #72695d); }
+.wb-act-change s { color: var(--text-muted, #72695d); }
+.wb-act-change b { font-weight: 700; color: var(--text, #17130f); }
+.wb-act-cleared { color: var(--text-muted, #72695d); font-style: italic; }
+.wb-act-line.is-comment .wb-act-said { padding: 8px 12px; border-radius: 10px; background: var(--surface-2, #f6efe4); margin-top: 4px; }
+/* The composer keeps its own space and lines its button up with the box rather than the middle
+   of it, which is what made the two look wedged together. */
+.wb-rec-panel .wb-comment-add { display: flex; gap: 10px; align-items: flex-start; margin-top: 2px; }
+.wb-rec-panel .wb-comment-add .wb-mention-wrap { flex: 1 1 auto; min-width: 0; }
+.wb-rec-panel .wb-comment-add textarea { width: 100%; resize: vertical; }
+.wb-rec-panel .wb-comment-add .btn { flex: none; }
+/* A mention, wherever it is read. */
+.wb-at { color: var(--info, #2563eb); font-weight: 700; }
+
 .wb-comments { margin-top: 20px; border-top: 1px solid var(--border, #e2d5bf); padding-top: 16px; }
 .wb-comments-title { display: flex; align-items: center; gap: 7px; font-size: .95rem; margin: 0 0 12px; }
 .wb-comments-count { font-size: .72rem; font-weight: 700; background: var(--surface-3, #eef1f5); color: var(--text-muted, #72695d); border-radius: 999px; padding: 1px 8px; }

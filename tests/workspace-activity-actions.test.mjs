@@ -12,10 +12,16 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
 
+// The mention picker is its own fetched module now; main.js keeps only the shim that loads it.
+const mentionPicker = readFileSync(join(root, 'src', 'workspace', 'mention-picker.js'), 'utf8');
+
 function fn(name) {
-  const at = main.lastIndexOf(`function ${name}(`);
+  const inModule = name === 'wbBindMentionPickers';
+  const from = inModule ? mentionPicker : main;
+  const at = from.lastIndexOf(`function ${name}(`);
   assert.notEqual(at, -1, `${name} not found`);
-  return main.slice(at, main.indexOf('\n}', at));
+  // The module's copy is indented inside its factory, so its closing brace is too.
+  return from.slice(at, from.indexOf(inModule ? '\n  }' : '\n}', at));
 }
 
 test('a log line links to the record it describes', () => {
@@ -165,6 +171,9 @@ test('@ offers the members, so the name typed is one that resolves', () => {
   assert.match(body, /input\.value = `\$\{before\}@\$\{member\.name\} \$\{after\}`;/, 'a trailing space, or the next word joins the mention');
   for (const key of ['ArrowDown', 'ArrowUp', 'Escape']) assert.ok(body.includes(`'${key}'`), `${key} is unhandled`);
   assert.ok(main.includes('wbBindMentionPickers(document, companyId)'), 'the picker is never bound');
+  // And main.js only fetches it, so a page with no mention box never pays for it.
+  assert.match(main, /import\('\.\/workspace\/mention-picker\.js'\)/);
+  assert.match(main, /if \(!\(root \|\| document\)\.querySelector\('\[data-wb-mention\]'\)\) return;/);
 });
 
 test('Enter picks a mention without also sending the comment', () => {

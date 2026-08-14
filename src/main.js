@@ -5,6 +5,7 @@ import {
   companiesToSave, resolveAppEntry, tileTargetApp, workspaceApps,
 } from './workspace/builder-core.js';
 import { readPullRows } from './workspace/pull-rows.js';
+
 // The pipeline MODEL is eager -- the stage pill, filters and the stage manager all need
 // it. Only the board's rendering is deferred, in ./workspace/board-view.js.
 import {
@@ -13705,6 +13706,56 @@ function wbLogCommentActivity(workspace, app, item) {
   wbLogActivity(workspace, { icon: 'ti-message-circle', color: '#2563eb', appId: app.id, itemId: item.id, text });
 }
 
+/**
+ * Log an edit as the edits it was.
+ *
+ * "Updated <record>" says nothing anybody needed to know. This says which fields moved and what
+ * they moved between, and carries the same list as data so the card can draw it as a receipt.
+ * A save that changed nothing logs nothing rather than a line saying so.
+ */
+function wbLogItemChanges(companyId, workspace, app, item, before, after) {
+  const skip = new Set(['created_time', 'updated_time', 'autonumber', 'calculation', 'rollup', 'button']);
+  const changes = [];
+  (app.fields || []).forEach((field) => {
+    if (skip.has(field.type)) return;
+    const from = (before || {})[field.id];
+    const to = (after || {})[field.id];
+    if (JSON.stringify(from ?? '') === JSON.stringify(to ?? '')) return;
+    changes.push({
+      fieldId: field.id,
+      label: String(field.label || 'Field'),
+      type: field.type,
+      from: wbPlainVal(companyId, workspace, app, field, from, after),
+      to: wbPlainVal(companyId, workspace, app, field, to, after),
+    });
+  });
+  if (!changes.length) return;
+  const listed = changes.slice(0, 3).map((change) => h(change.label)).join(', ');
+  const more = changes.length > 3 ? ` and ${changes.length - 3} more` : '';
+  wbLogActivity(workspace, {
+    kind: 'updated', icon: 'ti-pencil', color: '#2563eb', appId: app.id, itemId: item.id, changes,
+    text: `Changed <b>${listed}</b>${more}`,
+  });
+}
+
+/** Tell the people a comment named, by name, wherever they are. */
+function wbNotifyMentions(companyId, workspace, app, item, text) {
+  if (!String(text || '').includes('@')) return;
+  import('./workspace/record-activity.js').then(({ mentionedMembers }) => {
+    const me = activeSession().profile?.id || '';
+    const others = mentionedMembers(text, wbMembers(companyId)).filter((member) => member.id && member.id !== me);
+    if (!others.length) return;
+    const title = wbItemTitle(app, item);
+      notifyLocalEvent(
+      'workspace.mention',
+      `${actorName()} mentioned you`,
+      `On ${title} in ${app.name}`,
+      appHref(companyPath('workspaces', { workspace: workspace.id, app_id: app.id, tab: 'items', item_id: item.id }, companyId)),
+      'workspace_item', item.id, companyId, others.map((member) => member.id),
+    );
+  }).catch(() => {});
+}
+
 function wbLogActivity(workspace, entry) {
   workspace.activity = workspace.activity || [];
   // Who did it, stamped here rather than at each call site: this is the one place every
@@ -15811,79 +15862,15 @@ function wbBindRelationshipPickers(root) {
  * The trigger is the @-run immediately before the caret, so a mid-sentence mention works
  * and an email address does not open a menu (@ must start a word).
  */
+// The mention picker is fetched the first time a page has a box that wants one.
+let wbMentionModule = null;
 function wbBindMentionPickers(root, companyId) {
-  (root || document).querySelectorAll('[data-wb-mention]').forEach((input) => {
-    if (input.dataset.mentionBound) return;
-    input.dataset.mentionBound = '1';
-    const wrap = input.closest('[data-wb-mention-wrap]');
-    const results = wrap?.querySelector('[data-wb-mention-results]');
-    if (!results) return;
-
-    let matches = [];
-    let active = 0;
-    let at = -1;
-
-    const close = () => { results.hidden = true; results.innerHTML = ''; matches = []; at = -1; };
-
-    const paint = () => {
-      results.innerHTML = matches.map((m, i) => `<button type="button" class="wb-mention-result${i === active ? ' active' : ''}" role="option" aria-selected="${i === active}" data-i="${i}">`
-        + `${wbAvatar({ id: m.id, name: m.name, color: m.color, avatar_url: m.avatar_url }, 22)}<span>${h(m.name)}</span></button>`).join('');
-      results.hidden = !matches.length;
-    };
-
-    const commit = (member) => {
-      if (!member || at < 0) return;
-      const before = input.value.slice(0, at);
-      const after = input.value.slice(input.selectionStart ?? input.value.length);
-      // A trailing space so the next word is not swallowed into the mention.
-      input.value = `${before}@${member.name} ${after}`;
-      const caret = before.length + member.name.length + 2;
-      input.setSelectionRange(caret, caret);
-      close();
-      input.focus();
-    };
-
-    const refresh = () => {
-      const caret = input.selectionStart ?? input.value.length;
-      // The @-run the caret sits in: @ at a word boundary, then anything but @ or newline.
-      const found = /(^|\s)@([^@\n]*)$/.exec(input.value.slice(0, caret));
-      if (!found) { close(); return; }
-      at = caret - found[2].length - 1;
-      const query = found[2].trim().toLowerCase();
-      matches = wbMembers(companyId)
-        .filter((m) => m.name && (!query || m.name.toLowerCase().includes(query)))
-        .slice(0, 6);
-      active = 0;
-      paint();
-    };
-
-    input.addEventListener('input', refresh);
-    input.addEventListener('click', refresh);
-    input.addEventListener('keydown', (event) => {
-      if (results.hidden || !matches.length) return;
-      if (event.key === 'ArrowDown') { event.preventDefault(); active = (active + 1) % matches.length; paint(); return; }
-      if (event.key === 'ArrowUp') { event.preventDefault(); active = (active - 1 + matches.length) % matches.length; paint(); return; }
-      // Enter picks the highlighted member rather than sending a half-typed name. The flag
-      // is what tells the send handler to stand down: both listeners are on this same
-      // element, so stopPropagation does not reach it, and by the time it runs commit() has
-      // already closed the list -- so "is the list open" would answer no and send anyway.
-      if (event.key === 'Enter' || event.key === 'Tab') {
-        event.preventDefault();
-        event.mentionHandled = true;
-        commit(matches[active]);
-        return;
-      }
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
-    });
-    // mousedown, not click: the input's own blur would close the list first.
-    results.addEventListener('mousedown', (event) => {
-      const button = event.target.closest('[data-i]');
-      if (!button) return;
-      event.preventDefault();
-      commit(matches[Number(button.dataset.i)]);
-    });
-    input.addEventListener('blur', () => { setTimeout(close, 120); });
-  });
+  if (wbMentionModule) { wbMentionModule.wbBindMentionPickers(root, companyId); return; }
+  if (!(root || document).querySelector('[data-wb-mention]')) return;
+  import('./workspace/mention-picker.js').then((mod) => {
+    wbMentionModule = mod.createMentionPicker({ h, wbAvatar, wbMembers });
+    wbMentionModule.wbBindMentionPickers(document, companyId);
+  }).catch(() => {});
 }
 
 // A field you can type into has an input behind it. The generated ones do not, and
@@ -16956,37 +16943,27 @@ function wbCommentContext() {
   return { companyId, workspaceId, appId: route.params.get('app_id') || '', editId };
 }
 
+// The Activity / Comments card on a record. Both halves live in ./workspace/record-panel.js:
+// two tabs, a merged feed and a mention-aware composer are not markup every session should
+// carry, and only an open record has one.
+let wbRecordPanelModule = null;
+let wbRecordPanelPending = null;
+function loadRecordPanel() {
+  if (wbRecordPanelModule || wbRecordPanelPending) return;
+  wbRecordPanelPending = import('./workspace/record-panel.js').then((mod) => {
+    wbRecordPanelModule = mod.createRecordPanel({
+      h, state, wbAvatar, wbDoc, wbMemberById, wbMembers, wbTimeAgo,
+      activeProfileId: () => activeSession().profile?.id || '',
+    });
+    render();
+  }).catch(() => { wbRecordPanelPending = null; });
+}
+
 function wbItemCommentsHtml(companyId, item) {
-  const comments = Array.isArray(item.comments) ? item.comments : [];
-  const myId = activeSession().profile?.id || '';
-  const editingId = state.wbEditingCommentId || null;
-  const list = comments.length
-    ? comments.map((c) => {
-      // Resolve the author's CURRENT profile name/color from their id so a later
-      // profile rename shows everywhere; fall back to the stored snapshot only if
-      // the author is no longer a resolvable member.
-      const member = c.authorId ? wbMemberById(companyId, c.authorId) : null;
-      const live = member && member.name && member.name !== 'Unknown' ? member : null;
-      const name = live ? live.name : (c.author || 'User');
-      const color = live ? live.color : '#6b7280';
-      const mine = !!c.authorId && c.authorId === myId;
-      // wbAvatar, not hand-rolled markup: this built the initials badge directly and never
-      // looked at avatar_url, so a comment showed "LM" while the same person's photo
-      // appeared everywhere else. wbAvatar renders the image when there is one and falls
-      // back to exactly this badge when there is not.
-      const avatar = wbAvatar({ id: c.authorId, name, color, avatar_url: live?.avatar_url || '' }, 26);
-      if (mine && editingId === c.id) {
-        return `<div class="wb-comment">${avatar}<div class="wb-comment-body"><textarea class="wb-input" id="wbEditComment-${h(c.id)}" rows="2">${h(c.text)}</textarea><div class="wb-comment-edit-acts"><button class="btn btn-primary btn-sm" type="button" data-wb-comment-save="${h(c.id)}"><i class="ti ti-check"></i>Save</button><button class="btn btn-sm" type="button" data-wb-comment-cancel>Cancel</button></div></div></div>`;
-      }
-      const acts = mine ? `<span class="wb-comment-acts"><button class="wb-comment-act" type="button" data-wb-comment-edit="${h(c.id)}" title="Edit"><i class="ti ti-pencil"></i></button><button class="wb-comment-act danger" type="button" data-wb-comment-del="${h(c.id)}" title="Delete"><i class="ti ti-trash"></i></button></span>` : '';
-      return `<div class="wb-comment">${avatar}<div class="wb-comment-body"><div class="wb-comment-head"><b>${h(name)}</b><span>${h(wbTimeAgo(c.ts))}${c.editedAt ? ' · edited' : ''}</span>${acts}</div><div class="wb-comment-text">${h(c.text)}</div></div></div>`;
-    }).join('')
-    : '<div class="wb-sub">No comments yet — start the conversation.</div>';
-  return `<div class="wb-comments">
-      <h4 class="wb-comments-title"><i class="ti ti-message-circle"></i>Comments${comments.length ? ` <span class="wb-comments-count">${comments.length}</span>` : ''}</h4>
-      <div class="wb-comment-list">${list}</div>
-      <div class="wb-comment-add"><textarea class="wb-input" id="wbCommentInput" rows="2" placeholder="Add a comment…"></textarea><button class="btn btn-primary btn-sm" type="button" data-wb-add-comment><i class="ti ti-send"></i>Comment</button></div>
-    </div>`;
+  if (!wbRecordPanelModule) { loadRecordPanel(); return '<div class="wb-rec-panel"><div class="wb-sub">Loading the history…</div></div>'; }
+  return wbRecordPanelModule.recordPanel({
+    companyId, item, canWrite: can('workspaces.manage', companyId),
+  });
 }
 async function wbAddItemComment() {
   const m = wbCommentContext();
@@ -17024,6 +17001,7 @@ async function wbAddItemComment() {
     wbSave(m.companyId);
   }
   wbNotifyItem(m.companyId, workspace, app, item, `New comment on ${wbItemTitle(app, item)}`, `${actorName()}: ${text.length > 90 ? `${text.slice(0, 90)}…` : text}`);
+  wbNotifyMentions(m.companyId, workspace, app, item, text);
   wbKeepModalScroll();
   render();
   return true;
@@ -19164,7 +19142,7 @@ function wbSubmitModal() {
     if (m.editId) {
       const item = app.items.find((i) => i.id === m.editId); const prev = { ...item.values }; item.values = values;
       item.updatedAt = nowStamp; item.lastActivityAt = nowStamp;
-      wbLogActivity(workspace, { icon: app.icon, color: app.color, appId: app.id, itemId: item.id, text: `Updated <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}` });
+      wbLogItemChanges(companyId, workspace, app, item, prev, values);
       wbNotifyItem(companyId, workspace, app, item, `Updated: ${wbItemTitle(app, item)}`, `${actorName()} updated ${wbItemTitle(app, item)} in ${app.name}`);
       wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
       // Return to the read-only view instead of closing, so the record stays open.
@@ -19172,7 +19150,7 @@ function wbSubmitModal() {
     } else {
       wbAssignAutoNumbers(app, values);
       const item = { id: wbUid(), values, createdAt: nowStamp, createdBy: activeSession().profile?.id || '', updatedAt: nowStamp, lastActivityAt: nowStamp }; app.items.unshift(item);
-      wbLogActivity(workspace, { icon: app.icon, color: app.color, appId: app.id, itemId: item.id, text: `Added <b>${h(wbItemTitle(app, item))}</b> to ${h(app.name)}` });
+      wbLogActivity(workspace, { kind: 'created', icon: 'ti-plus', color: '#16a34a', appId: app.id, itemId: item.id, text: `Created this record in ${h(app.name)}` });
       wbNotifyItem(companyId, workspace, app, item, `${newRecordLabel(app)}: ${wbItemTitle(app, item)}`, `${actorName()} added ${wbItemTitle(app, item)} to ${app.name}`);
       wbRunAutomations(companyId, workspace, app, item, 'created', null);
       state.builderModal = null;
@@ -19974,6 +19952,9 @@ function mountWorkspaceBuilder() {
       nav({ app_id: appId, tab: 'calendar', field: el.value, ...(params?.get('view') ? { view: params.get('view') } : {}), ...(params?.get('on') ? { on: params.get('on') } : {}) });
     }, 'onchange');
     bind('[data-wb-child-tab]', (el) => { state.wbChildTab = el.dataset.wbChildTab; render(); });
+    // Activity or Comments on a record. The composer stays on both, because the reason to
+    // read the history is usually to say something about it.
+    bind('[data-wb-rec-tab]', (el) => { state.wbRecordTab = el.dataset.wbRecTab; render(); });
     bind('[data-wb-memo-new]', (el) => openWbMemoModal(companyId, workspaceId, appId, '', el.dataset.wbMemoNew));
     bind('[data-wb-memo-open]', (el) => openWbMemoModal(companyId, workspaceId, appId, el.dataset.wbMemoOpen, ''));
     bind('[data-wb-board-field]', (el) => { wbItemsUI(appId).boardFieldId = el.value; render(); }, 'onchange');
@@ -44426,10 +44407,30 @@ async function notifyEvent(input) {
 function mergeNotifications(rows) {
   if (!rows.length) return;
   const next = new Map();
+  const known = new Set(state.notifications.map((item) => item.id));
   rows.concat(state.notifications).forEach((item) => next.set(item.id, item));
   state.notifications = [...next.values()]
     .sort((a, b) => Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0))
     .slice(0, 200);
+  // Only for something that has just arrived FOR ME and is unread. Replaying a sound for every
+  // row a refetch happens to return would make the app chime at its own bookkeeping.
+  const mine = activeSession().profile?.id || '';
+  const fresh = rows.filter((row) => !known.has(row.id) && !row.read_at
+    && (!row.recipient_profile_id || row.recipient_profile_id === mine));
+  if (fresh.length) playAppSound(fresh.some((row) => row.type === 'alarm') ? 'alarm' : 'notification');
+}
+
+/**
+ * Make a sound, if the browser will allow one.
+ *
+ * Fetched on first use and never before: a page cannot play anything until somebody has
+ * interacted with it, so loading the synthesiser at boot would buy a module that cannot run.
+ */
+let appSounds = null;
+function playAppSound(name) {
+  if (state.soundsOff) return;
+  if (appSounds) { appSounds.play(name); return; }
+  import('./ui/sounds.js').then((mod) => { appSounds = mod; mod.play(name); }).catch(() => {});
 }
 
 function notificationRecipientIds(companyId, recipients = [], options = {}) {

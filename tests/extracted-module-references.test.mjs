@@ -162,6 +162,8 @@ const FACTORY_MODULES = [
   ['src/ui/combobox-menu.js', 'createComboboxMenu'],
   ['src/platform/master-panel.js', 'createPlatformPanel'],
   ['src/workspace/data-io.js', 'createDataIO'],
+  ['src/workspace/record-panel.js', 'createRecordPanel'],
+  ['src/workspace/mention-picker.js', 'createMentionPicker'],
   ['src/workspace/field-config-ui.js', 'renderFieldConfig'],
   ['src/ui/appearance-panel.js', 'createAppearancePanel'],
   ['src/workspace/automations-ui.js', 'createAutomationsUI'],

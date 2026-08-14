@@ -10,6 +10,8 @@ const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8
 // The record page is its own fetched-on-demand module now, so slicing `main` for it would
 // match the loader shim, whose body fetches rather than renders.
 const recordPage = readFileSync(new URL('../src/workspace/record-page.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+// The Activity / Comments card moved out of main.js into its own fetched module too.
+const panel = readFileSync(new URL('../src/workspace/record-panel.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const slice = (name) => (name === 'wbViewItemPage' ? recordPage : main)
   .match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`))?.[0] || '';
 
@@ -149,10 +151,12 @@ test('the page route resolves a workspace id rather than handing wbFind an empty
   assert.match(slice('wbCommentContext'), /wbCompanyWorkspace\(companyId\)\?\.id \|\| ''/);
 });
 
+
 test('which comment is being edited is not stored on the modal', () => {
   assert.match(main, /wbEditingCommentId: null,/);
   assert.ok(!/editingCommentId(?!:)/.test(main.replace(/wbEditingCommentId/g, '')), 'no modal-scoped copy may remain');
-  assert.match(main, /const editingId = state\.wbEditingCommentId \|\| null;/);
+  // The panel moved into ./workspace/record-panel.js; where the flag LIVES is the point.
+  assert.match(panel, /state\.wbEditingCommentId === entry\.id/);
 });
 
 test('the page binds its own comment handlers', () => {
@@ -211,9 +215,10 @@ test('a comment shows the author photo, not always their initials', () => {
   // This built the initials badge as literal markup and never read avatar_url, so a comment
   // showed "LM" while the same person's photo rendered everywhere else. wbAvatar draws the
   // image when there is one and falls back to that same badge when there is not.
-  const comments = slice('wbItemCommentsHtml');
-  assert.match(comments, /const avatar = wbAvatar\(\{ id: c\.authorId, name, color, avatar_url: live\?\.avatar_url \|\| '' \}, 26\);/);
-  assert.ok(!/const avatar = `<span class="wb-avatar"/.test(comments), 'no hand-rolled avatar markup');
+
+  assert.match(panel, /const avatar = wbAvatar\(who, 26\);/);
+  assert.match(panel, /avatar_url: live\?\.avatar_url \|\| '',/);
+  assert.ok(!/const avatar = `<span class="wb-avatar"/.test(panel), 'no hand-rolled avatar markup');
   // wbAvatar only renders an image if the member carries one, so the directory must supply it.
   const members = main.slice(main.indexOf('function wbMembers('));
   assert.match(members.slice(0, members.indexOf('\n}')), /avatar_url: user\.avatar_url \|\| ''/);
