@@ -18347,7 +18347,7 @@ function wbFieldConfigUI(fd, app) {
   if (!wbFieldUiModule) return '';
   return wbFieldUiModule.renderFieldConfig(fd, app, {
     h, state, canonicalCompanyId, companyName, wbOptRow, wbProgStopRow, wbProgressDisplayHtml,
-    wbRelTargetApp, wbCompanyApps, wbTargetApp, wbRelLabel,
+    wbRelTargetApp, wbCompanyApps, wbTargetApp, wbRelLabel, companyContactFieldsFor,
     WB_PROGRESS_STOPS_DEFAULT, WB_FIELD_TYPES, WB_PROGRESS_DISPLAYS,
   });
 }
@@ -18380,6 +18380,7 @@ function wbRenderFieldInput(companyId, workspaceId, f, val) {
     wbFieldInputFn = wbFieldUiModule.createFieldInput({
       h, WB_FIELD_TYPES, companyContactOptions, wbMembers, wbRelTargetApp, wbDoc, wbRelLabel, wbProgressColor,
       wbProgressDisplayHtml, wbChecklistValue, wbChecklistBodyHtml, wbRatingStars, wbAutoNumberText,
+      companyContactFieldsFor,
     });
   }
   return wbFieldInputFn(companyId, workspaceId, f, val);
@@ -18885,6 +18886,15 @@ function wbCollectModalDraft() {
       // Several links means there is no answer to "which one's address?", so the mapping is
       // dropped rather than left storing something the UI no longer offers.
       if (m.draft.config.multiple) { m.draft.config.pull = []; m.draft.config.pullAll = false; }
+    }
+    if (t === 'company_contact') {
+      // The same two controls as a relationship, read the same way. The switch is on by
+      // default for this field type, so an untouched panel saves it as on.
+      m.draft.config.pullAll = !!checked('wbRelPullAll');
+      m.draft.config.pull = readPullRows([...document.querySelectorAll('[data-wb-pull-row]')].map((row) => ({
+        from: row.querySelector('[data-wb-pull-from]')?.value || '',
+        to: row.querySelector('[data-wb-pull-to]')?.value || '',
+      })), { keepPartial: true });
     }
     if (t === 'calculation') m.draft.config.formula = (val('wbCalcFormula') || '').trim();
     if (t === 'money') m.draft.config.currency = (val('wbCurSym') || '').trim() || '$';
@@ -37800,7 +37810,32 @@ function syncCompanyContactPicker(input) {
   if (!idField) return;
   const typed = String(input.value || '').trim().toLowerCase();
   const match = companyContactsFor().find((contact) => contact.name.trim().toLowerCase() === typed);
+  const previous = idField.value;
   idField.value = match ? match.id : '';
+  // Only when the contact actually changes: this runs on every keystroke, and re-copying on
+  // each one would do nothing visible but would ask for the module over and over.
+  if (match && match.id !== previous) wbPullFromContact(picker, match);
+}
+
+// Picking a contact fills this record in from the directory: every field the app and Company
+// Contacts call the same thing. WHICH fields those are was worked out when the picker was
+// drawn; the values are read here, off the contact that was actually chosen.
+function wbPullFromContact(picker, contact) {
+  let pairs;
+  try { pairs = JSON.parse(picker.dataset.wbCcPull || '[]'); } catch { return; }
+  if (!Array.isArray(pairs) || !pairs.length) return;
+  const fields = companyContactFieldsFor(contact.company_id);
+  const values = {};
+  pairs.forEach(([from, to]) => {
+    const value = from === 'name' ? contact.name : companyContactValue(contact, fields.find((field) => field.id === from));
+    // A field the contact has nothing for is left alone rather than blanked: "fields the
+    // contact doesn't have will be left blank" means untouched, not cleared.
+    if (value !== '' && value != null && values[to] === undefined) values[to] = value;
+  });
+  if (!Object.keys(values).length) return;
+  loadRelationshipPicker()
+    .then((mod) => mod.applyPullValues(picker, values))
+    .catch((error) => console.error('Contact copy failed to load', error));
 }
 
 function contactById(id) {

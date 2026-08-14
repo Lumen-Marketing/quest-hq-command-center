@@ -66,6 +66,8 @@ const ctx = {
   // Every type, with the keys the panels read (a progress panel reads its type's colour as the
   // default bar colour). A stub missing a type throws where production would not.
   WB_FIELD_TYPES: Object.fromEntries(ALL_TYPES.map((type) => [type, { label: type, color: '#2563eb', icon: 'ti-square', desc: type }])),
+  // The company_contact panel matches this app's fields against the directory's.
+  companyContactFieldsFor: () => [{ id: 'cc-phone', label: 'Phone', type: 'phone' }],
   WB_PROGRESS_DISPLAYS: [['bar', 'Linear bar'], ['ring', 'Circular ring'], ['segments', 'Segmented bar']],
 };
 

@@ -167,6 +167,21 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - `ROUNDUP(528 / 8)` is 66, not 67: 528/8 is 65.99999999999999 in binary floating point, and a naive `Math.ceil` buys an extra box of birdstop on every tile job. Values are nudged to 12 significant digits before rounding.
 - **Storage**: `underwriting_calculators` holds the company's templates; the measurements ride on `underwriting_cases.takeoff`, because the calculator prices every roof and each roof has its own report. **Use in the decision** pushes the takeoff's totals into the margin panel above rather than duplicating the arithmetic.
 
+## 2026-08-14 A Company Contact field fills the record in
+
+- "When you select an item on it, it fetches all of the data of that contact with the same field to automatically fill other fields on this app." The copy-across the relationship field already did, sourced from the directory instead of another app.
+- `contactSourceApp` presents Company Contacts shaped like an app so `matchedFields` can read it unchanged — matching on the LABEL, case and space ignored, and only where the value survives the trip. The contact's **name** is offered as a field called Name: it is the column the directory is built around rather than one of the company's configurable fields, but to somebody looking at both it is simply a field with that name.
+- A field only one side has appears in no mapping at all, so it is left untouched rather than blanked, and the picker is never one of its own destinations.
+- **On unless turned off**, which is the one way it differs from a relationship. A relationship exists to link two records and copying is an extra thing you might ask of it; a contact picker on a record already says "this record is about that person". The config panel — previously "No extra configuration needed for this field type" — now carries the same switch and manual rows, and names the fields it will copy.
+- The picker carries the MAPPING, `[[contactFieldId, appFieldId], …]`, not the directory. Values are read off the contact at the moment it is chosen, so a company with five hundred contacts costs the same markup as one with three.
+
+## 2026-08-14 The copy wrote a label where an option id belonged
+
+- Found while verifying the above in a browser: the Company field showed its placeholder after a contact was picked, so the copy looked like it had failed.
+- A category or status is a combobox — it SHOWS a label and STORES an option id in a hidden input beside the visible box. `applyPullValues` wrote straight to `[data-f]`, which put `Acme Roofing` where `p1` belonged and left the visible box empty. The value was wrong **and** it looked like nothing had happened.
+- It fills the visible box now and lets the app's own commit resolve it, which also adds the option when this app has never seen that value. **This was live in the relationship copy too** — the combobox replaced a plain `<select>` when category fields gained type-ahead, and the copy was never revisited.
+- `applyPull` split into `applyPullValues(from, values)` so both sources share one copy path; three tests in `tests/workspace-relationship-pull.test.mjs` follow the body to its new name rather than being deleted.
+
 ## 2026-08-14 Typing in the takeoff card threw the caret out
 
 - "Every time I enter a number it exited my mouse in the edit field." Recalculating replaced the card body's innerHTML, so every keystroke destroyed the input being typed into and built a new one: focus was lost and the number came back selected.

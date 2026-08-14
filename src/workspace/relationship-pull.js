@@ -140,3 +140,38 @@ export function effectivePull(app, targetApp, field) {
   const auto = matchedFields(app, targetApp, field.id).filter((pair) => !taken.has(pair.to));
   return [...auto.map(({ from, to }) => ({ from, to })), ...manual];
 }
+
+/**
+ * The Company Contacts directory, shaped like an app so the matching above can read it.
+ *
+ * A contact's name is not one of the company's configurable fields -- it is the column the
+ * directory is built around -- but to somebody looking at the two side by side it is simply a
+ * field called Name, and an app field called Name should get it.
+ */
+export function contactSourceApp(contactFields) {
+  return {
+    name: 'Company Contacts',
+    fields: [{ id: 'name', label: 'Name', type: 'text' }, ...(contactFields || []).filter(Boolean)],
+  };
+}
+
+/**
+ * Which of this app's fields a chosen contact fills in, as [contactFieldId, appFieldId] pairs.
+ *
+ * "When you select an item on it, it fetches all of the data of that contact with the same
+ * field to automatically fill other fields on this app. Fields the contact doesn't have will
+ * be left blank."
+ *
+ * On unless it has been turned off, which is the one way this differs from a relationship. A
+ * relationship exists to link two records and copying is an extra thing you might ask it for;
+ * a contact picker on a record is already saying "this record is about that person", so having
+ * to find a switch before it fills anything in would be a setting for its own sake.
+ */
+export function contactPullMap(app, contactFields, field) {
+  const manual = Array.isArray(field?.config?.pull) ? field.config.pull.filter((p) => p && p.from && p.to) : [];
+  const taken = new Set(manual.map((pair) => pair.to));
+  const auto = field?.config?.pullAll === false
+    ? []
+    : matchedFields(app, contactSourceApp(contactFields), field?.id).filter((pair) => !taken.has(pair.to));
+  return [...auto, ...manual].map(({ from, to }) => [from, to]);
+}

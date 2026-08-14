@@ -12,7 +12,7 @@
 // destructured from `ctx` under the original names, so this is a move, not a rewrite.
 import { acceptAttr } from '../security/upload-policy.js';
 import {
-  PULL_FAMILY, effectivePull, matchedFields, pullTargets,
+  PULL_FAMILY, contactPullMap, contactSourceApp, effectivePull, matchedFields, pullTargets,
 } from './relationship-pull.js';
 
 // "Copy the data inputted on the other field so it will automatically input on it."
@@ -27,7 +27,16 @@ import {
 // from ctx inside renderFieldConfig. Reaching for it here threw a ReferenceError that took
 // the whole relationship config panel down with it -- Show field, Identify by and Specific
 // record all vanished, which looked like they had been removed.
-function pullConfigUI(h, fd, app, targetApp) {
+function pullConfigUI(h, fd, app, targetApp, opts = {}) {
+  // A contact picker copies unless told not to; a relationship copies only when asked. See
+  // contactPullMap for why the two differ.
+  const {
+    heading = 'Copy from the linked record',
+    noun = `a <b>${h(targetApp.name)}</b> record`,
+    shared: sharedLabel = 'the fields both apps call the same thing',
+    defaultOn = false,
+  } = opts;
+  const on = defaultOn ? fd.config.pullAll !== false : !!fd.config.pullAll;
   const rows = Array.isArray(fd.config.pull) ? fd.config.pull : [];
   const sources = (targetApp.fields || []).filter((f) => PULL_FAMILY[f.type]);
   if (!sources.length) return '';
@@ -56,26 +65,26 @@ function pullConfigUI(h, fd, app, targetApp) {
   // twelve things is a switch nobody trusts.
   const shared = matchedFields(app, targetApp, fd.id);
   const sharedNote = shared.length
-    ? `Copies <b>${shared.map((pair) => h(pair.label)).join('</b>, <b>')}</b> — the fields both apps call the same thing.`
+    ? `Copies <b>${shared.map((pair) => h(pair.label)).join('</b>, <b>')}</b> — ${sharedLabel}.`
     : `Nothing to copy automatically: no field on <b>${h(targetApp.name)}</b> shares a name with one here that could hold it.`;
 
   return `
     <div class="wb-field">
-      <label>Copy from the linked record <span class="wb-opt">(optional)</span></label>
+      <label>${heading} <span class="wb-opt">(optional)</span></label>
       <div class="wb-check-row">
-        <label class="wb-switch"><input type="checkbox" id="wbRelPullAll" ${fd.config.pullAll ? 'checked' : ''}><span class="wb-slider"></span></label>
+        <label class="wb-switch"><input type="checkbox" id="wbRelPullAll" ${on ? 'checked' : ''}><span class="wb-slider"></span></label>
         <div><b>Copy every field they share</b><div class="wb-sub">${sharedNote}</div></div>
       </div>
       <div class="wb-pull-list">${rows.map(row).join('')}</div>
       <button class="btn btn-sm" type="button" data-wb-pull-add><i class="ti ti-plus"></i>Copy a field</button>
-      <div class="wb-sub">When somebody picks a <b>${h(targetApp.name)}</b> record, these fields are filled in from it. A row here wins over the switch above, so name a field explicitly when the two apps call it different things. They stay editable afterwards — this fills a blank, it does not lock it.</div>
+      <div class="wb-sub">When somebody picks ${noun}, these fields are filled in from it. A row here wins over the switch above, so name a field explicitly when the two sides call it different things. They stay editable afterwards — this fills a blank, it does not lock it, and a field the source has nothing for is left alone.</div>
     </div>`;
 }
 
 export function renderFieldConfig(fd, app, ctx) {
   const {
     h, state, canonicalCompanyId, companyName, wbOptRow, wbProgStopRow, wbProgressDisplayHtml,
-    wbRelTargetApp, wbCompanyApps, wbTargetApp, wbRelLabel,
+    wbRelTargetApp, wbCompanyApps, wbTargetApp, wbRelLabel, companyContactFieldsFor,
     WB_PROGRESS_STOPS_DEFAULT, WB_FIELD_TYPES, WB_PROGRESS_DISPLAYS,
   } = ctx;
   const t = fd.type;
@@ -162,6 +171,17 @@ export function renderFieldConfig(fd, app, ctx) {
       ${colorBlock}
       <div class="wb-field"><label>Preview <span class="wb-opt">at ${previewPct}%</span></label><div class="wb-prog-preview" id="wbProgPreview">${wbProgressDisplayHtml(fd, previewPct)}</div></div>`;
   }
+  if (t === 'company_contact') {
+    const contactFields = companyContactFieldsFor(canonicalCompanyId(state.builderModal.companyId));
+    const source = contactSourceApp(contactFields);
+    const panel = pullConfigUI(h, fd, app, source, {
+      heading: 'Fill this record in from the contact',
+      noun: 'a contact',
+      shared: 'the fields this app and <b>Company Contacts</b> call the same thing',
+      defaultOn: true,
+    });
+    return panel || `<div class="wb-sub">Add fields to <b>Company Contacts</b> and any that share a name with a field here will be filled in when a contact is picked.</div>`;
+  }
   return '<div class="wb-sub">No extra configuration needed for this field type.</div>';
 }
 
@@ -177,6 +197,7 @@ export function createFieldInput(ctx) {
   const {
     h, WB_FIELD_TYPES, companyContactOptions, wbMembers, wbRelTargetApp, wbDoc, wbRelLabel, wbProgressColor,
     wbProgressDisplayHtml, wbChecklistValue, wbChecklistBodyHtml, wbRatingStars, wbAutoNumberText,
+    companyContactFieldsFor,
   } = ctx;
   // The app a field belongs to. A linked app is a pointer with no fields of its own, so it
   // cannot match and cannot be returned by mistake.
@@ -236,8 +257,13 @@ export function createFieldInput(ctx) {
         const options = companyContactOptions(companyId);
         const listId = `wbcr-${f.id}`;
         const current = options.find((option) => option.id === String(val || ''));
+        // Which fields a chosen contact fills in, as [contactFieldId, thisAppFieldId]. Worked
+        // out once for the picker rather than per contact: the values themselves are read off
+        // the contact at the moment it is chosen, so a directory of five hundred people costs
+        // the same markup as one.
+        const pull = contactPullMap(ownerAppOf(companyId, f.id), companyContactFieldsFor(companyId), f);
         input = `
-          <div class="wb-inline wb-cc-picker" data-wb-cc-picker>
+          <div class="wb-inline wb-cc-picker" data-wb-cc-picker ${pull.length ? `data-wb-cc-pull="${h(JSON.stringify(pull))}"` : ''}>
             <span class="wb-cur"><i class="ti ti-address-book"></i></span>
             <input class="wb-input" list="${h(listId)}" data-wb-cc-name value="${h(current ? current.name : '')}" placeholder="${options.length ? 'Search the company directory…' : 'No company contacts yet'}" autocomplete="off" />
             <input type="hidden" data-f="${h(f.id)}" data-wb-cc-id value="${h(current ? current.id : '')}" />

@@ -98,7 +98,9 @@ test('two rows cannot both write the same field', () => {
 
 test('the copy fills a blank and never overwrites', () => {
   // Somebody who typed an address and then linked a record did not ask for it to be replaced.
-  const body = fn(picker, 'applyPull');
+  // The body moved into applyPullValues so a company-contact picker could share it: the copy
+  // is the same job whether the values came from a linked record or from the directory.
+  const body = fn(picker, 'applyPullValues');
   assert.match(body, /if \(target\.checked\) return;/);
   assert.match(body, /if \(target\.value\) return;/, 'a select that already has a value is left alone');
   assert.match(body, /if \(String\(target\.value \|\| ''\)\.trim\(\)\) return;/);
@@ -109,12 +111,12 @@ test('the copy fills a blank and never overwrites', () => {
 
 test('a stage travels as its label, because option ids mean nothing in the other app', () => {
   assert.match(fieldUi, /if \(src\.type === 'status' \|\| src\.type === 'category'\) \{[\s\S]*?out\[pair\.to\] = String\(option\.label\)/);
-  assert.match(fn(picker, 'applyPull'), /o\.textContent\.trim\(\)\.toLowerCase\(\) === String\(value\)\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(fn(picker, 'applyPullValues'), /o\.textContent\.trim\(\)\.toLowerCase\(\) === String\(value\)\.trim\(\)\.toLowerCase\(\)/);
 });
 
 test('the copy is scoped to its own form', () => {
   // Two record forms on one page must not fill each other in.
-  assert.match(fn(picker, 'applyPull'), /select\.closest\('form, \.wb-modal, \.wb-record-page'\) \|\| document/);
+  assert.match(fn(picker, 'applyPullValues'), /from\.closest\('form, \.wb-modal, \.wb-record-page'\) \|\| document/);
 });
 
 test('picking a record triggers the copy', () => {
