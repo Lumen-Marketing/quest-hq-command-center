@@ -145,6 +145,20 @@ test('Activity is the history AND the conversation, oldest first', () => {
   assert.deepEqual(feed.map((e) => e.kind), ['created', 'comment', 'updated', 'comment']);
 });
 
+test('a comment is not listed twice', () => {
+  // The workspace feed carries a line saying somebody commented, so a card that also shows the
+  // comment itself was showing the same event twice, one under the other.
+  const noisy = {
+    activity: [
+      ...workspace.activity,
+      { id: 'a5', ts: '2026-08-14T10:31:00Z', itemId: 'i1', appId: 'a1', kind: 'comment-log', text: 'Commented on this' },
+    ],
+  };
+  const feed = recordFeed(noisy, 'a1', 'i1', comments);
+  assert.ok(!feed.some((entry) => entry.id === 'a5'), 'the announcement goes');
+  assert.equal(feed.filter((entry) => entry.kind === 'comment').length, 2, 'the comments stay');
+});
+
 test('another record and workspace-level noise stay out of it', () => {
   const feed = recordFeed(workspace, 'a1', 'i1', comments);
   assert.ok(!feed.some((e) => e.id === 'a3'), 'a different record');

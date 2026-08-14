@@ -124,10 +124,8 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     return `
       <div class="sh-ribbon" data-sh-ribbon>
         <div class="sh-group">
-          <input class="sh-font" data-sh-set="ff" list="sh-fonts" aria-label="Font" placeholder="Font" spellcheck="false" autocomplete="off">
-          <datalist id="sh-fonts">${FONTS.map((name) => `<option value="${esc(name)}"></option>`).join('')}</datalist>
-          <input class="sh-size" data-sh-set="fs" list="sh-sizes" type="number" min="6" max="96" step="1" aria-label="Font size" autocomplete="off">
-          <datalist id="sh-sizes">${FONT_SIZES.map((size) => `<option value="${size}"></option>`).join('')}</datalist>
+          ${combo('ff', 'sh-font', 'Font', FONTS, { placeholder: 'Font' })}
+          ${combo('fs', 'sh-size', 'Font size', FONT_SIZES, { number: true })}
           ${tool('grow', 'ti-letter-case-upper', 'Grow font')}
           ${tool('shrink', 'ti-letter-case-lower', 'Shrink font')}
           <span class="sh-sep"></span>
@@ -174,6 +172,24 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
   // the editor threw the moment it opened.
   function menuButton(name, glyph, label) {
     return `<span class="sh-menu-wrap"><button type="button" class="sh-tool sh-has-menu" data-sh-menu="${name}" aria-haspopup="true" aria-expanded="false" title="${esc(label)}">${icon(glyph)}${icon('ti-chevron-down')}</button>${menuBody(name)}</span>`;
+  }
+
+  /**
+   * A box you can type in with a list you can open.
+   *
+   * The list is one of the ribbon's own menus, so it is positioned and clipped like the rest --
+   * and unlike a <datalist>, which shows only what already matches, floats like a tooltip and
+   * takes no styling at all.
+   */
+  function combo(key, className, label, options, { placeholder = '', number = false } = {}) {
+    const items = options.map((value) => `<button type="button" role="option" data-sh-do="${key}:${esc(value)}">${esc(value)}</button>`).join('');
+    return `<span class="sh-combo">
+      <input class="${className}" data-sh-set="${key}" data-sh-combo="${key}" aria-label="${esc(label)}"
+        ${number ? 'type="number" min="6" max="96" step="1"' : `placeholder="${esc(placeholder)}" spellcheck="false"`}
+        autocomplete="off" role="combobox" aria-expanded="false" aria-controls="sh-menu-${key}">
+      <button type="button" class="sh-combo-arrow" data-sh-menu="${key}" tabindex="-1" aria-label="Show ${esc(label).toLowerCase()} list">${icon('ti-chevron-down')}</button>
+      <div class="sh-menu sh-combo-menu" id="sh-menu-${key}" data-sh-menu-for="${key}" role="listbox" hidden>${items}</div>
+    </span>`;
   }
 
   function menuBody(name) {
@@ -512,6 +528,12 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
       patch({ [head]: styleOf(sheet, anchor)?.[head] === arg ? null : arg });
       return;
     }
+    if (head === 'ff' || head === 'fs') {
+      patch({ [head]: head === 'fs' ? Number(arg) : arg });
+      const box = overlay.querySelector(`[data-sh-combo="${head}"]`);
+      if (box) box.value = arg;
+      return;
+    }
     if (head === 'bd') { sheet.styles = applyBorders(sheet, sel, arg); paint(); return; }
     if (head === 'grow') { resize(1); return; }
     if (head === 'shrink') { resize(-1); return; }
@@ -749,6 +771,23 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
   overlay.addEventListener('change', (event) => {
     const setter = event.target.closest('input[data-sh-set]');
     if (setter) applySetter(setter);
+  });
+  // Typing searches the list rather than only filling the box.
+  overlay.addEventListener('input', (event) => {
+    const box = event.target.closest('[data-sh-combo]');
+    if (!box) return;
+    const menu = overlay.querySelector(`[data-sh-menu-for="${box.dataset.shCombo}"]`);
+    if (!menu) return;
+    const typed = box.value.trim().toLowerCase();
+    let shown = 0;
+    menu.querySelectorAll('button').forEach((option) => {
+      const hit = !typed || option.textContent.toLowerCase().includes(typed);
+      option.hidden = !hit;
+      if (hit) shown += 1;
+    });
+    if (!shown) { menu.hidden = true; return; }
+    if (menu.hidden) { closeMenus(); menu.hidden = false; }
+    placeMenu(menu, box);
   });
   // Enter applies without leaving the box, which is what typing a size and carrying on expects.
   overlay.addEventListener('keydown', (event) => {

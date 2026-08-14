@@ -106,12 +106,17 @@ test('the font and the size are typed into, not only picked from', async () => {
   // 13pt, which is not on the list. A datalist keeps the suggestions and allows both.
   const { overlay } = await open();
   const html = overlay.innerHTML;
-  assert.match(html, /<input class="sh-font" data-sh-set="ff" list="sh-fonts"/);
-  assert.match(html, /<input class="sh-size" data-sh-set="fs" list="sh-sizes" type="number" min="6" max="96"/);
-  assert.match(html, /<datalist id="sh-fonts">/);
-  assert.match(html, /<datalist id="sh-sizes">/);
+  // Both halves of a combobox: a box that takes anything, and a list that can be opened and
+  // read. A <select> cannot be typed into; a <datalist> shows only what already matches, floats
+  // like a tooltip and takes no styling -- which is what it looked like.
+  assert.match(html, /<input class="sh-font" data-sh-set="ff" data-sh-combo="ff"/);
+  assert.match(html, /<input class="sh-size" data-sh-set="fs" data-sh-combo="fs"[^>]*type="number" min="6" max="96"/);
+  assert.match(html, /data-sh-menu="ff"[^>]*aria-label="Show font list"/);
+  assert.match(html, /<div class="sh-menu sh-combo-menu" id="sh-menu-ff" data-sh-menu-for="ff" role="listbox"/);
+  assert.match(html, /data-sh-do="ff:Georgia"/, 'the list is pickable');
+  assert.match(html, /data-sh-do="fs:14"/);
   assert.ok(!/<select class="sh-font"/.test(html));
-  assert.ok(!/<select class="sh-size"/.test(html));
+  assert.ok(!/<datalist/.test(html), 'the datalist is what this replaced');
 
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');

@@ -13703,7 +13703,7 @@ function wbLogCommentActivity(workspace, app, item) {
     existing.actor = actor.full_name || actor.email || '';
     return;
   }
-  wbLogActivity(workspace, { icon: 'ti-message-circle', color: '#2563eb', appId: app.id, itemId: item.id, text });
+  wbLogActivity(workspace, { kind: 'comment-log', icon: 'ti-message-circle', color: '#2563eb', appId: app.id, itemId: item.id, text });
 }
 
 /**
@@ -16072,8 +16072,15 @@ function wbSaveInlineValue(companyId, workspaceId, appId, itemId, field, cell) {
   item.lastActivityAt = stamp;
   wbResetInlineCell(cell);
   wbLogActivity(workspace, {
-    icon: app.icon, color: app.color, appId: app.id, itemId: item.id,
-    text: `Updated <b>${h(field.label)}</b> on <b>${h(wbItemTitle(app, item))}</b> in ${h(app.name)}`,
+    kind: 'updated', icon: 'ti-pencil', color: '#2563eb', appId: app.id, itemId: item.id,
+    text: `Changed <b>${h(field.label)}</b>`,
+    changes: [{
+      fieldId: field.id,
+      label: String(field.label || 'Field'),
+      type: field.type,
+      from: wbPlainVal(companyId, workspace, app, field, before, item.values),
+      to: wbPlainVal(companyId, workspace, app, field, value, item.values),
+    }],
   });
   wbNotifyItem(companyId, workspace, app, item, `Updated: ${wbItemTitle(app, item)}`, `${actorName()} updated ${field.label} on ${wbItemTitle(app, item)} in ${app.name}`);
   wbRunAutomations(companyId, workspace, app, item, 'updated', prev);

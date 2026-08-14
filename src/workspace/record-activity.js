@@ -150,6 +150,9 @@ export function recordFeed(workspace, appId, itemId, comments = []) {
   (workspace?.activity || []).forEach((entry) => {
     if (!entry || entry.itemId !== itemId) return;
     if (appId && entry.appId && entry.appId !== appId) return;
+    // The workspace feed carries a line saying somebody commented. Here the comment itself is
+    // already in the list, so keeping both would show the same event twice.
+    if (entry.kind === 'comment-log') return;
     out.push({
       kind: entry.kind || 'other',
       id: entry.id,

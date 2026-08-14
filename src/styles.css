@@ -22863,8 +22863,13 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
    history that omits what people said about the record is not a history of it. Comments is the
    conversation alone. The composer stays on both: the reason to read the history is usually to
    say something about it. */
-.wb-rec-panel { margin-top: 20px; border-top: 1px solid var(--border, #e2d5bf); padding-top: 12px; }
-.wb-rec-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border, #e2d5bf); }
+/* A plain white card. The rule above the tabs and the line under every row turned the feed
+   into a stack of boxes inside a box; the avatar and the name already say where each entry
+   starts, so the separators were drawing structure that was not needed. */
+.wb-rec-panel { margin-top: 8px; }
+/* The tabs keep their underline -- it is what marks which one is on -- but the rule across
+   the whole card goes. */
+.wb-rec-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
 .wb-rec-tab {
   display: inline-flex;
   align-items: center;
@@ -22890,9 +22895,8 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
 
 /* One line of history. */
 .wb-act-feed { display: flex; flex-direction: column; }
-.wb-act-line { display: flex; gap: 11px; padding: 11px 2px; border-bottom: 1px solid var(--border, #e2d5bf); }
-.wb-act-line:first-child { padding-top: 4px; }
-.wb-act-line:last-child { border-bottom: 0; padding-bottom: 4px; }
+.wb-act-feed { gap: 2px; }
+.wb-act-line { display: flex; gap: 11px; padding: 10px 2px; }
 .wb-act-dot { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-size: 13px; flex: none; }
 .wb-act-main { min-width: 0; flex: 1; }
 .wb-act-who { display: flex; align-items: baseline; gap: 8px; font-size: .86rem; }
@@ -33696,10 +33700,32 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 .sh-ribbon input[data-sh-set]:hover { border-color: var(--orange, #e0552d); }
 .sh-ribbon select:focus-visible,
 .sh-ribbon input[data-sh-set]:focus { outline: 2px solid var(--orange, #e0552d); outline-offset: 1px; }
-/* The typed boxes keep the caret room the drawn arrow would otherwise take, and the browser
-   draws its own list marker for a datalist. */
-.sh-ribbon input[data-sh-set] { background-image: none; padding-right: 8px; }
-.sh-ribbon input.sh-size { padding-right: 2px; }
+/* A box you type in with a list you can open: the input carries the value, the arrow opens the
+   menu, and the two read as one control. */
+.sh-combo { position: relative; display: inline-flex; align-items: center; }
+.sh-ribbon .sh-combo input[data-sh-set] { background-image: none; padding-right: 24px; }
+.sh-combo-arrow {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0 6px 6px 0;
+  background: transparent;
+  color: var(--text-muted, #72695d);
+  font-size: 13px;
+  cursor: pointer;
+}
+.sh-combo-arrow:hover { color: var(--orange, #e0552d); }
+/* The number spinner would sit under the arrow. */
+.sh-ribbon .sh-combo input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+.sh-ribbon .sh-combo input[type="number"]::-webkit-outer-spin-button,
+.sh-ribbon .sh-combo input[type="number"]::-webkit-inner-spin-button { appearance: none; margin: 0; }
+.sh-combo-menu { min-width: 0; max-height: 260px; overflow-y: auto; }
+.sh-combo-menu button { font-size: 13px; }
 .sh-font { width: 138px; }
 .sh-size { width: 74px; }
 .sh-nf { width: 156px; }
