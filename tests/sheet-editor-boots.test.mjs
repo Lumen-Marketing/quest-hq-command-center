@@ -19,7 +19,7 @@ const stub = () => {
     setAttribute() {}, getAttribute: () => null, removeAttribute() {},
     addEventListener() {}, removeEventListener() {}, dispatchEvent: () => true,
     appendChild() {}, remove() {}, focus() {}, blur() {}, closest: () => null,
-    matches: () => false, scrollIntoView() {},
+    matches: () => false, scrollIntoView() {}, insertAdjacentHTML() {},
     querySelector: () => stub(), querySelectorAll: () => [],
     getBoundingClientRect: () => ({ width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0 }),
     isConnected: true,

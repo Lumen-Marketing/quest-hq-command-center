@@ -448,6 +448,154 @@ export const deleteRows = (sheet, at, count = 1) => reshape(sheet, { axis: 'row'
 export const insertCols = (sheet, at, count = 1) => reshape(sheet, { axis: 'col', at, count, remove: false });
 export const deleteCols = (sheet, at, count = 1) => reshape(sheet, { axis: 'col', at, count, remove: true });
 
+// ---- the fill handle -------------------------------------------------------------------------
+
+/** The trailing number in a label: "Item 3" -> { head: 'Item ', n: 3 }, "Q4" -> { head: 'Q', n: 4 }. */
+function trailingNumber(text) {
+  const match = /^(.*?)(-?\d+)$/.exec(String(text ?? ''));
+  if (!match) return null;
+  return { head: match[1], n: Number(match[2]) };
+}
+
+const isNumeric = (text) => String(text ?? '').trim() !== '' && Number.isFinite(Number(text));
+
+/**
+ * What the seed cells continue as.
+ *
+ * Excel's rules, which are what anybody dragging the corner expects:
+ *   - two or more numbers carry their own step (1, 3 -> 5, 7)
+ *   - ONE number repeats, because a single 5 dragged down is five 5s, not 5, 6, 7
+ *   - text ending in a number counts up (Item 1 -> Item 2), which is the one people rely on
+ *   - a formula moves its references by the offset, so =B2*C2 becomes =B3*C3
+ *   - anything else repeats in order
+ *
+ * Returns a function of the index past the end of the seed.
+ */
+function seriesFrom(seed) {
+  const values = seed.map((text) => (text === undefined ? '' : String(text)));
+  const numbers = values.filter(isNumeric).map(Number);
+
+  if (numbers.length === values.length && values.length > 1) {
+    const step = numbers[1] - numbers[0];
+    const even = numbers.every((value, at) => at === 0 || Math.abs(value - numbers[at - 1] - step) < 1e-9);
+    if (even && step !== 0) {
+      const last = numbers[numbers.length - 1];
+      return (at) => String(Number((last + step * (at + 1)).toPrecision(12)));
+    }
+  }
+
+  if (values.length === 1) {
+    const labelled = trailingNumber(values[0]);
+    // Only when there IS a prefix: a bare "5" repeats, "Item 5" counts.
+    if (labelled && labelled.head !== '' && !isNumeric(values[0])) {
+      return (at) => `${labelled.head}${labelled.n + at + 1}`;
+    }
+  }
+
+  return (at) => values[(at + values.length) % values.length];
+}
+
+/**
+ * Drag the corner of a selection to fill.
+ *
+ * `source` is what was selected, `target` is where it was dragged to; the two share an edge and
+ * the fill runs in whichever direction the drag went. Formatting comes along with the value,
+ * because that is what Excel does and a filled row that loses its borders looks broken.
+ *
+ * Returns the whole new cells and styles maps rather than mutating, so a caller can decide.
+ */
+export function fillFrom(sheet, source, target) {
+  const cells = { ...(sheet.cells || {}) };
+  const styles = { ...(sheet.styles || {}) };
+  if (!source || !target) return { cells, styles };
+
+  const down = target.r2 > source.r2;
+  const up = target.r1 < source.r1;
+  const right = target.c2 > source.c2;
+  const left = target.c1 < source.c1;
+  if (!down && !up && !right && !left) return { cells, styles };
+
+  const vertical = down || up;
+  // One series per column when filling down, per row when filling across.
+  const lanes = vertical
+    ? Array.from({ length: source.c2 - source.c1 + 1 }, (_, at) => source.c1 + at)
+    : Array.from({ length: source.r2 - source.r1 + 1 }, (_, at) => source.r1 + at);
+
+  lanes.forEach((lane) => {
+    const seedRefs = vertical
+      ? Array.from({ length: source.r2 - source.r1 + 1 }, (_, at) => cellRef(source.r1 + at, lane))
+      : Array.from({ length: source.c2 - source.c1 + 1 }, (_, at) => cellRef(lane, source.c1 + at));
+    // Reversed when dragging up or left, so the series continues away from the seed either way.
+    const ordered = (up || left) ? [...seedRefs].reverse() : seedRefs;
+    const seed = ordered.map((ref) => cells[ref]);
+    const next = seriesFrom(seed);
+
+    const targets = [];
+    if (down) for (let row = source.r2 + 1; row <= target.r2; row += 1) targets.push(cellRef(row, lane));
+    else if (up) for (let row = source.r1 - 1; row >= target.r1; row -= 1) targets.push(cellRef(row, lane));
+    else if (right) for (let col = source.c2 + 1; col <= target.c2; col += 1) targets.push(cellRef(lane, col));
+    else for (let col = source.c1 - 1; col >= target.c1; col -= 1) targets.push(cellRef(lane, col));
+
+    targets.forEach((ref, at) => {
+      const from = ordered[(at + ordered.length) % ordered.length];
+      const raw = cells[from];
+      let value;
+      if (String(raw ?? '').startsWith('=')) {
+        // A formula moves with the fill: the offset from the cell it came from.
+        const source2 = parseRef(from);
+        const to = parseRef(ref);
+        value = offsetFormula(raw, to.row - source2.row, to.col - source2.col);
+      } else {
+        value = next(at);
+      }
+      if (String(value ?? '').trim() === '') delete cells[ref]; else cells[ref] = String(value);
+      const style = styles[from];
+      if (style) styles[ref] = { ...style }; else delete styles[ref];
+    });
+  });
+
+  return { cells, styles };
+}
+
+/**
+ * Move every reference in a formula by a row/column offset.
+ *
+ * shiftFormula moves references that sit past a point; this moves all of them, which is what
+ * copying a formula to another cell means.
+ */
+export function offsetFormula(text, byRow, byCol) {
+  const source = String(text ?? '');
+  if (!source.startsWith('=')) return source;
+  let out = '';
+  let at = 0;
+  while (at < source.length) {
+    const character = source[at];
+    if (character === '"') {
+      const end = source.indexOf('"', at + 1);
+      const stop = end === -1 ? source.length : end + 1;
+      out += source.slice(at, stop);
+      at = stop;
+      continue;
+    }
+    const match = /^([A-Z]+)([0-9]+)/.exec(source.slice(at));
+    const before = out[out.length - 1] || '';
+    if (match && !/[A-Za-z0-9_]/.test(before)) {
+      const ref = parseRef(match[0]);
+      const after = source[at + match[0].length] || '';
+      if (ref && !/[A-Za-z0-9_(]/.test(after)) {
+        const row = ref.row + byRow;
+        const col = ref.col + byCol;
+        out += (row < 0 || col < 0) ? '#REF!' : cellRef(row, col);
+        at += match[0].length;
+        continue;
+      }
+    }
+    out += character;
+    at += 1;
+  }
+  return out;
+}
+
 /** Empty every cell in a range, leaving its formatting alone -- what Delete does. */
 export function clearCells(sheet, range) {
   const cells = { ...(sheet.cells || {}) };

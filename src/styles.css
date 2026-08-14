@@ -33599,18 +33599,31 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
 .sh-has-menu i:last-child { font-size: 10px; opacity: .6; }
 /* The sign that separates More decimals from Fewer decimals, which share a glyph. */
 .sh-badge { font-size: 10px; font-weight: 800; line-height: 1; margin-left: -2px; }
+/* Big enough to read the value at a glance. At 27px and 12px these were legible only if you
+   went looking, and the value in them is the answer to "what is this cell". */
 .sh-ribbon select {
-  height: 27px;
-  padding: 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  height: 31px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--border-strong, #cdb595);
+  border-radius: 7px;
   background: var(--surface);
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  /* The native arrow sits differently in every browser and is easy to lose against the border;
+     this one is always in the same place. */
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted, #72695d) 50%), linear-gradient(135deg, var(--text-muted, #72695d) 50%, transparent 50%);
+  background-position: right 12px center, right 7px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
 }
-.sh-font { width: 118px; }
-.sh-size { width: 58px; }
-.sh-nf { width: 132px; }
+.sh-ribbon select:hover { border-color: var(--orange, #e0552d); }
+.sh-ribbon select:focus-visible { outline: 2px solid var(--orange, #e0552d); outline-offset: 1px; }
+.sh-font { width: 138px; }
+.sh-size { width: 74px; }
+.sh-nf { width: 156px; }
 
 /* The colour buttons carry a bar of the colour they would apply, which is the only way to tell
    two identical paint-pot icons apart. */
@@ -33751,6 +33764,21 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
    forty cells says nothing about where typing would go. */
 .sh-grid td.sel { background-image: linear-gradient(rgba(212, 84, 31, .13), rgba(212, 84, 31, .13)); }
 .sh-grid td.sel-lead { outline: 2px solid var(--accent, #d4541f); outline-offset: -2px; background-image: none; }
+/* The corner you drag to fill, and the range it currently reaches. */
+.sh-grid td { position: relative; }
+.sh-fill-handle {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 7px;
+  height: 7px;
+  background: var(--accent, #d4541f);
+  border: 1px solid #fff;
+  border-radius: 1px;
+  cursor: crosshair;
+  z-index: 2;
+}
+.sh-grid td.fill-preview { background-image: linear-gradient(rgba(212, 84, 31, .07), rgba(212, 84, 31, .07)); outline: 1px dashed var(--accent, #d4541f); outline-offset: -1px; }
 .sh-grid .sh-colhead, .sh-grid .sh-rownum { position: relative; cursor: pointer; user-select: none; }
 .sh-grid .sh-colhead.on, .sh-grid .sh-rownum.on { background: var(--accent, #d4541f); color: #fff; }
 /* The line between two headers is the handle. Wider than it looks, or it cannot be hit. */
@@ -33824,6 +33852,34 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   /* Repeat the column letters on every page, and never split a row across two. */
   body.sh-printing .sh-grid thead { display: table-header-group; }
   body.sh-printing .sh-grid tr { break-inside: avoid; }
+}
+
+/* ── The sheet, printed as a document ──
+   The editor is not what goes on the page. Printing the live grid took the row numbers, the
+   column letters and whatever happened to be selected with it, which is how a print came out
+   with an orange header band and a black stripe across row 2. This is built fresh from the
+   used range: the content, the formatting somebody applied, and nothing else. */
+.sh-print { display: none; }
+@media print {
+  body.sh-printing > *:not(.sh-print) { display: none !important; }
+  body.sh-printing .sh-print { display: block; color: #000; background: #fff; }
+  .sh-print h1 { margin: 0 0 12pt; font-size: 15pt; font-weight: 700; color: #000; }
+  .sh-print-grid {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    color: #000;
+    /* Fills and the lines somebody drew are the formatting; they have to survive the printer. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* No gridlines. Excel does not print them either, and a document has the lines its author
+     drew, not one round every cell it might have used. */
+  .sh-print-grid td { padding: 3pt 5pt; vertical-align: middle; overflow-wrap: anywhere; }
+  .sh-print-grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .sh-print-grid tr { break-inside: avoid; }
+  @page { margin: 14mm; }
 }
 
 /* The Time & date tile. A clock is read at a glance from across a room, so the time carries

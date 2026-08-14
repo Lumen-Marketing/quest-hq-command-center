@@ -36,6 +36,7 @@ import {
   clearCells,
   colRange,
   colWidth,
+  fillFrom,
   deleteCols,
   deleteRows,
   formatNumber,
@@ -44,6 +45,8 @@ import {
   isCovered,
   mergeAt,
   normalizeSheetFull,
+  parseRange,
+  rangeHas,
   rangeLabel,
   rangeOf,
   rangeSize,
@@ -78,6 +81,8 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
   let sel = rangeOf('A1', 'A1');
   let editing = false;
   let dragging = null;
+  // Where a fill drag currently reaches, drawn as a preview until the mouse comes up.
+  let fillTo = null;
 
   const overlay = document.createElement('div');
   overlay.className = 'sh-overlay';
@@ -125,7 +130,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
           ${tool('i', 'ti-italic', 'Italic (Ctrl+I)')}
           ${tool('u', 'ti-underline', 'Underline (Ctrl+U)')}
           ${menuButton('borders', 'ti-border-all', 'Cell lines')}
-          <label class="sh-tool sh-color" title="Fill colour">${icon('ti-paint')}<input type="color" data-sh-color="bg" aria-label="Fill colour"><span class="sh-color-bar" data-sh-bar="bg"></span></label>
+          <label class="sh-tool sh-color" title="Fill colour">${icon('ti-paint')}<input type="color" data-sh-color="bg" value="#ffffff" aria-label="Fill colour"><span class="sh-color-bar" data-sh-bar="bg"></span></label>
           <label class="sh-tool sh-color" title="Text colour">${icon('ti-letter-a')}<input type="color" data-sh-color="fg" value="#000000" aria-label="Text colour"><span class="sh-color-bar" data-sh-bar="fg"></span></label>
           ${tool('clearFormat', 'ti-eraser', 'Clear formatting')}
           <small>Font</small>
@@ -262,11 +267,20 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
 
   /** Selection is classes, not a repaint: redrawing 8,000 cells to move a box is how a grid stutters. */
   function paintSelection() {
-    gridHost.querySelectorAll('.sel, .sel-lead').forEach((cell) => cell.classList.remove('sel', 'sel-lead'));
+    gridHost.querySelectorAll('.sel, .sel-lead, .fill-preview').forEach((cell) => cell.classList.remove('sel', 'sel-lead', 'fill-preview'));
+    gridHost.querySelectorAll('.sh-fill-handle').forEach((node) => node.remove());
     refsIn(sel).forEach((ref) => {
       gridHost.querySelector(`[data-sh-cell="${ref}"]`)?.classList.add('sel');
     });
     gridHost.querySelector(`[data-sh-cell="${anchor}"]`)?.classList.add('sel-lead');
+    // The corner you drag to fill, on the bottom-right of the selection the way Excel puts it.
+    if (!readOnly) {
+      const corner = gridHost.querySelector(`[data-sh-cell="${cellRef(sel.r2, sel.c2)}"]`);
+      if (corner) corner.insertAdjacentHTML('beforeend', '<span class="sh-fill-handle" data-sh-fill title="Drag to fill"></span>');
+    }
+    if (fillTo) refsIn(fillTo).forEach((ref) => {
+      if (!rangeHas(sel, ref)) gridHost.querySelector(`[data-sh-cell="${ref}"]`)?.classList.add('fill-preview');
+    });
     gridHost.querySelectorAll('.sh-colhead.on, .sh-rownum.on').forEach((head) => head.classList.remove('on'));
     for (let col = sel.c1; col <= sel.c2; col += 1) gridHost.querySelector(`[data-sh-col="${col}"]`)?.classList.add('on');
     for (let row = sel.r1; row <= sel.r2; row += 1) gridHost.querySelector(`[data-sh-row="${row}"]`)?.classList.add('on');
@@ -294,6 +308,14 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     };
     bar('bg', 'transparent');
     bar('fg', '#111111');
+    // The pickers open on what the cell already is. Left at their default, the fill picker
+    // opened on black and one stray confirm painted the whole selection black.
+    const picker = (key, fallback) => {
+      const node = overlay.querySelector(`[data-sh-color="${key}"]`);
+      if (node) node.value = style[key] || fallback;
+    };
+    picker('bg', '#ffffff');
+    picker('fg', '#000000');
     const count = rangeSize(sel);
     if (status) {
       // Evaluated ONCE. Called per cell this runs the whole sheet for every cell in the
@@ -506,6 +528,14 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     if (editing) return;
     closeMenus();
 
+    if (event.target.closest('[data-sh-fill]')) {
+      // The corner handle. The selection stays put; what moves is where it reaches to.
+      dragging = { kind: 'fill' };
+      fillTo = sel;
+      event.preventDefault();
+      return;
+    }
+
     const grip = event.target.closest('[data-sh-grip-col],[data-sh-grip-row]');
     if (grip) {
       // Dragging the line between two headers resizes what is before it.
@@ -554,6 +584,25 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
       paint();
       return;
     }
+    if (dragging.kind === 'fill') {
+      const cell = event.target.closest('[data-sh-cell]');
+      const at = cell && parseRef(cell.dataset.shCell);
+      if (!at) return;
+      // One direction at a time, whichever the pointer has gone furthest in -- a fill that
+      // grew both ways at once would have no series to follow.
+      const belowBy = at.row - sel.r2;
+      const aboveBy = sel.r1 - at.row;
+      const rightBy = at.col - sel.c2;
+      const leftBy = sel.c1 - at.col;
+      const best = Math.max(belowBy, aboveBy, rightBy, leftBy);
+      if (best <= 0) { fillTo = sel; paintSelection(); return; }
+      if (best === belowBy) fillTo = { ...sel, r2: at.row };
+      else if (best === aboveBy) fillTo = { ...sel, r1: at.row };
+      else if (best === rightBy) fillTo = { ...sel, c2: at.col };
+      else fillTo = { ...sel, c1: at.col };
+      paintSelection();
+      return;
+    }
     if (dragging.kind === 'cell') {
       const cell = event.target.closest('[data-sh-cell]');
       if (cell) select(cell.dataset.shCell, true);
@@ -568,7 +617,20 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     if (head) selectRange(rowRange(sheet, dragging.from, Number(head.dataset.shRow)));
   });
 
-  const stopDrag = () => { dragging = null; };
+  const stopDrag = () => {
+    if (dragging?.kind === 'fill' && fillTo && rangeLabel(fillTo) !== rangeLabel(sel)) {
+      const filled = fillFrom(sheet, sel, fillTo);
+      sheet.cells = filled.cells;
+      sheet.styles = filled.styles;
+      // The filled range becomes the selection, so it can be dragged on again.
+      sel = fillTo;
+      anchor = cellRef(sel.r1, sel.c1);
+      fillTo = null;
+      paint();
+    }
+    fillTo = null;
+    dragging = null;
+  };
   document.addEventListener('mouseup', stopDrag);
 
   gridHost.addEventListener('dblclick', (event) => {
@@ -585,8 +647,11 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     if (event.key === 'Escape') { editing = false; syncBar(); formula.blur(); }
   });
 
-  overlay.addEventListener('keydown', (event) => {
-    if (editing || event.target === formula || event.target.matches('select,input')) return;
+  const onGridKey = (event) => {
+    if (!overlay.isConnected || editing) return;
+    // Anything typed into a real control belongs to that control.
+    const target = event.target;
+    if (target === formula || (target?.matches && target.matches('input,select,textarea'))) return;
     if ((event.ctrlKey || event.metaKey) && !readOnly) {
       const key = event.key.toLowerCase();
       if (['b', 'i', 'u'].includes(key)) { event.preventDefault(); toggle(key); return; }
@@ -605,7 +670,8 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     }
     // Any printable character starts an edit with that character, the way a grid should.
     if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) { event.preventDefault(); edit(anchor, event.key); }
-  });
+  };
+  document.addEventListener('keydown', onGridKey);
 
   overlay.addEventListener('click', (event) => {
     const menuButtonEl = event.target.closest('[data-sh-menu]');
@@ -621,13 +687,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     if (doer) { closeMenus(); run(doer.dataset.shDo); return; }
     if (!event.target.closest('.sh-menu')) closeMenus();
 
-    if (event.target.closest('[data-sh-print]')) {
-      // Printing prints the SHEET. The class is on the document so the page's own furniture --
-      // sidebar, topbar, the record form underneath -- can be told to stay out of the way.
-      document.body.classList.add('sh-printing');
-      window.print();
-      document.body.classList.remove('sh-printing');
-    }
+    if (event.target.closest('[data-sh-print]')) printSheet();
     if (event.target.closest('[data-sh-export]')) exportWorkbook();
     if (event.target.closest('[data-sh-done]')) close();
     if (event.target === overlay) close();
@@ -641,6 +701,84 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     const key = setter.dataset.shSet;
     patch({ [key]: key === 'fs' ? Number(setter.value) : (setter.value === 'general' ? null : setter.value) });
   });
+
+  // ---- printing ------------------------------------------------------------------------------
+
+  /**
+   * The last row and column with anything on them.
+   *
+   * A sheet is 20x8 whether or not anybody filled it in, and printing the grid rather than the
+   * content is what makes a spreadsheet print look like a spreadsheet instead of a document.
+   */
+  function usedBounds() {
+    let rows = 0;
+    let cols = 0;
+    const reach = (ref) => {
+      const at = parseRef(ref);
+      if (!at) return;
+      rows = Math.max(rows, at.row + 1);
+      cols = Math.max(cols, at.col + 1);
+    };
+    Object.keys(sheet.cells || {}).forEach(reach);
+    Object.keys(sheet.styles || {}).forEach(reach);
+    (sheet.merges || []).forEach((text) => {
+      const range = parseRange(text);
+      if (!range) return;
+      rows = Math.max(rows, range.r2 + 1);
+      cols = Math.max(cols, range.c2 + 1);
+    });
+    return { rows: Math.max(1, Math.min(sheet.rows, rows)), cols: Math.max(1, Math.min(sheet.cols, cols)) };
+  }
+
+  /**
+   * The sheet as a document: what is on it, and nothing else.
+   *
+   * Built fresh rather than printed from the grid on screen. The grid carries row numbers,
+   * column letters and whatever is selected, and printing those puts an orange header band and
+   * a black stripe on the page -- which is what a spreadsheet looks like, not what a document
+   * looks like. Like Excel, gridlines are off: the only lines that print are the ones somebody
+   * drew.
+   */
+  function printMarkup() {
+    const { values, errors } = evaluateSheet(sheet);
+    const size = usedBounds();
+    const cols = Array.from({ length: size.cols }, (_, col) => `<col style="width:${colWidth(sheet, col)}px">`).join('');
+    const body = Array.from({ length: size.rows }, (_, row) => {
+      const cells = Array.from({ length: size.cols }, (_, col) => {
+        const ref = cellRef(row, col);
+        if (isCovered(sheet, ref)) return '';
+        const merge = mergeAt(sheet, ref);
+        const span = merge ? ` colspan="${Math.min(merge.c2, size.cols - 1) - merge.c1 + 1}" rowspan="${Math.min(merge.r2, size.rows - 1) - merge.r1 + 1}"` : '';
+        const format = styleOf(sheet, ref)?.nf;
+        const text = errors[ref]
+          ? shownValue(values, errors, ref)
+          : formatNumber(values[ref] ?? shownValue(values, errors, ref), format);
+        const style = cellStyle(ref);
+        const numeric = typeof values[ref] === 'number' && !styleOf(sheet, ref)?.ha ? ' class="num"' : '';
+        return `<td${numeric}${span}${style ? ` style="${esc(style)}"` : ''}>${esc(text === '' ? '' : text)}</td>`;
+      }).join('');
+      const height = sheet.rowH?.[row] ? ` style="height:${sheet.rowH[row]}px"` : '';
+      return `<tr${height}>${cells}</tr>`;
+    }).join('');
+    return `<table class="sh-print-grid"><colgroup>${cols}</colgroup><tbody>${body}</tbody></table>`;
+  }
+
+  function printSheet() {
+    const host = document.createElement('div');
+    host.className = 'sh-print';
+    const heading = sheet.title || title;
+    host.innerHTML = `${heading ? `<h1>${esc(heading)}</h1>` : ''}${printMarkup()}`;
+    document.body.appendChild(host);
+    document.body.classList.add('sh-printing');
+    try {
+      window.print();
+    } finally {
+      // Removed whatever happened, including the user cancelling the dialog -- a stray copy of
+      // the sheet left in the body would print again on the next unrelated Ctrl+P.
+      document.body.classList.remove('sh-printing');
+      host.remove();
+    }
+  }
 
   function say(message) {
     const bar = overlay.querySelector('[data-sh-title]');
@@ -695,6 +833,7 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     if (!readOnly) write(normalizeSheetFull(sheet));
     overlay.remove();
     document.removeEventListener('keydown', onEscape, true);
+    document.removeEventListener('keydown', onGridKey);
     document.removeEventListener('mouseup', stopDrag);
   }
   const onEscape = (event) => {

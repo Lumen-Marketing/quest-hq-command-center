@@ -11,6 +11,7 @@ import {
   colWidth,
   deleteCols,
   deleteRows,
+  fillFrom,
   formatNumber,
   insertCols,
   insertRows,
@@ -19,6 +20,7 @@ import {
   normalizeMerges,
   normalizeSheetFull,
   normalizeStyle,
+  offsetFormula,
   parseRange,
   rangeHas,
   rangeLabel,
@@ -266,6 +268,61 @@ test('Delete empties the cells and leaves the formatting alone', () => {
   assert.equal(cells.B1, undefined);
   assert.equal(cells.B3, '=SUM(B1:B2)', 'the formula is still there, now adding nothing');
   assert.equal(subject.styles.B1.bg, '#ffff00');
+});
+
+// ---- dragging the corner ---------------------------------------------------------------------
+
+test('one number repeats, two carry their step', () => {
+  // Excel's rule, and the one people are surprised by if you get it wrong: a single 5 dragged
+  // down is five 5s, not 5, 6, 7.
+  const one = fillFrom(sheet({ cells: { A1: '5' } }), parseRange('A1'), parseRange('A1:A4'));
+  assert.deepEqual(['A2', 'A3', 'A4'].map((r) => one.cells[r]), ['5', '5', '5']);
+  const two = fillFrom(sheet({ cells: { A1: '1', A2: '3' } }), parseRange('A1:A2'), parseRange('A1:A6'));
+  assert.deepEqual(['A3', 'A4', 'A5', 'A6'].map((r) => two.cells[r]), ['5', '7', '9', '11']);
+});
+
+test('a label ending in a number counts up', () => {
+  const out = fillFrom(sheet({ cells: { A1: 'Item 1' } }), parseRange('A1'), parseRange('A1:A4'));
+  assert.deepEqual(['A2', 'A3', 'A4'].map((r) => out.cells[r]), ['Item 2', 'Item 3', 'Item 4']);
+});
+
+test('a formula moves its references with it', () => {
+  const out = fillFrom(sheet({ cells: { A1: '2', B1: '3', C1: '=A1*B1' } }), parseRange('C1'), parseRange('C1:C3'));
+  assert.equal(out.cells.C2, '=A2*B2');
+  assert.equal(out.cells.C3, '=A3*B3');
+});
+
+test('anything else repeats in order', () => {
+  const out = fillFrom(sheet({ cells: { A1: 'Mon', B1: 'Tue' } }), parseRange('A1:B1'), parseRange('A1:F1'));
+  assert.deepEqual(['C1', 'D1', 'E1', 'F1'].map((r) => out.cells[r]), ['Mon', 'Tue', 'Mon', 'Tue']);
+});
+
+test('dragging up continues away from the seed, not back towards it', () => {
+  const out = fillFrom(sheet({ cells: { A5: '10', A6: '20' } }), parseRange('A5:A6'), parseRange('A3:A6'));
+  assert.deepEqual(['A4', 'A3'].map((r) => out.cells[r]), ['0', '-10']);
+});
+
+test('the formatting comes along, because a filled row that loses its borders looks broken', () => {
+  let subject = sheet({ cells: { A1: '1' } });
+  subject.styles = applyStyle(subject, parseRange('A1'), { bg: '#ffff00', b: 1 });
+  const out = fillFrom(subject, parseRange('A1'), parseRange('A1:A3'));
+  assert.equal(out.styles.A2.bg, '#ffff00');
+  assert.equal(out.styles.A3.b, 1);
+});
+
+test('a fill that goes nowhere changes nothing', () => {
+  const before = sheet({ cells: { A1: '1' } });
+  const out = fillFrom(before, parseRange('A1'), parseRange('A1'));
+  assert.deepEqual(out.cells, before.cells);
+});
+
+test('offsetFormula moves every reference, unlike the insert-time one', () => {
+  // shiftFormula moves what sits past a point; this moves all of it, which is what copying a
+  // formula into another cell means.
+  assert.equal(offsetFormula('=SUM(A1:A3)+B1', 2, 1), '=SUM(B3:B5)+C3');
+  assert.equal(offsetFormula('="A1"', 1, 0), '="A1"', 'quoted text is text');
+  assert.equal(offsetFormula('12', 1, 0), '12');
+  assert.equal(offsetFormula('=A1', -5, 0), '=#REF!', 'off the top of the sheet');
 });
 
 test('formatting survives being stored but a cell outside the sheet does not', () => {

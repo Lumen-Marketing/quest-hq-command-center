@@ -13423,7 +13423,10 @@ function normalizeFeedPost(p) {
 // chart), tasks, calendar, contacts, text, image, links. `config` is per-type.
 // Every type a tile may be. normalizeWorkspaceTile falls back to 'text' for anything not
 // listed, so a type missing from here is not an unknown tile -- it is silently a blank note.
-const WB_TILE_TYPES = ['apps', 'app', 'report', 'tasks', 'members', 'calendar', 'contacts', 'jobs', 'text', 'image', 'links'];
+// Every type a tile may be. A type missing from here does not fail loudly -- normalize falls
+// back to 'text', so picking "Time & date" quietly added a Note instead, which is exactly what
+// happened when the clock shipped without being added to this list.
+const WB_TILE_TYPES = ['apps', 'app', 'report', 'tasks', 'members', 'calendar', 'contacts', 'jobs', 'text', 'image', 'links', 'clock'];
 /**
  * What a Jobs tile can show, and what each part is for.
  *
