@@ -18,6 +18,7 @@ import {
   BUTTON_OPS, buttonNotReady, buttonReady, planPush, planSet, pushableFields,
 } from './button-field.js';
 import { WB_ACTION_ICONS, WB_APP_ICONS } from './icon-sets.js';
+import { normalizeSheet, sheetPreview } from '../sheet/sheet-model.js';
 
 // "Copy the data inputted on the other field so it will automatically input on it."
 //
@@ -174,6 +175,23 @@ export function renderFieldConfig(fd, app, ctx) {
       <div class="wb-field"><label>Color</label><select class="wb-input" id="wbProgColorMode" data-wb-prog-refresh><option value="single" ${mode === 'single' ? 'selected' : ''}>Single color</option><option value="scale" ${mode === 'scale' ? 'selected' : ''}>Change by percentage</option></select></div>
       ${colorBlock}
       <div class="wb-field"><label>Preview <span class="wb-opt">at ${previewPct}%</span></label><div class="wb-prog-preview" id="wbProgPreview">${wbProgressDisplayHtml(fd, previewPct)}</div></div>`;
+  }
+  if (t === 'sheet') {
+    const start = normalizeSheet(fd.config.sheet || {});
+    const filled = Object.keys(start.cells).length;
+    return `
+      <div class="wb-field"><label>Starting sheet</label>
+        <div class="wb-sub">Every new record begins from this. Lay it out once — headings, prices, the formulas that add it up — and each record gets its own copy to fill in.</div>
+        <div class="wb-sheet-card" style="margin-top:10px">
+          ${filled ? `<div class="wb-sub">${filled} cell${filled === 1 ? '' : 's'} across ${start.rows} × ${start.cols}.</div>` : '<div class="wb-sub">Empty — every record starts blank.</div>'}
+          <input type="hidden" id="wbSheetDefault" data-f="wbSheetDefault" data-wb-sheet-title="Starting sheet" value="${h(JSON.stringify(start))}" />
+          <button class="btn btn-sm" type="button" data-wb-sheet-open="wbSheetDefault"><i class="ti ti-table"></i>${filled ? 'Edit the starting sheet' : 'Build the starting sheet'}</button>
+        </div>
+      </div>
+      <div class="wb-check-row">
+        <label class="wb-switch"><input type="checkbox" id="wbSheetHeader" ${start.headerRow ? 'checked' : ''}><span class="wb-slider"></span></label>
+        <div><b>First row is headings</b><div class="wb-sub">Draws row 1 as column headings, and keeps it as headings when the sheet is printed.</div></div>
+      </div>`;
   }
   if (t === 'button') {
     const sourceCompany = canonicalCompanyId(state.builderModal.companyId);
@@ -382,6 +400,23 @@ export function createFieldInput(ctx) {
           ${ready ? '' : `<div class="wb-sub">${h(buttonNotReady(f))} Open the field to set it up.</div>`}
         </div>`;
       }
+      // A sheet is stored as JSON in a hidden input, so the form's existing read and save need
+      // to know nothing about it. What is on the page is a preview and a way in.
+      case 'sheet': {
+        const stored = (() => { try { return typeof val === 'string' ? JSON.parse(val || '{}') : (val || {}); } catch { return {}; } })();
+        const start = Object.keys(stored?.cells || {}).length ? stored : (f.config.sheet || {});
+        const view = sheetPreview(start);
+        const grid = view.filled
+          ? `<table class="wb-sheet-mini">${view.rows.map((row) => `<tr>${row.map((cell) => `<td>${h(cell)}</td>`).join('')}</tr>`).join('')}</table>`
+          : '<div class="wb-sub">Empty sheet.</div>';
+        return `<div class="wb-fieldbox wb-sheetfield">${lbl}
+          <input type="hidden" data-f="${h(f.id)}" data-wb-sheet-title="${h(f.label)}" value="${h(JSON.stringify(start))}" />
+          <div class="wb-sheet-card">
+            ${grid}
+            <button class="btn btn-sm" type="button" data-wb-sheet-open="${h(f.id)}"><i class="ti ti-table"></i>${view.filled ? 'Open sheet' : 'Start the sheet'}</button>
+          </div>
+        </div>`;
+      }
       case 'company_contact': {
         const options = companyContactOptions(companyId);
         const listId = `wbcr-${f.id}`;
@@ -584,7 +619,23 @@ export function createFieldInput(ctx) {
  * them across two files is how the two halves drift apart. Mutates the draft in place, which is
  * what every other branch of the field editor does.
  */
-export function collectButtonConfig(config, fallbackCompany) {
+/**
+ * Read a field's panel back into its config.
+ *
+ * One door for every type that needs it, so main.js names none of them: the ids and the row
+ * shapes belong to the panel that drew them, and every session that never opens one of these
+ * fields would otherwise carry the lot.
+ */
+export function collectFieldConfig(type, config, fallbackCompany) {
+  if (type === 'button') collectButtonConfig(config, fallbackCompany);
+  if (type === 'sheet') {
+    const start = document.getElementById('wbSheetDefault');
+    if (start) { try { config.sheet = JSON.parse(start.value || '{}'); } catch { /* keep what was there */ } }
+    config.sheet = { ...(config.sheet || {}), headerRow: !!document.getElementById('wbSheetHeader')?.checked };
+  }
+}
+
+function collectButtonConfig(config, fallbackCompany) {
   const val = (id) => document.getElementById(id)?.value;
   const rows = (kind, keys) => [...document.querySelectorAll(`[data-wb-${kind}-row]`)]
     .map((row) => Object.fromEntries(keys.map((key) => [key, row.querySelector(`[data-wb-${kind}-${key}]`)?.value || ''])))

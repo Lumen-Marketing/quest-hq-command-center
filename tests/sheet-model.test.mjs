@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -218,4 +219,47 @@ test('the takeoff works as a sheet', () => {
   assert.equal(values.D3, 3575);
   assert.equal(values.D4, 4535);
   assert.equal(Math.round(values.D5 * 100) / 100, 4920.47);
+});
+
+// ---- the field and its grid ---------------------------------------------------------------
+
+test('a preview shows the worked-out values, not the formulas', async () => {
+  const { sheetPreview } = await import('../src/sheet/sheet-model.js');
+  const view = sheetPreview({ rows: 5, cols: 3, cells: { A1: 'Item', B1: '8', C1: '=B1*10' } }, 2);
+  assert.equal(view.filled, 3);
+  assert.deepEqual(view.rows[0], ['Item', '8', '80']);
+  assert.equal(sheetPreview({}).filled, 0, 'an empty sheet previews as empty');
+});
+
+test('a long decimal is not the arithmetic showing through', async () => {
+  const { shownValue } = await import('../src/sheet/sheet-model.js');
+  assert.equal(shownValue({ A1: 4920.470000000001 }, {}, 'A1'), '4920.47');
+  assert.equal(shownValue({ A1: true }, {}, 'A1'), 'TRUE');
+  assert.equal(shownValue({}, { A1: 'boom' }, 'A1'), '#ERROR');
+});
+
+test('one keypress moves one cell', async () => {
+  // It moved two. The cell's own handler cleared `editing` and then the grid's handler saw the
+  // same Enter -- by which point the guard no longer applied -- and stepped again. Caught in a
+  // browser, where B2 + Enter landed on B4; the fix is to stop the event where it is handled.
+  const editor = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');
+  assert.match(editor, /if \(\['Enter', 'Tab', 'Escape'\]\.includes\(event\.key\)\) \{ event\.preventDefault\(\); event\.stopPropagation\(\); \}/);
+  assert.match(editor, /if \(\['Enter', 'Escape'\]\.includes\(event\.key\)\) \{ event\.preventDefault\(\); event\.stopPropagation\(\); \}/);
+});
+
+test('the sheet is written back only when the grid is closed', () => {
+  // A spreadsheet somebody is halfway through is not a saved record, and the form underneath
+  // still has its own Save.
+  const editor = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');
+  assert.match(editor, /function close\(\) \{\s*\n\s*if \(!readOnly\) write\(normalizeSheet\(sheet\)\);/);
+});
+
+test('printing prints the sheet, not the page around it', () => {
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /@media print/, 'the app had no print rules at all before this');
+  assert.match(styles, /body\.sh-printing > \*:not\(\.sh-overlay\) \{ display: none !important; \}/);
+  // The toolbar is for working, not for reading on paper.
+  assert.match(styles, /body\.sh-printing \.sh-tools/);
+  // Column letters repeat on every page, and a row never splits across two.
+  assert.match(styles, /body\.sh-printing \.sh-grid thead \{ display: table-header-group; \}/);
 });

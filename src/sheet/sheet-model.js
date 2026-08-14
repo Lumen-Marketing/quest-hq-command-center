@@ -366,3 +366,28 @@ export function sheetFromRows(rows, existing = {}) {
     cells,
   });
 }
+
+/** What a cell shows: the worked-out value, or the error that stopped it. */
+export function shownValue(values, errors, ref) {
+  if (errors[ref]) return '#ERROR';
+  const value = values[ref];
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  // Long decimals are the arithmetic showing through; nobody typed 4920.470000000001.
+  if (typeof value === 'number') return String(Math.round(value * 1e6) / 1e6);
+  return String(value);
+}
+
+/** A few rows of the sheet, for the record form to show without opening it. */
+export function sheetPreview(value, limit = 3) {
+  const sheet = normalizeSheet(value);
+  const { values, errors } = evaluateSheet(sheet);
+  const filled = Object.keys(sheet.cells).length;
+  if (!filled) return { filled: 0, rows: [], cols: 0 };
+  const cols = Math.min(sheet.cols, 6);
+  const rows = Array.from({ length: Math.min(sheet.rows, limit) }, (_, row) => Array.from(
+    { length: cols },
+    (_, col) => shownValue(values, errors, cellRef(row, col)),
+  ));
+  return { filled, rows, cols };
+}

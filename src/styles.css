@@ -33420,3 +33420,188 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   opacity: .75;
 }
 .wb-tab-fixed .wb-tab-show { cursor: default; }
+
+/* ---- The Sheet field ---------------------------------------------------------------------- */
+/* On the record it is a few rows and a way in; the grid itself takes the whole window. */
+
+.wb-sheet-card {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+.wb-sheet-mini { border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+.wb-sheet-mini td {
+  border: 1px solid var(--border);
+  padding: 2px 7px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sh-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(15, 12, 10, .55);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+.sh-frame {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1400px, 100%);
+  height: min(880px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .3);
+}
+
+.sh-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.sh-title { font-size: 13px; white-space: nowrap; }
+/* The reference box and the formula bar: which cell, and what is actually in it. */
+.sh-ref {
+  min-width: 56px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+}
+.sh-formula {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+}
+.sh-tools { display: flex; gap: 6px; flex: none; }
+.sh-upload { position: relative; cursor: pointer; }
+
+.sh-scroll { overflow: auto; background: var(--surface); }
+.sh-grid { border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+.sh-grid th,
+.sh-grid td {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0 7px;
+  height: 26px;
+  min-width: 92px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The row and column headers stay put, which is the difference between a grid and a table. */
+.sh-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+  min-width: 92px;
+}
+.sh-grid .sh-rownum,
+.sh-grid .sh-corner {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  min-width: 44px;
+  width: 44px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.sh-grid .sh-corner { z-index: 3; }
+.sh-grid td { cursor: cell; background: var(--surface); }
+.sh-grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* A cell holding a formula reads as a result, with a quiet mark that it is worked out. */
+.sh-grid td.calc { color: var(--accent, #d4541f); }
+.sh-grid td.head { font-weight: 600; background: var(--surface-2); }
+.sh-grid td.bad { color: var(--danger, #c0392b); }
+.sh-grid td.sel { outline: 2px solid var(--accent, #d4541f); outline-offset: -2px; }
+.sh-cell-input {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+  outline: none;
+}
+
+.sh-help {
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .sh-overlay { padding: 0; }
+  .sh-frame { height: 100%; border-radius: 0; }
+  .sh-bar { flex-wrap: wrap; }
+  .sh-formula { order: 3; flex-basis: 100%; }
+}
+
+/* Printing the sheet. The app had no print rules at all before this, so the whole page came
+   out -- sidebar, topbar and the record form behind the grid. */
+@media print {
+  body.sh-printing > *:not(.sh-overlay) { display: none !important; }
+  body.sh-printing .sh-overlay {
+    position: static;
+    background: none;
+    padding: 0;
+    display: block;
+  }
+  body.sh-printing .sh-frame {
+    width: auto;
+    height: auto;
+    border: 0;
+    box-shadow: none;
+    display: block;
+  }
+  /* The controls are for working, not for reading on paper. */
+  body.sh-printing .sh-tools,
+  body.sh-printing .sh-ref,
+  body.sh-printing .sh-formula,
+  body.sh-printing .sh-help { display: none !important; }
+  body.sh-printing .sh-scroll { overflow: visible; }
+  body.sh-printing .sh-grid { width: 100%; font-size: 10pt; }
+  body.sh-printing .sh-grid td.sel { outline: 0; }
+  /* Repeat the column letters on every page, and never split a row across two. */
+  body.sh-printing .sh-grid thead { display: table-header-group; }
+  body.sh-printing .sh-grid tr { break-inside: avoid; }
+}

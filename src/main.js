@@ -13556,11 +13556,12 @@ const WB_FIELD_TYPES = {
   created_time: { label: 'Created time', icon: 'ti-calendar-plus', color: '#6b7280', desc: 'When the record was created' },
   updated_time: { label: 'Last modified', icon: 'ti-calendar-up', color: '#6b7280', desc: 'When it last changed' },
   button: { label: 'Button', icon: 'ti-click', color: '#d4541f', desc: 'Send the record to another app' },
+  sheet: { label: 'Sheet', icon: 'ti-table', color: '#0f766e', desc: 'A spreadsheet with formulas' },
 };
 // Computed / automatic fields hold no user-entered value: created/updated read the
 // item's timestamps, autonumber is assigned on create, rollup and calculation compute.
 const WB_AUTO_FIELD_TYPES = new Set(['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time', 'button']);
-const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'company_contact', 'button', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox'];
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'company_contact', 'button', 'sheet', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox'];
 // Comparison operators for numeric (number/money) automation triggers:
 // [operator, dropdown label, symbol for the human-readable rule summary].
 const WB_TRIG_OPS = [['==', 'equals', '='], ['!=', 'not equal', '≠'], ['>', 'greater than', '>'], ['<', 'less than', '<'], ['>=', 'at least', '≥'], ['<=', 'at most', '≤']];
@@ -17559,6 +17560,15 @@ function wbAppTabs(app) {
   return [...new Set([...chosen.filter((tab) => tab !== 'settings'), 'settings'])];
 }
 
+// ---- the Sheet field ---------------------------------------------------------------------
+// A spreadsheet inside a record. The grid is a full-screen overlay of its own, fetched the
+// first time one is opened -- most apps have no sheet, and none of them should pay for it.
+function wbOpenSheet(fieldId) {
+  import('./sheet/sheet-editor.js')
+    .then((mod) => mod.openFor(fieldId, { render }))
+    .catch((error) => showToast(error.message || 'The sheet could not be opened.', 'local', 'Workspaces'));
+}
+
 // ---- the app's recycle bin ---------------------------------------------------------------
 // Deleting a record moves it here rather than dropping it. Body in ./workspace/recycle-bin.js.
 let recycleBinModule = null;
@@ -18937,10 +18947,8 @@ function wbCollectModalDraft() {
       // dropped rather than left storing something the UI no longer offers.
       if (m.draft.config.multiple) { m.draft.config.pull = []; m.draft.config.pullAll = false; }
     }
-    // Read back by the module that drew the panel: a dozen ids and three kinds of row are its
-    // business, not the monolith's, and every session that never opens a Button field would
-    // otherwise carry them.
-    if (t === 'button') wbFieldUiModule?.collectButtonConfig(m.draft.config, canonicalCompanyId(m.companyId));
+    // Read back by the module that drew the panel -- see collectFieldConfig.
+    wbFieldUiModule?.collectFieldConfig(t, m.draft.config, canonicalCompanyId(m.companyId));
     if (t === 'company_contact') {
       // The same two controls as a relationship, read the same way. The switch is on by
       // default for this field type, so an untouched panel saves it as on.
@@ -26791,6 +26799,8 @@ function onDocumentClick(event) {
   if (!event.target.closest('.address-lookup-control, .sf-inline-address-editor')) closeAddressSuggestionMenus();
   if (!event.target.closest('.job-type-combobox')) closeJobTypeMenus();
   if (event.target.closest('[data-takeoff-action]') && takeoffEvent(event, 'click')) return;
+  const sheetOpen = event.target.closest('[data-wb-sheet-open]');
+  if (sheetOpen) { event.preventDefault(); wbOpenSheet(sheetOpen.dataset.wbSheetOpen); return; }
   const pressed = event.target.closest('[data-wb-press]');
   if (pressed && !pressed.disabled) {
     // A row's button must not also open the record it sits in.
