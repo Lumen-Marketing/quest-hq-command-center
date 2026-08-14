@@ -33647,12 +33647,14 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   margin-top: -1px;
 }
 
-.sh-menu-wrap { position: relative; display: inline-flex; }
+.sh-menu-wrap { display: inline-flex; }
+/* Fixed, and placed from the button's own rect when it opens.
+   The ribbon scrolls sideways, and `overflow-x: auto` forces `overflow-y` to `auto` with it --
+   so the ribbon clipped anything hanging below it. An absolutely positioned menu inside it
+   showed 17 of its 100 pixels: one visible row of a three-row menu. */
 .sh-menu {
-  position: absolute;
-  top: calc(100% + 3px);
-  left: 0;
-  z-index: 5;
+  position: fixed;
+  z-index: 60;
   min-width: 176px;
   padding: 4px;
   border: 1px solid var(--border);

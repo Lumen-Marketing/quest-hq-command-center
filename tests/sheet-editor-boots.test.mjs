@@ -77,6 +77,30 @@ test('a read-only sheet gets no ribbon and no import', async () => {
   assert.ok(overlay.innerHTML.includes('data-sh-export'), 'but it can still be exported');
 });
 
+test('a ribbon menu is not clipped by the ribbon it hangs off', async () => {
+  // The ribbon scrolls sideways, and `overflow-x: auto` drags `overflow-y` to `auto` with it, so
+  // the ribbon clips anything hanging below. An absolutely positioned menu inside it showed 17
+  // of its 100 pixels -- one readable row of a three-row menu.
+  const { readFileSync } = await import('node:fs');
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../src/sheet/sheet-editor.js', import.meta.url), 'utf8');
+  const declarations = styles.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  const at = declarations.indexOf('.sh-menu {');
+  assert.notEqual(at, -1);
+  const rule = declarations.slice(at, declarations.indexOf('}', at));
+  assert.match(rule, /position: fixed/, 'absolute would be clipped by the ribbon');
+  assert.ok(!/position: absolute/.test(rule));
+
+  // Fixed means it has to be TOLD where to go, from the button's own rect, after it is shown --
+  // a hidden element has no size to measure.
+  assert.match(source, /function placeMenu\(menu, button\)/);
+  assert.match(source, /menu\.hidden = false;\s*\n\s*menuButtonEl\.setAttribute\('aria-expanded', 'true'\);\s*\n\s*placeMenu\(menu, menuButtonEl\);/);
+  assert.match(source, /getBoundingClientRect\(\)/);
+  // And it does not follow its button, so scrolling the ribbon has to close it.
+  assert.match(source, /\[data-sh-ribbon\]'\)\?\.addEventListener\('scroll', closeMenus\)/);
+});
+
 test('a sheet that will not parse opens empty instead of throwing', async () => {
   const { overlay } = await open({ read: () => null });
   assert.ok(overlay);

@@ -198,6 +198,27 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     return `<div class="sh-menu" data-sh-menu-for="${name}" role="menu" hidden>${items[name] || ''}</div>`;
   }
 
+  /**
+   * Put an open menu under its button, in viewport coordinates.
+   *
+   * It has to be measured after it is shown, because a hidden element has no size, and it has to
+   * be told where to go because it is fixed -- which is the only way out of the ribbon's clip.
+   */
+  function placeMenu(menu, button) {
+    const from = button.getBoundingClientRect();
+    const size = menu.getBoundingClientRect();
+    const gap = 3;
+    // Below the button, unless there is more room above -- the ribbon sits at the top of the
+    // frame, so below is nearly always right.
+    const below = from.bottom + gap;
+    const top = (below + size.height > window.innerHeight - 8 && from.top - gap - size.height > 8)
+      ? from.top - gap - size.height
+      : Math.min(below, Math.max(8, window.innerHeight - 8 - size.height));
+    const left = Math.max(8, Math.min(from.left, window.innerWidth - 8 - size.width));
+    menu.style.top = `${Math.round(top)}px`;
+    menu.style.left = `${Math.round(left)}px`;
+  }
+
   function closeMenus() {
     overlay.querySelectorAll('[data-sh-menu-for]').forEach((menu) => { menu.hidden = true; });
     overlay.querySelectorAll('[data-sh-menu]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
@@ -617,6 +638,10 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
     if (head) selectRange(rowRange(sheet, dragging.from, Number(head.dataset.shRow)));
   });
 
+  // A fixed menu is placed once and does not follow its button, so scrolling the ribbon out from
+  // under it would leave it pointing at nothing.
+  overlay.querySelector('[data-sh-ribbon]')?.addEventListener('scroll', closeMenus);
+
   const stopDrag = () => {
     if (dragging?.kind === 'fill' && fillTo && rangeLabel(fillTo) !== rangeLabel(sel)) {
       const filled = fillFrom(sheet, sel, fillTo);
@@ -680,7 +705,11 @@ export function openSheetEditor({ read, write, title = 'Sheet', readOnly = false
       const menu = overlay.querySelector(`[data-sh-menu-for="${name}"]`);
       const wasOpen = menu && !menu.hidden;
       closeMenus();
-      if (menu && !wasOpen) { menu.hidden = false; menuButtonEl.setAttribute('aria-expanded', 'true'); }
+      if (menu && !wasOpen) {
+        menu.hidden = false;
+        menuButtonEl.setAttribute('aria-expanded', 'true');
+        placeMenu(menu, menuButtonEl);
+      }
       return;
     }
     const doer = event.target.closest('[data-sh-do]');
