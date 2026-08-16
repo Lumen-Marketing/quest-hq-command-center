@@ -302,7 +302,8 @@ test('a hidden field is dropped from the table, not from the record', () => {
   const body = fn('renderDirectory', page);
   assert.match(body, /companyContactFieldsFor\(companyId\)\.filter\(\(field\) => !field\.hidden\)/);
   // The card shows everything: hiding is about this table's columns.
-  assert.match(fn('renderCard', page), /const filled = fields\.filter\(\(field\) => field !== chipField && companyContactValue/);
+  assert.match(fn('renderCard', page), /const placeable = fields\.filter\(\(field\) => field !== chipField/);
+  assert.ok(!/placeable = fields\.filter\([^;]*field\.hidden/.test(page), 'hiding is a column setting, not a card one');
   assert.ok(!/!field\.hidden && companyContactValue/.test(page), 'the card no longer skips hidden fields');
 });
 

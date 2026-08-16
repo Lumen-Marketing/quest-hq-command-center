@@ -17,6 +17,15 @@
   --text-muted: var(--muted);
   --border: #e2d5bf;
   --border-strong: #d3c1a7;
+  /* How much of the work surface the sticky app tab strip covers. Named rather than repeated,
+     because anything else that sticks inside that surface has to clear it -- get the two out
+     of step and the second one pins underneath the first, which reads as a rendering bug. */
+  --wb-tab-strip: 70px;
+  /* Everything above a record's panels: the window chrome, the topbar, and the record header
+     that stays put while the record is read. What is left of the viewport is how tall a panel
+     can be before it scrolls itself. Erring large only makes the panels shorter than they
+     could be; erring small hides their last row below the fold. */
+  --wb-record-chrome: 260px;
   --amber: #f4b234;
   --amber-2: #f8d995;
   --orange: #e66a1f;
@@ -22685,18 +22694,28 @@ button.wb-minical-cell:hover { background: var(--surface-2, #f6efe4); }
 .wb-hidden-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--surface-3, #eef1f5); color: var(--text-muted, #72695d); font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; vertical-align: middle; }
 .wb-hidden-tag i { font-size: 12px; }
 .wb-icon-btn.active { color: var(--orange, #e0552d); background: color-mix(in srgb, var(--orange, #e0552d) 12%, transparent); }
-/* The palette lists every field type, which is taller than most screens. It scrolls itself
-   and sticks, so the types stay reachable however far down the field list you are — and it
-   no longer sets the height of the whole builder. */
+/* The palette lists every field type, which is taller than most screens. It sticks to the
+   viewport, and the type list scrolls inside it, so the types stay reachable however far down
+   the field list you are — and it no longer sets the height of the whole builder.
+   The card is the frame: its header never moves, and only .wb-palette-list scrolls. */
 .wb-palette {
   border: 1px solid var(--border, #e2d5bf); border-radius: 14px;
   background: var(--surface, #fffaf0); padding: 16px;
-  position: sticky; top: 12px;
-  max-height: calc(100vh - 140px);
-  overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-width: thin;
+  /* Below the tab strip, which sticks above it -- and short enough to still fit under it. */
+  position: sticky; top: calc(var(--wb-tab-strip, 70px) + 12px);
+  max-height: calc(100vh - 140px - var(--wb-tab-strip, 70px));
+  display: flex; flex-direction: column;
+  overflow: hidden;
 }
 .wb-palette h4 { font-weight: 800; font-size: .92rem; margin-bottom: 10px; }
+.wb-palette-head { flex: none; }
+.wb-palette-list {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin;
+  /* Bleed into the card's padding so the scrollbar rides the edge, not the text. */
+  margin-right: -8px; padding-right: 8px;
+}
 .wb-palette-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid transparent; border-radius: 10px; padding: 8px; cursor: pointer; background: none; }
 .wb-palette-item:hover { background: var(--surface-2, #f6efe4); }
 .wb-palette-item[draggable="true"] { cursor: grab; }
@@ -23024,7 +23043,25 @@ button.wb-file:hover { color: var(--orange); text-decoration: underline; }
 .wb-switch input:checked + .wb-slider { background: #16a34a; }
 .wb-switch input:checked + .wb-slider::before { transform: translateX(16px); }
 
-.wb-settings.card { max-width: 560px; border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); padding: 22px; }
+/* Three cards, each one question, rather than a single 560px column of fourteen fields that
+   pushed the tab list and the Save button below two screens of icon grid. Each card is two
+   columns wide enough to hold the icon picker beside the name it belongs to. */
+.wb-settings.card { max-width: 1100px; border: 1px solid var(--border, #e2d5bf); border-radius: 14px; background: var(--surface, #fffaf0); padding: 22px; margin-bottom: 14px; }
+
+.wb-settings-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+.wb-settings-col { min-width: 0; }
+
+/* Save and Delete sit under the whole card rather than floating beside one column, so they
+   read as "apply everything above" -- which is what they do. */
+.wb-settings-save { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border, #e2d5bf); }
+
+/* The icon grid scrolls in place instead of growing the card to 115 icons tall. */
+.wb-settings .wb-icon-grid { max-height: 260px; overflow-y: auto; }
+.wb-icon-none { margin: 6px 0 10px; }
+
+@media (max-width: 900px) {
+  .wb-settings-cols { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
 .wb-settings-title { font-weight: 800; margin-bottom: 16px; }
 .wb-settings-actions { display: flex; gap: 10px; margin-top: 8px; }
 .wb-field { margin-bottom: 14px; }
@@ -25729,6 +25766,31 @@ textarea.wb-input { min-height: 70px; resize: vertical; }
 .wb-star.on { color: #f59e0b; }
 .wb-star-clear { background: none; border: 0; cursor: pointer; color: var(--muted, #8b929e); font-size: 18px; margin-left: 6px; }
 .wb-rating-view { display: inline-flex; gap: 1px; font-size: 15px; }
+/* Category fields set to the "Choice chips" display style. Every option on show, one click to
+   pick. The option's own colour arrives on the element as --chip, so a chip reads as the same
+   colour here, in the table, and on the board. */
+.wb-chip-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wb-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 13px; border-radius: 999px;
+  border: 1px solid var(--border, #e2d5bf);
+  background: var(--surface, #fffaf0); color: var(--ink, #2b2b2b);
+  font-size: .84rem; font-weight: 700; line-height: 1.2;
+  cursor: pointer; transition: background .12s, border-color .12s, color .12s;
+}
+.wb-chip:hover { border-color: var(--chip, #6b7280); background: color-mix(in srgb, var(--chip, #6b7280) 10%, transparent); }
+.wb-chip.on { background: var(--chip, #6b7280); border-color: var(--chip, #6b7280); color: #fff; }
+/* Keyboard focus has to survive the colour swap in both states, so it rides outside the pill. */
+.wb-chip:focus-visible { outline: 2px solid var(--chip, #6b7280); outline-offset: 2px; }
+.wb-chip-other { border-style: dashed; color: var(--text-muted, #72695d); font-weight: 600; }
+.wb-chip-other:hover { border-color: var(--orange, #e0552d); color: var(--orange, #e0552d); background: none; }
+.wb-chip-other[hidden] { display: none; }
+/* The box "+ Other" opens: type the new option, Done mints it. */
+.wb-chip-new { display: inline-flex; align-items: center; gap: 6px; }
+.wb-chip-new[hidden] { display: none; }
+.wb-chip-new .wb-input { width: 170px; padding: 6px 10px; font-size: .84rem; }
+.wb-chip-new-x { background: none; border: 0; cursor: pointer; color: var(--text-muted, #72695d); font-size: 18px; line-height: 1; padding: 2px 4px; }
+.wb-chip-new-x:hover { color: var(--danger, #dc2626); }
 .wb-autonum { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; color: var(--ink-2, #565c67); }
 .wb-sub-time { color: var(--ink-2, #565c67); font-size: 13px; }
 .wb-auto-readonly { display: flex; align-items: center; gap: 6px; background: var(--surface-2, #f3f5f8); color: var(--muted, #8b929e); border-style: dashed; cursor: default; }
@@ -30684,6 +30746,40 @@ a.wb-cal-more:hover { color: var(--orange); }
 .wb-record-fields, .wb-record-comments { padding: 14px 18px; }
 @media (max-width: 900px) { .wb-record-body { grid-template-columns: minmax(0, 1fr); } }
 
+/* ---- a record's panels each scroll themselves ----------------------------------------------
+   Reading a long history used to drag the record's own fields off the screen, and filling in a
+   long field list pushed the conversation away. They sit side by side, so they should move
+   independently -- what you are reading on one side has nothing to do with the other.
+
+   Capped rather than stretched: the grid is align-items:start, so a short panel keeps its own
+   height and only one that would run past the bottom of the screen gets a scrollbar. Scoped to
+   .wb-record because .wb-dash-grid is also the app Dashboard, where the panels are tiles on a
+   page that is meant to scroll as one. */
+@media (min-width: 901px) {
+  .wb-record .wb-dash-grid > .wb-w:not(.editing) {
+    max-height: calc(100vh - var(--wb-record-chrome));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    /* Hidden until the pointer is in the panel, the same as the feed and the dashboard panes. */
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color .15s ease;
+  }
+  .wb-record .wb-dash-grid > .wb-w:not(.editing):hover,
+  .wb-record .wb-dash-grid > .wb-w:not(.editing):focus-within {
+    scrollbar-color: var(--border-strong, #cdb595) transparent;
+  }
+
+  /* The conversation is the exception: it already scrolls inside itself, and a panel scrollbar
+     around a feed scrollbar is two ways to move the same thing. The panel holds still -- tabs
+     at the top, the box you reply in at the bottom -- and only the feed between them moves. */
+  .wb-record .wb-dash-grid > .wb-w-comments:not(.editing) { overflow: hidden; display: flex; flex-direction: column; }
+  .wb-record .wb-w-comments .wb-rec-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+  /* Fills whatever the panel has rather than the fixed 460px it used to take, so a tall window
+     shows more history instead of leaving the bottom half of the card empty. */
+  .wb-record .wb-w-comments .wb-rec-body { max-height: none; flex: 1 1 auto; min-height: 0; }
+}
+
 /* ---- App Builder quick filter chips ----------------------------------------------------
    One chip per value of a chosen field, the way the Jobs trade spine reads. Scrolls sideways
    in its own container rather than wrapping to four lines on an app with many options. */
@@ -31374,6 +31470,8 @@ a.wb-cal-more:hover { color: var(--orange); }
    A view is a name plus a field to split by; each value becomes a row with a live count.
    Picking one drives the same filter state the quick-filter chips use. */
 .wb-items-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 16px; align-items: start; }
+/* Settings can turn the panel off; the list then gets the column it was using. */
+.wb-items-layout.wb-items-solo { grid-template-columns: minmax(0, 1fr); }
 .wb-items-main { min-width: 0; }
 .wb-views {
   border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
@@ -31800,12 +31898,26 @@ a.wb-cal-more:hover { color: var(--orange); }
 /* The app's actions sit WITH the tabs, not floating above them.
    Every one of Export / Import / Print / Add is specific to the tab you are on -- Add field
    only exists on Fields, Print only on Items and Reports -- so they belonged beside the tab
-   that governs them rather than in the page header above, where they read as page-level. */
+   that governs them rather than in the page header above, where they read as page-level.
+
+   And the whole row sticks to the top of the work surface. Both halves are things you reach
+   for repeatedly while reading a long list -- change tab, Export, Add a record -- and having
+   to scroll back to the top of two hundred rows to reach them is what makes a list feel like a
+   dead end. The app strip above it still scrolls away: that one is navigation between apps,
+   not a control over the list you are looking at. */
 .wb-tabs-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
+  position: sticky;
+  top: 0;
+  /* Above ordinary content, below the dropdowns that must open over it (z-index 90) and far
+     below any dialog. */
+  z-index: 20;
+  /* The work surface's own colour: rows passing underneath must not show through. */
+  background: var(--surface-2);
+  padding-top: 8px;
 }
 
 .wb-tab-actions {
@@ -32427,7 +32539,7 @@ a.wb-cal-more:hover { color: var(--orange); }
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   color: var(--muted);
@@ -32488,12 +32600,70 @@ a.wb-cal-more:hover { color: var(--orange); }
   gap: 8px;
 }
 
+/* The gear. Square rather than a labelled button: it opens settings for the whole directory,
+   and "Fields" undersold a dialog that now also decides how a contact reads. */
+.cc-settings-btn {
+  width: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.cc-settings-btn i { font-size: 17px; }
+
+/* ---- Settings: the two tabs, and the contact-card panel ---------------------------------- */
+.cc-settings-tabs {
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  margin: -4px 0 14px;
+}
+.cc-settings-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  padding: 8px 2px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+}
+.cc-settings-tab.on { color: var(--ink); border-bottom-color: var(--orange, #e0552d); }
+.cc-settings-tab:hover { color: var(--ink); }
+
+.cc-card-settings { display: flex; flex-direction: column; gap: 16px; }
+.cc-card-list { display: grid; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.cc-card-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.cc-card-list .cc-card-row:last-child { border-bottom: 0; }
+.cc-card-row-name { display: flex; flex-direction: column; min-width: 0; margin-right: auto; }
+.cc-card-row-name b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-card-row-name small { color: var(--muted); font-size: 11.5px; }
+.cc-card-place { max-width: 180px; flex: none; }
+
+@media (max-width: 620px) {
+  .cc-card-row { flex-wrap: wrap; }
+  .cc-card-place { max-width: none; width: 100%; }
+}
+
 .cc-search {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 0 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   color: var(--muted);
@@ -32521,7 +32691,7 @@ a.wb-cal-more:hover { color: var(--orange); }
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
   color: var(--text);
@@ -32576,6 +32746,14 @@ a.wb-cal-more:hover { color: var(--orange); }
 }
 
 .cc-cell-files { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+/* Directory cells for the borrowed types. Each shows what the value MEANS -- a face, a
+   thumbnail, a fraction -- because a column of ids and raw minutes is a column nobody reads. */
+.cc-cell-check { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cc-cell-user { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.cc-cell-user span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-cell-img img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; display: block; }
+.cc-cell-link { color: var(--accent, #2563eb); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.cc-cell-link:hover { text-decoration: underline; }
 
 .cc-table .table-row { cursor: pointer; }
 
@@ -32679,12 +32857,29 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 .cc-crumb a { color: var(--accent); text-decoration: none; }
 
+/* Edit info and the card's own gear live up here, on the breadcrumb row, rather than inside the
+   header. They are chrome for the CARD -- they do not change with the contact, and sitting in
+   the header they competed with the company's own buttons for the same corner. Up here the
+   header holds only what somebody put there. */
+.cc-crumb-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 560px) {
+  .cc-crumb { flex-wrap: wrap; }
+  .cc-crumb-actions { margin-left: 0; width: 100%; }
+}
+
 .cc-profile-head {
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
 }
@@ -32702,19 +32897,92 @@ a.wb-cal-more:hover { color: var(--orange); }
   font-size: 13px;
 }
 
-.cc-profile-actions { margin-left: auto; }
+/* The header's actions: the company's own buttons, Edit info, and the gear.
+
+   A flex row, because they are a row. Left as inline content they laid out on the text baseline
+   and wrapped ragged -- a filled button, a disabled one and an icon button are three different
+   intrinsic heights, so they never lined up with each other.
+
+   Right-aligned and wrapping upward, so adding a fourth button pushes the group down rather
+   than squeezing the contact's name. */
+.cc-profile-actions {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 1 auto;
+}
+
+/* One height for everything in the row, whatever kind of control it is. */
+.cc-profile-actions > .btn {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* A custom button carries --cc-span for the grid regions. In the header there is no grid, so
+   the span is inert and the button sizes to its own label -- which is what lines it up. */
+.cc-profile-actions > .cc-card-btn { grid-column: auto; }
+
+/* The name keeps the room it needs; only the actions give way. */
+.cc-profile-head > div { flex: 1 1 auto; min-width: 0; }
+
+@media (max-width: 560px) {
+  .cc-profile-actions { margin-left: 0; width: 100%; justify-content: flex-start; }
+}
+
+/* Every shelf of the contact card is one of these: a fixed four-column grid, and an element
+   spans 1-4 of them.
+
+   Fixed four rather than auto-fit, because `grid-column: span N` is meaningless against
+   auto-fit -- the resolved track count varies with the container width, so "Medium" would be
+   half a row on a laptop and a quarter on a desktop. Fixed tracks, then collapsed by media
+   query, is how .wb-dash-grid already does it.
+
+   `position: relative` because a pinned button is rendered INSIDE its anchor rather than into
+   a card-level overlay. That is the whole trick: the button cannot drift relative to the thing
+   it was placed against, because it is in it. */
+.cc-region {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.cc-region > .cc-el {
+  /* min() so a corrupt span cannot exceed the row and silently push a neighbour out. */
+  grid-column: span min(var(--cc-span, 1), 4);
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .cc-region { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .cc-region { grid-template-columns: minmax(0, 1fr); }
+  .cc-region > .cc-el { grid-column: span 1; }
+}
 
 .cc-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
 .cc-tile {
   padding: 12px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
+  /* Missing until now: without it a long value blows its own track wider than the grid. */
+  min-width: 0;
 }
 
 .cc-tile span {
@@ -32735,16 +33003,20 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 .cc-tile small { color: var(--muted); font-size: 11.5px; }
 
-.cc-panels {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-  align-items: start;
-}
+/* Same as the details grid: tracks live on .cc-region, and the width of each panel comes from
+   its own --cc-span.
+
+   There is deliberately NO `.cc-panels > .cc-panel { grid-column: span 2 }` here. It used to be,
+   and it silently broke every resize: same specificity as `.cc-region > .cc-el` but later in the
+   file, so it won on source order and pinned every panel to two columns whatever you chose. It
+   looked like it worked while editing only because an element being arranged is wrapped, so the
+   rule stopped matching -- then Done put it back. Two-up is the DEFAULT SPAN (md) in
+   card-layout.js, which is where a default belongs. */
+.cc-panels { gap: 12px; }
 
 .cc-panel {
   padding: 14px 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
 }
@@ -32801,11 +33073,269 @@ a.wb-cal-more:hover { color: var(--orange); }
 
 /* The card's detail grid: whatever short fields the company defined, two up, so a card with
    three fields does not look broken beside one with nine. */
-.cc-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
+/* Tracks come from .cc-region now, so a Medium detail is half a row at every width. Declaring
+   them again here would win on source order and quietly undo the spans. */
+.cc-detail-grid { gap: 10px; }
+
+/* ---- pinned buttons -------------------------------------------------------------------
+   "The option to add, rename, and freely position a custom button anywhere on the card."
+
+   A pin is an ANCHOR plus a reference point plus an offset, and every part of it resolves in
+   CSS. Nothing measures the DOM at paint time, so there is no flicker, no invisible button on
+   a slow frame, and no drift when the window resizes -- the button is inside the box it was
+   measured against.
+
+   Which inset the offset lands on is decided HERE, by attribute selector, rather than inline.
+   That is what lets the phone rule below switch the entire mechanism off with one declaration:
+   only custom properties were ever inline, so there is nothing to undo. */
+.cc-card,
+.cc-profile-head,
+.cc-card-foot { position: relative; }
+
+.cc-pin {
+  position: absolute;
+  z-index: var(--pin-z, 2);
+  /* A pinned button can never eat the whole card, however far somebody drags it. */
+  max-width: 60%;
 }
+
+.cc-pin[data-pin-x="left"] { left: var(--pin-x, 0px); }
+.cc-pin[data-pin-x="right"] { right: var(--pin-x, 0px); }
+.cc-pin[data-pin-x="center"] { left: 50%; margin-left: var(--pin-x, 0px); --pin-tx: -50%; }
+.cc-pin[data-pin-y="top"] { top: var(--pin-y, 0px); }
+.cc-pin[data-pin-y="bottom"] { bottom: var(--pin-y, 0px); }
+.cc-pin[data-pin-y="center"] { top: 50%; margin-top: var(--pin-y, 0px); --pin-ty: -50%; }
+
+.cc-pin { transform: translate(var(--pin-tx, 0), var(--pin-ty, 0)); }
+
+/* Never animate the insets. A transition on left/top fights the drag and makes the button
+   swim after the pointer instead of following it. */
+.cc-pin { transition: none; }
+
+.cc-card-btn { justify-self: start; }
+.cc-card-btn:disabled { opacity: .5; cursor: not-allowed; }
+/* Text and icon are both optional, and a blank button is a deliberate choice -- give it enough
+   of a target to still be pressable. */
+.cc-card-btn:empty { min-width: 44px; }
+.cc-card-btn:focus-visible { outline: 2px solid var(--accent, #e0552d); outline-offset: 2px; }
+
+/* On a phone the whole positioning mechanism is switched OFF rather than scaled down. Pins
+   fall into their anchor's flow, in the reading order the renderer emitted them in, so the
+   card scans the way the desktop one looks. */
+@media (max-width: 560px) {
+  .cc-pin {
+    position: static;
+    margin: 0;
+    transform: none;
+    max-width: none;
+    width: 100%;
+    justify-content: center;
+    grid-column: 1 / -1;
+  }
+  /* So a pin dropped into the header does not squash the contact's name. */
+  .cc-profile-head { flex-wrap: wrap; }
+}
+
+/* ---- arrange mode ---------------------------------------------------------------------
+   The card shows its seams only while somebody is arranging it. */
+.cc-card.is-arranging [data-cc-anchor] {
+  outline: 1px dashed var(--border);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+.cc-card.is-arranging .cc-card-btn {
+  cursor: grab;
+  /* Without this the browser scrolls the page instead of dragging the button on touch. */
+  touch-action: none;
+}
+
+.cc-card.is-arranging .cc-card-btn:active { cursor: grabbing; }
+
+/* ---- editing the card in place ---------------------------------------------------------
+   Everything the settings dialog can do, done on the real card against a real contact. */
+.cc-card-editor {
+  margin: 10px 0 4px;
+  padding: 12px 14px;
+  border: 1px dashed var(--accent, #e0552d);
+  border-radius: 12px;
+  background: var(--surface-2, var(--surface));
+}
+
+.cc-card-editor-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cc-card-editor-head b { display: inline-flex; align-items: center; gap: 6px; }
+.cc-card-editor-hint { flex: 1 1 260px; color: var(--muted); font-size: 12.5px; }
+
+.cc-card-add { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.cc-card-add > span { color: var(--muted); font-size: 12px; font-weight: 700; }
+
+/* A wrapped block: the toolbar hangs INSIDE the thing it edits, so it cannot drift from it. */
+.cc-el-wrap { position: relative; }
+.cc-el-wrap > .cc-el-inner > .cc-el { width: 100%; }
+
+.cc-el-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+
+.cc-el-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-el-sizes { display: inline-flex; gap: 2px; }
+
+/* The summary line, while it is being arranged. Plain text has no controls to hang on, so
+   editing turns each segment into a block -- including the ones that are empty on this
+   particular contact, which still have to be placeable. */
+.cc-summary-edit { margin-top: 8px; }
+
+.cc-summary-seg {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  min-width: 0;
+}
+
+.cc-summary-seg > span {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cc-summary-seg > b { font-size: 13px; overflow-wrap: anywhere; }
+.cc-summary-seg em { color: var(--muted); font-weight: 400; }
+
+/* What a panel shows about itself. Opens under its own toolbar rather than in a dialog, so the
+   card behind it redraws as each box is ticked -- which is the whole point of editing in place. */
+.cc-el-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 14px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2, var(--surface));
+}
+
+.cc-el-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; cursor: pointer; }
+.cc-el-toggle input { cursor: pointer; }
+
+.cc-el-choice { display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.cc-el-choice select { min-width: 90px; }
+
+.wb-icon-btn.on { background: var(--accent, #e0552d); border-color: var(--accent, #e0552d); color: #fff; }
+
+.cc-el-size {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cc-el-size.on { background: var(--accent, #e0552d); border-color: var(--accent, #e0552d); color: #fff; }
+.cc-el-size:hover { border-color: var(--accent, #e0552d); }
+
+.cc-card-arrange-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface-2, var(--surface));
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-card.is-arranging .cc-card-btn { transform: none; }
+}
+
+/* ---- Settings > Contact card ----------------------------------------------------------- */
+
+.cc-card-grip { color: var(--muted); cursor: grab; display: inline-flex; }
+.cc-card-row[draggable="false"] .cc-card-grip { visibility: hidden; }
+.cc-card-row.is-dragging { opacity: .45; }
+.cc-card-row.is-over { outline: 2px dashed var(--accent, #e0552d); outline-offset: -2px; }
+
+.cc-card-nosize { color: var(--muted); font-size: 12px; text-align: center; min-width: 92px; }
+
+.cc-card-move { display: inline-flex; gap: 2px; }
+
+/* The nine-cell placement pad. One click puts a button in a corner, an edge or the middle --
+   the path for anybody who does not want to drag, and the only path on a keyboard. */
+.cc-pin-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 26px);
+  grid-template-rows: repeat(3, 26px);
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.cc-pin-cell {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  cursor: pointer;
+  padding: 0;
+}
+
+.cc-pin-cell:hover { border-color: var(--accent, #e0552d); }
+.cc-pin-cell.on { background: var(--accent, #e0552d); border-color: var(--accent, #e0552d); }
+.cc-pin-cell:disabled { cursor: not-allowed; opacity: .5; }
+
+.cc-pin-editor { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; margin-top: 8px; }
+
+.cc-pin-numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  flex: 1 1 320px;
+}
+
+.cc-pin-numbers label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.cc-pin-numbers small { color: var(--muted); font-size: 11px; }
+
+.cc-pin-warn { display: flex; align-items: center; gap: 6px; color: var(--warning, #d97706); }
+
+.cc-btn-row {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: var(--surface);
+}
+
+.cc-btn-head { display: flex; align-items: center; gap: 8px; }
+.cc-btn-spacer { flex: 1 1 auto; }
 
 .cc-detail {
   display: flex;
@@ -32849,6 +33379,34 @@ a.wb-cal-more:hover { color: var(--orange); }
 .cc-check-field input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent, #2563eb); }
 .cc-editor .cc-hint { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; }
 .cc-editor .cc-money-input { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- Fields borrowed from the App Builder -------------------------------------------------
+   A rating, a checklist, a photo, a sheet: drawn by wbRenderFieldInput, so they arrive wrapped
+   in .wb-field with their own <label> rather than in this form's <label><span> pair. The two
+   are made to sit on the same line and read as one form -- otherwise a contact's own Phone and
+   its borrowed Rating look like they came from different products, which is exactly what
+   sharing the renderer was meant to avoid. */
+.cc-wb-field { display: block; min-width: 0; }
+.cc-wb-field .wb-field { display: block; margin: 0; }
+.cc-editor .cc-wb-field > .wb-field > label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+.cc-editor .cc-wb-field .wb-req { color: var(--danger, #dc2626); margin-left: 2px; }
+/* The inputs themselves keep .wb-input, which is styled for a modal on a white card -- the same
+   surface this form sits on, so nothing needs restating except the width. */
+.cc-editor .cc-wb-field .wb-input,
+.cc-editor .cc-wb-field .wb-checklist,
+.cc-editor .cc-wb-field .wb-sheet-card { width: 100%; }
+.cc-editor .cc-wb-field textarea.wb-input { min-height: 70px; }
+/* A hidden input still occupies a grid cell in some engines; the auto/derived boxes below are
+   read-only text, so they get the height of a control without pretending to be one. */
+.cc-editor .cc-wb-field .wb-auto-readonly,
+.cc-editor .cc-wb-field .wb-calc-display { min-height: 36px; display: flex; align-items: center; }
 
 /* ---- The field editor ----------------------------------------------------
    It IS the App Builder's field editor, so .wb-builder-grid / .wb-field-row / .wb-palette
@@ -33132,7 +33690,7 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   justify-content: center;
   width: 40px;
   height: 40px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
   color: var(--muted);
@@ -33176,7 +33734,7 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   align-items: center;
   gap: 12px;
   padding: 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
   color: inherit;
@@ -33221,7 +33779,7 @@ a.cc-use-row:hover { background: var(--surface-2, var(--surface)); }
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
 }
@@ -34158,3 +34716,144 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
   .cc-cal-year { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .cc-cal-cell { min-height: 36px; }
 }
+
+/* Which of a connected app's own fields show on its rows in "In flight". The apps listed are
+   whatever currently references the contact, so this doubles as "which apps is this person in?" */
+.cc-app-fields { margin-top: 8px; }
+
+.cc-app-field-row {
+  padding: 8px 10px;
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.cc-app-field-row > b { display: block; font-size: 12px; margin-bottom: 6px; }
+
+/* A nominated field reads label-then-value, so a row of them is scannable rather than a run-on
+   line of bare values with no idea which is which. */
+.cc-use-picked em { font-style: normal; font-weight: 700; color: var(--muted); margin-right: 4px; }
+
+/* "Show more" on a capped list. A button, not a static "+N more" label -- the count was only
+   ever informative, and the obvious thing to do when you see it is click it. */
+.cc-show-more {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  background: none;
+  color: var(--accent, #e0552d);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+}
+
+.cc-show-more:hover { background: var(--surface-2); }
+.cc-show-more span { color: var(--muted); font-weight: 400; }
+
+.cc-el-num { max-width: 90px; }
+
+/* A checklist change on an activity row: the steps that are ticked, struck through. The flat
+   "6/6 (100%): [x] … ; [ ] …" form is right for search and CSV, and unreadable here. */
+.wb-act-ticks { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; }
+
+.wb-act-tick {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2, #f6efe4);
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration-thickness: 1px;
+}
+
+.wb-act-of { color: var(--muted); font-size: 11.5px; font-weight: 700; }
+
+/* Two off-card blocks can legitimately share a name -- the built-in Notes panel and a field a
+   company also called Notes. Only the colliding ones carry the qualifier. */
+.cc-add-kind {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface-2, #f6efe4);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* A button's settings, opened from its own toolbar on the card. */
+.cc-el-settings.is-button { display: block; }
+.cc-el-settings.is-button .cc-btn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.cc-el-settings.is-button label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.cc-el-settings.is-button small { font-weight: 400; }
+.cc-btn-full { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+
+/* Which field names each row in "In flight". Automatic takes the first text field, which on an
+   app whose first text field is a note is not the one worth reading. */
+.cc-app-title { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.cc-app-title select { max-width: 260px; }
+.cc-app-title small { font-weight: 400; }
+
+/* ---- selecting several fields at once ---------------------------------------------------
+   Only the App Builder opts in; Company Contacts shares this markup and is unaffected. */
+.wb-field-bulk {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface-2, var(--surface));
+}
+
+.wb-field-bulk.is-active { border-style: solid; border-color: var(--accent, #e0552d); }
+.wb-field-bulk-count { font-size: 12.5px; font-weight: 700; }
+.wb-field-bulk-acts { margin-left: auto; display: flex; gap: 6px; }
+.wb-field-bulk .wb-sub { margin-left: auto; }
+
+.wb-field-pick { display: inline-flex; align-items: center; cursor: pointer; flex: 0 0 auto; }
+.wb-field-pick input { cursor: pointer; width: 16px; height: 16px; }
+
+/* A picked row reads as picked without shouting -- the list is still the thing being read. */
+.wb-field-row.is-picked {
+  border-color: var(--accent, #e0552d);
+  background: color-mix(in srgb, var(--accent, #e0552d) 6%, var(--surface));
+}
+
+/* A deleted FIELD in the bin, and the note a non-owner sees where Empty the bin would be. */
+.wb-trash-row.is-field { border-left: 3px solid var(--accent, #e0552d); }
+.wb-trash-row.is-field .wb-trash-what b { display: inline-flex; align-items: center; gap: 6px; }
+
+.wb-trash-owner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2, var(--surface));
+}
+
+/* The reference on an arrival line. A record that arrived by button carries a short id, so two
+   sends of the same thing are two distinguishable entries rather than two identical sentences. */
+.wb-act-ref {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface-2, #f6efe4);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  letter-spacing: .02em;
+}
+
+/* Building a link from the record's own data. The braces syntax works, but nobody discovers it
+   by being told about it -- these insert the token so the feature is found by using it. */
+.wb-href-fields { margin-top: 8px; }
+.wb-href-fields .wb-chip-pick { margin: 6px 0; }
+.wb-href-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }

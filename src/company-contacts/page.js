@@ -7,25 +7,60 @@
 // owns the record; the only things editable here are the contact's own details. The moment
 // records can be worked from this page it becomes a fifth workspace with no owner.
 
-import { contactUsage, usageBalance, usageSummary } from './model.js';
+import {
+  appsWithContactFields, companyContactFieldsOf, contactUsage, usageBalance, usageSummary,
+} from './model.js';
 import {
   CALENDAR_VIEWS, calendarSpan, contactActivity, contactDates, datesByDay, dayKey, entriesIn,
   shiftAnchor,
 } from './timeline.js';
 import { renderSearchCombobox } from '../ui/combobox-menu.js';
+// The card's layout model. Pure, and imported directly rather than threaded through ctx: it
+// names nothing main.js owns, so there is no binding to keep in step.
+import {
+  CARD_ANCHORS, CARD_REGIONS, CARD_SPANS, PIN_PRESETS, TILE_CATALOG,
+  anchorsInUse, cardElements, cardPinOf, cardRegionOf, cardSpanOf, groupByRegion,
+  movePin, normalizeCardSettings, pinFromRects, pinStyle, pinWarnings, pinsByAnchor,
+  readingOrder, regionsFor, reorderElements, spanColumns, splitStores,
+  CARD_BUTTON_ACTIONS, PANEL_OPTIONS, cardButtonNotReady, cardButtonReady, normalizeCardButton,
+} from './card-layout.js';
+// The App Builder's button rules, unchanged. A contact reuses them rather than owning a second
+// copy -- what makes a button ready, when a condition holds, and what a press would write are
+// the same questions here as on a record.
+import {
+  conditionMet, linkIsSafe, planSet, resolveHref, setValueFor,
+} from '../workspace/button-field.js';
 
+// The App Builder's own field UI arrives in ctx alongside everything else: wbRenderFieldInput,
+// wbFieldConfigUI and wbCollectFieldConfig are what let a contact carry a rating, a checklist,
+// a photo or a sheet without this page owning a second copy of any of them.
+//
+// saveWorkspaceBuilderDoc is there for the same reason: the card's TILE layout belongs to no
+// field, so it rides the builder document, and writing it is that document's own save.
+//
+// NOTE: no comments inside the destructure below. The ctx-completeness test splits it on commas
+// without stripping them, so a comment line there is read as a required key.
 export function createCompanyContactsPage(ctx) {
   const {
     activeCompanyId, appHref, can, canonicalCompanyId, companyContactById, companyContactChipField,
     companyContactFieldsFor, companyContactValue, companyContactsFor,
     companyPath, emptyState, createSupabaseClient, h, isLiveSupabaseSession, money, navigate,
     normalizeCompanyContact, normalizeCompanyContactField, render,
-    requirePermission, showToast, state, supabaseRow, supabaseWrite, timeAgo, wbDoc,
+    requirePermission, requireMutableWorkspace, showToast, state, supabaseRow, supabaseWrite, timeAgo, wbDoc,
+    saveWorkspaceBuilderDoc, wbCompanyApps, wbPlainVal,
     wbFieldBuilderMarkup, wbFileIcon, wbFileValues, wbFmtDuration, wbNameValue, wbOptRow, acceptAttr,
     fileTypeKind, formatDate,
+    protectedFormDraftAttributes, renderProtectedFormDraftStrip, clearProtectedFormDraft,
     WB_FIELD_TYPES,
     COMPANY_CONTACT_COLS, COMPANY_CONTACT_FIELD_COLS, COMPANY_CONTACT_FIELD_TYPES,
+    COMPANY_CONTACT_WB_TYPES, wbRenderFieldInput, wbFieldConfigUI, wbCollectFieldConfig,
+    wbMembers, wbMemberById, wbAvatar, wbRatingStars, wbTagsChips, wbAutoNumberText,
+    wbProgressDisplayHtml, wbChecklistStats, wbComputeCalc, wbNextContactAutoNumber,
   } = ctx;
+
+  // Types whose value is worked out at read time rather than stored. An auto-number is NOT one
+  // of them: it is computed once and then belongs to the contact.
+  const CC_DERIVED_TYPES = new Set(['created_time', 'updated_time', 'calculation']);
 
   async function persistCompanyContact(contact) {
     const payload = normalizeCompanyContact({ ...contact, updated_at: new Date().toISOString() });
@@ -53,14 +88,28 @@ export function createCompanyContactsPage(ctx) {
     const fields = companyContactFieldsFor(companyId);
     const fieldValues = {};
     fields.forEach((field) => {
+      // Worked out, not typed. Created and Last modified read the contact's own timestamps and
+      // a calculation is derived on the way out, so storing anything under them would be a
+      // stale copy that outlives whatever it was copied from.
+      if (CC_DERIVED_TYPES.has(field.type)) return;
       const raw = data[`field:${field.id}`];
       const value = raw === undefined ? '' : String(raw).trim();
       if (value) fieldValues[field.id] = value;
     });
 
-    // A category value typed rather than picked joins its list, so the next person picks it
-    // instead of inventing a second spelling.
-    for (const field of fields.filter((item) => item.type === 'category')) {
+    // An auto-number is stamped once, on the save that creates the contact, and carried
+    // untouched from then on -- the number is the contact's identity, and a later save that
+    // reassigned it would renumber somebody already quoted it.
+    fields.filter((field) => field.type === 'autonumber').forEach((field) => {
+      const held = existing?.field_values?.[field.id];
+      fieldValues[field.id] = held !== undefined && held !== '' && held !== null
+        ? held
+        : String(wbNextContactAutoNumber(companyId, field));
+    });
+
+    // A category or status value typed rather than picked joins its list, so the next person
+    // picks it instead of inventing a second spelling.
+    for (const field of fields.filter((item) => item.type === 'category' || item.type === 'status')) {
       const value = fieldValues[field.id];
       if (value) await ensureCompanyContactFieldOption(companyId, field, value);
     }
@@ -69,6 +118,9 @@ export function createCompanyContactsPage(ctx) {
       ...(existing || {}), id: data.id || '', company_id: companyId, name, field_values: fieldValues,
     });
     if (!saved) { showToast('Could not save that contact.', 'local', 'Company Contacts'); return; }
+    // The recovery copy has done its job the moment the real record exists. Cleared only on a
+    // save that actually landed, so a failed write leaves the typing recoverable.
+    clearProtectedFormDraft(form);
     state.modal = '';
     state.selectedCompanyContactId = '';
     showToast(existing ? 'Contact updated.' : 'Contact added.', isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');
@@ -89,6 +141,25 @@ export function createCompanyContactsPage(ctx) {
     const { ok } = await supabaseWrite('company_contact_fields', supabaseRow(next, COMPANY_CONTACT_FIELD_COLS));
     if (!ok) return;
     state.companyContactFields = state.companyContactFields.map((item) => (item.id === next.id ? next : item));
+  }
+
+  /**
+   * Add a typed value to a contact field's option list, now rather than on save.
+   *
+   * Clicking "Use ABS" in the suggestion menu is the moment the choice is made, so that is when
+   * ABS becomes one of the choices -- the same instant an app's category field mints one. It
+   * used to wait for the contact to be saved, which meant opening a second contact and finding
+   * the value you had just invented was still not on the list.
+   *
+   * Idempotent: ensureCompanyContactFieldOption returns untouched when the label is already
+   * there in any casing, so clicking a suggestion you have used before writes nothing.
+   */
+  async function addFieldOptionFromInput(fieldId, label) {
+    const companyId = activeCompanyId();
+    const field = companyContactFieldsFor(companyId).find((item) => item.id === fieldId);
+    if (!field || field.type !== 'category' || !String(label || '').trim()) return;
+    if (!can('company_contacts.manage', companyId)) return;
+    await ensureCompanyContactFieldOption(companyId, field, label);
   }
 
   // The X beside a suggestion prunes that field's list. Contacts already carrying the value
@@ -245,9 +316,12 @@ export function createCompanyContactsPage(ctx) {
 
   // One cell, rendered the way that field's type deserves.
   function fieldCell(companyId, contact, field) {
+    // Worked out rather than stored, so an empty field_values entry is not an empty cell.
+    const auto = autoCellHtml(companyId, contact, field);
+    if (auto !== null) return auto;
     const value = companyContactValue(contact, field);
     if (value === '' || value === undefined || value === null) return '<span class="muted-dash">—</span>';
-    if (field.type === 'category') {
+    if (field.type === 'category' || field.type === 'status') {
       const color = (field.config?.options || []).find((option) => option.label === value)?.color || '#6b7280';
       return `<span class="cc-type" style="--cc-type:${h(color)}">${h(value)}</span>`;
     }
@@ -256,7 +330,234 @@ export function createCompanyContactsPage(ctx) {
       return files.length ? `<span class="cc-cell-files"><i class="ti ti-paperclip"></i>${h(String(files.length))}</span>` : '<span class="muted-dash">—</span>';
     }
     if (field.type === 'money') return `<b>${h(money(Number(value) || 0))}</b>`;
+    // The App Builder's own cell renderings, so a rating is stars and a progress is a bar here
+    // exactly as it is on a record -- a column of "4" and "60" would be a table of raw storage.
+    if (field.type === 'rating') return wbRatingStars(value);
+    if (field.type === 'tags') return wbTagsChips(field, tagIds(value));
+    if (field.type === 'progress') return wbProgressDisplayHtml(field, Number(value) || 0);
+    if (field.type === 'checklist') {
+      const stats = wbChecklistStats(value, field);
+      return stats.total ? `<span class="cc-cell-check"><i class="ti ti-list-check"></i>${h(`${stats.done}/${stats.total}`)}</span>` : '<span class="muted-dash">—</span>';
+    }
+    if (field.type === 'image') {
+      const image = wbFileValues(value)[0];
+      return image?.url ? `<span class="cc-cell-img"><img src="${h(image.url)}" alt="" loading="lazy" /></span>` : '<span class="muted-dash">—</span>';
+    }
+    if (field.type === 'user') {
+      const member = wbMemberById(companyId, String(value));
+      return `<span class="cc-cell-user">${wbAvatar(member, 20)}${h(member.name)}</span>`;
+    }
+    if (field.type === 'url') {
+      return `<a class="cc-cell-link" href="${h(value)}" target="_blank" rel="noreferrer noopener">${h(shortUrl(value))}</a>`;
+    }
     return h(displayValue(field, value));
+  }
+
+  /**
+   * The cell for a field nobody types into, or null when the field is not one of those.
+   *
+   * Created / Last modified read the contact's own timestamps, a calculation is worked out from
+   * the other fields, and an auto-number is formatted with its prefix and padding. None of them
+   * live in field_values -- except the auto-number, which is written once when the contact is
+   * first saved and never again.
+   */
+  function autoCellHtml(companyId, contact, field) {
+    if (field.type === 'created_time') return contact.created_at ? h(formatDate(contact.created_at)) : '<span class="muted-dash">—</span>';
+    if (field.type === 'updated_time') return contact.updated_at ? h(timeAgo(contact.updated_at)) : '<span class="muted-dash">—</span>';
+    if (field.type === 'calculation') {
+      const text = wbComputeCalc(contactsAsApp(companyId), field, contact.field_values || {});
+      return text === '—' ? '<span class="muted-dash">—</span>' : h(text);
+    }
+    if (field.type === 'autonumber') {
+      const text = wbAutoNumberText(field, companyContactValue(contact, field));
+      return text ? h(text) : '<span class="muted-dash">—</span>';
+    }
+    return null;
+  }
+
+  /**
+   * The company's contact fields dressed as an app, for the helpers that expect one.
+   *
+   * wbComputeCalc resolves {Field name} against `fields` and never touches `items`, which is the
+   * only thing a contact directory does not have. Handing it this rather than reimplementing the
+   * formula parser is what keeps a calculation on a contact identical to one on a record.
+   */
+  function contactsAsApp(companyId) {
+    // allowMove:false — a contact lives in the directory, not in the app it was sent to, so the
+    // config panel withholds "send it and remove it" rather than offering something that would
+    // then be refused at press time.
+    return {
+      id: `cc-${companyId}`, name: 'Company Contacts', allowMove: false,
+      fields: companyContactFieldsFor(companyId), items: [],
+    };
+  }
+
+  // ---- the contact-source adapter ------------------------------------------------------
+  //
+  // A button on a contact reuses the App Builder's button machinery whole. That machinery
+  // expects a RECORD, and a contact is not one -- it disagrees in four places, and every one of
+  // them is silent if you get it wrong. All of the knowledge lives here, beside the storage
+  // shapes it inverts; nothing in button-field.js or button-push.js learns what a contact is.
+
+  /**
+   * The contact's fields, dressed as an app for the button rules.
+   *
+   * The NAME is deliberately absent. It is not sent as a value at all -- it becomes the target
+   * app's Company Contact field, labelled "Contact", holding this contact's id. That link is
+   * what displays the name, keeps the record tied to the card that produced it, and is what
+   * contactUsage scans to find the record again.
+   *
+   * Sending the name as text as well would put the same person in the app twice: once as a link
+   * that stays correct, and once as a string that goes stale the moment anybody is renamed.
+   */
+  function contactSourceAppFor(companyId) {
+    return {
+      id: `cc-${companyId}`,
+      name: 'Company Contacts',
+      allowMove: false,
+      fields: companyContactFieldsFor(companyId),
+      items: [],
+    };
+  }
+
+  /**
+   * THE TRAP, in one function.
+   *
+   * A contact does not store what an app stores, and it differs in three ways:
+   *   category / status -- a contact keeps the LABEL, an app keeps the option ID
+   *   tags              -- a contact keeps JSON TEXT of ids, an app keeps a real array
+   *   checkbox          -- a contact keeps 'yes' / 'no', an app keeps a boolean
+   *
+   * translateValue() assumes ids and arrays, so without this a multi-select would arrive at the
+   * target app as ONE option literally labelled `["cco-ab12","cco-cd34"]`, minted into that
+   * field's own option list and left there for good after a single press.
+   *
+   * Both shapes are accepted for category/status, so a value that was already an id (however it
+   * got there) passes through rather than being re-looked-up and lost.
+   */
+  function contactValueAsApp(field, raw) {
+    if (field.type === 'tags') return tagIds(raw);
+    if (field.type === 'checkbox') return String(raw) === 'yes';
+    if (field.type === 'category' || field.type === 'status') {
+      const options = field.config?.options || [];
+      if (options.some((option) => option.id === raw)) return raw;
+      const key = (value) => String(value ?? '').trim().toLowerCase();
+      return options.find((option) => key(option.label) === key(raw))?.id ?? String(raw);
+    }
+    return raw;
+  }
+
+  /**
+   * A contact in the shape the button rules expect an item to be.
+   *
+   * field_values never holds an empty string -- the save path only writes truthy values -- so
+   * absent means blank, which is what isBlank() already handles.
+   */
+  function contactAsItem(companyId, contact) {
+    const values = {};
+    companyContactFieldsFor(companyId).forEach((field) => {
+      const raw = contact.field_values?.[field.id];
+      if (raw === undefined || raw === '') return;
+      values[field.id] = contactValueAsApp(field, raw);
+    });
+    return { id: contact.id, values };
+  }
+
+  /**
+   * The inverse, for a button that changes fields on the contact itself.
+   *
+   * setValueFor returns APP-shaped values -- an option id, a boolean, a number -- and
+   * field_values holds non-empty strings. null means "cannot be expressed here", which keeps
+   * the existing skip-rather-than-write rule: a value a field has never heard of writes nothing
+   * instead of inventing something the field cannot show.
+   */
+  function contactValueFromApp(field, next) {
+    if (next === null || next === undefined) return null;
+    if (field.type === 'tags') return Array.isArray(next) && next.length ? JSON.stringify(next) : '';
+    if (field.type === 'checkbox') return next ? 'yes' : 'no';
+    if (field.type === 'category' || field.type === 'status') {
+      return (field.config?.options || []).find((option) => option.id === next)?.label ?? String(next ?? '');
+    }
+    return next === '' ? '' : String(next);
+  }
+
+  /**
+   * Carry out a "change fields on this contact" press.
+   *
+   * The seated/unseated split the record version makes collapses here: the card is a WINDOW,
+   * there is no form to write into, so this always writes and persists.
+   */
+  async function applyContactSet(companyId, contact, sets) {
+    const values = { ...(contact.field_values || {}) };
+    let touched = 0;
+    sets.forEach(({ field, value }) => {
+      const next = contactValueFromApp(field, setValueFor(field, value));
+      if (next === null) return;
+      if (next === '') delete values[field.id];
+      else values[field.id] = next;
+      touched += 1;
+    });
+    if (!touched) return 0;
+    const saved = await persistCompanyContact({ ...contact, field_values: values });
+    return saved ? touched : 0;
+  }
+
+  /**
+   * Everything a press needs, resolved from the seat the card wrote onto the button.
+   *
+   * The seat is `cc|<companyId>|<contactId>` -- three parts, deliberately not four, so the
+   * record seat's own split can never mistake one for the other.
+   *
+   * Two different app shapes come back, and the difference is the point:
+   *   sourceApp   -- Name INCLUDED, for a push. The name is the one thing a target app most
+   *                  wants, and planPush matches it by label like any other field.
+   *   settableApp -- Name EXCLUDED, for a set. A button that silently renames a contact is not
+   *                  what anybody meant, and leaving Name out excludes it structurally rather
+   *                  than with a guard somebody can delete later.
+   */
+  function contactButtonSeat(seat) {
+    const [kind, rawCompanyId, contactId] = String(seat || '').split('|');
+    if (kind !== 'cc' || !contactId) return null;
+    const companyId = canonicalCompanyId(rawCompanyId);
+    const contact = companyContactById(contactId);
+    if (!contact) return null;
+    return {
+      companyId,
+      contact,
+      sourceApp: contactSourceAppFor(companyId),
+      settableApp: contactsAsApp(companyId),
+      item: contactAsItem(companyId, contact),
+      // A button is a card object now, so it is looked up in the card settings rather than in
+      // the contact's field list -- which no longer contains buttons at all.
+      button: (buttonId) => cardSettings(companyId).buttons.find((entry) => entry.id === buttonId) || null,
+      applySet: (button) => applyContactSet(companyId, contact, planSet(contactsAsApp(companyId), { id: button.id, config: button })),
+      openLink: (button) => openContactLink(companyId, contact, button),
+    };
+  }
+
+  /**
+   * The third action: open a link, place a call, or start an email.
+   *
+   * Writes nothing, so it needs none of the push machinery. The href may name the contact's own
+   * fields in braces -- `tel:{Phone}` -- which is what makes one button work on every contact.
+   */
+  function openContactLink(companyId, contact, button) {
+    const url = resolveHref(contactSourceAppFor(companyId), contactAsItem(companyId, contact), button.href);
+    if (!linkIsSafe(url)) {
+      showToast('That link cannot be opened.', 'error', 'Company Contacts');
+      return false;
+    }
+    // A web page opens in its own tab; tel:/mailto:/sms: hand off to the device, where a new
+    // tab would be an empty window left behind after the dialler takes over.
+    if (/^https?:$/.test(new URL(url).protocol)) window.open(url, '_blank', 'noopener,noreferrer');
+    else window.location.href = url;
+    return true;
+  }
+
+  /** A link as somebody reads it: the host and path, without the scheme shouting at them. */
+  function shortUrl(value) {
+    const raw = String(value || '').trim();
+    try { const url = new URL(raw); return `${url.host}${url.pathname === '/' ? '' : url.pathname}`; } catch { return raw; }
   }
 
   function renderDirectory(companyId) {
@@ -311,7 +612,7 @@ export function createCompanyContactsPage(ctx) {
               <input type="search" data-company-contact-search value="${h(state.companyContactQuery || '')}" placeholder="Search every field…" aria-label="Search company contacts" />
             </label>
             ${canManage ? `
-              <button class="btn" type="button" data-action="open-company-contact-fields"><i class="ti ti-adjustments"></i>Fields</button>
+              <button class="btn btn-icon cc-settings-btn" type="button" data-action="open-company-contact-fields" title="Settings — fields and the contact card" aria-label="Company Contacts settings"><i class="ti ti-settings"></i></button>
               <button class="btn btn-primary" type="button" data-action="open-company-record-form" data-mode="new"><i class="ti ti-plus"></i>New contact</button>` : ''}
           </div>
         </div>
@@ -343,12 +644,30 @@ export function createCompanyContactsPage(ctx) {
     if (field.type === 'checkbox') return String(value) === 'yes' ? 'Yes' : 'No';
     // A file is stored as JSON. Printing that raw is how a card ends up reading
     // {"name":"quote.pdf","url":"https://…"} to somebody who wanted the quote.
-    if (field.type === 'file') {
+    if (field.type === 'file' || field.type === 'image') {
       const files = wbFileValues(value);
       return files.map((file) => file.name).join(', ');
     }
     if (field.type === 'money') return money(Number(value) || 0);
     if (field.type === 'date') return String(value).slice(0, 10);
+    // The rest are stored the way the App Builder stores them, which is not the way anybody
+    // reads them: ids, minutes and JSON. Each one is turned back into what it means, or the
+    // summary line under a contact's name fills up with storage.
+    if (field.type === 'tags') {
+      const byId = new Map((field.config.options || []).map((option) => [option.id, option.label]));
+      return tagIds(value).map((id) => byId.get(id) || '').filter(Boolean).join(', ');
+    }
+    if (field.type === 'duration') return wbFmtDuration(value);
+    if (field.type === 'progress') return `${Math.max(0, Math.min(100, Math.round(Number(value) || 0)))}%`;
+    if (field.type === 'rating') return `${Math.max(0, Math.min(5, Math.round(Number(value) || 0)))}/5`;
+    if (field.type === 'checklist') { const s = wbChecklistStats(value, field); return s.total ? `${s.done}/${s.total} done` : ''; }
+    if (field.type === 'user') return wbMemberById(activeCompanyId(), String(value)).name;
+    if (field.type === 'autonumber') return wbAutoNumberText(field, value);
+    // A sheet is a whole grid; on a summary line it is its name, which is what it is called
+    // everywhere else it is listed.
+    if (field.type === 'sheet') {
+      try { const sheet = typeof value === 'string' ? JSON.parse(value || '{}') : (value || {}); return String(sheet.title || '').trim() || 'Sheet'; } catch { return 'Sheet'; }
+    }
     return String(value);
   }
 
@@ -356,127 +675,174 @@ export function createCompanyContactsPage(ctx) {
   // record: the stage the app gave it, how long it is booked for, its dates, and when somebody
   // last touched it. Every part is optional -- an app with no status field contributes no
   // stage rather than an empty slot.
-
-  // ---- what has happened, and what is coming ----------------------------------------------
-
-  /** A link to the record an entry belongs to, where the workspace has a route. */
-  function entryHref(companyId, entry) {
-    return entry.workspaceRouteId
-      ? appHref(companyPath('workspaces', {
-        workspace: entry.workspaceRouteId, app_id: entry.appId, tab: 'items', item_id: entry.itemId,
-      }, companyId))
-      : '';
-  }
-
-  /**
-   * Everything logged against a record this contact is named on.
-   *
-   * The workspace feed already records what happened to each record; this is that feed read
-   * through one person, which is the question somebody on a contact card is actually asking.
-   */
-  function activityPanel(companyId, doc, contact) {
-    const entries = contactActivity(doc, contact.id, { nameValue: wbNameValue });
-    return `
-      <div class="cc-panel">
-        <h3><i class="ti ti-activity"></i>Recent updates</h3>
-        ${entries.length ? `<div class="cc-feed">${entries.map((entry) => {
-    const href = entryHref(companyId, entry);
-    const line = `<span class="cc-feed-ic"><i class="ti ${h(entry.icon)}"></i></span>
-            <span class="cc-feed-main">
-              <span class="cc-feed-text">${entry.text}</span>
-              <small>${h(entry.appName)}${entry.actor ? ` · ${h(entry.actor)}` : ''} · ${h(timeAgo(entry.at))}</small>
-            </span>`;
-    return href
-      ? `<a class="cc-feed-row" href="${h(href)}" data-router>${line}</a>`
-      : `<div class="cc-feed-row">${line}</div>`;
-  }).join('')}</div>`
-    : '<p class="cc-empty">Nothing has happened on their records yet. Edits, stage changes and new records all show up here.</p>'}
-      </div>`;
-  }
-
-  /**
-   * Their diary: every dated field on every record that names them.
-   *
-   * Only fields somebody CHOSE a day in. Created and Last modified are stamps the system
-   * writes, and a calendar full of "this was edited" is a calendar nobody opens -- those are in
-   * Recent updates, where they belong.
-   */
-  function calendarPanel(companyId, doc, contact) {
-    const view = CALENDAR_VIEWS.includes(state.ccCalView) ? state.ccCalView : 'month';
-    const anchor = state.ccCalAt ? new Date(state.ccCalAt) : new Date();
-    const span = calendarSpan(view, anchor);
-    const byDay = datesByDay(contactDates(doc, contact.id, { nameValue: wbNameValue }));
-    const today = dayKey(new Date());
-
-    const cell = (item) => {
-      const entries = entriesIn(item, byDay);
-      const key = dayKey(item.date);
-      const label = item.month === undefined
-        ? String(item.date.getDate())
-        : item.date.toLocaleDateString([], { month: 'short' });
-      const classes = [
-        'cc-cal-cell',
-        item.outside ? 'out' : '',
-        key === today && item.month === undefined ? 'today' : '',
-        entries.length ? 'has' : '',
-      ].filter(Boolean).join(' ');
-      // Day and week show what is on: the cells are big enough to read, and that is the whole
-      // point of looking at a day. Month and year show that something is there.
-      const detail = ['day', 'week'].includes(view)
-        ? entries.map((entry) => {
-          const href = entryHref(companyId, entry);
-          const body = `<b>${h(entry.title)}</b><small>${h(entry.label)} · ${h(entry.appName)}</small>`;
-          return href ? `<a class="cc-cal-item" href="${h(href)}" data-router>${body}</a>` : `<span class="cc-cal-item">${body}</span>`;
-        }).join('')
-        : entries.length ? `<span class="cc-cal-dot">${entries.length}</span>` : '';
-      return `<div class="${classes}" title="${h(entries.map((entry) => `${entry.title} — ${entry.label}`).join('\n'))}">
-        <span class="cc-cal-num">${h(label)}</span>${detail}
-      </div>`;
-    };
-
-    const weekdays = view === 'month' || view === 'week'
-      ? `<div class="cc-cal-days">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => `<span>${day}</span>`).join('')}</div>`
-      : '';
-
-    return `
-      <div class="cc-panel cc-cal-panel">
-        <h3><i class="ti ti-calendar"></i>Calendar</h3>
-        <div class="cc-cal-bar">
-          <button class="wb-icon-btn" type="button" data-cc-cal-step="-1" aria-label="Previous"><i class="ti ti-chevron-left"></i></button>
-          <b class="cc-cal-title">${h(span.title)}</b>
-          <button class="wb-icon-btn" type="button" data-cc-cal-step="1" aria-label="Next"><i class="ti ti-chevron-right"></i></button>
-          <button class="btn btn-sm" type="button" data-cc-cal-today>Today</button>
-          <div class="cc-cal-views">
-            ${CALENDAR_VIEWS.map((name) => `<button class="cc-cal-view ${name === view ? 'on' : ''}" type="button" data-cc-cal-view="${name}">${name[0].toUpperCase()}${name.slice(1)}</button>`).join('')}
-          </div>
-        </div>
-        ${weekdays}
-        <div class="cc-cal-grid cc-cal-${h(view)}">${span.cells.map(cell).join('')}</div>
-        ${byDay.size ? '' : '<p class="cc-empty">No dates yet. A date field on any record that names them shows up here.</p>'}
-      </div>`;
-  }
-
-  function useRow(companyId, use, item) {
+
+  // ---- what has happened, and what is coming ----------------------------------------------
+
+  /** A link to the record an entry belongs to, where the workspace has a route. */
+  function entryHref(companyId, entry) {
+    return entry.workspaceRouteId
+      ? appHref(companyPath('workspaces', {
+        workspace: entry.workspaceRouteId, app_id: entry.appId, tab: 'items', item_id: entry.itemId,
+      }, companyId))
+      : '';
+  }
+
+  /**
+   * Everything logged against a record this contact is named on.
+   *
+   * The workspace feed already records what happened to each record; this is that feed read
+   * through one person, which is the question somebody on a contact card is actually asking.
+   */
+  function activityPanel(companyId, doc, contact, cols = 2, show = {}) {
+    const all = contactActivity(doc, contact.id, { nameValue: wbNameValue });
+    // 0 means every entry, which is what this panel always showed. Otherwise each "Show more"
+    // reveals another page of the same size.
+    const step = Number(show.limit) > 0 ? Number(show.limit) : 0;
+    const cap = step ? step * (1 + (state.ccMore?.activity || 0)) : all.length;
+    const entries = all.slice(0, cap);
+    return `
+      <div class="cc-panel cc-el" style="--cc-span:${cols}">
+        <h3><i class="ti ti-activity"></i>Recent updates</h3>
+        ${entries.length ? `<div class="cc-feed">${entries.map((entry) => {
+    const href = entryHref(companyId, entry);
+    // The three facts under each line are each optional. A feed where every entry names the
+    // same app is a column of one repeated word, so being able to drop it matters.
+    const facts = [
+      show.app !== false ? h(entry.appName) : '',
+      show.actor !== false && entry.actor ? h(entry.actor) : '',
+      show.when !== false ? h(timeAgo(entry.at)) : '',
+    ].filter(Boolean).join(' · ');
+    const line = `<span class="cc-feed-ic"><i class="ti ${h(entry.icon)}"></i></span>
+            <span class="cc-feed-main">
+              <span class="cc-feed-text">${entry.text}</span>
+              ${facts ? `<small>${facts}</small>` : ''}
+            </span>`;
+    return href
+      ? `<a class="cc-feed-row" href="${h(href)}" data-router>${line}</a>`
+      : `<div class="cc-feed-row">${line}</div>`;
+  }).join('')}${all.length > entries.length ? `<button class="cc-show-more" type="button" data-action="cc-show-more" data-key="activity">Show ${Math.min(step, all.length - entries.length)} more <span>· ${all.length - entries.length} left</span></button>` : ''}</div>`
+    : '<p class="cc-empty">Nothing has happened on their records yet. Edits, stage changes and new records all show up here.</p>'}
+      </div>`;
+  }
+
+  /**
+   * Their diary: every dated field on every record that names them.
+   *
+   * Only fields somebody CHOSE a day in. Created and Last modified are stamps the system
+   * writes, and a calendar full of "this was edited" is a calendar nobody opens -- those are in
+   * Recent updates, where they belong.
+   */
+  function calendarPanel(companyId, doc, contact, cols = 2, show = {}) {
+    // The company's chosen starting view, until somebody picks another on this visit. A team
+    // that works a week at a time should not have to press Week every time they open a contact.
+    const opensOn = CALENDAR_VIEWS.includes(show.view) ? show.view : 'month';
+    const view = CALENDAR_VIEWS.includes(state.ccCalView) ? state.ccCalView : opensOn;
+    const anchor = state.ccCalAt ? new Date(state.ccCalAt) : new Date();
+    const span = calendarSpan(view, anchor);
+    const byDay = datesByDay(contactDates(doc, contact.id, { nameValue: wbNameValue }));
+    const today = dayKey(new Date());
+
+    const cell = (item) => {
+      const entries = entriesIn(item, byDay);
+      const key = dayKey(item.date);
+      const label = item.month === undefined
+        ? String(item.date.getDate())
+        : item.date.toLocaleDateString([], { month: 'short' });
+      const classes = [
+        'cc-cal-cell',
+        item.outside ? 'out' : '',
+        key === today && item.month === undefined ? 'today' : '',
+        entries.length ? 'has' : '',
+      ].filter(Boolean).join(' ');
+      // Day and week show what is on: the cells are big enough to read, and that is the whole
+      // point of looking at a day. Month and year show that something is there.
+      const detail = ['day', 'week'].includes(view)
+        ? entries.map((entry) => {
+          const href = entryHref(companyId, entry);
+          const body = `<b>${h(entry.title)}</b><small>${h(entry.label)} · ${h(entry.appName)}</small>`;
+          return href ? `<a class="cc-cal-item" href="${h(href)}" data-router>${body}</a>` : `<span class="cc-cal-item">${body}</span>`;
+        }).join('')
+        : entries.length ? `<span class="cc-cal-dot">${entries.length}</span>` : '';
+      return `<div class="${classes}" title="${h(entries.map((entry) => `${entry.title} — ${entry.label}`).join('\n'))}">
+        <span class="cc-cal-num">${h(label)}</span>${detail}
+      </div>`;
+    };
+
+    const weekdays = view === 'month' || view === 'week'
+      ? `<div class="cc-cal-days">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => `<span>${day}</span>`).join('')}</div>`
+      : '';
+
+    return `
+      <div class="cc-panel cc-cal-panel cc-el" style="--cc-span:${cols}">
+        <h3><i class="ti ti-calendar"></i>Calendar</h3>
+        <div class="cc-cal-bar">
+          <button class="wb-icon-btn" type="button" data-cc-cal-step="-1" aria-label="Previous"><i class="ti ti-chevron-left"></i></button>
+          <b class="cc-cal-title">${h(span.title)}</b>
+          <button class="wb-icon-btn" type="button" data-cc-cal-step="1" aria-label="Next"><i class="ti ti-chevron-right"></i></button>
+          <button class="btn btn-sm" type="button" data-cc-cal-today>Today</button>
+          <div class="cc-cal-views">
+            ${CALENDAR_VIEWS.map((name) => `<button class="cc-cal-view ${name === view ? 'on' : ''}" type="button" data-cc-cal-view="${name}">${name[0].toUpperCase()}${name.slice(1)}</button>`).join('')}
+          </div>
+        </div>
+        ${weekdays}
+        <div class="cc-cal-grid cc-cal-${h(view)}">${span.cells.map(cell).join('')}</div>
+        ${byDay.size ? '' : '<p class="cc-empty">No dates yet. A date field on any record that names them shows up here.</p>'}
+      </div>`;
+  }
+
+  function useRow(companyId, use, item, show = {}, picked = null) {
     const facts = item.facts || {};
     const meta = [];
-    if (facts.duration !== null && facts.duration !== undefined) {
+
+    // The app's OWN fields, chosen per app in the panel's settings. Rendered first, because
+    // somebody who went to the trouble of nominating "Project type" wants to read it before the
+    // generic stamps. A field that no longer resolves is skipped rather than rendered blank.
+    if (picked?.app && picked.fields?.length) {
+      picked.fields.forEach((fieldId) => {
+        const field = (picked.app.fields || []).find((item2) => item2.id === fieldId);
+        if (!field) return;
+        const text = String(wbPlainVal(companyId, picked.workspace, picked.app, field, item.values?.[field.id], item.values) || '').trim();
+        if (!text) return;
+        // The label is optional. With several fields nominated it is the longest thing on the
+        // row, and the value is the part being read -- but it is on by default, because a bare
+        // value with nothing to say what it is only reads once you already know the layout.
+        const label = show.labels !== false ? `<em>${h(field.label)}</em>` : '';
+        meta.push(`<span class="cc-use-fact cc-use-picked">${label}${h(text)}</span>`);
+      });
+    }
+    if (show.duration !== false && facts.duration !== null && facts.duration !== undefined) {
       meta.push(`<span class="cc-use-fact"><i class="ti ti-clock-hour-4"></i>${h(wbFmtDuration(facts.duration))}</span>`);
     }
     // A stamp reads as "8m ago" and a typed date as "Aug 20, 2026": one answers "how long has
     // this been sitting?", the other answers "when is it happening?".
-    (facts.dates || []).forEach((date) => {
-      const icon = date.relative ? 'ti-history' : 'ti-calendar';
-      const text = date.relative ? timeAgo(date.value) : formatDate(date.value);
-      meta.push(`<span class="cc-use-fact"><i class="ti ${icon}"></i>${h(date.label)} ${h(text)}</span>`);
-    });
-    if (facts.updatedAt) {
+    if (show.dates !== false) {
+      (facts.dates || []).forEach((date) => {
+        const icon = date.relative ? 'ti-history' : 'ti-calendar';
+        const text = date.relative ? timeAgo(date.value) : formatDate(date.value);
+        meta.push(`<span class="cc-use-fact"><i class="ti ${icon}"></i>${h(date.label)} ${h(text)}</span>`);
+      });
+    }
+    if (show.edited !== false && facts.updatedAt) {
       meta.push(`<span class="cc-use-fact"><i class="ti ti-pencil"></i>Edited ${h(timeAgo(facts.updatedAt))}</span>`);
+    }
+
+    // The row's title. Worked out by itemTitle unless this app names a field for it -- "Case #"
+    // reads better than the first text field on an app whose first text field is a note.
+    let title = item.title;
+    if (picked?.app && picked.title) {
+      const field = (picked.app.fields || []).find((item2) => item2.id === picked.title);
+      const text = field
+        ? String(wbPlainVal(companyId, picked.workspace, picked.app, field, item.values?.[field.id], item.values) || '').trim()
+        : '';
+      // Falls back rather than showing a blank row: a record with nothing in the chosen field
+      // still has to be identifiable enough to click.
+      if (text) title = text;
     }
 
     const body = `
       <span class="cc-use-main">
-        <span class="cc-use-title">${h(item.title)}</span>
-        ${facts.stage ? `<span class="cc-use-stage" style="--cc-stage:${h(facts.stage.color || '#6b7280')}">${h(facts.stage.label)}</span>` : ''}
+        <span class="cc-use-title">${h(title)}</span>
+        ${show.stage !== false && facts.stage ? `<span class="cc-use-stage" style="--cc-stage:${h(facts.stage.color || '#6b7280')}">${h(facts.stage.label)}</span>` : ''}
       </span>
       ${meta.length ? `<span class="cc-use-meta">${meta.join('')}</span>` : ''}`;
 
@@ -495,94 +861,502 @@ export function createCompanyContactsPage(ctx) {
       </a>`;
   }
 
+  /**
+   * The company's tile layout, off the builder document.
+   *
+   * A stat tile is not a field -- "Open balance" is computed across every workspace and belongs
+   * to no field at all -- so it has nowhere on a field row to live. The builder doc is already
+   * localStorage-mirrored, realtime-synced, merged on conflict and in the backup, which is four
+   * problems a new table would have had to solve again.
+   */
+  function cardSettings(companyId) {
+    return normalizeCardSettings(wbDoc(companyId)?.contactCard);
+  }
+
+  /**
+   * One stat tile's value.
+   *
+   * Every one of these comes out of the usage scan the card already runs, plus the contact's own
+   * columns. Nothing here costs a query.
+   */
+  function tileFacts(companyId, contact, uses, tile) {
+    const stamp = contact.last_activity_at || contact.updated_at;
+    switch (tile.id) {
+      case 'balance': {
+        const balance = usageBalance(uses);
+        return { value: balance ? money(balance) : '—', sub: 'across every workspace' };
+      }
+      case 'records': {
+        const records = uses.reduce((sum, use) => sum + use.count, 0);
+        return { value: String(records), sub: records ? `${uses.length} app${uses.length === 1 ? '' : 's'}` : 'not referenced yet' };
+      }
+      case 'workspaces':
+        return { value: String(new Set(uses.map((use) => use.workspaceId)).size), sub: 'using this contact' };
+      case 'touch':
+        return { value: stamp ? timeAgo(stamp) : '—', sub: '' };
+      case 'apps':
+        return { value: String(uses.length), sub: uses.length === 1 ? 'app' : 'apps' };
+      case 'quiet': {
+        if (!stamp) return { value: '—', sub: '' };
+        const days = Math.max(0, Math.floor((Date.now() - new Date(stamp).getTime()) / 86400000));
+        return { value: String(days), sub: days === 1 ? 'day' : 'days' };
+      }
+      case 'stages': {
+        const stages = new Set(uses.flatMap((use) => use.items.map((item) => item.facts?.stage?.label)).filter(Boolean));
+        return { value: String(stages.size), sub: 'across their records' };
+      }
+      case 'newest': {
+        const newest = uses.flatMap((use) => use.items.map((item) => item.createdAt)).filter(Boolean).sort().pop();
+        return { value: newest ? timeAgo(newest) : '—', sub: newest ? 'most recent' : 'nothing yet' };
+      }
+      case 'first':
+        return { value: contact.created_at ? formatDate(contact.created_at) : '—', sub: 'in the directory' };
+      default:
+        return { value: '—', sub: '' };
+    }
+  }
+
+  const tileHtml = (label, value, sub, span) => `
+    <div class="cc-tile cc-el" style="--cc-span:${span}"><span>${h(label)}</span><strong>${h(value)}</strong>${sub ? `<small>${h(sub)}</small>` : ''}</div>`;
+
+  /**
+   * A custom button, wherever it sits.
+   *
+   * The data-wb-press / data-wb-when / disabled contract is the App Builder's, copied rather
+   * than re-derived: the click delegate and syncButtons both read it, and a second version of
+   * it here is how the two drift into disagreeing about which buttons are live.
+   *
+   * draggable="false" is required, not cosmetic: a <button> inside a pointer-drag surface
+   * otherwise starts the browser's own drag and the gesture dies halfway.
+   */
+  function cardButtonHtml(companyId, contact, button, pin, span = 1) {
+    const text = String(button.label || '').trim();
+    const icon = String(button.icon || '').trim();
+    const rules = Array.isArray(button.when) ? button.when : [];
+    const ready = cardButtonReady(button);
+    const style = pin ? pinStyle(pin) : null;
+    const placement = pin
+      ? `data-pin-x="${h(style.x)}" data-pin-y="${h(style.y)}" style="--pin-x:${h(style.vars['--pin-x'])};--pin-y:${h(style.vars['--pin-y'])};--pin-z:${h(style.vars['--pin-z'])}"`
+      : `style="--cc-span:${span}"`;
+    return `<button class="btn btn-primary cc-card-btn cc-el${pin ? ' cc-pin' : ''}" type="button"
+      draggable="false"
+      data-cc-btn="${h(button.id)}"
+      data-wb-press="${h(button.id)}" data-wb-press-ctx="cc|${h(companyId)}|${h(contact.id)}"
+      data-wb-when="${h(JSON.stringify(rules))}" ${ready ? '' : 'disabled data-wb-no-target="1"'}
+      aria-label="${h(text || 'Action')}"
+      title="${h(ready ? '' : cardButtonNotReady(button))}"
+      ${placement}>${icon ? `<i class="ti ${h(icon)}"></i>` : ''}${h(text)}</button>`;
+  }
+
+  /**
+   * One of the four built-in panels.
+   *
+   * They used to be printed in a fixed order, always all four. They are elements now, so the
+   * renderer asks for one by id and the layout decides whether, where and how wide.
+   */
+  function builtinPanelHtml(companyId, contact, doc, uses, longFields, id, span, config = {}) {
+    const box = (inner) => `<div class="cc-panel cc-el" style="--cc-span:${span}">${inner}</div>`;
+    if (id === 'inflight') {
+      // 0 means all of them. A cap of five was the old hardcoded rule; it is now typed, and
+      // "Show more" only appears when something is actually being held back.
+      const step = Number(config.limit) > 0 ? Number(config.limit) : 0;
+      const meta = (use) => {
+        const parts = [];
+        if (config.count !== false) parts.push(`${use.count} record${use.count === 1 ? '' : 's'}`);
+        if (config.balance !== false && use.balance) parts.push(h(money(use.balance)));
+        return parts.join(' · ');
+      };
+      // Where each connected app actually lives, so a chosen field can be resolved and rendered.
+      const byAppId = new Map(appsWithContactFields(doc).map((entry) => [entry.app.id, entry]));
+      return box(`
+        <h3><i class="ti ti-briefcase"></i>In flight</h3>
+        ${uses.length ? uses.map((use) => {
+    // Each "Show more" reveals another page of the same size, so choosing 5 gives 5, then 10.
+    const moreKey = `inflight:${use.appId}`;
+    const cap = step ? step * (1 + (state.ccMore?.[moreKey] || 0)) : use.items.length;
+    const shown = use.items.slice(0, cap);
+    const facts = meta(use);
+    const seat = byAppId.get(use.appId);
+    const chosen = (config.apps || {})[use.appId] || { title: '', fields: [] };
+    const picked = seat ? { ...seat, ...chosen } : null;
+    return `
+          <div class="cc-use">
+            <div class="cc-use-head">
+              <b>${h(use.appName)}</b>
+              <span class="cc-ws">${h(use.workspaceName)}</span>
+              ${facts ? `<em>${facts}</em>` : ''}
+            </div>
+            ${shown.map((item) => useRow(companyId, use, item, config, picked)).join('')}
+            ${use.count > shown.length ? `<button class="cc-show-more" type="button" data-action="cc-show-more" data-key="${h(moreKey)}">Show ${Math.min(step, use.count - shown.length)} more <span>· ${use.count - shown.length} left</span></button>` : ''}
+          </div>`;
+  }).join('')
+      : '<p class="cc-empty">Nothing references this contact yet. Add a Company Contact field to a workspace app and pick them on a record.</p>'}`);
+    }
+    if (id === 'notes') {
+      return box(`
+        <h3><i class="ti ti-note"></i>${h(longFields[0]?.field.label || 'Notes')}</h3>
+        ${longFields.length ? longFields.map((element) => `
+          <p class="cc-notes">${h(companyContactValue(contact, element.field))}</p>`).join('')
+      : '<p class="cc-empty">Nothing written down yet.</p>'}`);
+    }
+    if (id === 'activity') return activityPanel(companyId, doc, contact, span, config);
+    if (id === 'calendar') return calendarPanel(companyId, doc, contact, span, config);
+    return '';
+  }
+
+  /**
+   * The controls that hang on an element while the card is being edited.
+   *
+   * Rendered INSIDE the element it belongs to, so there is no second coordinate system to keep
+   * in step -- the toolbar moves because the element moved. Everything the settings tab can do
+   * to an element is here: how wide, which way, and take it off.
+   */
+  /**
+   * The panel-contents editor, when a panel has anything to choose about itself.
+   *
+   * "In flight" can show a stage, a duration, dates and an edited stamp on every row -- a team
+   * that only reads the stage wants the rest gone. The vocabulary lives in card-layout.js, so
+   * this draws whatever that declares rather than knowing each panel by name.
+   */
+  /**
+   * Which of each connected app's own fields show on its rows.
+   *
+   * The list of apps is not a setting -- it is whatever currently references this contact, so it
+   * answers "which apps is this person in?" at the same time as it configures them. An app the
+   * contact leaves simply stops appearing; its chosen fields stay stored against the app id and
+   * come back if they are used again.
+   */
+  function perAppFieldsHtml(companyId, element) {
+    const doc = wbDoc(companyId);
+    const seats = appsWithContactFields(doc);
+    if (!seats.length) {
+      return '<div class="wb-sub">No app references this contact yet. Point a Company Contact field at them on a record and the app will appear here.</div>';
+    }
+    const chosen = (element.config || {}).apps || {};
+    return `
+      <div class="cc-app-fields">
+        <div class="wb-sub">Beyond the facts above, each app can show its own fields on a row — pick <b>Project type</b> in Estimating and it reads there without the other apps changing.</div>
+        ${seats.map(({ workspace, app }) => {
+    const entry = chosen[app.id] || { title: '', fields: [] };
+    const picked = new Set(entry.fields || []);
+    // A field that carries no readable value on a row is not offered: a button is a control,
+    // and the link back to this contact would print the name of the person you are looking at.
+    const offer = (app.fields || []).filter((field) => !['button', 'company_contact'].includes(field.type));
+    return `
+          <div class="cc-app-field-row">
+            <b>${h(workspace.name)} › ${h(app.name)}</b>
+            <label class="cc-app-title">Row title
+              <select class="wb-input" data-action="cc-panel-app-title" data-key="${h(element.key)}" data-app="${h(app.id)}">
+                <option value="" ${entry.title ? '' : 'selected'}>Work it out automatically</option>
+                ${offer.map((field) => `<option value="${h(field.id)}" ${entry.title === field.id ? 'selected' : ''}>${h(field.label)}</option>`).join('')}
+              </select>
+              <small>What names each row. Automatic takes the first text field, which is not always the one worth reading.</small>
+            </label>
+            ${offer.length ? `<div class="wb-chip-pick">
+              ${offer.map((field) => `
+                <button type="button" class="wb-chip ${picked.has(field.id) ? 'on' : ''}" aria-pressed="${picked.has(field.id) ? 'true' : 'false'}"
+                  data-action="cc-panel-app-field" data-key="${h(element.key)}" data-app="${h(app.id)}" data-field="${h(field.id)}">${h(field.label)}</button>`).join('')}
+            </div>` : '<span class="wb-sub">This app has no fields to show yet.</span>'}
+          </div>`;
+  }).join('')}
+      </div>`;
+  }
+
+  /**
+   * A button's own settings: its name, its icon, and what it does.
+   *
+   * One function, used by the settings dialog AND by the editor on the card, so a button is
+   * configured the same way wherever you found it. Every control writes straight through --
+   * ccBindCardButtons binds them by data attribute, so both places share the wiring too.
+   */
+  function cardButtonConfigHtml(companyId, button, canManage) {
+    const apps = wbCompanyApps(button.targetCompany || companyId);
+    const chosen = new Set(button.fields || []);
+    // Everything a button could carry. The contact's NAME is not among them -- it travels as
+    // the Company Contact link, which is what ties the new record back to this card.
+    const sendable = companyContactFieldsFor(companyId).filter((field) => !CC_DERIVED_TYPES.has(field.type));
+    return `
+      <div class="cc-btn-grid">
+        <label>Name
+          <input class="wb-input" value="${h(button.label)}" data-cc-btn-label="${h(button.id)}" aria-label="Button name" ${canManage ? '' : 'disabled'} />
+        </label>
+        <label>Icon
+          <input class="wb-input" value="${h(button.icon)}" placeholder="ti-send" data-cc-btn-icon="${h(button.id)}" ${canManage ? '' : 'disabled'} />
+          <small>A Tabler name, like <b>ti-send</b>. Blank for text only.</small>
+        </label>
+        <label>What it does
+          <select class="wb-input" data-cc-btn-action="${h(button.id)}" ${canManage ? '' : 'disabled'}>
+            ${CARD_BUTTON_ACTIONS.map(([id, label, hint]) => `<option value="${id}" title="${h(hint)}" ${button.action === id ? 'selected' : ''}>${h(label)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+
+      ${button.action === 'push' ? `
+        <div class="cc-btn-grid">
+          <label>Send it to
+            <select class="wb-input" data-cc-btn-app="${h(button.id)}" ${canManage ? '' : 'disabled'}>
+              <option value="">— Choose a workspace app —</option>
+              ${apps.map(({ workspace, app }) => `<option value="${h(app.id)}" ${button.targetApp === app.id ? 'selected' : ''}>${h(workspace.name)} › ${h(app.name)}</option>`).join('')}
+            </select>
+            <small>${apps.length ? 'The record lands here, with a <b>Contact</b> field pointing back at this contact.' : 'No apps in this company yet.'}</small>
+          </label>
+        </div>
+        <div class="wb-field">
+          <div class="wb-check-row">
+            <label class="wb-switch"><input type="checkbox" data-cc-btn-pick="${h(button.id)}" ${button.pickFields ? 'checked' : ''} ${canManage ? '' : 'disabled'} /><span class="wb-slider"></span></label>
+            <div><b>Choose which details to send</b><div class="wb-sub">Off, it sends every field on this contact — matched to the app by name, and created there if it has none. The contact's <b>name</b> always travels, as the Contact link.</div></div>
+          </div>
+          ${button.pickFields ? `
+            <div class="wb-chip-pick">
+              ${sendable.map((field) => `
+                <button type="button" class="wb-chip ${chosen.has(field.id) ? 'on' : ''}" aria-pressed="${chosen.has(field.id) ? 'true' : 'false'}"
+                  data-action="cc-btn-field" data-button="${h(button.id)}" data-field="${h(field.id)}" ${canManage ? '' : 'disabled'}>${h(field.label)}</button>`).join('')}
+              ${sendable.length ? '' : '<span class="wb-sub">This contact has no fields to send yet.</span>'}
+            </div>` : ''}
+        </div>` : ''}
+
+      ${button.action === 'link' ? `
+        <label class="cc-btn-full">Where it goes
+          <input class="wb-input" value="${h(button.href)}" placeholder="tel:{Phone}" data-cc-btn-href="${h(button.id)}" ${canManage ? '' : 'disabled'} />
+          <small>A web address, <b>tel:5551234567</b>, or <b>mailto:someone@example.com</b>. Put a field's name in braces to fill it in — <b>tel:{Phone}</b> dials whoever is open.</small>
+        </label>` : ''}
+
+      ${button.action === 'set' ? '<div class="wb-sub">Changing fields on the contact is configured from the Fields tab for now — pick the field there, then set this button to it.</div>' : ''}`;
+  }
+
+  function panelSettingsHtml(element) {
+    // A button's settings are its own; a panel's are what it shows about itself.
+    if (element.kind === 'button') {
+      return `<div class="cc-el-settings is-button">${cardButtonConfigHtml(activeCompanyId(), element.button, can('company_contacts.manage', activeCompanyId()))}</div>`;
+    }
+    const spec = PANEL_OPTIONS[element.panel?.id];
+    if (!spec) return '';
+    const config = element.config || {};
+    return `
+      <div class="cc-el-settings">
+        ${(spec.toggles || []).map(([key, label]) => `
+          <label class="cc-el-toggle">
+            <input type="checkbox" data-action="cc-panel-toggle" data-key="${h(element.key)}" data-opt="${h(key)}" ${config[key] !== false ? 'checked' : ''} />
+            <span>${h(label)}</span>
+          </label>`).join('')}
+        ${spec.limit ? `
+          <label class="cc-el-choice">${h(spec.limit.label)}
+            <input class="wb-input cc-el-num" type="number" min="0" max="999" step="1"
+              value="${h(String(config.limit ?? 0))}" data-action="cc-panel-limit" data-key="${h(element.key)}" />
+            <small>${h(spec.limit.hint || '')}</small>
+          </label>` : ''}
+        ${spec.choice ? `
+          <label class="cc-el-choice">${h(spec.choice.label)}
+            <select class="wb-input" data-action="cc-panel-choice" data-key="${h(element.key)}" data-opt="${h(spec.choice.key)}">
+              ${spec.choice.choices.map(([value, label]) => `<option value="${h(value)}" ${config[spec.choice.key] === value ? 'selected' : ''}>${h(label)}</option>`).join('')}
+            </select>
+          </label>` : ''}
+      </div>
+      ${spec.perApp ? perAppFieldsHtml(activeCompanyId(), element) : ''}`;
+  }
+
+  function elementToolbar(element) {
+    const sizeable = !SIZELESS_REGIONS.has(element.region);
+    // A panel can choose what it shows; a button can choose its name, icon and function.
+    const configurable = !!PANEL_OPTIONS[element.panel?.id] || element.kind === 'button';
+    const open = configurable && state.ccPanelSettings === element.key;
+    return `
+      <div class="cc-el-tools" data-cc-el-tools>
+        <span class="cc-el-name">${h(element.label)}</span>
+        ${sizeable ? `<span class="cc-el-sizes">${CARD_SPANS.map(([id, label]) => `
+          <button type="button" class="cc-el-size ${element.span === id ? 'on' : ''}" aria-pressed="${element.span === id ? 'true' : 'false'}"
+            data-action="cc-el-span" data-key="${h(element.key)}" data-span="${id}" title="${h(label)}" aria-label="${h(label)}">${label[0]}</button>`).join('')}</span>` : ''}
+        ${configurable ? `<button type="button" class="wb-icon-btn ${open ? 'on' : ''}" data-action="cc-panel-settings" data-key="${h(element.key)}" title="What this panel shows" aria-expanded="${open ? 'true' : 'false'}" aria-label="Choose what ${h(element.label)} shows"><i class="ti ti-adjustments"></i></button>` : ''}
+        <button type="button" class="wb-icon-btn" data-action="cc-el-move" data-key="${h(element.key)}" data-dir="up" title="Move earlier" aria-label="Move ${h(element.label)} earlier"><i class="ti ti-chevron-up"></i></button>
+        <button type="button" class="wb-icon-btn" data-action="cc-el-move" data-key="${h(element.key)}" data-dir="down" title="Move later" aria-label="Move ${h(element.label)} later"><i class="ti ti-chevron-down"></i></button>
+        <button type="button" class="wb-icon-btn" data-action="cc-el-remove" data-key="${h(element.key)}" title="Take off the card — it stays in Add back" aria-label="Take ${h(element.label)} off the card"><i class="ti ti-x"></i></button>
+        ${element.kind === 'button' ? `
+          <button type="button" class="wb-icon-btn danger" data-action="cc-btn-remove" data-button="${h(element.button.id)}" title="Delete this button for good" aria-label="Delete ${h(element.label)} permanently"><i class="ti ti-trash"></i></button>` : ''}
+      </div>
+      ${open ? panelSettingsHtml(element) : ''}`;
+  }
+
+  /** One placed element, drawn the way its region deserves. */
+  function elementHtml(companyId, contact, uses, element, extra = {}) {
+    const span = spanColumns(element.span);
+    if (element.kind === 'tile') {
+      const facts = tileFacts(companyId, contact, uses, element.tile);
+      return tileHtml(element.tile.label, facts.value, facts.sub, span);
+    }
+    if (element.kind === 'panel') {
+      return builtinPanelHtml(companyId, contact, extra.doc, uses, extra.longFields || [], element.panel.id, span, element.config || {});
+    }
+    if (element.kind === 'button') return cardButtonHtml(companyId, contact, element.button, null, span);
+
+    const field = element.field;
+    if (element.region === 'tiles') {
+      return `<div class="cc-tile cc-el" style="--cc-span:${span}"><span>${h(field.label)}</span><strong>${fieldCell(companyId, contact, field)}</strong></div>`;
+    }
+    if (element.region === 'panels') {
+      return `<div class="cc-panel cc-el" style="--cc-span:${span}"><h3>${h(field.label)}</h3><p class="cc-notes">${h(String(companyContactValue(contact, field) || ''))}</p></div>`;
+    }
+    if (element.region === 'footer') return `<span class="cc-el" style="--cc-span:${span}">${fieldCell(companyId, contact, field)}</span>`;
+    if (element.region === 'summary') {
+      // A summary segment reads as one word in a line of them, so it is drawn compactly rather
+      // than as a labelled box -- but it IS a block, which is what makes it editable.
+      const value = displayValue(field, companyContactValue(contact, field));
+      return `<div class="cc-summary-seg cc-el" style="--cc-span:${span}"><span>${h(field.label)}</span><b>${value ? h(value) : '<em>empty</em>'}</b></div>`;
+    }
+    // Details: the directory's own cell, so a rating is stars here too and a photo is the photo.
+    // A card that printed "4" where the table printed stars would read as two different products
+    // describing one person.
+    return `
+      <div class="cc-detail cc-el" style="--cc-span:${span}"><span>${h(field.label)}</span>${field.type === 'file'
+        ? `<span class="cc-detail-files">${wbFileValues(companyContactValue(contact, field)).map((file) => (file.url
+          ? `<a href="${h(file.url)}" target="_blank" rel="noreferrer"><i class="ti ${h(wbFileIcon(fileTypeKind({ file_name: file.name })))}"></i>${h(file.name)}</a>`
+          : `<span><i class="ti ti-file"></i>${h(file.name)}</span>`)).join('')}</span>`
+        : `<b>${fieldCell(companyId, contact, field)}</b>`}</div>`;
+  }
+
+  /**
+   * The pins hanging in one anchor, in reading order.
+   *
+   * Emitted last inside their anchor and ordered top-to-bottom, so when the phone rule drops
+   * positioning entirely they stack in the order the desktop card scans.
+   */
+  function pinLayer(companyId, contact, list) {
+    return readingOrder(list || [])
+      .map((element) => cardButtonHtml(companyId, contact, element.button, element.pin))
+      .join('');
+  }
+
   function renderCard(companyId, contact) {
     const doc = wbDoc(companyId);
     const uses = contactUsage(doc, contact.id, { nameValue: wbNameValue });
-    const balance = usageBalance(uses);
-    const records = uses.reduce((sum, use) => sum + use.count, 0);
     const canManage = can('company_contacts.manage', companyId);
     const chipField = companyContactChipField(companyId);
     const chip = companyContactValue(contact, chipField);
+    const arranging = canManage && state.ccCardArrange === true;
 
-    // Long-form fields get their own panel; the short ones read as a summary line under the
-    // name, which is how somebody scans a card they opened to answer one question.
+    // Reading a card, a field with nothing in it is noise, so an empty one is left off.
+    //
+    // ARRANGING it, that rule is exactly wrong: you are laying out the template for every
+    // contact, and a field that happens to be blank on THIS person still has to be placeable --
+    // otherwise it is invisible in the editor and cannot be moved, sized or taken off at all.
+    // That is what made five of six fields unfindable while editing.
     const fields = companyContactFieldsFor(companyId);
-    // Every field with something in it, hidden ones included: hiding is about the directory's
-    // columns, and a card that quietly omitted details would be a card you cannot trust.
-    const filled = fields.filter((field) => field !== chipField && companyContactValue(contact, field) !== '');
-    const longFields = filled.filter((field) => field.type === 'textarea');
-    const shortFields = filled.filter((field) => field.type !== 'textarea');
-    const meta = shortFields.map((field) => displayValue(field, companyContactValue(contact, field)));
+    const placeable = fields.filter((field) => field !== chipField && (
+      arranging
+      || companyContactValue(contact, field) !== ''
+      || autoCellHtml(companyId, contact, field) !== null));
 
-    const tile = (label, value, sub = '') => `
-      <div class="cc-tile"><span>${h(label)}</span><strong>${h(value)}</strong>${sub ? `<small>${h(sub)}</small>` : ''}</div>`;
+    const elements = cardElements(placeable, cardSettings(companyId));
+    const groups = groupByRegion(elements);
+    const pins = pinsByAnchor(elements);
+    const needed = anchorsInUse(elements);
+
+    const meta = groups.summary
+      .filter((element) => element.kind === 'field')
+      .map((element) => displayValue(element.field, companyContactValue(contact, element.field)))
+      .filter(Boolean);
+    const longFields = groups.panels.filter((element) => element.kind === 'field' && element.field.type === 'textarea');
+
+    // While editing, every block is wrapped so its own controls hang on it. The wrapper carries
+    // the span and the inner block fills it, so the toolbar cannot drift from the thing it
+    // edits -- it is inside it.
+    const draw = (list, extra = {}) => list.map((element) => {
+      const html = elementHtml(companyId, contact, uses, element, extra);
+      if (!arranging || !html) return html;
+      return `<div class="cc-el cc-el-wrap" style="--cc-span:${spanColumns(element.span)}" data-cc-el="${h(element.key)}">
+        ${elementToolbar(element)}
+        <div class="cc-el-inner">${html}</div>
+      </div>`;
+    }).join('');
+
+    /**
+     * A region is drawn when it holds something OR when a pin names it.
+     *
+     * That second half is the whole reason there is no fallback chain, and therefore no
+     * teleporting: an anchor a pin names is present on EVERY contact. An empty region wrapper is
+     * a zero-height grid, so a button pinned to the tiles row on a contact with no tiles sits
+     * exactly where the tiles row would have been, which is the predictable answer.
+     */
+    const region = (id, cls, inner) => ((inner || needed.has(id))
+      ? `<div class="cc-region ${cls}" data-cc-anchor="${id}">${inner}${pinLayer(companyId, contact, pins[id])}</div>`
+      : '');
+
+    // Every panel is an element now -- the four built-ins included. They sort and size with
+    // everything else, so "put the calendar first and make it full width" is a layout change
+    // rather than a code change.
+    const panelsInner = draw(
+      groups.panels.filter((element) => !(element.kind === 'field' && element.field.type === 'textarea')),
+      { doc, longFields },
+    );
+
+    // What is off the card, offered back. This is "add tile / add panel" -- nothing was ever
+    // deleted, so putting one back is one click and needs no picker dialog.
+    const offCard = groups.off.filter((element) => element.kind !== 'field' || element.field.type !== 'button');
+    const editor = arranging ? `
+      <div class="cc-card-editor" data-cc-card-editor>
+        <div class="cc-card-editor-head">
+          <b><i class="ti ti-layout-grid"></i>Editing this card</b>
+          <span class="cc-card-editor-hint">Resize, reorder or remove any block with the controls on it. Drag a button anywhere — arrow keys nudge, Shift+arrow moves further.</span>
+          <button class="btn btn-sm" type="button" data-action="cc-add-button-here"><i class="ti ti-plus"></i>Add button</button>
+          <button class="btn btn-sm btn-primary" type="button" data-action="cc-card-arrange"><i class="ti ti-check"></i>Done</button>
+        </div>
+        ${offCard.length ? `
+          <div class="cc-card-add">
+            <span>Add back:</span>
+            ${offCard.map((element) => {
+    // Two things can legitimately share a label -- the built-in Notes PANEL and a field a
+    // company also called Notes -- and two identical chips is a coin toss. Only the ones that
+    // actually collide get the qualifier, so the common case stays clean.
+    const clash = offCard.filter((other) => other.label === element.label).length > 1;
+    const kind = element.kind === 'panel' ? 'panel' : element.kind === 'tile' ? 'tile' : element.kind === 'button' ? 'button' : 'field';
+    return `
+              <button class="btn btn-mini" type="button" data-action="cc-el-add" data-key="${h(element.key)}"><i class="ti ti-plus"></i>${h(element.label)}${clash ? ` <span class="cc-add-kind">${h(kind)}</span>` : ''}</button>`;
+  }).join('')}
+          </div>` : '<div class="cc-card-add"><span>Everything is on the card.</span></div>'}
+      </div>` : '';
 
     return `
-      <div class="cc-card">
+      <div class="cc-card${arranging ? ' is-arranging' : ''}" data-cc-card data-cc-company="${h(companyId)}" data-cc-anchor="card">
         <div class="cc-crumb">
           <a href="${h(appHref(companyPath('company-contacts', {}, companyId)))}" data-router>Company Contacts</a>
           <span>/</span><b>${h(contact.name)}</b>
+          ${canManage ? `
+            <span class="cc-crumb-actions">
+              <button class="btn btn-sm" type="button" data-action="open-company-record-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit info</button>
+              <button class="btn btn-sm btn-icon ${arranging ? 'btn-primary' : ''}" type="button" data-action="cc-card-arrange" title="Edit this card — add, resize, reorder and place" aria-label="Edit this card">
+                <i class="ti ti-${arranging ? 'check' : 'settings'}"></i>
+              </button>
+            </span>` : ''}
         </div>
 
-        <header class="cc-profile-head">
+        <header class="cc-profile-head" data-cc-anchor="head">
           <span class="cc-avatar cc-avatar-lg" style="background:${h(chipColor(companyId, chip))}">${h(initials(contact.name))}</span>
           <div>
             <h2>${h(contact.name)}
               ${chip ? `<span class="cc-type" style="--cc-type:${h(chipColor(companyId, chip))}">${h(chip)}</span>` : ''}
             </h2>
-            <p>${meta.length ? h(meta.join(' · ')) : 'No details on file'}</p>
+            ${arranging
+    // While editing, the summary line becomes real blocks. As plain text its fields have no
+    // controls and never reach the Add back list, so they read as missing from the card
+    // entirely -- which is what "where are the other data" was about.
+    ? `<div class="cc-region cc-summary-edit">${draw(groups.summary)}</div>`
+    : `<p>${meta.length ? h(meta.join(' · ')) : 'No details on file'}</p>`}
           </div>
-          ${canManage ? `
-            <div class="cc-profile-actions">
-              <button class="btn" type="button" data-action="open-company-record-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit info</button>
-            </div>` : ''}
+          ${groups.header.length ? `<div class="cc-profile-actions">${draw(groups.header)}</div>` : ''}
+          ${pinLayer(companyId, contact, pins.head)}
         </header>
 
-        <div class="cc-tiles">
-          ${tile('Open balance', balance ? money(balance) : '—', 'across every workspace')}
-          ${tile('Active records', String(records), records ? `${uses.length} app${uses.length === 1 ? '' : 's'}` : 'not referenced yet')}
-          ${tile('Workspaces', String(new Set(uses.map((use) => use.workspaceId)).size), 'using this contact')}
-          ${tile('Last touch', contact.last_activity_at ? timeAgo(contact.last_activity_at) : timeAgo(contact.updated_at))}
-        </div>
+        ${editor}
 
-        ${shortFields.length ? `
-          <div class="cc-detail-grid">
-            ${shortFields.map((field) => `
-              <div class="cc-detail"><span>${h(field.label)}</span>${field.type === 'file'
-                ? `<span class="cc-detail-files">${wbFileValues(companyContactValue(contact, field)).map((file) => (file.url
-                  ? `<a href="${h(file.url)}" target="_blank" rel="noreferrer"><i class="ti ${h(wbFileIcon(fileTypeKind({ file_name: file.name })))}"></i>${h(file.name)}</a>`
-                  : `<span><i class="ti ti-file"></i>${h(file.name)}</span>`)).join('')}</span>`
-                : `<b>${h(displayValue(field, companyContactValue(contact, field)))}</b>`}</div>`).join('')}
-          </div>` : ''}
+        ${region('tiles', 'cc-tiles', draw(groups.tiles))}
+        ${region('detail', 'cc-detail-grid', draw(groups.detail))}
+        ${region('panels', 'cc-panels', panelsInner)}
 
-        <div class="cc-panels">
-          <div class="cc-panel">
-            <h3><i class="ti ti-briefcase"></i>In flight</h3>
-            ${uses.length ? uses.map((use) => `
-              <div class="cc-use">
-                <div class="cc-use-head">
-                  <b>${h(use.appName)}</b>
-                  <span class="cc-ws">${h(use.workspaceName)}</span>
-                  <em>${use.count} record${use.count === 1 ? '' : 's'}${use.balance ? ` · ${h(money(use.balance))}` : ''}</em>
-                </div>
-                ${use.items.slice(0, 5).map((item) => useRow(companyId, use, item)).join('')}
-                ${use.count > 5 ? `<span class="cc-use-more">+${use.count - 5} more</span>` : ''}
-              </div>`).join('')
-              : '<p class="cc-empty">Nothing references this contact yet. Add a Company Contact field to a workspace app and pick them on a record.</p>'}
-          </div>
-          <div class="cc-panel">
-            <h3><i class="ti ti-note"></i>${h(longFields[0]?.label || 'Notes')}</h3>
-            ${longFields.length ? longFields.map((field) => `
-              <p class="cc-notes">${h(companyContactValue(contact, field))}</p>`).join('')
-              : '<p class="cc-empty">Nothing written down yet.</p>'}
-          </div>
-          ${activityPanel(companyId, doc, contact)}
-          ${calendarPanel(companyId, doc, contact)}
-        </div>
-
-        <div class="cc-card-foot">
+        <div class="cc-card-foot" data-cc-anchor="footer">
           <a class="btn" href="${h(appHref(companyPath('company-contacts', {}, companyId)))}" data-router><i class="ti ti-arrow-left"></i>Back to Company Contacts</a>
+          ${draw(groups.footer)}
+          ${pinLayer(companyId, contact, pins.footer)}
         </div>
+        ${pinLayer(companyId, contact, pins.card)}
       </div>`;
   }
 
@@ -656,22 +1430,79 @@ export function createCompanyContactsPage(ctx) {
             <button class="address-pin-button" type="button" data-address-map-link data-action="open-location-picker" data-location-kind="input" data-location-field="${h(name)}" title="Find it on a map" aria-label="Find ${h(field.label)} on a map"><i class="ti ti-map-pin"></i><span>Map</span></button>
           </div>
         </label>`;
+      // Multi-select is the one type drawn here rather than borrowed. The App Builder can use a
+      // native <select multiple> because its modal reads selectedOptions directly; a <form>
+      // cannot -- FormData keeps only the last value, and a recovery draft restores only one
+      // option. Chips over a single hidden JSON input make it one named value like everything
+      // else, and read better than "hold Ctrl to pick several" besides.
+      case 'tags': {
+        const chosen = tagIds(value);
+        const options = field.config.options || [];
+        if (!options.length) return `<label class="span-2">${label}<div class="wb-sub">Add some options to this field first — open <b>Fields</b> and configure ${h(field.label)}.</div></label>`;
+        return `<label class="span-2">${label}
+          <div class="wb-chip-pick" data-wb-tagpick>
+            <input type="hidden" name="${h(name)}" data-f="${h(field.id)}" value="${h(chosen.length ? JSON.stringify(chosen) : '')}" />
+            ${options.map((option) => {
+    const on = chosen.includes(option.id);
+    return `<button type="button" class="wb-chip ${on ? 'on' : ''}" data-wb-tag="${h(option.id)}" aria-pressed="${on ? 'true' : 'false'}" style="--chip:${h(option.color || '#6b7280')}">${h(option.label)}</button>`;
+  }).join('')}
+          </div>
+        </label>`;
+      }
       default:
+        // Everything the App Builder already draws, drawn by the App Builder. The value inputs
+        // come back carrying [data-f] and no name; wbNameContactFieldInputs gives them the
+        // `field:<id>` name this form saves and restores by, so nothing here has to know which
+        // of them is a hidden input, a range or a star row.
+        if (COMPANY_CONTACT_WB_TYPES.has(field.type)) {
+          const wide = ['sheet', 'checklist', 'image'].includes(field.type) ? ' span-2' : '';
+          return `<div class="cc-wb-field${wide}">${wbRenderFieldInput(companyId, '', field, wbValueFor(field, value))}</div>`;
+        }
         return `<label>${label}<input name="${h(name)}" value="${h(value)}" autocomplete="off"${req} /></label>`;
     }
   }
+
+  /** Option ids on a multi-select, from the JSON the form stores or a bare single value. */
+  function tagIds(value) {
+    if (Array.isArray(value)) return value.map(String);
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+    if (raw[0] === '[') { try { const list = JSON.parse(raw); return Array.isArray(list) ? list.map(String) : []; } catch { return []; } }
+    return [raw];
+  }
+
+  /**
+   * A stored contact value in the shape the App Builder's renderer expects.
+   *
+   * Contacts store every value as a string, because field_values is one JSON object filled from
+   * a form. The record form is handed richer values, so the two disagree in exactly two places:
+   * a checkbox, which is a boolean there and 'yes'/'no' here, and a multi-select, which is an
+   * array there and JSON text here. Everything else -- checklists, sheets, files -- is JSON text
+   * on both sides and parses the same.
+   */
+  function wbValueFor(field, value) {
+    if (field.type === 'tags') return tagIds(value);
+    if (field.type === 'checkbox') return String(value) === 'yes';
+    return value;
+  }
+
+  // A contact belongs to the company, not to any one workspace -- so its recovery draft is
+  // keyed the same way. Keying it by whichever workspace happened to be open would hide a
+  // half-typed contact from the person who switched workspace and came back for it.
+  const CC_DRAFT_SCOPE = 'company';
 
   function renderCompanyContactEditor(companyId, contact) {
     const edit = contact || { id: '', name: '', field_values: {} };
     const fields = companyContactFieldsFor(companyId);
     return `
-      <form class="job-editor cc-editor" data-company-record-form>
+      <form class="job-editor cc-editor" data-company-record-form ${protectedFormDraftAttributes('company-contact', edit.id || 'new', companyId, CC_DRAFT_SCOPE)}>
         <input type="hidden" name="id" value="${h(edit.id || '')}" />
         <input type="hidden" name="company_id" value="${h(companyId)}" />
         <div class="section-head span-2">
           <div><h2>${contact ? 'Edit contact' : 'New company contact'}</h2>
           <p>Visible in every workspace. Workspace apps point at this record with a Company Contact field.</p></div>
         </div>
+        ${renderProtectedFormDraftStrip()}
         <label><span>Name<b class="req">*</b></span><input name="name" value="${h(edit.name)}" required autocomplete="off" /></label>
         ${fields.map((field) => fieldControl(companyId, field, edit.field_values?.[field.id] ?? '')).join('')}
         ${fields.length ? '' : '<p class="cc-empty span-2">No fields beyond the name yet. Add some with <b>Fields</b> on the directory.</p>'}
@@ -694,9 +1525,15 @@ export function createCompanyContactsPage(ctx) {
   // your mind about it, should cost nothing and leave nothing behind.
   let fieldDraft = null;
 
-  // The App Builder offers rollups over another app's records and auto-numbers scoped to one.
-  // A contact has neither, so the palette is the basics: what a person or a company IS.
-  const CC_PALETTE = ['text', 'textarea', 'number', 'money', 'date', 'category', 'checkbox', 'email', 'phone', 'location', 'file'];
+  // The App Builder's palette, in the App Builder's order, minus the three types that name an
+  // app: relationship, rollup and button. An app lives in one workspace and a contact belongs
+  // to the whole company, so there is no answer to "which app" from here.
+  //
+  // Everything else is offered, because a contact is not a thinner thing than a record -- a sub
+  // has a rating and an insurance expiry, a client has a photo and an account manager, a
+  // supplier has a price sheet. The list is derived from the same whitelist main.js validates
+  // against, so the palette and the normalizer cannot drift into disagreeing about a type.
+  const CC_PALETTE = COMPANY_CONTACT_FIELD_TYPES;
   const OPTION_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
 
   function openCompanyContactFieldEditor(companyId) {
@@ -708,6 +1545,12 @@ export function createCompanyContactsPage(ctx) {
       fields: companyContactFieldsFor(companyId).map((field) => ({
         ...field, config: { ...field.config, options: [...(field.config.options || [])] },
       })),
+      // The card half, drafted alongside the fields so one Save writes everything. It comes
+      // from a different store -- the builder doc -- but the person arranging the card is not
+      // thinking about two stores, and should not have to press Save twice.
+      tiles: cardSettings(companyId).tiles.map((tile) => ({ ...tile })),
+      panels: cardSettings(companyId).panels.map((panel) => ({ ...panel })),
+      buttons: cardSettings(companyId).buttons.map((button) => ({ ...button })),
     };
   }
 
@@ -743,6 +1586,14 @@ export function createCompanyContactsPage(ctx) {
         })),
       };
     }
+    // The borrowed panels are read back by the module that drew them. Their control ids belong
+    // to that panel -- a formula box, a step list, a number prefix -- and naming them here is
+    // how the two halves drift apart the first time either changes.
+    if (COMPANY_CONTACT_WB_TYPES.has(field.type)) {
+      const next = { ...field.config };
+      wbCollectFieldConfig(field.type, next, fieldDraft.companyId);
+      field.config = next;
+    }
   }
 
   // A palette type dropped in, at the row it was dropped on. Labelled from the type and made
@@ -760,7 +1611,9 @@ export function createCompanyContactsPage(ctx) {
       id: `ccf-${fieldDraft.companyId}-${crypto.randomUUID().slice(0, 8)}`,
       company_id: fieldDraft.companyId,
       label, type, required: false, hidden: false,
-      config: type === 'category' ? { options: [] } : {},
+      // A field whose whole point is a list of choices starts with the list, so its panel opens
+      // on an "Add option" button rather than on nothing.
+      config: ['category', 'status', 'tags'].includes(type) ? { options: [] } : {},
       position: 0,
     };
     const at = Number.isInteger(index) && index >= 0 && index <= fieldDraft.fields.length ? index : fieldDraft.fields.length;
@@ -845,7 +1698,10 @@ export function createCompanyContactsPage(ctx) {
 
   async function saveCompanyContactFields() {
     if (!fieldDraft) return;
+    // Both tabs, whichever is on screen. One Save writes the dialog, so a placement chosen on
+    // the card tab and a rename typed on the fields tab land together.
     syncFieldDraft();
+    syncCardDraft();
     const companyId = fieldDraft.companyId;
     if (!requirePermission('company_contacts.manage', companyId)) return;
 
@@ -872,6 +1728,11 @@ export function createCompanyContactsPage(ctx) {
       }
     }
 
+    // The tile half, which lives on the builder document. Written after the fields so a failure
+    // there does not leave the card half-arranged, and gated on the permission that store needs
+    // -- a role that can manage contacts but not workspaces still saves everything else.
+    if (can('workspaces.manage', companyId)) await saveContactCardTiles(companyId);
+
     const removed = new Set(fieldDraft.removed);
     state.companyContactFields = [
       ...state.companyContactFields.filter((field) => field.company_id !== companyId && !removed.has(field.id)),
@@ -879,7 +1740,7 @@ export function createCompanyContactsPage(ctx) {
     ];
     fieldDraft = null;
     state.modal = '';
-    showToast('Fields saved.', isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');
+    showToast('Card settings saved.', isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');
     render();
   }
 
@@ -913,6 +1774,7 @@ export function createCompanyContactsPage(ctx) {
             <div class="wb-opt-list">${options.map((option) => wbOptRow(option)).join('')}</div>
             <button class="btn btn-sm" type="button" data-cc-add-option data-field-id="${h(field.id)}"><i class="ti ti-plus"></i>Add option</button>
           </div>` : ''}
+        ${COMPANY_CONTACT_WB_TYPES.has(field.type) ? wbFieldConfigUI(field, contactsAsApp(fieldDraft.companyId)) : ''}
         <div class="wb-check-row">
           <label class="wb-switch"><input type="checkbox" data-cc-field-required ${field.required ? 'checked' : ''} /><span class="wb-slider"></span></label>
           <div><b>Required field</b><div class="wb-sub">Contacts can't be saved without it.</div></div>
@@ -921,6 +1783,323 @@ export function createCompanyContactsPage(ctx) {
           <button type="button" class="btn btn-primary btn-sm" data-action="configure-company-contact-field" data-field-id="${h(field.id)}"><i class="ti ti-check"></i>Done</button>
         </div>
       </div>`;
+  }
+
+  // ---- Settings > Contact card ---------------------------------------------
+  //
+  // "Inside settings you can customize how the contacts looks in the contact card."
+  //
+  // Where each field lands, and which one badges the contact. Both are stored on the FIELD's
+  // own config rather than in a company-level settings row: there is no such row, and both
+  // answers are genuinely about one field. That also means Save writes them through the same
+  // path as a rename, so this tab needs no write of its own.
+  //
+  /**
+   * The draft's elements, which is what every row on this tab is one of.
+   *
+   * All THREE card stores, not just the tiles. Passing only `tiles` let normalizeCardSettings
+   * default the rest, so the panels came back at their defaults and the buttons vanished
+   * entirely -- the tab would have quietly reset the card on Save.
+   */
+  function draftElements() {
+    return cardElements(fieldDraft.fields, {
+      tiles: fieldDraft.tiles,
+      panels: fieldDraft.panels,
+      buttons: fieldDraft.buttons,
+    });
+  }
+
+  /** Sizing is meaningless where the region does not lay things out on the grid. */
+  const SIZELESS_REGIONS = new Set(['summary', 'header', 'footer', 'pin', 'off']);
+
+  function renderCompanyContactCardSettings(companyId) {
+    if (!fieldDraft || fieldDraft.companyId !== companyId) openCompanyContactFieldEditor(companyId);
+    const canManage = can('company_contacts.manage', companyId);
+    const canTiles = can('workspaces.manage', companyId);
+    const badgeable = fieldDraft.fields.filter((field) => field.type === 'category' || field.type === 'status');
+    const current = companyContactChipField(companyId);
+    const elements = draftElements();
+    const warnings = pinWarnings(elements);
+    const buttons = elements.filter((element) => element.kind === 'button');
+
+    const sizes = (element) => {
+      if (SIZELESS_REGIONS.has(element.region)) return '<span class="cc-card-nosize">—</span>';
+      return `<div class="wb-w-sizes" role="group" aria-label="Width of ${h(element.label)}">
+        ${CARD_SPANS.map(([id, label]) => `
+          <button type="button" class="wb-w-size ${element.span === id ? 'on' : ''}" aria-pressed="${element.span === id ? 'true' : 'false'}"
+            data-action="cc-card-span" data-key="${h(element.key)}" data-span="${id}" title="${h(label)}" ${canManage ? '' : 'disabled'}>${label[0]}</button>`).join('')}
+      </div>`;
+    };
+
+    // One row per element, and the element may be any of four kinds. Only a FIELD has a
+    // `.field` -- a tile has `.tile`, a panel has `.panel`, a button has `.button` -- so
+    // reaching for element.field.type here is what made this whole tab throw.
+    const metaOf = (element) => {
+      if (element.kind === 'tile') {
+        return { label: element.tile.kind === 'builtin' ? 'Stat tile' : 'Computed', icon: 'ti-chart-bar', color: '#0891b2' };
+      }
+      if (element.kind === 'panel') return { label: 'Panel', icon: element.panel.icon || 'ti-layout-grid', color: '#7c3aed' };
+      if (element.kind === 'button') return { label: 'Button', icon: element.button.icon || 'ti-click', color: '#e0552d' };
+      return WB_FIELD_TYPES[element.field?.type] || WB_FIELD_TYPES.text;
+    };
+
+    const row = (element) => {
+      const meta = metaOf(element);
+      // Tiles and panels live on the builder document, which needs a different permission.
+      const locked = (element.kind === 'tile' || element.kind === 'panel') && !canTiles;
+      return `
+        <div class="cc-card-row" data-cc-card-row="${h(element.key)}" draggable="${canManage && !locked ? 'true' : 'false'}">
+          <span class="cc-card-grip" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>
+          <span class="wb-field-ic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span>
+          <span class="cc-card-row-name"><b>${h(element.label)}</b><small>${h(meta.label)}</small></span>
+          <select class="wb-input cc-card-place" data-cc-card-place="${h(element.key)}" aria-label="Where ${h(element.label)} appears" ${canManage && !locked ? '' : 'disabled'}>
+            ${regionsFor(element).map(([id, label, hint]) => `<option value="${id}" title="${h(hint)}" ${element.region === id ? 'selected' : ''}>${h(label)}</option>`).join('')}
+          </select>
+          ${sizes(element)}
+          <span class="cc-card-move">
+            <button class="wb-icon-btn" type="button" data-action="cc-card-move" data-key="${h(element.key)}" data-dir="up" aria-label="Move ${h(element.label)} up" ${canManage ? '' : 'disabled'}><i class="ti ti-chevron-up"></i></button>
+            <button class="wb-icon-btn" type="button" data-action="cc-card-move" data-key="${h(element.key)}" data-dir="down" aria-label="Move ${h(element.label)} down" ${canManage ? '' : 'disabled'}><i class="ti ti-chevron-down"></i></button>
+          </span>
+        </div>`;
+    };
+
+    // The 3x3 pad. Nine one-click placements, so somebody who does not want to drag anything
+    // never has to -- and so this works on a keyboard, which a drag never will.
+    const pad = (element) => {
+      const pin = element.pin || cardPinOf({ type: 'button', config: { card: 'pin' } });
+      const at = PIN_PRESETS.findIndex((preset) => preset.x.at === pin.x.at && preset.y.at === pin.y.at);
+      return `
+        <div class="cc-pin-pad" role="group" aria-label="Reference point for ${h(element.label)}">
+          ${PIN_PRESETS.map((preset, index) => `
+            <button type="button" class="cc-pin-cell ${index === at ? 'on' : ''}" aria-pressed="${index === at ? 'true' : 'false'}"
+              data-action="cc-pin-preset" data-field="${h(button.id)}" data-index="${index}"
+              title="${h(preset.label)}" aria-label="${h(preset.label)}" ${canManage ? '' : 'disabled'}></button>`).join('')}
+        </div>`;
+    };
+
+    const buttonRow = (element) => {
+      const button = element.button;
+      const pin = element.pin;
+      const pinned = element.region === 'pin';
+      const mine = warnings.filter((warning) => warning.key.includes(element.key));
+      return `
+        <div class="cc-btn-row" data-cc-btn-row="${h(button.id)}">
+          <div class="cc-btn-head">
+            <b>${h(button.label)}</b>
+            <span class="cc-btn-spacer"></span>
+            <button class="btn btn-sm danger" type="button" data-action="cc-btn-remove" data-button="${h(button.id)}" aria-label="Delete ${h(button.label)}"><i class="ti ti-trash"></i>Delete</button>
+          </div>
+
+          ${cardButtonConfigHtml(companyId, button, canManage)}
+
+          ${pinned ? `
+            <div class="cc-pin-editor">
+              ${pad(element)}
+              <div class="cc-pin-numbers">
+                <label>Anchor
+                  <select class="wb-input" data-cc-pin-anchor="${h(button.id)}" ${canManage ? '' : 'disabled'}>
+                    ${CARD_ANCHORS.map(([id, label, hint]) => `<option value="${id}" title="${h(hint)}" ${pin.anchor === id ? 'selected' : ''}>${h(label)}</option>`).join('')}
+                  </select>
+                </label>
+                <label>X <input class="wb-input" type="number" step="1" min="-400" max="400" value="${h(String(pin.x.px))}" data-cc-pin-x="${h(button.id)}" ${canManage ? '' : 'disabled'} /><small>px from the ${h(pin.x.at === 'center' ? 'centre' : `${pin.x.at} edge`)}</small></label>
+                <label>Y <input class="wb-input" type="number" step="1" min="-400" max="400" value="${h(String(pin.y.px))}" data-cc-pin-y="${h(button.id)}" ${canManage ? '' : 'disabled'} /><small>px from the ${h(pin.y.at === 'center' ? 'middle' : `${pin.y.at} edge`)}</small></label>
+                <label>Layer <input class="wb-input" type="number" step="1" min="1" max="99" value="${h(String(pin.z))}" data-cc-pin-z="${h(button.id)}" ${canManage ? '' : 'disabled'} /></label>
+              </div>
+            </div>` : '<div class="wb-sub">Set its placement to <b>Pinned</b> above to position it by hand, or drag it on the card itself with <b>Arrange</b>.</div>'}
+          ${mine.map((warning) => `<div class="wb-sub cc-pin-warn"><i class="ti ti-alert-triangle"></i>${h(warning.text)}</div>`).join('')}
+        </div>`;
+    };
+
+    return `
+      <div class="cc-card-settings" data-cc-card-settings>
+        <p class="ccf-intro">How a contact reads when somebody opens it. Choose what appears, how wide it is, and where your own buttons sit.</p>
+
+        <div class="wb-field">
+          <label>Badge beside the name</label>
+          ${badgeable.length ? `
+            <select class="wb-input" data-cc-card-badge ${canManage ? '' : 'disabled'} style="max-width:320px">
+              ${badgeable.map((field) => `<option value="${h(field.id)}" ${current?.id === field.id ? 'selected' : ''}>${h(field.label)}</option>`).join('')}
+            </select>
+            <div class="wb-sub">Its colour tints the avatar and the chips above the directory. Only a Category or Status field can badge — the pill takes the chosen option's colour, and a date has none.</div>`
+            : '<div class="wb-sub">Add a Category or Status field and it can badge every contact.</div>'}
+        </div>
+
+        <div class="wb-field">
+          <label>What's on the card</label>
+          ${canTiles ? '' : '<div class="wb-sub cc-pin-warn"><i class="ti ti-lock"></i>The stat tiles are stored with your workspaces, so arranging them needs <b>Manage workspaces</b>. Your fields and buttons below are unaffected.</div>'}
+          <div class="cc-card-list">${elements.length ? elements.map(row).join('') : '<p class="cc-empty">No fields yet — add some on the Fields tab.</p>'}</div>
+          <div class="wb-sub">Drag a row, or use the arrows, to reorder. Taking something off the card leaves it on the record and leaves its value stored — this is about what somebody reads at a glance, not about what a contact holds.</div>
+        </div>
+
+        <div class="wb-field">
+          <label>Buttons</label>
+          ${buttons.length
+            ? buttons.map(buttonRow).join('')
+            : '<div class="wb-sub">No buttons yet. A button can send this contact into a workspace app, change fields on the contact, or place a call.</div>'}
+          <button class="btn btn-sm" type="button" data-action="cc-add-button-here" ${canManage ? '' : 'disabled'}><i class="ti ti-plus"></i>Add button</button>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Read the card tab back into the draft.
+   *
+   * Same contract as syncFieldDraft: anything that re-renders has to call this first, or the
+   * placement just chosen is thrown away when the DOM is rebuilt.
+   */
+  /** A row's key back to the thing it edits: `field:` / `tile:` / `panel:` / `button:`. */
+  const draftTile = (id) => fieldDraft?.tiles.find((tile) => tile.id === id) || null;
+  const draftPanel = (id) => fieldDraft?.panels.find((panel) => panel.id === id) || null;
+  const draftButton = (id) => fieldDraft?.buttons.find((button) => button.id === id) || null;
+
+  function targetOf(key) {
+    const [kind, ...rest] = String(key || '').split(':');
+    const id = rest.join(':');
+    if (kind === 'tile') return { kind, tile: draftTile(id) };
+    if (kind === 'panel') return { kind, panel: draftPanel(id) };
+    if (kind === 'button') return { kind, button: draftButton(id) };
+    return { kind: 'field', field: draftField(id) };
+  }
+
+  function syncCardDraft() {
+    const panel = document.querySelector('[data-cc-card-settings]');
+    if (!fieldDraft || !panel) return;
+
+    panel.querySelectorAll('[data-cc-card-place]').forEach((select) => {
+      const target = targetOf(select.dataset.ccCardPlace);
+      if (target.tile) target.tile.region = select.value;
+      else if (target.panel) target.panel.region = select.value;
+      else if (target.button) target.button.card = select.value;
+      else if (target.field) target.field.config = { ...target.field.config, card: select.value };
+    });
+
+    // A pin's numbers are typed, not dragged, for anybody who wants them exact -- and for
+    // anybody on a keyboard, who has no drag at all. Keyed by BUTTON id: a button is a card
+    // object now, so draftField would never find it.
+    const pinOf = (button) => cardPinOf({ ...button, kind: 'button', card: 'pin' });
+    const number = (node, fallback) => {
+      const value = Number(node.value);
+      return Number.isFinite(value) ? value : fallback;
+    };
+    panel.querySelectorAll('[data-cc-pin-anchor]').forEach((select) => {
+      const button = draftButton(select.dataset.ccPinAnchor);
+      if (button) button.pin = { ...pinOf(button), anchor: select.value };
+    });
+    panel.querySelectorAll('[data-cc-pin-x]').forEach((input) => {
+      const button = draftButton(input.dataset.ccPinX);
+      if (!button) return;
+      const pin = pinOf(button);
+      button.pin = { ...pin, x: { ...pin.x, px: number(input, pin.x.px) } };
+    });
+    panel.querySelectorAll('[data-cc-pin-y]').forEach((input) => {
+      const button = draftButton(input.dataset.ccPinY);
+      if (!button) return;
+      const pin = pinOf(button);
+      button.pin = { ...pin, y: { ...pin.y, px: number(input, pin.y.px) } };
+    });
+    panel.querySelectorAll('[data-cc-pin-z]').forEach((input) => {
+      const button = draftButton(input.dataset.ccPinZ);
+      if (!button) return;
+      button.pin = { ...pinOf(button), z: number(input, pinOf(button).z) };
+    });
+
+    const badge = panel.querySelector('[data-cc-card-badge]');
+    if (badge) {
+      // Exactly one badge. Written to every candidate rather than only to the chosen one, or
+      // switching the badge would leave the previous field still claiming it.
+      fieldDraft.fields.forEach((field) => {
+        if (field.type !== 'category' && field.type !== 'status') return;
+        field.config = { ...field.config, badge: field.id === badge.value };
+      });
+    }
+  }
+
+  /** Write one element's size back into whichever store owns it. */
+  function setCardSpan(key, span) {
+    if (!fieldDraft) return;
+    syncCardDraft();
+    const target = targetOf(key);
+    if (target.tile) target.tile.span = span;
+    else if (target.panel) target.panel.span = span;
+    else if (target.button) target.button.cardSpan = span;
+    else if (target.field) target.field.config = { ...target.field.config, cardSpan: span };
+    render();
+  }
+
+  /**
+   * Move one element in the single ordering both stores share.
+   *
+   * The list is rebuilt, renumbered and split back apart, so a tile and a field can genuinely
+   * interleave -- which is the only reason the ordering can be one list at all.
+   */
+  function moveCardElement(key, direction) {
+    if (!fieldDraft) return;
+    syncCardDraft();
+    const elements = draftElements();
+    const at = elements.findIndex((element) => element.key === key);
+    const to = at + (direction === 'up' ? -1 : 1);
+    if (at < 0 || to < 0 || to >= elements.length) return;
+    commitElements(reorderElements(elements, key, elements[to].key));
+    render();
+  }
+
+  /** A row dropped onto another row, from the settings list. */
+  function dropCardElement(fromKey, toKey) {
+    if (!fieldDraft || fromKey === toKey) return;
+    syncCardDraft();
+    commitElements(reorderElements(draftElements(), fromKey, toKey));
+    render();
+  }
+
+  /** Put an edited element list back into the two stores it came from. */
+  function commitElements(elements) {
+    const { fields, tiles, panels: panelRows, buttons } = splitStores(elements);
+    fieldDraft.fields.forEach((field) => {
+      const placement = fields[field.id];
+      if (placement) field.config = { ...field.config, ...placement };
+    });
+    const merge = (list, incoming) => list.map((entry) => {
+      const next = incoming.find((item) => item.id === entry.id);
+      return next ? { ...entry, ...next } : entry;
+    });
+    fieldDraft.tiles = merge(fieldDraft.tiles, tiles);
+    fieldDraft.panels = merge(fieldDraft.panels, panelRows);
+    fieldDraft.buttons = buttons;
+  }
+
+  /** One of the nine pad placements, applied to a button. */
+  function setPinPreset(buttonId, index) {
+    const button = draftButton(buttonId);
+    const preset = PIN_PRESETS[Number(index)];
+    if (!button || !preset) return;
+    syncCardDraft();
+    const pin = cardPinOf({ ...button, kind: 'button', card: 'pin' });
+    button.card = 'pin';
+    button.pin = { ...pin, x: { ...preset.x }, y: { ...preset.y } };
+    render();
+  }
+
+  /** Add a button and open its action panel, because a button with no action does nothing. */
+  function addCardButton() {
+    addCompanyContactField('button');
+  }
+
+  /**
+   * Write the tile half, which lives on the builder document rather than on any field row.
+   *
+   * saveWorkspaceBuilderDoc directly rather than wbSave: the companiesToSave fan-out and the
+   * app-index invalidation are both about apps, and neither has anything to do with a tile.
+   */
+  async function saveContactCardTiles(companyId) {
+    const doc = wbDoc(companyId);
+    if (!doc) return;
+    doc.contactCard = {
+      v: 1,
+      tiles: fieldDraft.tiles.map((tile) => ({ ...tile })),
+      panels: fieldDraft.panels.map((panel) => ({ ...panel })),
+      buttons: fieldDraft.buttons.map((button) => ({ ...button })),
+    };
+    await saveWorkspaceBuilderDoc(companyId);
   }
 
   function renderCompanyContactFieldsEditor(companyId) {
@@ -938,15 +2117,642 @@ export function createCompanyContactsPage(ctx) {
     return shiftAnchor(CALENDAR_VIEWS.includes(view) ? view : 'month', at || new Date(), direction).toISOString();
   }
 
+  // ---- arrange mode: dragging a button on the card itself --------------------------------
+  //
+  // The settings tab can place a button with one click on the 3x3 pad, and type its offsets
+  // exactly. This is the other half -- putting it where you want it by hand, on the real card,
+  // against the real contact.
+  //
+  // Nothing is measured at pointerdown, and nothing is written until release. The move is a
+  // transform on the node and nothing else: no state write, no render(), so a re-render mid-drag
+  // cannot fight the gesture. Release re-queries the button by id and re-measures, so an
+  // interleaved render is survivable by construction rather than by luck.
+
+  const DRAG_SLOP = 5;
+
+  /** Persist one field's placement, straight through the same write a rename uses. */
+  async function persistFieldPlacement(companyId, fieldId, placement) {
+    const field = companyContactFieldsFor(companyId).find((item) => item.id === fieldId);
+    if (!field) return false;
+    if (!requirePermission('company_contacts.manage', companyId)) return false;
+    const next = normalizeCompanyContactField({ ...field, config: { ...field.config, ...placement } });
+    const { ok } = await supabaseWrite('company_contact_fields', supabaseRow(next, COMPANY_CONTACT_FIELD_COLS));
+    if (!ok) { showToast('Could not save that placement.', 'local', 'Company Contacts'); return false; }
+    state.companyContactFields = state.companyContactFields.map((item) => (item.id === next.id ? next : item));
+    return true;
+  }
+
+  /** Where every anchor is, right now, in one coordinate space. */
+  function anchorRects(card) {
+    return [...card.querySelectorAll('[data-cc-anchor]')].map((node) => {
+      const box = node.getBoundingClientRect();
+      return {
+        id: node.dataset.ccAnchor, left: box.left, top: box.top, width: box.width, height: box.height,
+      };
+    });
+  }
+
+  /**
+   * Begin a drag. Returns the handlers main.js binds, so the DOM wiring stays where the rest of
+   * the app's event binding lives and the geometry stays here.
+   */
+  function beginPinDrag(button, event) {
+    const card = button.closest('[data-cc-card]');
+    if (!card) return null;
+    const companyId = card.dataset.ccCompany;
+    const fieldId = button.dataset.ccBtn;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let moved = false;
+
+    const move = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (!moved && Math.abs(dx) < DRAG_SLOP && Math.abs(dy) < DRAG_SLOP) return;
+      if (!moved) {
+        moved = true;
+        try { button.setPointerCapture(moveEvent.pointerId); } catch { /* capture is a nicety */ }
+      }
+      // The DOM is the preview. Nothing else happens until release.
+      button.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+    };
+
+    const release = async () => {
+      button.style.transform = '';
+      if (!moved) return false;
+      // Re-query and re-measure: a render may have replaced this node while the pointer was
+      // down, and the rect taken at pointerdown would describe a node that no longer exists.
+      const liveCard = document.querySelector('[data-cc-card]');
+      const liveButton = liveCard?.querySelector(`[data-cc-btn="${CSS.escape(fieldId)}"]`);
+      if (!liveCard || !liveButton) { showToast('That button is no longer on the card.', 'local', 'Company Contacts'); return false; }
+      const box = liveButton.getBoundingClientRect();
+      const pin = pinFromRects(
+        { left: box.left, top: box.top, width: box.width, height: box.height },
+        anchorRects(liveCard),
+      );
+      const ok = await persistFieldPlacement(companyId, fieldId, { card: 'pin', pin });
+      render();
+      return ok;
+    };
+
+    return { move, release, moved: () => moved };
+  }
+
+  // ---- editing the card in place ---------------------------------------------------------
+  //
+  // Everything the Contact card settings tab can do, done on the card itself against the real
+  // contact. There is no draft here and no Save: the settings dialog has one because it edits
+  // fields that are not on screen, and a change made ON the card is already visible, so a Save
+  // step would only be a chance to lose it.
+
+  /** The live elements of a company's card, as the card itself builds them. */
+  function liveElements(companyId) {
+    return cardElements(companyContactFieldsFor(companyId), cardSettings(companyId));
+  }
+
+  /**
+   * Write an edited element list back to both stores.
+   *
+   * Only fields whose placement actually CHANGED are written. Nudging one tile would otherwise
+   * rewrite every field row on the contact, which is a dozen round trips to move one thing.
+   */
+  async function persistCardLayout(companyId, elements) {
+    // panelRows, not `panels`: the extracted-module-reference guard treats a bare `panels` as a
+    // module-level name, and main.js contains the STRING 'Metal panels (PBR / standing seam)'
+    // in a price list -- which that guard reads as a call. A false positive, but a one-word
+    // rename is cheaper than loosening a check that exists to catch real missing functions.
+    const { fields, tiles, panels: panelRows, buttons } = splitStores(elements);
+    const doc = wbDoc(companyId);
+    if (doc) {
+      if (!can('workspaces.manage', companyId)) {
+        showToast('Arranging the tiles and panels needs Manage workspaces.', 'local', 'Company Contacts');
+      } else {
+        doc.contactCard = { v: 1, tiles, panels: panelRows, buttons };
+        await saveWorkspaceBuilderDoc(companyId);
+      }
+    }
+    const live = companyContactFieldsFor(companyId);
+    for (const field of live) {
+      const placement = fields[field.id];
+      if (!placement) continue;
+      const same = cardRegionOf(field) === placement.card
+        && cardSpanOf(field) === placement.cardSpan
+        && Number(field.config?.cardOrder ?? 0) === Number(placement.cardOrder);
+      if (same) continue;
+      // eslint-disable-next-line no-await-in-loop
+      if (!await persistFieldPlacement(companyId, field.id, placement)) return false;
+    }
+    return true;
+  }
+
+  /** Apply one change to the live layout and write it. */
+  async function editCardLayout(companyId, change) {
+    if (!requirePermission('company_contacts.manage', companyId)) return;
+    const elements = liveElements(companyId);
+    const next = change(elements);
+    if (!next) return;
+    await persistCardLayout(companyId, next);
+    render();
+  }
+
+  /**
+   * Change what one panel shows about itself.
+   *
+   * Merged rather than replaced, so ticking one box does not reset the other five to whatever
+   * the defaults happen to be.
+   */
+  function setPanelOption(companyId, key, patch) {
+    return editCardLayout(companyId, (elements) => elements.map((element) => (element.key === key
+      ? { ...element, config: { ...(element.config || {}), ...patch } }
+      : element)));
+  }
+
+  /** One panel's current per-app field map, so a caller can merge rather than replace it. */
+  function panelAppFields(companyId, key) {
+    return liveElements(companyId).find((element) => element.key === key)?.config?.apps || {};
+  }
+
+  /** Resize one block on the card. */
+  function cardElementSpan(companyId, key, span) {
+    return editCardLayout(companyId, (elements) => elements.map((element) => (element.key === key ? { ...element, span } : element)));
+  }
+
+  /** Move one block earlier or later in its region. */
+  function cardElementMove(companyId, key, direction) {
+    return editCardLayout(companyId, (elements) => {
+      const region = elements.find((element) => element.key === key)?.region;
+      // Reordered against its NEIGHBOURS IN THE SAME REGION. Against the whole flat list, one
+      // press would jump a tile past every panel without appearing to move at all.
+      const siblings = elements.filter((element) => element.region === region);
+      const at = siblings.findIndex((element) => element.key === key);
+      const to = at + (direction === 'up' ? -1 : 1);
+      if (at < 0 || to < 0 || to >= siblings.length) return null;
+      return reorderElements(elements, key, siblings[to].key);
+    });
+  }
+
+  /** Take a block off the card. Nothing is deleted -- it goes back in the Add list. */
+  function cardElementRemove(companyId, key) {
+    return editCardLayout(companyId, (elements) => elements.map((element) => (element.key === key ? { ...element, region: 'off' } : element)));
+  }
+
+  /** Put a block back, on the shelf its kind belongs to. */
+  function cardElementAdd(companyId, key) {
+    return editCardLayout(companyId, (elements) => elements.map((element) => {
+      if (element.key !== key) return element;
+      const region = element.kind === 'panel' ? 'panels'
+        : element.kind === 'tile' ? 'tiles'
+          : element.kind === 'button' ? 'header'
+            : element.field?.type === 'textarea' ? 'panels' : 'detail';
+      return { ...element, region };
+    }));
+  }
+
+  /**
+   * Add a button from the card itself.
+   *
+   * Written straight through rather than drafted: there is no dialog open to press Save in, and
+   * a button that appears only after a round trip through Settings is not "add a button here".
+   */
+  /** Write the card's button list straight to the builder document. */
+  async function saveCardButtons(companyId, buttons) {
+    const doc = wbDoc(companyId);
+    if (!doc) return false;
+    if (!can('workspaces.manage', companyId)) {
+      showToast('Adding a button to the card needs Manage workspaces.', 'local', 'Company Contacts');
+      return false;
+    }
+    const current = cardSettings(companyId);
+    doc.contactCard = { v: 1, tiles: current.tiles, panels: current.panels, buttons };
+    await saveWorkspaceBuilderDoc(companyId);
+    return true;
+  }
+
+  /**
+   * Add a button to the card.
+   *
+   * It is a card object, not a field: nothing is written to company_contact_fields, and no
+   * contact gains a column. It opens beside Edit info and needs an action before it will do
+   * anything, which is what the settings panel is for.
+   */
+  async function addCardButtonHere(companyId) {
+    if (!requirePermission('company_contacts.manage', companyId)) return;
+    const buttons = cardSettings(companyId).buttons;
+    let label = 'Button';
+    if (buttons.some((button) => button.label === label)) {
+      let n = 2;
+      while (buttons.some((button) => button.label === `${label} ${n}`)) n += 1;
+      label = `${label} ${n}`;
+    }
+    const made = normalizeCardButton({
+      id: `ccb-${crypto.randomUUID().slice(0, 8)}`,
+      label,
+      action: 'push',
+      card: 'header',
+      cardOrder: buttons.length + 1,
+    }, buttons.length);
+    if (!await saveCardButtons(companyId, [...buttons, made])) return;
+    showToast(`${label} added — give it an action to make it work.`, isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');
+    render();
+  }
+
+  /** Change one button's configuration. */
+  async function updateCardButton(companyId, buttonId, patch) {
+    if (!requirePermission('company_contacts.manage', companyId)) return;
+    const buttons = cardSettings(companyId).buttons;
+    const next = buttons.map((button, index) => (button.id === buttonId
+      ? normalizeCardButton({ ...button, ...patch }, index)
+      : button));
+    if (!await saveCardButtons(companyId, next)) return;
+    render();
+  }
+
+  /** Remove a button from the card. It is a card object, so this really does delete it. */
+  async function removeCardButton(companyId, buttonId) {
+    if (!requirePermission('company_contacts.manage', companyId)) return;
+    const buttons = cardSettings(companyId).buttons.filter((button) => button.id !== buttonId);
+    if (!await saveCardButtons(companyId, buttons)) return;
+    showToast('Button removed.', isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');
+    render();
+  }
+
+  /** Arrow keys nudge a focused pin: the keyboard path, which a drag can never be. */
+  async function nudgePinnedButton(button, dx, dy) {
+    const card = button.closest('[data-cc-card]');
+    if (!card) return;
+    const companyId = card.dataset.ccCompany;
+    const fieldId = button.dataset.ccBtn;
+    const field = companyContactFieldsFor(companyId).find((item) => item.id === fieldId);
+    if (!field || cardRegionOf(field) !== 'pin') return;
+    const next = movePin(cardPinOf(field), dx, dy);
+    if (await persistFieldPlacement(companyId, fieldId, { card: 'pin', pin: next })) render();
+  }
+
+  // ---- the DOM wiring, which lives here rather than in main.js ---------------------------
+  //
+  // Every one of these only ever runs on a Company Contacts screen, and this module is only
+  // fetched when one is open -- so in main.js they were kilobytes of the ENTRY chunk that every
+  // session downloads before anything renders, for a page most sessions never visit.
+  //
+  // That is not hygiene, it is the only lever that works: bundle-budget-lib.mjs records that a
+  // statically imported module is bundled into the same chunk, so moving code out of main.js
+  // shrinks nothing unless it lands somewhere lazily loaded. This is somewhere lazily loaded.
+
+  /** Bind the card: its calendar, and -- while arranging -- its draggable buttons. */
+  function mountCard() {
+    const card = document.querySelector('[data-cc-card]');
+    if (!card) return;
+
+    const bind = (selector, handler) => card.querySelectorAll(selector)
+      .forEach((el) => { el.onclick = (e) => { e.preventDefault(); handler(el, e); }; });
+
+    // State only -- which view, and which week or month it is looking at -- so the card redraws
+    // from the same records rather than fetching anything.
+    bind('[data-cc-cal-view]', (el) => { state.ccCalView = el.dataset.ccCalView; render(); });
+    bind('[data-cc-cal-step]', (el) => {
+      state.ccCalAt = shiftContactCalendar(state.ccCalView, state.ccCalAt, Number(el.dataset.ccCalStep));
+      render();
+    });
+    bind('[data-cc-cal-today]', () => { state.ccCalAt = ''; render(); });
+
+    if (!state.ccCardArrange) return;
+    bindCardButtonInputs();
+
+    card.querySelectorAll('[data-cc-btn]').forEach((button) => {
+      if (button.dataset.ccDragBound) return;
+      button.dataset.ccDragBound = '1';
+      button.tabIndex = 0;
+
+      button.onpointerdown = (event) => {
+        if (event.button !== 0) return;
+        const drag = beginPinDrag(button, event);
+        if (!drag) return;
+        state.ccPinDrag = button.dataset.ccBtn;
+
+        const move = (moveEvent) => drag.move(moveEvent);
+        const release = () => {
+          window.removeEventListener('pointermove', move);
+          window.removeEventListener('pointerup', release);
+          window.removeEventListener('pointercancel', release);
+          state.ccPinDrag = null;
+          // Swallow the click this gesture is about to produce. Without it every drag ALSO
+          // fires data-wb-press, and letting go of a button would push the contact into an app.
+          if (drag.moved()) {
+            window.addEventListener('click', (clickEvent) => {
+              clickEvent.stopPropagation();
+              clickEvent.preventDefault();
+            }, { capture: true, once: true });
+          }
+          drag.release();
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', release);
+        window.addEventListener('pointercancel', release);
+      };
+
+      // The keyboard path. A drag can never be one, and placement that only works with a mouse
+      // is placement half the people cannot use.
+      button.onkeydown = (event) => {
+        const step = event.shiftKey ? 10 : 1;
+        const nudge = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
+        if (nudge) {
+          event.preventDefault();
+          nudgePinnedButton(button, nudge[0], nudge[1]);
+          return;
+        }
+        if (event.key === 'Escape') { state.ccCardArrange = false; render(); }
+      };
+    });
+  }
+
+  /**
+   * A card button's own inputs, wherever they are drawn.
+   *
+   * Bound on `change` rather than `input` so a rename is one write when the box is left, not one
+   * per keystroke.
+   */
+  function bindCardButtonInputs() {
+    const companyId = activeCompanyId();
+    const on = (selector, key, read) => document.querySelectorAll(selector).forEach((el) => {
+      el.onchange = () => updateCardButton(companyId, el.dataset[key], read(el));
+    });
+    on('[data-cc-btn-label]', 'ccBtnLabel', (el) => ({ label: el.value }));
+    on('[data-cc-btn-icon]', 'ccBtnIcon', (el) => ({ icon: el.value.trim() }));
+    on('[data-cc-btn-action]', 'ccBtnAction', (el) => ({ action: el.value }));
+    on('[data-cc-btn-href]', 'ccBtnHref', (el) => ({ href: el.value }));
+    on('[data-cc-btn-pick]', 'ccBtnPick', (el) => ({ pickFields: el.checked }));
+    // The app picker also stamps the company, so a button pointing at another workspace's app
+    // still resolves when it is pressed.
+    on('[data-cc-btn-app]', 'ccBtnApp', (el) => ({ targetApp: el.value, targetCompany: companyId }));
+  }
+
+  /**
+   * Drag-to-reorder for the Contact card tab's element list.
+   *
+   * Handlers assigned as properties and the dragged key held in a closure, which is the App
+   * Builder's idiom. A gesture inside a modal cannot outlive its mount, and realtime refreshes
+   * are already suppressed while one is open, so there is nothing for a state key to survive.
+   */
+  function mountCardSettings() {
+    bindCardButtonInputs();
+    const rows = [...document.querySelectorAll('[data-cc-card-row]')];
+    if (!rows.length) return;
+    let dragKey = '';
+    rows.forEach((row) => {
+      if (row.getAttribute('draggable') !== 'true') return;
+      row.ondragstart = (event) => {
+        dragKey = row.dataset.ccCardRow;
+        row.classList.add('is-dragging');
+        // Firefox ignores a drag that sets no data.
+        try { event.dataTransfer.setData('text/plain', dragKey); } catch { /* not essential */ }
+        event.dataTransfer.effectAllowed = 'move';
+      };
+      row.ondragend = () => {
+        dragKey = '';
+        rows.forEach((other) => other.classList.remove('is-dragging', 'is-over'));
+      };
+      row.ondragover = (event) => {
+        if (!dragKey || dragKey === row.dataset.ccCardRow) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        row.classList.add('is-over');
+      };
+      row.ondragleave = () => row.classList.remove('is-over');
+      row.ondrop = (event) => {
+        event.preventDefault();
+        row.classList.remove('is-over');
+        if (!dragKey || dragKey === row.dataset.ccCardRow) return;
+        dropCardElement(dragKey, row.dataset.ccCardRow);
+        dragKey = '';
+      };
+    });
+  }
+
+  /**
+   * The Fields tab: the shared field builder's palette, its drag gestures, and the option rows.
+   *
+   * Also purely this page's, and also only reachable when this module is loaded.
+   */
+  function mountFieldsEditor() {
+    mountCardSettings();
+
+    const root = document.querySelector('[data-cc-field-builder]');
+    if (!root) return;
+
+    // The scope prefix the shared markup writes in front of every id. Stripped here rather than
+    // threaded through, because this editor has exactly one list to put a field in.
+    const bare = (raw) => String(raw || '').replace(/^cc:/, '');
+    const bind = (selector, handler, event = 'onclick') => root.querySelectorAll(selector)
+      .forEach((el) => { el[event] = (e) => { e.preventDefault(); handler(el, e); }; });
+
+    bind('[data-add-type]', (el) => addCompanyContactField(bare(el.dataset.addType)));
+    bind('[data-edit-field]', (el) => configureCompanyContactField(bare(el.dataset.editField)));
+    bind('[data-hide-field]', (el) => toggleCompanyContactFieldHidden(bare(el.dataset.hideField)));
+    bind('[data-del-field]', (el) => removeCompanyContactField(bare(el.dataset.delField)));
+
+    bind('[data-cc-add-option]', (el) => addCompanyContactFieldOption(el.dataset.fieldId));
+    bind('[data-wb-del-option]', (el) => removeDraftFieldOption(
+      el.closest('[data-cc-field-config]')?.dataset.fieldId, el.closest('.wb-opt-item')?.dataset.oid,
+    ));
+
+    // Drag a type out of the palette; drop it on the list to append, or on a row to insert
+    // there. The same two gestures the App Builder has.
+    let dragId = '';
+    let paletteType = '';
+    root.querySelectorAll('.wb-palette-item').forEach((item) => {
+      item.ondragstart = (event) => {
+        paletteType = bare(item.dataset.wbPaletteType);
+        item.classList.add('dragging');
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = 'copy';
+          try { event.dataTransfer.setData('text/plain', paletteType); } catch { /* ignore */ }
+        }
+      };
+      item.ondragend = () => {
+        paletteType = '';
+        item.classList.remove('dragging');
+        root.querySelectorAll('.drop-target, .wb-drop-active').forEach((el) => el.classList.remove('drop-target', 'wb-drop-active'));
+      };
+    });
+
+    const zone = root.querySelector('[data-wb-field-dropzone]');
+    if (zone) {
+      zone.ondragover = (event) => { if (paletteType) { event.preventDefault(); zone.classList.add('wb-drop-active'); } };
+      zone.ondragleave = (event) => { if (event.target === zone) zone.classList.remove('wb-drop-active'); };
+      zone.ondrop = (event) => {
+        if (!paletteType) return;
+        event.preventDefault();
+        zone.classList.remove('wb-drop-active');
+        const type = paletteType;
+        paletteType = '';
+        addCompanyContactField(type);
+      };
+    }
+
+    root.querySelectorAll('.wb-field-row[draggable]').forEach((row) => {
+      row.ondragstart = () => { dragId = bare(row.dataset.fid); row.classList.add('dragging'); };
+      row.ondragend = () => { row.classList.remove('dragging'); root.querySelectorAll('.wb-field-row').forEach((el) => el.classList.remove('drop-target')); };
+      row.ondragover = (event) => { event.preventDefault(); row.classList.add('drop-target'); };
+      row.ondragleave = () => row.classList.remove('drop-target');
+      row.ondrop = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        row.classList.remove('drop-target');
+        const target = bare(row.dataset.fid);
+        // A palette drag lands as an insert at that position; a row drag is a reorder.
+        if (paletteType) {
+          const type = paletteType;
+          paletteType = '';
+          addCompanyContactField(type, fieldIndexOf(target));
+          return;
+        }
+        moveCompanyContactField(dragId, target);
+      };
+    });
+  }
+
+  /**
+   * Every `cc-` action, dispatched here rather than as fifteen branches in main.js's delegate.
+   *
+   * Returns true when it handled the action, so main.js keeps one line and this module keeps the
+   * fifteen bodies -- which is the point: they are only reachable from a screen this module is
+   * loaded for.
+   */
+  function handleCardAction(action, node, event) {
+    const companyId = activeCompanyId();
+    const stop = () => event?.preventDefault();
+
+    switch (action) {
+      // -- the settings dialog's list
+      case 'cc-card-span': stop(); setCardSpan(node.dataset.key, node.dataset.span); return true;
+      case 'cc-card-move': {
+        stop();
+        const key = node.dataset.key;
+        moveCardElement(key, node.dataset.dir);
+        // Focus follows the row, or a second press with the keyboard moves whatever slid into
+        // the place the pointer used to be over.
+        requestAnimationFrame(() => {
+          document.querySelector(`[data-cc-card-row="${CSS.escape(key)}"] [data-action="cc-card-move"][data-dir="${node.dataset.dir}"]`)?.focus();
+        });
+        return true;
+      }
+      case 'cc-pin-preset': stop(); setPinPreset(node.dataset.field, node.dataset.index); return true;
+
+      // -- the editor on the card itself
+      case 'cc-el-span': stop(); cardElementSpan(companyId, node.dataset.key, node.dataset.span); return true;
+      case 'cc-el-move': stop(); cardElementMove(companyId, node.dataset.key, node.dataset.dir); return true;
+      case 'cc-el-remove': stop(); cardElementRemove(companyId, node.dataset.key); return true;
+      case 'cc-el-add': stop(); cardElementAdd(companyId, node.dataset.key); return true;
+
+      case 'cc-add-button':
+      case 'cc-add-button-here':
+        stop();
+        if (!requireMutableWorkspace()) return true;
+        addCardButtonHere(companyId);
+        return true;
+
+      case 'cc-btn-remove': stop(); removeCardButton(companyId, node.dataset.button); return true;
+      case 'cc-btn-field': {
+        stop();
+        // Read off the chips' own pressed state, so the stored list is whatever is lit rather
+        // than a parallel copy that can drift. Scoped by data-button, NOT by an ancestor: the
+        // same controls open from a button's gear on the card, where no wrapper exists.
+        const buttonId = node.dataset.button;
+        const chosen = [...document.querySelectorAll(`[data-action="cc-btn-field"][data-button="${CSS.escape(buttonId)}"]`)]
+          .filter((chip) => (chip === node ? chip.getAttribute('aria-pressed') !== 'true' : chip.getAttribute('aria-pressed') === 'true'))
+          .map((chip) => chip.dataset.field);
+        updateCardButton(companyId, buttonId, { fields: chosen });
+        return true;
+      }
+
+      // -- a panel's own contents
+      case 'cc-panel-settings':
+        stop();
+        // One open at a time: two is two columns of checkboxes and no card left to see them against.
+        state.ccPanelSettings = state.ccPanelSettings === node.dataset.key ? '' : node.dataset.key;
+        render();
+        return true;
+      case 'cc-panel-app-field': {
+        stop();
+        const appId = node.dataset.app;
+        const lit = [...document.querySelectorAll(`[data-action="cc-panel-app-field"][data-app="${CSS.escape(appId)}"]`)]
+          .filter((chip) => (chip === node ? chip.getAttribute('aria-pressed') !== 'true' : chip.getAttribute('aria-pressed') === 'true'))
+          .map((chip) => chip.dataset.field);
+        const current = panelAppFields(companyId, node.dataset.key);
+        const mine = current[appId] || { title: '', fields: [] };
+        setPanelOption(companyId, node.dataset.key, { apps: { ...current, [appId]: { ...mine, fields: lit } } });
+        return true;
+      }
+
+      case 'cc-show-more': {
+        stop();
+        // Runtime only: how far somebody expanded a list on this visit is not a company-wide
+        // setting, and persisting it would change the card for everybody else.
+        const key = node.dataset.key;
+        state.ccMore = { ...(state.ccMore || {}), [key]: (state.ccMore?.[key] || 0) + 1 };
+        render();
+        return true;
+      }
+
+      case 'cc-card-arrange':
+        stop();
+        // A pointer drag is not a data-action, so the read-only guard never sees it. Asked here,
+        // once, rather than on every pointermove.
+        if (!state.ccCardArrange && !requireMutableWorkspace()) return true;
+        state.ccCardArrange = !state.ccCardArrange;
+        render();
+        return true;
+
+      default: return false;
+    }
+  }
+
+  /**
+   * The panel-contents controls, which report on `change` rather than click.
+   *
+   * A checkbox, a number box and a select: reading them on click sees the value from BEFORE the
+   * browser applied it, and handling them on click as well is what stopped the dropdowns
+   * working -- opening one wrote back the value it already had and re-rendered it away.
+   */
+  function handleCardChange(node) {
+    const companyId = activeCompanyId();
+    const key = node.dataset.key;
+    if (node.dataset.action === 'cc-panel-toggle') { setPanelOption(companyId, key, { [node.dataset.opt]: node.checked }); return true; }
+    if (node.dataset.action === 'cc-panel-limit') { setPanelOption(companyId, key, { limit: Number(node.value) }); return true; }
+    if (node.dataset.action === 'cc-panel-choice') { setPanelOption(companyId, key, { [node.dataset.opt]: node.value }); return true; }
+    if (node.dataset.action === 'cc-panel-app-title') {
+      const appId = node.dataset.app;
+      const current = panelAppFields(companyId, key);
+      const mine = current[appId] || { title: '', fields: [] };
+      setPanelOption(companyId, key, { apps: { ...current, [appId]: { ...mine, title: node.value } } });
+      return true;
+    }
+    return false;
+  }
+
   return {
     shiftContactCalendar,
+    mountCard, mountCardSettings, mountFieldsEditor, handleCardAction, handleCardChange,
     renderCompanyContactsPage, renderCompanyContactEditor, saveCompanyContactForm,
     deleteCompanyContact, createCompanyContactNamed, createMissingContacts,
-    renderCompanyContactFieldsEditor,
+    renderCompanyContactFieldsEditor, renderCompanyContactCardSettings,
+    // Exposed so switching tabs can bank the open panel before the DOM holding it is rebuilt.
+    syncCardDraft, syncFieldDraftNow: syncFieldDraft,
     openCompanyContactFieldEditor,
     closeCompanyContactFieldEditor, addCompanyContactField, removeCompanyContactField,
     toggleCompanyContactFieldHidden, configureCompanyContactField,
     moveCompanyContactField, fieldIndexOf, addCompanyContactFieldOption, removeDraftFieldOption,
-    removeCompanyContactFieldOption, saveCompanyContactFields,
+    removeCompanyContactFieldOption, addFieldOptionFromInput, saveCompanyContactFields,
+    // The card's own layout: sizes, ordering, and where a button sits.
+    setCardSpan, moveCardElement, dropCardElement, setPinPreset, addCardButton,
+    // Arrange mode on the card. The geometry lives here; main.js binds the pointer events.
+    beginPinDrag, nudgePinnedButton,
+    // Editing the card in place: resize, reorder, remove, add back, add a button. No draft and
+    // no Save -- a change made on the card is already visible.
+    cardElementSpan, cardElementMove, cardElementRemove, cardElementAdd, addCardButtonHere,
+    updateCardButton, removeCardButton, setPanelOption, panelAppFields,
+    // Everything a button press needs, resolved from the seat the card wrote onto the button.
+    // button-push.js reaches this through ctx and so never learns what a contact stores.
+    contactButtonSeat,
   };
 }

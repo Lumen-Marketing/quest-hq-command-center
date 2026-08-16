@@ -11,7 +11,7 @@
 // The reading of the data is record-activity.js, which is pure. This is the drawing.
 
 import {
-  ACTIVITY_KINDS, commentThread, markMentions, recordFeed, recordTab,
+  ACTIVITY_KINDS, checklistDone, commentThread, markMentions, recordFeed, recordTab,
 } from './record-activity.js';
 
 export function createRecordPanel(ctx) {
@@ -91,11 +91,26 @@ export function createRecordPanel(ctx) {
           <div class="wb-act-said">${commentBody(companyId, entry.body)}</div>
         </div></div>`;
     }
-    const changes = (entry.changes || []).map((change) => `<span class="wb-act-change">
+    const changes = (entry.changes || []).map((change) => {
+      // A checklist reads as the steps that are TICKED, struck through -- which is what a
+      // checklist means. Printed whole it is counts, a percentage and every step somebody has
+      // NOT done, to report the one they just did.
+      const list = change.type === 'checklist' ? checklistDone(change.to) : null;
+      if (list) {
+        return `<span class="wb-act-change">
+        <em>${h(change.label)}</em>
+        ${list.done.length
+    ? `<span class="wb-act-ticks">${list.done.map((label) => `<s class="wb-act-tick">${h(label)}</s>`).join('')}</span>`
+    : '<span class="wb-act-cleared">nothing ticked</span>'}
+        <span class="wb-act-of">${list.done.length}/${list.total}</span>
+      </span>`;
+      }
+      return `<span class="wb-act-change">
         <em>${h(change.label)}</em>
         ${change.from ? `<s>${h(change.from)}</s>` : ''}
         <b>${h(change.to) || '<span class="wb-act-cleared">cleared</span>'}</b>
-      </span>`).join('');
+      </span>`;
+    }).join('');
     return `<div class="wb-act-line">
       <span class="wb-act-dot" style="background:${h(entry.color || meta.color)}"><i class="ti ${h(entry.icon || meta.icon)}"></i></span>
       <div class="wb-act-main">

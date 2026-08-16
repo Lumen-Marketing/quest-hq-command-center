@@ -84,7 +84,7 @@ test('a list with no removeKind renders no remove controls at all', () => {
 test('using a new value adds it to its list before the contact is saved', () => {
   const body = fn('saveCompanyContactForm', page);
   assert.match(body, /await ensureCompanyContactFieldOption\(companyId, field, value\);/);
-  assert.match(body, /fields\.filter\(\(item\) => item\.type === 'category'\)/);
+  assert.match(body, /fields\.filter\(\(item\) => item\.type === 'category' \|\| item\.type === 'status'\)/);
   assert.ok(
     body.indexOf('ensureCompanyContactFieldOption') < body.indexOf('persistCompanyContact'),
     'a contact must not end up referring to a label nobody can choose again',

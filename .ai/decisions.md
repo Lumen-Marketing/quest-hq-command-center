@@ -1488,3 +1488,84 @@ The page and its CSS are fetched only on first use. Search and category filters 
 parameters, so Back/Forward and copied links work while `companyPath` preserves the active
 workspace. Unresolved questions reuse the existing authenticated problem-report controller
 and support email; there is no second report pipeline to secure or maintain.
+
+## Client portal `scale_unit`: match production, and never send an explicit null
+
+Decided 2026-08-15.
+
+`client_portal_documents.scale_unit` had drifted. The migration that introduced it
+(`202607041100_client_portal_document_review_fields.sql`) declared a nullable column guarded by
+`check (scale_unit is null or scale_unit in ('ft','in','cm'))`. Production, though, runs it as
+`not null default 'ft'` — applied out of band and never recorded as a migration. A database
+built from this repository therefore had a different shape from the one the app talks to.
+
+It surfaced as "Upload failed — no documents were saved": every plan-set upload sent an explicit
+`scale_unit: null`, a column default does not apply to a key that is present-and-null, and so
+each insert died on the not-null constraint. Because the upload path deletes the stored object
+again when the record fails, it left nothing behind to diagnose.
+
+Fixed on both sides, because they fail differently. `clientPortalDocumentPayload` now falls back
+to `'ft'` instead of null, which works against either shape — so the app is not waiting on a
+deploy to be correct. `20260815140000_client_portal_scale_unit_not_null.sql` moves the migration
+history to what production actually has, so a fresh environment matches. Production is already in
+that state, so the migration is a no-op there.
+
+Production was chosen as the truth rather than the migration: a unit with no scale beside it is
+inert, `'ft'` is the sensible default for a plan set, and NOT NULL is the stricter of the two.
+
+The general rule this is an instance of: a NOT NULL column with a default must be OMITTED from an
+insert payload, never sent as null. `emptyToNull` is the trap — it turns `''` into null, so a
+NOT NULL column must never appear in its key list.
+
+## The contact card is arranged, not fixed — region + span for content, pins for buttons
+
+Decided 2026-08-15.
+
+Company Contacts cards were a fixed shape: four hardcoded stat tiles, a summary line, a details
+grid, four panels. The only choice was which of three shelves a field landed on. They are now
+arranged by the company, and the model deliberately has two halves rather than one.
+
+CONTENT — tiles, details, summary segments, panels — has a REGION and a SPAN on a four-column
+grid. The card's shape stays the card's: a header that identifies somebody, a row of numbers,
+their details, the panels that read their work. A tile can be turned off, resized, reordered, and
+any field can be promoted into one.
+
+A BUTTON is an affordance rather than content, so it gets a seventh region, `pin`: an anchor, a
+reference point and a pixel offset. The load-bearing decision is that a pinned button is rendered
+INSIDE its anchor element rather than into a card-level overlay — `.cc-profile-head` is
+`position: relative` and a pin on it is `position: absolute; right: 12px`. Everything that is
+otherwise hard falls out of that for free: it cannot drift when the window resizes because it is
+in the thing it was measured against; it needs no measure-then-paint pass, so there is no flicker
+and no invisible button on a slow frame; and it cannot teleport when a contact has no records and
+the card is half the height. Which inset the offset lands on is chosen in CSS by attribute
+selector, never inline, so one media query switches the whole mechanism off below 560px and pins
+fall into their anchor's flow in reading order.
+
+No fallback chain exists, and that is deliberate. `anchorsInUse` makes `renderCard` emit any
+anchor a pin names on EVERY contact, even when empty — an empty region is a zero-height grid. A
+chain of "if the anchor is missing, try the next one" is how a button ends up somewhere nobody
+put it.
+
+STORAGE NEEDED NO NEW TABLE. Field placement, button config and pin coordinates ride
+`company_contact_fields.config` (jsonb), written by the Save that already existed. Tile layout
+rides `workspace_builder_state.doc.contactCard`, which is already localStorage-mirrored,
+realtime-synced, three-way merged and backed up. Tile entries are keyed `id` so `mergeIdLists`
+merges per tile — two people moving different tiles both keep their change. Two edits were
+required and either one missing loses layouts silently: `normalizeWorkspaceBuilderDoc` drops
+every key it does not name, and `mergeBuilderDocs` rebuilds the doc from named keys.
+
+`button` joined the contact palette. It had been excluded alongside `relationship` and `rollup`
+on the stated grounds that all three "name an app" — but those two resolve IMPLICITLY against the
+app they live in, while a button names `targetCompany` + `targetApp` in its own config and
+`resolveTarget` walks the company for it. Three exclusions, three different reasons; describing
+them as one is what kept a usable field type off the list. `company_contact` was removed from the
+same palette as circular (a contact pointing at a contact), while staying in the APP palette,
+where it is what `contactUsage` scans to build the card at all.
+
+A contact is not a record, and the adapter that bridges them lives in `page.js` so that neither
+`button-field.js` nor `button-push.js` learns what a contact stores. They disagree in four ways:
+a category/status keeps its LABEL rather than an option id, tags are JSON text rather than an
+array, a checkbox is 'yes'/'no' rather than a boolean, and the name is a real column rather than
+a field. The name travels OUT as a synthetic field so `planPush` can label-match it, but the set
+action is handed an app shape WITHOUT it — a button that silently renames a contact is excluded
+structurally rather than by a guard somebody can delete.

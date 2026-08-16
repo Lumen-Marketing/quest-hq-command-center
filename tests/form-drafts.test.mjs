@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   createFormDraftManager,
@@ -371,4 +372,48 @@ test('maps draft lifecycle states to concise user-facing status text', () => {
     label: 'Local draft saving unavailable',
     tone: 'unavailable',
   });
+});
+
+// ---- restoring is fetched, writing is not ----------------------------------------------------
+//
+// Writing a draft happens on every keystroke and has to be instant, so it stays in the entry
+// bundle. Reading one back is a deliberate click with a dialog already on screen, which is the
+// shape that pays for a dynamic import -- and it drags the whole dependent-address chain
+// (country -> province -> city -> barangay) along with it.
+
+const mainSource = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const recovery = readFileSync(new URL('../src/drafts/draft-recovery.js', import.meta.url), 'utf8');
+
+test('Restore and Discard are handled by a module fetched on the click', () => {
+  assert.match(mainSource, /loadDraftRecovery\(\)\s*\n\s*\.then\(\(mod\) => mod\.handleProtectedFormDraftAction\(action, node\)\)/);
+  assert.match(mainSource, /import\('\.\/drafts\/draft-recovery\.js'\)/);
+  // A fetch that fails must not leave the button silently dead.
+  assert.match(mainSource, /Draft recovery failed to load/);
+  // And the two functions really left, rather than being copied.
+  assert.ok(!/function handleProtectedFormDraftAction\(/.test(mainSource));
+  assert.ok(!/function syncContactAddressFromRestoredDraft\(/.test(mainSource));
+});
+
+test('capturing a draft stays in the entry bundle', () => {
+  // It runs on every input and change event; a fetch on the first keystroke would be a stall
+  // exactly where one is least acceptable.
+  assert.match(mainSource, /function queueProtectedFormDraft\(form\)/);
+  assert.match(mainSource, /function onProtectedFormDraftChange\(event\)/);
+  assert.match(mainSource, /function clearProtectedFormDraft\(form\)/);
+});
+
+test('the mutable holders are read through getters, not captured at fetch time', () => {
+  // formDraftManager and the underwriter module are both null until their own fetch lands, so
+  // handing over the value would freeze in whatever it was when this module arrived.
+  assert.match(mainSource, /draftManager: \(\) => formDraftManager/);
+  assert.match(mainSource, /underwriterModule: \(\) => renderUnderwriterPageModule/);
+  assert.match(mainSource, /countryData: \(\) => qcCountryData/);
+  assert.match(recovery, /const manager = draftManager\(\);/);
+  assert.match(recovery, /countryData\(\)\.find\(\(item\) => item\.dial === dial\)/);
+});
+
+test('discarding keeps what was typed while the offer was on screen', () => {
+  // That typing is newer than the draft, so it is not what "discard" refers to.
+  const fn = recovery.slice(recovery.indexOf('function handleProtectedFormDraftAction'));
+  assert.match(fn, /if \(result\.ok && changedWhilePending\) queueProtectedFormDraft\(form\);/);
 });

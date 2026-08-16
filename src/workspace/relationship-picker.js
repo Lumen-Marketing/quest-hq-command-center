@@ -56,24 +56,47 @@ function writeValue(node, isCombo, value) {
  * That is the difference between a copy you can trust and one people work around: changing the
  * linked record used to leave the first record's values sitting there, silently wrong.
  */
-export function applyPullValues(from, values) {
+export function applyPullValues(from, values, opts = {}) {
+  // `chips()` hands back the choice-chip runtime, or nothing if it has not loaded -- late-bound
+  // because it lives in the chunk that draws the chips, and a form with none never fetches it.
+  // It is what turns a copied LABEL into an option id, minting when the app has no such value.
+  const chipRuntime = opts.chips?.() || null;
   // Scoped to the form the picker is in, so two record forms on one page cannot fill each other.
   const scope = from.closest('form, .wb-modal, .wb-record-page') || document;
   Object.entries(values).forEach(([fieldId, raw]) => {
     const target = scope.querySelector(`[data-f="${cssEscape(fieldId)}"]`);
     if (!target || target === from || from.contains?.(target)) return;
     const combo = target.type === 'hidden' ? target.closest?.('[data-wb-option-combo]') : null;
+    // A category shown as chips has no visible box to write a label into: the row's hidden
+    // input holds an option id and the chips are painted from it.
+    const chips = !combo && target.type === 'hidden' ? target.closest?.('[data-wb-chip-pick]') : null;
     // For a combobox everything happens on the visible box; the hidden id follows from it.
     const node = combo ? combo.querySelector('[data-wb-option-input]') : target;
     if (!node) return;
 
-    const value = raw === undefined || raw === null ? '' : String(raw);
+    let value = raw === undefined || raw === null ? '' : String(raw);
+    // Resolve to an id BEFORE the guard, so the comparison, the stamp and the write are all in
+    // the same terms the field actually stores. Compared as a label, every copy would look like
+    // a change and would overwrite a chip somebody had picked themselves.
+    if (chips && value.trim()) {
+      const optionId = chipRuntime?.wbResolveChipOption(fieldId, value.trim(), chips) || '';
+      // No option and none can be added -- leave the field alone rather than clearing it.
+      if (!optionId) return;
+      value = optionId;
+    }
     const current = readValue(node);
     const stamp = node.dataset.wbPull;
     // Ours to write: still empty, or still holding exactly what we last put there.
     if (current !== '' && current !== stamp) return;
     if (current === value.trim() && stamp !== undefined) return;
 
+    if (chips) {
+      // Paints the row and fires the events, so a chip filled by a copy is indistinguishable
+      // from one that was clicked.
+      chipRuntime?.wbChipSelect(chips, value);
+      node.dataset.wbPull = readValue(node);
+      return;
+    }
     writeValue(node, !!combo, value);
     node.dataset.wbPull = readValue(node);
     // Both events: an automation listens for change, a calculation redraws on input, and a
@@ -84,13 +107,15 @@ export function applyPullValues(from, values) {
 }
 
 export function createRelationshipPicker(ctx) {
-  const { h } = ctx;
+  // `chips` is optional: a caller that only wants the picker still gets one, and a copy onto a
+  // choice-chip field simply leaves that field alone.
+  const { h, chips } = ctx;
 
   // The linked record's values ride on the <option> the renderer built.
   function applyPull(select, itemId) {
     const raw = [...select.options].find((o) => o.value === itemId)?.dataset?.pull;
     if (!raw) return;
-    try { applyPullValues(select, JSON.parse(raw)); } catch { /* a mapping we cannot read fills nothing */ }
+    try { applyPullValues(select, JSON.parse(raw), { chips }); } catch { /* a mapping we cannot read fills nothing */ }
   }
 
   function wbBindRelationshipPickers(root) {

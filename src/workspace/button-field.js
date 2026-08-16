@@ -170,14 +170,49 @@ export function buttonReady(field) {
   if (config.action === 'set') {
     return !!config.clearAll || (Array.isArray(config.set) && config.set.some((row) => row && row.field));
   }
+  if (config.action === 'link') return !!String(config.href || '').trim();
   return !!config.targetApp;
 }
 
 /** Why it is not, in words, for the tooltip on a button nobody can press. */
 export function buttonNotReady(field) {
-  return field?.config?.action === 'set'
-    ? 'This button has no fields to change yet.'
-    : 'This button has no destination set yet.';
+  const action = field?.config?.action;
+  if (action === 'set') return 'This button has no fields to change yet.';
+  if (action === 'link') return 'This button has no link set yet.';
+  return 'This button has no destination set yet.';
+}
+
+/**
+ * The schemes a button may hand to the browser.
+ *
+ * An allowlist rather than a blocklist: `javascript:` and `data:` are the two that turn a link
+ * into script execution, and a blocklist of two is a blocklist somebody will find a third way
+ * around. Everything a person could actually mean by "open this" is here.
+ */
+export const LINK_SCHEMES = new Set(['http:', 'https:', 'tel:', 'mailto:', 'sms:']);
+
+/**
+ * {Field label} filled in from the record, so one button can be "Call this person".
+ *
+ * Matched by LABEL, case and surrounding space ignored -- the same grammar planPush uses to
+ * decide two fields are the same field, so somebody who has used one already knows this.
+ *
+ * Percent-encoded, because the result is a URL: a tel: with spaces in it still dials, and a
+ * query parameter does not break on the ampersand in "Smith & Sons". A brace that matches no
+ * field is left exactly as typed rather than blanked -- a href reading `tel:{Mobile}` is a
+ * visible mistake, where `tel:` is an invisible one.
+ */
+export function resolveHref(app, item, href) {
+  return String(href || '').replace(/\{([^}]+)\}/g, (whole, label) => {
+    const field = (app?.fields || []).find((item2) => key(item2.label) === key(label));
+    if (!field) return whole;
+    return encodeURIComponent(readable(field, item?.values?.[field.id]));
+  });
+}
+
+/** Is this safe to hand to the browser? Anything that is not a known scheme is refused. */
+export function linkIsSafe(url) {
+  try { return LINK_SCHEMES.has(new URL(String(url)).protocol); } catch { return false; }
 }
 
 /**
@@ -248,6 +283,7 @@ export function fieldToCreate(field, mintId) {
   delete config.pull;
   delete config.pullAll;
   delete config.fields;
+  delete config.pickFields;
   delete config.when;
   if (Array.isArray(config.options)) config.options = config.options.map((option) => ({ ...option }));
   return {

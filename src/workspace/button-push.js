@@ -9,11 +9,13 @@ import {
   buttonNotReady, buttonReady, conditionMet, fieldToCreate,
   planPush, planSet, setValueFor, translateValue,
 } from './button-field.js';
+import { arrivalRef } from './record-ref.js';
 
 export function createButtonPush(ctx) {
   const {
-    can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
+    h, can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
     state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle,
+    contactSeat,
   } = ctx;
 
   /** The target app, wherever it lives, or null with the reason it cannot be reached. */
@@ -39,7 +41,7 @@ export function createButtonPush(ctx) {
    * is the whole reason the merge is safe: nothing in the target is overwritten, and the
    * records already there keep every value they had, with the new columns empty.
    */
-  async function pressButton(sourceCompanyId, sourceApp, buttonField, item, sourceWorkspace) {
+  async function pressButton(sourceCompanyId, sourceApp, buttonField, item, sourceWorkspace, from = null) {
     const target = resolveTarget(buttonField.config);
     if (target.error) { showToast(target.error, 'local', 'Workspaces'); return false; }
     if (!can('workspaces.manage', target.companyId)) {
@@ -81,39 +83,122 @@ export function createButtonPush(ctx) {
       values[destination.id] = value;
     });
 
+    // 2b. The link back to the contact, when this was pushed FROM one.
+    //
+    // Without it the arrival never appears on the card that produced it: contactUsage only
+    // finds a record through a Company Contact field holding the contact's id, so the button
+    // would look like it had silently done nothing. The field is minted where the target has
+    // none, which is the same "grow the app to fit" rule the rest of the push follows.
+    if (from?.contactId) {
+      let link = (target.app.fields || []).find((field) => field?.type === 'company_contact');
+      if (!link) {
+        link = fieldToCreate({ type: 'company_contact', label: 'Contact', config: {} }, wbUid);
+        target.app.fields.unshift(link);
+      }
+      values[link.id] = from.contactId;
+    }
+
     // 3. Add the record.
     const now = new Date().toISOString();
     if (!Array.isArray(target.app.items)) target.app.items = [];
+    const moving = buttonField.config?.action === 'move';
+
+    // A MOVE keeps the record. Same id, its comments, and the history it built up -- the record
+    // did not stop existing and start again somewhere else, it went somewhere else. A copy is
+    // the other thing, and gets a new id because it genuinely is a second record.
+    //
+    // The id is only kept when the target does not already hold one -- two records sharing an id
+    // in one app would make every lookup ambiguous, and every lookup here is by id.
+    const idIsFree = !(target.app.items || []).some((row) => row.id === item.id);
+    const keepId = moving && idIsFree;
+    const arrivedId = keepId ? item.id : wbUid();
     target.app.items.unshift({
-      id: wbUid(),
+      id: arrivedId,
       values,
-      createdAt: now,
-      createdBy: activeSession()?.profile?.id || '',
+      // A move carries the record's beginning with it; a copy begins now, because it does.
+      createdAt: moving && item.createdAt ? item.createdAt : now,
+      createdBy: moving && item.createdBy ? item.createdBy : (activeSession()?.profile?.id || ''),
       updatedAt: now,
       lastActivityAt: now,
+      ...(moving && Array.isArray(item.comments) && item.comments.length
+        ? { comments: item.comments.map((entry) => ({ ...entry })) }
+        : {}),
+      ...(moving && Array.isArray(item.children) && item.children.length
+        ? { children: item.children.map((child) => ({ ...child })) }
+        : {}),
       // Where it came from, so a record that arrived by button can be told from one typed in.
-      pushedFrom: { companyId: canonicalCompanyId(sourceCompanyId), appId: sourceApp.id, itemId: item.id },
+      // A contact is tagged as such: `cc-<companyId>` is not an app id, and anything reading
+      // provenance has to be able to tell the two apart.
+      pushedFrom: from?.contactId
+        ? { companyId: canonicalCompanyId(sourceCompanyId), kind: 'contact', contactId: from.contactId }
+        : { companyId: canonicalCompanyId(sourceCompanyId), appId: sourceApp.id, itemId: item.id },
+    });
+
+    const grew = plan.create.length
+      ? ` ${plan.create.length} field${plan.create.length === 1 ? '' : 's'} added to fit.`
+      : '';
+    // A contact's title is its name, which is a real column rather than a field -- wbItemTitle
+    // reads item.values against app.fields and would call every contact "Untitled".
+    const title = from?.contactName || wbItemTitle(sourceApp, item);
+
+    // A move takes the record's HISTORY with it. Activity lives on the workspace, keyed by app
+    // and item, so the entries belonging to this record are carried across and re-pointed at
+    // the app they now live in. Without this the record arrives with an empty Activity tab and
+    // everything that ever happened to it is stranded in an app it is no longer in.
+    if (moving && sourceWorkspace && Array.isArray(sourceWorkspace.activity)) {
+      const mine = sourceWorkspace.activity.filter((entry) => entry
+        && entry.appId === sourceApp.id && entry.itemId === item.id);
+      if (mine.length) {
+        sourceWorkspace.activity = sourceWorkspace.activity.filter((entry) => !mine.includes(entry));
+        if (!Array.isArray(target.workspace.activity)) target.workspace.activity = [];
+        target.workspace.activity.push(...mine.map((entry) => ({
+          ...entry, appId: target.app.id, itemId: arrivedId,
+        })));
+      }
+    }
+
+    // The arrival, on the RECEIVING side. Without it the record opens on an empty Activity tab
+    // reading "Nothing yet" -- wrong twice over: something did happen, and the one thing worth
+    // knowing about this record is that nobody here typed it. A pipeline is a sequence of apps
+    // handing work along, so "it landed, from there, sent by them" is the entry the next person
+    // along actually needs. Logged as `created`, because for this app it IS the record's
+    // beginning -- it has no earlier history here to be an update to.
+    //
+    // Named as the record, not as its fields: the title is what the arrival is about, and it
+    // reads as the sentence somebody would say -- "Kevin Henderson arrived from Lead Gen".
+    wbLogActivity(target.workspace, {
+      // A move is not this record's beginning -- it has a history, and it just came with it.
+      kind: moving ? 'updated' : 'created',
+      // Covered by every icon pack, unlike the arrow-into-a-bar that says this more literally
+      // and falls back to Tabler in all three.
+      icon: moving ? 'ti-arrow-right' : 'ti-package-import',
+      color: '#e0552d',
+      appId: target.app.id,
+      itemId: arrivedId,
+      // The reference, not "(a copy)". Two sends of the same contact used to produce two
+      // identical lines with no way to tell which arrival was which record; this one names it.
+      text: moving
+        ? `<b>${h(title)}</b> moved from <b>${h(sourceApp.name)}</b> to <b>${h(target.app.name)}</b> <span class="wb-act-ref">${h(arrivalRef(arrivedId))}</span>${grew}`
+        : `<b>${h(title)}</b> arrived from <b>${h(sourceApp.name)}</b> <span class="wb-act-ref">${h(arrivalRef(arrivedId))}</span>${grew}`,
     });
 
     // The doc resolveTarget handed back IS the one in state, so the merge above already
     // landed; this persists it, for the target's company rather than for the one we are in.
     await wbSave(target.companyId);
-    const grew = plan.create.length
-      ? ` ${plan.create.length} field${plan.create.length === 1 ? '' : 's'} added to fit.`
-      : '';
     // 4. "Send it and take it off this app." The record moves on rather than being copied:
     //    its FIELDS stay exactly as they are here -- this app keeps its shape and its other
     //    records -- and only the one that was sent is gone. Done after the target is saved, so
     //    a failure to write there cannot lose the record from both.
-    const moved = buttonField.config?.action === 'move'
-      && (sourceApp.items || []).some((row) => row.id === item.id);
+    const moved = moving && (sourceApp.items || []).some((row) => row.id === item.id);
     if (moved) {
-      const title = wbItemTitle(sourceApp, item);
       sourceApp.items = sourceApp.items.filter((row) => row.id !== item.id);
       if (sourceWorkspace) {
+        // No appId/itemId: the record is not here any more, so an entry keyed to it would sit
+        // in this app's feed pointing at something nobody here can open. This is a note about
+        // the APP -- one of its records left -- and belongs in the workspace's own history.
         wbLogActivity(sourceWorkspace, {
-          icon: 'ti-trash', color: '#dc2626',
-          text: `Sent <b>${title}</b> to ${target.app.name} and removed it from ${sourceApp.name}`,
+          icon: 'ti-arrow-right', color: '#dc2626',
+          text: `<b>${h(title)}</b> moved from <b>${h(sourceApp.name)}</b> to <b>${h(target.app.name)}</b> <span class="wb-act-ref">${h(arrivalRef(arrivedId))}</span>`,
         });
       }
       wbSave(canonicalCompanyId(sourceCompanyId));
@@ -169,6 +254,22 @@ export function createButtonPush(ctx) {
     root.querySelectorAll('[data-wb-press]').forEach((button) => {
       // A button with no destination stays disabled whatever the record says.
       if (button.dataset.wbNoTarget === '1') return;
+      // A button on a CONTACT CARD is judged against the contact's stored values. Checked
+      // before seatOf, because a card has no form and no record row: without this the DOM-rules
+      // path below finds no scope, reads every rule as '', and leaves every conditional button
+      // permanently dead while every unconditional one is live regardless of its rules.
+      const cc = String(button.dataset.wbPressCtx || '').startsWith('cc|')
+        ? contactSeat?.(button.dataset.wbPressCtx)
+        : null;
+      if (cc) {
+        const card = cc.button(button.dataset.wbPress);
+        if (!card) return;
+        const asField = { id: card.id, type: 'button', label: card.label, config: card };
+        const ready = buttonReady(asField);
+        button.disabled = !(ready && conditionMet(asField, cc.item, cc.sourceApp));
+        button.title = ready ? '' : buttonNotReady(asField);
+        return;
+      }
       // A button in the LIST is judged against its own record's stored values, and reads its
       // rules straight off the field. One on a FORM is judged against the form, so changing a
       // stage lights it up before anything is saved.
@@ -271,7 +372,44 @@ export function createButtonPush(ctx) {
    * A row carries its own seat, because the list shows many records and the button has to act
    * on the one it is sitting in rather than on whatever happens to be open.
    */
+  /**
+   * A button pressed on a contact card.
+   *
+   * The seat is `cc|<companyId>|<contactId>` -- three parts, deliberately not four, so seatOf's
+   * own split can never mistake one for a record seat. Everything about what a contact STORES
+   * lives behind contactSeat, in the contacts page; this only decides which action runs.
+   */
+  async function pressContactButton(buttonId, seat) {
+    const cc = contactSeat?.(seat);
+    if (!cc) { showToast('That contact is no longer open.', 'local', 'Company Contacts'); return false; }
+    const button = cc.button(buttonId);
+    if (!button) return false;
+
+    // The card button carries its own configuration rather than a field's, so the shared rules
+    // are asked against a field-shaped view of it. conditionMet and planPush read `config`.
+    const asField = { id: button.id, type: 'button', label: button.label, config: button };
+    if (!conditionMet(asField, cc.item, cc.sourceApp)) {
+      showToast('This button is not available on this contact yet.', 'local', 'Company Contacts');
+      return false;
+    }
+
+    if (button.action === 'link') return cc.openLink(button);
+    if (button.action === 'set') {
+      const touched = await cc.applySet(button);
+      showToast(touched
+        ? `${touched} field${touched === 1 ? '' : 's'} changed.`
+        : 'Nothing on this contact could be changed.', 'local', 'Company Contacts');
+      render();
+      return touched > 0;
+    }
+    return pressButton(cc.companyId, cc.sourceApp, asField, cc.item, null, {
+      contactId: cc.contact.id,
+      contactName: cc.contact.name,
+    });
+  }
+
   function press(fieldId, seat) {
+    if (String(seat || '').startsWith('cc|')) return pressContactButton(fieldId, seat);
     const row = seatOf(seat);
     if (!row) return pressFromForm(fieldId);
     const field = (row.app.fields || []).find((item) => item.id === fieldId);

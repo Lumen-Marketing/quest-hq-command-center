@@ -186,9 +186,27 @@ test('a sub-item list gets the real field builder, not a lesser one', () => {
   // delete — so there is one builder to learn and one to keep working.
   // `types` and `rowExtra` arrived with Company Contacts, which renders this same builder for
   // a field list that is not an app's: a narrower palette, and a config panel under the row.
-  assert.match(main, /function wbFieldBuilderMarkup\(companyId, fields, canManage, scope = '', types = WB_FIELD_ORDER, rowExtra = null\)/);
-  assert.match(main, /function wbViewBuilder\(companyId, workspace, app\) \{\n\s*return wbFieldBuilderMarkup\(companyId, app\.fields, can\('workspaces\.manage', companyId\)\);/);
-  assert.match(main, /wbFieldBuilderMarkup\(companyId, c\.fields, canManage, c\.id\)/);
+  assert.match(main, /function wbFieldBuilderMarkup\(companyId, fields, canManage, scope = '', types = WB_FIELD_ORDER, rowExtra = null, selectable = false\)/);
+  // The APP's Fields tab opts into tick boxes; a sub-item list and Company Contacts do not.
+  // Selection is opt-in precisely because this markup is shared -- a column of boxes appearing
+  // in the Company Contacts settings dialog would be a change nobody there asked for.
+  assert.match(main, /function wbViewBuilder\(companyId, workspace, app\) \{\n\s*return wbFieldBuilderMarkup\(companyId, app\.fields, can\('workspaces\.manage', companyId\), '', WB_FIELD_ORDER, null, true\);/);
+  assert.match(main, /wbFieldBuilderMarkup\(companyId, c\.fields, canManage, c\.id\)/, 'a sub-item list stays unselectable');
+  const contacts = readFileSync(new URL('../src/company-contacts/page.js', import.meta.url), 'utf8');
+  assert.match(contacts, /wbFieldBuilderMarkup\(companyId, fieldDraft\.fields, canManage, 'cc', CC_PALETTE, fieldConfigPanel\)/, 'and so does Company Contacts');
+});
+
+test('a bulk field delete goes to the recycle bin, never straight to a purge', () => {
+  // The whole reason the bin was built first: "delete 12 fields" must not be a decision nobody
+  // can take back. The confirm says where they go, and the handler routes through wbTrashFields.
+  const handler = main.slice(main.indexOf("bind('[data-wb-pick-delete]'"));
+  const body = handler.slice(0, handler.indexOf('\n    });') + 8);
+  assert.match(body, /openWbConfirm\(companyId, 'del-fields'/);
+  assert.match(body, /moved to the recycle bin/, 'and says so before it happens');
+  assert.ok(!/delete .*\.values\[/.test(body), 'no direct value deletion anywhere near a bulk action');
+
+  const confirm = main.slice(main.indexOf("if (c.op === 'del-fields')"));
+  assert.match(confirm.slice(0, 600), /await wbTrashFields\(companyId, target, c\.fieldIds \|\| \[\]\)/);
 });
 
 test('one dialog configures both, so option editors cannot drift apart', () => {
@@ -223,7 +241,26 @@ test('deleting a sub-item field clears it from the children, not the records', (
   const del = main.match(/if \(c\.op === 'del-field'\) \{[\s\S]*?\n {2}\}/)?.[0] || '';
   assert.match(del, /if \(child\.collection === c\.collectionId\) delete child\.values\[c\.fieldId\]/);
   assert.match(del, /collection\.fields = \(collection\.fields \|\| \[\]\)\.filter\(\(f\) => f\.id !== c\.fieldId\)/);
-  assert.match(del, /app\.fields = app\.fields\.filter/, 'the app path still works');
+
+  // An APP field goes to the recycle bin instead, taking its values with it. It used to run
+  // `delete it.values[fieldId]` over every record, which destroyed the column's data with
+  // nothing left to rebuild from. That is the failure that orphaned 17 contacts' values on
+  // 2026-08-15, on the one table that DOES leave a residue -- this one leaves none.
+  assert.match(del, /wbTrashFields\(companyId, app, \[c\.fieldId\]\)/, 'an app field is binned, not destroyed');
+  assert.ok(
+    !/app\.items\.forEach\(\(it\) => \{ delete it\.values\[c\.fieldId\]; \}\)/.test(del),
+    'the destructive path is gone, not merely bypassed',
+  );
+});
+
+test('binning a field is never skipped just because the module has not loaded', () => {
+  // wbTrashFields awaits loadRecycleBin. A `recycleBinModule?.` here would resolve to undefined
+  // on the Fields tab -- where the bin has usually never been opened -- and silently fall back
+  // to destroying the data, which is the exact outcome the bin exists to prevent.
+  const fn = main.slice(main.indexOf('async function wbTrashFields'));
+  const body = fn.slice(0, fn.indexOf('\n}') + 2);
+  assert.match(body, /const mod = await loadRecycleBin\(\);/);
+  assert.match(body, /mod\.sendFieldsToTrash\(app, fieldIds/);
 });
 
 test('only one list opens its builder at a time', () => {
@@ -269,11 +306,15 @@ test('saving clears the draft, so the saved value is what shows next', () => {
 });
 
 test('the field builder is not squeezed into the settings column', () => {
-  // It is a two-column layout itself; inside a 560px card it loses two thirds of its width.
+  // It is a two-column layout itself, so it renders BELOW the settings cards rather than inside
+  // one. The settings card used to be 560px, which cost it two thirds of its width; both are now
+  // 1100px, so the three cards on this tab line up as one column of equal width.
   const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
   assert.match(main, /<\/div>\n\s*\$\{wbCollectionsSettings\(companyId, app, canManage\)\}/, 'it renders below the card');
-  assert.match(styles, /\.wb-settings\.card \{ max-width: 560px/);
-  assert.match(styles, /\.wb-collections \{ margin-top: 18px; max-width: 1100px; \}/);
+  const settingsWidth = /\.wb-settings\.card \{ max-width: (\d+)px/.exec(styles)?.[1];
+  const collectionsWidth = /\.wb-collections \{ margin-top: 18px; max-width: (\d+)px; \}/.exec(styles)?.[1];
+  assert.ok(settingsWidth, 'the settings card declares a width');
+  assert.equal(settingsWidth, collectionsWidth, 'the cards on this tab are the same width');
   assert.match(styles, /\.wb-collection \.wb-builder-grid \{ grid-template-columns: minmax\(0, 1fr\) 260px/);
 });
 

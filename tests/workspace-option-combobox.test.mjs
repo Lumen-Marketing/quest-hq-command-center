@@ -5,6 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { createComboboxMenu } from '../src/ui/combobox-menu.js';
+import { createFieldInput } from '../src/workspace/field-config-ui.js';
 
 // "In the field Category can you make it just blank? So when I click it the items in the
 // dropdown will just display, and when I type it matches on the list, but when the data I type
@@ -149,4 +150,63 @@ test('both ways of choosing commit the value', () => {
   // Picking from the menu, and typing then clicking away.
   assert.match(main, /if \(input\.hasAttribute\('data-wb-option-input'\)\) wbCommitOptionChoice\(input\);/);
   assert.match(main, /if \(event\.target\.matches\?\.\('\[data-wb-option-input\]'\)\) wbCommitOptionChoice\(event\.target\);/);
+});
+
+// ---- the other display style: choice chips --------------------------------------------------
+//
+// "Can you make a 2 option? The dropdown and the choice chips" -- then "make the status field
+// to have a choice chips too aside from drop down".
+
+const OPTIONS = [{ id: 'o1', label: 'Lead', color: '#378ADD' }, { id: 'o2', label: 'Nurturing', color: '#16a34a' }];
+
+const renderInput = (field, value = '') => createFieldInput({
+  h,
+  WB_FIELD_TYPES: { category: { label: 'Category / Dropdown' }, status: { label: 'Status' } },
+  companyContactOptions: () => [],
+  wbMembers: () => [],
+  wbRelTargetApp: () => null,
+  wbDoc: () => ({ workspaces: [] }),
+  wbRelLabel: () => '',
+  wbProgressColor: () => '#000',
+  wbProgressDisplayHtml: () => '',
+  wbChecklistValue: () => ({ steps: [] }),
+  wbChecklistBodyHtml: () => '',
+  wbRatingStars: () => '',
+  wbAutoNumberText: () => '',
+  companyContactFieldsFor: () => [],
+})('co', 'ws', field, value);
+
+for (const type of ['category', 'status']) {
+  test(`a ${type} set to chips draws one per option, and still stores the id`, () => {
+    const html = renderInput({ id: 'f1', type, label: 'Stage', required: false, config: { display: 'chips', options: OPTIONS } }, 'o2');
+    assert.match(html, /data-wb-chip-pick/);
+    assert.ok(!/data-wb-option-combo/.test(html), 'the dropdown is not also drawn');
+    // The id lives in the same hidden input the dropdown writes, so every reader is unchanged.
+    assert.match(html, /<input type="hidden" data-f="f1" value="o2"/);
+    assert.match(html, /data-wb-chip="o1"[^>]*aria-pressed="false"/);
+    assert.match(html, /data-wb-chip="o2"[^>]*aria-pressed="true"/);
+    assert.match(html, /--chip:#16a34a/, 'each chip carries its own option colour');
+    // The chips' answer to typing an unknown value into the dropdown.
+    assert.match(html, /data-wb-chip-other/);
+  });
+
+  test(`a ${type} left on the dropdown is unchanged`, () => {
+    const html = renderInput({ id: 'f1', type, label: 'Stage', required: false, config: { options: OPTIONS } }, 'o2');
+    assert.match(html, /data-wb-option-combo/);
+    assert.ok(!/data-wb-chip-pick/.test(html), 'chips are opt-in');
+  });
+}
+
+test('chips with no options fall back to the dropdown, which at least accepts a typed value', () => {
+  const html = renderInput({ id: 'f1', type: 'category', label: 'Type', required: false, config: { display: 'chips', options: [] } });
+  assert.match(html, /data-wb-option-combo/);
+  assert.ok(!/data-wb-chip-pick/.test(html), 'an empty chip row would be a dead end');
+});
+
+test('a field on a record is labelled by its name alone, not by its type', () => {
+  // "Contact Company Contact", "Type Category / Dropdown" -- the type is builder vocabulary,
+  // and printed beside the label it reads as part of it, so the label itself looks wrong.
+  const html = renderInput({ id: 'f1', type: 'category', label: 'Type', required: true, config: { options: OPTIONS } });
+  assert.match(html, /<label>Type<span class="wb-req">\*<\/span><\/label>/);
+  assert.ok(!/Category \/ Dropdown/.test(html), 'the type name is gone from the record form');
 });

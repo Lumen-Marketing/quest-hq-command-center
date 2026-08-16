@@ -9,6 +9,8 @@ import {
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
   + readFileSync(new URL('../src/workspace/builder-modal.js', import.meta.url), 'utf8');
 const mod = readFileSync(new URL('../src/workspace/saved-views.js', import.meta.url), 'utf8');
+const settings = readFileSync(new URL('../src/workspace/app-settings.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const itemsView = readFileSync(new URL('../src/workspace/items-view.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 const ids = () => { let n = 0; return () => `v${(n += 1)}`; };
@@ -210,6 +212,47 @@ test('the rail is fetched with its model, not carried by every page', () => {
   assert.match(main, /import\('\.\/workspace\/saved-views\.js'\)/);
   assert.match(main, /savedViewsPending = null;/, 'a failed fetch must be retryable');
   assert.match(main, /if \(!savedViewsModule\) \{\n\s*loadSavedViews\(\)/, 'the list must not wait for the rail');
+});
+
+// --- turning the panel off -------------------------------------------------------------------
+// "In the settings, can you add an option where I can hide this card, so the items field
+// expands and occupies its space."
+
+test('Settings offers the panel as a tick box, and only to somebody who may change the app', () => {
+  assert.match(settings, /function viewsRailField\(app\)/);
+  assert.match(settings, /\$\{canManage \? viewsRailField\(app\) : ''\}/);
+  assert.match(settings, /id="wbSetViewsRail" \$\{app\.hideViews \? '' : 'checked'\}/, 'an app never told otherwise shows it');
+});
+
+test('hiding the panel hides the panel, not the views', () => {
+  // The rail is where a view is deleted, so hiding it must not be a way to lose one.
+  assert.ok(!/hideViews[\s\S]{0,80}views = \[\]/.test(settings), 'nothing is thrown away');
+  assert.match(settings, /Your saved views are kept/, 'and the copy says so');
+});
+
+test('the choice is saved, and survives a reload', () => {
+  assert.match(main, /const railBox = document\.getElementById\('wbSetViewsRail'\);\n\s*if \(railBox\) app\.hideViews = !railBox\.checked;/);
+  // The doc normalizer rebuilds every app explicitly, so anything it does not name is dropped.
+  assert.match(main, /\.\.\.\(app\.hideViews \? \{ hideViews: true \} : \{\}\)/);
+});
+
+test('a hidden panel gives its column to the list rather than leaving a gap', () => {
+  assert.match(itemsView, /const showRail = !app\.hideViews;/);
+  assert.match(itemsView, /wb-items-layout\$\{showRail \? '' : ' wb-items-solo'\}/);
+  assert.match(styles, /\.wb-items-layout\.wb-items-solo \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+});
+
+test('a hidden panel is not fetched either', () => {
+  // wbViewsRail is what pulls in the saved-views chunk. Asking before calling it means an app
+  // that has turned the panel off never pays for the module.
+  assert.match(itemsView, /\$\{showRail \? wbViewsRail\(companyId, app, ui\) : ''\}/);
+});
+
+test('a filter a view set can still be cleared once the panel is gone', () => {
+  // Picking a view drives the same chipFieldId/chipValue the quick-filter chips use, and the
+  // chip bar renders above the list either way -- so the way out does not leave with the rail.
+  assert.match(itemsView, /const chipBar = wbItemsChipBar\(companyId, app, ui, rows\);/);
+  assert.match(itemsView, /wb-items-main">\$\{toolbar\}\$\{chipBar\}/);
 });
 
 // --- which field a view splits by --------------------------------------------------------

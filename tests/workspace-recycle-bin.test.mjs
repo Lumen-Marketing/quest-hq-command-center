@@ -9,9 +9,14 @@ import {
   createRecycleBin,
   emptyTrash,
   expiredInTrash,
+  purgeFieldFromTrash,
   purgeFromTrash,
+  restoreFieldFromTrash,
   restoreFromTrash,
+  sendFieldsToTrash,
   sendToTrash,
+  trashTotals,
+  trashedFieldValueCount,
 } from '../src/workspace/recycle-bin.js';
 
 // "Add a recycle bin for the deleted items on the workspace app builder, between Automations
@@ -149,9 +154,10 @@ test('a record that arrived by Button keeps saying so', () => {
 
 // ---- what it looks like ------------------------------------------------------------------
 
-const view = (a, canManage = true) => createRecycleBin({
+const view = (a, canManage = true, isOwner = true) => createRecycleBin({
   h: (v) => String(v ?? ''),
   can: () => canManage,
+  isCompanyOwner: () => isOwner,
   wbItemTitle: (_app, item) => item.values.f || 'Untitled',
   wbTimeAgo: () => '2 hours ago',
   formatDate: (v) => String(v),
@@ -205,4 +211,141 @@ test('every class the bin uses is styled', () => {
   [...used].filter((name) => name.startsWith('wb-trash')).forEach((name) => {
     assert.ok(styles.includes(`.${name}`), `.${name} is emitted but has no CSS rule`);
   });
+});
+
+// ---- deleted FIELDS ----------------------------------------------------------------------
+//
+// Deleting a field used to run `delete it.values[fieldId]` over every record, destroying the
+// column's data with nothing to rebuild from -- no deleted_at, no history table, and automatic
+// backups off by default.
+//
+// That is not hypothetical. On 2026-08-15 the equivalent delete on Company Contacts orphaned 17
+// contacts' values, and they were only recovered because THAT table leaves its values behind.
+// This one leaves none, so the field and its data go to the bin together.
+
+const appWithField = () => ({
+  fields: [
+    { id: 'f1', label: 'Project', type: 'text' },
+    { id: 'f2', label: 'Budget', type: 'money' },
+    { id: 'f3', label: 'Stage', type: 'status' },
+  ],
+  items: [
+    { id: 'i1', values: { f1: 'Roof', f2: 1000, f3: 'open' } },
+    { id: 'i2', values: { f1: 'Deck', f3: 'done' } },
+    { id: 'i3', values: {} },
+  ],
+});
+
+test('a binned field takes its data with it, off every record', () => {
+  const app = appWithField();
+  assert.equal(sendFieldsToTrash(app, ['f1'], 'me'), 1);
+
+  assert.deepEqual(app.fields.map((f) => f.id), ['f2', 'f3'], 'gone from the field list');
+  assert.equal(app.items[0].values.f1, undefined, 'and off the records');
+  assert.equal(app.items[1].values.f1, undefined);
+  // Everything else is untouched -- a delete that took a neighbour with it would be worse.
+  assert.equal(app.items[0].values.f2, 1000);
+  assert.equal(app.items[0].values.f3, 'open');
+
+  const entry = app.fieldTrash[0];
+  assert.equal(entry.field.label, 'Project');
+  assert.equal(entry.deletedBy, 'me');
+  assert.deepEqual(entry.values, { i1: 'Roof', i2: 'Deck' }, 'only records that had a value');
+  assert.equal(trashedFieldValueCount(entry), 2);
+});
+
+test('restoring a field brings back the values it held, in its old position', () => {
+  const app = appWithField();
+  sendFieldsToTrash(app, ['f2']);
+  const back = restoreFieldFromTrash(app, 'f2');
+
+  assert.equal(back.label, 'Budget');
+  assert.deepEqual(app.fields.map((f) => f.id), ['f1', 'f2', 'f3'],
+    'back where it was -- a column reappearing at the end is one somebody has to hunt for');
+  assert.equal(app.items[0].values.f2, 1000, 'and the data is back');
+  assert.equal(app.fieldTrash.length, 0);
+});
+
+test('a record deleted while the field was binned simply has nothing to put back', () => {
+  const app = appWithField();
+  sendFieldsToTrash(app, ['f1']);
+  app.items = app.items.filter((item) => item.id !== 'i2');
+  restoreFieldFromTrash(app, 'f1');
+  assert.equal(app.items.find((item) => item.id === 'i1').values.f1, 'Roof');
+  assert.equal(app.items.length, 2, 'the missing record is not resurrected by a field restore');
+});
+
+test('several fields bin and restore independently', () => {
+  const app = appWithField();
+  assert.equal(sendFieldsToTrash(app, ['f1', 'f3']), 2, 'a bulk delete is one call');
+  assert.deepEqual(app.fields.map((f) => f.id), ['f2']);
+  restoreFieldFromTrash(app, 'f3');
+  assert.deepEqual(app.fields.map((f) => f.id), ['f2', 'f3']);
+  assert.equal(app.fieldTrash.length, 1, 'the other one stays in the bin');
+});
+
+test('binning nothing reports nothing, rather than claiming a delete', () => {
+  const app = appWithField();
+  assert.equal(sendFieldsToTrash(app, []), 0);
+  assert.equal(sendFieldsToTrash(app, ['nope']), 0);
+  assert.equal(app.fields.length, 3, 'and changes nothing');
+});
+
+test('a field restored twice does not appear twice', () => {
+  const app = appWithField();
+  sendFieldsToTrash(app, ['f1']);
+  restoreFieldFromTrash(app, 'f1');
+  assert.equal(restoreFieldFromTrash(app, 'f1'), null, 'the second restore finds nothing');
+  assert.equal(app.fields.filter((f) => f.id === 'f1').length, 1);
+});
+
+test('purging a field is the one thing nothing comes back from', () => {
+  const app = appWithField();
+  sendFieldsToTrash(app, ['f1']);
+  assert.equal(purgeFieldFromTrash(app, 'f1'), true);
+  assert.equal(app.fieldTrash.length, 0);
+  assert.equal(restoreFieldFromTrash(app, 'f1'), null, 'gone for good');
+  assert.equal(purgeFieldFromTrash(app, 'f1'), false, 'and says so the second time');
+});
+
+test('emptying the bin takes records and fields alike', () => {
+  const app = appWithField();
+  app.trash = [{ id: 'old', values: {} }];
+  sendFieldsToTrash(app, ['f1']);
+  assert.deepEqual(trashTotals(app), { records: 1, fields: 1, fieldValues: 2 });
+  assert.equal(emptyTrash(app), 2, 'both are counted, so the confirmation can say what it costs');
+  assert.deepEqual(trashTotals(app), { records: 0, fields: 0, fieldValues: 0 });
+});
+
+// ---- emptying the bin is an owner's decision ---------------------------------------------
+//
+// "emptying bin requires account owners password."
+//
+// Two rules, and only both together mean anything. A browser can verify the SIGNED-IN user's own
+// password and nobody else's -- there is no server-side verifier for an arbitrary person's, and
+// accepting somebody else's credential into the page is not a thing a web app should do. So the
+// password proves who is at the keyboard, and the owner check proves they are entitled to be.
+
+test('a non-owner is not offered Empty the bin, and is told why', () => {
+  const a = app();
+  sendToTrash(a, ['i1']);
+  const asOwner = view(a, true, true);
+  const asManager = view(a, true, false);
+
+  assert.match(asOwner, /data-wb-trash-empty/, 'an owner gets the button');
+  assert.ok(!/data-wb-trash-empty/.test(asManager), 'a manager does not');
+  assert.match(asManager, /account owner's decision/, 'and is told why rather than left guessing');
+  // The things they CAN still do are unchanged -- this gate is about the irreversible one.
+  assert.match(asManager, /data-wb-trash-restore/);
+  assert.match(asManager, /data-wb-trash-purge/);
+});
+
+test('the gate is re-checked on confirm, not just hidden in the markup', () => {
+  // A hidden button is a hint. State can change while a modal is open, and the handler is the
+  // only thing that actually decides.
+  const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+  assert.match(main, /if \(c\.ownerOnly && !isCompanyOwner\(companyId\)\) \{/);
+  assert.match(main, /openWbConfirm\(companyId, 'empty-trash',[\s\S]*?needsPassword: true, ownerOnly: true/);
+  // And the password is asked for every time, not only when the bin happens to hold field data.
+  assert.match(main, /if \(c\.needsPassword && isLiveSupabaseSession\(\)\) \{[\s\S]*?confirmAccountPassword/);
 });

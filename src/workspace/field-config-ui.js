@@ -20,6 +20,11 @@ import {
 import { WB_ACTION_ICONS, WB_APP_ICONS } from './icon-sets.js';
 import { sheetPreview } from '../sheet/sheet-model.js';
 import { normalizeSheetFull } from '../sheet/sheet-format.js';
+// Choice chips are drawn here and run from there. Re-exported so main.js, which already holds
+// this module whenever a chip can be on screen, reaches the runtime without a second fetch.
+import { wbChipHtml } from './chip-field.js';
+
+export { createChipRuntime } from './chip-field.js';
 
 // "Copy the data inputted on the other field so it will automatically input on it."
 //
@@ -95,7 +100,19 @@ export function renderFieldConfig(fd, app, ctx) {
   } = ctx;
   const t = fd.type;
   if (t === 'category' || t === 'status' || t === 'tags') {
-    return `<div class="wb-field"><label>Options</label><div class="wb-opt-list">${(fd.config.options || []).map((o) => wbOptRow(o)).join('')}</div><button class="btn btn-sm" data-wb-add-option><i class="ti ti-plus"></i>Add option</button>${t === 'tags' ? '<div class="wb-sub">Records can hold several of these at once.</div>' : ''}</div>`;
+    // How the options are put in front of somebody filling in a record. A dropdown is typed
+    // into and searched, which is the only thing that survives a long list; chips put every
+    // option on screen, which is faster when there are three of them and the dropdown is a
+    // click and a menu in the way. A status is usually a handful of stages, so chips suit it
+    // for the same reason. Tags are excluded: they hold several values at once, and a row of
+    // one-at-a-time chips would be the wrong control for that.
+    const chips = t !== 'tags' && fd.config.display === 'chips';
+    const displayRow = t !== 'tags' ? `<div class="wb-field"><label>Display style</label>
+      <select class="wb-input" id="wbCatDisplay">
+        <option value="dropdown" ${chips ? '' : 'selected'}>Dropdown — type to search</option>
+        <option value="chips" ${chips ? 'selected' : ''}>Choice chips — every option on show</option>
+      </select><div class="wb-sub">Chips suit a handful of options and pick in one click. A dropdown stays usable when there are many, and lets a new value be typed in.</div></div>` : '';
+    return `<div class="wb-field"><label>Options</label><div class="wb-opt-list">${(fd.config.options || []).map((o) => wbOptRow(o)).join('')}</div><button class="btn btn-sm" data-wb-add-option><i class="ti ti-plus"></i>Add option</button>${t === 'tags' ? '<div class="wb-sub">Records can hold several of these at once.</div>' : ''}</div>${displayRow}`;
   }
   if (t === 'autonumber') {
     return `<div class="wb-field"><label>Prefix <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbAutoPrefix" value="${h(fd.config.prefix || '')}" placeholder="e.g. INV-" style="max-width:200px"></div>
@@ -206,11 +223,34 @@ export function renderFieldConfig(fd, app, ctx) {
     const targetApp = wbTargetApp(targetCompany, fd.config.targetApp);
     const carryable = pushableFields(app, fd.id);
     const chosen = Array.isArray(fd.config.fields) ? fd.config.fields : [];
+    // Whether the picker is open is its OWN setting, not "are any fields chosen". Inferring it
+    // from the list made the switch impossible to turn off: flipping it collected a list that
+    // was still empty, an empty list reads as "everything", and the panel drew the switch back
+    // on. A button configured before this reads as picking whenever it named fields.
+    const picking = fd.config.pickFields === undefined ? chosen.length > 0 : !!fd.config.pickFields;
+    // An empty list means every field -- the same rule pushableFields applies -- so the boxes
+    // start all ticked and you untick what you do not want, rather than facing an empty list
+    // whose summary underneath says it carries everything.
+    const ticked = chosen.length ? new Set(chosen) : null;
     const testable = (app.fields || []).filter((field) => field.id !== fd.id && field.type !== 'button');
     const rules = Array.isArray(fd.config.when) && fd.config.when.length ? fd.config.when : [{ field: '', op: 'eq', value: '' }];
     const plan = targetApp ? planPush(app, targetApp, fd) : null;
     const names = (list) => list.map((label) => h(label)).join('</b>, <b>');
-    const action = ['set', 'move'].includes(fd.config.action) ? fd.config.action : 'push';
+    const action = ['set', 'move', 'link'].includes(fd.config.action) ? fd.config.action : 'push';
+    // Fields this record already holds that a link can be built from. Text is included because
+    // a company keeps a booking URL or a portal code in one often enough to matter; a rating or
+    // a checklist is not something you can dial.
+    const LINKABLE = ['phone', 'email', 'url', 'text'];
+    const linkable = (app?.fields || []).filter((field) => field && LINKABLE.includes(field.type));
+    // One press for the three anybody actually wants, wired to the first field of that kind.
+    const linkQuick = [
+      ['Call', 'ti-phone', 'tel:', 'phone'],
+      ['Email', 'ti-mail', 'mailto:', 'email'],
+      ['Open', 'ti-external-link', '', 'url'],
+    ];
+    // A contact cannot be "moved" -- it lives in the directory, not in the app it was sent to --
+    // so the option is withheld where it has no meaning rather than offered and then refused.
+    const allowMove = app?.allowMove !== false;
     // Fields this button could write to: everything the record actually stores.
     const settable = pushableFields(app, fd.id);
     const setRows = Array.isArray(fd.config.set) && fd.config.set.length ? fd.config.set : [{ field: '', value: '' }];
@@ -260,10 +300,35 @@ export function renderFieldConfig(fd, app, ctx) {
       <div class="wb-field"><label>What the button does</label>
         <select class="wb-input" id="wbBtnAction" data-wb-rel-refresh>
           <option value="push" ${action === 'push' ? 'selected' : ''}>Send a copy to another app</option>
-          <option value="move" ${action === 'move' ? 'selected' : ''}>Send it and remove it from this app</option>
+          ${allowMove ? `<option value="move" ${action === 'move' ? 'selected' : ''}>Send it and remove it from this app</option>` : ''}
           <option value="set" ${action === 'set' ? 'selected' : ''}>Change fields on this record</option>
+          <option value="link" ${action === 'link' ? 'selected' : ''}>Open a link, call or email</option>
         </select>
       </div>
+      ${action === 'link' ? `
+        <div class="wb-field"><label>Where it goes</label>
+          <input class="wb-input" type="text" id="wbBtnHref" value="${h(fd.config.href || '')}" placeholder="tel:{Phone}" />
+          <div class="wb-sub">A web address, <b>tel:5551234567</b>, or <b>mailto:someone@example.com</b>. Only web, phone, SMS and email links are allowed.</div>
+          ${linkable.length ? `
+            <div class="wb-href-fields">
+              <span class="wb-sub">Use this record's own data — click to insert:</span>
+              <div class="wb-chip-pick">
+                ${linkable.map((field) => `
+                  <button type="button" class="wb-chip" data-wb-href-field="${h(field.label)}" title="Insert {${h(field.label)}}">
+                    <i class="ti ${h(WB_FIELD_TYPES[field.type]?.icon || 'ti-square')}"></i>${h(field.label)}
+                  </button>`).join('')}
+              </div>
+              <div class="wb-sub">A field in braces is filled in from the record the button is on, so one button works on every record — <b>tel:{Phone}</b> dials whoever you are looking at.</div>
+            </div>`
+    : '<div class="wb-sub">This app has no phone, email or link field yet — add one and it can be filled in from the record.</div>'}
+          <div class="wb-href-quick">
+            ${linkQuick.map(([label, icon, prefix, type]) => {
+    const field = linkable.find((entry) => entry.type === type);
+    if (!field) return '';
+    return `<button type="button" class="btn btn-sm" data-wb-href-set="${h(`${prefix}{${field.label}}`)}"><i class="ti ${icon}"></i>${label}</button>`;
+  }).join('')}
+          </div>
+        </div>` : ''}
       ${action === 'set' ? `
         <div class="wb-field"><label>Change these fields</label>
           <div class="wb-check-row">
@@ -275,7 +340,7 @@ export function renderFieldConfig(fd, app, ctx) {
             <button class="btn btn-sm" type="button" data-wb-set-add><i class="ti ti-plus"></i>Change a field</button>
             <div class="wb-sub">Leave the value empty to clear that field. A stage or category is set by what it says, so type <b>Won</b> — a word the field has never heard of is skipped rather than added to its list. Pressed in the list it saves the record; pressed on an open record it fills the boxes and leaves them for you to save.</div>`}
         </div>
-      ` : `
+      ` : action === 'link' ? '' : `
       <div class="wb-field"><label>Send the record to</label>
         ${companies.length > 1 ? `<select class="wb-input" id="wbBtnCompany" data-wb-rel-refresh>${companies.map((company) => `<option value="${h(company.id)}" ${targetCompany === company.id ? 'selected' : ''}>${h(company.name)}</option>`).join('')}</select>` : ''}
         <select class="wb-input" id="wbBtnApp" data-wb-rel-refresh><option value="">— Select an app —</option>${apps.map((item) => `<option value="${h(item.id)}" ${fd.config.targetApp === item.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}</select>
@@ -283,13 +348,13 @@ export function renderFieldConfig(fd, app, ctx) {
       </div>
       <div class="wb-field wb-push-only"><label>What to send</label>
         <div class="wb-check-row">
-          <label class="wb-switch"><input type="checkbox" id="wbBtnAll" ${chosen.length ? '' : 'checked'} data-wb-rel-refresh><span class="wb-slider"></span></label>
+          <label class="wb-switch"><input type="checkbox" id="wbBtnAll" ${picking ? '' : 'checked'} data-wb-rel-refresh><span class="wb-slider"></span></label>
           <div><b>Everything on the record</b><div class="wb-sub">Turn this off to pick particular fields.</div></div>
         </div>
-        ${chosen.length ? `<div class="wb-pick-list">${carryable.map((field) => `<label class="wb-pick"><input type="checkbox" data-wb-btn-field="${h(field.id)}" ${chosen.includes(field.id) ? 'checked' : ''}><span>${h(field.label)}</span></label>`).join('')}</div>` : ''}
+        ${picking ? `<div class="wb-pick-list">${carryable.map((field) => `<label class="wb-pick"><input type="checkbox" data-wb-btn-field="${h(field.id)}" ${!ticked || ticked.has(field.id) ? 'checked' : ''}><span>${h(field.label)}</span></label>`).join('')}</div>${carryable.length ? '' : '<div class="wb-sub">Nothing on this record can be carried across, so there is nothing to pick.</div>'}` : ''}
       </div>
       `}
-      ${action !== 'set' && plan ? `<div class="wb-field"><div class="wb-sub wb-plan">
+      ${action !== 'set' && action !== 'link' && plan ? `<div class="wb-field"><div class="wb-sub wb-plan">
         ${plan.carry.length ? `Carries <b>${names(plan.carry.map((pair) => pair.from.label))}</b>.` : 'Nothing on this record can be carried across yet.'}
         ${plan.create.length ? ` <b>${h(targetApp.name)}</b> has no <b>${names(plan.create.map((field) => field.label))}</b>, so ${plan.create.length === 1 ? 'it is added' : 'they are added'} there on the first send. Records already in that app keep every value they have and read blank in the new ${plan.create.length === 1 ? 'column' : 'columns'}.` : ''}
         ${plan.blocked.length ? ` <b>${names(plan.blocked)}</b> ${plan.blocked.length === 1 ? 'stays' : 'stay'} behind: an automatic field belongs to the app that filled it in.` : ''}
@@ -338,7 +403,12 @@ export function createFieldInput(ctx) {
 
   function wbRenderFieldInput(companyId, workspaceId, f, val) {
     const meta = WB_FIELD_TYPES[f.type];
-    const lbl = `<label>${h(f.label)}${f.required ? '<span class="wb-req">*</span>' : ''} <span class="wb-opt" style="text-transform:none">${h(meta.label)}</span></label>`;
+    // The field's own name only. The type used to be printed beside it -- "Contact
+    // Company Contact", "Type Category / Dropdown" -- which is builder vocabulary shown to
+    // somebody filling in a record: it reads as part of the label, so the label looks wrong.
+    // Whoever is typing can already see what the control is; whoever needs the type is in the
+    // field editor, where it is on screen anyway.
+    const lbl = `<label>${h(f.label)}${f.required ? '<span class="wb-req">*</span>' : ''}</label>`;
     let input = '';
     switch (f.type) {
       case 'text': input = `<input class="wb-input" data-f="${h(f.id)}" value="${h(val || '')}" placeholder="${h(f.config.placeholder || '')}">`; break;
@@ -360,6 +430,26 @@ export function createFieldInput(ctx) {
       case 'category': case 'status': {
         const chosen = (f.config.options || []).find((o) => o.id === val);
         const labels = (f.config.options || []).map((o) => o.label);
+        // Chips are the other half of the Category field's "Display style": every option on
+        // screen, one click to pick, clicking the picked one again to clear. The chosen option
+        // ID still lives in the same hidden [data-f] input the combobox writes to, so saving,
+        // automations, the table and every filter read it without knowing which style drew it.
+        // Only where there are options to draw -- an empty chip row is a dead end, so that
+        // falls back to the combobox, which at least accepts a typed value.
+        if (f.config.display === 'chips' && (f.config.options || []).length) {
+          const noun = String(f.label || 'option').toLowerCase();
+          input = `<div class="wb-chip-pick" data-wb-chip-pick role="group" aria-label="${h(f.label)}">
+            <input type="hidden" data-f="${h(f.id)}" value="${h(val || '')}" />
+            ${f.config.options.map((o) => wbChipHtml(h, o, o.id === val)).join('')}
+            <button type="button" class="wb-chip wb-chip-other" data-wb-chip-other><i class="ti ti-plus"></i>Other</button>
+            <span class="wb-chip-new" data-wb-chip-new hidden>
+              <input class="wb-input" type="text" data-wb-chip-new-input autocomplete="off" placeholder="${h(`New ${noun}`)}" aria-label="${h(`New ${noun}`)}" />
+              <button type="button" class="btn btn-sm btn-primary" data-wb-chip-add><i class="ti ti-check"></i>Done</button>
+              <button type="button" class="wb-chip-new-x" data-wb-chip-cancel aria-label="Cancel">&times;</button>
+            </span>
+          </div>`;
+          break;
+        }
         input = `
           <div class="wb-option-combo job-type-combobox" data-wb-option-combo>
             <input type="hidden" data-f="${h(f.id)}" value="${h(val || '')}" />
@@ -637,6 +727,9 @@ export function createFieldInput(ctx) {
  */
 export function collectFieldConfig(type, config, fallbackCompany) {
   if (type === 'button') collectButtonConfig(config, fallbackCompany);
+  // Dropdown or choice chips, for a category or a status. Anything but 'chips' reads as the
+  // dropdown, so a field built before the choice existed keeps the control it already had.
+  if (type === 'category' || type === 'status') config.display = document.getElementById('wbCatDisplay')?.value === 'chips' ? 'chips' : 'dropdown';
   if (type === 'sheet') {
     const start = document.getElementById('wbSheetDefault');
     if (start) { try { config.sheet = JSON.parse(start.value || '{}'); } catch { /* keep what was there */ } }
@@ -652,6 +745,9 @@ function collectButtonConfig(config, fallbackCompany) {
   config.text = (val('wbBtnText') || '').trim();
   config.icon = document.querySelector('[name=wbBtnIcon]:checked')?.value || '';
   config.action = val('wbBtnAction') || 'push';
+  // Read whenever the panel offered it. Kept even while another action is selected, so
+  // switching to Change fields and back does not lose the link somebody already typed.
+  if (document.getElementById('wbBtnHref')) config.href = (val('wbBtnHref') || '').trim();
   // The workspace picker is only drawn when there is more than one to choose from.
   config.targetCompany = val('wbBtnCompany') || fallbackCompany;
   const targetApp = val('wbBtnApp') || '';
@@ -662,7 +758,12 @@ function collectButtonConfig(config, fallbackCompany) {
   config.clearAll = !!document.getElementById('wbBtnClearAll')?.checked;
   config.set = rows('set', ['field', 'value']);
   config.when = rows('when', ['field', 'op', 'value']);
-  config.fields = document.getElementById('wbBtnAll')?.checked
+  // The switch is the mode; the boxes are only read while it is off. Recorded separately so
+  // "picking, nothing ticked yet" is a state that survives the re-render -- deriving the mode
+  // from the list is what made the switch impossible to turn off.
+  const everything = !!document.getElementById('wbBtnAll')?.checked;
+  config.pickFields = !everything;
+  config.fields = everything
     ? []
     : [...document.querySelectorAll('[data-wb-btn-field]')].filter((box) => box.checked).map((box) => box.dataset.wbBtnField);
 }

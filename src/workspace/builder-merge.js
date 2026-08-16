@@ -123,6 +123,14 @@ export function mergeBuilderDocs(base, mine, theirs) {
   const doc = {
     workspaces: mergeIdLists(safe(base).workspaces, safe(mine).workspaces, safe(theirs).workspaces, 'workspaces', conflicts),
   };
+  // The contact card's tile layout rides the same document. Merged rather than dropped: this
+  // rebuilds the doc from named keys, so anything not mentioned here is silently lost on every
+  // conflict retry -- and a retry is exactly when two people were both arranging the card.
+  //
+  // Its `tiles` entries are keyed `id`, so mergeValue routes them through mergeIdLists and two
+  // people moving DIFFERENT tiles both keep their change, instead of one losing the lot.
+  const contactCard = mergeValue(base?.contactCard, mine?.contactCard, theirs?.contactCard, 'contactCard', conflicts);
+  if (contactCard !== undefined) doc.contactCard = contactCard;
   return { doc, conflicts };
 }
 

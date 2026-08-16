@@ -286,7 +286,7 @@ test('a category follows the new record too, through its combobox', () => {
 });
 
 test('the filling itself stays in the lazily fetched picker module', () => {
-  assert.match(main, /loadRelationshipPicker\(\)\s*\n\s*\.then\(\(mod\) => mod\.applyPullValues\(picker, values\)\)/);
+  assert.match(main, /loadRelationshipPicker\(\)\s*\n\s*\.then\(\(mod\) => mod\.applyPullValues\(picker, values, \{ chips: wbChips \}\)\)/);
   assert.ok(!/function applyPullValues/.test(main), 'not a second copy in the entry bundle');
 });
 
@@ -296,6 +296,99 @@ test('the config panel saves the switch and the rows for this field type too', (
   const branch = main.slice(at, main.indexOf('\n    }', at));
   assert.match(branch, /config\.pullAll = !!checked\('wbRelPullAll'\)/);
   assert.match(branch, /config\.pull = readPullRows\(/);
+});
+
+// A category drawn as choice chips. There is no visible box to write a label into: the row's
+// hidden input stores an option id and the chips are painted from it, so the copy has to
+// resolve the label itself before it can write anything.
+function fakeChips(stored = '') {
+  const events = [];
+  const hidden = {
+    type: 'hidden',
+    tagName: 'INPUT',
+    value: stored,
+    dataset: {},
+    dispatchEvent: (event) => events.push(event.type),
+  };
+  hidden.closest = (selector) => (selector === '[data-wb-chip-pick]' ? zone : null);
+  const zone = { querySelector: () => hidden };
+  const scope = { querySelector: () => hidden };
+  const picker = { closest: () => scope, contains: () => false };
+  return { hidden, zone, picker, events };
+}
+
+// Stands in for the chip runtime the copy reaches through `opts.chips()`, minting what is
+// missing exactly as the real one does.
+function chipHooks(options, { canAdd = true } = {}) {
+  const added = [];
+  const runtime = {
+    wbResolveChipOption: (fieldId, label) => {
+      const match = options.find((o) => o.label.toLowerCase() === label.toLowerCase());
+      if (match) return match.id;
+      if (!canAdd) return '';
+      const option = { id: `new-${options.length + 1}`, label };
+      options.push(option);
+      added.push(label);
+      return option.id;
+    },
+    wbChipSelect: (zone, id) => {
+      const node = zone.querySelector();
+      node.value = id;
+      node.dispatchEvent(new Event('input'));
+      node.dispatchEvent(new Event('change'));
+    },
+  };
+  return { added, chips: () => runtime };
+}
+
+test('a contact value the chips have no option for is created rather than dropped', () => {
+  // "type: demo" off the contact, no Demo option on this app's category -- so Demo is added,
+  // which is what typing it into the dropdown has always done.
+  const options = [{ id: 'o1', label: 'Residential' }];
+  const chips = fakeChips();
+  const hooks = chipHooks(options);
+  applyPullValues(chips.picker, { a3: 'Demo' }, { chips: hooks.chips });
+  assert.deepEqual(hooks.added, ['Demo'], 'the missing option was minted');
+  assert.equal(chips.hidden.value, 'new-2', 'and the record points at it by id, not by label');
+  assert.deepEqual(chips.events, ['input', 'change'], 'announced like any other pick');
+});
+
+test('a contact value the chips already offer just picks it', () => {
+  const options = [{ id: 'o1', label: 'Residential' }, { id: 'o2', label: 'Demo' }];
+  const chips = fakeChips();
+  const hooks = chipHooks(options);
+  applyPullValues(chips.picker, { a3: '  demo ' }, { chips: hooks.chips });
+  assert.deepEqual(hooks.added, [], 'no duplicate for a different spelling');
+  assert.equal(chips.hidden.value, 'o2');
+});
+
+test('a chip somebody picked themselves is not replaced by a copy', () => {
+  const chips = fakeChips('o1');
+  const hooks = chipHooks([{ id: 'o1', label: 'Residential' }, { id: 'o2', label: 'Demo' }]);
+  applyPullValues(chips.picker, { a3: 'Demo' }, { chips: hooks.chips });
+  assert.equal(chips.hidden.value, 'o1', 'was filled before any copy ran');
+  assert.deepEqual(chips.events, []);
+});
+
+test('picking a different contact refreshes the chip the copy filled', () => {
+  const options = [{ id: 'o1', label: 'Residential' }];
+  const chips = fakeChips();
+  const hooks = chipHooks(options);
+  applyPullValues(chips.picker, { a3: 'Residential' }, { chips: hooks.chips });
+  assert.equal(chips.hidden.value, 'o1');
+  applyPullValues(chips.picker, { a3: 'Demo' }, { chips: hooks.chips });
+  assert.equal(chips.hidden.value, 'new-2', 'the second contact wins, and minted its value');
+});
+
+test('a chip value that cannot be added leaves the field alone rather than clearing it', () => {
+  // Somebody who may not edit the app still gets the rest of the copy; this one field is
+  // skipped, because there is no option to point at and emptying it would lose more.
+  const chips = fakeChips('o1');
+  chips.hidden.dataset.wbPull = 'o1';
+  const hooks = chipHooks([{ id: 'o1', label: 'Residential' }], { canAdd: false });
+  applyPullValues(chips.picker, { a3: 'Demo' }, { chips: hooks.chips });
+  assert.equal(chips.hidden.value, 'o1');
+  assert.deepEqual(chips.events, []);
 });
 
 // The two halves of an option combobox: the box the user reads and types into, and the hidden

@@ -235,3 +235,45 @@ test('usage returns each app’s records already sorted', () => {
   assert.deepEqual(use.items.map((i) => i.id), ['newer', 'older']);
   assert.equal(use.count, 2, 'sorting must not change what is counted');
 });
+
+// ---- a half-typed contact survives a refresh, a crash, or a lost connection -------------------
+//
+// "Sometimes the field that I entered suddenly disappears. Can you make the details I entered
+// sync, so even if I refresh, lose internet, or the app closes while I'm typing, it will not be
+// lost? It only clears when I save it, so a new contact starts blank again."
+//
+// The recovery-draft machinery already carried the Job, Quote and CRM Contact forms. This is the
+// same machinery, not a second one -- a private, per-profile local copy that is offered back on
+// the next visit and thrown away once a real record exists.
+
+test('the contact form is a protected form, and offers its draft back', () => {
+  const editor = fn('renderCompanyContactEditor');
+  assert.match(editor, /protectedFormDraftAttributes\('company-contact', edit\.id \|\| 'new', companyId, CC_DRAFT_SCOPE\)/);
+  // The strip is what shows Restore / Discard and the "saved" stamp; without it a draft is
+  // written and never offered back, which is worse than not writing one.
+  assert.match(editor, /renderProtectedFormDraftStrip\(\)/);
+});
+
+test('the draft follows the contact, not whichever workspace happened to be open', () => {
+  // A company contact belongs to the company. Keying its draft by workspace would hide a
+  // half-typed contact from the person who switched workspace and came back for it.
+  assert.match(page, /const CC_DRAFT_SCOPE = 'company';/);
+});
+
+test('the draft is cleared by a save that landed, and only then', () => {
+  const save = fn('saveCompanyContactForm');
+  const at = save.indexOf('clearProtectedFormDraft(form)');
+  assert.notEqual(at, -1, 'a saved contact stops offering its draft, so the next new one starts blank');
+  // After the write is known to have succeeded: a failed write must leave the typing recoverable.
+  const guard = save.indexOf("if (!saved) { showToast('Could not save that contact.'");
+  assert.ok(guard !== -1 && guard < at, 'cleared below the failure guard, not above it');
+});
+
+test('main.js hands the page the three draft helpers it destructures', () => {
+  // Missing one throws a ReferenceError the first time somebody opens the form.
+  const at = main.indexOf('createCompanyContactsPage({');
+  const passed = main.slice(at, main.indexOf('});', at));
+  for (const key of ['protectedFormDraftAttributes', 'renderProtectedFormDraftStrip', 'clearProtectedFormDraft']) {
+    assert.ok(passed.includes(key), `main.js must pass ${key}`);
+  }
+});

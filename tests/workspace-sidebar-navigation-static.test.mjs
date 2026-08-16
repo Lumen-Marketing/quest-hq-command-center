@@ -74,3 +74,41 @@ test('long child workspace lists stay compact until expanded', () => {
   assert.match(source, /data-action="toggle-workspace-menu"/);
   assert.match(source, />\$\{state\.workspaceMenuOpen \? 'Show fewer' : 'More workspaces'\}</);
 });
+
+// ---- choosing a workspace takes you to that workspace's apps ----------------------------------
+//
+// "When I select a workspace it will instantly go to the workspace app -- so even when I'm on
+// the settings menu and click another workspace, it will direct me to the workspace apps."
+//
+// It used to carry the current section across, so switching workspace from Settings landed on
+// the next workspace's Settings: the same admin screen with a different subject, and nothing on
+// it to show the switch had worked.
+
+test('switching workspace lands on its apps, whatever page you were on', () => {
+  const at = source.indexOf('function setActiveWorkspace(');
+  const body = source.slice(at, source.indexOf('\n}\n', at));
+  assert.match(body, /const section = can\('workspaces\.view', workspace\.company_id\) \? 'workspaces' : current;/);
+  assert.match(body, /navigate\(companyPath\(section, \{ workspace: workspace\.id \}, workspace\.company_id\)\)/);
+  // No app_id in the call itself: the workspace's own home, which is where its apps are listed.
+  // Pinning one would open whichever app happened to be named rather than the workspace.
+  const call = body.match(/navigate\(companyPath\(section,[^\n]*/)?.[0] || '';
+  assert.ok(call && !/app_id/.test(call), 'the workspace home, not one app inside it');
+});
+
+test('a role that cannot open Apps is not dumped on a page that refuses it', () => {
+  const at = source.indexOf('function setActiveWorkspace(');
+  const body = source.slice(at, source.indexOf('\n}\n', at));
+  // The section they were already on is the fallback, so the switch still happens.
+  assert.match(body, /const current = route\.name === 'company' \? route\.section : 'jobs';/);
+});
+
+test('the active workspace is stored before the navigation reads it', () => {
+  // The builder page resolves which workspace to draw from state.activeWorkspaceId, so setting
+  // it after navigating would render the workspace that was open before the click.
+  const at = source.indexOf('function setActiveWorkspace(');
+  const body = source.slice(at, source.indexOf('\n}\n', at));
+  assert.ok(
+    body.indexOf('state.activeWorkspaceId = workspace.id;') < body.indexOf('navigate(companyPath(section'),
+    'the id is set first',
+  );
+});

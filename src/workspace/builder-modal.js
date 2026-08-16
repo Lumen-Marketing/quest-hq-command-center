@@ -17,9 +17,15 @@ export function createBuilderModal(ctx) {
     const m = state.builderModal;
     if (!m) return '';
     if (m.kind === 'confirm') {
-      return wbModalShell('Delete', 'wb-modal-sm', `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>Confirm delete</h3>`,
-        `<p class="wb-sub">${h(m.confirm.message)}</p>`,
-        `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-confirm><i class="ti ti-trash"></i>Delete</button>`);
+      // Some deletes can be undone from the recycle bin and some destroy data for good. The
+      // ones that destroy ask for the password, and say so -- the same gate deleting an app
+      // and clearing an activity log already use.
+      const permanent = m.confirm.needsPassword === true;
+      return wbModalShell('Delete', 'wb-modal-sm',
+        `<div class="wb-modal-ic danger"><i class="ti ti-alert-triangle"></i></div><h3>${permanent ? 'Delete for good' : 'Confirm delete'}</h3>`,
+        `<p class="wb-sub">${h(m.confirm.message)}</p>
+        ${permanent && isLiveSupabaseSession() ? reauthPasswordField('wbConfirmPw') : ''}`,
+        `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-confirm><i class="ti ti-trash"></i>${permanent ? 'Delete for good' : 'Delete'}</button>`);
     }
     if (m.kind === 'stages') {
       const deleting = !!m.del;

@@ -13,8 +13,11 @@ import { fileURLToPath } from 'node:url';
 // time either one changed.
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
-const page = readFileSync(join(root, 'src', 'company-contacts', 'page.js'), 'utf8');
+// Normalized to LF, as tests/extracted-module-references.test.mjs does. src/main.js is stored
+// CRLF, so an assertion written with a bare \n silently never matches — and reads as the code
+// being wrong rather than the file having different line endings.
+const main = readFileSync(join(root, 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
+const page = readFileSync(join(root, 'src', 'company-contacts', 'page.js'), 'utf8').replace(/\r\n/g, '\n');
 
 const fn = (name, source = main) => {
   const at = source.lastIndexOf(`function ${name}(`);
@@ -33,22 +36,211 @@ test('the editor is the App Builder one, not a copy of it', () => {
     .forEach((key) => assert.match(main, new RegExp(`\\b${key},`), `${key} must reach the page module`));
 });
 
-test('the palette offers what a contact can be, and nothing that needs an app', () => {
-  const palette = page.match(/const CC_PALETTE = \[[^\]]*\]/)?.[0] || '';
-  ['text', 'textarea', 'number', 'money', 'date', 'category', 'checkbox', 'email', 'phone', 'location', 'file']
-    .forEach((type) => assert.match(palette, new RegExp(`'${type}'`), `${type} is one of the basics asked for`));
-  // A rollup summarises linked records in another app; a contact has no app to link into.
-  ['rollup', 'relationship', 'autonumber', 'calculation', 'status', 'user']
-    .forEach((type) => assert.ok(!palette.includes(`'${type}'`), `${type} has no meaning on a contact`));
+// "Can you copy all of the available fields we have in the workspaces app, so I can fully
+// connect the company contacts on the workspace app." The palette used to be eleven types on
+// the grounds that a contact is a simpler thing than a record. It is not: a sub has a rating,
+// a client has a photo and an account manager, a supplier has a price sheet.
+
+test('the palette is the App Builder palette, minus what does not fit a person', () => {
+  const allowed = main.match(/const COMPANY_CONTACT_FIELD_TYPES = \[([\s\S]*?)\];/)?.[1] || '';
+  const order = main.match(/const WB_FIELD_ORDER = \[([^\]]*)\]/)?.[1] || '';
+  const every = (order.match(/'([a-z_]+)'/g) || []).map((quoted) => quoted.replace(/'/g, ''));
+  assert.ok(every.length >= 29, 'the App Builder list itself was found');
+
+  // Three exclusions, three DIFFERENT reasons. They were once described as one, and collapsing
+  // them is exactly what kept a workable field type off the list: button was filed with the two
+  // that genuinely cannot resolve, and inherited a limitation it never had.
+  //
+  //   relationship / rollup -- resolve IMPLICITLY against the app they live in. A contact has no
+  //     such app, so "which app" has no answer. Genuinely impossible.
+  //   company_contact -- circular. A contact pointing at another contact says nothing about a
+  //     person. It stays in the APP palette, which is how an app points at a contact.
+  const impossible = ['relationship', 'rollup'];
+  const circular = ['company_contact'];
+  // A button is not a field at all: it holds no value, has no place on the add/edit form, and
+  // can never be filled in. It lives on the CARD, in contactCard.buttons on the builder doc.
+  const notAValue = ['button'];
+  [...impossible, ...circular, ...notAValue].forEach((type) => assert.ok(
+    !allowed.includes(`'${type}'`),
+    `${type} must not be offered on a contact`,
+  ));
+
+  every.filter((type) => ![...impossible, ...circular, ...notAValue].includes(type))
+    .forEach((type) => assert.ok(allowed.includes(`'${type}'`), `${type} is in the App Builder but not offered on a contact`));
+
+  // The one that must NOT follow the removal: apps still point at contacts with this type, and
+  // the whole contact card is built from scanning for it.
+  assert.match(main, /const WB_FIELD_ORDER = \[[^\]]*'company_contact'/, 'apps keep the Company Contact field');
+
+  // And the palette IS that list, rather than a second one kept in step by hand.
+  assert.match(page, /const CC_PALETTE = COMPANY_CONTACT_FIELD_TYPES;/);
 });
 
 test('every palette type is one the database will accept', () => {
   // The CHECK constraint is the last word. A type the palette offers and the column rejects
   // fails at save, after the person has already designed the field.
-  const palette = (page.match(/const CC_PALETTE = \[([^\]]*)\]/)?.[1] || '').match(/'([a-z_]+)'/g) || [];
-  const allowed = main.match(/const COMPANY_CONTACT_FIELD_TYPES = \[([^\]]*)\]/)?.[1] || '';
-  assert.ok(palette.length >= 11);
-  palette.forEach((type) => assert.ok(allowed.includes(type), `${type} is missing from COMPANY_CONTACT_FIELD_TYPES`));
+  const allowed = (main.match(/const COMPANY_CONTACT_FIELD_TYPES = \[([\s\S]*?)\];/)?.[1] || '')
+    .match(/'([a-z_]+)'/g)?.map((quoted) => quoted.replace(/'/g, '')) || [];
+  // 25: the App Builder's palette minus relationship, rollup, company_contact and button.
+  assert.ok(allowed.length >= 25, `expected the widened list, got ${allowed.length}`);
+
+  // The live constraint is whichever migration touched it last.
+  const dir = join(root, 'supabase', 'migrations');
+  const constraintFile = readdirSync(dir).filter((name) => name.endsWith('.sql')).sort().reverse()
+    .find((name) => readFileSync(join(dir, name), 'utf8').includes('company_contact_fields_type_check')
+      || /create table if not exists public\.company_contact_fields/.test(readFileSync(join(dir, name), 'utf8')));
+  assert.ok(constraintFile, 'no migration defines the type constraint');
+  const sql = readFileSync(join(dir, constraintFile), 'utf8');
+  const check = sql.slice(sql.indexOf('check (type in ('));
+  allowed.forEach((type) => assert.ok(check.includes(`'${type}'`), `${type} would be rejected by ${constraintFile}`));
+});
+
+test('the borrowed types are drawn by the App Builder, not copied into the contacts page', () => {
+  // Fifteen types arriving with no new markup is the whole point: one renderer, one config
+  // panel, one set of stored shapes. A second copy would drift the first time either changed.
+  assert.match(page, /if \(COMPANY_CONTACT_WB_TYPES\.has\(field\.type\)\) \{[\s\S]*?wbRenderFieldInput\(companyId, '', field, wbValueFor\(field, value\)\)/);
+  assert.match(page, /COMPANY_CONTACT_WB_TYPES\.has\(field\.type\) \? wbFieldConfigUI\(field, contactsAsApp\(fieldDraft\.companyId\)\) : ''/);
+  // Read back by the module that drew it, for the same reason.
+  assert.match(fn('syncFieldDraft', page), /wbCollectFieldConfig\(field\.type, next, fieldDraft\.companyId\)/);
+});
+
+test('an App Builder input is given the name this form saves by', () => {
+  // The record modal reads [data-f] at save time; this is a real <form> read with FormData, and
+  // its recovery draft restores through form.elements. Both key off `name`.
+  const body = fn('wbNameContactFieldInputs');
+  assert.match(body, /el\.name = `field:\$\{el\.dataset\.f\}`/);
+  assert.match(body, /if \(el\.name \|\| !el\.dataset\.f\) return;/, 'a field that already has one is left alone');
+  // Auto fields are display boxes. A name on one would post a stale value over the computed one.
+  assert.match(body, /wb-auto-readonly, \.wb-calc-display/);
+  assert.match(fn('mountCompanyContactForm'), /wbNameContactFieldInputs\(form\)/);
+});
+
+test('the zones the borrowed fields need are bound on the contact form', () => {
+  const body = fn('mountCompanyContactForm');
+  ['wbMountFileFields', 'wbMountDurationFields', 'wbMountProgressFields', 'wbMountChecklistFields', 'wbMountTagFields']
+    .forEach((binder) => assert.match(body, new RegExp(`${binder}\\(form\\)`), `${binder} is not bound`));
+  // Named BEFORE the binders run: they fire input events as they paint, and a draft written
+  // from one of those has to carry the field's name or it restores nothing.
+  assert.ok(body.indexOf('wbNameContactFieldInputs') < body.indexOf('wbMountFileFields'));
+});
+
+test('multi-select is chips over one hidden value, not a native multi-select', () => {
+  // FormData keeps only the last value of a <select multiple>, and a recovery draft restores
+  // only one option -- so the App Builder's own control cannot be borrowed for this one.
+  const control = fn('fieldControl', page);
+  const tags = control.slice(control.indexOf("case 'tags': {"), control.indexOf('default:'));
+  assert.ok(tags, 'the tags case was not found');
+  assert.match(tags, /data-wb-tagpick/);
+  assert.ok(!/<select/.test(tags), 'a native multi-select would lose all but one');
+  assert.match(fn('wbMountTagFields'), /hidden\.value = next\.length \? JSON\.stringify\(next\) : ''/);
+});
+
+test('what is worked out is not also stored', () => {
+  // Created / Last modified read the contact's own timestamps and a calculation is derived on
+  // the way out. A stored copy would outlive whatever it was copied from.
+  assert.match(page, /const CC_DERIVED_TYPES = new Set\(\['created_time', 'updated_time', 'calculation'\]\);/);
+  assert.match(fn('saveCompanyContactForm', page), /if \(CC_DERIVED_TYPES\.has\(field\.type\)\) return;/);
+  // An auto-number is the exception: computed once, then it belongs to the contact.
+  assert.ok(!/CC_DERIVED_TYPES = new Set\(\[[^\]]*'autonumber'/.test(page));
+  assert.match(fn('saveCompanyContactForm', page), /held !== undefined && held !== '' && held !== null\s*\?\s*held/);
+});
+
+test('a contact auto-number counts contacts, including deleted ones', () => {
+  const body = fn('wbNextContactAutoNumber');
+  assert.match(body, /for \(const contact of state\.companyContacts \|\| \[\]\)/);
+  assert.match(body, /contact\.field_values\?\.\[field\.id\]/);
+  // Reissuing a number a quote already quotes is worse than a gap in the sequence.
+  assert.ok(!/deleted_at/.test(body), 'a soft-deleted contact still holds its number');
+});
+
+// --- Settings: a gear, two tabs -------------------------------------------------------------
+// "Make an icon Settings where when you click it you can see the field there where you can
+// customize, also inside setting you can customize how the contacts looks in the contact card."
+
+test('the directory opens settings from a gear, not a button called Fields', () => {
+  assert.match(page, /data-action="open-company-contact-fields"[^>]*aria-label="Company Contacts settings"/);
+  assert.match(page, /<i class="ti ti-settings"><\/i>/);
+  assert.ok(!/ti-adjustments"><\/i>Fields</.test(page), 'the old labelled button is gone, not left beside it');
+});
+
+test('settings is one dialog with a Fields tab and a Contact card tab', () => {
+  const shell = main.slice(main.indexOf("state.modal === 'company-contact-fields'"), main.indexOf("state.modal === 'company-record-form'"));
+  assert.match(shell, /\['fields', 'ti-list-details', 'Fields'\], \['card', 'ti-id-badge-2', 'Contact card'\]/);
+  assert.match(shell, /renderCompanyContactCardSettings\(/);
+  assert.match(shell, /renderCompanyContactFieldsEditor\(/);
+  // One Save for the dialog, not one per tab.
+  assert.match(shell, /data-action="save-company-contact-fields"/);
+  assert.equal((shell.match(/data-action="save-company-contact-fields"/g) || []).length, 1);
+});
+
+test('switching tab banks the panel being left', () => {
+  // Both drafts, both ways: switching to the card tab and back used to be how you lost the
+  // label you had just typed, and switching away from it how you lost the placement.
+  const handler = main.slice(main.indexOf("action === 'set-company-contact-settings-tab'"), main.indexOf("action === 'configure-company-contact-field'"));
+  assert.match(handler, /page\?\.syncFieldDraftNow\(\);/);
+  assert.match(handler, /page\?\.syncCardDraft\(\);/);
+  assert.ok(handler.indexOf('syncCardDraft') < handler.indexOf('state.ccSettingsTab ='), 'read before the DOM is rebuilt');
+  // The gear always lands on Fields, so it does not do something different each time.
+  assert.match(main, /state\.ccSettingsTab = 'fields';\n\s*state\.modal = 'company-contact-fields';/);
+});
+
+test('the card tab decides where a field lands, and what badges the contact', () => {
+  const panel = fn('renderCompanyContactCardSettings', page);
+  // The shelves themselves live in card-layout.js now, so the settings tab and the card build
+  // their picture from one list rather than from two that have to be kept in step.
+  assert.match(page, /from '\.\/card-layout\.js'/);
+  assert.match(panel, /regionsFor\(element\)/, 'each row is offered only the shelves its kind can sit on');
+  // Keyed by element key -- `field:<id>` or `tile:<id>` -- because a tile is not a field and
+  // both are arranged in one list.
+  assert.match(panel, /data-cc-card-place="\$\{h\(element\.key\)\}"/);
+  assert.match(panel, /data-cc-card-badge/);
+  // Only an option list can badge: the pill takes the chosen option's colour.
+  assert.match(panel, /field\.type === 'category' \|\| field\.type === 'status'/);
+  assert.match(panel, /leaves it on the record/);
+});
+
+test('the card tab can resize, reorder and place a button by hand', () => {
+  const panel = fn('renderCompanyContactCardSettings', page);
+  // Sizing reuses the App Builder's own width control rather than inventing a second one.
+  assert.match(panel, /wb-w-sizes/);
+  assert.match(panel, /data-action="cc-card-span"/);
+  // Arrows as well as drag: a drag-only reorder is unusable on a keyboard and on touch.
+  assert.match(panel, /data-action="cc-card-move"/);
+  assert.match(panel, /draggable="\$\{canManage && !locked \? 'true' : 'false'\}"/);
+  // The 3x3 pad is the no-drag path to placing a button.
+  assert.match(panel, /data-action="cc-pin-preset"/);
+  assert.match(panel, /data-cc-pin-anchor/);
+  assert.match(panel, /data-cc-pin-x/);
+  assert.match(panel, /data-cc-pin-y/);
+  // Tiles live on the builder doc, which needs a different permission from contacts.
+  assert.match(panel, /can\('workspaces\.manage', companyId\)/);
+});
+
+test('exactly one field claims the badge', () => {
+  // Written to every candidate, not only the chosen one -- otherwise the previous badge field
+  // keeps its flag and companyContactChipField finds two.
+  const body = fn('syncCardDraft', page);
+  assert.match(body, /field\.config = \{ \.\.\.field\.config, badge: field\.id === badge\.value \};/);
+  // And the reader falls back, so a company that never opened the panel looks unchanged.
+  const chip = fn('companyContactChipField');
+  assert.match(chip, /field\.config\?\.badge === true && badgeable\(field\)/);
+  assert.match(chip, /\|\| fields\.find\(badgeable\)/);
+});
+
+test('card placement has a default, so an existing card is not blanked by the new setting', () => {
+  // The default moved into card-layout.js as cardRegionOf, and the behaviour is unchanged:
+  // long text keeps its own panel, everything else reads on the summary line. Asserted against
+  // the module rather than the page, because that is where it now lives -- and it is covered
+  // behaviourally in tests/company-contact-card-layout.test.mjs.
+  const layout = readFileSync(join(root, 'src', 'company-contacts', 'card-layout.js'), 'utf8');
+  assert.match(layout, /return field\?\.type === 'textarea' \? 'detail' : 'summary';/);
+  // A button opens beside Edit info, so a new one is useful before anybody drags anything.
+  // Keyed off `kind`, not `type`: a button is a card object rather than a field.
+  assert.match(layout, /if \(field\?\.kind === 'button'\) return 'header';/);
+  // And Save writes both tabs, so choosing a placement is not lost by never opening Fields.
+  assert.match(fn('saveCompanyContactFields', page), /syncFieldDraft\(\);\s*\n\s*syncCardDraft\(\);/);
+  // ...including the tile half, which is written to a different store entirely.
+  assert.match(fn('saveCompanyContactFields', page), /saveContactCardTiles\(companyId\)/);
 });
 
 test('the config panel has no type picker, the way the App Builder has none', () => {
@@ -124,15 +316,18 @@ test('the drop zone does not claim a contact belongs to one workspace', () => {
 test('the card shows an attachment as a link, never as its JSON', () => {
   // {"name":"quote.pdf","url":"https://…"} printed raw is what somebody reads instead of
   // the quote they came for.
-  assert.match(fn('displayValue', page), /if \(field\.type === 'file'\) \{[\s\S]*?wbFileValues\(value\)/);
-  assert.match(fn('renderCard', page), /cc-detail-files/);
-  assert.match(fn('renderCard', page), /wbFileIcon\(fileTypeKind\(\{ file_name: file\.name \}\)\)/);
+  // An image is the same stored shape and gets the same treatment.
+  assert.match(fn('displayValue', page), /if \(field\.type === 'file' \|\| field\.type === 'image'\) \{[\s\S]*?wbFileValues\(value\)/);
+  // The details box moved into elementHtml when the card became layout-driven -- one renderer
+  // per kind of element, rather than one function that knew every shelf.
+  assert.match(fn('elementHtml', page), /cc-detail-files/);
+  assert.match(fn('elementHtml', page), /wbFileIcon\(fileTypeKind\(\{ file_name: file\.name \}\)\)/);
 });
 
 test('Save sits in the header beside Close, and there is no second one below', () => {
   // A Cancel at the bottom of a list that scrolls is a button nobody finds without scrolling
   // to look for it. Close already cancels.
-  assert.match(main, /renderModalShell\('Company Contacts', 'Edit fields',[\s\S]*?data-action="save-company-contact-fields"/);
+  assert.match(main, /renderModalShell\('Company Contacts', 'Settings',[\s\S]*?data-action="save-company-contact-fields"/);
   assert.ok(!/form-actions/.test(fn('renderCompanyContactFieldsEditor', page)));
   assert.match(fn('renderModalShell'), /\$\{headerActions\}\s*\r?\n\s*<button class="btn" type="button" data-action="close-modal">Close<\/button>/);
 });
@@ -167,7 +362,12 @@ test('a structural change reads the open config panel first', () => {
 });
 
 test('the mount binds the shared markup, and cannot fight the App Builder for it', () => {
-  const body = fn('mountCompanyContactFields');
+  // The wiring moved into ./company-contacts/page.js, beside the markup it binds. It is
+  // contacts-only and that module is lazily fetched, so in main.js it was entry-chunk weight
+  // every session paid for and most never used -- and bundle-budget-lib.mjs records that only
+  // lazy-loading reduces the entry chunk, not tidiness.
+  assert.match(fn('mountCompanyContactFields'), /companyContactWrites\(\)\?\.mountFieldsEditor\(\)/);
+  const body = fn('mountFieldsEditor', page);
   assert.match(body, /document\.querySelector\('\[data-cc-field-builder\]'\)/);
   // Scoped to that root: bind() here is root.querySelectorAll, not document's.
   assert.match(body, /root\.querySelectorAll\(selector\)/);
@@ -230,7 +430,10 @@ test('hidden means off the directory, not off the record', () => {
   // The table drops it; the card and the form keep it. Hiding is a column setting, and a card
   // that quietly omitted details would be a card you cannot trust.
   assert.match(fn('renderDirectory', page), /\.filter\(\(field\) => !field\.hidden\)/);
-  assert.match(fn('renderCard', page), /const filled = fields\.filter\(\(field\) => field !== chipField && companyContactValue/);
+  // Renamed from `filled` to `placeable`: a button holds no value and computes none, so the
+  // old "has something in it" rule dropped every button before it could ever be placed.
+  assert.match(fn('renderCard', page), /const placeable = fields\.filter\(\(field\) => field !== chipField/);
+  assert.ok(!/placeable = fields\.filter\([^;]*field\.hidden/.test(page), 'hiding is a column setting, not a card one');
   assert.match(fn('renderCompanyContactEditor', page), /\$\{fields\.map\(\(field\) => fieldControl\(companyId, field, edit\.field_values\?\.\[field\.id\] \?\? ''\)\)\.join\(''\)\}/);
 });
 

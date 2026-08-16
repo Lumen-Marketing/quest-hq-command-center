@@ -94,8 +94,28 @@ test('a presence event only re-renders when the set actually changed', () => {
   const body = fn.slice(0, fn.indexOf('\n}\n'));
   // sync fires on every join and leave anywhere in the company.
   assert.match(body, /const changed = next\.size !== state\.onlineProfileIds\.size/);
-  assert.match(body, /if \(changed\) render\(\);/);
+  assert.match(body, /if \(!changed\) return;/);
   assert.match(body, /channel\.track\(selfPresence\(profileId\)\)/);
+});
+
+test('a presence change never re-renders over somebody who is typing', () => {
+  // A render rebuilds the page from state, and a half-filled form lives in the DOM. A colleague
+  // opening the app in another tab used to wipe whatever was typed into an open form -- which
+  // nothing the typist did could explain, so it read as random.
+  const fn = main.slice(main.indexOf('function ensurePresenceChannel('));
+  const body = fn.slice(0, fn.indexOf('\n}\n'));
+  // The same terms the realtime refresh already defers on, rather than a second opinion.
+  assert.match(body, /if \(renderWouldInterrupt\(\)\)/);
+  const shared = main.slice(main.indexOf('function renderWouldInterrupt()'));
+  assert.match(shared.slice(0, shared.indexOf('\n}\n')), /editableFocused: anEditableIsFocused\(\)/);
+  assert.match(body, /state\.presenceRetry = setTimeout\(applyState, 1500\)/);
+  // The set must NOT be committed on the deferred path: leaving the old one in place is what
+  // keeps `changed` true, so the retry still has something to do rather than going quiet.
+  const deferred = body.slice(body.indexOf('shouldDeferRealtimeRefresh'), body.indexOf('state.onlineProfileIds = next;'));
+  assert.ok(!/state\.onlineProfileIds = next/.test(deferred), 'the new set is committed only when it is actually rendered');
+  // And the pending retry dies with the channel.
+  const teardown = main.slice(main.indexOf('function teardownPresence()'));
+  assert.match(teardown.slice(0, teardown.indexOf('\n}\n')), /clearTimeout\(state\.presenceRetry\)/);
 });
 
 test('the ring appears on direct chats and on message senders', () => {

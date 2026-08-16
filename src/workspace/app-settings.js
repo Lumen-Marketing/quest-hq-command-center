@@ -32,27 +32,52 @@ export function createAppSettings(ctx) {
         ${canManage ? `<div class="wb-settings-actions"><button class="btn danger" data-wb-remove-linked><i class="ti ti-unlink"></i>Remove from this workspace</button></div><div class="wb-sub" style="margin-top:8px">Removing only takes it out of this workspace. The original app and its data are untouched.</div>` : '<div class="wb-sub">Ask a workspace manager to remove this linked app.</div>'}
       </div>`;
     }
-    return `<div class="wb-settings card">
+    // Three cards, each answering one question, rather than one column of fourteen fields.
+    //
+    // WHAT IT IS -- its name, wording, icon and colour.
+    // WHERE IT GOES -- download, install, share, which tabs it shows.
+    // WHAT LIVES INSIDE IT -- sub-item lists.
+    //
+    // Each card is two columns on a wide screen and one on a narrow one, so the icon grid sits
+    // beside the name it belongs to rather than pushing everything below it a screen down.
+    return `<div class="wb-settings card wb-settings-identity">
       <h3 class="wb-settings-title">App settings</h3>
-      <div class="wb-field"><label>App name</label><input class="wb-input" id="wbSetName" data-wb-setting="name" value="${h(draft.name ?? app.name)}" ${canManage ? '' : 'disabled'}></div>
-      <div class="wb-field"><label>What one record is called</label><input class="wb-input" id="wbSetRecordName" data-wb-setting="recordName" value="${h(draft.recordName ?? app.recordName ?? '')}" placeholder="${h(singularize(app.name))}" ${canManage ? '' : 'disabled'}><small class="wb-hint">Names the buttons — "${h(addRecordLabel(app))}". Left blank it follows the app name.</small></div>
-      <div class="wb-field"><label>Description</label><textarea class="wb-input" id="wbSetDesc" data-wb-setting="description" ${canManage ? '' : 'disabled'}>${h(draft.description ?? app.description ?? '')}</textarea></div>
-      <div class="wb-field"><label>Type</label><input class="wb-input" id="wbSetType" data-wb-setting="type" value="${h(draft.type ?? app.type ?? '')}" placeholder="e.g. Contacts, Tasks, Projects" ${canManage ? '' : 'disabled'}></div>
-      <div class="wb-field"><label>Icon &amp; color</label>
-        <div class="wb-emoji-pick" id="wbSetIcons">${wbAppIconGrid(app.icon)}</div>
-        <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}<label class="wb-swatch wb-swatch-custom ${isCustomColor ? 'sel' : ''}" data-color="${h(app.color)}" title="Custom color"${isCustomColor ? ` style="background:${h(app.color)}"` : ''}><input type="color" id="wbSetCustomColor" value="${h(isCustomColor ? app.color : '#000000')}" aria-label="Custom color" ${canManage ? '' : 'disabled'}><i class="ti ${isCustomColor ? 'ti-check' : 'ti-plus'}"></i></label></div>
+      <div class="wb-settings-cols">
+        <div class="wb-settings-col">
+          <div class="wb-field"><label>App name</label><input class="wb-input" id="wbSetName" data-wb-setting="name" value="${h(draft.name ?? app.name)}" ${canManage ? '' : 'disabled'}></div>
+          <div class="wb-field"><label>What one record is called</label><input class="wb-input" id="wbSetRecordName" data-wb-setting="recordName" value="${h(draft.recordName ?? app.recordName ?? '')}" placeholder="${h(singularize(app.name))}" ${canManage ? '' : 'disabled'}><small class="wb-hint">Names the buttons — "${h(addRecordLabel(app))}". Left blank it follows the app name.</small></div>
+          <div class="wb-field"><label>Description</label><textarea class="wb-input" id="wbSetDesc" data-wb-setting="description" ${canManage ? '' : 'disabled'}>${h(draft.description ?? app.description ?? '')}</textarea></div>
+          <div class="wb-field"><label>Type</label><input class="wb-input" id="wbSetType" data-wb-setting="type" value="${h(draft.type ?? app.type ?? '')}" placeholder="e.g. Contacts, Tasks, Projects" ${canManage ? '' : 'disabled'}></div>
+        </div>
+        <div class="wb-settings-col">
+          <div class="wb-field"><label>Icon &amp; color</label>
+            <div class="wb-search-box wb-icon-search"><i class="ti ti-search"></i><input type="text" class="wb-search-input" id="wbSetIconSearch" data-wb-app-icon-search placeholder="Search icons…" aria-label="Search icons" ${canManage ? '' : 'disabled'}></div>
+            <div class="wb-emoji-pick wb-icon-grid" id="wbSetIcons">${wbAppIconGrid(app.icon)}</div>
+            <p class="wb-sub wb-icon-none" id="wbSetIconNone" hidden>No icon matches that.</p>
+            <div class="wb-swatches" id="wbSetColors">${WB_PALETTE.map((color) => `<button class="wb-swatch ${app.color === color ? 'sel' : ''}" data-color="${color}" style="background:${color}"></button>`).join('')}<label class="wb-swatch wb-swatch-custom ${isCustomColor ? 'sel' : ''}" data-color="${h(app.color)}" title="Custom color"${isCustomColor ? ` style="background:${h(app.color)}"` : ''}><input type="color" id="wbSetCustomColor" value="${h(isCustomColor ? app.color : '#000000')}" aria-label="Custom color" ${canManage ? '' : 'disabled'}><i class="ti ${isCustomColor ? 'ti-check' : 'ti-plus'}"></i></label></div>
+          </div>
+        </div>
       </div>
-      <div class="wb-field"><label>Portability</label>
-        <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — its fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'}, ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'}, and how it is arranged: card layout, sub-item lists, record layout, dashboard and saved views. Back it up, or install it into another workspace.</div>
-        <div class="wb-settings-actions" style="margin-top:10px"><button class="btn" data-wb-download-app><i class="ti ti-download"></i>Download app</button></div>
+    </div>
+    <div class="wb-settings card wb-settings-portability">
+      <div class="wb-settings-cols">
+        <div class="wb-settings-col">
+          <div class="wb-field"><label>Portability</label>
+            <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — its fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'}, ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'}, and how it is arranged: card layout, sub-item lists, record layout, dashboard and saved views. Back it up, or install it into another workspace.</div>
+            <div class="wb-settings-actions" style="margin-top:10px"><button class="btn" data-wb-download-app><i class="ti ti-download"></i>Download app</button></div>
+          </div>
+          ${canManage ? wbInstallToWorkspaceField(companyId, workspace, app) : ''}
+          <div class="wb-field"><label>Quest App Market</label>
+            <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.' : 'Share this app so anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.'}</div>
+            ${canManage ? `<div class="wb-settings-actions" style="margin-top:10px"><button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share this app'}</button></div>` : ''}
+          </div>
+        </div>
+        <div class="wb-settings-col">
+          ${canManage ? tabsField(app) : ''}
+          ${canManage ? viewsRailField(app) : ''}
+        </div>
       </div>
-      ${canManage ? tabsField(app) : ''}
-      ${canManage ? wbInstallToWorkspaceField(companyId, workspace, app) : ''}
-      <div class="wb-field"><label>Quest App Market</label>
-        <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.' : 'Share this app so anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.'}</div>
-        ${canManage ? `<div class="wb-settings-actions" style="margin-top:10px"><button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share this app'}</button></div>` : ''}
-      </div>
-      ${canManage ? `<div class="wb-settings-actions"><button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save changes</button><button class="btn danger" data-del-app><i class="ti ti-trash"></i>Delete app</button></div>` : ''}
+      ${canManage ? `<div class="wb-settings-actions wb-settings-save"><button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save changes</button><button class="btn danger" data-del-app><i class="ti ti-trash"></i>Delete app</button></div>` : ''}
     </div>
     ${wbCollectionsSettings(companyId, app, canManage)}`;
   }
@@ -99,6 +124,27 @@ export function createAppSettings(ctx) {
           <span class="wb-sub">Always last</span>
         </div>
         <div class="wb-sub">Untick a tab to hide it, and use the arrows to put them in the order you want. Hiding a tab hides the tab, not the data — Save changes to apply it.</div>
+      </div>`;
+  }
+
+  // Whether the saved-views panel sits beside the Items list.
+  //
+  // Hiding it is a layout choice, not a delete: the views stay on the app and come back with
+  // the panel. It lives here rather than as a collapse arrow on the panel itself because an
+  // app that never groups its records wants the width back permanently, not per visit --
+  // which is the same reason the tab strip above is a setting and not a per-session toggle.
+  function viewsRailField(app) {
+    return `
+      <div class="wb-field"><label>Views panel</label>
+        <div class="wb-tab-list">
+          <div class="wb-tab-row">
+            <label class="wb-tab-show">
+              <input type="checkbox" id="wbSetViewsRail" ${app.hideViews ? '' : 'checked'}>
+              <span>Show the Views panel beside the Items list</span>
+            </label>
+          </div>
+        </div>
+        <div class="wb-sub">Untick to give the list the full width. Your saved views are kept — tick it back on and they are all still there. Save changes to apply it.</div>
       </div>`;
   }
 

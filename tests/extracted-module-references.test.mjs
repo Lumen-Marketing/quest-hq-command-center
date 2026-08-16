@@ -160,6 +160,11 @@ const FACTORY_MODULES = [
   ['src/crm/bulk-modals.js', 'createBulkModals'],
   ['src/workspace/relationship-picker.js', 'createRelationshipPicker'],
   ['src/ui/combobox-menu.js', 'createComboboxMenu'],
+  ['src/workspace/chip-field.js', 'createChipRuntime'],
+  ['src/drafts/draft-recovery.js', 'createDraftRecovery'],
+  // Minting an option is shared by the dropdown and the choice chips, so it is built by each of
+  // them rather than named in main.js -- its context arrives through the combobox's.
+  ['src/workspace/option-mint.js', 'createOptionMint', 'createComboboxMenu'],
   ['src/platform/master-panel.js', 'createPlatformPanel'],
   ['src/workspace/data-io.js', 'createDataIO'],
   ['src/workspace/record-panel.js', 'createRecordPanel'],

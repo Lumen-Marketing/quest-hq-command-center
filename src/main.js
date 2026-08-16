@@ -5,6 +5,7 @@ import {
   companiesToSave, resolveAppEntry, tileTargetApp, workspaceApps,
 } from './workspace/builder-core.js';
 import { readPullRows } from './workspace/pull-rows.js';
+import { arrivalRef as wbArrivalRef } from './workspace/record-ref.js';
 
 // The pipeline MODEL is eager -- the stage pill, filters and the stage manager all need
 // it. Only the board's rendering is deferred, in ./workspace/board-view.js.
@@ -1492,35 +1493,41 @@ function resolveJobStage(value, companyId) {
   return raw;
 }
 function resolveContactStage(value) {
-  const names = contactStageNames();
-  const raw = String(value || '').trim();
-  if (names.includes(raw)) return raw;
-  const legacy = canonicalContactStageName(raw);
-  if (names.includes(legacy)) return legacy;
-  return names[0] || 'Prospects';
-}
-function resolveDealStage(value, companyId) {
-  const names = dealStageNames(companyId);
-  const raw = String(value || '').trim();
-  if (!raw) return names[0] || 'Underwriting';
-  if (names.includes(raw)) return raw;
-  const legacy = {
-    Prospect: 'Underwriting',
-    Qualified: 'Underwriting',
-    'Proposal sent': 'Estimate Sent',
-    Negotiation: 'Negotiating',
-    'Verbal commit': 'Waiting to Sign',
-    Won: 'Won',
-    Lost: 'Negotiating',
-  }[raw];
-  if (legacy && names.includes(legacy)) return legacy;
-  // Kept, not rewritten -- see resolveJobStage.
-  return raw;
+    const names = contactStageNames();
+    const raw = String(value || '').trim();
+    if (names.includes(raw)) return raw;
+    const legacy = canonicalContactStageName(raw);
+    if (names.includes(legacy)) return legacy;
+    return names[0] || 'Prospects';
 }
 
-function persistJobStages() { JOB_STAGES = JOB_STAGES.filter((stage) => stage.name); writeJson(JOB_STAGES_KEY, JOB_STAGES); }
-function persistContactStages() { CONTACT_STAGES = CONTACT_STAGES.filter((stage) => stage.name); writeJson(CONTACT_STAGES_KEY, CONTACT_STAGES); }
-function persistDealStages() { DEAL_STAGES = DEAL_STAGES.filter((stage) => stage.name); writeJson(DEAL_STAGES_KEY, DEAL_STAGES); }
+function resolveDealStage(value, companyId) {
+    const names = dealStageNames(companyId);
+    const raw = String(value || '').trim();
+    if (!raw) return names[0] || 'Underwriting';
+    if (names.includes(raw)) return raw;
+    const legacy = {
+        Prospect: 'Underwriting',
+        Qualified: 'Underwriting',
+        'Proposal sent': 'Estimate Sent',
+        Negotiation: 'Negotiating',
+        'Verbal commit': 'Waiting to Sign',
+        Won: 'Won',
+        Lost: 'Negotiating',
+    }[raw];
+    if (legacy && names.includes(legacy)) return legacy;
+    // Kept, not rewritten -- see resolveJobStage.
+    return raw;
+}
+
+function persistJobStages() { JOB_STAGES = JOB_STAGES.filter((stage) => stage.name);
+    writeJson(JOB_STAGES_KEY, JOB_STAGES); }
+
+function persistContactStages() { CONTACT_STAGES = CONTACT_STAGES.filter((stage) => stage.name);
+    writeJson(CONTACT_STAGES_KEY, CONTACT_STAGES); }
+
+function persistDealStages() { DEAL_STAGES = DEAL_STAGES.filter((stage) => stage.name);
+    writeJson(DEAL_STAGES_KEY, DEAL_STAGES); }
 
 const ACCOUNT_TYPES = ['Customer', 'Prospect', 'Partner', 'Vendor'];
 const ACTIVITY_TYPES = ['note', 'call', 'email', 'meeting', 'task', 'stage_change', 'system'];
@@ -1933,66 +1940,64 @@ const formResponsesFallback = [
     submitted_by: 'Maya Rosales',
     created_at: new Date(Date.now() - 3600000).toISOString(),
     answers: {
-      'q-roof-1': 'Queen Creek, AZ',
-      'q-roof-2': 'Active leak',
-      'q-roof-3': 'Dry-in held. Prepare repair estimate and photo packet.',
+        'q-roof-1': 'Queen Creek, AZ',
+        'q-roof-2': 'Active leak',
+        'q-roof-3': 'Dry-in held. Prepare repair estimate and photo packet.',
     },
-  },
-];
+}, ];
 
-const financeVendorsFallback = [
-  {
-    id: 'vendor-roofing-materials',
-    company_id: 'roofing',
-    name: 'Valley Roofing Supply',
-    contact_name: 'Elena Ortiz',
-    email: 'orders@valleyroofingsupply.local',
-    phone: '(480) 555-0190',
-    category: 'Materials',
-    status: 'Active',
-    notes: 'Primary tile, flashing, and underlayment vendor.',
-    created_at: new Date(Date.now() - 1209600000).toISOString(),
-    updated_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 'vendor-roofing-dryin',
-    company_id: 'roofing',
-    name: 'Monsoon Dry-In Crew',
-    contact_name: 'R. Alvarez',
-    email: 'dispatch@monsoondryin.local',
-    phone: '(602) 555-0144',
-    category: 'Subcontractor',
-    status: 'Active',
-    notes: 'Emergency dry-in support during storm calls.',
-    created_at: new Date(Date.now() - 1036800000).toISOString(),
-    updated_at: new Date(Date.now() - 172800000).toISOString(),
-  },
-  {
-    id: 'vendor-drafting-permits',
-    company_id: 'drafting',
-    name: 'Permit Runner AZ',
-    contact_name: 'Sofia Chen',
-    email: 'permits@runneraz.local',
-    phone: '(602) 555-0171',
-    category: 'Permit',
-    status: 'Active',
-    notes: 'Permit filing support for drafting packets.',
-    created_at: new Date(Date.now() - 864000000).toISOString(),
-    updated_at: new Date(Date.now() - 259200000).toISOString(),
-  },
-  {
-    id: 'vendor-lumen-software',
-    company_id: 'lumen',
-    name: 'Lumen SaaS Stack',
-    contact_name: 'Ops Billing',
-    email: 'billing@lumenstack.local',
-    phone: '',
-    category: 'Software',
-    status: 'Active',
-    notes: 'Internal software subscriptions for client onboarding.',
-    created_at: new Date(Date.now() - 777600000).toISOString(),
-    updated_at: new Date(Date.now() - 345600000).toISOString(),
-  },
+const financeVendorsFallback = [{
+        id: 'vendor-roofing-materials',
+        company_id: 'roofing',
+        name: 'Valley Roofing Supply',
+        contact_name: 'Elena Ortiz',
+        email: 'orders@valleyroofingsupply.local',
+        phone: '(480) 555-0190',
+        category: 'Materials',
+        status: 'Active',
+        notes: 'Primary tile, flashing, and underlayment vendor.',
+        created_at: new Date(Date.now() - 1209600000).toISOString(),
+        updated_at: new Date(Date.now() - 86400000).toISOString(),
+    },
+    {
+        id: 'vendor-roofing-dryin',
+        company_id: 'roofing',
+        name: 'Monsoon Dry-In Crew',
+        contact_name: 'R. Alvarez',
+        email: 'dispatch@monsoondryin.local',
+        phone: '(602) 555-0144',
+        category: 'Subcontractor',
+        status: 'Active',
+        notes: 'Emergency dry-in support during storm calls.',
+        created_at: new Date(Date.now() - 1036800000).toISOString(),
+        updated_at: new Date(Date.now() - 172800000).toISOString(),
+    },
+    {
+        id: 'vendor-drafting-permits',
+        company_id: 'drafting',
+        name: 'Permit Runner AZ',
+        contact_name: 'Sofia Chen',
+        email: 'permits@runneraz.local',
+        phone: '(602) 555-0171',
+        category: 'Permit',
+        status: 'Active',
+        notes: 'Permit filing support for drafting packets.',
+        created_at: new Date(Date.now() - 864000000).toISOString(),
+        updated_at: new Date(Date.now() - 259200000).toISOString(),
+    },
+    {
+        id: 'vendor-lumen-software',
+        company_id: 'lumen',
+        name: 'Lumen SaaS Stack',
+        contact_name: 'Ops Billing',
+        email: 'billing@lumenstack.local',
+        phone: '',
+        category: 'Software',
+        status: 'Active',
+        notes: 'Internal software subscriptions for client onboarding.',
+        created_at: new Date(Date.now() - 777600000).toISOString(),
+        updated_at: new Date(Date.now() - 345600000).toISOString(),
+    },
 ];
 
 const financeInvoicesFallback = [
@@ -2634,6 +2639,19 @@ const state = {
   companyContactQuery: '',
   companyContactTypeFilter: 'all',
   selectedCompanyContactId: '',
+  // Arrange mode on the contact card: the card shows its seams and its buttons become draggable.
+  // Declared here rather than assigned into existence, so it is one findable thing rather than
+  // a key that appears in whichever branch happens to run first.
+  ccCardArrange: false,
+  // The button currently under the pointer, if any. Read by the realtime guard so a remote
+  // change cannot rebuild the card out from under a drag in progress.
+  ccPinDrag: null,
+  // Which panel has its "what this shows" editor open, by element key. One at a time: two open
+  // at once is two columns of checkboxes and no card left to see them against.
+  ccPanelSettings: '',
+  // How far each long list has been expanded on this visit, by list key. Runtime only: how much
+  // somebody scrolled is not a company-wide setting, and storing it would move everyone's card.
+  ccMore: {},
   contactSort: 'name',
   contactFilters: { ...CONTACT_FILTER_DEFAULTS },
   contactRailScope: 'team',
@@ -3217,39 +3235,39 @@ function readableOn(hex) {
 
 /** The CSS custom properties for a side menu choice, or null to leave the default alone. */
 function sidebarThemeVars(settings) {
-  const id = settings.sidebarTheme;
-  if (!id || id === 'default') return null;
-  if (id === 'custom') {
-    const dark = readableOn(settings.sidebarBg);
-    const ink = dark ? '255,255,255' : '23,19,15';
+    const id = settings.sidebarTheme;
+    if (!id || id === 'default') return null;
+    if (id === 'custom') {
+        const dark = readableOn(settings.sidebarBg);
+        const ink = dark ? '255,255,255' : '23,19,15';
+        return {
+            bg: settings.sidebarBg,
+            text: `rgba(${ink},${dark ? 0.8 : 0.78})`,
+            strong: dark ? '#ffffff' : '#17130f',
+            label: `rgba(${ink},${dark ? 0.55 : 0.65})`,
+            activeBg: hexToRgba(settings.sidebarAccent, dark ? 0.18 : 0.13),
+            activeText: settings.sidebarAccent,
+            dark,
+        };
+    }
+    const preset = (SIDEBAR_THEMES.find(([key]) => key === id) || [])[2] || null;
+    if (!preset) return null;
+    // The accent picker sits directly under the theme picker, so it has to mean something for
+    // every theme. Presets used to be returned verbatim, which baked their own highlight in and
+    // made the accent look broken the moment a theme other than Custom was chosen.
+    //
+    // Only the two accent-derived values are overridden. A preset's background, text and label
+    // colours are what make it that theme, and are left alone.
+    const accent = settings.sidebarAccent;
+    if (!accent) return preset;
     return {
-      bg: settings.sidebarBg,
-      text: `rgba(${ink},${dark ? 0.8 : 0.78})`,
-      strong: dark ? '#ffffff' : '#17130f',
-      label: `rgba(${ink},${dark ? 0.55 : 0.65})`,
-      activeBg: hexToRgba(settings.sidebarAccent, dark ? 0.18 : 0.13),
-      activeText: settings.sidebarAccent,
-      dark,
+        ...preset,
+        activeBg: hexToRgba(accent, preset.dark ? 0.18 : 0.13),
+        // On a dark menu the accent reads as-is. On the light one it is mixed toward black, or a
+        // mid-tone accent on near-white fails contrast -- which is why the Light preset shipped
+        // with #c2410c rather than the raw brand orange.
+        activeText: preset.dark ? accent : `color-mix(in srgb, ${accent} 65%, #000)`,
     };
-  }
-  const preset = (SIDEBAR_THEMES.find(([key]) => key === id) || [])[2] || null;
-  if (!preset) return null;
-  // The accent picker sits directly under the theme picker, so it has to mean something for
-  // every theme. Presets used to be returned verbatim, which baked their own highlight in and
-  // made the accent look broken the moment a theme other than Custom was chosen.
-  //
-  // Only the two accent-derived values are overridden. A preset's background, text and label
-  // colours are what make it that theme, and are left alone.
-  const accent = settings.sidebarAccent;
-  if (!accent) return preset;
-  return {
-    ...preset,
-    activeBg: hexToRgba(accent, preset.dark ? 0.18 : 0.13),
-    // On a dark menu the accent reads as-is. On the light one it is mixed toward black, or a
-    // mid-tone accent on near-white fails contrast -- which is why the Light preset shipped
-    // with #c2410c rather than the raw brand orange.
-    activeText: preset.dark ? accent : `color-mix(in srgb, ${accent} 65%, #000)`,
-  };
 }
 
 // Writes the appearance choices to CSS custom properties + data-* on <html>. These live on
@@ -3288,35 +3306,35 @@ function applyAppearance(settings = getAppearance()) {
 
   applyIconPack(settings.iconPack);
 
-  // Side menu. 'default' clears everything rather than writing the shipped colours back,
-  // so the untouched look stays the stylesheet's business and cannot drift.
-  const side = sidebarThemeVars(settings);
-  const SIDE_VARS = ['--deck-bg', '--deck-text', '--deck-strong', '--deck-label', '--deck-active-bg', '--deck-active-text'];
-  if (!side) {
-    delete root.dataset.sidebarTheme;
-    delete root.dataset.sidebarSurface;
-    SIDE_VARS.forEach((name) => style.removeProperty(name));
-  } else {
-    root.dataset.sidebarTheme = settings.sidebarTheme;
-    // Separate from the id so the stylesheet can key hairlines and hover on light-vs-dark
-    // without listing every preset name.
-    root.dataset.sidebarSurface = side.dark ? 'dark' : 'light';
-    style.setProperty('--deck-bg', side.bg);
-    style.setProperty('--deck-text', side.text);
-    style.setProperty('--deck-strong', side.strong);
-    style.setProperty('--deck-label', side.label);
-    style.setProperty('--deck-active-bg', side.activeBg);
-    style.setProperty('--deck-active-text', side.activeText);
-    // An explicit text colour overrides what the preset chose. Applied on top rather than
-    // inside the preset so it survives switching between them, and derived into three
-    // weights so headings, body rows and section labels stay distinguishable.
-    const ink = String(settings.sidebarText || '').trim();
-    if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(ink)) {
-      style.setProperty('--deck-strong', ink);
-      style.setProperty('--deck-text', hexToRgba(ink, 0.82));
-      style.setProperty('--deck-label', hexToRgba(ink, 0.6));
+    // Side menu. 'default' clears everything rather than writing the shipped colours back,
+    // so the untouched look stays the stylesheet's business and cannot drift.
+    const side = sidebarThemeVars(settings);
+    const SIDE_VARS = ['--deck-bg', '--deck-text', '--deck-strong', '--deck-label', '--deck-active-bg', '--deck-active-text'];
+    if (!side) {
+        delete root.dataset.sidebarTheme;
+        delete root.dataset.sidebarSurface;
+        SIDE_VARS.forEach((name) => style.removeProperty(name));
+    } else {
+        root.dataset.sidebarTheme = settings.sidebarTheme;
+        // Separate from the id so the stylesheet can key hairlines and hover on light-vs-dark
+        // without listing every preset name.
+        root.dataset.sidebarSurface = side.dark ? 'dark' : 'light';
+        style.setProperty('--deck-bg', side.bg);
+        style.setProperty('--deck-text', side.text);
+        style.setProperty('--deck-strong', side.strong);
+        style.setProperty('--deck-label', side.label);
+        style.setProperty('--deck-active-bg', side.activeBg);
+        style.setProperty('--deck-active-text', side.activeText);
+        // An explicit text colour overrides what the preset chose. Applied on top rather than
+        // inside the preset so it survives switching between them, and derived into three
+        // weights so headings, body rows and section labels stay distinguishable.
+        const ink = String(settings.sidebarText || '').trim();
+        if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(ink)) {
+            style.setProperty('--deck-strong', ink);
+            style.setProperty('--deck-text', hexToRgba(ink, 0.82));
+            style.setProperty('--deck-label', hexToRgba(ink, 0.6));
+        }
     }
-  }
 }
 
 function setAppearance(patch = {}) {
@@ -3969,6 +3987,7 @@ function render() {
   queueMicrotask(mountWorkspaceBuilder);
   queueMicrotask(mountCompanyContactFields);
   queueMicrotask(mountCompanyContactForm);
+  queueMicrotask(mountCompanyContactCard);
   queueMicrotask(mountFileViewer);
   queueMicrotask(mountDashboardWidgetDnD);
   queueMicrotask(mountContactSmsReadiness);
@@ -4133,73 +4152,37 @@ function clearProtectedFormDraft(form) {
   else formDraftManagerReady.then((manager) => manager?.clear(context));
 }
 
-async function syncContactAddressFromRestoredDraft(form) {
-  if (!form?.matches('[data-contact-address-form]')) return;
-  await initContactAddressForm();
-  const countryName = String(form.elements.country?.value || '').trim();
-  const provinceName = String(form.elements.province?.value || '').trim();
-  const cityName = String(form.elements.city?.value || '').trim();
-  const barangayName = String(form.elements.barangay?.value || '').trim();
-  const locationName = String(form.elements.location?.value || '').trim();
-  const dial = String(form.elements.country_code?.value || '').trim();
-  const country = qcEl('qc-country');
-  await qcLoadCountries();
-  if (country?.tagName === 'SELECT' && countryName && qcSelectByText(country, countryName)) {
-    await qcLoadProvinces(country.value, provinceName);
-    if (cityName) await qcLoadCities(cityName);
-    if (barangayName) await qcLoadBarangays(barangayName);
-  } else if (country?.tagName === 'INPUT') {
-    country.value = countryName;
+// Reading a draft back is a deliberate click with a dialog already open, so it can afford a
+// fetch. Writing one cannot -- that happens on every keystroke and stays above.
+let draftRecoveryModule = null;
+let draftRecoveryPending = null;
+function loadDraftRecovery() {
+  if (draftRecoveryModule) return Promise.resolve(draftRecoveryModule);
+  if (!draftRecoveryPending) {
+    draftRecoveryPending = import('./drafts/draft-recovery.js').then((mod) => {
+      draftRecoveryModule = mod.createDraftRecovery({
+        // Both holders are null until their own fetch lands, so they are read through a getter
+        // rather than captured -- handing over the value here would freeze in whatever it was.
+        draftManager: () => formDraftManager,
+        underwriterModule: () => renderUnderwriterPageModule,
+        countryData: () => qcCountryData,
+        protectedFormDraftContext,
+        setProtectedFormDraftStatus,
+        queueProtectedFormDraft,
+        initContactAddressForm,
+        qcEl,
+        qcLoadCountries,
+        qcSelectByText,
+        qcLoadProvinces,
+        qcLoadCities,
+        qcLoadBarangays,
+        qcSelectDial,
+        qcPlacePin,
+      });
+      return draftRecoveryModule;
+    }).catch((error) => { draftRecoveryPending = null; throw error; });
   }
-  if (dial) {
-    const match = qcCountryData.find((item) => item.dial === dial);
-    qcSelectDial(dial, match?.iso2 || '');
-  }
-  const lat = Number(form.elements.lat?.value);
-  const lng = Number(form.elements.lng?.value);
-  if (Number.isFinite(lat) && Number.isFinite(lng) && form.elements.lat?.value && form.elements.lng?.value) {
-    qcPlacePin(lat, lng, { center: true });
-  }
-  if (form.elements.country) form.elements.country.value = countryName;
-  if (form.elements.province) form.elements.province.value = provinceName;
-  if (form.elements.city) form.elements.city.value = cityName;
-  if (form.elements.barangay) form.elements.barangay.value = barangayName;
-  if (form.elements.location) form.elements.location.value = locationName;
-}
-
-function handleProtectedFormDraftAction(actionName, node) {
-  const form = node.closest('form');
-  const context = protectedFormDraftContext(form);
-  if (!form || !context || !formDraftManager) {
-    setProtectedFormDraftStatus(form, 'unavailable');
-    return false;
-  }
-  const recovery = form.querySelector('[data-form-draft-recovery]');
-  if (actionName === 'restore-form-draft') {
-    const result = formDraftManager.restore(context, form.elements);
-    if (!result.ok) {
-      setProtectedFormDraftStatus(form, 'unavailable');
-      return true;
-    }
-    if (recovery) recovery.hidden = true;
-    delete form.dataset.draftRecoveryPending;
-    delete form.dataset.draftChangedWhilePending;
-    setProtectedFormDraftStatus(form, result.draft ? 'restored' : 'idle');
-    if (form.matches('[data-underwriting-form]')) renderUnderwriterPageModule?.syncUnderwritingForm(form);
-    syncContactAddressFromRestoredDraft(form).catch((error) => console.warn('Contact draft address restore failed', error));
-    return true;
-  }
-  if (actionName === 'discard-form-draft') {
-    const changedWhilePending = form.dataset.draftChangedWhilePending === 'true';
-    const result = formDraftManager.clear(context);
-    if (recovery) recovery.hidden = true;
-    delete form.dataset.draftRecoveryPending;
-    delete form.dataset.draftChangedWhilePending;
-    setProtectedFormDraftStatus(form, result.ok ? 'discarded' : 'unavailable');
-    if (result.ok && changedWhilePending) queueProtectedFormDraft(form);
-    return true;
-  }
-  return false;
+  return draftRecoveryPending;
 }
 
 function openNativeTimePicker(input) {
@@ -4255,6 +4238,29 @@ function closeJobTypeMenus(exceptInput = null) {
     if (exceptInput && menu.closest('.job-type-combobox')?.contains(exceptInput)) return;
     menu.hidden = true;
   });
+}
+
+/**
+ * A value picked in a Company Contacts combobox joins that field's option list.
+ *
+ * Only that combobox: `data-job-type-remove` carries the contact field's id and is passed as
+ * `removeKind` by the contacts form alone, so a job's client box or an app's category -- which
+ * mints through wbCommitOptionChoice -- cannot be caught by this.
+ *
+ * The input's own option list is patched in place as well as written. The menu reads its
+ * suggestions off that attribute, and a render() here would discard everything else typed into
+ * the half-filled form underneath.
+ */
+function commitContactOptionChoice(input) {
+  const fieldId = input.dataset.jobTypeRemove || '';
+  const label = String(input.value || '').trim();
+  if (!fieldId || !label) return;
+  const known = (() => { try { const a = JSON.parse(input.dataset.jobTypeOptions || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } })();
+  if (known.some((item) => String(item).toLowerCase() === label.toLowerCase())) return;
+  input.dataset.jobTypeOptions = JSON.stringify([...known, label]);
+  companyContactWrites()
+    ?.addFieldOptionFromInput(fieldId, label)
+    .catch((error) => console.warn('Could not add that option', error));
 }
 
 function wireJobTypeAutocomplete(input, options = null) {
@@ -13345,6 +13351,18 @@ function normalizeWbItem(item) {
 function normalizeWorkspaceBuilderDoc(doc) {
   const workspaces = Array.isArray(doc?.workspaces) ? doc.workspaces : [];
   return {
+    // The contact card's tile layout. A stat tile is not a field, so it has nowhere on a field
+    // row to live -- it rides the builder doc, which is already localStorage-mirrored, already
+    // realtime-synced, already merged on conflict and already in the backup.
+    //
+    // A SHAPE CHECK ONLY. The sanitizing lives in card-layout.js normalizeCardSettings, on the
+    // way out: this function is on the eager path, and a static import of a lazy pure module
+    // would drag it into the entry chunk for every session that never opens a contact.
+    //
+    // Everything not named here is dropped on load, which is why this line has to exist at all.
+    ...(doc?.contactCard && typeof doc.contactCard === 'object' && !Array.isArray(doc.contactCard)
+      ? { contactCard: doc.contactCard }
+      : {}),
     workspaces: workspaces.map((ws) => ({
       id: ws.id || wbUid(),
       name: ws.name || 'Untitled workspace',
@@ -13387,6 +13405,9 @@ function normalizeWorkspaceBuilderDoc(doc) {
         items: Array.isArray(app.items) ? app.items.map(normalizeWbItem) : [],
         // Which tabs this app shows, and in what order. Absent means all of them.
         ...(Array.isArray(app.tabs) ? { tabs: app.tabs.filter((tab) => typeof tab === 'string') } : {}),
+        // The Items tab without its saved-views panel, so the list gets the whole width.
+        // Absent means shown, which is what every app built before the setting existed wants.
+        ...(app.hideViews ? { hideViews: true } : {}),
         // Deleted records, kept so a misclick is recoverable. Same shape plus when it went.
         trash: Array.isArray(app.trash) ? app.trash.map((item) => ({ ...normalizeWbItem(item), deletedAt: item.deletedAt || new Date().toISOString(), deletedBy: item.deletedBy || '' })) : [],
         automations: Array.isArray(app.automations) ? app.automations.map((auto) => ({ id: auto.id || wbUid(), name: auto.name || 'Automation', enabled: auto.enabled !== false, trigger: auto.trigger && typeof auto.trigger === 'object' ? auto.trigger : { event: 'created' }, actions: Array.isArray(auto.actions) ? auto.actions : [] })) : [],
@@ -13489,7 +13510,10 @@ function wbAppIconGrid(selected) {
     loadWbIconSets().then(() => render()).catch((error) => console.error('icon set failed to load', error));
     return questLoader('Loading icons');
   }
-  return wbIconSetsModule.WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${selected === icon ? 'sel' : ''}" type="button" data-icon="${icon}" aria-pressed="${selected === icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('');
+  // data-icon-name carries the searchable words. The create-app modal's picker already filters
+  // on exactly this, and 115 icons is well past the point where scanning beats typing -- so the
+  // two pickers now behave the same way instead of one being searchable and the other not.
+  return wbIconSetsModule.WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${selected === icon ? 'sel' : ''}" type="button" data-icon="${icon}" data-icon-name="${h(wbIconLabel(icon).toLowerCase())}" aria-pressed="${selected === icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('');
 }
 
 
@@ -15833,7 +15857,7 @@ function loadRelationshipPicker() {
   if (relationshipPickerModule) return Promise.resolve(relationshipPickerModule);
   if (!relationshipPickerPending) {
     relationshipPickerPending = import('./workspace/relationship-picker.js').then((mod) => {
-      relationshipPickerModule = mod.createRelationshipPicker({ h });
+      relationshipPickerModule = mod.createRelationshipPicker({ h, chips: wbChips });
       return relationshipPickerModule;
     }).catch((error) => {
       relationshipPickerPending = null;
@@ -15987,6 +16011,10 @@ function wbBindInlineEdits(root, companyId, workspaceId, appId, itemId) {
       });
 
       cell.addEventListener('keydown', (event) => {
+        // The "+ Other" box on a choice-chip field owns both keys: Enter adds the option and
+        // Escape backs out of the box. Committing the cell instead would save the record
+        // without the option the person was halfway through naming.
+        if (event.target.closest?.('[data-wb-chip-new-input]')) return;
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(false); return; }
         // Enter saves, except where a newline is a legitimate part of the value.
         if (event.key === 'Enter' && !event.shiftKey && field.type !== 'textarea' && field.type !== 'checklist') {
@@ -16916,7 +16944,12 @@ function wbViewsRail(companyId, app, ui) {
 }
 // Shared per-item bits for the non-table views.
 function wbItemSearchAttr(companyId, workspace, app, cols, item) {
-  return cols.map((field) => wbPlainVal(companyId, workspace, app, field, item.values[field.id], item.values)).join(' ').toLowerCase();
+  const values = cols.map((field) => wbPlainVal(companyId, workspace, app, field, item.values[field.id], item.values));
+  // The record's own reference, so the id shown on an arrival line can be pasted straight into
+  // the search box and find the record it names. Both with and without the leading hash --
+  // somebody reading "#A3F9C1" off a screen types it either way.
+  const ref = wbArrivalRef(item.id);
+  return [...values, ref, ref.replace('#', '')].join(' ').toLowerCase();
 }
 function wbItemCheckbox(item, ui, selectable) {
   return selectable ? `<input type="checkbox" class="wb-item-check" data-wb-select="${h(item.id)}" ${ui.sel.has(item.id) ? 'checked' : ''} title="Select record">` : '';
@@ -17326,6 +17359,26 @@ function wbNextAutoNumber(app, field) {
   return max + 1;
 }
 
+/**
+ * Next auto-number for a Company Contacts field.
+ *
+ * The same rule as an app's -- one past the highest already issued -- counted over the
+ * company's contacts instead of an app's items, because that is where these values live.
+ * Deleted contacts are counted too: they are soft-deleted and can come back, and reissuing a
+ * number that a quote or a job already quotes is worse than a gap in the sequence.
+ */
+function wbNextContactAutoNumber(companyId, field) {
+  const start = Number(field.config?.start);
+  let max = Number.isFinite(start) ? start - 1 : 0;
+  const id = canonicalCompanyId(companyId);
+  for (const contact of state.companyContacts || []) {
+    if (canonicalCompanyId(contact.company_id) !== id) continue;
+    const n = Number(contact.field_values?.[field.id]);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
 // Assign auto-numbers to a new record's blank auto-number fields. Call BEFORE the
 // record is added to app.items, so it isn't counted in its own max.
 function wbAssignAutoNumbers(app, values) {
@@ -17394,29 +17447,73 @@ function wbAddFieldInstant(companyId, workspaceId, appId, type, index, collectio
 // over another app's records, which it has no app to roll up. `rowExtra` hangs a panel under
 // a row, which is how the Company Contacts editor configures a field in place instead of
 // stacking a second dialog over the first.
-function wbFieldBuilderMarkup(companyId, fields, canManage, scope = '', types = WB_FIELD_ORDER, rowExtra = null) {
+/**
+ * @param {boolean} [selectable]  Whether rows carry a tick box for selecting several at once.
+ *   Opt-in, and only the App Builder asks for it: Company Contacts shares this markup, and a
+ *   column of boxes appearing in its Settings dialog would be a change nobody there asked for.
+ */
+function wbFieldBuilderMarkup(companyId, fields, canManage, scope = '', types = WB_FIELD_ORDER, rowExtra = null, selectable = false) {
   const key = (id) => (scope ? `${scope}:${id}` : id);
+  const picking = selectable && canManage;
+  const chosen = picking ? wbFieldPicks(scope) : null;
   const list = fields.length ? fields.map((field) => {
     const meta = WB_FIELD_TYPES[field.type];
     let extra = '';
     if ((field.type === 'category' || field.type === 'status') && field.config.options) extra = ` · ${field.config.options.length} options`;
     if (field.type === 'relationship' && field.config.targetApp) { const ta = wbRelTargetApp(field, companyId); const wsName = field.config.targetCompany && field.config.targetCompany !== canonicalCompanyId(companyId) ? `${h(companyName(field.config.targetCompany) || 'workspace')} · ` : ''; extra = ta ? ` · → ${wsName}${h(ta.name)}` : ' · (no target)'; }
     if (field.type === 'calculation' && field.config.formula) extra = ` · ${h(field.config.formula)}`;
-    return `<div class="wb-field-row ${field.hidden ? 'wb-field-hidden' : ''}" ${canManage ? 'draggable="true"' : ''} data-fid="${h(key(field.id))}">
+    const ticked = picking && chosen.has(field.id);
+    return `<div class="wb-field-row ${field.hidden ? 'wb-field-hidden' : ''} ${ticked ? 'is-picked' : ''}" ${canManage ? 'draggable="true"' : ''} data-fid="${h(key(field.id))}">
+      ${picking ? `<label class="wb-field-pick"><input type="checkbox" data-wb-pick-field="${h(key(field.id))}" ${ticked ? 'checked' : ''} aria-label="Select ${h(field.label)}" /></label>` : ''}
       ${canManage ? '<span class="wb-grip"><i class="ti ti-grip-vertical"></i></span>' : ''}
       <div class="wb-field-ic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></div>
       <div class="wb-field-meta"><b>${h(field.label)}${field.required ? '<span class="wb-req">*</span>' : ''}${field.hidden ? '<span class="wb-hidden-tag"><i class="ti ti-eye-off"></i>Hidden in table</span>' : ''}</b><div class="wb-field-type">${h(meta.label)}${extra}</div></div>
       ${canManage ? `<div class="wb-field-acts"><button class="wb-icon-btn ${field.hidden ? 'active' : ''}" data-hide-field="${h(key(field.id))}" title="${field.hidden ? 'Show this field in the items table' : 'Hide this field from the items table (still editable on each record)'}"><i class="ti ti-${field.hidden ? 'eye-off' : 'eye'}"></i></button><button class="wb-icon-btn" data-edit-field="${h(key(field.id))}" title="Configure"><i class="ti ti-adjustments"></i></button><button class="wb-icon-btn danger" data-del-field="${h(key(field.id))}" title="Delete"><i class="ti ti-trash"></i></button></div>` : ''}
     </div>${rowExtra ? rowExtra(field) : ''}`;
   }).join('') : '<div class="wb-empty wb-empty-dashed"><i class="ti ti-layout-dashboard"></i><h3>Design your app</h3><p>Add fields from the palette to shape what data this app stores. Drag to reorder anytime.</p></div>';
-  const palette = canManage ? `<div class="wb-palette"><h4>Add a field</h4><input class="wb-input wb-pal-find" data-wb-pal-find placeholder="Search field types" autocomplete="off" aria-label="Search field types">${types.map((type) => { const meta = WB_FIELD_TYPES[type]; return `<button class="wb-palette-item" draggable="true" data-add-type="${scope ? `${scope}:${type}` : type}" data-wb-palette-type="${scope ? `${scope}:${type}` : type}"><span class="wb-pic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-palette-text">${h(meta.label)}<small>${h(meta.desc)}</small></span><i class="ti ti-grip-vertical wb-palette-grip"></i></button>`; }).join('')}</div>` : '';
+  const palette = canManage ? `<div class="wb-palette"><div class="wb-palette-head"><h4>Add a field</h4><input class="wb-input wb-pal-find" data-wb-pal-find placeholder="Search field types" autocomplete="off" aria-label="Search field types"></div><div class="wb-palette-list">${types.map((type) => { const meta = WB_FIELD_TYPES[type]; return `<button class="wb-palette-item" draggable="true" data-add-type="${scope ? `${scope}:${type}` : type}" data-wb-palette-type="${scope ? `${scope}:${type}` : type}"><span class="wb-pic" style="background:${meta.color}22;color:${meta.color}"><i class="ti ${meta.icon}"></i></span><span class="wb-palette-text">${h(meta.label)}<small>${h(meta.desc)}</small></span><i class="ti ti-grip-vertical wb-palette-grip"></i></button>`; }).join('')}</div></div>` : '';
   const dropHint = canManage ? '<div class="wb-drop-hint"><i class="ti ti-arrow-down-to-arc"></i>Drag a field type here to add it</div>' : '';
-  return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? `data-wb-field-dropzone="${h(scope)}"` : ''}><div class="wb-field-count">${fields.length} field${fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${list}${dropHint}</div>${palette}</div>`;
+  // The selection bar. Present whenever rows are selectable, so the select-all box has somewhere
+  // to live before anything is picked -- a bar that only appears once you have already selected
+  // something cannot be how you select the first thing.
+  const allOn = picking && fields.length > 0 && fields.every((field) => chosen.has(field.id));
+  const bar = picking && fields.length ? `
+    <div class="wb-field-bulk ${chosen.size ? 'is-active' : ''}">
+      <label class="wb-field-pick">
+        <input type="checkbox" data-wb-pick-all="${h(scope)}" ${allOn ? 'checked' : ''} aria-label="Select every field" />
+      </label>
+      <span class="wb-field-bulk-count">${chosen.size ? `${chosen.size} selected` : 'Select fields'}</span>
+      ${chosen.size ? `
+        <span class="wb-field-bulk-acts">
+          <button class="btn btn-sm" type="button" data-wb-pick-clear="${h(scope)}"><i class="ti ti-x"></i>Clear</button>
+          <button class="btn btn-sm danger" type="button" data-wb-pick-delete="${h(scope)}"><i class="ti ti-trash"></i>Delete ${chosen.size} field${chosen.size === 1 ? '' : 's'}</button>
+        </span>`
+    : '<span class="wb-sub">Tick a few to move or delete them together.</span>'}
+    </div>` : '';
+  return `<div class="wb-builder-grid"><div class="wb-field-list" ${canManage ? `data-wb-field-dropzone="${h(scope)}"` : ''}><div class="wb-field-count">${fields.length} field${fields.length === 1 ? '' : 's'}${canManage ? ' — drag to reorder, or drag a type from the palette to add' : ''}</div>${bar}${list}${dropHint}</div>${palette}</div>`;
 }
 
-/** The app's own fields, on the Fields tab. */
+/**
+ * The fields ticked in one builder, by scope.
+ *
+ * Held on state rather than in the DOM, because every action here re-renders and a checkbox's
+ * checked-ness does not survive that. Keyed by scope so the App Builder and any other builder on
+ * screen cannot read each other's selection.
+ */
+function wbFieldPicks(scope = '') {
+  if (!state.wbFieldPicks) state.wbFieldPicks = {};
+  if (!(state.wbFieldPicks[scope] instanceof Set)) state.wbFieldPicks[scope] = new Set();
+  return state.wbFieldPicks[scope];
+}
+
+/** Forget the selection. Called after a delete, and when the builder is left. */
+function wbClearFieldPicks(scope = '') {
+  wbFieldPicks(scope).clear();
+}
+
+/** The app's own fields, on the Fields tab. Selectable: 32 fields is a list you edit in bulk. */
 function wbViewBuilder(companyId, workspace, app) {
-  return wbFieldBuilderMarkup(companyId, app.fields, can('workspaces.manage', companyId));
+  return wbFieldBuilderMarkup(companyId, app.fields, can('workspaces.manage', companyId), '', WB_FIELD_ORDER, null, true);
 }
 
 // Install this app into the chosen workspace as a linked pointer. Extracted so both the
@@ -17610,8 +17707,13 @@ function wbBindClocks() {
 // A spreadsheet inside a record. The grid is a full-screen overlay of its own, fetched the
 // first time one is opened -- most apps have no sheet, and none of them should pay for it.
 function wbOpenSheet(fieldId) {
+  // A contact's form is drawn from the stored contact, not from a draft in state, so a render()
+  // when the sheet closes would rebuild it and take everything typed but not yet saved with it.
+  // The sheet is written into its hidden input either way -- only the little preview grid waits
+  // for the next natural repaint, which is a fair trade for not losing the rest of the form.
+  const inContactForm = !!document.querySelector(`[data-company-record-form] [data-wb-sheet-open="${(window.CSS && CSS.escape) ? CSS.escape(fieldId) : fieldId}"]`);
   import('./sheet/sheet-editor.js')
-    .then((mod) => mod.openFor(fieldId, { render }))
+    .then((mod) => mod.openFor(fieldId, inContactForm ? {} : { render }))
     .catch((error) => showToast(error.message || 'The sheet could not be opened.', 'local', 'Workspaces'));
 }
 
@@ -17637,7 +17739,7 @@ function loadRecycleBin() {
   if (recycleBinModule) return Promise.resolve(recycleBinModule);
   if (!recycleBinPending) {
     recycleBinPending = import('./workspace/recycle-bin.js').then((mod) => {
-      recycleBinModule = { ...mod, ...mod.createRecycleBin({ h, can, wbItemTitle, wbTimeAgo, formatDate, memberName, emptyState }) };
+      recycleBinModule = { ...mod, ...mod.createRecycleBin({ h, can, isCompanyOwner, wbItemTitle, wbTimeAgo, formatDate, memberName, emptyState }) };
       return recycleBinModule;
     }).catch((error) => { recycleBinPending = null; throw error; });
   }
@@ -17655,6 +17757,21 @@ function wbViewRecycleBin(companyId, workspace, app) {
 async function wbTrashItems(companyId, workspace, app, itemIds) {
   const mod = await loadRecycleBin();
   const moved = mod.sendToTrash(app, itemIds, activeSession()?.profile?.id || '');
+  if (moved) wbSave(companyId);
+  return moved;
+}
+
+/**
+ * Fields to the bin, with the values they held.
+ *
+ * Awaits the module for the same reason wbTrashItems does, and it matters more here: this is
+ * reached from the Fields tab, where the bin has usually never been opened. A `?.` that resolved
+ * to undefined would silently fall through to the old destructive delete -- which is the exact
+ * outcome this whole change exists to remove.
+ */
+async function wbTrashFields(companyId, app, fieldIds) {
+  const mod = await loadRecycleBin();
+  const moved = mod.sendFieldsToTrash(app, fieldIds, activeSession()?.profile?.id || '');
   if (moved) wbSave(companyId);
   return moved;
 }
@@ -18960,6 +19077,20 @@ function wbCommitOptionChoice(input) {
     .catch((error) => console.error('Option combobox failed to load', error));
 }
 
+// Category "Choice chips". The behaviour lives in ./workspace/chip-field.js, inside the
+// field-config-ui chunk that draws the chips in the first place -- wbRenderFieldInput returns
+// nothing at all until that module has arrived, so a chip on screen is proof it is loaded.
+// Only the routing stays here, where the delegated listeners are.
+let wbChipRuntimeFn = null;
+function wbChips() {
+  if (!wbChipRuntimeFn && wbFieldUiModule) {
+    wbChipRuntimeFn = wbFieldUiModule.createChipRuntime({
+      h, showToast, wbDoc, wbSave, wbUid, can, activeCompanyId, WB_PALETTE,
+    });
+  }
+  return wbChipRuntimeFn;
+}
+
 function wbCollectModalDraft() {
   const m = state.builderModal;
   if (!m) return;
@@ -19262,10 +19393,58 @@ async function wbConfirmDeleteApp() {
   navigate(companyPath('workspaces', {}, companyId));
 }
 
-function wbConfirmDelete() {
+async function wbConfirmDelete() {
   const m = state.builderModal;
   if (!m || m.kind !== 'confirm') return;
   const c = m.confirm; const companyId = m.companyId; const doc = wbDoc(companyId);
+
+  // "Requires the account owner's password" is two rules, and only both together mean anything.
+  //
+  // A browser can verify the SIGNED-IN user's own password and nobody else's -- there is no
+  // server-side verifier for an arbitrary person's, and accepting somebody else's credential
+  // into this page is not a thing a web app should ever do. So the password proves who is at
+  // the keyboard, and THIS proves they are entitled to be. Re-checked here rather than trusted
+  // from the click that opened the dialog: state can change while a modal is open, and a hidden
+  // button is a hint rather than a control.
+  if (c.ownerOnly && !isCompanyOwner(companyId)) {
+    showToast('Only an account owner can do that.', 'error', 'Workspaces');
+    return;
+  }
+  if (c.needsPassword && isLiveSupabaseSession()) {
+    const auth = await confirmAccountPassword(document.getElementById('wbConfirmPw')?.value || '');
+    if (!auth.ok) { showToast(auth.error, 'error', 'Workspaces'); return; }
+  }
+
+  if (c.op === 'del-fields') {
+    const { app: target } = wbFind(companyId, c.workspaceId, c.appId);
+    if (!target) { state.builderModal = null; render(); return; }
+    state.builderModal = null;
+    const moved = await wbTrashFields(companyId, target, c.fieldIds || []);
+    wbClearFieldPicks('');
+    showToast(moved
+      ? `${moved} field${moved === 1 ? '' : 's'} moved to the recycle bin.`
+      : 'Those fields were already gone.', 'local', 'Workspaces');
+    render();
+    return;
+  }
+
+  if (c.op === 'purge-field' || c.op === 'empty-trash') {
+    const { app: target } = wbFind(companyId, c.workspaceId, c.appId);
+    if (!target) { state.builderModal = null; render(); return; }
+    const mod = await loadRecycleBin();
+    if (c.op === 'purge-field') {
+      const gone = mod.purgeFieldFromTrash(target, c.fieldId);
+      state.builderModal = null;
+      if (gone) { wbSave(companyId); showToast('Field deleted for good.', 'local', 'Workspaces'); }
+      render();
+      return;
+    }
+    const n = mod.emptyTrash(target);
+    state.builderModal = null;
+    if (n) { wbSave(companyId); showToast(`${n} item${n === 1 ? '' : 's'} deleted for good.`, 'local', 'Workspaces'); }
+    render();
+    return;
+  }
   if (c.op === 'del-ws') { doc.workspaces = doc.workspaces.filter((w) => w.id !== c.workspaceId); state.builderModal = null; wbSave(companyId); showToast('Workspace deleted.', 'local', 'Workspaces'); navigate(companyPath('workspaces', {}, companyId)); return; }
   const { workspace, app } = wbFind(companyId, c.workspaceId, c.appId);
   if (c.op === 'del-app') {
@@ -19291,8 +19470,19 @@ function wbConfirmDelete() {
         (it.children || []).forEach((child) => { if (child.collection === c.collectionId) delete child.values[c.fieldId]; });
       });
     } else {
-      app.fields = app.fields.filter((f) => f.id !== c.fieldId);
-      app.items.forEach((it) => { delete it.values[c.fieldId]; });
+      // To the bin, not into the void. This used to run `delete it.values[fieldId]` over every
+      // record, destroying the column's data with nothing left to rebuild from -- no deleted_at,
+      // no history table, and automatic backups off by default. The field and every value it
+      // held now travel together into app.fieldTrash, so Restore actually restores.
+      //
+      // Handled by the async path below, which awaits the module rather than risking the old
+      // destructive fallback when the bin has never been opened.
+      state.builderModal = null;
+      wbTrashFields(companyId, app, [c.fieldId]).then((moved) => {
+        showToast(moved ? 'Field moved to the recycle bin.' : 'That field was already gone.', 'local', 'Workspaces');
+        render();
+      }).catch((error) => showToast(error?.message || 'Could not delete that field.', 'error', 'Workspaces'));
+      return;
     }
   }
   else if (c.op === 'del-item') {
@@ -19483,6 +19673,10 @@ function wbSaveAppSettings(companyId, workspaceId, appId) {
   if (rows.length) {
     app.tabs = rows.filter((row) => row.querySelector('input[type=checkbox]')?.checked).map((row) => row.dataset.wbTabRow);
   }
+  // Whether the saved-views panel sits beside the list. Read only when the box is on screen,
+  // so a role that is not offered the setting cannot blank it by saving the rest of the form.
+  const railBox = document.getElementById('wbSetViewsRail');
+  if (railBox) app.hideViews = !railBox.checked;
   const icon = document.querySelector('#wbSetIcons .wb-emoji-opt.sel'); if (icon) app.icon = icon.dataset.icon;
   const color = document.querySelector('#wbSetColors .wb-swatch.sel'); if (color) app.color = color.dataset.color;
   if (state.wbSettingsDraft) delete state.wbSettingsDraft[appId];
@@ -19495,93 +19689,97 @@ function wbSaveAppSettings(companyId, workspaceId, appId) {
 // selectors too, but only when the route section is "workspaces", so the two never collide.
 // The contact form carries the App Builder's file field, and that field is inert without
 // its uploader. Scoped to the form so it cannot bind an App Builder zone behind it.
+/**
+ * Bind the contact form's fields after each render.
+ *
+ * The work itself lives in ./company-contacts/page.js, beside the fieldControl that emitted the
+ * markup -- naming the inputs, the multi-select chips and the calculation recompute are all
+ * only ever wanted on this one form, and the module holding them is already fetched whenever it
+ * can be on screen. Keeping them here would have put four kilobytes of contact-form wiring in
+ * front of every session that never opens Company Contacts.
+ */
 function mountCompanyContactForm() {
   const form = document.querySelector('[data-company-record-form]');
-  if (form) wbMountFileFields(form);
+  if (!form) return;
+  // Named BEFORE anything is bound. The binders below fire `input` events as they paint, and a
+  // recovery draft written from one of those has to carry the field's name or it restores
+  // nothing -- the draft is keyed by name, and an input that has not been named yet is invisible
+  // to it.
+  wbNameContactFieldInputs(form);
+  wbMountFileFields(form);
+  wbMountDurationFields(form);
+  wbMountProgressFields(form);
+  wbMountChecklistFields(form);
+  wbMountTagFields(form);
 }
 
+/**
+ * Give the App Builder's inputs the name this form saves by.
+ *
+ * The record modal reads [data-f] directly at save time, so the App Builder never names its
+ * inputs. The contact form is a real <form>: it saves with FormData and restores through
+ * form.elements, and both key off `name`. Without this, every borrowed field -- a rating, a
+ * checklist, a sheet -- posts nothing at all.
+ */
+function wbNameContactFieldInputs(form) {
+  form.querySelectorAll('[data-f]').forEach((el) => {
+    // A field that already has one is left alone: the hand-written controls name themselves,
+    // and overwriting would rename the very inputs that were already correct.
+    if (el.name || !el.dataset.f) return;
+    // Auto fields are display boxes, not inputs. A name on one would post the rendered text
+    // back over the value the server computes, which is how a calculation ends up frozen.
+    if (el.closest('.wb-auto-readonly, .wb-calc-display')) return;
+    el.name = `field:${el.dataset.f}`;
+  });
+}
+
+/**
+ * The multi-select, as chips over one hidden value.
+ *
+ * FormData keeps only the LAST value of a <select multiple> and a recovery draft restores only
+ * one option, so the App Builder's own control cannot be borrowed here. The chips write a single
+ * hidden input holding JSON, which makes a multi-select one named value like everything else.
+ */
+function wbMountTagFields(overlay) {
+  overlay.querySelectorAll('[data-wb-tagpick]').forEach((zone) => {
+    if (zone.dataset.bound) return;
+    zone.dataset.bound = '1';
+    const hidden = zone.querySelector('input[type="hidden"]');
+    if (!hidden) return;
+    const read = () => {
+      const raw = String(hidden.value || '').trim();
+      if (!raw) return [];
+      try { const list = JSON.parse(raw); return Array.isArray(list) ? list.map(String) : []; } catch { return []; }
+    };
+    zone.querySelectorAll('[data-wb-tag]').forEach((chip) => {
+      chip.onclick = (event) => {
+        event.preventDefault();
+        const id = String(chip.dataset.wbTag || '');
+        const current = read();
+        const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+        // Empty writes '' rather than '[]', so "nothing chosen" is the same absent value the
+        // save path already treats as unset.
+        hidden.value = next.length ? JSON.stringify(next) : '';
+        const on = next.includes(id);
+        chip.classList.toggle('on', on);
+        chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+        hidden.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+    });
+  });
+}
+
+// The contact card's own wiring lives in ./company-contacts/page.js, beside the markup it
+// binds. It only ever runs on a Company Contacts screen, and that module is only fetched when
+// one is open -- here it was entry-chunk weight for a page most sessions never visit.
+function mountCompanyContactCard() {
+  companyContactWrites()?.mountCard();
+}
+
+// The Fields tab's wiring lives in ./company-contacts/page.js beside the markup it binds --
+// contacts-only code, and that module is only fetched when a contacts screen is open.
 function mountCompanyContactFields() {
-  const root = document.querySelector('[data-cc-field-builder]');
-  if (!root) return;
-  const page = companyContactWrites();
-  if (!page) return;
-
-  // The scope prefix the shared markup writes in front of every id. Stripped here rather than
-  // threaded through, because this editor has exactly one list to put a field in.
-  const bare = (raw) => String(raw || '').replace(/^cc:/, '');
-  const bind = (selector, handler, event = 'onclick') => root.querySelectorAll(selector)
-    .forEach((el) => { el[event] = (e) => { e.preventDefault(); handler(el, e); }; });
-
-  bind('[data-add-type]', (el) => page.addCompanyContactField(bare(el.dataset.addType)));
-  bind('[data-edit-field]', (el) => page.configureCompanyContactField(bare(el.dataset.editField)));
-  bind('[data-hide-field]', (el) => page.toggleCompanyContactFieldHidden(bare(el.dataset.hideField)));
-  bind('[data-del-field]', (el) => page.removeCompanyContactField(bare(el.dataset.delField)));
-
-  // The contact card's calendar. State only -- which view, and which week or month it is
-  // looking at -- so the card redraws from the same records rather than fetching anything.
-  bind('[data-cc-cal-view]', (el) => { state.ccCalView = el.dataset.ccCalView; render(); });
-  bind('[data-cc-cal-step]', (el) => {
-    state.ccCalAt = page.shiftContactCalendar(state.ccCalView, state.ccCalAt, Number(el.dataset.ccCalStep));
-    render();
-  });
-  bind('[data-cc-cal-today]', () => { state.ccCalAt = ''; render(); });
-
-  bind('[data-cc-add-option]', (el) => page.addCompanyContactFieldOption(el.dataset.fieldId));
-  bind('[data-wb-del-option]', (el) => page.removeDraftFieldOption(
-    el.closest('[data-cc-field-config]')?.dataset.fieldId, el.closest('.wb-opt-item')?.dataset.oid,
-  ));
-
-  // Drag a type out of the palette; drop it on the list to append, or on a row to insert
-  // there. The same two gestures the App Builder has.
-  let dragId = '';
-  let paletteType = '';
-  root.querySelectorAll('.wb-palette-item').forEach((item) => {
-    item.ondragstart = (event) => {
-      paletteType = bare(item.dataset.wbPaletteType);
-      item.classList.add('dragging');
-      if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'copy'; try { event.dataTransfer.setData('text/plain', paletteType); } catch { /* ignore */ } }
-    };
-    item.ondragend = () => {
-      paletteType = '';
-      item.classList.remove('dragging');
-      root.querySelectorAll('.drop-target, .wb-drop-active').forEach((el) => el.classList.remove('drop-target', 'wb-drop-active'));
-    };
-  });
-
-  const zone = root.querySelector('[data-wb-field-dropzone]');
-  if (zone) {
-    zone.ondragover = (event) => { if (paletteType) { event.preventDefault(); zone.classList.add('wb-drop-active'); } };
-    zone.ondragleave = (event) => { if (event.target === zone) zone.classList.remove('wb-drop-active'); };
-    zone.ondrop = (event) => {
-      if (!paletteType) return;
-      event.preventDefault();
-      zone.classList.remove('wb-drop-active');
-      const type = paletteType;
-      paletteType = '';
-      page.addCompanyContactField(type);
-    };
-  }
-
-  root.querySelectorAll('.wb-field-row[draggable]').forEach((row) => {
-    row.ondragstart = () => { dragId = bare(row.dataset.fid); row.classList.add('dragging'); };
-    row.ondragend = () => { row.classList.remove('dragging'); root.querySelectorAll('.wb-field-row').forEach((el) => el.classList.remove('drop-target')); };
-    row.ondragover = (event) => { event.preventDefault(); row.classList.add('drop-target'); };
-    row.ondragleave = () => row.classList.remove('drop-target');
-    row.ondrop = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      row.classList.remove('drop-target');
-      const target = bare(row.dataset.fid);
-      // A palette drag lands as an insert at that position; a row drag is a reorder.
-      if (paletteType) {
-        const type = paletteType;
-        paletteType = '';
-        page.addCompanyContactField(type, page.fieldIndexOf(target));
-        return;
-      }
-      page.moveCompanyContactField(dragId, target);
-    };
-  });
+  companyContactWrites()?.mountFieldsEditor();
 }
 
 function mountWorkspaceBuilder() {
@@ -19746,6 +19944,36 @@ function mountWorkspaceBuilder() {
       showToast(f.hidden ? `"${f.label}" hidden from the table.` : `"${f.label}" shown in the table.`, 'local', 'Workspaces');
       render();
     });
+    // ---- selecting several fields at once ------------------------------------------------
+    bind('[data-wb-pick-field]', (el) => {
+      const { id } = splitScope(el.dataset.wbPickField);
+      const picks = wbFieldPicks('');
+      if (picks.has(id)) picks.delete(id); else picks.add(id);
+      render();
+    }, 'onchange');
+    bind('[data-wb-pick-all]', (el) => {
+      const { app } = wbFind(companyId, workspaceId, appId);
+      const picks = wbFieldPicks('');
+      picks.clear();
+      // Every field in the list, which is every field there is -- this builder does not filter.
+      if (el.checked) (app?.fields || []).forEach((field) => picks.add(field.id));
+      render();
+    }, 'onchange');
+    bind('[data-wb-pick-clear]', () => { wbClearFieldPicks(''); render(); });
+    bind('[data-wb-pick-delete]', () => {
+      const { app } = wbFind(companyId, workspaceId, appId);
+      const picks = [...wbFieldPicks('')];
+      const going = (app?.fields || []).filter((field) => picks.includes(field.id));
+      if (!going.length) return;
+      // Bulk, but not destructive: these go to the recycle bin with the values they hold, so a
+      // wrong selection is undone by pressing Restore rather than by a database recovery.
+      const names = going.slice(0, 3).map((field) => field.label).join(', ');
+      const more = going.length > 3 ? ` and ${going.length - 3} more` : '';
+      openWbConfirm(companyId, 'del-fields',
+        `${names}${more} will be moved to the recycle bin, along with the values they hold on every record. You can restore them from there.`,
+        { workspaceId, appId, fieldIds: going.map((field) => field.id) });
+    });
+
     bind('[data-del-field]', (el) => {
       const { collectionId, id } = splitScope(el.dataset.delField);
       const owner = fieldOwner(collectionId);
@@ -19884,10 +20112,48 @@ function mountWorkspaceBuilder() {
       const { app } = wbFind(companyId, workspaceId, appId);
       if (recycleBinModule?.purgeFromTrash(app, el.dataset.wbTrashPurge)) { wbSave(companyId); showToast('Deleted for good.', 'local', 'Workspaces'); render(); }
     });
+    bind('[data-wb-trash-field-restore]', (el) => {
+      const { app } = wbFind(companyId, workspaceId, appId);
+      const back = recycleBinModule?.restoreFieldFromTrash(app, el.dataset.wbTrashFieldRestore);
+      if (back) { wbSave(companyId); showToast(`${back.label || 'Field'} restored, with the values it held.`, 'local', 'Workspaces'); render(); }
+    });
+    bind('[data-wb-trash-field-purge]', (el) => {
+      const { app } = wbFind(companyId, workspaceId, appId);
+      // The only irreversible act in the bin, so it is the one that asks. A field purge takes
+      // the column's data on every record with it and nothing can bring that back.
+      const entry = (app.fieldTrash || []).find((row) => row.field?.id === el.dataset.wbTrashFieldPurge);
+      const held = recycleBinModule?.trashedFieldValueCount(entry) || 0;
+      openWbConfirm(companyId, 'purge-field', held
+        ? `"${entry?.field?.label || 'This field'}" still holds a value on ${held} record${held === 1 ? '' : 's'}. Deleting it for good destroys those values — nothing can bring them back.`
+        : `"${entry?.field?.label || 'This field'}" will be deleted for good.`,
+      { workspaceId, appId, fieldId: el.dataset.wbTrashFieldPurge, needsPassword: held > 0 });
+    });
     bind('[data-wb-trash-empty]', () => {
       const { app } = wbFind(companyId, workspaceId, appId);
-      const n = recycleBinModule?.emptyTrash(app) || 0;
-      if (n) { wbSave(companyId); showToast(`${n} record${n === 1 ? '' : 's'} deleted for good.`, 'local', 'Workspaces'); render(); }
+      const totals = recycleBinModule?.trashTotals(app) || { records: 0, fields: 0, fieldValues: 0 };
+      if (!totals.records && !totals.fields) return;
+      // Owners only. "Requires the account owner's password" is two rules, and only both
+      // together mean anything: a browser can verify the SIGNED-IN user's own password and
+      // nobody else's, so the password proves who is at the keyboard and this proves they are
+      // entitled to be. Checked again in the confirm handler -- a disabled button is a hint,
+      // not a control.
+      if (!isCompanyOwner(companyId)) {
+        showToast('Only an account owner can empty the recycle bin.', 'error', 'Workspaces');
+        return;
+      }
+      // This had NO confirmation at all, which was survivable while the bin held only records
+      // that were already deleted on purpose. It now holds fields and the data they carried, so
+      // emptying it is the largest single destructive act in the product.
+      const parts = [
+        totals.records ? `${totals.records} record${totals.records === 1 ? '' : 's'}` : '',
+        totals.fields ? `${totals.fields} field${totals.fields === 1 ? '' : 's'}` : '',
+      ].filter(Boolean).join(' and ');
+      // Always the password, whatever is in there. Emptying the bin is the one action that
+      // destroys everything somebody put aside precisely because they were not sure -- gating it
+      // on what happens to be inside would mean the friction came and went unpredictably.
+      openWbConfirm(companyId, 'empty-trash',
+        `${parts} will be deleted for good.${totals.fieldValues ? ` That includes field values on ${totals.fieldValues} record${totals.fieldValues === 1 ? '' : 's'}.` : ''} Nothing here can be recovered afterwards.`,
+        { workspaceId, appId, needsPassword: true, ownerOnly: true });
     });
     bind('[data-wb-view-file]', (el) => { openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
     // Changing the chip field clears the chosen chip: its id belongs to the old field and
@@ -20033,6 +20299,26 @@ function mountWorkspaceBuilder() {
     bind('[data-del-auto]', (el) => openWbConfirm(companyId, 'del-auto', 'This rule will stop running.', { workspaceId, appId, autoId: el.dataset.delAuto }));
     bind('[data-toggle-auto]', (el) => { const { app } = wbFind(companyId, workspaceId, appId); const au = app.automations.find((x) => x.id === el.dataset.toggleAuto); if (au) { au.enabled = el.checked; wbSave(companyId); render(); } }, 'onchange');
     document.querySelectorAll('#wbSetIcons .wb-emoji-opt').forEach((b) => { b.onclick = () => { document.querySelectorAll('#wbSetIcons .wb-emoji-opt').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); }; });
+    // Searching 115 icons, the same way the create-app modal already does. Filtering by hiding
+    // rather than re-rendering keeps the chosen icon selected while somebody types: the save
+    // reads `.sel` out of the grid, and a re-render would drop that selection on every keystroke.
+    const setIconSearch = document.querySelector('[data-wb-app-icon-search]');
+    if (setIconSearch) {
+      const filterAppIcons = () => {
+        const query = setIconSearch.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#wbSetIcons .wb-emoji-opt').forEach((b) => {
+          const hit = !query || (b.dataset.iconName || '').includes(query);
+          b.hidden = !hit;
+          if (hit) shown += 1;
+        });
+        // Say so, rather than showing an empty box that reads as the icons having failed to load.
+        const none = document.querySelector('#wbSetIconNone');
+        if (none) none.hidden = shown > 0;
+      };
+      setIconSearch.oninput = filterAppIcons;
+      filterAppIcons();
+    }
     document.querySelectorAll('#wbSetColors .wb-swatch').forEach((b) => { b.onclick = () => { document.querySelectorAll('#wbSetColors .wb-swatch').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); }; });
     // The custom swatch carries data-color (read on save); update it and reselect
     // when a color is chosen from the native picker.
@@ -20187,6 +20473,33 @@ function wbMountModal() {
   const wbDelRow = (kind, keys, index) => [...overlay.querySelectorAll(`[data-wb-${kind}-row]`)]
     .map((row) => Object.fromEntries(keys.map((key) => [key, row.querySelector(`[data-wb-${kind}-${key}]`)?.value || ''])))
     .filter((_, at) => at !== index);
+  // A link button built from the record's own data. Inserted at the cursor rather than appended,
+  // so `mailto:` then Email then `?subject=Hi` reads the way somebody typed it -- and no
+  // re-render, or the box would lose focus and the caret on every chip.
+  overlay.querySelectorAll('[data-wb-href-field]').forEach((b) => {
+    b.onclick = () => {
+      const box = overlay.querySelector('#wbBtnHref');
+      if (!box) return;
+      const token = `{${b.dataset.wbHrefField}}`;
+      const at = Number.isInteger(box.selectionStart) ? box.selectionStart : box.value.length;
+      const to = Number.isInteger(box.selectionEnd) ? box.selectionEnd : at;
+      box.value = `${box.value.slice(0, at)}${token}${box.value.slice(to)}`;
+      box.focus();
+      box.setSelectionRange(at + token.length, at + token.length);
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+  });
+  // The three anybody actually wants, in one press. Replaces rather than appends: "Call" means
+  // this button calls, not that tel: is bolted onto whatever was already there.
+  overlay.querySelectorAll('[data-wb-href-set]').forEach((b) => {
+    b.onclick = () => {
+      const box = overlay.querySelector('#wbBtnHref');
+      if (!box) return;
+      box.value = b.dataset.wbHrefSet;
+      box.focus();
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+  });
   overlay.querySelectorAll('[data-wb-set-add]').forEach((b) => {
     b.onclick = () => { wbCollectModalDraft(); m.draft.config.set = [...(m.draft.config.set || []), { field: '', value: '' }]; render(); };
   });
@@ -24631,9 +24944,20 @@ function renderActiveModal(route, session) {
   if (state.modal === 'job-walk') return jobWalkModule ? jobWalkModule.renderModal() : renderModalShell('Jobs', 'Job walk', questLoader('Loading'), 'wb-modal-sm');
   if (state.modal === 'jobs-bulk-delete') return renderJobsBulkDeleteModal();
   if (state.modal === 'company-contact-fields') {
-    return renderModalShell('Company Contacts', 'Edit fields',
-      renderCompanyContactFieldsEditor(route.companyId || activeCompanyId()), 'wide-modal',
-      '<button class="btn btn-primary" type="button" data-action="save-company-contact-fields"><i class="ti ti-device-floppy"></i>Save fields</button>');
+    // One dialog, two tabs: what a contact HOLDS, and how a contact READS. Both are edited
+    // against the same field draft and written by the same Save, so moving a field to the
+    // summary line and renaming it are one action rather than two round trips.
+    const tab = state.ccSettingsTab === 'card' ? 'card' : 'fields';
+    const tabs = `<div class="cc-settings-tabs" role="tablist" aria-label="Company Contacts settings">
+      ${[['fields', 'ti-list-details', 'Fields'], ['card', 'ti-id-badge-2', 'Contact card']].map(([id, icon, label]) => `
+        <button class="cc-settings-tab ${tab === id ? 'on' : ''}" type="button" role="tab" aria-selected="${tab === id ? 'true' : 'false'}" data-action="set-company-contact-settings-tab" data-tab="${id}"><i class="ti ${icon}"></i>${label}</button>`).join('')}
+    </div>`;
+    const body = tab === 'card'
+      ? renderCompanyContactCardSettings(route.companyId || activeCompanyId())
+      : renderCompanyContactFieldsEditor(route.companyId || activeCompanyId());
+    return renderModalShell('Company Contacts', 'Settings',
+      `${tabs}${body}`, 'wide-modal',
+      '<button class="btn btn-primary" type="button" data-action="save-company-contact-fields"><i class="ti ti-device-floppy"></i>Save settings</button>');
   }
   if (state.modal === 'company-record-form') {
     return renderModalShell('Company Contacts', state.selectedCompanyContactId ? 'Edit contact' : 'New contact',
@@ -26203,6 +26527,15 @@ function onDocumentKeydown(event) {
   // which is how a password field became impossible to type into.
   if (state.commandPalette.open && !(state.builderModal || state.modal) && commandPaletteKeydown(event)) return;
 
+  // The "+ Other" box on a choice-chip Category field. Checked before the modal handling
+  // below, because Escape there dismisses the whole dialog -- and backing out of a half-typed
+  // option name must not take the record with it. Enter commits, the same as clicking Done.
+  const chipNew = event.target?.closest?.('[data-wb-chip-new-input]');
+  if (chipNew && (event.key === 'Enter' || event.key === 'Escape')) {
+    wbChips()?.wbChipKeydown(chipNew.closest('[data-wb-chip-pick]'), event);
+    return;
+  }
+
   // Modal keyboard support: Esc dismisses, Tab is trapped within the modal.
   if ((state.builderModal || state.modal) && activeModalOverlay()) {
     if (event.key === 'Escape') { if (dismissTopModal()) event.preventDefault(); return; }
@@ -26908,6 +27241,17 @@ function onDocumentClick(event) {
     return;
   }
 
+  // A Category field set to "Choice chips". The whole row is claimed here rather than each
+  // control separately: inside a table cell these chips sit on a row that opens the record, and
+  // a click meant for a chip must not also open it. Delegated rather than mounted, because the
+  // row is drawn in the record modal, in a child item, and in an inline cell alike.
+  const chipZone = event.target.closest('[data-wb-chip-pick]');
+  if (chipZone) {
+    event.stopPropagation();
+    wbChips()?.wbChipClick(chipZone, event);
+    return;
+  }
+
   // Checked before the option itself: the X sits beside the option, so a click that lands on
   // it must prune the list rather than pick the value it is attached to.
   const removeOption = event.target.closest('[data-job-type-remove-option]');
@@ -26939,9 +27283,17 @@ function onDocumentClick(event) {
       input.value = jobTypeOption.dataset.jobTypeOption || '';
       syncContactRoofFieldVisibility(input);
       if (input.hasAttribute('data-wb-option-input')) wbCommitOptionChoice(input);
+      // A Company Contacts combobox stores the LABEL and has no [data-wb-option-input], so it
+      // never reached the minting above -- its options were only written when the contact was
+      // saved. Clicking "Use ABS" is the moment the choice is made, so that is when it joins
+      // the list, matching what an app's category does and what the wording promises.
+      commitContactOptionChoice(input);
       input.dispatchEvent(new Event('change', { bubbles: true }));
       input.focus();
-      closeJobTypeMenus(input);
+      // Every menu, this one included. closeJobTypeMenus(input) EXEMPTS the given input's own
+      // menu -- it is written for "close the others while I work in this one" -- so passing the
+      // input here left the list hanging open over the form after a choice had been made.
+      closeJobTypeMenus();
     }
     return;
   }
@@ -27053,7 +27405,9 @@ function handleAction(event, node) {
   keepWorkspaceFormText(node);
   if (action === 'restore-form-draft' || action === 'discard-form-draft') {
     event.preventDefault();
-    handleProtectedFormDraftAction(action, node);
+    loadDraftRecovery()
+      .then((mod) => mod.handleProtectedFormDraftAction(action, node))
+      .catch((error) => console.error('Draft recovery failed to load', error));
     return;
   }
   if (action === 'open-record-history') {
@@ -29418,7 +29772,22 @@ function handleAction(event, node) {
     event.preventDefault();
     if (!requirePermission('company_contacts.manage', activeCompanyId())) return;
     companyContactWrites()?.openCompanyContactFieldEditor(activeCompanyId());
+    // Always on Fields: it is what the dialog is opened for nine times in ten, and landing on
+    // whichever tab was left open last means the gear does something different each time.
+    state.ccSettingsTab = 'fields';
     state.modal = 'company-contact-fields';
+    render();
+    return;
+  }
+  if (action === 'set-company-contact-settings-tab') {
+    event.preventDefault();
+    // Read the tab being LEFT before the DOM holding it is rebuilt, or switching to the card
+    // tab and back discards the label just typed -- and switching away from the card tab
+    // discards the placement just chosen.
+    const page = companyContactWrites();
+    page?.syncFieldDraftNow();
+    page?.syncCardDraft();
+    state.ccSettingsTab = node.dataset.tab === 'card' ? 'card' : 'fields';
     render();
     return;
   }
@@ -29427,6 +29796,27 @@ function handleAction(event, node) {
     companyContactWrites()?.configureCompanyContactField(node.dataset.fieldId);
     return;
   }
+  // Everything the contact card and its settings do. One line here, the fifteen bodies in
+  // ./company-contacts/page.js -- they are only reachable from a screen that module is loaded
+  // for, and in the entry chunk they were weight every session paid for and most never used.
+  if (action.startsWith('cc-') && companyContactWrites()?.handleCardAction(action, node, event)) return;
+  // ---- Settings > Contact card: what is on it, how wide, and where a button sits ----------
+  // Every one of these re-renders, so every one banks the open panel first -- the same contract
+  // the tab switch above follows. Without it the size just chosen is thrown away by the render
+  // that was supposed to show it.
+  if (action === 'remove-company-contact-field') {
+    event.preventDefault();
+    companyContactWrites()?.removeCompanyContactField(node.dataset.fieldId);
+    return;
+  }
+  // ---- editing the contact card in place -------------------------------------------------
+  // These write straight through: the card is not a draft, and a change made on it is already
+  // on screen, so a Save step would only be a chance to lose it.
+  // cc-panel-toggle / -limit / -choice are deliberately NOT handled on click. They are a
+  // checkbox, a number box and a select, and they report on `change` (see onDocumentChange).
+  // Handling them here as well is what stopped the dropdowns working: clicking to OPEN one
+  // fired this, which wrote back the value it already had and called render(), tearing the
+  // open dropdown out of the DOM before anything could be chosen.
   if (action === 'remove-draft-field-option') {
     event.preventDefault();
     companyContactWrites()?.removeDraftFieldOption(node.dataset.fieldId, node.dataset.optionId);
@@ -33322,7 +33712,7 @@ function onDocumentInput(event) {
   if (event.target.closest?.('[data-f]')) wbSyncButtons(event.target.closest('form, .wb-modal, .wb-record-page'));
   if (event.target.matches('[data-wb-pal-find]')) {
     const q = event.target.value.trim().toLowerCase();
-    event.target.parentNode.querySelectorAll('.wb-palette-item').forEach((item) => {
+    event.target.closest('.wb-palette').querySelectorAll('.wb-palette-item').forEach((item) => {
       item.hidden = !!q && !item.textContent.toLowerCase().includes(q);
     });
     return;
@@ -33621,6 +34011,12 @@ function horizontalScrollerUnder(target) {
 }
 
 function onDocumentChange(event) {
+  // The contact card's panel-contents controls: a checkbox, a number box and a select, so the
+  // value is only right on the CHANGE event. Dispatched into the page module for the same
+  // reason the click actions are -- these bodies belong with the markup that emits them.
+  const panelOpt = event.target.closest?.('[data-action^="cc-panel-"]');
+  if (panelOpt && panelOpt.dataset.action !== 'cc-panel-settings'
+    && companyContactWrites()?.handleCardChange(panelOpt)) return;
   // Typed rather than picked: change fires when the box loses focus, which is the moment a
   // value stops being half-typed and becomes the answer.
   if (event.target.matches?.('[data-wb-option-input]')) wbCommitOptionChoice(event.target);
@@ -34002,8 +34398,11 @@ function loadButtonPush() {
   if (!buttonPushPending) {
     buttonPushPending = import('./workspace/button-push.js').then((mod) => {
       buttonPushModule = mod.createButtonPush({
-        can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
+        h, can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
         state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle,
+        // A thunk, not the resolved seat: the contacts page is loaded on its own schedule, and
+        // this keeps every storage-shape difference a contact has on that side of the boundary.
+        contactSeat: (seat) => companyContactsPageModule?.contactButtonSeat(seat) || null,
       });
       return buttonPushModule;
     }).catch((error) => { buttonPushPending = null; throw error; });
@@ -37079,8 +37478,18 @@ function setActiveWorkspace(workspaceId) {
   localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
   applyPipelineStagesForCompany(workspace.company_id);
   resetScopedUiState();
+  // Choosing a workspace means "show me that workspace", and what a workspace IS to the people
+  // building on it is its apps. Staying on whatever section happened to be open sent somebody
+  // who was in Settings straight to the next workspace's Settings -- the same admin screen with
+  // a different subject, and nothing on it to say the switch had worked at all.
+  //
+  // Anyone whose role cannot open Apps keeps the section they were on: landing them on a page
+  // that refuses them is worse than not moving them.
   const route = state.route || getRoute();
-  const section = route.name === 'company' ? route.section : 'jobs';
+  const current = route.name === 'company' ? route.section : 'jobs';
+  const section = can('workspaces.view', workspace.company_id) ? 'workspaces' : current;
+  // No app_id: the workspace's own home, which is where its apps are listed. Which workspace
+  // the builder shows follows state.activeWorkspaceId, set just above.
   navigate(companyPath(section, { workspace: workspace.id }, workspace.company_id));
 }
 
@@ -37975,10 +38384,16 @@ function loadCompanyContactsPage() {
         activeCompanyId, appHref, can, canonicalCompanyId, companyContactById, companyContactChipField,
         companyContactFieldsFor, companyContactValue, companyContactsFor, companyPath, emptyState,
         createSupabaseClient, h, isLiveSupabaseSession, money, navigate, normalizeCompanyContact,
-        normalizeCompanyContactField, render, requirePermission, showToast, state,
-        supabaseRow, supabaseWrite, timeAgo, wbDoc, wbFieldBuilderMarkup, wbFileIcon, wbFileValues,
+        normalizeCompanyContactField, render, requirePermission, requireMutableWorkspace, showToast, state,
+        supabaseRow, supabaseWrite, timeAgo, wbDoc, saveWorkspaceBuilderDoc, wbCompanyApps, wbPlainVal,
+        wbFieldBuilderMarkup, wbFileIcon, wbFileValues,
         wbFmtDuration, wbNameValue, wbOptRow, acceptAttr, fileTypeKind, formatDate, WB_FIELD_TYPES,
+        protectedFormDraftAttributes, renderProtectedFormDraftStrip, clearProtectedFormDraft,
         COMPANY_CONTACT_COLS, COMPANY_CONTACT_FIELD_COLS, COMPANY_CONTACT_FIELD_TYPES,
+        COMPANY_CONTACT_WB_TYPES, wbRenderFieldInput, wbFieldConfigUI,
+        wbCollectFieldConfig: (type, config, companyId) => wbFieldUiModule?.collectFieldConfig(type, config, companyId),
+        wbMembers, wbMemberById, wbAvatar, wbRatingStars, wbTagsChips, wbAutoNumberText,
+        wbProgressDisplayHtml, wbChecklistStats, wbComputeCalc, wbNextContactAutoNumber,
       });
       return companyContactsPageModule;
     }).catch((error) => {
@@ -37995,9 +38410,25 @@ function renderCompanyContactsPage(route, companyId) {
   return questLoader('Loading contacts');
 }
 
+/**
+ * Both halves of Company Contacts now draw App Builder fields, so both wait for that chunk.
+ *
+ * wbRenderFieldInput and wbFieldConfigUI return an empty string until field-config-ui.js has
+ * arrived. Rendering a beat early would not fail loudly -- it would draw a contact form with
+ * the rating, the checklist and the photo simply missing from it, which reads as a broken form
+ * rather than a loading one.
+ */
+function companyContactFieldUiReady(onMissing) {
+  if (wbFieldUiModule) return true;
+  wbLoadFieldUi().then(() => render()).catch((error) => companyContactsLoadFailed(error, onMissing));
+  return false;
+}
+
 function renderCompanyContactEditor(companyId, contact) {
-  if (companyContactsPageModule) return companyContactsPageModule.renderCompanyContactEditor(companyId, contact);
-  loadCompanyContactsPage().then(() => render()).catch((error) => companyContactsLoadFailed(error, 'That form could not load'));
+  if (companyContactsPageModule && companyContactFieldUiReady('That form could not load')) {
+    return companyContactsPageModule.renderCompanyContactEditor(companyId, contact);
+  }
+  if (!companyContactsPageModule) loadCompanyContactsPage().then(() => render()).catch((error) => companyContactsLoadFailed(error, 'That form could not load'));
   return questLoader('Loading form');
 }
 
@@ -38007,9 +38438,24 @@ function companyContactWrites() {
   return companyContactsPageModule;
 }
 
+function renderCompanyContactCardSettings(companyId) {
+  // Waits for the App Builder's field UI as well as the page, exactly as the Fields tab does.
+  // This tab draws a button's action panel inline through wbFieldConfigUI, and that returns an
+  // empty string until field-config-ui.js has arrived -- so rendering a beat early showed
+  // "Configure action" opening onto nothing at all, which reads as a broken button rather than
+  // a loading one.
+  if (companyContactsPageModule && companyContactFieldUiReady('Card settings could not load')) {
+    return companyContactsPageModule.renderCompanyContactCardSettings(companyId);
+  }
+  if (!companyContactsPageModule) loadCompanyContactsPage().then(() => render()).catch((error) => companyContactsLoadFailed(error, 'Card settings could not load'));
+  return questLoader('Loading settings');
+}
+
 function renderCompanyContactFieldsEditor(companyId) {
-  if (companyContactsPageModule) return companyContactsPageModule.renderCompanyContactFieldsEditor(companyId);
-  loadCompanyContactsPage().then(() => render()).catch((error) => companyContactsLoadFailed(error, 'The field editor could not load'));
+  if (companyContactsPageModule && companyContactFieldUiReady('The field editor could not load')) {
+    return companyContactsPageModule.renderCompanyContactFieldsEditor(companyId);
+  }
+  if (!companyContactsPageModule) loadCompanyContactsPage().then(() => render()).catch((error) => companyContactsLoadFailed(error, 'The field editor could not load'));
   return questLoader('Loading fields');
 }
 
@@ -38031,8 +38477,23 @@ function companyContactFieldsFor(companyId = activeCompanyId()) {
 
 // Whichever category field the directory groups by. The first one, because a second set of
 // chips would be two answers to the same question.
+/**
+ * The field that badges a contact: the pill beside the name and the colour of the avatar.
+ *
+ * Chosen in Settings > Contact card, and stored as `badge` on the field's own config -- there
+ * is no company-level settings row to put it in, and the choice is genuinely about one field.
+ * Falling back to the first category keeps every company that has never opened the panel
+ * looking exactly as it did.
+ *
+ * Only an option-list field can badge: the pill is coloured from the chosen option, and a date
+ * or a money value has no colour to take.
+ */
 function companyContactChipField(companyId = activeCompanyId()) {
-  return companyContactFieldsFor(companyId).find((field) => field.type === 'category') || null;
+  const fields = companyContactFieldsFor(companyId);
+  const badgeable = (field) => field.type === 'category' || field.type === 'status';
+  return fields.find((field) => field.config?.badge === true && badgeable(field))
+    || fields.find(badgeable)
+    || null;
 }
 
 function companyContactValue(contact, field) {
@@ -38120,7 +38581,7 @@ function wbPullFromContact(picker, contact) {
   // fault from one that never arrived, and calling both "failed to load" hid the
   // first for two deploys.
   loadRelationshipPicker()
-    .then((mod) => mod.applyPullValues(picker, values))
+    .then((mod) => mod.applyPullValues(picker, values, { chips: wbChips }))
     .catch((error) => console.error('Contact copy failed', error));
 }
 
@@ -41927,10 +42388,44 @@ function normalizeCompanyContact(input) {
 
 // One row of a customer-editable dropdown. `kind` says which list it belongs to: the type
 // list ships with trade defaults, the organization list fills itself from use.
-// The field types a Company Contact may use. A deliberate subset of the App Builder's --
-// these are the ones that mean something on a person, and every one of them already has a
-// renderer, so nothing here needs a second implementation.
-const COMPANY_CONTACT_FIELD_TYPES = ['text', 'textarea', 'number', 'money', 'phone', 'email', 'location', 'file', 'category', 'checkbox', 'date'];
+// The field types a Company Contact may use: the App Builder's palette, minus the three that
+// cannot mean anything here. They used to be described as one exception; they are three, and
+// collapsing them is what kept a perfectly workable field off the list for months.
+//
+// RELATIONSHIP and ROLLUP resolve IMPLICITLY against the app they live in -- one points at
+// items in a particular app, the other aggregates across one. A contact belongs to the whole
+// company and has no such app, so "which app" genuinely has no answer. Left off.
+//
+// COMPANY_CONTACT is circular from here: a contact pointing at another contact says nothing
+// about a person, and the directory already links them. Note this is only about the CONTACTS
+// palette -- the type stays in the APP palette, because that is how a workspace app points at
+// a contact, and contactUsage() scanning for it is what the whole contact card is built from.
+//
+// BUTTON is not here either, and for a fourth reason: it is not a FIELD at all. A field is
+// something a contact HOLDS -- it has a value, a place on the add/edit form, and a column in the
+// directory. A button has none of those; it stores nothing and can never be filled in. Making it
+// a field gave every contact a column that could not contain anything.
+//
+// It lives on the card instead, beside the tiles and the panels, in `contactCard.buttons` on the
+// builder document. See src/company-contacts/card-layout.js normalizeCardButton.
+//
+// Everything else already has a renderer, a config panel and a stored shape in the App
+// Builder, which is why this list can be widened without a second implementation of anything:
+// the contact form draws them with wbRenderFieldInput, the same function the record form uses.
+const COMPANY_CONTACT_FIELD_TYPES = [
+  'text', 'textarea', 'number', 'money', 'phone', 'email', 'location', 'file', 'category', 'checkbox', 'date',
+  'url', 'status', 'tags', 'rating', 'duration', 'progress', 'checklist', 'image', 'sheet',
+  'user',
+  'calculation', 'autonumber', 'created_time', 'updated_time',
+];
+// Drawn by the App Builder's own input renderer rather than by a hand-written control in the
+// contacts page. The original eleven keep their bespoke markup: their stored shapes predate
+// this (a category holds its LABEL here and its option id in an app), and rewriting them would
+// be a data migration for no visible gain.
+const COMPANY_CONTACT_WB_TYPES = new Set([
+  'url', 'status', 'tags', 'rating', 'duration', 'progress', 'checklist', 'image', 'sheet',
+  'user', 'calculation', 'autonumber', 'created_time', 'updated_time',
+]);
 
 function normalizeCompanyContactField(input) {
   return {
@@ -43486,7 +43981,15 @@ function clientPortalDocumentPayload(doc) {
     is_current: doc.is_current !== false,
     review_status: doc.review_status || 'pending',
     scale: Number(doc.scale) > 0 ? Number(doc.scale) : null,
-    scale_unit: ['ft', 'in', 'cm'].includes(doc.scale_unit) ? doc.scale_unit : null,
+    // Never null. The column is NOT NULL DEFAULT 'ft' in the database, and a default only
+    // applies to a key that is ABSENT -- an explicit null is a not-null violation, which is
+    // what made every plan-set upload fail: the insert threw, the freshly stored object was
+    // removed again, and the only thing the uploader could say was "no documents were saved".
+    //
+    // 'ft' rather than omitting the key, because this payload is used for UPDATE too, where a
+    // missing key means "leave it alone" and would quietly keep a stale unit. The unit is inert
+    // until somebody sets a scale, so defaulting it costs nothing.
+    scale_unit: ['ft', 'in', 'cm'].includes(doc.scale_unit) ? doc.scale_unit : 'ft',
     bucket_id: doc.bucket_id,
     object_path: doc.object_path,
     file_name: doc.file_name,
@@ -43555,7 +44058,10 @@ async function persistClientPortalDocument(doc) {
   upsertClientPortalDocument(normalized);
   const client = createSupabaseClient();
   if (!isLiveSupabaseSession() || !client) return;
-  const payload = emptyToNull(supabaseRow(clientPortalDocumentPayload(normalized), CLIENT_PORTAL_DOCUMENT_COLS), ['scale', 'scale_unit', 'page_count', 'uploaded_by']);
+  // scale_unit is deliberately NOT in this list: the column is NOT NULL, so blanking it to null
+  // is the very thing that broke uploads. clientPortalDocumentPayload already guarantees a
+  // valid unit, so there is nothing here to empty.
+  const payload = emptyToNull(supabaseRow(clientPortalDocumentPayload(normalized), CLIENT_PORTAL_DOCUMENT_COLS), ['scale', 'page_count', 'uploaded_by']);
   const { data, error } = await client.from('client_portal_documents').update(payload).eq('id', normalized.id).select().single();
   if (error) {
     notifySyncFailure(error, 'Document save');
@@ -43891,6 +44397,25 @@ function anEditableIsFocused() {
   return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable === true;
 }
 
+/**
+ * Is now a bad moment to rebuild the page from state?
+ *
+ * A render throws away everything that lives only in the DOM, and a half-filled form is exactly
+ * that -- so any refresh the user did not ask for has to wait for one of these to clear. One
+ * predicate rather than one per caller: the presence feed learned this the hard way, by wiping
+ * what somebody had typed whenever a colleague opened the app.
+ */
+function renderWouldInterrupt() {
+  return shouldDeferRealtimeRefresh({
+    editableFocused: anEditableIsFocused(),
+    builderModal: state.builderModal,
+    modal: state.modal,
+    recycleModal: state.recycleModal,
+    dataLoading: state.dataLoading,
+    backgroundRefreshing: state.backgroundRefreshing,
+  });
+}
+
 function subscribeToMessageRealtime(companyId, conversationId) {
   const client = createSupabaseClient();
   if (state.session?.auth !== 'supabase' || !client?.channel || !conversationId) return;
@@ -44177,14 +44702,7 @@ function subscribeToGlobalRealtime() {
   const deferredDomains = createDeferredDomainAccumulator();
   const refreshWhenSafe = (domains = []) => {
     deferredDomains.add(domains);
-    if (shouldDeferRealtimeRefresh({
-      editableFocused: anEditableIsFocused(),
-      builderModal: state.builderModal,
-      modal: state.modal,
-      recycleModal: state.recycleModal,
-      dataLoading: state.dataLoading,
-      backgroundRefreshing: state.backgroundRefreshing,
-    })) {
+    if (renderWouldInterrupt()) {
       clearTimeout(state.globalRealtimeRetry);
       state.globalRealtimeRetry = setTimeout(() => refreshWhenSafe(domains), 1500);
       return;
@@ -44229,8 +44747,22 @@ function ensurePresenceChannel(companyId) {
     // leave anywhere in the company, and a full re-render per event is wasteful.
     const changed = next.size !== state.onlineProfileIds.size
       || [...next].some((id) => !state.onlineProfileIds.has(id));
+    if (!changed) return;
+    // ...and never in the middle of somebody's typing. A render rebuilds the page from state,
+    // and a half-filled form lives in the DOM, not in state -- so a colleague opening the app
+    // in another tab used to wipe whatever was typed into an open form. That is the "the field
+    // I entered suddenly disappeared" report: nothing the typist did caused it, which is why it
+    // looked random. Held over on the same terms the realtime refresh already uses, and retried
+    // shortly after -- online dots are worth a few seconds' staleness, typing is not.
+    if (renderWouldInterrupt()) {
+      // The set is deliberately NOT committed here: leaving the old one in place is what keeps
+      // `changed` true, so the retry still has something to do.
+      clearTimeout(state.presenceRetry);
+      state.presenceRetry = setTimeout(applyState, 1500);
+      return;
+    }
     state.onlineProfileIds = next;
-    if (changed) render();
+    render();
   };
 
   const channel = client
@@ -44247,6 +44779,8 @@ function ensurePresenceChannel(companyId) {
 
 function teardownPresence() {
   const client = createSupabaseClient();
+  clearTimeout(state.presenceRetry);
+  state.presenceRetry = null;
   if (state.presenceChannel && client?.removeChannel) client.removeChannel(state.presenceChannel);
   state.presenceChannel = null;
   state.presenceKey = '';

@@ -181,3 +181,36 @@ policy gated on membership alone: `notifications` INSERT. That is intended. A me
 create a notification addressed to another ACTIVE member of the same company and nobody
 else, which is what makes peer notifications work. Do not "fix" it without replacing the
 feature.
+
+## Deleting a Company Contacts field is a hard delete with no undo
+
+Confirmed 2026-08-15.
+
+The trash icon on a field row in Settings > Fields marks it in `fieldDraft.removed`, and Save runs
+`delete from company_contact_fields where id in (...)`. There is no `deleted_at` on that table and
+no recycle-bin entry, so the field definition is gone the moment Save succeeds — including its
+label, its type and a category's whole option list.
+
+The CONTACT DATA survives: `company_contacts.field_values` is keyed by field id and is never
+touched by the delete. But with the definition gone the values are invisible and unreachable —
+the directory has no column for them and the card has no row.
+
+This bit on 2026-08-15: `quest-roofing-az` reached 0 field definitions with 17 contacts still
+holding values against 11 distinct field ids. Recovery was possible only because the ids are
+deterministic for seeded fields (`ccf-<company>-<slug>`) and the values themselves reveal the
+type — re-inserting the definitions with their ORIGINAL ids made all 17 contacts whole again.
+
+**If it happens again:** do not recreate the fields through the UI. A new field gets a new id and
+the old values stay orphaned. Instead read the surviving ids out of `field_values`
+
+```sql
+select kv.key, count(*), min(left(kv.value #>> '{}', 40))
+from public.company_contacts cc, lateral jsonb_each(coalesce(cc.field_values,'{}'::jsonb)) kv
+where cc.company_id = '<company>' group by kv.key order by 2 desc;
+```
+
+then re-insert `company_contact_fields` rows using those exact ids, inferring the type from the
+sample values and rebuilding a category's options from the distinct values in use.
+
+**Worth fixing properly:** the table should carry `deleted_at` and join the recycle bin, the way
+records already do. Until then a mis-click plus Save is unrecoverable through the product.

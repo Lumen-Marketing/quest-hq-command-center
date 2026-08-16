@@ -260,3 +260,51 @@ test('the app strip pins to its scroll container, flush under the header', () =>
   // The base rule's overflow: hidden would clip the sticky behaviour.
   assert.match(styles, /\.wb-topbar \{[\s\S]*?overflow: visible;/);
 });
+
+// ---- each panel on a record scrolls itself ---------------------------------------------------
+//
+// "Separate the scroll of the contacts record to the activity and comment section."
+//
+// They sit side by side, so what you are reading on one has nothing to do with the other:
+// scrolling a long history used to drag the record's own fields off the screen, and filling in a
+// long field list pushed the conversation away.
+
+test('a record panel taller than the screen scrolls inside itself', () => {
+  const rule = styles.match(/\.wb-record \.wb-dash-grid > \.wb-w:not\(\.editing\) \{([\s\S]*?)\}/)?.[1] || '';
+  assert.match(rule, /max-height: calc\(100vh - var\(--wb-record-chrome\)\)/);
+  assert.match(rule, /overflow-y: auto/);
+  // A scroll that reaches its end must not carry on into the page behind it -- the whole point
+  // is that the two panels do not move each other.
+  assert.match(rule, /overscroll-behavior: contain/);
+  assert.match(styles, /--wb-record-chrome: \d+px;/);
+});
+
+test('the cap is scoped to the record, not to every grid that shares the class', () => {
+  // .wb-dash-grid is also the app Dashboard, where the tiles are a page meant to scroll as one.
+  const rule = styles.match(/\.wb-record \.wb-dash-grid > \.wb-w:not\(\.editing\) \{/);
+  assert.ok(rule, 'the selector must carry .wb-record');
+  // And while the layout is being rearranged, whole blocks stay visible: the move/resize tools
+  // are pinned inside the block and would scroll away with its content.
+  assert.ok(/:not\(\.editing\)/.test(rule[0]));
+});
+
+test('only one scrollbar governs the conversation', () => {
+  // The feed already scrolled inside the panel. A panel scrollbar around a feed scrollbar is
+  // two ways to move the same thing, and the composer would leave with it.
+  assert.match(styles, /\.wb-record \.wb-dash-grid > \.wb-w-comments:not\(\.editing\) \{[^}]*overflow: hidden/);
+  assert.match(styles, /\.wb-record \.wb-w-comments \.wb-rec-body \{[^}]*max-height: none/);
+  // Flexed to fill the panel, so a tall window shows more history rather than a half-empty card.
+  assert.match(styles, /\.wb-record \.wb-w-comments \.wb-rec-body \{[^}]*flex: 1 1 auto; min-height: 0/);
+  // The feed's own scroll is what remains.
+  assert.match(styles, /\.wb-rec-body \{[\s\S]*?overflow-y: auto/);
+});
+
+test('stacked on a narrow screen, the panels go back to scrolling with the page', () => {
+  // One column means they are no longer side by side, and a scrollbar inside each stacked card
+  // is a worse way to read than simply scrolling the page.
+  const at = styles.indexOf('.wb-record .wb-dash-grid > .wb-w:not(.editing)');
+  const guard = styles.lastIndexOf('@media (min-width: 901px)', at);
+  assert.ok(guard !== -1 && guard < at, 'the cap sits inside the wide-screen guard');
+  // And it mirrors the breakpoint the record grid already stacks at.
+  assert.match(styles, /@media \(max-width: 900px\) \{ \.wb-record-body \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
+});

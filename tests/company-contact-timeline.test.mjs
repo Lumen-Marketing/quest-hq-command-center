@@ -198,10 +198,21 @@ test('a contact used on a record still builds its feed and diary', () => {
 });
 
 test('both panels are on the contact card', () => {
-  assert.match(page, /function activityPanel\(companyId, doc, contact\)/);
-  assert.match(page, /function calendarPanel\(companyId, doc, contact\)/);
-  assert.match(page, /\$\{activityPanel\(companyId, doc, contact\)\}/);
-  assert.match(page, /\$\{calendarPanel\(companyId, doc, contact\)\}/);
+  // They take a column span now: every panel is a layout element, so the company decides the
+  // order and the width instead of the renderer printing all four in a fixed arrangement.
+  // A column span AND a content config: the company decides where each panel sits, how wide it
+  // is, and what it shows about itself.
+  assert.match(page, /function activityPanel\(companyId, doc, contact, cols = 2, show = \{\}\)/);
+  assert.match(page, /function calendarPanel\(companyId, doc, contact, cols = 2, show = \{\}\)/);
+  // Reached through the panel renderer rather than interpolated directly, which is what lets
+  // them be reordered against In flight, Notes and any field placed in the panels region.
+  assert.match(page, /if \(id === 'activity'\) return activityPanel\(companyId, doc, contact, span, config\);/);
+  assert.match(page, /if \(id === 'calendar'\) return calendarPanel\(companyId, doc, contact, span, config\);/);
+  // And they are still on by default, in the order they have always been in.
+  const layout = readFileSync(new URL('../src/company-contacts/card-layout.js', import.meta.url), 'utf8');
+  assert.match(layout, /\{ id: 'activity', label: 'Recent updates'/);
+  assert.match(layout, /\{ id: 'calendar', label: 'Calendar'/);
+  assert.match(layout, /region: 'panels', span: 'md'/, 'two to a row, exactly as before');
 });
 
 test('an entry links to the record it belongs to', () => {

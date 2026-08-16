@@ -20,6 +20,8 @@ export function renderSearchCombobox(h, label, name, value, options, { placehold
 // Fetched on first focus: no suggestion exists until somebody opens one, and keeping the
 // matching and the markup out of main.js is what pays for the features that use it.
 
+import { createOptionMint } from '../workspace/option-mint.js';
+
 // Takes its one dependency positionally rather than as a ctx object: a factory that
 // destructures a single key is ceremony, and the extracted-module guard rightly treats a
 // three-key ctx as a sign the extraction was not worth making.
@@ -30,6 +32,9 @@ export function createComboboxMenu(ctx) {
   const {
     h, wbDoc, wbSave, wbUid, can, showToast, activeCompanyId, WB_PALETTE,
   } = ctx;
+  // Shared with the choice-chip field, which mints options the same way: the two have to agree
+  // on casing, colour, and who is allowed to add one.
+  const { wbMintOption } = createOptionMint({ wbDoc, wbSave, wbUid, can, activeCompanyId, WB_PALETTE });
 
 
   function parseJobTypeOptions(input) {
@@ -96,38 +101,6 @@ export function createComboboxMenu(ctx) {
     menu.hidden = !menu.innerHTML;
   }
 
-  // The app, workspace and field behind a field id. Sub-item lists are searched too, so a
-
-  // category on a daily report resolves the same way as one on the record.
-
-  function wbFieldOwner(companyId, fieldId) {
-
-    for (const workspace of wbDoc(companyId)?.workspaces || []) {
-
-      for (const app of workspace.apps || []) {
-
-        const own = (app.fields || []).find((field) => field.id === fieldId);
-
-        if (own) return { workspace, app, field: own };
-
-        for (const collection of app.collections || []) {
-
-          const sub = (collection.fields || []).find((field) => field.id === fieldId);
-
-          if (sub) return { workspace, app, field: sub };
-
-        }
-
-      }
-
-    }
-
-    return null;
-
-  }
-
-
-
   // A category/status combobox shows a LABEL; the field stores an option ID. Resolve one to the
 
   // other, and when the label matches nothing, add it to the list rather than refusing it --
@@ -135,6 +108,12 @@ export function createComboboxMenu(ctx) {
   // "when the data I type does not match on the list and I just use it, it will automatically
 
   // add to the category list".
+
+  //
+
+  // The resolving itself is wbMintOption, in ./workspace/option-mint.js, because the choice-chip
+
+  // field and the copy-from-a-contact both mint options too and all three have to agree.
 
   function wbCommitOptionChoice(input) {
 
@@ -144,60 +123,34 @@ export function createComboboxMenu(ctx) {
 
     if (!holder) return;
 
-    const companyId = activeCompanyId();
-
-    const found = wbFieldOwner(companyId, holder.getAttribute('data-f'));
-
-    if (!found) return;
-
-    const { field } = found;
-
     const label = String(input.value || '').trim();
 
     if (!label) { holder.value = ''; return; }
 
+    const result = wbMintOption(holder.getAttribute('data-f'), label);
 
+    // No such field, or not allowed to add: their typing stays on screen; it simply does not
 
-    const options = field.config.options || [];
+    // become a new choice for the whole company.
 
-    const match = options.find((option) => String(option.label).toLowerCase() === label.toLowerCase());
+    if (!result || !result.option) return;
 
-    if (match) {
+    holder.value = result.option.id;
 
-      // Snap to the stored spelling, so "roofing" and "Roofing" do not become two chips.
+    input.value = result.option.label;
 
-      holder.value = match.id;
-
-      input.value = match.label;
-
-      return;
-
-    }
-
-    // Adding an option edits the app, which not everybody may do. Their typing stays on screen;
-
-    // it simply does not become a new choice for the whole company.
-
-    if (!can('workspaces.manage', companyId)) return;
-
-    const option = { id: wbUid(), label, color: WB_PALETTE[options.length % WB_PALETTE.length] };
-
-    field.config = { ...field.config, options: [...options, option] };
-
-    wbSave(companyId);
-
-    holder.value = option.id;
+    if (!result.added) return;
 
     // The menu reads its list off the input, so the new value is offered immediately rather
 
     // than after a reload.
 
-    input.dataset.jobTypeOptions = JSON.stringify([...options, option].map((o) => o.label));
+    input.dataset.jobTypeOptions = JSON.stringify(result.options.map((o) => o.label));
 
-    showToast(`Added "${label}" to ${field.label}.`, 'local', 'Workspaces');
+    showToast(`Added "${result.option.label}" to ${result.field.label}.`, 'local', 'Workspaces');
 
   }
 
   return {
-    wbCommitOptionChoice, parseJobTypeOptions, jobTypeMenu, jobTypeMatches, renderJobTypeSuggestions };
+    wbCommitOptionChoice, wbMintOption, parseJobTypeOptions, jobTypeMenu, jobTypeMatches, renderJobTypeSuggestions };
 }

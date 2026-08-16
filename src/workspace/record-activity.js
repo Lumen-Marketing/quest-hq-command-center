@@ -67,6 +67,47 @@ export function describeChecklist(field, before, next) {
   return { ticked, cleared };
 }
 
+/**
+ * A logged checklist value, read back as the steps that are ticked.
+ *
+ * An activity entry stores a checklist as the flat form wbPlainVal produces:
+ *
+ *     6/6 (100%): [x] Received Blueprint; [x] Waiting Permit; [ ] Called
+ *
+ * That form is right for search, sort and CSV export -- it is one cell of text and it says
+ * everything. On an activity row it is a wall: the counts, the percentage and every unticked
+ * step, when the only thing being reported is what somebody just ticked.
+ *
+ * So it is parsed back HERE rather than logged differently. Two reasons: the write path feeds
+ * three other consumers that want the flat form, and parsing fixes every entry ALREADY in the
+ * history rather than only the ones logged from now on.
+ *
+ * Returns null when the text is not that shape, so the caller falls back to printing it whole --
+ * a checklist logged by some older build still reads, it just reads plainly.
+ */
+export function checklistDone(text) {
+  const raw = String(text || '');
+  const at = raw.indexOf(':');
+  if (at < 0) return null;
+  // The prefix has to be the counts, or this is some other string that happens to hold a colon.
+  if (!/^\s*\d+\/\d+\s*\(\d+%\)\s*$/.test(raw.slice(0, at))) return null;
+  const steps = raw.slice(at + 1).split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const mark = /^\[( |x)\]\s*/i.exec(part);
+      if (!mark) return null;
+      return { done: mark[1].toLowerCase() === 'x', label: part.slice(mark[0].length).trim() };
+    });
+  // One unparseable step means the whole thing is a guess -- a label containing "; " would do
+  // it -- so the raw text is printed instead of a list that quietly dropped something.
+  if (!steps.length || steps.some((step) => step === null)) return null;
+  return {
+    done: steps.filter((step) => step.done).map((step) => step.label).filter(Boolean),
+    total: steps.length,
+  };
+}
+
 // ---- who was talked about ---------------------------------------------------------------------
 
 /**

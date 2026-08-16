@@ -63,11 +63,113 @@ export function purgeFromTrash(app, itemId) {
   return app.trash.length < before;
 }
 
-/** Empty the whole bin. */
+/** Empty the whole bin -- records and fields alike. */
 export function emptyTrash(app) {
-  const count = (app.trash || []).length;
+  const count = (app.trash || []).length + (app.fieldTrash || []).length;
   app.trash = [];
+  app.fieldTrash = [];
   return count;
+}
+
+// ---- deleted FIELDS ---------------------------------------------------------------------
+//
+// A deleted field used to be unrecoverable, and worse than unrecoverable: `del-field` ran
+// `delete it.values[fieldId]` over every record in the app, so the values went with it. There
+// was nothing left to rebuild from -- no deleted_at, no history table, and automatic backups
+// are off by default.
+//
+// That is not a theoretical hazard. On 2026-08-15 the equivalent delete on Company Contacts
+// orphaned 17 contacts' values, and they were only recovered because THAT table leaves its
+// values behind. The App Builder leaves nothing.
+//
+// So a field goes to the bin with its data: the definition AND the value it held on every
+// record, carried together, so Restore actually restores rather than bringing back an empty
+// column. The document does not grow -- the same bytes move from `item.values` into the bin
+// entry, and only a purge shrinks anything.
+
+/**
+ * Move fields out of the app and into its bin, taking their values with them.
+ *
+ * @returns {number} how many actually moved, so a caller can say nothing happened rather than
+ *   claiming a delete that deleted nothing.
+ */
+export function sendFieldsToTrash(app, fieldIds, by = '') {
+  const kill = new Set(fieldIds || []);
+  if (!kill.size) return 0;
+  const going = (app.fields || []).filter((field) => kill.has(field.id));
+  if (!going.length) return 0;
+
+  if (!Array.isArray(app.fieldTrash)) app.fieldTrash = [];
+  const at = stamp();
+  going.forEach((field) => {
+    // The value this field held on every record, keyed by record id. Only records that had
+    // one: an empty map is the honest record of a field nobody ever filled in.
+    const values = {};
+    (app.items || []).forEach((item) => {
+      const value = item?.values?.[field.id];
+      if (value === undefined) return;
+      values[item.id] = value;
+      delete item.values[field.id];
+    });
+    app.fieldTrash.unshift({
+      field: { ...field },
+      // Where it sat, so Restore can put it back where it was rather than at the end.
+      position: (app.fields || []).findIndex((entry) => entry.id === field.id),
+      values,
+      deletedAt: at,
+      deletedBy: by,
+    });
+  });
+  app.fields = (app.fields || []).filter((field) => !kill.has(field.id));
+  return going.length;
+}
+
+/**
+ * Put a field back, with everything it held.
+ *
+ * Restored to its old position where that still exists, because a field list is read in order
+ * and a column reappearing at the end is a column somebody has to hunt for.
+ */
+export function restoreFieldFromTrash(app, fieldId) {
+  const at = (app.fieldTrash || []).findIndex((entry) => entry.field?.id === fieldId);
+  if (at === -1) return null;
+  const [entry] = app.fieldTrash.splice(at, 1);
+  if (!Array.isArray(app.fields)) app.fields = [];
+  // A field restored twice, or whose id came back another way, must not appear twice over.
+  app.fields = app.fields.filter((field) => field.id !== entry.field.id);
+  const where = Number.isInteger(entry.position) && entry.position >= 0
+    ? Math.min(entry.position, app.fields.length)
+    : app.fields.length;
+  app.fields.splice(where, 0, { ...entry.field });
+  // And the data. A record deleted in the meantime simply has nothing to put back.
+  (app.items || []).forEach((item) => {
+    const value = entry.values?.[item.id];
+    if (value === undefined) return;
+    if (!item.values || typeof item.values !== 'object') item.values = {};
+    item.values[entry.field.id] = value;
+  });
+  return entry.field;
+}
+
+/** Destroy one field and its data for good. Nothing comes back from here. */
+export function purgeFieldFromTrash(app, fieldId) {
+  const before = (app.fieldTrash || []).length;
+  app.fieldTrash = (app.fieldTrash || []).filter((entry) => entry.field?.id !== fieldId);
+  return app.fieldTrash.length < before;
+}
+
+/** How many records a binned field still holds a value for -- what a purge would destroy. */
+export function trashedFieldValueCount(entry) {
+  return Object.keys(entry?.values || {}).length;
+}
+
+/** Everything in the bin, records and fields both, so a caller can count what a purge costs. */
+export function trashTotals(app) {
+  return {
+    records: (app.trash || []).length,
+    fields: (app.fieldTrash || []).length,
+    fieldValues: (app.fieldTrash || []).reduce((sum, entry) => sum + trashedFieldValueCount(entry), 0),
+  };
 }
 
 /**
@@ -86,26 +188,53 @@ export function expiredInTrash(app, now = Date.now()) {
 
 export function createRecycleBin(ctx) {
   const {
-    h, can, wbItemTitle, wbTimeAgo, formatDate, memberName, emptyState,
+    h, can, isCompanyOwner, wbItemTitle, wbTimeAgo, formatDate, memberName, emptyState,
   } = ctx;
+
+  /** A deleted field, and what restoring it would bring back with it. */
+  function fieldRow(app, entry, canManage) {
+    const held = trashedFieldValueCount(entry);
+    return `
+      <div class="wb-trash-row is-field" data-wb-trash-field="${h(entry.field.id)}">
+        <div class="wb-trash-what">
+          <b><i class="ti ti-forms"></i>${h(entry.field.label || 'Field')}</b>
+          <small>
+            Field · ${held ? `${held} record${held === 1 ? '' : 's'} still hold its value` : 'no records had a value'}
+            · deleted ${h(wbTimeAgo(entry.deletedAt) || formatDate(entry.deletedAt))}${entry.deletedBy ? ` by ${h(memberName(entry.deletedBy) || 'someone')}` : ''}
+          </small>
+        </div>
+        ${canManage ? `
+          <button class="btn btn-sm" type="button" data-wb-trash-field-restore="${h(entry.field.id)}"><i class="ti ti-arrow-back-up"></i>Restore</button>
+          <button class="wb-icon-btn danger" type="button" data-wb-trash-field-purge="${h(entry.field.id)}" title="Delete for good" aria-label="Delete ${h(entry.field.label || 'field')} for good"><i class="ti ti-x"></i></button>
+        ` : ''}
+      </div>`;
+  }
 
   function wbViewRecycleBin(companyId, workspace, app) {
     const canManage = can('workspaces.manage', companyId);
+    const isOwner = isCompanyOwner(companyId);
     const trash = app.trash || [];
+    const fields = app.fieldTrash || [];
     const stale = expiredInTrash(app).length;
-    if (!trash.length) {
+    if (!trash.length && !fields.length) {
       return `<div class="wb-trash card">
-        <div class="section-head"><div><h3>Recycle bin</h3><p>Records deleted from ${h(app.name)} wait here so a misclick is not the end of them.</p></div></div>
+        <div class="section-head"><div><h3>Recycle bin</h3><p>Records and fields deleted from ${h(app.name)} wait here so a misclick is not the end of them.</p></div></div>
         ${emptyState('Nothing has been deleted from this app.')}
       </div>`;
     }
+    const parts = [
+      trash.length ? `${trash.length} record${trash.length === 1 ? '' : 's'}` : '',
+      fields.length ? `${fields.length} field${fields.length === 1 ? '' : 's'}` : '',
+    ].filter(Boolean).join(' and ');
     return `<div class="wb-trash card">
       <div class="section-head">
-        <div><h3>Recycle bin</h3><p>${trash.length} deleted record${trash.length === 1 ? '' : 's'} from ${h(app.name)}. Restoring one puts it back at the top of the list.</p></div>
-        ${canManage ? '<button class="btn danger" type="button" data-wb-trash-empty><i class="ti ti-trash"></i>Empty the bin</button>' : ''}
+        <div><h3>Recycle bin</h3><p>${parts} deleted from ${h(app.name)}. Restoring a field brings back the value it held on every record.</p></div>
+        ${canManage && isOwner ? '<button class="btn danger" type="button" data-wb-trash-empty><i class="ti ti-lock"></i>Empty the bin</button>' : ''}
       </div>
+      ${canManage && !isOwner ? '<div class="wb-sub wb-trash-owner"><i class="ti ti-lock"></i>Emptying the bin is an account owner\'s decision — it destroys everything here, including the values any deleted field was holding. Restore and purge one at a time are still yours.</div>' : ''}
       ${stale ? `<div class="wb-sub wb-trash-stale"><i class="ti ti-clock"></i>${stale} ${stale === 1 ? 'record has' : 'records have'} been here more than ${TRASH_DAYS} days. Nothing is removed automatically — the bin only empties when somebody empties it.</div>` : ''}
       <div class="wb-trash-list">
+        ${fields.map((entry) => fieldRow(app, entry, canManage)).join('')}
         ${trash.map((item) => `
           <div class="wb-trash-row" data-wb-trash-id="${h(item.id)}">
             <div class="wb-trash-what">

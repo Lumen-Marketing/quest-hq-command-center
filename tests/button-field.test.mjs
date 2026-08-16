@@ -18,7 +18,9 @@ import {
   setValueFor,
   translateValue,
 } from '../src/workspace/button-field.js';
+import { arrivalRef } from '../src/workspace/record-ref.js';
 import { createButtonPush } from '../src/workspace/button-push.js';
+import { renderFieldConfig } from '../src/workspace/field-config-ui.js';
 
 // "This field is a button, programmable to manipulate the data list... set the condition it
 // becomes enabled on, or no condition so it is always active. The action passes the record to
@@ -235,6 +237,9 @@ const pressed = async ({ canManage = true } = {}) => {
   const toasts = [];
   let ids = 0;
   const push = createButtonPush({
+    h: (v) => String(v ?? ''),
+    wbItemTitle: () => 'John Doe',
+    wbLogActivity: () => {},
     can: () => canManage,
     wbDoc: (companyId) => (companyId === 'co2' ? doc : null),
     wbSave: async (companyId) => saved.push({ companyId }),
@@ -302,6 +307,9 @@ test('a role that cannot manage the target app changes nothing there', async () 
 
 test('a destination that is gone, or was never set, says so and writes nothing', async () => {
   const push = createButtonPush({
+    h: (v) => String(v ?? ''),
+    wbItemTitle: () => 'John Doe',
+    wbLogActivity: () => {},
     can: () => true,
     wbDoc: () => ({ workspaces: [] }),
     wbSave: async () => { throw new Error('must not save'); },
@@ -318,6 +326,9 @@ test('a destination that is gone, or was never set, says so and writes nothing',
 
 test('a workspace this account cannot load is not a crash', async () => {
   const push = createButtonPush({
+    h: (v) => String(v ?? ''),
+    wbItemTitle: () => 'John Doe',
+    wbLogActivity: () => {},
     can: () => true,
     wbDoc: () => null,
     wbSave: async () => { throw new Error('must not save'); },
@@ -358,6 +369,9 @@ const listSetup = () => {
   app1.items.push({ id: 'i2', values: { 'f-name': 'Someone Else', 'f-age': 40 } });
   const toasts = [];
   const push = createButtonPush({
+    h: (v) => String(v ?? ''),
+    wbItemTitle: () => 'John Doe',
+    wbLogActivity: () => {},
     can: () => true,
     wbDoc: () => ({ workspaces: [{ id: 'ws', apps: [app1, app2] }] }),
     wbSave: async () => {},
@@ -491,6 +505,9 @@ test('pressing a set button in the list writes the record and saves it', async (
   };
   const saved = [];
   const push = createButtonPush({
+    h: (v) => String(v ?? ''),
+    wbItemTitle: () => 'John Doe',
+    wbLogActivity: () => {},
     can: () => true,
     wbDoc: () => ({ workspaces: [{ id: 'ws', apps: [app] }] }),
     wbSave: (companyId) => saved.push(companyId),
@@ -564,6 +581,9 @@ test('in the list, a Change-fields button is enabled on the rows that qualify', 
     items: [{ id: 'i1', values: { t: 'Abe' } }, { id: 'i2', values: { t: 'Someone' } }],
   };
   const push = createButtonPush({
+    h: (v) => String(v ?? ''),
+    wbItemTitle: () => 'John Doe',
+    wbLogActivity: () => {},
     can: () => true,
     wbDoc: () => ({ workspaces: [{ id: 'ws', apps: [app] }] }),
     wbSave: () => {},
@@ -592,11 +612,16 @@ const movedSetup = () => {
   const app2 = APP2();
   app1.items.push({ id: 'i2', values: { 'f-name': 'Stays Put' } });
   const workspace = { id: 'ws', apps: [app1], activity: [] };
+  // One target workspace, not a fresh one per lookup: a move writes the record's history into
+  // it, and a wbDoc that rebuilt it each call would discard that before anything could read it.
+  const target = { id: 'ws2', apps: [app2], activity: [] };
   const saved = [];
   const logged = [];
   const push = createButtonPush({
+    h: (v) => String(v ?? ''),
+    wbItemTitle: () => 'John Doe',
     can: () => true,
-    wbDoc: () => ({ workspaces: [{ id: 'ws2', apps: [app2] }] }),
+    wbDoc: () => ({ workspaces: [target] }),
     wbSave: (companyId) => saved.push(companyId),
     wbUid: () => `u-${++seq}`,
     showToast: () => {},
@@ -607,11 +632,10 @@ const movedSetup = () => {
     wbFind: () => ({ app: app1, workspace }),
     wbReadFieldInput: () => undefined,
     activeCompanyId: () => 'co1',
-    wbLogActivity: (ws, entry) => logged.push(entry),
-    wbItemTitle: () => 'John Doe',
+    wbLogActivity: (ws, entry) => logged.push({ ...entry, ws }),
   });
   const button = { id: 'f-btn', config: { action: 'move', targetCompany: 'co2', targetApp: 'app2' } };
-  return { push, app1, app2, button, workspace, saved, logged };
+  return { push, app1, app2, button, workspace, target, saved, logged };
 };
 
 test('the record lands in the other app and leaves this one', async () => {
@@ -620,7 +644,146 @@ test('the record lands in the other app and leaves this one', async () => {
   assert.equal(app2.items.length, 2, 'it arrived');
   assert.deepEqual(app1.items.map((row) => row.id), ['i2'], 'and it is gone from here');
   assert.deepEqual(saved, ['co2', 'co1'], 'target saved first, so a failure there cannot lose it from both');
-  assert.match(logged[0].text, /Sent .* and removed it from App 1/, 'the workspace feed says where it went');
+  const sent = logged.find((entry) => entry.ws === workspace);
+  assert.match(sent.text, /moved from <b>App 1<\/b> to <b>App 2<\/b>/, 'the workspace feed says where it went');
+  assert.equal(sent.itemId, undefined, 'and is not keyed to a record this app no longer holds');
+});
+
+test('a move keeps the record, rather than copying it and deleting the original', async () => {
+  // "move means all fields and data, and the activity and comments also be moved... so the
+  // activity, comments, record, even the id is intact."
+  const { push, app1, app2, button, workspace } = movedSetup();
+  const before = app1.items[0];
+  before.comments = [{ id: 'c1', text: 'Called them Tuesday', authorId: 'u1' }];
+  before.createdAt = '2020-01-01T00:00:00.000Z';
+  const id = before.id;
+
+  await push.pressButton('co1', app1, button, before, workspace);
+  const landed = app2.items.find((row) => row.id === id);
+
+  assert.ok(landed, 'the SAME record id -- it went somewhere else, it did not stop existing');
+  assert.deepEqual(landed.comments.map((entry) => entry.text), ['Called them Tuesday'], 'comments travel');
+  assert.equal(landed.createdAt, '2020-01-01T00:00:00.000Z', 'and so does when it began');
+});
+
+test('a copy is a second record, so it gets an id and a beginning of its own', async () => {
+  const plain = movedSetup();
+  plain.button.config.action = 'push';
+  const id = plain.app1.items[0].id;
+  plain.app1.items[0].comments = [{ id: 'c1', text: 'private note' }];
+
+  await plain.push.pressButton('co1', plain.app1, plain.button, plain.app1.items[0], plain.workspace);
+  const copy = plain.app2.items[0];
+
+  assert.notEqual(copy.id, id, 'a copy genuinely is a different record');
+  assert.equal(copy.comments, undefined, 'and does not inherit a conversation it was not part of');
+  assert.equal(plain.app1.items.length, 2, 'the original stays put');
+});
+
+test("a move carries the record's history into the app it moved to", async () => {
+  const { push, app1, app2, button, workspace, target } = movedSetup();
+  const id = app1.items[0].id;
+  // What the record built up while it lived in App 1.
+  workspace.activity = [
+    { id: 'a1', appId: app1.id, itemId: id, text: 'Changed Stage' },
+    { id: 'a2', appId: app1.id, itemId: 'i2', text: 'a different record' },
+    { id: 'a3', appId: 'other-app', itemId: id, text: 'a different app' },
+  ];
+
+  await push.pressButton('co1', app1, button, app1.items[0], workspace);
+
+  assert.deepEqual(workspace.activity.map((entry) => entry.id), ['a2', 'a3'],
+    'only this record in this app is taken -- a namesake elsewhere stays put');
+  const carried = (target.activity || []).find((entry) => entry.id === 'a1');
+  assert.ok(carried, 'and it lands in the workspace it moved to');
+  assert.equal(carried.appId, app2.id, 're-pointed at the app it now lives in');
+  assert.equal(carried.itemId, id);
+});
+
+test('a move onto a colliding id mints a new one rather than shadowing a record', async () => {
+  // Two records sharing an id in one app makes every lookup ambiguous, and every lookup is by id.
+  const { push, app1, app2, button, workspace } = movedSetup();
+  const id = app1.items[0].id;
+  app2.items.push({ id, values: { 'g-addr': 'already here' } });
+
+  await push.pressButton('co1', app1, button, app1.items[0], workspace);
+
+  assert.equal(app2.items.filter((row) => row.id === id).length, 1, 'the sitting record is untouched');
+  assert.equal(app2.items.find((row) => row.values['g-addr'] === 'already here').id, id);
+  assert.equal(app1.items.length, 1, 'and the move still happened');
+});
+
+// ---- the arrival, on the receiving side -----------------------------------------------------
+//
+// "There is a new data in the app that I did not create, it was sent by the other app. Can you
+// add an activity for this new record?" Without it the arrived record opens on "Nothing yet",
+// which is wrong twice over: something did happen, and the one thing worth knowing about this
+// record is that nobody in this app typed it.
+
+test('the record that arrives gets an activity entry of its own', async () => {
+  const { push, app1, app2, button, workspace, logged } = movedSetup();
+  await push.pressButton('co1', app1, button, app1.items[0], workspace);
+
+  const arrival = logged.find((entry) => entry.ws !== workspace);
+  assert.ok(arrival, 'the receiving workspace is written to, not only the sending one');
+  // Tied to the NEW record, or the record card would never show it: the feed is filtered by
+  // item id, and the arrived record has an id of its own.
+  assert.equal(arrival.itemId, app2.items[0].id);
+  assert.equal(arrival.appId, app2.id);
+  // A MOVE names both ends, because the useful question is where it came from and where it is
+  // now -- and it is not this record's beginning, so it is not logged as one.
+  assert.match(arrival.text, /<b>John Doe<\/b> moved from <b>App 1<\/b> to <b>App 2<\/b>/);
+  assert.equal(arrival.kind, 'updated', 'the record has a history and it just came with it');
+
+  // A copy IS a beginning here -- nothing of it existed in this app before.
+  const plain = movedSetup();
+  plain.button.config.action = 'push';
+  await plain.push.pressButton('co1', plain.app1, plain.button, plain.app1.items[0], plain.workspace);
+  const copied = plain.logged.find((entry) => entry.ws !== plain.workspace);
+  assert.match(copied.text, /arrived from <b>App 1<\/b>/);
+  assert.equal(copied.kind, 'created');
+});
+
+test('an arrival names the record it created, so two sends can be told apart', async () => {
+  // It used to read "(a copy)", which says whether it was copied or moved and nothing else.
+  // Send the same thing twice and you got two identical lines with no way to know which
+  // arrival was which record.
+  const first = movedSetup();
+  first.button.config.action = 'push';
+  await first.push.pressButton('co1', first.app1, first.button, first.app1.items[0], first.workspace);
+  const a = first.logged.find((entry) => entry.ws !== first.workspace);
+
+  const second = movedSetup();
+  second.button.config.action = 'push';
+  await second.push.pressButton('co1', second.app1, second.button, second.app1.items[0], second.workspace);
+  const b = second.logged.find((entry) => entry.ws !== second.workspace);
+
+  assert.ok(!/a copy/.test(a.text), 'the vague wording is gone');
+  assert.match(a.text, /wb-act-ref">#[A-Z0-9]{1,6}</, 'a reference is shown instead');
+  // And it is the reference OF THE RECORD IT MADE, so the line points at something real.
+  assert.equal(a.text.match(/#([A-Z0-9]{1,6})</)[1], arrivalRef(a.itemId).slice(1));
+  assert.notEqual(
+    a.text.match(/#([A-Z0-9]{1,6})</)[1],
+    b.text.match(/#([A-Z0-9]{1,6})</)[1],
+    'two sends produce two different references -- the whole point',
+  );
+});
+
+test('a reference is short, readable, and empty when there is no id', () => {
+  assert.equal(arrivalRef('wb-1a2b3c4d5e6f'), '#4D5E6F');
+  assert.equal(arrivalRef('abc'), '#ABC', 'a short id is not padded into a lie');
+  assert.equal(arrivalRef(''), '', 'and nothing yields nothing rather than a bare hash');
+  assert.equal(arrivalRef(null), '');
+  // Punctuation out, and the LAST six kept -- a uuid's tail varies where its head does not.
+  assert.equal(arrivalRef('aa-bb_cc.dd'), '#BBCCDD');
+});
+
+test('the fields the arrival forced into this app are named in its own history', async () => {
+  // The person reading the new record is the one who has to make sense of two new columns.
+  const { push, app1, button, workspace, logged } = movedSetup();
+  await push.pressButton('co1', app1, button, app1.items[0], workspace);
+  const arrival = logged.find((entry) => entry.ws !== workspace);
+  assert.match(arrival.text, /2 fields added to fit\./);
 });
 
 test('the fields of the app it left are untouched', async () => {
@@ -641,6 +804,9 @@ test('a record that never reached the target is not removed from the source', as
   // Removing it on a failed write would lose it from both apps at once.
   const { app1, button, workspace } = movedSetup();
   const push = createButtonPush({
+    h: (v) => String(v ?? ''),
+    wbItemTitle: () => 'John Doe',
+    wbLogActivity: () => {},
     can: () => false,
     wbDoc: () => ({ workspaces: [] }),
     wbSave: () => {},
@@ -653,9 +819,147 @@ test('a record that never reached the target is not removed from the source', as
     wbFind: () => ({ app: app1, workspace }),
     wbReadFieldInput: () => undefined,
     activeCompanyId: () => 'co1',
-    wbLogActivity: () => {},
-    wbItemTitle: () => 'x',
   });
   await push.pressButton('co1', app1, button, app1.items[0], workspace);
   assert.equal(app1.items.length, 2, 'still here');
+});
+
+// ---- picking particular fields to send ------------------------------------------------------
+//
+// "I want to pick a particular data but the toggle button can't be toggled."
+//
+// The switch used to be drawn from "are any fields chosen": flipping it off collected a list
+// that was still empty, an empty list means every field, and the panel drew the switch straight
+// back on. The mode is now its own setting, so off stays off.
+
+const buttonPanel = (config, app = APP1()) => renderFieldConfig(
+  { id: 'f-btn', type: 'button', label: 'Graduate', config },
+  app,
+  {
+    h: (value) => String(value ?? ''),
+    state: { builderModal: { companyId: 'co1' } },
+    canonicalCompanyId: (id) => id || 'co1',
+    companyName: () => 'Quest Roofing',
+    wbOptRow: () => '',
+    wbProgStopRow: () => '',
+    wbProgressDisplayHtml: () => '',
+    wbRelTargetApp: () => null,
+    wbCompanyApps: () => [{ app: APP2() }],
+    wbTargetApp: () => APP2(),
+    wbRelLabel: () => '',
+    companyContactFieldsFor: () => [],
+    WB_PROGRESS_STOPS_DEFAULT: [],
+    WB_FIELD_TYPES: { button: { label: 'Button' } },
+    WB_PROGRESS_DISPLAYS: [],
+  },
+);
+
+const switchIsOn = (panel) => /id="wbBtnAll" checked/.test(panel);
+const pickBoxes = (panel) => [...panel.matchAll(/data-wb-btn-field="([^"]+)"([^>]*)/g)]
+  .map(([, id, rest]) => ({ id, checked: rest.includes('checked') }));
+
+test('an unconfigured button sends everything, and shows no picker', () => {
+  const panel = buttonPanel({ action: 'push', targetApp: 'app2' });
+  assert.ok(switchIsOn(panel), 'everything is the default');
+  assert.deepEqual(pickBoxes(panel), [], 'and there is nothing to pick from yet');
+});
+
+test('turning the switch off opens the picker and keeps it off', () => {
+  // The state the old panel could not represent: picking, with nothing narrowed down yet.
+  const panel = buttonPanel({ action: 'push', targetApp: 'app2', pickFields: true, fields: [] });
+  assert.ok(!switchIsOn(panel), 'off stays off');
+  const boxes = pickBoxes(panel);
+  assert.deepEqual(boxes.map((box) => box.id), ['f-name', 'f-age'], 'every carryable field is offered');
+  // Empty means all -- the same rule pushableFields applies -- so the summary underneath and
+  // the boxes agree instead of contradicting each other.
+  assert.ok(boxes.every((box) => box.checked), 'and starts fully ticked, to untick from');
+});
+
+test('a narrowed-down list is drawn as chosen', () => {
+  const boxes = pickBoxes(buttonPanel({ action: 'push', targetApp: 'app2', pickFields: true, fields: ['f-age'] }));
+  assert.deepEqual(boxes, [{ id: 'f-name', checked: false }, { id: 'f-age', checked: true }]);
+});
+
+test('a button configured before the switch existed reads the way it always behaved', () => {
+  // No pickFields key at all: named fields meant picking, and no fields meant everything.
+  assert.ok(!switchIsOn(buttonPanel({ action: 'push', targetApp: 'app2', fields: ['f-age'] })));
+  assert.ok(switchIsOn(buttonPanel({ action: 'push', targetApp: 'app2', fields: [] })));
+});
+
+test('the mode is recorded separately from the list', () => {
+  const source = readFileSync(join(root, 'src', 'workspace', 'field-config-ui.js'), 'utf8');
+  assert.match(source, /config\.pickFields = !everything;/);
+  // And a field cloned into the target app does not inherit the button's picker mode.
+  const cloned = fieldToCreate({ id: 'x', type: 'text', label: 'Name', config: { pickFields: true, fields: ['a'] } }, mintId);
+  assert.equal(cloned.config.pickFields, undefined);
+  assert.equal(cloned.config.fields, undefined);
+});
+
+test('a record can be found by the reference an arrival printed', () => {
+  // "the ID you create can also search so i can find a record with that."
+  //
+  // The search box filters rows on their data-search attribute, so the reference is written
+  // into it -- with and without the leading hash, because somebody reading "#A3F9C1" off a
+  // screen types it either way.
+  const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
+  const fn = main.slice(main.indexOf('function wbItemSearchAttr'));
+  const body = fn.slice(0, fn.indexOf('\n}') + 2);
+  assert.match(body, /const ref = wbArrivalRef\(item\.id\);/);
+  assert.match(body, /\[\.\.\.values, ref, ref\.replace\('#', ''\)\]/, 'both spellings are searchable');
+
+  // One definition, read by the line that PRINTS the reference and the search that FINDS it --
+  // two copies would drift and the id on screen would stop matching the id you can search for.
+  assert.match(main, /import \{ arrivalRef as wbArrivalRef \} from '\.\/workspace\/record-ref\.js';/);
+  const push = readFileSync(join(root, 'src', 'workspace', 'button-push.js'), 'utf8');
+  assert.match(push, /import \{ arrivalRef \} from '\.\/record-ref\.js';/);
+
+  // And it is its OWN module rather than a helper inside button-field.js: main.js needs it
+  // synchronously on every items render, and whatever main.js imports lands in the entry chunk.
+  const field = readFileSync(join(root, 'src', 'workspace', 'button-field.js'), 'utf8');
+  assert.ok(!/export function arrivalRef/.test(field), 'not re-declared where it would be dragged in');
+});
+
+// ---- a link built from the record's own data ---------------------------------------------
+
+test('a link button is not asked for a destination app it will never use', () => {
+  // "Send the record to" and the plan summary were gated on `action !== 'set'`, so choosing
+  // "Open a link" still drew an app picker and a carry-plan for a push that never happens.
+  const link = buttonPanel({ action: 'link', href: 'tel:{Phone}' });
+  assert.ok(!/Send the record to/.test(link), 'no destination for a link');
+  assert.ok(!/What to send/.test(link), 'and nothing to carry');
+  assert.ok(!/wb-plan/.test(link), 'nor a plan for a push that will not happen');
+  assert.match(link, /id="wbBtnHref"/, 'just where it goes');
+
+  // A push still gets all of it -- the gate narrowed, it did not disappear.
+  const push = buttonPanel({ action: 'push' });
+  assert.match(push, /Send the record to/);
+  assert.match(push, /What to send/);
+});
+
+test('the record\'s own phone, email and link fields are offered for the href', () => {
+  // "it can be defined but can also use its current contact, email, link data, where the
+  // button is." The braces syntax already did this; nobody discovers it by being told.
+  const app = APP1();
+  app.fields.push(
+    { id: 'f-phone', type: 'phone', label: 'Mobile', config: {} },
+    { id: 'f-mail', type: 'email', label: 'Work email', config: {} },
+    { id: 'f-rate', type: 'rating', label: 'Score', config: {} },
+  );
+  const out = buttonPanel({ action: 'link' }, app);
+
+  assert.match(out, /data-wb-href-field="Mobile"/, 'a phone can be dialled');
+  assert.match(out, /data-wb-href-field="Work email"/);
+  assert.match(out, /data-wb-href-field="Name"/, 'and a text field, which often holds a URL');
+  assert.ok(!/data-wb-href-field="Score"/.test(out), 'a rating is not something you can dial');
+
+  // One press for the three anybody actually wants, wired to the first field of that kind.
+  assert.match(out, /data-wb-href-set="tel:\{Mobile\}"/);
+  assert.match(out, /data-wb-href-set="mailto:\{Work email\}"/);
+});
+
+test('an app with nothing linkable says so rather than showing an empty row', () => {
+  const bare = { id: 'a', name: 'A', fields: [{ id: 'r', type: 'rating', label: 'Score', config: {} }], items: [] };
+  const out = buttonPanel({ action: 'link' }, bare);
+  assert.ok(!/data-wb-href-field=/.test(out));
+  assert.match(out, /no phone, email or link field yet/);
 });

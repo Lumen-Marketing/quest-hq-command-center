@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   ACTIVITY_KINDS,
+  checklistDone,
   RECORD_TABS,
   commentThread,
   describeChanges,
@@ -193,4 +194,56 @@ test('every kind has something to draw with', () => {
     assert.match(meta.icon, /^ti-/, `${kind} has no icon`);
     assert.match(meta.color, /^#/, `${kind} has no colour`);
   });
+});
+
+// ---- a checklist on an activity row ------------------------------------------------------
+//
+// "this is messy, make it only display what is checked or slashed from the check list."
+//
+// An activity entry stores a checklist as the flat form wbPlainVal produces, because that same
+// string feeds search, sort and CSV export. On a history row it is a wall: counts, a percentage,
+// and every step somebody has NOT done, in order to report the one they just did. So it is read
+// back at render time -- which also means the entries already in the history read properly,
+// rather than only the ones logged from now on.
+
+const FLAT = '6/6 (100%): [x] Received Blueprint; [x] Waiting Permit; [x] Called; [x] Underwriting Sheet; [x] Qouting; [x] Qoute Built';
+
+test('a logged checklist reads back as the steps that are ticked', () => {
+  const out = checklistDone(FLAT);
+  assert.equal(out.total, 6);
+  assert.deepEqual(out.done, [
+    'Received Blueprint', 'Waiting Permit', 'Called', 'Underwriting Sheet', 'Qouting', 'Qoute Built',
+  ]);
+});
+
+test('only the ticked steps come back, never the unticked ones', () => {
+  const out = checklistDone('1/3 (33%): [x] Received Blueprint; [ ] Waiting Permit; [ ] Called');
+  assert.deepEqual(out.done, ['Received Blueprint'], 'the two nobody has done are not reported');
+  assert.equal(out.total, 3, 'but they still count towards the total');
+});
+
+test('a checklist with nothing ticked says so rather than reading as empty', () => {
+  const out = checklistDone('0/2 (0%): [ ] Received Blueprint; [ ] Called');
+  assert.deepEqual(out.done, []);
+  assert.equal(out.total, 2);
+});
+
+test('anything that is not that shape returns null, so the raw text still prints', () => {
+  // The caller falls back to printing the value whole. A checklist logged by some older build
+  // still reads -- it just reads plainly, instead of being silently dropped.
+  [
+    '', null, undefined,
+    'To Do',
+    'Done → In progress',
+    // A colon, but no counts in front of it: some other value that happens to contain one.
+    'Note: call them back',
+    // Counts, but the steps carry no box -- not the form this parses.
+    '2/3 (66%): Received Blueprint; Called',
+  ].forEach((input) => assert.equal(checklistDone(input), null, `${JSON.stringify(input)} is not a checklist`));
+});
+
+test('one unparseable step abandons the whole parse rather than dropping it', () => {
+  // A label containing "; " would split wrong. Printing the raw string is honest; printing a
+  // list that quietly lost an item is not.
+  assert.equal(checklistDone('2/2 (100%): [x] Called; them back; [x] Qouting'), null);
 });

@@ -74,7 +74,11 @@ export function createItemsView(ctx) {
     else if (ui.view === 'activity') listBody = wbRenderItemsActivity(companyId, workspace, app, rows, cols, ui, selectable, canManage);
     else listBody = wbRenderItemsTable(companyId, workspace, app, rows, cols, ui, selectable, canManage);
     const viewLabel = (WB_VIEW_MODES.find(([v]) => v === ui.view) || [])[1] || 'Table';
-    return `<div class="wb-items-layout">${wbViewsRail(companyId, app, ui)}<div class="wb-items-main">${toolbar}${chipBar}${bulkBar}<div id="wbItemsList">${listBody}</div>
+    // Settings can turn the saved-views panel off, and then the list takes the whole width.
+    // Asked before the rail is called, not after: calling it would fetch the saved-views chunk
+    // for a panel nobody is going to see.
+    const showRail = !app.hideViews;
+    return `<div class="wb-items-layout${showRail ? '' : ' wb-items-solo'}">${showRail ? wbViewsRail(companyId, app, ui) : ''}<div class="wb-items-main">${toolbar}${chipBar}${bulkBar}<div id="wbItemsList">${listBody}</div>
       <div class="wb-table-foot"><span data-wb-items-count>${rows.length} item${rows.length === 1 ? '' : 's'}</span>${navStage
       ? ` at <b>${h(navStageLabel)}</b> of ${app.items.length}` : ''} · ${app.fields.length} field${app.fields.length === 1 ? '' : 's'} · ${h(viewLabel)} view</div></div></div>`;
   }

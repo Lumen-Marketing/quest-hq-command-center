@@ -162,10 +162,79 @@ test('the field palette scrolls itself instead of setting the builder height', (
   // whole builder that tall and pushed everything below it off the page.
   const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
   const rule = styles.match(/\.wb-palette \{([\s\S]*?)\}/)?.[1] || '';
-  assert.match(rule, /max-height: calc\(100vh - 140px\)/);
-  assert.match(rule, /overflow-y: auto/);
-  // Sticky, so the types stay reachable however far down the field list you are.
-  assert.match(rule, /position: sticky/);
+  assert.match(rule, /max-height: calc\(100vh - 140px - var\(--wb-tab-strip/);
+  // Sticky, so the types stay reachable however far down the field list you are -- but below
+  // the tab strip, which sticks above it. Pinned to the same spot they would overlap, and the
+  // palette would sit under the tabs.
+  assert.match(rule, /position: sticky; top: calc\(var\(--wb-tab-strip/);
+  // The card is the frame and does not scroll: it is a flex column, so the header stays put
+  // and only the list below it moves. Scrolling the card itself is what let field types ride
+  // up into the gap above "Add a field".
+  assert.match(rule, /overflow: hidden/);
+  assert.match(rule, /flex-direction: column/);
+
+  // Both halves of the tab row stick: the tabs and the Export / Import / Print / Add buttons
+  // beside them are all things you reach for while reading a long list, and scrolling back to
+  // the top of two hundred rows to reach them is what makes a list feel like a dead end.
+  const tabs = styles.match(/\.wb-tabs-row \{([\s\S]*?)\}/)?.[1] || '';
+  assert.match(tabs, /position: sticky/);
+  assert.match(tabs, /top: 0/);
+  // A transparent strip would let the rows scroll through it.
+  assert.match(tabs, /background: var\(--surface-2\)/);
+  // Above ordinary content, below the suggestion menus that must open over it.
+  const layer = Number(tabs.match(/z-index: (\d+)/)?.[1]);
+  assert.ok(layer > 3 && layer < 90, `expected a layer between content and menus, got ${layer}`);
+  // The height it covers is named once, so the two sticky things inside the work surface
+  // cannot drift apart and pin on top of each other.
+  assert.match(styles, /--wb-tab-strip: \d+px;/);
+
+  const list = styles.match(/\.wb-palette-list \{([\s\S]*?)\}/)?.[1] || '';
+  assert.match(list, /overflow-y: auto/);
+  // A list that can shrink below its content is the whole reason the header keeps its height.
+  assert.match(list, /min-height: 0/);
   // And a scroll that reaches its end must not carry on into the page behind it.
-  assert.match(rule, /overscroll-behavior: contain/);
+  assert.match(list, /overscroll-behavior: contain/);
+});
+
+test('a category or status field can be shown as choice chips, and chips can mint a new option', () => {
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const fieldUi = readFileSync(new URL('../src/workspace/field-config-ui.js', import.meta.url), 'utf8');
+  // The config panel offers the choice to a category and a status alike. Tags are excluded:
+  // they hold several values at once, so one-at-a-time chips would be the wrong control.
+  assert.match(fieldUi, /id="wbCatDisplay"/);
+  assert.match(fieldUi, /const chips = t !== 'tags' && fd\.config\.display === 'chips'/);
+  assert.match(fieldUi, /const displayRow = t !== 'tags' \?/);
+  // Chips write the option ID into the same hidden [data-f] input the dropdown uses, so every
+  // reader downstream is unchanged.
+  assert.match(fieldUi, /data-wb-chip-pick[\s\S]*?input type="hidden" data-f=/);
+  // "+ Other" is the chips' answer to typing an unknown value into the dropdown.
+  assert.match(fieldUi, /data-wb-chip-other/);
+  assert.match(fieldUi, /data-wb-chip-new-input/);
+
+  // Every route to a brand-new option goes through one minting function -- the dropdown, the
+  // chips' "+ Other", and a copy carrying a value this app has no option for -- so they cannot
+  // drift apart on casing, colour, or who is allowed to add one.
+  const mint = readFileSync(new URL('../src/workspace/option-mint.js', import.meta.url), 'utf8');
+  assert.match(mint, /export function createOptionMint/);
+  assert.match(mint, /function wbMintOption\(fieldId, rawLabel\)/);
+  assert.match(mint, /if \(!can\('workspaces\.manage', companyId\)\) return \{ option: null/);
+  const combo = readFileSync(new URL('../src/ui/combobox-menu.js', import.meta.url), 'utf8');
+  assert.ok(!/function wbMintOption/.test(combo), 'the combobox uses the shared one, it does not keep a copy');
+
+  // The behaviour rides in the chunk that draws the chips, not the entry bundle: main.js
+  // renders nothing at all until field-config-ui has arrived, so a chip on screen is proof
+  // the runtime is loaded, and main.js keeps only the event routing.
+  const chip = readFileSync(new URL('../src/workspace/chip-field.js', import.meta.url), 'utf8');
+  assert.ok(!/import .*chip-field/.test(main), 'not pulled into the entry bundle');
+  assert.match(fieldUi, /export \{ createChipRuntime \} from '\.\/chip-field\.js'/);
+  // The picked chip has to fire input/change, or the record saves as if nothing was touched.
+  const select = chip.match(/function wbChipSelect\(zone, optionId\) \{([\s\S]*?)\n {2}\}/)?.[1] || '';
+  assert.match(select, /new Event\('input', \{ bubbles: true \}\)/);
+  assert.match(select, /new Event\('change', \{ bubbles: true \}\)/);
+  // A copy carrying a label this app has no option for mints it rather than dropping it.
+  assert.match(chip, /function wbResolveChipOption\(fieldId, label, zone\)/);
+
+  // Saving the dialog has to record the choice, read back by the panel that drew the control,
+  // and defaulting to the dropdown so fields built before this existed keep what they had.
+  assert.match(fieldUi, /if \(type === 'category' \|\| type === 'status'\) config\.display = document\.getElementById\('wbCatDisplay'\)\?\.value === 'chips' \? 'chips' : 'dropdown'/);
 });
