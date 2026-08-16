@@ -1261,12 +1261,16 @@ const NAVIGATION_LABELS = {
 };
 
 const NAV_GROUPS = [
-  { label: 'Work', ids: ['dashboard', 'tasks', 'messages', 'company-contacts'] },
+  { label: 'Work', ids: ['dashboard', 'tasks', 'messages'] },
   { label: 'Pipeline', ids: ['contacts'] },
   { label: 'Production', ids: ['jobs'] },
   { label: 'Tools', ids: ['underwriter', 'proposals'] },
   { label: 'Review', ids: ['analytics', 'users', 'calendar'] },
   { label: 'Build', ids: ['templates', 'automations'] },
+  // Above Workspace, and first in the Company tab. A contact belongs to the COMPANY -- that is
+  // the whole point of the directory, and why it has no workspace_id -- so listing it under
+  // Work, beside a person's own tasks and inbox, said the opposite of what it is.
+  { label: 'Company', ids: ['company-contacts'] },
   { label: 'Workspace', ids: ['workspaces', 'workday', 'deals', 'files', 'forms', 'client-portals', 'knowledge'] },
   { label: 'Operations', ids: ['price-book', 'finance', 'team-chart', 'time', 'approvals', 'clock', 'team-workload', 'eod', 'calls'] },
   { label: 'Control', ids: ['settings', 'help', 'tickets'] },
@@ -1274,7 +1278,7 @@ const NAV_GROUPS = [
 
 const SIDEBAR_SCOPE_GROUPS = {
   'my-work': new Set(['Work', 'Pipeline', 'Production', 'Tools', 'Review', 'Build']),
-  company: new Set(['Workspace', 'Operations', 'Control']),
+  company: new Set(['Company', 'Workspace', 'Operations', 'Control']),
 };
 
 function navigationLabel(moduleId, fallbackLabel) {

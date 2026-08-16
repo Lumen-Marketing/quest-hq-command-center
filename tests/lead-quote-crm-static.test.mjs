@@ -363,7 +363,7 @@ test('messages remains visible as the job center inbox', () => {
   // Company Contacts joined this group: it is company-wide, so it belongs beside Home and
   // Inbox in My work rather than under any one workspace. The three that were here before
   // still have to be, in order.
-  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages', 'company-contacts'\] \}/);
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
   assert.match(source, /messages:\s*'Inbox'/);
   assert.doesNotMatch(source, /\{ id: 'messages', group: 'Company', label: 'Inbox'/);
 });

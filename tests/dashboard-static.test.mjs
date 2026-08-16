@@ -17,7 +17,7 @@ test('dashboard replaces home as the canonical core workspace route', () => {
   // Company Contacts joined this group: it is company-wide, so it belongs beside Home and
   // Inbox in My work rather than under any one workspace. The three that were here before
   // still have to be, in order.
-  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages', 'company-contacts'\] \}/);
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
   assert.match(source, /\{ label: 'Pipeline', ids: \['contacts'\] \}/);
   assert.match(source, /const section = companyMatch\[2\] \|\| 'dashboard';/);
   assert.match(source, /if \(route\.section === 'dashboard'\) return renderCompanyDashboard\(companyId\);/);

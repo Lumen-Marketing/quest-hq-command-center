@@ -249,7 +249,7 @@ test('the plugin is company-shared and auto-installed', () => {
   assert.match(catalog, /module_ids: \['company-contacts'\]/);
   assert.match(main, /\['company_contacts\.view', 'View company contacts'\]/);
   assert.match(main, /\['company_contacts\.manage', 'Add\/edit company contacts'\]/);
-  assert.match(main, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages', 'company-contacts'\] \}/);
+  assert.match(main, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
   assert.match(main, /id: 'company-contacts', group: 'Work'[^}]*permission: 'company_contacts\.view'/);
   assert.match(main, /route\.section === 'company-contacts'/, 'the nav item needs somewhere to go');
 });

@@ -14,10 +14,17 @@ test('command center uses the approved IBM Plex typography system', () => {
 
 test('navigation follows the approved job center information architecture', () => {
   assert.match(source, /const NAVIGATION_LABELS = \{[\s\S]*dashboard:\s*'Home'[\s\S]*messages:\s*'Inbox'[\s\S]*underwriter:\s*'Estimator'[\s\S]*analytics:\s*'Reports'[\s\S]*users:\s*'People'[\s\S]*calendar:\s*'Meetings'/);
-  // Company Contacts joined this group: it is company-wide, so it belongs beside Home and
-  // Inbox in My work rather than under any one workspace. The three that were here before
-  // still have to be, in order.
-  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages', 'company-contacts'\] \}/);
+  assert.match(source, /\{ label: 'Work', ids: \['dashboard', 'tasks', 'messages'\] \}/);
+  // Company Contacts moved OUT of Work and into its own Company group, above Workspace and
+  // first in the Company tab. A contact belongs to the company -- that is the whole point of
+  // the directory, and why the table has no workspace_id -- so sitting under Work, beside a
+  // person's own tasks and inbox, said the opposite of what it is.
+  assert.match(source, /\{ label: 'Company', ids: \['company-contacts'\] \},\n\s*\{ label: 'Workspace',/, 'Company sits directly above Workspace');
+  assert.match(source, /company: new Set\(\['Company', 'Workspace', 'Operations', 'Control'\]\)/, 'and shows in the Company tab, not My work');
+  assert.ok(
+    !/'my-work': new Set\(\[[^\]]*'Company'/.test(source),
+    'a company-wide directory is not one person\'s work',
+  );
   assert.match(source, /\{ label: 'Pipeline', ids: \['contacts'\] \}/);
   assert.match(source, /\{ label: 'Production', ids: \['jobs'\] \}/);
   assert.match(source, /\{ label: 'Tools', ids: \['underwriter', 'proposals'\] \}/);
