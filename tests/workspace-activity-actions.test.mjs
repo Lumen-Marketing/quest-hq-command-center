@@ -29,9 +29,11 @@ test('a log line links to the record it describes', () => {
   assert.match(body, /if \(!ev\?\.appId \|\| !ev\?\.itemId\) return '';/,
     'an entry about no record must not pretend to point at one');
   assert.match(body, /workspace_id: workspace\.id, app_id: ev\.appId, item_id: ev\.itemId/);
-  // Every write that knows a record now records which one.
-  // Six now: the five original writes, plus the inline single-field save on the record page.
-  assert.equal((main.match(/appId: app\.id, itemId: item\.id/g) || []).length, 6);
+  // Every write that knows a record records which one.
+  // Seven now: the five original writes, the inline single-field save on the record page, and
+  // setting a category from its chips on a card — a stage moved from a card is the same event
+  // as one moved from the record, and has to be as findable.
+  assert.equal((main.match(/appId: app\.id, itemId: item\.id/g) || []).length, 7);
 });
 
 test('entries written before this stay plain text', () => {

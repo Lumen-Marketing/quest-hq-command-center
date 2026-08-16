@@ -7,6 +7,10 @@
 
 import * as recordLayout from './record-layout.js';
 import * as children from './child-collections.js';
+// Pure leaf modules, like the two above: the stage field so stepping stays inside the deck you
+// arrived from, and newest-first so 'next' means the row below the one you opened.
+import { pipelineField } from './pipeline-core.js';
+import { sortNewestFirst } from '../company-contacts/model.js';
 
 /**
  * One sub-item field, rendered by the APP'S OWN formatter.
@@ -114,6 +118,37 @@ export function createRecordPage(ctx) {
     const backHref = appHref(companyPath('workspaces', {
       app_id: app.id, tab: 'items', ...(stage ? { stage } : {}),
     }, companyId));
+
+    // Walking the list without going back to it.
+    //
+    // Ordered the way the ITEMS LIST is by default -- newest first -- so "next" means the record
+    // below the one you opened, not an arbitrary neighbour in storage order. The stage filter is
+    // honoured too: having arrived from a filtered deck, stepping through it must stay inside
+    // that deck rather than wandering into records the filter excluded.
+    const stageField = stage ? pipelineField(app) : null;
+    const siblings = sortNewestFirst(
+      stageField
+        ? (app.items || []).filter((row) => String(row?.values?.[stageField.id] ?? '') === stage)
+        : (app.items || []),
+    );
+    const at = siblings.findIndex((row) => row.id === item.id);
+    const stepHref = (row) => appHref(companyPath('workspaces', {
+      app_id: app.id, tab: 'items', item_id: row.id, ...(stage ? { stage } : {}),
+    }, companyId));
+    const prev = at > 0 ? siblings[at - 1] : null;
+    const next = at >= 0 && at < siblings.length - 1 ? siblings[at + 1] : null;
+    // Rendered even at the ends, disabled, so the pair does not shift position as you step
+    // through — a control that moves under the pointer is one you misclick.
+    const stepper = siblings.length > 1 ? `
+      <span class="wb-record-step" role="group" aria-label="Move through ${h(app.name)}">
+        ${prev
+    ? `<a class="wb-w-btn" href="${stepHref(prev)}" data-router title="Previous — ${h(wbItemTitle(app, prev))}" aria-label="Previous record"><i class="ti ti-chevron-left"></i></a>`
+    : '<span class="wb-w-btn is-off" aria-disabled="true" title="This is the first one"><i class="ti ti-chevron-left"></i></span>'}
+        <span class="wb-record-step-at">${at + 1} of ${siblings.length}</span>
+        ${next
+    ? `<a class="wb-w-btn" href="${stepHref(next)}" data-router title="Next — ${h(wbItemTitle(app, next))}" aria-label="Next record"><i class="ti ti-chevron-right"></i></a>`
+    : '<span class="wb-w-btn is-off" aria-disabled="true" title="This is the last one"><i class="ti ti-chevron-right"></i></span>'}
+      </span>` : '';
     // The item is handed over, not withheld. Created / Last modified fields read their value
     // off item.createdAt and item.updatedAt rather than out of values, so with item: null
     // they rendered a dash on every record. canManage stays false, which is what actually
@@ -227,6 +262,7 @@ export function createRecordPage(ctx) {
         <div class="wb-record-top">
         <div class="wb-record-bar">
           <a class="wb-record-back" href="${backHref}" data-router><i class="ti ti-arrow-left"></i>All ${h(app.name)}</a>
+          ${stepper}
           ${canManage ? `<div class="wb-dash-controls">
             <button class="btn btn-sm ${editing ? 'btn-primary' : ''}" type="button" data-wb-rec-manage>${editing ? '<i class="ti ti-check"></i>Done' : '<i class="ti ti-adjustments"></i>Customize'}</button>
             ${editing ? '<button class="btn btn-sm" type="button" data-wb-rec-add><i class="ti ti-plus"></i>Add card</button><button class="btn btn-sm" type="button" data-wb-rec-reset><i class="ti ti-rotate"></i>Reset</button>' : ''}

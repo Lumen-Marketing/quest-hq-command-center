@@ -251,7 +251,18 @@ export function createButtonPush(ctx) {
   /** Enable or disable every button in `root` against what the form currently holds. */
   function syncButtons(root) {
     if (!root || !root.querySelectorAll) return;
+    // A record being ADDED has not been saved, so there is nothing to send, change or link from.
+    // Pressing a push button here would file a record the app does not have yet, and pressing a
+    // "change fields" one would write into boxes that are about to be replaced by the save. So
+    // every button on a new-record form is held until the record exists.
+    const adding = !!state.builderModal && !state.builderModal.editId
+      && root.closest?.('.wb-modal, .wb-record-page') !== null;
     root.querySelectorAll('[data-wb-press]').forEach((button) => {
+      if (adding && !button.dataset.wbPressCtx) {
+        button.disabled = true;
+        button.title = 'Save this record first — there is nothing to send yet.';
+        return;
+      }
       // A button with no destination stays disabled whatever the record says.
       if (button.dataset.wbNoTarget === '1') return;
       // A button on a CONTACT CARD is judged against the contact's stored values. Checked

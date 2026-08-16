@@ -35,11 +35,21 @@ test('the pack covers essentially every icon the app uses', () => {
   // The last three arrived with the spreadsheet ribbon and are deliberate, not missed: Lucide's
   // `rows-2`/`columns-2` say "rows" and "columns", not "delete these rows", and `hash` is not
   // "more decimal places". Every other ribbon icon IS aliased.
+  //
+  // The money and brand icons arrived with the button icon picker, which had nothing that said
+  // "quote", "invoice" or "take a payment" — the commonest thing anybody builds a button for.
+  // Lucide has no peso, no pound, no piggy bank and no brand marks at all, and inventing an
+  // alias would be the confidently-wrong case this list exists to avoid. They fall back to
+  // Tabler, which is exactly right for a currency symbol: it has to be the actual symbol.
   const KNOWN_FALLBACKS = [
     'arrows-diagonal', 'chart-donut', 'database-heart', 'door-exit', 'help-off', 'ladder',
     'layout-sidebar-left-collapse', 'message-off', 'player-pause', 'player-play',
     'refresh-alert', 'rotate-2', 'square-rounded',
     'column-remove', 'decimal', 'row-remove',
+    'businessplan', 'cash-banknote', 'pig-money',
+    'currency-bitcoin', 'currency-euro', 'currency-peso', 'currency-pound',
+    'menu-2',
+    'brand-apple', 'brand-facebook', 'brand-github', 'brand-google', 'brand-twitter',
   ];
   assert.deepEqual(
     [...uncovered].sort(),

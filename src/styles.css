@@ -28947,7 +28947,7 @@ html[data-card-style="glass"] .message-context-rail {
 /* Matches the email cell's treatment so the two read as the same kind of thing: a value
    you can act on. Green rather than blue, because dialing and mailing are different
    actions and the field type is already green in the builder. */
-.wb-tel-cell {
+.wb-tel-cell { border: none; background: none; padding: 0; font: inherit; cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -31911,7 +31911,9 @@ a.wb-cal-more:hover { color: var(--orange); }
   align-items: center;
   gap: 12px;
   position: sticky;
-  top: 0;
+  /* BELOW the app strip, not on top of it. At top: 0 both rows claimed the same spot and this
+     one — the lower z-index — slid under and disappeared on scroll. */
+  top: var(--wb-strip-h, 0px);
   /* Above ordinary content, below the dropdowns that must open over it (z-index 90) and far
      below any dialog. */
   z-index: 20;
@@ -32224,6 +32226,16 @@ a.wb-cal-more:hover { color: var(--orange); }
    removed at its source instead -- the surface's own top padding, dropped for this section
    only. The sides still bleed through its 24px so the strip spans the full width. */
 .quest-app[data-section="workspaces"] .work-surface { padding-top: 0; }
+
+/* How tall the app strip is when it is stuck, and therefore where the tab row underneath has
+   to stop. ONE number, declared here beside the thing it measures.
+
+   Both rows were sticky at top: 0. The strip wins on z-index (30 vs 20), so the tabs slid
+   underneath it and vanished the moment anybody scrolled — which reads as the tabs not being
+   sticky at all, when in fact they were sticking to a place already occupied.
+     8px padding + 34px icon + 6px gap + ~15px label + 8px padding + 1px border = 72
+   plus the strip's own 8px top and bottom padding. */
+.quest-app[data-section="workspaces"] { --wb-strip-h: 88px; }
 
 .wb-topbar {
   position: sticky;
@@ -34857,3 +34869,25 @@ a.cc-cal-item:hover { border-color: var(--accent, #d4541f); }
 .wb-href-fields { margin-top: 8px; }
 .wb-href-fields .wb-chip-pick { margin: 6px 0; }
 .wb-href-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* The number in the call confirmation, big enough to read back to somebody before you dial. */
+.wb-call-number {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: .01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A category set to Choice chips shows every choice on the card, so a stage can be moved
+   without opening the record. The row wraps rather than scrolling: a card is read at a glance
+   and a hidden option is one nobody picks. */
+.wb-ic-row.is-chips { align-items: flex-start; }
+.wb-card-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.wb-card-chips .wb-chip { font-size: 11.5px; padding: 2px 8px; }
+
+/* Stepping through records without going back to the list. Rendered at both ends, disabled,
+   so the pair keeps its position — a control that moves under the pointer is one you misclick. */
+.wb-record-step { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
+.wb-record-step-at { color: var(--muted); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 62px; text-align: center; }
+.wb-w-btn.is-off { opacity: .35; cursor: default; display: inline-grid; place-items: center; }

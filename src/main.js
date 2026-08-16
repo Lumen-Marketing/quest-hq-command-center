@@ -16213,13 +16213,18 @@ function wbFmtVal(ctx, field, value) {
     case 'email': return `<a href="mailto:${h(value)}" style="color:var(--info,#2563eb)">${h(value)}</a>`;
     case 'url': { const href = wbUrlHref(value); return `<a class="wb-url-cell" href="${h(href)}" target="_blank" rel="noopener noreferrer" title="${h(href)}"><i class="ti ti-world-www"></i><span class="wb-url-cell-txt">${h(wbUrlLabel(value))}</span></a>`; }
     case 'phone': {
-      // Dialable, matching how an email field is already a mailto link. The row's own
-      // click handler skips anchors, so tapping the number calls instead of opening
-      // the record.
+      // A BUTTON, not a bare tel: link. The link handed straight to the browser produced its
+      // own "this site is trying to open an app" dialog, which is the operating system's
+      // wording about an application rather than ours about a person -- and it left no trace
+      // that the call happened.
+      //
+      // So the number opens our own confirmation first, and answering it logs the call on the
+      // record before the dialler is handed anything. The row's click handler already skips
+      // buttons, so tapping the number still calls rather than opening the record.
       const tel = telHref(value);
       const shown = formatPhoneNumber(value);
       return tel
-        ? `<a class="wb-tel-cell" href="${h(tel)}" title="Call ${h(shown)}"><i class="ti ti-phone" aria-hidden="true"></i>${h(shown)}</a>`
+        ? `<button type="button" class="wb-tel-cell" data-wb-call="${h(tel)}" data-wb-call-shown="${h(shown)}" title="Call ${h(shown)}"><i class="ti ti-phone" aria-hidden="true"></i>${h(shown)}</button>`
         : h(shown);
     }
     case 'date': return value ? new Date(`${value}T00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '<span class="wb-cell-empty">—</span>';
@@ -17201,6 +17206,24 @@ function wbCardFieldHtml(ctx, field, ui) {
       panel = `<div class="wb-card-cl-panel"><ul class="wb-cl-list">${list || '<li class="wb-cl-empty">No steps yet — open the record to add some.</li>'}</ul></div>`;
     }
     return `<div class="wb-ic-row"><span class="wb-ic-label">${h(field.label)}</span><span class="wb-ic-val">${summary}</span></div>${panel}`;
+  }
+  // A category set to Choice chips shows EVERY choice on the card, not just the one that is
+  // set. The point of choosing chips over a dropdown is that the options are worth seeing --
+  // and on a card that means you can also set one without opening the record, the same way a
+  // checklist ticks and a progress bar drags here.
+  //
+  // The chosen one is `on`; pressing it again clears the field, because a chip row with no way
+  // back to empty is a value you can never unset.
+  if ((field.type === 'category' || field.type === 'status') && canManage
+    && field.config?.display === 'chips' && (field.config.options || []).length) {
+    const chips = field.config.options.map((option) => {
+      const on = option.id === val;
+      return `<button type="button" class="wb-chip ${on ? 'on' : ''}" aria-pressed="${on ? 'true' : 'false'}"
+        data-wb-card-chip="${h(item.id)}:${h(field.id)}:${h(option.id)}"
+        style="--chip:${h(option.color || '#6b7280')}"
+        title="${h(on ? `Clear ${field.label}` : `Set ${field.label} to ${option.label}`)}">${h(option.label)}</button>`;
+    }).join('');
+    return `<div class="wb-ic-row is-chips"><span class="wb-ic-label">${h(field.label)}</span><span class="wb-ic-val wb-card-chips">${chips}</span></div>`;
   }
   if (field.type === 'progress' && canManage && !(field.config && field.config.source)) {
     const p = Math.max(0, Math.min(100, Math.round(Number(val) || 0)));
@@ -18486,6 +18509,61 @@ function wbFileIcon(kind) {
 
 function openWbFilePreview(url, name) { if (!url) { showToast('No file is attached to this field.', 'local', 'Workspaces'); return; } openWbModal({ kind: 'file-preview', url, name: name || 'File' }); }
 
+/**
+ * Ask before dialling, and remember which record was being called.
+ *
+ * The item id comes off the row rather than being threaded through wbFmtVal, which formats a
+ * VALUE and has no idea which record it belongs to. Every view that renders a phone cell puts
+ * it inside something carrying data-item, so the row is where to ask.
+ */
+function openWbCall(companyId, workspaceId, appId, el) {
+  const tel = el.dataset.wbCall;
+  if (!tel) return;
+  const itemId = el.closest('[data-item]')?.dataset.item || '';
+  const { app } = wbFind(companyId, workspaceId, appId);
+  const item = (app?.items || []).find((row) => row.id === itemId);
+  openWbModal({
+    kind: 'call',
+    companyId,
+    workspaceId,
+    appId,
+    itemId,
+    tel,
+    shown: el.dataset.wbCallShown || '',
+    // Named as the record, because "Call Roman?" is the question somebody is actually asking.
+    who: app && item ? wbItemTitle(app, item) : '',
+  });
+}
+
+/**
+ * The call was placed. Note it on the record, then hand the number over.
+ *
+ * Logged BEFORE the hand-off, and not conditional on it: once the dialler has the number this
+ * page may be replaced by the phone app, and an entry written after that never gets written.
+ * "Attempted" is the honest word either way -- the browser can start a call and nothing here
+ * can know whether it connected.
+ */
+async function wbConfirmCall() {
+  const m = state.builderModal;
+  if (!m || m.kind !== 'call') return;
+  const { app, workspace } = wbFind(m.companyId, m.workspaceId, m.appId);
+  if (workspace && app && m.itemId) {
+    wbLogActivity(workspace, {
+      kind: 'updated',
+      icon: 'ti-phone',
+      color: '#16a34a',
+      appId: app.id,
+      itemId: m.itemId,
+      text: `Called <b>${h(m.who || 'this contact')}</b> on <b>${h(m.shown || '')}</b>`,
+    });
+    await wbSave(m.companyId);
+  }
+  state.builderModal = null;
+  render();
+  // Last, so the log is already written if the browser hands the tab to a phone app.
+  window.location.href = m.tel;
+}
+
 // Flip a checkbox field straight from the item table (no modal). Mirrors the
 // item-modal "updated" path: log the change and run automations.
 function wbToggleItemCheckbox(companyId, workspaceId, appId, itemId, fieldId) {
@@ -18550,6 +18628,48 @@ function wbSetItemProgressInline(companyId, workspaceId, appId, itemId, fieldId,
   wbSave(companyId);
   render();
 }
+/**
+ * Set a category or status from its chips on a card.
+ *
+ * Pressing the chip that is already on CLEARS the field: a chip row with no way back to empty
+ * is a value nobody can unset without opening the record, which defeats the point of editing
+ * here at all.
+ *
+ * Logged and run through automations exactly as the progress slider is -- a stage moved from a
+ * card is the same event as a stage moved from the record, and an automation that watches for
+ * it must not care which screen it was pressed on.
+ */
+function wbSetItemChipInline(companyId, workspaceId, appId, itemId, fieldId, optionId) {
+  if (!can('workspaces.manage', companyId)) return;
+  const { workspace, app } = wbFind(companyId, workspaceId, appId);
+  if (!app) return;
+  const item = app.items.find((i) => i.id === itemId);
+  const field = app.fields.find((f) => f.id === fieldId);
+  if (!item || !field || !['category', 'status'].includes(field.type)) return;
+  const option = (field.config?.options || []).find((o) => o.id === optionId);
+  if (!option) return;
+
+  const next = item.values[fieldId] === optionId ? '' : optionId;
+  if (item.values[fieldId] === next) return;
+  const prev = { ...item.values };
+  item.values = { ...item.values, [fieldId]: next };
+  const stamp = new Date().toISOString();
+  item.updatedAt = stamp;
+  item.lastActivityAt = stamp;
+  wbLogActivity(workspace, {
+    kind: 'updated', icon: 'ti-pencil', color: '#2563eb', appId: app.id, itemId: item.id,
+    text: `Changed <b>${h(field.label)}</b>`,
+    changes: [{
+      fieldId, label: String(field.label || 'Field'), type: field.type,
+      from: wbPlainVal(companyId, workspace, app, field, prev[fieldId], prev),
+      to: wbPlainVal(companyId, workspace, app, field, next, item.values),
+    }],
+  });
+  wbRunAutomations(companyId, workspace, app, item, 'updated', prev);
+  wbSave(companyId);
+  render();
+}
+
 function openWbDeleteWorkspace(companyId, workspace) {
   if (!wbGuard()) return;
   openWbModal({ kind: 'delete-workspace', companyId, workspaceId: workspace.id, workspaceName: workspace.name, error: '' });
@@ -20260,6 +20380,8 @@ function mountWorkspaceBuilder() {
     if (selAll) { const boxes = document.querySelectorAll('#wbItemsList [data-wb-select]'); const checked = [...boxes].filter((b) => b.checked).length; selAll.indeterminate = checked > 0 && checked < boxes.length; }
     // A file cell opens a preview/download chooser (not the row's edit modal).
     bind('[data-wb-view-file]', (el, e) => { e.stopPropagation(); openWbFilePreview(el.dataset.fileUrl, el.dataset.fileName); });
+    // A phone cell asks first, in our words rather than the browser's, and notes the call.
+    bind('[data-wb-call]', (el, e) => { e.stopPropagation(); openWbCall(companyId, workspaceId, appId, el); });
     // Checkbox cells toggle inline without opening the item.
     bind('[data-wb-toggle-check]', (el, e) => { e.stopPropagation(); wbToggleItemCheckbox(companyId, workspaceId, appId, el.dataset.itemId, el.dataset.fieldId); });
     // Board: which field the columns come from, what they total, and editing the stages.
@@ -20284,6 +20406,13 @@ function mountWorkspaceBuilder() {
       el.addEventListener('input', (e) => { e.stopPropagation(); if (out) out.textContent = `${el.value}%`; });
       el.addEventListener('change', (e) => { e.stopPropagation(); const [itemId, fieldId] = String(el.dataset.wbCardProgress).split(':'); wbSetItemProgressInline(companyId, workspaceId, appId, itemId, fieldId, el.value); });
       el.addEventListener('click', (e) => e.stopPropagation());
+    });
+    // Setting a category from its chips, straight on the card. stopPropagation because the card
+    // is one big click target that opens the record, and choosing a stage is not that.
+    bind('[data-wb-card-chip]', (el, e) => {
+      e.stopPropagation();
+      const [itemId, fieldId, optionId] = String(el.dataset.wbCardChip).split(':');
+      wbSetItemChipInline(companyId, workspaceId, appId, itemId, fieldId, optionId);
     });
     bind('[data-wb-setting]', (el) => {
       state.wbSettingsDraft = state.wbSettingsDraft || {};
@@ -20582,6 +20711,7 @@ function wbMountModal() {
     render();
   };
   const confirmBtn = overlay.querySelector('[data-wb-confirm]'); if (confirmBtn) confirmBtn.onclick = () => wbConfirmDelete();
+  const callBtn = overlay.querySelector('[data-wb-call-go]'); if (callBtn) callBtn.onclick = () => wbConfirmCall();
   const delWsBtn = overlay.querySelector('[data-wb-delete-ws-confirm]'); if (delWsBtn) delWsBtn.onclick = () => wbConfirmDeleteWorkspace();
   const delViewBtn = overlay.querySelector('[data-wb-delete-view-confirm]');
   if (delViewBtn) {

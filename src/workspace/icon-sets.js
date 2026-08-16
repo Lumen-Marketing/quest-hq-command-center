@@ -35,9 +35,29 @@ export const WB_APP_ICONS = [
 // so the picker stays a single grid, and every name here is checked against the bundled font
 // by the button tests -- there is no CDN, so a wrong name is a blank square.
 export const WB_ACTION_ICONS = [
+  // Movement and direction.
   'ti-arrow-right', 'ti-arrow-left', 'ti-arrow-up', 'ti-arrow-down',
   'ti-arrow-back-up', 'ti-arrow-forward-up', 'ti-arrows-sort', 'ti-refresh',
+  'ti-chevron-right', 'ti-chevron-left', 'ti-chevron-up', 'ti-chevron-down',
+  // Doing something with it.
   'ti-send', 'ti-share', 'ti-external-link', 'ti-click',
   'ti-trash', 'ti-trash-x', 'ti-eraser', 'ti-x',
   'ti-device-floppy', 'ti-check', 'ti-circle-check', 'ti-player-play',
+  'ti-plus', 'ti-edit', 'ti-pencil', 'ti-search', 'ti-download',
+  // Getting hold of somebody. A button that calls or emails wants one of these.
+  'ti-mail', 'ti-message', 'ti-phone', 'ti-bell',
+  // People.
+  'ti-user', 'ti-users', 'ti-user-plus', 'ti-user-circle',
+  // Getting around.
+  'ti-home', 'ti-menu-2', 'ti-settings',
+  // Money. A button that quotes, invoices, takes a payment or files a receipt is the
+  // commonest thing anybody builds here, and none of it had an icon that said so.
+  'ti-cash', 'ti-cash-banknote', 'ti-coin', 'ti-coins',
+  'ti-credit-card', 'ti-wallet', 'ti-building-bank', 'ti-pig-money', 'ti-receipt',
+  'ti-currency-dollar', 'ti-currency-euro', 'ti-currency-pound',
+  'ti-currency-peso', 'ti-currency-bitcoin',
+  'ti-calculator', 'ti-chart-bar', 'ti-chart-line', 'ti-businessplan',
+  // Somewhere else entirely.
+  'ti-brand-github', 'ti-brand-google', 'ti-brand-facebook',
+  'ti-brand-twitter', 'ti-brand-apple',
 ];

@@ -27,6 +27,15 @@ export function createBuilderModal(ctx) {
         ${permanent && isLiveSupabaseSession() ? reauthPasswordField('wbConfirmPw') : ''}`,
         `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn danger" data-wb-confirm><i class="ti ti-trash"></i>${permanent ? 'Delete for good' : 'Delete'}</button>`);
     }
+    if (m.kind === 'call') {
+      // Ours, not the browser's. The native prompt talks about opening an application; this
+      // talks about ringing a person, which is what is actually about to happen.
+      return wbModalShell('Call', 'wb-modal-sm',
+        `<div class="wb-modal-ic" style="background:#16a34a"><i class="ti ti-phone"></i></div><h3>Call ${h(m.who || 'this contact')}?</h3>`,
+        `<p class="wb-call-number">${h(m.shown || '')}</p>
+        <p class="wb-sub">Your phone or dialler takes it from here. The call is noted on this record either way, so the next person can see it was made.</p>`,
+        `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" type="button" data-wb-call-go><i class="ti ti-phone"></i>Call</button>`);
+    }
     if (m.kind === 'stages') {
       const deleting = !!m.del;
       return wbModalShell('Pipeline', 'wb-modal-md',

@@ -45,16 +45,35 @@ test('anything undialable yields no link at all', () => {
   }
 });
 
-test('the phone field renders as a link, matching how email already does', () => {
+test('the phone field asks before dialling, in our words rather than the browser\'s', () => {
   const start = main.indexOf("case 'phone': {");
   assert.notEqual(start, -1, 'the phone case should exist');
   const block = main.slice(start, main.indexOf('\n    }', start));
   assert.match(block, /const tel = telHref\(value\)/);
-  assert.match(block, /<a class="wb-tel-cell" href="\$\{h\(tel\)\}"/);
+  // A BUTTON, not a bare tel: link. Handed straight to the browser, the link produced the OS's
+  // own "this site is trying to open an app" prompt -- wording about an application rather than
+  // about a person -- and left no trace that the call happened.
+  assert.match(block, /<button type="button" class="wb-tel-cell" data-wb-call="\$\{h\(tel\)\}"/);
+  assert.ok(!/<a class="wb-tel-cell" href/.test(block), 'the raw tel: anchor is gone');
   // Display keeps the human formatting; only the href is normalised.
   assert.match(block, /formatPhoneNumber\(value\)/);
-  // No link when there is nothing to dial.
+  // Nothing to dial, nothing to press.
   assert.match(block, /: h\(shown\)/);
+});
+
+test('answering the call notes it on the record, before the dialler is handed anything', () => {
+  const fn = main.slice(main.indexOf('async function wbConfirmCall()'));
+  const body = fn.slice(0, fn.indexOf('\n}') + 2);
+  assert.match(body, /wbLogActivity\(workspace, \{/, 'the call is logged');
+  assert.match(body, /itemId: m\.itemId/, 'against the record that was being called');
+  assert.match(body, /Called <b>\$\{h\(m\.who \|\| 'this contact'\)\}<\/b>/);
+  // Order matters and is the whole point: once the dialler has the number this page may be
+  // replaced by the phone app, and an entry written after that never gets written.
+  assert.ok(
+    body.indexOf('wbLogActivity') < body.indexOf('window.location.href = m.tel'),
+    'logged before the hand-off, not after',
+  );
+  assert.match(body, /await wbSave\(m\.companyId\)/, 'and persisted, not left in memory');
 });
 
 test('tapping the number calls instead of opening the record', () => {
