@@ -257,8 +257,15 @@ export function createRecordPage(ctx) {
 
     // Fields nobody placed would otherwise just be missing from every record, with no hint.
     const missing = blocks && editing ? recordLayout.unplacedFields(app, blocks) : [];
+    // The page says WHICH record it is, the same way a row in the list does.
+    //
+    // Without it a phone cell here opened the call modal, dialled, and noted nothing: the call
+    // handler finds its record with closest('[data-item]'), which a list row carries and this
+    // page did not -- so the entry was skipped and the modal asked "Call this contact?" instead
+    // of naming the person. Anything else that has to answer "which record am I on" from a cell
+    // deep inside the layout reads it here too.
     return `
-      <div class="wb-record">
+      <div class="wb-record" data-item="${h(item.id)}">
         <div class="wb-record-top">
         <div class="wb-record-bar">
           <a class="wb-record-back" href="${backHref}" data-router><i class="ti ti-arrow-left"></i>All ${h(app.name)}</a>

@@ -257,10 +257,11 @@ const pressed = async ({ canManage = true } = {}) => {
 test('the worked example: App 2 grows to fit and gains the record', async () => {
   const { ok, app2, saved } = await pressed();
   assert.equal(ok, true);
-  // What arrived comes first, in the order it had at home: App 1 (Name, Age) into App 2
-  // (Address) reads Name, Age, Address -- the record as the person sending it thinks of it.
-  // A starting order only; the field list is draggable afterwards like any other.
-  assert.deepEqual(app2.fields.map((field) => field.label), ['Name', 'Age', 'Address'], 'three fields now');
+  // What arrived goes LAST, after the fields the target already had, in the order it had at
+  // home: App 2 (Address) receiving App 1 (Name, Age) reads Address, Name, Age. The target's
+  // own shape is the one its people know, and an arrival at the top reorders the form
+  // underneath them. A starting order only; the list is draggable afterwards like any other.
+  assert.deepEqual(app2.fields.map((field) => field.label), ['Address', 'Name', 'Age'], 'three fields now');
   assert.equal(app2.items.length, 2, 'the record that was there is still there');
 
   const arrived = app2.items[0];

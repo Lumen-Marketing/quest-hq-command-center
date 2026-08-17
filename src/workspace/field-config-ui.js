@@ -11,11 +11,17 @@
 // The body is unchanged from where it lived in main.js. Everything it calls is
 // destructured from `ctx` under the original names, so this is a move, not a rewrite.
 import { acceptAttr } from '../security/upload-policy.js';
+import { readPullRows } from './pull-rows.js';
+import { optionRow } from './option-row.js';
+import {
+  docFilled, normalizeDoc, pageMm,
+} from '../form/doc-model.js';
 import {
   PULL_FAMILY, contactPullMap, contactSourceApp, effectivePull, matchedFields, pullTargets,
 } from './relationship-pull.js';
 import {
-  BUTTON_OPS, buttonNotReady, buttonReady, planPush, planSet, pushableFields,
+  BUTTON_OPS, buttonNotReady, buttonReady, impossibleConditions, isContactsTarget, planPush, planSet, pushKind,
+  pushableFields,
 } from './button-field.js';
 import { WB_ACTION_ICONS, WB_APP_ICONS } from './icon-sets.js';
 import { sheetPreview } from '../sheet/sheet-model.js';
@@ -92,9 +98,119 @@ function pullConfigUI(h, fd, app, targetApp, opts = {}) {
     </div>`;
 }
 
+/**
+ * "I want to set a specific field to copy or move the data to another field."
+ *
+ * Without this the push matches by LABEL and nothing else, so two apps that call the same thing
+ * by different names -- Full name here, Client name there -- could not be joined up at all, and
+ * the only fix was renaming a field in one of them.
+ *
+ * A row here beats the label match for that source field. The destination list is narrowed by
+ * the same type rule the push itself applies, so an impossible pairing is not offered rather
+ * than offered and then refused: a date has no business in a money column, and Text into a
+ * Company Contact appears because the push can file the contact.
+ */
+function pushMapUI(h, fd, app, targetApp, pushKindFn, pushable) {
+  const sources = pushable;
+  if (!sources.length || !targetApp) return '';
+  const rows = Array.isArray(fd.config.map) ? fd.config.map : [];
+
+  const row = (pair, index) => {
+    const from = sources.find((field) => field.id === pair.from);
+    const targets = (targetApp.fields || []).filter((field) => from && pushKindFn(from, field));
+    return `
+      <div class="wb-pull-row" data-wb-map-row data-index="${index}">
+        <select class="wb-input" data-wb-map-from data-wb-rel-refresh>
+          <option value="">— Field here —</option>
+          ${sources.map((field) => `<option value="${h(field.id)}" ${pair.from === field.id ? 'selected' : ''}>${h(field.label)}</option>`).join('')}
+        </select>
+        <i class="ti ti-arrow-right" aria-hidden="true"></i>
+        <select class="wb-input" data-wb-map-to ${from ? '' : 'disabled'}>
+          <option value="">${from ? `— Field in ${h(targetApp.name)} —` : 'Pick a field here first'}</option>
+          ${targets.map((field) => `<option value="${h(field.id)}" ${pair.to === field.id ? 'selected' : ''}>${h(field.label)}</option>`).join('')}
+        </select>
+        <button type="button" class="wb-icon-btn danger" data-wb-map-del title="Remove" aria-label="Remove this mapping"><i class="ti ti-x"></i></button>
+      </div>`;
+  };
+
+  return `
+    <div class="wb-field wb-push-only"><label>Send a field somewhere else <span class="wb-opt">(optional)</span></label>
+      <div class="wb-pull-list">${rows.map(row).join('')}</div>
+      <button class="btn btn-sm" type="button" data-wb-map-add><i class="ti ti-plus"></i>Map a field</button>
+      <div class="wb-sub">Everything else still travels to the field of the same name in <b>${h(targetApp.name)}</b>; name a pair here only where the two apps call it something different. A row wins over the name match for that field. Only destinations that can hold what the field holds are listed — and a field you have unticked above does not travel, whatever it is mapped to.</div>
+    </div>`;
+}
+
+/**
+ * One row of a Category or Status option list, and one colour stop of a Progress bar.
+ *
+ * These lived in main.js and were handed in through ctx, and this panel was their only reader --
+ * so every session that never opened a field editor carried them. `h` is a parameter for the
+ * same reason it is on pullConfigUI: they sit at module scope, and h is destructured from ctx
+ * inside renderFieldConfig.
+ */
+
+function progStopRow(h, s) {
+  return `<div class="wb-stop-item"><span class="wb-stop-lead">≤</span><input type="number" min="0" max="100" class="wb-input wb-stop-upto" value="${h(String(s.upto ?? 100))}" style="max-width:84px"><span class="wb-sub">%</span><input type="color" class="wb-stop-color" value="${h(s.color || '#16a34a')}"><button class="wb-icon-btn danger" data-wb-del-stop type="button" aria-label="Remove stop"><i class="ti ti-x"></i></button></div>`;
+}
+
+/**
+ * Setting up a Form field: what it is called, and what the document it makes is called.
+ *
+ * Deliberately this short. The document itself is not designed here -- it is designed on the page,
+ * in the builder, where the preview IS the document. Trying to describe a layout with rows of
+ * inputs is what made the first attempt at this field feel like a form rather than a document, so
+ * the panel offers the one button that opens the real thing.
+ *
+ * The starting document is the field's own, kept in `config.doc`. A record with nothing in its
+ * form yet opens this instead of a blank page, which is what makes one layout serve every record
+ * -- the same arrangement the Sheet field's starting sheet uses.
+ */
+function formConfigUI(h, fd) {
+  const doc = normalizeDoc(fd.config.doc, () => '');
+  const filled = docFilled(doc);
+  return `
+    <div class="wb-field"><label>Document name <span class="wb-opt">(shown on the record and used for the file name)</span></label>
+      <input class="wb-input" id="wbFormTitle" value="${h(doc.title)}" placeholder="Proposal" maxlength="120" />
+    </div>
+    <div class="wb-field"><label>Starting document</label>
+      <input type="hidden" id="wbFormDoc" data-f="wbFormDoc" data-wb-form-title="Starting document" value="${h(JSON.stringify(doc))}" />
+      <div class="wb-sheet-card">
+        ${formMiniPreview(h, doc)}
+        <button class="btn btn-sm" type="button" data-wb-form-open="wbFormDoc"><i class="ti ti-file-text"></i>${filled ? 'Edit the starting document' : 'Design the document'}</button>
+      </div>
+      <div class="wb-sub">Every record starts from this layout and can then be changed on its own, so one design serves the whole app. Place text, shapes, pictures and <b>fields from the record</b> \u2014 a placed field is read live, so a document is never out of date. Export it as a PDF or an image, or upload a PDF and use that instead.</div>
+    </div>`;
+}
+
+/**
+ * A thumbnail of a document, drawn as coloured boxes rather than as its real contents.
+ *
+ * The point is to answer "is there something in here, and roughly what shape is it" at a glance,
+ * which is the same job the Sheet field's mini grid does. Rendering the actual text at this size
+ * would be illegible and cost a font measurement per element.
+ */
+function formMiniPreview(h, input) {
+  const doc = normalizeDoc(input, () => '');
+  if (doc.source === 'upload' && doc.upload) {
+    return `<div class="wb-form-mini uploaded"><i class="ti ti-file-type-pdf"></i><span>${h(doc.upload.name)}</span></div>`;
+  }
+  if (!doc.elements.length) return '<div class="wb-sub">Nothing on the page yet.</div>';
+  const [pw, ph] = pageMm(doc.page);
+  const blocks = doc.elements.slice(0, 40).map((el) => {
+    const pct = (part, whole) => `${((part / whole) * 100).toFixed(2)}%`;
+    const paint = el.kind === 'shape' && el.style.fill !== 'none'
+      ? el.style.fill
+      : el.kind === 'icon' ? el.style.color : '';
+    const style = `left:${pct(el.x, pw)};top:${pct(el.y, ph)};width:${pct(el.w, pw)};height:${pct(el.h, ph)}`
+      + (paint ? `;background:${paint}` : '');
+    return `<i class="wb-form-blk k-${h(el.kind)}" style="${style}"></i>`;
+  }).join('');
+  return `<div class="wb-form-mini" style="aspect-ratio:${pw} / ${ph}">${blocks}</div>`;
+}
 export function renderFieldConfig(fd, app, ctx) {
   const {
-    h, state, canonicalCompanyId, companyName, wbOptRow, wbProgStopRow, wbProgressDisplayHtml,
+    h, state, canonicalCompanyId, companyName, wbProgressDisplayHtml,
     wbRelTargetApp, wbCompanyApps, wbTargetApp, wbRelLabel, companyContactFieldsFor,
     WB_PROGRESS_STOPS_DEFAULT, WB_FIELD_TYPES, WB_PROGRESS_DISPLAYS,
   } = ctx;
@@ -112,7 +228,7 @@ export function renderFieldConfig(fd, app, ctx) {
         <option value="dropdown" ${chips ? '' : 'selected'}>Dropdown — type to search</option>
         <option value="chips" ${chips ? 'selected' : ''}>Choice chips — every option on show</option>
       </select><div class="wb-sub">Chips suit a handful of options and pick in one click. A dropdown stays usable when there are many, and lets a new value be typed in.</div></div>` : '';
-    return `<div class="wb-field"><label>Options</label><div class="wb-opt-list">${(fd.config.options || []).map((o) => wbOptRow(o)).join('')}</div><button class="btn btn-sm" data-wb-add-option><i class="ti ti-plus"></i>Add option</button>${t === 'tags' ? '<div class="wb-sub">Records can hold several of these at once.</div>' : ''}</div>${displayRow}`;
+    return `<div class="wb-field"><label>Options</label><div class="wb-opt-list">${(fd.config.options || []).map((o) => optionRow(h, o)).join('')}</div><button class="btn btn-sm" data-wb-add-option><i class="ti ti-plus"></i>Add option</button>${t === 'tags' ? '<div class="wb-sub">Records can hold several of these at once.</div>' : ''}</div>${displayRow}`;
   }
   if (t === 'autonumber') {
     return `<div class="wb-field"><label>Prefix <span class="wb-opt">(optional)</span></label><input class="wb-input" id="wbAutoPrefix" value="${h(fd.config.prefix || '')}" placeholder="e.g. INV-" style="max-width:200px"></div>
@@ -180,7 +296,7 @@ export function renderFieldConfig(fd, app, ctx) {
     const colorBlock = mode === 'single'
       ? `<div class="wb-field"><label>Bar color</label><input type="color" class="wb-stop-color" id="wbProgColor" value="${h(cfg.color || WB_FIELD_TYPES.progress.color)}"></div>`
       : `<div class="wb-field"><label>Color stops <span class="wb-opt">(value ≤ % uses that color)</span></label>
-          <div class="wb-prog-stops" id="wbProgStops">${stops.map((s) => wbProgStopRow(s)).join('')}</div>
+          <div class="wb-prog-stops" id="wbProgStops">${stops.map((s) => progStopRow(h, s)).join('')}</div>
           <button class="btn btn-sm" data-wb-add-stop type="button"><i class="ti ti-plus"></i>Add color stop</button>
           <div class="wb-sub">The lowest stop whose % is ≥ the value wins. Example: 0→white, 20→red, 40→yellow, 80→orange, 100→green.</div></div>`;
     return `
@@ -194,6 +310,7 @@ export function renderFieldConfig(fd, app, ctx) {
       ${colorBlock}
       <div class="wb-field"><label>Preview <span class="wb-opt">at ${previewPct}%</span></label><div class="wb-prog-preview" id="wbProgPreview">${wbProgressDisplayHtml(fd, previewPct)}</div></div>`;
   }
+  if (t === 'form') return formConfigUI(h, fd);
   if (t === 'sheet') {
     const start = normalizeSheetFull(fd.config.sheet || {});
     const filled = Object.keys(start.cells).length;
@@ -221,6 +338,11 @@ export function renderFieldConfig(fd, app, ctx) {
     // somebody has to notice for themselves.
     const apps = wbCompanyApps(targetCompany).map((entry) => entry.app).filter((item) => item.id !== app.id);
     const targetApp = wbTargetApp(targetCompany, fd.config.targetApp);
+    // The directory as a destination, offered alongside the apps because that is how somebody
+    // picking one thinks of it -- "send this to Company Contacts" is the same sentence as "send
+    // this to Leads". Withheld when the button is ON a contact card: sending a contact to the
+    // directory it already lives in is the loop case, and `cc-` is what a contacts app is.
+    const contactsTarget = isContactsTarget(app?.id) ? '' : `cc-${targetCompany}`;
     const carryable = pushableFields(app, fd.id);
     const chosen = Array.isArray(fd.config.fields) ? fd.config.fields : [];
     // Whether the picker is open is its OWN setting, not "are any fields chosen". Inferring it
@@ -234,8 +356,18 @@ export function renderFieldConfig(fd, app, ctx) {
     const ticked = chosen.length ? new Set(chosen) : null;
     const testable = (app.fields || []).filter((field) => field.id !== fd.id && field.type !== 'button');
     const rules = Array.isArray(fd.config.when) && fd.config.when.length ? fd.config.when : [{ field: '', op: 'eq', value: '' }];
+    const whenMode = fd.config.whenMode === 'any' ? 'any' : 'all';
+    // Two `is` rules on one field under ALL can never both be true. Named rather than quietly
+    // fixed: which of the two they meant is not ours to guess.
+    const impossible = impossibleConditions(fd.config);
     const plan = targetApp ? planPush(app, targetApp, fd) : null;
     const names = (list) => list.map((label) => h(label)).join('</b>, <b>');
+    // Sending to the directory used to be forced to a copy, on the reasoning that a contact
+    // cannot be "moved" into it -- the directory holds the person, and the record that named
+    // them still has a job where it is. Fair as a default, wrong as a rule: an intake app whose
+    // rows ARE people has nothing left to do with the row once the person is filed, and forcing
+    // a copy left it sitting there for somebody to delete by hand.
+    const toContacts = isContactsTarget(fd.config.targetApp);
     const action = ['set', 'move', 'link'].includes(fd.config.action) ? fd.config.action : 'push';
     // Fields this record already holds that a link can be built from. Text is included because
     // a company keeps a booking URL or a portal code in one often enough to matter; a rating or
@@ -248,8 +380,6 @@ export function renderFieldConfig(fd, app, ctx) {
       ['Email', 'ti-mail', 'mailto:', 'email'],
       ['Open', 'ti-external-link', '', 'url'],
     ];
-    // A contact cannot be "moved" -- it lives in the directory, not in the app it was sent to --
-    // so the option is withheld where it has no meaning rather than offered and then refused.
     const allowMove = app?.allowMove !== false;
     // Fields this button could write to: everything the record actually stores.
     const settable = pushableFields(app, fd.id);
@@ -277,6 +407,34 @@ export function renderFieldConfig(fd, app, ctx) {
         <button type="button" class="wb-icon-btn danger" data-wb-when-del title="Remove" aria-label="Remove this condition"><i class="ti ti-x"></i></button>
       </div>`;
 
+    // "Can you add a multiple action -- I want it to send records to multiple apps."
+    //
+    // One extra destination per row. They always receive a COPY, whatever the action above
+    // says: the record can only be removed from here once, so "send it and remove it" names
+    // where it ENDS UP, and the extras are places it also lands on the way.
+    const alsoList = Array.isArray(fd.config.also) ? fd.config.also : [];
+    const alsoPick = (row, index) => {
+      const company = row?.company || targetCompany;
+      const choices = wbCompanyApps(company).map((entry) => entry.app)
+        .filter((item) => item.id !== app.id && item.id !== fd.config.targetApp);
+      return `
+        <div class="wb-pull-row" data-wb-also-row data-index="${index}">
+          ${companies.length > 1 ? `<select class="wb-input" data-wb-also-company data-wb-rel-refresh>${companies.map((entry) => `<option value="${h(entry.id)}" ${company === entry.id ? 'selected' : ''}>${h(entry.name)}</option>`).join('')}</select>` : ''}
+          <select class="wb-input" data-wb-also-app data-wb-rel-refresh>
+            <option value="">— Also send to —</option>
+            ${choices.map((entry) => `<option value="${h(entry.id)}" ${row?.app === entry.id ? 'selected' : ''}>${h(entry.name)}</option>`).join('')}
+            ${isContactsTarget(app?.id) ? '' : `<option value="${h(`cc-${company}`)}" ${row?.app === `cc-${company}` ? 'selected' : ''}>Company Contacts (directory)</option>`}
+          </select>
+          <button type="button" class="wb-icon-btn danger" data-wb-also-del title="Remove" aria-label="Remove this destination"><i class="ti ti-x"></i></button>
+        </div>`;
+    };
+    const alsoRows = fd.config.targetApp ? `
+      <div class="wb-also">
+        <div class="wb-pull-list">${alsoList.map(alsoPick).join('')}</div>
+        <button class="btn btn-sm" type="button" data-wb-also-add><i class="ti ti-plus"></i>Send to another app too</button>
+        ${alsoList.length ? `<div class="wb-sub">One press files the record in <b>${alsoList.length + 1}</b> places. The extras always get a copy${action === 'move' ? ', and the record is removed from here only once every one of them has taken it' : ''} — and they match on field names only, so the mapping below applies to <b>${h(targetApp?.name || 'the main destination')}</b>.</div>` : ''}
+      </div>` : '';
+
     return `
       <div class="wb-field"><label>Button text <span class="wb-opt">(optional)</span></label>
         <input class="wb-input" id="wbBtnText" value="${h(fd.config.text || '')}" placeholder="Leave empty for no text" maxlength="40">
@@ -293,9 +451,14 @@ export function renderFieldConfig(fd, app, ctx) {
         <div class="wb-sub">Text, an icon, or both. With neither, the button is blank — it still works, and screen readers still read the field's name.</div>
       </div>
       <div class="wb-field"><label>Enabled when <span class="wb-opt">(leave it on “Always enabled” for no condition)</span></label>
+        ${rules.filter((rule) => rule.field).length > 1 ? `<select class="wb-input" id="wbBtnWhenMode" data-wb-rel-refresh style="max-width:260px;margin-bottom:8px">
+          <option value="all" ${whenMode === 'any' ? '' : 'selected'}>All of these have to hold</option>
+          <option value="any" ${whenMode === 'any' ? 'selected' : ''}>Any one of these is enough</option>
+        </select>` : ''}
         <div class="wb-when-list">${rules.map(ruleRow).join('')}</div>
         <button class="btn btn-sm" type="button" data-wb-when-add><i class="ti ti-plus"></i>Add a condition</button>
-        <div class="wb-sub">Every condition has to hold. A stage or category is matched on what it says, so type <b>Won</b> rather than an option id. The button follows the form as it is filled in — changing the stage lights it up without saving first.</div>
+        ${impossible.length ? `<div class="wb-sub wb-plan" style="color:var(--warning,#d97706)"><b>This button can never light up.</b> <b>${names(impossible.map((id) => testable.find((entry) => entry.id === id)?.label || 'A field'))}</b> is being asked to equal two different things at once, and <b>all</b> of them have to hold. Switch to <b>Any one of these is enough</b>, or remove one.</div>` : ''}
+        <div class="wb-sub">A stage or category is matched on what it says, so type <b>Won</b> rather than an option id. The button follows the form as it is filled in — changing the stage lights it up without saving first.</div>
       </div>
       <div class="wb-field"><label>What the button does</label>
         <select class="wb-input" id="wbBtnAction" data-wb-rel-refresh>
@@ -341,10 +504,14 @@ export function renderFieldConfig(fd, app, ctx) {
             <div class="wb-sub">Leave the value empty to clear that field. A stage or category is set by what it says, so type <b>Won</b> — a word the field has never heard of is skipped rather than added to its list. Pressed in the list it saves the record; pressed on an open record it fills the boxes and leaves them for you to save.</div>`}
         </div>
       ` : action === 'link' ? '' : `
-      <div class="wb-field"><label>Send the record to</label>
+      <div class="wb-field"><label>Send the record to <span class="wb-opt">(an app, or the company directory)</span></label>
         ${companies.length > 1 ? `<select class="wb-input" id="wbBtnCompany" data-wb-rel-refresh>${companies.map((company) => `<option value="${h(company.id)}" ${targetCompany === company.id ? 'selected' : ''}>${h(company.name)}</option>`).join('')}</select>` : ''}
-        <select class="wb-input" id="wbBtnApp" data-wb-rel-refresh><option value="">— Select an app —</option>${apps.map((item) => `<option value="${h(item.id)}" ${fd.config.targetApp === item.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}</select>
-        <div class="wb-sub">Pressing it adds a record there carrying this one's values.</div>
+        <select class="wb-input" id="wbBtnApp" data-wb-rel-refresh><option value="">— Select a destination —</option>${apps.length ? `<optgroup label="Apps">${apps.map((item) => `<option value="${h(item.id)}" ${fd.config.targetApp === item.id ? 'selected' : ''}>${h(item.name)}</option>`).join('')}</optgroup>` : ''}${contactsTarget ? `<optgroup label="Company-wide"><option value="${h(contactsTarget)}" ${fd.config.targetApp === contactsTarget ? 'selected' : ''}>Company Contacts (directory)</option></optgroup>` : ''}</select>
+        ${alsoRows}
+        <div class="wb-sub">${isContactsTarget(fd.config.targetApp)
+    ? 'Pressing it files this record as a contact in the directory. The directory keeps the field list your company arranged in Settings — anything it has no field for stays behind rather than adding a column to every contact.'
+    : "Pressing it adds a record there carrying this one's values."}</div>
+        ${action === 'move' && toContacts ? '<div class="wb-sub wb-plan">The person is filed in the directory and <b>this record is then removed from this app</b>. Right where the row exists only to capture somebody — an intake list — and wrong where the record still has work to do here.</div>' : ''}
       </div>
       <div class="wb-field wb-push-only"><label>What to send</label>
         <div class="wb-check-row">
@@ -353,9 +520,11 @@ export function renderFieldConfig(fd, app, ctx) {
         </div>
         ${picking ? `<div class="wb-pick-list">${carryable.map((field) => `<label class="wb-pick"><input type="checkbox" data-wb-btn-field="${h(field.id)}" ${!ticked || ticked.has(field.id) ? 'checked' : ''}><span>${h(field.label)}</span></label>`).join('')}</div>${carryable.length ? '' : '<div class="wb-sub">Nothing on this record can be carried across, so there is nothing to pick.</div>'}` : ''}
       </div>
+      ${pushMapUI(h, fd, app, targetApp, pushKind, carryable)}
       `}
       ${action !== 'set' && action !== 'link' && plan ? `<div class="wb-field"><div class="wb-sub wb-plan">
-        ${plan.carry.length ? `Carries <b>${names(plan.carry.map((pair) => pair.from.label))}</b>.` : 'Nothing on this record can be carried across yet.'}
+        ${plan.carry.length ? `Carries <b>${names(plan.carry.filter((pair) => pair.kind !== 'contact').map((pair) => pair.from.label))}</b>.` : 'Nothing on this record can be carried across yet.'}
+        ${plan.carry.filter((pair) => pair.kind === 'contact').map((pair) => ` <b>${h(pair.from.label)}</b> is filed as a contact in <b>Company Contacts</b> and <b>${h(pair.to.label)}</b> is linked to them — an existing contact of that name is reused, and their blank details are filled in from this record.`).join('')}
         ${plan.create.length ? ` <b>${h(targetApp.name)}</b> has no <b>${names(plan.create.map((field) => field.label))}</b>, so ${plan.create.length === 1 ? 'it is added' : 'they are added'} there on the first send. Records already in that app keep every value they have and read blank in the new ${plan.create.length === 1 ? 'column' : 'columns'}.` : ''}
         ${plan.blocked.length ? ` <b>${names(plan.blocked)}</b> ${plan.blocked.length === 1 ? 'stays' : 'stay'} behind: an automatic field belongs to the app that filled it in.` : ''}
         ${plan.skipped.length ? ` ${plan.skipped.map((entry) => h(`${entry.field.label} is left behind — ${entry.why}`)).join('. ')}.` : ''}
@@ -493,6 +662,27 @@ export function createFieldInput(ctx) {
       }
       // A sheet is stored as JSON in a hidden input, so the form's existing read and save need
       // to know nothing about it. What is on the page is a preview and a way in.
+      // The designed document, on a record. Everything about it -- the page, what is on it and
+      // the versions saved along the way -- lives in ONE JSON string in a hidden input, the same
+      // arrangement the sheet field uses, so saving, automations and exports need to know nothing
+      // about documents.
+      case 'form': {
+        const stored = (() => { try { return typeof val === 'string' ? JSON.parse(val || '{}') : (val || {}); } catch { return {}; } })();
+        // An untouched record opens the field's starting document rather than a blank page, which
+        // is what makes one design serve a whole app.
+        const start = docFilled(stored) ? stored : (f.config.doc || {});
+        const doc = normalizeDoc(start, () => '');
+        const filled = docFilled(doc);
+        const name = doc.title || f.config.doc?.title || f.label;
+        return `<div class="wb-fieldbox wb-formfield">${lbl}
+          <input type="hidden" data-f="${h(f.id)}" data-wb-form-title="${h(name)}" value="${h(JSON.stringify(doc))}" />
+          <div class="wb-sheet-card">
+            <div class="wb-form-name"><i class="ti ti-file-text" aria-hidden="true"></i><b>${h(name)}</b>${doc.versions.length ? `<span class="wb-opt">${doc.versions.length} saved version${doc.versions.length === 1 ? '' : 's'}</span>` : ''}</div>
+            ${formMiniPreview(h, doc)}
+            <button class="btn btn-sm" type="button" data-wb-form-open="${h(f.id)}"><i class="ti ti-file-text"></i>${filled ? 'Open form' : 'Start the document'}</button>
+          </div>
+        </div>`;
+      }
       case 'sheet': {
         const stored = (() => { try { return typeof val === 'string' ? JSON.parse(val || '{}') : (val || {}); } catch { return {}; } })();
         const start = Object.keys(stored?.cells || {}).length ? stored : (f.config.sheet || {});
@@ -727,6 +917,7 @@ export function createFieldInput(ctx) {
  */
 export function collectFieldConfig(type, config, fallbackCompany) {
   if (type === 'button') collectButtonConfig(config, fallbackCompany);
+  if (type === 'form') collectFormConfig(config);
   // Dropdown or choice chips, for a category or a status. Anything but 'chips' reads as the
   // dropdown, so a field built before the choice existed keeps the control it already had.
   if (type === 'category' || type === 'status') config.display = document.getElementById('wbCatDisplay')?.value === 'chips' ? 'chips' : 'dropdown';
@@ -737,6 +928,20 @@ export function collectFieldConfig(type, config, fallbackCompany) {
   }
 }
 
+/**
+ * Read a Form field's setup back off the panel.
+ *
+ * The document arrives already built, as JSON in a hidden input the builder writes -- the same
+ * arrangement the starting sheet uses. Its title is typed in the panel rather than in the builder
+ * so the two cannot disagree about what the field is called.
+ */
+export function collectFormConfig(config) {
+  const holder = document.getElementById('wbFormDoc');
+  const title = (document.getElementById('wbFormTitle')?.value || '').trim();
+  let doc = {};
+  try { doc = JSON.parse(holder?.value || '{}'); } catch { doc = {}; }
+  config.doc = { ...doc, title };
+}
 function collectButtonConfig(config, fallbackCompany) {
   const val = (id) => document.getElementById(id)?.value;
   const rows = (kind, keys) => [...document.querySelectorAll(`[data-wb-${kind}-row]`)]
@@ -752,12 +957,41 @@ function collectButtonConfig(config, fallbackCompany) {
   config.targetCompany = val('wbBtnCompany') || fallbackCompany;
   const targetApp = val('wbBtnApp') || '';
   // A different destination invalidates the chosen field list, which named fields in the app
-  // that is no longer the target.
-  if (targetApp !== config.targetApp) config.fields = [];
+  // that is no longer the target -- and the mappings, which named fields in it on BOTH sides.
+  const targetChanged = targetApp !== config.targetApp;
+  if (targetChanged) config.fields = [];
   config.targetApp = targetApp;
   config.clearAll = !!document.getElementById('wbBtnClearAll')?.checked;
   config.set = rows('set', ['field', 'value']);
+  // from/to rather than field/value, so it cannot use the shared `rows` helper -- that one
+  // drops any row without a `field`, which would be every row here.
+  //
+  // keepPartial, and this is the whole reason the control did not work: the left select carries
+  // data-wb-rel-refresh, so choosing a field collects the panel and re-renders it. Dropping a
+  // row for having no destination YET threw away the half somebody had just chosen, the row
+  // came back blank, and the right select -- which only fills once the left one is resolved --
+  // stayed on "Pick a field here first" for ever. A row is half-chosen for exactly as long as
+  // it takes to choose the other half. readPullRows also enforces one source per destination,
+  // which planPush was checking again on its own.
+  config.map = readPullRows([...document.querySelectorAll('[data-wb-map-row]')]
+    .map((row) => ({
+      from: row.querySelector('[data-wb-map-from]')?.value || '',
+      to: row.querySelector('[data-wb-map-to]')?.value || '',
+    })), { keepPartial: true });
+  // Read first, then discarded: the boxes on screen still belong to the app that WAS the
+  // target, so their ids would dangle against the new one.
+  if (targetChanged) config.map = [];
+  // Every row, including one whose app has not been chosen yet -- same reason as above: the
+  // company select re-renders the panel, and a row that vanished when you touched it would be
+  // impossible to fill in. An app-less row reaches nothing; extraTargets ignores it.
+  config.also = [...document.querySelectorAll('[data-wb-also-row]')]
+    .map((row) => ({
+      company: row.querySelector('[data-wb-also-company]')?.value || config.targetCompany,
+      app: row.querySelector('[data-wb-also-app]')?.value || '',
+    }));
   config.when = rows('when', ['field', 'op', 'value']);
+  // Only drawn once there are two conditions to relate; absent means the default, ALL.
+  if (document.getElementById('wbBtnWhenMode')) config.whenMode = val('wbBtnWhenMode') === 'any' ? 'any' : 'all';
   // The switch is the mode; the boxes are only read while it is off. Recorded separately so
   // "picking, nothing ticked yet" is a state that survives the re-render -- deriving the mode
   // from the list is what made the switch impossible to turn off.

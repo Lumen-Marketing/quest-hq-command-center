@@ -184,7 +184,8 @@ export const RECORD_TABS = ['activity', 'comments'];
  * history of the record.
  *
  * Downwards, like the conversation it contains: the newest line sits directly above the box you
- * type the next one into, which is where you are already looking.
+ * type the next one into. What makes the newest the first thing you SEE is that the panel opens
+ * scrolled to its bottom (.wb-rec-body is a column-reverse scrollport), not the list order.
  */
 export function recordFeed(workspace, appId, itemId, comments = []) {
   const out = [];
@@ -223,6 +224,13 @@ export function recordFeed(workspace, appId, itemId, comments = []) {
       editedAt: entry.editedAt || '',
     });
   });
+  // Oldest first, so the list reads downwards like the conversation it contains and the newest
+  // line sits directly above the box you type the next one into.
+  //
+  // "The newest is the first thing I want to see when I open the item, so I just scroll up to
+  // see the oldest." That is a SCROLL POSITION, not an order -- the panel opens at its bottom.
+  // Reversing the list instead was the wrong reading of it, and put the newest furthest from
+  // the composer that answers it.
   return out.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
 }
 

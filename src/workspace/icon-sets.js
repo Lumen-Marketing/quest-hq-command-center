@@ -61,3 +61,14 @@ export const WB_ACTION_ICONS = [
   'ti-brand-github', 'ti-brand-google', 'ti-brand-facebook',
   'ti-brand-twitter', 'ti-brand-apple',
 ];
+
+/**
+ * "ti-building-store" -> "building store".
+ *
+ * The raw class name is what a picker has to work with, and read aloud verbatim it is worse than
+ * nothing. It lives beside the names themselves rather than in main.js: both pickers that need it
+ * are behind dynamic imports, and only a dynamic import keeps something out of the entry chunk.
+ */
+export function iconLabel(icon) {
+  return String(icon || '').replace(/^ti-/, '').replace(/-/g, ' ').trim() || 'icon';
+}

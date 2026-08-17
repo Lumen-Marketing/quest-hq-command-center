@@ -6,11 +6,40 @@
 // The body is unchanged from where it lived in main.js; everything it calls arrives as ctx
 // under the original names, so this is a move rather than a rewrite.
 
+import { iconLabel } from './icon-sets.js';
+
 export function createAppSettings(ctx) {
   const {
-    h, state, can, wbDoc, singularize, addRecordLabel, wbAppIconGrid, wbAppTabs, WB_ALL_TABS,
+    h, state, can, wbDoc, singularize, addRecordLabel, wbAppTabs, WB_ALL_TABS, questLoader, render,
     wbInstallToWorkspaceField, wbCollectionsSettings, WB_PALETTE,
   } = ctx;
+
+  // The icon list itself is a hundred-odd class names in a chunk of its own, fetched the first time
+  // somebody opens the picker. Until it lands the grid draws a loader rather than an empty box,
+  // which would read as a picker with no icons in it.
+  let iconSets = null;
+  let iconSetsPending = null;
+
+  function loadIconSets() {
+    if (iconSets) return Promise.resolve(iconSets);
+    if (!iconSetsPending) {
+      iconSetsPending = import('./icon-sets.js').then((mod) => {
+        iconSets = mod;
+        return mod;
+      }).catch((error) => { iconSetsPending = null; throw error; });
+    }
+    return iconSetsPending;
+  }
+
+  function wbAppIconGrid(selected) {
+    if (!iconSets) {
+      loadIconSets().then(() => render()).catch((error) => console.error('icon set failed to load', error));
+      return questLoader('Loading icons');
+    }
+    // data-icon-name carries the searchable words, the same attribute the create-app modal's picker
+    // filters on -- 115 icons is well past the point where scanning beats typing.
+    return iconSets.WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${selected === icon ? 'sel' : ''}" type="button" data-icon="${icon}" data-icon-name="${h(iconLabel(icon).toLowerCase())}" aria-pressed="${selected === icon}" aria-label="Icon ${h(iconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('');
+  }
 
   function wbViewAppSettings(companyId, workspace, app, appLinked = false) {
     const canManage = can('workspaces.manage', companyId);
@@ -35,7 +64,10 @@ export function createAppSettings(ctx) {
     // Three cards, each answering one question, rather than one column of fourteen fields.
     //
     // WHAT IT IS -- its name, wording, icon and colour.
-    // WHERE IT GOES -- download, install, share, which tabs it shows.
+    // WHERE IT GOES -- what downloading and sharing mean, where to install it, which tabs it
+    //   shows. The four ACTIONS on the app -- Download, Delete, Share, Save -- live in the tab
+    //   row above rather than here: Save at the foot of this form was a scroll away from the
+    //   name field at the top, which reads as a rename that did not take.
     // WHAT LIVES INSIDE IT -- sub-item lists.
     //
     // Each card is two columns on a wide screen and one on a narrow one, so the icon grid sits
@@ -63,13 +95,11 @@ export function createAppSettings(ctx) {
       <div class="wb-settings-cols">
         <div class="wb-settings-col">
           <div class="wb-field"><label>Portability</label>
-            <div class="wb-sub">Download this app as a <code>.questapp.json</code> file — its fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'}, ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'}, and how it is arranged: card layout, sub-item lists, record layout, dashboard and saved views. Back it up, or install it into another workspace.</div>
-            <div class="wb-settings-actions" style="margin-top:10px"><button class="btn" data-wb-download-app><i class="ti ti-download"></i>Download app</button></div>
+            <div class="wb-sub"><b>Download app</b>, above, saves this app as a <code>.questapp.json</code> file — its fields, ${app.items.length} record${app.items.length === 1 ? '' : 's'}, ${app.automations.length} automation${app.automations.length === 1 ? '' : 's'}, and how it is arranged: card layout, sub-item lists, record layout, dashboard and saved views. Back it up, or install it into another workspace.</div>
           </div>
           ${canManage ? wbInstallToWorkspaceField(companyId, workspace, app) : ''}
           <div class="wb-field"><label>Quest App Market</label>
-            <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.' : 'Share this app so anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.'}</div>
-            ${canManage ? `<div class="wb-settings-actions" style="margin-top:10px"><button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share this app'}</button></div>` : ''}
+            <div class="wb-sub">${app.shared ? 'This app is <b>shared</b> — anyone on Questbase can install its structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared. Press <b>App shared</b> above to stop sharing it.' : 'Use <b>Share app</b>, above, and anyone on Questbase can install this app\'s structure from the Quest App Market: fields, automations, sub-item lists, and how the record, dashboard and views are laid out. Your records are never shared.'}</div>
           </div>
         </div>
         <div class="wb-settings-col">
@@ -77,7 +107,6 @@ export function createAppSettings(ctx) {
           ${canManage ? viewsRailField(app) : ''}
         </div>
       </div>
-      ${canManage ? `<div class="wb-settings-actions wb-settings-save"><button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save changes</button><button class="btn danger" data-del-app><i class="ti ti-trash"></i>Delete app</button></div>` : ''}
     </div>
     ${wbCollectionsSettings(companyId, app, canManage)}`;
   }

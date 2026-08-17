@@ -7,6 +7,7 @@
 // owns the record; the only things editable here are the contact's own details. The moment
 // records can be worked from this page it becomes a fifth workspace with no owner.
 
+import { optionRow } from '../workspace/option-row.js';
 import {
   appsWithContactFields, companyContactFieldsOf, contactUsage, usageBalance, usageSummary,
 } from './model.js';
@@ -48,7 +49,7 @@ export function createCompanyContactsPage(ctx) {
     normalizeCompanyContact, normalizeCompanyContactField, render,
     requirePermission, requireMutableWorkspace, showToast, state, supabaseRow, supabaseWrite, timeAgo, wbDoc,
     saveWorkspaceBuilderDoc, wbCompanyApps, wbPlainVal,
-    wbFieldBuilderMarkup, wbFileIcon, wbFileValues, wbFmtDuration, wbNameValue, wbOptRow, acceptAttr,
+    wbFieldBuilderMarkup, wbFileIcon, wbFileValues, wbFmtDuration, wbNameValue, acceptAttr,
     fileTypeKind, formatDate,
     protectedFormDraftAttributes, renderProtectedFormDraftStrip, clearProtectedFormDraft,
     WB_FIELD_TYPES,
@@ -203,6 +204,65 @@ export function createCompanyContactsPage(ctx) {
     return saved || null;
   }
 
+  /**
+   * A record arriving from an App Builder button, filed as a contact.
+   *
+   * The other half of contactButtonSeat: that one lets a contact push INTO an app, this one
+   * lets an app push into the directory. Both keep every storage-shape difference on this side
+   * of the boundary -- button-push.js hands over plain words keyed by contact field id and
+   * learns nothing about what a contact stores.
+   *
+   * Which fields arrive was already decided by planPush against the directory's own field list,
+   * so anything the company has no field for never reaches here. What is decided HERE is
+   * whether each word can be expressed in the field it landed on: setValueFor returns null for
+   * an option the field has never heard of or letters in a number box, and that value is
+   * dropped rather than invented -- the same rule a "change fields on this contact" button
+   * already follows.
+   *
+   * An existing contact of the same name is FILLED IN rather than duplicated, matching
+   * createCompanyContactNamed: pressing the button twice on one record, or on two records about
+   * the same person, must not leave the directory with two of them. Filling in is additive --
+   * a field the contact already has something in is left alone, because the person who typed it
+   * knew more than a record being forwarded does.
+   */
+  async function receiveContactFromApp(companyId, { name = '', plain = {} } = {}) {
+    const target = canonicalCompanyId(companyId);
+    const clean = String(name || '').trim();
+    if (!clean) return { ok: false, error: 'A contact needs a name.' };
+    if (!can('company_contacts.manage', target)) {
+      return { ok: false, error: 'Your role cannot add contacts.' };
+    }
+
+    const fields = companyContactFieldsFor(target);
+    const existing = companyContactsFor(target)
+      .find((contact) => String(contact.name || '').trim().toLowerCase() === clean.toLowerCase());
+    const values = { ...(existing?.field_values || {}) };
+    let landed = 0;
+    Object.entries(plain).forEach(([fieldId, text]) => {
+      const field = fields.find((entry) => entry.id === fieldId);
+      // Worked out rather than typed, so writing one would be a stale copy of something that
+      // recomputes itself. An auto-number is stamped below, on the save that creates the row.
+      if (!field || CC_DERIVED_TYPES.has(field.type) || field.type === 'autonumber') return;
+      if (String(values[field.id] ?? '') !== '') return;
+      const next = contactValueFromApp(field, setValueFor(field, text));
+      if (next === null || next === '') return;
+      values[field.id] = next;
+      landed += 1;
+    });
+
+    if (!existing) {
+      fields.filter((field) => field.type === 'autonumber').forEach((field) => {
+        values[field.id] = String(wbNextContactAutoNumber(target, field));
+      });
+    }
+
+    const saved = await persistCompanyContact({
+      ...(existing || {}), id: existing?.id || '', company_id: target, name: clean, field_values: values,
+    });
+    if (!saved) return { ok: false, error: 'Could not save that contact.' };
+    return { ok: true, landed, reused: !!existing, contact: saved };
+  }
+
   // Mint a contact for each pending name, and write the new id back into the form that is
   // still on screen. Sequential rather than parallel: two names that turn out to be the same
   // person must not race each other into two rows.
@@ -252,6 +312,115 @@ export function createCompanyContactsPage(ctx) {
     state.selectedCompanyContactId = '';
     showToast('Contact deleted.', isLiveSupabaseSession() ? 'live' : 'local', 'Company Contacts');
     navigate(companyPath('company-contacts', {}, contact.company_id));
+  }
+
+  /* ---- Picking several at once ------------------------------------------------------------
+   *
+   * "Add a button Select, then check boxes appear where I can select multiple contacts to
+   * delete, and a Clear select appears too together with Delete."
+   *
+   * Off by default: a directory is read far more often than it is pruned, and a checkbox on
+   * every row all the time makes the common case noisier for the rare one. Select turns the
+   * column on; Cancel turns it off and forgets the ticks.
+   */
+  const selectedIds = () => (Array.isArray(state.companyContactSelected) ? state.companyContactSelected : []);
+
+  /**
+   * The ticked contacts that still exist in THIS company.
+   *
+   * A tick is only an id, and between ticking and pressing Delete the row can have been
+   * filtered away, deleted in another tab, or the company switched underneath. Resolving
+   * against the live list each time means a stale id is dropped rather than sent to the server.
+   */
+  function selectedContacts(companyId) {
+    return selectedIds()
+      .map((id) => companyContactById(id))
+      .filter((contact) => contact && canonicalCompanyId(contact.company_id) === canonicalCompanyId(companyId));
+  }
+
+  function setContactSelectMode(on) {
+    state.companyContactSelecting = !!on;
+    // Leaving the mode forgets the ticks. Keeping them would mean pressing Select again later
+    // silently re-arms a selection made against a list that has since moved on.
+    if (!on) state.companyContactSelected = [];
+    render();
+  }
+
+  function toggleContactSelected(contactId) {
+    const id = String(contactId || '');
+    if (!id) return;
+    const current = selectedIds();
+    state.companyContactSelected = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+    render();
+  }
+
+  /** The header box: tick every row currently on screen, or untick them. */
+  function toggleContactSelectAll(companyId) {
+    const visible = visibleContacts(companyId).map((contact) => contact.id);
+    const current = selectedIds();
+    const allOn = visible.length > 0 && visible.every((id) => current.includes(id));
+    // Only the rows on screen. A filtered-out contact somebody ticked earlier keeps its tick
+    // rather than being silently dropped by a box that says "all".
+    state.companyContactSelected = allOn
+      ? current.filter((id) => !visible.includes(id))
+      : [...new Set([...current, ...visible])];
+    render();
+  }
+
+  function clearContactSelection() {
+    state.companyContactSelected = [];
+    render();
+  }
+
+  /**
+   * Delete every ticked contact.
+   *
+   * deleteCompanyContact navigates back to the directory when it is done, which is right when
+   * you are looking at the card of the contact you just deleted and wrong here -- this already
+   * IS the directory. So the write is the same shape and the navigation is not.
+   *
+   * One failure does not abort the rest: a permission or network error on the third of ten must
+   * not leave seven undeleted and unreported. Every row is attempted, and the toast says what
+   * actually happened.
+   */
+  async function deleteSelectedContacts() {
+    const companyId = canonicalCompanyId(activeCompanyId());
+    if (!requirePermission('company_contacts.manage', companyId)) return;
+    const contacts = selectedContacts(companyId);
+    if (!contacts.length) { clearContactSelection(); return; }
+
+    // Deleting a contact a record still points at leaves that record showing a broken chip, and
+    // in a bulk delete nobody is looking at the cards one at a time to notice. So the count is
+    // put in front of them before anything is written.
+    const doc = wbDoc(companyId);
+    const inUse = contacts.filter((contact) => contactUsage(doc, contact.id, { nameValue: wbNameValue }).length);
+    const noun = contacts.length === 1 ? 'contact' : 'contacts';
+    const warning = inUse.length
+      ? `\n\n${inUse.length} of them ${inUse.length === 1 ? 'is' : 'are'} still named by records in this company. Those records keep the link and will show the contact as missing.`
+      : '';
+    if (!window.confirm(`Delete ${contacts.length} ${noun}?${warning}`)) return;
+
+    const stamp = new Date().toISOString();
+    const settled = await Promise.all(contacts.map((contact) => supabaseWrite('company_contacts', {
+      id: contact.id, company_id: contact.company_id, name: contact.name, deleted_at: stamp,
+    }).then(({ ok }) => (ok ? contact.id : ''), () => '')));
+
+    const removed = new Set(settled.filter(Boolean));
+    if (removed.size) {
+      state.companyContacts = state.companyContacts.filter((item) => !removed.has(item.id));
+      if (removed.has(state.selectedCompanyContactId)) state.selectedCompanyContactId = '';
+    }
+    // Whatever could not be deleted stays ticked, so a retry is one press rather than a hunt
+    // back through the list for the ones that did not go.
+    state.companyContactSelected = selectedIds().filter((id) => !removed.has(id));
+    if (!state.companyContactSelected.length) state.companyContactSelecting = false;
+
+    const failed = contacts.length - removed.size;
+    const source = isLiveSupabaseSession() ? 'live' : 'local';
+    if (!removed.size) showToast(`Could not delete ${failed === 1 ? 'that contact' : `those ${failed} contacts`}.`, 'error', 'Company Contacts');
+    else if (failed) showToast(`${removed.size} deleted, ${failed} could not be — still ticked.`, 'error', 'Company Contacts');
+    else showToast(`${removed.size} ${removed.size === 1 ? 'contact' : 'contacts'} deleted.`, source, 'Company Contacts');
+    render();
   }
 
   const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
@@ -575,10 +744,17 @@ export function createCompanyContactsPage(ctx) {
     const columns = companyContactFieldsFor(companyId).filter((field) => !field.hidden);
     // The grid is built from the count, because the count is now the company's decision. A
     // fixed six-column rule silently mis-aligned every row the moment a seventh appeared.
-    const tracks = ['minmax(200px, 1.4fr)', ...columns.map(() => 'minmax(130px, .9fr)'),
+    // Picking several at once adds a column, so it has to go into the SAME track list the head
+    // and every row share -- a checkbox added to the rows alone would shunt every cell one
+    // column left of its heading.
+    const selecting = canManage && !!state.companyContactSelecting;
+    const ticked = new Set(selecting ? selectedIds() : []);
+    const tracks = [...(selecting ? ['34px'] : []), 'minmax(200px, 1.4fr)', ...columns.map(() => 'minmax(130px, .9fr)'),
       'minmax(180px, 1.2fr)', '120px', '110px'].join(' ');
-    const minWidth = 610 + columns.length * 130;
+    const minWidth = 610 + columns.length * 130 + (selecting ? 34 : 0);
     const grid = `style="--cc-cols:${tracks};--cc-min:${minWidth}px"`;
+    const onScreen = rows.map((contact) => contact.id);
+    const allTicked = selecting && onScreen.length > 0 && onScreen.every((id) => ticked.has(id));
 
     const row = (contact) => {
       const uses = contactUsage(doc, contact.id, { nameValue: wbNameValue });
@@ -586,8 +762,17 @@ export function createCompanyContactsPage(ctx) {
       const summary = usageSummary(uses);
       const chip = companyContactValue(contact, chipField);
       const phone = fieldText(contact, phoneField);
+      // While picking, the row PICKS. Leaving it opening the contact would mean the same click
+      // on the same pixel does two different things depending on a mode you cannot see from the
+      // row itself -- and every mis-click costs a page load.
+      const on = ticked.has(contact.id);
       return `
-        <div class="table-row cc-row" role="button" tabindex="0" ${grid} data-action="open-company-record" data-contact-id="${h(contact.id)}">
+        <div class="table-row cc-row${selecting ? ' cc-picking' : ''}${on ? ' cc-picked' : ''}" role="button" tabindex="0" ${grid}
+          data-action="${selecting ? 'toggle-company-contact-pick' : 'open-company-record'}" data-contact-id="${h(contact.id)}"
+          ${selecting ? `aria-pressed="${on}"` : ''}>
+          ${selecting ? `<span class="cc-cell-pick">
+            <input type="checkbox" tabindex="-1" ${on ? 'checked' : ''} aria-label="${h(`Select ${contact.name}`)}" />
+          </span>` : ''}
           <span class="cc-cell-name">
             <span class="cc-avatar" style="background:${h(chipColor(companyId, chip))}">${h(initials(contact.name))}</span>
             <span><strong>${h(contact.name)}</strong><small class="cc-cell-phone">${h(phone || '—')}</small></span>
@@ -611,11 +796,23 @@ export function createCompanyContactsPage(ctx) {
               <i class="ti ti-search"></i>
               <input type="search" data-company-contact-search value="${h(state.companyContactQuery || '')}" placeholder="Search every field…" aria-label="Search company contacts" />
             </label>
+            ${canManage && (rows.length || selecting) ? `
+              <button class="btn ${selecting ? 'btn-primary' : ''}" type="button" data-action="toggle-company-contact-select" aria-pressed="${selecting}">
+                <i class="ti ti-${selecting ? 'x' : 'checkbox'}"></i>${selecting ? 'Cancel' : 'Select'}
+              </button>` : ''}
             ${canManage ? `
               <button class="btn btn-icon cc-settings-btn" type="button" data-action="open-company-contact-fields" title="Settings — fields and the contact card" aria-label="Company Contacts settings"><i class="ti ti-settings"></i></button>
               <button class="btn btn-primary" type="button" data-action="open-company-record-form" data-mode="new"><i class="ti ti-plus"></i>New contact</button>` : ''}
           </div>
         </div>
+        ${selecting ? `
+          <div class="cc-pickbar" role="status">
+            <span class="cc-pickbar-n">${ticked.size} selected</span>
+            ${ticked.size ? `
+              <button class="btn btn-sm danger" type="button" data-action="delete-company-contact-picked"><i class="ti ti-trash"></i>Delete ${ticked.size}</button>
+              <button class="btn btn-sm" type="button" data-action="clear-company-contact-picked"><i class="ti ti-square-x"></i>Clear selection</button>`
+    : '<span class="wb-sub">Tick the contacts you want to delete.</span>'}
+          </div>` : ''}
         ${chips.length ? `
           <div class="cc-chips" role="group" aria-label="Filter by ${h(chipField.label)}">
             ${chips.map((chip) => `
@@ -625,6 +822,10 @@ export function createCompanyContactsPage(ctx) {
           </div>` : ''}
         <div class="data-table cc-table">
           <div class="table-head" ${grid}>
+            ${selecting ? `<span class="cc-cell-pick">
+              <input type="checkbox" ${allTicked ? 'checked' : ''} data-action="toggle-company-contact-pick-all"
+                aria-label="${allTicked ? 'Clear these' : 'Select these'} ${onScreen.length} contacts" title="Select everything on screen" />
+            </span>` : ''}
             <span>Name</span>
             ${columns.map((field) => `<span>${h(field.label)}</span>`).join('')}
             <span>Active with us</span>
@@ -1039,9 +1240,12 @@ export function createCompanyContactsPage(ctx) {
         ${seats.map(({ workspace, app }) => {
     const entry = chosen[app.id] || { title: '', fields: [] };
     const picked = new Set(entry.fields || []);
-    // A field that carries no readable value on a row is not offered: a button is a control,
-    // and the link back to this contact would print the name of the person you are looking at.
-    const offer = (app.fields || []).filter((field) => !['button', 'company_contact'].includes(field.type));
+    // A button is a control, not a value, so it is never offered. A Company Contact field IS
+    // offered: it was excluded on the grounds that it would print the name of the person whose
+    // card you are on, but that is only true of the field pointing back at THEM -- an app with a
+    // second one (Referred by, Site contact) names somebody else, which is worth reading. The
+    // one pointing back is dropped where it is resolved, in itemTitle, which can see the value.
+    const offer = (app.fields || []).filter((field) => field.type !== 'button');
     return `
           <div class="cc-app-field-row">
             <b>${h(workspace.name)} › ${h(app.name)}</b>
@@ -1050,7 +1254,7 @@ export function createCompanyContactsPage(ctx) {
                 <option value="" ${entry.title ? '' : 'selected'}>Work it out automatically</option>
                 ${offer.map((field) => `<option value="${h(field.id)}" ${entry.title === field.id ? 'selected' : ''}>${h(field.label)}</option>`).join('')}
               </select>
-              <small>What names each row. Automatic takes the first text field, which is not always the one worth reading.</small>
+              <small>What names each row. Automatic prefers a Company Contact field naming somebody else, then the first text field.</small>
             </label>
             ${offer.length ? `<div class="wb-chip-pick">
               ${offer.map((field) => `
@@ -1317,8 +1521,14 @@ export function createCompanyContactsPage(ctx) {
     return `
       <div class="cc-card${arranging ? ' is-arranging' : ''}" data-cc-card data-cc-company="${h(companyId)}" data-cc-anchor="card">
         <div class="cc-crumb">
-          <a href="${h(appHref(companyPath('company-contacts', {}, companyId)))}" data-router>Company Contacts</a>
-          <span>/</span><b>${h(contact.name)}</b>
+          <!-- A button to get back to the directory, and deliberately still an <a>. It reads and
+               behaves as a button, but a real href keeps middle-click, Cmd-click, "open in new
+               tab" and "copy link" working -- all of which a <button> with a click handler
+               silently drops, and all of which somebody stepping through a list of contacts
+               actually uses. -->
+          <a class="btn btn-sm cc-crumb-back" href="${h(appHref(companyPath('company-contacts', {}, companyId)))}" data-router
+            title="Back to Company Contacts" aria-label="Back to Company Contacts"><i class="ti ti-arrow-left" aria-hidden="true"></i>Company Contacts</a>
+          <b class="cc-crumb-here">${h(contact.name)}</b>
           ${canManage ? `
             <span class="cc-crumb-actions">
               <button class="btn btn-sm" type="button" data-action="open-company-record-form" data-mode="edit" data-contact-id="${h(contact.id)}"><i class="ti ti-pencil"></i>Edit info</button>
@@ -1771,7 +1981,7 @@ export function createCompanyContactsPage(ctx) {
         ${field.type === 'category' ? `
           <div class="wb-field">
             <label>Options</label>
-            <div class="wb-opt-list">${options.map((option) => wbOptRow(option)).join('')}</div>
+            <div class="wb-opt-list">${options.map((option) => optionRow(h, option)).join('')}</div>
             <button class="btn btn-sm" type="button" data-cc-add-option data-field-id="${h(field.id)}"><i class="ti ti-plus"></i>Add option</button>
           </div>` : ''}
         ${COMPANY_CONTACT_WB_TYPES.has(field.type) ? wbFieldConfigUI(field, contactsAsApp(fieldDraft.companyId)) : ''}
@@ -2735,6 +2945,7 @@ export function createCompanyContactsPage(ctx) {
     mountCard, mountCardSettings, mountFieldsEditor, handleCardAction, handleCardChange,
     renderCompanyContactsPage, renderCompanyContactEditor, saveCompanyContactForm,
     deleteCompanyContact, createCompanyContactNamed, createMissingContacts,
+    setContactSelectMode, toggleContactSelected, toggleContactSelectAll, clearContactSelection, deleteSelectedContacts,
     renderCompanyContactFieldsEditor, renderCompanyContactCardSettings,
     // Exposed so switching tabs can bank the open panel before the DOM holding it is rebuilt.
     syncCardDraft, syncFieldDraftNow: syncFieldDraft,
@@ -2754,5 +2965,7 @@ export function createCompanyContactsPage(ctx) {
     // Everything a button press needs, resolved from the seat the card wrote onto the button.
     // button-push.js reaches this through ctx and so never learns what a contact stores.
     contactButtonSeat,
+    // ...and the other direction: a record pushed from an app, filed as a contact.
+    receiveContactFromApp,
   };
 }

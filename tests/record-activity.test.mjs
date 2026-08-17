@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 
 import {
   ACTIVITY_KINDS,
@@ -141,7 +142,8 @@ test('Activity is the history AND the conversation, oldest first', () => {
   const feed = recordFeed(workspace, 'a1', 'i1', comments);
   // Strictly by time and reading DOWNWARDS, so the two stores interleave: 09:00 creation,
   // 09:30 comment, 10:00 edit, 10:30 comment -- and the newest line sits directly above the
-  // box the next one is typed into.
+  // box the next one is typed into. What makes the newest the first thing you SEE is the panel
+  // opening at its bottom, which is a scroll position and not this order.
   assert.deepEqual(feed.map((e) => e.id), ['a2', 'c2', 'a1', 'c1']);
   assert.deepEqual(feed.map((e) => e.kind), ['created', 'comment', 'updated', 'comment']);
 });
@@ -246,4 +248,32 @@ test('one unparseable step abandons the whole parse rather than dropping it', ()
   // A label containing "; " would split wrong. Printing the raw string is honest; printing a
   // list that quietly lost an item is not.
   assert.equal(checklistDone('2/2 (100%): [x] Called; them back; [x] Qouting'), null);
+});
+
+
+test('the feed scrolls, and column-reverse is not how it opens at the bottom', () => {
+  // "The newest is the first thing I want to see when I open the item, so I just scroll up to
+  // see the oldest." That is a scroll position, not an order. A column-reverse scrollport
+  // starts at its bottom, which is where the newest line is.
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const at = styles.indexOf('.wb-rec-body {');
+  assert.notEqual(at, -1, 'the feed scrollport has moved');
+  const rule = styles.slice(at, styles.indexOf('}', at));
+  // column-reverse was tried and reverted: the feed is a flex column with overflow:hidden, so
+  // as a flex item it shrank to the container and the panel could not be scrolled at all.
+  assert.doesNotMatch(rule, /column-reverse/, 'this broke scrolling the last time it was tried');
+  assert.match(rule, /overflow-y: auto;/, 'the feed needs its own scrollport');
+});
+
+test('the record page lands on the newest line, once per record', () => {
+  // The list reads downwards, so the newest is at the bottom — and that is the one you opened
+  // the record to read. Re-pinning on every render would drag a reader back down mid-scroll,
+  // so it fires only when the record itself changes.
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  // The flag lives on `state` rather than as a module-level binding: a top-level const in
+  // this file measured ~100 gzip bytes in the entry bundle, which it has no headroom for.
+  assert.match(main, /state\.wbFeedPinnedTo !== openItemId/);
+  assert.match(main, /state\.wbFeedPinnedTo = openItemId; feed\.scrollTop = feed\.scrollHeight;/);
+  // Guarded on the element existing: the panel is absent while its module is still loading.
+  assert.match(main, /if \(feed\) \{ state\.wbFeedPinnedTo/);
 });

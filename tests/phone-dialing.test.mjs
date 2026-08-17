@@ -76,6 +76,19 @@ test('answering the call notes it on the record, before the dialler is handed an
   assert.match(body, /await wbSave\(m\.companyId\)/, 'and persisted, not left in memory');
 });
 
+// The bug this pins: on the RECORD PAGE the call was noted nowhere.
+//
+// openWbCall finds its record with closest('[data-item]'). A list row carries that; the record
+// page did not, so itemId came back empty, wbConfirmCall's guard skipped the log entirely, and
+// the modal asked "Call this contact?" rather than naming the person. Everything else about the
+// feature worked, which is why it read as the Activity tab being broken rather than the page.
+test('the record page says which record it is, so a call from it can be noted', () => {
+  const page = readFileSync(new URL('../src/workspace/record-page.js', import.meta.url), 'utf8');
+  assert.match(page, /<div class="wb-record" data-item="\$\{h\(item\.id\)\}">/);
+  const open = main.slice(main.indexOf('function openWbCall('));
+  assert.match(open.slice(0, open.indexOf('\n}')), /closest\('\[data-item\]'\)\?\.dataset\.item/);
+});
+
 test('tapping the number calls instead of opening the record', () => {
   // The row's own click handler opens the item. It already skips anchors, which is what
   // keeps a phone link from doing both things at once.

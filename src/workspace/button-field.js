@@ -14,6 +14,57 @@
 // push in words before anybody presses anything, and a test can check the merge rules without
 // a browser. Carrying it out lives in ./button-push.js.
 
+import { PULL_FAMILY, canPull } from './relationship-pull.js';
+
+/**
+ * Which source type may land in which destination type, on a push.
+ *
+ * "All fields with the same data types -- string to string. String to int is prohibited, but
+ * int to string is allowed."
+ *
+ * That rule already existed for the relationship copy, as `canPull`, and this reuses it rather
+ * than writing a second table: a number reads perfectly well as text, and text written into a
+ * number column is not a copy, it is a corruption. Until now the push ignored types entirely --
+ * it matched on the label and carried the value whatever the two fields were -- so "Age" as
+ * text landed in "Age" as a number and the target read NaN.
+ *
+ * The one thing the push can do that a copy cannot is MINT. A name in a text field arriving at
+ * a Company Contact field is not a string being forced into an id column: the contact is
+ * created (or found) and the field is given its id. So that pair is allowed here and stays
+ * refused in `canPull`, which has no way to create anything and would write the words where the
+ * id belongs -- the exact bug the option copy had.
+ */
+export const CONTACT_MINT_FROM = new Set(['text', 'textarea', 'email', 'phone', 'url', 'location', 'autonumber']);
+
+/** 'carry' to copy the value across, 'contact' to file it as a contact first, null to refuse. */
+export function pushKind(fromField, toField) {
+  if (!fromField || !toField) return null;
+  if (toField.type === 'company_contact' && fromField.type !== 'company_contact') {
+    return CONTACT_MINT_FROM.has(fromField.type) ? 'contact' : null;
+  }
+  return canPull(fromField.type, toField.type) ? 'carry' : null;
+}
+
+const FAMILY_WORD = {
+  text: 'text', number: 'a number', date: 'a date', option: 'a choice',
+  boolean: 'yes/no', user: 'a person', contact: 'a contact',
+};
+
+/** Why a field the target HAS by name still cannot receive this one, in words. */
+export function whyNotPushed(fromField, toField) {
+  const label = toField?.label || fromField?.label || 'That field';
+  if (COMPUTED_TARGETS.has(toField?.type)) {
+    return `${label} works itself out over there, so a value sent into it would vanish on the next render`;
+  }
+  const from = FAMILY_WORD[PULL_FAMILY[fromField?.type]] || 'that';
+  const to = FAMILY_WORD[PULL_FAMILY[toField?.type]] || 'that';
+  if (from === to) return `${label} cannot take what this one holds`;
+  return `${label} is ${to} there and ${from} here — ${from} cannot become ${to}`;
+}
+
+/** Refused as a destination because nothing is stored on them. Mirrors COMPUTED_TYPES. */
+const COMPUTED_TARGETS = new Set(['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time']);
+
 /** How a button's condition compares a field against its value. */
 export const BUTTON_OPS = [
   ['eq', 'is'],
@@ -47,6 +98,16 @@ export const NEVER_PUSHED = new Set(['button', 'calculation', 'rollup', 'autonum
  */
 export const NEVER_CREATED = new Set(['relationship']);
 
+/**
+ * The Company Contacts directory, addressed as a destination: `cc-<companyId>`.
+ *
+ * It is a table of its own rather than an app in the builder doc, so nothing that resolves an
+ * app id will ever find it and every caller has to recognise the shape. The same id the
+ * contacts card mints for its own seat, so a button pointing AT the directory and a button
+ * pressed ON it name it identically.
+ */
+export const isContactsTarget = (id) => /^cc-/.test(String(id || ''));
+
 const key = (value) => String(value ?? '').trim().toLowerCase();
 const isBlank = (value) => value === undefined || value === null || value === ''
   || (Array.isArray(value) && !value.length);
@@ -73,12 +134,40 @@ export function pushableFields(app, buttonFieldId = '', only = null) {
  * configured twice is a button people assume is broken.
  */
 export function conditionMet(buttonField, item, app) {
-  const rules = Array.isArray(buttonField?.config?.when) ? buttonField.config.when : [];
+  const config = buttonField?.config || {};
+  const rules = Array.isArray(config.when) ? config.when : [];
   const live = rules.filter((rule) => rule && rule.field && rule.op);
   if (!live.length) return true;
-  // Every rule, not any: "enabled when the stage is Won AND the price is set" is what somebody
-  // listing two conditions means.
-  return live.every((rule) => ruleHolds(rule, item, app));
+  // ALL by default: "enabled when the stage is Won and the price is set" is what somebody
+  // listing two conditions usually means, and it is what every button written before this
+  // meant, so the absent setting has to keep meaning it.
+  //
+  // ANY is the other thing people write, and until it existed they wrote it as two rules on one
+  // field -- "Status is Hot", "Status is Warm" -- which under ALL can never be true, so the
+  // button sat disabled with two conditions on screen that both looked right.
+  return config.whenMode === 'any'
+    ? live.some((rule) => ruleHolds(rule, item, app))
+    : live.every((rule) => ruleHolds(rule, item, app));
+}
+
+/**
+ * Conditions that can never all hold at once.
+ *
+ * Two `is` rules on one field under ALL is the mistake this exists to name: it is not a rule
+ * somebody would write on purpose, and the button is simply dead. Reported rather than
+ * silently corrected -- which of the two they meant is not ours to guess.
+ */
+export function impossibleConditions(config) {
+  if (config?.whenMode === 'any') return [];
+  const seen = new Map();
+  const clash = new Set();
+  (Array.isArray(config?.when) ? config.when : []).forEach((rule) => {
+    if (!rule?.field || rule.op !== 'eq' || !String(rule.value ?? '').trim()) return;
+    const had = seen.get(rule.field);
+    if (had !== undefined && key(had) !== key(rule.value)) clash.add(rule.field);
+    else seen.set(rule.field, rule.value);
+  });
+  return [...clash];
 }
 
 function ruleHolds(rule, item, app) {
@@ -125,6 +214,12 @@ export function readable(field, raw) {
  * to somebody looking at two apps side by side. A field the target already has is reused even
  * when its type differs, because two fields with one name are one field to the person who
  * named them; the value is translated on the way in.
+ *
+ * A target marked `fixedFields` does not grow. Company Contacts is the one that is: its field
+ * list is the COMPANY'S, arranged once in Settings and shared by every contact, and a button
+ * that added a column to it on each press would turn one agreed shape into whatever the last
+ * app to send happened to be carrying. Fields it has no home for are reported as skipped, so
+ * the config panel says which ones stay behind before anybody presses anything.
  */
 export function planPush(sourceApp, targetApp, buttonField) {
   const carrying = pushableFields(sourceApp, buttonField?.id, buttonField?.config?.fields);
@@ -133,21 +228,80 @@ export function planPush(sourceApp, targetApp, buttonField) {
     if (field && !existing.has(key(field.label))) existing.set(key(field.label), field);
   });
 
+  // Hand-written pairs: "this field here goes into that field there". Named by id on both
+  // sides, so renaming either afterwards keeps the mapping rather than quietly breaking it --
+  // the opposite trade-off to the label match, and the right one for a pair somebody chose.
+  const byId = new Map((targetApp?.fields || []).map((field) => [field.id, field]));
+  const mapped = new Map();
+  (buttonField?.config?.map || []).forEach((row) => {
+    if (!row?.from || !row?.to || mapped.has(row.from)) return;
+    const destination = byId.get(row.to);
+    if (destination) mapped.set(row.from, destination);
+  });
+
+  // Every destination an explicit row has spoken for, worked out BEFORE the loop: a field that
+  // happens to share a name with one could otherwise reach it first simply by sitting higher in
+  // the field list, and which of the two won would depend on the order somebody dragged them.
+  const spokenFor = new Set([...mapped.values()].map((field) => field.id));
+
   const carry = [];
   const create = [];
   const skipped = [];
+  const claimed = new Set();
   carrying.forEach((field) => {
+    const chosen = mapped.get(field.id);
+    if (chosen) {
+      const kind = pushKind(field, chosen);
+      if (!kind) { skipped.push({ field, why: whyNotPushed(field, chosen) }); return; }
+      // Two fields aimed at one destination is a mistake that would otherwise be invisible:
+      // both write, the last one wins, and the first looks like it never travelled.
+      if (claimed.has(chosen.id)) {
+        skipped.push({ field, why: `${chosen.label} is already being filled by another field` });
+        return;
+      }
+      claimed.add(chosen.id);
+      carry.push({
+        from: field, to: chosen, made: false, kind, mapped: true,
+      });
+      return;
+    }
     const match = existing.get(key(field.label));
     if (match) {
-      carry.push({ from: field, to: match, made: false });
+      // A destination an explicit row has claimed is not also filled by whatever happens to
+      // share its name. The row is the deliberate instruction; the name match is the default.
+      if (spokenFor.has(match.id)) {
+        skipped.push({ field, why: `${match.label} is being filled by a field you mapped to it` });
+        return;
+      }
+      // Sharing a name is no longer enough on its own. Two fields called Age are the same field
+      // to the person who named them, but if one holds text and the other a number, carrying it
+      // writes a value the destination cannot hold -- so the pair is reported as skipped, with
+      // the reason, rather than landing as NaN and looking like the button half-worked.
+      const kind = pushKind(field, match);
+      if (!kind) {
+        skipped.push({ field, why: whyNotPushed(field, match) });
+        return;
+      }
+      carry.push({
+        from: field, to: match, made: false, kind,
+      });
       return;
     }
     if (NEVER_CREATED.has(field.type)) {
       skipped.push({ field, why: `${targetApp?.name || 'That app'} has no ${field.label} to link into` });
       return;
     }
+    if (targetApp?.fixedFields) {
+      skipped.push({ field, why: `${targetApp?.name || 'That app'} has no ${field.label}` });
+      return;
+    }
+    // A field the target does not have is CLONED, so its type goes with it and the pair is
+    // always a plain carry -- there is no type mismatch to resolve against a field that is
+    // about to be made in this one's own image.
     create.push(field);
-    carry.push({ from: field, to: field, made: true });
+    carry.push({
+      from: field, to: field, made: true, kind: 'carry',
+    });
   });
 
   const blocked = (sourceApp?.fields || [])

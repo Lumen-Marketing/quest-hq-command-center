@@ -87,6 +87,15 @@ export function itemTitle(app, item, { nameValue = null, contactId = '' } = {}) 
       && String(item?.values?.[field.id] ?? '') === String(contactId)));
   const read = (field) => String((nameValue ? nameValue(app, field, item) : plainValue(field, item)) ?? '').trim();
 
+  // A person first. On a card that lists other people's records -- a job whose Site contact is
+  // somebody else, a lead someone Referred -- the name of that person is what tells one row from
+  // another, where "Re-roof" repeated eight times does not. The field pointing back at the
+  // contact whose card this is was already dropped above, so this can only name somebody else.
+  for (const field of usable) {
+    if (field.type !== COMPANY_CONTACT_FIELD) continue;
+    const value = read(field);
+    if (value) return value;
+  }
   for (const field of usable) {
     if (!TITLE_TEXT_TYPES.includes(field.type)) continue;
     const value = read(field);

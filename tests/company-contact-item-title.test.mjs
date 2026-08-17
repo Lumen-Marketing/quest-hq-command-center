@@ -107,7 +107,9 @@ test('a record with nothing in it still says which record it is', () => {
 test('the page hands the App Builder formatter to the model', () => {
   // Without it the card would name records differently from every other screen.
   assert.match(page, /contactUsage\(doc, contact\.id, \{ nameValue: wbNameValue \}\)/);
-  assert.match(main, /wbFmtDuration, wbNameValue, wbOptRow,/, 'and main.js passes it through ctx');
+  // wbOptRow is no longer passed through ctx: both editors import one shared option-row module,
+  // which is what took it out of the entry bundle.
+  assert.match(main, /wbFmtDuration, wbNameValue, acceptAttr,/, 'and main.js passes the rest through ctx');
 });
 
 test('usage names every record it returns', () => {
@@ -117,4 +119,57 @@ test('usage names every record it returns', () => {
   // And still works with no formatter supplied, falling back to self-describing fields.
   const [plain] = contactUsage(doc, 'cc-1');
   assert.equal(plain.items[0].title, '2026-08-14', 'the date is the first self-describing value');
+});
+
+// --- a Company Contact field can name a row -----------------------------------------------
+//
+// "Why does the Company Contacts field not appear here? Make automatic prefer the company
+// contact, then the first field."
+//
+// It was excluded from the picker outright, on the grounds that it would print the name of the
+// person whose card you are on. True only of the field pointing back at THEM — which itemTitle
+// already drops, because unlike the picker it can see the value.
+
+test('automatic prefers a contact naming somebody else over a text field', () => {
+  const app = {
+    id: 'a', name: 'Jobs', recordName: 'Job',
+    fields: [
+      { id: 'f-scope', label: 'Scope', type: 'text', config: {} },
+      { id: 'f-site', label: 'Site contact', type: 'company_contact', config: {} },
+    ],
+  };
+  const item = { id: 'i1', values: { 'f-scope': 'Re-roof', 'f-site': 'c-2' } };
+  const nameValue = (a, field, row) => (field.id === 'f-site' ? 'Maria Santos' : row.values[field.id]);
+  assert.equal(itemTitle(app, item, { nameValue, contactId: 'c-1' }), 'Maria Santos');
+});
+
+test('the field pointing back at this card is still never the title', () => {
+  // Every row would read as the name of the person you are already looking at.
+  const app = {
+    id: 'a', name: 'Jobs', recordName: 'Job',
+    fields: [
+      { id: 'f-contact', label: 'Contact', type: 'company_contact', config: {} },
+      { id: 'f-scope', label: 'Scope', type: 'text', config: {} },
+    ],
+  };
+  const item = { id: 'i1', values: { 'f-contact': 'c-1', 'f-scope': 'Re-roof' } };
+  const nameValue = (a, field, row) => (field.type === 'company_contact' ? 'Kim' : row.values[field.id]);
+  assert.equal(itemTitle(app, item, { nameValue, contactId: 'c-1' }), 'Re-roof');
+});
+
+test('an empty contact field falls through to the text', () => {
+  const app = {
+    id: 'a', name: 'Jobs', recordName: 'Job',
+    fields: [
+      { id: 'f-site', label: 'Site contact', type: 'company_contact', config: {} },
+      { id: 'f-scope', label: 'Scope', type: 'text', config: {} },
+    ],
+  };
+  const item = { id: 'i1', values: { 'f-scope': 'Re-roof' } };
+  assert.equal(itemTitle(app, item, { contactId: 'c-1' }), 'Re-roof');
+});
+
+test('the picker offers Company Contact fields, and still never buttons', () => {
+  const src = readFileSync(new URL('../src/company-contacts/page.js', import.meta.url), 'utf8');
+  assert.match(src, /const offer = \(app\.fields \|\| \[\]\)\.filter\(\(field\) => field\.type !== 'button'\);/);
 });

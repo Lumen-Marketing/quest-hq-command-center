@@ -32,7 +32,7 @@ test('the editor is the App Builder one, not a copy of it', () => {
   // Passed in rather than imported: it reads WB_FIELD_TYPES and half a dozen other main.js
   // bindings, and this page is a lazily-fetched factory.
   // Every one of them, wherever the line happens to wrap.
-  ['wbFieldBuilderMarkup', 'wbOptRow', 'wbFileIcon', 'wbFileValues', 'acceptAttr', 'fileTypeKind', 'WB_FIELD_TYPES']
+  ['wbFieldBuilderMarkup', 'wbFileIcon', 'wbFileValues', 'acceptAttr', 'fileTypeKind', 'WB_FIELD_TYPES']
     .forEach((key) => assert.match(main, new RegExp(`\\b${key},`), `${key} must reach the page module`));
 });
 
@@ -60,12 +60,17 @@ test('the palette is the App Builder palette, minus what does not fit a person',
   // A button is not a field at all: it holds no value, has no place on the add/edit form, and
   // can never be filled in. It lives on the CARD, in contactCard.buttons on the builder doc.
   const notAValue = ['button'];
-  [...impossible, ...circular, ...notAValue].forEach((type) => assert.ok(
+  // A form is a document ABOUT a record -- a work order, a punch list. The directory's field list
+  // is one shape shared by every contact in the company, and the database CHECK constraint on
+  // company_contact_fields.type does not accept it either, so offering it would fail at save
+  // after somebody had already designed the form.
+  const aboutARecord = ['form'];
+  [...impossible, ...circular, ...notAValue, ...aboutARecord].forEach((type) => assert.ok(
     !allowed.includes(`'${type}'`),
     `${type} must not be offered on a contact`,
   ));
 
-  every.filter((type) => ![...impossible, ...circular, ...notAValue].includes(type))
+  every.filter((type) => ![...impossible, ...circular, ...notAValue, ...aboutARecord].includes(type))
     .forEach((type) => assert.ok(allowed.includes(`'${type}'`), `${type} is in the App Builder but not offered on a contact`));
 
   // The one that must NOT follow the removal: apps still point at contacts with this type, and
@@ -250,7 +255,10 @@ test('the config panel has no type picker, the way the App Builder has none', ()
   assert.ok(!/<select/.test(panel), 'wrong type means delete and drag the right one in');
   assert.match(panel, /Configure \$\{h\(meta\.label\)\} field/);
   // And it is the App Builder's own controls, not a second set: the option row, the switch.
-  assert.match(panel, /wbOptRow\(option\)/);
+  // The option row is now ONE shared module both editors import, rather than a helper main.js
+  // hands to each through ctx -- same "not a copy of it" rule, enforced by the import instead.
+  assert.match(panel, /optionRow\(h, option\)/);
+  assert.match(page, /import \{ optionRow \} from '\.\.\/workspace\/option-row\.js';/);
   assert.match(panel, /<label class="wb-switch">/);
   assert.match(panel, /data-cc-add-option/);
 });
@@ -479,5 +487,10 @@ test('the grid is built from the column count, and can still collapse', () => {
   assert.match(body, /--cc-cols:\$\{tracks\};--cc-min:\$\{minWidth\}px/);
   // Custom properties, not the properties themselves: an inline grid-template-columns would
   // beat the narrow-screen rule that collapses the row to a single column.
-  assert.match(body, /const tracks = \['minmax\(200px, 1\.4fr\)', \.\.\.columns\.map/);
+  //
+  // A leading track is allowed before the name column -- the tick-box column that Select turns
+  // on lives there. What matters is that the rest is still derived from the column COUNT, which
+  // is the fixed-six-track bug this guards. That the head and the rows then agree on how many
+  // columns there are is checked by rendering both, in company-contact-bulk-select.test.mjs.
+  assert.match(body, /const tracks = \[.*'minmax\(200px, 1\.4fr\)', \.\.\.columns\.map/);
 });

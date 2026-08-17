@@ -86,14 +86,21 @@ test('every icon-only control has an accessible name', () => {
 });
 
 test('icon picker options are distinguishable and read as a chosen state', () => {
-  assert.match(main, /function wbIconLabel\(/);
-  // "ti-building-store" read aloud verbatim is worse than nothing.
-  assert.ok(!main.includes('aria-label="Icon ${h(icon)}"'), 'the raw class name is not a label');
-  const picks = [...main.matchAll(/<button class="wb-emoji-opt[^>]*>/g)];
-  assert.equal(picks.length, 3);
+  // The three pickers moved into the two lazy chunks that draw them, and the name-reader moved
+  // beside the names it reads. Every one of them still has to be announceable.
+  const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+  assert.match(source('../src/workspace/icon-sets.js'), /export function iconLabel\(/);
+  const picks = ['../src/workspace/builder-modal.js', '../src/workspace/app-settings.js'].flatMap((path) => {
+    const body = source(path);
+    // "ti-building-store" read aloud verbatim is worse than nothing.
+    assert.ok(!body.includes('aria-label="Icon ${h(icon)}"'), 'the raw class name is not a label');
+    return [...body.matchAll(/<button class="wb-emoji-opt[^>]*>/g)];
+  });
+  assert.equal(picks.length, 3, `expected three icon pickers, found ${picks.length}`);
   for (const pick of picks) {
-    assert.match(pick[0], /aria-label="Icon \$\{h\(wbIconLabel\(icon\)\)\}"/);
+    assert.match(pick[0], /aria-label="Icon \$\{h\(iconLabel\(icon\)\)\}"/);
     assert.match(pick[0], /aria-pressed=/);
     assert.match(pick[0], /type="button"/);
   }
 });
+

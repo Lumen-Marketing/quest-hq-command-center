@@ -153,8 +153,28 @@ export function reorderWidget(widgets, id, targetId) {
   return list;
 }
 
+/**
+ * Resize one card. Touches `size` and nothing else.
+ *
+ * It deliberately does NOT re-normalize. This function is shared with the record layout, whose
+ * types -- fields, comments, meta, collection -- are not widget types at all. normalizeWidget
+ * did not recognise them and rewrote `type` to 'metric'; the record page's own normalizeBlock
+ * then did not recognise 'metric' either and rewrote it again to 'fields'. So resizing a
+ * Comments card turned it into a field group, and a Sub-items card lost its list. Only 'note'
+ * survived, because it is the one name in both tables, and 'fields' survived by luck by
+ * round-tripping through the two fallbacks.
+ *
+ * moveWidget, reorderWidget and removeWidget were always safe to share -- they touch order and
+ * identity only. This one claimed to and did not.
+ *
+ * A size that is not a number leaves the card as it was, rather than snapping it to a default
+ * width belonging to a type table this function must not consult.
+ */
 export function resizeWidget(widgets, id, size) {
-  return widgets.map((w) => (w.id === id ? normalizeWidget({ ...w, size }) : w));
+  const next = Math.round(Number(size));
+  return widgets.map((w) => (w.id === id
+    ? { ...w, size: Number.isFinite(next) ? Math.min(DASH_COLUMNS, Math.max(1, next)) : w.size }
+    : w));
 }
 
 export function removeWidget(widgets, id) {

@@ -6,22 +6,75 @@
 // company, so every step checks it is allowed before it changes anything.
 
 import {
-  buttonNotReady, buttonReady, conditionMet, fieldToCreate,
-  planPush, planSet, setValueFor, translateValue,
+  buttonNotReady, buttonReady, conditionMet, fieldToCreate, isContactsTarget,
+  planPush, planSet, readable, setValueFor, translateValue,
 } from './button-field.js';
 import { arrivalRef } from './record-ref.js';
 
 export function createButtonPush(ctx) {
   const {
     h, can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
-    state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle,
-    contactSeat,
+    state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle, wbRunAutomations,
+    contactSeat, contactsApp, contactIntake,
   } = ctx;
+
+  /**
+   * The record, shaped as a contact: a name plus every field the DIRECTORY also has.
+   *
+   * Used by both ways a contact can be created from a record -- a button pointed straight at
+   * Company Contacts, and a text field landing on a Company Contact field in an ordinary app.
+   * One builder, so the two cannot disagree about which fields travel.
+   *
+   * `planPush` against the directory does the matching, which means the same label rule and the
+   * same type rule as everywhere else, and `fixedFields` keeps it from inventing columns on a
+   * list the whole company shares.
+   */
+  function contactPayloadFrom(sourceApp, item, buttonField, companyId, nameOverride = '') {
+    const directory = contactsApp?.(companyId);
+    if (!directory) return null;
+    const plan = planPush(sourceApp, directory, buttonField);
+    let name = String(nameOverride || '').trim();
+    const plain = {};
+    plan.carry.forEach(({ from: source, to }) => {
+      const text = readable(source, item?.values?.[source.id]).trim();
+      // The synthetic Name field of the directory. When the caller already knows the name --
+      // it came from the very field being converted -- that wins over the heuristic.
+      if (to.id === 'name') { if (!name) name = text; return; }
+      if (text) plain[to.id] = text;
+    });
+
+    // Then by TYPE, for the details a contact card is made of.
+    //
+    // Matching on the label alone is too strict here. An app calling its phone field "no." and
+    // a directory calling its own "Phone" mean the same thing, and the person filing the
+    // contact expects the number to travel -- there is exactly one place a phone number can go
+    // on a contact. Only where the directory has ONE field of that type, and only into one
+    // nothing has already claimed: two Phone fields is a real choice and guessing between them
+    // would be worse than leaving it.
+    const CONTACT_DETAIL = ['phone', 'email', 'location', 'url'];
+    CONTACT_DETAIL.forEach((type) => {
+      const homes = (directory.fields || []).filter((field) => field.type === type);
+      if (homes.length !== 1 || plain[homes[0].id]) return;
+      const sources = (sourceApp?.fields || []).filter((field) => field.type === type
+        && String(item?.values?.[field.id] ?? '').trim());
+      if (sources.length !== 1) return;
+      plain[homes[0].id] = readable(sources[0], item.values[sources[0].id]).trim();
+    });
+
+    return name ? { name, plain } : null;
+  }
 
   /** The target app, wherever it lives, or null with the reason it cannot be reached. */
   function resolveTarget(config) {
     const companyId = canonicalCompanyId(config?.targetCompany || '');
     if (!companyId || !config?.targetApp) return { error: 'This button has no destination set yet.' };
+    // The directory is not in any builder doc, so it is resolved before one is looked for.
+    // It carries no workspace either: a contact belongs to the company, not to a workspace.
+    if (isContactsTarget(config.targetApp)) {
+      const app = contactsApp?.(companyId);
+      return app ? { companyId, doc: null, workspace: null, app, contacts: true }
+        : { error: 'Company Contacts is not available here.' };
+    }
     const doc = wbDoc(companyId);
     // The builder docs a session holds are the ones its RLS let it load, so an unreachable
     // company is simply absent rather than something to test for separately.
@@ -41,9 +94,75 @@ export function createButtonPush(ctx) {
    * is the whole reason the merge is safe: nothing in the target is overwritten, and the
    * records already there keep every value they had, with the new columns empty.
    */
+  /**
+   * Every destination this button sends to: the main one, then any extras.
+   *
+   * Deduplicated, because the same app named twice would file the record twice with no way to
+   * tell the two arrivals apart, and the source app is refused for the same reason the picker
+   * never offers it -- a button that files a record into the app it already lives in is a loop.
+   */
+  function extraTargets(sourceApp, config) {
+    const primary = `${canonicalCompanyId(config?.targetCompany || '')}|${config?.targetApp || ''}`;
+    const seen = new Set([primary]);
+    return (Array.isArray(config?.also) ? config.also : []).reduce((out, row) => {
+      const company = canonicalCompanyId(row?.company || config?.targetCompany || '');
+      const app = String(row?.app || '');
+      const key2 = `${company}|${app}`;
+      if (!app || app === sourceApp?.id || seen.has(key2)) return out;
+      seen.add(key2);
+      out.push({ company, app });
+      return out;
+    }, []);
+  }
+
+  /**
+   * One press, one or many destinations.
+   *
+   * "I want it to send records to multiple apps." The extras are sent FIRST and always as
+   * copies, and the main destination goes last -- because that is the one that may be a MOVE,
+   * and a move deletes the record from here. Running it first would leave nothing to copy.
+   *
+   * If any extra fails, the move does not happen. Half a fan-out plus a deletion is the one
+   * outcome with no way back: the record would be gone from here and in only some of the places
+   * it was meant to reach.
+   */
   async function pressButton(sourceCompanyId, sourceApp, buttonField, item, sourceWorkspace, from = null) {
+    const extras = extraTargets(sourceApp, buttonField?.config);
+    if (!extras.length) return pressOne(sourceCompanyId, sourceApp, buttonField, item, sourceWorkspace, from);
+
+    for (const extra of extras) {
+      // A copy, whatever the button's own action is, and with the extras stripped so this
+      // cannot recurse. The field mapping is left behind too: it names field ids in the MAIN
+      // destination, which mean nothing in this one.
+      const asCopy = {
+        ...buttonField,
+        config: {
+          ...buttonField.config, action: 'push', targetCompany: extra.company, targetApp: extra.app, also: [], map: [],
+        },
+      };
+      // A refusal and a thrown save are the same event here -- that app did not take it. The
+      // throw already stopped the move by unwinding past it, but only by accident; catching it
+      // makes the guarantee the code's rather than the call order's, and says so in words
+      // instead of surfacing a raw error.
+      // eslint-disable-next-line no-await-in-loop
+      const sent = await pressOne(sourceCompanyId, sourceApp, asCopy, item, sourceWorkspace, from)
+        .catch(() => false);
+      if (!sent) {
+        showToast('Stopped: one of the other apps could not take it, so nothing was removed from here.', 'error', 'Workspaces');
+        return false;
+      }
+    }
+
+    const primary = { ...buttonField, config: { ...buttonField.config, also: [] } };
+    return pressOne(sourceCompanyId, sourceApp, primary, item, sourceWorkspace, from);
+  }
+
+  async function pressOne(sourceCompanyId, sourceApp, buttonField, item, sourceWorkspace, from = null) {
     const target = resolveTarget(buttonField.config);
     if (target.error) { showToast(target.error, 'local', 'Workspaces'); return false; }
+    if (target.contacts) {
+      return pushToContacts(sourceCompanyId, sourceApp, buttonField, item, sourceWorkspace, target);
+    }
     if (!can('workspaces.manage', target.companyId)) {
       showToast(`Your role cannot add records in ${target.app.name}.`, 'error', 'Workspaces');
       return false;
@@ -55,10 +174,11 @@ export function createButtonPush(ctx) {
       return false;
     }
 
-    // 1. Grow the target's field list, with what arrived FIRST and in the order it had at
-    //    home: App 1 (text, number) landing in App 2 (location) reads text, number, location,
-    //    which is the record as the person sending it thinks of it. It is only a starting
-    //    order -- the field list is draggable afterwards like any other.
+    // 1. Grow the target's field list, appending what arrived in the order it had at home.
+    //    They go LAST, after the fields the target already had: that app's own shape is the
+    //    one its people know, and putting an arrival at the top reorders a form underneath
+    //    everybody who uses it. It is only a starting order -- the list is draggable like any
+    //    other.
     //
     //    Existing records are untouched: a field they have never had simply reads blank, which
     //    is what an empty cell already means everywhere else.
@@ -68,11 +188,13 @@ export function createButtonPush(ctx) {
       made.set(field.id, clone);
       return clone;
     });
-    target.app.fields.unshift(...fresh);
+    target.app.fields.push(...fresh);
 
     // 2. Translate the values into the target's own ids.
     const values = {};
-    plan.carry.forEach(({ from, to, made: isNew }) => {
+    plan.carry.forEach(({ from, to, made: isNew, kind }) => {
+      // Filed as a contact below, not written as words. A Company Contact field stores an id.
+      if (kind === 'contact') return;
       const destination = isNew ? made.get(from.id) : to;
       if (!destination) return;
       const raw = item?.values?.[from.id];
@@ -82,6 +204,48 @@ export function createButtonPush(ctx) {
       if (options) destination.config = { ...(destination.config || {}), options };
       values[destination.id] = value;
     });
+
+    // 2a. Text arriving at a Company Contact field becomes a CONTACT.
+    //
+    // "Prospects has Name as a text field; Leads has Name as a Company Contact field." Writing
+    // the words into it would store a name where an id belongs and render as a broken chip. So
+    // the person is filed in the company directory first and the field is given their id --
+    // and because the directory is filled from the whole record rather than from that one
+    // field, their Phone, Email and Location travel with them wherever the two agree on a name.
+    //
+    // An existing contact of that name is REUSED, never duplicated, and only blank fields on
+    // them are filled: the directory is the company's record of a person, and a button press
+    // is not permission to overwrite it.
+    const contactPairs = plan.carry.filter((pair) => pair.kind === 'contact');
+    // What the conversion actually DID, kept so it can be written into the arriving record's
+    // history below -- "a contact was created" is a real event, and until now the only trace of
+    // it was a contact card appearing in the directory with nothing saying where it came from.
+    // Logged after the record exists, because an entry has to be keyed to a record to show on it.
+    const minted = [];
+    if (contactPairs.length) {
+      const failures = [];
+      for (const pair of contactPairs) {
+        const name = readable(pair.from, item?.values?.[pair.from.id]).trim();
+        // No name is not a failure: the record simply had nothing there, and an empty contact
+        // field is the honest result.
+        if (!name) continue;
+        const payload = contactPayloadFrom(sourceApp, item, buttonField, target.companyId, name);
+        if (!payload) { failures.push(pair.to.label); continue; }
+        // Sequential, like createMissingContacts: two fields naming the same person must not
+        // race each other into two rows.
+        // eslint-disable-next-line no-await-in-loop
+        const filed = await contactIntake?.(target.companyId, payload);
+        if (filed?.ok && filed.contact?.id) {
+          values[pair.to.id] = filed.contact.id;
+          minted.push({ field: pair.to.label, name, reused: !!filed.reused });
+        } else failures.push(pair.to.label);
+      }
+      if (failures.length) {
+        // The record still goes. Losing the link is worse than losing the record, but a move
+        // that stopped here would leave the record nowhere at all.
+        showToast(`Sent, but ${failures.join(', ')} could not be filed in Company Contacts.`, 'error', 'Workspaces');
+      }
+    }
 
     // 2b. The link back to the contact, when this was pushed FROM one.
     //
@@ -93,7 +257,7 @@ export function createButtonPush(ctx) {
       let link = (target.app.fields || []).find((field) => field?.type === 'company_contact');
       if (!link) {
         link = fieldToCreate({ type: 'company_contact', label: 'Contact', config: {} }, wbUid);
-        target.app.fields.unshift(link);
+        target.app.fields.push(link);
       }
       values[link.id] = from.contactId;
     }
@@ -151,9 +315,12 @@ export function createButtonPush(ctx) {
       if (mine.length) {
         sourceWorkspace.activity = sourceWorkspace.activity.filter((entry) => !mine.includes(entry));
         if (!Array.isArray(target.workspace.activity)) target.workspace.activity = [];
-        target.workspace.activity.push(...mine.map((entry) => ({
+        // Merged by time, not appended. The log is newest-first and it is capped from the tail,
+        // so pushing a record's history onto the end put the oldest thing it owns exactly where
+        // the truncation starts -- carried across on one press and deleted on the next.
+        target.workspace.activity = [...target.workspace.activity, ...mine.map((entry) => ({
           ...entry, appId: target.app.id, itemId: arrivedId,
-        })));
+        }))].sort((a, b) => String(b?.ts || '').localeCompare(String(a?.ts || '')));
       }
     }
 
@@ -166,6 +333,18 @@ export function createButtonPush(ctx) {
     //
     // Named as the record, not as its fields: the title is what the arrival is about, and it
     // reads as the sentence somebody would say -- "Kevin Henderson arrived from Lead Gen".
+    // Logged BEFORE the arrival, so it reads in the order it happened: the person was filed,
+    // then the record landed here. The log is newest-first, so the earlier event goes on first.
+    minted.forEach((entry) => wbLogActivity(target.workspace, {
+      kind: 'created',
+      icon: 'ti-address-book',
+      color: '#e0552d',
+      appId: target.app.id,
+      itemId: arrivedId,
+      text: `<b>${h(entry.name)}</b> ${entry.reused ? 'was already in' : 'was added to'} <b>Company Contacts</b>`
+        + ` and linked as <b>${h(entry.field)}</b>`,
+    }));
+
     wbLogActivity(target.workspace, {
       // A move is not this record's beginning -- it has a history, and it just came with it.
       kind: moving ? 'updated' : 'created',
@@ -181,6 +360,19 @@ export function createButtonPush(ctx) {
         ? `<b>${h(title)}</b> moved from <b>${h(sourceApp.name)}</b> to <b>${h(target.app.name)}</b> <span class="wb-act-ref">${h(arrivalRef(arrivedId))}</span>${grew}`
         : `<b>${h(title)}</b> arrived from <b>${h(sourceApp.name)}</b> <span class="wb-act-ref">${h(arrivalRef(arrivedId))}</span>${grew}`,
     });
+
+    // A record that ARRIVES is new to this app, so this app's automations run on it.
+    //
+    // Nothing fired here at all before: a pushed or moved record landed silently, so an app
+    // whose rule is "when an item is created, notify me" was never told about the ones that
+    // did not come from its own Add button -- which is most of them in a pipeline. Fired as
+    // `created` for a move as well as a copy: the record has a history and it brought it with
+    // it, but as far as THIS app is concerned it begins here, and that is what its rules are
+    // written against.
+    //
+    // After the arrival is logged, so an automation that logs its own line reads under it, and
+    // before the save, so anything it changes is persisted by the same write.
+    wbRunAutomations?.(target.companyId, target.workspace, target.app, target.app.items[0], 'created', null);
 
     // The doc resolveTarget handed back IS the one in state, so the merge above already
     // landed; this persists it, for the target's company rather than for the one we are in.
@@ -201,12 +393,108 @@ export function createButtonPush(ctx) {
           text: `<b>${h(title)}</b> moved from <b>${h(sourceApp.name)}</b> to <b>${h(target.app.name)}</b> <span class="wb-act-ref">${h(arrivalRef(arrivedId))}</span>`,
         });
       }
-      wbSave(canonicalCompanyId(sourceCompanyId));
+      // Awaited: this is the write that REMOVES the record from here. Returning before it
+      // lands means the next reload can bring it back, so the same record sits in two apps.
+      await wbSave(canonicalCompanyId(sourceCompanyId));
       // The record it was open on no longer exists, so the form cannot stay on it.
       if (state.builderModal?.editId === item.id) state.builderModal = null;
     }
 
     showToast(`${moved ? 'Moved' : 'Sent'} to ${target.app.name}.${grew}`, 'local', 'Workspaces');
+    render();
+    return true;
+  }
+
+  /**
+   * The same press, aimed at Company Contacts.
+   *
+   * Separate from the app push rather than a branch inside it, because almost nothing it does
+   * applies: there is no builder doc to merge fields into, no workspace to log activity on, no
+   * item row to unshift, and the directory has its own table and its own storage shapes.
+   *
+   * What the two DO share is the plan. planPush already decides which of this record's fields
+   * the directory has a home for, matching by label, and -- because the directory is marked
+   * fixedFields -- reports the rest as left behind instead of proposing to create them. That is
+   * the whole of "only the fields that the Company Contacts has": a record carrying Name, Phone,
+   * Email and Location sends the first three and drops Location, because there is nowhere for it
+   * to go and inventing one would change the shape of every contact in the business.
+   *
+   * Values cross as WORDS, not as ids. A category on a record stores an option id that means
+   * nothing in the directory's own list, so each value is read the way a person reads it and
+   * matched against the contact field's options on the other side -- the same path a "change
+   * fields on this contact" button already takes, which skips a word the field has never heard
+   * of rather than minting it.
+   */
+  async function pushToContacts(sourceCompanyId, sourceApp, buttonField, item, sourceWorkspace, target) {
+    if (!contactIntake) {
+      showToast('Company Contacts could not be reached.', 'local', 'Company Contacts');
+      return false;
+    }
+    const plan = planPush(sourceApp, target.app, buttonField);
+    if (!plan.carry.length) {
+      showToast('Company Contacts has no field in common with this record, so there is nothing to send.', 'local', 'Company Contacts');
+      return false;
+    }
+
+    // The contact's name. A field labelled Name wins, because somebody who named a field that
+    // meant it; otherwise the record's own title, which is what it is called everywhere else.
+    const payload = contactPayloadFrom(sourceApp, item, buttonField, target.companyId)
+      || { name: String(wbItemTitle(sourceApp, item) || '').trim(), plain: {} };
+    if (!payload.name) {
+      showToast('That record has nothing that could be used as a contact name.', 'local', 'Company Contacts');
+      return false;
+    }
+
+    const result = await contactIntake(target.companyId, payload);
+    if (!result?.ok) {
+      showToast(result?.error || 'Could not add that contact.', 'local', 'Company Contacts');
+      return false;
+    }
+
+    // Said on the SENDING side, because the directory has no per-contact feed of its own and
+    // this app's history is where somebody would look to find out where the record went. The
+    // dropped fields are named rather than counted: "Location was left behind" is actionable --
+    // add the field to the directory -- and "1 field left behind" is not.
+    const left = plan.skipped.map((entry) => entry.field.label);
+    if (sourceWorkspace) {
+      wbLogActivity(sourceWorkspace, {
+        kind: 'updated',
+        icon: 'ti-address-book',
+        color: '#e0552d',
+        appId: sourceApp.id,
+        itemId: item.id,
+        text: `<b>${h(payload.name)}</b> ${result.reused ? 'was already in' : 'was added to'} <b>Company Contacts</b>`
+          + `${left.length ? ` — <b>${h(left.join(', '))}</b> stayed behind, the directory has no field for ${left.length === 1 ? 'it' : 'them'}` : ''}`,
+      });
+      await wbSave(canonicalCompanyId(sourceCompanyId));
+    }
+
+    // "Send it and remove it from this app", pointed at the directory. The person is now filed,
+    // so on an intake list the row has done its job. Done AFTER the contact is saved, never
+    // before: a failure to file must not lose the record from both places -- the same ordering
+    // the app-to-app move uses, and for the same reason.
+    const moving = buttonField.config?.action === 'move'
+      && (sourceApp.items || []).some((row) => row.id === item.id);
+    if (moving) {
+      sourceApp.items = sourceApp.items.filter((row) => row.id !== item.id);
+      if (sourceWorkspace) {
+        // No appId/itemId: the record is not here any more, so an entry keyed to it would point
+        // at something nobody in this app can open. It is a note about the APP.
+        wbLogActivity(sourceWorkspace, {
+          icon: 'ti-arrow-right',
+          color: '#dc2626',
+          text: `<b>${h(payload.name)}</b> was filed in <b>Company Contacts</b> and removed from <b>${h(sourceApp.name)}</b>`,
+        });
+      }
+      await wbSave(canonicalCompanyId(sourceCompanyId));
+      // The form cannot stay open on a record that no longer exists.
+      if (state?.builderModal?.editId === item.id) state.builderModal = null;
+    }
+
+    const where = moving ? ' and removed from this app' : '';
+    showToast(result.reused
+      ? `${payload.name} is already in Company Contacts — ${result.landed} field${result.landed === 1 ? '' : 's'} updated${where}.`
+      : `${payload.name} added to Company Contacts with ${result.landed} field${result.landed === 1 ? '' : 's'}${where}.`, 'local', 'Company Contacts');
     render();
     return true;
   }
@@ -317,7 +605,9 @@ export function createButtonPush(ctx) {
    * leaves them for the person to look at and save -- writing behind their back while they are
    * halfway through typing is the more surprising of the two.
    */
-  function applySet(companyId, app, buttonField, item, seated) {
+  // async because the seated branch persists the record, and the caller must be able to wait
+  // for that write the same way every other press can.
+  async function applySet(companyId, app, buttonField, item, seated) {
     const sets = planSet(app, buttonField);
     if (!sets.length) {
       showToast('This button has no fields to change yet.', 'local', 'Workspaces');
@@ -336,7 +626,7 @@ export function createButtonPush(ctx) {
       if (touched) {
         item.updatedAt = new Date().toISOString();
         item.lastActivityAt = item.updatedAt;
-        wbSave(companyId);
+        await wbSave(companyId);
       }
     } else {
       const scope = document.querySelector('.wb-modal, .wb-record-page') || document;

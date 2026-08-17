@@ -310,7 +310,11 @@ test('a hidden field is dropped from the table, not from the record', () => {
 test('the grid is built from the column count, and can still collapse', () => {
   // A fixed six-track rule mis-aligned every row the moment a seventh column appeared.
   const body = fn('renderDirectory', page);
-  assert.match(body, /const tracks = \['minmax\(200px, 1\.4fr\)', \.\.\.columns\.map/);
+  // A leading track is allowed before the name column -- the tick-box column that Select turns
+  // on lives there. The derivation from the column COUNT is what this guards; that the head and
+  // the rows agree on the total is checked by rendering both, in
+  // company-contact-bulk-select.test.mjs.
+  assert.match(body, /const tracks = \[.*'minmax\(200px, 1\.4fr\)', \.\.\.columns\.map/);
   assert.match(body, /--cc-cols:\$\{tracks\};--cc-min:\$\{minWidth\}px/);
   // Custom properties, not the properties themselves: an inline grid-template-columns would
   // beat the narrow-screen rule that collapses the row to one column.

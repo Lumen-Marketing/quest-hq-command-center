@@ -151,11 +151,11 @@ export function createDataIO(ctx) {
       if (!(await guardUpload(file, 'csv', 'Workspaces'))) return;
       let text = '';
       try { text = await file.text(); } catch { showToast('Could not read that file.', 'local', 'Workspaces'); return; }
-      wbImportCsvText(companyId, workspaceId, appId, text);
+      wbImportCsvText(companyId, workspaceId, appId, text, file.name);
     };
     input.click();
   }
-  function wbImportCsvText(companyId, workspaceId, appId, text) {
+  function wbImportCsvText(companyId, workspaceId, appId, text, fileName = '') {
     const { workspace, app } = wbFind(companyId, workspaceId, appId);
     if (!app) return;
     const rows = wbParseCsv(text).filter((r) => r.some((c) => String(c).trim() !== ''));
@@ -171,12 +171,31 @@ export function createDataIO(ctx) {
       fieldForCol.forEach((f, i) => { if (!f) return; const v = wbCoerceImport(companyId, app, f, cells[i]); if (v !== undefined && v !== '') values[f.id] = v; });
       if (!Object.keys(values).length) return;
       wbAssignAutoNumbers(app, values);
-      app.items.unshift({ id: wbUid(), values, createdAt: today, createdBy: activeSession().profile?.id || '', updatedAt: today, lastActivityAt: today });
+      const id = wbUid();
+      app.items.unshift({ id, values, createdAt: today, createdBy: activeSession().profile?.id || '', updatedAt: today, lastActivityAt: today });
+      // On the RECORD, not only on the workspace. The import already logged one line saying how
+      // many arrived, which is the right thing for the feed and useless on a record: opening any
+      // of them showed "Nothing yet", as though somebody had typed it in by hand. Where a row
+      // came from is the first thing you want to know about a row you did not create.
+      wbLogActivity(workspace, {
+        kind: 'created',
+        icon: 'ti-file-import',
+        color: '#16a34a',
+        appId: app.id,
+        itemId: id,
+        text: fileName
+          ? `Imported from <b>${h(fileName)}</b>`
+          : 'Imported from a CSV file',
+      });
       added++;
     });
     if (!added) { showToast('No rows could be imported — check that values line up with the headers.', 'local', 'Workspaces'); return; }
     const skipped = headers.length - matched;
-    wbLogActivity(workspace, { icon: 'ti-file-import', color: '#16a34a', text: `Imported <b>${added}</b> item${added === 1 ? '' : 's'} into ${h(app.name)} from CSV` });
+    wbLogActivity(workspace, {
+      icon: 'ti-file-import',
+      color: '#16a34a',
+      text: `Imported <b>${added}</b> item${added === 1 ? '' : 's'} into ${h(app.name)}${fileName ? ` from <b>${h(fileName)}</b>` : ' from CSV'}`,
+    });
     wbSave(companyId);
     showToast(`Imported ${added} item${added === 1 ? '' : 's'}${skipped ? ` · ${skipped} unmatched column${skipped === 1 ? '' : 's'} skipped` : ''}.`, 'local', 'Workspaces');
     render();

@@ -5,13 +5,33 @@ import { addRecordLabel, newRecordLabel } from './naming.js';
 import { acceptAttr } from '../security/upload-policy.js';
 import { JOB_TILE_PARTS } from '../jobs/dashboard-model.js';
 
-import { WB_APP_ICONS, WB_WS_ICONS } from './icon-sets.js';
+import { WB_APP_ICONS, WB_WS_ICONS, iconLabel } from './icon-sets.js';
 
 export function createBuilderModal(ctx) {
   const {
     WB_FIELD_TYPES, WB_PALETTE, clearableCount,
-    can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAppReportOptions, wbAvatar, wbColorSwatches, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbIconLabel, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
+    can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAvatar, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
   } = ctx;
+
+// Preset swatches plus a trailing custom-color picker. `selected` may be any hex
+// string; if it isn't one of the presets the custom swatch shows it as active.
+function wbColorSwatches(selected) {
+  const current = selected || WB_PALETTE[0];
+  const isCustom = !WB_PALETTE.includes(current);
+  const presets = WB_PALETTE.map((color) => `<button type="button" class="wb-swatch ${color === current ? 'sel' : ''}" data-wb-pick-color="${color}" style="background:${color}"></button>`).join('');
+  const custom = `<label class="wb-swatch wb-swatch-custom ${isCustom ? 'sel' : ''}" title="Custom color"${isCustom ? ` style="background:${h(current)}"` : ''}><input type="color" data-wb-custom-color value="${h(isCustom ? current : '#000000')}" aria-label="Choose a custom color"><i class="ti ${isCustom ? 'ti-check' : 'ti-plus'}"></i></label>`;
+  return `<div class="wb-swatches">${presets}${custom}</div>`;
+}
+
+// Report options a given app can drive (matches dashboardAppWidgetBody).
+function wbAppReportOptions(app) {
+  const opts = [['recent', 'Latest records']];
+  (app.fields || []).forEach((f) => {
+    if (f.type === 'status' || f.type === 'category') opts.push([`group:${f.id}`, `Breakdown · ${f.label}`]);
+    if (['number', 'money', 'calculation'].includes(f.type)) opts.push([`sum:${f.id}`, `Total · ${f.label}`]);
+  });
+  return opts;
+}
 
   function renderWorkspaceBuilderModal() {
     const m = state.builderModal;
@@ -220,7 +240,7 @@ export function createBuilderModal(ctx) {
       return wbModalShell(editing ? 'Edit workspace' : 'Create workspace', 'wb-modal-wide', `<div class="wb-modal-ic" style="background:${h(m.draft.color)}"><i class="ti ${h(m.draft.icon)}"></i></div><h3>${editing ? 'Edit workspace' : 'Create workspace'}</h3>`,
         `<div class="wb-field"><label>Workspace name</label><input class="wb-input" id="wbWsName" value="${h(m.draft.name ?? editing?.name ?? '')}" placeholder="e.g. Marketing, Field Operations" autofocus></div>
         <div class="wb-field"><label>Description <span class="wb-opt">(optional)</span></label><textarea class="wb-input" id="wbWsDesc" placeholder="What is this workspace for?">${h(m.draft.description ?? editing?.description ?? '')}</textarea></div>
-        <div class="wb-row2"><div class="wb-field"><label>Icon</label><div class="wb-emoji-pick">${WB_WS_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" type="button" data-wb-pick-icon="${icon}" aria-pressed="${icon === m.draft.icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('')}</div></div>
+        <div class="wb-row2"><div class="wb-field"><label>Icon</label><div class="wb-emoji-pick">${WB_WS_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" type="button" data-wb-pick-icon="${icon}" aria-pressed="${icon === m.draft.icon}" aria-label="Icon ${h(iconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('')}</div></div>
         <div class="wb-field"><label>Color</label>${wbColorSwatches(m.draft.color)}</div></div>
         <div class="wb-field"><label>${editing ? 'Members' : 'Invite members'} <span class="wb-opt">(who collaborates here)</span></label><div class="wb-member-pick">${wbMembers(m.companyId).map((member) => `<button class="wb-member-opt ${m.draft.members.includes(member.id) ? 'on' : ''}" data-wb-toggle-member="${h(member.id)}">${wbAvatar(member, 30)}<div class="wb-mo-info"><b>${h(member.name)}</b><span>${h(member.role)} · ${h(member.email)}</span></div><span class="wb-ck"><i class="ti ti-check"></i></span></button>`).join('') || '<div class="wb-sub">No company members found.</div>'}</div></div>
         ${editing && can('workspaces.manage', m.companyId) ? `
@@ -315,7 +335,7 @@ export function createBuilderModal(ctx) {
         <div class="wb-field"><label>App type <span class="wb-opt">(optional)</span></label><select class="wb-input" id="wbApType"><option value="">— Select a type —</option>${['Contacts', 'Tasks', 'Projects', 'Records', 'Inventory', 'Documents', 'Calendar', 'Tickets', 'Invoices', 'Custom'].map((t) => `<option ${m.draft.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
         <div class="wb-field"><label>Icon</label>
           <div class="wb-search-box wb-icon-search"><i class="ti ti-search"></i><input type="text" class="wb-search-input" data-wb-icon-search value="${h(m.iconQuery || '')}" placeholder="Search icons…"></div>
-          <div class="wb-emoji-pick wb-icon-grid" id="wbAppIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" type="button" aria-pressed="${icon === m.draft.icon}" aria-label="Icon ${h(wbIconLabel(icon))}" data-wb-pick-icon="${icon}" data-icon-name="${h(icon.replace('ti-', '').replace(/-/g, ' '))}"><i class="ti ${icon}"></i></button>`).join('')}</div>
+          <div class="wb-emoji-pick wb-icon-grid" id="wbAppIcons">${WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${icon === m.draft.icon ? 'sel' : ''}" type="button" aria-pressed="${icon === m.draft.icon}" aria-label="Icon ${h(iconLabel(icon))}" data-wb-pick-icon="${icon}" data-icon-name="${h(icon.replace('ti-', '').replace(/-/g, ' '))}"><i class="ti ${icon}"></i></button>`).join('')}</div>
         </div>
         <div class="wb-field"><label>Color</label>${wbColorSwatches(m.draft.color)}</div>`,
         `<button class="btn" data-action="wb-modal-close">Cancel</button><button class="btn btn-primary" data-wb-submit><i class="ti ti-plus"></i>Create app</button>`);
