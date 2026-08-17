@@ -24,7 +24,11 @@ test('public form file answers upload to storage before the response is submitte
   assert.doesNotMatch(source, /uploadToSignedUrl|\/api\/public-form-file-upload/);
   assert.match(uploadModule, /\/api\/public-form-file-upload/);
   assert.match(uploadModule, /uploadToSignedUrl/);
-  assert.match(source, /collectFormAnswers\(form, data, \{ publicUpload: true \}\)/);
+  // The call moved with submitPublicFormResponse into src/form/public-form-page.js; main.js
+  // still owns collectFormAnswers and passes it in through that module's ctx.
+  const publicFormPage = readFileSync(new URL('../src/form/public-form-page.js', import.meta.url), 'utf8');
+  assert.match(publicFormPage, /collectFormAnswers\(form, data, \{ publicUpload: true \}\)/);
+  assert.match(source, /collectFormAnswers,/, 'main.js must still hand it to the module');
   assert.match(uploadModule, /bucket_id/);
   assert.match(uploadModule, /object_path/);
 });

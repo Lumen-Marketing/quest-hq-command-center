@@ -245,6 +245,7 @@ const FACTORY_MODULES = [
   ['src/workspace/app-settings.js', 'createAppSettings'],
   ['src/workspace/recycle-bin.js', 'createRecycleBin'],
   ['src/workspace/items-view.js', 'createItemsView'],
+  ['src/form/public-form-page.js', 'createPublicFormPage'],
 ];
 
 test('the list above covers every factory module there is', () => {

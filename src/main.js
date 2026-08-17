@@ -203,6 +203,10 @@ const WB_ITEMS_UI_KEY = 'quest-hq-wb-items-ui-v1';
 const WB_PRIVATE_VIEWS_KEY = 'quest-hq-wb-private-views-v1';
 const JOB_BOARD_VIEW_KEY = 'quest-hq-job-board-view';
 const CONTACT_BOARD_VIEW_KEY = 'quest-hq-contact-board-view';
+// Which half of the workspace dashboard's stream you want to read: what people wrote, what the
+// apps did, or both. A reading preference rather than a filter on the data, so it is kept the
+// way the board/table choices are and follows you to your other devices.
+const WB_FEED_VIEW_KEY = 'quest-hq-wb-feed-view';
 const THEME_KEY = 'quest-theme';
 const ACCENT_KEY = 'quest-accent';
 const NOTIFICATION_CACHE_KEY = 'quest-hq-notification-cache-v1';
@@ -2489,6 +2493,7 @@ const state = {
   clientPortalEvents: readSeededList(CLIENT_PORTAL_EVENT_CACHE_KEY, []).map(normalizeClientPortalEvent),
   clientPortalPublic: readJson(CLIENT_PORTAL_SESSION_KEY, null),
   publicForm: null,
+  intakeView: null,
   checkoutRequestId: '',
   clientPortalAnnotate: null,
   clientPortalTool: 'pan',
@@ -2635,6 +2640,8 @@ const state = {
   jobBoardView: localStorage.getItem(JOB_BOARD_VIEW_KEY) || 'board',
   contactBoardView: localStorage.getItem(CONTACT_BOARD_VIEW_KEY) || 'table',
   dealBoardView: localStorage.getItem(DEAL_BOARD_VIEW_KEY) || 'board',
+  // Both, because the dashboard's whole idea is that the two read as one story.
+  wbFeedView: localStorage.getItem(WB_FEED_VIEW_KEY) || 'all',
   contactStageFilter: 'all',
   contactLifecycleFilter: 'all',
   contactQuery: '',
@@ -3098,6 +3105,8 @@ const UI_PREF_SLOTS = [
     get: () => state.driveView, set: (v) => { if (v) state.driveView = String(v); } },
   { group: 'views', name: 'tasks', store: TASK_VIEW_KEY, json: false,
     get: () => state.taskView, set: (v) => { if (v) state.taskView = String(v); } },
+  { group: 'views', name: 'workspaceFeed', store: WB_FEED_VIEW_KEY, json: false,
+    get: () => state.wbFeedView, set: (v) => { if (v) state.wbFeedView = String(v); } },
 ];
 
 function uiPrefsPayload() {
@@ -3850,6 +3859,19 @@ function adoptRecoveryModeFromUrl() {
   state.authMessage = 'Choose a new password for your account.';
 }
 
+// Held once fetched so a re-render draws the current screen rather than the loading one.
+let intakeModule = null;
+let intakeManageModule = null;
+function openIntakeManage(companyId, workspaceId, appId) {
+  return import('./intake/manage.js').then((mod) => {
+    intakeManageModule = mod;
+    mod.open(companyId, workspaceId, appId, {
+      createSupabaseClient, isLiveSupabaseSession, render, showToast, wbFind, wbSave, wbUid,
+      setIntakeView: (value) => { state.intakeView = value; },
+    });
+  });
+}
+
 function render() {
   const keptScroll = captureScrollForRender();
   queueMicrotask(() => restoreScrollAfterRender(keptScroll));
@@ -3922,11 +3944,33 @@ function render() {
 
   if (state.route.name === 'form-public') {
     document.title = 'Form | Questbase';
-    app.innerHTML = renderPublicFormPage(state.route);
+    app.innerHTML = publicFormModule ? publicFormModule.renderPublicFormPage(state.route) : '';
     queueMicrotask(() => {
-      ensurePublicFormOpen(state.route.token).catch((error) => {
-        state.publicForm = { formId: state.route.token || '', error: error.message || 'Could not open form.' };
-        render();
+      // Only the load itself re-renders. ensurePublicFormOpen returns early once the form is in
+      // hand, so a later render must not schedule another one or the two would chase each other.
+      const firstLoad = !publicFormModule;
+      loadPublicFormPage()
+        .then((mod) => mod.ensurePublicFormOpen(state.route.token))
+        .then(() => { if (firstLoad) render(); })
+        .catch((error) => {
+          state.publicForm = { formId: state.route.token || '', error: error.message || 'Could not open form.' };
+          render();
+        });
+    });
+    return;
+  }
+
+  // A public intake link. The visitor has no session, no company and no workspace, so the whole
+  // surface is one lazily-fetched module that holds its own state and escapes its own markup.
+  if (state.route.name === 'intake-public') {
+    document.title = 'Form | Questbase';
+    app.innerHTML = intakeModule ? intakeModule.renderIntakePage() : '';
+    queueMicrotask(() => {
+      import('./intake/public-page.js').then((mod) => {
+        const first = !intakeModule;
+        intakeModule = mod;
+        mod.mountIntakePage(state.route.token, render);
+        if (first) render();
       });
     });
     return;
@@ -4442,7 +4486,7 @@ function shouldHoldCompanyRouteForLiveData(route) {
   // Only show the full "Loading workspace data…" screen on the very first load.
   // Once data has loaded once, later re-fetches (a save, or a realtime update)
   // refresh in place using the data already on screen — no blocking loader.
-  return !!route && route.name !== 'home' && route.name !== 'login' && route.name !== 'client-portal' && route.name !== 'proposal-public' && route.name !== 'form-public' && state.session?.auth === 'supabase' && !state.dataLoaded && !state.everLoaded;
+  return !!route && route.name !== 'home' && route.name !== 'login' && route.name !== 'client-portal' && route.name !== 'proposal-public' && route.name !== 'form-public' && route.name !== 'intake-public' && state.session?.auth === 'supabase' && !state.dataLoaded && !state.everLoaded;
 }
 
 function renderWorkspaceLoading(route) {
@@ -4548,7 +4592,7 @@ function renderNoCompanyAccess() {
 
 function needsLocalLogin(route) {
   if (!CONFIG.questAuthEnabled && !CONFIG.localLoginEnabled) return false;
-  if (route.name === 'login' || route.name === 'home' || route.name === 'proposal-public' || route.name === 'form-public') return false;
+  if (route.name === 'login' || route.name === 'home' || route.name === 'proposal-public' || route.name === 'form-public' || route.name === 'intake-public') return false;
   return !state.session;
 }
 
@@ -6304,7 +6348,7 @@ function loadRenderWorkspaceBuilderModal() {
   if (!renderWorkspaceBuilderModalPending) {
     renderWorkspaceBuilderModalPending = import('./workspace/builder-modal.js').then((mod) => {
       renderWorkspaceBuilderModalModule = mod.createBuilderModal({
-        WB_FIELD_TYPES, WB_PALETTE, clearableCount, can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAppReportOptions, wbAvatar, wbColorSwatches, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbIconLabel, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
+        WB_FIELD_TYPES, WB_PALETTE, clearableCount, can, fileTypeKind, formatDate, h, isLiveSupabaseSession, questLoader, reauthPasswordField, wbActionCardsUI, wbAvatar, wbCompanyWorkspace, wbDoc, wbFieldConfigUI, wbFileIcon, wbFind, wbFmtVal, wbItemCommentsHtml, wbItemTitle, wbMembers, wbModalShell, wbRenderFieldInput, wbStagesModalBody, wbTileLinkRow, wbTimeAgo, wbTrigCfgUI, wbUrlControl, wbWorkspaceApps, renderDashModal, state,
       });
       return renderWorkspaceBuilderModalModule;
     }).catch((error) => {
@@ -13472,15 +13516,6 @@ function normalizeWorkspaceTile(t) {
 }
 
 const WB_PALETTE = ['#e0552d', '#2563eb', '#7c3aed', '#0d9488', '#16a34a', '#d97706', '#db2777', '#0891b2', '#dc2626', '#4f46e5'];
-// Preset swatches plus a trailing custom-color picker. `selected` may be any hex
-// string; if it isn't one of the presets the custom swatch shows it as active.
-function wbColorSwatches(selected) {
-  const current = selected || WB_PALETTE[0];
-  const isCustom = !WB_PALETTE.includes(current);
-  const presets = WB_PALETTE.map((color) => `<button type="button" class="wb-swatch ${color === current ? 'sel' : ''}" data-wb-pick-color="${color}" style="background:${color}"></button>`).join('');
-  const custom = `<label class="wb-swatch wb-swatch-custom ${isCustom ? 'sel' : ''}" title="Custom color"${isCustom ? ` style="background:${h(current)}"` : ''}><input type="color" data-wb-custom-color value="${h(isCustom ? current : '#000000')}" aria-label="Choose a custom color"><i class="ti ${isCustom ? 'ti-check' : 'ti-plus'}"></i></label>`;
-  return `<div class="wb-swatches">${presets}${custom}</div>`;
-}
 // The fallback icons, as literals: normalising a stored document runs on boot and must
 // name one before ./workspace/icon-sets.js has been fetched. They are the first entry of
 // each list there, and a test holds the two in agreement.
@@ -13489,36 +13524,6 @@ const WB_DEFAULT_WS_ICON = 'ti-rocket';
 // shape, because the value is interpolated straight into class="ti ${icon}".
 const WB_ICON_CLASS = /^ti-[a-z0-9-]+$/;
 const WB_DEFAULT_APP_ICON = 'ti-address-book';
-
-// Fetched on the first icon picker. Until then the grid renders as a loader rather than
-// as an empty box, which reads as a picker with no icons in it.
-let wbIconSetsModule = null;
-let wbIconSetsPending = null;
-
-function loadWbIconSets() {
-  if (wbIconSetsModule) return Promise.resolve(wbIconSetsModule);
-  if (!wbIconSetsPending) {
-    wbIconSetsPending = import('./workspace/icon-sets.js').then((mod) => {
-      wbIconSetsModule = mod;
-      return mod;
-    }).catch((error) => {
-      wbIconSetsPending = null;
-      throw error;
-    });
-  }
-  return wbIconSetsPending;
-}
-
-function wbAppIconGrid(selected) {
-  if (!wbIconSetsModule) {
-    loadWbIconSets().then(() => render()).catch((error) => console.error('icon set failed to load', error));
-    return questLoader('Loading icons');
-  }
-  // data-icon-name carries the searchable words. The create-app modal's picker already filters
-  // on exactly this, and 115 icons is well past the point where scanning beats typing -- so the
-  // two pickers now behave the same way instead of one being searchable and the other not.
-  return wbIconSetsModule.WB_APP_ICONS.map((icon) => `<button class="wb-emoji-opt ${selected === icon ? 'sel' : ''}" type="button" data-icon="${icon}" data-icon-name="${h(wbIconLabel(icon).toLowerCase())}" aria-pressed="${selected === icon}" aria-label="Icon ${h(wbIconLabel(icon))}"><i class="ti ${icon}"></i></button>`).join('');
-}
 
 
 const WB_FIELD_TYPES = {
@@ -13554,11 +13559,14 @@ const WB_FIELD_TYPES = {
   updated_time: { label: 'Last modified', icon: 'ti-calendar-up', color: '#6b7280', desc: 'When it last changed' },
   button: { label: 'Button', icon: 'ti-click', color: '#d4541f', desc: 'Send the record to another app' },
   sheet: { label: 'Sheet', icon: 'ti-table', color: '#0f766e', desc: 'A spreadsheet with formulas' },
+  // Not the sheet. A sheet is a grid of anonymous cells; a form is named, typed fields with a
+  // layout of its own, designed once here and filled in per record.
+  form: { label: 'Form', icon: 'ti-file-text', color: '#4f46e5', desc: 'A document you design, fill in and print' },
 };
 // Computed / automatic fields hold no user-entered value: created/updated read the
 // item's timestamps, autonumber is assigned on create, rollup and calculation compute.
 const WB_AUTO_FIELD_TYPES = new Set(['calculation', 'rollup', 'autonumber', 'created_time', 'updated_time', 'button']);
-const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'company_contact', 'button', 'sheet', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox'];
+const WB_FIELD_ORDER = ['text', 'textarea', 'number', 'money', 'duration', 'progress', 'checklist', 'date', 'category', 'status', 'tags', 'rating', 'user', 'relationship', 'company_contact', 'button', 'sheet', 'form', 'rollup', 'url', 'email', 'phone', 'location', 'file', 'image', 'calculation', 'autonumber', 'created_time', 'updated_time', 'checkbox'];
 // Comparison operators for numeric (number/money) automation triggers:
 // [operator, dropdown label, symbol for the human-readable rule summary].
 const WB_TRIG_OPS = [['==', 'equals', '='], ['!=', 'not equal', '≠'], ['>', 'greater than', '>'], ['<', 'less than', '<'], ['>=', 'at least', '≥'], ['<=', 'at most', '≤']];
@@ -13799,8 +13807,25 @@ function wbLogActivity(workspace, entry) {
     actor: actor.full_name || actor.email || '',
     ...entry,
   });
-  if (workspace.activity.length > 60) workspace.activity.length = 60;
+  // Bounded, but nowhere near as tight as it was.
+  //
+  // This used to be 60 for the whole workspace, newest-first, truncated from the tail -- and
+  // that quietly broke the MOVE. A record carried between apps brings its history into this one
+  // list, and carried history is by definition the oldest thing in it, so anything else
+  // happening in the workspace evicted it. Three apps in one workspace was enough: the record's
+  // Activity tab showed only what had happened since it arrived, which is the opposite of what
+  // carrying the history is for.
+  //
+  // 60 was never a display limit either -- wbFeedStream sorts and slices its own 60 -- so the
+  // store was capped far tighter than any reader needed.
+  //
+  // The RIGHT rule is per record, so a busy app can never cost a quiet record its past. That
+  // costs ~140 gzip bytes in the entry bundle and the budget note says the next growth must be
+  // paid for by extraction rather than by raising the ceiling again. So this is the same rule,
+  // one number wider, which is free: see .ai/current-state.md for the follow-up.
+  if (workspace.activity.length > 400) workspace.activity.length = 400;
 }
+
 function wbTimeAgo(ts) {
   const seconds = (Date.now() - new Date(ts).getTime()) / 1000;
   if (Number.isNaN(seconds)) return '';
@@ -13893,7 +13918,48 @@ function wbViewCompanyHome(companyId, workspace) {
 function wbFeedColumn(companyId, workspace) {
   const canManage = can('workspaces.manage', companyId);
   const composer = canManage ? wbComposer(companyId) : '';
-  return `<div class="wb-feed-wrap">${composer}${wbFeedStream(companyId, workspace)}</div>`;
+  return `<div class="wb-feed-wrap">${composer}${wbFeedPicker(workspace)}${wbFeedStream(companyId, workspace)}</div>`;
+}
+
+/**
+ * What the stream should be showing: what people wrote, what the apps did, or both.
+ *
+ * The two are genuinely different reading jobs. Posts are a conversation you catch up on;
+ * activity is a ledger you scan for what changed. Interleaved they read as one story, which is
+ * the point of the dashboard and stays the default -- but a busy week of record edits buries
+ * every post under a hundred log lines, and somebody looking for "what did the apps do" does
+ * not want the conversation in the way either.
+ *
+ * The counts are on the buttons because they answer the question that makes somebody reach for
+ * this: whether there is anything on the other side worth switching to.
+ */
+const WB_FEED_VIEWS = [
+  ['all', 'Both', 'ti-layout-list'],
+  ['posts', 'Posts', 'ti-message-2'],
+  ['activity', 'Activity', 'ti-history'],
+];
+
+function wbFeedView() {
+  return WB_FEED_VIEWS.some(([id]) => id === state.wbFeedView) ? state.wbFeedView : 'all';
+}
+
+function wbFeedPicker(workspace) {
+  const totals = {
+    all: (workspace.feed || []).length + (workspace.activity || []).length,
+    posts: (workspace.feed || []).length,
+    activity: (workspace.activity || []).length,
+  };
+  // Nothing at all in the workspace: the empty state says what to do next, and a row of three
+  // zeroes above it is noise on the one screen with nothing to choose between.
+  if (!totals.all) return '';
+  const view = wbFeedView();
+  return `<div class="wb-feed-picker">
+    <div class="segmented" role="group" aria-label="What to show in the feed">
+      ${WB_FEED_VIEWS.map(([id, label, icon]) => `<button class="${view === id ? 'active' : ''}" type="button"
+        data-action="set-wb-feed-view" data-view="${h(id)}" aria-pressed="${view === id ? 'true' : 'false'}"
+      ><i class="ti ${h(icon)}" aria-hidden="true"></i>${h(label)}<b>${h(String(totals[id]))}</b></button>`).join('')}
+    </div>
+  </div>`;
 }
 
 // The Podio-style publisher: a text box plus mode tabs (Post / File / Link /
@@ -13960,13 +14026,24 @@ function wbFeedBumpedAt(entry) {
 // Merge member posts (rich) and system activity (compact rows) into one stream, most
 // recently active first, so the dashboard reads like Podio's activity feed.
 function wbFeedStream(companyId, workspace) {
-  const posts = (workspace.feed || []).map((p) => ({ kind: 'post', ts: wbFeedBumpedAt(p), data: p }));
-  const acts = (workspace.activity || []).map((a) => ({ kind: 'act', ts: wbFeedBumpedAt(a), data: a }));
+  const view = wbFeedView();
+  const posts = view === 'activity' ? [] : (workspace.feed || []).map((p) => ({ kind: 'post', ts: wbFeedBumpedAt(p), data: p }));
+  const acts = view === 'posts' ? [] : (workspace.activity || []).map((a) => ({ kind: 'act', ts: wbFeedBumpedAt(a), data: a }));
   // Sorted by activity, then trimmed -- the other order would drop an old thread with a new
-  // reply before its comment was ever taken into account.
+  // reply before its comment was ever taken into account. Filtered BEFORE the trim, so asking
+  // for posts on a busy workspace shows sixty posts rather than whichever few survived sixty
+  // rows of mostly activity.
   const stream = posts.concat(acts).sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60);
   if (!stream.length) {
-    return `<section class="wb-feed"><div class="wb-feed-empty"><i class="ti ti-activity" aria-hidden="true"></i><p>Nothing here yet. Share an update or create an app to get things moving.</p></div></section>`;
+    // Said against what was ASKED FOR. "Nothing here yet" under a filter is wrong twice over:
+    // there may be plenty here, and it sends somebody off to write a post when all they had to
+    // do was press Both.
+    const empty = view === 'posts'
+      ? 'No posts yet. Share an update, or press Activity to see what the apps have been doing.'
+      : view === 'activity'
+        ? 'No app activity yet. Records created, edited and moved show up here.'
+        : 'Nothing here yet. Share an update or create an app to get things moving.';
+    return `<section class="wb-feed"><div class="wb-feed-empty"><i class="ti ti-activity" aria-hidden="true"></i><p>${h(empty)}</p></div></section>`;
   }
   const rows = stream.map((entry) => entry.kind === 'post'
     ? wbFeedPost(companyId, workspace, entry.data)
@@ -14730,6 +14807,9 @@ function wbWorkspaceHeader(companyId, workspace, activeAppId) {
 // render() replaces the strip's markup, so anything stored on the node is lost with it,
 // which is why opening an app used to send the strip back to the start.
 let wbTopbarScrollLeft = 0;
+// Kept across renders so re-measuring a freshly painted strip does not leave the previous
+// observer holding a detached node.
+let wbStripSizer = null;
 
 /**
  * Drag the app strip sideways by holding the left mouse button.
@@ -14868,6 +14948,30 @@ function wbMountTopbar() {
   const nav = document.querySelector('[data-wb-topbar-nav]');
   if (!track) return;
   wbMountTopbarReorder(track);
+
+  // The tab row stops exactly where the strip ends -- measured, not counted.
+  //
+  // The offset started as a hand-tallied 88px, and it was too big: the strip renders shorter
+  // than the sum of its parts, so a sliver of the page scrolled through the gap between the
+  // two sticky rows. It cannot be counted reliably in any case -- icon size, whether a long
+  // app name wraps, and the browser's own font all move it. The strip reports its own height
+  // instead, and the number in the stylesheet stays only as the value before this first runs.
+  const strip = track.closest('.wb-topbar');
+  const shell = track.closest('.quest-app');
+  if (strip && shell) {
+    const measure = () => {
+      const px = Math.round(strip.getBoundingClientRect().height);
+      if (px > 0) shell.style.setProperty('--wb-strip-h', `${px}px`);
+    };
+    measure();
+    if (typeof ResizeObserver === 'function') {
+      if (wbStripSizer) wbStripSizer.disconnect();
+      wbStripSizer = new ResizeObserver(measure);
+      wbStripSizer.observe(strip);
+    } else {
+      window.addEventListener('resize', measure);
+    }
+  }
   const sync = () => {
     if (!nav) return;
     const overflowing = track.scrollWidth - track.clientWidth > 1;
@@ -15005,6 +15109,27 @@ function wbViewApp(route, companyId, workspace, app, appLinked = false) {
   if (tab === 'reports' && app.fields.length && app.items.length) headBtn += `<button class="btn" data-wb-print-reports><i class="ti ti-printer"></i>Print</button>`;
   if (canManage && tab === 'items' && app.fields.length) headBtn += `<button class="btn btn-primary" data-add-item><i class="ti ti-plus"></i>${h(addRecordLabel(app))}</button>`;
   else if (canManage && tab === 'automations') headBtn += `<button class="btn btn-primary" data-add-auto><i class="ti ti-plus"></i>New automation</button>`;
+  // Settings: the four things you DO to the app, up here beside the tabs rather than buried at
+  // three different depths of the form below.
+  //
+  // Save was the reason. It sat at the foot of the second card, so on a long settings page you
+  // renamed the app at the top, scrolled past the icon grid and the tab list, and only then
+  // found the button — and anyone who did not scroll that far concluded the rename had not
+  // taken. Up here it is on screen the whole time you are editing. Download and Share came with
+  // it because they are the same kind of thing: an action on the app, not a field of it.
+  //
+  // A linked app is excluded. It is a live mirror whose name, icon and fields belong to the
+  // workspace it came from -- there is nothing here to save, share or delete, and its one real
+  // action (remove it from this workspace) stays in the body where its explanation is.
+  if (tab === 'settings' && !appLinked) {
+    headBtn += `<button class="btn" data-wb-download-app title="Download this app as a .questapp.json file"><i class="ti ti-download"></i>Download app</button>`;
+    if (canManage) {
+      headBtn += `<button class="btn danger wb-tab-danger" data-del-app><i class="ti ti-trash"></i>Delete app</button>`;
+      headBtn += `<button class="btn" data-wb-intake-link title="Give a client a link to fill this in without signing in"><i class="ti ti-link"></i>Share link</button>`;
+      headBtn += `<button class="btn ${app.shared ? 'wb-shared-on' : ''}" data-wb-share-app><i class="ti ti-${app.shared ? 'circle-check' : 'share'}"></i>${app.shared ? 'App shared' : 'Share app'}</button>`;
+      headBtn += `<button class="btn btn-primary" data-save-app><i class="ti ti-device-floppy"></i>Save</button>`;
+    }
+  }
   const tabLabel = { dashboard: 'Dashboard', calendar: 'Calendar', items: `Items <b>${app.items.length}</b>`, fields: `Fields <b>${app.fields.length}</b>`, reports: 'Reports', automations: `Automations <b>${app.automations.length}</b>`, trash: `Recycle bin${(app.trash || []).length ? ` <b>${app.trash.length}</b>` : ''}`, settings: 'Settings' };
   let body = '';
   if (tab === 'dashboard') body = renderAppDashboard(companyId, app, state.wbDashManage);
@@ -15263,6 +15388,14 @@ async function wbComposerShare(companyId) {
   // File posted attachments into Company Drive under a workspace-named folder.
   if (post.type === 'file') post.attachments.forEach((att) => wbMirrorFeedFileToDrive(att, companyId, workspace.name));
   wbComposeState().files = [];
+  // Reading only the activity ledger does not mean you meant to post into the void. Sharing
+  // while filtered to Activity would file the post correctly and show nothing, which reads as
+  // the Share button having failed. Widened rather than switched to Posts: both is where the
+  // dashboard starts, and the ledger they were reading stays on screen.
+  if (wbFeedView() === 'activity') {
+    state.wbFeedView = 'all';
+    localStorage.setItem(WB_FEED_VIEW_KEY, 'all');
+  }
   wbSave(companyId);
   wbNotifyFeed(companyId, workspace, post);
   showToast('Shared to the workspace.', isLiveSupabaseSession() ? 'live' : 'local', 'Workspaces');
@@ -15527,15 +15660,6 @@ function wbSaveTileConfig(companyId) {
   showToast('Tile updated.', 'local', 'Workspaces');
   render();
 }
-// Report options a given app can drive (matches dashboardAppWidgetBody).
-function wbAppReportOptions(app) {
-  const opts = [['recent', 'Latest records']];
-  (app.fields || []).forEach((f) => {
-    if (f.type === 'status' || f.type === 'category') opts.push([`group:${f.id}`, `Breakdown · ${f.label}`]);
-    if (['number', 'money', 'calculation'].includes(f.type)) opts.push([`sum:${f.id}`, `Total · ${f.label}`]);
-  });
-  return opts;
-}
 
 // Locate the workspace + company that own an app (apps live inside company docs)
 // so a title can resolve member names, linked records, etc.
@@ -15597,8 +15721,39 @@ function wbAppIndex() {
 // relationship strictly within the requested company).
 function wbTargetApp(companyId, targetAppId) {
   if (!targetAppId) return null;
+  // Company Contacts is a destination but not an app: it lives in its own table, so the index
+  // will never hold it and it has to be recognised by its id.
+  if (/^cc-/.test(String(targetAppId))) return wbContactsTargetApp(companyId);
   const entry = wbAppIndex().get(targetAppId);
   return entry && entry.companyId === canonicalCompanyId(companyId) ? entry.app : null;
+}
+
+/**
+ * The Company Contacts directory, shaped like an app so a button can be pointed at it.
+ *
+ * Two things about it differ from any app, and both are structural rather than a rule somebody
+ * could forget:
+ *
+ *   Name is a FIELD here. In storage it is the directory's own column, not one of the
+ *   company's configurable fields -- but to somebody looking at an app and the directory side
+ *   by side it is simply a field called Name, and a record's Name should become the contact's.
+ *
+ *   fixedFields. The field list belongs to the COMPANY and every contact shares it. An app
+ *   grows to fit whatever is pushed into it; the directory must not, or one button press would
+ *   add a column to every contact in the business. Anything the directory has no home for is
+ *   left behind, which is exactly the asked-for rule: "only the fields that the Company
+ *   Contacts has".
+ */
+function wbContactsTargetApp(companyId) {
+  const cid = canonicalCompanyId(companyId);
+  return {
+    id: `cc-${cid}`,
+    name: 'Company Contacts',
+    recordName: 'Contact',
+    fixedFields: true,
+    fields: [{ id: 'name', label: 'Name', type: 'text', config: {} }, ...companyContactFieldsFor(cid)],
+    items: [],
+  };
 }
 
 // {workspace, app} for every app in a company, for the relationship app-picker.
@@ -15652,7 +15807,7 @@ function wbNameValue(app, field, item, depth = 0) {
     // A sheet stores its whole grid as JSON and a button stores its own configuration. Neither
     // is a name, and falling through to the default branch put `{"rows":39,"cols":24,"cells":…`
     // in the activity feed as the record's title.
-    case 'checklist': case 'progress': case 'checkbox': case 'file': case 'image': case 'duration': case 'calculation': case 'rating': case 'tags': case 'rollup': case 'created_time': case 'updated_time': case 'sheet': case 'button': return '';
+    case 'checklist': case 'progress': case 'checkbox': case 'file': case 'image': case 'duration': case 'calculation': case 'rating': case 'tags': case 'rollup': case 'created_time': case 'updated_time': case 'sheet': case 'form': case 'button': return '';
     case 'autonumber': return wbAutoNumberText(field, raw);
     case 'category': case 'status': { const o = (field.config.options || []).find((x) => x.id === raw); return o ? String(o.label) : ''; }
     case 'user': { const loc = wbLocateApp(app); const m = wbMemberById(loc.companyId, raw); return m ? String(m.name) : ''; }
@@ -15810,9 +15965,6 @@ function wbProgressDisplayHtml(field, pct) {
     return `<div class="wb-prog wb-prog-seg" title="${p}%"><span class="wb-seg-track">${Array.from({ length: segs }, (_, i) => `<span class="wb-seg${i < filled ? ' on' : ''}"${i < filled ? ` style="background:${h(color)}"` : ''}></span>`).join('')}</span><span class="wb-prog-num">${p}%</span></div>`;
   }
   return `<div class="wb-prog" title="${p}%"><span class="wb-prog-track"><span class="wb-prog-fill" style="width:${p}%;background:${h(color)}"></span></span><span class="wb-prog-num">${p}%</span></div>`;
-}
-function wbProgStopRow(s) {
-  return `<div class="wb-stop-item"><span class="wb-stop-lead">≤</span><input type="number" min="0" max="100" class="wb-input wb-stop-upto" value="${h(String(s.upto ?? 100))}" style="max-width:84px"><span class="wb-sub">%</span><input type="color" class="wb-stop-color" value="${h(s.color || '#16a34a')}"><button class="wb-icon-btn danger" data-wb-del-stop type="button" aria-label="Remove stop"><i class="ti ti-x"></i></button></div>`;
 }
 // --- Link / URL field ------------------------------------------------------
 // A safe, openable href from whatever the user typed (adds https:// if missing).
@@ -15975,6 +16127,12 @@ function wbBindInlineEdits(root, companyId, workspaceId, appId, itemId) {
       if (input) {
         input.focus();
         if (typeof input.select === 'function' && ['text', 'textarea', 'number', 'email', 'phone', 'money'].includes(field.type)) input.select();
+        // A Yes/No is a one-click control, and the click that opened the editor IS the click
+        // that meant to flip it. Without this the first press only swaps a static "No" for a
+        // switch that also reads No -- nothing appears to happen, and clicking away commits
+        // no -> no, which is what the history recorded. Flipping it here makes one press mean
+        // one change; pressing the switch again before leaving still changes it back.
+        if (field.type === 'checkbox') input.checked = !input.checked;
       }
 
       let done = false;
@@ -16267,6 +16425,16 @@ function wbFmtVal(ctx, field, value) {
     case 'rating': return wbRatingStars(value);
     case 'tags': return wbTagsChips(field, value) || '<span class="wb-cell-empty">—</span>';
     case 'autonumber': return `<span class="wb-autonum">${h(wbAutoNumberText(field, value))}</span>`;
+    // Same reasoning as the sheet: a document stores its whole page as JSON, and a column wants
+    // to know there is one and what it is called. Not clickable from a row -- a document is opened
+    // from the record it belongs to, where the fields it reads are also on screen.
+    case 'form': {
+      const name = h(wbSheetLabel(value, 'Document'));
+      const seen = `<i class="ti ti-file-text"></i>${name}`;
+      return ctx.item
+        ? `<button type="button" class="wb-sheet-chip" data-wb-form-row="${h(field.id)}" data-wb-form-ctx="${h(wbSeat(ctx))}" title="Open ${name}">${seen}</button>`
+        : `<span class="wb-sheet-chip">${seen}</span>`;
+    }
     // A sheet stores its whole grid as JSON. A row shows what it is CALLED and opens it when
     // clicked -- printing the grid into a table cell is how a column ends up unreadable.
     case 'sheet': {
@@ -16739,18 +16907,19 @@ function wbPlainVal(companyId, workspace, app, field, value, values) {
     // index or a CSV column -- they want to know there is a spreadsheet here and what it is
     // called. A button holds its own configuration, which is not a value at all.
     case 'sheet': return wbSheetLabel(value);
+    case 'form': return wbSheetLabel(value, 'Document');
     case 'button': return '';
     default: return String(value);
   }
 }
 
-/** What a sheet is called: its own title, or just "Spreadsheet" when it has never been named. */
-function wbSheetLabel(raw) {
+/** What a sheet or a document is called: its own title, or a plain word when never named. */
+function wbSheetLabel(raw, fallback = 'Spreadsheet') {
   try {
-    const sheet = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
-    return String(sheet?.title || '').trim() || 'Spreadsheet';
+    const held = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
+    return String(held?.title || '').trim() || fallback;
   } catch {
-    return 'Spreadsheet';
+    return fallback;
   }
 }
 function wbFieldNumber(app, field, raw, values) {
@@ -17757,6 +17926,29 @@ function wbOpenSheetRow(fieldId, seat) {
     .catch((error) => showToast(error.message || 'The sheet could not be opened.', 'local', 'Workspaces'));
 }
 
+// ---- the Form field ----------------------------------------------------------------------
+// A document you arrange by hand and print to PDF. A page editor is a lot of code and most
+// records never open one, so all of it -- the canvas, the inspector and the PDF writer -- is
+// fetched on the first click. The module finds the record itself; threading that through here
+// would put the lookup in every session that never opens a document.
+// From a row, or from the record page: there is no hidden input to read, so the module goes to
+// the record itself and writes back through the app’s own save.
+function wbOpenFormRow(fieldId, seat) {
+  import('./form/doc-editor.js')
+    .then((mod) => mod.openForRecord(fieldId, seat, {
+      wbDoc, wbSave, render, can, formatDate, memberName, wbItemTitle,
+    }))
+    .catch((error) => showToast(error.message || 'The document could not be opened.', 'local', 'Workspaces'));
+}
+
+function wbOpenForm(fieldId) {
+  import('./form/doc-editor.js')
+    .then((mod) => mod.openFor(fieldId, {
+      state, wbFind, render, formatDate, memberName, wbItemTitle,
+    }))
+    .catch((error) => showToast(error.message || 'The document could not be opened.', 'local', 'Workspaces'));
+}
+
 // ---- the app's recycle bin ---------------------------------------------------------------
 // Deleting a record moves it here rather than dropping it. Body in ./workspace/recycle-bin.js.
 let recycleBinModule = null;
@@ -17813,7 +18005,7 @@ function loadAppSettings() {
   if (!appSettingsPending) {
     appSettingsPending = import('./workspace/app-settings.js').then((mod) => {
       appSettingsModule = mod.createAppSettings({
-        h, state, can, wbDoc, singularize, addRecordLabel, wbAppIconGrid, wbAppTabs, WB_ALL_TABS,
+        h, state, can, wbDoc, singularize, addRecordLabel, wbAppTabs, WB_ALL_TABS, questLoader, render,
         wbInstallToWorkspaceField, wbCollectionsSettings, WB_PALETTE,
       });
       return appSettingsModule;
@@ -18175,11 +18367,24 @@ function wbCtx() {
 //
 // Each write goes through the same guarded update and three-way merge as any other, so a
 // second row is not a second risk.
+/**
+ * Persist this company's builder doc, and any company it links out to.
+ *
+ * RETURNS A PROMISE, and that is the point. It used to start each write and return nothing, so
+ * the four callers written as `await wbSave(...)` awaited `undefined` and carried on while the
+ * write was still in the air. Two of them are the button push, where the whole safety of a MOVE
+ * rests on the order: the record is removed from here only "after the target is saved". It was
+ * not -- the removal raced the write. And a record pushed to an app immediately before a
+ * realtime refresh could be reloaded away before its save landed, which is why a send sometimes
+ * took two or three presses to stick.
+ *
+ * Non-awaiting callers are unaffected: they ignored the old `undefined` and ignore this. The
+ * per-write `.catch` stays, so an ignored return can never surface as an unhandled rejection.
+ */
 function wbSave(companyId) {
   wbInvalidateAppIndex();
-  for (const target of companiesToSave(canonicalCompanyId(companyId), wbDoc(companyId))) {
-    saveWorkspaceBuilderDoc(target).catch(() => null);
-  }
+  return Promise.all(companiesToSave(canonicalCompanyId(companyId), wbDoc(companyId))
+    .map((target) => saveWorkspaceBuilderDoc(target).catch(() => null)));
 }
 function wbGuard() { return requirePermission('workspaces.manage', activeCompanyId(), 'Your role cannot manage workspaces.', 'Workspaces'); }
 
@@ -18689,11 +18894,6 @@ function wbTileLinkRow(link) {
     <button class="wb-tile-mbtn danger" type="button" data-wb-tilecfg-dellink title="Remove"><i class="ti ti-x"></i></button>
   </div>`;
 }
-// "ti-building-store" -> "building store". The raw class name is what the picker has
-// to work with, and read aloud verbatim it is worse than nothing.
-function wbIconLabel(icon) {
-  return String(icon || '').replace(/^ti-/, '').replace(/-/g, ' ').trim() || 'icon';
-}
 
 function wbModalShell(eyebrow, extraClass, head, body, foot) {
   // Generic modal format: explicit "Close" button (no 'X' icon) and no
@@ -18706,7 +18906,7 @@ function wbModalShell(eyebrow, extraClass, head, body, foot) {
 function wbFieldConfigUI(fd, app) {
   if (!wbFieldUiModule) return '';
   return wbFieldUiModule.renderFieldConfig(fd, app, {
-    h, state, canonicalCompanyId, companyName, wbOptRow, wbProgStopRow, wbProgressDisplayHtml,
+    h, state, canonicalCompanyId, companyName, wbProgressDisplayHtml,
     wbRelTargetApp, wbCompanyApps, wbTargetApp, wbRelLabel, companyContactFieldsFor,
     WB_PROGRESS_STOPS_DEFAULT, WB_FIELD_TYPES, WB_PROGRESS_DISPLAYS,
   });
@@ -18726,9 +18926,6 @@ function wbLoadFieldUi() {
     });
   }
   return wbFieldUiPending;
-}
-function wbOptRow(o) {
-  return `<div class="wb-opt-item" data-oid="${h(o.id)}"><input type="color" class="wb-dot-pick" value="${h(o.color || '#2563eb')}"><input class="wb-input wb-opt-label" value="${h(o.label)}" placeholder="Option label"><button class="wb-icon-btn danger" data-wb-del-option type="button" aria-label="Remove option"><i class="ti ti-x"></i></button></div>`;
 }
 // Delegates to the lazily-fetched field UI chunk. openWbItemModal awaits the module
 // before the record form opens, so this is only called with it in hand. The factory is
@@ -19182,6 +19379,9 @@ function wbReadFieldInput(f) {
   if (!el) return f.type === 'calculation' ? undefined : '';
   if (f.type === 'checkbox') return el.checked;
   if (f.type === 'checklist') { try { return JSON.parse(el.value || '[]'); } catch { return []; } }
+  // Same shape as the sheet field: the whole document is one JSON value in a hidden input, so
+  // every read, save, automation and export already works without knowing what a form is.
+  if (f.type === 'form') { try { return JSON.parse(el.value || '{}'); } catch { return {}; } }
   if (f.type === 'number' || f.type === 'money' || f.type === 'duration' || f.type === 'progress') return el.value === '' ? '' : Number(el.value);
   if (f.type === 'rating') return el.value === '' ? '' : Number(el.value);
   if ((f.type === 'relationship' && f.config.multiple) || f.type === 'tags') return [...el.selectedOptions].map((o) => o.value);
@@ -19690,6 +19890,21 @@ function mountWbGridDrag(gridSelector, idAttr, idKey, commit) {
   if (!grid) return;
   const clear = () => grid.querySelectorAll('.wb-w').forEach((n) => n.classList.remove('dragging', 'drop-target'));
   grid.querySelectorAll(`[${idAttr}]`).forEach((card) => {
+    // A drag starts on the GRIP, not anywhere on the card.
+    //
+    // The card carries draggable="true", so a press anywhere inside it was a drag waiting to
+    // begin -- and the browser swallows the click the instant the pointer moves a pixel. On the
+    // record page every field value is also a click-to-edit control, so reordering and editing
+    // were competing for one gesture and reordering won: opening a Yes/No switch and actually
+    // flipping it was a coin toss, which reads as the toggle being dead.
+    //
+    // Both grids already draw a grip captioned "Drag to reorder" with cursor: grab, so this is
+    // the behaviour the interface was already promising. Every press re-decides, so the flag
+    // cannot get stuck on; dragend resets it for the case where no press follows.
+    card.draggable = false;
+    card.addEventListener('pointerdown', (event) => {
+      card.draggable = !!event.target?.closest?.('.wb-w-grip');
+    });
     card.addEventListener('dragstart', (event) => {
       state.wbDashDragId = card.dataset[idKey];
       card.classList.add('dragging');
@@ -19699,7 +19914,7 @@ function mountWbGridDrag(gridSelector, idAttr, idKey, commit) {
         try { event.dataTransfer.setData('text/plain', card.dataset[idKey]); } catch { /* ignore */ }
       }
     });
-    card.addEventListener('dragend', () => { state.wbDashDragId = ''; clear(); });
+    card.addEventListener('dragend', () => { state.wbDashDragId = ''; card.draggable = false; clear(); });
     card.addEventListener('dragover', (event) => {
       const from = state.wbDashDragId;
       if (!from || from === card.dataset[idKey]) return;
@@ -20013,6 +20228,7 @@ function mountWorkspaceBuilder() {
     bind('[data-wb-cal-nav]', (el) => { const c = wbCalCursor(); const d = new Date(c.year, c.month + Number(el.dataset.wbCalNav), 1); state.wbCalMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; render(); });
     bind('[data-wb-install-app]', () => wbInstallAppPrompt(companyId, workspaceId));
     bind('[data-wb-download-app]', () => wbDownloadApp(companyId, workspaceId, appId));
+    bind('[data-wb-intake-link]', () => { if (!wbGuard()) return; openIntakeManage(companyId, workspaceId, appId); });
     bind('[data-wb-share-app]', () => { if (!wbGuard()) return; const { app } = wbFind(companyId, workspaceId, appId); if (!app) return; app.shared = !app.shared; wbSave(companyId); showToast(app.shared ? `"${app.name}" is now shared to the Quest App Market.` : `"${app.name}" removed from the Quest App Market.`, 'local', 'Workspaces'); render(); });
     // Choosing a company re-renders so its workspaces can be listed.
     bind('[data-wb-install-company]', (el) => {
@@ -20145,7 +20361,15 @@ function mountWorkspaceBuilder() {
     // No Edit button any more: the value cells are the editors. Bound with the record's
     // identity, because a single-field save has to know which record it is saving to.
     const openItemId = state.route?.params?.get('item_id') || '';
-    if (openItemId) wbBindInlineEdits(document, companyId, workspaceId, appId, openItemId);
+    if (openItemId) {
+      wbBindInlineEdits(document, companyId, workspaceId, appId, openItemId);
+      // The history reads downwards, so the newest line is at the BOTTOM -- and that is the
+      // one you opened the record to read. Land on it; scroll up for the past. Only when the
+      // record CHANGES: every render rebuilds this node at scrollTop 0, and re-pinning each
+      // time would drag a reader back down the moment anything re-rendered under them.
+      const feed = state.wbFeedPinnedTo !== openItemId && document.querySelector('.wb-rec-body');
+      if (feed) { state.wbFeedPinnedTo = openItemId; feed.scrollTop = feed.scrollHeight; }
+    }
     // Record layout. Same vocabulary as the dashboard, because it is the same idea applied to
     // a different page: one arrangement, owned by the app, shown on every record.
     bind('[data-wb-rec-manage]', () => { state.wbRecordManage = !state.wbRecordManage; render(); });
@@ -20644,6 +20868,32 @@ function wbMountModal() {
   });
   overlay.querySelectorAll('[data-wb-when-del]').forEach((b) => {
     b.onclick = () => { const i = Number(b.closest('[data-wb-when-row]')?.dataset.index); wbCollectModalDraft(); m.draft.config.when = wbDelRow('when', ['field', 'op', 'value'], i); render(); };
+  });
+  overlay.querySelectorAll('[data-wb-also-add]').forEach((b) => {
+    b.onclick = () => { wbCollectModalDraft(); m.draft.config.also = [...(m.draft.config.also || []), { company: '', app: '' }]; render(); };
+  });
+  overlay.querySelectorAll('[data-wb-also-del]').forEach((b) => {
+    b.onclick = () => { const i = Number(b.closest('[data-wb-also-row]')?.dataset.index); wbCollectModalDraft(); m.draft.config.also = wbDelRow('also', ['company', 'app'], i); render(); };
+  });
+  // Add and remove a row of the Form field's design. One writer, because the two differ only in
+  // what they do to the list.
+  const wbFormRows = (change) => {
+    wbCollectModalDraft();
+    const form = m.draft.config.form || {};
+    m.draft.config.form = { ...form, fields: change(form.fields || []) };
+    render();
+  };
+  overlay.querySelectorAll('[data-wb-form-add]').forEach((b) => {
+    b.onclick = () => wbFormRows((rows) => [...rows, { label: '', type: 'text', source: 'own' }]);
+  });
+  overlay.querySelectorAll('[data-wb-form-del]').forEach((b) => {
+    b.onclick = () => { const i = Number(b.closest('[data-wb-form-row]')?.dataset.index); wbFormRows((rows) => rows.filter((_, at) => at !== i)); };
+  });
+  overlay.querySelectorAll('[data-wb-map-add]').forEach((b) => {
+    b.onclick = () => { wbCollectModalDraft(); m.draft.config.map = [...(m.draft.config.map || []), { from: '', to: '' }]; render(); };
+  });
+  overlay.querySelectorAll('[data-wb-map-del]').forEach((b) => {
+    b.onclick = () => { const i = Number(b.closest('[data-wb-map-row]')?.dataset.index); wbCollectModalDraft(); m.draft.config.map = wbDelRow('map', ['from', 'to'], i); render(); };
   });
   overlay.querySelectorAll('[data-wb-pull-add]').forEach((b) => {
     b.onclick = () => { wbCollectModalDraft(); m.draft.config.pull = [...(m.draft.config.pull || []), { from: '', to: '' }]; render(); };
@@ -22678,103 +22928,20 @@ function renderFormsResponses(companyId, form) {
   `;
 }
 
-function renderPublicFormPage(route) {
-  const formId = route.token || '';
-  const current = state.publicForm;
-  const form = current?.formId === formId ? current.form : null;
-  const company = current?.company || {};
-  if (current?.formId === formId && current.submitted) {
-    return `
-      <main class="form-public-shell">
-        <section class="form-public-card complete">
-          <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Form')}</span><span><strong>Quest Forms</strong><small>${h(company.name || 'Submission received')}</small></span></div>
-          <h1>Thanks, we received it.</h1>
-          <p>Your response was sent to the workspace team.</p>
-        </section>
-      </main>
-    `;
-  }
-  if (!form) {
-    return `
-      <main class="form-public-shell">
-        <section class="form-public-card ${current?.loading ? 'loading' : ''}">
-          <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Form')}</span><span><strong>Quest Forms</strong><small>Secure response</small></span></div>
-          <h1>${current?.error ? 'Could not open form' : 'Opening form'}</h1>
-          <p>${current?.error ? 'This form link is unavailable or no longer published.' : 'Checking this public form link.'}</p>
-          ${current?.error ? `<div class="form-message error">${h(current.error)}</div>` : '<div class="client-portal-status">Opening...</div>'}
-        </section>
-      </main>
-    `;
-  }
-  return `
-    <main class="form-public-shell">
-      <form class="form-public-card response-form" data-public-form-response data-form-id="${h(form.id)}" style="--form-accent:${h(form.theme_color || company.color || '#f45d22')}">
-        <div class="client-portal-brand"><span class="side-mark logo-image-mark">${questLogoImage('Quest Form')}</span><span><strong>${h(company.name || 'Quest Forms')}</strong><small>${h(form.audience || 'Response')}</small></span></div>
-        <div class="designed-form-header">
-          <span>${h(company.name || 'Questbase')}</span>
-          <h1>${h(form.title)}</h1>
-          <p>${h(form.description || 'Complete this form and send it to the workspace team.')}</p>
-        </div>
-        <label class="form-honeypot" aria-hidden="true"><span>Website</span><input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
-        ${form.collect_email ? `<label><span>Email</span><input name="submitter_email" type="email" placeholder="name@example.com" /></label>` : ''}
-        ${form.questions.map((question) => renderPreviewQuestion(question)).join('') || emptyState('This form has no questions yet.')}
-        ${current?.error ? `<div class="form-message error">${h(current.error)}</div>` : ''}
-        <div class="form-actions">
-          <button class="btn btn-primary" type="submit">${h(form.submit_label || 'Submit')}</button>
-        </div>
-      </form>
-    </main>
-  `;
-}
-
-async function ensurePublicFormOpen(formId) {
-  if (!formId) throw new Error('Missing form link.');
-  if (state.publicForm?.formId === formId && (state.publicForm.form || state.publicForm.error || state.publicForm.loading)) return state.publicForm;
-  const openedAt = new Date().toISOString();
-  const local = formById(formId);
-  if (local && local.status === 'Published') {
-    state.publicForm = { formId, form: local, company: companyById(local.company_id) || { name: companyName(local.company_id) }, openedAt };
-    render();
-    return state.publicForm;
-  }
-  state.publicForm = { formId, loading: true, openedAt };
-  render();
-  const response = await fetch('/api/public-form-open?form_id=' + encodeURIComponent(formId));
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || 'Could not open form.');
-  state.publicForm = {
-    formId,
-    form: normalizeForm(payload.form || {}),
-    company: payload.company || {},
-    openedAt,
-  };
-  render();
-  return state.publicForm;
-}
-
-async function submitPublicFormResponse(formEl) {
-  const formId = formEl.dataset.formId || state.publicForm?.form?.id || '';
-  const form = state.publicForm?.form?.id === formId ? state.publicForm.form : null;
-  if (!form) throw new Error('Form is not loaded.');
-  const data = new FormData(formEl);
-  const answers = await collectFormAnswers(form, data, { publicUpload: true });
-  const response = await fetch('/api/public-form-submit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      form_id: form.id,
-      submitter_email: String(data.get('submitter_email') || ''),
-      submitted_by: String(data.get('submitter_email') || 'Public respondent'),
-      answers,
-      website: String(data.get('website') || ''),
-      started_at: state.publicForm.openedAt,
-    }),
+// The public form surface lives in ./form/public-form-page.js and is fetched on demand: it is
+// reachable only at /form/<id>, which no signed-in session ever visits.
+let publicFormModule = null;
+function loadPublicFormPage() {
+  if (publicFormModule) return Promise.resolve(publicFormModule);
+  return import('./form/public-form-page.js').then((mod) => {
+    publicFormModule = mod.createPublicFormPage({
+      collectFormAnswers, companyById, companyName, emptyState, formById, h, normalizeForm,
+      questLogoImage, render, renderPreviewQuestion, state,
+    });
+    return publicFormModule;
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || 'Could not submit this response.');
-  state.publicForm = { ...state.publicForm, submitted: true, response: payload.response };
-  render();
 }
+
 
 // ===========================================================================
 // CRM: Accounts (real entity), Deals pipeline, Activities timeline
@@ -25061,6 +25228,7 @@ function renderActiveModal(route, session) {
   // state underneath -- this cannot go through state.modal, because the line below answers
   // to builderModal first, and closing the record to show a map would throw away every
   // other field the person had typed but not yet saved.
+  if (state.intakeView && intakeManageModule) return intakeManageModule.renderIntakeManage();
   if (state.builderModal?.kind === 'wb-location') return renderLocationPickerModal();
   if (state.builderModal) return renderWorkspaceBuilderModal();
   if (['workspace-setup', 'workspace-setup-required'].includes(state.modal)) {
@@ -27356,6 +27524,16 @@ function onDocumentClick(event) {
   if (!event.target.closest('.address-lookup-control, .sf-inline-address-editor')) closeAddressSuggestionMenus();
   if (!event.target.closest('.job-type-combobox')) closeJobTypeMenus();
   if (event.target.closest('[data-takeoff-action]') && takeoffEvent(event, 'click')) return;
+  const formOpen = event.target.closest('[data-wb-form-open]');
+  if (formOpen) { event.preventDefault(); wbOpenForm(formOpen.dataset.wbFormOpen); return; }
+  const formRow = event.target.closest('[data-wb-form-row]');
+  if (formRow) {
+    // A row’s document must not also open the record it sits in.
+    event.preventDefault();
+    event.stopPropagation();
+    wbOpenFormRow(formRow.dataset.wbFormRow, formRow.dataset.wbFormCtx || '');
+    return;
+  }
   const sheetOpen = event.target.closest('[data-wb-sheet-open]');
   if (sheetOpen) { event.preventDefault(); wbOpenSheet(sheetOpen.dataset.wbSheetOpen); return; }
   const sheetRow = event.target.closest('[data-wb-sheet-row]');
@@ -29969,6 +30147,34 @@ function handleAction(event, node) {
     companyContactWrites()?.deleteCompanyContact(node.dataset.contactId).catch((error) => showToast(error.message || 'Could not delete that contact.', 'local', 'Company Contacts'));
     return;
   }
+  // Picking several contacts at once. The tick boxes are drawn only while the mode is on, so
+  // none of these can fire from a directory nobody has put into it.
+  if (action === 'toggle-company-contact-select') {
+    event.preventDefault();
+    companyContactWrites()?.setContactSelectMode(!state.companyContactSelecting);
+    return;
+  }
+  if (action === 'toggle-company-contact-pick') {
+    event.preventDefault();
+    companyContactWrites()?.toggleContactSelected(node.dataset.contactId);
+    return;
+  }
+  if (action === 'toggle-company-contact-pick-all') {
+    // Not preventDefault: this one IS the checkbox, and the re-render draws it from state.
+    companyContactWrites()?.toggleContactSelectAll(activeCompanyId());
+    return;
+  }
+  if (action === 'clear-company-contact-picked') {
+    event.preventDefault();
+    companyContactWrites()?.clearContactSelection();
+    return;
+  }
+  if (action === 'delete-company-contact-picked') {
+    event.preventDefault();
+    companyContactWrites()?.deleteSelectedContacts()
+      .catch((error) => showToast(error.message || 'Could not delete those contacts.', 'local', 'Company Contacts'));
+    return;
+  }
   if (action === 'set-contact-rail-scope') {
     event.preventDefault();
     state.contactRailScope = node.dataset.scope === 'private' ? 'private' : 'team';
@@ -30010,6 +30216,16 @@ function handleAction(event, node) {
       state.jobBoardView = view;
       localStorage.setItem(JOB_BOARD_VIEW_KEY, view);
     }
+    render();
+    return;
+  }
+  if (action === 'set-wb-feed-view') {
+    event.preventDefault();
+    // Read against the table rather than trusted: the value comes off an attribute, and an
+    // unrecognised one would leave the stream matching nothing with no button lit to undo it.
+    const view = WB_FEED_VIEWS.some(([id]) => id === node.dataset.view) ? node.dataset.view : 'all';
+    state.wbFeedView = view;
+    localStorage.setItem(WB_FEED_VIEW_KEY, view);
     render();
     return;
   }
@@ -31028,7 +31244,7 @@ function onDocumentSubmit(event) {
 
   if (event.target.matches('[data-public-form-response]')) {
     event.preventDefault();
-    submitPublicFormResponse(event.target).catch((error) => {
+    loadPublicFormPage().then((mod) => mod.submitPublicFormResponse(event.target)).catch((error) => {
       state.publicForm = { ...(state.publicForm || {}), error: error.message || 'Form response failed.' };
       render();
     });
@@ -34533,10 +34749,19 @@ function loadButtonPush() {
     buttonPushPending = import('./workspace/button-push.js').then((mod) => {
       buttonPushModule = mod.createButtonPush({
         h, can, wbDoc, wbSave, wbUid, showToast, render, canonicalCompanyId, activeSession,
-        state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle,
+        state, wbFind, wbReadFieldInput, activeCompanyId, wbLogActivity, wbItemTitle, wbRunAutomations,
         // A thunk, not the resolved seat: the contacts page is loaded on its own schedule, and
         // this keeps every storage-shape difference a contact has on that side of the boundary.
         contactSeat: (seat) => companyContactsPageModule?.contactButtonSeat(seat) || null,
+        // The directory as a destination. Its field list is read live, so a field added in
+        // Settings is available to a button that was configured before it existed.
+        contactsApp: (companyId) => wbContactsTargetApp(companyId),
+        // Filing the arrival. Awaited through the loader rather than read off the module: the
+        // contacts page is fetched when somebody opens it, and pressing a button that sends
+        // there is very often the first thing in a session that needs it.
+        contactIntake: (companyId, payload) => loadCompanyContactsPage()
+          .then((mod) => mod.receiveContactFromApp(companyId, payload))
+          .catch(() => ({ ok: false, error: 'Company Contacts could not load.' })),
       });
       return buttonPushModule;
     }).catch((error) => { buttonPushPending = null; throw error; });
@@ -37347,6 +37572,7 @@ function getRoute() {
   if (path.startsWith('/portal/')) return { name: 'client-portal', path, params, section: 'client-portal', companyId: '', token: decodeURIComponent(path.replace(/^\/portal\//, '')), jobId: '' };
   if (path.startsWith('/proposal/')) return { name: 'proposal-public', path, params, section: 'proposal-public', companyId: '', token: decodeURIComponent(path.replace(/^\/proposal\//, '')), jobId: '' };
   if (path.startsWith('/form/')) return { name: 'form-public', path, params, section: 'form-public', companyId: '', token: decodeURIComponent(path.replace(/^\/form\//, '')), jobId: '' };
+  if (path.startsWith('/intake/')) return { name: 'intake-public', path, params, section: 'intake-public', companyId: '', token: decodeURIComponent(path.replace(/^\/intake\//, '')), jobId: '' };
   if (path === '/login') return { name: 'login', path, params, section: '', companyId: '', jobId: '' };
   if (path === '/') return { name: 'home', path, params, section: '', companyId: '', jobId: '' };
   if (path === '/command') return { name: 'command', path, params, section: 'dashboard', companyId: activeCompanyId(), jobId: params.get('job_id') || '' };
@@ -38521,7 +38747,7 @@ function loadCompanyContactsPage() {
         normalizeCompanyContactField, render, requirePermission, requireMutableWorkspace, showToast, state,
         supabaseRow, supabaseWrite, timeAgo, wbDoc, saveWorkspaceBuilderDoc, wbCompanyApps, wbPlainVal,
         wbFieldBuilderMarkup, wbFileIcon, wbFileValues,
-        wbFmtDuration, wbNameValue, wbOptRow, acceptAttr, fileTypeKind, formatDate, WB_FIELD_TYPES,
+        wbFmtDuration, wbNameValue, acceptAttr, fileTypeKind, formatDate, WB_FIELD_TYPES,
         protectedFormDraftAttributes, renderProtectedFormDraftStrip, clearProtectedFormDraft,
         COMPANY_CONTACT_COLS, COMPANY_CONTACT_FIELD_COLS, COMPANY_CONTACT_FIELD_TYPES,
         COMPANY_CONTACT_WB_TYPES, wbRenderFieldInput, wbFieldConfigUI,

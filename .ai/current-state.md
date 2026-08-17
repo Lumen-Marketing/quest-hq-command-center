@@ -217,6 +217,32 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Overrides belong to the **job**, not the company's calculator, so they ride with the measurements in `deals.takeoff` / `underwriting_cases.takeoff`. Zero is a real override; empty is not.
 - The box keeps whatever was typed while it has the caret — `patchFigures` skips only the active element's VALUE, not its marker — and the formula's answer reappears on leaving an emptied box, rather than being restored mid-edit under somebody who cleared it in order to retype.
 
+## 2026-08-17 The app's four actions moved into the tab row
+
+- **Download app, Delete app, Share app, Save** now sit beside the tabs on the Settings tab, in that order, instead of at three different depths of the form.
+- **Save was the reason.** It sat at the foot of the second card, so you renamed the app at the top, scrolled past the icon grid and the tab list, and only then found the button — and anyone who did not scroll that far concluded the rename had not taken. Up there it is on screen the whole time you are editing.
+- The same actions, not new ones: the four `data-*` handlers were already bound document-wide for the workspaces section, so this is a move of markup. The body keeps the prose explaining what downloading and sharing DO, reworded to point at where the button now is.
+- **Delete keeps its asked-for place but gets 6px of air on each side.** A destructive button flush against two harmless ones is a mis-click waiting to happen.
+- **A linked app gets none of them.** Its name, icon and fields belong to the workspace it came from; its one real action, "Remove from this workspace", stays in the body beside its explanation.
+
+## 2026-08-16 The workspace dashboard's stream can be read one half at a time
+
+- A segmented control between the composer and the stream: **Both / Posts / Activity**, with counts on the buttons. Both stays the default — interleaving the two is the dashboard's whole idea — but posts and activity are different reading jobs, and a busy week of record edits buries every post under a hundred log lines.
+- **Filtered before the sixty-row trim**, not after. The other order shows whichever handful of posts survived sixty rows of mostly activity, which is the problem one level down rather than a fix for it.
+- **The empty state answers what was asked for.** "Nothing here yet" under a filter is wrong twice over: there may be plenty here, and it sends somebody off to write a post when all they had to do was press Both.
+- **Sharing while reading only Activity widens the view to Both** rather than filing the post correctly and showing nothing, which reads as Share having failed. Widened rather than switched to Posts, so the ledger they were reading stays on screen.
+- Kept in `WB_FEED_VIEW_KEY` and declared in `UI_PREF_SLOTS`, so it follows you to your other devices like the board/table choices. An unrecognised stored value falls back to Both instead of matching nothing.
+
+## 2026-08-16 A button can send a record to Company Contacts
+
+- **The directory is now a destination.** It appears in the button's app picker as "Company Contacts (directory)", alongside the workspace apps, because that is how somebody choosing one thinks of it. Pressing files the record as a contact.
+- **It does not grow to fit, and that is the point.** Every other push target gains the columns it was missing. The directory must not: its field list belongs to the COMPANY and is shared by every contact, so one press adding a column would change the shape of the whole business's contacts. `planPush` honours a `fixedFields` flag on the target — unmatched fields land in `skipped` instead of `create`. A record carrying Name, Phone, Email and Location sends the first three; Location stays behind, and the config panel says so before anybody presses anything.
+- **Name is a field there.** In storage it is the directory's own column, but to somebody looking at an app and the directory side by side it is a field called Name, and matching by label is the grammar the rest of the push already uses. No Name field on the source means the record's own title becomes the contact's name.
+- **Values cross as words, not ids.** A category on a record stores an option id that means nothing in the directory's list, so each value is read the way a person reads it and matched against the contact field's own options — the same path a "change fields on this contact" button takes, which skips a word the field has never heard of rather than minting it.
+- **An existing contact of the same name is filled in, not duplicated**, and filling in is additive: a field somebody has already typed into is left alone, because they knew more than a record being forwarded does.
+- **No move.** "Send it and remove it" is withheld for this destination: a contact is a person, and the record that named them still has a job to do in the app it lives in.
+- `wbContactsTargetApp` in `main.js` shapes the directory; `receiveContactFromApp` on the contacts page does the write. `button-push.js` hands over plain words keyed by contact field id and learns nothing about what a contact stores — the same boundary `contactButtonSeat` holds in the other direction.
+
 ## 2026-08-14 The Button field: a second action, its own look, and a searchable palette
 
 - **A second action.** As well as sending the record to another app, a button can **change fields on the record it sits on** — set values, clear chosen fields, or clear every field with one switch. Automatic fields are refused for the same reason they are never pushed: a value written to a calculation vanishes on the next render.
@@ -379,6 +405,528 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - The menu stayed open because the handler called `closeJobTypeMenus(input)` — and that function **exempts** the menu belonging to the input it is passed. It is written for "close the others while I work in this one", which is the opposite of what is wanted once a choice has been made. It now closes every menu.
 - The value only joined the list on save. A Company Contacts combobox stores the **label** and carries no `[data-wb-option-input]`, so it never reached `wbCommitOptionChoice`, which is what mints an option immediately for an app's category field — meaning a value you had just invented was still missing when you opened the next contact. `commitContactOptionChoice` now writes it on the click and patches the input's own option list in place, so the menu offers it without a `render()` that would discard the half-filled form underneath.
 
+## 2026-08-16 Underwriting Sheet — guys × days, line items, and a margin tier
+
+- **`docs/apps/Underwriting Sheet.questapp.json`** — 43 fields, 9 calculated, one sub-item list, and the first bundle in the repository to ship a **record layout**. The Estimating stage as a pipeline: **Scope & takeoff → Underwriting sheet → Quote built → Handed to the Closer**, plus On hold and Dropped.
+- It is a **third** underwriting app, not a replacement, because the two already here answer different questions. **Underwriter** is the margin decision on a job that is *already priced* — its `Decision` status is Draft / Ready to price / Review the scope / Reprice, an approval state rather than a stage, and its Labor is one typed money field. **Underwriting Calculator** is one specific tile takeoff transcribed from `Underwriting_Calculator.xlsx`, with 26 lines flattened into 78 fixed fields. Neither has the described flow, a crew-based labor model, line items, or margin tiers.
+- **Labor is derived, not typed.** `Man-hours = {Crew size} * {Days} * {Hours per day}` and Labor cost multiplies that by the rate — so changing the crew or the days moves every figure beneath it. This is the "guys × days" the field actually talks in, and the one thing the flat `Labor` money field on Underwriter cannot express.
+- **Line items are a sub-item list**, not fixed fields — Category, Description, **Vendor**, Quantity, Unit, Unit price, Amount, Vendor quote on file. Vendor pricing sits on the line it prices. This is the shape the Calculator's 78 columns should have had; it costs the per-record total, which is typed (`Line items total`) because a calculation resolves `{Label}` against the app's fields and there is no per-record rollup over a collection.
+- **The takeoff is the Sheet field**, laid out once as the eight GAF measurements with a waste column of real formulas (`=B2+B2*D2/100`), so every record starts from the grid rather than a blank one. Asserted against `normalizeSheetFull` so a cell the normalizer would drop or rewrite fails the build.
+- **Margin tier is the policy, Target margin % is the arithmetic.** A category cannot drive a formula, so the tier names the deal (Insurance 40 / Standard 35 / Preferred 30 / Volume 25 / Custom) and the number is what `Margin vs target` and `Price at target margin` read. Picking Custom posts a notification that it needs sign-off.
+- **Every formula multiplies its inputs out in full** — a calculation referencing another calculation reads 0, the rule this file has recorded twice before. Pinned numerically rather than by eye: 20,000 of line items at 8.6% tax with four guys × three days × eight hours at $45 gives 96 man-hours, $4,320 labor, $26,040 direct, $30,727.20 total at 18% burden, and at a $48,000 quote a live margin of **35.99%**, 0.98 under a 35% tier, against a price at target of **$47,272.62**. Both denominators that can legitimately be zero mid-sheet — no quote price, a 100% target — return `null` and render an em dash rather than a number that looks like an answer.
+- **Eight mutations confirmed to fail**, including dropping tax out of direct cost, applying the burden twice, losing the hours from man-hours, and pointing Gross profit at `{Total cost}` instead of multiplying out.
+- **A record layout, laid out the way the sheet is worked**: The job → Scope & takeoff → Labor (guys × days) → Materials & vendor pricing → the Line items card → What it costs to do → Price & margin → Handing it to the Closer → Trail → comments. 43 fields in nine groups is the difference between a form you read and a column you scroll. Verified by running the real `remapApp` over the bundle: all 43 arrive placed and live, and the Sub-items card follows the collection's reminted id rather than the bundle's.
+- **A hand-off button that pushes rather than moves.** The sheet is Estimating's record of how the job was priced and stays with them; the Closer gets a deal. It ships without a destination, because a bundle cannot name an app id in a workspace it has never seen — pick the Sales Pipeline once after installing.
+- **A `set_field` action was written and removed.** Moving to *Handed to the Closer* was going to stamp `Quote sent on`, but the automation runner does `item.values[fieldId] = ac.value` — a raw write — so `"today"` would have landed in a date field as the literal word. The bundle test allows `set_field` on a date and would have passed it; the value is not checked. Two notifications instead, and the date is typed.
+
+## 2026-08-16 Proposals — the document the client signs, above the per-trade deals
+
+- The Sales stage described ("client-facing proposal and securing the contract", Closer, lump sum ~90% or split per scope, draws to 100%, Estimate sent → Negotiating → Contract sent → Waiting to sign → Won) was **already Sales Pipeline**, stage for stage. What it could not express is the **proposal as a document**: `collections: 0`, one deal is one trade, so a lump sum wrapped across three trades had nowhere to live and a partial signing was inferred from which deals went Lost rather than recorded on the thing the client signed.
+- **`docs/apps/Proposals.questapp.json`** — 29 fields, 6 calculated, one sub-item list. It sits above the deals rather than replacing them. **Scopes** is the trades it covers — Trade, What it covers, Amount, In the proposal, **Signed**, Status, Job — so a partial signing is a set of ticks on the document, and **Partially won** is a stage of its own. Contract price is the one number the client signs; on a lump sum the scope Amounts are left blank.
+- **The Handoff at signature is a checklist**, not prose: contract filed, Signed ticked on each accepted scope, draws armed to 100%, buckets pre-loaded, a job per signed trade, unsigned scopes closed or re-quoted — with a progress bar over it.
+- **No hand-off button, on purpose.** One press creates one record, and the handoff fans out to one job *per signed trade*. A single button would file one job carrying the proposal's values and no trade, which reads as working. The checklist carries the step instead.
+- **Two limits stated rather than papered over**: the per-record sum of the scope Amounts cannot be derived — a calculation resolves `{Label}` against the app's fields, never a sub-item list, and there is no per-record rollup over a collection — so Contract price is typed. And "must total 100%" is shown by `Draw total %`, not enforced; the grammar has no conditional.
+
+### Two more install traps, found building it
+
+- **`collectionIds` is not remapped.** `remapApp` maps `config.collectionId` and only that, while `record-page.js:206` *prefers* `collectionIds` whenever it is a non-empty array. A bundle shipping the plural — which is what the editor writes — would install a Sub-items card naming the bundle's own ids, rendering empty while looking configured. Bundles ship the singular; the test refuses the plural.
+- **A `col:<collectionId>:<fieldId>` dashboard total is wiped on install.** `remapConfig` puts `fieldId` through `fieldIdMap`, which holds no such key, so it becomes `''` and the card silently degrades to a count of records. That figure is only reachable by adding the widget after install. The test refuses it in a bundle.
+- Verified by running `wbBuildInstalledApp`: the Scopes list and all seven of its fields get fresh ids, the layout card follows them rather than being dropped by the `!block.config.collectionId` filter, and the sub-item status options survive. **Six mutations of the new checks confirmed to fail.**
+
+## 2026-08-17 The Form field, BUILT: a document builder that writes its own PDF
+
+Shipped. The spec below is now history; this is what exists. 3,579 tests pass, `ai:check` and
+`tenancy:check` are green, and the bundle gate passes with 84 bytes of headroom.
+
+### Five files, and why they are five
+
+| File | What it owns | Pure? |
+| --- | --- | --- |
+| `src/form/doc-model.js` | the page and what sits on it, in **millimetres** | yes, 33 tests |
+| `src/form/doc-pdf.js` | writing the PDF file, by hand | yes, 30 tests |
+| `src/form/host-values.js` | a record's field as **plain words** | yes, 16 tests |
+| `src/form/doc-editor.js` | the modal: drags, inspector, exports | 20 tests, stub DOM |
+| `src/form/form-model.js` | kept: named form fields + the `{Label}` calculator | yes, 17 tests |
+
+The split is deliberate. `form-model.js` knows what a field is *worth*; `doc-model.js` knows where
+things *sit*. A proposal is a layout whose words happen to come from a record, so the arithmetic
+and the geometry have no business in one file. `form-model` is still live — `doc-model` takes
+`PAGE_SIZES` and `normalizePage` from it — so its 17 tests still mean something.
+
+### Millimetres, never pixels or percentages
+
+Everything on the page is in mm: an element 20 mm from the top edge is 20 mm from the top of the
+printout at any zoom, on any screen. The editor scales mm→px for display, the PDF writer scales
+mm→pt, and neither ever writes a pixel back into the document. Percentages would move things when
+the page size changed, which is exactly what somebody switching A4 to Letter does not want.
+
+### The PDF is written by hand, and it is a real file
+
+**The earlier note said "print-to-PDF, not a library". That was overtaken, and here is why.** Two
+properties of a proposal make a hand-written generator small:
+
+1. **The base fourteen fonts.** Every reader already has Helvetica, so a document asking for it
+   embeds no font data — which is where the weight in a PDF library goes. `doc-pdf.js` carries the
+   Adobe advance-width tables for Helvetica and Helvetica-Bold (95 numbers each; Oblique is a
+   sheared upright and shares its metrics), which is all that is needed to wrap and centre text
+   correctly. No `/FontFile` anywhere.
+2. **JPEG passes straight through.** A `/DCTDecode` stream *is* the .jpg, byte for byte, so an
+   image is embedded by copying it. No encoder, no zlib. The editor converts anything dropped on
+   the page — PNG, an icon glyph — to JPEG on a canvas first, which browsers do natively.
+
+Result: **selectable, searchable, copyable text** in a downloadable file, not a screenshot. Verified
+by generating a proposal and opening it with `pdfjs-dist` (already a dependency, for reading):
+1 page, 595×842 pt, `/Info` title, and the text extracts with the wrapping intact.
+
+**What the tests pin, because a bad PDF fails in ways "it downloaded" cannot see:**
+- **every cross-reference offset is read back and checked against the object it names.** A table one
+  byte out makes a file some readers open and others refuse. Mutating `at` → `at + 1` is caught.
+- the page is the right way up (the classic first PDF bug is one wrong subtraction);
+- `/Info` is an *indirect object* — an inline dictionary in the trailer is invalid;
+- a Huffman table (`0xC4`, in the middle of the SOFn range) is not mistaken for a frame header;
+- a path with nothing to paint emits `n`, so the next element does not inherit it.
+
+**Known limits, stated rather than papered over.** One page — the model holds one page, so a
+document that overflows is clipped at the box rather than continuing. Opacity is drawn at full
+strength (a transparency group per value is not worth it on white paper). Text outside Latin-1 is
+folded to ASCII or `?`, because WinAnsiEncoding is what a non-embedded font can address.
+
+### Email is honest about what a browser cannot do
+
+**No browser lets a web page attach a file to a mail client.** So Email does the two halves it can:
+downloads the PDF, then opens a `mailto:` draft prefilled with the subject and addressed to the
+record's own email field. The status bar says so: *"… has been downloaded — attach it to the draft
+that just opened."* A button that looked like it attached something and did not would be worse.
+
+### The starting document is the Sheet field's trick
+
+The field config is **two things**: a document name, and one button that opens the real builder on
+`config.doc` — the *starting document*. A record whose own value is empty opens that instead of a
+blank page, so **one layout serves the whole app** and a record that has diverged keeps its own.
+Both directions are pinned, and both mutations (never use the template / always use the template)
+are caught. This is exactly `sheet`'s starting-sheet arrangement, which is what "its like a sheet
+field" asked for.
+
+### Three states, not two: selected, dragging, typing
+
+The first cut of the pointer handling had two bugs that only a person with a mouse would find, and
+both are now tests:
+
+- **`contenteditable` left on permanently swallows the pointer**, so a text element could only be
+  dragged by its handles, never by its middle — which is how everybody moves things. It goes on
+  only while that element is the one being typed into.
+- **The first press must select *and* arm the drag.** Requiring a click to select and a second press
+  to move is the most irritating thing an editor can ask for.
+
+Also pinned: a press that does not move writes nothing (selecting must not save a document
+identical to the stored one); a field element and a shape are never editable, whatever is
+double-clicked; an empty text box being typed into shows nothing, not a placeholder to delete.
+
+### A record field on the page reads live, and reads formatted
+
+A `field` element holds `from` — the host field's id — and **stores no copy**, so a proposal laid
+out in March shows today's address. Its label comes off the record too, so renaming the field
+renames it on the document. `host-values.js` is why the words are right: a stage prints *Won*, not
+`o2`; money prints `$42,500.00`, not `42500`; a rating prints `4 / 5` rather than star characters
+the PDF has not got a font for. Three renderers — screen, PDF, PNG — all read that one function,
+which is the only way they stay in agreement. `placeableFields` is deliberately **wider** than
+`form-model`'s importable list: an element on a page is just text, so a rollup or a relationship
+prints fine even though a *form field* could not hold one.
+
+### The bundle: paid for by extraction, as instructed
+
+`main.js` gained **six lines** — `wbOpenForm` and one click branch — and everything else is behind
+`import('./form/doc-editor.js')`: a 12.9 KB gz chunk nobody who never opens a document pays for.
+
+The gate was 99 bytes over before this started. Paid by moving `wbColorSwatches` and
+`wbAppReportOptions` into `builder-modal.js`, which is already a lazy chunk and their only caller.
+That is the distinction the ceiling comment insists on and it held: **only a dynamic import reduces
+the entry chunk** — a statically imported module is bundled into the same one.
+
+**Headroom is 84 bytes.** The queue behind the gate is unchanged and now one item shorter.
+
+### Opened from a row, and a Save button beside Versions
+
+Two follow-ups asked for the same afternoon:
+
+- **The chip in a table row opens the document**, the same as the Sheet chip beside it. Both render
+  through `wbFmtVal`, so the record PAGE got it for free. `data-wb-form-row` + `data-wb-form-ctx`
+  carry the field and the seat; `openForRecord` in doc-editor.js finds the record itself, exactly as
+  the sheet does, so main.js only gains the branch. A chip with no record behind it (a header, a
+  preview) stays an inert span rather than a button that cannot work, and the branch
+  `stopPropagation`s -- without it one press would open the document AND the record behind it.
+- **A Save button in the header.** One press keeps a version, no prompt: it is pressed mid-edit and
+  having to answer a dialog every time is why people stop pressing Save. The name is the date and
+  time, which is what they would have typed. The Versions panel keeps its own NAMED save, because
+  somebody looking at a list of versions is naming one among many.
+
+**A row edit writes into the record immediately but calls `wbSave` and `render` once, on close.**
+`wbSave` is a network round trip per company, and a drag end, a colour and a nudge are each a commit
+-- persisting per commit would hammer the backend and repaint the app underneath the open modal. The
+document is in memory the moment it changes, so nothing is lost. Closing an unchanged document saves
+nothing. All four of those are mutation-tested.
+
+### Paid for again, and three guard tests re-pointed
+
+The row opener put the entry bundle 11 bytes over. Paid by moving the **icon picker** out: the grid
+and its loader into `app-settings.js`, and `wbIconLabel` → `iconLabel` into `icon-sets.js`, beside
+the names it reads. Both consumers -- the Settings tab and the builder modal -- were already lazy
+chunks, and builder-modal already imported from `icon-sets.js`, so that half was free. **Headroom is
+182 bytes.**
+
+Three existing tests asserted that code was IN main.js and broke. They were re-pointed, not deleted:
+what they guard is still worth guarding (a loader instead of an empty box; a spoken label instead of
+`ti-building-store` read aloud), and one now also guards the extraction -- it refuses `wbAppIconGrid`
+or `wbIconLabel` reappearing in main.js or in a ctx.
+
+### Two tests exist because this field shipped wrong twice
+
+`tests/form-document-field.test.mjs` and `tests/doc-editor-boots.test.mjs` are shaped by the two
+failures, both of which passed every test that existed at the time:
+
+- registered in `WB_FIELD_TYPES` but **not `WB_FIELD_ORDER`**, so the palette never drew it — the
+  render tests called the renderers directly and never the palette;
+- built as a **label/value form filler** when a document builder was asked for.
+
+So: the palette membership is asserted against the real `WB_FIELD_ORDER`; the click delegation in
+`main.js` is asserted, because *a card with a dead button is the same bug as a missing field*; the
+old scaffolding's markers (`data-wb-form-row`, `Add a field to the form`) are asserted **absent**,
+so a regression to a form filler fails; and the editor is opened and its buttons driven through the
+listeners it really registers. **21 mutations of the new code were run and all 21 were caught.**
+
+## Form field: the FINAL spec (supersedes the sections below)
+
+Given 2026-08-17 in full. Where this disagrees with anything below, this wins.
+
+### On the field itself, in the App Builder
+Add the **Form** field, give it a **label**, and a **form title**. That is all the field config does
+-- everything else is designed in the document builder, not in a settings panel.
+
+### The document builder
+Clicking the field's **file icon** on a record opens a modal, laid out like the Quote proposal
+reference. Inside it:
+
+- Type a **title** and free **text**.
+- Place **fields from the record**.
+- Place **images and icons**.
+- Place **shapes**.
+- **Every element** -- text, field, image, shape -- can be **resized, recoloured and repositioned**.
+- Text can be **bold / italic / underlined** and **resized**.
+
+**THE PREVIEW IS THE FORM.** This is the point that breaks the plan written earlier: it is direct,
+WYSIWYG editing on the page itself, NOT a settings pane on the left driving a read-only preview on
+the right. The proposal builder's split layout is the wrong model for the editing surface -- copy
+its modal shell and its saved-versions list, not its settings-pane-drives-preview arrangement.
+
+"Not just a form builder -- a DOCUMENT builder." The output is the artifact.
+
+### Output
+- Generate a **PDF or an image**.
+- **Download** it, or **email it to the client**.
+- **Or upload a PDF** and use that as the document instead of building one. So a form's document has
+  two possible origins -- designed here, or supplied -- and the stored shape has to allow both from
+  the start rather than being retrofitted.
+
+### What already exists and is still correct
+`src/form/form-model.js` -- the field definitions, the two sources (typed here / read LIVE off the
+record), and the calculation engine, all tested. The record-side label/value rendering and the
+row-based config panel are SCAFFOLDING and will be replaced by the builder above.
+
+### Not built
+The modal, the canvas and every element type on it, the styling controls, the saved-versions list,
+PDF/image generation, download, email, and PDF upload.
+
+## Form field: the interaction, confirmed
+
+Clarified 2026-08-17 against the Quote proposal modal and the Quick Create > Proposal button:
+
+- **Clicking the Form field on a record OPENS A MODAL.** It is not filled in inline. The field on
+  the record is an entry point plus a summary -- what has been made, and a way in -- the same
+  relationship the Sheet field has to its editor.
+- **The modal is the Quote proposal builder's layout**, which is the reference implementation:
+  - a **Saved list** at the top left -- "Reuse, edit, or export past versions" -- so one record can
+    hold several documents, each with its own number and draft/final state,
+  - **Template** and **Style** pickers,
+  - a document number, issued / valid-through dates, and the client block,
+  - a **live preview** filling the right-hand two thirds,
+  - **Save** and **Close** in the header.
+- Beyond the proposal builder: the preview has to be EDITABLE -- place fields, add free text and
+  shapes, resize, recolour, change font size -- and export to a PDF or JPG file.
+
+So the build order in the section below still holds, with one correction: step 1's shell is a MODAL
+opened from the field, carrying a saved-versions list, not a panel embedded in the record.
+
+## Form field: the target is a DOCUMENT MAKER, not a field list
+
+Corrected 2026-08-17 after the first slice was built the wrong shape. "I want the form to be like
+this" -- pointing at the **Quote proposal** modal -- "where I can customize it, add shapes, resize,
+change colour, add text, place other fields, add calculation, resize text... a document maker or
+PDF generator where I can generate a PDF file."
+
+The slice that exists (label/value rows on the record) is the wrong shape and should be treated as
+scaffolding: the model, the two field sources and the calculation engine are all still right, but
+the record-side rendering is not the destination.
+
+**Copy the proposal builder's SHELL.** `src/proposals/proposal-builder-modal.js` is the pattern:
+a settings pane on the left, a live preview on the right, and Save / Close in the header. Note the
+proposals modules are thin (64/62/51 lines) -- `PROPOSAL_TEMPLATES` and the preview renderer live
+in main.js and arrive through ctx, which is the wrong side of the bundle line for a new feature and
+should NOT be copied.
+
+**What the Form field needs beyond it.** The proposal builder picks a FIXED template and style; this
+has to be a free-form canvas: shapes, text boxes with their own size and colour, drag and resize,
+and the form's fields placed onto it. That is a small design tool and the single biggest piece --
+bigger than everything built for this field so far.
+
+Suggested order, each independently useful:
+1. The shell -- settings + live preview + Save / Open in new tab / Print, over the fields already
+   definable today. No canvas yet; the preview is the document laid out down the page.
+2. The canvas -- absolute-positioned blocks, drag, resize, z-order, colour, font size, shapes,
+   free text, and the form's fields as placeable blocks.
+3. Export -- print first, then PDF and JPG files. Both viable: the export code is lazily loaded, so
+   a PDF library lands in the form's chunk rather than the entry bundle.
+
+## 2026-08-17 The Form field, first working slice
+
+Registered as the 29th field type and usable end to end for design + fill-in. Verified by
+rendering both halves, not by reading them.
+
+- `WB_FIELD_TYPES.form` -- "A document you design, fill in and print", `ti-file-text`.
+- **Config panel** (`formConfigUI` in field-config-ui.js): document name, page size, landscape, and
+  a repeatable row per form field -- name, type, and where the value comes from. The same row shape
+  as the button's conditions and mappings.
+- **Two sources, which is the point**: `Typed in on the form`, or `From this record: <field>`. Only
+  host fields a document can show are offered, and a borrowed one reads the record LIVE.
+- **Record side** (`createFieldInput` case `'form'`): the designed document rendered as title +
+  label/value rows. Typed fields are inputs; borrowed fields and calculations render as text,
+  because writing to either is a value that vanishes on the next render. All answers live in ONE
+  JSON string in the hidden `[data-f]` input -- the sheet field's arrangement, so saving,
+  automations and exports need to know nothing about forms.
+- Verified: 4 rows in the panel, the borrow offered, the formula box appearing only for a
+  calculation, and on the record 2 editable fields with `{Qty} * {Rate}` computing 375.
+- Field ids are minted once and kept on the row, so an answer stays attached to its field across a
+  rename or a reorder.
+
+### Still to build
+
+The fill-in MODAL and fullscreen route (the card is inline today), the layout designer over
+`record-layout`'s blocks, and the export. PDF/JPG both confirmed viable: the export code is lazily
+loaded, so a PDF library lands in the form's chunk rather than the entry bundle.
+
+### The gate is over again, by ~95 bytes
+
+Registering a field type costs `main.js` inherently: the type entry, the read-back branch, and the
+row-add/remove handlers. The earlier extraction bought ~110 bytes and this spent more than that.
+Collapsing the two handlers into one writer changed nothing measurable -- the third time that trick
+has failed here. The next extraction candidates are listed above; nothing else should go into
+`main.js` until one of them is done.
+
+## 2026-08-17 The main.js extraction, and the Form field's model
+
+- **The entry bundle is under its gate again.** `wbProgStopRow` and `wbOptRow` were markup helpers
+  living in `main.js` and handed to lazily-fetched panels through ctx, so every session that never
+  opened a field editor carried them. `progStopRow` moved into `field-config-ui.js`, its only
+  reader. `wbOptRow` had TWO readers -- the App Builder field editor and the Company Contacts one
+  -- so it became `src/workspace/option-row.js`, imported by both; since neither panel is in the
+  entry chunk, a module they share is not either.
+- **The earlier claim that this would not help was wrong.** `field-config-ui.js` is reached through
+  `import()`, so it is its own chunk -- moving code into it does leave the entry bundle. Getting
+  that right is what made the extraction work at all.
+- Three tests asserted `wbOptRow` reaches the contacts page through ctx. Their intent -- "the
+  editor is the App Builder one, not a copy of it" -- is unchanged and now enforced more strictly:
+  one shared module rather than a helper duplicated per consumer.
+- **`npm run check` is green end to end** for the first time in the session: 3412 tests, ai:check,
+  tenancy:check, build, bundle budget, bundle boots. Headroom is real but thin -- bank it.
+
+### The Form field: model first, deliberately not the Sheet field
+
+`src/form/form-model.js`, pure and tested without a browser (17 tests). A sheet is a grid of
+anonymous cells addressed A1..Z99; a form is a list of NAMED, TYPED fields with a layout of its
+own. They share the container pattern -- one JSON value in a hidden `[data-f]` input, a large
+modal, modules fetched on demand -- and nothing of the grid. A test asserts the shape carries no
+`rows`/`cols`/`cells`/`merges`, so it cannot drift into being a worse spreadsheet.
+
+- **Two sources per field**: `own` (typed here) or `record` (read LIVE off the record the form sits
+  on, by host field id). A record-sourced field stores nothing, so it cannot go stale -- asserted.
+  `importableFields` matches on TYPE rather than label, because the form's field is already named
+  by whoever designed it, and marks the ones already claimed.
+- **Calculations** reuse the App Builder's `{Label}` grammar and its refusals: a reference to
+  another calculation reads 0 and is REPORTED rather than silently wrong, and the character
+  whitelist runs before `Function()` is reached.
+- **A mutation run caught a bad test of mine**: deleting the whitelist did not fail anything,
+  because `constructor` throws on its own and the try/catch masked it. Now pinned with `0x10` and
+  `(8).toFixed(0)` -- valid JavaScript returning a number, so only the whitelist can refuse them.
+- **Export: PDF and JPG are both viable, and the reason matters.** The export code is lazily
+  loaded, so a PDF library lands in the FORM's chunk, not the entry bundle just cleared. JPG needs
+  no dependency (SVG `foreignObject` -> canvas -> `toBlob`). Still to build: the field-definition
+  editor, the layout designer over `record-layout`'s blocks, the fill-in modal, the fullscreen
+  route, and the export itself. The field type is deliberately NOT yet registered in
+  `WB_FIELD_TYPES` -- a type in the palette with no editor renders as nothing.
+
+## Next: the src/main.js extraction, with the groundwork done
+
+The entry bundle sits at ~364662 against 364544 (+64 tolerance). Everything else is green. What
+has already been measured, so none of it needs rediscovering:
+
+- **Only a DYNAMIC import wins.** `activity-log.js`, `app-portability.js` and the other statically
+  imported workspace modules are already in the entry chunk; moving code into one of them saves
+  nothing. The gain comes from a module reached through `import()`, the way `field-config-ui.js`,
+  `data-io.js`, `record-panel.js` and `button-push.js` are.
+- **A top-level `const` in main.js measured ~100 gzip bytes.** Twice. Prefer hanging state off the
+  existing `state` object over adding a module-level binding -- that alone paid for the record-page
+  scroll pin.
+- **Do not collapse near-identical blocks into a table.** Tried twice now, on the repeatable-row
+  handlers and again on the five bulk-select handlers: **21 bytes worse** the second time. Repeated
+  literal blocks compress almost to nothing; a shape table does not.
+- **Measurements inside ~60 bytes of the ceiling are noise.** The same file failed and passed the
+  gate several times this session. Aim for real headroom, not a passing measurement.
+- **Candidates, by size** (lines to the next top-level function, so they include intervening
+  constants -- treat as a rough ranking):
+  `handleAction` @27749 (~2892, a dispatcher -- extract *branches*, not the whole thing),
+  `onDocumentSubmit` @30693 (~606), `mountWorkspaceBuilder` @20106 (~571),
+  `wbMountModal` @20789 (~371), `onDocumentInput` @34019 (~329), `onDocumentChange` @34402 (~273),
+  `wbMountFileFields` @19123 (~150, four call sites all in main.js -- each must be able to await
+  the module first, which is the work).
+- Two features are already shipped OVER the gate and want paying for: the one-press checkbox flip
+  and the record-page scroll pin. Both are small and both are in main.js.
+
+## Queued: what is still behind the entry-bundle gate
+
+The Form field is BUILT -- see the 2026-08-17 entry above. What was written here ("NOT started",
+"PDF via the browser’s print-to-PDF, not a library") is superseded: it writes its own PDF.
+
+### The queue behind the entry-bundle gate
+
+Six items now wait on `main.js` having headroom. In priority order once it does: a dedicated
+`arrived` automation trigger (arrivals currently reuse `created`); Button pin-first/pin-last
+field ordering; and the per-record activity cap. Two more are already
+shipped OVER the line and want paying for: the one-press checkbox flip and the record-page
+scroll pin.
+
+## 2026-08-17 One press flips a Yes/No, and merged fields land last
+
+- **"I can't toggle the button."** The record's own history had the diagnosis: *Changed Something to bid — no → no*. A Yes/No went through the click-to-edit path, so the press was consumed OPENING an editor that then drew a switch also reading No. Nothing appeared to happen, and clicking away committed the value it already had. Opening the editor on a checkbox now flips it, because that press was the toggle gesture; pressing the switch again before leaving still changes it back. Scoped to `checkbox` — every other type opens untouched, which is what you want before typing over it.
+- **A field the push has to CREATE in the target is now appended, not prepended.** The target app's own shape is the one its people know, and an arrival at the top silently reorders the form underneath everybody using it. Arrivals keep the order they had at home, after the fields already there. The same applies to the Contact field minted when pushing from a contact card — which the first mutation run showed was uncovered, so it now has a test.
+- One existing assertion encoded the old order (`Name, Age, Address`) and was updated to the new one (`Address, Name, Age`) rather than deleted: it is guarding a deliberate decision either way.
+
+### The entry bundle is over the gate again
+
+- 364614 against 364544 (+64 tolerance) — 6 bytes past, from one line added to `main.js` for the checkbox flip. It has now failed and passed several times this session on the same file: **there is no headroom left and the measurement is inside gzip noise of the ceiling.**
+- Everything else is green (3437 tests). The blocker is the one the budget file already names: extract slices of `src/main.js` into lazily-fetched modules. Nothing further should be added to `main.js` before that.
+
+## 2026-08-17 History that survives the move, the import, and the contact it created
+
+- **Activity was lost when a record moved between apps.** Two causes. The transfer **appended** the carried entries, and the log is newest-first truncated from the TAIL -- so a record's oldest history landed exactly where deletion starts. And the cap was **60 for the whole workspace**, which three apps sharing one workspace pass in a morning. Merged by timestamp now, and the store keeps 400. 60 was never a display limit: `wbFeedStream` sorts and slices its own 60, so the store was capped far tighter than any reader needed.
+- **The right rule is per RECORD, not per workspace** -- so a busy app can never cost a quiet record its past. Written, measured, and **reverted**: it cost ~140 gzip bytes in the entry bundle, and the budget note says the next growth must be paid for by extraction rather than another bump. The wider flat cap is the same fix one number looser, and free. The per-record version is the follow-up.
+- **Creating a contact is now an event on the record.** A text field converted to a Company Contact filed somebody in the directory and said nothing; the card simply appeared. The arriving record now reads "*Roman* was added to **Company Contacts** and linked as **contacts**", then the move -- logged before the arrival so it lands in the order it happened. Says "was already in" when an existing contact is reused rather than claiming a new one.
+- **Imported records say where they came from.** The import logged one workspace-level line -- "Imported 11 items into 1" -- with no `itemId`, which means `recordFeed` showed it on **none** of the rows it described: every imported record read "Nothing yet". Each row now carries `Imported from <file>`, and the summary line names the file too.
+- **The contact card can title a row by a Company Contact field.** It was excluded from the picker outright on the grounds that it would print the name of the person whose card you are on -- true only of the field pointing back at THEM, which `itemTitle` already drops because, unlike the picker, it can see the value. A second one (Site contact, Referred by) names somebody else and is the most useful thing on the row, so automatic now prefers it over the first text field.
+
+### The entry bundle is on the ceiling
+
+- Two builds this session failed the gate at 364613-364681 against 364544 (+64 tolerance), and the same `main.js` passes on others: it is **oscillating on gzip noise**, which means there is no real headroom left.
+- Reclaiming it by collapsing the five bulk-select handlers into a lookup table measured **21 bytes worse** -- the lesson this file already records from the repeatable-row handlers: near-identical blocks compress almost to nothing, a shape table does not. Reverted.
+- The budget file's own note is the instruction: raising the ceiling again is blocked, and the durable fix is extracting slices of `src/main.js` into lazily-fetched modules. Nothing further should be added to `main.js` until that is done.
+
+## 2026-08-17 `await wbSave()` never waited, so a send took two or three presses
+
+- "My setup was send to another app then save to Company Contacts, but it just saves to contacts, not sends to the app. It takes me 2-3 clicks before it appears."
+- Not the fan-out: driven in isolation, app-then-contacts and contacts-then-app both land on the first press. The fault was one layer down. **`wbSave` was not async and returned nothing** — it started each `saveWorkspaceBuilderDoc` and dropped the promise on the floor with a `.catch`. So the four callers written as `await wbSave(...)` awaited `undefined` and carried straight on while the write was still in the air.
+- The consequence matches the symptom exactly: a record pushed into an app, then a realtime refresh arriving before the write committed, reloads the doc from the server **without** it. Press again and the timing sometimes wins. `saveWorkspaceBuilderDoc` guards on a revision and retries on collision, which is why repeated presses eventually stick.
+- The worse consequence is the one nobody had noticed: the MOVE's whole safety is the ordering — "the record is removed from here only after the target is saved, so a failure to write there cannot lose it from both". **That was never true.** The removal raced the write.
+- `wbSave` now returns `Promise.all(...)` over its writes. Non-awaiting callers (64 of the 68) are unaffected — they ignored `undefined` and ignore this — and the per-write `.catch` stays so an ignored return can never surface as an unhandled rejection. The two remaining un-awaited calls in the push are now awaited too, including the one that persists the REMOVAL half of a move.
+- Awaiting inside `applySet` meant making it async, which it was not — and `await` in a non-async function is a **syntax error that made the whole module un-importable**. The test written for this change reads `main.js` as text and passed anyway; the three push tests that actually import the module caught it. Confirmed by putting the error back: `button-to-contacts` fails, the text-based one does not. Reading source is not running it, again.
+
+## 2026-08-17 The field mapping shipped broken — the row deleted itself as you filled it in
+
+- Picking a field in the left select did nothing: the right one stayed on "Pick a field here first" for ever, so the control could never be completed.
+- The left select carries `data-wb-rel-refresh`, so **choosing a field collects the panel and re-renders it from what was collected**. The readback filtered `row.from && row.to`, which threw away the half just chosen — the row came back blank, and the right select, which only fills once the left one resolves, never woke up. Every keystroke of progress deleted itself.
+- `pull-rows.js` already had the answer, and the comment naming this exact trap: *"`keepPartial` is for a panel that is still open: a row is half-chosen for as long as it takes to choose the other half, and deleting it there would take the row away from the person filling it in."* The relationship copy has used `readPullRows(..., { keepPartial: true })` since it was written. The button's mapping hand-rolled its own readback and reinvented the bug the helper exists to prevent.
+- Now reuses `readPullRows`, which also enforces one source per destination — a rule `planPush` was separately checking, so that is one rule in one place again. The extra-destination rows keep every row for the same reason: their company select re-renders too, and a row that vanished when touched could never be filled in.
+- **The unit tests all passed while the feature was unusable.** They called `planPush` with a config object assembled in the test, which is the state AFTER a row is complete — the failure lived entirely in the round trip between the DOM and the draft, which nothing exercised. `tests/button-map-halfrow.test.mjs` drives the real sequence — render, choose, collect, render — and asserts the right select is no longer disabled. Both mutations (restoring the filter, and `keepPartial: false`) fail it.
+- Fifth time this session that a feature was green in tests and broken in the browser, and the second where the fix was already written elsewhere in the codebase.
+
+## 2026-08-17 Move into the directory is allowed again, and actually moves
+
+- **"Why did you remove the mode option in the button action?"** It was not removed. Rendering the panel shows `push, move, set, link` for an app destination and `push, set, link` for **Company Contacts** — move was withheld only there, by a rule that predates this session (`allowMove = ... && !toContacts`). What changed two days ago was that the withholding became *visible*: a notice was added explaining the action had been rewritten to a copy, which is when it read as having been taken away.
+- The original reasoning — a contact cannot be "moved" INTO the directory, because the directory holds the person while the record that named them still has a job where it is — is a fair default and a bad rule. **An intake app whose rows ARE people** has nothing left to do with the row once the person is filed, and forcing a copy left it sitting there to be deleted by hand.
+- Move is now offered for the directory and **honoured**: `pushToContacts` removes the source record, logs it on the workspace rather than against the record (which no longer exists there), saves, and closes a form left open on it. Ordered **after** the contact is saved, never before — the same rule the app-to-app move follows, so a failure to file cannot lose the record from both places.
+- The panel says what it will do rather than leaving it to be discovered, and the toast names it: "added to Company Contacts with 2 fields **and removed from this app**".
+- The test that asserted move was withheld is flipped rather than deleted: the behaviour it guarded was a deliberate decision, and it is now guarding the opposite decision plus the ordering. Three mutations confirmed to fail — and **two more first reported as passing turned out to be mis-aimed**: `sourceApp.items = sourceApp.items.filter(...)` appears in both the app-to-app move and this one, and `replace(..., 1)` hit the first. Re-run scoped to `pushToContacts`, all three fail as they should.
+
+## 2026-08-17 Naming the destination field, and sending to several apps at once
+
+- **"Where is it? I want to set a specific field to copy or move the data to another field."** It did not exist. The "What to send" switch picked *which* fields travel; the destination was always the field with the same label, so two apps calling one thing by different names — Full name here, Client name there — could not be joined up at all short of renaming a field. The relationship field had the control; the button did not.
+- **`config.map` is a list of `{ from, to }` field ids**, drawn as the same from → to rows the relationship copy uses. A row **beats the label match** for that field, and the destination list is narrowed by the same type rule the push applies, so an impossible pairing is never offered rather than offered and refused. Ids on both sides, so renaming either afterwards keeps the mapping — the opposite trade-off to the label match, and the right one for a pair somebody chose deliberately.
+- Two ordering traps closed: a destination an explicit row claims is **worked out before the loop**, so a field that merely shares its name cannot reach it first by sitting higher in the list — otherwise which won depended on the order somebody dragged them. And **two sources aimed at one destination** is reported rather than silently last-wins, which would have looked like the first field never travelled. Changing the destination app clears the mappings, because they named ids on both sides.
+- **`config.also` sends one record to several apps.** The extras go **first** and always as **copies**; the main destination goes last, because that is the one that may be a MOVE and a move deletes the record from here. Running it first would leave nothing to copy.
+- **A failed extra stops the move.** Half a fan-out plus a deletion is the one outcome with no way back — the record gone from here and in only some of the places it was meant to reach. A thrown save counts as a refusal: the throw already unwound past the move, but only by accident, and catching it makes the guarantee the code's rather than the call order's.
+- Duplicates are folded, the main destination repeated as an extra is ignored, and the source app is refused as a destination for the reason the picker never offers it — a record filed into the app it already lives in is a loop.
+- The extras match on field names only; the mapping belongs to the main destination, whose field ids mean nothing in another app. The panel says so rather than leaving it to be discovered.
+- 20 new tests across `button-push-types` and `button-push-multi`, the second pressing through `createButtonPush` against three real target apps. **Nine mutations confirmed to fail** — including sending the extras after the main destination, sending them with the button's own action, and letting a namesake steal a mapped destination. Two more "misses" on the first mutation run turned out to be mutation strings that never applied, which is why the runner now refuses to report a result it did not actually produce.
+
+## 2026-08-17 The Button push learns types, and text can become a contact
+
+- "Prospects has Name (text) and Age (number); Leads has Name (Company Contact) and Age (number). Sending should convert the text to a Company Contact, save it to Company Contacts, and carry Phone, Location and Email too — and string to int is prohibited while int to string is allowed."
+- **The push ignored types entirely.** It matched on the label and carried the value whatever the two fields were, so "Age" as text landed in "Age" as a number and the target read `NaN`. It now asks `canPull` — **the rule the user described already existed**, as the relationship copy's `ACCEPTS` table: anything reads fine as text, only a number may land in a number. Reused rather than copied, so the two cannot drift, and a test asserts the push agrees with `canPull` across every type pair except the one addition below.
+- A label match that cannot convert is now reported in **`plan.skipped` with the reason in words** — "Age is a number there and text here — text cannot become a number" — which the config panel already prints, so it is visible before anybody presses rather than after.
+- **Text arriving at a Company Contact field is FILED, not written.** That field stores an id; writing the words would render as a broken chip. The person is put in the company directory first and the field is given their id. `CONTACT_MINT_FROM` limits it to the text family: `Age → Contact` is somebody having named two unrelated fields the same thing, not an instruction to create a person called 42.
+- **The contact is built from the whole record, not from that one field**, which is what carries Phone, Email and Location across — the directory is matched by label with the same rules, and `fixedFields` stops it growing columns the whole company shares. An existing contact of that name is **reused, never duplicated**, and only their blank fields are filled: a button press is not permission to overwrite the company's record of a person.
+- **`canPull` itself was deliberately NOT widened.** The relationship copy uses it and has no way to create anything, so allowing text there would write a name where an id belongs — the exact bug the option copy had on 2026-08-14. The mint is the push's own rule, because minting is the one thing a push can do that a copy cannot.
+- One builder now serves both ways a record becomes a contact — a button pointed straight at the directory, and this conversion — so they cannot disagree about which fields travel. Refactoring that path left two references to a local that no longer existed; **the existing tests caught all four**, which is the first time in this file's history that a refactor was caught by the suite rather than by a user.
+- A contact that cannot be filed (no permission, a failed write) reports and **the record still goes**: losing the link is bad, but a move that stopped there would leave the record nowhere at all.
+- 22 new tests across `button-push-types` and `button-push-contact-mint`, the second pressing the button for real through `createButtonPush`. **Nine mutations confirmed to fail**, including writing the contact pair as raw text, never writing the id back, minting from a number, and widening the shared copy rule.
+
+## 2026-08-16 Picking several contacts at once, and two record-layout bugs
+
+- **Company Contacts gained a Select mode.** A **Select** button turns on a tick-box column; **Delete _n_** and **Clear selection** appear beside a live count once anything is ticked; **Cancel** leaves and forgets the ticks. Off by default — a directory is read far more often than pruned, and a checkbox on every row all the time makes the common case noisier for the rare one.
+- While picking, **a row picks rather than opening**. Leaving it opening the contact would mean the same click on the same pixel does two different things depending on a mode invisible from the row, and every mis-click costs a page load.
+- The header box selects **what is on screen**, so it respects the search and the type chip. A contact ticked and then filtered away keeps its tick rather than being silently dropped by a box that says "all".
+- **The delete asks first, and counts how many of the selected are still named by records** — deleting a contact a record points at leaves that record showing a broken chip, and in a bulk delete nobody is looking at the cards one at a time to notice. It is the same soft delete (`deleted_at`) the single delete does, minus the navigation, which only made sense when you were looking at the card of the contact you just removed.
+- **A partial failure keeps its rows ticked.** Every row is attempted rather than aborting on the first error, the ones that worked are removed, and the toast says "2 deleted, 1 could not be" with the failure still selected so a retry is one press.
+- The tick-box column is added to the **shared track list**, so the head and the rows stay aligned. A cell added to the rows alone shunts every value one column left of its heading — markup that is individually correct and collectively wrong, which is why the test renders both and compares the counts. **Ten mutations confirmed to fail**, including that one, a hard delete, a dropped permission check and a missing confirmation.
+
+### Resizing a record-layout card turned it into a field group
+
+- `resizeBlock` is `resizeWidget` re-exported from the dashboard, and that function re-normalized through `normalizeWidget` — which only knows widget types. A block type it had never heard of became `'metric'`; `normalizeBlock` then read `'metric'` as unknown and rewrote it again to `'fields'`. **Comments, Details and Sub-items were all destroyed by a width click**; `note` survived because it is the one name in both tables, and `fields` survived by luck by round-tripping through the two fallbacks. Sub-items losing its list would have hit the Scopes and Line items cards on the apps added today.
+- `record-layout.js` already claimed these four shared functions "only ever touch `id` and `size`". Three did. `resizeWidget` now does too — it clamps the size and copies the rest, consulting no type table. A non-number leaves the card as it was rather than snapping it to a default width belonging to a table it must not read.
+
+### A draggable card swallowed every click inside it
+
+- In layout-editing mode the whole card carries `draggable="true"`, so a press anywhere in it was a drag waiting to begin — and the browser eats the click the instant the pointer moves a pixel. On the record page every field value is also a click-to-edit control, so reordering and editing were competing for one gesture and reordering won: opening a Yes/No switch and actually flipping it was a coin toss, which reads as the toggle being dead.
+- The drag now arms only while the pointer is down on the **grip**. Both grids already drew one captioned "Drag to reorder" with `cursor: grab`, so this is the behaviour the interface was already promising. Every press re-decides, so the flag cannot stick on.
+
+### A note on line endings
+
+- `core.autocrlf` is `true` here, and editing `src/main.js` rewrote all 47,000 lines as CRLF. Git's EOL filter does not normalize that file (it does normalize its neighbours), so the change surfaced as a whole-file diff and broke `sidebar-navigation-static.test.mjs`, whose regex spans a newline. **134 of the 247 source-reading tests do not normalize CRLF**, so any of them with a multi-line pattern is fragile on a Windows checkout. `main.js` was put back to LF; the wider fragility is untouched and worth a sweep.
+
+## 2026-08-16 The directory was in the destination list all along, and unfindable
+
+- "Add a choice here where I can send it to company contacts" — asked with the Button field's **company** dropdown open. The choice already existed, one control further down, and the report is still correct: a feature nobody can find is not shipped.
+- **The placeholder was the whole bug.** The second select read **"— Select an app —"**, and Company Contacts is a directory rather than an app, so the one list holding it described itself as excluding it. Somebody hunting for a company-wide directory then reasonably tries the company dropdown, which lists companies. Now **"— Select a destination —"**, with the options under **Apps** and **Company-wide** optgroups so the directory is visibly a second kind of destination, and the label carries *(an app, or the company directory)*.
+- The directory is **not** added to the company dropdown, which would be the literal request. `cc-<companyId>` is per company: that select answers *whose*, the destination select answers *what*. Putting it in the first one asks "which company's contacts?" twice and breaks the two-step.
+- **The silent action rewrite is now spoken.** Picking the directory while the action is "Send it and remove it from this app" rewrites it to a copy (`action = rawAction === 'move' && toContacts ? 'push' : rawAction`) and drops move from the dropdown — correct, because the directory holds the person while the record that named them still has a job where it is, but previously the dropdown just quietly read something else. It says so when it happens, and only then.
+- **The test that let this through greped for the label.** `assert.match(src, /Company Contacts \(directory\)/)` passed the whole time — the string was in the file, in a select that presented it as not belonging. A source-text assertion cannot see which control a label lands in. Replaced with five tests that call `renderFieldConfig` and read the rendered `<select>`: the directory is an option of `wbBtnApp`, the placeholder does not say "app", it follows the company picker, it comes back selected, a button on a contact card is not offered it, and move is withheld with the notice shown. **Six mutations confirmed to fail**, including putting the old placeholder back. This is the fifth source-text assertion in this file's history to wave a defect through.
+
+## 2026-08-16 Prospects, Leads and Nurturing — the three apps before the pipeline
+
+- "Prospect: drip working him, no money attached. Lead: the prospect progresses into a lead once they have got something to bid. Nurturing: warm, not ready yet." Three `.questapp.json` bundles filling the Prospecting stage that sits in front of the existing Sales Pipeline.
+- **`docs/apps/Prospects.questapp.json`** — 24 fields, **no money field of any kind**, asserted by a test. "No money attached" is the definition of the stage, and a money box here invites a guess; a funnel total built from guesses is worse than no total. The drip is a **checklist** of six touches feeding a **progress** bar, beside Touches / Last touch / Next touch, and Next touch drives a **calendar** widget — the queue is the app's main screen. A **Something to bid** checkbox is the gate out.
+- **`docs/apps/Leads.questapp.json`** — 32 fields, 2 calculated. Money attaches here and attaches as an **estimate**: Est. value / Est. cost / Est. gross profit / Est. margin %, deliberately not "Contract price", which belongs to Sales after a signature. **One lead per trade per address**, the same rule the Sales Pipeline runs on, so a Won lead becomes exactly one deal. It carries **both** `Trade interest` (tags, what they asked about, arriving from the prospect) and `Trade` (category, required, the one trade this lead bids) — so a two-trade prospect becomes two leads that each still remember the whole interest.
+- **`docs/apps/Nurturing.questapp.json`** — 27 fields. **Revisit on is the only required date in the three apps**: a nurture list with no wake-up date is a graveyard, and the calendar over it is the app's main screen. A cooling Lead lands here with its estimate intact rather than being marked Lost. **Why not now** records what has to change; a **Buying signal** tick turns it Hot and says so.
+- **The three hand records to each other with buttons**, and a test pins the shared spine — Contact, Company, Address, Trade interest, Source, Owner, Notes, same label and same type in all three, with Source and Trade interest offering identical option labels. A button matches fields **by label** and translates an option **by its label**, so a spine that disagrees on wording silently grows the destination a duplicate column on the first press.
+- **A bundle cannot carry a button's destination.** `targetApp` names an app id in another workspace and is in the importer's un-remapped list, so each hand-off button installs disabled reading "This button has no destination set yet." Six dropdowns to pick after install; the button labels name where each one goes.
+
+### What these are the first bundles to use, and the four traps found doing it
+
+- They are the first `.questapp.json` files to ship a **record layout**, **automations**, a **progress source** and **buttons**, so none of that surface had test coverage. `tests/app-bundles.test.mjs` gained five generic per-bundle checks, and **all sixteen mutations of them were confirmed to fail** before being trusted — the repeated lesson in this file's history.
+- **A record layout with explicit `fieldIds` hides what it omits.** `blockFields` honours the list exactly, so a field the author forgot to place is not out of order, it is invisible with nothing on screen to say why. The test requires every field in exactly one group.
+- **Nothing inside a button's config is remapped** — not `when[].field`, not `set[].field`, not the chosen `fields` list. Field ids are reminted on install and `wbBuildInstalledApp` remaps exactly one field-config key, `progress.config.source`. A condition shipped in a bundle would compare a field that no longer exists, read as always-false and lock the button shut while looking configured. None are shipped, and the test refuses them.
+- **A record button cannot run the `link` action.** The config panel offers "Open a link, call or email" for an app field, but `press()` in `button-push.js` has no link branch for a record seat — only the Company Contacts card implements it. A link button on a record would install *enabled* and do nothing. Left out, and the test refuses it. **This is a live gap in the Button field, not something these apps introduced.**
+- **A sourced progress field is derived, not stored,** so `item.values` holds nothing for a numeric automation trigger to read and such a rule never fires. The automations trigger on statuses and checkboxes instead.
+- **A pre-existing bug fell out of the new dashboard test**: `Underwriting Calculator.questapp.json` totalled "Total for client", a **calculation**, and a `sum` widget reads `item.values[fieldId]` — which is never written for a calculation. It showed **$0.00 however many roofs were priced**, and had done since the app was added. Fixed in `scripts/build-underwriting-app.mjs` rather than in the generated file, whose own header already warns about exactly this trap one section further up. No stored money field there could stand in — every figure in that app is a calculation, and the per-line `price` fields are unit costs that mean nothing added across records — so the card is now "added this week", which is a real number.
+- Verified by **running the installer**, not only by reading the files: `wbBuildInstalledApp` over all three confirms every id reminted, each progress source landing on its checklist, all 24/31/27 fields placed on the record page, every widget/view/card field live, automations remapped with their option ids intact, buttons arriving with text, icon and action but no destination, colours surviving sanitisation, and a second install named "Leads (2)" sharing no ids with the first.
+
 ## 2026-08-15 The Views panel can be turned off
 
 - **"In the settings, can you add an option where I can hide this card, so the items field expands and occupies its space."** App settings gained a **Views panel** tick box under Tabs: untick it and the Items tab drops the saved-views rail, and the list takes the column it was using. Stored as `app.hideViews` on the app, so it is the app's layout rather than one browser's — the same thing the Tabs setting above it is, and for the same reason: an app that never groups its records wants the width back permanently, not per visit.
@@ -397,6 +945,32 @@ Invited workers now land on the permission-neutral Dashboard after acceptance. O
 - Paid for against the bundle budget by extracting `src/company-contacts/page.js`, moving the Company Contacts write path into it, and moving the whole map-pin runtime into `src/crm/location-picker-modal.js`.
 - Verified against the real render in a headless browser: six cells match six grid tracks, the cross-workspace rollup reads `1 Deal · 2 Jobs` / `$35,000` from two workspaces, chip counts survive filtering, the wide table pans sideways, and every card row is a link with no nested controls.
 - Known gap found and fixed during verification: record rows were labelled with the contact id because the headline took the first value on the item, and the contact link is usually written first. Titles now come from the app's first text field.
+
+## 2026-08-17 `docs/apps` was emptied, and what came back
+
+- The whole `docs/apps` folder was found **empty** at the start of this session — every `.questapp.json` gone, the directory itself still there. Four were tracked and came back from `git checkout`: **Jobs**, **Sales Pipeline**, **Underwriter**, **Underwriting Calculator**.
+- **Five were never committed and are not recoverable from git**: Leads, Nurturing, Proposals, Prospects, and Underwriting Sheet. `tests/app-bundles.test.mjs` is itself uncommitted (+330 lines) and tests four of them, so the wipe left the suite red with the app files gone and their tests still present.
+- **Underwriting Sheet was rebuilt** against those tests, which turned out to be a precise specification — the pinned arithmetic, the four stages, the sheet grid's `A1`/`E2`, the crew-based labor model and the Line items list all came back from what the test asserts rather than from memory.
+- **Underwriting Calculator was regenerated** with `node scripts/build-underwriting-app.mjs` rather than left at its committed version. The script carries an uncommitted fix the bundle it emits needs: the dashboard used to total `Total for client`, a calculation, whose value is never stored — so the card read $0.00 however many roofs were priced. It is a count of records added instead. 108 fields, 26 lines.
+- **All four remaining apps were rebuilt in the same session**: Prospects (24 fields), Leads (32), Nurturing (27) and Proposals (29 fields, 6 calculated, the Scopes list). `tests/app-bundles.test.mjs` is green at **121 of 121**, and the full suite passes.
+- The three funnel apps came back from their tests, which pin the shared spine — Contact, Company, Address, Trade interest, Source, Owner, Notes, the same label and the same type in all three, with Source and Trade interest offering identical option labels — because a button matches by label and a spine that disagrees on wording grows the destination a duplicate column on the first press. Proposals had no test and was rebuilt from the design notes above.
+- **Every bundle was run through the real `remapApp`, not just the static checks.** All five layout-carrying apps arrive with every field placed and live, both Sub-items cards follow their reminted collection ids, and each `progress.config.source` still points at its checklist. The four bundles with no layout are unchanged and still install clean.
+- The lesson worth keeping: a hand-authored app bundle is source, and an uncommitted one is a file with no second copy. These are the only artefacts in the repository whose specification lives in a test while the artefact itself is untracked — which is what made the rebuild possible and is not a reason to leave them untracked.
+
+## 2026-08-17 A client fills in a record without signing in
+
+- "Add a button to generate a link to send to a client so they can fill it up without logging in — public, or private with a 6-character passcode."
+- **A staging table, not a direct write, and that is the whole design.** `workspace_builder_state` is ONE row per company with every app, field and record in a single `doc jsonb`. There is no "insert one record" there: the only write is *replace the whole company document*. So no RLS policy can let an anonymous visitor add a record without also letting them overwrite every app in the company, and even server-side an append is the read-modify-write that `src/workspace/builder-merge.js` (148 lines of three-way merge) already exists to survive. A submission lands in `wb_intake_submissions`; a member with `workspaces.manage` presses **Add record** and it is written through the app's own save. That also buys a review step, which a public link appending straight into a live app does not have.
+- **Migration `20260817120000_wb_intake_links.sql`.** Two tables. `wb_intake_links` carries the token, the visibility, the PBKDF2 hash and salt, an optional submission cap and expiry, and a failed-attempt counter. A check constraint makes the two visibilities honest — a private link cannot exist without a hash and a public one cannot keep a stale one. **Neither table is reachable by `anon`**, explicitly revoked: the public page reaches them only through two API routes under the service role. Submissions have **no INSERT policy at all**, on purpose — the route is the only writer, so a compromised member session cannot forge client submissions.
+- **`/api/wb-intake-open`** returns metadata on GET and fields only after the passcode on POST. A private link returns **no field labels at all** before the gate: labels describe the business ("Adjuster", "Claim #"), so handing them out would leak the shape of the work to anybody who guessed a token. **`/api/wb-intake-submit`** re-checks the passcode rather than trusting that open was called, because a poster does not have to use our page.
+- **PBKDF2, not scrypt, for one reason: the browser can compute it too.** A link is created by a signed-in member and its row is guarded by RLS (`workspaces.manage`). Had the hash needed the server, creating a link would need an authenticated endpoint, and that endpoint would have to re-decide who may create one — a second copy of an authorization rule the database already enforces, which is exactly how `public.clients` ended up writable by any member. The client derives the hash through SubtleCrypto and inserts the row itself, so RLS stays the only judge. `tests/wb-intake-passcode-parity.test.mjs` runs both implementations and fails if they ever disagree — nothing in the product could notice that drift, because a mismatch just reads as "that passcode is not right", for ever.
+- **The passcode alphabet excludes 0, O, 1, I and L**, and is sampled by rejection rather than `% 31`, which would have made the first few letters ~13% more likely. Eight wrong tries lock the link for 15 minutes **in the database**, because the API's rate limiter is in-memory and per serverless instance and does not survive a cold start.
+- **What a stranger may fill is a whitelist of 14 field types.** `company_contact` is excluded because it would let anonymous input mint rows in the COMPANY directory every workspace shares; `file`/`image` because uploads need an abuse story of their own; the automatic types because a value written to them is discarded on the next render. A category is matched against that field's own option ids, so one submission cannot mint an option the whole workspace is then stuck with.
+- **Paid for by extracting the public FORM page**, which had been sitting in the entry chunk despite being reachable only at `/form/<id>` — a URL no signed-in session ever visits. `src/form/public-form-page.js` uses the same `createX(ctx)` factory as `src/portals/public-page.js`. Entry headroom went from **182 bytes to 501**, so this feature landed and left more room than it found.
+- **Applied live** on 2026-08-17 as provider ledger `20260817131245_wb_intake_links` (repository filename `20260817120000_wb_intake_links.sql`; the timestamps differ as they do for other reconciled migrations). Both tables exist with RLS on, 5 indexes and 4 named check constraints.
+- **Verified live, rollback-only, and the probe left zero rows.** `anon` cannot read a link row; `authenticated` cannot INSERT a submission *even though it holds the INSERT grant*, because there is deliberately no INSERT policy; and a private link with no passcode is refused by the check constraint. Supabase security advisors returned **no ERROR or CRITICAL** findings and name neither new table.
+- **`authenticated` holds `TRUNCATE` on both tables, and on every other table in the schema.** That is Supabase's default `GRANT ALL`, not something this migration added — `clients`, `jobs`, `forms`, `company_contacts` and `workspace_builder_state` all read the same. It is worth knowing that **TRUNCATE is not subject to RLS**, so the grant is wider than the policies suggest; the practical exposure is small because PostgREST has no TRUNCATE verb, so it is unreachable from a browser session. Narrowing it is a schema-wide decision, not one to make inside a feature migration.
+- **Still to do**: the config panel creates a link over *every* fillable field. `field_ids` is stored and honoured end to end, but nothing yet chooses the subset. Uploads are not offered. **The client half is not yet deployed** — the tables are live, the code is local and uncommitted.
 
 ## Remaining controlled launch configuration
 

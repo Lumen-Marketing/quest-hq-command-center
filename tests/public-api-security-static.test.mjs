@@ -41,6 +41,16 @@ test('the app sends the caller access token when opening form files', () => {
 });
 
 test('the public form posts the honeypot and timing fields', () => {
-  assert.match(app, /name="website"/);
-  assert.match(app, /started_at: state\.publicForm\.openedAt/);
+  // Both moved into src/form/public-form-page.js when the public form page was lifted out of
+  // the entry chunk. They are the two spam gates the submit endpoint reads, so they are checked
+  // where they now live rather than dropped.
+  const page = readFileSync(new URL('../src/form/public-form-page.js', import.meta.url), 'utf8');
+  assert.match(page, /name="website"/);
+  assert.match(page, /started_at: state\.publicForm\.openedAt/);
+});
+
+test('the public intake page posts the same two spam gates', () => {
+  const intake = readFileSync(new URL('../src/intake/public-page.js', import.meta.url), 'utf8');
+  assert.match(intake, /name="website"/);
+  assert.match(intake, /started_at: state\.startedAt/);
 });

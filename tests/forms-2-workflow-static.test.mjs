@@ -4,16 +4,24 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const publicFormPage = readFileSync(new URL('../src/form/public-form-page.js', import.meta.url), 'utf8');
 
 test('forms public links open a customer-safe form route and submit through public APIs', () => {
   assert.match(source, /path\.startsWith\('\/form\/'\)/);
   assert.match(source, /name: 'form-public'/);
   assert.match(source, /if \(state\.route\.name === 'form-public'\)/);
-  assert.match(source, /function renderPublicFormPage\(route\)/);
-  assert.match(source, /function ensurePublicFormOpen\(formId\)/);
-  assert.match(source, /function submitPublicFormResponse\(formEl\)/);
-  assert.match(source, /fetch\('\/api\/public-form-open/);
-  assert.match(source, /fetch\('\/api\/public-form-submit'/);
+  // The three bodies moved into src/form/public-form-page.js, fetched on demand: the page is
+  // reachable only at /form/<id>, which no signed-in session ever visits, so every other
+  // session was carrying it for nothing. main.js keeps the loader and the call sites.
+  assert.match(source, /import\('\.\/form\/public-form-page\.js'\)/);
+  assert.match(source, /publicFormModule\.renderPublicFormPage\(state\.route\)/);
+  assert.match(source, /mod\.ensurePublicFormOpen\(state\.route\.token\)/);
+  assert.match(source, /mod\.submitPublicFormResponse\(event\.target\)/);
+  assert.match(publicFormPage, /function renderPublicFormPage\(route\)/);
+  assert.match(publicFormPage, /function ensurePublicFormOpen\(formId\)/);
+  assert.match(publicFormPage, /function submitPublicFormResponse\(formEl\)/);
+  assert.match(publicFormPage, /fetch\('\/api\/public-form-open/);
+  assert.match(publicFormPage, /fetch\('\/api\/public-form-submit'/);
   assert.match(source, /data-public-form-response/);
   assert.match(source, /function formPublicLink\(form\)/);
   assert.match(source, /copyFormPublicLink/);
